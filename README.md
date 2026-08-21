@@ -30,7 +30,7 @@ today's date unless `--date` is given. Open the file in a browser to view it.
 
 ## Template
 
-`templates/artifact.html` uses `{{placeholder}}` substitution with the context:
+`src/lotuspod/_templates/artifact.html` uses `{{placeholder}}` substitution with the context:
 `title`, `kicker`, `date`, `summary_block`, `body`, `theme_name`, `theme_version`.
 
 ## Theme
