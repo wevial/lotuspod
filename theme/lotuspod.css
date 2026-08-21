@@ -1,0 +1,110 @@
+/*
+ * Lotuspod theme "lotus" v0.1.0
+ * Tokens mirror theme/tokens.json.
+ */
+
+:root {
+  --color-pond: #12332a;
+  --color-deep-pond: #0b241d;
+  --color-leaf: #3f7d5c;
+  --color-pad: #eaf4ee;
+  --color-petal: #f7c8d8;
+  --color-blossom: #d9568f;
+  --color-mist: #f8f5ef;
+  --color-ink: #23282c;
+
+  --font-display: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  --font-body: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --radius-card: 14px;
+  --radius-pill: 999px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background:
+    radial-gradient(1200px 600px at 85% -10%, var(--color-pad) 0%, transparent 60%),
+    radial-gradient(900px 500px at -10% 110%, var(--color-petal) 0%, transparent 55%),
+    var(--color-mist);
+  color: var(--color-ink);
+  font-family: var(--font-body);
+  line-height: 1.65;
+  min-height: 100vh;
+}
+
+.artifact {
+  max-width: 44rem;
+  margin: 0 auto;
+  padding: 4rem 1.5rem 3rem;
+}
+
+.artifact-header {
+  background: #ffffff;
+  border: 1px solid var(--color-pad);
+  border-radius: var(--radius-card);
+  box-shadow: 0 10px 30px rgba(18, 51, 42, 0.08);
+  padding: 2.25rem 2rem 1.75rem;
+}
+
+.artifact-kicker {
+  color: var(--color-blossom);
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  margin: 0 0 0.75rem;
+}
+
+.artifact-title {
+  color: var(--color-deep-pond);
+  font-family: var(--font-display);
+  font-size: clamp(1.75rem, 4vw, 2.5rem);
+  line-height: 1.15;
+  margin: 0 0 0.5rem;
+}
+
+.artifact-meta {
+  color: var(--color-leaf);
+  font-size: 0.9rem;
+  margin: 0;
+}
+
+.artifact-summary {
+  border-left: 3px solid var(--color-petal);
+  color: var(--color-pond);
+  font-size: 1.05rem;
+  margin: 1.25rem 0 0;
+  padding-left: 0.9rem;
+}
+
+.artifact-body {
+  padding: 1.75rem 0.25rem 0;
+}
+
+.artifact-body h2 {
+  color: var(--color-deep-pond);
+  font-family: var(--font-display);
+  margin-top: 2rem;
+}
+
+.artifact-body a {
+  color: var(--color-blossom);
+}
+
+.artifact-footer {
+  color: var(--color-leaf);
+  font-size: 0.85rem;
+  letter-spacing: 0.08em;
+  margin-top: 2.5rem;
+  text-align: center;
+}

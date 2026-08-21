@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{title}} · Lotuspod</title>
+  <meta name="generator" content="lotuspod theme {{theme_name}} v{{theme_version}}">
+  <link rel="stylesheet" href="lotuspod.css">
+</head>
+<body>
+  <main class="artifact">
+    <header class="artifact-header">
+      <p class="artifact-kicker">{{kicker}}</p>
+      <h1 class="artifact-title">{{title}}</h1>
+      <p class="artifact-meta"><time datetime="{{date}}">{{date}}</time></p>
+      {{summary_block}}
+    </header>
+
+    <section class="artifact-body">
+      {{body}}
+    </section>
+
+    <footer class="artifact-footer">
+      <span aria-hidden="true">&#10047;</span> lotuspod
+    </footer>
+  </main>
+</body>
+</html>
