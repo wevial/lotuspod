@@ -7,13 +7,10 @@ Podcast artifact scaffold with a shared lotus theme. Render episode artifacts
 
 ```
 lotuspod/
-├── src/lotuspod/        # package + minimal CLI (`lotuspod render`)
-├── templates/
-│   └── artifact.html    # artifact template ({{placeholder}} substitution)
-├── theme/
-│   ├── tokens.json      # design tokens: colors, fonts, radii
-│   └── lotuspod.css     # theme stylesheet consumed by artifacts
-└── artifacts/           # rendered output (gitignored)
+├── src/lotuspod/          # package + minimal CLI (`lotuspod render`)
+│   ├── _templates/artifact.html   # artifact template ({{placeholder}} substitution)
+│   └── _theme/            # tokens.json (colors, fonts, radii) + lotuspod.css
+└── artifacts/             # rendered output (gitignored)
 ```
 
 ## Usage
