@@ -1,5 +1,7 @@
 """Minimal CLI for rendering Lotuspod artifacts from the template + theme."""
 
+from __future__ import annotations
+
 import argparse
 import datetime as _dt
 import json
@@ -8,10 +10,20 @@ import shutil
 import sys
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-TEMPLATE_PATH = REPO_ROOT / "templates" / "artifact.html"
-THEME_DIR = REPO_ROOT / "theme"
-DEFAULT_OUTPUT_DIR = REPO_ROOT / "artifacts"
+import importlib.resources as _res
+
+_PKG = "lotuspod"
+
+
+def _pkg_path(*parts: str) -> Path:
+    """Resolve packaged assets (templates/theme) for any install mode."""
+    with _res.as_file(_res.files(_PKG).joinpath(*parts)) as p:
+        return p
+
+
+TEMPLATE_PATH = _pkg_path("_templates", "artifact.html")
+THEME_DIR = _pkg_path("_theme")
+DEFAULT_OUTPUT_DIR = Path.cwd() / "artifacts"
 
 _PLACEHOLDER = re.compile(r"\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}")
 
