@@ -451,13 +451,25 @@ class PublishConfigTests(unittest.TestCase):
         self.assertTrue(PUBLISH_CONFIG_PATH.is_file(), PUBLISH_CONFIG_PATH)
 
     def test_single_hostname_rule_targets_publish_name_on_local_server(self):
+        # NOTE: ingress targets the dedicated publish port 8622, not serve's default 8000
         self.assertEqual(len(self.rules), 2, "one hostname rule + catch-all")
         self.assertEqual(
             self.rules[0],
             {
                 "hostname": PUBLISH_HOSTNAME,
-                "service": f"http://127.0.0.1:{cli.DEFAULT_SERVE_PORT}",
+                "service": "http://127.0.0.1:8622",
             },
+        )
+
+    def test_ingress_port_is_dedicated_publish_port_not_serve_default(self):
+        # The committed ingress intentionally targets 8622 (dedicated publish
+        # port), NOT cli.DEFAULT_SERVE_PORT (8000). Operators run
+        # `serve --host 127.0.0.1 --port 8622` per README.
+        self.assertEqual(self.rules[0]["service"], "http://127.0.0.1:8622")
+        self.assertNotEqual(
+            self.rules[0]["service"],
+            f"http://127.0.0.1:{cli.DEFAULT_SERVE_PORT}",
+            "ingress must not silently track serve's default port",
         )
 
     def test_catch_all_404_is_last_rule(self):

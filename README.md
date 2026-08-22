@@ -122,7 +122,9 @@ so re-rendering an artifact publishes or unpublishes it live — no restart.
 Publish the pond publicly at `https://lotuspod.example.com` through a
 Cloudflare Tunnel. The checked-in ingress config lives in
 `deploy/cloudflared.yml`; it routes the public hostname to the same
-allow-listed server on `127.0.0.1:8000`:
+allow-listed server on the dedicated publish port `127.0.0.1:8622` (see
+`deploy/README.md` for the full copy-paste setup, including the
+`lotuspod.service` unit):
 
 ```sh
 cloudflared tunnel login

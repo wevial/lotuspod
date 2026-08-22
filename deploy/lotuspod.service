@@ -1,0 +1,20 @@
+[Unit]
+Description=Lotuspod allow-listed artifact server (publish port 8622)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Adjust ExecStart to your install; the port MUST match deploy/cloudflared.yml.
+ExecStart=/usr/bin/env lotuspod serve --host 127.0.0.1 --port 8622
+Restart=on-failure
+RestartSec=5
+
+# Hardening: loopback-only listener, no new privileges, private tmp.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=%h
+
+[Install]
+WantedBy=default.target

@@ -24,7 +24,7 @@ tunnel: REPLACE_WITH_TUNNEL_UUID
 ingress:
   # Public hostname -> local allow-listed artifact server.
   - hostname: lotuspod.example.com
-    service: http://127.0.0.1:8000
+    service: http://127.0.0.1:8622
 
   # Required catch-all: everything else gets a bare 404. Must stay last.
   - service: http_status:404
