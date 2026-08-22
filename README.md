@@ -36,6 +36,7 @@ today's date unless `--date` is given. Open the file in a browser to view it.
 ## Theme
 
 The lotus theme lives in `src/lotuspod/_theme/`: `tokens.json` is the source of truth for the
-palette (`pond`, `leaf`, `pad`, `petal`, `blossom`, `mist`, `ink`), typography,
+palette (dark/white/lavender: `night`, `deep_night`, `surface`, `glow`,
+`lavender`, `pale_lavender`, `muted_lavender`, `white`), typography,
 and radii; `lotuspod.css` mirrors the tokens as CSS custom properties. Edit the
 CSS to restyle all artifacts.

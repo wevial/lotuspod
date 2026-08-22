@@ -1,17 +1,17 @@
 /*
- * Lotuspod theme "lotus" v0.1.0
+ * Lotuspod theme "lotus" v0.2.0
  * Tokens mirror theme/tokens.json.
  */
 
 :root {
-  --color-pond: #12332a;
-  --color-deep-pond: #0b241d;
-  --color-leaf: #3f7d5c;
-  --color-pad: #eaf4ee;
-  --color-petal: #f7c8d8;
-  --color-blossom: #d9568f;
-  --color-mist: #f8f5ef;
-  --color-ink: #23282c;
+  --color-night: #16121f;
+  --color-deep-night: #0d0a15;
+  --color-surface: #1e1930;
+  --color-glow: #272043;
+  --color-lavender: #b79cf4;
+  --color-pale-lavender: #d8cbfa;
+  --color-muted-lavender: #948aad;
+  --color-white: #ffffff;
 
   --font-display: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
   --font-body: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -33,10 +33,10 @@ body {
 
 body {
   background:
-    radial-gradient(1200px 600px at 85% -10%, var(--color-pad) 0%, transparent 60%),
-    radial-gradient(900px 500px at -10% 110%, var(--color-petal) 0%, transparent 55%),
-    var(--color-mist);
-  color: var(--color-ink);
+    radial-gradient(1200px 600px at 85% -10%, var(--color-glow) 0%, transparent 60%),
+    radial-gradient(900px 500px at -10% 110%, var(--color-glow) 0%, transparent 55%),
+    var(--color-night);
+  color: var(--color-white);
   font-family: var(--font-body);
   line-height: 1.65;
   min-height: 100vh;
@@ -49,15 +49,15 @@ body {
 }
 
 .artifact-header {
-  background: #ffffff;
-  border: 1px solid var(--color-pad);
+  background: var(--color-surface);
+  border: 1px solid rgba(216, 203, 250, 0.16);
   border-radius: var(--radius-card);
-  box-shadow: 0 10px 30px rgba(18, 51, 42, 0.08);
+  box-shadow: 0 10px 30px rgba(13, 10, 21, 0.55);
   padding: 2.25rem 2rem 1.75rem;
 }
 
 .artifact-kicker {
-  color: var(--color-blossom);
+  color: var(--color-lavender);
   font-family: var(--font-mono);
   font-size: 0.8rem;
   letter-spacing: 0.12em;
@@ -66,7 +66,7 @@ body {
 }
 
 .artifact-title {
-  color: var(--color-deep-pond);
+  color: var(--color-white);
   font-family: var(--font-display);
   font-size: clamp(1.75rem, 4vw, 2.5rem);
   line-height: 1.15;
@@ -74,14 +74,14 @@ body {
 }
 
 .artifact-meta {
-  color: var(--color-leaf);
+  color: var(--color-muted-lavender);
   font-size: 0.9rem;
   margin: 0;
 }
 
 .artifact-summary {
-  border-left: 3px solid var(--color-petal);
-  color: var(--color-pond);
+  border-left: 3px solid var(--color-lavender);
+  color: var(--color-pale-lavender);
   font-size: 1.05rem;
   margin: 1.25rem 0 0;
   padding-left: 0.9rem;
@@ -92,17 +92,21 @@ body {
 }
 
 .artifact-body h2 {
-  color: var(--color-deep-pond);
+  color: var(--color-white);
   font-family: var(--font-display);
   margin-top: 2rem;
 }
 
 .artifact-body a {
-  color: var(--color-blossom);
+  color: var(--color-lavender);
+}
+
+.artifact-body a:hover {
+  color: var(--color-pale-lavender);
 }
 
 .artifact-footer {
-  color: var(--color-leaf);
+  color: var(--color-muted-lavender);
   font-size: 0.85rem;
   letter-spacing: 0.08em;
   margin-top: 2.5rem;
