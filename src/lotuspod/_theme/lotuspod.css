@@ -112,3 +112,98 @@ body {
   margin-top: 2.5rem;
   text-align: center;
 }
+
+.index {
+  max-width: 44rem;
+  margin: 0 auto;
+  padding: 4rem 1.5rem 3rem;
+}
+
+.index-header {
+  background: var(--color-surface);
+  border: 1px solid rgba(216, 203, 250, 0.16);
+  border-radius: var(--radius-card);
+  box-shadow: 0 10px 30px rgba(13, 10, 21, 0.55);
+  padding: 2.25rem 2rem 1.75rem;
+}
+
+.index-title {
+  color: var(--color-white);
+  font-family: var(--font-display);
+  font-size: clamp(1.75rem, 4vw, 2.5rem);
+  line-height: 1.15;
+  margin: 0;
+}
+
+.episode-list {
+  display: grid;
+  gap: 1rem;
+  list-style: none;
+  margin: 1.5rem 0 0;
+  padding: 0;
+}
+
+.episode-card {
+  background: var(--color-surface);
+  border: 1px solid rgba(216, 203, 250, 0.16);
+  border-radius: var(--radius-card);
+  box-shadow: 0 6px 18px rgba(13, 10, 21, 0.45);
+  display: block;
+  padding: 1.25rem 1.4rem;
+  text-decoration: none;
+  transition:
+    border-color 0.15s ease,
+    transform 0.15s ease;
+}
+
+.episode-card:hover {
+  border-color: rgba(183, 156, 244, 0.55);
+  transform: translateY(-2px);
+}
+
+.episode-kicker {
+  color: var(--color-lavender);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  letter-spacing: 0.12em;
+  margin: 0 0 0.35rem;
+  text-transform: uppercase;
+}
+
+.episode-title {
+  color: var(--color-white);
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  line-height: 1.2;
+  margin: 0;
+}
+
+.episode-card:hover .episode-title {
+  color: var(--color-pale-lavender);
+}
+
+.episode-date {
+  color: var(--color-muted-lavender);
+  font-size: 0.85rem;
+  margin: 0.35rem 0 0;
+}
+
+.episode-summary {
+  color: var(--color-pale-lavender);
+  font-size: 0.95rem;
+  margin: 0.5rem 0 0;
+}
+
+.index-empty {
+  border: 1px dashed rgba(148, 138, 173, 0.5);
+  border-radius: var(--radius-card);
+  color: var(--color-muted-lavender);
+  margin-top: 1.5rem;
+  padding: 1.5rem;
+  text-align: center;
+}
+
+.index-empty code {
+  color: var(--color-lavender);
+  font-family: var(--font-mono);
+}

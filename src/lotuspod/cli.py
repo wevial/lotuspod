@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as _dt
+import html
 import json
 import re
 import shutil
@@ -22,8 +23,10 @@ def _pkg_path(*parts: str) -> Path:
 
 
 TEMPLATE_PATH = _pkg_path("_templates", "artifact.html")
+INDEX_TEMPLATE_PATH = _pkg_path("_templates", "index.html")
 THEME_DIR = _pkg_path("_theme")
 DEFAULT_OUTPUT_DIR = Path.cwd() / "artifacts"
+INDEX_FILE = "index.html"
 
 _PLACEHOLDER = re.compile(r"\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}")
 
@@ -40,8 +43,8 @@ def load_tokens() -> dict:
         return json.load(fh)
 
 
-def render_template(context: dict) -> str:
-    template = TEMPLATE_PATH.read_text(encoding="utf-8")
+def render_template(context: dict, template_path: Path = TEMPLATE_PATH) -> str:
+    template = template_path.read_text(encoding="utf-8")
 
     def _sub(match: re.Match) -> str:
         key = match.group(1)
@@ -111,16 +114,81 @@ def cmd_manifest(args: argparse.Namespace) -> int:
     if not out_dir.is_dir():
         raise FileNotFoundError(f"artifacts directory not found: {out_dir}")
 
-    artifacts = [
-        extract_meta(p.read_text(encoding="utf-8"), p.stem)
-        for p in sorted(out_dir.glob("*.html"))
-    ]
+    pages = sorted(p for p in out_dir.glob("*.html") if p.name != INDEX_FILE)
+    artifacts = [extract_meta(p.read_text(encoding="utf-8"), p.stem) for p in pages]
 
     manifest_path = out_dir / "manifest.json"
     manifest_path.write_text(
         json.dumps({"artifacts": artifacts}, indent=2) + "\n", encoding="utf-8"
     )
     print(f"wrote {manifest_path} ({len(artifacts)} artifacts)")
+    return 0
+
+
+_INDEX_EMPTY_BLOCK = (
+    '<p class="index-empty">Nothing in the pond yet. Render one with '
+    "<code>lotuspod render</code>.</p>"
+)
+
+
+def index_entries_html(artifacts: list[dict]) -> str:
+    """Render manifest-style metadata into the index page's list block."""
+    if not artifacts:
+        return _INDEX_EMPTY_BLOCK
+    esc = html.escape
+    items = []
+    for meta in artifacts:
+        inner = []
+        if meta["episode"]:
+            ep = esc(str(meta["episode"]))
+            inner.append(f'<p class="episode-kicker">Episode {ep}</p>')
+        title = esc(str(meta["title"]))
+        inner.append(f'<h2 class="episode-title">{title}</h2>')
+        if meta["date"]:
+            date = esc(str(meta["date"]))
+            inner.append(
+                f'<p class="episode-date"><time datetime="{date}">{date}</time></p>'
+            )
+        if meta["summary"]:
+            summary = esc(str(meta["summary"]))
+            inner.append(f'<p class="episode-summary">{summary}</p>')
+        body = "".join(f"\n          {part}" for part in inner)
+        href = esc(str(meta["file"]))
+        items.append(
+            "      <li>\n"
+            f'        <a class="episode-card" href="{href}">'
+            f"{body}\n"
+            "        </a>\n"
+            "      </li>"
+        )
+    return '<ul class="episode-list">\n' + "\n".join(items) + "\n    </ul>"
+
+
+def cmd_index(args: argparse.Namespace) -> int:
+    out_dir = Path(args.out_dir) if args.out_dir else DEFAULT_OUTPUT_DIR
+    if not out_dir.is_dir():
+        raise FileNotFoundError(f"artifacts directory not found: {out_dir}")
+
+    pages = sorted(p for p in out_dir.glob("*.html") if p.name != INDEX_FILE)
+    artifacts = [extract_meta(p.read_text(encoding="utf-8"), p.stem) for p in pages]
+
+    tokens = load_tokens()
+    context = {
+        "generated": _dt.date.today().isoformat(),
+        "entries_block": index_entries_html(artifacts),
+        "theme_name": tokens["name"],
+        "theme_version": tokens["version"],
+    }
+
+    theme_copy = out_dir / "lotuspod.css"
+    if not theme_copy.exists():
+        shutil.copyfile(THEME_DIR / "lotuspod.css", theme_copy)
+
+    out_path = out_dir / INDEX_FILE
+    out_path.write_text(
+        render_template(context, INDEX_TEMPLATE_PATH), encoding="utf-8"
+    )
+    print(f"wrote {out_path} ({len(artifacts)} artifacts)")
     return 0
 
 
@@ -143,6 +211,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
     manifest.add_argument("--out-dir", default="", help="artifacts directory (default: artifacts/)")
     manifest.set_defaults(func=cmd_manifest)
+
+    index = sub.add_parser("index", help="build index.html listing rendered artifacts")
+    index.add_argument("--out-dir", default="", help="artifacts directory (default: artifacts/)")
+    index.set_defaults(func=cmd_index)
 
     return parser
 

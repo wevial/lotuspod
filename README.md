@@ -7,8 +7,9 @@ Podcast artifact scaffold with a shared lotus theme. Render episode artifacts
 
 ```
 lotuspod/
-├── src/lotuspod/          # package + minimal CLI (`lotuspod render`)
+├── src/lotuspod/          # package + minimal CLI (`lotuspod render|manifest|index`)
 │   ├── _templates/artifact.html   # artifact template ({{placeholder}} substitution)
+│   ├── _templates/index.html      # index-page template
 │   └── _theme/            # tokens.json (colors, fonts, radii) + lotuspod.css
 └── artifacts/             # rendered output (gitignored)
 ```
@@ -39,6 +40,20 @@ lotuspod manifest            # scans artifacts/ (or pass --out-dir DIR)
 
 Each entry carries the artifact's file, title, episode, date, and summary,
 parsed from the rendered HTML; output is sorted by filename.
+
+## Index
+
+Build `artifacts/index.html`, a browsable episode index linking every rendered
+artifact:
+
+```sh
+lotuspod index               # scans artifacts/ (or pass --out-dir DIR)
+```
+
+Each card links to its artifact page and shows the title, episode, date, and
+summary parsed from the rendered HTML; cards are sorted by filename and styled
+by the lotus theme. Re-running is safe: `index.html` never lists itself (and is
+skipped by `lotuspod manifest` too).
 
 ## Template
 
