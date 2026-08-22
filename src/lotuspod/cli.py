@@ -12,6 +12,7 @@ import shutil
 import subprocess
 import sys
 from functools import partial
+from http import HTTPStatus
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -273,6 +274,54 @@ def _tailnet_dns_name() -> str:
         return ""
 
 
+_SERVE_CSS_FILE = "lotuspod.css"
+_DENY_PATH_NAME = ".lotuspod-not-found"
+
+
+def serve_allow_list(out_dir: Path) -> frozenset[str]:
+    """Names serve v2 may answer with: visible pages + support files.
+
+    Same fail-closed rule as manifest/index: an artifact page is servable
+    only when its lotuspod:visible meta flag parses to exactly true.
+    """
+    allowed = {INDEX_FILE, MANIFEST_FILE, _SERVE_CSS_FILE}
+    for page in out_dir.glob("*.html"):
+        if page.name == INDEX_FILE:
+            continue
+        try:
+            visible = extract_visibility(page.read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError):
+            continue
+        if visible:
+            allowed.add(page.name)
+    return frozenset(allowed)
+
+
+class _AllowListHandler(SimpleHTTPRequestHandler):
+    """Serve v2: answer only allow-listed names; everything else is a 404."""
+
+    def __init__(self, *args, root: Path, **kwargs):
+        self.root = Path(root)
+        super().__init__(*args, **kwargs)
+
+    def translate_path(self, path: str) -> str:
+        fs_path = Path(super().translate_path(path))
+        try:
+            rel = fs_path.relative_to(self.root)
+        except ValueError:
+            rel = None
+        if rel is not None:
+            if not rel.parts:
+                return str(self.root / INDEX_FILE)
+            if len(rel.parts) == 1 and rel.name in serve_allow_list(self.root):
+                return str(fs_path)
+        return str(self.root / _DENY_PATH_NAME)
+
+    def list_directory(self, path: str):
+        self.send_error(HTTPStatus.NOT_FOUND, "File not found")
+        return None
+
+
 def cmd_serve(args: argparse.Namespace) -> int:
     out_dir = Path(args.out_dir) if args.out_dir else DEFAULT_OUTPUT_DIR
     if not out_dir.is_dir():
@@ -280,7 +329,7 @@ def cmd_serve(args: argparse.Namespace) -> int:
 
     host = tailnet_ipv4()
 
-    handler = partial(SimpleHTTPRequestHandler, directory=str(out_dir))
+    handler = partial(_AllowListHandler, directory=str(out_dir), root=out_dir)
     try:
         server = ThreadingHTTPServer((host, args.port), handler)
     except OSError as exc:
@@ -289,7 +338,7 @@ def cmd_serve(args: argparse.Namespace) -> int:
 
     if not (out_dir / INDEX_FILE).exists():
         print(f"note: no {INDEX_FILE} yet; run `lotuspod index` to build one")
-    print(f"serving {out_dir} on the tailnet:")
+    print(f"serving {out_dir} on the tailnet (v2 allow-list):")
     print(f"  http://{host}:{args.port}/")
     dns_name = _tailnet_dns_name()
     if dns_name:
@@ -334,7 +383,8 @@ def build_parser() -> argparse.ArgumentParser:
     index.set_defaults(func=cmd_index)
 
     serve = sub.add_parser(
-        "serve", help="serve the artifacts directory over the tailnet"
+        "serve",
+        help="serve the artifacts directory over the tailnet (v2: allow-list enforced)",
     )
     serve.add_argument("--out-dir", default="", help="artifacts directory (default: artifacts/)")
     serve.add_argument(

@@ -68,7 +68,8 @@ Visibility is fail-closed: an artifact is listed only when its
 `lotuspod:visible` meta flag is present and exactly `true`. Artifacts rendered
 with `--hidden`, with a malformed flag value, or without any flag (pre-v2
 pages) are excluded — re-render them with this version to publish. The flag
-governs listings only; a hidden page remains reachable by direct URL.
+governs listings, and `lotuspod serve` v2 enforces it over HTTP too (hidden
+pages 404 even by direct URL); opening the file on disk still works.
 
 ## Index
 
@@ -98,9 +99,17 @@ The command detects this node's tailnet IPv4 (`tailscale ip -4`) and listens
 only on that address, so your podcast pages are reachable from the other
 devices in your tailnet — and nothing outside it. Open the printed
 `http://100.x.y.z:8000/` URL on any tailnet device; `/` serves
-`artifacts/index.html` (build it first with `lotuspod index`), episode pages,
-`manifest.json`, and `lotuspod.css` are served as-is. Requires a running
-`tailscaled`; without a tailnet address it exits with an error.
+`artifacts/index.html` (build it first with `lotuspod index`). Requires a
+running `tailscaled`; without a tailnet address it exits with an error.
+
+Serve v2 enforces an allow-list: the server answers only for `index.html`,
+`manifest.json`, `lotuspod.css`, and artifact pages whose fail-closed
+`lotuspod:visible` flag parses to exactly `true` — the same rule as
+`lotuspod manifest`. Everything else returns 404: hidden pages (rendered with
+`--hidden`, a malformed flag, or no flag at all) are no longer reachable by
+direct URL, and stray files, dotfiles, subdirectories, traversal attempts, and
+directory listings are denied too. The allow-list is recomputed per request,
+so re-rendering an artifact publishes or unpublishes it live — no restart.
 
 ## Template
 
