@@ -2,7 +2,8 @@
 
 Covers the shared visibility rule end to end: extract_visibility edges,
 render's flag writing, manifest v2 uniform schema + fail-closed listing,
-the index page's same rule, and serve v2's allow-list.
+the index page's same rule, and serve v2's allow-list plus the request
+path handler that enforces it.
 
 Run from the repo root:
 
@@ -108,73 +109,74 @@ class ExtractVisibilityTests(TempDirTestCase):
 class RenderFlagTests(TempDirTestCase):
     """render writes the flag that everything downstream reads."""
 
-    def read_flag_content(self, name: str) -> str:
+    def assert_flag_marker(self, name: str, content: str) -> None:
         page = (self.out_dir / f"{name}.html").read_text(encoding="utf-8")
-        tag = cli._VISIBLE_TAG_RE.search(page)
-        self.assertIsNotNone(tag, f"{name}.html carries no visibility meta tag")
-        return cli._META_CONTENT_RE.search(tag.group(0)).group(1)
+        self.assertIn(
+            f'<meta name="lotuspod:visible" content="{content}">',
+            page,
+            f"{name}.html carries no {content!r} visibility marker",
+        )
 
     def test_default_render_marks_visible(self):
         rc, _, _ = self.render("ep-001")
         self.assertEqual(rc, 0)
-        self.assertEqual(self.read_flag_content("ep-001"), "true")
+        self.assert_flag_marker("ep-001", "true")
 
     def test_hidden_render_marks_not_visible(self):
         rc, _, _ = self.render("draft", "--hidden")
         self.assertEqual(rc, 0)
-        self.assertEqual(self.read_flag_content("draft"), "false")
+        self.assert_flag_marker("draft", "false")
 
 
-def make_mixed_fixture(out_dir: Path) -> dict[str, str]:
+def make_mixed_fixture(out_dir: Path) -> None:
     """Render/hand-write one artifact of each visibility flavor."""
-    results = {}
-    results["zeta"] = "visible-render"
-    run_cli(
+    rc, _, err = run_cli(
         "render", "--name", "zeta", "--title", "Zeta Pond",
         "--episode", "7", "--date", "2026-03-04",
         "--summary", "latest from the pond",
         "--out-dir", str(out_dir),
     )
-    results["alpha"] = "hidden-render"
-    run_cli(
+    assert rc == 0, err
+    rc, _, err = run_cli(
         "render", "--name", "alpha", "--title", "Alpha Draft",
         "--episode", "1", "--hidden",
         "--out-dir", str(out_dir),
     )
-    results["mike"] = "malformed-flag"
+    assert rc == 0, err
     (out_dir / "mike.html").write_text(
         VISIBLE_PAGE.format(title="Mike", episode="3", date="", summary="")
         .replace('content="true"', 'content="yes"'),
         encoding="utf-8",
     )
-    results["tango"] = "no-flag-legacy"
     (out_dir / "tango.html").write_text(
         "<!DOCTYPE html><html><body>"
         '<h1 class="artifact-title">Tango Legacy</h1>'
         "</body></html>",
         encoding="utf-8",
     )
-    return {k: v for k, v in sorted(results.items())}
 
 
 class ManifestV2Tests(TempDirTestCase):
     """manifest v2: versioned, uniform schema, sorted, fail-closed."""
 
-    def write_manifest(self) -> tuple[int, dict, str]:
-        rc, out, err = run_cli("manifest", "--out-dir", str(self.out_dir))
-        text = (self.out_dir / "manifest.json").read_text(encoding="utf-8")
-        return rc, json.loads(text), text
+    def write_manifest(self) -> tuple[int, dict]:
+        rc, _, err = run_cli("manifest", "--out-dir", str(self.out_dir))
+        assert rc == 0, err
+        data = json.loads(
+            (self.out_dir / "manifest.json").read_text(encoding="utf-8")
+        )
+        return rc, data
 
     def test_version_is_two(self):
         make_mixed_fixture(self.out_dir)
-        rc, data, _ = self.write_manifest()
+        rc, data = self.write_manifest()
         self.assertEqual(rc, 0)
         self.assertEqual(data["version"], 2)
         self.assertEqual(set(data.keys()), {"version", "artifacts"})
 
     def test_uniform_schema_no_nulls_sorted(self):
         make_mixed_fixture(self.out_dir)
-        rc, data, text = self.write_manifest()
+        rc, data = self.write_manifest()
         self.assertEqual(rc, 0)
         artifacts = data["artifacts"]
         self.assertEqual(len(artifacts), 1)
@@ -183,7 +185,14 @@ class ManifestV2Tests(TempDirTestCase):
         for field in ("file", "title", "episode", "date", "summary"):
             self.assertIsInstance(entry[field], str, field)
         self.assertIsInstance(entry["visible"], bool)
-        self.assertNotIn("null", text)
+        stack = [data]
+        while stack:
+            node = stack.pop()
+            self.assertIsNotNone(node)
+            if isinstance(node, dict):
+                stack.extend(node.values())
+            elif isinstance(node, list):
+                stack.extend(node)
         files = [a["file"] for a in artifacts]
         self.assertEqual(files, sorted(files))
         self.assertEqual(entry["file"], "zeta.html")
@@ -193,7 +202,7 @@ class ManifestV2Tests(TempDirTestCase):
 
     def test_fail_closed_exclusions(self):
         make_mixed_fixture(self.out_dir)
-        rc, data, _ = self.write_manifest()
+        rc, data = self.write_manifest()
         self.assertEqual(rc, 0)
         listed = {a["file"] for a in data["artifacts"]}
         self.assertNotIn("alpha.html", listed, "--hidden render must be excluded")
@@ -206,7 +215,7 @@ class ManifestV2Tests(TempDirTestCase):
             "bare",
             '<meta name="lotuspod:visible" content="true"><html></html>',
         )
-        rc, data, _ = self.write_manifest()
+        rc, data = self.write_manifest()
         self.assertEqual(rc, 0)
         (entry,) = data["artifacts"]
         self.assertEqual(entry["file"], "bare.html")
@@ -223,14 +232,14 @@ class ManifestV2Tests(TempDirTestCase):
             '<h1 class="artifact-title">Index</h1>',
         )
         self.render("real", )
-        rc, data, _ = self.write_manifest()
+        rc, data = self.write_manifest()
         self.assertEqual(rc, 0)
         listed = [a["file"] for a in data["artifacts"]]
         self.assertNotIn("index.html", listed)
         self.assertEqual(listed, ["real.html"])
 
     def test_empty_dir_exit_zero(self):
-        rc, data, _ = self.write_manifest()
+        rc, data = self.write_manifest()
         self.assertEqual(rc, 0)
         self.assertEqual(data, {"version": 2, "artifacts": []})
 
@@ -239,7 +248,7 @@ class ManifestV2Tests(TempDirTestCase):
         rc, out, err = run_cli("manifest", "--out-dir", str(missing))
         self.assertEqual(rc, 1)
         self.assertIn("not found", err)
-        self.assertFalse((missing / "manifest.json").exists())
+        self.assertFalse(missing.exists())
 
 
 class IndexVisibilityTests(TempDirTestCase):
@@ -292,20 +301,6 @@ class ServeAllowListTests(TempDirTestCase):
         self.assertNotIn("mike.html", allowed)
         self.assertNotIn("tango.html", allowed)
 
-    def test_never_files_and_stray_files_absent(self):
-        make_mixed_fixture(self.out_dir)
-        (self.out_dir / "notes.txt").write_text("stray", encoding="utf-8")
-        (self.out_dir / "sub").mkdir()
-        (self.out_dir / "sub" / "nested.html").write_text(
-            VISIBLE_PAGE.format(title="N", episode="", date="", summary=""),
-            encoding="utf-8",
-        )
-        allowed = self.allow_list()
-        self.assertNotIn("manifest.json", allowed)
-        self.assertNotIn("FINDINGS.md", allowed)
-        self.assertNotIn("notes.txt", allowed)
-        self.assertNotIn("nested.html", allowed)
-
     def test_undecodable_page_fail_closed(self):
         self.render("good", )
         (self.out_dir / "junk.html").write_bytes(b"\xff\xfe\x00<not utf-8>")
@@ -325,6 +320,79 @@ class ServeAllowListTests(TempDirTestCase):
             encoding="utf-8",
         )
         self.assertNotIn("flip.html", self.allow_list())
+
+
+def bare_handler(root: Path) -> cli._AllowListHandler:
+    """A handler instance wired for direct method calls, no sockets."""
+    handler = cli._AllowListHandler.__new__(cli._AllowListHandler)
+    handler.root = root
+    handler.directory = str(root)
+    handler.client_address = ("127.0.0.1", 0)
+    handler.command = "GET"
+    handler.request_version = "HTTP/1.1"
+    handler.requestline = "GET / HTTP/1.1"
+    handler.wfile = io.BytesIO()
+    return handler
+
+
+class ServeHandlerTests(TempDirTestCase):
+    """_AllowListHandler decides path shape; the allow-list set is not enough."""
+
+    def resolve(self, url_path: str, root: Path | None = None) -> Path:
+        return Path(bare_handler(root or self.out_dir).translate_path(url_path))
+
+    def assertDenied(self, url_path: str, root: Path | None = None) -> None:
+        expected = (root or self.out_dir) / cli._DENY_PATH_NAME
+        self.assertEqual(self.resolve(url_path, root), expected, url_path)
+
+    def test_root_resolves_to_index(self):
+        self.assertEqual(self.resolve("/"), self.out_dir / cli.INDEX_FILE)
+
+    def test_allow_listed_visible_page_resolves_to_itself(self):
+        make_mixed_fixture(self.out_dir)
+        self.assertEqual(self.resolve("/zeta.html"), self.out_dir / "zeta.html")
+
+    def test_never_files_on_disk_resolve_to_deny_sentinel(self):
+        make_mixed_fixture(self.out_dir)
+        (self.out_dir / cli.MANIFEST_FILE).write_text("{}", encoding="utf-8")
+        (self.out_dir / "FINDINGS.md").write_text("findings", encoding="utf-8")
+        self.assertDenied(f"/{cli.MANIFEST_FILE}")
+        self.assertDenied("/FINDINGS.md")
+
+    def test_stray_file_denied(self):
+        make_mixed_fixture(self.out_dir)
+        (self.out_dir / "notes.txt").write_text("stray", encoding="utf-8")
+        self.assertDenied("/notes.txt")
+
+    def test_hidden_page_denied_by_direct_url(self):
+        make_mixed_fixture(self.out_dir)
+        self.assertDenied("/alpha.html")
+
+    def test_nested_visible_page_denied(self):
+        make_mixed_fixture(self.out_dir)
+        (self.out_dir / "sub").mkdir()
+        (self.out_dir / "sub" / "nested.html").write_text(
+            VISIBLE_PAGE.format(title="N", episode="", date="", summary=""),
+            encoding="utf-8",
+        )
+        self.assertDenied("/sub/nested.html")
+
+    def test_traversal_outside_root_denied(self):
+        self.assertDenied("/../outside.html")
+
+    def test_vanished_artifacts_dir_denies_without_raising(self):
+        gone = self.out_dir / "gone"
+        self.assertEqual(
+            self.resolve("/page.html", gone), gone / cli._DENY_PATH_NAME
+        )
+
+    def test_directory_listing_suppressed_with_404(self):
+        make_mixed_fixture(self.out_dir)
+        handler = bare_handler(self.out_dir)
+        with redirect_stderr(io.StringIO()):
+            body = handler.list_directory(str(self.out_dir))
+        self.assertIsNone(body)
+        self.assertTrue(handler.wfile.getvalue().startswith(b"HTTP/1.0 404"))
 
 
 if __name__ == "__main__":
