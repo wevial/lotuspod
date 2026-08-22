@@ -334,27 +334,40 @@ class _AllowListHandler(SimpleHTTPRequestHandler):
         return None
 
 
+def resolve_serve_host(host_override: str) -> str:
+    """Explicit --host wins; otherwise auto-detect the tailnet IPv4."""
+    return host_override if host_override else tailnet_ipv4()
+
+
+def _make_server(out_dir: Path, host: str, port: int) -> ThreadingHTTPServer:
+    handler = partial(_AllowListHandler, directory=str(out_dir), root=out_dir)
+    return ThreadingHTTPServer((host, port), handler)
+
+
 def cmd_serve(args: argparse.Namespace) -> int:
     out_dir = Path(args.out_dir) if args.out_dir else DEFAULT_OUTPUT_DIR
     if not out_dir.is_dir():
         raise FileNotFoundError(f"artifacts directory not found: {out_dir}")
 
-    host = tailnet_ipv4()
+    host = resolve_serve_host(args.host)
 
-    handler = partial(_AllowListHandler, directory=str(out_dir), root=out_dir)
     try:
-        server = ThreadingHTTPServer((host, args.port), handler)
+        server = _make_server(out_dir, host, args.port)
     except OSError as exc:
         print(f"error: cannot bind {host}:{args.port}: {exc}", file=sys.stderr)
         return 1
 
     if not (out_dir / INDEX_FILE).exists():
         print(f"note: no {INDEX_FILE} yet; run `lotuspod index` to build one")
-    print(f"serving {out_dir} on the tailnet (v2 allow-list):")
+    if args.host:
+        print(f"serving {out_dir} on {args.host} (v2 allow-list):")
+    else:
+        print(f"serving {out_dir} on the tailnet (v2 allow-list):")
     print(f"  http://{host}:{args.port}/")
-    dns_name = _tailnet_dns_name()
-    if dns_name:
-        print(f"  http://{dns_name}:{args.port}/")
+    if not args.host:
+        dns_name = _tailnet_dns_name()
+        if dns_name:
+            print(f"  http://{dns_name}:{args.port}/")
     print("ctrl-c to stop")
     try:
         server.serve_forever()
@@ -401,6 +414,12 @@ def build_parser() -> argparse.ArgumentParser:
     serve.add_argument("--out-dir", default="", help="artifacts directory (default: artifacts/)")
     serve.add_argument(
         "--port", type=int, default=DEFAULT_SERVE_PORT, help=f"TCP port (default: {DEFAULT_SERVE_PORT})"
+    )
+    serve.add_argument(
+        "--host",
+        default="",
+        help="bind address override (default: auto-detected tailnet IPv4); "
+        "use 127.0.0.1 when a local Cloudflare Tunnel fronts the server",
     )
     serve.set_defaults(func=cmd_serve)
 

@@ -1,0 +1,30 @@
+# Lotuspod publish config — Cloudflare Tunnel ingress for lotuspod.example.com.
+#
+# One-time setup (as the user who runs the tunnel):
+#   cloudflared tunnel login
+#   cloudflared tunnel create lotuspod        # prints the tunnel UUID
+#   cloudflared tunnel route dns lotuspod lotuspod.example.com
+#
+# Paste that UUID into `tunnel:` below (credentials land in the default
+# location ~/.cloudflared/<uuid>.json; no secret belongs in this file),
+# then publish with two processes on this node:
+#
+#   lotuspod index                            # refresh the public listing
+#   lotuspod serve --host 127.0.0.1           # v2 allow-listed server
+#   cloudflared tunnel --config deploy/cloudflared.yml run lotuspod
+#
+# What gets published is exactly what serve v2 answers with on any socket:
+# index.html, lotuspod.css, and artifact pages whose fail-closed
+# lotuspod:visible flag parses to exactly true. manifest.json and
+# FINDINGS.md are never served; hidden pages 404 by direct URL — through
+# the tunnel identically to the tailnet.
+
+tunnel: REPLACE_WITH_TUNNEL_UUID
+
+ingress:
+  # Public hostname -> local allow-listed artifact server.
+  - hostname: lotuspod.example.com
+    service: http://127.0.0.1:8000
+
+  # Required catch-all: everything else gets a bare 404. Must stay last.
+  - service: http_status:404

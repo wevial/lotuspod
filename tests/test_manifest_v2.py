@@ -2,8 +2,10 @@
 
 Covers the shared visibility rule end to end: extract_visibility edges,
 render's flag writing, manifest v2 uniform schema + fail-closed listing,
-the index page's same rule, and serve v2's allow-list plus the request
-path handler that enforces it.
+the index page's same rule, serve v2's allow-list plus the request
+path handler that enforces it, serve's --host override used when a local
+Cloudflare Tunnel fronts the server, and the checked-in publish config
+(deploy/cloudflared.yml) that publishes lotuspod.example.com.
 
 Run from the repo root:
 
@@ -18,11 +20,16 @@ from __future__ import annotations
 
 import io
 import json
+import re
 import sys
 import tempfile
+import threading
 import unittest
+import urllib.error
+import urllib.request
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
@@ -393,6 +400,173 @@ class ServeHandlerTests(TempDirTestCase):
             body = handler.list_directory(str(self.out_dir))
         self.assertIsNone(body)
         self.assertTrue(handler.wfile.getvalue().startswith(b"HTTP/1.0 404"))
+
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+PUBLISH_CONFIG_PATH = REPO_ROOT / "deploy" / "cloudflared.yml"
+PUBLISH_HOSTNAME = "lotuspod.example.com"
+
+
+def parse_ingress(config_text: str) -> tuple[dict, list[dict]]:
+    """Minimal YAML-subset parse: (top-level scalars, ingress rule list).
+
+    Understands exactly the shape deploy/cloudflared.yml uses — top-level
+    `key: value` lines and an `ingress:` block of `- key: value` rules with
+    continuation keys on following lines. Comments are stripped.
+    """
+    top: dict[str, str] = {}
+    rules: list[dict] = []
+    in_ingress = False
+    for raw in config_text.splitlines():
+        line = raw.split("#", 1)[0].rstrip()
+        if not line.strip():
+            continue
+        if not line[0].isspace():
+            in_ingress = line.strip() == "ingress:"
+            if not in_ingress:
+                key, _, value = line.partition(":")
+                top[key.strip()] = value.strip()
+            continue
+        if not in_ingress:
+            continue
+        stripped = line.strip()
+        if stripped.startswith("- "):
+            rules.append({})
+            stripped = stripped[2:]
+        key, _, value = stripped.partition(":")
+        if key.strip() in ("hostname", "service") and rules:
+            rules[-1][key.strip()] = value.strip()
+    return top, rules
+
+
+class PublishConfigTests(unittest.TestCase):
+    """deploy/cloudflared.yml publishes lotuspod.example.com, and only that."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.config_text = PUBLISH_CONFIG_PATH.read_text(encoding="utf-8")
+        cls.top, cls.rules = parse_ingress(cls.config_text)
+
+    def test_config_file_exists_in_repo(self):
+        self.assertTrue(PUBLISH_CONFIG_PATH.is_file(), PUBLISH_CONFIG_PATH)
+
+    def test_single_hostname_rule_targets_publish_name_on_local_server(self):
+        self.assertEqual(len(self.rules), 2, "one hostname rule + catch-all")
+        self.assertEqual(
+            self.rules[0],
+            {
+                "hostname": PUBLISH_HOSTNAME,
+                "service": f"http://127.0.0.1:{cli.DEFAULT_SERVE_PORT}",
+            },
+        )
+
+    def test_catch_all_404_is_last_rule(self):
+        self.assertEqual(self.rules[-1], {"service": "http_status:404"})
+        self.assertNotIn("hostname", self.rules[-1])
+
+    def test_no_tunnel_secret_committed(self):
+        self.assertEqual(
+            self.top.get("tunnel"),
+            "REPLACE_WITH_TUNNEL_UUID",
+            "config must carry the placeholder, never a real tunnel UUID",
+        )
+        self.assertNotIn("credentials-file", self.top, "credentials stay outside the repo")
+        real_uuid = re.compile(r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b")
+        self.assertNotSearch(real_uuid, self.config_text)
+        self.assertNotIn("PRIVATE KEY", self.config_text)
+
+    def assertNotSearch(self, pattern: re.Pattern, text: str) -> None:
+        self.assertIsNone(pattern.search(text), f"matched {pattern.pattern!r}")
+
+
+class ServeHostOverrideTests(TempDirTestCase):
+    """--host lets a local Cloudflare Tunnel front the allow-listed server."""
+
+    def test_parser_defaults_to_tailnet_autodetect(self):
+        args = cli.build_parser().parse_args(["serve"])
+        self.assertEqual(args.host, "")
+        self.assertEqual(args.port, cli.DEFAULT_SERVE_PORT)
+
+    def test_parser_accepts_host_override(self):
+        args = cli.build_parser().parse_args(["serve", "--host", "127.0.0.1"])
+        self.assertEqual(args.host, "127.0.0.1")
+
+    def test_explicit_host_wins_without_tailnet_lookup(self):
+        with mock.patch.object(
+            cli, "tailnet_ipv4", side_effect=AssertionError("must not be called")
+        ):
+            self.assertEqual(cli.resolve_serve_host("127.0.0.1"), "127.0.0.1")
+
+    def test_empty_override_falls_back_to_tailnet_detection(self):
+        detector = mock.Mock(return_value="100.64.0.1")
+        with mock.patch.object(cli, "tailnet_ipv4", detector):
+            self.assertEqual(cli.resolve_serve_host(""), "100.64.0.1")
+        detector.assert_called_once_with()
+
+    def test_make_server_binds_requested_host(self):
+        server = cli._make_server(self.out_dir, "127.0.0.1", 0)
+        self.addCleanup(server.server_close)
+        host, port = server.server_address[:2]
+        self.assertEqual(host, "127.0.0.1")
+        self.assertGreater(port, 0)
+
+
+class PublishHttpRoundTripTests(TempDirTestCase):
+    """The exact wiring cloudflared proxies to: loopback HTTP end to end."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        make_mixed_fixture(self.out_dir)
+        rc, _, err = run_cli("index", "--out-dir", str(self.out_dir))
+        assert rc == 0, err
+        rc, _, err = run_cli("manifest", "--out-dir", str(self.out_dir))
+        assert rc == 0, err
+        (self.out_dir / "FINDINGS.md").write_text("private findings", encoding="utf-8")
+        self.server = cli._make_server(self.out_dir, "127.0.0.1", 0)
+        self.port = self.server.server_address[1]
+        self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
+        self.thread.start()
+        self.addCleanup(self._stop_server)
+
+    def _stop_server(self) -> None:
+        self.server.shutdown()
+        self.server.server_close()
+        self.thread.join(timeout=5)
+
+    def fetch(self, path: str) -> tuple[int, bytes]:
+        url = f"http://127.0.0.1:{self.port}{path}"
+        try:
+            with urllib.request.urlopen(url, timeout=5) as resp:
+                return resp.status, resp.read()
+        except urllib.error.HTTPError as exc:
+            return exc.code, exc.read()
+
+    def test_public_surface_through_loopback_matches_allow_list(self):
+        index_bytes = (self.out_dir / "index.html").read_bytes()
+        status, body = self.fetch("/")
+        self.assertEqual(status, 200)
+        self.assertEqual(body, index_bytes)
+        status, body = self.fetch("/zeta.html")
+        self.assertEqual(status, 200)
+        self.assertIn(b"Zeta Pond", body)
+        self.assertEqual(self.fetch("/lotuspod.css")[0], 200)
+        for denied in ("/manifest.json", "/FINDINGS.md", "/alpha.html"):
+            status, _ = self.fetch(denied)
+            self.assertEqual(status, 404, denied)
+
+    def test_republish_flips_live_while_published(self):
+        self.assertEqual(self.fetch("/zeta.html")[0], 200)
+        page = self.out_dir / "zeta.html"
+        page.write_text(
+            page.read_text(encoding="utf-8").replace('content="true"', 'content="false"'),
+            encoding="utf-8",
+        )
+        self.assertEqual(self.fetch("/zeta.html")[0], 404)
+        page.write_text(
+            page.read_text(encoding="utf-8").replace('content="false"', 'content="true"'),
+            encoding="utf-8",
+        )
+        self.assertEqual(self.fetch("/zeta.html")[0], 200)
 
 
 if __name__ == "__main__":

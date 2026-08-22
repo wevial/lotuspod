@@ -93,6 +93,7 @@ Share rendered episodes over your tailnet:
 ```sh
 lotuspod serve               # serves artifacts/ (or pass --out-dir DIR)
 lotuspod serve --port 8080   # pick a different port (default: 8000)
+lotuspod serve --host 127.0.0.1  # bind address override for tunnel fronting
 ```
 
 The command detects this node's tailnet IPv4 (`tailscale ip -4`) and listens
@@ -101,6 +102,9 @@ devices in your tailnet — and nothing outside it. Open the printed
 `http://100.x.y.z:8000/` URL on any tailnet device; `/` serves
 `artifacts/index.html` (build it first with `lotuspod index`). Requires a
 running `tailscaled`; without a tailnet address it exits with an error.
+Pass `--host` to bind an explicit address instead — e.g. `127.0.0.1` when a
+local Cloudflare Tunnel fronts the server (see Publish below); everything
+else behaves identically.
 
 Serve v2 enforces an allow-list: the server answers only for `index.html`,
 `lotuspod.css`, and artifact pages whose fail-closed `lotuspod:visible` flag
@@ -112,6 +116,32 @@ returns 404: hidden pages (rendered with
 direct URL, and stray files, dotfiles, subdirectories, traversal attempts, and
 directory listings are denied too. The allow-list is recomputed per request,
 so re-rendering an artifact publishes or unpublishes it live — no restart.
+
+## Publish
+
+Publish the pond publicly at `https://lotuspod.example.com` through a
+Cloudflare Tunnel. The checked-in ingress config lives in
+`deploy/cloudflared.yml`; it routes the public hostname to the same
+allow-listed server on `127.0.0.1:8000`:
+
+```sh
+cloudflared tunnel login
+cloudflared tunnel create lotuspod                    # prints the tunnel UUID
+cloudflared tunnel route dns lotuspod lotuspod.example.com
+# paste the UUID into deploy/cloudflared.yml (no secret belongs there —
+# credentials stay in ~/.cloudflared/<uuid>.json)
+
+lotuspod index                                        # refresh the listing
+lotuspod serve --host 127.0.0.1 &                     # v2 allow-listed server
+cloudflared tunnel --config deploy/cloudflared.yml run lotuspod
+```
+
+What is published is exactly what `lotuspod serve` answers with anywhere:
+`index.html`, `lotuspod.css`, and artifact pages whose fail-closed
+`lotuspod:visible` flag parses to exactly `true`. The tunnel adds no
+exposure beyond that allow-list: `manifest.json`, `FINDINGS.md`, hidden
+pages, and everything else 404 through the public hostname too, and the
+ingress catch-all sends any other hostname to a bare 404.
 
 ## Tests
 
