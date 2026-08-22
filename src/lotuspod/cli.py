@@ -5,10 +5,14 @@ from __future__ import annotations
 import argparse
 import datetime as _dt
 import html
+import ipaddress
 import json
 import re
 import shutil
+import subprocess
 import sys
+from functools import partial
+from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 import importlib.resources as _res
@@ -27,6 +31,8 @@ INDEX_TEMPLATE_PATH = _pkg_path("_templates", "index.html")
 THEME_DIR = _pkg_path("_theme")
 DEFAULT_OUTPUT_DIR = Path.cwd() / "artifacts"
 INDEX_FILE = "index.html"
+DEFAULT_SERVE_PORT = 8000
+_TAILNET_V4 = ipaddress.ip_network("100.64.0.0/10")
 
 _PLACEHOLDER = re.compile(r"\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}")
 
@@ -193,6 +199,80 @@ def cmd_index(args: argparse.Namespace) -> int:
     return 0
 
 
+def tailnet_ipv4() -> str:
+    """Return this node's tailnet IPv4 (100.64.0.0/10), or raise RuntimeError."""
+    try:
+        proc = subprocess.run(
+            ["tailscale", "ip", "-4"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError) as exc:
+        raise RuntimeError(f"cannot run 'tailscale' CLI: {exc}") from exc
+    if proc.returncode != 0:
+        raise RuntimeError(
+            f"'tailscale ip -4' failed: {(proc.stderr or '').strip() or 'is tailscaled running?'}"
+        )
+    for line in proc.stdout.splitlines():
+        line = line.strip()
+        try:
+            addr = ipaddress.ip_address(line)
+        except ValueError:
+            continue
+        if addr.version == 4 and addr in _TAILNET_V4:
+            return str(addr)
+    raise RuntimeError("no tailnet IPv4 found; is this node joined to a tailnet?")
+
+
+def _tailnet_dns_name() -> str:
+    """Best-effort MagicDNS name for this node (empty string if unavailable)."""
+    try:
+        proc = subprocess.run(
+            ["tailscale", "status", "--json"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+        data = json.loads(proc.stdout)
+        return str(data.get("Self", {}).get("DNSName", "")).rstrip(".")
+    except Exception:
+        return ""
+
+
+def cmd_serve(args: argparse.Namespace) -> int:
+    out_dir = Path(args.out_dir) if args.out_dir else DEFAULT_OUTPUT_DIR
+    if not out_dir.is_dir():
+        raise FileNotFoundError(f"artifacts directory not found: {out_dir}")
+
+    host = tailnet_ipv4()
+
+    handler = partial(SimpleHTTPRequestHandler, directory=str(out_dir))
+    try:
+        server = ThreadingHTTPServer((host, args.port), handler)
+    except OSError as exc:
+        print(f"error: cannot bind {host}:{args.port}: {exc}", file=sys.stderr)
+        return 1
+
+    if not (out_dir / INDEX_FILE).exists():
+        print(f"note: no {INDEX_FILE} yet; run `lotuspod index` to build one")
+    print(f"serving {out_dir} on the tailnet:")
+    print(f"  http://{host}:{args.port}/")
+    dns_name = _tailnet_dns_name()
+    if dns_name:
+        print(f"  http://{dns_name}:{args.port}/")
+    print("ctrl-c to stop")
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        server.server_close()
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="lotuspod", description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -217,6 +297,15 @@ def build_parser() -> argparse.ArgumentParser:
     index.add_argument("--out-dir", default="", help="artifacts directory (default: artifacts/)")
     index.set_defaults(func=cmd_index)
 
+    serve = sub.add_parser(
+        "serve", help="serve the artifacts directory over the tailnet"
+    )
+    serve.add_argument("--out-dir", default="", help="artifacts directory (default: artifacts/)")
+    serve.add_argument(
+        "--port", type=int, default=DEFAULT_SERVE_PORT, help=f"TCP port (default: {DEFAULT_SERVE_PORT})"
+    )
+    serve.set_defaults(func=cmd_serve)
+
     return parser
 
 
@@ -225,7 +314,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         return args.func(args)
-    except (KeyError, FileNotFoundError, json.JSONDecodeError) as exc:
+    except (KeyError, FileNotFoundError, json.JSONDecodeError, RuntimeError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
 
