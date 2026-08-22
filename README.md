@@ -113,6 +113,19 @@ direct URL, and stray files, dotfiles, subdirectories, traversal attempts, and
 directory listings are denied too. The allow-list is recomputed per request,
 so re-rendering an artifact publishes or unpublishes it live — no restart.
 
+## Tests
+
+A standard-library `unittest` suite (no extra dependencies) pins the manifest
+v2 schema and the fail-closed visibility rule across `render`, `manifest`,
+`index`, and serve v2's allow-list:
+
+```sh
+python -m unittest discover
+```
+
+The suite always tests this checkout's `src/`, so an ambient `lotuspod`
+install cannot shadow the code under test.
+
 ## Template
 
 `src/lotuspod/_templates/artifact.html` uses `{{placeholder}}` substitution with the context:
