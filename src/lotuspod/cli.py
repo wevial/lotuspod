@@ -181,7 +181,8 @@ def cmd_index(args: argparse.Namespace) -> int:
     }
 
     theme_copy = out_dir / "lotuspod.css"
-    if not theme_copy.exists():
+    packaged_css = (THEME_DIR / "lotuspod.css").read_bytes()
+    if not theme_copy.exists() or theme_copy.read_bytes() != packaged_css:
         shutil.copyfile(THEME_DIR / "lotuspod.css", theme_copy)
 
     out_path = out_dir / INDEX_FILE
