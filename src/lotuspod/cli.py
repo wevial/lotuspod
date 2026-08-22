@@ -289,7 +289,11 @@ def serve_allow_list(out_dir: Path) -> frozenset[str]:
     over HTTP even though it lives in the served directory.
     """
     allowed = {INDEX_FILE, _SERVE_CSS_FILE}
-    for page in out_dir.glob("*.html"):
+    try:
+        pages = sorted(out_dir.glob("*.html"))
+    except OSError:
+        return allowed
+    for page in pages:
         if page.name == INDEX_FILE:
             continue
         try:
