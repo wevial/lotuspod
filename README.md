@@ -28,6 +28,18 @@ lotuspod render \
 This writes `artifacts/ep-001.html` (and copies `lotuspod.css` beside it), using
 today's date unless `--date` is given. Open the file in a browser to view it.
 
+## Manifest
+
+Generate `artifacts/manifest.json`, an index of every rendered artifact in a
+directory:
+
+```sh
+lotuspod manifest            # scans artifacts/ (or pass --out-dir DIR)
+```
+
+Each entry carries the artifact's file, title, episode, date, and summary,
+parsed from the rendered HTML; output is sorted by filename.
+
 ## Template
 
 `src/lotuspod/_templates/artifact.html` uses `{{placeholder}}` substitution with the context:

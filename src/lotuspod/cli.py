@@ -27,6 +27,12 @@ DEFAULT_OUTPUT_DIR = Path.cwd() / "artifacts"
 
 _PLACEHOLDER = re.compile(r"\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}")
 
+_EPISODE_KICKER = re.compile(r"^Lotuspod · Episode (.+)$")
+_TITLE_RE = re.compile(r'<h1 class="artifact-title">(.*?)</h1>', re.DOTALL)
+_KICKER_RE = re.compile(r'<p class="artifact-kicker">(.*?)</p>', re.DOTALL)
+_DATE_RE = re.compile(r'<time datetime="([^"]*)">')
+_SUMMARY_RE = re.compile(r'<p class="artifact-summary">(.*?)</p>', re.DOTALL)
+
 
 def load_tokens() -> dict:
     tokens_path = THEME_DIR / "tokens.json"
@@ -79,6 +85,45 @@ def cmd_render(args: argparse.Namespace) -> int:
     return 0
 
 
+def extract_meta(html: str, stem: str) -> dict:
+    title = _TITLE_RE.search(html)
+    kicker = _KICKER_RE.search(html)
+    date = _DATE_RE.search(html)
+    summary = _SUMMARY_RE.search(html)
+
+    episode = None
+    if kicker:
+        ep = _EPISODE_KICKER.match(kicker.group(1).strip())
+        if ep:
+            episode = ep.group(1).strip()
+
+    return {
+        "file": f"{stem}.html",
+        "title": title.group(1) if title else stem,
+        "episode": episode,
+        "date": date.group(1) if date else None,
+        "summary": summary.group(1) if summary else None,
+    }
+
+
+def cmd_manifest(args: argparse.Namespace) -> int:
+    out_dir = Path(args.out_dir) if args.out_dir else DEFAULT_OUTPUT_DIR
+    if not out_dir.is_dir():
+        raise FileNotFoundError(f"artifacts directory not found: {out_dir}")
+
+    artifacts = [
+        extract_meta(p.read_text(encoding="utf-8"), p.stem)
+        for p in sorted(out_dir.glob("*.html"))
+    ]
+
+    manifest_path = out_dir / "manifest.json"
+    manifest_path.write_text(
+        json.dumps({"artifacts": artifacts}, indent=2) + "\n", encoding="utf-8"
+    )
+    print(f"wrote {manifest_path} ({len(artifacts)} artifacts)")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="lotuspod", description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -92,6 +137,12 @@ def build_parser() -> argparse.ArgumentParser:
     render.add_argument("--body", default="", help="artifact body (HTML or plain text)")
     render.add_argument("--out-dir", default="", help="output directory (default: artifacts/)")
     render.set_defaults(func=cmd_render)
+
+    manifest = sub.add_parser(
+        "manifest", help="generate manifest.json indexing rendered artifacts"
+    )
+    manifest.add_argument("--out-dir", default="", help="artifacts directory (default: artifacts/)")
+    manifest.set_defaults(func=cmd_manifest)
 
     return parser
 
