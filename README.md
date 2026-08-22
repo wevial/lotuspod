@@ -7,7 +7,7 @@ Podcast artifact scaffold with a shared lotus theme. Render episode artifacts
 
 ```
 lotuspod/
-├── src/lotuspod/          # package + minimal CLI (`lotuspod render|manifest|index`)
+├── src/lotuspod/          # package + minimal CLI (`lotuspod render|manifest|index|serve`)
 │   ├── _templates/artifact.html   # artifact template ({{placeholder}} substitution)
 │   ├── _templates/index.html      # index-page template
 │   └── _theme/            # tokens.json (colors, fonts, radii) + lotuspod.css
@@ -54,6 +54,23 @@ Each card links to its artifact page and shows the title, episode, date, and
 summary parsed from the rendered HTML; cards are sorted by filename and styled
 by the lotus theme. Re-running is safe: `index.html` never lists itself (and is
 skipped by `lotuspod manifest` too).
+
+## Serve
+
+Share rendered episodes over your tailnet:
+
+```sh
+lotuspod serve               # serves artifacts/ (or pass --out-dir DIR)
+lotuspod serve --port 8080   # pick a different port (default: 8000)
+```
+
+The command detects this node's tailnet IPv4 (`tailscale ip -4`) and listens
+only on that address, so your podcast pages are reachable from the other
+devices in your tailnet — and nothing outside it. Open the printed
+`http://100.x.y.z:8000/` URL on any tailnet device; `/` serves
+`artifacts/index.html` (build it first with `lotuspod index`), episode pages,
+`manifest.json`, and `lotuspod.css` are served as-is. Requires a running
+`tailscaled`; without a tailnet address it exits with an error.
 
 ## Template
 
