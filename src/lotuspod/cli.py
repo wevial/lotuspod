@@ -31,6 +31,8 @@ INDEX_TEMPLATE_PATH = _pkg_path("_templates", "index.html")
 THEME_DIR = _pkg_path("_theme")
 DEFAULT_OUTPUT_DIR = Path.cwd() / "artifacts"
 INDEX_FILE = "index.html"
+MANIFEST_FILE = "manifest.json"
+MANIFEST_VERSION = 2
 DEFAULT_SERVE_PORT = 8000
 _TAILNET_V4 = ipaddress.ip_network("100.64.0.0/10")
 
@@ -41,6 +43,10 @@ _TITLE_RE = re.compile(r'<h1 class="artifact-title">(.*?)</h1>', re.DOTALL)
 _KICKER_RE = re.compile(r'<p class="artifact-kicker">(.*?)</p>', re.DOTALL)
 _DATE_RE = re.compile(r'<time datetime="([^"]*)">')
 _SUMMARY_RE = re.compile(r'<p class="artifact-summary">(.*?)</p>', re.DOTALL)
+_VISIBLE_TAG_RE = re.compile(
+    r"<meta\s[^>]*name=[\"']lotuspod:visible[\"'][^>]*>", re.IGNORECASE
+)
+_META_CONTENT_RE = re.compile(r"content=[\"']([^\"']*)[\"']", re.IGNORECASE)
 
 
 def load_tokens() -> dict:
@@ -78,6 +84,7 @@ def cmd_render(args: argparse.Namespace) -> int:
         "body": args.body,
         "theme_name": tokens["name"],
         "theme_version": tokens["version"],
+        "visible": "false" if args.hidden else "true",
     }
     html = render_template(context)
 
@@ -94,13 +101,22 @@ def cmd_render(args: argparse.Namespace) -> int:
     return 0
 
 
-def extract_meta(html: str, stem: str) -> dict:
-    title = _TITLE_RE.search(html)
-    kicker = _KICKER_RE.search(html)
-    date = _DATE_RE.search(html)
-    summary = _SUMMARY_RE.search(html)
+def extract_visibility(page_html: str) -> bool:
+    """Fail closed: visible only when the flag is present and exactly 'true'."""
+    tag = _VISIBLE_TAG_RE.search(page_html)
+    if not tag:
+        return False
+    content = _META_CONTENT_RE.search(tag.group(0))
+    return content is not None and content.group(1).strip().lower() == "true"
 
-    episode = None
+
+def extract_meta(page_html: str, stem: str) -> dict:
+    title = _TITLE_RE.search(page_html)
+    kicker = _KICKER_RE.search(page_html)
+    date = _DATE_RE.search(page_html)
+    summary = _SUMMARY_RE.search(page_html)
+
+    episode = ""
     if kicker:
         ep = _EPISODE_KICKER.match(kicker.group(1).strip())
         if ep:
@@ -110,9 +126,22 @@ def extract_meta(html: str, stem: str) -> dict:
         "file": f"{stem}.html",
         "title": title.group(1) if title else stem,
         "episode": episode,
-        "date": date.group(1) if date else None,
-        "summary": summary.group(1) if summary else None,
+        "date": date.group(1) if date else "",
+        "summary": summary.group(1) if summary else "",
+        "visible": extract_visibility(page_html),
     }
+
+
+def collect_artifacts(out_dir: Path) -> tuple[list[dict], int]:
+    """Parse every artifact page; return (visible entries, hidden count)."""
+    pages = sorted(p for p in out_dir.glob("*.html") if p.name != INDEX_FILE)
+    metas = [extract_meta(p.read_text(encoding="utf-8"), p.stem) for p in pages]
+    visible = [m for m in metas if m["visible"]]
+    return visible, len(metas) - len(visible)
+
+
+def _hidden_note(hidden: int) -> str:
+    return f", {hidden} not visible" if hidden else ""
 
 
 def cmd_manifest(args: argparse.Namespace) -> int:
@@ -120,14 +149,15 @@ def cmd_manifest(args: argparse.Namespace) -> int:
     if not out_dir.is_dir():
         raise FileNotFoundError(f"artifacts directory not found: {out_dir}")
 
-    pages = sorted(p for p in out_dir.glob("*.html") if p.name != INDEX_FILE)
-    artifacts = [extract_meta(p.read_text(encoding="utf-8"), p.stem) for p in pages]
+    artifacts, hidden = collect_artifacts(out_dir)
 
-    manifest_path = out_dir / "manifest.json"
+    manifest_path = out_dir / MANIFEST_FILE
     manifest_path.write_text(
-        json.dumps({"artifacts": artifacts}, indent=2) + "\n", encoding="utf-8"
+        json.dumps({"version": MANIFEST_VERSION, "artifacts": artifacts}, indent=2)
+        + "\n",
+        encoding="utf-8",
     )
-    print(f"wrote {manifest_path} ({len(artifacts)} artifacts)")
+    print(f"wrote {manifest_path} ({len(artifacts)} artifacts{_hidden_note(hidden)})")
     return 0
 
 
@@ -175,8 +205,7 @@ def cmd_index(args: argparse.Namespace) -> int:
     if not out_dir.is_dir():
         raise FileNotFoundError(f"artifacts directory not found: {out_dir}")
 
-    pages = sorted(p for p in out_dir.glob("*.html") if p.name != INDEX_FILE)
-    artifacts = [extract_meta(p.read_text(encoding="utf-8"), p.stem) for p in pages]
+    artifacts, hidden = collect_artifacts(out_dir)
 
     tokens = load_tokens()
     context = {
@@ -195,7 +224,9 @@ def cmd_index(args: argparse.Namespace) -> int:
     out_path.write_text(
         render_template(context, INDEX_TEMPLATE_PATH), encoding="utf-8"
     )
-    print(f"wrote {out_path} ({len(artifacts)} artifacts)")
+    print(
+        f"wrote {out_path} ({len(artifacts)} artifacts{_hidden_note(hidden)})"
+    )
     return 0
 
 
@@ -284,6 +315,11 @@ def build_parser() -> argparse.ArgumentParser:
     render.add_argument("--date", default="", help="publication date (ISO, defaults to today)")
     render.add_argument("--summary", default="", help="short summary line")
     render.add_argument("--body", default="", help="artifact body (HTML or plain text)")
+    render.add_argument(
+        "--hidden",
+        action="store_true",
+        help="mark the artifact not visible (excluded from manifest/index)",
+    )
     render.add_argument("--out-dir", default="", help="output directory (default: artifacts/)")
     render.set_defaults(func=cmd_render)
 

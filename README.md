@@ -29,6 +29,10 @@ lotuspod render \
 This writes `artifacts/ep-001.html` (and copies `lotuspod.css` beside it), using
 today's date unless `--date` is given. Open the file in a browser to view it.
 
+Pass `--hidden` to mark an artifact not visible: it carries a
+`lotuspod:visible: false` flag and is excluded from `manifest.json` and
+`index.html`. Re-render without `--hidden` to publish it.
+
 ## Manifest
 
 Generate `artifacts/manifest.json`, an index of every rendered artifact in a
@@ -38,8 +42,33 @@ directory:
 lotuspod manifest            # scans artifacts/ (or pass --out-dir DIR)
 ```
 
-Each entry carries the artifact's file, title, episode, date, and summary,
-parsed from the rendered HTML; output is sorted by filename.
+The manifest is a versioned document:
+
+```json
+{
+  "version": 2,
+  "artifacts": [
+    {
+      "file": "ep-001.html",
+      "title": "Opening the Pond",
+      "episode": "1",
+      "date": "2026-08-22",
+      "summary": "Why we started Lotuspod.",
+      "visible": true
+    }
+  ]
+}
+```
+
+The schema is uniform: every entry carries exactly `file`, `title`, `episode`,
+`date`, `summary`, and `visible`; fields with no value are empty strings, never
+`null`. Entries are sorted by filename.
+
+Visibility is fail-closed: an artifact is listed only when its
+`lotuspod:visible` meta flag is present and exactly `true`. Artifacts rendered
+with `--hidden`, with a malformed flag value, or without any flag (pre-v2
+pages) are excluded — re-render them with this version to publish. The flag
+governs listings only; a hidden page remains reachable by direct URL.
 
 ## Index
 
@@ -51,9 +80,10 @@ lotuspod index               # scans artifacts/ (or pass --out-dir DIR)
 ```
 
 Each card links to its artifact page and shows the title, episode, date, and
-summary parsed from the rendered HTML; cards are sorted by filename and styled
-by the lotus theme. Re-running is safe: `index.html` never lists itself (and is
-skipped by `lotuspod manifest` too).
+summary parsed from the rendered HTML; only fail-closed-visible artifacts are
+listed (same rule as `lotuspod manifest`). Cards are sorted by filename and
+styled by the lotus theme. Re-running is safe: `index.html` never lists itself
+(and is skipped by `lotuspod manifest` too).
 
 ## Serve
 
