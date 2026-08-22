@@ -275,6 +275,7 @@ def _tailnet_dns_name() -> str:
 
 
 _SERVE_CSS_FILE = "lotuspod.css"
+_SERVE_NEVER_FILES = frozenset({MANIFEST_FILE, "FINDINGS.md"})
 _DENY_PATH_NAME = ".lotuspod-not-found"
 
 
@@ -283,8 +284,11 @@ def serve_allow_list(out_dir: Path) -> frozenset[str]:
 
     Same fail-closed rule as manifest/index: an artifact page is servable
     only when its lotuspod:visible meta flag parses to exactly true.
+    manifest.json and FINDINGS.md are never served (_SERVE_NEVER_FILES):
+    the manifest lists private artifact ids, so it must stay unreachable
+    over HTTP even though it lives in the served directory.
     """
-    allowed = {INDEX_FILE, MANIFEST_FILE, _SERVE_CSS_FILE}
+    allowed = {INDEX_FILE, _SERVE_CSS_FILE}
     for page in out_dir.glob("*.html"):
         if page.name == INDEX_FILE:
             continue
@@ -313,7 +317,11 @@ class _AllowListHandler(SimpleHTTPRequestHandler):
         if rel is not None:
             if not rel.parts:
                 return str(self.root / INDEX_FILE)
-            if len(rel.parts) == 1 and rel.name in serve_allow_list(self.root):
+            if (
+                len(rel.parts) == 1
+                and rel.name not in _SERVE_NEVER_FILES
+                and rel.name in serve_allow_list(self.root)
+            ):
                 return str(fs_path)
         return str(self.root / _DENY_PATH_NAME)
 

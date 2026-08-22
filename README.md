@@ -103,9 +103,11 @@ devices in your tailnet — and nothing outside it. Open the printed
 running `tailscaled`; without a tailnet address it exits with an error.
 
 Serve v2 enforces an allow-list: the server answers only for `index.html`,
-`manifest.json`, `lotuspod.css`, and artifact pages whose fail-closed
-`lotuspod:visible` flag parses to exactly `true` — the same rule as
-`lotuspod manifest`. Everything else returns 404: hidden pages (rendered with
+`lotuspod.css`, and artifact pages whose fail-closed `lotuspod:visible` flag
+parses to exactly `true` — the same rule as `lotuspod manifest`.
+`manifest.json` and `FINDINGS.md` are never served (the manifest lists
+private artifact ids); requests for either return 404. Everything else
+returns 404: hidden pages (rendered with
 `--hidden`, a malformed flag, or no flag at all) are no longer reachable by
 direct URL, and stray files, dotfiles, subdirectories, traversal attempts, and
 directory listings are denied too. The allow-list is recomputed per request,
