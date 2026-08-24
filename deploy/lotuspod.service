@@ -5,8 +5,10 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-# Adjust ExecStart to your install; the port MUST match deploy/cloudflared.yml.
-ExecStart=/usr/bin/env lotuspod serve --host 127.0.0.1 --port 8622
+# Repo-local venv install (pip install -e .) with WorkingDirectory set.
+# Adjust both paths to your layout; the port MUST match deploy/cloudflared.yml.
+WorkingDirectory=%h/srv/dev/lotuspod
+ExecStart=%h/srv/dev/lotuspod/.venv/bin/lotuspod serve --host 127.0.0.1 --port 8622
 Restart=on-failure
 RestartSec=5
 
