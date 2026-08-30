@@ -386,7 +386,7 @@ class IndexHeaderTests(TempDirTestCase):
 
     def test_title_is_plain_lotuspod(self):
         index_html = self.build_index()
-        self.assertIn('<h1 class="index-title">Lotuspod</h1>', index_html)
+        self.assertIn('<h1 class="index-title">Lotuspod <span class="index-updated">', index_html)
         self.assertIn("<title>Lotuspod</title>", index_html)
         self.assertNotIn("Episodes", index_html)
 
