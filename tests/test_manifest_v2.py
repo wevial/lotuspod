@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import io
 import json
+import os
 import re
 import sys
 import tempfile
@@ -133,6 +134,39 @@ class RenderFlagTests(TempDirTestCase):
         rc, _, _ = self.render("draft", "--hidden")
         self.assertEqual(rc, 0)
         self.assert_flag_marker("draft", "false")
+
+
+class ThemeCssSyncTests(TempDirTestCase):
+    """A theme upgrade must reach directories rendered by an older version."""
+
+    def packaged_css(self) -> bytes:
+        return (cli.THEME_DIR / "lotuspod.css").read_bytes()
+
+    def css_copy(self) -> Path:
+        return self.out_dir / "lotuspod.css"
+
+    def test_render_writes_the_stylesheet(self):
+        self.render("ep-001")
+        self.assertEqual(self.css_copy().read_bytes(), self.packaged_css())
+
+    def test_render_refreshes_a_stale_stylesheet(self):
+        self.css_copy().write_bytes(b"/* theme v0.2.0 */\n")
+        self.render("ep-001")
+        self.assertEqual(self.css_copy().read_bytes(), self.packaged_css())
+
+    def test_index_refreshes_a_stale_stylesheet(self):
+        self.render("ep-001")
+        self.css_copy().write_bytes(b"/* theme v0.2.0 */\n")
+        rc, _, _ = run_cli("index", "--out-dir", str(self.out_dir))
+        self.assertEqual(rc, 0)
+        self.assertEqual(self.css_copy().read_bytes(), self.packaged_css())
+
+    def test_current_stylesheet_left_untouched(self):
+        self.render("ep-001")
+        stamp = 1_000_000_000
+        os.utime(self.css_copy(), (stamp, stamp))
+        self.render("ep-002")
+        self.assertEqual(int(self.css_copy().stat().st_mtime), stamp)
 
 
 def make_mixed_fixture(out_dir: Path) -> None:

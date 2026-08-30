@@ -71,6 +71,18 @@ def render_template(context: dict, template_path: Path = TEMPLATE_PATH) -> str:
     return _PLACEHOLDER.sub(_sub, template)
 
 
+def sync_theme_css(out_dir: Path) -> None:
+    """Keep the artifact dir's stylesheet identical to the packaged theme.
+
+    Rewriting only on a content difference means a theme upgrade reaches
+    already-rendered directories while untouched ones keep their mtime.
+    """
+    packaged = THEME_DIR / "lotuspod.css"
+    theme_copy = out_dir / "lotuspod.css"
+    if not theme_copy.exists() or theme_copy.read_bytes() != packaged.read_bytes():
+        shutil.copyfile(packaged, theme_copy)
+
+
 def cmd_render(args: argparse.Namespace) -> int:
     tokens = load_tokens()
     kicker = "Lotuspod"
@@ -93,9 +105,7 @@ def cmd_render(args: argparse.Namespace) -> int:
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / f"{args.name}.html"
 
-    theme_copy = out_dir / "lotuspod.css"
-    if not theme_copy.exists():
-        shutil.copyfile(THEME_DIR / "lotuspod.css", theme_copy)
+    sync_theme_css(out_dir)
 
     out_path.write_text(html, encoding="utf-8")
     print(f"rendered {out_path}")
@@ -216,10 +226,7 @@ def cmd_index(args: argparse.Namespace) -> int:
         "theme_version": tokens["version"],
     }
 
-    theme_copy = out_dir / "lotuspod.css"
-    packaged_css = (THEME_DIR / "lotuspod.css").read_bytes()
-    if not theme_copy.exists() or theme_copy.read_bytes() != packaged_css:
-        shutil.copyfile(THEME_DIR / "lotuspod.css", theme_copy)
+    sync_theme_css(out_dir)
 
     out_path = out_dir / INDEX_FILE
     out_path.write_text(
