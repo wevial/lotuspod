@@ -206,7 +206,7 @@ def index_entries_html(artifacts: list[dict]) -> str:
             "          </tr>"
         )
     return (
-        '<table class="episode-table">\n'
+        '<table class="index-table">\n'
         "        <thead>\n"
         "          <tr>\n"
         '            <th scope="col" data-sort-type="number">Episode</th>\n'

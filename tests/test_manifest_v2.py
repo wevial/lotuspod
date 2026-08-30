@@ -412,7 +412,7 @@ class IndexTableTests(TempDirTestCase):
     def test_artifacts_are_listed_as_table_rows(self):
         make_mixed_fixture(self.out_dir)
         index_html = self.build_index()
-        self.assertIn('<table class="episode-table">', index_html)
+        self.assertIn('<table class="index-table">', index_html)
         self.assertIn('<td class="episode-number">7</td>', index_html)
         self.assertIn(
             '<td class="episode-title"><a href="zeta.html">Zeta Pond</a></td>',
@@ -464,7 +464,7 @@ class IndexTableTests(TempDirTestCase):
         make_mixed_fixture(self.out_dir)
         index_html = self.build_index()
         script = index_html[index_html.index("<script>"): index_html.index("</script>")]
-        self.assertIn(".episode-table", script)
+        self.assertIn(".index-table", script)
         self.assertIn("sort-button", script)
         self.assertIn("aria-sort", script)
         self.assertIn('addEventListener("input"', script)
@@ -477,14 +477,14 @@ class IndexTableTests(TempDirTestCase):
 
     def test_theme_styles_the_table_and_its_controls(self):
         css = self.theme_css()
-        for rule in (".episode-table", ".sort-button", ".index-search", ".index-count"):
+        for rule in (".index-table", ".sort-button", ".index-search", ".index-count"):
             with self.subTest(rule=rule):
                 self.assertIn(rule, css)
 
     def test_theme_hides_filtered_rows_and_the_hidden_controls(self):
         """[hidden] loses to table/flex display roles unless restated."""
         css = self.theme_css()
-        self.assertIn(".episode-table tbody tr[hidden]", css)
+        self.assertIn(".index-table tbody tr[hidden]", css)
         self.assertIn(".index-controls[hidden]", css)
 
     def test_theme_no_longer_styles_the_dropped_cards(self):

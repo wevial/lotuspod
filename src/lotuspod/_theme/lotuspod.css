@@ -505,7 +505,7 @@ body {
    of cards: columns let one field be scanned down the page. It borrows the body
    table's language - hairline rules, a single tinted header band, and its own
    sideways scroll when the columns outgrow a narrow viewport. */
-.episode-table {
+.index-table {
   border-collapse: collapse;
   display: block;
   font-size: 0.95rem;
@@ -517,8 +517,8 @@ body {
   width: max-content;
 }
 
-.episode-table th,
-.episode-table td {
+.index-table th,
+.index-table td {
   border-bottom: 1px solid var(--hairline);
   padding: 0.65rem 0.9rem;
   text-align: left;
@@ -527,7 +527,7 @@ body {
 
 /* The header cell hands its padding to the sort button, so the whole cell is
    the hit target rather than just the words inside it. */
-.episode-table thead th {
+.index-table thead th {
   background: var(--color-surface);
   border-bottom-color: var(--hairline-strong);
   color: var(--color-pale-lavender);
@@ -536,28 +536,28 @@ body {
   white-space: nowrap;
 }
 
-.episode-table tbody tr:nth-child(even) {
+.index-table tbody tr:nth-child(even) {
   background: var(--row-tint);
 }
 
-.episode-table tbody tr:last-child td {
+.index-table tbody tr:last-child td {
   border-bottom: 0;
 }
 
 /* Table display roles outrank [hidden] too, so filtered-out rows say it here. */
-.episode-table tbody tr[hidden] {
+.index-table tbody tr[hidden] {
   display: none;
 }
 
-.episode-table::-webkit-scrollbar {
+.index-table::-webkit-scrollbar {
   height: 8px;
 }
 
-.episode-table::-webkit-scrollbar-track {
+.index-table::-webkit-scrollbar-track {
   background: transparent;
 }
 
-.episode-table::-webkit-scrollbar-thumb {
+.index-table::-webkit-scrollbar-thumb {
   background: var(--hairline-strong);
   border-radius: var(--radius-pill);
 }
@@ -586,12 +586,12 @@ body {
   margin-left: 0.4rem;
 }
 
-.episode-table th[aria-sort="ascending"] .sort-button::after {
+.index-table th[aria-sort="ascending"] .sort-button::after {
   color: var(--color-lavender);
   content: "\2191";
 }
 
-.episode-table th[aria-sort="descending"] .sort-button::after {
+.index-table th[aria-sort="descending"] .sort-button::after {
   color: var(--color-lavender);
   content: "\2193";
 }
