@@ -1,7 +1,8 @@
 """Test suite for manifest v2 and fail-closed visibility behavior.
 
 Covers the shared visibility rule end to end: extract_visibility edges,
-render's flag writing, manifest v2 uniform schema + fail-closed listing,
+render's flag writing, the artifact page's back-link to the index,
+manifest v2 uniform schema + fail-closed listing,
 the index page's same rule, serve v2's allow-list plus the request
 path handler that enforces it, serve's --host override used when a local
 Cloudflare Tunnel fronts the server, and the checked-in publish config
@@ -134,6 +135,53 @@ class RenderFlagTests(TempDirTestCase):
         rc, _, _ = self.render("draft", "--hidden")
         self.assertEqual(rc, 0)
         self.assert_flag_marker("draft", "false")
+
+
+class ArtifactNavTests(TempDirTestCase):
+    """Every rendered artifact offers a way back to the index."""
+
+    def rendered(self, name: str = "ep-001", *extra: str) -> str:
+        rc, _, err = self.render(name, *extra)
+        self.assertEqual(rc, 0, err)
+        return (self.out_dir / f"{name}.html").read_text(encoding="utf-8")
+
+    def test_render_links_back_to_the_index(self):
+        page = self.rendered()
+        self.assertIn('<nav class="artifact-nav">', page)
+        self.assertIn('href="index.html"', page)
+
+    def test_back_link_sits_above_the_header(self):
+        page = self.rendered()
+        self.assertLess(
+            page.index('class="artifact-nav"'),
+            page.index('class="artifact-header"'),
+        )
+
+    def test_hidden_render_links_back_too(self):
+        self.assertIn('href="index.html"', self.rendered("draft", "--hidden"))
+
+    def test_theme_styles_the_back_link(self):
+        css = (cli.THEME_DIR / "lotuspod.css").read_text(encoding="utf-8")
+        self.assertIn(".artifact-nav", css)
+
+    def test_back_link_does_not_disturb_listing_metadata(self):
+        """The nav's <a> must not be mistaken for artifact metadata."""
+        self.render(
+            "ep-002", "--episode", "2", "--date", "2026-03-04",
+            "--summary", "back from the pond",
+        )
+        page = (self.out_dir / "ep-002.html").read_text(encoding="utf-8")
+        self.assertEqual(
+            cli.extract_meta(page, "ep-002"),
+            {
+                "file": "ep-002.html",
+                "title": "Ep-002",
+                "episode": "2",
+                "date": "2026-03-04",
+                "summary": "back from the pond",
+                "visible": True,
+            },
+        )
 
 
 class ThemeCssSyncTests(TempDirTestCase):
