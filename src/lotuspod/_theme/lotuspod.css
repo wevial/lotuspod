@@ -61,7 +61,7 @@ body {
 }
 
 .artifact {
-  max-width: 44rem;
+  max-width: 72rem;
   margin: 0 auto;
   padding: 4rem 1.5rem 3rem;
 }
@@ -107,13 +107,21 @@ body {
 
 /* Body: a reading column. Measure is capped in ch so long-form prose keeps a
    comfortable line length at any viewport; paragraph spacing (never indent)
-   carries the rhythm. */
+   carries the rhythm. The cap rides on the blocks rather than on this box, so
+   the measure governs line length while wide structure can use the full
+   container. */
 .artifact-body {
   color: var(--body-ink);
   font-size: var(--size-body);
   line-height: var(--leading-body);
-  max-width: var(--measure-prose);
   padding: 1.75rem 0.25rem 0;
+}
+
+/* Tables and code blocks are structure, not prose - they are read as a whole
+   unit rather than line by line - so they are exempt and take the container's
+   width instead. */
+.artifact-body > :not(table, pre) {
+  max-width: var(--measure-prose);
 }
 
 .artifact-body > :first-child {
@@ -216,7 +224,7 @@ body {
 
 /* Tables are read as data, not framed as cards: hairline rules carry the grid,
    the header band is the only tinted surface, and the table scrolls itself when
-   a wide one outgrows the reading column - no wrapper markup, no unreachable
+   a wide one outgrows the container - no wrapper markup, no unreachable
    content, no shrunken type. */
 .artifact-body table {
   border-collapse: collapse;
@@ -397,7 +405,7 @@ body {
 }
 
 .index {
-  max-width: 44rem;
+  max-width: 72rem;
   margin: 0 auto;
   padding: 4rem 1.5rem 3rem;
 }
