@@ -27,6 +27,14 @@
   --leading-body: 1.7;
   --leading-heading: 1.25;
 
+  --hairline: rgba(216, 203, 250, 0.16);
+  --hairline-strong: rgba(216, 203, 250, 0.32);
+  --row-tint: rgba(216, 203, 250, 0.04);
+  --code-surface: rgba(216, 203, 250, 0.09);
+  --quote-tint: rgba(183, 156, 244, 0.07);
+
+  --radius-chip: 4px;
+  --radius-block: 8px;
   --radius-card: 14px;
   --radius-pill: 999px;
 }
@@ -60,7 +68,7 @@ body {
 
 .artifact-header {
   background: var(--color-surface);
-  border: 1px solid rgba(216, 203, 250, 0.16);
+  border: 1px solid var(--hairline);
   border-radius: var(--radius-card);
   box-shadow: 0 10px 30px rgba(13, 10, 21, 0.55);
   padding: 2.25rem 2rem 1.75rem;
@@ -90,11 +98,11 @@ body {
 }
 
 .artifact-summary {
-  border-left: 3px solid var(--color-lavender);
+  border-left: 1px solid var(--hairline-strong);
   color: var(--color-pale-lavender);
   font-size: 1.05rem;
   margin: 1.25rem 0 0;
-  padding-left: 0.9rem;
+  padding-left: 1rem;
 }
 
 /* Body: a reading column. Measure is capped in ch so long-form prose keeps a
@@ -206,6 +214,150 @@ body {
   margin: 0 0 0.5em;
 }
 
+/* Tables are read as data, not framed as cards: hairline rules carry the grid,
+   the header band is the only tinted surface, and the table scrolls itself when
+   a wide one outgrows the reading column - no wrapper markup, no unreachable
+   content, no shrunken type. */
+.artifact-body table {
+  border-collapse: collapse;
+  display: block;
+  font-size: 0.95rem;
+  margin: 0 0 1.5em;
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-color: var(--hairline-strong) transparent;
+  scrollbar-width: thin;
+  width: max-content;
+}
+
+.artifact-body th,
+.artifact-body td {
+  border-bottom: 1px solid var(--hairline);
+  padding: 0.6rem 0.9rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+.artifact-body th {
+  background: var(--color-surface);
+  border-bottom-color: var(--hairline-strong);
+  color: var(--color-pale-lavender);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.artifact-body tbody tr:nth-child(even) {
+  background: var(--row-tint);
+}
+
+.artifact-body tbody tr:last-child td,
+.artifact-body tbody tr:last-child th {
+  border-bottom: 0;
+}
+
+.artifact-body caption {
+  caption-side: bottom;
+  color: var(--color-muted-lavender);
+  font-size: 0.9rem;
+  padding-top: 0.6rem;
+  text-align: left;
+}
+
+/* The scrollbar is the affordance, so it is drawn in the palette rather than
+   left as a bright system bar across a dark page. */
+.artifact-body table::-webkit-scrollbar,
+.artifact-body pre::-webkit-scrollbar {
+  height: 8px;
+}
+
+.artifact-body table::-webkit-scrollbar-track,
+.artifact-body pre::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.artifact-body table::-webkit-scrollbar-thumb,
+.artifact-body pre::-webkit-scrollbar-thumb {
+  background: var(--hairline-strong);
+  border-radius: var(--radius-pill);
+}
+
+/* A quotation is set-in material: an indented block on a quiet tint, in the
+   display serif, so it reads as someone else's voice. Deliberately unlike the
+   header summary, which stays a hairline rail on body sans. */
+.artifact-body blockquote {
+  background: var(--quote-tint);
+  border-radius: var(--radius-block);
+  color: var(--color-pale-lavender);
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  margin: 1.6em 0;
+  padding: 1.1rem 1.35rem;
+}
+
+.artifact-body blockquote > :first-child {
+  margin-top: 0;
+}
+
+.artifact-body blockquote > :last-child {
+  margin-bottom: 0;
+}
+
+/* A quote inside a quote deepens the indent; it does not stack another tint. */
+.artifact-body blockquote blockquote {
+  background: none;
+  border-left: 1px solid var(--hairline-strong);
+  border-radius: 0;
+  padding: 0 0 0 1rem;
+}
+
+.artifact-body blockquote cite,
+.artifact-body blockquote footer {
+  color: var(--color-muted-lavender);
+  display: block;
+  font-family: var(--font-body);
+  font-size: 0.9rem;
+  font-style: normal;
+  margin-top: 0.65rem;
+}
+
+/* Mono is for code and data only. Inline code sits on a chip small enough to
+   keep the prose line height; a block sets its own field and scrolls sideways
+   rather than wrapping code at arbitrary points. */
+.artifact-body code {
+  background: var(--code-surface);
+  border-radius: var(--radius-chip);
+  color: var(--color-pale-lavender);
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  overflow-wrap: break-word;
+  padding: 0.15em 0.35em;
+}
+
+.artifact-body pre {
+  background: var(--color-deep-night);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-block);
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+  line-height: 1.55;
+  margin: 0 0 1.5em;
+  max-width: 100%;
+  overflow-x: auto;
+  padding: 1rem 1.15rem;
+  scrollbar-color: var(--hairline-strong) transparent;
+  scrollbar-width: thin;
+}
+
+.artifact-body pre code {
+  background: none;
+  border-radius: 0;
+  color: var(--body-ink);
+  font-size: inherit;
+  overflow-wrap: normal;
+  padding: 0;
+  white-space: pre;
+}
+
 /* Light-on-dark: emphasis lifts to pure white rather than piling on weight,
    which would bloom against the night background. */
 .artifact-body strong {
@@ -220,7 +372,7 @@ body {
 
 .artifact-body hr {
   border: 0;
-  border-top: 1px solid rgba(216, 203, 250, 0.16);
+  border-top: 1px solid var(--hairline);
   margin: 2.75rem 0;
 }
 
@@ -252,7 +404,7 @@ body {
 
 .index-header {
   background: var(--color-surface);
-  border: 1px solid rgba(216, 203, 250, 0.16);
+  border: 1px solid var(--hairline);
   border-radius: var(--radius-card);
   box-shadow: 0 10px 30px rgba(13, 10, 21, 0.55);
   padding: 2.25rem 2rem 1.75rem;
@@ -276,7 +428,7 @@ body {
 
 .episode-card {
   background: var(--color-surface);
-  border: 1px solid rgba(216, 203, 250, 0.16);
+  border: 1px solid var(--hairline);
   border-radius: var(--radius-card);
   box-shadow: 0 6px 18px rgba(13, 10, 21, 0.45);
   display: block;

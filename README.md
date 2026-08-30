@@ -168,5 +168,6 @@ install cannot shadow the code under test.
 The lotus theme lives in `src/lotuspod/_theme/`: `tokens.json` is the source of truth for the
 palette (dark/white/lavender: `night`, `deep_night`, `surface`, `glow`,
 `lavender`, `pale_lavender`, `muted_lavender`, `white`), typography,
-and radii; `lotuspod.css` mirrors the tokens as CSS custom properties. Edit the
+structural hairlines/tints (table rules, code and quote surfaces), and radii;
+`lotuspod.css` mirrors the tokens as CSS custom properties. Edit the
 CSS to restyle all artifacts.
