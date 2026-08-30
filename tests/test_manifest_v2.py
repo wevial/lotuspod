@@ -376,6 +376,28 @@ class IndexVisibilityTests(TempDirTestCase):
             self.assertIn(f'href="{entry["file"]}"', index_html)
 
 
+class IndexHeaderTests(TempDirTestCase):
+    """The index wears its own name plainly: no eyebrow, no card."""
+
+    def build_index(self) -> str:
+        rc, _, err = run_cli("index", "--out-dir", str(self.out_dir))
+        self.assertEqual(rc, 0, err)
+        return (self.out_dir / "index.html").read_text(encoding="utf-8")
+
+    def test_title_is_plain_lotuspod(self):
+        index_html = self.build_index()
+        self.assertIn('<h1 class="index-title">Lotuspod</h1>', index_html)
+        self.assertIn("<title>Lotuspod</title>", index_html)
+        self.assertNotIn("Episodes", index_html)
+
+    def test_no_eyebrow_above_the_title(self):
+        self.assertNotIn("artifact-kicker", self.build_index())
+
+    def test_theme_gives_the_header_no_card(self):
+        css = (cli.THEME_DIR / "lotuspod.css").read_text(encoding="utf-8")
+        self.assertNotIn(".index-header", css)
+
+
 class ServeAllowListTests(TempDirTestCase):
     """serve v2 enforces the same visibility rule over HTTP names."""
 
