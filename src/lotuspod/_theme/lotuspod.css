@@ -61,6 +61,7 @@ body {
 }
 
 .artifact {
+  container-type: inline-size;
   max-width: 72rem;
   margin: 0 auto;
   padding: 4rem 1.5rem 3rem;
@@ -107,21 +108,19 @@ body {
 
 /* Body: a reading column. Measure is capped in ch so long-form prose keeps a
    comfortable line length at any viewport; paragraph spacing (never indent)
-   carries the rhythm. The cap rides on the blocks rather than on this box, so
-   the measure governs line length while wide structure can use the full
-   container. */
+   carries the rhythm. The cap stays on this box rather than on the blocks
+   inside it, because a body may arrive as bare text with no element child to
+   hang a cap on - capping the box catches every line either way. Structure that
+   is read as a unit steps back out to --measure-full. */
 .artifact-body {
+  /* How far a block may reach out of the reading column: the page container's
+     content box, less this box's own side padding. */
+  --measure-full: calc(100cqi - 0.5rem);
   color: var(--body-ink);
   font-size: var(--size-body);
   line-height: var(--leading-body);
-  padding: 1.75rem 0.25rem 0;
-}
-
-/* Tables and code blocks are structure, not prose - they are read as a whole
-   unit rather than line by line - so they are exempt and take the container's
-   width instead. */
-.artifact-body > :not(table, pre) {
   max-width: var(--measure-prose);
+  padding: 1.75rem 0.25rem 0;
 }
 
 .artifact-body > :first-child {
@@ -364,6 +363,19 @@ body {
   overflow-wrap: normal;
   padding: 0;
   white-space: pre;
+}
+
+/* Tables and code blocks are structure, not prose - they are read as a whole
+   unit rather than line by line - so at the top level of the body they step out
+   of the reading column and take the page container's width. Nested inside
+   prose, in a quote or a list item, they stay within their parent instead. */
+.artifact-body > table,
+.artifact-body > pre {
+  max-width: var(--measure-full);
+}
+
+.artifact-body > pre {
+  width: var(--measure-full);
 }
 
 /* Light-on-dark: emphasis lifts to pure white rather than piling on weight,
