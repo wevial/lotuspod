@@ -179,36 +179,46 @@ _INDEX_EMPTY_BLOCK = (
 
 
 def index_entries_html(artifacts: list[dict]) -> str:
-    """Render manifest-style metadata into the index page's list block."""
+    """Render manifest-style metadata into the index page's table.
+
+    Episodes are uniform records, so they are listed as rows: one column per
+    field lets a reader scan a single field down the page, and gives the index
+    script a grid to sort and filter. The markup is a complete listing on its
+    own - the script only adds sorting and the search filter on top.
+    """
     if not artifacts:
         return _INDEX_EMPTY_BLOCK
     esc = html.escape
-    items = []
+    rows = []
     for meta in artifacts:
-        inner = []
-        if meta["episode"]:
-            ep = esc(str(meta["episode"]))
-            inner.append(f'<p class="episode-kicker">Episode {ep}</p>')
-        title = esc(str(meta["title"]))
-        inner.append(f'<h2 class="episode-title">{title}</h2>')
-        if meta["date"]:
-            date = esc(str(meta["date"]))
-            inner.append(
-                f'<p class="episode-date"><time datetime="{date}">{date}</time></p>'
-            )
-        if meta["summary"]:
-            summary = esc(str(meta["summary"]))
-            inner.append(f'<p class="episode-summary">{summary}</p>')
-        body = "".join(f"\n          {part}" for part in inner)
         href = esc(str(meta["file"]))
-        items.append(
-            "      <li>\n"
-            f'        <a class="episode-card" href="{href}">'
-            f"{body}\n"
-            "        </a>\n"
-            "      </li>"
+        title = esc(str(meta["title"]))
+        episode = esc(str(meta["episode"]))
+        date = esc(str(meta["date"]))
+        summary = esc(str(meta["summary"]))
+        date_cell = f'<time datetime="{date}">{date}</time>' if date else ""
+        rows.append(
+            "          <tr>\n"
+            f'            <td class="episode-number">{episode}</td>\n'
+            f'            <td class="episode-title"><a href="{href}">{title}</a></td>\n'
+            f'            <td class="episode-date">{date_cell}</td>\n'
+            f'            <td class="episode-summary">{summary}</td>\n'
+            "          </tr>"
         )
-    return '<ul class="episode-list">\n' + "\n".join(items) + "\n    </ul>"
+    return (
+        '<table class="episode-table">\n'
+        "        <thead>\n"
+        "          <tr>\n"
+        '            <th scope="col" data-sort-type="number">Episode</th>\n'
+        '            <th scope="col">Title</th>\n'
+        '            <th scope="col">Date</th>\n'
+        '            <th scope="col">Summary</th>\n'
+        "          </tr>\n"
+        "        </thead>\n"
+        "        <tbody>\n"
+        + "\n".join(rows)
+        + "\n        </tbody>\n      </table>"
+    )
 
 
 def cmd_index(args: argparse.Namespace) -> int:

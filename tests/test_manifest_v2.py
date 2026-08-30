@@ -398,6 +398,101 @@ class IndexHeaderTests(TempDirTestCase):
         self.assertNotIn(".index-header", css)
 
 
+class IndexTableTests(TempDirTestCase):
+    """The listing is a sortable, filterable table of artifact records."""
+
+    def build_index(self) -> str:
+        rc, _, err = run_cli("index", "--out-dir", str(self.out_dir))
+        self.assertEqual(rc, 0, err)
+        return (self.out_dir / "index.html").read_text(encoding="utf-8")
+
+    def theme_css(self) -> str:
+        return (cli.THEME_DIR / "lotuspod.css").read_text(encoding="utf-8")
+
+    def test_artifacts_are_listed_as_table_rows(self):
+        make_mixed_fixture(self.out_dir)
+        index_html = self.build_index()
+        self.assertIn('<table class="episode-table">', index_html)
+        self.assertIn('<td class="episode-number">7</td>', index_html)
+        self.assertIn(
+            '<td class="episode-title"><a href="zeta.html">Zeta Pond</a></td>',
+            index_html,
+        )
+        self.assertIn(
+            '<td class="episode-date">'
+            '<time datetime="2026-03-04">2026-03-04</time></td>',
+            index_html,
+        )
+        self.assertIn(
+            '<td class="episode-summary">latest from the pond</td>', index_html
+        )
+        self.assertNotIn("episode-card", index_html)
+
+    def test_columns_are_labelled_and_the_episode_column_sorts_numerically(self):
+        make_mixed_fixture(self.out_dir)
+        index_html = self.build_index()
+        self.assertIn(
+            '<th scope="col" data-sort-type="number">Episode</th>', index_html
+        )
+        for label in ("Title", "Date", "Summary"):
+            with self.subTest(label=label):
+                self.assertIn(f'<th scope="col">{label}</th>', index_html)
+
+    def test_missing_fields_leave_empty_cells(self):
+        self.render("note")  # no --episode, no --summary
+        index_html = self.build_index()
+        self.assertIn('<td class="episode-number"></td>', index_html)
+        self.assertIn('<td class="episode-summary"></td>', index_html)
+
+    def test_row_values_are_escaped(self):
+        self.render("amp", "--title", "Pond & Lotus", "--summary", "<b>bold</b>")
+        index_html = self.build_index()
+        self.assertIn("Pond &amp; Lotus", index_html)
+        self.assertIn("&lt;b&gt;bold&lt;/b&gt;", index_html)
+
+    def test_search_filter_ships_hidden_for_the_script_to_reveal(self):
+        make_mixed_fixture(self.out_dir)
+        index_html = self.build_index()
+        self.assertIn('<div class="index-controls" hidden>', index_html)
+        self.assertIn('class="index-search" type="search"', index_html)
+        self.assertIn('for="index-search"', index_html)
+        self.assertIn('id="index-search"', index_html)
+        self.assertIn('<p class="index-count"', index_html)
+        self.assertIn('class="index-empty index-no-match" hidden', index_html)
+
+    def test_script_wires_sorting_and_filtering(self):
+        make_mixed_fixture(self.out_dir)
+        index_html = self.build_index()
+        script = index_html[index_html.index("<script>"): index_html.index("</script>")]
+        self.assertIn(".episode-table", script)
+        self.assertIn("sort-button", script)
+        self.assertIn("aria-sort", script)
+        self.assertIn('addEventListener("input"', script)
+        self.assertIn(".index-search", script)
+
+    def test_empty_pond_has_no_table(self):
+        index_html = self.build_index()
+        self.assertIn("Nothing in the pond yet", index_html)
+        self.assertNotIn("<table", index_html)
+
+    def test_theme_styles_the_table_and_its_controls(self):
+        css = self.theme_css()
+        for rule in (".episode-table", ".sort-button", ".index-search", ".index-count"):
+            with self.subTest(rule=rule):
+                self.assertIn(rule, css)
+
+    def test_theme_hides_filtered_rows_and_the_hidden_controls(self):
+        """[hidden] loses to table/flex display roles unless restated."""
+        css = self.theme_css()
+        self.assertIn(".episode-table tbody tr[hidden]", css)
+        self.assertIn(".index-controls[hidden]", css)
+
+    def test_theme_no_longer_styles_the_dropped_cards(self):
+        css = self.theme_css()
+        self.assertNotIn(".episode-card", css)
+        self.assertNotIn(".episode-list", css)
+
+
 class ServeAllowListTests(TempDirTestCase):
     """serve v2 enforces the same visibility rule over HTTP names."""
 

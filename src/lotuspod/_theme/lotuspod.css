@@ -442,7 +442,7 @@ body {
 }
 
 /* The index masthead is the page's own voice, not an entry: it wears no card,
-   so the episode cards below are the only surfaces that lift off the night. */
+   so the listing below is the only surface that lifts off the night. */
 .index-title {
   color: var(--color-white);
   font-family: var(--font-display);
@@ -451,63 +451,179 @@ body {
   margin: 0 0 0.5rem;
 }
 
-.episode-list {
-  display: grid;
-  gap: 1rem;
-  list-style: none;
-  margin: 1.5rem 0 0;
-  padding: 0;
+/* Search sits above the listing in the quiet meta voice, and is revealed by the
+   index script - the markup ships it hidden, so a page without scripting never
+   shows a control that cannot filter. */
+.index-controls {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 1.5rem;
 }
 
-.episode-card {
-  background: var(--color-surface);
-  border: 1px solid var(--hairline);
-  border-radius: var(--radius-card);
-  box-shadow: 0 6px 18px rgba(13, 10, 21, 0.45);
-  display: block;
-  padding: 1.25rem 1.4rem;
-  text-decoration: none;
-  transition:
-    border-color 0.15s ease,
-    transform 0.15s ease;
+/* The display above outranks the UA stylesheet's [hidden] rule, so the hidden
+   state has to be restated here. */
+.index-controls[hidden] {
+  display: none;
 }
 
-.episode-card:hover {
-  border-color: rgba(183, 156, 244, 0.55);
-  transform: translateY(-2px);
-}
-
-.episode-kicker {
-  color: var(--color-lavender);
-  font-family: var(--font-mono);
-  font-size: 0.75rem;
+.index-search-label {
+  color: var(--color-muted-lavender);
+  font-size: 0.8rem;
   letter-spacing: 0.12em;
-  margin: 0 0 0.35rem;
   text-transform: uppercase;
 }
 
-.episode-title {
+.index-search {
+  background: var(--color-surface);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-pill);
   color: var(--color-white);
-  font-family: var(--font-display);
-  font-size: 1.25rem;
-  line-height: 1.2;
+  font-family: var(--font-body);
+  font-size: 0.95rem;
+  min-width: 16rem;
+  padding: 0.45rem 0.95rem;
+}
+
+.index-search::placeholder {
+  color: var(--color-muted-lavender);
+}
+
+.index-search:focus-visible {
+  border-color: var(--color-lavender);
+  outline: none;
+}
+
+.index-count {
+  color: var(--color-muted-lavender);
+  font-size: 0.85rem;
   margin: 0;
 }
 
-.episode-card:hover .episode-title {
+/* Episodes are uniform records, so the listing is a table rather than a stack
+   of cards: columns let one field be scanned down the page. It borrows the body
+   table's language - hairline rules, a single tinted header band, and its own
+   sideways scroll when the columns outgrow a narrow viewport. */
+.episode-table {
+  border-collapse: collapse;
+  display: block;
+  font-size: 0.95rem;
+  margin: 1.25rem 0 0;
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-color: var(--hairline-strong) transparent;
+  scrollbar-width: thin;
+  width: max-content;
+}
+
+.episode-table th,
+.episode-table td {
+  border-bottom: 1px solid var(--hairline);
+  padding: 0.65rem 0.9rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+/* The header cell hands its padding to the sort button, so the whole cell is
+   the hit target rather than just the words inside it. */
+.episode-table thead th {
+  background: var(--color-surface);
+  border-bottom-color: var(--hairline-strong);
   color: var(--color-pale-lavender);
+  font-weight: 600;
+  padding: 0;
+  white-space: nowrap;
+}
+
+.episode-table tbody tr:nth-child(even) {
+  background: var(--row-tint);
+}
+
+.episode-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+/* Table display roles outrank [hidden] too, so filtered-out rows say it here. */
+.episode-table tbody tr[hidden] {
+  display: none;
+}
+
+.episode-table::-webkit-scrollbar {
+  height: 8px;
+}
+
+.episode-table::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.episode-table::-webkit-scrollbar-thumb {
+  background: var(--hairline-strong);
+  border-radius: var(--radius-pill);
+}
+
+/* The sort arrow is drawn from aria-sort, which is also what a screen reader
+   announces - one source of state, no indicator markup to keep in step. */
+.sort-button {
+  background: none;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  padding: 0.65rem 0.9rem;
+  text-align: left;
+  width: 100%;
+}
+
+.sort-button:hover,
+.sort-button:focus-visible {
+  color: var(--color-lavender);
+}
+
+.sort-button::after {
+  color: var(--color-muted-lavender);
+  content: "\2195";
+  margin-left: 0.4rem;
+}
+
+.episode-table th[aria-sort="ascending"] .sort-button::after {
+  color: var(--color-lavender);
+  content: "\2191";
+}
+
+.episode-table th[aria-sort="descending"] .sort-button::after {
+  color: var(--color-lavender);
+  content: "\2193";
+}
+
+.episode-number {
+  color: var(--color-lavender);
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
+.episode-title a {
+  color: var(--color-white);
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  text-decoration: none;
+}
+
+.episode-title a:hover,
+.episode-title a:focus-visible {
+  color: var(--color-pale-lavender);
+  text-decoration: underline;
 }
 
 .episode-date {
   color: var(--color-muted-lavender);
-  font-size: 0.85rem;
-  margin: 0.35rem 0 0;
+  white-space: nowrap;
 }
 
 .episode-summary {
   color: var(--color-pale-lavender);
-  font-size: 0.95rem;
-  margin: 0.5rem 0 0;
+  max-width: 48ch;
 }
 
 .index-empty {

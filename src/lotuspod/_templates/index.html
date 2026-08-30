@@ -15,12 +15,116 @@
     </header>
 
     <section class="index-body">
-{{entries_block}}
+      <div class="index-controls" hidden>
+        <label class="index-search-label" for="index-search">Search</label>
+        <input id="index-search" class="index-search" type="search" autocomplete="off"
+               spellcheck="false" placeholder="title, episode, date, summary">
+        <p class="index-count" role="status" aria-live="polite"></p>
+      </div>
+
+      {{entries_block}}
+
+      <p class="index-empty index-no-match" hidden>Nothing matches that search.</p>
     </section>
 
     <footer class="artifact-footer">
       <span aria-hidden="true">&#10047;</span> lotuspod
     </footer>
   </main>
+
+  <script>
+    // Progressive enhancement over a listing that is already complete: the table
+    // above stands on its own, and this adds sorting and the search filter on
+    // top. The search field ships hidden and is revealed here, so a reader
+    // without scripting never sees a control that cannot filter anything.
+    (() => {
+      const table = document.querySelector(".episode-table");
+      if (!table) return;
+
+      const body = table.tBodies[0];
+      const headers = Array.from(table.tHead.rows[0].cells);
+      // Document order is filename order - the listing's stable base. Sorts run
+      // from it rather than from the current DOM order, so a sort is repeatable
+      // and equal keys keep falling back to filename order.
+      const rows = Array.from(body.rows);
+
+      const cell = (row, column) => row.cells[column].textContent.trim();
+
+      const sorted = (column, ascending) => {
+        const numeric = headers[column].dataset.sortType === "number";
+        const direction = ascending ? 1 : -1;
+        return rows.slice().sort((a, b) => {
+          const left = cell(a, column);
+          const right = cell(b, column);
+          // Blanks (no episode number, no date) sink in both directions, so the
+          // rows that carry the field stay together at the top either way.
+          if (!left || !right) return left ? -1 : right ? 1 : 0;
+          if (numeric) {
+            const [x, y] = [Number(left), Number(right)];
+            if (!Number.isNaN(x) && !Number.isNaN(y)) return (x - y) * direction;
+          }
+          return left.localeCompare(right, undefined, {
+            numeric: true,
+            sensitivity: "base",
+          }) * direction;
+        });
+      };
+
+      let sortColumn = -1;
+      let ascending = true;
+
+      const sortBy = (column) => {
+        ascending = column === sortColumn ? !ascending : true;
+        sortColumn = column;
+        for (const row of sorted(column, ascending)) body.append(row);
+        headers.forEach((header, index) => {
+          header.setAttribute(
+            "aria-sort",
+            index !== column ? "none" : ascending ? "ascending" : "descending"
+          );
+        });
+      };
+
+      // The header label becomes a button so the sort is reachable by keyboard;
+      // aria-sort carries the state, and the theme draws the arrow from it.
+      headers.forEach((header, index) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "sort-button";
+        button.textContent = header.textContent;
+        button.addEventListener("click", () => sortBy(index));
+        header.textContent = "";
+        header.append(button);
+        header.setAttribute("aria-sort", "none");
+      });
+
+      const controls = document.querySelector(".index-controls");
+      const search = document.querySelector(".index-search");
+      const count = document.querySelector(".index-count");
+      const noMatch = document.querySelector(".index-no-match");
+
+      // One case-insensitive substring test against the whole row, so a query
+      // matches any column without the reader having to pick one.
+      const filter = () => {
+        const query = search.value.trim().toLowerCase();
+        let shown = 0;
+        for (const row of rows) {
+          const match = !query || row.textContent.toLowerCase().includes(query);
+          row.hidden = !match;
+          if (match) shown += 1;
+        }
+        const noun = rows.length === 1 ? "episode" : "episodes";
+        count.textContent =
+          shown === rows.length
+            ? `${rows.length} ${noun}`
+            : `${shown} of ${rows.length} ${noun}`;
+        noMatch.hidden = shown > 0;
+      };
+
+      search.addEventListener("input", filter);
+      controls.hidden = false;
+      filter();
+    })();
+  </script>
 </body>
 </html>

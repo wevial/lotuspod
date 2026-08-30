@@ -80,11 +80,20 @@ artifact:
 lotuspod index               # scans artifacts/ (or pass --out-dir DIR)
 ```
 
-Each card links to its artifact page and shows the title, episode, date, and
-summary parsed from the rendered HTML; only fail-closed-visible artifacts are
-listed (same rule as `lotuspod manifest`). Cards are sorted by filename and
-styled by the lotus theme. Re-running is safe: `index.html` never lists itself
-(and is skipped by `lotuspod manifest` too).
+The listing is a table: one row per artifact, with the episode, title (linking
+to its page), date, and summary parsed from the rendered HTML. Only
+fail-closed-visible artifacts are listed (same rule as `lotuspod manifest`).
+Rows arrive in filename order and are styled by the lotus theme. Re-running is
+safe: `index.html` never lists itself (and is skipped by `lotuspod manifest`
+too).
+
+Click a column header to sort by it (a second click reverses; the episode
+column sorts numerically, and rows with a blank value in the sorted column sink
+to the bottom either way), and type in the search box to filter rows down to
+those matching the query in any column. Both are progressive enhancement from a
+script inlined in `index.html` — no extra file to serve — so with scripting off
+the page is still the complete listing, just unsorted and unfiltered (the search
+box stays hidden rather than offering a control that cannot filter).
 
 ## Serve
 
