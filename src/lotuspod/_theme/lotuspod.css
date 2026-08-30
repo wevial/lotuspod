@@ -1,5 +1,5 @@
 /*
- * Lotuspod theme "lotus" v0.2.0
+ * Lotuspod theme "lotus" v0.3.0
  * Tokens mirror theme/tokens.json.
  */
 
@@ -16,6 +16,16 @@
   --font-display: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
   --font-body: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --measure-prose: 66ch;
+  --body-ink: rgba(255, 255, 255, 0.87);
+  --size-body: 1.0625rem;
+  --size-h2: clamp(1.45rem, 4vw, 1.95rem);
+  --size-h3: 1.375rem;
+  --size-h4: 1.125rem;
+  --size-h5: 0.875rem;
+  --leading-body: 1.7;
+  --leading-heading: 1.25;
 
   --radius-card: 14px;
   --radius-pill: 999px;
@@ -87,22 +97,143 @@ body {
   padding-left: 0.9rem;
 }
 
+/* Body: a reading column. Measure is capped in ch so long-form prose keeps a
+   comfortable line length at any viewport; paragraph spacing (never indent)
+   carries the rhythm. */
 .artifact-body {
+  color: var(--body-ink);
+  font-size: var(--size-body);
+  line-height: var(--leading-body);
+  max-width: var(--measure-prose);
   padding: 1.75rem 0.25rem 0;
+}
+
+.artifact-body > :first-child {
+  margin-top: 0;
+}
+
+.artifact-body > :last-child {
+  margin-bottom: 0;
+}
+
+.artifact-body p {
+  margin: 0 0 1.15em;
+  text-wrap: pretty;
+}
+
+/* Heading roles: display serif for the two section levels, body sans below
+   them, each with more space above than below so a heading binds to the text
+   it introduces rather than floating between blocks. */
+.artifact-body h2,
+.artifact-body h3,
+.artifact-body h4,
+.artifact-body h5,
+.artifact-body h6 {
+  line-height: var(--leading-heading);
+  text-wrap: balance;
 }
 
 .artifact-body h2 {
   color: var(--color-white);
   font-family: var(--font-display);
-  margin-top: 2rem;
+  font-size: var(--size-h2);
+  font-weight: 600;
+  margin: 3rem 0 0.85rem;
+}
+
+.artifact-body h3 {
+  color: var(--color-pale-lavender);
+  font-family: var(--font-display);
+  font-size: var(--size-h3);
+  font-weight: 600;
+  margin: 2.25rem 0 0.65rem;
+}
+
+.artifact-body h4 {
+  color: var(--color-lavender);
+  font-family: var(--font-body);
+  font-size: var(--size-h4);
+  font-weight: 600;
+  margin: 1.85rem 0 0.5rem;
+}
+
+.artifact-body h5,
+.artifact-body h6 {
+  color: var(--color-muted-lavender);
+  font-family: var(--font-body);
+  font-size: var(--size-h5);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  margin: 1.6rem 0 0.45rem;
+  text-transform: uppercase;
+}
+
+.artifact-body ul,
+.artifact-body ol {
+  margin: 0 0 1.15em;
+  padding-left: 1.4rem;
+}
+
+.artifact-body li {
+  margin: 0 0 0.4em;
+  padding-left: 0.2rem;
+}
+
+.artifact-body li::marker {
+  color: var(--color-lavender);
+}
+
+.artifact-body ol > li::marker {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+}
+
+.artifact-body ul ul {
+  list-style-type: circle;
+}
+
+.artifact-body ul ul ul {
+  list-style-type: square;
+}
+
+/* A nested list belongs to the item above it: close below, open after. */
+.artifact-body li > ul,
+.artifact-body li > ol {
+  margin: 0.4em 0 0.15em;
+}
+
+.artifact-body li > p {
+  margin: 0 0 0.5em;
+}
+
+/* Light-on-dark: emphasis lifts to pure white rather than piling on weight,
+   which would bloom against the night background. */
+.artifact-body strong {
+  color: var(--color-white);
+  font-weight: 600;
+}
+
+.artifact-body em {
+  color: var(--color-white);
+  font-style: italic;
+}
+
+.artifact-body hr {
+  border: 0;
+  border-top: 1px solid rgba(216, 203, 250, 0.16);
+  margin: 2.75rem 0;
 }
 
 .artifact-body a {
   color: var(--color-lavender);
+  text-decoration-color: rgba(183, 156, 244, 0.45);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.18em;
 }
 
 .artifact-body a:hover {
   color: var(--color-pale-lavender);
+  text-decoration-color: currentColor;
 }
 
 .artifact-footer {
