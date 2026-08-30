@@ -144,10 +144,14 @@ def extract_meta(page_html: str, stem: str) -> dict:
 
 
 def collect_artifacts(out_dir: Path) -> tuple[list[dict], int]:
-    """Parse every artifact page; return (visible entries, hidden count)."""
+    """Parse every artifact page; return (visible entries, hidden count).
+
+    Visible entries come back newest-first (date descending, filename as the
+    tiebreaker) so the index leads with the latest work by default."""
     pages = sorted(p for p in out_dir.glob("*.html") if p.name != INDEX_FILE)
     metas = [extract_meta(p.read_text(encoding="utf-8"), p.stem) for p in pages]
     visible = [m for m in metas if m["visible"]]
+    visible.sort(key=lambda m: m.get("date") or "", reverse=True)
     return visible, len(metas) - len(visible)
 
 
