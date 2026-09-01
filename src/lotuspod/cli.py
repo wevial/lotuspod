@@ -105,18 +105,23 @@ class _H2Collector(HTMLParser):
                 self._line_starts.append(index + 1)
         self._open: dict | None = None
         self.headings: list[dict] = []
+        self.ids: set[str] = set()
 
     def _offset(self) -> int:
         line, column = self.getpos()
         return self._line_starts[line - 1] + column
 
     def handle_starttag(self, tag: str, attrs: list) -> None:
+        explicit = next((v for k, v in attrs if k == "id" and v), "")
+        if explicit:
+            # Every element's id is reserved, not just the headings' - an
+            # anchor that lands on some other element is a broken anchor.
+            self.ids.add(explicit)
         if tag != "h2":
             return
         self._finish()
         start = self._offset()
         source = self.get_starttag_text() or ""
-        explicit = next((v for k, v in attrs if k == "id" and v), "")
         self._open = {
             "start": start,
             "end": start + len(source),
@@ -167,7 +172,8 @@ def outline_body(body: str) -> tuple[str, list[dict]]:
     Ids come from the heading text alone, so the same body always yields the
     same anchors - a re-render never breaks a link someone already shared.
     Headings that carry an explicit id keep it (it may already be linked) and
-    only reserve that name, so a generated id can never collide with one.
+    only reserve that name, so a generated id can never collide with one -
+    nor with an id already spelled out anywhere else in the body.
     A body with fewer than two h2s has nothing to navigate, so it is left
     exactly as written.
     """
@@ -178,7 +184,7 @@ def outline_body(body: str) -> tuple[str, list[dict]]:
     if len(headings) < _OUTLINE_MIN_HEADINGS:
         return body, []
 
-    taken = {h["id"] for h in headings if h["id"]}
+    taken = set(parser.ids)
     outline: list[dict] = []
     pieces: list[str] = []
     cursor = 0

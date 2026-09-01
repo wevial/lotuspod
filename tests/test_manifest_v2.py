@@ -890,6 +890,14 @@ class OutlineBodyTests(unittest.TestCase):
             with self.subTest(body=body):
                 self.assertEqual(cli.outline_body(body), (body, []))
 
+    def test_ids_on_other_elements_are_reserved_too(self):
+        """An anchor that lands on a non-heading element is a broken anchor."""
+        body = '<div id="notes">n</div><h2>Notes</h2><h2>Other</h2>'
+        out, outline = cli.outline_body(body)
+        self.assertIn('<h2 id="notes-2">Notes</h2>', out)
+        self.assertEqual(outline[0], {"id": "notes-2", "text": "Notes"})
+        self.assertEqual(cli.outline_body(out), (out, outline))
+
     def test_running_twice_is_a_fixed_point(self):
         once, outline = cli.outline_body("<h2>A</h2><h2>B</h2>")
         self.assertEqual(cli.outline_body(once), (once, outline))
