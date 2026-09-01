@@ -828,13 +828,17 @@ class OutlineTests(TempDirTestCase):
         self.assertIn(self.TWO_H2, page)
         self.assertNotIn('id="a"', page)
 
-    def test_no_outline_matches_the_pre_change_page_exactly(self):
-        """Opting out must reproduce the page render produced before ids."""
+    def test_no_outline_matches_the_page_without_an_outline(self):
+        """Opting out drops both halves at once - the ids and the section list
+        built from them - leaving the page a body with no outline at all."""
         with_ids = self.rendered(self.TWO_H2)
         opted_out = self.rendered(self.TWO_H2, "--no-outline")
+        without_nav = re.sub(
+            r'<nav class="artifact-outline".*?</nav>', "", with_ids, flags=re.DOTALL
+        )
         self.assertEqual(
             opted_out,
-            with_ids.replace('<h2 id="a">', "<h2>").replace('<h2 id="b">', "<h2>"),
+            without_nav.replace('<h2 id="a">', "<h2>").replace('<h2 id="b">', "<h2>"),
         )
 
     def test_outline_reaches_the_template_context(self):
@@ -857,6 +861,125 @@ class OutlineTests(TempDirTestCase):
 
     def test_hidden_render_still_gets_ids(self):
         self.assertIn('id="a"', self.rendered(self.TWO_H2, "--hidden"))
+
+
+class OutlineMarkupTests(TempDirTestCase):
+    """The outline the reader sees: one list of links, two layouts, no script."""
+
+    OUTLINE_NAV = re.compile(
+        r'<nav class="artifact-outline".*?</nav>', re.DOTALL
+    )
+
+    def rendered(self, body: str, *extra: str) -> str:
+        rc, _, err = self.render("ep-001", "--body", body, *extra)
+        self.assertEqual(rc, 0, err)
+        return (self.out_dir / "ep-001.html").read_text(encoding="utf-8")
+
+    def nav(self, page: str) -> str:
+        found = self.OUTLINE_NAV.search(page)
+        self.assertIsNotNone(found, "no outline nav in the page")
+        return found.group(0)
+
+    def test_every_section_is_listed_in_document_order(self):
+        nav = self.nav(self.rendered("<h2>Alpha</h2><h2>Beta</h2><h2>Gamma</h2>"))
+        self.assertEqual(
+            re.findall(r'<a href="#([^"]*)">([^<]*)</a>', nav),
+            [("alpha", "Alpha"), ("beta", "Beta"), ("gamma", "Gamma")],
+        )
+
+    def test_links_point_at_the_ids_the_body_carries(self):
+        """Anchors and headings come from one pass, so they cannot disagree."""
+        page = self.rendered('<h2>Same</h2><h2 id="kept">Same</h2><h2>Same</h2>')
+        for heading_id in ("same", "kept", "same-2"):
+            with self.subTest(id=heading_id):
+                self.assertIn(f'<h2 id="{heading_id}">', page)
+                self.assertIn(f'href="#{heading_id}"', self.nav(page))
+
+    def test_link_text_is_the_flattened_heading_text(self):
+        nav = self.nav(
+            self.rendered("<h2><em>Deep</em> Dive</h2><h2>Salt &amp; Pepper</h2>")
+        )
+        self.assertIn('<a href="#deep-dive">Deep Dive</a>', nav)
+        self.assertIn('<a href="#salt-pepper">Salt &amp; Pepper</a>', nav)
+
+    def test_outline_sits_above_the_body_in_one_wrapper(self):
+        """Source order is the narrow layout; the wide one is the grid's job."""
+        page = self.rendered(OutlineTests.TWO_H2)
+        self.assertLess(
+            page.index('class="artifact-main"'), page.index('class="artifact-outline"')
+        )
+        self.assertLess(
+            page.index('class="artifact-outline"'), page.index('class="artifact-body"')
+        )
+
+    def test_disclosure_ships_open_and_labelled(self):
+        """The fold is a real control at either width, and starts undone."""
+        nav = self.nav(self.rendered(OutlineTests.TWO_H2))
+        self.assertIn('<details class="artifact-outline-disclosure" open>', nav)
+        self.assertIn(
+            '<summary class="artifact-outline-summary">On this page</summary>', nav
+        )
+        self.assertIn('aria-label="Sections"', nav)
+
+    def test_pages_with_nothing_to_navigate_get_no_outline(self):
+        for body, extra in (
+            ("<h2>Only</h2><p>x</p>", ()),
+            ("<p>no headings</p>", ()),
+            (OutlineTests.TWO_H2, ("--no-outline",)),
+        ):
+            with self.subTest(body=body, extra=extra):
+                page = self.rendered(body, *extra)
+                self.assertIsNone(self.OUTLINE_NAV.search(page))
+                self.assertNotIn("artifact-outline", page)
+
+    def test_ids_and_text_are_escaped(self):
+        markup = cli.outline_html([{"id": 'a"b', "text": "Tom & <Jerry>"}])
+        self.assertIn(
+            '<a href="#a&quot;b">Tom &amp; &lt;Jerry&gt;</a>', markup
+        )
+
+    def test_empty_outline_renders_nothing(self):
+        self.assertEqual(cli.outline_html([]), "")
+
+
+class OutlineThemeTests(unittest.TestCase):
+    """The two layouts are CSS alone - the markup ships one list either way."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.css = (cli.THEME_DIR / "lotuspod.css").read_text(encoding="utf-8")
+        cls.wide = cls.css.split("@container (min-width: 58rem) {")[1].split("\n}\n")[0]
+
+    def test_narrow_disclosure_is_styled(self):
+        for hook in (
+            ".artifact-outline-disclosure",
+            ".artifact-outline-summary",
+            ".artifact-outline-list",
+        ):
+            with self.subTest(hook=hook):
+                self.assertIn(hook, self.css.split("@container")[0])
+
+    def test_wide_layout_puts_the_outline_in_a_sticky_rail(self):
+        self.assertIn("position: sticky", self.wide)
+        self.assertIn("grid-area: 1 / 2", self.wide)
+        self.assertIn("grid-area: 1 / 1", self.wide)
+
+    def test_the_two_column_grid_forms_only_when_there_is_an_outline(self):
+        """A body with no outline keeps the plain column - no empty rail."""
+        for rule in self.wide.split("}"):
+            if "display: grid" in rule:
+                self.assertIn(":has(.artifact-outline)", rule)
+                break
+        else:
+            self.fail("no grid rule in the wide layout")
+
+    def test_the_rail_takes_its_room_out_of_the_breakout_measure(self):
+        """Otherwise a full-width table would run under the rail."""
+        self.assertIn("--measure-full", self.wide)
+        self.assertIn("var(--outline-rail)", self.wide)
+
+    def test_anchored_headings_keep_air_above_them(self):
+        self.assertIn("scroll-margin-top", self.css)
 
 
 class OutlineBodyTests(unittest.TestCase):

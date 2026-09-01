@@ -40,8 +40,18 @@ Pass `--hidden` to mark an artifact not visible: it carries a
 When the body has two or more `<h2>` sections, render gives each one a slug id
 taken from its heading text (`<h2>Deep Dive</h2>` -> `id="deep-dive"`, repeats deduped
 as `deep-dive-2`), so section links stay the same every time a page is
-re-rendered. A heading that already carries an `id` keeps it. Pass
-`--no-outline` to skip id assignment entirely.
+re-rendered. A heading that already carries an `id` keeps it.
+
+Those sections also become the page's own outline: one
+`<nav class="artifact-outline">` list of section links, placed above the body
+in the markup. The theme gives it two roles from that single list — on a wide
+page it sits in the empty gutter beside the reading column as a sticky rail
+(the prose keeps its measure; a full-width table stops at the rail rather than
+running under it), and on a narrow one it is a disclosure card above the
+prose. It ships expanded and folds away at either width. No script and no
+second copy of the links: the layout is a container query away.
+
+Pass `--no-outline` to skip the ids and the outline list entirely.
 
 ## Manifest
 

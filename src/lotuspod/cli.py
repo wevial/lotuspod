@@ -204,6 +204,39 @@ def outline_body(body: str) -> tuple[str, list[dict]]:
     return "".join(pieces), outline
 
 
+_OUTLINE_LABEL = "On this page"
+
+
+def outline_html(outline: list[dict]) -> str:
+    """Render the outline as one list of section links ("" when there is none).
+
+    One list serves both roles the theme draws from it - a sticky rail beside
+    the prose where the page is wide enough for one, a disclosure above the
+    prose where it is not - so there is never a second copy of the links to
+    keep in step, and no script deciding which copy to show. It ships open:
+    folding it away is the reader's to do, at either width.
+    """
+    if not outline:
+        return ""
+    esc = html.escape
+    items = "\n".join(
+        '            <li><a href="#{id}">{text}</a></li>'.format(
+            id=esc(str(entry["id"])), text=esc(str(entry["text"]))
+        )
+        for entry in outline
+    )
+    return (
+        '<nav class="artifact-outline" aria-label="Sections">\n'
+        '        <details class="artifact-outline-disclosure" open>\n'
+        f'          <summary class="artifact-outline-summary">{_OUTLINE_LABEL}</summary>\n'
+        '          <ol class="artifact-outline-list" role="list">\n'
+        f"{items}\n"
+        "          </ol>\n"
+        "        </details>\n"
+        "      </nav>"
+    )
+
+
 def cmd_render(args: argparse.Namespace) -> int:
     tokens = load_tokens()
     kicker = "Lotuspod"
@@ -218,6 +251,7 @@ def cmd_render(args: argparse.Namespace) -> int:
         "summary_block": summary_block,
         "body": body,
         "outline": outline,
+        "outline_block": outline_html(outline),
         "theme_name": tokens["name"],
         "theme_version": tokens["version"],
         "visible": "false" if args.hidden else "true",

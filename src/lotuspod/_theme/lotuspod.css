@@ -1,5 +1,5 @@
 /*
- * Lotuspod theme "lotus" v0.3.0
+ * Lotuspod theme "lotus" v0.4.0
  * Tokens mirror theme/tokens.json.
  */
 
@@ -125,6 +125,124 @@ body {
   padding-left: 1rem;
 }
 
+/* Body and outline are one unit: a single column on a narrow page, and a
+   reading column beside a rail once there is room for both. The grid forms
+   only when an outline is actually there - a page under the two-heading
+   threshold, or one rendered with --no-outline, keeps the plain column. */
+.artifact-main {
+  --outline-rail: 15rem;
+  --outline-gap: 2.5rem;
+}
+
+/* Narrow: a disclosure above the prose. It ships open, so the reader arrives
+   knowing the shape of the page, and folds away to hand the screen back -
+   the fold is a real control at both widths, never a dead one. */
+.artifact-outline {
+  margin: 1.75rem 0 0;
+}
+
+.artifact-outline-disclosure {
+  background: var(--color-surface);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-block);
+  padding: 0 1rem;
+}
+
+.artifact-outline-summary {
+  color: var(--color-muted-lavender);
+  cursor: pointer;
+  font-size: 0.8rem;
+  letter-spacing: 0.12em;
+  padding: 0.7rem 0;
+  text-transform: uppercase;
+}
+
+.artifact-outline-summary:hover,
+.artifact-outline-summary:focus-visible {
+  color: var(--color-lavender);
+}
+
+.artifact-outline-summary::marker {
+  color: var(--color-lavender);
+}
+
+/* Numbers would compete with the section names, so the ordered list is drawn
+   unmarked - it carries role="list" because dropping the marker also drops
+   list semantics in some screen readers. */
+.artifact-outline-list {
+  border-top: 1px solid var(--hairline);
+  list-style: none;
+  margin: 0;
+  padding: 0.5rem 0 0.85rem;
+}
+
+/* Section links are navigation, not prose: no underline at rest, the whole
+   line is the hit target, and hover lifts into lavender like the back-link. */
+.artifact-outline-list a {
+  color: var(--color-pale-lavender);
+  display: block;
+  font-size: 0.9rem;
+  line-height: 1.4;
+  padding: 0.3rem 0;
+  text-decoration: none;
+  text-wrap: pretty;
+}
+
+.artifact-outline-list a:hover,
+.artifact-outline-list a:focus-visible {
+  color: var(--color-lavender);
+}
+
+/* Wide: the reading column is capped well inside the container, so the
+   outline moves into the gutter it leaves and rides along as a sticky rail -
+   the prose keeps its measure untouched. Measured against the page container
+   rather than the viewport, the same box --measure-full is figured from. */
+@container (min-width: 58rem) {
+  .artifact-main:has(.artifact-outline) {
+    align-items: start;
+    column-gap: var(--outline-gap);
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) var(--outline-rail);
+  }
+
+  .artifact-main:has(.artifact-outline) > .artifact-body {
+    /* The rail now stands in part of the container, so a block stepping out
+       of the reading column stops at the column edge, not under the rail. */
+    --measure-full: calc(
+      100cqi - 0.5rem - var(--outline-rail) - var(--outline-gap)
+    );
+    grid-area: 1 / 1;
+  }
+
+  /* Sticky within the row it shares with the body, and scrollable itself if a
+     long outline outgrows the screen - a rail that runs off the bottom would
+     be navigation you cannot reach. */
+  .artifact-outline {
+    grid-area: 1 / 2;
+    max-height: calc(100vh - 3rem);
+    overflow-y: auto;
+    position: sticky;
+    scrollbar-color: var(--hairline-strong) transparent;
+    scrollbar-width: thin;
+    top: 1.5rem;
+  }
+
+  /* In the gutter the card would read as a second surface competing with the
+     header, so the rail is drawn as a hairline margin note instead. */
+  .artifact-outline-disclosure {
+    background: none;
+    border: 0;
+    border-left: 1px solid var(--hairline);
+    border-radius: 0;
+    padding: 0 0 0 1.15rem;
+  }
+
+  .artifact-outline-list {
+    border-top: 0;
+    padding: 0.35rem 0 0;
+  }
+}
+
 /* Body: a reading column. Measure is capped in ch so long-form prose keeps a
    comfortable line length at any viewport; paragraph spacing (never indent)
    carries the rhythm. The cap stays on this box rather than on the blocks
@@ -173,6 +291,9 @@ body {
   font-size: var(--size-h2);
   font-weight: 600;
   margin: 3rem 0 0.85rem;
+  /* An outline link lands here: leave the heading a little air above it
+     rather than jamming it against the top of the window. */
+  scroll-margin-top: 1.5rem;
 }
 
 .artifact-body h3 {
