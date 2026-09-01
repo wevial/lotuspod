@@ -12,6 +12,7 @@ import shutil
 import subprocess
 import sys
 from functools import partial
+from html.parser import HTMLParser
 from http import HTTPStatus
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -83,18 +84,134 @@ def sync_theme_css(out_dir: Path) -> None:
         shutil.copyfile(packaged, theme_copy)
 
 
+_OUTLINE_MIN_HEADINGS = 2
+_SLUG_STRIP = re.compile(r"[^a-z0-9]+")
+_SLUG_FALLBACK = "section"
+
+
+class _H2Collector(HTMLParser):
+    """Locate the body's h2 elements: source span, explicit id, and text.
+
+    Spans are recorded against the source string rather than re-serialized,
+    so injecting an id can splice the original bytes back untouched - the
+    parser never gets to normalize markup the author wrote by hand.
+    """
+
+    def __init__(self, body: str) -> None:
+        super().__init__(convert_charrefs=True)
+        self._line_starts = [0]
+        for index, char in enumerate(body):
+            if char == "\n":
+                self._line_starts.append(index + 1)
+        self._open: dict | None = None
+        self.headings: list[dict] = []
+
+    def _offset(self) -> int:
+        line, column = self.getpos()
+        return self._line_starts[line - 1] + column
+
+    def handle_starttag(self, tag: str, attrs: list) -> None:
+        if tag != "h2":
+            return
+        self._finish()
+        start = self._offset()
+        source = self.get_starttag_text() or ""
+        explicit = next((v for k, v in attrs if k == "id" and v), "")
+        self._open = {
+            "start": start,
+            "end": start + len(source),
+            "source": source,
+            "id": explicit,
+            "text": [],
+        }
+
+    def handle_data(self, data: str) -> None:
+        if self._open is not None:
+            self._open["text"].append(data)
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag == "h2":
+            self._finish()
+
+    def _finish(self) -> None:
+        """Close the open heading, collapsing its text to a single line."""
+        if self._open is None:
+            return
+        self._open["text"] = " ".join("".join(self._open["text"]).split())
+        self.headings.append(self._open)
+        self._open = None
+
+    def close(self) -> None:
+        super().close()
+        self._finish()
+
+
+def slugify(text: str) -> str:
+    """Lowercase text to a slug; every run of non-alphanumerics becomes '-'."""
+    return _SLUG_STRIP.sub("-", text.lower()).strip("-") or _SLUG_FALLBACK
+
+
+def _unique_id(base: str, taken: set[str]) -> str:
+    """First free id in the deterministic series base, base-2, base-3, ..."""
+    candidate = base
+    suffix = 2
+    while candidate in taken:
+        candidate = f"{base}-{suffix}"
+        suffix += 1
+    return candidate
+
+
+def outline_body(body: str) -> tuple[str, list[dict]]:
+    """Give the body's h2s stable ids; return (body, outline entries).
+
+    Ids come from the heading text alone, so the same body always yields the
+    same anchors - a re-render never breaks a link someone already shared.
+    Headings that carry an explicit id keep it (it may already be linked) and
+    only reserve that name, so a generated id can never collide with one.
+    A body with fewer than two h2s has nothing to navigate, so it is left
+    exactly as written.
+    """
+    parser = _H2Collector(body)
+    parser.feed(body)
+    parser.close()
+    headings = parser.headings
+    if len(headings) < _OUTLINE_MIN_HEADINGS:
+        return body, []
+
+    taken = {h["id"] for h in headings if h["id"]}
+    outline: list[dict] = []
+    pieces: list[str] = []
+    cursor = 0
+    for heading in headings:
+        heading_id = heading["id"]
+        if not heading_id:
+            heading_id = _unique_id(slugify(heading["text"]), taken)
+            taken.add(heading_id)
+            # Splice the id in just after the "<h2" the tag opens with, so
+            # the author's own attributes and spacing survive verbatim.
+            source = heading["source"]
+            pieces.append(body[cursor:heading["start"]])
+            pieces.append(f'{source[:3]} id="{heading_id}"{source[3:]}')
+            cursor = heading["end"]
+        outline.append({"id": heading_id, "text": heading["text"]})
+    pieces.append(body[cursor:])
+    return "".join(pieces), outline
+
+
 def cmd_render(args: argparse.Namespace) -> int:
     tokens = load_tokens()
     kicker = "Lotuspod"
     if args.episode:
         kicker = f"Lotuspod · Episode {args.episode}"
     summary_block = f'<p class="artifact-summary">{args.summary}</p>' if args.summary else ""
+    body, outline = (args.body, []) if args.no_outline else outline_body(args.body)
     context = {
         "title": args.title,
         "kicker": kicker,
         "date": args.date or _dt.date.today().isoformat(),
         "summary_block": summary_block,
-        "body": args.body,
+        "body": body,
+        "outline": outline,
         "theme_name": tokens["name"],
         "theme_version": tokens["version"],
         "visible": "false" if args.hidden else "true",
@@ -414,6 +531,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--hidden",
         action="store_true",
         help="mark the artifact not visible (excluded from manifest/index)",
+    )
+    render.add_argument(
+        "--no-outline",
+        action="store_true",
+        help="skip heading ids and the section outline",
     )
     render.add_argument("--out-dir", default="", help="output directory (default: artifacts/)")
     render.set_defaults(func=cmd_render)

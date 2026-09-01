@@ -33,6 +33,12 @@ Pass `--hidden` to mark an artifact not visible: it carries a
 `lotuspod:visible: false` flag and is excluded from `manifest.json` and
 `index.html`. Re-render without `--hidden` to publish it.
 
+When the body has two or more `<h2>` sections, render gives each one a slug id
+taken from its heading text (`<h2>Deep Dive</h2>` -> `id="deep-dive"`, repeats deduped
+as `deep-dive-2`), so section links stay the same every time a page is
+re-rendered. A heading that already carries an `id` keeps it. Pass
+`--no-outline` to skip id assignment entirely.
+
 ## Manifest
 
 Generate `artifacts/manifest.json`, an index of every rendered artifact in a

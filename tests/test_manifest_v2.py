@@ -2,6 +2,7 @@
 
 Covers the shared visibility rule end to end: extract_visibility edges,
 render's flag writing, the artifact page's back-link to the index,
+render's deterministic h2 ids and the outline data they feed,
 manifest v2 uniform schema + fail-closed listing,
 the index page's same rule, serve v2's allow-list plus the request
 path handler that enforces it, serve's --host override used when a local
@@ -778,6 +779,129 @@ class PublishHttpRoundTripTests(TempDirTestCase):
             encoding="utf-8",
         )
         self.assertEqual(self.fetch("/zeta.html")[0], 200)
+
+
+class OutlineTests(TempDirTestCase):
+    """render assigns h2 anchors that never move between renders."""
+
+    TWO_H2 = "<h2>A</h2><p>x</p><h2>B</h2><p>y</p>"
+
+    def rendered(self, body: str, *extra: str, name: str = "ep-001") -> str:
+        rc, _, err = self.render(
+            name, "--date", "2026-03-04", "--body", body, *extra
+        )
+        self.assertEqual(rc, 0, err)
+        return (self.out_dir / f"{name}.html").read_text(encoding="utf-8")
+
+    def test_ids_are_slugs_of_the_heading_text(self):
+        page = self.rendered(self.TWO_H2)
+        self.assertIn('<h2 id="a">A</h2>', page)
+        self.assertIn('<h2 id="b">B</h2>', page)
+
+    def test_two_renders_are_byte_identical(self):
+        first = self.rendered(self.TWO_H2)
+        self.assertEqual(first, self.rendered(self.TWO_H2))
+        self.assertIn('id="a"', first)
+        self.assertIn('id="b"', first)
+
+    def test_repeated_heading_text_dedupes_with_numeric_suffixes(self):
+        page = self.rendered("<h2>Same</h2><h2>Same</h2><h2>Same</h2>")
+        self.assertIn('<h2 id="same">Same</h2>', page)
+        self.assertIn('<h2 id="same-2">Same</h2>', page)
+        self.assertIn('<h2 id="same-3">Same</h2>', page)
+
+    def test_explicit_id_is_kept_and_reserved(self):
+        """An id someone may already have linked to is never rewritten."""
+        page = self.rendered('<h2 id="intro">Intro</h2><h2>Intro</h2>')
+        self.assertIn('<h2 id="intro">Intro</h2>', page)
+        self.assertIn('<h2 id="intro-2">Intro</h2>', page)
+
+    def test_single_h2_body_gets_no_ids(self):
+        page = self.rendered("<h2>Only</h2><p>x</p>")
+        self.assertIn("<h2>Only</h2>", page)
+        self.assertNotIn("id=", page.split('class="artifact-body"')[1])
+
+    def test_no_outline_leaves_the_body_verbatim(self):
+        page = self.rendered(self.TWO_H2, "--no-outline")
+        self.assertIn(self.TWO_H2, page)
+        self.assertNotIn('id="a"', page)
+
+    def test_no_outline_matches_the_pre_change_page_exactly(self):
+        """Opting out must reproduce the page render produced before ids."""
+        with_ids = self.rendered(self.TWO_H2)
+        opted_out = self.rendered(self.TWO_H2, "--no-outline")
+        self.assertEqual(
+            opted_out,
+            with_ids.replace('<h2 id="a">', "<h2>").replace('<h2 id="b">', "<h2>"),
+        )
+
+    def test_outline_reaches_the_template_context(self):
+        with mock.patch.object(
+            cli, "render_template", wraps=cli.render_template
+        ) as render_template:
+            self.rendered(self.TWO_H2)
+        context = render_template.call_args.args[0]
+        self.assertEqual(
+            context["outline"],
+            [{"id": "a", "text": "A"}, {"id": "b", "text": "B"}],
+        )
+
+    def test_no_outline_passes_an_empty_outline(self):
+        with mock.patch.object(
+            cli, "render_template", wraps=cli.render_template
+        ) as render_template:
+            self.rendered(self.TWO_H2, "--no-outline")
+        self.assertEqual(render_template.call_args.args[0]["outline"], [])
+
+    def test_hidden_render_still_gets_ids(self):
+        self.assertIn('id="a"', self.rendered(self.TWO_H2, "--hidden"))
+
+
+class OutlineBodyTests(unittest.TestCase):
+    """The id/outline primitive on its own, away from the render plumbing."""
+
+    def test_markup_is_spliced_not_reserialized(self):
+        body = '<h2 class="x"\n  data-y=\'1\'>Multi\n  Head!</h2><h2>Next</h2>'
+        out, outline = cli.outline_body(body)
+        self.assertIn('<h2 id="multi-head" class="x"\n  data-y=\'1\'>', out)
+        self.assertEqual(outline[0], {"id": "multi-head", "text": "Multi Head!"})
+
+    def test_nested_markup_and_entities_flatten_into_the_text(self):
+        out, outline = cli.outline_body(
+            "<h2><em>Deep</em> Dive</h2><h2>Salt &amp; Pepper</h2>"
+        )
+        self.assertEqual(
+            outline,
+            [
+                {"id": "deep-dive", "text": "Deep Dive"},
+                {"id": "salt-pepper", "text": "Salt & Pepper"},
+            ],
+        )
+        self.assertIn('<h2 id="deep-dive"><em>Deep</em> Dive</h2>', out)
+
+    def test_other_headings_are_untouched(self):
+        body = "<h1>Title</h1><h2>A</h2><h3>a1</h3><h2>B</h2>"
+        out, _ = cli.outline_body(body)
+        self.assertIn("<h1>Title</h1>", out)
+        self.assertIn("<h3>a1</h3>", out)
+
+    def test_bodies_below_the_threshold_come_back_unchanged(self):
+        for body in ("", "<p>x</p>", "<h2>Only</h2>"):
+            with self.subTest(body=body):
+                self.assertEqual(cli.outline_body(body), (body, []))
+
+    def test_running_twice_is_a_fixed_point(self):
+        once, outline = cli.outline_body("<h2>A</h2><h2>B</h2>")
+        self.assertEqual(cli.outline_body(once), (once, outline))
+
+    def test_unsluggable_headings_fall_back_to_section(self):
+        _, outline = cli.outline_body("<h2>!!!</h2><h2>???</h2>")
+        self.assertEqual([entry["id"] for entry in outline], ["section", "section-2"])
+
+    def test_slugify_rule(self):
+        self.assertEqual(cli.slugify("  Hello, World!  "), "hello-world")
+        self.assertEqual(cli.slugify("Episode 2 — Recap"), "episode-2-recap")
+        self.assertEqual(cli.slugify("***"), "section")
 
 
 if __name__ == "__main__":
