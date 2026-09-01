@@ -29,6 +29,10 @@ lotuspod render \
 This writes `artifacts/ep-001.html` (and copies `lotuspod.css` beside it), using
 today's date unless `--date` is given. Open the file in a browser to view it.
 
+The `lotuspod` command is the installed console script. From a bare checkout —
+no install — the same CLI runs as a module: `PYTHONPATH=src python3 -m lotuspod
+render ...`.
+
 Pass `--hidden` to mark an artifact not visible: it carries a
 `lotuspod:visible: false` flag and is excluded from `manifest.json` and
 `index.html`. Re-render without `--hidden` to publish it.

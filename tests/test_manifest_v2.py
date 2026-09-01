@@ -24,6 +24,7 @@ import io
 import json
 import os
 import re
+import subprocess
 import sys
 import tempfile
 import threading
@@ -34,7 +35,8 @@ from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest import mock
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+SRC_DIR = Path(__file__).resolve().parents[1] / "src"
+sys.path.insert(0, str(SRC_DIR))
 
 from lotuspod import cli  # noqa: E402
 
@@ -910,6 +912,40 @@ class OutlineBodyTests(unittest.TestCase):
         self.assertEqual(cli.slugify("  Hello, World!  "), "hello-world")
         self.assertEqual(cli.slugify("Episode 2 — Recap"), "episode-2-recap")
         self.assertEqual(cli.slugify("***"), "section")
+
+
+class ModuleEntryPointTests(unittest.TestCase):
+    """`python -m lotuspod` must reach the same CLI as the console script.
+
+    pyproject declares the `lotuspod` console script, but that shim only
+    exists once the package is installed; `python -m lotuspod` is what works
+    from a bare checkout, so the package needs a __main__ module.
+    """
+
+    def run_module(self, *argv: str) -> subprocess.CompletedProcess:
+        env = dict(os.environ, PYTHONPATH=str(SRC_DIR))
+        return subprocess.run(
+            [sys.executable, "-m", "lotuspod", *argv],
+            capture_output=True, text=True, env=env, cwd=str(SRC_DIR.parent),
+        )
+
+    def test_module_invocation_runs_the_cli(self):
+        proc = self.run_module("--help")
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertIn("usage: lotuspod", proc.stdout)
+        for command in ("render", "manifest", "index", "serve"):
+            self.assertIn(command, proc.stdout)
+
+    def test_module_invocation_renders(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            proc = self.run_module(
+                "render", "--name", "ep-mod", "--title", "Mod",
+                "--body", "<h2>Alpha</h2><h2>Beta</h2>", "--out-dir", tmp,
+            )
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            page = (Path(tmp) / "ep-mod.html").read_text(encoding="utf-8")
+        self.assertIn('<h2 id="alpha">Alpha</h2>', page)
+        self.assertIn('<h2 id="beta">Beta</h2>', page)
 
 
 if __name__ == "__main__":
