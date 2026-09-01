@@ -912,10 +912,11 @@ class OutlineMarkupTests(TempDirTestCase):
             page.index('class="artifact-outline"'), page.index('class="artifact-body"')
         )
 
-    def test_disclosure_ships_open_and_labelled(self):
-        """The fold is a real control at either width, and starts undone."""
+    def test_disclosure_ships_collapsed_and_labelled(self):
+        """Collapsed is the narrow default; the wide rail is CSS's job to open."""
         nav = self.nav(self.rendered(OutlineTests.TWO_H2))
-        self.assertIn('<details class="artifact-outline-disclosure" open>', nav)
+        self.assertIn('<details class="artifact-outline-disclosure">', nav)
+        self.assertNotIn("open", nav[: nav.index("<summary")])
         self.assertIn(
             '<summary class="artifact-outline-summary">On this page</summary>', nav
         )
@@ -1002,6 +1003,13 @@ class OutlineThemeTests(unittest.TestCase):
         self.assertIn("position: sticky", self.wide)
         self.assertIn("grid-area: 1 / 2", self.wide)
         self.assertIn("grid-area: 1 / 1", self.wide)
+
+    def test_wide_layout_holds_the_collapsed_disclosure_open(self):
+        """Markup ships collapsed for the phone; the gutter reopens it here."""
+        self.assertIn(
+            ".artifact-outline-disclosure::details-content", self.wide
+        )
+        self.assertIn("content-visibility: visible", self.wide)
 
     def test_the_two_column_grid_forms_only_when_there_is_an_outline(self):
         """A body with no outline keeps the plain column - no empty rail."""

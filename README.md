@@ -48,8 +48,10 @@ in the markup. The theme gives it two roles from that single list — on a wide
 page it sits in the empty gutter beside the reading column as a sticky rail
 (the prose keeps its measure; a full-width table stops at the rail rather than
 running under it), and on a narrow one it is a disclosure card above the
-prose. It ships expanded and folds away at either width. No script and no
-second copy of the links: the layout is a container query away.
+prose. The markup ships collapsed, so a phone gets the article first and the
+outline on request; the wide rail is held open by the stylesheet, since the
+gutter it sits in costs the prose nothing. No script and no second copy of the
+links: the layout is a container query away.
 
 Pass `--no-outline` to skip the ids and the outline list entirely.
 

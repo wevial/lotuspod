@@ -134,9 +134,10 @@ body {
   --outline-gap: 2.5rem;
 }
 
-/* Narrow: a disclosure above the prose. It ships open, so the reader arrives
-   knowing the shape of the page, and folds away to hand the screen back -
-   the fold is a real control at both widths, never a dead one. */
+/* Narrow: a disclosure above the prose, collapsed. A phone screen belongs to
+   the article, so the outline announces itself in one line and waits to be
+   asked - open by default it costs a full viewport of scrolling before the
+   first sentence. */
 .artifact-outline {
   margin: 1.75rem 0 0;
 }
@@ -235,6 +236,36 @@ body {
     border-left: 1px solid var(--hairline);
     border-radius: 0;
     padding: 0 0 0 1.15rem;
+  }
+
+  /* The gutter is empty space the prose never wanted, so out here the list
+     costs the reader nothing and stays open - the markup ships collapsed for
+     the phone, and this is the one rule that undoes it. Where
+     ::details-content is not understood the rail simply arrives folded, one
+     click from the same list. */
+  .artifact-outline-disclosure::details-content {
+    content-visibility: visible;
+  }
+
+  /* Held open by CSS, the summary can no longer close anything, so it drops
+     the affordances that would promise it can and reads as the rail's
+     heading. */
+  .artifact-outline-summary {
+    cursor: default;
+    list-style: none;
+  }
+
+  .artifact-outline-summary::marker,
+  .artifact-outline-summary::-webkit-details-marker {
+    content: "";
+    display: none;
+  }
+
+  /* Hover lift too: it reads as "this does something" on a heading that no
+     longer does. Focus keeps its lift - the summary is still reachable by
+     keyboard, and a focus ring that goes nowhere visible is worse. */
+  .artifact-outline-summary:hover {
+    color: var(--color-muted-lavender);
   }
 
   .artifact-outline-list {
