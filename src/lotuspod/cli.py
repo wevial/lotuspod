@@ -39,6 +39,9 @@ DEFAULT_SERVE_PORT = 8000
 _TAILNET_V4 = ipaddress.ip_network("100.64.0.0/10")
 
 _PLACEHOLDER = re.compile(r"\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}")
+_SECTION = re.compile(
+    r"\{\{#([a-zA-Z_][a-zA-Z0-9_]*)\}\}(.*?)\{\{/([a-zA-Z_][a-zA-Z0-9_]*)\}\}", re.DOTALL
+)
 
 _EPISODE_KICKER = re.compile(r"^Lotuspod · Episode (.+)$")
 _TITLE_RE = re.compile(r'<h1 class="artifact-title">(.*?)</h1>', re.DOTALL)
@@ -57,8 +60,27 @@ def load_tokens() -> dict:
         return json.load(fh)
 
 
+def _resolve_sections(template: str, context: dict) -> str:
+    """Drop `{{#key}}...{{/key}}` blocks whose context value is empty.
+
+    Markup only some pages carry can then sit in the template beside the markup
+    every page carries, instead of being assembled in Python where a reader of
+    the theme would not think to look for it.
+    """
+
+    def _sub(match: re.Match) -> str:
+        key, body, closing = match.groups()
+        if key != closing:
+            raise KeyError(f"template section {key!r} closed by {closing!r}")
+        if key not in context:
+            raise KeyError(f"template section {key!r} missing from context")
+        return body if context[key] else ""
+
+    return _SECTION.sub(_sub, template)
+
+
 def render_template(context: dict, template_path: Path = TEMPLATE_PATH) -> str:
-    template = template_path.read_text(encoding="utf-8")
+    template = _resolve_sections(template_path.read_text(encoding="utf-8"), context)
 
     def _sub(match: re.Match) -> str:
         key = match.group(1)
@@ -204,36 +226,24 @@ def outline_body(body: str) -> tuple[str, list[dict]]:
     return "".join(pieces), outline
 
 
-_OUTLINE_LABEL = "On this page"
-
-
 def outline_html(outline: list[dict]) -> str:
-    """Render the outline as one list of section links ("" when there is none).
+    """Render the outline's section links ("" when there is none).
 
-    One list serves both roles the theme draws from it - a sticky rail beside
-    the prose where the page is wide enough for one, a disclosure above the
-    prose where it is not - so there is never a second copy of the links to
-    keep in step, and no script deciding which copy to show. It ships open:
-    folding it away is the reader's to do, at either width.
+    Only the `<li>` items are built here - the nav, disclosure and list that
+    wrap them live in artifact.html, inside an `{{#outline}}` section the
+    renderer drops when this returns nothing. One list serves both roles the
+    theme draws from it - a sticky rail beside the prose where the page is wide
+    enough for one, a disclosure above the prose where it is not - so there is
+    never a second copy of the links to keep in step, and no script deciding
+    which copy to show. It ships open: folding it away is the reader's to do,
+    at either width.
     """
-    if not outline:
-        return ""
     esc = html.escape
-    items = "\n".join(
+    return "\n".join(
         '            <li><a href="#{id}">{text}</a></li>'.format(
             id=esc(str(entry["id"])), text=esc(str(entry["text"]))
         )
         for entry in outline
-    )
-    return (
-        '<nav class="artifact-outline" aria-label="Sections">\n'
-        '        <details class="artifact-outline-disclosure" open>\n'
-        f'          <summary class="artifact-outline-summary">{_OUTLINE_LABEL}</summary>\n'
-        '          <ol class="artifact-outline-list" role="list">\n'
-        f"{items}\n"
-        "          </ol>\n"
-        "        </details>\n"
-        "      </nav>"
     )
 
 
@@ -251,7 +261,7 @@ def cmd_render(args: argparse.Namespace) -> int:
         "summary_block": summary_block,
         "body": body,
         "outline": outline,
-        "outline_block": outline_html(outline),
+        "outline_items": outline_html(outline),
         "theme_name": tokens["name"],
         "theme_version": tokens["version"],
         "visible": "false" if args.hidden else "true",

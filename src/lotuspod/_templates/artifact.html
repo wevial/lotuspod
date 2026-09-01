@@ -22,7 +22,14 @@
     </header>
 
     <div class="artifact-main">
-      {{outline_block}}
+      {{#outline}}<nav class="artifact-outline" aria-label="On this page">
+        <details class="artifact-outline-disclosure" open>
+          <summary class="artifact-outline-summary">On this page</summary>
+          <ol class="artifact-outline-list" role="list">
+{{outline_items}}
+          </ol>
+        </details>
+      </nav>{{/outline}}
 
       <section class="artifact-body">
         {{body}}

@@ -919,7 +919,7 @@ class OutlineMarkupTests(TempDirTestCase):
         self.assertIn(
             '<summary class="artifact-outline-summary">On this page</summary>', nav
         )
-        self.assertIn('aria-label="Sections"', nav)
+        self.assertIn('aria-label="On this page"', nav)
 
     def test_pages_with_nothing_to_navigate_get_no_outline(self):
         for body, extra in (
@@ -940,6 +940,45 @@ class OutlineMarkupTests(TempDirTestCase):
 
     def test_empty_outline_renders_nothing(self):
         self.assertEqual(cli.outline_html([]), "")
+
+
+class TemplateSectionTests(unittest.TestCase):
+    """`{{#key}}...{{/key}}` is what keeps optional markup in the template."""
+
+    def render(self, template: str, context: dict) -> str:
+        path = Path(self.enterContext(tempfile.TemporaryDirectory())) / "t.html"
+        path.write_text(template, encoding="utf-8")
+        return cli.render_template(context, path)
+
+    def test_section_is_kept_and_filled_when_the_value_is_present(self):
+        self.assertEqual(
+            self.render("a{{#xs}}[{{x}}]{{/xs}}b", {"xs": [1], "x": "hi"}), "a[hi]b"
+        )
+
+    def test_section_is_dropped_whole_when_the_value_is_empty(self):
+        """An empty outline must leave no nav, no disclosure, no empty shell."""
+        self.assertEqual(
+            self.render("a{{#xs}}[{{x}}]{{/xs}}b", {"xs": [], "x": "hi"}), "ab"
+        )
+
+    def test_a_placeholder_only_inside_a_dropped_section_is_not_required(self):
+        """The items placeholder may hold nothing when the section goes away."""
+        self.assertEqual(self.render("a{{#xs}}{{x}}{{/xs}}b", {"xs": [], "x": ""}), "ab")
+
+    def test_a_section_key_missing_from_the_context_is_an_error(self):
+        with self.assertRaises(KeyError):
+            self.render("{{#xs}}x{{/xs}}", {})
+
+    def test_a_mismatched_closing_tag_is_an_error(self):
+        with self.assertRaises(KeyError):
+            self.render("{{#xs}}x{{/ys}}", {"xs": [1], "ys": [1]})
+
+    def test_the_artifact_template_carries_the_outline_markup(self):
+        """The nav lives in the theme's template, not in a Python string."""
+        template = cli.TEMPLATE_PATH.read_text(encoding="utf-8")
+        self.assertIn('<nav class="artifact-outline"', template)
+        self.assertIn("{{#outline}}", template)
+        self.assertIn("{{/outline}}", template)
 
 
 class OutlineThemeTests(unittest.TestCase):
