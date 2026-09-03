@@ -187,6 +187,77 @@ class ArtifactNavTests(TempDirTestCase):
         )
 
 
+class ArtifactTopbarTests(TempDirTestCase):
+    """KO-235: a sticky "Lotuspod: TITLE" bar revealed once the header scrolls off."""
+
+    TOPBAR = re.compile(r'<div class="artifact-topbar">(.*?)</div>', re.DOTALL)
+
+    def rendered(self, name: str = "ep-001", *extra: str) -> str:
+        rc, _, err = self.render(name, *extra)
+        self.assertEqual(rc, 0, err)
+        return (self.out_dir / f"{name}.html").read_text(encoding="utf-8")
+
+    def theme_css(self) -> str:
+        return (cli.THEME_DIR / "lotuspod.css").read_text(encoding="utf-8")
+
+    def test_bar_is_the_first_child_of_main_and_carries_both_links(self):
+        page = self.rendered()
+        main = re.search(r'<main class="artifact[^"]*" id="top">\s*<(\w+) class="([^"]+)"', page)
+        self.assertIsNotNone(main)
+        self.assertEqual(main.group(1), "div")
+        self.assertEqual(main.group(2), "artifact-topbar")
+        bars = self.TOPBAR.findall(page)
+        self.assertEqual(len(bars), 1)
+        bar = bars[0]
+        self.assertIn('<a class="artifact-topbar-brand" href="index.html">Lotuspod</a>', bar)
+        self.assertIn('<span class="artifact-topbar-sep">:</span>', bar)
+        title = re.search(r'<a class="artifact-topbar-title" href="#top">(.*?)</a>', bar)
+        self.assertIsNotNone(title)
+        heading = re.search(r'<h1 class="artifact-title">(.*?)</h1>', page)
+        self.assertEqual(title.group(1), heading.group(1))
+        self.assertEqual(title.group(1), "Ep-001")
+
+    def test_no_outline_and_report_variants_carry_exactly_one_bar(self):
+        for name, extra in (
+            ("plain", ("--no-outline",)),
+            ("report", ("--variant", "report")),
+        ):
+            with self.subTest(name=name):
+                page = self.rendered(name, *extra)
+                self.assertEqual(len(self.TOPBAR.findall(page)), 1)
+                self.assertIn(' id="top"', page)
+
+    def test_two_renders_are_byte_identical(self):
+        self.assertEqual(self.rendered(), self.rendered())
+
+    def test_theme_pins_the_bar_and_guards_the_scroll_driven_reveal(self):
+        css = self.theme_css()
+        block = re.search(r"^\.artifact-topbar \{.*?^\}\n", css, re.MULTILINE | re.DOTALL)
+        self.assertIsNotNone(block)
+        self.assertIn("position: sticky;", block.group(0))
+        self.assertIn("top: 0;", block.group(0))
+        self.assertGreater(css.count("z-index: 3;"), 0)
+
+        supports = re.search(
+            r"@supports \(animation-timeline: scroll\(\)\) \{\n(.*?)\n\}\n", css, re.DOTALL
+        )
+        self.assertIsNotNone(supports)
+        inside = supports.group(1)
+        outside = css.replace(supports.group(0), "")
+        self.assertIn("animation-timeline: scroll(root);", inside)
+        self.assertIn("@keyframes topbar-reveal", inside)
+        self.assertNotIn("animation-timeline", outside)
+        self.assertNotIn("topbar-reveal", outside)
+
+        reduced = re.search(
+            r"@media \(prefers-reduced-motion: reduce\) \{(.*?)\n  \}$", inside, re.DOTALL
+        )
+        self.assertIsNotNone(reduced)
+        self.assertIn("@keyframes topbar-reveal", reduced.group(1))
+        self.assertNotIn("translateY", reduced.group(1))
+        self.assertIn("transform: none;", reduced.group(1))
+
+
 class ThemeCssSyncTests(TempDirTestCase):
     """A theme upgrade must reach directories rendered by an older version."""
 
@@ -502,7 +573,7 @@ class IndexTableTests(TempDirTestCase):
         version = json.loads(
             (cli.THEME_DIR / "tokens.json").read_text(encoding="utf-8")
         )["version"]
-        self.assertEqual(version, "0.4.3")
+        self.assertEqual(version, "0.4.4")
         self.assertIn(f'href="lotuspod.css?v={version}"', first)
 
 
@@ -1304,7 +1375,7 @@ class ReportVariantTests(TempDirTestCase):
             )
 
     def test_default_render_stamps_no_variant_class(self):
-        self.assertIn('<main class="artifact">', self.rendered())
+        self.assertIn('<main class="artifact" id="top">', self.rendered())
         self.assertNotIn("artifact--", self.rendered())
 
     def test_article_is_the_default_variant_spelled_out(self):
@@ -1312,7 +1383,7 @@ class ReportVariantTests(TempDirTestCase):
 
     def test_report_variant_stamps_the_class_on_main(self):
         self.assertIn(
-            '<main class="artifact artifact--report">',
+            '<main class="artifact artifact--report" id="top">',
             self.rendered("--variant", "report"),
         )
 
@@ -1326,8 +1397,8 @@ class ReportVariantTests(TempDirTestCase):
         self.assertEqual(
             changed,
             [(
-                '  <main class="artifact">',
-                '  <main class="artifact artifact--report">',
+                '  <main class="artifact" id="top">',
+                '  <main class="artifact artifact--report" id="top">',
             )],
         )
 
@@ -1435,7 +1506,7 @@ class ReportVariantTests(TempDirTestCase):
         self.assertEqual(rc, 0, err)
         second = page.read_bytes()
         html = first.decode("utf-8")
-        self.assertIn('<main class="artifact artifact--report">', html)
+        self.assertIn('<main class="artifact artifact--report" id="top">', html)
         self.assertNotRegex(html, r"<style[\s>]")
         self.assertIn("<th>Heading 11</th>", html)
         self.assertIn('class="artifact-outline"', html)

@@ -1,5 +1,5 @@
 /*
- * Lotuspod theme "lotus" v0.4.0
+ * Lotuspod theme "lotus" v0.4.4
  * Tokens mirror theme/tokens.json.
  */
 
@@ -67,6 +67,99 @@ body {
   max-width: 72rem;
   margin: 0 auto;
   padding: 4rem 1.5rem 3rem;
+}
+
+/* Title bar: once the header has scrolled off, a one-line "Lotuspod: TITLE"
+   strip stays pinned to the top of the viewport as a way back to the index
+   and to the top of the page. It is the first child of main, so it is sticky
+   from the first pixel; the scroll-driven reveal below is what keeps it out
+   of the way while the header is still in view. Its z-index sits above the
+   outline rail. The rail's own top is left alone: the bar overlaps the rail's
+   first few lines briefly while the reveal runs, and once the bar is fully in
+   the rail simply scrolls under it, which reads as intended. */
+.artifact-topbar {
+  align-items: baseline;
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--hairline);
+  display: flex;
+  gap: 0.5rem;
+  line-height: 1.4;
+  margin: 0 -1.5rem 0.75rem;
+  padding: 0.6rem 1.5rem;
+  position: sticky;
+  text-wrap: nowrap;
+  top: 0;
+  white-space: nowrap;
+  z-index: 3;
+}
+
+.artifact-topbar a {
+  text-decoration: none;
+}
+
+.artifact-topbar-brand {
+  color: var(--color-lavender);
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.artifact-topbar-sep {
+  color: var(--color-muted-lavender);
+  flex: none;
+}
+
+.artifact-topbar-title {
+  color: var(--color-white);
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.artifact-topbar a:hover,
+.artifact-topbar a:focus-visible {
+  color: var(--color-pale-lavender);
+}
+
+/* Where the browser can drive an animation from the scroll position, the bar
+   starts hidden and slides in over the first 12rem of scroll - roughly the
+   distance that takes the header off the screen. Without the feature the bar
+   is simply visible from the start, which is a fair fallback. */
+@supports (animation-timeline: scroll()) {
+  @keyframes topbar-reveal {
+    from {
+      opacity: 0;
+      transform: translateY(-100%);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  .artifact-topbar {
+    animation: topbar-reveal linear both;
+    animation-timeline: scroll(root);
+    animation-range: 0 12rem;
+  }
+
+  /* Reduced motion: keep the opacity fade, drop the slide. */
+  @media (prefers-reduced-motion: reduce) {
+    @keyframes topbar-reveal {
+      from {
+        opacity: 0;
+        transform: none;
+      }
+      to {
+        opacity: 1;
+        transform: none;
+      }
+    }
+  }
 }
 
 /* A quiet way back to the index: it sits above the header card in the muted
