@@ -1,5 +1,5 @@
 /*
- * Lotuspod theme "lotus" v0.4.4
+ * Lotuspod theme "lotus" v0.4.5
  * Tokens mirror theme/tokens.json.
  */
 
@@ -28,6 +28,8 @@
   --leading-heading: 1.25;
   --size-body-report: 0.875rem;
   --leading-body-report: 1.6;
+
+  --topbar-height: 2.75rem;
 
   --hairline: rgba(216, 203, 250, 0.16);
   --hairline-strong: rgba(216, 203, 250, 0.32);
@@ -74,17 +76,24 @@ body {
    and to the top of the page. It is the first child of main, so it is sticky
    from the first pixel; the scroll-driven reveal below is what keeps it out
    of the way while the header is still in view. Its z-index sits above the
-   outline rail. The rail's own top is left alone: the bar overlaps the rail's
-   first few lines briefly while the reveal runs, and once the bar is fully in
-   the rail simply scrolls under it, which reads as intended. */
+   outline rail, whose sticky top clears --topbar-height so the bar never
+   covers "On this page".
+
+   The bar is a fixed-height strip that reserves no room in flow: its own
+   height is cancelled by an equal negative bottom margin, so at scroll 0 the
+   nav sits exactly where it sat before the bar existed. The sticky box itself
+   is unaffected - only the content below is pulled up under it. */
 .artifact-topbar {
   align-items: baseline;
   background: var(--color-surface);
   border-bottom: 1px solid var(--hairline);
+  box-sizing: border-box;
   display: flex;
   gap: 0.5rem;
+  height: var(--topbar-height);
   line-height: 1.4;
-  margin: 0 -1.5rem 0.75rem;
+  margin: 0 -1.5rem;
+  margin-bottom: calc(-1 * var(--topbar-height));
   padding: 0.6rem 1.5rem;
   position: sticky;
   text-wrap: nowrap;
@@ -316,12 +325,12 @@ body {
      be navigation you cannot reach. */
   .artifact-outline {
     grid-area: 1 / 1;
-    max-height: calc(100vh - 3rem);
+    max-height: calc(100vh - var(--topbar-height) - 3rem);
     overflow-y: auto;
     position: sticky;
     scrollbar-color: var(--hairline-strong) transparent;
     scrollbar-width: thin;
-    top: 1.5rem;
+    top: calc(var(--topbar-height) + 1.5rem);
   }
 
   /* In the gutter the card would read as a second surface competing with the

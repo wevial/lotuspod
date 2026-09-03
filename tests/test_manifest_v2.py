@@ -257,6 +257,56 @@ class ArtifactTopbarTests(TempDirTestCase):
         self.assertNotIn("translateY", reduced.group(1))
         self.assertIn("transform: none;", reduced.group(1))
 
+    def test_hidden_bar_takes_no_flow_space_and_the_rail_clears_it(self):
+        """KO-236: the bar cancels its own height; the wide rail's top adds it."""
+        css = self.theme_css()
+        self.assertIn("--topbar-height: 2.75rem;", css)
+        block = re.search(r"^\.artifact-topbar \{.*?^\}\n", css, re.MULTILINE | re.DOTALL)
+        self.assertIsNotNone(block)
+        self.assertIn("height: var(--topbar-height);", block.group(0))
+        self.assertIn("margin-bottom: calc(-1 * var(--topbar-height));", block.group(0))
+        self.assertIn("position: sticky;", block.group(0))
+        self.assertIn("top: 0;", block.group(0))
+
+        wide = css.split("@container (min-width: 58rem) {", 1)[1].split("\n}\n", 1)[0]
+        outline = re.search(r"\.artifact-outline \{(.*?)\n  \}", wide, re.DOTALL)
+        self.assertIsNotNone(outline)
+        self.assertIn("top: calc(var(--topbar-height) + 1.5rem);", outline.group(1))
+        self.assertIn(
+            "max-height: calc(100vh - var(--topbar-height) - 3rem);", outline.group(1)
+        )
+        self.assertNotIn("top: 1.5rem;", outline.group(1))
+
+    def test_markup_differs_from_before_only_in_the_theme_version(self):
+        """KO-236 is CSS alone: the page markup is untouched."""
+        repo = Path(__file__).resolve().parent.parent
+        previous = self.out_dir / "previous-theme"
+        previous.mkdir()
+        for filename in ("lotuspod.css", "tokens.json"):
+            proc = subprocess.run(
+                ["git", "show", f"d0b2598:src/lotuspod/_theme/{filename}"],
+                cwd=repo, capture_output=True, text=True, encoding="utf-8",
+            )
+            if proc.returncode != 0:
+                self.skipTest(f"previous theme unavailable: {proc.stderr.strip()}")
+            (previous / filename).write_text(proc.stdout, encoding="utf-8")
+        old_version = json.loads(
+            (previous / "tokens.json").read_text(encoding="utf-8")
+        )["version"]
+        new_version = json.loads(
+            (cli.THEME_DIR / "tokens.json").read_text(encoding="utf-8")
+        )["version"]
+        self.assertNotEqual(old_version, new_version)
+
+        after = self.rendered()
+        with mock.patch.object(cli, "THEME_DIR", previous):
+            before = self.rendered()
+
+        self.assertIn(f"lotuspod.css?v={old_version}", before)
+        self.assertIn(f"lotuspod.css?v={new_version}", after)
+        self.assertNotEqual(before, after)
+        self.assertEqual(before.replace(old_version, new_version), after)
+
 
 class ThemeCssSyncTests(TempDirTestCase):
     """A theme upgrade must reach directories rendered by an older version."""
@@ -573,7 +623,7 @@ class IndexTableTests(TempDirTestCase):
         version = json.loads(
             (cli.THEME_DIR / "tokens.json").read_text(encoding="utf-8")
         )["version"]
-        self.assertEqual(version, "0.4.4")
+        self.assertEqual(version, "0.4.5")
         self.assertIn(f'href="lotuspod.css?v={version}"', first)
 
 
