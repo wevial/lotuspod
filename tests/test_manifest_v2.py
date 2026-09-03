@@ -495,6 +495,56 @@ class IndexTableTests(TempDirTestCase):
         self.assertNotIn(".episode-card", css)
         self.assertNotIn(".episode-list", css)
 
+    def test_two_index_builds_are_byte_identical_and_name_the_theme_version(self):
+        make_mixed_fixture(self.out_dir)
+        first = self.build_index()
+        self.assertEqual(first, self.build_index())
+        version = json.loads(
+            (cli.THEME_DIR / "tokens.json").read_text(encoding="utf-8")
+        )["version"]
+        self.assertEqual(version, "0.4.2")
+        self.assertIn(f'href="lotuspod.css?v={version}"', first)
+
+
+class IndexTableWidthTests(unittest.TestCase):
+    """The listing sits in the centred .index column, not against the viewport.
+
+    KO-233: the full-bleed rule (100vw, negative side margins) left five rows
+    pinned to the left of an empty wide page. The table is now as wide as its
+    container and still scrolls sideways when the columns outgrow it.
+    """
+
+    BLOCK = re.compile(r"^\.index-table \{.*?^\}\n", re.MULTILINE | re.DOTALL)
+    PREVIOUS_COMMIT = "bf8d79c"
+
+    def theme_css(self) -> str:
+        return (cli.THEME_DIR / "lotuspod.css").read_text(encoding="utf-8")
+
+    def index_table_block(self, css: str) -> str:
+        blocks = self.BLOCK.findall(css)
+        self.assertEqual(len(blocks), 1, blocks)
+        return blocks[0]
+
+    def test_table_fills_its_container_and_keeps_its_sideways_scroll(self):
+        block = self.index_table_block(self.theme_css())
+        self.assertIn("width: 100%;", block)
+        self.assertIn("max-width: 100%;", block)
+        self.assertIn("overflow-x: auto;", block)
+        self.assertNotIn("vw", block)
+
+    def test_nothing_else_in_the_stylesheet_moved(self):
+        repo = Path(__file__).resolve().parent.parent
+        proc = subprocess.run(
+            ["git", "show", f"{self.PREVIOUS_COMMIT}:src/lotuspod/_theme/lotuspod.css"],
+            cwd=repo, capture_output=True, text=True, encoding="utf-8",
+        )
+        if proc.returncode != 0:
+            self.skipTest(f"previous stylesheet unavailable: {proc.stderr.strip()}")
+        before = self.BLOCK.sub("", proc.stdout)
+        after = self.BLOCK.sub("", self.theme_css())
+        self.assertNotEqual(proc.stdout, self.theme_css())
+        self.assertEqual(before, after)
+
 
 class ServeAllowListTests(TempDirTestCase):
     """serve v2 enforces the same visibility rule over HTTP names."""
