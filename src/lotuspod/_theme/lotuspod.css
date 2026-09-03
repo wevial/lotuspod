@@ -26,6 +26,8 @@
   --size-h5: 0.875rem;
   --leading-body: 1.7;
   --leading-heading: 1.25;
+  --size-body-report: 0.875rem;
+  --leading-body-report: 1.6;
 
   --hairline: rgba(216, 203, 250, 0.16);
   --hairline-strong: rgba(216, 203, 250, 0.32);
@@ -577,6 +579,137 @@ body {
 .artifact-body a:hover {
   color: var(--color-pale-lavender);
   text-decoration-color: currentColor;
+}
+
+/* Report variant. `render --variant report` stamps artifact--report on the
+   main element and nothing else changes in the markup: everything below is
+   the denser reading surface a long technical report wants, and none of it
+   reaches a page without the class. Body at 14px on a wider measure, the
+   header flattened to a hairline (same markup, no card), inline code that
+   wraps anywhere, and tables laid out as tables at the reading column's
+   width instead of scrolling - a report's tables are read, not glanced at. */
+.artifact--report {
+  max-width: 100rem;
+  padding: 2rem 2rem 3rem;
+}
+
+.artifact--report .artifact-header {
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--hairline);
+  border-radius: 0;
+  box-shadow: none;
+  padding: 0 0 1.25rem;
+}
+
+.artifact--report .artifact-title {
+  font-size: clamp(1.5rem, 2.6vw, 2rem);
+}
+
+.artifact--report .artifact-summary {
+  font-size: 0.95rem;
+}
+
+.artifact--report .artifact-body {
+  --measure-prose: 84ch;
+  font-size: var(--size-body-report);
+  line-height: var(--leading-body-report);
+  padding-top: 1.25rem;
+}
+
+.artifact--report .lede {
+  color: var(--color-pale-lavender);
+  font-size: 0.95rem;
+}
+
+.artifact--report .artifact-body h2 {
+  font-size: 1.3rem;
+  margin-top: 2.2em;
+}
+
+.artifact--report .artifact-body h3 {
+  font-size: 1.02rem;
+}
+
+.artifact--report .artifact-body p,
+.artifact--report .artifact-body li {
+  text-wrap: pretty;
+}
+
+.artifact--report .artifact-body code {
+  font-size: 0.86em;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.artifact--report .artifact-body pre {
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.artifact--report .artifact-body pre code {
+  overflow-wrap: normal;
+  white-space: pre;
+}
+
+/* display: table with a width: cells wrap instead of the table scrolling, so
+   the whole of a wide table is on the page at once with no scroll container. */
+.artifact--report .artifact-body table {
+  display: table;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  max-width: var(--measure-full);
+  table-layout: auto;
+  width: var(--measure-full);
+}
+
+.artifact--report .artifact-body th,
+.artifact--report .artifact-body td {
+  padding: 0.45rem 0.6rem;
+}
+
+.artifact--report .artifact-body th {
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: normal;
+}
+
+.artifact--report .artifact-body td:first-child {
+  white-space: nowrap;
+}
+
+.artifact--report .artifact-body td ul {
+  margin: 0;
+  padding-left: 1.1em;
+}
+
+/* Wide: the rail moves to the left column, narrower than the article's. The
+   body's --measure-full is figured from --outline-rail, so the narrower rail
+   is set here once and the breakout measure follows it. */
+@container (min-width: 58rem) {
+  .artifact--report .artifact-main {
+    --outline-rail: 13.5rem;
+  }
+
+  .artifact--report .artifact-main:has(.artifact-outline) {
+    grid-template-columns: var(--outline-rail) minmax(0, 1fr);
+  }
+
+  .artifact--report .artifact-main:has(.artifact-outline) > .artifact-body {
+    grid-area: 1 / 2;
+  }
+
+  .artifact--report .artifact-outline {
+    grid-area: 1 / 1;
+    margin-top: 1.25rem;
+  }
+
+  .artifact--report .artifact-outline-list a {
+    font-size: 0.8rem;
+    line-height: 1.35;
+    padding: 0.22rem 0;
+  }
 }
 
 .artifact-footer {

@@ -55,6 +55,15 @@ links: the layout is a container query away.
 
 Pass `--no-outline` to skip the ids and the outline list entirely.
 
+Pass `--variant report` for a long technical report. The page keeps the same
+markup with one class more, `artifact--report` on the `main` element, and the
+theme switches on a denser reading surface behind it: 14px body on a wider
+measure, the header flattened to a hairline, inline code that wraps anywhere,
+tables laid out as tables at the reading column's width instead of scrolling,
+and the outline rail on the left of the prose on a wide page. The default,
+`--variant article`, stamps nothing, so a page rendered without the flag is
+byte-identical to one rendered before the variant existed.
+
 ## Manifest
 
 Generate `artifacts/manifest.json`, an index of every rendered artifact in a

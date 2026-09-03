@@ -1120,3 +1120,184 @@ class ModuleEntryPointTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ReportVariantTests(TempDirTestCase):
+    """--variant report: one class on the main element, one ruleset behind it.
+
+    The default article look is the contract every podcast page already
+    relies on, so the variant is a strict addition: without the flag a render
+    carries the same bytes it did before variants existed.
+    """
+
+    BODY = (
+        "<h2>A</h2><p>x</p>"
+        "<table><tr><th>k</th><td>v</td></tr></table>"
+        "<h2>B</h2><p>y</p>"
+    )
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.css = (cli.THEME_DIR / "lotuspod.css").read_text(encoding="utf-8")
+        cls.tokens = cli.load_tokens()
+
+    def rendered(self, *extra: str) -> str:
+        rc, _, err = self.render(
+            "ep-001", "--date", "2026-09-03", "--body", self.BODY, *extra
+        )
+        self.assertEqual(rc, 0, err)
+        return (self.out_dir / "ep-001.html").read_text(encoding="utf-8")
+
+    @property
+    def report_rules(self) -> str:
+        """Every declaration block scoped to the report class, flattened."""
+        return "\n".join(
+            rule for rule in self.css.split("}") if ".artifact--report" in rule
+        )
+
+    def test_parser_defaults_to_article_and_rejects_unknown_variants(self):
+        parser = cli.build_parser()
+        args = parser.parse_args(["render", "--name", "n", "--title", "t"])
+        self.assertEqual(args.variant, "article")
+        with self.assertRaises(SystemExit), redirect_stderr(io.StringIO()):
+            parser.parse_args(
+                ["render", "--name", "n", "--title", "t", "--variant", "poster"]
+            )
+
+    def test_default_render_stamps_no_variant_class(self):
+        self.assertIn('<main class="artifact">', self.rendered())
+        self.assertNotIn("artifact--", self.rendered())
+
+    def test_article_is_the_default_variant_spelled_out(self):
+        self.assertEqual(self.rendered("--variant", "article"), self.rendered())
+
+    def test_report_variant_stamps_the_class_on_main(self):
+        self.assertIn(
+            '<main class="artifact artifact--report">',
+            self.rendered("--variant", "report"),
+        )
+
+    def test_the_class_on_main_is_the_only_difference(self):
+        """The variant lives in the stylesheet: same markup, one class more."""
+        article = self.rendered().splitlines()
+        report = self.rendered("--variant", "report").splitlines()
+        changed = [
+            (a, r) for a, r in zip(article, report, strict=True) if a != r
+        ]
+        self.assertEqual(
+            changed,
+            [(
+                '  <main class="artifact">',
+                '  <main class="artifact artifact--report">',
+            )],
+        )
+
+    def test_variant_class_helper_matches_the_flag(self):
+        self.assertEqual(cli.variant_class("article"), "")
+        self.assertEqual(cli.variant_class("report"), " artifact--report")
+        with self.assertRaises(KeyError):
+            cli.variant_class("poster")
+
+    def test_report_ruleset_is_scoped_and_in_the_one_stylesheet(self):
+        """One lotuspod.css is what serve allow-lists - no second sheet."""
+        self.assertIn(".artifact--report", self.css)
+        self.assertEqual(
+            sorted(p.name for p in cli.THEME_DIR.glob("*.css")), ["lotuspod.css"]
+        )
+        for rule in self.css.split("}"):
+            if "--size-body-report" in rule or "--leading-body-report" in rule:
+                self.assertTrue(
+                    ":root" in rule or ".artifact--report" in rule, rule
+                )
+
+    def test_report_body_sizes_mirror_the_tokens(self):
+        sizes = self.tokens["type"]
+        self.assertEqual(sizes["report_body_size"], "0.875rem")
+        self.assertEqual(sizes["report_body_leading"], "1.6")
+        root = self.css.split("}")[0]
+        self.assertIn(f"--size-body-report: {sizes['report_body_size']};", root)
+        self.assertIn(
+            f"--leading-body-report: {sizes['report_body_leading']};", root
+        )
+        self.assertIn("font-size: var(--size-body-report)", self.report_rules)
+        self.assertIn("line-height: var(--leading-body-report)", self.report_rules)
+
+    def test_report_header_is_flattened_not_replaced(self):
+        """Same .artifact-header markup; only the surface changes."""
+        self.assertIn('<header class="artifact-header">', self.rendered("--variant", "report"))
+        header = next(
+            rule for rule in self.css.split("}")
+            if ".artifact--report .artifact-header" in rule
+        )
+        self.assertIn("background: none", header)
+        self.assertIn("box-shadow: none", header)
+        self.assertIn("border-bottom: 1px solid var(--hairline)", header)
+
+    def test_report_tables_lay_out_as_tables_at_the_reading_column(self):
+        table = next(
+            rule for rule in self.css.split("}")
+            if ".artifact--report .artifact-body table" in rule
+        )
+        self.assertIn("display: table", table)
+        self.assertIn("width: var(--measure-full)", table)
+        self.assertNotIn("overflow", table)
+        self.assertIn("overflow-wrap: anywhere", self.report_rules)
+        self.assertIn("max-width: 100rem", self.report_rules)
+
+    def test_report_wide_layout_puts_the_rail_on_the_left(self):
+        wide = self.css.split("@container (min-width: 58rem) {")
+        self.assertEqual(len(wide), 3, "expected the article and report wide blocks")
+        report_wide = wide[2].split("\n}\n")[0]
+        rules = {
+            selector.strip(): body
+            for selector, body in re.findall(
+                r"([^{}]+)\{([^{}]*)\}", report_wide
+            )
+        }
+        self.assertIn(
+            "grid-template-columns: var(--outline-rail) minmax(0, 1fr)",
+            rules[".artifact--report .artifact-main:has(.artifact-outline)"],
+        )
+        self.assertIn(
+            "grid-area: 1 / 2",
+            rules[".artifact--report .artifact-main:has(.artifact-outline) > .artifact-body"],
+        )
+        self.assertIn("grid-area: 1 / 1", rules[".artifact--report .artifact-outline"])
+        self.assertIn(
+            "--outline-rail: 13.5rem", rules[".artifact--report .artifact-main"]
+        )
+
+    def test_report_render_of_a_wide_table_fixture_is_clean_and_stable(self):
+        """Criterion 4's witness: an h2 outline and a table wider than the
+        prose measure, rendered with --variant report into a temporary
+        directory. The main element carries the variant class, the page has
+        no style element (the treatment lives in lotuspod.css, not inlined in
+        the body the way the Holophyte review once smuggled it in), and two
+        renders are byte-identical."""
+        wide_row = "".join(f"<td>column {n} value</td>" for n in range(12))
+        body = (
+            "<h2>Findings</h2><p>x</p>"
+            "<table><thead><tr>"
+            + "".join(f"<th>Heading {n}</th>" for n in range(12))
+            + f"</tr></thead><tbody><tr>{wide_row}</tr></tbody></table>"
+            "<h2>Next</h2><p>y</p>"
+        )
+        rc, _, err = self.render(
+            "wide-report", "--date", "2026-09-03", "--variant", "report",
+            "--body", body,
+        )
+        self.assertEqual(rc, 0, err)
+        page = self.out_dir / "wide-report.html"
+        first = page.read_bytes()
+        rc, _, err = self.render(
+            "wide-report", "--date", "2026-09-03", "--variant", "report",
+            "--body", body,
+        )
+        self.assertEqual(rc, 0, err)
+        second = page.read_bytes()
+        html = first.decode("utf-8")
+        self.assertIn('<main class="artifact artifact--report">', html)
+        self.assertNotRegex(html, r"<style[\s>]")
+        self.assertIn("<th>Heading 11</th>", html)
+        self.assertIn('class="artifact-outline"', html)
+        self.assertEqual(first, second)
