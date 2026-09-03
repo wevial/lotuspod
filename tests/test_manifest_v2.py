@@ -1266,3 +1266,38 @@ class ReportVariantTests(TempDirTestCase):
         self.assertIn(
             "--outline-rail: 13.5rem", rules[".artifact--report .artifact-main"]
         )
+
+    def test_report_render_of_a_wide_table_fixture_is_clean_and_stable(self):
+        """Criterion 4's witness: an h2 outline and a table wider than the
+        prose measure, rendered with --variant report into a temporary
+        directory. The main element carries the variant class, the page has
+        no style element (the treatment lives in lotuspod.css, not inlined in
+        the body the way the Holophyte review once smuggled it in), and two
+        renders are byte-identical."""
+        wide_row = "".join(f"<td>column {n} value</td>" for n in range(12))
+        body = (
+            "<h2>Findings</h2><p>x</p>"
+            "<table><thead><tr>"
+            + "".join(f"<th>Heading {n}</th>" for n in range(12))
+            + f"</tr></thead><tbody><tr>{wide_row}</tr></tbody></table>"
+            "<h2>Next</h2><p>y</p>"
+        )
+        rc, _, err = self.render(
+            "wide-report", "--date", "2026-09-03", "--variant", "report",
+            "--body", body,
+        )
+        self.assertEqual(rc, 0, err)
+        page = self.out_dir / "wide-report.html"
+        first = page.read_bytes()
+        rc, _, err = self.render(
+            "wide-report", "--date", "2026-09-03", "--variant", "report",
+            "--body", body,
+        )
+        self.assertEqual(rc, 0, err)
+        second = page.read_bytes()
+        html = first.decode("utf-8")
+        self.assertIn('<main class="artifact artifact--report">', html)
+        self.assertNotRegex(html, r"<style[\s>]")
+        self.assertIn("<th>Heading 11</th>", html)
+        self.assertIn('class="artifact-outline"', html)
+        self.assertEqual(first, second)
