@@ -53,6 +53,13 @@ _VISIBLE_TAG_RE = re.compile(
 )
 _META_CONTENT_RE = re.compile(r"content=[\"']([^\"']*)[\"']", re.IGNORECASE)
 
+# Render variants. Each is one ruleset in lotuspod.css keyed off a class on
+# the main element, never a second stylesheet: the one file serve allow-lists
+# is the whole theme. The default variant stamps nothing, so a page rendered
+# without --variant is byte-identical to one rendered before variants existed.
+DEFAULT_VARIANT = "article"
+VARIANTS = (DEFAULT_VARIANT, "report")
+
 
 def load_tokens() -> dict:
     tokens_path = THEME_DIR / "tokens.json"
@@ -247,6 +254,13 @@ def outline_html(outline: list[dict]) -> str:
     )
 
 
+def variant_class(variant: str) -> str:
+    """The class the main element carries for a variant ("" for the default)."""
+    if variant not in VARIANTS:
+        raise KeyError(f"unknown render variant {variant!r}")
+    return "" if variant == DEFAULT_VARIANT else f" artifact--{variant}"
+
+
 def cmd_render(args: argparse.Namespace) -> int:
     tokens = load_tokens()
     kicker = "Lotuspod"
@@ -265,6 +279,7 @@ def cmd_render(args: argparse.Namespace) -> int:
         "theme_name": tokens["name"],
         "theme_version": tokens["version"],
         "visible": "false" if args.hidden else "true",
+        "variant_class": variant_class(args.variant),
     }
     html = render_template(context)
 
@@ -586,6 +601,13 @@ def build_parser() -> argparse.ArgumentParser:
         "--no-outline",
         action="store_true",
         help="skip heading ids and the section outline",
+    )
+    render.add_argument(
+        "--variant",
+        choices=VARIANTS,
+        default=DEFAULT_VARIANT,
+        help="page treatment: article (default) or report - a denser reading "
+        "surface for long technical reports, outline as a left rail",
     )
     render.add_argument("--out-dir", default="", help="output directory (default: artifacts/)")
     render.set_defaults(func=cmd_render)
