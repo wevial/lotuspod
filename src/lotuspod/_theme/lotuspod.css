@@ -197,15 +197,16 @@ body {
 }
 
 /* Wide: the reading column is capped well inside the container, so the
-   outline moves into the gutter it leaves and rides along as a sticky rail -
-   the prose keeps its measure untouched. Measured against the page container
-   rather than the viewport, the same box --measure-full is figured from. */
+   outline moves into the gutter it leaves and rides along as a sticky rail on
+   the left, ahead of the prose in reading order - the prose keeps its measure
+   untouched. Measured against the page container rather than the viewport,
+   the same box --measure-full is figured from. */
 @container (min-width: 58rem) {
   .artifact-main:has(.artifact-outline) {
     align-items: start;
     column-gap: var(--outline-gap);
     display: grid;
-    grid-template-columns: minmax(0, 1fr) var(--outline-rail);
+    grid-template-columns: var(--outline-rail) minmax(0, 1fr);
   }
 
   .artifact-main:has(.artifact-outline) > .artifact-body {
@@ -214,14 +215,14 @@ body {
     --measure-full: calc(
       100cqi - 0.5rem - var(--outline-rail) - var(--outline-gap)
     );
-    grid-area: 1 / 1;
+    grid-area: 1 / 2;
   }
 
   /* Sticky within the row it shares with the body, and scrollable itself if a
      long outline outgrows the screen - a rail that runs off the bottom would
      be navigation you cannot reach. */
   .artifact-outline {
-    grid-area: 1 / 2;
+    grid-area: 1 / 1;
     max-height: calc(100vh - 3rem);
     overflow-y: auto;
     position: sticky;
@@ -684,24 +685,15 @@ body {
   padding-left: 1.1em;
 }
 
-/* Wide: the rail moves to the left column, narrower than the article's. The
-   body's --measure-full is figured from --outline-rail, so the narrower rail
-   is set here once and the breakout measure follows it. */
+/* Wide: the rail is narrower than the article's; its side comes from the base
+   layout. The body's --measure-full is figured from --outline-rail, so the
+   narrower rail is set here once and the breakout measure follows it. */
 @container (min-width: 58rem) {
   .artifact--report .artifact-main {
     --outline-rail: 13.5rem;
   }
 
-  .artifact--report .artifact-main:has(.artifact-outline) {
-    grid-template-columns: var(--outline-rail) minmax(0, 1fr);
-  }
-
-  .artifact--report .artifact-main:has(.artifact-outline) > .artifact-body {
-    grid-area: 1 / 2;
-  }
-
   .artifact--report .artifact-outline {
-    grid-area: 1 / 1;
     margin-top: 1.25rem;
   }
 

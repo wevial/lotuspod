@@ -502,7 +502,7 @@ class IndexTableTests(TempDirTestCase):
         version = json.loads(
             (cli.THEME_DIR / "tokens.json").read_text(encoding="utf-8")
         )["version"]
-        self.assertEqual(version, "0.4.2")
+        self.assertEqual(version, "0.4.3")
         self.assertIn(f'href="lotuspod.css?v={version}"', first)
 
 
@@ -515,7 +515,7 @@ class IndexTableWidthTests(unittest.TestCase):
     """
 
     BLOCK = re.compile(r"^\.index-table \{.*?^\}\n", re.MULTILINE | re.DOTALL)
-    PREVIOUS_COMMIT = "bf8d79c"
+    KO_233_COMMIT = "3adc05d"
 
     def theme_css(self) -> str:
         return (cli.THEME_DIR / "lotuspod.css").read_text(encoding="utf-8")
@@ -532,18 +532,19 @@ class IndexTableWidthTests(unittest.TestCase):
         self.assertIn("overflow-x: auto;", block)
         self.assertNotIn("vw", block)
 
-    def test_nothing_else_in_the_stylesheet_moved(self):
+    def test_the_block_has_not_drifted_since_ko_233(self):
+        """Later theme work (KO-234's rail) leaves the listing rule alone."""
         repo = Path(__file__).resolve().parent.parent
         proc = subprocess.run(
-            ["git", "show", f"{self.PREVIOUS_COMMIT}:src/lotuspod/_theme/lotuspod.css"],
+            ["git", "show", f"{self.KO_233_COMMIT}:src/lotuspod/_theme/lotuspod.css"],
             cwd=repo, capture_output=True, text=True, encoding="utf-8",
         )
         if proc.returncode != 0:
             self.skipTest(f"previous stylesheet unavailable: {proc.stderr.strip()}")
-        before = self.BLOCK.sub("", proc.stdout)
-        after = self.BLOCK.sub("", self.theme_css())
-        self.assertNotEqual(proc.stdout, self.theme_css())
-        self.assertEqual(before, after)
+        self.assertEqual(
+            self.index_table_block(proc.stdout),
+            self.index_table_block(self.theme_css()),
+        )
 
 
 class ServeAllowListTests(TempDirTestCase):
@@ -1054,6 +1055,23 @@ class OutlineThemeTests(unittest.TestCase):
         self.assertIn("grid-area: 1 / 2", self.wide)
         self.assertIn("grid-area: 1 / 1", self.wide)
 
+    def rule(self, selector: str) -> str:
+        head = f"  {selector} {{"
+        self.assertIn(head, self.wide)
+        return self.wide.split(head)[1].split("\n  }")[0]
+
+    def test_the_rail_sits_on_the_left_and_the_body_on_the_right(self):
+        """KO-234: navigation comes before content in reading order."""
+        self.assertIn(
+            "grid-template-columns: var(--outline-rail) minmax(0, 1fr);",
+            self.rule(".artifact-main:has(.artifact-outline)"),
+        )
+        self.assertIn(
+            "grid-area: 1 / 2;",
+            self.rule(".artifact-main:has(.artifact-outline) > .artifact-body"),
+        )
+        self.assertIn("grid-area: 1 / 1;", self.rule(".artifact-outline"))
+
     def test_wide_layout_holds_the_collapsed_disclosure_open(self):
         """Markup ships collapsed for the phone; the gutter reopens it here."""
         self.assertIn(
@@ -1077,6 +1095,77 @@ class OutlineThemeTests(unittest.TestCase):
 
     def test_anchored_headings_keep_air_above_them(self):
         self.assertIn("scroll-margin-top", self.css)
+
+
+class ReportVariantRailTests(unittest.TestCase):
+    """The report keeps its rail width and type size; its side comes from the base.
+
+    KO-234: the base layout now puts the rail on the left, so the report's own
+    left-rail overrides were duplicates and are gone.
+    """
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        css = (cli.THEME_DIR / "lotuspod.css").read_text(encoding="utf-8")
+        wide_blocks = [
+            b.split("\n}\n")[0]
+            for b in css.split("@container (min-width: 58rem) {")[1:]
+        ]
+        report = [b for b in wide_blocks if ".artifact--report" in b]
+        assert len(report) == 1, len(report)
+        cls.block = report[0]
+
+    def test_the_side_is_no_longer_restated(self):
+        self.assertNotIn("grid-template-columns", self.block)
+        self.assertNotIn("grid-area", self.block)
+        self.assertNotIn("--measure-full", self.block)
+
+    def test_rail_width_and_outline_type_size_stay(self):
+        self.assertIn("--outline-rail: 13.5rem;", self.block)
+        self.assertIn(".artifact--report .artifact-outline-list a {", self.block)
+        self.assertIn("font-size: 0.8rem;", self.block)
+
+
+class OutlineSideRenderTests(TempDirTestCase):
+    """Moving the rail is CSS alone: the page markup is untouched."""
+
+    PREVIOUS_COMMIT = "06b7dc1"
+    BODY = "<h2>Alpha</h2><p>a</p><h2>Beta</h2><p>b</p><h2>Gamma</h2><p>c</p>"
+
+    def rendered(self) -> str:
+        rc, _, err = self.render("ep-001", "--body", self.BODY)
+        self.assertEqual(rc, 0, err)
+        return (self.out_dir / "ep-001.html").read_text(encoding="utf-8")
+
+    def test_markup_differs_from_before_only_in_the_theme_version(self):
+        repo = Path(__file__).resolve().parent.parent
+        previous = self.out_dir / "previous-theme"
+        previous.mkdir()
+        for filename in ("lotuspod.css", "tokens.json"):
+            proc = subprocess.run(
+                ["git", "show",
+                 f"{self.PREVIOUS_COMMIT}:src/lotuspod/_theme/{filename}"],
+                cwd=repo, capture_output=True, text=True, encoding="utf-8",
+            )
+            if proc.returncode != 0:
+                self.skipTest(f"previous theme unavailable: {proc.stderr.strip()}")
+            (previous / filename).write_text(proc.stdout, encoding="utf-8")
+        old_version = json.loads(
+            (previous / "tokens.json").read_text(encoding="utf-8")
+        )["version"]
+        new_version = json.loads(
+            (cli.THEME_DIR / "tokens.json").read_text(encoding="utf-8")
+        )["version"]
+        self.assertNotEqual(old_version, new_version)
+
+        after = self.rendered()
+        with mock.patch.object(cli, "THEME_DIR", previous):
+            before = self.rendered()
+
+        self.assertIn(f"lotuspod.css?v={old_version}", before)
+        self.assertIn(f"lotuspod.css?v={new_version}", after)
+        self.assertNotEqual(before, after)
+        self.assertEqual(before.replace(old_version, new_version), after)
 
 
 class OutlineBodyTests(unittest.TestCase):
@@ -1294,7 +1383,8 @@ class ReportVariantTests(TempDirTestCase):
         self.assertIn("overflow-wrap: anywhere", self.report_rules)
         self.assertIn("max-width: 100rem", self.report_rules)
 
-    def test_report_wide_layout_puts_the_rail_on_the_left(self):
+    def test_report_wide_layout_narrows_the_rail_the_base_puts_on_the_left(self):
+        """KO-234 moved the rail left for every page; the report only sizes it."""
         wide = self.css.split("@container (min-width: 58rem) {")
         self.assertEqual(len(wide), 3, "expected the article and report wide blocks")
         report_wide = wide[2].split("\n}\n")[0]
@@ -1305,16 +1395,15 @@ class ReportVariantTests(TempDirTestCase):
             )
         }
         self.assertIn(
-            "grid-template-columns: var(--outline-rail) minmax(0, 1fr)",
-            rules[".artifact--report .artifact-main:has(.artifact-outline)"],
-        )
-        self.assertIn(
-            "grid-area: 1 / 2",
-            rules[".artifact--report .artifact-main:has(.artifact-outline) > .artifact-body"],
-        )
-        self.assertIn("grid-area: 1 / 1", rules[".artifact--report .artifact-outline"])
-        self.assertIn(
             "--outline-rail: 13.5rem", rules[".artifact--report .artifact-main"]
+        )
+        self.assertIn("margin-top: 1.25rem", rules[".artifact--report .artifact-outline"])
+        self.assertNotIn(
+            ".artifact--report .artifact-main:has(.artifact-outline)", rules
+        )
+        self.assertNotIn(
+            ".artifact--report .artifact-main:has(.artifact-outline) > .artifact-body",
+            rules,
         )
 
     def test_report_render_of_a_wide_table_fixture_is_clean_and_stable(self):
