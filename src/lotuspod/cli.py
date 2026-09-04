@@ -352,6 +352,7 @@ def cmd_manifest(args: argparse.Namespace) -> int:
         raise FileNotFoundError(f"artifacts directory not found: {out_dir}")
 
     artifacts, hidden = collect_artifacts(out_dir)
+    sync_theme_css(out_dir)
 
     manifest_path = out_dir / MANIFEST_FILE
     manifest_path.write_text(

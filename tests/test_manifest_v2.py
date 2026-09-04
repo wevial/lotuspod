@@ -382,6 +382,13 @@ class FaviconTests(TempDirTestCase):
         self.assertEqual((self.out_dir / "favicon.svg").read_bytes(), self.packaged_icon())
         self.assertIn("favicon.svg", cli.serve_allow_list(self.out_dir))
 
+    def test_manifest_lands_the_icon_too(self):
+        self.render("ep-001")
+        (self.out_dir / "favicon.svg").unlink()
+        rc, _, err = run_cli("manifest", "--out-dir", str(self.out_dir))
+        self.assertEqual(rc, 0, err)
+        self.assertEqual((self.out_dir / "favicon.svg").read_bytes(), self.packaged_icon())
+
 
 def make_mixed_fixture(out_dir: Path) -> None:
     """Render/hand-write one artifact of each visibility flavor."""
