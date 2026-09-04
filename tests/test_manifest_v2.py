@@ -290,6 +290,10 @@ class ArtifactTopbarTests(TempDirTestCase):
             if proc.returncode != 0:
                 self.skipTest(f"previous theme unavailable: {proc.stderr.strip()}")
             (previous / filename).write_text(proc.stdout, encoding="utf-8")
+        # d0b2598 predates the favicon (KO-244); the copy step needs it present.
+        (previous / "favicon.svg").write_bytes(
+            (cli.THEME_DIR / "favicon.svg").read_bytes()
+        )
         old_version = json.loads(
             (previous / "tokens.json").read_text(encoding="utf-8")
         )["version"]
@@ -339,6 +343,51 @@ class ThemeCssSyncTests(TempDirTestCase):
         os.utime(self.css_copy(), (stamp, stamp))
         self.render("ep-002")
         self.assertEqual(int(self.css_copy().stat().st_mtime), stamp)
+
+
+class FaviconTests(TempDirTestCase):
+    """KO-244: every page names the lotus glyph as its icon, and serve answers it."""
+
+    ICON_LINK = '<link rel="icon" type="image/svg+xml" href="favicon.svg">'
+
+    def packaged_icon(self) -> bytes:
+        return (cli.THEME_DIR / "favicon.svg").read_bytes()
+
+    def test_theme_icon_is_the_lavender_lotus_glyph(self):
+        svg = self.packaged_icon().decode("utf-8")
+        self.assertIn('viewBox="0 0 32 32"', svg)
+        self.assertIn("#b79cf4", svg)
+        self.assertIn("&#10047;", svg)
+
+    def test_render_links_the_icon_and_lands_the_file(self):
+        rc, _, err = self.render("ep-001")
+        self.assertEqual(rc, 0, err)
+        page = (self.out_dir / "ep-001.html").read_text(encoding="utf-8")
+        head = page.split("</head>", 1)[0]
+        self.assertIn(self.ICON_LINK, head)
+        self.assertEqual((self.out_dir / "favicon.svg").read_bytes(), self.packaged_icon())
+
+    def test_render_refreshes_a_stale_icon(self):
+        (self.out_dir / "favicon.svg").write_bytes(b"<svg/>")
+        self.render("ep-001")
+        self.assertEqual((self.out_dir / "favicon.svg").read_bytes(), self.packaged_icon())
+
+    def test_index_links_the_icon_and_serve_allows_it(self):
+        self.render("ep-001")
+        (self.out_dir / "favicon.svg").unlink()
+        rc, _, err = run_cli("index", "--out-dir", str(self.out_dir))
+        self.assertEqual(rc, 0, err)
+        index_html = (self.out_dir / "index.html").read_text(encoding="utf-8")
+        self.assertIn(self.ICON_LINK, index_html.split("</head>", 1)[0])
+        self.assertEqual((self.out_dir / "favicon.svg").read_bytes(), self.packaged_icon())
+        self.assertIn("favicon.svg", cli.serve_allow_list(self.out_dir))
+
+    def test_manifest_lands_the_icon_too(self):
+        self.render("ep-001")
+        (self.out_dir / "favicon.svg").unlink()
+        rc, _, err = run_cli("manifest", "--out-dir", str(self.out_dir))
+        self.assertEqual(rc, 0, err)
+        self.assertEqual((self.out_dir / "favicon.svg").read_bytes(), self.packaged_icon())
 
 
 def make_mixed_fixture(out_dir: Path) -> None:
@@ -623,7 +672,7 @@ class IndexTableTests(TempDirTestCase):
         version = json.loads(
             (cli.THEME_DIR / "tokens.json").read_text(encoding="utf-8")
         )["version"]
-        self.assertEqual(version, "0.4.5")
+        self.assertEqual(version, "0.4.6")
         self.assertIn(f'href="lotuspod.css?v={version}"', first)
 
 
@@ -677,7 +726,7 @@ class ServeAllowListTests(TempDirTestCase):
     def test_only_visible_pages_plus_support_files(self):
         make_mixed_fixture(self.out_dir)
         allowed = self.allow_list()
-        self.assertEqual(allowed, {"index.html", "lotuspod.css", "zeta.html"})
+        self.assertEqual(allowed, {"index.html", "lotuspod.css", "favicon.svg", "zeta.html"})
         self.assertNotIn("alpha.html", allowed)
         self.assertNotIn("mike.html", allowed)
         self.assertNotIn("tango.html", allowed)
@@ -685,7 +734,9 @@ class ServeAllowListTests(TempDirTestCase):
     def test_undecodable_page_fail_closed(self):
         self.render("good", )
         (self.out_dir / "junk.html").write_bytes(b"\xff\xfe\x00<not utf-8>")
-        self.assertEqual(self.allow_list(), {"index.html", "lotuspod.css", "good.html"})
+        self.assertEqual(
+            self.allow_list(), {"index.html", "lotuspod.css", "favicon.svg", "good.html"}
+        )
 
     def test_allow_list_recomputed_on_rewrite(self):
         self.render("flip", "--hidden")
@@ -936,6 +987,7 @@ class PublishHttpRoundTripTests(TempDirTestCase):
         self.assertEqual(status, 200)
         self.assertIn(b"Zeta Pond", body)
         self.assertEqual(self.fetch("/lotuspod.css")[0], 200)
+        self.assertEqual(self.fetch("/favicon.svg")[0], 200)
         for denied in ("/manifest.json", "/FINDINGS.md", "/alpha.html"):
             status, _ = self.fetch(denied)
             self.assertEqual(status, 404, denied)
@@ -1271,6 +1323,10 @@ class OutlineSideRenderTests(TempDirTestCase):
             if proc.returncode != 0:
                 self.skipTest(f"previous theme unavailable: {proc.stderr.strip()}")
             (previous / filename).write_text(proc.stdout, encoding="utf-8")
+        # d0b2598 predates the favicon (KO-244); the copy step needs it present.
+        (previous / "favicon.svg").write_bytes(
+            (cli.THEME_DIR / "favicon.svg").read_bytes()
+        )
         old_version = json.loads(
             (previous / "tokens.json").read_text(encoding="utf-8")
         )["version"]
