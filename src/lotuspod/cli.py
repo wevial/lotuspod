@@ -101,16 +101,21 @@ def render_template(context: dict, template_path: Path = TEMPLATE_PATH) -> str:
     return _PLACEHOLDER.sub(_sub, template)
 
 
-def sync_theme_css(out_dir: Path) -> None:
-    """Keep the artifact dir's stylesheet identical to the packaged theme.
+THEME_FILES = ("lotuspod.css", "favicon.svg")
 
-    Rewriting only on a content difference means a theme upgrade reaches
-    already-rendered directories while untouched ones keep their mtime.
+
+def sync_theme_css(out_dir: Path) -> None:
+    """Keep the artifact dir's theme files identical to the packaged theme.
+
+    Covers the stylesheet and the favicon (THEME_FILES). Rewriting only on
+    a content difference means a theme upgrade reaches already-rendered
+    directories while untouched ones keep their mtime.
     """
-    packaged = THEME_DIR / "lotuspod.css"
-    theme_copy = out_dir / "lotuspod.css"
-    if not theme_copy.exists() or theme_copy.read_bytes() != packaged.read_bytes():
-        shutil.copyfile(packaged, theme_copy)
+    for filename in THEME_FILES:
+        packaged = THEME_DIR / filename
+        theme_copy = out_dir / filename
+        if not theme_copy.exists() or theme_copy.read_bytes() != packaged.read_bytes():
+            shutil.copyfile(packaged, theme_copy)
 
 
 _OUTLINE_MIN_HEADINGS = 2
@@ -478,6 +483,7 @@ def _tailnet_dns_name() -> str:
 
 
 _SERVE_CSS_FILE = "lotuspod.css"
+_SERVE_ICON_FILE = "favicon.svg"
 _SERVE_NEVER_FILES = frozenset({MANIFEST_FILE, "FINDINGS.md"})
 _DENY_PATH_NAME = ".lotuspod-not-found"
 
@@ -491,7 +497,7 @@ def serve_allow_list(out_dir: Path) -> frozenset[str]:
     the manifest lists private artifact ids, so it must stay unreachable
     over HTTP even though it lives in the served directory.
     """
-    allowed = {INDEX_FILE, _SERVE_CSS_FILE}
+    allowed = {INDEX_FILE, _SERVE_CSS_FILE, _SERVE_ICON_FILE}
     try:
         pages = sorted(out_dir.glob("*.html"))
     except OSError:
