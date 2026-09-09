@@ -173,6 +173,11 @@ class _H2Collector(HTMLParser):
             if char == "\n":
                 self._line_starts.append(index + 1)
         self._open: dict | None = None
+        # Depth of `pre` nesting while inside a `pre.mermaid`, 0 outside one.
+        # Mermaid reads a diagram block's text verbatim and allows HTML in
+        # node labels, so an h2 spelled out there is diagram source, not a
+        # heading - it gets no id and no outline entry.
+        self._mermaid_depth = 0
         self.headings: list[dict] = []
         self.ids: set[str] = set()
 
@@ -186,7 +191,11 @@ class _H2Collector(HTMLParser):
             # Every element's id is reserved, not just the headings' - an
             # anchor that lands on some other element is a broken anchor.
             self.ids.add(explicit)
-        if tag != "h2":
+        if tag == "pre":
+            classes = next((v for k, v in attrs if k == "class" and v), "").split()
+            if self._mermaid_depth or "mermaid" in classes:
+                self._mermaid_depth += 1
+        if tag != "h2" or self._mermaid_depth:
             return
         self._finish()
         start = self._offset()
@@ -204,7 +213,9 @@ class _H2Collector(HTMLParser):
             self._open["text"].append(data)
 
     def handle_endtag(self, tag: str) -> None:
-        if tag == "h2":
+        if tag == "pre" and self._mermaid_depth:
+            self._mermaid_depth -= 1
+        elif tag == "h2" and not self._mermaid_depth:
             self._finish()
 
     def _finish(self) -> None:

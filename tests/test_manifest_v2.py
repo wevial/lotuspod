@@ -1198,6 +1198,20 @@ class MermaidTests(TempDirTestCase):
         self.assertIn(self.DIAGRAM, page)
         self.assertIn(self.BODY, page)
 
+    def test_h2_markup_inside_the_diagram_source_is_not_a_heading(self):
+        # Mermaid allows HTML in node labels; the outline must not touch it.
+        diagram = (
+            '<pre class="mermaid">flowchart LR\n'
+            'a["<h2>Alpha</h2>"] --> b["<h2>Beta</h2>"]</pre>'
+        )
+        out, outline = cli.outline_body(diagram)
+        self.assertEqual((out, outline), (diagram, []))
+        body = f"<h2>One</h2>{diagram}<h2>Two</h2>"
+        out, outline = cli.outline_body(body)
+        self.assertIn(diagram, out)
+        self.assertEqual([entry["text"] for entry in outline], ["One", "Two"])
+        self.assertIn(diagram, self.rendered(body))
+
     def test_a_page_without_a_diagram_block_never_mentions_mermaid(self):
         page = self.rendered("<p>Plain prose.</p><h2>A</h2><p>x</p><h2>B</h2><p>y</p>")
         self.assertNotIn("mermaid", page)
