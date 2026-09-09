@@ -672,7 +672,7 @@ class IndexTableTests(TempDirTestCase):
         version = json.loads(
             (cli.THEME_DIR / "tokens.json").read_text(encoding="utf-8")
         )["version"]
-        self.assertEqual(version, "0.4.6")
+        self.assertEqual(version, "0.4.7")
         self.assertIn(f'href="lotuspod.css?v={version}"', first)
 
 
@@ -1165,6 +1165,87 @@ class OutlineMarkupTests(TempDirTestCase):
 
     def test_empty_outline_renders_nothing(self):
         self.assertEqual(cli.outline_html([]), "")
+
+
+class MermaidTests(TempDirTestCase):
+    """A diagram block brings the pinned Mermaid script in the lotus palette;
+    a page without one carries no trace of it."""
+
+    DIAGRAM = '<pre class="mermaid">flowchart LR\na --> b</pre>'
+    BODY = f"<p>Before.</p>{DIAGRAM}<p>After.</p>"
+
+    def rendered(self, body: str, *extra: str) -> str:
+        rc, _, err = self.render("ep-001", "--date", "2026-03-04", "--body", body, *extra)
+        self.assertEqual(rc, 0, err)
+        return (self.out_dir / "ep-001.html").read_text(encoding="utf-8")
+
+    def test_a_diagram_block_loads_pinned_mermaid_in_the_lotus_palette(self):
+        page = self.rendered(self.BODY)
+        tokens = json.loads((cli.THEME_DIR / "tokens.json").read_text(encoding="utf-8"))
+        scripts = re.findall(r'<script type="module">.*?</script>', page, re.DOTALL)
+        self.assertEqual(len(scripts), 1)
+        script = scripts[0]
+        self.assertRegex(script, r'import mermaid from "https://[^"]*mermaid@\d+\.\d+\.\d+/')
+        self.assertIn("mermaid.initialize(", script)
+        self.assertIn("themeVariables", script)
+        self.assertIn(tokens["colors"]["lavender"], script)
+        self.assertIn(tokens["colors"]["surface"], script)
+        self.assertIn('theme: "base"', script)
+        self.assertIn("startOnLoad: true", script)
+
+    def test_the_diagram_source_is_byte_identical_to_the_input(self):
+        page = self.rendered(self.BODY)
+        self.assertIn(self.DIAGRAM, page)
+        self.assertIn(self.BODY, page)
+
+    def test_h2_markup_inside_the_diagram_source_is_not_a_heading(self):
+        # Mermaid allows HTML in node labels; the outline must not touch it.
+        diagram = (
+            '<pre class="mermaid">flowchart LR\n'
+            'a["<h2>Alpha</h2>"] --> b["<h2>Beta</h2>"]</pre>'
+        )
+        out, outline = cli.outline_body(diagram)
+        self.assertEqual((out, outline), (diagram, []))
+        body = f"<h2>One</h2>{diagram}<h2>Two</h2>"
+        out, outline = cli.outline_body(body)
+        self.assertIn(diagram, out)
+        self.assertEqual([entry["text"] for entry in outline], ["One", "Two"])
+        self.assertIn(diagram, self.rendered(body))
+
+    def test_a_page_without_a_diagram_block_never_mentions_mermaid(self):
+        page = self.rendered("<p>Plain prose.</p><h2>A</h2><p>x</p><h2>B</h2><p>y</p>")
+        self.assertNotIn("mermaid", page)
+        self.assertNotIn("<script", page)
+
+    def test_the_flag_and_palette_reach_the_template_context(self):
+        with mock.patch.object(
+            cli, "render_template", wraps=cli.render_template
+        ) as render_template:
+            self.rendered(self.BODY)
+        context = render_template.call_args.args[0]
+        self.assertTrue(context["mermaid"])
+        variables = json.loads(context["mermaid_theme_variables"])
+        tokens = json.loads((cli.THEME_DIR / "tokens.json").read_text(encoding="utf-8"))
+        self.assertEqual(variables["primaryColor"], tokens["colors"]["surface"])
+        self.assertEqual(variables["lineColor"], tokens["colors"]["lavender"])
+        self.assertEqual(variables["primaryBorderColor"], tokens["colors"]["lavender"])
+        self.assertEqual(variables["primaryTextColor"], tokens["colors"]["pale_lavender"])
+        self.assertEqual(variables["background"], tokens["colors"]["night"])
+        self.assertEqual(variables["fontFamily"], tokens["fonts"]["mono"])
+
+    def test_detection_needs_a_pre_with_the_mermaid_class(self):
+        self.assertTrue(cli.has_mermaid_block('<pre class="code mermaid">x</pre>'))
+        self.assertFalse(cli.has_mermaid_block("<p>mermaid</p>"))
+        self.assertFalse(cli.has_mermaid_block('<div class="mermaid">x</div>'))
+        self.assertFalse(cli.has_mermaid_block('<pre class="mermaids">x</pre>'))
+
+    def test_the_theme_styles_the_diagram_block(self):
+        css = (cli.THEME_DIR / "lotuspod.css").read_text(encoding="utf-8")
+        self.assertIn(".artifact-body pre.mermaid", css)
+
+    def test_the_readme_shows_the_diagram_block_form(self):
+        readme = (Path(__file__).resolve().parent.parent / "README.md").read_text(encoding="utf-8")
+        self.assertIn('pre class="mermaid"', readme)
 
 
 class TemplateSectionTests(unittest.TestCase):

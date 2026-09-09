@@ -1,5 +1,5 @@
 /*
- * Lotuspod theme "lotus" v0.4.6
+ * Lotuspod theme "lotus" v0.4.7
  * Tokens mirror theme/tokens.json.
  */
 
@@ -639,6 +639,26 @@ body {
   overflow-wrap: normal;
   padding: 0;
   white-space: pre;
+}
+
+/* A diagram block. Until Mermaid runs - or without scripting - it reads as the
+   source text in the pre style above. Once drawn, the SVG sits centred on the
+   page's own background and scrolls sideways when wider than the measure. */
+.artifact-body pre.mermaid {
+  text-align: center;
+}
+
+.artifact-body pre.mermaid[data-processed] {
+  background: transparent;
+  border: 0;
+  overflow-x: auto;
+  padding: 0;
+}
+
+.artifact-body pre.mermaid svg {
+  display: inline-block;
+  height: auto;
+  max-width: none;
 }
 
 /* Tables and code blocks are structure, not prose - they are read as a whole
