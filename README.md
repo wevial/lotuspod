@@ -55,6 +55,23 @@ links: the layout is a container query away.
 
 Pass `--no-outline` to skip the ids and the outline list entirely.
 
+A body may carry diagrams as Mermaid source in a `<pre class="mermaid">` block:
+
+```html
+<pre class="mermaid">
+flowchart LR
+  a --> b
+</pre>
+```
+
+When the body holds such a block, the page ends with one module script that
+imports a pinned Mermaid 11 from jsDelivr and draws every block in the lotus
+palette, built from `tokens.json` (surface fills, lavender lines and borders,
+pale lavender labels in the mono font on the night background). The text inside
+the block is left exactly as written, since Mermaid reads it verbatim; before
+the script runs, or without scripting, it reads as a code block. A body with no
+diagram block ships no script and no CDN reference at all.
+
 Pass `--variant report` for a long technical report. The page keeps the same
 markup with one class more, `artifact--report` on the `main` element, and the
 theme switches on a denser reading surface behind it: 14px body on a wider
@@ -201,7 +218,8 @@ install cannot shadow the code under test.
 ## Template
 
 `src/lotuspod/_templates/artifact.html` uses `{{placeholder}}` substitution with the context:
-`title`, `kicker`, `date`, `summary_block`, `body`, `theme_name`, `theme_version`.
+`title`, `kicker`, `date`, `summary_block`, `body`, `theme_name`, `theme_version`,
+plus the `mermaid` section flag and its `mermaid_theme_variables`.
 
 ## Theme
 
