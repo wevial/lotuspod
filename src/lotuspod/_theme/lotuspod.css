@@ -1,5 +1,5 @@
 /*
- * Lotuspod theme "lotus" v0.4.7
+ * Lotuspod theme "lotus" v0.4.8
  * Tokens mirror theme/tokens.json.
  */
 
@@ -14,7 +14,7 @@
   --color-white: #ffffff;
 
   --font-display: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
-  --font-body: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-body: "Avenir Next", -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
   --measure-prose: 66ch;
