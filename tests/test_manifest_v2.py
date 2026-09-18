@@ -234,7 +234,9 @@ class ArtifactTopbarTests(TempDirTestCase):
         css = self.theme_css()
         block = re.search(r"^\.artifact-topbar \{.*?^\}\n", css, re.MULTILINE | re.DOTALL)
         self.assertIsNotNone(block)
-        self.assertIn("position: sticky;", block.group(0))
+        self.assertIn("position: fixed;", block.group(0))
+        self.assertIn("left: 0;", block.group(0))
+        self.assertIn("right: 0;", block.group(0))
         self.assertIn("top: 0;", block.group(0))
         self.assertGreater(css.count("z-index: 3;"), 0)
 
@@ -258,14 +260,20 @@ class ArtifactTopbarTests(TempDirTestCase):
         self.assertIn("transform: none;", reduced.group(1))
 
     def test_hidden_bar_takes_no_flow_space_and_the_rail_clears_it(self):
-        """KO-236: the bar cancels its own height; the wide rail's top adds it."""
+        """KO-236: the bar takes no flow space; the wide rail's top clears it.
+
+        Since theme 0.4.9 the bar is fixed to the viewport edges rather than
+        sticky inside the page container, so it spans the full width and
+        needs no negative margin to stay out of the flow."""
         css = self.theme_css()
         self.assertIn("--topbar-height: 2.75rem;", css)
         block = re.search(r"^\.artifact-topbar \{.*?^\}\n", css, re.MULTILINE | re.DOTALL)
         self.assertIsNotNone(block)
         self.assertIn("height: var(--topbar-height);", block.group(0))
-        self.assertIn("margin-bottom: calc(-1 * var(--topbar-height));", block.group(0))
-        self.assertIn("position: sticky;", block.group(0))
+        self.assertNotIn("margin-bottom", block.group(0))
+        self.assertIn("position: fixed;", block.group(0))
+        self.assertIn("left: 0;", block.group(0))
+        self.assertIn("right: 0;", block.group(0))
         self.assertIn("top: 0;", block.group(0))
 
         wide = css.split("@container (min-width: 58rem) {", 1)[1].split("\n}\n", 1)[0]
@@ -672,7 +680,7 @@ class IndexTableTests(TempDirTestCase):
         version = json.loads(
             (cli.THEME_DIR / "tokens.json").read_text(encoding="utf-8")
         )["version"]
-        self.assertEqual(version, "0.4.8")
+        self.assertEqual(version, "0.4.9")
         self.assertIn(f'href="lotuspod.css?v={version}"', first)
 
 
