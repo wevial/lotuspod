@@ -1,11 +1,12 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { cloudflareTest } from "@cloudflare/vitest-plugin";
+import { cloudflareTest, readD1Migrations } from "@cloudflare/vitest-plugin";
 import { defineConfig } from "vitest/config";
 import { experimental_readRawConfig } from "wrangler";
 
 const configPath = fileURLToPath(new URL("./wrangler.toml", import.meta.url));
 const fixtureAssets = fileURLToPath(new URL("./test/fixtures/assets", import.meta.url));
+const migrations = await readD1Migrations(fileURLToPath(new URL("./migrations", import.meta.url)));
 
 export default defineConfig({
   plugins: [
@@ -19,7 +20,12 @@ export default defineConfig({
           ALLOWED_EMAIL: "maintainer@example.org",
           MACHINE_CLIENT_ID: "fixture-machine.access",
           CSRF_SECRET: "fixture-csrf-secret-not-used-anywhere-real",
+          // For test/apply-migrations.js, which runs inside the Worker.
+          TEST_MIGRATIONS: migrations,
         },
+        // A local database for the tests only: wrangler.toml takes its
+        // database ids later from the provisioned inventory.
+        d1Databases: ["DB"],
         // Serve the fixtures in place of ../publish, still Worker first.
         assets: {
           directory: fixtureAssets,
@@ -33,6 +39,7 @@ export default defineConfig({
     }),
   ],
   test: {
+    setupFiles: ["./test/apply-migrations.js"],
     // wrangler.toml as wrangler parses it, and as written, for the tests.
     provide: {
       wranglerConfig: JSON.parse(

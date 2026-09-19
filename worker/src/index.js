@@ -1,5 +1,6 @@
 import { identify } from "./access.js";
-import { issueCsrf } from "./csrf.js";
+import { issueCsrf, verifyCsrf } from "./csrf.js";
+import { storeResponse } from "./responses.js";
 
 function refuse(status, headers = {}) {
   return new Response(null, {
@@ -22,10 +23,12 @@ function firstSegment(url) {
 
 // The /api/ routes, none of which is ever served from the assets binding.
 function routeApi(who, request) {
-  if (new URL(request.url).pathname !== "/api/session") return { status: 404 };
+  const path = new URL(request.url).pathname;
+  if (path !== "/api/session" && path !== "/api/responses") return { status: 404 };
   if (who.kind !== "user") return { status: 403 };
-  if (request.method !== "GET") return { status: 405, headers: { Allow: "GET" } };
-  return { session: true };
+  const method = path === "/api/session" ? "GET" : "POST";
+  if (request.method !== method) return { status: 405, headers: { Allow: method } };
+  return path === "/api/session" ? { session: true } : { responses: true };
 }
 
 // The signed-in address and a request token bound to this Access session.
@@ -62,6 +65,10 @@ export default {
     if (!who) return refuse(403);
     const granted = route(who, request);
     if (granted.session) return session(who, env);
+    if (granted.responses) {
+      if (!(await verifyCsrf(request, who, env))) return refuse(403);
+      return storeResponse(request, who, env);
+    }
     if (!granted.assets) return refuse(granted.status, granted.headers);
     return env.ASSETS.fetch(request);
   },

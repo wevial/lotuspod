@@ -1,0 +1,8 @@
+{
+  "some-page": {
+    "next-step": {
+      "version": "3f9a1c2e",
+      "choices": ["ship", "revise", "drop"]
+    }
+  }
+}
