@@ -73,6 +73,34 @@ class ExportContentsTests(ExportTestCase):
                 (self.dest / name).read_bytes(), (self.out_dir / name).read_bytes()
             )
 
+    def test_assets_come_from_the_artifacts_directory_not_the_package(self):
+        # serve answers with the directory's copies, so export publishes those
+        # bytes even when they differ from the packaged theme.
+        custom = {
+            "lotuspod.css": b"body { color: rebeccapurple; }\n",
+            "favicon.svg": b'<svg xmlns="http://www.w3.org/2000/svg"/>\n',
+        }
+        for name, data in custom.items():
+            self.assertNotEqual(data, (cli.THEME_DIR / name).read_bytes())
+            (self.out_dir / name).write_bytes(data)
+        before = self.source_snapshot()
+        rc, _, err = self.export()
+        self.assertEqual(rc, 0, err)
+        for name, data in custom.items():
+            self.assertEqual((self.dest / name).read_bytes(), data)
+        self.assertEqual(self.source_snapshot(), before)
+
+    def test_missing_asset_is_refused(self):
+        for name in ("lotuspod.css", "favicon.svg"):
+            with self.subTest(name=name):
+                saved = (self.out_dir / name).read_bytes()
+                (self.out_dir / name).unlink()
+                rc, _, err = self.export()
+                self.assertNotEqual(rc, 0)
+                self.assertIn(name, err)
+                self.assertDestAbsentOrEmpty()
+                (self.out_dir / name).write_bytes(saved)
+
     def test_exported_names_match_serve_allow_list(self):
         rc, _, err = self.export()
         self.assertEqual(rc, 0, err)
@@ -144,6 +172,17 @@ class ExportSymlinkRefusalTests(ExportTestCase):
         link.unlink()
         link.symlink_to(target)
         self.assertRefusesLink(link)
+
+    def test_linked_stylesheet_or_icon(self):
+        for name in ("lotuspod.css", "favicon.svg"):
+            with self.subTest(name=name):
+                link = self.out_dir / name
+                saved = link.read_bytes()
+                link.unlink()
+                link.symlink_to(self.out_dir / "FINDINGS.md")
+                self.assertRefusesLink(link)
+                link.unlink()
+                link.write_bytes(saved)
 
 
 class ExportDestinationRefusalTests(ExportTestCase):

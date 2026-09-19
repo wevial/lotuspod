@@ -637,10 +637,18 @@ def cmd_export(args: argparse.Namespace) -> int:
         if not extract_visibility(data.decode("utf-8")):
             raise RuntimeError(f"page is no longer visible: {out_dir / name}")
         files[name] = data
-    # The packaged theme is what serve answers with once index/manifest/render
-    # have synced it, and reading it here leaves the artifacts directory alone.
-    for name in THEME_FILES:
-        files[name] = (THEME_DIR / name).read_bytes()
+    # The stylesheet and icon are the artifacts directory's copies, the bytes
+    # serve answers with, even where they differ from the packaged theme.
+    # Export syncs nothing, so a missing copy is refused rather than replaced.
+    for name in (_SERVE_CSS_FILE, _SERVE_ICON_FILE):
+        source = out_dir / name
+        if source.is_symlink():
+            raise RuntimeError(f"refusing to export a symbolic link: {source}")
+        if not source.is_file():
+            raise RuntimeError(
+                f"missing {source}; run `lotuspod index` to sync the theme files"
+            )
+        files[name] = source.read_bytes()
     files[INDEX_FILE] = render_index(artifacts).encode("utf-8")
 
     dest.mkdir(parents=True, exist_ok=True)
