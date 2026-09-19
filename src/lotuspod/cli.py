@@ -461,13 +461,8 @@ def index_entries_html(artifacts: list[dict]) -> str:
     )
 
 
-def cmd_index(args: argparse.Namespace) -> int:
-    out_dir = Path(args.out_dir) if args.out_dir else DEFAULT_OUTPUT_DIR
-    if not out_dir.is_dir():
-        raise FileNotFoundError(f"artifacts directory not found: {out_dir}")
-
-    artifacts, hidden = collect_artifacts(out_dir)
-
+def render_index(artifacts: list[dict]) -> str:
+    """The index page's text for a visible set; index and export both write it."""
     tokens = load_tokens()
     context = {
         "generated": _dt.date.today().isoformat(),
@@ -475,13 +470,20 @@ def cmd_index(args: argparse.Namespace) -> int:
         "theme_name": tokens["name"],
         "theme_version": tokens["version"],
     }
+    return render_template(context, INDEX_TEMPLATE_PATH)
+
+
+def cmd_index(args: argparse.Namespace) -> int:
+    out_dir = Path(args.out_dir) if args.out_dir else DEFAULT_OUTPUT_DIR
+    if not out_dir.is_dir():
+        raise FileNotFoundError(f"artifacts directory not found: {out_dir}")
+
+    artifacts, hidden = collect_artifacts(out_dir)
 
     sync_theme_css(out_dir)
 
     out_path = out_dir / INDEX_FILE
-    out_path.write_text(
-        render_template(context, INDEX_TEMPLATE_PATH), encoding="utf-8"
-    )
+    out_path.write_text(render_index(artifacts), encoding="utf-8")
     print(
         f"wrote {out_path} ({len(artifacts)} artifacts{_hidden_note(hidden)})"
     )
@@ -592,6 +594,63 @@ class _AllowListHandler(SimpleHTTPRequestHandler):
         return None
 
 
+def cmd_export(args: argparse.Namespace) -> int:
+    """Build a fresh publish directory holding only what serve would answer.
+
+    The allow-list holds at build time: the destination gets the visible
+    pages, the stylesheet and the icon byte for byte, plus an index written
+    fresh from the visible set. Everything is read and checked before the
+    destination is created, so a refusal leaves nothing behind, and export
+    never deletes or overwrites: the caller supplies a fresh directory.
+    """
+    out_dir = Path(args.out_dir) if args.out_dir else DEFAULT_OUTPUT_DIR
+    if not out_dir.is_dir():
+        raise FileNotFoundError(f"artifacts directory not found: {out_dir}")
+    dest = Path(args.dest)
+
+    if dest.is_symlink() or (dest.exists() and not dest.is_dir()):
+        raise RuntimeError(f"destination is not a fresh directory: {dest}")
+    if dest.is_dir() and any(dest.iterdir()):
+        raise RuntimeError(
+            f"destination is not empty: {dest} (export needs a fresh directory)"
+        )
+
+    # Links are refused before any page is read: a linked page name would
+    # publish whatever it points at, in or out of the artifacts directory.
+    for page in sorted(out_dir.glob("*.html")):
+        if page.name != INDEX_FILE and page.is_symlink():
+            raise RuntimeError(f"refusing to export a symbolic link: {page}")
+
+    pages = sorted(
+        serve_allow_list(out_dir) - {INDEX_FILE, _SERVE_CSS_FILE, _SERVE_ICON_FILE}
+    )
+    artifacts, hidden = collect_artifacts(out_dir)
+    if sorted(str(meta["file"]) for meta in artifacts) != pages:
+        raise RuntimeError(
+            f"visible pages changed during export; nothing written to {dest}"
+        )
+
+    files: dict[str, bytes] = {}
+    for name in pages:
+        data = (out_dir / name).read_bytes()
+        # The bytes that get published are the bytes that were judged visible.
+        if not extract_visibility(data.decode("utf-8")):
+            raise RuntimeError(f"page is no longer visible: {out_dir / name}")
+        files[name] = data
+    # The packaged theme is what serve answers with once index/manifest/render
+    # have synced it, and reading it here leaves the artifacts directory alone.
+    for name in THEME_FILES:
+        files[name] = (THEME_DIR / name).read_bytes()
+    files[INDEX_FILE] = render_index(artifacts).encode("utf-8")
+
+    dest.mkdir(parents=True, exist_ok=True)
+    for name, data in files.items():
+        with open(dest / name, "xb") as fh:
+            fh.write(data)
+    print(f"exported {len(files)} files to {dest} ({len(pages)} pages{_hidden_note(hidden)})")
+    return 0
+
+
 def resolve_serve_host(host_override: str) -> str:
     """Explicit --host wins; otherwise auto-detect the tailnet IPv4."""
     return host_override if host_override else tailnet_ipv4()
@@ -692,6 +751,18 @@ def build_parser() -> argparse.ArgumentParser:
         "use 127.0.0.1 when a local Cloudflare Tunnel fronts the server",
     )
     serve.set_defaults(func=cmd_serve)
+
+    export = sub.add_parser(
+        "export",
+        help="build a fresh publish directory holding only what serve would answer",
+    )
+    export.add_argument("--out-dir", default="", help="artifacts directory (default: artifacts/)")
+    export.add_argument(
+        "--dest",
+        required=True,
+        help="publish directory to create; must not exist yet or be empty",
+    )
+    export.set_defaults(func=cmd_export)
 
     return parser
 
