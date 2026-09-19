@@ -9,3 +9,8 @@ venv/
 # rendered artifacts (generated output)
 artifacts/*
 !artifacts/.gitkeep
+
+# worker dependencies and local state, and the exported publish directory
+node_modules/
+.wrangler/
+publish/
