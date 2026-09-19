@@ -18,6 +18,7 @@ export default defineConfig({
           ACCESS_AUD: "fixture-audience-tag",
           ALLOWED_EMAIL: "maintainer@example.org",
           MACHINE_CLIENT_ID: "fixture-machine.access",
+          CSRF_SECRET: "fixture-csrf-secret-not-used-anywhere-real",
         },
         // Serve the fixtures in place of ../publish, still Worker first.
         assets: {

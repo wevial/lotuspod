@@ -7,7 +7,7 @@ const ALGORITHM = { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" };
 // Team domain -> Map of key id -> CryptoKey, kept for the isolate's lifetime.
 const keySets = new Map();
 
-function decodeBase64Url(text) {
+export function decodeBase64Url(text) {
   const padded = text.replace(/-/g, "+").replace(/_/g, "/");
   const binary = atob(padded + "=".repeat((4 - (padded.length % 4)) % 4));
   return Uint8Array.from(binary, (char) => char.charCodeAt(0));
@@ -69,14 +69,14 @@ async function verifiedClaims(token, teamDomain, audience) {
   return claims;
 }
 
-function setting(env, name) {
+export function setting(env, name) {
   const value = env[name];
   return typeof value === "string" && value !== "" ? value : null;
 }
 
-// Who is asking: { kind: "user", email } for the maintainer,
-// { kind: "machine", id } for the configured service token, and null for
-// nobody. Every missing setting, bad token or failure on the way is nobody.
+// Who is asking: { kind: "user", email, iat } for the maintainer, iat being
+// the Access token's own (null if it names none), { kind: "machine", id }
+// for the configured service token, and null for nobody. Every missing setting, bad token or failure on the way is nobody.
 export async function identify(request, env) {
   const teamDomain = setting(env, "ACCESS_TEAM_DOMAIN");
   const audience = setting(env, "ACCESS_AUD");
@@ -93,7 +93,8 @@ export async function identify(request, env) {
   if (!claims) return null;
   if (typeof claims.email === "string" && claims.email !== "") {
     const email = claims.email.toLowerCase();
-    return email === allowedEmail.toLowerCase() ? { kind: "user", email } : null;
+    if (email !== allowedEmail.toLowerCase()) return null;
+    return { kind: "user", email, iat: typeof claims.iat === "number" ? claims.iat : null };
   }
   if (typeof claims.common_name === "string" && claims.common_name !== "") {
     const machineId = setting(env, "MACHINE_CLIENT_ID");

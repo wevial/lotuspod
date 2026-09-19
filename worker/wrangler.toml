@@ -2,7 +2,8 @@
 # routes and hostnames are deliberately absent: they arrive from the
 # provisioned inventory by a separate hand change. The gate's settings
 # (ACCESS_TEAM_DOMAIN, ACCESS_AUD, ALLOWED_EMAIL, MACHINE_CLIENT_ID) are
-# environment settings supplied at provisioning, never committed here.
+# environment settings and CSRF_SECRET is a Worker secret, all supplied at
+# provisioning, never committed here.
 name = "lotuspod"
 main = "src/index.js"
 compatibility_date = "2026-09-01"
