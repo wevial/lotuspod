@@ -68,9 +68,13 @@ class ExportContentsTests(ExportTestCase):
         self.assertEqual(rc, 0, err)
         names = {str(p.relative_to(self.dest)) for p in self.dest.rglob("*")}
         self.assertEqual(
-            names, {"zeta.html", "index.html", "lotuspod.css", "favicon.svg"}
+            names,
+            {
+                "zeta.html", "index.html", "lotuspod.css", "favicon.svg",
+                "lotuspod-form.js",
+            },
         )
-        for name in ("zeta.html", "lotuspod.css", "favicon.svg"):
+        for name in ("zeta.html", "lotuspod.css", "favicon.svg", "lotuspod-form.js"):
             self.assertEqual(
                 (self.dest / name).read_bytes(), (self.out_dir / name).read_bytes()
             )
@@ -95,7 +99,7 @@ class ExportContentsTests(ExportTestCase):
             names,
             {
                 "zeta.html", "asked.html", "index.html", "lotuspod.css",
-                "favicon.svg", "_lotuspod/forms.json",
+                "favicon.svg", "lotuspod-form.js", "_lotuspod/forms.json",
             },
         )
         definitions = json.loads(
@@ -124,7 +128,7 @@ class ExportContentsTests(ExportTestCase):
         self.assertEqual(self.source_snapshot(), before)
 
     def test_missing_asset_is_refused(self):
-        for name in ("lotuspod.css", "favicon.svg"):
+        for name in ("lotuspod.css", "favicon.svg", "lotuspod-form.js"):
             with self.subTest(name=name):
                 saved = (self.out_dir / name).read_bytes()
                 (self.out_dir / name).unlink()
@@ -207,7 +211,7 @@ class ExportSymlinkRefusalTests(ExportTestCase):
         self.assertRefusesLink(link)
 
     def test_linked_stylesheet_or_icon(self):
-        for name in ("lotuspod.css", "favicon.svg"):
+        for name in ("lotuspod.css", "favicon.svg", "lotuspod-form.js"):
             with self.subTest(name=name):
                 link = self.out_dir / name
                 saved = link.read_bytes()
