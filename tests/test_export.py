@@ -1,7 +1,8 @@
 """Test suite for `lotuspod export`: the publish directory holds only what
 serve would answer with.
 
-Covers the exact exported name set and bytes, the fresh index, and the two
+Covers the exact exported name set and bytes (with and without a response
+form among the visible pages), the fresh index, and the two
 refusals: a symbolic link among the pages and a destination that is not empty.
 
 Run from the repo root:
@@ -11,6 +12,7 @@ Run from the repo root:
 
 from __future__ import annotations
 
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -72,6 +74,37 @@ class ExportContentsTests(ExportTestCase):
             self.assertEqual(
                 (self.dest / name).read_bytes(), (self.out_dir / name).read_bytes()
             )
+
+    def test_a_visible_form_adds_exactly_the_definitions_file(self):
+        body = (
+            '<ul><li><input type="checkbox" disabled> Approve</li>'
+            '<li><input type="checkbox" disabled checked> Decline</li></ul>'
+        )
+        for name, extra in (("asked", ()), ("secret", ("--hidden",))):
+            rc, _, err = run_cli(
+                "render", "--name", name, "--title", name.title(),
+                "--body", body, "--out-dir", str(self.out_dir), *extra,
+            )
+            self.assertEqual(rc, 0, err)
+        rc, _, err = self.export()
+        self.assertEqual(rc, 0, err)
+        names = {
+            str(p.relative_to(self.dest)) for p in self.dest.rglob("*") if p.is_file()
+        }
+        self.assertEqual(
+            names,
+            {
+                "zeta.html", "asked.html", "index.html", "lotuspod.css",
+                "favicon.svg", "_lotuspod/forms.json",
+            },
+        )
+        definitions = json.loads(
+            (self.dest / "_lotuspod" / "forms.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(list(definitions), ["asked"])
+        self.assertEqual(list(definitions["asked"]), ["q1"])
+        self.assertEqual(definitions["asked"]["q1"]["choices"], ["approve", "decline"])
+        self.assertRegex(definitions["asked"]["q1"]["version"], r"\A[0-9a-f]{12}\Z")
 
     def test_assets_come_from_the_artifacts_directory_not_the_package(self):
         # serve answers with the directory's copies, so export publishes those
