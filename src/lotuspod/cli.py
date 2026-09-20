@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as _dt
+import hashlib
 import html
 import ipaddress
 import json
@@ -288,6 +289,249 @@ def outline_body(body: str) -> tuple[str, list[dict]]:
     return "".join(pieces), outline
 
 
+FORM_CLASS = "artifact-form"
+FORMS_FILE = "_lotuspod/forms.json"
+_FORM_NOTE_NAME = "note"
+_FORM_VERSION_LENGTH = 12
+_LIST_TAGS = ("ul", "ol")
+# Converters differ on whether an item's checkbox sits bare in the li or
+# inside a paragraph or label; nothing else may come before it.
+_TASK_ITEM_WRAPPERS = ("p", "label")
+
+
+class _TaskListCollector(HTMLParser):
+    """Locate the body's task lists: source span and each item's state and text.
+
+    A task list is a top-level list, holding no list of its own, whose items
+    each begin with a disabled checkbox - what Markdown converters emit for
+    "- [ ]" lines. Anything short of that is an ordinary list and is not
+    recorded. Spans are recorded against the source string, as _H2Collector
+    records them, so everything around a task list survives verbatim.
+    """
+
+    def __init__(self, body: str) -> None:
+        super().__init__(convert_charrefs=True)
+        self._body = body
+        self._line_starts = [0]
+        for index, char in enumerate(body):
+            if char == "\n":
+                self._line_starts.append(index + 1)
+        self._depth = 0
+        self._list: dict | None = None
+        self._item: dict | None = None
+        # A list spelled out in a diagram's label is diagram source, not a
+        # list (see _H2Collector).
+        self._mermaid_depth = 0
+        self.lists: list[dict] = []
+
+    def _offset(self) -> int:
+        line, column = self.getpos()
+        return self._line_starts[line - 1] + column
+
+    def handle_starttag(self, tag: str, attrs: list) -> None:
+        if tag == "pre":
+            classes = next((v for k, v in attrs if k == "class" and v), "").split()
+            if self._mermaid_depth or "mermaid" in classes:
+                self._mermaid_depth += 1
+        if self._mermaid_depth:
+            return
+        if tag in _LIST_TAGS:
+            self._depth += 1
+            if self._depth == 1:
+                self._list = {"start": self._offset(), "items": [], "task": True}
+            elif self._list is not None:
+                self._list["task"] = False
+            return
+        if self._list is None or not self._list["task"]:
+            return
+        if tag == "li":
+            self._finish_item()
+            self._item = {"checked": None, "text": []}
+        elif self._item is None:
+            self._list["task"] = False
+        elif tag == "input":
+            names = {k for k, _ in attrs}
+            kind = next((v for k, v in attrs if k == "type" and v), "")
+            if (
+                self._item["checked"] is None
+                and kind.lower() == "checkbox"
+                and "disabled" in names
+            ):
+                self._item["checked"] = "checked" in names
+            else:
+                self._list["task"] = False
+        elif self._item["checked"] is None and tag not in _TASK_ITEM_WRAPPERS:
+            self._list["task"] = False
+
+    def handle_data(self, data: str) -> None:
+        if self._mermaid_depth or self._list is None or not data.strip():
+            return
+        if self._item is None or self._item["checked"] is None:
+            # Text outside an item, or ahead of an item's checkbox.
+            self._list["task"] = False
+        else:
+            self._item["text"].append(data)
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag == "pre" and self._mermaid_depth:
+            self._mermaid_depth -= 1
+            return
+        if self._mermaid_depth:
+            return
+        if tag == "li" and self._depth == 1:
+            self._finish_item()
+        elif tag in _LIST_TAGS and self._depth:
+            self._depth -= 1
+            if self._depth == 0:
+                self._finish_list()
+
+    def _finish_item(self) -> None:
+        """Close the open item, collapsing its text to a single line."""
+        if self._item is None or self._list is None:
+            return
+        text = " ".join("".join(self._item["text"]).split())
+        if self._item["checked"] is None or not text:
+            self._list["task"] = False
+        self._list["items"].append({"checked": bool(self._item["checked"]), "text": text})
+        self._item = None
+
+    def _finish_list(self) -> None:
+        self._finish_item()
+        found, self._list = self._list, None
+        if found is None or not found["task"] or not found["items"]:
+            return
+        start = self._offset()
+        found["end"] = self._body.index(">", start) + 1
+        self.lists.append(found)
+
+
+def form_version(question: str, choices: list[tuple[str, str]]) -> str:
+    """Short hash of a question: its id, its choice keys and their labels.
+
+    An answer carries the version it was given against, so rewording a
+    question strands the old answers instead of attaching them to new words.
+    """
+    payload = json.dumps(
+        [question, [list(choice) for choice in choices]],
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:_FORM_VERSION_LENGTH]
+
+
+def form_body(body: str, page: str) -> str:
+    """Turn each task list in the body into a response form.
+
+    Questions are numbered q1, q2, ... in document order and choice keys come
+    from the item text alone, so the same body always yields the same form.
+    A body without a task list is returned exactly as written.
+    """
+    parser = _TaskListCollector(body)
+    parser.feed(body)
+    parser.close()
+    if not parser.lists:
+        return body
+
+    esc = html.escape
+    pieces: list[str] = []
+    cursor = 0
+    for number, found in enumerate(parser.lists, start=1):
+        question = f"q{number}"
+        # The note field's name is reserved, so no choice can shadow it.
+        taken = {_FORM_NOTE_NAME}
+        choices: list[tuple[str, str]] = []
+        for item in found["items"]:
+            key = _unique_id(slugify(item["text"]), taken)
+            taken.add(key)
+            choices.append((key, item["text"]))
+        lines = [
+            '<form class="{cls}" data-page="{page}" data-question="{question}"'
+            ' data-version="{version}">'.format(
+                cls=FORM_CLASS,
+                page=esc(page),
+                question=question,
+                version=form_version(question, choices),
+            ),
+            f'<ul class="{FORM_CLASS}-choices">',
+        ]
+        for (key, text), item in zip(choices, found["items"]):
+            checked = " checked" if item["checked"] else ""
+            lines.append(
+                f'<li><label><input type="checkbox" name="{esc(key)}"{checked}>'
+                f" {esc(text)}</label></li>"
+            )
+        lines += [
+            "</ul>",
+            f'<textarea class="{FORM_CLASS}-note" name="{_FORM_NOTE_NAME}"'
+            ' aria-label="Note"></textarea>',
+            '<button type="submit">Submit</button>',
+            "</form>",
+        ]
+        pieces.append(body[cursor:found["start"]])
+        pieces.append("\n".join(lines))
+        cursor = found["end"]
+    pieces.append(body[cursor:])
+    return "".join(pieces)
+
+
+class _FormCollector(HTMLParser):
+    """Read a rendered page's response forms back: question, version, choices."""
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self._open: dict | None = None
+        self._mermaid_depth = 0
+        self.forms: list[dict] = []
+
+    def handle_starttag(self, tag: str, attrs: list) -> None:
+        values = {k: v or "" for k, v in attrs}
+        if tag == "pre":
+            if self._mermaid_depth or "mermaid" in values.get("class", "").split():
+                self._mermaid_depth += 1
+        if self._mermaid_depth:
+            return
+        if tag == "form":
+            self._open = None
+            if FORM_CLASS in values.get("class", "").split():
+                self._open = {
+                    "question": values.get("data-question", ""),
+                    "version": values.get("data-version", ""),
+                    "choices": [],
+                }
+        elif (
+            tag == "input"
+            and self._open is not None
+            and values.get("type", "").lower() == "checkbox"
+            and values.get("name")
+        ):
+            self._open["choices"].append(values["name"])
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag == "pre" and self._mermaid_depth:
+            self._mermaid_depth -= 1
+        elif tag == "form" and not self._mermaid_depth and self._open is not None:
+            self.forms.append(self._open)
+            self._open = None
+
+
+def page_forms(page_html: str) -> dict[str, dict]:
+    """A rendered page's questions, in the shape the definitions file holds."""
+    parser = _FormCollector()
+    parser.feed(page_html)
+    parser.close()
+    questions: dict[str, dict] = {}
+    for form in parser.forms:
+        if not form["question"] or not form["version"]:
+            continue
+        if form["question"] in questions:
+            raise RuntimeError(f"question {form['question']!r} appears twice")
+        questions[form["question"]] = {
+            "version": form["version"],
+            "choices": form["choices"],
+        }
+    return questions
+
+
 def outline_html(outline: list[dict]) -> str:
     """Render the outline's section links ("" when there is none).
 
@@ -322,7 +566,8 @@ def cmd_render(args: argparse.Namespace) -> int:
     if args.episode:
         kicker = f"Lotuspod · Episode {args.episode}"
     summary_block = f'<p class="artifact-summary">{args.summary}</p>' if args.summary else ""
-    body, outline = (args.body, []) if args.no_outline else outline_body(args.body)
+    body = form_body(args.body, args.name)
+    body, outline = (body, []) if args.no_outline else outline_body(body)
     context = {
         "title": args.title,
         "kicker": kicker,
@@ -603,7 +848,8 @@ def cmd_export(args: argparse.Namespace) -> int:
 
     The allow-list holds at build time: the destination gets the visible
     pages, the stylesheet and the icon byte for byte, plus an index written
-    fresh from the visible set. Everything is read and checked before the
+    fresh from the visible set and, when a visible page holds a response
+    form, the definitions file the Worker reads. Everything is read and checked before the
     destination is created, so a refusal leaves nothing behind, and export
     never deletes or overwrites: the caller supplies a fresh directory.
     """
@@ -635,12 +881,19 @@ def cmd_export(args: argparse.Namespace) -> int:
         )
 
     files: dict[str, bytes] = {}
+    definitions: dict[str, dict] = {}
     for name in pages:
         data = (out_dir / name).read_bytes()
         # The bytes that get published are the bytes that were judged visible.
         if not extract_visibility(data.decode("utf-8")):
             raise RuntimeError(f"page is no longer visible: {out_dir / name}")
         files[name] = data
+        try:
+            questions = page_forms(data.decode("utf-8"))
+        except RuntimeError as exc:
+            raise RuntimeError(f"{out_dir / name}: {exc}") from None
+        if questions:
+            definitions[Path(name).stem] = questions
     # The stylesheet and icon are the artifacts directory's copies, the bytes
     # serve answers with, even where they differ from the packaged theme.
     # Export syncs nothing, so a missing copy is refused rather than replaced.
@@ -654,9 +907,17 @@ def cmd_export(args: argparse.Namespace) -> int:
             )
         files[name] = source.read_bytes()
     files[INDEX_FILE] = render_index(artifacts).encode("utf-8")
+    # What the Worker checks a submitted answer against. It lives under
+    # _lotuspod/ because the Worker answers 404 for every path there, and is
+    # written only when a visible page asks something.
+    if definitions:
+        files[FORMS_FILE] = (
+            json.dumps(definitions, indent=2, sort_keys=True) + "\n"
+        ).encode("utf-8")
 
     dest.mkdir(parents=True, exist_ok=True)
     for name, data in files.items():
+        (dest / name).parent.mkdir(parents=True, exist_ok=True)
         with open(dest / name, "xb") as fh:
             fh.write(data)
     print(f"exported {len(files)} files to {dest} ({len(pages)} pages{_hidden_note(hidden)})")
