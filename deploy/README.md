@@ -76,6 +76,52 @@ Everything else — `manifest.json`, `FINDINGS.md`, hidden pages, dotfiles,
 traversal paths, other hostnames (ingress catch-all) — returns **404**
 through the public hostname too.
 
+## Publishing
+
+Publishing to Cloudflare is one script, run from anywhere:
+
+```sh
+deploy/publish.sh staging https://<staging address>
+deploy/publish.sh production https://<production address>
+```
+
+It runs four steps in a fixed order and stops at the first one that fails:
+
+1. **Export.** Removes and recreates the repository's own `publish/`
+   directory (nothing else, and it refuses if `publish` is a symbolic link or
+   is not directly inside the repository), then runs `lotuspod export` into
+   it, so a file left by an earlier run is never uploaded.
+2. **Migrate.** `wrangler d1 migrations apply DB --remote --env <environment>`.
+3. **Deploy.** `wrangler deploy --env <environment>`, uploading `publish/`.
+4. **Verify.** Requests the address with `curl`, with no credentials, no
+   cookies and no redirects followed, and reads only the status code. A `302`
+   (to the sign-in page) or a `403` passes. A `200` fails with "the deployed
+   site is publicly readable"; any other answer, or no answer, fails too.
+   A failure here means the deployment is already live: fix the gate or roll
+   back before doing anything else.
+
+The environment must be `staging` or `production` and the address is
+required; otherwise the script exits with status 2 before calling anything.
+The environment sections themselves (`[env.staging]`, `[env.production]`,
+database ids, routes) are not in `worker/wrangler.toml` yet; they arrive from
+the provisioned inventory by a separate hand change.
+
+Wrangler is the version pinned in `worker/package.json`, run as
+`npm --prefix worker exec wrangler --`. The script does not install
+dependencies: run `npm --prefix worker ci` once beforehand. Wrangler's
+credentials (`CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`) come from the
+caller's environment and the script prints none of it.
+
+Overridable through the environment (the tests use these):
+
+- `WRANGLER` — the wrangler command.
+- `LOTUSPOD` — the lotuspod command (default: the repository's
+  `.venv/bin/lotuspod` if present, else `lotuspod` on `PATH`).
+- `ARTIFACTS_DIR` — the artifacts directory (default: `<repo>/artifacts`).
+
+The script does not touch the tunnel, the old server or DNS. Cutover is a
+separate, separately approved step.
+
 ## Response retrieval and crash reconciliation
 
 The maintainer's answers are stored on Cloudflare. The operator host fetches
