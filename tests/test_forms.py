@@ -19,9 +19,10 @@ import tempfile
 from html.parser import HTMLParser
 from pathlib import Path
 
-from tests.test_manifest_v2 import TempDirTestCase, run_cli
+from tests.test_manifest_v2 import TempDirTestCase, cli, run_cli
 
 FIXTURES = Path(__file__).parent / "fixtures"
+FORM_SCRIPT = "lotuspod-form.js"
 
 THREE_ITEMS = (
     "<p>Before the question.</p>\n"
@@ -203,6 +204,59 @@ class NoTaskListTests(FormsTestCase):
             (self.out_dir / "plain.html").read_bytes(),
             (FIXTURES / "no_task_list.expected.html").read_bytes(),
         )
+
+
+class _ScriptReader(HTMLParser):
+    """Read every script tag's attributes."""
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.scripts: list[dict] = []
+
+    def handle_starttag(self, tag, attrs):
+        if tag == "script":
+            self.scripts.append(dict(attrs))
+
+
+def form_script_tags(page_html: str) -> list[dict]:
+    reader = _ScriptReader()
+    reader.feed(page_html)
+    reader.close()
+    return [
+        attrs for attrs in reader.scripts
+        if (attrs.get("src") or "").split("?")[0] == FORM_SCRIPT
+    ]
+
+
+class FormScriptTests(FormsTestCase):
+    def test_a_page_with_a_form_loads_the_script_once_as_a_module(self):
+        # Two forms on the page still load the one script.
+        tags = form_script_tags(self.render_body("twice", TWO_LISTS))
+        self.assertEqual(len(tags), 1)
+        self.assertEqual(tags[0]["type"], "module")
+
+    def test_a_page_without_a_form_loads_no_script(self):
+        page = self.render_body("quiet", f"<p>Nothing asked.</p>\n{ORDINARY_LIST}")
+        self.assertEqual(form_script_tags(page), [])
+        self.assertNotIn(FORM_SCRIPT, page)
+
+    def test_the_script_is_synced_served_and_exported(self):
+        self.render_body("plan", THREE_ITEMS)
+        packaged = (cli.THEME_DIR / FORM_SCRIPT).read_bytes()
+        self.assertEqual((self.out_dir / FORM_SCRIPT).read_bytes(), packaged)
+        self.assertIn(FORM_SCRIPT, cli.serve_allow_list(self.out_dir))
+
+        with tempfile.TemporaryDirectory() as tmp:
+            dest = Path(tmp) / "publish"
+            rc, _, err = run_cli(
+                "export", "--out-dir", str(self.out_dir), "--dest", str(dest)
+            )
+            self.assertEqual(rc, 0, err)
+            exported = {
+                str(p.relative_to(dest)) for p in dest.rglob("*") if p.is_file()
+            }
+            self.assertIn(FORM_SCRIPT, exported)
+            self.assertEqual((dest / FORM_SCRIPT).read_bytes(), packaged)
 
 
 class ExportDefinitionsTests(FormsTestCase):

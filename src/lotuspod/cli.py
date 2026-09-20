@@ -141,13 +141,13 @@ def render_template(context: dict, template_path: Path = TEMPLATE_PATH) -> str:
     return _PLACEHOLDER.sub(_sub, template)
 
 
-THEME_FILES = ("lotuspod.css", "favicon.svg")
+THEME_FILES = ("lotuspod.css", "favicon.svg", "lotuspod-form.js")
 
 
 def sync_theme_css(out_dir: Path) -> None:
     """Keep the artifact dir's theme files identical to the packaged theme.
 
-    Covers the stylesheet and the favicon (THEME_FILES). Rewriting only on
+    Covers the stylesheet, the favicon and the form script (THEME_FILES). Rewriting only on
     a content difference means a theme upgrade reaches already-rendered
     directories while untouched ones keep their mtime.
     """
@@ -567,6 +567,8 @@ def cmd_render(args: argparse.Namespace) -> int:
         kicker = f"Lotuspod · Episode {args.episode}"
     summary_block = f'<p class="artifact-summary">{args.summary}</p>' if args.summary else ""
     body = form_body(args.body, args.name)
+    # form_body leaves a body without a task list exactly as written.
+    has_form = body != args.body
     body, outline = (body, []) if args.no_outline else outline_body(body)
     context = {
         "title": args.title,
@@ -580,6 +582,7 @@ def cmd_render(args: argparse.Namespace) -> int:
         "theme_version": tokens["version"],
         "visible": "false" if args.hidden else "true",
         "variant_class": variant_class(args.variant),
+        "form": has_form,
         "mermaid": has_mermaid_block(body),
         "mermaid_theme_variables": mermaid_theme_variables(tokens),
     }
@@ -784,6 +787,8 @@ def _tailnet_dns_name() -> str:
 
 _SERVE_CSS_FILE = "lotuspod.css"
 _SERVE_ICON_FILE = "favicon.svg"
+_SERVE_FORM_SCRIPT_FILE = "lotuspod-form.js"
+_SERVE_SUPPORT_FILES = (_SERVE_CSS_FILE, _SERVE_ICON_FILE, _SERVE_FORM_SCRIPT_FILE)
 _SERVE_NEVER_FILES = frozenset({MANIFEST_FILE, "FINDINGS.md"})
 _DENY_PATH_NAME = ".lotuspod-not-found"
 
@@ -797,7 +802,7 @@ def serve_allow_list(out_dir: Path) -> frozenset[str]:
     the manifest lists private artifact ids, so it must stay unreachable
     over HTTP even though it lives in the served directory.
     """
-    allowed = {INDEX_FILE, _SERVE_CSS_FILE, _SERVE_ICON_FILE}
+    allowed = {INDEX_FILE, *_SERVE_SUPPORT_FILES}
     try:
         pages = sorted(out_dir.glob("*.html"))
     except OSError:
@@ -847,7 +852,7 @@ def cmd_export(args: argparse.Namespace) -> int:
     """Build a fresh publish directory holding only what serve would answer.
 
     The allow-list holds at build time: the destination gets the visible
-    pages, the stylesheet and the icon byte for byte, plus an index written
+    pages, the stylesheet, the icon and the form script byte for byte, plus an index written
     fresh from the visible set and, when a visible page holds a response
     form, the definitions file the Worker reads. Everything is read and checked before the
     destination is created, so a refusal leaves nothing behind, and export
@@ -872,7 +877,7 @@ def cmd_export(args: argparse.Namespace) -> int:
             raise RuntimeError(f"refusing to export a symbolic link: {page}")
 
     pages = sorted(
-        serve_allow_list(out_dir) - {INDEX_FILE, _SERVE_CSS_FILE, _SERVE_ICON_FILE}
+        serve_allow_list(out_dir) - {INDEX_FILE, *_SERVE_SUPPORT_FILES}
     )
     artifacts, hidden = collect_artifacts(out_dir)
     if sorted(str(meta["file"]) for meta in artifacts) != pages:
@@ -894,10 +899,10 @@ def cmd_export(args: argparse.Namespace) -> int:
             raise RuntimeError(f"{out_dir / name}: {exc}") from None
         if questions:
             definitions[Path(name).stem] = questions
-    # The stylesheet and icon are the artifacts directory's copies, the bytes
+    # The stylesheet, icon and form script are the artifacts directory's copies, the bytes
     # serve answers with, even where they differ from the packaged theme.
     # Export syncs nothing, so a missing copy is refused rather than replaced.
-    for name in (_SERVE_CSS_FILE, _SERVE_ICON_FILE):
+    for name in _SERVE_SUPPORT_FILES:
         source = out_dir / name
         if source.is_symlink():
             raise RuntimeError(f"refusing to export a symbolic link: {source}")
