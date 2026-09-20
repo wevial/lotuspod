@@ -1,11 +1,16 @@
-// The write half of the answer channel: one immutable D1 row per deliberate
+// The answer channel. The write half: one immutable D1 row per deliberate
 // submission by the verified maintainer, to a question as it currently
-// reads. The note is data: stored as given and never interpreted here.
+// reads. The read half: the machine identity lists the rows not yet
+// acknowledged and acknowledges them, once each. The note is data: stored
+// and returned as given and never interpreted here.
+
+import { decodeBase64Url } from "./access.js";
 
 const DEFINITIONS_PATH = "/_lotuspod/forms.json";
 const MAX_BODY_BYTES = 16 * 1024;
 const MAX_NOTE_LENGTH = 4000;
 const IDEMPOTENCY_KEY = /^[A-Za-z0-9_-]{16,64}$/;
+const MAX_LIMIT = 100;
 const FIELDS = ["idempotencyKey", "page", "question", "version", "selected", "note"];
 
 function answer(status, body) {
@@ -174,4 +179,69 @@ export async function storeResponse(request, who, env) {
   const winner = await findByKey(env, submission.idempotencyKey);
   if (!winner) return answer(500, { error: "not_saved" });
   return replay(winner, submission, who.email);
+}
+
+// The cursor is opaque to the caller: the last row's createdAt and id.
+function encodeCursor(row) {
+  const bytes = new TextEncoder().encode(JSON.stringify([row.createdAt, row.id]));
+  return btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+// The [createdAt, id] pair a cursor holds, or null if it is not one of ours.
+function decodeCursor(text) {
+  if (!/^[A-Za-z0-9_-]+$/.test(text)) return null;
+  let pair;
+  try {
+    pair = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(decodeBase64Url(text)));
+  } catch {
+    return null;
+  }
+  return Array.isArray(pair) && pair.length === 2 && pair.every(isText) ? pair : null;
+}
+
+// The limit asked for, capped; MAX_LIMIT when none is; null if not a count.
+function parseLimit(text) {
+  if (text === null) return MAX_LIMIT;
+  if (!/^[0-9]{1,9}$/.test(text) || Number(text) === 0) return null;
+  return Math.min(Number(text), MAX_LIMIT);
+}
+
+// GET /api/responses?status=pending, for the machine identity the route has
+// already passed. Rows come in submission order, createdAt then id, and the
+// cursor compares on the pair, so rows sharing a timestamp are neither
+// skipped nor repeated.
+export async function listPending(request, env) {
+  const params = new URL(request.url).searchParams;
+  if (params.get("status") !== "pending") return answer(400, { error: "invalid_status" });
+  const limit = parseLimit(params.get("limit"));
+  if (limit === null) return answer(400, { error: "invalid_limit" });
+  const after = params.has("after") ? decodeCursor(params.get("after")) : ["", ""];
+  if (!after) return answer(400, { error: "invalid_cursor" });
+
+  // One row more than asked for tells whether another page follows.
+  const { results } = await env.DB.prepare(
+    `SELECT id, page, question, version, selected, note, actor, createdAt FROM responses
+     WHERE ackedAt IS NULL AND (createdAt > ?1 OR (createdAt = ?1 AND id > ?2))
+     ORDER BY createdAt, id LIMIT ?3`,
+  )
+    .bind(after[0], after[1], limit + 1)
+    .all();
+  const page = results.slice(0, limit);
+  const body = { responses: page.map((row) => ({ ...row, selected: JSON.parse(row.selected) })) };
+  if (results.length > limit) body.next = encodeCursor(page[page.length - 1]);
+  return answer(200, body);
+}
+
+// POST /api/responses/ID/ack, for the machine identity the route has already
+// passed. The first acknowledgement records when and by whom; the update
+// leaves an acknowledged row untouched, so a retry hears the first again.
+export async function acknowledgeResponse(id, who, env) {
+  await env.DB.prepare("UPDATE responses SET ackedAt = ?1, ackedBy = ?2 WHERE id = ?3 AND ackedAt IS NULL")
+    .bind(new Date().toISOString(), who.id, id)
+    .run();
+  const row = await env.DB.prepare("SELECT id, ackedAt, ackedBy FROM responses WHERE id = ?")
+    .bind(id)
+    .first();
+  if (!row) return answer(404, { error: "unknown_response" });
+  return answer(200, row);
 }
