@@ -1,6 +1,6 @@
 import { identify } from "./access.js";
 import { issueCsrf, verifyCsrf } from "./csrf.js";
-import { storeResponse } from "./responses.js";
+import { acknowledgeResponse, listPending, storeResponse } from "./responses.js";
 
 function refuse(status, headers = {}) {
   return new Response(null, {
@@ -21,14 +21,27 @@ function firstSegment(url) {
   return path.split(/[/\\]/).find((segment) => segment !== "") ?? "";
 }
 
+const ACK_PATH = /^\/api\/responses\/([^/]+)\/ack$/;
+
 // The /api/ routes, none of which is ever served from the assets binding.
+// Each method of a path belongs to one kind of identity: the maintainer
+// submits, the machine lists and acknowledges, and neither does the other's.
 function routeApi(who, request) {
   const path = new URL(request.url).pathname;
-  if (path !== "/api/session" && path !== "/api/responses") return { status: 404 };
-  if (who.kind !== "user") return { status: 403 };
-  const method = path === "/api/session" ? "GET" : "POST";
-  if (request.method !== method) return { status: 405, headers: { Allow: method } };
-  return path === "/api/session" ? { session: true } : { responses: true };
+  const ack = ACK_PATH.exec(path);
+  let methods;
+  if (path === "/api/session") methods = { GET: ["user", { session: true }] };
+  else if (path === "/api/responses") {
+    methods = { POST: ["user", { responses: true }], GET: ["machine", { pending: true }] };
+  } else if (ack) methods = { POST: ["machine", { ack: ack[1] }] };
+  else return { status: 404 };
+  // Another identity's method is refused as such, never offered as a 405.
+  const open = Object.keys(methods).filter((method) => methods[method][0] === who.kind);
+  if (open.length === 0 || (Object.hasOwn(methods, request.method) && !open.includes(request.method))) {
+    return { status: 403 };
+  }
+  if (!open.includes(request.method)) return { status: 405, headers: { Allow: open.join(", ") } };
+  return methods[request.method][1];
 }
 
 // The signed-in address and a request token bound to this Access session.
@@ -69,6 +82,8 @@ export default {
       if (!(await verifyCsrf(request, who, env))) return refuse(403);
       return storeResponse(request, who, env);
     }
+    if (granted.pending) return listPending(request, env);
+    if (granted.ack) return acknowledgeResponse(granted.ack, who, env);
     if (!granted.assets) return refuse(granted.status, granted.headers);
     return env.ASSETS.fetch(request);
   },
