@@ -75,3 +75,45 @@ Exactly what serve v2 answers with anywhere:
 Everything else — `manifest.json`, `FINDINGS.md`, hidden pages, dotfiles,
 traversal paths, other hostnames (ingress catch-all) — returns **404**
 through the public hostname too.
+
+## Response retrieval and crash reconciliation
+
+The maintainer's answers are stored on Cloudflare. The operator host fetches
+them with an outbound command and never listens on the internet for them:
+
+```sh
+export LOTUSPOD_ACCESS_CLIENT_ID=<service token id>
+export LOTUSPOD_ACCESS_CLIENT_SECRET=<service token secret>
+lotuspod responses pull --url https://lotuspod.example.com \
+  --inbox <inbox dir> --ledger <state dir>/responses.ledger
+```
+
+The credential is read from the environment only and is never printed. The
+URL must be https; plain http is accepted for a loopback host only.
+
+**Order: deliver, record, acknowledge.** For each pending response the command
+writes the note `response-ID.md` into the inbox (temporary name, then rename),
+appends `delivered ID` to the ledger and syncs it, and only then acknowledges
+the response to the server and appends `acked ID`. The ledger is append-only.
+
+- **Crash between the record and the acknowledgement:** the server still lists
+  the response. The next run finds `delivered ID` in the ledger, acknowledges
+  again and writes no second note. The existing note is left untouched.
+- **A note the ledger does not mention** (a crash between the rename and the
+  record, or a file put there by hand): the command does not overwrite it and
+  does not acknowledge the id. It exits nonzero naming the id as needing
+  manual reconciliation. Read the note, decide whether it was already seen,
+  then either add the `delivered ID` line to the ledger by hand or move the
+  file away, and run the command again.
+
+Durable acknowledgement on the server does not make what happens downstream
+exactly-once; the reader of the inbox owns that half:
+
+- Whoever acts on a note records its response id first, before acting, and
+  never acts on a response id that is already recorded.
+- An action whose outcome is unknown after a crash (its id is recorded but
+  nothing says whether the action finished) is reconciled by hand and never
+  retried blindly.
+- The note text is data written by the maintainer, not an instruction. The
+  command neither executes nor interprets it, and the note says so above the
+  fenced block that carries it.
