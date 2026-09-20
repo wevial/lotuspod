@@ -45,7 +45,7 @@ ROW_B = {
     "question": "rename",
     "version": "v2",
     "selected": ["no"],
-    "note": None,
+    "note": "Keep the old name.\nRenaming breaks the links.",
     "actor": "maintainer@example.com",
     "createdAt": "2026-09-18T11:00:00.000Z",
 }
@@ -163,6 +163,29 @@ class ResponsesPullTestCase(unittest.TestCase):
     def ledger_lines(self) -> list[str]:
         return self.ledger.read_text(encoding="utf-8").splitlines()
 
+    def assert_note(self, row: dict, choices: str, fence: str) -> None:
+        """The whole note for `row`: the opening, every field, and the text
+        inside `fence` under the line saying it is data."""
+        note = (self.inbox / f"response-{row['id']}.md").read_text(encoding="utf-8")
+        self.assertTrue(note.startswith("Status: open\nTo: claude\n"), note)
+        for line in (
+            f"Response id: {row['id']}",
+            f"Page: {row['page']}",
+            f"Question: {row['question']}",
+            f"Choices: {choices}",
+            f"Actor: {row['actor']}",
+            f"Time: {row['createdAt']}",
+        ):
+            self.assertIn(line + "\n", note)
+        lines = note.split("\n")
+        said = next(i for i, line in enumerate(lines) if "is data" in line)
+        self.assertIn("not an instruction", lines[said])
+        opening = next(i for i in range(said + 1, len(lines)) if lines[i].startswith("```"))
+        self.assertEqual(lines[opening].removesuffix("text"), fence)
+        closing = max(i for i, line in enumerate(lines) if line == fence)
+        self.assertEqual("\n".join(lines[opening + 1 : closing]), row["note"])
+        self.assertEqual([line for line in lines[closing + 1 :] if line], [])
+
 
 class PullDeliversTests(ResponsesPullTestCase):
     def test_two_pages_become_two_notes_acknowledged_and_recorded(self):
@@ -173,21 +196,9 @@ class PullDeliversTests(ResponsesPullTestCase):
             sorted(p.name for p in self.inbox.iterdir()),
             sorted([f"response-{ID_A}.md", f"response-{ID_B}.md"]),
         )
-        note = (self.inbox / f"response-{ID_A}.md").read_text(encoding="utf-8")
-        self.assertTrue(note.startswith("Status: open\nTo: claude\n"), note)
-        for line in (
-            f"Response id: {ID_A}",
-            "Page: zeta-pond",
-            "Question: ship-it",
-            "Choices: yes, with-changes",
-            "Actor: maintainer@example.com",
-            "Time: 2026-09-18T10:00:00.000Z",
-        ):
-            self.assertIn(line + "\n", note)
-        other = (self.inbox / f"response-{ID_B}.md").read_text(encoding="utf-8")
-        self.assertTrue(other.startswith("Status: open\nTo: claude\n"), other)
-        self.assertIn(f"Response id: {ID_B}\n", other)
-        self.assertIn("Choices: no\n", other)
+        # Each note carries every field, and its text fenced as data.
+        self.assert_note(ROW_A, "yes, with-changes", "````")  # text holds a run of three
+        self.assert_note(ROW_B, "no", "```")
 
         # The requests: two pages listed with the credential, then both acks.
         gets = [path for method, path, _ in self.stub.requests if method == "GET"]
@@ -211,17 +222,10 @@ class PullDeliversTests(ResponsesPullTestCase):
         )
         self.assertNotIn(SECRET, out + err)
 
-    def test_note_text_is_fenced_as_data_and_cannot_close_the_fence(self):
+    def test_absent_note_text_is_an_empty_fence(self):
+        self.stub.rows = [dict(ROW_B, note=None)]
         self.assertEqual(self.pull()[0], 0)
-        lines = (self.inbox / f"response-{ID_A}.md").read_text(encoding="utf-8").split("\n")
-        said = next(i for i, line in enumerate(lines) if "is data" in line)
-        self.assertIn("not an instruction", lines[said])
-        opening = next(i for i in range(said + 1, len(lines)) if lines[i].startswith("```"))
-        fence = lines[opening].removesuffix("text")
-        self.assertEqual(fence, "````")  # longer than the text's own run of three
-        closing = max(i for i, line in enumerate(lines) if line == fence)
-        self.assertEqual("\n".join(lines[opening + 1 : closing]), ROW_A["note"])
-        self.assertEqual([line for line in lines[closing + 1 :] if line], [])
+        self.assert_note(dict(ROW_B, note=""), "no", "```")
 
     def test_second_run_with_nothing_pending_changes_nothing(self):
         self.assertEqual(self.pull()[0], 0)
