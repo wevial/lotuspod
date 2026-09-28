@@ -215,6 +215,27 @@ python -m unittest discover
 The suite always tests this checkout's `src/`, so an ambient `lotuspod`
 install cannot shadow the code under test.
 
+## Captures
+
+Screenshots of the rendered pages are taken with Playwright, pinned in
+`e2e/` (`@playwright/test` 1.62.1, Chromium only). The fixture
+`tests.capture_site` renders a sample site into a scratch directory, serves
+it on a free loopback port around one command and names its URL in
+`LOTUSPOD_URL`; `e2e/playwright.config.ts` reads that as its base URL, so the
+config starts no server of its own. The screenshots go to the directory named
+by `CAPTURE_OUT`:
+
+```sh
+npm --prefix e2e ci --no-audit --no-fund
+CAPTURE_OUT="$(mktemp -d)" python -m tests.capture_site \
+  npm --prefix e2e exec --no -- playwright test \
+  --config e2e/playwright.config.ts e2e/smoke/CAPTURE-0.capture.ts
+```
+
+The smoke spec in `e2e/smoke/` captures the index and the article page. A
+ticket's own spec goes in `e2e/capture`, which stays out of git; it has to
+live under `e2e/` for its `@playwright/test` import to resolve.
+
 ## Template
 
 `src/lotuspod/_templates/artifact.html` uses `{{placeholder}}` substitution with the context:

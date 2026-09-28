@@ -14,3 +14,6 @@ artifacts/*
 node_modules/
 .wrangler/
 publish/
+
+# playwright's output from a capture run
+e2e/test-results/
