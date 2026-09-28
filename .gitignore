@@ -7,8 +7,7 @@ dist/
 venv/
 
 # rendered artifacts (generated output)
-artifacts/*
-!artifacts/.gitkeep
+artifacts/
 
 # worker dependencies and local state, and the exported publish directory
 node_modules/

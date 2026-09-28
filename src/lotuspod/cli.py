@@ -560,6 +560,69 @@ def variant_class(variant: str) -> str:
     return "" if variant == DEFAULT_VARIANT else f" artifact--{variant}"
 
 
+def _git(out_dir: Path, *argv: str) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        ["git", "-C", str(out_dir), *argv],
+        capture_output=True,
+        text=True,
+        env={**os.environ, "GIT_TERMINAL_PROMPT": "0"},
+    )
+
+
+class _GitFailed(Exception):
+    pass
+
+
+def _git_ok(out_dir: Path, *argv: str) -> str:
+    done = _git(out_dir, *argv)
+    if done.returncode != 0:
+        lines = (done.stderr or done.stdout).strip().splitlines()
+        detail = lines[-1].strip() if lines else f"exit {done.returncode}"
+        raise _GitFailed(f"git {argv[0]}: {detail}")
+    return done.stdout
+
+
+def commit_output(out_dir: Path, message: str) -> None:
+    """Commit and push out_dir when it is the top of its own git repository.
+
+    Anywhere else (no repository, or a subdirectory of one) this does
+    nothing. A git failure prints one warning line and returns: the files
+    are already written, and the next render pushes the backlog.
+    """
+    try:
+        top = _git(out_dir, "rev-parse", "--show-toplevel")
+        if top.returncode != 0 or not top.stdout.strip():
+            return
+        if Path(top.stdout.strip()).resolve() != Path(out_dir).resolve():
+            return
+    except OSError:
+        return
+
+    try:
+        _git_ok(out_dir, "add", "-A")
+        if _git(out_dir, "diff", "--cached", "--quiet").returncode != 0:
+            _git_ok(out_dir, "commit", "-q", "-m", message)
+        if _git(out_dir, "rev-parse", "--verify", "--quiet", "HEAD").returncode != 0:
+            return
+        if _git(out_dir, "remote", "get-url", "origin").returncode != 0:
+            return
+        _git_ok(out_dir, "fetch", "origin")
+        # A remote with no main yet (a fresh bare repository) has nothing
+        # to rebase onto; the push creates the branch.
+        has_main = _git(
+            out_dir, "rev-parse", "--verify", "--quiet", "refs/remotes/origin/main"
+        )
+        if has_main.returncode == 0:
+            try:
+                _git_ok(out_dir, "rebase", "origin/main")
+            except _GitFailed:
+                _git(out_dir, "rebase", "--abort")
+                raise
+        _git_ok(out_dir, "push", "origin", "HEAD:main")
+    except (_GitFailed, OSError) as exc:
+        print(f"warning: {out_dir} not committed and pushed: {exc}", file=sys.stderr)
+
+
 def cmd_render(args: argparse.Namespace) -> int:
     tokens = load_tokens()
     kicker = "Lotuspod"
@@ -595,7 +658,14 @@ def cmd_render(args: argparse.Namespace) -> int:
     sync_theme_css(out_dir)
 
     out_path.write_text(html, encoding="utf-8")
+    source = getattr(args, "source", None)
+    if source:
+        destination = out_dir / f"{args.name}.md"
+        # The source may already be the copy beside the page, edited in place.
+        if not (destination.exists() and Path(source).samefile(destination)):
+            shutil.copyfile(source, destination)
     print(f"rendered {out_path}")
+    commit_output(out_dir, f"render {args.name}")
     return 0
 
 
@@ -661,6 +731,7 @@ def cmd_manifest(args: argparse.Namespace) -> int:
         encoding="utf-8",
     )
     print(f"wrote {manifest_path} ({len(artifacts)} artifacts{_hidden_note(hidden)})")
+    commit_output(out_dir, "manifest")
     return 0
 
 
@@ -739,6 +810,7 @@ def cmd_index(args: argparse.Namespace) -> int:
     print(
         f"wrote {out_path} ({len(artifacts)} artifacts{_hidden_note(hidden)})"
     )
+    commit_output(out_dir, "index")
     return 0
 
 
@@ -1231,6 +1303,11 @@ def build_parser() -> argparse.ArgumentParser:
         "surface for long technical reports, outline as a left rail",
     )
     render.add_argument("--out-dir", default="", help="output directory (default: artifacts/)")
+    render.add_argument(
+        "--source",
+        default="",
+        help="markdown source of the page, copied to NAME.md beside it",
+    )
     render.set_defaults(func=cmd_render)
 
     manifest = sub.add_parser(
