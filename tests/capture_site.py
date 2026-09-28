@@ -18,14 +18,17 @@ can never shadow the code under capture.
 
 from __future__ import annotations
 
+import datetime
 import os
 import shutil
 import subprocess
 import sys
 import tempfile
 import threading
+import types
 from contextlib import redirect_stdout
 from pathlib import Path
+from unittest import mock
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "src"))
@@ -37,6 +40,24 @@ HOST = "127.0.0.1"
 URL_ENV = "LOTUSPOD_URL"
 # A fixed date, so every run renders the same bytes.
 SAMPLE_DATE = "2026-01-01"
+
+
+class _SampleDay(datetime.date):
+    @classmethod
+    def today(cls) -> datetime.date:
+        return cls.fromisoformat(SAMPLE_DATE)
+
+
+def _sample_clock() -> types.ModuleType:
+    """The datetime module as cli.py reads it, with today() held at SAMPLE_DATE.
+
+    `index` has no --date: it stamps the page with date.today().
+    """
+    clock = types.ModuleType("datetime")
+    clock.__dict__.update(vars(datetime))
+    clock.date = _SampleDay
+    return clock
+
 
 # No mermaid block anywhere: the page template would load Mermaid from a CDN,
 # and a capture without network must render the same page.
@@ -88,7 +109,7 @@ def render(out_dir: Path) -> None:
     steps.append(("index", ["index", "--out-dir", str(out_dir)]))
     for step, argv in steps:
         # The CLI reports on stdout; keep that stream for COMMAND alone.
-        with redirect_stdout(sys.stderr):
+        with redirect_stdout(sys.stderr), mock.patch.object(cli, "_dt", _sample_clock()):
             try:
                 rc = cli.main(argv)
             except SystemExit as exc:

@@ -120,6 +120,44 @@ class ServedSiteTests(CaptureSiteTestCase):
         second = self.fetch("/", "/capture-article.html")
         self.assertEqual(first, second)
 
+    def fetch_on(self, day: str, *paths: str) -> dict:
+        # Move the CLI's clock from outside: a sitecustomize swaps the
+        # datetime module cli.py reads for one whose today() is `day`.
+        hook = self.work / f"clock-{day}"
+        hook.mkdir()
+        (hook / "sitecustomize.py").write_text(
+            "import datetime, sys, types\n"
+            f"sys.path.insert(0, {str(REPO_ROOT / 'src')!r})\n"
+            "from lotuspod import cli\n"
+            "class _Day(datetime.date):\n"
+            "    @classmethod\n"
+            "    def today(cls):\n"
+            f"        return cls.fromisoformat({day!r})\n"
+            "clock = types.ModuleType('datetime')\n"
+            "clock.__dict__.update(vars(datetime))\n"
+            "clock.date = _Day\n"
+            "cli._dt = clock\n",
+            encoding="utf-8",
+        )
+        env = dict(os.environ, TMPDIR=str(self.scratch), PYTHONPATH=str(hook))
+        proc = subprocess.run(
+            [sys.executable, "-m", "tests.capture_site",
+             sys.executable, "-c", FETCH_COMMAND, str(self.record), *paths],
+            capture_output=True, text=True, env=env, cwd=str(REPO_ROOT),
+            timeout=60, check=False,
+        )
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        return json.loads(self.record.read_text(encoding="utf-8"))
+
+    def test_another_calendar_day_renders_the_same_bytes(self):
+        paths = ("/", "/capture-article.html", "/capture-report.html")
+        first = self.fetch_on("2031-03-04", *paths)
+        second = self.fetch_on("2032-11-12", *paths)
+        self.assertEqual(first, second)
+        for path, (_status, body) in first.items():
+            with self.subTest(path=path):
+                self.assertNotIn("2031-03-04", body)
+
 
 class TeardownTests(CaptureSiteTestCase):
     def test_command_exit_code_and_cleanup(self):
