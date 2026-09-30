@@ -20,23 +20,36 @@ is reworded.
 A reader's comment also keeps, as it arrives, its page's owner and that
 owner's last pull then, so routing (lotuspod.routing) can tell whether the
 owner was listening when it came, whatever pulls follow.
+
+An agent takes a reader's comment up by claiming it: the comment keeps the
+claim's credential, handle, token hash and expiry, and becomes `claimed`.
+An agent's reply keeps the credential's idempotency key, unique per
+credential, so a retried reply is found again rather than stored twice. Each
+claim, reply, release and failure writes a row to the audit table in the
+same transaction.
 """
 
 from __future__ import annotations
 
 import datetime
+import hmac
 import json
 import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Iterator, Mapping
+from typing import Callable, Iterator, Mapping
 
 DEFAULT_NAME = "lotuspod.sqlite3"
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 # Seconds a connection waits for another writer before giving up.
 BUSY_TIMEOUT = 30
 # The state of a reader's comment until an agent takes it up.
 PENDING = "pending"
+# The states an agent's claim, reply and failure leave it in.
+CLAIMED = "claimed"
+ANSWERED = "answered"
+FAILED = "failed"
+SETTLED = (ANSWERED, FAILED)
 
 # The statements that bring a database from the version before each to it.
 _SCHEMA = {1: (
@@ -93,6 +106,29 @@ _SCHEMA = {1: (
         acked_at TEXT NOT NULL,
         PRIMARY KEY (answer, handle)
     )""",
+), 4: (
+    # The claim on a reader's comment; its handle stays once it is settled.
+    "ALTER TABLE comments ADD COLUMN claim_handle TEXT",
+    "ALTER TABLE comments ADD COLUMN claim_credential TEXT",
+    "ALTER TABLE comments ADD COLUMN claim_hash TEXT",
+    "ALTER TABLE comments ADD COLUMN claim_expires TEXT",
+    "ALTER TABLE comments ADD COLUMN reason TEXT",
+    # An agent's reply: the idempotency key it was sent with, per credential.
+    "ALTER TABLE comments ADD COLUMN reply_credential TEXT",
+    "ALTER TABLE comments ADD COLUMN reply_key TEXT",
+    "CREATE UNIQUE INDEX comments_by_key ON comments(reply_credential, reply_key)"
+    " WHERE reply_key IS NOT NULL",
+    """CREATE TABLE audit (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        at TEXT NOT NULL,
+        action TEXT NOT NULL,
+        comment INTEGER NOT NULL REFERENCES comments(id),
+        page TEXT NOT NULL,
+        credential TEXT NOT NULL,
+        handle TEXT NOT NULL,
+        key TEXT
+    )""",
+    "CREATE INDEX audit_by_page ON audit(page, id)",
 )}
 
 
@@ -104,10 +140,27 @@ class DuplicateCredential(ValueError):
     """A credential of that name already exists, revoked or not."""
 
 
+class Refused(Exception):
+    """A claim, reply, release or failure refused, naming why: unknown_comment,
+    unknown_page, settled, not_routed, claimed, not_claimed or
+    revision_mismatch. Nothing is stored."""
+
+    def __init__(self, error: str) -> None:
+        super().__init__(error)
+        self.error = error
+
+
 def _now() -> str:
     """The current UTC time, ISO 8601 to the millisecond."""
     stamp = datetime.datetime.now(datetime.timezone.utc)
     return stamp.isoformat(timespec="milliseconds").replace("+00:00", "Z")
+
+
+def stamp(seconds: float) -> str:
+    """A time in seconds since the epoch as stored: UTC, ISO 8601 to the
+    millisecond, so stored times order as text."""
+    moment = datetime.datetime.fromtimestamp(seconds, datetime.timezone.utc)
+    return moment.isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
 
 def _actor(text: str) -> dict:
@@ -130,7 +183,7 @@ def _answer(row: sqlite3.Row) -> dict:
 
 
 def _comment(row: sqlite3.Row) -> dict:
-    return {
+    found = {
         "id": row["id"],
         "page": row["page"],
         "section": row["section"],
@@ -142,8 +195,27 @@ def _comment(row: sqlite3.Row) -> dict:
         "actor": _actor(row["actor"]),
         "createdAt": row["created_at"],
         "state": row["state"],
-        # Routing's own: lotuspod.routing reads it and never shows it.
+        # Routing's own: lotuspod.routing reads them and never shows them.
         "arrival": {"owner": row["arrival_owner"], "ownerPull": row["arrival_pull"]},
+        "claim": {"handle": row["claim_handle"], "credential": row["claim_credential"],
+                  "tokenHash": row["claim_hash"], "expiresAt": row["claim_expires"]},
+    }
+    # Only a failed comment has a reason.
+    if row["reason"] is not None:
+        found["reason"] = row["reason"]
+    return found
+
+
+def _audit(row: sqlite3.Row) -> dict:
+    return {
+        "id": row["id"],
+        "at": row["at"],
+        "action": row["action"],
+        "comment": row["comment"],
+        "page": row["page"],
+        "credential": row["credential"],
+        "handle": row["handle"],
+        "key": row["key"],
     }
 
 
@@ -282,12 +354,149 @@ class Database:
         return list(threads.values())
 
     def open_comments(self) -> list[dict]:
-        """Every comment no agent has taken up yet, oldest first."""
+        """Every comment not yet answered or failed, claimed ones too (a
+        claim may have lapsed), oldest first."""
         with self._connect() as conn:
             rows = conn.execute(
-                "SELECT * FROM comments WHERE state = ? ORDER BY id", (PENDING,)
+                "SELECT * FROM comments WHERE state IN (?, ?) ORDER BY id", (PENDING, CLAIMED)
             ).fetchall()
         return [_comment(row) for row in rows]
+
+    def comment(self, comment_id: int) -> dict | None:
+        """The comment comment_id; None when there is none."""
+        with self._connect() as conn:
+            row = conn.execute("SELECT * FROM comments WHERE id = ?", (comment_id,)).fetchone()
+        return None if row is None else _comment(row)
+
+    def claim(self, comment_id: int, *, credential: str, handles: list[str],
+              token_hash: str, claim_sec: float, clock: Callable[[], float],
+              route: Callable[[dict, dict[str, str], float], str | None]) -> dict:
+        """Claim comment_id for credential for claim_sec seconds; the comment
+        as claimed.
+
+        clock() is the time, read once the write lock is held, so a request
+        that waited for it is judged as of when it is decided.
+        route(comment, pulls, now) is the handle the comment is routed to, a
+        lapsed claim routed afresh, given each handle's last pull. Refused
+        settled for an answered or failed comment, not_routed when that
+        handle is none of handles, claimed while another credential's claim
+        is current. A current claim of credential's own is renewed.
+        """
+        with self._connect() as conn, _write(conn):
+            now = clock()
+            found = _find(conn, comment_id)
+            if found["state"] in SETTLED:
+                raise Refused("settled")
+            pulls = {row["handle"]: row["pulled_at"]
+                     for row in conn.execute("SELECT handle, pulled_at FROM pulls")}
+            handle = route(found, pulls, now)
+            if handle is None or handle not in handles:
+                raise Refused("not_routed")
+            # Only while it is unclaimed, or its claim has lapsed or is this
+            # credential's own.
+            changed = conn.execute(
+                "UPDATE comments SET state = ?, claim_handle = ?, claim_credential = ?,"
+                " claim_hash = ?, claim_expires = ?"
+                " WHERE id = ? AND (state = ? OR (state = ? AND"
+                " (claim_expires <= ? OR claim_credential = ?)))",
+                (CLAIMED, handle, credential, token_hash, stamp(now + claim_sec),
+                 comment_id, PENDING, CLAIMED, stamp(now), credential),
+            ).rowcount
+            if changed != 1:
+                raise Refused("claimed")
+            _record(conn, "claim", found, credential, handle, None)
+            return _comment(_row(conn, comment_id))
+
+    def reply(self, comment_id: int, *, credential: str, token_hash: str, key: str,
+              text: str, revision: str | None, clock: Callable[[], float],
+              page_of: Callable[[str], Mapping | None]) -> dict:
+        """Store credential's reply to comment_id under its claim; the reply.
+
+        clock() is the time the claim is checked at and page_of(name) the
+        page {revision, sections} as serve answers it now, or None; both are
+        read under the write lock, so a request that waited for it is judged
+        as of when it is decided.
+
+        A key credential has used before answers the reply stored with it,
+        whatever the claim's state now. Otherwise refused not_claimed unless
+        the comment's current claim is credential's and token_hash is its
+        token's; unknown_page when serve no longer answers the comment's
+        page; revision_mismatch when revision is not None and not the page's.
+        The reply joins the comment's thread, the comment becomes answered
+        and the claim ends.
+        """
+        with self._connect() as conn, _write(conn):
+            stored = conn.execute(
+                "SELECT * FROM comments WHERE reply_credential = ? AND reply_key = ?",
+                (credential, key),
+            ).fetchone()
+            if stored is not None:
+                return _comment(stored)
+            found = _held(conn, comment_id, credential, token_hash, clock())
+            page = page_of(found["page"])
+            if page is None:
+                raise Refused("unknown_page")
+            if revision is not None and revision != page["revision"]:
+                raise Refused("revision_mismatch")
+            handle = found["claim"]["handle"]
+            actor = {"kind": "agent", "handle": handle, "credential": credential}
+            root = found["id"] if found["parent"] is None else found["parent"]
+            cursor = conn.execute(
+                "INSERT INTO comments (page, section, section_title, revision, parent, text,"
+                " quote, actor, created_at, state, reply_credential, reply_key)"
+                " VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?)",
+                (found["page"], found["section"],
+                 page["sections"].get(found["section"], ""),
+                 # A reply's revision is the page revision it made, if any.
+                 revision or "", root, text, _dump(actor), _now(), ANSWERED,
+                 credential, key),
+            )
+            conn.execute(
+                "UPDATE comments SET state = ?, claim_hash = NULL, claim_expires = NULL"
+                " WHERE id = ?", (ANSWERED, comment_id),
+            )
+            _record(conn, "reply", found, credential, handle, key)
+            return _comment(_row(conn, cursor.lastrowid))
+
+    def release(self, comment_id: int, *, credential: str, token_hash: str,
+                clock: Callable[[], float]) -> dict:
+        """End credential's current claim on comment_id and route it again;
+        the comment. Refused not_claimed as reply is."""
+        with self._connect() as conn, _write(conn):
+            found = _held(conn, comment_id, credential, token_hash, clock())
+            conn.execute(
+                "UPDATE comments SET state = ?, claim_handle = NULL, claim_credential = NULL,"
+                " claim_hash = NULL, claim_expires = NULL WHERE id = ?",
+                (PENDING, comment_id),
+            )
+            _record(conn, "release", found, credential, found["claim"]["handle"], None)
+            return _comment(_row(conn, comment_id))
+
+    def fail(self, comment_id: int, *, credential: str, token_hash: str,
+             clock: Callable[[], float], reason: str) -> dict:
+        """Leave comment_id failed for reason under credential's current
+        claim, which ends; the comment. Refused not_claimed as reply is."""
+        with self._connect() as conn, _write(conn):
+            found = _held(conn, comment_id, credential, token_hash, clock())
+            conn.execute(
+                "UPDATE comments SET state = ?, reason = ?, claim_hash = NULL,"
+                " claim_expires = NULL WHERE id = ?",
+                (FAILED, reason, comment_id),
+            )
+            _record(conn, "fail", found, credential, found["claim"]["handle"], None)
+            return _comment(_row(conn, comment_id))
+
+    def audit(self, page: str | None = None) -> list[dict]:
+        """Every claim, reply, release and failure, on page or on any page,
+        oldest first."""
+        with self._connect() as conn:
+            if page is None:
+                rows = conn.execute("SELECT * FROM audit ORDER BY id").fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT * FROM audit WHERE page = ? ORDER BY id", (page,)
+                ).fetchall()
+        return [_audit(row) for row in rows]
 
     def thread(self, root: int) -> dict:
         """The thread of comment root as {root, replies}, oldest first."""
@@ -392,6 +601,41 @@ def _write(conn: sqlite3.Connection) -> Iterator[None]:
         conn.execute("ROLLBACK")
         raise
     conn.execute("COMMIT")
+
+
+def _row(conn: sqlite3.Connection, comment_id: int) -> sqlite3.Row:
+    return conn.execute("SELECT * FROM comments WHERE id = ?", (comment_id,)).fetchone()
+
+
+def _find(conn: sqlite3.Connection, comment_id: int) -> dict:
+    """The reader's comment comment_id; Refused unknown_comment when there
+    is none, or it is an agent's reply."""
+    row = _row(conn, comment_id)
+    if row is None or json.loads(row["actor"]).get("kind") != "human":
+        raise Refused("unknown_comment")
+    return _comment(row)
+
+
+def _held(conn: sqlite3.Connection, comment_id: int, credential: str, token_hash: str,
+          now: float) -> dict:
+    """The comment comment_id while credential's claim on it is current and
+    token_hash is its token's; Refused not_claimed otherwise."""
+    found = _find(conn, comment_id)
+    claim = found["claim"]
+    if (found["state"] != CLAIMED or claim["credential"] != credential
+            or claim["expiresAt"] is None or claim["expiresAt"] <= stamp(now)
+            or not hmac.compare_digest(claim["tokenHash"] or "", token_hash)):
+        raise Refused("not_claimed")
+    return found
+
+
+def _record(conn: sqlite3.Connection, action: str, comment: Mapping, credential: str,
+            handle: str, key: str | None) -> None:
+    conn.execute(
+        "INSERT INTO audit (at, action, comment, page, credential, handle, key)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (_now(), action, comment["id"], comment["page"], credential, handle, key),
+    )
 
 
 def _insert_comment(conn: sqlite3.Connection, *, page: str, section: str,

@@ -12,11 +12,17 @@ A reader's comment no agent has taken up yet is routed to one handle:
 
 A handle is listening when its last pull is within the window. A comment is
 `pending` while the handle it is routed to is listening, else `unavailable`.
-A comment an agent has taken up keeps the state stored with it.
+
+A comment an agent has taken up keeps the state stored with it and is shown
+as the handle's that took it: `claimed` while the claim is current,
+`answered` once replied to, `failed` once the agent gave up on it. A claim
+that has expired simply lapses: the comment is routed again, as if never
+claimed.
 
 `route()` is a pure function of the comment (which keeps its page's owner and
-that owner's last pull as it arrived), the last-pull times, the window and
-the clock, so the threads routes, the pull and the claim all agree.
+that owner's last pull as it arrived, and its claim), the last-pull times,
+the window and the clock, so the threads routes, the pull and the claim all
+agree.
 """
 
 from __future__ import annotations
@@ -35,6 +41,11 @@ RESPONDER = "responder"
 DEFAULT_WINDOW = 300
 PENDING = db.PENDING
 UNAVAILABLE = "unavailable"
+CLAIMED = db.CLAIMED
+# The routing states of a comment waiting for its handle: what a pull returns.
+WAITING = (PENDING, UNAVAILABLE)
+# Seconds a claim lasts unless the config's [comments] claim_sec says otherwise.
+DEFAULT_CLAIM = 900
 # Messages after a thread's root that a pulled item carries.
 THREAD_TAIL = 20
 
@@ -69,6 +80,12 @@ def listening(handle: str, pulls: Mapping[str, float], window: float, now: float
     return last is not None and now - last <= window
 
 
+def lapsed(comment: Mapping, now: float) -> bool:
+    """Whether the comment is claimed and its claim has expired."""
+    expires = seconds(comment["claim"]["expiresAt"])
+    return comment["state"] == CLAIMED and (expires is None or expires <= now)
+
+
 def route(comment: Mapping, pulls: Mapping[str, float], window: float,
           now: float) -> tuple[str, str] | None:
     """(handle, state) of a reader's comment; None for an agent's reply.
@@ -77,6 +94,15 @@ def route(comment: Mapping, pulls: Mapping[str, float], window: float,
     """
     if comment["actor"].get("kind") != "human":
         return None
+    state = PENDING if lapsed(comment, now) else comment["state"]
+    if state != PENDING:
+        return comment["claim"]["handle"] or _routed(comment, window, now), state
+    handle = _routed(comment, window, now)
+    return handle, PENDING if listening(handle, pulls, window, now) else UNAVAILABLE
+
+
+def _routed(comment: Mapping, window: float, now: float) -> str:
+    """The handle a comment no agent has taken up is routed to."""
     handle = mention(comment["text"])
     if handle is None:
         arrival = comment["arrival"]
@@ -85,9 +111,7 @@ def route(comment: Mapping, pulls: Mapping[str, float], window: float,
         owner_held = (arrival["owner"] and pulled is not None
                       and arrived - pulled <= window and now - arrived < window)
         handle = arrival["owner"] if owner_held else RESPONDER
-    if comment["state"] != PENDING:
-        return handle, comment["state"]
-    return handle, PENDING if listening(handle, pulls, window, now) else UNAVAILABLE
+    return handle
 
 
 def last_pulls(database: db.Database) -> dict[str, float]:
@@ -98,7 +122,7 @@ def last_pulls(database: db.Database) -> dict[str, float]:
 def public(comment: Mapping, pulls: Mapping[str, float], window: float, now: float) -> dict:
     """The comment as it is shown: its `owner` the handle it is routed to
     (None for an agent's reply) and its `state` its routing state."""
-    row = {key: value for key, value in comment.items() if key != "arrival"}
+    row = {key: value for key, value in comment.items() if key not in ("arrival", "claim")}
     routed = route(comment, pulls, window, now)
     row["owner"] = None if routed is None else routed[0]
     if routed is not None:

@@ -251,7 +251,7 @@ class PullTests(PullTestCase):
             "source": (self.out_dir / "plan.md").read_text(encoding="utf-8"),
         }
         self.assertEqual(page["source"], PLAN)
-        self.assertEqual(set(comment_item), {"kind", "comment", "thread", "page"})
+        self.assertEqual(set(comment_item), {"kind", "comment", "thread", "omitted", "page"})
         self.assertEqual(comment_item["page"], page)
         got = comment_item["comment"]
         self.assertEqual(got["id"], comment["id"])
@@ -260,7 +260,7 @@ class PullTests(PullTestCase):
         self.assertEqual(got["revision"], self.revision())
         self.assertEqual((got["state"], got["owner"]), ("pending", "hermes"))
         self.assertNotIn("arrival", got)
-        self.assertEqual(comment_item["thread"], {"root": got, "replies": [], "omitted": 0})
+        self.assertEqual((comment_item["thread"], comment_item["omitted"]), ([got], 0))
 
         self.assertEqual(set(answer_item), {"kind", "answer", "question", "page"})
         self.assertEqual(answer_item["page"], page)
@@ -291,10 +291,10 @@ class PullTests(PullTestCase):
         [item] = [item for item in self.pull("responder")
                   if item["kind"] == "comment" and item["comment"]["id"] == rows[-1]["id"]]
         thread = item["thread"]
-        self.assertEqual(thread["root"]["id"], root["id"])
-        self.assertEqual([row["text"] for row in thread["replies"]],
+        self.assertEqual(thread[0]["id"], root["id"])
+        self.assertEqual([row["text"] for row in thread[1:]],
                          [f"Message {n}" for n in range(11, 31)])
-        self.assertEqual(thread["omitted"], 9)
+        self.assertEqual(item["omitted"], 9)
 
 
 class RoutingTests(PullTestCase):
@@ -499,7 +499,7 @@ class SchemaTests(PullTestCase):
                              db.SCHEMA_VERSION)
         finally:
             conn.close()
-        self.assertEqual(db.SCHEMA_VERSION, 3)
+        self.assertEqual(db.SCHEMA_VERSION, 4)
 
 
 class OwnerWindowOptionTests(unittest.TestCase):

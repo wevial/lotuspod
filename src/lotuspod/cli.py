@@ -1536,6 +1536,18 @@ def owner_window(arg: int | None) -> int:
     return int(value)
 
 
+def claim_seconds() -> int:
+    """How long an agent's claim lasts, in seconds: the config's [comments]
+    claim_sec, else the default."""
+    value = (config_section("comments") or {}).get("claim_sec", "")
+    if not value:
+        return routing.DEFAULT_CLAIM
+    if not value.isdigit() or int(value) < 1:
+        raise ConfigError(f"config {config_path()} [comments] claim_sec {value!r} is not "
+                          "a whole number of seconds, 1 or more")
+    return int(value)
+
+
 def cmd_serve(args: argparse.Namespace) -> int:
     out_dir = Path(args.out_dir) if args.out_dir else DEFAULT_OUTPUT_DIR
     if not out_dir.is_dir():
@@ -1548,6 +1560,7 @@ def cmd_serve(args: argparse.Namespace) -> int:
         return 1
     socket_path = serve_socket_path(db_path, args.socket)
     window = owner_window(args.owner_window)
+    claim_sec = claim_seconds()
     host = resolve_serve_host(args.host)
     verifier = access_verifier()
 
@@ -1560,7 +1573,7 @@ def cmd_serve(args: argparse.Namespace) -> int:
     try:
         sockets = machine.SocketServer(
             socket_path, db.Database(db_path), pages=partial(api_page, out_dir),
-            describe=partial(agent_page, out_dir), window=window,
+            describe=partial(agent_page, out_dir), window=window, claim_sec=claim_sec,
         )
     except (OSError, machine.SocketInUse) as exc:
         server.server_close()
@@ -1660,6 +1673,27 @@ def cmd_credential_revoke(args: argparse.Namespace) -> int:
         print(f"error: no credential named {args.name!r}", file=sys.stderr)
         return 1
     print(f"credential {row['name']} revoked {row['revokedAt']}")
+    return 0
+
+
+def cmd_audit(args: argparse.Namespace) -> int:
+    if args.page is not None and not _PAGE_NAME.fullmatch(args.page):
+        print(f"error: not a page name: {args.page!r}", file=sys.stderr)
+        return 1
+    try:
+        rows = serve_database(args).audit(args.page)
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    if args.json:
+        print(json.dumps({"page": args.page, "actions": rows}, indent=2))
+        return 0
+    if not rows:
+        print("no actions yet")
+    for row in rows:
+        key = f"\tkey {row['key']}" if row["key"] is not None else ""
+        print(f"{row['at']}\t{row['action']}\tcomment {row['comment']} on {row['page']}"
+              f"\tcredential {row['credential']}\thandle {row['handle']}{key}")
     return 0
 
 
@@ -1932,6 +1966,18 @@ def build_parser() -> argparse.ArgumentParser:
     answers.add_argument("--json", action="store_true", help="print JSON, as GET /api/answers")
     database_options(answers)
     answers.set_defaults(func=cmd_answers)
+
+    audit = sub.add_parser(
+        "audit",
+        help="list every claim, reply, release and failure by an agent, oldest first",
+        description="List every claim, reply, release and failure agents made on serve's "
+        "socket, oldest first: when, which comment on which page, the credential and "
+        "handle that acted, and a reply's idempotency key. Reads serve's database directly.",
+    )
+    audit.add_argument("--page", default=None, metavar="NAME", help="only this page's")
+    audit.add_argument("--json", action="store_true", help="print JSON")
+    database_options(audit)
+    audit.set_defaults(func=cmd_audit)
 
     agents.add_parser(sub)
 

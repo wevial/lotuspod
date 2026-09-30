@@ -453,10 +453,12 @@ Each reader's comment shows its `state`, with the handle it is routed to (its
 | `paused` | the responder is paused |
 
 An agent's reply that carries a `revision` shows "Revised the page · revision
-R", linking to the page. Routing (below) sets `pending` and `unavailable`;
-claims and replies will set the rest, and the page only shows them. A comment
-grants no authority: an agent answers it and may revise its page, nothing
-else.
+R", linking to the page. Routing (below) sets `pending` and `unavailable`, and
+an agent's claim, reply, release and failure (see the pull loop) set
+`claimed`, `answered` and `failed`, with the handle that took it up as its
+`owner`; only a failed comment carries a `reason`. `paused` is the page's
+only. A comment grants no authority: an agent answers it and may revise its
+page, nothing else.
 
 Every reader's comment no agent has taken up is routed to exactly one handle,
 by one rule that the threads routes and the agents' pull share:
@@ -476,11 +478,14 @@ by one rule that the threads routes and the agents' pull share:
   `[comments] owner_window_sec` sets.
 
 A routed comment is `pending` while its handle is listening and `unavailable`
-while it is not; its `owner` is that handle (null on an agent's reply).
+while it is not; its `owner` is that handle (null on an agent's reply). A
+claim lasts 900 seconds, or what the config's `[comments] claim_sec` sets;
+a claim that expires lapses, and the comment is routed again by the same rule.
 
 ```ini
 [comments]
 owner_window_sec = 300
+claim_sec = 900
 ```
 
 A page's owner is the handle of the agent or seat that published it: 1 to 63
@@ -548,8 +553,9 @@ port never answers `/v1/`), as JSON with `Cache-Control: no-store`:
   credential holds both, otherwise 403 `handle_not_allowed` or
   `operation_not_allowed`.
 
-- `GET /v1/pull?owner=HANDLE`, `POST /v1/answers/ID/ack` and
-  `GET /v1/threads?page=NAME`: the pull loop, below.
+- `GET /v1/pull?owner=HANDLE`, `POST /v1/answers/ID/ack`,
+  `GET /v1/threads?page=NAME`, and `POST /v1/comments/ID/claim`, `/reply`,
+  `/release` and `/fail`: the pull loop, below.
 
 No socket route writes a reader's answer or comment, whatever the credential.
 
@@ -575,11 +581,12 @@ nothing and settles nothing, so the same items come back on every pull until
 they are claimed or acknowledged: an agent that only reads never blocks the
 fallback to the responder. Items are, comments first, oldest first:
 
-- `{"kind": "comment", "comment", "thread", "page"}` for each reader's comment
-  routed to the handle (above). `comment` carries its verified `actor`, its
-  section, the revision it was written against and its routing state;
-  `thread` is `{root, replies, omitted}`, the thread's first comment and at
-  most its last 20 replies, `omitted` counting the replies left out.
+- `{"kind": "comment", "comment", "thread", "omitted", "page"}` for each
+  reader's comment routed to the handle (above) that no agent holds a current
+  claim on. `comment` carries its verified `actor`, its section, the revision
+  it was written against and its routing state; `thread` is a list, the
+  thread's first comment and at most its last 20 replies, oldest first, and
+  `omitted` counts the replies left out.
 - `{"kind": "answer", "answer", "question", "page"}` for each answer on a page
   the handle owns that it has not acknowledged, superseded ones included (each
   names the answer it `supersedes`). `question` is `{id, text, label,
@@ -598,13 +605,62 @@ acknowledged answer out from then on. `show PAGE` needs `pull` for any handle
 and prints what the reader's `GET /api/comments?page=PAGE` answers, so an
 owner coming back later can catch up.
 
+To answer a comment, an agent claims it, then replies under the claim, so two
+agents sharing a handle never both answer and a retry after a crash never
+answers twice:
+
+```sh
+lotuspod comments claim 7 --json
+# {"comment": 7, "handle": "hermes", "claimToken": "…", "expiresAt": "…"}
+lotuspod comments reply 7 --claim TOKEN --key hermes-7-1 --text "Cut it." --json
+lotuspod comments reply 7 --claim TOKEN --key hermes-7-2 --text-file reply.md \
+  --revision 3f2a9c01d4be                        # having revised the page
+lotuspod comments release 7 --claim TOKEN      # back to routing, unanswered
+lotuspod comments fail 7 --claim TOKEN --reason "source missing"
+```
+
+- `claim ID` (`POST /v1/comments/ID/claim`) needs `claim` and the handle the
+  comment is routed to (else 403 `not_routed`). It is atomic: while another
+  credential's claim is current it is 409 `claimed`, and an answered or failed
+  comment is 409 `settled`. It answers `{comment, handle, claimToken,
+  expiresAt}` and the comment is `claimed`, leaving every pull, until the
+  claim expires (`[comments] claim_sec`), when it lapses and is routed again.
+- `reply ID --claim TOKEN --key KEY (--text TEXT | --text-file PATH)
+  [--revision R]` (`POST /v1/comments/ID/reply` with `{claimToken,
+  idempotencyKey, text[, revision]}`) needs `reply`. A KEY this credential
+  has sent before answers the reply stored with it, whatever has happened to
+  the claim since. Otherwise the claim must be this credential's, current,
+  and the one TOKEN names, else 409 `not_claimed`; a `revision` must be the
+  page's current one, else 409 `revision_mismatch`, and the reply then shows
+  as having revised the page. The reply joins the thread with the actor
+  `{"kind": "agent", "handle", "credential"}`, the comment is `answered`, and
+  the claim ends.
+- `release ID --claim TOKEN` ends the claim unanswered: the comment is
+  `pending` again and in its route's next pull. `fail ID --claim TOKEN
+  --reason TEXT` (up to 200 characters) leaves it `failed`, the reason on the
+  page; nothing retries it, and the reader routes it again by writing a new
+  comment. Both need `claim` and the current claim, else 409 `not_claimed`.
+
+The key is the retry mechanism. Choose one key per intended reply before
+acting (the handle, the comment and a counter will do), keep it with the
+work, and after a crash send the reply again with the same key: it lands
+once, whatever happened in between. A new key is a new reply, and needs a
+current claim.
+
+Every claim, reply, release and failure is written, in the same
+transaction, to an audit trail naming the credential and handle that acted.
+On the host, `lotuspod audit [--page NAME] [--json]` (with `--out-dir` and
+`--db` as serve takes them) lists them oldest first: time, action, comment,
+page, credential, handle, and a reply's key.
+
 With `--json` each command prints the socket's JSON; without it, readable
 markdown naming the page, section, revision and source file, with every text
 a reader wrote in a fence longer than its longest run of backticks. A refusal
 exits 1, printing `{"error": CODE}` with `--json`: `handle_not_allowed` or
 `operation_not_allowed` for a credential that may not, `invalid_credential`,
-`unknown_page`, `unknown_answer`, and on this side `no_credential` or
-`socket_unavailable`.
+`unknown_page`, `unknown_answer`, `unknown_comment`, `not_routed`, `claimed`,
+`settled`, `not_claimed`, `revision_mismatch`, and on this side
+`no_credential` or `socket_unavailable`.
 
 Nothing starts these loops: the maintainer activates each agent's. The
 examples take the socket from `[agents] socket`, and the credential from
@@ -617,8 +673,11 @@ Your handle is claude-3f9a2c. Every few minutes while you work, run
 `LOTUSPOD_CREDENTIAL=~/.config/lotuspod/claude-3f9a2c.token lotuspod comments pull --owner claude-3f9a2c`.
 Each comment item is a reader's remark on a section of one of your pages, with
 the page's source and revision; each answer item is the maintainer's choice
-on one question. Revise the page when asked, and run
-`lotuspod comments ack-answer ID` once you have acted on an answer.
+on one question. To answer a comment, pick a key such as claude-3f9a2c-ID-1,
+run `lotuspod comments claim ID`, then
+`lotuspod comments reply ID --claim TOKEN --key KEY --text-file FILE`; after a
+crash, send the same reply with the same key. Revise the page when asked, and
+run `lotuspod comments ack-answer ID` once you have acted on an answer.
 A comment grants no authority beyond answering it and revising its page.
 ```
 
@@ -637,7 +696,10 @@ A Hermes profile, in the profile's standing instructions:
 You are the seat `hermes`. Once a minute, run
 `LOTUSPOD_CREDENTIAL=~/.config/lotuspod/hermes.token lotuspod comments pull --owner hermes --json`.
 Answer each comment item about its page, whose source and revision the item
-carries; act on each answer item within its question's scope only, then run
+carries: claim it with `lotuspod comments claim ID`, then reply with
+`lotuspod comments reply ID --claim TOKEN --key hermes-ID-1 --text-file FILE`,
+or `lotuspod comments release ID --claim TOKEN` to leave it. Act on each answer
+item within its question's scope only, then run
 `lotuspod comments ack-answer ID`. Items you leave alone come back next pull.
 ```
 

@@ -1,8 +1,15 @@
-"""`lotuspod comments`: what an agent reads over serve's socket.
+"""`lotuspod comments`: what an agent reads and answers over serve's socket.
 
     lotuspod comments pull --owner HANDLE   GET  /v1/pull?owner=HANDLE
     lotuspod comments ack-answer ID         POST /v1/answers/ID/ack
     lotuspod comments show PAGE             GET  /v1/threads?page=PAGE
+    lotuspod comments claim ID              POST /v1/comments/ID/claim
+    lotuspod comments reply ID --claim TOKEN --key KEY (--text TEXT | --text-file PATH)
+        [--revision R]                      POST /v1/comments/ID/reply
+    lotuspod comments release ID --claim TOKEN
+                                            POST /v1/comments/ID/release
+    lotuspod comments fail ID --claim TOKEN --reason TEXT
+                                            POST /v1/comments/ID/fail
 
 Each takes --socket and --credential as every agent command does, prints the
 socket's JSON with --json and readable markdown without it, and exits 1 on a
@@ -40,7 +47,7 @@ class _Failed(Exception):
         self.message = message
 
 
-def _ask(args: argparse.Namespace, method: str, target: str) -> dict:
+def _ask(args: argparse.Namespace, method: str, target: str, body: object = None) -> dict:
     """The socket's JSON for one request; _Failed naming the refusal."""
     try:
         token = cli.agent_token(args)
@@ -48,7 +55,7 @@ def _ask(args: argparse.Namespace, method: str, target: str) -> dict:
         raise _Failed("no_credential", str(exc)) from None
     socket_path = cli.agent_socket(args)
     try:
-        status, payload = machine.request(socket_path, token, method, target)
+        status, payload = machine.request(socket_path, token, method, target, body)
     except OSError as exc:
         raise _Failed("socket_unavailable", f"cannot reach serve on {socket_path}: {exc}") from None
     except ValueError:
@@ -58,9 +65,9 @@ def _ask(args: argparse.Namespace, method: str, target: str) -> dict:
     return payload
 
 
-def _run(args: argparse.Namespace, method: str, target: str, text) -> int:
+def _run(args: argparse.Namespace, method: str, target: str, text, body: object = None) -> int:
     try:
-        payload = _ask(args, method, target)
+        payload = _ask(args, method, target, body)
     except _Failed as exc:
         if exc.message:
             print(f"error: {exc.message}", file=sys.stderr)
@@ -137,12 +144,13 @@ def pull_text(payload: dict) -> str:
             ]
             if comment.get("quote"):
                 lines += ["Quoting the page:", "", fence(comment["quote"]["exact"]), ""]
-            lines += [fence(comment["text"]), ""]
+            lines += [fence(comment["text"]), "",
+                      f"- Claim: `lotuspod comments claim {comment['id']}`", ""]
             about = "the thread's first comment and its latest replies"
-            if thread["omitted"]:
-                about += f"; {thread['omitted']} earlier replies left out"
+            if item["omitted"]:
+                about += f"; {item['omitted']} earlier replies left out"
             lines += [f"### Thread ({about})", ""]
-            for row in (thread["root"], *thread["replies"]):
+            for row in thread:
                 lines += _message(row, "####")
         else:
             answer, question = item["answer"], item["question"]
@@ -192,6 +200,22 @@ def show_text(payload: dict) -> str:
     return "\n".join(lines).rstrip("\n")
 
 
+def claim_text(payload: dict) -> str:
+    return (f"comment {payload['comment']} claimed as {payload['handle']} until "
+            f"{payload['expiresAt']}\nclaim token: {payload['claimToken']}")
+
+
+def reply_text(payload: dict) -> str:
+    return f"reply {payload['id']} stored in the thread of comment {payload['parent']}"
+
+
+def settled_text(payload: dict) -> str:
+    line = f"comment {payload['id']} is {_standing(payload)}"
+    if payload.get("reason"):
+        line += f": {payload['reason']}"
+    return line
+
+
 def cmd_pull(args: argparse.Namespace) -> int:
     target = "/v1/pull?" + urllib.parse.urlencode({"owner": args.owner})
     return _run(args, "GET", target, pull_text)
@@ -206,9 +230,47 @@ def cmd_show(args: argparse.Namespace) -> int:
     return _run(args, "GET", target, show_text)
 
 
+def cmd_claim(args: argparse.Namespace) -> int:
+    return _run(args, "POST", f"/v1/comments/{args.id}/claim", claim_text)
+
+
+def cmd_reply(args: argparse.Namespace) -> int:
+    if args.text_file is not None:
+        try:
+            with open(args.text_file, encoding="utf-8") as fh:
+                text = fh.read()
+        except (OSError, UnicodeDecodeError) as exc:
+            print(f"error: cannot read {args.text_file}: {exc}", file=sys.stderr)
+            if args.json:
+                print(json.dumps({"error": "unreadable_text"}))
+            return 1
+    else:
+        text = args.text
+    body = {"claimToken": args.claim, "idempotencyKey": args.key, "text": text}
+    if args.revision is not None:
+        body["revision"] = args.revision
+    return _run(args, "POST", f"/v1/comments/{args.id}/reply", reply_text, body)
+
+
+def cmd_release(args: argparse.Namespace) -> int:
+    return _run(args, "POST", f"/v1/comments/{args.id}/release", settled_text,
+                {"claimToken": args.claim})
+
+
+def cmd_fail(args: argparse.Namespace) -> int:
+    return _run(args, "POST", f"/v1/comments/{args.id}/fail", settled_text,
+                {"claimToken": args.claim, "reason": args.reason})
+
+
 def _answer_id(value: str) -> int:
     if not value.isdigit() or int(value) < 1:
         raise argparse.ArgumentTypeError(f"not an answer id: {value!r}")
+    return int(value)
+
+
+def _comment_id(value: str) -> int:
+    if not value.isdigit() or int(value) < 1:
+        raise argparse.ArgumentTypeError(f"not a comment id: {value!r}")
     return int(value)
 
 
@@ -216,8 +278,8 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
     """Register `lotuspod comments` and its actions."""
     parser = sub.add_parser(
         "comments",
-        help="read the comments routed to an agent and the answers on its pages, "
-        "over serve's socket",
+        help="read the comments routed to an agent and the answers on its pages, and "
+        "claim and answer comments, over serve's socket",
     )
     actions = parser.add_subparsers(dest="action", required=True)
 
@@ -252,3 +314,62 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
     show.add_argument("--json", action="store_true", help="print the socket's JSON")
     cli.add_agent_options(show)
     show.set_defaults(func=cmd_show)
+
+    claim = actions.add_parser(
+        "claim",
+        help="take a comment routed to one of the credential's handles up, so no other "
+        "agent answers it",
+        description="Claim comment ID for the handle it is routed to. Prints the claim "
+        "token a reply, release or failure names, and when the claim expires (the "
+        "config's [comments] claim_sec after now); an expired claim lapses and the "
+        "comment is routed again. Needs a credential with claim and that handle.",
+    )
+    claim.add_argument("id", type=_comment_id, metavar="ID", help="the comment's id")
+    claim.add_argument("--json", action="store_true", help="print the socket's JSON")
+    cli.add_agent_options(claim)
+    claim.set_defaults(func=cmd_claim)
+
+    reply = actions.add_parser(
+        "reply",
+        help="answer a claimed comment, once per idempotency key",
+        description="Reply to comment ID under the claim TOKEN names. Choose KEY once per "
+        "intended reply, before acting, and send the same KEY again after a crash: a key "
+        "this credential has used before prints the reply stored with it, and nothing is "
+        "stored twice. With --revision, the reply says it revised the page to revision R, "
+        "which must be the page's current revision. The comment becomes answered and the "
+        "claim ends. Needs a credential with reply.",
+    )
+    reply.add_argument("id", type=_comment_id, metavar="ID", help="the comment's id")
+    reply.add_argument("--claim", required=True, metavar="TOKEN",
+                       help="the claim token `comments claim` printed")
+    reply.add_argument("--key", required=True, metavar="KEY",
+                       help="the idempotency key of this reply, chosen before acting")
+    text = reply.add_mutually_exclusive_group(required=True)
+    text.add_argument("--text", metavar="TEXT", help="the reply's text")
+    text.add_argument("--text-file", metavar="PATH", help="a UTF-8 file holding the reply's text")
+    reply.add_argument("--revision", default=None, metavar="R",
+                       help="the page's revision after the agent revised it")
+    reply.add_argument("--json", action="store_true", help="print the socket's JSON")
+    cli.add_agent_options(reply)
+    reply.set_defaults(func=cmd_reply)
+
+    release = actions.add_parser(
+        "release", help="end a claim unanswered, so the comment is routed again",
+    )
+    release.add_argument("id", type=_comment_id, metavar="ID", help="the comment's id")
+    release.add_argument("--claim", required=True, metavar="TOKEN", help="the claim token")
+    release.add_argument("--json", action="store_true", help="print the socket's JSON")
+    cli.add_agent_options(release)
+    release.set_defaults(func=cmd_release)
+
+    fail = actions.add_parser(
+        "fail",
+        help="give up on a claimed comment, with a reason the page shows; nothing retries it",
+    )
+    fail.add_argument("id", type=_comment_id, metavar="ID", help="the comment's id")
+    fail.add_argument("--claim", required=True, metavar="TOKEN", help="the claim token")
+    fail.add_argument("--reason", required=True, metavar="TEXT",
+                      help="why, in up to 200 characters")
+    fail.add_argument("--json", action="store_true", help="print the socket's JSON")
+    cli.add_agent_options(fail)
+    fail.set_defaults(func=cmd_fail)

@@ -19,10 +19,28 @@ credential that exists and is not revoked:
                                         pull for that owner)
     GET  /v1/threads?page=NAME          the page's threads, as the reader's
                                         route answers them (needs pull)
+    POST /v1/comments/ID/claim          take comment ID up, for claim_sec
+                                        seconds (needs claim, and the handle
+                                        it is routed to)
+    POST /v1/comments/ID/reply          {claimToken, idempotencyKey, text[,
+                                        revision]}: answer it under the claim,
+                                        once per key (needs reply)
+    POST /v1/comments/ID/release        {claimToken}: route it again (needs claim)
+    POST /v1/comments/ID/fail           {claimToken, reason}: leave it failed
+                                        (needs claim)
 
 A pull records that HANDLE is listening and takes nothing off the queue: the
 same items come back until they are claimed or acknowledged. It is the only
 way a page's kept source leaves the host's files.
+
+Each claim, reply, release and failure is one database transaction, written
+to the audit trail with the credential and handle that acted. A claim is
+refused 409 claimed while another credential's is current, 403 not_routed
+for a comment routed to none of the credential's handles, and 409 settled
+once it is answered or failed; a reply, release or failure without the
+credential's current claim and its token is 409 not_claimed. A reply's key
+names it for good: the same credential sending the same key again gets the
+reply stored the first time.
 
 No socket route writes a reader's answer or comment, whatever the credential.
 """
@@ -66,7 +84,23 @@ ROUTES = (WHOAMI, CHECK, PULL, THREADS)
 METHODS = ("GET", "HEAD")
 # POST /v1/answers/ID/ack
 _ACK = re.compile(r"/v1/answers/([1-9][0-9]{0,18})/ack")
+# POST /v1/comments/ID/claim, /reply, /release and /fail
+_COMMENT = re.compile(r"/v1/comments/([1-9][0-9]{0,18})/(claim|reply|release|fail)")
 ACK_METHODS = ("POST",)
+# Characters of a claim token or an idempotency key, and of a failure's reason.
+MAX_KEY = 200
+MAX_REASON = 200
+CLAIM_BYTES = 32
+# The HTTP status of each refusal a claim, reply, release or failure meets.
+_REFUSED = {
+    "unknown_comment": HTTPStatus.NOT_FOUND,
+    "unknown_page": HTTPStatus.NOT_FOUND,
+    "not_routed": HTTPStatus.FORBIDDEN,
+    "settled": HTTPStatus.CONFLICT,
+    "claimed": HTTPStatus.CONFLICT,
+    "not_claimed": HTTPStatus.CONFLICT,
+    "revision_mismatch": HTTPStatus.CONFLICT,
+}
 # Seconds a socket connection may sit idle.
 REQUEST_TIMEOUT = 30
 
@@ -213,22 +247,27 @@ class Routes:
 
     pages(name) is the Page serve would answer for name, or None, and
     describe(page) the page as a pulled item shows it, its kept source
-    included; window is routing's owner window.
+    included; window is routing's owner window, and claim_sec how long a
+    claim lasts.
     """
 
     def __init__(self, database: db.Database,
                  pages: Callable[[str], api.Page | None] = _no_page,
                  describe: Callable[[api.Page], dict] | None = None,
                  window: float = routing.DEFAULT_WINDOW,
-                 clock: Callable[[], float] = time.time) -> None:
+                 clock: Callable[[], float] = time.time,
+                 claim_sec: float = routing.DEFAULT_CLAIM) -> None:
         self.database = database
         self.pages = pages
         self.describe = describe or _describe
         self.window = window
         self.clock = clock
+        self.claim_sec = claim_sec
 
-    def answer(self, method: str, target: str, headers: Message) -> api.Answer:
-        """The answer to one request for target, a path and query."""
+    def answer(self, method: str, target: str, headers: Message,
+               body: api.Body | None = None) -> api.Answer:
+        """The answer to one request for target, a path and query; body is
+        the request's, which only the comment routes read."""
         token = bearer(headers)
         try:
             credential = None if token is None else find(self.database, token)
@@ -238,9 +277,10 @@ class Routes:
             return HTTPStatus.UNAUTHORIZED, {"error": "invalid_credential"}, ()
         path, _, query = target.split("#", 1)[0].partition("?")
         ack = _ACK.fullmatch(path)
-        if path not in ROUTES and ack is None:
+        acting = _COMMENT.fullmatch(path)
+        if path not in ROUTES and ack is None and acting is None:
             return HTTPStatus.NOT_FOUND, {"error": "not_found"}, ()
-        allowed = METHODS if ack is None else ACK_METHODS
+        allowed = METHODS if ack is None and acting is None else ACK_METHODS
         if method not in allowed:
             return (HTTPStatus.METHOD_NOT_ALLOWED, {"error": "method_not_allowed"},
                     (("Allow", ", ".join(allowed)),))
@@ -257,9 +297,14 @@ class Routes:
                 return HTTPStatus.OK, self._pull(credential, _query(query, ("owner",))["owner"]), ()
             if path == THREADS:
                 return HTTPStatus.OK, self._threads(credential, _query(query, ("page",))["page"]), ()
+            if acting is not None:
+                return HTTPStatus.OK, self._act(credential, int(acting.group(1)),
+                                                acting.group(2), headers, body), ()
             return HTTPStatus.OK, self._ack(credential, int(ack.group(1))), ()
         except api.Refusal as exc:
             return exc.status, {"error": exc.error}, ()
+        except db.Refused as exc:
+            return _REFUSED[exc.error], {"error": exc.error}, ()
         except (sqlite3.Error, OSError):
             return HTTPStatus.SERVICE_UNAVAILABLE, {"error": "storage_unavailable"}, ()
 
@@ -287,7 +332,8 @@ class Routes:
         items = []
         for comment in self.database.open_comments():
             routed = routing.route(comment, pulls, self.window, now)
-            if routed is None or routed[0] != owner:
+            # A current claim takes it off the queue; a lapsed one does not.
+            if routed is None or routed[0] != owner or routed[1] not in routing.WAITING:
                 continue
             # A comment on a page serve no longer answers waits for it.
             page = page_of(comment["page"])
@@ -296,12 +342,13 @@ class Routes:
             root = comment["id"] if comment["parent"] is None else comment["parent"]
             found = self.database.thread(root)
             omitted = max(0, len(found["replies"]) - routing.THREAD_TAIL)
-            found = {"root": found["root"], "replies": found["replies"][omitted:]}
             items.append({
                 "kind": "comment",
                 "comment": routing.public(comment, pulls, self.window, now),
-                "thread": {**routing.thread(found, pulls, self.window, now),
-                           "omitted": omitted},
+                # The thread's first comment and its latest replies, oldest first.
+                "thread": [routing.public(row, pulls, self.window, now)
+                           for row in (found["root"], *found["replies"][omitted:])],
+                "omitted": omitted,
                 "page": item_page(page),
             })
         for found in self.database.unacknowledged_answers(owner):
@@ -351,6 +398,86 @@ class Routes:
         return {"answer": answer_id, "owner": page.owner, "ackedAt": acked_at}
 
 
+    def _act(self, credential: Mapping, comment_id: int, action: str,
+             headers: Message, body: api.Body | None) -> dict:
+        """Claim, reply to, release or fail comment comment_id."""
+        _allow_op(credential, "reply" if action == "reply" else "claim")
+        if action == "claim":
+            return self._claim(credential, comment_id)
+        fields = _json_body(headers, body)
+        required = {"reply": {"claimToken", "idempotencyKey", "text"},
+                    "release": {"claimToken"},
+                    "fail": {"claimToken", "reason"}}[action]
+        api._keys(fields, required, frozenset({"revision"} if action == "reply" else ()))
+        token = token_hash(api._text(fields["claimToken"], 1, MAX_KEY))
+        name = credential["name"]
+        if action == "release":
+            row = self.database.release(comment_id, credential=name, token_hash=token,
+                                        clock=self.clock)
+            return self._shown(row)
+        if action == "fail":
+            reason = api._text(fields["reason"], 1, MAX_REASON)
+            row = self.database.fail(comment_id, credential=name, token_hash=token,
+                                     clock=self.clock, reason=reason)
+            return self._shown(row)
+        key = api._text(fields["idempotencyKey"], 1, MAX_KEY)
+        text = api._text(fields["text"], 1, api.MAX_TEXT)
+        revision = fields.get("revision")
+        if revision is not None:
+            revision = api._text(revision, 1, api.MAX_NAME)
+        row = self.database.reply(comment_id, credential=name, token_hash=token, key=key,
+                                  text=text, revision=revision, clock=self.clock,
+                                  page_of=self._current)
+        return self._shown(row)
+
+    def _current(self, name: str) -> dict | None:
+        """The page's revision, as a pull gives it, and its sections; None
+        when serve would not answer it."""
+        page = self._page(name)
+        if page is None:
+            return None
+        return {"revision": self.describe(page)["revision"], "sections": page.sections}
+
+    def _claim(self, credential: Mapping, comment_id: int) -> dict:
+        found = self.database.comment(comment_id)
+        # A comment on a page serve no longer answers is no one's to claim.
+        if found is not None and self._page(found["page"]) is None:
+            raise api.Refusal(HTTPStatus.NOT_FOUND, "unknown_page")
+
+        def route(comment: dict, pulls: dict[str, str], now: float) -> str | None:
+            last = {handle: routing.seconds(stamp) for handle, stamp in pulls.items()}
+            routed = routing.route(comment, last, self.window, now)
+            return None if routed is None else routed[0]
+
+        token = secrets.token_urlsafe(CLAIM_BYTES)
+        row = self.database.claim(
+            comment_id, credential=credential["name"], handles=credential["handles"],
+            token_hash=token_hash(token), claim_sec=self.claim_sec, clock=self.clock,
+            route=route,
+        )
+        return {"comment": row["id"], "handle": row["claim"]["handle"],
+                "claimToken": token, "expiresAt": row["claim"]["expiresAt"]}
+
+    def _shown(self, row: dict) -> dict:
+        """A comment as the threads routes show it."""
+        return routing.public(row, routing.last_pulls(self.database), self.window,
+                              self.clock())
+
+
+def _json_body(headers: Message, body: api.Body | None) -> dict:
+    """The request's JSON object; Refusal as the /api routes refuse one."""
+    if body is None:
+        raise api.Refusal(HTTPStatus.LENGTH_REQUIRED, "length_required")
+    if (headers.get("Content-Type") or "").split(";", 1)[0].strip().lower() != "application/json":
+        raise api.Refusal(HTTPStatus.UNSUPPORTED_MEDIA_TYPE, "unsupported_media_type")
+    return api._json_object(body.read(api.MAX_BODY))
+
+
+def _allow_op(credential: Mapping, operation: str) -> None:
+    if operation not in credential["operations"]:
+        raise api.Refusal(HTTPStatus.FORBIDDEN, "operation_not_allowed")
+
+
 def _describe(page: api.Page) -> dict:
     """A page as a pulled item shows it, when serve names no source."""
     return {"name": page.name, "title": page.title, "owner": page.owner,
@@ -393,7 +520,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             return False
         body = api.Body(self.rfile, self.connection, self.headers)
         status, payload, headers = self.server.routes.answer(
-            self.command, self.path, self.headers
+            self.command, self.path, self.headers, body
         )
         data = json.dumps(payload).encode("utf-8")
         self.send_response(status)
@@ -439,9 +566,10 @@ class SocketServer(socketserver.ThreadingMixIn, socketserver.UnixStreamServer):
     def __init__(self, path: Path | str, database: db.Database,
                  pages: Callable[[str], api.Page | None] = _no_page,
                  describe: Callable[[api.Page], dict] | None = None,
-                 window: float = routing.DEFAULT_WINDOW) -> None:
+                 window: float = routing.DEFAULT_WINDOW,
+                 claim_sec: float = routing.DEFAULT_CLAIM) -> None:
         self.path = Path(path)
-        self.routes = Routes(database, pages, describe, window)
+        self.routes = Routes(database, pages, describe, window, claim_sec=claim_sec)
         self._inode: int | None = None
         clear_stale(self.path)
         # Never, even briefly, readable or writable by anyone else.
