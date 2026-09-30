@@ -9,6 +9,10 @@ venv/
 # rendered artifacts (generated output)
 artifacts/
 
+# serve's answers and comments, beside artifacts/ (with SQLite's WAL files)
+lotuspod.sqlite3
+lotuspod.sqlite3-*
+
 # node dependencies (the capture harness in e2e/)
 node_modules/
 

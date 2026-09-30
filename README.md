@@ -301,6 +301,53 @@ for an email not allowed 403 `forbidden`, a key set that cannot be fetched 503
 `access_unconfigured` (pages are served as before). `GET /api/whoami` answers
 `{"actor": {"kind": "human", "email": EMAIL}}`.
 
+## Answers and comments
+
+serve keeps the reader's answers and comments in one SQLite file,
+`lotuspod.sqlite3` beside the artifacts directory (`artifacts/../`), or the
+file `serve --db PATH` names. It is made on first write, its schema versioned
+with `PRAGMA user_version`, and it runs in WAL mode, so SQLite keeps
+`lotuspod.sqlite3-wal` and `-shm` files beside it; `.gitignore` covers all
+three. A `--db` inside the artifacts directory is refused at start (exit 1):
+the artifacts repository commits everything there. serve never answers the
+file either way.
+
+Four routes sit behind the Access check above; each row records the verified
+reader as `actor`, the page's `lotuspod:revision` when it was written as
+`revision`, and `createdAt` (UTC, ISO 8601). Ids are integers never given out
+twice.
+
+- `POST /api/answers` with `{page, question, version, choice, note}` stores an
+  answer and answers 201 with it, its `supersedes` the id of the answer to the
+  same page and question it replaces, or null.
+- `GET /api/answers?page=NAME` answers `{page, questions}`: each answered
+  question as `{current, earlier}`, the newest answer and the older ones newest
+  first.
+- `POST /api/comments` with `{page, section, text}` (and optionally a `quote`,
+  `{exact, prefix, suffix}`) opens a thread on a section; with
+  `{page, parent, text}` it replies. It answers 201 with the row: `section`,
+  `sectionTitle` (the text of the page's h2 with that id, or empty), `parent`,
+  `quote`, and `state` (`pending`). A reply takes its thread's section, and a
+  reply to a reply joins the same thread: `parent` is always the thread's first
+  comment.
+- `GET /api/comments?page=NAME` answers `{page, threads}`: each as
+  `{root, replies}`, threads and replies oldest first.
+
+Every answer is JSON with `Cache-Control: no-store`, and a refused request
+stores nothing. A POST sent from a page of another origin (its `Origin`, or
+`Sec-Fetch-Site: cross-site`) is 403 `cross_origin`: the request's own origin
+is its `Host` over the scheme `X-Forwarded-Proto` names (the tunnel ends the
+TLS), else `http`; one that is not
+`application/json` 415; one with no length 411; a body over 16 KiB 413. A
+missing, extra or mistyped field is 400 `invalid_body`, as are `question`,
+`version`, `choice` or `section` outside 1 to 100 characters, `text` outside 1
+to 4000, `note` over 4000, and a quote whose `exact` is outside 1 to 500 or
+whose `prefix` or `suffix` is over 32. A page serve would not answer (hidden,
+missing, not a page) is 404 `unknown_page`, and a reply to no comment on its
+page 404 `unknown_parent`. A read without exactly one `page` is 400
+`invalid_query`. Questions, versions, choices and sections are not yet checked
+against the page itself.
+
 ## What a page may run
 
 Every artifact page carries a Content-Security-Policy meta tag at the top of
@@ -370,8 +417,9 @@ it on a free loopback port around one command and names its URL in
 config starts no server of its own. The site trusts the test Access key in
 `tests/fixtures/access/` (made for the tests only), and the fixture names an
 assertion it accepts in `LOTUSPOD_TEST_ASSERTION`, for a check to send as
-`Cf-Access-Jwt-Assertion`. The screenshots go to the directory named by
-`CAPTURE_OUT`:
+`Cf-Access-Jwt-Assertion`. Its answers and comments go to a database in the
+scratch directory, beside the rendered site and never in it. The screenshots
+go to the directory named by `CAPTURE_OUT`:
 
 ```sh
 npm --prefix e2e ci --no-audit --no-fund

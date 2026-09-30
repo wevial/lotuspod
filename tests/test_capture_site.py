@@ -62,6 +62,32 @@ with open(sys.argv[1], "w", encoding="utf-8") as fh:
     json.dump(seen, fh)
 """
 
+# Posts an answer to capture-article, then records the answer's status, the
+# status of the page and of /lotuspod.sqlite3, and every lotuspod.sqlite3
+# under the scratch directory (TMPDIR) while the site is served.
+ANSWER_COMMAND = """\
+import json, os, pathlib, sys, urllib.error, urllib.request
+base = os.environ["LOTUSPOD_URL"]
+body = json.dumps({"page": "capture-article", "question": "q", "version": "v1",
+                   "choice": "yes", "note": ""}).encode("utf-8")
+request = urllib.request.Request(base + "/api/answers", data=body, method="POST", headers={
+    "Content-Type": "application/json",
+    "Cf-Access-Jwt-Assertion": os.environ["LOTUSPOD_TEST_ASSERTION"],
+})
+seen = {}
+with urllib.request.urlopen(request, timeout=10) as response:
+    seen["answer"] = response.status
+for path in ("/capture-article.html", "/lotuspod.sqlite3", "/site/lotuspod.sqlite3"):
+    try:
+        with urllib.request.urlopen(base + path, timeout=10) as response:
+            seen[path] = response.status
+    except urllib.error.HTTPError as exc:
+        seen[path] = exc.code
+seen["databases"] = sorted(str(p) for p in pathlib.Path(os.environ["TMPDIR"]).rglob("lotuspod.sqlite3"))
+with open(sys.argv[1], "w", encoding="utf-8") as fh:
+    json.dump(seen, fh)
+"""
+
 # Records LOTUSPOD_URL and the working directory, then exits 3.
 RECORD_COMMAND = """\
 import json, os, sys
@@ -191,6 +217,29 @@ class TestAssertionTests(CaptureSiteTestCase):
             [200, "no-store", {"actor": {"kind": "human", "email": "maintainer@example.com"}}],
         )
         self.assertEqual(seen["without"], [401, "no-store", {"error": "signed_out"}])
+
+
+class DatabaseTests(CaptureSiteTestCase):
+    def test_answers_go_to_the_scratch_directory_beside_the_site(self):
+        outside = [REPO_ROOT / "lotuspod.sqlite3", REPO_ROOT.parent / "lotuspod.sqlite3"]
+        before = [path.exists() for path in outside]
+        proc = self.run_wrapper(
+            sys.executable, "-c", ANSWER_COMMAND, str(self.record)
+        )
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        seen = json.loads(self.record.read_text(encoding="utf-8"))
+        self.assertEqual(seen["answer"], 201)
+        self.assertEqual(seen["/capture-article.html"], 200)
+        self.assertEqual(seen["/lotuspod.sqlite3"], 404)
+        self.assertEqual(seen["/site/lotuspod.sqlite3"], 404)
+        # One database, at the top of the fixture's own temporary directory,
+        # outside the site it rendered there.
+        self.assertEqual(len(seen["databases"]), 1)
+        database = Path(seen["databases"][0])
+        self.assertEqual(database.parent.parent, self.scratch)
+        self.assertTrue(database.parent.name.startswith("lotuspod-capture-"))
+        self.assertEqual([path.exists() for path in outside], before)
+        self.assertEqual(list(self.scratch.iterdir()), [])
 
 
 class TeardownTests(CaptureSiteTestCase):

@@ -27,7 +27,7 @@ from pathlib import Path
 
 import importlib.resources as _res
 
-from lotuspod import access, markdown
+from lotuspod import access, api, db, markdown
 
 _PKG = "lotuspod"
 
@@ -1171,6 +1171,28 @@ def serve_allow_list(out_dir: Path) -> frozenset[str]:
     return frozenset(allowed)
 
 
+def api_page(out_dir: Path, name: str) -> api.Page | None:
+    """The page serve answers as NAME.html, as /api records it; None when
+    serve would not answer it."""
+    # The allow-list holds bare file names only, so no name reaches past it.
+    file = f"{name}.html"
+    if not is_page_name(file) or file not in serve_allow_list(out_dir):
+        return None
+    try:
+        page_html = (out_dir / file).read_text(encoding="utf-8")
+        revision = page_revision(out_dir, name)
+    except (OSError, UnicodeDecodeError):
+        return None
+    parser = _H2Collector(page_html)
+    parser.feed(page_html)
+    parser.close()
+    sections: dict[str, str] = {}
+    for heading in parser.headings:
+        if heading["id"]:
+            sections.setdefault(heading["id"], heading["text"])
+    return api.Page(name=name, revision=revision, sections=sections)
+
+
 # Headers on every page response. A meta tag cannot forbid framing, and
 # nosniff keeps a browser from reading a file as a type it was not served as.
 _PAGE_HEADERS = (
@@ -1193,15 +1215,18 @@ class _AllowListHandler(SimpleHTTPRequestHandler):
 
     /api paths never reach the file system or method dispatch: whatever the
     method, each is answered only after the request's Access assertion
-    verifies (see parse_request and _serve_api).
+    verifies (see parse_request and _serve_api). The answers and comments
+    routes are lotuspod.api's.
     """
 
     # Whether the response being written is a page's (see end_headers).
     _page_response = False
 
-    def __init__(self, *args, root: Path, verifier: access.Verifier | None = None, **kwargs):
+    def __init__(self, *args, root: Path, verifier: access.Verifier | None = None,
+                 api: api.Api | None = None, **kwargs):
         self.root = Path(root)
         self.verifier = verifier
+        self.api = api
         super().__init__(*args, **kwargs)
 
     def _api_path(self) -> str | None:
@@ -1219,7 +1244,7 @@ class _AllowListHandler(SimpleHTTPRequestHandler):
         if self.command != "HEAD":
             self.wfile.write(body)
 
-    def _serve_api(self, path: str) -> None:
+    def _serve_api(self, path: str, body: api.Body) -> None:
         # The reader is known only from a verified assertion; the plain
         # Cf-Access-Authenticated-User-Email header is never read.
         if self.verifier is None:
@@ -1233,7 +1258,11 @@ class _AllowListHandler(SimpleHTTPRequestHandler):
         except access.AccessError as exc:
             self._api_answer(exc.status, {"error": exc.error})
             return
-        if path != "/api/whoami":
+        actor = {"kind": "human", "email": email}
+        if self.api is not None and path in api.ROUTES:
+            query = self.path.split("#", 1)[0].partition("?")[2]
+            self._api_answer(*self.api.answer(self.command, path, query, self.headers, body, actor))
+        elif path != "/api/whoami":
             self._api_answer(HTTPStatus.NOT_FOUND, {"error": "not_found"})
         elif self.command not in _API_READ_METHODS:
             self._api_answer(
@@ -1241,7 +1270,7 @@ class _AllowListHandler(SimpleHTTPRequestHandler):
                 (("Allow", ", ".join(_API_READ_METHODS)),),
             )
         else:
-            self._api_answer(HTTPStatus.OK, {"actor": {"kind": "human", "email": email}})
+            self._api_answer(HTTPStatus.OK, {"actor": actor})
 
     def parse_request(self) -> bool:
         # /api is answered here, before handle_one_request dispatches on the
@@ -1252,8 +1281,11 @@ class _AllowListHandler(SimpleHTTPRequestHandler):
         path = self._api_path()
         if path is None:
             return True
-        self._serve_api(path)
+        body = api.Body(self.rfile, self.connection, self.headers)
+        self._serve_api(path, body)
         self.wfile.flush()
+        # Only once the answer is out: a body left unread would reset it.
+        body.discard()
         return False
 
     def translate_path(self, path: str) -> str:
@@ -1313,11 +1345,31 @@ def resolve_serve_host(host_override: str) -> str:
     return host_override if host_override else tailnet_ipv4()
 
 
+def serve_db_path(out_dir: Path, db_arg: str) -> Path:
+    """The database serve keeps: --db, else lotuspod.sqlite3 beside the
+    output directory. ValueError when it would sit inside the output
+    directory, which the artifacts repository commits whole."""
+    out_dir = out_dir.resolve()
+    path = Path(db_arg).resolve() if db_arg else out_dir.parent / db.DEFAULT_NAME
+    if path == out_dir or out_dir in path.parents:
+        raise ValueError(
+            f"--db {db_arg or path} is inside the output directory {out_dir}; "
+            "the artifacts repository would commit it"
+        )
+    return path
+
+
 def _make_server(out_dir: Path, host: str, port: int,
-                 verifier: access.Verifier | None = None) -> ThreadingHTTPServer:
-    """The allow-list server; /api answers 503 access_unconfigured without a verifier."""
+                 verifier: access.Verifier | None = None,
+                 db_path: Path | None = None) -> ThreadingHTTPServer:
+    """The allow-list server; /api answers 503 access_unconfigured without a
+    verifier, and has no answers and comments routes without a database."""
+    routes = None
+    if db_path is not None:
+        routes = api.Api(db.Database(db_path), partial(api_page, out_dir))
     handler = partial(
-        _AllowListHandler, directory=str(out_dir), root=out_dir, verifier=verifier
+        _AllowListHandler, directory=str(out_dir), root=out_dir, verifier=verifier,
+        api=routes,
     )
     return ThreadingHTTPServer((host, port), handler)
 
@@ -1327,11 +1379,16 @@ def cmd_serve(args: argparse.Namespace) -> int:
     if not out_dir.is_dir():
         raise FileNotFoundError(f"artifacts directory not found: {out_dir}")
 
+    try:
+        db_path = serve_db_path(out_dir, args.db)
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
     host = resolve_serve_host(args.host)
     verifier = access_verifier()
 
     try:
-        server = _make_server(out_dir, host, args.port, verifier=verifier)
+        server = _make_server(out_dir, host, args.port, verifier=verifier, db_path=db_path)
     except OSError as exc:
         print(f"error: cannot bind {host}:{args.port}: {exc}", file=sys.stderr)
         return 1
@@ -1343,6 +1400,7 @@ def cmd_serve(args: argparse.Namespace) -> int:
     else:
         print(f"serving {out_dir} on the tailnet (v2 allow-list):")
     print(f"  http://{host}:{args.port}/")
+    print(f"answers and comments in {db_path}")
     if verifier is None:
         print("note: no [access] section in the config; /api answers 503")
     if not args.host:
@@ -1474,6 +1532,13 @@ def build_parser() -> argparse.ArgumentParser:
         default="",
         help="bind address override (default: auto-detected tailnet IPv4); "
         "use 127.0.0.1 when a local Cloudflare Tunnel fronts the server",
+    )
+    serve.add_argument(
+        "--db",
+        default="",
+        metavar="PATH",
+        help=f"database of answers and comments (default: {db.DEFAULT_NAME} beside "
+        "the artifacts directory; never inside it)",
     )
     serve.set_defaults(func=cmd_serve)
 

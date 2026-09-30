@@ -6,8 +6,10 @@ temporary directory, serves it with the site's own allow-list server on
 in LOTUSPOD_URL, then stops the server, removes the directory and exits with
 the command's code. The site trusts the test Access key
 (tests/fixtures/access/), and LOTUSPOD_TEST_ASSERTION holds an assertion it
-accepts, for a browser check to send as Cf-Access-Jwt-Assertion. It never reads or writes the operator's artifacts/ and
-never binds the tailnet address.
+accepts, for a browser check to send as Cf-Access-Jwt-Assertion. Answers and
+comments go to a database in the same temporary directory, beside the
+rendered site and never in it. It never reads or writes the operator's
+artifacts/ and never binds the tailnet address.
 
 Run from the repo root:
 
@@ -35,7 +37,7 @@ from unittest import mock
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
-from lotuspod import access, cli  # noqa: E402
+from lotuspod import access, cli, db  # noqa: E402
 from tests import access_keys  # noqa: E402
 
 
@@ -146,16 +148,20 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     directory = Path(tempfile.mkdtemp(prefix="lotuspod-capture-"))
+    site = directory / "site"
     server = None
     thread = None
     try:
         try:
-            render(directory)
+            site.mkdir()
+            render(site)
         except Exception as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 1
         verifier = access.Verifier(access.parse_config(access_keys.config_section()))
-        server = cli._make_server(directory, HOST, 0, verifier=verifier)
+        server = cli._make_server(
+            site, HOST, 0, verifier=verifier, db_path=directory / db.DEFAULT_NAME
+        )
         port = server.server_address[1]
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
