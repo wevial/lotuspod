@@ -29,7 +29,7 @@ from pathlib import Path
 
 import importlib.resources as _res
 
-from lotuspod import access, api, db, machine, markdown
+from lotuspod import access, api, db, decisions, machine, markdown
 
 _PKG = "lotuspod"
 
@@ -253,7 +253,10 @@ def script_warning(name: str, body: str) -> str:
     )
 
 
-THEME_FILES = ("lotuspod.css", "favicon.svg")
+# The page script answers decision forms (lotuspod.decisions); only a page
+# with such a form loads it.
+PAGE_SCRIPT = "lotuspod-page.js"
+THEME_FILES = ("lotuspod.css", "favicon.svg", PAGE_SCRIPT)
 
 
 def write_atomic(path: Path, data: bytes) -> None:
@@ -280,9 +283,9 @@ def write_atomic(path: Path, data: bytes) -> None:
 def sync_theme_css(out_dir: Path) -> None:
     """Keep the artifact dir's theme files identical to the packaged theme.
 
-    Covers the stylesheet and the favicon (THEME_FILES). Rewriting only on a
-    content difference means a theme upgrade reaches already-rendered
-    directories while untouched ones keep their mtime.
+    Covers the stylesheet, the favicon and the page script (THEME_FILES).
+    Rewriting only on a content difference means a theme upgrade reaches
+    already-rendered directories while untouched ones keep their mtime.
     """
     for filename in THEME_FILES:
         packaged = THEME_DIR / filename
@@ -529,6 +532,8 @@ def cmd_render(args: argparse.Namespace) -> int:
         else:
             text = Path(markdown_path).read_text(encoding="utf-8")
         body = markdown.to_body(text)
+    # Before the outline, so the forms sit inside their section.
+    body, has_decisions = decisions.render_decisions(body, args.name)
     body, outline = (body, []) if args.no_outline else outline_body(body)
     context = {
         "title": args.title,
@@ -544,6 +549,8 @@ def cmd_render(args: argparse.Namespace) -> int:
         "revision": getattr(args, "revision", ""),
         "variant_class": variant_class(args.variant),
         "mermaid": has_mermaid_block(body),
+        "decisions": has_decisions,
+        "page_script": PAGE_SCRIPT,
         "mermaid_theme_variables": mermaid_theme_variables(tokens),
         "mermaid_dir": MERMAID_DIR,
     }
@@ -1176,7 +1183,7 @@ def _tailnet_dns_name() -> str:
 
 _SERVE_CSS_FILE = "lotuspod.css"
 _SERVE_ICON_FILE = "favicon.svg"
-_SERVE_SUPPORT_FILES = (_SERVE_CSS_FILE, _SERVE_ICON_FILE)
+_SERVE_SUPPORT_FILES = (_SERVE_CSS_FILE, _SERVE_ICON_FILE, PAGE_SCRIPT)
 _SERVE_NEVER_FILES = frozenset({MANIFEST_FILE, "FINDINGS.md"})
 _DENY_PATH_NAME = ".lotuspod-not-found"
 
@@ -1230,7 +1237,11 @@ def api_page(out_dir: Path, name: str) -> api.Page | None:
     for heading in parser.headings:
         if heading["id"]:
             sections.setdefault(heading["id"], heading["text"])
-    return api.Page(name=name, revision=revision, sections=sections)
+    questions = {
+        key: api.Question(version=form.version, choices=frozenset(v for v, _ in form.options))
+        for key, form in decisions.read_forms(page_html).items()
+    }
+    return api.Page(name=name, revision=revision, sections=sections, questions=questions)
 
 
 # Headers on every page response. A meta tag cannot forbid framing, and
@@ -1492,7 +1503,7 @@ def _stop_serving(signum: int, frame: object) -> None:
     raise KeyboardInterrupt
 
 
-def credential_db(args: argparse.Namespace) -> db.Database:
+def serve_database(args: argparse.Namespace) -> db.Database:
     """The database serve keeps for the same --out-dir and --db."""
     out_dir = Path(args.out_dir) if args.out_dir else DEFAULT_OUTPUT_DIR
     return db.Database(serve_db_path(out_dir, args.db))
@@ -1500,7 +1511,7 @@ def credential_db(args: argparse.Namespace) -> db.Database:
 
 def cmd_credential_create(args: argparse.Namespace) -> int:
     try:
-        database = credential_db(args)
+        database = serve_database(args)
         row = machine.create_credential(database, args.name, args.handle, args.op,
                                         Path(args.out))
     except (ValueError, machine.CredentialError) as exc:
@@ -1514,7 +1525,7 @@ def cmd_credential_create(args: argparse.Namespace) -> int:
 
 def cmd_credential_list(args: argparse.Namespace) -> int:
     try:
-        rows = [machine.public(row) for row in credential_db(args).credentials()]
+        rows = [machine.public(row) for row in serve_database(args).credentials()]
     except ValueError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
@@ -1533,7 +1544,7 @@ def cmd_credential_list(args: argparse.Namespace) -> int:
 
 def cmd_credential_revoke(args: argparse.Namespace) -> int:
     try:
-        row = credential_db(args).revoke_credential(args.name)
+        row = serve_database(args).revoke_credential(args.name)
     except ValueError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
@@ -1541,6 +1552,57 @@ def cmd_credential_revoke(args: argparse.Namespace) -> int:
         print(f"error: no credential named {args.name!r}", file=sys.stderr)
         return 1
     print(f"credential {row['name']} revoked {row['revokedAt']}")
+    return 0
+
+
+def answers_text(name: str, questions: dict, forms: dict[str, decisions.Form]) -> str:
+    """`lotuspod answers` without --json: each answered question, its
+    current answer and, under it, the earlier ones, newest first."""
+    if not questions:
+        return f"no answers to {name}"
+
+    def entry(row: dict, form: decisions.Form | None, indent: str) -> list[str]:
+        label = form.label(row["choice"]) if form else row["choice"]
+        head = f"{indent}{label} (answer {row['id']}"
+        if row["supersedes"] is not None:
+            head += f", replaces answer {row['supersedes']}"
+        head += ")"
+        if form is None or row["version"] != form.version:
+            head += ", to an earlier wording"
+        lines = [head, f"{indent}  by {row['actor'].get('email', '')} at {row['createdAt']}"]
+        if row["note"]:
+            lines.append(f"{indent}  note: {row['note']}")
+        return lines
+
+    lines = []
+    for question, answered in questions.items():
+        form = forms.get(question)
+        lines.append(f"{question}: {form.text}" if form else question)
+        lines += entry(answered["current"], form, "  ")
+        if answered["earlier"]:
+            lines.append("  earlier:")
+            for row in answered["earlier"]:
+                lines += entry(row, form, "    ")
+    return "\n".join(lines)
+
+
+def cmd_answers(args: argparse.Namespace) -> int:
+    name = args.page
+    if not _PAGE_NAME.fullmatch(name):
+        print(f"error: not a page name: {name!r}", file=sys.stderr)
+        return 1
+    try:
+        questions = serve_database(args).answers(name)
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    if args.json:
+        print(json.dumps({"page": name, "questions": questions}, indent=2))
+        return 0
+    out_dir = Path(args.out_dir) if args.out_dir else DEFAULT_OUTPUT_DIR
+    page = out_dir / f"{name}.html"
+    forms = decisions.read_forms(page.read_text(encoding="utf-8")) if page.is_file() else {}
+    print(answers_text(name, questions, forms))
     return 0
 
 
@@ -1719,6 +1781,14 @@ def build_parser() -> argparse.ArgumentParser:
     revoke.add_argument("name", metavar="NAME", help="the credential's name")
     database_options(revoke)
     revoke.set_defaults(func=cmd_credential_revoke)
+
+    answers = sub.add_parser(
+        "answers", help="show the answers given to a page's decisions, with their history"
+    )
+    answers.add_argument("page", metavar="PAGE", help="the page's name")
+    answers.add_argument("--json", action="store_true", help="print JSON, as GET /api/answers")
+    database_options(answers)
+    answers.set_defaults(func=cmd_answers)
 
     return parser
 

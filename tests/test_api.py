@@ -24,7 +24,7 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from lotuspod import access, cli  # noqa: E402
+from lotuspod import access, cli, decisions  # noqa: E402
 from tests import access_keys as keys  # noqa: E402
 
 HOST = "127.0.0.1"
@@ -43,7 +43,22 @@ Ship it.
 ## Risks
 
 The pond may freeze.
+
+## Decisions for the maintainer
+
+| # | Question | Options |
+| --- | --- | --- |
+| 1 | Freeze the pond? | Yes / No |
+| 2 | Skate on it? | Yes / No |
 """
+
+# A body whose decisions table asks what PLAN's does.
+DECISIONS_BODY = (
+    "<p>A page.</p>\n<h2>Decisions for the maintainer</h2>\n"
+    "<table><thead><tr><th>Question</th><th>Options</th></tr></thead><tbody>"
+    "<tr><td>Freeze the pond?</td><td>Yes / No</td></tr>"
+    "<tr><td>Skate on it?</td><td>Yes / No</td></tr></tbody></table>\n"
+)
 
 
 def run_cli(*argv: str) -> None:
@@ -60,8 +75,9 @@ def quiet(testcase: unittest.TestCase) -> None:
 
 
 class ApiTestCase(unittest.TestCase):
-    """A site with a published page `plan` (sections goals and risks), a
-    visible page `other` and a hidden page `secret`, served with the test key
+    """A site with a published page `plan` (sections goals and risks, and
+    questions decision-1 and decision-2), a visible page `other` asking the
+    same questions and a hidden page `secret`, served with the test key
     trusted and a database beside the output directory."""
 
     def setUp(self) -> None:
@@ -84,7 +100,7 @@ class ApiTestCase(unittest.TestCase):
                 "--local")
         for name, extra in (("other", ()), ("secret", ("--hidden",))):
             run_cli("render", "--name", name, "--title", name.title(),
-                    "--body", "<p>A page.</p>", "--out-dir", str(self.out_dir), *extra)
+                    "--body", DECISIONS_BODY, "--out-dir", str(self.out_dir), *extra)
         run_cli("index", "--out-dir", str(self.out_dir))
 
         page = (self.out_dir / "plan.html").read_text(encoding="utf-8")
@@ -139,10 +155,20 @@ class ApiTestCase(unittest.TestCase):
             return response.status, json.loads(data.decode("utf-8"))
         return response.status, data
 
-    def answer(self, question: str = "q", choice: str = "yes", page: str = "plan", **extra):
-        body = {"page": page, "question": question, "version": "v1", "choice": choice,
-                "note": "", **extra}
-        return self.ask("POST", "/api/answers", body)
+    def version(self, question: str = "decision-1", page: str = "plan") -> str:
+        """The version of question as page's form asks it; "v1" when it does not."""
+        path = self.out_dir / f"{page}.html"
+        forms = decisions.read_forms(path.read_text(encoding="utf-8")) if path.exists() else {}
+        return forms[question].version if question in forms else "v1"
+
+    def answer_body(self, question: str = "decision-1", choice: str = "yes",
+                    page: str = "plan", **extra) -> dict:
+        return {"page": page, "question": question, "version": self.version(question, page),
+                "choice": choice, "note": "", **extra}
+
+    def answer(self, question: str = "decision-1", choice: str = "yes", page: str = "plan",
+               **extra):
+        return self.ask("POST", "/api/answers", self.answer_body(question, choice, page, **extra))
 
     def comment(self, **body):
         return self.ask("POST", "/api/comments", {"page": "plan", **body})
@@ -163,9 +189,9 @@ class AnswerTests(ApiTestCase):
 
         self.assertEqual(
             {key: first[key] for key in first if key not in ("id", "createdAt")},
-            {"page": "plan", "question": "q", "version": "v1", "choice": "yes",
-             "note": "first thoughts", "revision": self.revision, "actor": ACTOR,
-             "supersedes": None},
+            {"page": "plan", "question": "decision-1", "version": self.version(),
+             "choice": "yes", "note": "first thoughts", "revision": self.revision,
+             "actor": ACTOR, "supersedes": None},
         )
         self.assertRegex(first["createdAt"], CREATED_AT)
         self.assertEqual(second["actor"], ACTOR)
@@ -175,24 +201,24 @@ class AnswerTests(ApiTestCase):
 
         self.assertEqual(
             self.ask("GET", "/api/answers?page=plan"),
-            (200, {"page": "plan", "questions": {"q": {"current": second, "earlier": [first]}}}),
+            (200, {"page": "plan",
+                   "questions": {"decision-1": {"current": second, "earlier": [first]}}}),
         )
 
     def test_questions_are_kept_apart(self):
-        _, one = self.answer(question="q1")
-        _, two = self.answer(question="q2")
-        _, other = self.answer(question="q1", page="other")
+        _, one = self.answer(question="decision-1")
+        _, two = self.answer(question="decision-2")
+        _, other = self.answer(question="decision-1", page="other")
         self.assertIsNone(two["supersedes"])
         self.assertIsNone(other["supersedes"])
         self.assertEqual(other["revision"], "")
         _, got = self.ask("GET", "/api/answers?page=plan")
-        self.assertEqual(got["questions"], {"q1": {"current": one, "earlier": []},
-                                            "q2": {"current": two, "earlier": []}})
+        self.assertEqual(got["questions"], {"decision-1": {"current": one, "earlier": []},
+                                            "decision-2": {"current": two, "earlier": []}})
 
     def test_a_same_origin_browser_post_is_taken(self):
         status, _row = self.ask(
-            "POST", "/api/answers",
-            {"page": "plan", "question": "q", "version": "v1", "choice": "yes", "note": ""},
+            "POST", "/api/answers", self.answer_body(),
             headers={"Origin": f"http://{HOST}:{self.port}", "Sec-Fetch-Site": "same-origin",
                      "Content-Type": "application/json; charset=utf-8"},
         )
@@ -212,21 +238,16 @@ class AnswerTests(ApiTestCase):
                 headers = {"Origin": origin}
                 if forwarded is not None:
                     headers["X-Forwarded-Proto"] = forwarded
-                got = self.ask(
-                    "POST", "/api/answers",
-                    {"page": "plan", "question": origin + str(forwarded), "version": "v1",
-                     "choice": "yes", "note": ""},
-                    headers=headers,
-                )
+                got = self.ask("POST", "/api/answers", self.answer_body(), headers=headers)
                 self.assertEqual(got[0], status, got)
                 if status == 403:
                     self.assertEqual(got[1], {"error": "cross_origin"})
         _, got = self.ask("GET", "/api/answers?page=plan")
-        self.assertEqual(len(got["questions"]), 2)
+        self.assertEqual(len(got["questions"]["decision-1"]["earlier"]), 1)
 
     def test_any_page_serve_answers_takes_answers(self):
         run_cli("render", "--name", "plan.v2", "--title", "Plan v2",
-                "--body", "<p>A page.</p>", "--out-dir", str(self.out_dir))
+                "--body", DECISIONS_BODY, "--out-dir", str(self.out_dir))
         conn = http.client.HTTPConnection(HOST, self.port, timeout=15)
         conn.request("GET", "/plan.v2.html")
         self.assertEqual(conn.getresponse().status, 200)
@@ -234,7 +255,44 @@ class AnswerTests(ApiTestCase):
         self.assertEqual(self.answer(page="plan.v2")[0], 201)
         self.assertEqual(self.comment(page="plan.v2", section="s", text="Hi")[0], 201)
         _, got = self.ask("GET", "/api/answers?page=plan.v2")
-        self.assertEqual(list(got["questions"]), ["q"])
+        self.assertEqual(list(got["questions"]), ["decision-1"])
+
+
+class AnswerCheckTests(ApiTestCase):
+    """An answer is checked against the page's own decision forms."""
+
+    def test_answers_the_page_does_not_ask_for_store_nothing(self):
+        for label, body, status, error in (
+            ("unknown question", self.answer_body(question="decision-3"),
+             400, "unknown_question"),
+            ("question of no form", self.answer_body(question="goals"), 400, "unknown_question"),
+            ("stale version", self.answer_body(version="0" * 12), 409, "stale"),
+            ("choice not offered", self.answer_body(choice="maybe"), 400, "invalid_choice"),
+            ("label, not value", self.answer_body(choice="Yes"), 400, "invalid_choice"),
+        ):
+            with self.subTest(label):
+                self.assertEqual(self.ask("POST", "/api/answers", body), (status, {"error": error}))
+        self.assertEmpty()
+
+    def test_a_page_without_decisions_asks_nothing(self):
+        run_cli("render", "--name", "plain", "--title", "Plain", "--body", "<p>A page.</p>",
+                "--out-dir", str(self.out_dir))
+        self.assertEqual(self.answer(page="plain"), (400, {"error": "unknown_question"}))
+        self.assertEmpty("plain")
+
+    def test_rewording_a_question_strands_its_answers(self):
+        self.assertEqual(self.answer()[0], 201)
+        body = self.answer_body()
+        source = self.work / "plan.md"
+        source.write_text(PLAN.replace("Freeze the pond?", "Freeze the whole pond?"),
+                          encoding="utf-8")
+        run_cli("publish", str(source), "--name", "plan", "--out-dir", str(self.out_dir),
+                "--local")
+        self.assertNotEqual(self.version(), body["version"])
+        self.assertEqual(self.version("decision-2"), self.answer_body("decision-2")["version"])
+        self.assertEqual(self.ask("POST", "/api/answers", body), (409, {"error": "stale"}))
+        _, fresh = self.answer()
+        self.assertEqual(fresh["version"], self.version())
 
 
 class CommentTests(ApiTestCase):
@@ -413,7 +471,7 @@ class RestartTests(ApiTestCase):
         self.start()
         self.assertEqual(self.ask("GET", "/api/answers?page=plan"), answers)
         self.assertEqual(self.ask("GET", "/api/comments?page=plan"), threads)
-        self.assertEqual(answers[1]["questions"]["q"]["current"], answer)
+        self.assertEqual(answers[1]["questions"]["decision-1"]["current"], answer)
         self.assertEqual(threads[1]["threads"][0]["root"], comment)
         _, later = self.answer()
         self.assertEqual(later["supersedes"], answer["id"])
@@ -435,7 +493,7 @@ class ServeCommandTests(unittest.TestCase):
         env.start()
         self.addCleanup(env.stop)
         quiet(self)
-        run_cli("render", "--name", "plan", "--title", "Plan", "--body", "<p>Plan.</p>",
+        run_cli("render", "--name", "plan", "--title", "Plan", "--body", DECISIONS_BODY,
                 "--out-dir", str(self.out_dir))
         run_cli("index", "--out-dir", str(self.out_dir))
 
@@ -484,8 +542,10 @@ class ServeCommandTests(unittest.TestCase):
                 self.assertFalse(database.exists())
 
                 conn = http.client.HTTPConnection(HOST, port, timeout=15)
-                body = {"page": "plan", "question": "q", "version": "v1", "choice": "yes",
-                        "note": ""}
+                page = (self.out_dir / "plan.html").read_text(encoding="utf-8")
+                form = decisions.read_forms(page)["decision-1"]
+                body = {"page": "plan", "question": "decision-1", "version": form.version,
+                        "choice": "yes", "note": ""}
                 conn.request("POST", "/api/answers", body=json.dumps(body),
                              headers={"Content-Type": "application/json",
                                       "Cf-Access-Jwt-Assertion": keys.assertion()})

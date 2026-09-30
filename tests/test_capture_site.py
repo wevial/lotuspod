@@ -62,14 +62,17 @@ with open(sys.argv[1], "w", encoding="utf-8") as fh:
     json.dump(seen, fh)
 """
 
-# Posts an answer to capture-article, then records the answer's status, the
-# status of the page and of /lotuspod.sqlite3, and every lotuspod.sqlite3
-# under the scratch directory (TMPDIR) while the site is served.
+# Posts an answer to capture-decisions' first question, then records the
+# answer's status, the status of the page and of /lotuspod.sqlite3, and every
+# lotuspod.sqlite3 under the scratch directory (TMPDIR) while the site is served.
 ANSWER_COMMAND = """\
-import json, os, pathlib, sys, urllib.error, urllib.request
+import json, os, pathlib, re, sys, urllib.error, urllib.request
 base = os.environ["LOTUSPOD_URL"]
-body = json.dumps({"page": "capture-article", "question": "q", "version": "v1",
-                   "choice": "yes", "note": ""}).encode("utf-8")
+with urllib.request.urlopen(base + "/capture-decisions.html", timeout=10) as response:
+    page = response.read().decode("utf-8")
+version = re.search(r'data-question="decision-1" data-version="([0-9a-f]+)"', page).group(1)
+body = json.dumps({"page": "capture-decisions", "question": "decision-1", "version": version,
+                   "choice": "opus", "note": ""}).encode("utf-8")
 request = urllib.request.Request(base + "/api/answers", data=body, method="POST", headers={
     "Content-Type": "application/json",
     "Cf-Access-Jwt-Assertion": os.environ["LOTUSPOD_TEST_ASSERTION"],
@@ -77,7 +80,7 @@ request = urllib.request.Request(base + "/api/answers", data=body, method="POST"
 seen = {}
 with urllib.request.urlopen(request, timeout=10) as response:
     seen["answer"] = response.status
-for path in ("/capture-article.html", "/lotuspod.sqlite3", "/site/lotuspod.sqlite3"):
+for path in ("/capture-decisions.html", "/lotuspod.sqlite3", "/site/lotuspod.sqlite3"):
     try:
         with urllib.request.urlopen(base + path, timeout=10) as response:
             seen[path] = response.status
@@ -152,6 +155,18 @@ class ServedSiteTests(CaptureSiteTestCase):
         self.assertNotIn("<form", article)
 
         self.assertIn("artifact--report", seen["/capture-report.html"][1])
+
+    def test_decisions_page_has_its_forms_and_page_script(self):
+        seen = self.fetch("/capture-decisions.html", "/lotuspod-page.js", "/capture-article.html")
+        status, page = seen["/capture-decisions.html"]
+        self.assertEqual(status, 200)
+        self.assertEqual(page.count('<form class="artifact-decision"'), 2)
+        self.assertIn('data-question="decision-1"', page)
+        self.assertIn('data-question="decision-2"', page)
+        self.assertIn('<script src="lotuspod-page.js?v=', page)
+        self.assertNotIn("<table", page)
+        self.assertEqual(seen["/lotuspod-page.js"][0], 200)
+        self.assertNotIn("lotuspod-page.js", seen["/capture-article.html"][1])
 
     def test_form_script_answers_404(self):
         seen = self.fetch("/lotuspod-form.js")
@@ -229,7 +244,7 @@ class DatabaseTests(CaptureSiteTestCase):
         self.assertEqual(proc.returncode, 0, proc.stderr)
         seen = json.loads(self.record.read_text(encoding="utf-8"))
         self.assertEqual(seen["answer"], 201)
-        self.assertEqual(seen["/capture-article.html"], 200)
+        self.assertEqual(seen["/capture-decisions.html"], 200)
         self.assertEqual(seen["/lotuspod.sqlite3"], 404)
         self.assertEqual(seen["/site/lotuspod.sqlite3"], 404)
         # One database, at the top of the fixture's own temporary directory,

@@ -585,6 +585,190 @@ body {
   min-height: 1.7em;
 }
 
+/* Decisions for the maintainer: each question of the page's decisions table is
+   a form (lotuspod.decisions) on a faintly tinted card, its options one row of
+   radio buttons, the note a text-width field in the body voice, and the status
+   line and earlier answers in the muted voice of the meta line. */
+.artifact-decisions {
+  display: grid;
+  gap: 1rem;
+  margin: 0 0 1.5em;
+}
+
+.artifact-decision fieldset {
+  background: var(--row-tint);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-block);
+  margin: 0;
+  min-width: 0;
+  padding: 1rem 1.25rem;
+}
+
+/* A floated legend sits inside the card instead of on its border. */
+.artifact-decision legend {
+  color: var(--color-white);
+  float: left;
+  font-weight: 600;
+  margin: 0 0 0.5em;
+  padding: 0;
+  width: 100%;
+}
+
+.artifact-decision legend + * {
+  clear: both;
+}
+
+.artifact-decision-number {
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-chip);
+  color: var(--color-lavender);
+  font-family: var(--font-mono);
+  font-size: 0.8em;
+  font-weight: 400;
+  margin-right: 0.4em;
+  padding: 0.05em 0.45em;
+}
+
+.artifact-body .artifact-decision-context {
+  color: var(--color-muted-lavender);
+  font-size: 0.9rem;
+  margin: 0 0 0.4em;
+}
+
+.artifact-decision-context-label {
+  color: var(--color-pale-lavender);
+}
+
+.artifact-decision-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1.5rem;
+  margin: 0.6em 0 0.8em;
+}
+
+.artifact-decision-option {
+  align-items: baseline;
+  cursor: pointer;
+  display: inline-flex;
+  gap: 0.5rem;
+}
+
+.artifact-decision input[type="radio"] {
+  accent-color: var(--color-lavender);
+  flex: none;
+  height: 1em;
+  margin: 0;
+  transform: translateY(0.12em);
+  width: 1em;
+}
+
+.artifact-decision-mark {
+  color: var(--color-muted-lavender);
+  font-size: 0.85em;
+}
+
+.artifact-decision-note {
+  display: block;
+  margin: 0 0 0.8em;
+}
+
+.artifact-decision-note span {
+  color: var(--color-muted-lavender);
+  display: block;
+  font-size: 0.85rem;
+  margin: 0 0 0.25em;
+}
+
+.artifact-decision textarea {
+  background: var(--color-surface);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-block);
+  color: var(--body-ink);
+  display: block;
+  font-family: var(--font-body);
+  font-size: inherit;
+  line-height: var(--leading-body);
+  min-height: 3.5rem;
+  padding: 0.5rem 0.8rem;
+  resize: vertical;
+  width: 100%;
+}
+
+.artifact-decision textarea:focus-visible {
+  border-color: var(--color-lavender);
+  outline: none;
+}
+
+.artifact-decision-actions {
+  align-items: baseline;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+}
+
+.artifact-decision button {
+  background: var(--color-surface);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-pill);
+  color: var(--color-pale-lavender);
+  cursor: pointer;
+  font-family: var(--font-body);
+  font-size: 0.95rem;
+  padding: 0.4rem 1.2rem;
+}
+
+.artifact-decision button:hover,
+.artifact-decision button:focus-visible {
+  border-color: var(--color-lavender);
+  color: var(--color-white);
+  outline: none;
+}
+
+.artifact-decision button:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.artifact-body .artifact-decision-status {
+  color: var(--color-muted-lavender);
+  font-size: 0.85rem;
+  margin: 0;
+}
+
+.artifact-decision-history {
+  color: var(--color-muted-lavender);
+  font-size: 0.85rem;
+  margin: 0.6em 0 0;
+}
+
+.artifact-decision-history summary {
+  cursor: pointer;
+}
+
+.artifact-body .artifact-decision-history ol {
+  margin: 0.4em 0 0;
+}
+
+.artifact-decision-history-choice {
+  color: var(--color-pale-lavender);
+}
+
+.artifact-decision-history-note {
+  color: var(--body-ink);
+}
+
+.artifact-decision-history-note::before {
+  content: "\201C";
+}
+
+.artifact-decision-history-note::after {
+  content: "\201D";
+}
+
+.artifact-decision-history-by::before {
+  content: "\2014\00a0";
+}
+
 /* Tables are read as data, not framed as cards: hairline rules carry the grid,
    the header band is the only tinted surface, and the table scrolls itself when
    a wide one outgrows the container - no wrapper markup, no unreachable

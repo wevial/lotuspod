@@ -7,7 +7,7 @@ Podcast artifact scaffold with a shared lotus theme. Render episode artifacts
 
 ```
 lotuspod/
-├── src/lotuspod/          # package + minimal CLI (`lotuspod render|publish|manifest|index|serve`)
+├── src/lotuspod/          # package + minimal CLI (`lotuspod render|publish|manifest|index|serve|answers`)
 │   ├── _templates/artifact.html   # artifact template ({{placeholder}} substitution)
 │   ├── _templates/index.html      # index-page template
 │   └── _theme/            # tokens.json (colors, fonts, radii) + lotuspod.css
@@ -255,7 +255,7 @@ local Cloudflare Tunnel fronts the server (see Publish below); everything
 else behaves identically.
 
 Serve v2 enforces an allow-list: the server answers only for `index.html`,
-`lotuspod.css`, and artifact pages whose fail-closed `lotuspod:visible` flag
+`lotuspod.css`, `favicon.svg`, the page script `lotuspod-page.js`, and artifact pages whose fail-closed `lotuspod:visible` flag
 parses to exactly `true` — the same rule as `lotuspod manifest`.
 `manifest.json` and `FINDINGS.md` are never served (the manifest lists
 private artifact ids); requests for either return 404. Everything else
@@ -345,8 +345,69 @@ to 4000, `note` over 4000, and a quote whose `exact` is outside 1 to 500 or
 whose `prefix` or `suffix` is over 32. A page serve would not answer (hidden,
 missing, not a page) is 404 `unknown_page`, and a reply to no comment on its
 page 404 `unknown_parent`. A read without exactly one `page` is 400
-`invalid_query`. Questions, versions, choices and sections are not yet checked
-against the page itself.
+`invalid_query`. An answer is checked against the page's own decision forms
+(below): a question the page does not ask is 400 `unknown_question`, a
+`version` other than the form's 409 `stale`, and a `choice` the form does not
+offer 400 `invalid_choice`. Comment sections are not checked against the page.
+
+## Decisions for the maintainer
+
+A plan page often ends with a table of questions for the maintainer. `render`
+and `publish` turn it into forms the maintainer answers on the page:
+
+```markdown
+## Decisions for the maintainer
+
+| # | Question | Options | Default |
+| --- | --- | --- | --- |
+| 1 | Which model replies? | Sonnet / Opus | Sonnet |
+| 2 | Keep the archive? | Yes / No | Yes |
+```
+
+The table taken is the first one after an h2 or h3 whose text is "Decisions
+for the maintainer" (any case), before the next h2, whose header row has a
+`Question` column. The pass works on the body's HTML, so a markdown page and
+an HTML one alike get it. `#`, `Options` and `Default` columns are optional;
+any other column is shown under its question as context.
+
+Each row becomes a `form.artifact-decision` with one radio button per option
+and a note. Its question id is `decision-` and the slug of its `#` cell, or
+`decision-N` by row number without a `#` column. Options are the `Options`
+cell split on ` / `, each keyed by its slug; the one matching the `Default`
+cell is labelled "(default)", and none is pre-selected. With a `Default` but
+no `Options` column, a row offers "Accept the default" (`accept`) and
+"Something else" (`other`) and shows the default's text. A table with any row
+of fewer than two options is left exactly as written, and the page then loads
+no script.
+
+Each form carries `data-version`, a short hash of its question's text and its
+options' labels. Rewording a question changes its version, so answers given
+to the old wording are not attached to the new words: the answers route
+refuses a stale version (409), and the page shows an old answer as given "to
+an earlier wording" without filling the form from it.
+
+A page with such forms loads the site's page script, `lotuspod-page.js`,
+which serve answers beside `lotuspod.css`. It reads the page's answers, marks
+each current choice, fills its note, and shows "Answered by READER, TIME" and
+a collapsed list of earlier answers. Answering again keeps the earlier answer
+as history. The script sends no credential of its own: the reader's Access
+session is the only identity, so a reader who is signed out is told to reload
+the page to sign in. Reader text is set as text, never as markup.
+
+An answer is the reader's choice on that one question, recorded with the page
+revision it was given against. It is evidence for that question's scope only
+and authorizes nothing beyond what the question describes.
+
+`lotuspod answers PAGE` prints the same on the writer host, from the database
+serve keeps (`--db` and `--out-dir` as serve takes them): each answered
+question, its current choice's label with its note, reader and time, the
+answer it replaces, and the earlier answers under it. `--json` prints what
+`GET /api/answers?page=PAGE` answers.
+
+```sh
+lotuspod answers pond-plan
+lotuspod answers pond-plan --json
+```
 
 ## Agent credentials
 
@@ -410,7 +471,8 @@ its head, computed from the finished page so it never allows more than the
 page holds. A page runs only the site's own script files, the pinned Mermaid
 (`https://cdn.jsdelivr.net/npm/mermaid@11.4.1/`, allowed only on a page with a
 diagram) and the inline scripts the page template writes, each allowed by its
-`sha256` hash; today that is the Mermaid start-up module alone. Styles may be
+`sha256` hash; today that is the Mermaid start-up module alone. A page with
+decision forms also loads the site's page script, `lotuspod-page.js`. Styles may be
 inline, since Mermaid sets them so; images come from the site or `data:`
 URLs; plugins, `<base>` and forms posting elsewhere are refused.
 
@@ -503,6 +565,7 @@ python -m tests.capture_site \
 `src/lotuspod/_templates/artifact.html` uses `{{placeholder}}` substitution with the context:
 `title`, `kicker`, `date`, `summary_block`, `body`, `theme_name`, `theme_version`,
 plus the `mermaid` section flag with its `mermaid_theme_variables` and `mermaid_dir`,
+the `decisions` section flag with the `page_script` it loads,
 and the page `policy`, which the renderer fills in last.
 
 ## Theme

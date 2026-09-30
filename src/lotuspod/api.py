@@ -12,7 +12,10 @@ A POST is refused before anything is stored: 403 cross_origin when a browser
 sent it from another site, 415 when it is not JSON, 411 without a length,
 413 over MAX_BODY bytes, 400 invalid_body for a body that is not the one
 described, 404 unknown_page for a page serve would not answer, and 404
-unknown_parent for a reply to no comment on its page.
+unknown_parent for a reply to no comment on its page. An answer is checked
+against the page's own decision forms: 400 unknown_question for a question
+the page does not ask, 409 stale for a version other than the page's, and
+400 invalid_choice for a choice its form does not offer.
 """
 
 from __future__ import annotations
@@ -21,7 +24,7 @@ import json
 import socket
 import sqlite3
 import urllib.parse
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from email.message import Message
 from http import HTTPStatus
 from typing import BinaryIO, Callable, Mapping
@@ -51,6 +54,14 @@ Answer = tuple[int, dict, tuple]
 
 
 @dataclass(frozen=True)
+class Question:
+    """A decision form's question as the page asks it."""
+
+    version: str
+    choices: frozenset[str]
+
+
+@dataclass(frozen=True)
 class Page:
     """What a row records of the page it was written against."""
 
@@ -58,6 +69,8 @@ class Page:
     revision: str
     # Section ids to their titles.
     sections: Mapping[str, str]
+    # Question ids of the page's decision forms to their questions.
+    questions: Mapping[str, Question] = field(default_factory=dict)
 
 
 class Refusal(Exception):
@@ -278,6 +291,13 @@ class Api:
         choice = _text(fields["choice"], 1, MAX_NAME)
         note = _text(fields["note"], 0, MAX_TEXT)
         page = self._page(fields["page"])
+        asked = page.questions.get(question)
+        if asked is None:
+            raise Refusal(HTTPStatus.BAD_REQUEST, "unknown_question")
+        if version != asked.version:
+            raise Refusal(HTTPStatus.CONFLICT, "stale")
+        if choice not in asked.choices:
+            raise Refusal(HTTPStatus.BAD_REQUEST, "invalid_choice")
         return self.database.add_answer(
             page=page.name, question=question, version=version, choice=choice,
             note=note, revision=page.revision, actor=actor,

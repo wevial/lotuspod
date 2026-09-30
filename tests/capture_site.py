@@ -104,12 +104,29 @@ SCRIPTS_BODY = """\
 <p id="handler-output">Nothing written.</p>
 """
 
+# A plan page ending in a decisions table: render makes each row a form the
+# page script answers. No diagram, so the page needs no network.
+DECISIONS_BODY = """\
+<p>A sample plan for captures: two questions for the maintainer.</p>
+<h2>Plan</h2>
+<p>The responder needs a model, and the archive needs a rule.</p>
+<h2>Decisions for the maintainer</h2>
+<table>
+<thead><tr><th>#</th><th>Question</th><th>Options</th><th>Default</th><th>Why it matters</th></tr></thead>
+<tbody>
+<tr><td>1</td><td>Which model replies?</td><td>Sonnet / Opus</td><td>Sonnet</td><td>Replies run on every comment.</td></tr>
+<tr><td>2</td><td>Keep the archive?</td><td>Yes / No</td><td>Yes</td><td>Old pages stay linkable.</td></tr>
+</tbody>
+</table>
+"""
+
 SAMPLE_PAGES = (
     ("capture-article", "Capture article", ARTICLE_BODY, ()),
     ("capture-report", "Capture report", REPORT_BODY, ("--variant", "report")),
     ("capture-hidden", "Capture hidden", HIDDEN_BODY, ("--hidden",)),
     ("capture-diagram", "Capture diagram", DIAGRAM_BODY, ()),
     ("capture-scripts", "Capture body scripts", SCRIPTS_BODY, ()),
+    ("capture-decisions", "Capture decisions", DECISIONS_BODY, ()),
 )
 
 
