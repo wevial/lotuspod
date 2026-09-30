@@ -158,6 +158,23 @@ def authorize(credential: Mapping, operation: str, handle: str) -> str | None:
     return None
 
 
+def check_owner(database: db.Database, token: str, handle: str) -> dict:
+    """The credential of token when it may publish as handle;
+    CredentialError naming the problem when it may not."""
+    credential = find(database, token)
+    if credential is None:
+        raise CredentialError("the credential is unknown or revoked")
+    error = authorize(credential, "publish", handle)
+    if error == "handle_not_allowed":
+        raise CredentialError(
+            f"credential {credential['name']} may not act as {handle} "
+            f"(its handles: {', '.join(credential['handles'])})"
+        )
+    if error is not None:
+        raise CredentialError(f"credential {credential['name']} may not publish")
+    return credential
+
+
 def bearer(headers: Message) -> str | None:
     """The token of the request's one Authorization: Bearer header."""
     values = headers.get_all("Authorization") or []

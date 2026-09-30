@@ -140,6 +140,11 @@ Republishing a page keeps its date, summary and treatment unless `--date`,
 `--summary` or `--variant` is given; a new page gets today's date and the
 `report` treatment.
 
+A published page takes comments on every section (see [Comments](#comments));
+`--no-comments` leaves the boxes out. `--owner HANDLE --credential FILE`
+names the agent or seat that published it, and a republish without `--owner`
+keeps the page's owner.
+
 Every published page carries its source's revision - the first 12 hex
 characters of the SHA-256 of the kept source - in a `lotuspod:revision` meta
 tag, and `publish` prints it. `--expect-revision REV` publishes only when the
@@ -166,7 +171,9 @@ With `host` set, `publish` runs `ssh HOST COMMAND publish --local - --out-dir
 OUT_DIR --format FORMAT --name NAME ...` with the source on standard input;
 the format and name are worked out here from the file name, and every
 argument after `command` is shell-quoted (`command`, default `lotuspod`, is
-used as written). `out_dir` is required when `host` is set. The far side's
+used as written); `--owner`, `--credential`, `--db` and `--no-comments` go
+along when given, so the credential file and the database named are the writer
+host's. `out_dir` is required when `host` is set. The far side's
 output passes through and its exit status is `publish`'s, so a revision
 conflict still exits 3. `--local` publishes on this machine regardless of the
 config, and `--out-dir` without `--local` is refused while a host is set. Keep
@@ -340,15 +347,17 @@ is its `Host` over the scheme `X-Forwarded-Proto` names (the tunnel ends the
 TLS), else `http`; one that is not
 `application/json` 415; one with no length 411; a body over 16 KiB 413. A
 missing, extra or mistyped field is 400 `invalid_body`, as are `question`,
-`version`, `choice` or `section` outside 1 to 100 characters, `text` outside 1
-to 4000, `note` over 4000, and a quote whose `exact` is outside 1 to 500 or
+`version` or `choice` outside 1 to 100 characters, an empty `section` (any
+heading id's length is taken, since it must name one of the page's boxes),
+`text` outside 1 to 4000, `note` over 4000, and a quote whose `exact` is outside 1 to 500 or
 whose `prefix` or `suffix` is over 32. A page serve would not answer (hidden,
 missing, not a page) is 404 `unknown_page`, and a reply to no comment on its
 page 404 `unknown_parent`. A read without exactly one `page` is 400
 `invalid_query`. An answer is checked against the page's own decision forms
 (below): a question the page does not ask is 400 `unknown_question`, a
 `version` other than the form's 409 `stale`, and a `choice` the form does not
-offer 400 `invalid_choice`. Comment sections are not checked against the page.
+offer 400 `invalid_choice`. A new thread is checked against the page's comment
+boxes (below): a `section` the page has no box for is 400 `unknown_section`.
 
 ## Decisions for the maintainer
 
@@ -408,6 +417,62 @@ answer it replaces, and the earlier answers under it. `--json` prints what
 lotuspod answers pond-plan
 lotuspod answers pond-plan --json
 ```
+
+## Comments
+
+A remark about one part of a page belongs next to it. `publish` ends every h2
+section of a page with a comment box, and `render --comments` does the same
+(off by default for `render`; `publish --no-comments` turns it off). A section
+runs from its heading to the next h2 or the end of the body; a body with fewer
+than two h2 sections gets one box, for the whole page, at its end. The pass
+runs on the body's HTML after the outline pass, so markdown and HTML pages
+alike get it, and each box names its heading's id: `--comments` with
+`--no-outline` is refused (exit 1, nothing written). A heading inside a
+diagram or a form starts no section, so a box never lands inside either.
+
+Each box is a `details.artifact-comment` with `data-page` and `data-section`
+(the heading's id, or `page`), holding the section's threads and a form to
+start a new one. The page script, `lotuspod-page.js`, reads the page's threads
+and shows each in its section's box: every comment's author, time and text, an
+agent's reply marked with its handle, and a reply box per thread. Posting
+adds the comment without a reload, and the box's summary reads "Comment", or
+"Comments (N)" once it holds threads. A thread whose section the page no
+longer has is listed at the end of the body under "Comments on sections that
+have changed". Every author and text is set as text, never as markup.
+
+Each reader's comment shows its `state`, with the handle it is routed to (its
+`owner`, else the page's):
+
+| `state` | shown |
+| --- | --- |
+| `pending` | waiting for HANDLE |
+| `unavailable` | HANDLE is offline; queued for it |
+| `claimed` | HANDLE is answering |
+| `answered` | answered |
+| `failed` | HANDLE could not answer: REASON (its `reason`) |
+| `paused` | the responder is paused |
+
+An agent's reply that carries a `revision` shows "Revised the page · revision
+R", linking to the page. Routing, claims
+and replies set these; the page only shows them. A comment grants no
+authority: an agent answers it and may revise its page, nothing else.
+
+A page's owner is the handle of the agent or seat that published it: 1 to 63
+lower-case letters, digits and hyphens, starting with a letter or digit (a
+seat such as `operator`, `hermes` or `example-seat`, or a session's handle
+such as `claude-3f9a2c`). `--owner HANDLE` on `publish` or `render` needs
+`--credential FILE` (or `$LOTUSPOD_CREDENTIAL`) for a credential that holds
+both `publish` and HANDLE, checked in serve's database (`--db`, with serve's
+default); otherwise the command exits 1 naming the problem and writes nothing.
+The page carries the handle in a `lotuspod:owner` meta tag and shows
+"Published by HANDLE" in its header.
+
+```sh
+lotuspod publish pond-plan.md --owner hermes --credential ~/.config/lotuspod/hermes.token
+```
+
+As with every credential, this keeps well-behaved agents honest: a process
+running as the same user can still edit the files (see below).
 
 ## Agent credentials
 
@@ -550,7 +615,9 @@ ticket's own spec goes in `e2e/capture`, which stays out of git; it has to
 live under `e2e/` for its `@playwright/test` import to resolve.
 
 Browser checks run the same way, with `e2e/checks.config.ts` and the specs in
-`e2e/checks/`; `e2e/checks/policy.spec.ts` checks the page policy in Chromium,
+`e2e/checks/` (among them `comments.spec.ts`, which posts and reads back
+comments on the fixture's comments page); `e2e/checks/policy.spec.ts` checks
+the page policy in Chromium,
 answering jsDelivr's Mermaid requests from the copy pinned in `e2e/`, so no
 network is needed. `python -m unittest tests.test_browser_checks` runs them
 and skips when `e2e/node_modules` is not installed:
@@ -565,7 +632,8 @@ python -m tests.capture_site \
 `src/lotuspod/_templates/artifact.html` uses `{{placeholder}}` substitution with the context:
 `title`, `kicker`, `date`, `summary_block`, `body`, `theme_name`, `theme_version`,
 plus the `mermaid` section flag with its `mermaid_theme_variables` and `mermaid_dir`,
-the `decisions` section flag with the `page_script` it loads,
+the `page_script_needed` section flag (decision forms or comment boxes) with
+the `page_script` it loads, the `owner` section and its handle,
 and the page `policy`, which the renderer fills in last.
 
 ## Theme

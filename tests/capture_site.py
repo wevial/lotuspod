@@ -8,7 +8,8 @@ the command's code. The site trusts the test Access key
 (tests/fixtures/access/), and LOTUSPOD_TEST_ASSERTION holds an assertion it
 accepts, for a browser check to send as Cf-Access-Jwt-Assertion. Answers and
 comments go to a database in the same temporary directory, beside the
-rendered site and never in it. It never reads or writes the operator's
+rendered site and never in it; it also holds the credential that lets the
+comments page name `hermes` as its owner. It never reads or writes the operator's
 artifacts/ and never binds the tailnet address.
 
 Run from the repo root:
@@ -37,7 +38,7 @@ from unittest import mock
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
-from lotuspod import access, cli, db  # noqa: E402
+from lotuspod import access, cli, db, machine  # noqa: E402
 from tests import access_keys  # noqa: E402
 
 
@@ -48,6 +49,8 @@ ASSERTION_ENV = "LOTUSPOD_TEST_ASSERTION"
 ASSERTION_LIFETIME = 24 * 3600
 # A fixed date, so every run renders the same bytes.
 SAMPLE_DATE = "2026-01-01"
+# The owner the comments page names, and the credential allowed to name it.
+OWNER = "hermes"
 
 
 class _SampleDay(datetime.date):
@@ -120,6 +123,18 @@ DECISIONS_BODY = """\
 </table>
 """
 
+# A plan page with a comment box ending each of its three sections, owned by
+# OWNER. No diagram, so the page needs no network.
+COMMENTS_BODY = """\
+<p>A sample plan for captures: every section takes comments.</p>
+<h2>Findings</h2>
+<p>The pond freezes in January, and the pump stops with it.</p>
+<h2>Risks</h2>
+<p>A frozen pump may crack before anyone notices.</p>
+<h2>Next steps</h2>
+<p>Fit a heater before the first frost.</p>
+"""
+
 SAMPLE_PAGES = (
     ("capture-article", "Capture article", ARTICLE_BODY, ()),
     ("capture-report", "Capture report", REPORT_BODY, ("--variant", "report")),
@@ -127,21 +142,28 @@ SAMPLE_PAGES = (
     ("capture-diagram", "Capture diagram", DIAGRAM_BODY, ()),
     ("capture-scripts", "Capture body scripts", SCRIPTS_BODY, ()),
     ("capture-decisions", "Capture decisions", DECISIONS_BODY, ()),
+    ("capture-comments", "Capture comments", COMMENTS_BODY,
+     ("--comments", "--owner", OWNER)),
 )
 
 
-def render(out_dir: Path) -> None:
+def render(out_dir: Path, db_path: Path) -> None:
     """Render the sample pages and then the index into out_dir.
 
-    Calls the CLI in process, the same code the installed `lotuspod` command
-    runs. Raises RuntimeError naming the step that failed.
+    Makes OWNER's publishing credential in the database at db_path first, its
+    token beside the database. Calls the CLI in process, the same code the
+    installed `lotuspod` command runs. Raises RuntimeError naming the step
+    that failed.
     """
+    token = db_path.with_name(f"{OWNER}.token")
+    machine.create_credential(db.Database(db_path), OWNER, [OWNER], ["publish"], token)
     steps = [
         (
             f"render {name}",
             [
                 "render", "--name", name, "--title", title, "--body", body,
-                "--date", SAMPLE_DATE, "--out-dir", str(out_dir), *extra,
+                "--date", SAMPLE_DATE, "--out-dir", str(out_dir),
+                "--credential", str(token), "--db", str(db_path), *extra,
             ],
         )
         for name, title, body, extra in SAMPLE_PAGES
@@ -171,7 +193,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         try:
             site.mkdir()
-            render(site)
+            render(site, directory / db.DEFAULT_NAME)
         except Exception as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 1

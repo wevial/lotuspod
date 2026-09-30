@@ -679,7 +679,9 @@ body {
   margin: 0 0 0.25em;
 }
 
-.artifact-decision textarea {
+.artifact-decision textarea,
+.artifact-comment-form textarea,
+.artifact-comment-reply textarea {
   background: var(--color-surface);
   border: 1px solid var(--hairline);
   border-radius: var(--radius-block);
@@ -694,19 +696,24 @@ body {
   width: 100%;
 }
 
-.artifact-decision textarea:focus-visible {
+.artifact-decision textarea:focus-visible,
+.artifact-comment-form textarea:focus-visible,
+.artifact-comment-reply textarea:focus-visible {
   border-color: var(--color-lavender);
   outline: none;
 }
 
-.artifact-decision-actions {
+.artifact-decision-actions,
+.artifact-comment-actions {
   align-items: baseline;
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem 1rem;
 }
 
-.artifact-decision button {
+.artifact-decision button,
+.artifact-comment-form button,
+.artifact-comment-reply button {
   background: var(--color-surface);
   border: 1px solid var(--hairline-strong);
   border-radius: var(--radius-pill);
@@ -718,18 +725,25 @@ body {
 }
 
 .artifact-decision button:hover,
-.artifact-decision button:focus-visible {
+.artifact-decision button:focus-visible,
+.artifact-comment-form button:hover,
+.artifact-comment-form button:focus-visible,
+.artifact-comment-reply button:hover,
+.artifact-comment-reply button:focus-visible {
   border-color: var(--color-lavender);
   color: var(--color-white);
   outline: none;
 }
 
-.artifact-decision button:disabled {
+.artifact-decision button:disabled,
+.artifact-comment-form button:disabled,
+.artifact-comment-reply button:disabled {
   cursor: default;
   opacity: 0.6;
 }
 
-.artifact-body .artifact-decision-status {
+.artifact-body .artifact-decision-status,
+.artifact-body .artifact-comment-status {
   color: var(--color-muted-lavender);
   font-size: 0.85rem;
   margin: 0;
@@ -767,6 +781,140 @@ body {
 
 .artifact-decision-history-by::before {
   content: "\2014\00a0";
+}
+
+/* Comments (lotuspod.comments): each section ends in a folded box whose
+   summary is a quiet pill; open, it holds the section's threads as a hairline
+   column of comments, an agent's marked by a lavender rule and its handle in
+   the mono voice, each reader's comment with its state in the muted voice. */
+.artifact-comment {
+  margin: 0 0 1.5em;
+}
+
+.artifact-comment-summary {
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-pill);
+  color: var(--color-muted-lavender);
+  cursor: pointer;
+  display: inline-block;
+  font-size: 0.85rem;
+  list-style: none;
+  padding: 0.2rem 0.9rem;
+}
+
+.artifact-comment-summary::-webkit-details-marker {
+  display: none;
+}
+
+.artifact-comment-summary:hover,
+.artifact-comment-summary:focus-visible,
+.artifact-comment[open] > .artifact-comment-summary {
+  border-color: var(--color-lavender);
+  color: var(--color-pale-lavender);
+  outline: none;
+}
+
+.artifact-comment[open] {
+  background: var(--row-tint);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-block);
+  padding: 0.75rem 1.25rem 1rem;
+}
+
+.artifact-comment-form {
+  margin: 0.8em 0 0;
+}
+
+/* Below a box's threads, the form for a new one is set apart from the last
+   thread's reply box. */
+.artifact-comment-threads:not(:empty) + .artifact-comment-form {
+  border-top: 1px solid var(--hairline);
+  padding: 0.8em 0 0;
+}
+
+.artifact-comment-form textarea,
+.artifact-comment-reply textarea {
+  margin: 0 0 0.6em;
+}
+
+.artifact-comment-thread {
+  border-top: 1px solid var(--hairline);
+  padding: 0.8em 0 0;
+  margin: 0.8em 0 0;
+}
+
+.artifact-body .artifact-comment-list {
+  list-style: none;
+  margin: 0 0 0.6em;
+  padding: 0;
+}
+
+.artifact-body .artifact-comment-item {
+  margin: 0 0 0.7em;
+  padding: 0;
+}
+
+.artifact-body .artifact-comment-item--agent {
+  border-left: 2px solid var(--color-lavender);
+  margin-left: 1rem;
+  padding-left: 0.8rem;
+}
+
+.artifact-body .artifact-comment-by,
+.artifact-body .artifact-comment-section {
+  color: var(--color-muted-lavender);
+  font-size: 0.85rem;
+  margin: 0;
+}
+
+.artifact-comment-author {
+  color: var(--color-pale-lavender);
+}
+
+.artifact-comment-agent {
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-chip);
+  color: var(--color-lavender);
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  padding: 0.05em 0.45em;
+}
+
+.artifact-body .artifact-comment-text {
+  margin: 0.15em 0 0.2em;
+  white-space: pre-wrap;
+}
+
+.artifact-body .artifact-comment-state,
+.artifact-body .artifact-comment-revision {
+  color: var(--color-muted-lavender);
+  font-size: 0.85rem;
+  margin: 0;
+}
+
+.artifact-comment-state::before {
+  content: "\25cf\00a0";
+  color: var(--color-lavender);
+}
+
+.artifact-comment-state[data-state="answered"]::before {
+  color: var(--color-muted-lavender);
+}
+
+.artifact-comment-state[data-state="failed"],
+.artifact-comment-state[data-state="unavailable"] {
+  color: var(--color-pale-lavender);
+}
+
+.artifact-comments-changed {
+  border-top: 1px solid var(--hairline-strong);
+  margin: 3rem 0 0;
+}
+
+.artifact-owner {
+  color: var(--color-muted-lavender);
+  font-size: 0.9rem;
+  margin: 0.25rem 0 0;
 }
 
 /* Tables are read as data, not framed as cards: hairline rules carry the grid,

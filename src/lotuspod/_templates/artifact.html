@@ -8,7 +8,8 @@
   <meta name="generator" content="lotuspod theme {{theme_name}} v{{theme_version}}">
   <meta name="lotuspod:visible" content="{{visible}}">
 {{#revision}}  <meta name="lotuspod:revision" content="{{revision}}">
-{{/revision}}  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+{{/revision}}{{#owner}}  <meta name="lotuspod:owner" content="{{owner}}">
+{{/owner}}  <link rel="icon" type="image/svg+xml" href="favicon.svg">
   <link rel="stylesheet" href="lotuspod.css?v={{theme_version}}">
 </head>
 <body>
@@ -26,7 +27,8 @@
       <p class="artifact-kicker">{{kicker}}</p>
       <h1 class="artifact-title">{{title}}</h1>
       <p class="artifact-meta"><time datetime="{{date}}">{{date}}</time></p>
-      {{summary_block}}
+{{#owner}}      <p class="artifact-owner">Published by {{owner}}</p>
+{{/owner}}      {{summary_block}}
     </header>
 
     <div class="artifact-main">
@@ -56,6 +58,6 @@
       themeVariables: {{mermaid_theme_variables}}
     });
   </script>
-{{/mermaid}}{{#decisions}}  <script src="{{page_script}}?v={{theme_version}}" defer></script>
-{{/decisions}}</body>
+{{/mermaid}}{{#page_script_needed}}  <script src="{{page_script}}?v={{theme_version}}" defer></script>
+{{/page_script_needed}}</body>
 </html>

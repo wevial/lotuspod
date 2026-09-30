@@ -15,7 +15,9 @@ described, 404 unknown_page for a page serve would not answer, and 404
 unknown_parent for a reply to no comment on its page. An answer is checked
 against the page's own decision forms: 400 unknown_question for a question
 the page does not ask, 409 stale for a version other than the page's, and
-400 invalid_choice for a choice its form does not offer.
+400 invalid_choice for a choice its form does not offer. A new thread is
+checked against the page's comment boxes: 400 unknown_section for a section
+the page has no box for.
 """
 
 from __future__ import annotations
@@ -71,6 +73,8 @@ class Page:
     sections: Mapping[str, str]
     # Question ids of the page's decision forms to their questions.
     questions: Mapping[str, Question] = field(default_factory=dict)
+    # The sections of the page's comment boxes, which take new threads.
+    comment_sections: frozenset[str] = frozenset()
 
 
 class Refusal(Exception):
@@ -318,10 +322,14 @@ class Api:
             except db.UnknownParent:
                 raise Refusal(HTTPStatus.NOT_FOUND, "unknown_parent") from None
         _keys(fields, {"page", "section", "text"}, frozenset({"quote"}))
-        section = _text(fields["section"], 1, MAX_NAME)
+        # A heading's id may be any length, and must match one of the page's
+        # boxes exactly: the body's own limit is the only one it needs.
+        section = _text(fields["section"], 1, MAX_BODY)
         text = _text(fields["text"], 1, MAX_TEXT)
         quote = _quote(fields.get("quote"))
         page = self._page(fields["page"])
+        if section not in page.comment_sections:
+            raise Refusal(HTTPStatus.BAD_REQUEST, "unknown_section")
         return self.database.add_comment(
             page=page.name, section=section, section_title=page.sections.get(section, ""),
             revision=page.revision, text=text, quote=quote, actor=actor,

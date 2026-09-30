@@ -16,6 +16,7 @@ import re
 import shlex
 import shutil
 import signal
+import sqlite3
 import subprocess
 import sys
 import threading
@@ -29,7 +30,7 @@ from pathlib import Path
 
 import importlib.resources as _res
 
-from lotuspod import access, api, db, decisions, machine, markdown
+from lotuspod import access, api, comments, db, decisions, machine, markdown
 
 _PKG = "lotuspod"
 
@@ -253,8 +254,8 @@ def script_warning(name: str, body: str) -> str:
     )
 
 
-# The page script answers decision forms (lotuspod.decisions); only a page
-# with such a form loads it.
+# The page script answers decision forms (lotuspod.decisions) and shows and
+# posts comments (lotuspod.comments); only a page with either loads it.
 PAGE_SCRIPT = "lotuspod-page.js"
 THEME_FILES = ("lotuspod.css", "favicon.svg", PAGE_SCRIPT)
 
@@ -516,7 +517,52 @@ def commit_output(out_dir: Path, message: str) -> None:
         print(f"warning: {out_dir} not committed and pushed: {exc}", file=sys.stderr)
 
 
+_OWNER_TAG_RE = re.compile(
+    r"<meta\s[^>]*name=[\"']lotuspod:owner[\"'][^>]*>", re.IGNORECASE
+)
+
+
+def page_owner(page_html: str) -> str:
+    """The handle a page's lotuspod:owner meta tag names ("" when none)."""
+    tag = _OWNER_TAG_RE.search(page_html)
+    content = _META_CONTENT_RE.search(tag.group(0)) if tag else None
+    return content.group(1).strip() if content else ""
+
+
+def check_owner(args: argparse.Namespace, out_dir: Path) -> None:
+    """Refuse (RuntimeError) args.owner unless the credential of --credential,
+    else $LOTUSPOD_CREDENTIAL, may publish as it, in serve's database."""
+    handle = args.owner
+    if not machine.is_handle(handle):
+        raise RuntimeError(
+            f"--owner {handle!r} is not a handle: 1 to 63 lower-case letters, digits "
+            "and hyphens, starting with a letter or digit; nothing written"
+        )
+    path = args.credential or os.environ.get(machine.CREDENTIAL_ENV, "")
+    if not path:
+        raise RuntimeError(
+            f"--owner {handle} needs --credential FILE for a credential that may publish "
+            f"as {handle}; nothing written"
+        )
+    try:
+        token = machine.read_token(path)
+        db_path = serve_db_path(out_dir, args.db)
+        if not db_path.is_file():
+            raise RuntimeError(f"no credentials at {db_path}; nothing written")
+        machine.check_owner(db.Database(db_path), token, handle)
+    except (ValueError, sqlite3.Error, OSError) as exc:
+        raise RuntimeError(f"--owner {handle}: {exc}; nothing written") from None
+
+
 def cmd_render(args: argparse.Namespace) -> int:
+    with_comments = getattr(args, "comments", False)
+    if with_comments and args.no_outline:
+        print("error: --comments needs the heading ids --no-outline leaves out; "
+              "nothing written", file=sys.stderr)
+        return 1
+    owner = getattr(args, "owner", "")
+    if owner and not getattr(args, "owner_checked", False):
+        check_owner(args, Path(args.out_dir) if args.out_dir else DEFAULT_OUTPUT_DIR)
     tokens = load_tokens()
     kicker = "Lotuspod"
     if args.episode:
@@ -535,6 +581,9 @@ def cmd_render(args: argparse.Namespace) -> int:
     # Before the outline, so the forms sit inside their section.
     body, has_decisions = decisions.render_decisions(body, args.name)
     body, outline = (body, []) if args.no_outline else outline_body(body)
+    # After the outline, so each box names its heading's id.
+    if with_comments:
+        body = comments.render_comments(body, args.name)
     context = {
         "title": args.title,
         "kicker": kicker,
@@ -547,9 +596,11 @@ def cmd_render(args: argparse.Namespace) -> int:
         "theme_version": tokens["version"],
         "visible": "false" if args.hidden else "true",
         "revision": getattr(args, "revision", ""),
+        # A handle (check_owner, or a kept one publish checked): no markup.
+        "owner": owner,
         "variant_class": variant_class(args.variant),
         "mermaid": has_mermaid_block(body),
-        "decisions": has_decisions,
+        "page_script_needed": has_decisions or with_comments,
         "page_script": PAGE_SCRIPT,
         "mermaid_theme_variables": mermaid_theme_variables(tokens),
         "mermaid_dir": MERMAID_DIR,
@@ -1019,9 +1070,15 @@ def remote_publish_command(command: str, out_dir: str, fmt: str, name: str,
         ("--variant", args.variant),
         ("--date", args.date or None),
         ("--expect-revision", args.expect_revision),
+        # The credential and the database are the writer host's.
+        ("--owner", args.owner or None),
+        ("--credential", args.credential or None),
+        ("--db", args.db or None),
     ):
         if value is not None:
             argv.append(f"{option}={value}")
+    if not args.comments:
+        argv.append("--no-comments")
     return " ".join([command, *(shlex.quote(arg) for arg in argv)])
 
 
@@ -1073,6 +1130,8 @@ def cmd_publish(args: argparse.Namespace) -> int:
 
     out_dir = (Path(args.out_dir) if args.out_dir else DEFAULT_OUTPUT_DIR).resolve()
     label, fmt, name = publish_target(args)
+    if args.owner:
+        check_owner(args, out_dir)
     data = read_source(args, label)
     try:
         text = data.decode("utf-8")
@@ -1108,6 +1167,7 @@ def cmd_publish(args: argparse.Namespace) -> int:
         kept = extract_meta(previous, name) if previous else {}
         summary = args.summary if args.summary is not None else kept.get("summary", "")
         variant = args.variant or (page_variant(previous) if previous else PUBLISH_VARIANT)
+        owner = args.owner or page_owner(previous)
         cmd_render(
             argparse.Namespace(
                 name=name,
@@ -1118,6 +1178,10 @@ def cmd_publish(args: argparse.Namespace) -> int:
                 body=body,
                 hidden=False,
                 no_outline=False,
+                comments=args.comments,
+                # Checked above, or kept from the page when it is a handle.
+                owner=owner if machine.is_handle(owner) else "",
+                owner_checked=True,
                 variant=variant,
                 out_dir=str(out_dir),
                 revision=revision,
@@ -1241,7 +1305,8 @@ def api_page(out_dir: Path, name: str) -> api.Page | None:
         key: api.Question(version=form.version, choices=frozenset(v for v, _ in form.options))
         for key, form in decisions.read_forms(page_html).items()
     }
-    return api.Page(name=name, revision=revision, sections=sections, questions=questions)
+    return api.Page(name=name, revision=revision, sections=sections, questions=questions,
+                    comment_sections=frozenset(comments.read_boxes(page_html)))
 
 
 # Headers on every page response. A meta tag cannot forbid framing, and
@@ -1606,6 +1671,30 @@ def cmd_answers(args: argparse.Namespace) -> int:
     return 0
 
 
+def owner_options(parser: argparse.ArgumentParser, comments_default: bool) -> None:
+    """--comments, --owner, --credential and --db, which render and publish take."""
+    parser.add_argument(
+        "--comments", action=argparse.BooleanOptionalAction, default=comments_default,
+        help="end every h2 section with a comment box (needs the outline; "
+        f"default: {'on' if comments_default else 'off'})",
+    )
+    parser.add_argument(
+        "--owner", default="", metavar="HANDLE",
+        help="stamp the page with the handle of the agent or seat that published it; "
+        "needs a credential that may publish as HANDLE"
+        + (" (default: the page's current owner)" if comments_default else ""),
+    )
+    parser.add_argument(
+        "--credential", default="", metavar="FILE",
+        help=f"the credential --owner is checked against (default: ${machine.CREDENTIAL_ENV})",
+    )
+    parser.add_argument(
+        "--db", default="", metavar="PATH",
+        help=f"serve's database the credential is checked in (default: {db.DEFAULT_NAME} "
+        "beside the artifacts directory)",
+    )
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="lotuspod", description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -1642,6 +1731,7 @@ def build_parser() -> argparse.ArgumentParser:
         "surface for long technical reports, outline as a left rail",
     )
     render.add_argument("--out-dir", default="", help="output directory (default: artifacts/)")
+    owner_options(render, comments_default=False)
     render.add_argument(
         "--source",
         default="",
@@ -1701,6 +1791,7 @@ def build_parser() -> argparse.ArgumentParser:
         f"('{NO_REVISION}': the page must not exist yet)",
     )
     publish.add_argument("--out-dir", default="", help="output directory (default: artifacts/)")
+    owner_options(publish, comments_default=True)
     publish.add_argument(
         "--local",
         action="store_true",

@@ -24,7 +24,7 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from lotuspod import access, cli, decisions  # noqa: E402
+from lotuspod import access, cli, db, decisions  # noqa: E402
 from tests import access_keys as keys  # noqa: E402
 
 HOST = "127.0.0.1"
@@ -77,8 +77,9 @@ def quiet(testcase: unittest.TestCase) -> None:
 class ApiTestCase(unittest.TestCase):
     """A site with a published page `plan` (sections goals and risks, and
     questions decision-1 and decision-2), a visible page `other` asking the
-    same questions and a hidden page `secret`, served with the test key
-    trusted and a database beside the output directory."""
+    same questions, with one comment box for the page, and a hidden page
+    `secret`, served with the test key trusted and a database beside the
+    output directory."""
 
     def setUp(self) -> None:
         tmp = tempfile.TemporaryDirectory()
@@ -99,7 +100,7 @@ class ApiTestCase(unittest.TestCase):
         run_cli("publish", str(source), "--name", "plan", "--out-dir", str(self.out_dir),
                 "--local")
         for name, extra in (("other", ()), ("secret", ("--hidden",))):
-            run_cli("render", "--name", name, "--title", name.title(),
+            run_cli("render", "--name", name, "--title", name.title(), "--comments",
                     "--body", DECISIONS_BODY, "--out-dir", str(self.out_dir), *extra)
         run_cli("index", "--out-dir", str(self.out_dir))
 
@@ -246,14 +247,14 @@ class AnswerTests(ApiTestCase):
         self.assertEqual(len(got["questions"]["decision-1"]["earlier"]), 1)
 
     def test_any_page_serve_answers_takes_answers(self):
-        run_cli("render", "--name", "plan.v2", "--title", "Plan v2",
+        run_cli("render", "--name", "plan.v2", "--title", "Plan v2", "--comments",
                 "--body", DECISIONS_BODY, "--out-dir", str(self.out_dir))
         conn = http.client.HTTPConnection(HOST, self.port, timeout=15)
         conn.request("GET", "/plan.v2.html")
         self.assertEqual(conn.getresponse().status, 200)
         conn.close()
         self.assertEqual(self.answer(page="plan.v2")[0], 201)
-        self.assertEqual(self.comment(page="plan.v2", section="s", text="Hi")[0], 201)
+        self.assertEqual(self.comment(page="plan.v2", section="page", text="Hi")[0], 201)
         _, got = self.ask("GET", "/api/answers?page=plan.v2")
         self.assertEqual(list(got["questions"]), ["decision-1"])
 
@@ -325,16 +326,22 @@ class CommentTests(ApiTestCase):
             (200, {"page": "plan", "threads": [{"root": root, "replies": [reply, deeper]}]}),
         )
 
-    def test_threads_come_oldest_first_and_unknown_sections_have_no_title(self):
+    def test_threads_come_oldest_first_and_gone_sections_have_no_title(self):
         _, goals = self.comment(section="goals", text="Which goal first?")
-        _, elsewhere = self.comment(section="nowhere", text="A section not on the page.")
-        _, reply = self.comment(parent=goals["id"], text="The first.")
+        # A thread on a section an earlier revision had: the route takes new
+        # threads only on the page's own boxes.
+        elsewhere = db.Database(self.db_path).add_comment(
+            page="plan", section="nowhere", section_title="Nowhere", revision="0" * 12,
+            text="A section not on the page.", quote=None, actor=ACTOR,
+        )
+        _, reply = self.comment(parent=elsewhere["id"], text="Still here.")
         self.assertEqual(goals["sectionTitle"], "Goals")
-        self.assertEqual(elsewhere["sectionTitle"], "")
-        self.assertIsNone(elsewhere["quote"])
+        self.assertEqual(reply["section"], "nowhere")
+        self.assertEqual(reply["sectionTitle"], "")
+        self.assertIsNone(reply["quote"])
         _, got = self.ask("GET", "/api/comments?page=plan")
-        self.assertEqual(got["threads"], [{"root": goals, "replies": [reply]},
-                                          {"root": elsewhere, "replies": []}])
+        self.assertEqual(got["threads"], [{"root": goals, "replies": []},
+                                          {"root": elsewhere, "replies": [reply]}])
 
 
 class SignedOutTests(ApiTestCase):
@@ -355,7 +362,7 @@ class SignedOutTests(ApiTestCase):
 
 class RefusalTests(ApiTestCase):
     def test_refusals_store_nothing(self):
-        _, elsewhere = self.comment(page="other", section="s", text="On another page.")
+        _, elsewhere = self.comment(page="other", section="page", text="On another page.")
         answer = {"page": "plan", "question": "q", "version": "v1", "choice": "yes", "note": ""}
         comment = {"page": "plan", "section": "risks", "text": "Hello"}
         big = {**answer, "note": "x" * (17 << 10)}
