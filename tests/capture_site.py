@@ -59,8 +59,8 @@ def _sample_clock() -> types.ModuleType:
     return clock
 
 
-# No mermaid block anywhere: the page template would load Mermaid from a CDN,
-# and a capture without network must render the same page.
+# Only the diagram page has a mermaid block: its page loads Mermaid from
+# jsDelivr, which a browser check answers from the copy pinned in e2e/.
 ARTICLE_BODY = """\
 <p>A sample article for captures: two sections.</p>
 <h2>First section</h2>
@@ -79,10 +79,29 @@ REPORT_BODY = """\
 
 HIDDEN_BODY = "<p>A hidden page: rendered, never listed, never served.</p>\n"
 
+DIAGRAM_BODY = """\
+<p>A sample diagram, drawn by the pinned Mermaid under the page policy.</p>
+<pre class="mermaid">graph LR
+  A[Write] --> B[Publish] --> C[Read]</pre>
+"""
+
+# Every script here is refused by the page policy: the page shows
+# "Nothing written." twice, before and after its button is pressed.
+SCRIPTS_BODY = """\
+<p>A sample page whose body holds scripts. None of them runs.</p>
+<p id="inline-output">Nothing written.</p>
+<script>document.getElementById("inline-output").textContent = "The inline script ran.";</script>
+<script src="https://scripts.example.com/widget.js"></script>
+<p><button type="button" onclick="document.getElementById('handler-output').textContent = 'The handler ran.'">Press me</button></p>
+<p id="handler-output">Nothing written.</p>
+"""
+
 SAMPLE_PAGES = (
     ("capture-article", "Capture article", ARTICLE_BODY, ()),
     ("capture-report", "Capture report", REPORT_BODY, ("--variant", "report")),
     ("capture-hidden", "Capture hidden", HIDDEN_BODY, ("--hidden",)),
+    ("capture-diagram", "Capture diagram", DIAGRAM_BODY, ()),
+    ("capture-scripts", "Capture body scripts", SCRIPTS_BODY, ()),
 )
 
 

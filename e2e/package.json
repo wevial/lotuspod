@@ -2,6 +2,7 @@
   "name": "lotuspod-e2e",
   "private": true,
   "dependencies": {
-    "@playwright/test": "1.62.1"
+    "@playwright/test": "1.62.1",
+    "mermaid": "11.4.1"
   }
 }

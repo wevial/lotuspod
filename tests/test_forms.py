@@ -4,7 +4,8 @@ list it was written as, with no form and no script.
 The markup is witnessed by parsing it, never by matching strings. A page
 without a task list is held byte for byte to tests/fixtures/
 no_task_list.expected.html, captured from the renderer as it stood before
-forms existed (it names the theme version, so a theme bump re-captures it).
+forms existed and re-captured with the page policy tag (it names the theme
+version, so a theme bump re-captures it).
 
 Run from the repo root:
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import configparser
 import datetime as _dt
 import fcntl
@@ -143,6 +144,111 @@ def render_template(context: dict, template_path: Path = TEMPLATE_PATH) -> str:
     if missing:
         raise KeyError(f"missing context keys: {sorted(missing)}")
     return _PLACEHOLDER.sub(_sub, template)
+
+
+# The pinned Mermaid's directory on jsDelivr. The page template's start-up
+# module imports the library from here, and the library its chunks.
+MERMAID_DIR = "https://cdn.jsdelivr.net/npm/mermaid@11.4.1/"
+
+# Context values an author supplies. None of them is part of a script the
+# template writes, so a page rendered with them blank holds exactly the
+# template's own inline scripts.
+_AUTHORED_KEYS = ("title", "kicker", "date", "summary_block", "body", "outline_items", "revision")
+
+
+class _ScriptCollector(HTMLParser):
+    """Count a page's script elements and keep the text of the inline ones."""
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=False)
+        self.count = 0
+        self.inline: list[str] = []
+        self._text: list[str] | None = None
+
+    def handle_starttag(self, tag: str, attrs: list) -> None:
+        if tag == "script":
+            self.count += 1
+            if not any(name == "src" for name, _ in attrs):
+                self._text = []
+
+    def handle_data(self, data: str) -> None:
+        if self._text is not None:
+            self._text.append(data)
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag == "script" and self._text is not None:
+            self.inline.append("".join(self._text))
+            self._text = None
+
+
+def collect_scripts(page_html: str) -> _ScriptCollector:
+    parser = _ScriptCollector()
+    parser.feed(page_html)
+    parser.close()
+    return parser
+
+
+def script_hash(text: str) -> str:
+    """A CSP hash source for an inline script's text as written."""
+    digest = hashlib.sha256(text.encode("utf-8")).digest()
+    return "'sha256-" + base64.b64encode(digest).decode("ascii") + "'"
+
+
+def page_policy(page_html: str, own_scripts: set[str]) -> str:
+    """The Content-Security-Policy for a finished page.
+
+    Scripts run from the site itself, and inline only when the template
+    wrote them (own_scripts): each such script in the page is allowed by its
+    hash, and the Mermaid directory only when one of them loads from it. A
+    script in the body is never hashed, so it never runs, and neither does
+    an inline event handler.
+    """
+    script_src = ["'self'"]
+    hashes: list[str] = []
+    for text in collect_scripts(page_html).inline:
+        if text not in own_scripts:
+            continue
+        if MERMAID_DIR in text and MERMAID_DIR not in script_src:
+            script_src.append(MERMAID_DIR)
+        source = script_hash(text)
+        if source not in hashes:
+            hashes.append(source)
+    directives = (
+        "default-src 'self'",
+        "script-src " + " ".join(script_src + hashes),
+        # Mermaid sets its styles inline.
+        "style-src 'self' 'unsafe-inline'",
+        "img-src 'self' data:",
+        "connect-src 'self'",
+        "object-src 'none'",
+        "base-uri 'none'",
+        "form-action 'self'",
+    )
+    return "; ".join(directives)
+
+
+def render_page(context: dict) -> str:
+    """Render an artifact page with its policy meta tag in the head.
+
+    The policy is computed from the finished page, so it never allows more
+    than the page holds.
+    """
+    blank = {**context, **dict.fromkeys(_AUTHORED_KEYS, ""), "outline": []}
+    own_scripts = set(collect_scripts(render_template({**blank, "policy": ""})).inline)
+    page = render_template({**context, "policy": ""})
+    return render_template({**context, "policy": page_policy(page, own_scripts)})
+
+
+def script_warning(name: str, body: str) -> str:
+    """The line render prints for a body holding scripts ("" when none)."""
+    count = collect_scripts(body).count
+    if not count:
+        return ""
+    noun = "script" if count == 1 else "scripts"
+    return (
+        f"warning: {name}: {count} {noun} will not run; "
+        "a page runs only the site's own scripts"
+    )
 
 
 THEME_FILES = ("lotuspod.css", "favicon.svg")
@@ -437,8 +543,9 @@ def cmd_render(args: argparse.Namespace) -> int:
         "variant_class": variant_class(args.variant),
         "mermaid": has_mermaid_block(body),
         "mermaid_theme_variables": mermaid_theme_variables(tokens),
+        "mermaid_dir": MERMAID_DIR,
     }
-    html = render_template(context)
+    html = render_page(context)
 
     out_dir = Path(args.out_dir) if args.out_dir else DEFAULT_OUTPUT_DIR
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -447,6 +554,9 @@ def cmd_render(args: argparse.Namespace) -> int:
     sync_theme_css(out_dir)
 
     write_atomic(out_path, html.encode("utf-8"))
+    warning = script_warning(args.name, body)
+    if warning:
+        print(warning, file=sys.stderr)
     source = getattr(args, "source", None)
     if source:
         destination = out_dir / f"{args.name}.md"
@@ -1043,8 +1153,19 @@ def serve_allow_list(out_dir: Path) -> frozenset[str]:
     return frozenset(allowed)
 
 
+# Headers on every page response. A meta tag cannot forbid framing, and
+# nosniff keeps a browser from reading a file as a type it was not served as.
+_PAGE_HEADERS = (
+    ("Content-Security-Policy", "frame-ancestors 'none'"),
+    ("X-Content-Type-Options", "nosniff"),
+)
+
+
 class _AllowListHandler(SimpleHTTPRequestHandler):
     """Serve v2: answer only allow-listed names; everything else is a 404."""
+
+    # Whether the response being written is a page's (see end_headers).
+    _page_response = False
 
     def __init__(self, *args, root: Path, **kwargs):
         self.root = Path(root)
@@ -1084,10 +1205,18 @@ class _AllowListHandler(SimpleHTTPRequestHandler):
     def send_head(self):
         # Denial never reaches the file system: were a file ever to sit at
         # the sentinel's name, it would still not be served.
-        if self.translate_path(self.path) == str(self.root / _DENY_PATH_NAME):
+        target = self.translate_path(self.path)
+        if target == str(self.root / _DENY_PATH_NAME):
             self.send_error(HTTPStatus.NOT_FOUND, "File not found")
             return None
+        self._page_response = target.endswith(".html")
         return super().send_head()
+
+    def end_headers(self):
+        if self._page_response:
+            for header, value in _PAGE_HEADERS:
+                self.send_header(header, value)
+        super().end_headers()
 
     def list_directory(self, path: str):
         self.send_error(HTTPStatus.NOT_FOUND, "File not found")

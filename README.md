@@ -267,6 +267,24 @@ subdirectories, traversal attempts (encoded or not), and directory listings
 are denied too. The allow-list is recomputed per request,
 so re-rendering an artifact publishes or unpublishes it live — no restart.
 
+## What a page may run
+
+Every artifact page carries a Content-Security-Policy meta tag at the top of
+its head, computed from the finished page so it never allows more than the
+page holds. A page runs only the site's own script files, the pinned Mermaid
+(`https://cdn.jsdelivr.net/npm/mermaid@11.4.1/`, allowed only on a page with a
+diagram) and the inline scripts the page template writes, each allowed by its
+`sha256` hash; today that is the Mermaid start-up module alone. Styles may be
+inline, since Mermaid sets them so; images come from the site or `data:`
+URLs; plugins, `<base>` and forms posting elsewhere are refused.
+
+A script written into a page body is never hashed, so it does not run, and
+neither does an inline event handler such as `onclick`. `render` and
+`publish` still publish the page and print one line naming it and how many
+scripts will not run. Serve adds `Content-Security-Policy: frame-ancestors
+'none'` and `X-Content-Type-Options: nosniff` to every page it answers, so
+no other site can frame a page.
+
 ## Publish
 
 Publish the pond publicly at `https://lotuspod.example.com` through a
@@ -329,11 +347,23 @@ The smoke spec in `e2e/smoke/` captures the index and the article page. A
 ticket's own spec goes in `e2e/capture`, which stays out of git; it has to
 live under `e2e/` for its `@playwright/test` import to resolve.
 
+Browser checks run the same way, with `e2e/checks.config.ts` and the specs in
+`e2e/checks/`; `e2e/checks/policy.spec.ts` checks the page policy in Chromium,
+answering jsDelivr's Mermaid requests from the copy pinned in `e2e/`, so no
+network is needed. `python -m unittest tests.test_browser_checks` runs them
+and skips when `e2e/node_modules` is not installed:
+
+```sh
+python -m tests.capture_site \
+  npm --prefix e2e exec --no -- playwright test --config e2e/checks.config.ts
+```
+
 ## Template
 
 `src/lotuspod/_templates/artifact.html` uses `{{placeholder}}` substitution with the context:
 `title`, `kicker`, `date`, `summary_block`, `body`, `theme_name`, `theme_version`,
-plus the `mermaid` section flag and its `mermaid_theme_variables`.
+plus the `mermaid` section flag with its `mermaid_theme_variables` and `mermaid_dir`,
+and the page `policy`, which the renderer fills in last.
 
 ## Theme
 
