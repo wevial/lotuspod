@@ -91,6 +91,34 @@ with open(sys.argv[1], "w", encoding="utf-8") as fh:
     json.dump(seen, fh)
 """
 
+# Asks the agent socket LOTUSPOD_TEST_SOCKET names GET /v1/whoami with each
+# credential the environment names, fetches the owned page and its source
+# over HTTP, and records what it saw with the environment's other names and
+# the owned page's source file in LOTUSPOD_TEST_OUT.
+AGENT_COMMAND = """\
+import json, os, pathlib, stat, sys, urllib.error, urllib.request
+sys.path.insert(0, "src")
+from lotuspod import machine
+env = os.environ
+socket_path = env["LOTUSPOD_TEST_SOCKET"]
+seen = {"python": env["LOTUSPOD_TEST_PYTHON"], "out": env["LOTUSPOD_TEST_OUT"],
+        "socketMode": stat.S_IMODE(os.stat(socket_path).st_mode), "whoami": {}}
+for label in ("HERMES", "OTHER"):
+    token = machine.read_token(env["LOTUSPOD_TEST_CREDENTIAL_" + label])
+    seen["whoami"][label] = machine.request(socket_path, token, "GET", "/v1/whoami")
+seen["whoami"]["none"] = machine.request(socket_path, None, "GET", "/v1/whoami")
+for path in ("/capture-owned.html", "/capture-owned.md"):
+    try:
+        with urllib.request.urlopen(env["LOTUSPOD_URL"] + path, timeout=10) as response:
+            seen[path] = [response.status, response.read().decode("utf-8")]
+    except urllib.error.HTTPError as exc:
+        seen[path] = [exc.code, ""]
+source = pathlib.Path(env["LOTUSPOD_TEST_OUT"]) / "capture-owned.md"
+seen["source"] = source.read_text(encoding="utf-8") if source.is_file() else None
+with open(sys.argv[1], "w", encoding="utf-8") as fh:
+    json.dump(seen, fh)
+"""
+
 # Records LOTUSPOD_URL and the working directory, then exits 3.
 RECORD_COMMAND = """\
 import json, os, sys
@@ -257,6 +285,48 @@ class DatabaseTests(CaptureSiteTestCase):
         self.assertEqual(list(self.scratch.iterdir()), [])
 
 
+class AgentSocketTests(CaptureSiteTestCase):
+    def test_socket_credentials_and_owned_page(self):
+        from tests import capture_site
+
+        proc = self.run_wrapper(sys.executable, "-c", AGENT_COMMAND, str(self.record))
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        seen = json.loads(self.record.read_text(encoding="utf-8"))
+
+        hermes_status, hermes = seen["whoami"]["HERMES"]
+        self.assertEqual(hermes_status, 200)
+        self.assertEqual(hermes["credential"]["name"], "hermes")
+        self.assertEqual(hermes["credential"]["handles"], ["hermes"])
+        self.assertEqual(hermes["credential"]["operations"],
+                         ["pull", "claim", "reply", "publish"])
+        self.assertIsNone(hermes["credential"]["revokedAt"])
+        self.assertNotIn("tokenHash", hermes["credential"])
+        other_status, other = seen["whoami"]["OTHER"]
+        self.assertEqual(other_status, 200)
+        self.assertEqual(other["credential"]["name"], "claude-3f9a2c")
+        self.assertEqual(other["credential"]["handles"], ["claude-3f9a2c"])
+        self.assertNotIn("publish", other["credential"]["operations"])
+        self.assertEqual(seen["whoami"]["none"], [401, {"error": "invalid_credential"}])
+        self.assertEqual(seen["socketMode"], 0o600)
+
+        status, page = seen["/capture-owned.html"]
+        self.assertEqual(status, 200)
+        self.assertIn("Published by hermes", page)
+        self.assertEqual(page.count('<form class="artifact-decision"'), 1)
+        self.assertIn('data-section="pump"', page)
+        self.assertIn('data-section="heater"', page)
+        # The source leaves the host's files only through the socket's pull.
+        self.assertEqual(seen["/capture-owned.md"][0], 404)
+        self.assertEqual(seen["source"], capture_site.OWNED_SOURCE)
+
+        out = Path(seen["out"])
+        self.assertEqual(out.name, "site")
+        self.assertEqual(out.parent.parent, self.scratch)
+        self.assertEqual(seen["python"], sys.executable)
+        # The socket, the tokens and the site go with the directory.
+        self.assertEqual(list(self.scratch.iterdir()), [])
+
+
 class TeardownTests(CaptureSiteTestCase):
     def test_command_exit_code_and_cleanup(self):
         proc = self.run_wrapper(
@@ -301,7 +371,9 @@ class TeardownTests(CaptureSiteTestCase):
             timeout=60, check=False,
         )
         self.assertEqual(proc.returncode, 1, proc.stderr)
-        self.assertIn("index failed", proc.stderr)
+        # The owned page's publish is the first step to build the index.
+        self.assertIn("error: index broken", proc.stderr)
+        self.assertIn("failed with exit code 1", proc.stderr)
         self.assertFalse(self.record.exists())
         self.assertEqual(list(self.scratch.iterdir()), [])
 

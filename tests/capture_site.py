@@ -8,9 +8,21 @@ the command's code. The site trusts the test Access key
 (tests/fixtures/access/), and LOTUSPOD_TEST_ASSERTION holds an assertion it
 accepts, for a browser check to send as Cf-Access-Jwt-Assertion. Answers and
 comments go to a database in the same temporary directory, beside the
-rendered site and never in it; it also holds the credential that lets the
-comments page name `hermes` as its owner. It never reads or writes the operator's
+rendered site and never in it. It never reads or writes the operator's
 artifacts/ and never binds the tailnet address.
+
+The site's agent socket listens in the same directory, as serve's does. The
+database holds two machine credentials: `hermes` (pull, claim, reply and
+publish as hermes), which the comments page and the owned page name as their
+owner, and `claude-3f9a2c` (pull, claim and reply as itself). The owned page,
+capture-owned, is published from markdown, so the site keeps its source
+beside it. For an agent command, the command's environment names:
+
+    LOTUSPOD_TEST_SOCKET             the agent socket
+    LOTUSPOD_TEST_CREDENTIAL_HERMES  hermes's credential file
+    LOTUSPOD_TEST_CREDENTIAL_OTHER   claude-3f9a2c's credential file
+    LOTUSPOD_TEST_OUT                the site's output directory
+    LOTUSPOD_TEST_PYTHON             the Python running the fixture
 
 Run from the repo root:
 
@@ -32,25 +44,36 @@ import tempfile
 import threading
 import types
 from contextlib import redirect_stdout
+from functools import partial
 from pathlib import Path
 from unittest import mock
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
-from lotuspod import access, cli, db, machine  # noqa: E402
+from lotuspod import access, cli, db, machine, routing  # noqa: E402
 from tests import access_keys  # noqa: E402
 
 
 HOST = "127.0.0.1"
 URL_ENV = "LOTUSPOD_URL"
 ASSERTION_ENV = "LOTUSPOD_TEST_ASSERTION"
+SOCKET_ENV = "LOTUSPOD_TEST_SOCKET"
+HERMES_ENV = "LOTUSPOD_TEST_CREDENTIAL_HERMES"
+OTHER_ENV = "LOTUSPOD_TEST_CREDENTIAL_OTHER"
+OUT_ENV = "LOTUSPOD_TEST_OUT"
+PYTHON_ENV = "LOTUSPOD_TEST_PYTHON"
 # How long the fixture's assertion stays valid: longer than any capture run.
 ASSERTION_LIFETIME = 24 * 3600
 # A fixed date, so every run renders the same bytes.
 SAMPLE_DATE = "2026-01-01"
-# The owner the comments page names, and the credential allowed to name it.
+# The owner the comments and owned pages name, and its credential, which
+# may also pull, claim and reply as it.
 OWNER = "hermes"
+OWNER_OPERATIONS = ("pull", "claim", "reply", "publish")
+# Another agent's credential, bound to its own handle only.
+OTHER = "claude-3f9a2c"
+OTHER_OPERATIONS = ("pull", "claim", "reply")
 
 
 class _SampleDay(datetime.date):
@@ -135,6 +158,29 @@ COMMENTS_BODY = """\
 <p>Fit a heater before the first frost.</p>
 """
 
+# The owned page: published from markdown by OWNER, so its source is kept
+# beside it and reaches OWNER's pull. Two sections, then one question.
+OWNED_PAGE = "capture-owned"
+OWNED_SOURCE = """\
+# Capture owned page
+
+A sample plan for captures, owned by hermes: two sections and one question.
+
+## Pump
+
+The pond pump stops when the water freezes.
+
+## Heater
+
+Fit a heater before the first frost.
+
+## Decisions for the maintainer
+
+| # | Question | Options | Default | Why it matters |
+|---|---|---|---|---|
+| 1 | Which heater? | Floating / Submerged | Floating | The pump shares its outlet. |
+"""
+
 SAMPLE_PAGES = (
     ("capture-article", "Capture article", ARTICLE_BODY, ()),
     ("capture-report", "Capture report", REPORT_BODY, ("--variant", "report")),
@@ -147,16 +193,27 @@ SAMPLE_PAGES = (
 )
 
 
-def render(out_dir: Path, db_path: Path) -> None:
-    """Render the sample pages and then the index into out_dir.
+def credential_path(db_path: Path, name: str) -> Path:
+    """The file the credential name's token is kept in, beside the database."""
+    return db_path.with_name(f"{name}.token")
 
-    Makes OWNER's publishing credential in the database at db_path first, its
-    token beside the database. Calls the CLI in process, the same code the
-    installed `lotuspod` command runs. Raises RuntimeError naming the step
-    that failed.
+
+def render(out_dir: Path, db_path: Path) -> None:
+    """Render the sample pages, publish the owned page and build the index
+    into out_dir.
+
+    Makes OWNER's and OTHER's credentials in the database at db_path first,
+    their tokens beside the database. Calls the CLI in process, the same code
+    the installed `lotuspod` command runs. Raises RuntimeError naming the
+    step that failed.
     """
-    token = db_path.with_name(f"{OWNER}.token")
-    machine.create_credential(db.Database(db_path), OWNER, [OWNER], ["publish"], token)
+    database = db.Database(db_path)
+    token = credential_path(db_path, OWNER)
+    machine.create_credential(database, OWNER, [OWNER], list(OWNER_OPERATIONS), token)
+    machine.create_credential(database, OTHER, [OTHER], list(OTHER_OPERATIONS),
+                              credential_path(db_path, OTHER))
+    source = db_path.with_name(f"{OWNED_PAGE}.md")
+    source.write_text(OWNED_SOURCE, encoding="utf-8")
     steps = [
         (
             f"render {name}",
@@ -168,6 +225,14 @@ def render(out_dir: Path, db_path: Path) -> None:
         )
         for name, title, body, extra in SAMPLE_PAGES
     ]
+    steps.append((
+        f"publish {OWNED_PAGE}",
+        [
+            "publish", str(source), "--local", "--date", SAMPLE_DATE,
+            "--out-dir", str(out_dir), "--owner", OWNER,
+            "--credential", str(token), "--db", str(db_path),
+        ],
+    ))
     steps.append(("index", ["index", "--out-dir", str(out_dir)]))
     for step, argv in steps:
         # The CLI reports on stdout; keep that stream for COMMAND alone.
@@ -188,31 +253,50 @@ def main(argv: list[str] | None = None) -> int:
 
     directory = Path(tempfile.mkdtemp(prefix="lotuspod-capture-"))
     site = directory / "site"
+    db_path = directory / db.DEFAULT_NAME
+    socket_path = directory / machine.SOCKET_NAME
     server = None
     thread = None
+    sockets = None
+    socket_thread = None
     try:
         try:
             site.mkdir()
-            render(site, directory / db.DEFAULT_NAME)
+            render(site, db_path)
         except Exception as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 1
         verifier = access.Verifier(access.parse_config(access_keys.config_section()))
-        server = cli._make_server(
-            site, HOST, 0, verifier=verifier, db_path=directory / db.DEFAULT_NAME
-        )
+        server = cli._make_server(site, HOST, 0, verifier=verifier, db_path=db_path)
         port = server.server_address[1]
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
+        # The agent socket as serve runs it: the same database and pages.
+        sockets = machine.SocketServer(
+            socket_path, db.Database(db_path), pages=partial(cli.api_page, site),
+            describe=partial(cli.agent_page, site), window=routing.DEFAULT_WINDOW,
+            claim_sec=routing.DEFAULT_CLAIM,
+        )
+        socket_thread = threading.Thread(target=sockets.serve_forever, daemon=True)
+        socket_thread.start()
         env = dict(os.environ)
         env[URL_ENV] = f"http://{HOST}:{port}"
         env[ASSERTION_ENV] = access_keys.assertion(lifetime=ASSERTION_LIFETIME)
+        env[SOCKET_ENV] = str(socket_path)
+        env[HERMES_ENV] = str(credential_path(db_path, OWNER))
+        env[OTHER_ENV] = str(credential_path(db_path, OTHER))
+        env[OUT_ENV] = str(site)
+        env[PYTHON_ENV] = sys.executable
         try:
             return subprocess.run(command, cwd=str(REPO_ROOT), env=env, check=False).returncode
         except OSError as exc:
             print(f"error: cannot run {command[0]}: {exc}", file=sys.stderr)
             return 1
     finally:
+        if sockets is not None:
+            if socket_thread is not None:
+                sockets.shutdown()
+            sockets.server_close()
         if server is not None:
             if thread is not None:
                 server.shutdown()

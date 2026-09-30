@@ -905,8 +905,15 @@ config starts no server of its own. The site trusts the test Access key in
 `tests/fixtures/access/` (made for the tests only), and the fixture names an
 assertion it accepts in `LOTUSPOD_TEST_ASSERTION`, for a check to send as
 `Cf-Access-Jwt-Assertion`. Its answers and comments go to a database in the
-scratch directory, beside the rendered site and never in it. The screenshots
-go to the directory named by `CAPTURE_OUT`:
+scratch directory, beside the rendered site and never in it. It serves the
+site's agent socket there too, with a credential for `hermes` (pull, claim,
+reply, publish) and one for `claude-3f9a2c`, and publishes `capture-owned`,
+a page `hermes` owns, from markdown. For an agent command it names the socket
+in `LOTUSPOD_TEST_SOCKET`, the credentials' files in
+`LOTUSPOD_TEST_CREDENTIAL_HERMES` and `LOTUSPOD_TEST_CREDENTIAL_OTHER`, the
+site's output directory in `LOTUSPOD_TEST_OUT` and its own Python in
+`LOTUSPOD_TEST_PYTHON`. The screenshots go to the directory named by
+`CAPTURE_OUT`:
 
 ```sh
 npm --prefix e2e ci --no-audit --no-fund
@@ -924,7 +931,12 @@ Browser checks run the same way, with `e2e/checks.config.ts` and the specs in
 comments on the fixture's comments page); `e2e/checks/policy.spec.ts` checks
 the page policy in Chromium,
 answering jsDelivr's Mermaid requests from the copy pinned in `e2e/`, so no
-network is needed. `python -m unittest tests.test_browser_checks` runs them
+network is needed. `e2e/checks/chain.spec.ts` is the acceptance run of the
+reader-to-agent story: the signed-in reader answers and comments on
+`capture-owned` in Chromium, and `hermes`, through real `lotuspod comments`
+and `lotuspod publish` commands, alone receives both, claims the comment,
+revises the page expecting its revision and replies, which the reader sees
+after a reload; a reader without the assertion stores nothing. `python -m unittest tests.test_browser_checks` runs them
 and skips when `e2e/node_modules` is not installed:
 
 ```sh

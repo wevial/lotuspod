@@ -1,8 +1,11 @@
+import { execFileSync } from 'node:child_process';
+import path from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 
 // The capture fixture's comments page: three sections, each ending in a
 // comment box, owned by hermes. The fixture names an assertion its site
-// accepts; sending it is being signed in.
+// accepts; sending it is being signed in. hermes pulls on the fixture's agent
+// socket first, so it is listening and a new comment waits for it.
 const PAGE = '/capture-comments.html';
 const THREADS = (url: URL) => url.pathname === '/api/comments';
 const ASSERTION = process.env.LOTUSPOD_TEST_ASSERTION ?? '';
@@ -49,6 +52,15 @@ function row(fields: Record<string, unknown>) {
     ...fields,
   };
 }
+
+test.beforeAll(() => {
+  const env = process.env;
+  execFileSync(env.LOTUSPOD_TEST_PYTHON ?? '', [
+    '-m', 'lotuspod', 'comments', 'pull', '--owner', OWNER, '--json',
+    '--socket', env.LOTUSPOD_TEST_SOCKET ?? '',
+    '--credential', env.LOTUSPOD_TEST_CREDENTIAL_HERMES ?? '',
+  ], { env: { ...env, PYTHONPATH: path.resolve(__dirname, '..', '..', 'src') }, stdio: 'ignore' });
+});
 
 test.describe('signed in', () => {
   test.use({ extraHTTPHeaders: SIGNED_IN });
