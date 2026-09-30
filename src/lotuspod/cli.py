@@ -30,8 +30,8 @@ from pathlib import Path
 
 import importlib.resources as _res
 
-from lotuspod import (access, agents, api, comments, db, decisions, machine, markdown,
-                      responder, routing)
+from lotuspod import (access, agents, api, backup, comments, db, decisions, machine,
+                      markdown, responder, routing)
 
 _PKG = "lotuspod"
 
@@ -1993,6 +1993,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     agents.add_parser(sub)
     responder.add_parser(sub)
+    backup.add_parser(sub)
 
     return parser
 

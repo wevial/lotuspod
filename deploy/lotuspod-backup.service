@@ -1,0 +1,20 @@
+[Unit]
+Description=Lotuspod nightly backup of the answers-and-comments database and the artifacts repository
+After=lotuspod.service
+
+[Service]
+Type=oneshot
+# Same repo-local venv install and WorkingDirectory as lotuspod.service; adjust
+# both paths to your layout. With no options both commands use serve's own
+# defaults: artifacts/ in the working directory, lotuspod.sqlite3 beside it,
+# and the sets in lotuspod-backups beside it. The verification runs only after
+# the backup succeeds, and a failure of either fails the unit.
+WorkingDirectory=%h/srv/dev/lotuspod
+ExecStart=%h/srv/dev/lotuspod/.venv/bin/lotuspod backup
+ExecStart=%h/srv/dev/lotuspod/.venv/bin/lotuspod backup --verify latest
+
+# Hardening: no new privileges, private tmp.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=%h

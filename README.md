@@ -7,7 +7,7 @@ Podcast artifact scaffold with a shared lotus theme. Render episode artifacts
 
 ```
 lotuspod/
-├── src/lotuspod/          # package + minimal CLI (`lotuspod render|publish|manifest|index|serve|answers`)
+├── src/lotuspod/          # package + minimal CLI (`lotuspod render|publish|manifest|index|serve|answers|backup|restore`)
 │   ├── _templates/artifact.html   # artifact template ({{placeholder}} substitution)
 │   ├── _templates/index.html      # index-page template
 │   └── _theme/            # tokens.json (colors, fonts, radii) + lotuspod.css
@@ -833,6 +833,67 @@ service from the same working directory and virtual environment as
 its credential on the writer host, sign `claude` in for that user, adjust
 the paths, copy it to `~/.config/systemd/user/`, then run
 `systemctl --user enable --now lotuspod-respond.service`.
+
+## Backups
+
+The writer host holds two things that belong together: serve's database of
+the reader's answers and comments and the agents' replies, and the artifacts
+repository of the pages they refer to. `lotuspod backup` takes one backup set
+of both while serve keeps serving:
+
+```sh
+lotuspod backup                       # --db PATH --out-dir DIR --to BACKUPS as needed
+lotuspod backup --verify latest       # restore the newest set into scratch space and check it
+lotuspod restore BACKUPS/20260930T031500.123456Z --db PATH --out-dir DIR
+```
+
+`backup [--db PATH] [--out-dir DIR] [--to BACKUPS] [--keep N] [--json]`
+takes `--out-dir` and `--db` as serve does and refuses, writing no set, an
+output directory that is not its own git repository. serve makes its
+database on first use, so a first backup that finds none makes it as serve
+would; once `BACKUPS` holds a set, a missing database is refused, writing
+no set and removing none, since it means a wrong `--db` or a lost file. Holding the publish
+lock, so no publish lands between the two, it copies the database with
+SQLite's online backup and bundles every ref of the repository with `git
+bundle create --all`, into a new directory `BACKUPS/UTC-TIMESTAMP` (mode
+0700, its files 0600): `lotuspod.sqlite3`, `artifacts.bundle`, and
+`manifest.json` with each file's SHA-256, the database's schema version, the
+repository's `HEAD` and its `origin`, if it has one. A set appears whole or
+not at all. `BACKUPS` is `--to`, else `lotuspod-backups` beside the artifacts
+directory, never inside it. The newest `--keep` sets (default 14) are kept
+and older ones removed; nothing else in `BACKUPS` is touched. `--json` prints
+`{"backup": PATH}`.
+
+`restore SET --db PATH --out-dir DIR` checks every file of the set against
+its checksum first, then copies the database to `--db` and clones the bundle
+into `--out-dir`, with `main` checked out at the recorded `HEAD` and `origin`
+set to the recorded remote (no `origin` when none was recorded). It never
+pushes. It exits 1 naming the file, and writes nothing, when a checksum does
+not match, and it refuses, changing nothing, when the database (or a `-wal`,
+`-shm` or `-journal` file beside it) or the output directory already exists:
+restore into fresh paths, check them with `lotuspod serve --out-dir DIR --db
+PATH`, then stop serve and move them into place.
+
+`backup --verify SET` (or `latest`, the newest set in `--to`) restores the
+set into a temporary directory, runs `PRAGMA integrity_check` and `git fsck`,
+compares `HEAD` with the manifest's, and exits 1 naming the first failure.
+
+`deploy/lotuspod-backup.service` runs `lotuspod backup` and then `lotuspod
+backup --verify latest` from the same working directory and virtual
+environment as `deploy/lotuspod.service`, and `deploy/lotuspod-backup.timer`
+runs it every night, catching up after the host was down (`Persistent=true`).
+Nothing enables them: adjust the paths, copy both to
+`~/.config/systemd/user/`, then run `systemctl --user enable --now
+lotuspod-backup.timer`; `journalctl --user -u lotuspod-backup.service` shows
+each night's result.
+
+Where the backups live: a set on the writer host guards against a bad
+publish, a bad migration or a deleted file, not against losing the host. A
+set holds every reader's comments and the hashes of the machine credentials,
+so copy `BACKUPS` to storage only the maintainer can read, on another
+machine; which one is the maintainer's to decide, and nothing here copies
+backups off the host. Between nightly sets there is no point-in-time
+recovery: a restore returns the site to the moment of its set.
 
 ## What a page may run
 

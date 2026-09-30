@@ -13,6 +13,9 @@ artifacts/
 lotuspod.sqlite3
 lotuspod.sqlite3-*
 
+# backup sets of both, beside artifacts/ (lotuspod backup's default --to)
+lotuspod-backups/
+
 # node dependencies (the capture harness in e2e/)
 node_modules/
 
