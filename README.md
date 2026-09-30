@@ -149,6 +149,29 @@ directory take turns under a lock file kept beside the directory (never inside
 it), and every file is written under a temporary name and renamed into place,
 so a reader never sees half a page.
 
+On a machine other than the writer host, `publish` publishes on the writer
+host when a local config file names it. The config is the first of
+`$LOTUSPOD_CONFIG`, `$XDG_CONFIG_HOME/lotuspod/config.ini` and
+`~/.config/lotuspod/config.ini` that exists; with none, `publish` publishes
+here:
+
+```ini
+[publish]
+host = writer.example
+command = lotuspod
+out_dir = /srv/lotuspod/artifacts
+```
+
+With `host` set, `publish` runs `ssh HOST COMMAND publish --local - --out-dir
+OUT_DIR --format FORMAT --name NAME ...` with the source on standard input;
+the format and name are worked out here from the file name, and every
+argument after `command` is shell-quoted (`command`, default `lotuspod`, is
+used as written). `out_dir` is required when `host` is set. The far side's
+output passes through and its exit status is `publish`'s, so a revision
+conflict still exits 3. `--local` publishes on this machine regardless of the
+config, and `--out-dir` without `--local` is refused while a host is set. Keep
+the host's address in the local config only, never in this repository.
+
 ## Manifest
 
 Generate `artifacts/manifest.json`, an index of every rendered artifact in a

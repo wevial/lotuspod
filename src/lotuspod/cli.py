@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import configparser
 import datetime as _dt
 import fcntl
 import hashlib
@@ -11,6 +12,7 @@ import ipaddress
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -881,6 +883,9 @@ PUBLISH_VARIANT = "report"
 REVISION_LENGTH = 12
 NO_REVISION = "none"
 EXIT_REVISION_CONFLICT = 3
+EXIT_CONFIG = 2
+CONFIG_ENV = "LOTUSPOD_CONFIG"
+DEFAULT_REMOTE_COMMAND = "lotuspod"
 _REVISION_TAG_RE = re.compile(
     r"<meta\s[^>]*name=[\"']lotuspod:revision[\"'][^>]*>", re.IGNORECASE
 )
@@ -998,15 +1003,43 @@ def publish_lock(out_dir: Path):
         yield
 
 
-def cmd_publish(args: argparse.Namespace) -> int:
-    """Render a page from its source, keep the source, rebuild the manifest
-    and the index, and commit and push once.
+class ConfigError(RuntimeError):
+    pass
 
-    Everything that can be refused is refused before anything is written.
-    From the revision check to the commit the directory's publish lock is
-    held, so two publishes of one page cannot both pass the check.
-    """
-    out_dir = (Path(args.out_dir) if args.out_dir else DEFAULT_OUTPUT_DIR).resolve()
+
+def config_path() -> Path | None:
+    """The first of $LOTUSPOD_CONFIG, $XDG_CONFIG_HOME/lotuspod/config.ini and
+    ~/.config/lotuspod/config.ini that is a file (an empty variable counts as
+    unset); None when none is."""
+    candidates = []
+    named = os.environ.get(CONFIG_ENV, "")
+    if named:
+        candidates.append(Path(named))
+    base = os.environ.get("XDG_CONFIG_HOME", "")
+    if base:
+        candidates.append(Path(base) / "lotuspod" / "config.ini")
+    candidates.append(Path.home() / ".config" / "lotuspod" / "config.ini")
+    return next((path for path in candidates if path.is_file()), None)
+
+
+def publish_config() -> dict[str, str]:
+    """The config's [publish] section; {} when there is no config file."""
+    path = config_path()
+    if path is None:
+        return {}
+    parser = configparser.ConfigParser(interpolation=None)
+    try:
+        with open(path, encoding="utf-8") as fh:
+            parser.read_file(fh)
+    except (OSError, UnicodeDecodeError, configparser.Error) as exc:
+        raise ConfigError(f"cannot read config {path}: {exc}") from None
+    if not parser.has_section("publish"):
+        return {}
+    return {key: value.strip() for key, value in parser.items("publish")}
+
+
+def publish_target(args: argparse.Namespace) -> tuple[str, str, str]:
+    """(label, format, page name) of the source, or a refusal."""
     if args.source == "-":
         if not args.format or not args.name:
             raise RuntimeError("publishing standard input needs --format and --name")
@@ -1029,16 +1062,92 @@ def cmd_publish(args: argparse.Namespace) -> int:
             _dt.date.fromisoformat(args.date)
         except ValueError:
             raise RuntimeError(f"not an ISO date: {args.date!r}") from None
+    return label, fmt, name
 
+
+def read_source(args: argparse.Namespace, label: str) -> bytes:
     if args.source == "-":
-        data = sys.stdin.buffer.read()
-    else:
+        return sys.stdin.buffer.read()
+    try:
+        return Path(args.source).read_bytes()
+    except FileNotFoundError:
+        raise FileNotFoundError(f"source not found: {label}") from None
+    except OSError as exc:
+        raise RuntimeError(f"cannot read {label}: {exc.strerror}") from None
+
+
+def remote_publish_command(command: str, out_dir: str, fmt: str, name: str,
+                           args: argparse.Namespace) -> str:
+    """The command line ssh hands the writer host's shell.
+
+    ssh joins its arguments into one string for the far shell, so every
+    argument after COMMAND is quoted; COMMAND is the config owner's own
+    shell text and is used as written. Each value rides as --option=value,
+    so one beginning with '-' is never taken for an option on the far side.
+    """
+    argv = ["publish", "--local", "-", f"--out-dir={out_dir}", f"--format={fmt}",
+            f"--name={name}"]
+    for option, value in (
+        ("--title", args.title),
+        ("--summary", args.summary),
+        ("--variant", args.variant),
+        ("--date", args.date or None),
+        ("--expect-revision", args.expect_revision),
+    ):
+        if value is not None:
+            argv.append(f"{option}={value}")
+    return " ".join([command, *(shlex.quote(arg) for arg in argv)])
+
+
+def publish_over_ssh(args: argparse.Namespace, config: dict[str, str]) -> int:
+    """Run publish on the config's host with the source on standard input.
+
+    The far side's output passes through and its exit status is returned
+    as it is, so a revision conflict still exits 3.
+    """
+    host = config["host"]
+    out_dir = config.get("out_dir", "")
+    if not out_dir:
+        raise ConfigError(f"config {config_path()} sets host but no out_dir in [publish]")
+    if args.out_dir:
+        raise ConfigError(
+            f"--out-dir names a directory on this machine, but config {config_path()} "
+            "publishes on its host; pass --local to publish here"
+        )
+    label, fmt, name = publish_target(args)
+    data = read_source(args, label)
+    command = config.get("command") or DEFAULT_REMOTE_COMMAND
+    remote = remote_publish_command(command, out_dir, fmt, name, args)
+    try:
+        done = subprocess.run(["ssh", host, remote], input=data)
+    except OSError as exc:
+        raise RuntimeError(f"cannot run ssh: {exc.strerror}") from None
+    return done.returncode
+
+
+def cmd_publish(args: argparse.Namespace) -> int:
+    """Render a page from its source, keep the source, rebuild the manifest
+    and the index, and commit and push once.
+
+    When the config names a host and --local is not given, publish runs
+    there over ssh instead (see publish_over_ssh).
+
+    Everything that can be refused is refused before anything is written.
+    From the revision check to the commit the directory's publish lock is
+    held, so two publishes of one page cannot both pass the check.
+    """
+    if not args.local:
         try:
-            data = Path(args.source).read_bytes()
-        except FileNotFoundError:
-            raise FileNotFoundError(f"source not found: {label}") from None
-        except OSError as exc:
-            raise RuntimeError(f"cannot read {label}: {exc.strerror}") from None
+            config = publish_config()
+            if config.get("host"):
+                return publish_over_ssh(args, config)
+        except ConfigError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return EXIT_CONFIG
+
+    out_dir = (Path(args.out_dir) if args.out_dir else DEFAULT_OUTPUT_DIR).resolve()
+    label, fmt, name = publish_target(args)
+    data = read_source(args, label)
     try:
         text = data.decode("utf-8")
     except UnicodeDecodeError:
@@ -1684,6 +1793,11 @@ def build_parser() -> argparse.ArgumentParser:
         f"('{NO_REVISION}': the page must not exist yet)",
     )
     publish.add_argument("--out-dir", default="", help="output directory (default: artifacts/)")
+    publish.add_argument(
+        "--local",
+        action="store_true",
+        help="publish on this machine even when the config names a host",
+    )
     publish.set_defaults(func=cmd_publish)
 
     serve = sub.add_parser(
