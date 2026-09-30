@@ -353,7 +353,10 @@ class OwnerWindowTests(PullTestCase):
         self.pull("hermes")
         comment = self.comment("Still waiting?")
         time.sleep(2)
-        self.assertNotIn(comment["id"], self.pulled_comments("hermes"))
+        # The owner still reads it, as the responder's.
+        [item] = [item for item in self.pull("hermes") if item["kind"] == "comment"]
+        self.assertEqual((item["comment"]["id"], item["comment"]["owner"]),
+                         (comment["id"], "responder"))
         self.assertIn(comment["id"], self.pulled_comments("responder"))
         row = self.row(comment["id"])
         self.assertEqual((row["state"], row["owner"]), ("pending", "responder"))
@@ -499,7 +502,7 @@ class SchemaTests(PullTestCase):
                              db.SCHEMA_VERSION)
         finally:
             conn.close()
-        self.assertEqual(db.SCHEMA_VERSION, 4)
+        self.assertEqual(db.SCHEMA_VERSION, 5)
 
 
 class OwnerWindowOptionTests(unittest.TestCase):

@@ -144,8 +144,12 @@ def pull_text(payload: dict) -> str:
             ]
             if comment.get("quote"):
                 lines += ["Quoting the page:", "", fence(comment["quote"]["exact"]), ""]
-            lines += [fence(comment["text"]), "",
-                      f"- Claim: `lotuspod comments claim {comment['id']}`", ""]
+            if comment.get("owner") == payload["owner"]:
+                take = f"- Claim: `lotuspod comments claim {comment['id']}`"
+            else:
+                take = (f"- Passed to {comment.get('owner')} once the owner window ended; "
+                        "only it may claim this")
+            lines += [fence(comment["text"]), "", take, ""]
             about = "the thread's first comment and its latest replies"
             if item["omitted"]:
                 about += f"; {item['omitted']} earlier replies left out"
@@ -336,7 +340,8 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
         "intended reply, before acting, and send the same KEY again after a crash: a key "
         "this credential has used before prints the reply stored with it, and nothing is "
         "stored twice. With --revision, the reply says it revised the page to revision R, "
-        "which must be the page's current revision. The comment becomes answered and the "
+        "which must be the page's current revision, or one this credential republished it "
+        "at for KEY. The comment becomes answered and the "
         "claim ends. Needs a credential with reply.",
     )
     reply.add_argument("id", type=_comment_id, metavar="ID", help="the comment's id")

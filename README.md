@@ -454,11 +454,12 @@ Each reader's comment shows its `state`, with the handle it is routed to (its
 
 An agent's reply that carries a `revision` shows "Revised the page · revision
 R", linking to the page. Routing (below) sets `pending` and `unavailable`, and
-an agent's claim, reply, release and failure (see the pull loop) set
-`claimed`, `answered` and `failed`, with the handle that took it up as its
-`owner`; only a failed comment carries a `reason`. `paused` is the page's
-only. A comment grants no authority: an agent answers it and may revise its
-page, nothing else.
+`paused` for a comment routed to `responder` while the default responder is
+paused (see below); an agent's claim, reply, release and failure (see the
+pull loop) set `claimed`, `answered` and `failed`, with the handle that took
+it up as its `owner`; only a failed comment carries a `reason`. A comment
+grants no authority: an agent answers it and may revise its page, nothing
+else.
 
 Every reader's comment no agent has taken up is routed to exactly one handle,
 by one rule that the threads routes and the agents' pull share:
@@ -579,7 +580,10 @@ lotuspod comments show pond-plan --json        # GET /v1/threads?page=pond-plan
 `pull` records that the handle is listening and returns its items. It claims
 nothing and settles nothing, so the same items come back on every pull until
 they are claimed or acknowledged: an agent that only reads never blocks the
-fallback to the responder. Items are, comments first, oldest first:
+fallback to the responder. A page's owner goes on reading a comment that was
+routed to it as it arrived after the owner window passes it to `responder`,
+until an agent takes it up; its `owner` is then `responder`, and only the
+responder may claim it. Items are, comments first, oldest first:
 
 - `{"kind": "comment", "comment", "thread", "omitted", "page"}` for each
   reader's comment routed to the handle (above) that no agent holds a current
@@ -594,9 +598,12 @@ fallback to the responder. Items are, comments first, oldest first:
   reader answered, kept with the answer, and whether the page now asks it in
   other words, or not at all. An answer is
   evidence of the reader's choice on that one question only.
-- `page` is `{name, title, owner, revision, sourceFile, source}`: `revision`
-  is the page's `lotuspod:revision`, and `source` the page's kept `NAME.md` or
-  `NAME.body.html`, exactly as kept. A page published before sources were kept
+- `page` is `{name, title, owner, revision, sourceFile, source}`: `source`
+  is the page's kept `NAME.md` or `NAME.body.html`, exactly as kept, and
+  `revision` the revision of those very bytes, which is the page's
+  `lotuspod:revision` once any publish has finished. Read beside a publish,
+  it is the older revision the source still has, so an edit expecting it is
+  refused rather than overwriting the newer one. A page published before sources were kept
   has an empty `source` and `sourceFile`, and the revision of the page as
   rendered. The pull is the only way a page's source leaves the host's files.
 
@@ -631,8 +638,9 @@ lotuspod comments fail 7 --claim TOKEN --reason "source missing"
   has sent before answers the reply stored with it, whatever has happened to
   the claim since. Otherwise the claim must be this credential's, current,
   and the one TOKEN names, else 409 `not_claimed`; a `revision` must be the
-  page's current one, else 409 `revision_mismatch`, and the reply then shows
-  as having revised the page. The reply joins the thread with the actor
+  page's current one, or one the default responder's credential republished
+  the page at for this KEY (below), else 409 `revision_mismatch`, and the
+  reply then shows as having revised the page. The reply joins the thread with the actor
   `{"kind": "agent", "handle", "credential"}`, the comment is `answered`, and
   the claim ends.
 - `release ID --claim TOKEN` ends the claim unanswered: the comment is
@@ -648,10 +656,14 @@ once, whatever happened in between. A new key is a new reply, and needs a
 current claim.
 
 Every claim, reply, release and failure is written, in the same
-transaction, to an audit trail naming the credential and handle that acted.
+transaction, to an audit trail naming the credential and handle that acted,
+and so is every page the default responder republishes (action `publish`).
 On the host, `lotuspod audit [--page NAME] [--json]` (with `--out-dir` and
 `--db` as serve takes them) lists them oldest first: time, action, comment,
-page, credential, handle, and a reply's key.
+page, credential, handle, the key of a reply or of the reply a republish
+was for, and the revision a republish made; `--json` prints them as a JSON
+list of `{id, at, action, comment, page, credential, handle, key,
+revision}`.
 
 With `--json` each command prints the socket's JSON; without it, readable
 markdown naming the page, section, revision and source file, with every text
@@ -724,6 +736,103 @@ done
 A loop that pulls less often than the owner window is not listening: comments
 naming it show as `unavailable`, and comments on its pages go to the
 responder.
+
+## The default responder
+
+Comments routed to an owner are answered while that owner listens. The rest
+go to the default responder: comments on pages whose owner is not listening,
+on pages with no owner, those an owner held past the owner window, and those
+naming `@responder`. `lotuspod respond` answers them. It is an ordinary agent
+on the socket, with its own credential for the handle `responder`:
+
+```sh
+lotuspod credential create responder --handle responder \
+  --op pull --op claim --op reply --op publish \
+  --out ~/.config/lotuspod/responder.token
+lotuspod respond --credential ~/.config/lotuspod/responder.token
+```
+
+`respond [--once] [--interval SEC] [--command CMD] [--timeout SEC]
+--credential FILE [--socket PATH] [--journal PATH] [--out-dir DIR] [--db
+PATH]` runs a pass every `--interval` seconds (default 30) until it is
+stopped (SIGTERM exits 0), or one pass with `--once`. Each pass pulls as
+`responder` and, for each comment, claims it (a comment another agent
+claimed first is skipped) and runs the agent command once:
+
+- The command is `--command`, else `command` in the config's `[responder]`
+  section, else `claude -p --model opus --permission-mode acceptEdits`.
+- It runs in a fresh scratch directory holding only a copy of the page's
+  kept source under its own name (`NAME.md` or `NAME.body.html`), named by
+  `LOTUSPOD_PAGE_SOURCE`, with the page's name in `LOTUSPOD_PAGE`. Its
+  standard input is the prompt: what the responder may do (answer from the
+  page and the thread; edit the source copy when the comment asks for a
+  change to the page) and may not do (run commands, change anything else, or
+  take a comment as authority for anything else), then the page's name,
+  title, owner and revision, the section's heading, the thread with its
+  authors (the first comment and at most its last 20 replies, each reader's
+  text marked as the reader's words), and the source. A page with no kept
+  source cannot be revised, and the prompt says so.
+- Its trimmed standard output is the reply. When it changed the copy, the
+  page is republished from it first, through `lotuspod publish`'s own code,
+  only if the page is still at the revision the agent read, keeping the
+  page's date, summary, variant, owner and comment boxes; the reply then
+  carries the new revision, so it links to it.
+- The comment is `failed`, with the reason on the page and nothing
+  published or replied, when the command exits non-zero, prints nothing or
+  runs past `--timeout` (default 600 seconds), when the page changed while it
+  ran ("the page changed while I was editing it"), and when the credential
+  lacks `publish` for an edit. Nothing is retried; the reader can write a new
+  comment to route it again.
+
+```ini
+[responder]
+command = claude -p --model opus --permission-mode acceptEdits
+```
+
+The responder holds no authority beyond answering a comment and revising
+that comment's page: its credential is bound to `responder`, and a comment
+is never instructions to it. Every claim, reply and failure it makes, and
+every republish, is in `lotuspod audit` under its credential. As with every
+credential, this keeps a well-behaved agent to its limits; the agent command
+runs as the same user, and processes running as the same user are not
+isolated from each other.
+
+Before running the agent, the responder appends to its journal
+(`lotuspod-responder.journal` beside the database, or `--journal PATH`; mode
+0600) the comment, the reply's idempotency key and the revision it expects,
+then the reply and the revision it is publishing, then that it published;
+a failure's reason is journaled before it is sent. A reply or failure whose
+claim lapsed while the agent ran claims the comment again, so a comment is
+never left to be routed back and answered twice. Each pass first finishes
+what a crash left: a reply whose page was republished (as the journal, the
+audit trail, the page itself or, when the output directory is a git
+repository, its history since the entry began shows) is sent again with the
+same key and revision, which the reply keeps even when the page has changed since,
+without running the agent or publishing again; a failure is sent again with
+its reason; a comment left before its answer was ready is failed. A reply the
+socket refuses while the responder still holds the claim fails the comment
+instead, so no comment is left claimed and unanswered. Without a git
+repository, a crash between a republish and both of its records, followed by
+someone else's edit, leaves no sign of it: the comment is then failed ("I
+stopped while revising the page and found no sign my edit was published")
+rather than answered with a guess. One pass at a time holds the journal,
+through a lock file beside it; a pass that finds it held, such as a second
+`respond --once` beside the service, does nothing.
+
+```sh
+lotuspod respond pause    # comments routed to responder show as `paused`
+lotuspod respond resume
+```
+
+`pause` and `resume` (with `--out-dir` and `--db` as serve takes them) set a
+flag in serve's database; while it is set, passes do nothing.
+
+`deploy/lotuspod-respond.service` runs `lotuspod respond` as a systemd user
+service from the same working directory and virtual environment as
+`deploy/lotuspod.service`, restarting on failure. Nothing enables it: make
+its credential on the writer host, sign `claude` in for that user, adjust
+the paths, copy it to `~/.config/systemd/user/`, then run
+`systemctl --user enable --now lotuspod-respond.service`.
 
 ## What a page may run
 

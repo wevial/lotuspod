@@ -30,7 +30,8 @@ from pathlib import Path
 
 import importlib.resources as _res
 
-from lotuspod import access, agents, api, comments, db, decisions, machine, markdown, routing
+from lotuspod import (access, agents, api, comments, db, decisions, machine, markdown,
+                      responder, routing)
 
 _PKG = "lotuspod"
 
@@ -1316,15 +1317,22 @@ def api_page(out_dir: Path, name: str) -> api.Page | None:
 def agent_page(out_dir: Path, page: api.Page) -> dict:
     """The page as an agent's pull shows it, with its kept source (NAME.md
     or NAME.body.html). A page published before sources were kept has none:
-    an empty source, and the revision of the page as rendered."""
-    source_file, source = "", ""
+    an empty source, and the revision of the page as rendered.
+
+    With a source, the revision is that of the very bytes given, which is
+    the page's lotuspod:revision once a publish has finished. publish writes
+    the page before its source, and this reads without its lock, so a
+    revision read apart from the source could be newer than the source
+    given; an agent expecting it would then overwrite that newer edit."""
+    source_file, source, revision = "", "", page.revision
     for suffix in _KEPT_SOURCE_SUFFIX.values():
         kept = out_dir / f"{page.name}{suffix}"
         if kept.is_file() and not kept.is_symlink():
+            data = kept.read_bytes()
             source_file = kept.name
-            source = kept.read_bytes().decode("utf-8", "replace")
+            source = data.decode("utf-8", "replace")
+            revision = source_revision(data)
             break
-    revision = page.revision
     if not source_file and not revision:
         revision = source_revision((out_dir / f"{page.name}.html").read_bytes())
     return {"name": page.name, "title": page.title, "owner": page.owner,
@@ -1686,12 +1694,14 @@ def cmd_audit(args: argparse.Namespace) -> int:
         print(f"error: {exc}", file=sys.stderr)
         return 1
     if args.json:
-        print(json.dumps({"page": args.page, "actions": rows}, indent=2))
+        print(json.dumps(rows, indent=2))
         return 0
     if not rows:
         print("no actions yet")
     for row in rows:
         key = f"\tkey {row['key']}" if row["key"] is not None else ""
+        if row["revision"] is not None:
+            key += f"\trevision {row['revision']}"
         print(f"{row['at']}\t{row['action']}\tcomment {row['comment']} on {row['page']}"
               f"\tcredential {row['credential']}\thandle {row['handle']}{key}")
     return 0
@@ -1969,17 +1979,20 @@ def build_parser() -> argparse.ArgumentParser:
 
     audit = sub.add_parser(
         "audit",
-        help="list every claim, reply, release and failure by an agent, oldest first",
+        help="list every claim, reply, release and failure by an agent, and every "
+        "republish by the responder, oldest first",
         description="List every claim, reply, release and failure agents made on serve's "
-        "socket, oldest first: when, which comment on which page, the credential and "
-        "handle that acted, and a reply's idempotency key. Reads serve's database directly.",
+        "socket, and every page the responder republished, oldest first: when, which "
+        "comment on which page, the credential and handle that acted, and the idempotency "
+        "key of a reply or of the reply a republish was for. Reads serve's database directly.",
     )
     audit.add_argument("--page", default=None, metavar="NAME", help="only this page's")
-    audit.add_argument("--json", action="store_true", help="print JSON")
+    audit.add_argument("--json", action="store_true", help="print a JSON list of the actions")
     database_options(audit)
     audit.set_defaults(func=cmd_audit)
 
     agents.add_parser(sub)
+    responder.add_parser(sub)
 
     return parser
 

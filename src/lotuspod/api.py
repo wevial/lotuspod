@@ -20,8 +20,8 @@ checked against the page's comment boxes: 400 unknown_section for a section
 the page has no box for.
 
 Every reader's comment a route answers carries its routing state (see
-lotuspod.routing): `state` is `pending` or `unavailable` until an agent takes
-it up, and `owner` is the handle it is routed to (null on an agent's reply).
+lotuspod.routing): `state` is `pending`, `unavailable` or `paused` until an
+agent takes it up, and `owner` is the handle it is routed to (null on an agent's reply).
 """
 
 from __future__ import annotations
@@ -326,7 +326,8 @@ class Api:
 
     def _post_comment(self, headers: Message, body: Body, actor: Mapping) -> dict:
         row = self._store_comment(headers, body, actor)
-        return routing.public(row, routing.last_pulls(self.database), self.window, self.clock())
+        return routing.public(row, routing.last_pulls(self.database), self.window, self.clock(),
+                              self.database.responder_paused())
 
     def _store_comment(self, headers: Message, body: Body, actor: Mapping) -> dict:
         fields = self._json_body(headers, body)

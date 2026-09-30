@@ -26,7 +26,8 @@ claim's credential, handle, token hash and expiry, and becomes `claimed`.
 An agent's reply keeps the credential's idempotency key, unique per
 credential, so a retried reply is found again rather than stored twice. Each
 claim, reply, release and failure writes a row to the audit table in the
-same transaction.
+same transaction, and the default responder writes one for each page it
+republishes. Whether the responder is paused is kept here too.
 """
 
 from __future__ import annotations
@@ -40,7 +41,7 @@ from pathlib import Path
 from typing import Callable, Iterator, Mapping
 
 DEFAULT_NAME = "lotuspod.sqlite3"
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 # Seconds a connection waits for another writer before giving up.
 BUSY_TIMEOUT = 30
 # The state of a reader's comment until an agent takes it up.
@@ -129,7 +130,18 @@ _SCHEMA = {1: (
         key TEXT
     )""",
     "CREATE INDEX audit_by_page ON audit(page, id)",
+), 5: (
+    # Named settings of the site's own: today, whether the responder is paused.
+    """CREATE TABLE settings (
+        name TEXT PRIMARY KEY,
+        value TEXT NOT NULL,
+        set_at TEXT NOT NULL
+    )""",
+    # The revision the responder republished a page at, on its audit row.
+    "ALTER TABLE audit ADD COLUMN revision TEXT",
 )}
+# The settings row that holds whether the responder is paused.
+_PAUSED = "responder_paused"
 
 
 class UnknownParent(LookupError):
@@ -216,6 +228,7 @@ def _audit(row: sqlite3.Row) -> dict:
         "credential": row["credential"],
         "handle": row["handle"],
         "key": row["key"],
+        "revision": row["revision"],
     }
 
 
@@ -421,7 +434,9 @@ class Database:
         whatever the claim's state now. Otherwise refused not_claimed unless
         the comment's current claim is credential's and token_hash is its
         token's; unknown_page when serve no longer answers the comment's
-        page; revision_mismatch when revision is not None and not the page's.
+        page; revision_mismatch when revision is not None, not the page's,
+        and not one credential republished the page at for this key (see
+        record_publish), which stays true once the page moves on.
         The reply joins the comment's thread, the comment becomes answered
         and the claim ends.
         """
@@ -436,7 +451,8 @@ class Database:
             page = page_of(found["page"])
             if page is None:
                 raise Refused("unknown_page")
-            if revision is not None and revision != page["revision"]:
+            if revision is not None and revision != page["revision"] and not _published(
+                    conn, comment_id, credential, key, revision):
                 raise Refused("revision_mismatch")
             handle = found["claim"]["handle"]
             actor = {"kind": "agent", "handle": handle, "credential": credential}
@@ -486,9 +502,48 @@ class Database:
             _record(conn, "fail", found, credential, found["claim"]["handle"], None)
             return _comment(_row(conn, comment_id))
 
+    def record_publish(self, comment_id: int, *, credential: str, handle: str,
+                       key: str, revision: str) -> None:
+        """Write to the audit trail that credential, acting as handle,
+        republished the page of comment comment_id at revision, as asked in
+        it, for the reply of idempotency key key; once, however often it is
+        recorded."""
+        with self._connect() as conn, _write(conn):
+            if not _published(conn, comment_id, credential, key, revision):
+                _record(conn, "publish", _find(conn, comment_id), credential, handle, key,
+                        revision)
+
+    def published_revision(self, comment_id: int, *, credential: str,
+                           key: str) -> str | None:
+        """The revision credential republished comment_id's page at for the
+        reply of key; None when it did not."""
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT revision FROM audit WHERE action = 'publish' AND comment = ?"
+                " AND credential = ? AND key = ? ORDER BY id DESC LIMIT 1",
+                (comment_id, credential, key),
+            ).fetchone()
+        return None if row is None else row[0]
+
+    def responder_paused(self) -> bool:
+        """Whether the responder is paused."""
+        with self._connect() as conn:
+            row = conn.execute("SELECT value FROM settings WHERE name = ?", (_PAUSED,)).fetchone()
+        return row is not None and row[0] == "1"
+
+    def set_responder_paused(self, paused: bool) -> None:
+        """Pause the responder, or resume it."""
+        with self._connect() as conn, _write(conn):
+            conn.execute(
+                "INSERT INTO settings (name, value, set_at) VALUES (?, ?, ?)"
+                " ON CONFLICT (name) DO UPDATE SET value = excluded.value,"
+                " set_at = excluded.set_at",
+                (_PAUSED, "1" if paused else "0", _now()),
+            )
+
     def audit(self, page: str | None = None) -> list[dict]:
-        """Every claim, reply, release and failure, on page or on any page,
-        oldest first."""
+        """Every claim, reply, release and failure, and every republish by
+        the responder, on page or on any page, oldest first."""
         with self._connect() as conn:
             if page is None:
                 rows = conn.execute("SELECT * FROM audit ORDER BY id").fetchall()
@@ -630,12 +685,22 @@ def _held(conn: sqlite3.Connection, comment_id: int, credential: str, token_hash
 
 
 def _record(conn: sqlite3.Connection, action: str, comment: Mapping, credential: str,
-            handle: str, key: str | None) -> None:
+            handle: str, key: str | None, revision: str | None = None) -> None:
     conn.execute(
-        "INSERT INTO audit (at, action, comment, page, credential, handle, key)"
-        " VALUES (?, ?, ?, ?, ?, ?, ?)",
-        (_now(), action, comment["id"], comment["page"], credential, handle, key),
+        "INSERT INTO audit (at, action, comment, page, credential, handle, key, revision)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        (_now(), action, comment["id"], comment["page"], credential, handle, key, revision),
     )
+
+
+def _published(conn: sqlite3.Connection, comment_id: int, credential: str, key: str,
+               revision: str) -> bool:
+    """Whether credential republished comment_id's page at revision for the
+    reply of key: that reply may name it after the page has moved on."""
+    return conn.execute(
+        "SELECT 1 FROM audit WHERE action = 'publish' AND comment = ? AND credential = ?"
+        " AND key = ? AND revision = ?", (comment_id, credential, key, revision),
+    ).fetchone() is not None
 
 
 def _insert_comment(conn: sqlite3.Connection, *, page: str, section: str,

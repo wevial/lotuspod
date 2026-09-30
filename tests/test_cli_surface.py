@@ -31,7 +31,7 @@ REMOVED_PATHS = (
     "src/lotuspod/_theme/lotuspod-form.js",
 )
 COMMANDS = ("render", "manifest", "index", "serve", "publish", "credential", "answers",
-            "comments", "audit")
+            "comments", "audit", "respond")
 REMOVED_COMMANDS = ("export", "responses")
 
 
@@ -66,7 +66,8 @@ class RemovedFilesTests(unittest.TestCase):
             self.skipTest(f"git unavailable: {proc.stderr.strip()}")
         self.assertEqual(
             proc.stdout.split(),
-            ["deploy/README.md", "deploy/cloudflared.yml", "deploy/lotuspod.service"],
+            ["deploy/README.md", "deploy/cloudflared.yml", "deploy/lotuspod-respond.service",
+             "deploy/lotuspod.service"],
         )
 
 

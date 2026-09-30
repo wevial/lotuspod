@@ -1,0 +1,25 @@
+[Unit]
+Description=Lotuspod default responder (answers comments routed to `responder`)
+After=lotuspod.service
+Wants=lotuspod.service
+
+[Service]
+Type=simple
+# Same repo-local venv install and WorkingDirectory as lotuspod.service; adjust
+# both paths to your layout. The credential holds pull, claim, reply and publish
+# for the handle responder (see "The default responder" in the README), and
+# `claude` must be signed in for this user.
+WorkingDirectory=%h/srv/dev/lotuspod
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=%h/srv/dev/lotuspod/.venv/bin/lotuspod respond --credential %h/.config/lotuspod/responder.token
+Restart=on-failure
+RestartSec=5
+
+# Hardening: no new privileges, private tmp.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=%h
+
+[Install]
+WantedBy=default.target

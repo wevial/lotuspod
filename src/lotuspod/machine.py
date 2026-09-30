@@ -30,8 +30,10 @@ credential that exists and is not revoked:
                                         (needs claim)
 
 A pull records that HANDLE is listening and takes nothing off the queue: the
-same items come back until they are claimed or acknowledged. It is the only
-way a page's kept source leaves the host's files.
+same items come back until they are claimed or acknowledged. A page's owner
+also reads the comments routed to it as they arrived that have since passed
+to the responder, until an agent takes them up; only the responder may claim
+them. The pull is the only way a page's kept source leaves the host's files.
 
 Each claim, reply, release and failure is one database transaction, written
 to the audit trail with the credential and handle that acted. A claim is
@@ -315,6 +317,7 @@ class Routes:
         _allow(credential, "pull", owner)
         pulled_at = self.database.record_pull(owner)
         pulls = routing.last_pulls(self.database)
+        paused = self.database.responder_paused()
         now = self.clock()
         pages: dict[str, api.Page | None] = {}
         described: dict[str, dict] = {}
@@ -331,9 +334,13 @@ class Routes:
 
         items = []
         for comment in self.database.open_comments():
-            routed = routing.route(comment, pulls, self.window, now)
+            routed = routing.route(comment, pulls, self.window, now, paused)
             # A current claim takes it off the queue; a lapsed one does not.
-            if routed is None or routed[0] != owner or routed[1] not in routing.WAITING:
+            if routed is None or routed[1] not in routing.WAITING:
+                continue
+            # The owner it was routed to as it arrived still reads it, but
+            # does not hold it past the window.
+            if owner not in (routed[0], routing.arrival_owner(comment, self.window)):
                 continue
             # A comment on a page serve no longer answers waits for it.
             page = page_of(comment["page"])
@@ -344,9 +351,9 @@ class Routes:
             omitted = max(0, len(found["replies"]) - routing.THREAD_TAIL)
             items.append({
                 "kind": "comment",
-                "comment": routing.public(comment, pulls, self.window, now),
+                "comment": routing.public(comment, pulls, self.window, now, paused),
                 # The thread's first comment and its latest replies, oldest first.
-                "thread": [routing.public(row, pulls, self.window, now)
+                "thread": [routing.public(row, pulls, self.window, now, paused)
                            for row in (found["root"], *found["replies"][omitted:])],
                 "omitted": omitted,
                 "page": item_page(page),
@@ -461,7 +468,7 @@ class Routes:
     def _shown(self, row: dict) -> dict:
         """A comment as the threads routes show it."""
         return routing.public(row, routing.last_pulls(self.database), self.window,
-                              self.clock())
+                              self.clock(), self.database.responder_paused())
 
 
 def _json_body(headers: Message, body: api.Body | None) -> dict:

@@ -272,7 +272,7 @@ class AuditTests(ClaimTestCase):
     def audit(self, *argv: str) -> list[dict]:
         rc, out, err = run_cli("audit", "--json", "--out-dir", str(self.out_dir), *argv)
         self.assertEqual(rc, 0, err)
-        return json.loads(out)["actions"]
+        return json.loads(out)
 
     def test_every_claim_reply_release_and_failure_is_listed_oldest_first(self):
         self.pull("hermes")
@@ -341,7 +341,8 @@ class SchemaTests(unittest.TestCase):
             self.assertEqual(database.audit(), [])
             conn = sqlite3.connect(str(path))
             try:
-                self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 4)
+                self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0],
+                                 db.SCHEMA_VERSION)
             finally:
                 conn.close()
 
