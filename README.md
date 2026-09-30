@@ -7,7 +7,7 @@ Podcast artifact scaffold with a shared lotus theme. Render episode artifacts
 
 ```
 lotuspod/
-├── src/lotuspod/          # package + minimal CLI (`lotuspod render|manifest|index|serve`)
+├── src/lotuspod/          # package + minimal CLI (`lotuspod render|publish|manifest|index|serve`)
 │   ├── _templates/artifact.html   # artifact template ({{placeholder}} substitution)
 │   ├── _templates/index.html      # index-page template
 │   └── _theme/            # tokens.json (colors, fonts, radii) + lotuspod.css
@@ -110,6 +110,45 @@ Everything from a `## Concrete commands` heading on is left out of the page,
 which keeps host-only commands off published pages. Links, images and task
 lists are not converted.
 
+## Publish a page
+
+`lotuspod publish SOURCE` puts a page on the site in one step: it renders the
+page, keeps its source beside it, rebuilds `manifest.json` and `index.html`,
+and, when the output directory is the top of its own git repository, makes
+one commit, `publish NAME`, and pushes it - where `render`, `manifest` and
+`index` run one by one commit once each.
+
+```sh
+lotuspod publish pond-plan.md --date 2026-09-01 --summary "Water plan"
+lotuspod publish garden.html
+lotuspod publish - --format markdown --name pond < pond.md
+```
+
+`SOURCE` is a `.md` or `.markdown` page (converted as above), an `.html` or
+`.htm` page body (used as given), or `-` for standard input with `--format
+markdown|html` and `--name`. The page name defaults to the file name up to its
+first dot. The title is the first `# ` line of a markdown page, or the text of
+the first `<h1>` of an HTML one (which is taken out of the body, so the page
+does not show it twice); `--title` overrides both, and a page with no title is
+refused. An HTML body gets the same section ids and outline as a markdown one.
+
+The source is kept byte for byte as `NAME.md`, or `NAME.body.html` for an HTML
+body. Both are sources, not pages: the manifest and the index leave them out,
+and serve never answers for them.
+
+Republishing a page keeps its date, summary and treatment unless `--date`,
+`--summary` or `--variant` is given; a new page gets today's date and the
+`report` treatment.
+
+Every published page carries its source's revision - the first 12 hex
+characters of the SHA-256 of the kept source - in a `lotuspod:revision` meta
+tag, and `publish` prints it. `--expect-revision REV` publishes only when the
+page is at `REV` (`none`: only when there is no page yet); otherwise publish
+exits 3 with "revision conflict" and writes nothing. Publishes to one
+directory take turns under a lock file kept beside the directory (never inside
+it), and every file is written under a temporary name and renamed into place,
+so a reader never sees half a page.
+
 ## Manifest
 
 Generate `artifacts/manifest.json`, an index of every rendered artifact in a
@@ -199,8 +238,10 @@ parses to exactly `true` — the same rule as `lotuspod manifest`.
 private artifact ids); requests for either return 404. Everything else
 returns 404: hidden pages (rendered with
 `--hidden`, a malformed flag, or no flag at all) are no longer reachable by
-direct URL, and stray files, dotfiles, subdirectories, traversal attempts, and
-directory listings are denied too. The allow-list is recomputed per request,
+direct URL, and page sources (`NAME.md`, `NAME.body.html`), stray files,
+dotfiles (`.git` included), a page or theme file that is a symbolic link,
+subdirectories, traversal attempts (encoded or not), and directory listings
+are denied too. The allow-list is recomputed per request,
 so re-rendering an artifact publishes or unpublishes it live — no restart.
 
 ## Publish

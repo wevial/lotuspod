@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as _dt
+import fcntl
 import hashlib
 import html
 import ipaddress
@@ -16,6 +17,7 @@ import sys
 import urllib.error
 import urllib.parse
 import urllib.request
+from contextlib import contextmanager
 from functools import partial
 from html.parser import HTMLParser
 from http import HTTPStatus
@@ -146,6 +148,27 @@ def render_template(context: dict, template_path: Path = TEMPLATE_PATH) -> str:
 THEME_FILES = ("lotuspod.css", "favicon.svg", "lotuspod-form.js")
 
 
+def write_atomic(path: Path, data: bytes) -> None:
+    """Write to a temporary file beside path, then rename it into place.
+
+    A reader - serve, or a publish running beside this one - sees the old
+    file or the new one, never half of either. The temporary name starts
+    with a dot and ends in .tmp, so no page glob and no serve request ever
+    matches it.
+    """
+    tmp = path.with_name(f".{path.name}.{os.getpid()}.{os.urandom(4).hex()}.tmp")
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o666)
+    try:
+        with os.fdopen(fd, "wb") as fh:
+            fh.write(data)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(tmp, path)
+    except BaseException:
+        tmp.unlink(missing_ok=True)
+        raise
+
+
 def sync_theme_css(out_dir: Path) -> None:
     """Keep the artifact dir's theme files identical to the packaged theme.
 
@@ -157,7 +180,7 @@ def sync_theme_css(out_dir: Path) -> None:
         packaged = THEME_DIR / filename
         theme_copy = out_dir / filename
         if not theme_copy.exists() or theme_copy.read_bytes() != packaged.read_bytes():
-            shutil.copyfile(packaged, theme_copy)
+            write_atomic(theme_copy, packaged.read_bytes())
 
 
 _OUTLINE_MIN_HEADINGS = 2
@@ -656,6 +679,7 @@ def cmd_render(args: argparse.Namespace) -> int:
         "theme_name": tokens["name"],
         "theme_version": tokens["version"],
         "visible": "false" if args.hidden else "true",
+        "revision": getattr(args, "revision", ""),
         "variant_class": variant_class(args.variant),
         "form": has_form,
         "mermaid": has_mermaid_block(body),
@@ -669,7 +693,7 @@ def cmd_render(args: argparse.Namespace) -> int:
 
     sync_theme_css(out_dir)
 
-    out_path.write_text(html, encoding="utf-8")
+    write_atomic(out_path, html.encode("utf-8"))
     source = getattr(args, "source", None)
     if source:
         destination = out_dir / f"{args.name}.md"
@@ -677,7 +701,8 @@ def cmd_render(args: argparse.Namespace) -> int:
         if not (destination.exists() and Path(source).samefile(destination)):
             shutil.copyfile(source, destination)
     print(f"rendered {out_path}")
-    commit_output(out_dir, f"render {args.name}")
+    if getattr(args, "commit", True):
+        commit_output(out_dir, f"render {args.name}")
     return 0
 
 
@@ -702,14 +727,30 @@ def extract_meta(page_html: str, stem: str) -> dict:
         if ep:
             episode = ep.group(1).strip()
 
+    # The page holds its title and summary as markup; the metadata is their
+    # text, escaped again only for wherever it is written next.
     return {
         "file": f"{stem}.html",
-        "title": title.group(1) if title else stem,
+        "title": html.unescape(title.group(1)) if title else stem,
         "episode": episode,
         "date": date.group(1) if date else "",
-        "summary": summary.group(1) if summary else "",
+        "summary": html.unescape(summary.group(1)) if summary else "",
         "visible": extract_visibility(page_html),
     }
+
+
+# A page's kept HTML source, NAME.body.html, sits beside NAME.html as NAME.md
+# does for a markdown page: a source, never a page.
+BODY_SOURCE_SUFFIX = ".body.html"
+
+
+def is_page_name(name: str) -> bool:
+    """Whether a *.html name in the output directory is an artifact page."""
+    return (
+        name != INDEX_FILE
+        and not name.startswith(".")
+        and not name.endswith(BODY_SOURCE_SUFFIX)
+    )
 
 
 def collect_artifacts(out_dir: Path) -> tuple[list[dict], int]:
@@ -717,7 +758,7 @@ def collect_artifacts(out_dir: Path) -> tuple[list[dict], int]:
 
     Visible entries come back newest-first (date descending, filename as the
     tiebreaker) so the index leads with the latest work by default."""
-    pages = sorted(p for p in out_dir.glob("*.html") if p.name != INDEX_FILE)
+    pages = sorted(p for p in out_dir.glob("*.html") if is_page_name(p.name))
     metas = [extract_meta(p.read_text(encoding="utf-8"), p.stem) for p in pages]
     visible = [m for m in metas if m["visible"]]
     visible.sort(key=lambda m: m.get("date") or "", reverse=True)
@@ -737,13 +778,16 @@ def cmd_manifest(args: argparse.Namespace) -> int:
     sync_theme_css(out_dir)
 
     manifest_path = out_dir / MANIFEST_FILE
-    manifest_path.write_text(
-        json.dumps({"version": MANIFEST_VERSION, "artifacts": artifacts}, indent=2)
-        + "\n",
-        encoding="utf-8",
+    write_atomic(
+        manifest_path,
+        (
+            json.dumps({"version": MANIFEST_VERSION, "artifacts": artifacts}, indent=2)
+            + "\n"
+        ).encode("utf-8"),
     )
     print(f"wrote {manifest_path} ({len(artifacts)} artifacts{_hidden_note(hidden)})")
-    commit_output(out_dir, "manifest")
+    if getattr(args, "commit", True):
+        commit_output(out_dir, "manifest")
     return 0
 
 
@@ -818,11 +862,244 @@ def cmd_index(args: argparse.Namespace) -> int:
     sync_theme_css(out_dir)
 
     out_path = out_dir / INDEX_FILE
-    out_path.write_text(render_index(artifacts), encoding="utf-8")
+    write_atomic(out_path, render_index(artifacts).encode("utf-8"))
     print(
         f"wrote {out_path} ({len(artifacts)} artifacts{_hidden_note(hidden)})"
     )
-    commit_output(out_dir, "index")
+    if getattr(args, "commit", True):
+        commit_output(out_dir, "index")
+    return 0
+
+
+PUBLISH_FORMATS = ("markdown", "html")
+_FORMAT_BY_SUFFIX = {".md": "markdown", ".markdown": "markdown", ".html": "html", ".htm": "html"}
+# Where each kind of source is kept beside its page, byte for byte as read.
+_KEPT_SOURCE_SUFFIX = {"markdown": ".md", "html": BODY_SOURCE_SUFFIX}
+# No dot, so a page name can never end in .body and pass for a source.
+_PAGE_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]*")
+PUBLISH_VARIANT = "report"
+REVISION_LENGTH = 12
+NO_REVISION = "none"
+EXIT_REVISION_CONFLICT = 3
+_REVISION_TAG_RE = re.compile(
+    r"<meta\s[^>]*name=[\"']lotuspod:revision[\"'][^>]*>", re.IGNORECASE
+)
+_MAIN_CLASS_RE = re.compile(r'<main class="([^"]*)"')
+
+
+def source_revision(data: bytes) -> str:
+    """A source's revision: the head of the SHA-256 of its bytes."""
+    return hashlib.sha256(data).hexdigest()[:REVISION_LENGTH]
+
+
+def page_revision(out_dir: Path, name: str) -> str:
+    """The revision NAME.html is published at; "none" when there is no page.
+
+    A page rendered before revisions were stamped takes its kept source's.
+    """
+    page = out_dir / f"{name}.html"
+    if not page.exists():
+        return NO_REVISION
+    tag = _REVISION_TAG_RE.search(page.read_text(encoding="utf-8"))
+    content = _META_CONTENT_RE.search(tag.group(0)) if tag else None
+    if content:
+        return content.group(1).strip()
+    for suffix in _KEPT_SOURCE_SUFFIX.values():
+        kept = out_dir / f"{name}{suffix}"
+        if kept.is_file():
+            return source_revision(kept.read_bytes())
+    return ""
+
+
+def page_variant(page_html: str) -> str:
+    """The render variant a page's main element carries."""
+    main = _MAIN_CLASS_RE.search(page_html)
+    classes = main.group(1).split() if main else []
+    for variant in VARIANTS:
+        stamp = variant_class(variant).strip()
+        if stamp and stamp in classes:
+            return variant
+    return DEFAULT_VARIANT
+
+
+def markdown_title(text: str) -> str:
+    """The text of the first `# ` line outside a code fence ("" when none)."""
+    fenced = False
+    for line in text.split("\n"):
+        if line.startswith("```"):
+            fenced = not fenced
+        elif not fenced and line.startswith("# "):
+            return line[2:].strip()
+    return ""
+
+
+class _H1Collector(HTMLParser):
+    """Locate the body's first h1: source span and text (see _H2Collector)."""
+
+    def __init__(self, body: str) -> None:
+        super().__init__(convert_charrefs=True)
+        self._body = body
+        self._line_starts = [0]
+        for index, char in enumerate(body):
+            if char == "\n":
+                self._line_starts.append(index + 1)
+        self._mermaid_depth = 0
+        self._open = False
+        self.start: int | None = None
+        self.end: int | None = None
+        self.text: list[str] = []
+
+    def _offset(self) -> int:
+        line, column = self.getpos()
+        return self._line_starts[line - 1] + column
+
+    def handle_starttag(self, tag: str, attrs: list) -> None:
+        if tag == "pre":
+            classes = next((v for k, v in attrs if k == "class" and v), "").split()
+            if self._mermaid_depth or "mermaid" in classes:
+                self._mermaid_depth += 1
+        if tag == "h1" and self.start is None and not self._mermaid_depth:
+            self.start = self._offset()
+            self._open = True
+
+    def handle_data(self, data: str) -> None:
+        if self._open:
+            self.text.append(data)
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag == "pre" and self._mermaid_depth:
+            self._mermaid_depth -= 1
+        elif tag == "h1" and self._open:
+            self._open = False
+            self.end = self._body.index(">", self._offset()) + 1
+
+
+def html_title(body: str) -> tuple[str, str]:
+    """(the first h1's text, the body without that h1); ("", body) when none."""
+    parser = _H1Collector(body)
+    parser.feed(body)
+    parser.close()
+    if parser.start is None or parser.end is None:
+        return "", body
+    title = " ".join("".join(parser.text).split())
+    return title, body[:parser.start] + body[parser.end:]
+
+
+@contextmanager
+def publish_lock(out_dir: Path):
+    """Hold the output directory's publish lock for the block.
+
+    The lock file sits beside the directory, never inside it, so it is
+    never a file of the site and never reaches the artifacts repository.
+    """
+    lock_path = out_dir.parent / f".{out_dir.name}.publish.lock"
+    with open(lock_path, "a") as fh:
+        fcntl.flock(fh.fileno(), fcntl.LOCK_EX)
+        yield
+
+
+def cmd_publish(args: argparse.Namespace) -> int:
+    """Render a page from its source, keep the source, rebuild the manifest
+    and the index, and commit and push once.
+
+    Everything that can be refused is refused before anything is written.
+    From the revision check to the commit the directory's publish lock is
+    held, so two publishes of one page cannot both pass the check.
+    """
+    out_dir = (Path(args.out_dir) if args.out_dir else DEFAULT_OUTPUT_DIR).resolve()
+    if args.source == "-":
+        if not args.format or not args.name:
+            raise RuntimeError("publishing standard input needs --format and --name")
+        label = "standard input"
+        fmt = args.format
+    else:
+        label = args.source
+        fmt = args.format or _FORMAT_BY_SUFFIX.get(Path(args.source).suffix.lower(), "")
+        if not fmt:
+            raise RuntimeError(
+                f"cannot tell the format of {label}: name it .md or .html, or pass --format"
+            )
+    name = args.name or Path(args.source).name.split(".", 1)[0]
+    if not _PAGE_NAME.fullmatch(name) or f"{name}.html" == INDEX_FILE:
+        raise RuntimeError(
+            f"not a usable page name: {name!r} (letters, digits, '-' and '_'; pass --name)"
+        )
+    if args.date:
+        try:
+            _dt.date.fromisoformat(args.date)
+        except ValueError:
+            raise RuntimeError(f"not an ISO date: {args.date!r}") from None
+
+    if args.source == "-":
+        data = sys.stdin.buffer.read()
+    else:
+        try:
+            data = Path(args.source).read_bytes()
+        except FileNotFoundError:
+            raise FileNotFoundError(f"source not found: {label}") from None
+        except OSError as exc:
+            raise RuntimeError(f"cannot read {label}: {exc.strerror}") from None
+    try:
+        text = data.decode("utf-8")
+    except UnicodeDecodeError:
+        raise RuntimeError(f"{label} is not UTF-8") from None
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
+    if fmt == "markdown":
+        title, body = markdown_title(text), markdown.to_body(text)
+    else:
+        title, body = html_title(text)
+    if args.title is not None:
+        title = args.title.strip()
+    if not title:
+        raise RuntimeError(
+            f"{label} has no title: give it a first '# ' line or h1, or pass --title"
+        )
+    revision = source_revision(data)
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+    with publish_lock(out_dir):
+        current = page_revision(out_dir, name)
+        if args.expect_revision is not None and args.expect_revision != current:
+            print(
+                f"error: revision conflict: {name} is at revision {current or 'unknown'}, "
+                f"not {args.expect_revision}; nothing published",
+                file=sys.stderr,
+            )
+            return EXIT_REVISION_CONFLICT
+
+        # A republish keeps what the page already says unless told otherwise.
+        page = out_dir / f"{name}.html"
+        previous = page.read_text(encoding="utf-8") if page.exists() else ""
+        kept = extract_meta(previous, name) if previous else {}
+        summary = args.summary if args.summary is not None else kept.get("summary", "")
+        variant = args.variant or (page_variant(previous) if previous else PUBLISH_VARIANT)
+        cmd_render(
+            argparse.Namespace(
+                name=name,
+                title=html.escape(title, quote=False),
+                episode="",
+                date=args.date or kept.get("date") or _dt.date.today().isoformat(),
+                summary=html.escape(summary, quote=False),
+                body=body,
+                hidden=False,
+                no_outline=False,
+                variant=variant,
+                out_dir=str(out_dir),
+                revision=revision,
+                commit=False,
+            )
+        )
+        for kind, suffix in _KEPT_SOURCE_SUFFIX.items():
+            if kind == fmt:
+                write_atomic(out_dir / f"{name}{suffix}", data)
+            else:
+                # A page republished from the other kind keeps one source.
+                (out_dir / f"{name}{suffix}").unlink(missing_ok=True)
+        steps = argparse.Namespace(out_dir=str(out_dir), commit=False)
+        cmd_manifest(steps)
+        cmd_index(steps)
+        commit_output(out_dir, f"publish {name}")
+    print(f"published {name} at revision {revision}")
     return 0
 
 
@@ -884,7 +1161,9 @@ def serve_allow_list(out_dir: Path) -> frozenset[str]:
     only when its lotuspod:visible meta flag parses to exactly true.
     manifest.json and FINDINGS.md are never served (_SERVE_NEVER_FILES):
     the manifest lists private artifact ids, so it must stay unreachable
-    over HTTP even though it lives in the served directory.
+    over HTTP even though it lives in the served directory. Sources
+    (NAME.body.html, like NAME.md), dotfiles and symbolic links are never
+    pages, so they are never listed.
     """
     allowed = {INDEX_FILE, *_SERVE_SUPPORT_FILES}
     try:
@@ -892,9 +1171,11 @@ def serve_allow_list(out_dir: Path) -> frozenset[str]:
     except OSError:
         return allowed
     for page in pages:
-        if page.name == INDEX_FILE:
+        if not is_page_name(page.name):
             continue
         try:
+            if page.is_symlink():
+                continue
             visible = extract_visibility(page.read_text(encoding="utf-8"))
         except (OSError, UnicodeDecodeError):
             continue
@@ -911,21 +1192,43 @@ class _AllowListHandler(SimpleHTTPRequestHandler):
         super().__init__(*args, **kwargs)
 
     def translate_path(self, path: str) -> str:
+        deny = str(self.root / _DENY_PATH_NAME)
+        # A request that climbs, or names a dotfile, is refused as written -
+        # before normalisation could fold it back inside the directory.
+        words = urllib.parse.unquote(path.split("?", 1)[0].split("#", 1)[0])
+        if any(word.startswith(".") for word in words.split("/")):
+            return deny
         fs_path = Path(super().translate_path(path))
         try:
             rel = fs_path.relative_to(self.root)
         except ValueError:
-            rel = None
-        if rel is not None:
-            if not rel.parts:
-                return str(self.root / INDEX_FILE)
-            if (
-                len(rel.parts) == 1
-                and rel.name not in _SERVE_NEVER_FILES
-                and rel.name in serve_allow_list(self.root)
-            ):
-                return str(fs_path)
-        return str(self.root / _DENY_PATH_NAME)
+            return deny
+        if not rel.parts:
+            name = INDEX_FILE
+        elif (
+            len(rel.parts) == 1
+            and rel.name not in _SERVE_NEVER_FILES
+            and rel.name in serve_allow_list(self.root)
+        ):
+            name = rel.name
+        else:
+            return deny
+        # A linked page or theme file would serve whatever it points at.
+        candidate = self.root / name
+        try:
+            if candidate.is_symlink() or candidate.resolve().parent != self.root.resolve():
+                return deny
+        except (OSError, RuntimeError):
+            return deny
+        return str(candidate)
+
+    def send_head(self):
+        # Denial never reaches the file system: were a file ever to sit at
+        # the sentinel's name, it would still not be served.
+        if self.translate_path(self.path) == str(self.root / _DENY_PATH_NAME):
+            self.send_error(HTTPStatus.NOT_FOUND, "File not found")
+            return None
+        return super().send_head()
 
     def list_directory(self, path: str):
         self.send_error(HTTPStatus.NOT_FOUND, "File not found")
@@ -1338,6 +1641,50 @@ def build_parser() -> argparse.ArgumentParser:
     index = sub.add_parser("index", help="build index.html listing rendered artifacts")
     index.add_argument("--out-dir", default="", help="artifacts directory (default: artifacts/)")
     index.set_defaults(func=cmd_index)
+
+    publish = sub.add_parser(
+        "publish",
+        help="render a markdown or HTML page, keep its source, rebuild the "
+        "manifest and index, and commit once",
+    )
+    publish.add_argument(
+        "source",
+        metavar="SOURCE",
+        help="a .md/.markdown page, an .html/.htm page body, or '-' for standard input",
+    )
+    publish.add_argument(
+        "--name", default="", help="page name (default: the file name up to its first dot)"
+    )
+    publish.add_argument(
+        "--title", default=None, help="page title (default: the first '# ' line or h1)"
+    )
+    publish.add_argument(
+        "--summary", default=None, help="short summary line (default: the page's current one)"
+    )
+    publish.add_argument(
+        "--variant",
+        choices=VARIANTS,
+        default=None,
+        help=f"page treatment (default: the page's current one, else {PUBLISH_VARIANT})",
+    )
+    publish.add_argument(
+        "--date", default="", help="publication date (default: the page's current one, else today)"
+    )
+    publish.add_argument(
+        "--format",
+        choices=PUBLISH_FORMATS,
+        default="",
+        help="source format (default: from the file name; required for '-')",
+    )
+    publish.add_argument(
+        "--expect-revision",
+        default=None,
+        metavar="REV",
+        help=f"refuse, exit {EXIT_REVISION_CONFLICT}, unless the page is at REV "
+        f"('{NO_REVISION}': the page must not exist yet)",
+    )
+    publish.add_argument("--out-dir", default="", help="output directory (default: artifacts/)")
+    publish.set_defaults(func=cmd_publish)
 
     serve = sub.add_parser(
         "serve",
