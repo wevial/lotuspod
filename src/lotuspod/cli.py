@@ -24,6 +24,8 @@ from pathlib import Path
 
 import importlib.resources as _res
 
+from lotuspod import markdown
+
 _PKG = "lotuspod"
 
 
@@ -629,9 +631,19 @@ def cmd_render(args: argparse.Namespace) -> int:
     if args.episode:
         kicker = f"Lotuspod · Episode {args.episode}"
     summary_block = f'<p class="artifact-summary">{args.summary}</p>' if args.summary else ""
-    body = form_body(args.body, args.name)
+    source_body = args.body
+    markdown_path = getattr(args, "markdown", None)
+    if markdown_path:
+        # Read here rather than passed on the command line, so a body of any
+        # size gets through; `-` reads standard input.
+        if markdown_path == "-":
+            text = sys.stdin.read()
+        else:
+            text = Path(markdown_path).read_text(encoding="utf-8")
+        source_body = markdown.to_body(text)
+    body = form_body(source_body, args.name)
     # form_body leaves a body without a task list exactly as written.
-    has_form = body != args.body
+    has_form = body != source_body
     body, outline = (body, []) if args.no_outline else outline_body(body)
     context = {
         "title": args.title,
@@ -1284,7 +1296,14 @@ def build_parser() -> argparse.ArgumentParser:
     render.add_argument("--episode", default="", help="episode number/label")
     render.add_argument("--date", default="", help="publication date (ISO, defaults to today)")
     render.add_argument("--summary", default="", help="short summary line")
-    render.add_argument("--body", default="", help="artifact body (HTML or plain text)")
+    body_source = render.add_mutually_exclusive_group()
+    body_source.add_argument("--body", default="", help="artifact body (HTML or plain text)")
+    body_source.add_argument(
+        "--markdown",
+        default="",
+        metavar="PATH",
+        help="markdown file to convert into the body ('-' reads standard input)",
+    )
     render.add_argument(
         "--hidden",
         action="store_true",

@@ -81,6 +81,35 @@ and the outline rail on the left of the prose on a wide page. The default,
 `--variant article`, stamps nothing, so a page rendered without the flag is
 byte-identical to one rendered before the variant existed.
 
+### From markdown
+
+`--markdown PATH` renders the page straight from a markdown file instead of an
+HTML `--body` (the two cannot be combined); `--markdown -` reads standard
+input. The file is read inside the process, so a body of any size gets through
+without meeting the command-line length limit.
+
+```sh
+lotuspod render --name ep-002 --title "Under the Leaves" --markdown ep-002.md
+```
+
+The converter (`lotuspod.markdown.to_body`) takes a small subset of markdown:
+
+- `##` and `###` headings, and paragraphs; every `# ` line is dropped, since
+  the title is passed with `--title`.
+- `-` and `1.` lists, nested by indentation; indented plain text under an item
+  continues it.
+- `>` blockquotes, converted like the page itself, so fences, lists and tables
+  work inside them.
+- Pipe tables: the first row is the header, and the dashed separator row is
+  dropped.
+- `` `code spans` `` and `**bold**`.
+- Fenced code: a `mermaid` fence becomes a `<pre class="mermaid">` diagram
+  block, any other fence a `<pre><code>` block.
+
+Everything from a `## Concrete commands` heading on is left out of the page,
+which keeps host-only commands off published pages. Links, images and task
+lists are not converted.
+
 ## Manifest
 
 Generate `artifacts/manifest.json`, an index of every rendered artifact in a
