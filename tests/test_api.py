@@ -24,7 +24,7 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from lotuspod import access, cli, db, decisions  # noqa: E402
+from lotuspod import access, cli, db, decisions, routing  # noqa: E402
 from tests import access_keys as keys  # noqa: E402
 
 HOST = "127.0.0.1"
@@ -310,7 +310,9 @@ class CommentTests(ApiTestCase):
             {key: root[key] for key in root if key not in ("id", "createdAt")},
             {"page": "plan", "section": "risks", "sectionTitle": "Risks",
              "revision": self.revision, "parent": None, "text": "What if it does?",
-             "quote": quote, "actor": ACTOR, "state": "pending"},
+             "quote": quote, "actor": ACTOR,
+             # The page has no owner and the responder has never pulled.
+             "state": "unavailable", "owner": "responder"},
         )
         self.assertRegex(root["createdAt"], CREATED_AT)
         for row in (reply, deeper):
@@ -318,7 +320,8 @@ class CommentTests(ApiTestCase):
             self.assertEqual(row["section"], "risks")
             self.assertEqual(row["sectionTitle"], "Risks")
             self.assertIsNone(row["quote"])
-            self.assertEqual(row["state"], "pending")
+            self.assertEqual(row["state"], "unavailable")
+            self.assertEqual(row["owner"], "responder")
             self.assertEqual(row["actor"], ACTOR)
 
         self.assertEqual(
@@ -334,6 +337,7 @@ class CommentTests(ApiTestCase):
             page="plan", section="nowhere", section_title="Nowhere", revision="0" * 12,
             text="A section not on the page.", quote=None, actor=ACTOR,
         )
+        elsewhere = routing.public(elsewhere, {}, routing.DEFAULT_WINDOW, 0)
         _, reply = self.comment(parent=elsewhere["id"], text="Still here.")
         self.assertEqual(goals["sectionTitle"], "Goals")
         self.assertEqual(reply["section"], "nowhere")

@@ -30,7 +30,7 @@ from pathlib import Path
 
 import importlib.resources as _res
 
-from lotuspod import access, api, comments, db, decisions, machine, markdown
+from lotuspod import access, agents, api, comments, db, decisions, machine, markdown, routing
 
 _PKG = "lotuspod"
 
@@ -1302,11 +1302,33 @@ def api_page(out_dir: Path, name: str) -> api.Page | None:
         if heading["id"]:
             sections.setdefault(heading["id"], heading["text"])
     questions = {
-        key: api.Question(version=form.version, choices=frozenset(v for v, _ in form.options))
+        key: api.Question(version=form.version, choices=frozenset(v for v, _ in form.options),
+                          text=form.text, labels=dict(form.options))
         for key, form in decisions.read_forms(page_html).items()
     }
+    owner = page_owner(page_html)
     return api.Page(name=name, revision=revision, sections=sections, questions=questions,
-                    comment_sections=frozenset(comments.read_boxes(page_html)))
+                    comment_sections=frozenset(comments.read_boxes(page_html)),
+                    owner=owner if machine.is_handle(owner) else "",
+                    title=extract_meta(page_html, name)["title"])
+
+
+def agent_page(out_dir: Path, page: api.Page) -> dict:
+    """The page as an agent's pull shows it, with its kept source (NAME.md
+    or NAME.body.html). A page published before sources were kept has none:
+    an empty source, and the revision of the page as rendered."""
+    source_file, source = "", ""
+    for suffix in _KEPT_SOURCE_SUFFIX.values():
+        kept = out_dir / f"{page.name}{suffix}"
+        if kept.is_file() and not kept.is_symlink():
+            source_file = kept.name
+            source = kept.read_bytes().decode("utf-8", "replace")
+            break
+    revision = page.revision
+    if not source_file and not revision:
+        revision = source_revision((out_dir / f"{page.name}.html").read_bytes())
+    return {"name": page.name, "title": page.title, "owner": page.owner,
+            "revision": revision, "sourceFile": source_file, "source": source}
 
 
 # Headers on every page response. A meta tag cannot forbid framing, and
@@ -1485,17 +1507,33 @@ def serve_socket_path(db_path: Path, socket_arg: str) -> Path:
 
 def _make_server(out_dir: Path, host: str, port: int,
                  verifier: access.Verifier | None = None,
-                 db_path: Path | None = None) -> ThreadingHTTPServer:
+                 db_path: Path | None = None,
+                 window: int = routing.DEFAULT_WINDOW) -> ThreadingHTTPServer:
     """The allow-list server; /api answers 503 access_unconfigured without a
     verifier, and has no answers and comments routes without a database."""
     routes = None
     if db_path is not None:
-        routes = api.Api(db.Database(db_path), partial(api_page, out_dir))
+        routes = api.Api(db.Database(db_path), partial(api_page, out_dir), window)
     handler = partial(
         _AllowListHandler, directory=str(out_dir), root=out_dir, verifier=verifier,
         api=routes,
     )
     return ThreadingHTTPServer((host, port), handler)
+
+
+def owner_window(arg: int | None) -> int:
+    """Routing's owner window in seconds: --owner-window, else the config's
+    [comments] owner_window_sec, else the default."""
+    if arg is not None:
+        value, label = str(arg), "--owner-window"
+    else:
+        value = (config_section("comments") or {}).get("owner_window_sec", "")
+        label = f"config {config_path()} [comments] owner_window_sec"
+        if not value:
+            return routing.DEFAULT_WINDOW
+    if not value.isdigit() or int(value) < 1:
+        raise ConfigError(f"{label} {value!r} is not a whole number of seconds, 1 or more")
+    return int(value)
 
 
 def cmd_serve(args: argparse.Namespace) -> int:
@@ -1509,16 +1547,21 @@ def cmd_serve(args: argparse.Namespace) -> int:
         print(f"error: {exc}", file=sys.stderr)
         return 1
     socket_path = serve_socket_path(db_path, args.socket)
+    window = owner_window(args.owner_window)
     host = resolve_serve_host(args.host)
     verifier = access_verifier()
 
     try:
-        server = _make_server(out_dir, host, args.port, verifier=verifier, db_path=db_path)
+        server = _make_server(out_dir, host, args.port, verifier=verifier, db_path=db_path,
+                              window=window)
     except OSError as exc:
         print(f"error: cannot bind {host}:{args.port}: {exc}", file=sys.stderr)
         return 1
     try:
-        agents = machine.SocketServer(socket_path, db.Database(db_path))
+        sockets = machine.SocketServer(
+            socket_path, db.Database(db_path), pages=partial(api_page, out_dir),
+            describe=partial(agent_page, out_dir), window=window,
+        )
     except (OSError, machine.SocketInUse) as exc:
         server.server_close()
         print(f"error: cannot listen on {socket_path}: {exc}", file=sys.stderr)
@@ -1545,8 +1588,8 @@ def cmd_serve(args: argparse.Namespace) -> int:
     on_main = threading.current_thread() is threading.main_thread()
     if on_main:
         previous = signal.signal(signal.SIGTERM, _stop_serving)
-    agents_thread = threading.Thread(target=agents.serve_forever, daemon=True)
-    agents_thread.start()
+    socket_thread = threading.Thread(target=sockets.serve_forever, daemon=True)
+    socket_thread.start()
     try:
         server.serve_forever()
     except KeyboardInterrupt:
@@ -1555,9 +1598,9 @@ def cmd_serve(args: argparse.Namespace) -> int:
         if on_main:
             # A second SIGTERM must not cut the cleanup short.
             signal.signal(signal.SIGTERM, signal.SIG_IGN)
-        agents.shutdown()
-        agents_thread.join()
-        agents.server_close()
+        sockets.shutdown()
+        socket_thread.join()
+        sockets.server_close()
         server.server_close()
         if on_main:
             signal.signal(signal.SIGTERM, previous)
@@ -1827,6 +1870,15 @@ def build_parser() -> argparse.ArgumentParser:
         help="Unix socket agents reach serve on (default: the config's [agents] "
         f"socket, else {machine.SOCKET_NAME} beside the database)",
     )
+    serve.add_argument(
+        "--owner-window",
+        type=int,
+        default=None,
+        metavar="SECONDS",
+        help="how long a pull keeps a handle listening, and a listening page owner "
+        "holds a comment before the responder gets it (default: the config's "
+        f"[comments] owner_window_sec, else {routing.DEFAULT_WINDOW})",
+    )
     serve.set_defaults(func=cmd_serve)
 
     credential = sub.add_parser(
@@ -1880,6 +1932,8 @@ def build_parser() -> argparse.ArgumentParser:
     answers.add_argument("--json", action="store_true", help="print JSON, as GET /api/answers")
     database_options(answers)
     answers.set_defaults(func=cmd_answers)
+
+    agents.add_parser(sub)
 
     return parser
 

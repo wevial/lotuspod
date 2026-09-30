@@ -10,8 +10,19 @@ serve listens on a Unix socket (mode 0600, removed when serve stops) beside
 its port, and answers only /v1/ paths there, each for a bearer token of a
 credential that exists and is not revoked:
 
-    GET /v1/whoami                     the credential's name, handles, operations
-    GET /v1/check?op=OP&handle=HANDLE  whether it may do OP as HANDLE
+    GET  /v1/whoami                     the credential's name, handles, operations
+    GET  /v1/check?op=OP&handle=HANDLE  whether it may do OP as HANDLE
+    GET  /v1/pull?owner=HANDLE          the comments routed to HANDLE and the
+                                        answers on its pages it has not
+                                        acknowledged (needs pull for HANDLE)
+    POST /v1/answers/ID/ack             the page's owner has answer ID (needs
+                                        pull for that owner)
+    GET  /v1/threads?page=NAME          the page's threads, as the reader's
+                                        route answers them (needs pull)
+
+A pull records that HANDLE is listening and takes nothing off the queue: the
+same items come back until they are claimed or acknowledged. It is the only
+way a page's kept source leaves the host's files.
 
 No socket route writes a reader's answer or comment, whatever the credential.
 """
@@ -30,13 +41,14 @@ import socket
 import socketserver
 import sqlite3
 import stat
+import time
 import urllib.parse
 from email.message import Message
 from http import HTTPStatus
 from pathlib import Path
-from typing import Mapping
+from typing import Callable, Mapping
 
-from lotuspod import api, db
+from lotuspod import api, db, routing
 
 OPERATIONS = ("pull", "claim", "reply", "publish")
 # An owner handle, and a credential's name: 1 to 63 lower-case letters,
@@ -48,8 +60,13 @@ TOKEN_BYTES = 32
 
 WHOAMI = "/v1/whoami"
 CHECK = "/v1/check"
-ROUTES = (WHOAMI, CHECK)
+PULL = "/v1/pull"
+THREADS = "/v1/threads"
+ROUTES = (WHOAMI, CHECK, PULL, THREADS)
 METHODS = ("GET", "HEAD")
+# POST /v1/answers/ID/ack
+_ACK = re.compile(r"/v1/answers/([1-9][0-9]{0,18})/ack")
+ACK_METHODS = ("POST",)
 # Seconds a socket connection may sit idle.
 REQUEST_TIMEOUT = 30
 
@@ -187,11 +204,28 @@ def bearer(headers: Message) -> str | None:
     return token
 
 
-class Routes:
-    """The socket's routes over one database."""
+def _no_page(name: str) -> api.Page | None:
+    return None
 
-    def __init__(self, database: db.Database) -> None:
+
+class Routes:
+    """The socket's routes over one database.
+
+    pages(name) is the Page serve would answer for name, or None, and
+    describe(page) the page as a pulled item shows it, its kept source
+    included; window is routing's owner window.
+    """
+
+    def __init__(self, database: db.Database,
+                 pages: Callable[[str], api.Page | None] = _no_page,
+                 describe: Callable[[api.Page], dict] | None = None,
+                 window: float = routing.DEFAULT_WINDOW,
+                 clock: Callable[[], float] = time.time) -> None:
         self.database = database
+        self.pages = pages
+        self.describe = describe or _describe
+        self.window = window
+        self.clock = clock
 
     def answer(self, method: str, target: str, headers: Message) -> api.Answer:
         """The answer to one request for target, a path and query."""
@@ -203,32 +237,143 @@ class Routes:
         if credential is None:
             return HTTPStatus.UNAUTHORIZED, {"error": "invalid_credential"}, ()
         path, _, query = target.split("#", 1)[0].partition("?")
-        if path not in ROUTES:
+        ack = _ACK.fullmatch(path)
+        if path not in ROUTES and ack is None:
             return HTTPStatus.NOT_FOUND, {"error": "not_found"}, ()
-        if method not in METHODS:
+        allowed = METHODS if ack is None else ACK_METHODS
+        if method not in allowed:
             return (HTTPStatus.METHOD_NOT_ALLOWED, {"error": "method_not_allowed"},
-                    (("Allow", ", ".join(METHODS)),))
-        if path == WHOAMI:
-            return HTTPStatus.OK, {"credential": public(credential)}, ()
-        fields = _query(query)
-        if fields is None:
-            return HTTPStatus.BAD_REQUEST, {"error": "invalid_query"}, ()
-        error = authorize(credential, fields["op"], fields["handle"])
-        if error is not None:
-            return HTTPStatus.FORBIDDEN, {"error": error}, ()
-        return HTTPStatus.OK, {"allowed": True, **fields}, ()
+                    (("Allow", ", ".join(allowed)),))
+        try:
+            if path == WHOAMI:
+                return HTTPStatus.OK, {"credential": public(credential)}, ()
+            if path == CHECK:
+                fields = _query(query, ("op", "handle"))
+                error = authorize(credential, fields["op"], fields["handle"])
+                if error is not None:
+                    raise api.Refusal(HTTPStatus.FORBIDDEN, error)
+                return HTTPStatus.OK, {"allowed": True, **fields}, ()
+            if path == PULL:
+                return HTTPStatus.OK, self._pull(credential, _query(query, ("owner",))["owner"]), ()
+            if path == THREADS:
+                return HTTPStatus.OK, self._threads(credential, _query(query, ("page",))["page"]), ()
+            return HTTPStatus.OK, self._ack(credential, int(ack.group(1))), ()
+        except api.Refusal as exc:
+            return exc.status, {"error": exc.error}, ()
+        except (sqlite3.Error, OSError):
+            return HTTPStatus.SERVICE_UNAVAILABLE, {"error": "storage_unavailable"}, ()
+
+    def _page(self, name: str) -> api.Page | None:
+        return self.pages(name) if isinstance(name, str) else None
+
+    def _pull(self, credential: Mapping, owner: str) -> dict:
+        _allow(credential, "pull", owner)
+        pulled_at = self.database.record_pull(owner)
+        pulls = routing.last_pulls(self.database)
+        now = self.clock()
+        pages: dict[str, api.Page | None] = {}
+        described: dict[str, dict] = {}
+
+        def page_of(name: str) -> api.Page | None:
+            if name not in pages:
+                pages[name] = self._page(name)
+            return pages[name]
+
+        def item_page(page: api.Page) -> dict:
+            if page.name not in described:
+                described[page.name] = self.describe(page)
+            return described[page.name]
+
+        items = []
+        for comment in self.database.open_comments():
+            routed = routing.route(comment, pulls, self.window, now)
+            if routed is None or routed[0] != owner:
+                continue
+            # A comment on a page serve no longer answers waits for it.
+            page = page_of(comment["page"])
+            if page is None:
+                continue
+            root = comment["id"] if comment["parent"] is None else comment["parent"]
+            found = self.database.thread(root)
+            omitted = max(0, len(found["replies"]) - routing.THREAD_TAIL)
+            found = {"root": found["root"], "replies": found["replies"][omitted:]}
+            items.append({
+                "kind": "comment",
+                "comment": routing.public(comment, pulls, self.window, now),
+                "thread": {**routing.thread(found, pulls, self.window, now),
+                           "omitted": omitted},
+                "page": item_page(page),
+            })
+        for found in self.database.unacknowledged_answers(owner):
+            answer, kept = found["answer"], found["asked"]
+            page = page_of(answer["page"])
+            if page is None or page.owner != owner:
+                continue
+            asked = page.questions.get(answer["question"])
+            # Whether the page now asks it in other words, or not at all.
+            reworded = asked is None or asked.version != answer["version"]
+            text, label = kept["text"], kept["label"]
+            if text is None:
+                # Stored before the words were kept: the page's own words are
+                # the answered ones only while its version is the same.
+                text = "" if reworded else asked.text
+                label = answer["choice"] if reworded else asked.labels.get(
+                    answer["choice"], answer["choice"])
+            items.append({
+                "kind": "answer",
+                "answer": answer,
+                # The question and choice in the words the reader answered.
+                "question": {"id": answer["question"], "text": text, "label": label,
+                             "reworded": reworded},
+                "page": item_page(page),
+            })
+        return {"owner": owner, "pulledAt": pulled_at, "items": items}
+
+    def _threads(self, credential: Mapping, name: str) -> dict:
+        if "pull" not in credential["operations"]:
+            raise api.Refusal(HTTPStatus.FORBIDDEN, "operation_not_allowed")
+        page = self._page(name)
+        if page is None:
+            raise api.Refusal(HTTPStatus.NOT_FOUND, "unknown_page")
+        return {"page": page.name,
+                "threads": routing.threads(self.database, page.name, self.window, self.clock())}
+
+    def _ack(self, credential: Mapping, answer_id: int) -> dict:
+        answer = self.database.answer(answer_id)
+        if answer is None:
+            raise api.Refusal(HTTPStatus.NOT_FOUND, "unknown_answer")
+        page = self._page(answer["page"])
+        if page is None:
+            raise api.Refusal(HTTPStatus.NOT_FOUND, "unknown_page")
+        # A page with no owner is no handle's to acknowledge.
+        _allow(credential, "pull", page.owner)
+        acked_at = self.database.acknowledge_answer(answer_id, page.owner)
+        return {"answer": answer_id, "owner": page.owner, "ackedAt": acked_at}
 
 
-def _query(query: str) -> dict | None:
-    """{op, handle} from a query naming each exactly once; None otherwise."""
+def _describe(page: api.Page) -> dict:
+    """A page as a pulled item shows it, when serve names no source."""
+    return {"name": page.name, "title": page.title, "owner": page.owner,
+            "revision": page.revision, "sourceFile": "", "source": ""}
+
+
+def _allow(credential: Mapping, operation: str, handle: str) -> None:
+    error = authorize(credential, operation, handle)
+    if error is not None:
+        raise api.Refusal(HTTPStatus.FORBIDDEN, error)
+
+
+def _query(query: str, names: tuple[str, ...]) -> dict:
+    """The fields of a query naming each of names exactly once and nothing
+    else; Refusal invalid_query otherwise."""
     try:
         fields = urllib.parse.parse_qs(query, keep_blank_values=True,
                                        strict_parsing=bool(query), errors="strict")
     except (ValueError, UnicodeDecodeError):
-        return None
-    if sorted(fields) != ["handle", "op"] or any(len(v) != 1 for v in fields.values()):
-        return None
-    return {"op": fields["op"][0], "handle": fields["handle"][0]}
+        fields = {}
+    if sorted(fields) != sorted(names) or any(len(v) != 1 for v in fields.values()):
+        raise api.Refusal(HTTPStatus.BAD_REQUEST, "invalid_query")
+    return {name: fields[name][0] for name in names}
 
 
 class _Handler(http.server.BaseHTTPRequestHandler):
@@ -291,9 +436,12 @@ class SocketServer(socketserver.ThreadingMixIn, socketserver.UnixStreamServer):
 
     daemon_threads = True
 
-    def __init__(self, path: Path | str, database: db.Database) -> None:
+    def __init__(self, path: Path | str, database: db.Database,
+                 pages: Callable[[str], api.Page | None] = _no_page,
+                 describe: Callable[[api.Page], dict] | None = None,
+                 window: float = routing.DEFAULT_WINDOW) -> None:
         self.path = Path(path)
-        self.routes = Routes(database)
+        self.routes = Routes(database, pages, describe, window)
         self._inode: int | None = None
         clear_stale(self.path)
         # Never, even briefly, readable or writable by anyone else.

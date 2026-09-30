@@ -18,6 +18,10 @@ the page does not ask, 409 stale for a version other than the page's, and
 400 invalid_choice for a choice its form does not offer. A new thread is
 checked against the page's comment boxes: 400 unknown_section for a section
 the page has no box for.
+
+Every reader's comment a route answers carries its routing state (see
+lotuspod.routing): `state` is `pending` or `unavailable` until an agent takes
+it up, and `owner` is the handle it is routed to (null on an agent's reply).
 """
 
 from __future__ import annotations
@@ -25,13 +29,14 @@ from __future__ import annotations
 import json
 import socket
 import sqlite3
+import time
 import urllib.parse
 from dataclasses import dataclass, field
 from email.message import Message
 from http import HTTPStatus
 from typing import BinaryIO, Callable, Mapping
 
-from lotuspod import db
+from lotuspod import db, routing
 
 ANSWERS = "/api/answers"
 COMMENTS = "/api/comments"
@@ -61,6 +66,9 @@ class Question:
 
     version: str
     choices: frozenset[str]
+    text: str = ""
+    # Option values to their labels.
+    labels: Mapping[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -75,6 +83,9 @@ class Page:
     questions: Mapping[str, Question] = field(default_factory=dict)
     # The sections of the page's comment boxes, which take new threads.
     comment_sections: frozenset[str] = frozenset()
+    # The handle its lotuspod:owner names; "" when none does.
+    owner: str = ""
+    title: str = ""
 
 
 class Refusal(Exception):
@@ -230,11 +241,15 @@ def cross_origin(headers: Message) -> bool:
 
 class Api:
     """The four routes over one database; pages(name) is the Page serve
-    would answer for name, or None."""
+    would answer for name, or None; window is routing's owner window."""
 
-    def __init__(self, database: db.Database, pages: Callable[[str], Page | None]) -> None:
+    def __init__(self, database: db.Database, pages: Callable[[str], Page | None],
+                 window: float = routing.DEFAULT_WINDOW,
+                 clock: Callable[[], float] = time.time) -> None:
         self.database = database
         self.pages = pages
+        self.window = window
+        self.clock = clock
 
     def answer(self, method: str, path: str, query: str, headers: Message,
                body: Body, actor: Mapping) -> Answer:
@@ -253,7 +268,8 @@ class Api:
             if path == ANSWERS:
                 payload = {"page": page.name, "questions": self.database.answers(page.name)}
             else:
-                payload = {"page": page.name, "threads": self.database.threads(page.name)}
+                payload = {"page": page.name, "threads": routing.threads(
+                    self.database, page.name, self.window, self.clock())}
             return HTTPStatus.OK, payload, ()
         except Refusal as exc:
             return exc.status, {"error": exc.error}, ()
@@ -305,9 +321,14 @@ class Api:
         return self.database.add_answer(
             page=page.name, question=question, version=version, choice=choice,
             note=note, revision=page.revision, actor=actor,
+            question_text=asked.text, choice_label=asked.labels.get(choice, choice),
         )
 
     def _post_comment(self, headers: Message, body: Body, actor: Mapping) -> dict:
+        row = self._store_comment(headers, body, actor)
+        return routing.public(row, routing.last_pulls(self.database), self.window, self.clock())
+
+    def _store_comment(self, headers: Message, body: Body, actor: Mapping) -> dict:
         fields = self._json_body(headers, body)
         if "parent" in fields:
             _keys(fields, {"page", "parent", "text"})
@@ -317,7 +338,7 @@ class Api:
             try:
                 return self.database.add_reply(
                     page=page.name, parent=parent, revision=page.revision,
-                    sections=page.sections, text=text, actor=actor,
+                    sections=page.sections, text=text, actor=actor, owner=page.owner,
                 )
             except db.UnknownParent:
                 raise Refusal(HTTPStatus.NOT_FOUND, "unknown_parent") from None
@@ -332,5 +353,5 @@ class Api:
             raise Refusal(HTTPStatus.BAD_REQUEST, "unknown_section")
         return self.database.add_comment(
             page=page.name, section=section, section_title=page.sections.get(section, ""),
-            revision=page.revision, text=text, quote=quote, actor=actor,
+            revision=page.revision, text=text, quote=quote, actor=actor, owner=page.owner,
         )

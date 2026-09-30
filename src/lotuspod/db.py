@@ -11,7 +11,15 @@ Every row keeps the actor who wrote it and the page revision it was written
 against, so what the reader saw can be found again later.
 
 The machine credentials agents use on serve's socket are kept here too, by
-name, handles, operations and the SHA-256 of their token, never the token.
+name, handles, operations and the SHA-256 of their token, never the token,
+with each handle's last pull and the answers each owner has acknowledged.
+An answer also keeps its question's text and its choice's label as the page
+asked them, so an agent reads what the reader answered even after the page
+is reworded.
+
+A reader's comment also keeps, as it arrives, its page's owner and that
+owner's last pull then, so routing (lotuspod.routing) can tell whether the
+owner was listening when it came, whatever pulls follow.
 """
 
 from __future__ import annotations
@@ -24,7 +32,7 @@ from pathlib import Path
 from typing import Iterator, Mapping
 
 DEFAULT_NAME = "lotuspod.sqlite3"
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 # Seconds a connection waits for another writer before giving up.
 BUSY_TIMEOUT = 30
 # The state of a reader's comment until an agent takes it up.
@@ -68,6 +76,22 @@ _SCHEMA = {1: (
         token_hash TEXT NOT NULL UNIQUE,
         created_at TEXT NOT NULL,
         revoked_at TEXT
+    )""",
+), 3: (
+    "ALTER TABLE comments ADD COLUMN arrival_owner TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE comments ADD COLUMN arrival_pull TEXT",
+    "ALTER TABLE answers ADD COLUMN question_text TEXT",
+    "ALTER TABLE answers ADD COLUMN choice_label TEXT",
+    "CREATE INDEX comments_by_state ON comments(state, id)",
+    """CREATE TABLE pulls (
+        handle TEXT PRIMARY KEY,
+        pulled_at TEXT NOT NULL
+    )""",
+    """CREATE TABLE answer_acks (
+        answer INTEGER NOT NULL REFERENCES answers(id),
+        handle TEXT NOT NULL,
+        acked_at TEXT NOT NULL,
+        PRIMARY KEY (answer, handle)
     )""",
 )}
 
@@ -118,6 +142,8 @@ def _comment(row: sqlite3.Row) -> dict:
         "actor": _actor(row["actor"]),
         "createdAt": row["created_at"],
         "state": row["state"],
+        # Routing's own: lotuspod.routing reads it and never shows it.
+        "arrival": {"owner": row["arrival_owner"], "ownerPull": row["arrival_pull"]},
     }
 
 
@@ -171,8 +197,10 @@ class Database:
             conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
 
     def add_answer(self, *, page: str, question: str, version: str, choice: str,
-                   note: str, revision: str, actor: Mapping) -> dict:
-        """Store an answer; it supersedes the newest one to the same question."""
+                   note: str, revision: str, actor: Mapping,
+                   question_text: str | None = None, choice_label: str | None = None) -> dict:
+        """Store an answer; it supersedes the newest one to the same question.
+        question_text and choice_label are the words the page asked it in."""
         with self._connect() as conn, _write(conn):
             last = conn.execute(
                 "SELECT MAX(id) FROM answers WHERE page = ? AND question = ?",
@@ -180,9 +208,10 @@ class Database:
             ).fetchone()[0]
             cursor = conn.execute(
                 "INSERT INTO answers (page, question, version, choice, note, revision,"
-                " actor, created_at, supersedes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                " actor, created_at, supersedes, question_text, choice_label)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (page, question, version, choice, note, revision,
-                 _dump(actor), _now(), last),
+                 _dump(actor), _now(), last, question_text, choice_label),
             )
             row = conn.execute("SELECT * FROM answers WHERE id = ?", (cursor.lastrowid,))
             return _answer(row.fetchone())
@@ -206,17 +235,19 @@ class Database:
         return questions
 
     def add_comment(self, *, page: str, section: str, section_title: str, revision: str,
-                    text: str, quote: Mapping | None, actor: Mapping) -> dict:
-        """Store a comment opening a new thread on section."""
+                    text: str, quote: Mapping | None, actor: Mapping, owner: str = "") -> dict:
+        """Store a comment opening a new thread on section of a page owned
+        by owner ("" when it has none)."""
         with self._connect() as conn, _write(conn):
             return _insert_comment(
                 conn, page=page, section=section, section_title=section_title,
                 revision=revision, parent=None, text=text,
-                quote=None if quote is None else _dump(quote), actor=actor,
+                quote=None if quote is None else _dump(quote), actor=actor, owner=owner,
             )
 
     def add_reply(self, *, page: str, parent: int, revision: str,
-                  sections: Mapping[str, str], text: str, actor: Mapping) -> dict:
+                  sections: Mapping[str, str], text: str, actor: Mapping,
+                  owner: str = "") -> dict:
         """Store a reply in the thread of comment parent, on its section.
 
         A reply to a reply joins the same thread: its parent is the thread's
@@ -233,7 +264,7 @@ class Database:
             return _insert_comment(
                 conn, page=page, section=found["section"],
                 section_title=sections.get(found["section"], ""), revision=revision,
-                parent=root, text=text, quote=None, actor=actor,
+                parent=root, text=text, quote=None, actor=actor, owner=owner,
             )
 
     def threads(self, page: str) -> list[dict]:
@@ -249,6 +280,71 @@ class Database:
             else:
                 threads[row["parent"]]["replies"].append(_comment(row))
         return list(threads.values())
+
+    def open_comments(self) -> list[dict]:
+        """Every comment no agent has taken up yet, oldest first."""
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT * FROM comments WHERE state = ? ORDER BY id", (PENDING,)
+            ).fetchall()
+        return [_comment(row) for row in rows]
+
+    def thread(self, root: int) -> dict:
+        """The thread of comment root as {root, replies}, oldest first."""
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT * FROM comments WHERE id = ? OR parent = ? ORDER BY id", (root, root)
+            ).fetchall()
+        return {"root": _comment(rows[0]), "replies": [_comment(row) for row in rows[1:]]}
+
+    def record_pull(self, handle: str) -> str:
+        """Record that handle pulled now; the time it did."""
+        stamp = _now()
+        with self._connect() as conn, _write(conn):
+            conn.execute(
+                "INSERT INTO pulls (handle, pulled_at) VALUES (?, ?)"
+                " ON CONFLICT (handle) DO UPDATE SET pulled_at = excluded.pulled_at",
+                (handle, stamp),
+            )
+        return stamp
+
+    def pulls(self) -> dict[str, str]:
+        """Each handle that has pulled, to the time it last did."""
+        with self._connect() as conn:
+            rows = conn.execute("SELECT handle, pulled_at FROM pulls").fetchall()
+        return {row["handle"]: row["pulled_at"] for row in rows}
+
+    def answer(self, answer_id: int) -> dict | None:
+        """The answer answer_id; None when there is none."""
+        with self._connect() as conn:
+            row = conn.execute("SELECT * FROM answers WHERE id = ?", (answer_id,)).fetchone()
+        return None if row is None else _answer(row)
+
+    def unacknowledged_answers(self, handle: str) -> list[dict]:
+        """Every answer handle has not acknowledged, oldest first, each as
+        {answer, asked}: the answer, and the {text, label} of its question
+        and choice as the page asked them (None in an answer stored before
+        they were kept)."""
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT * FROM answers WHERE id NOT IN"
+                " (SELECT answer FROM answer_acks WHERE handle = ?) ORDER BY id", (handle,)
+            ).fetchall()
+        return [{"answer": _answer(row),
+                 "asked": {"text": row["question_text"], "label": row["choice_label"]}}
+                for row in rows]
+
+    def acknowledge_answer(self, answer_id: int, handle: str) -> str:
+        """Record that handle has the answer answer_id; when it first did."""
+        with self._connect() as conn, _write(conn):
+            conn.execute(
+                "INSERT OR IGNORE INTO answer_acks (answer, handle, acked_at) VALUES (?, ?, ?)",
+                (answer_id, handle, _now()),
+            )
+            return conn.execute(
+                "SELECT acked_at FROM answer_acks WHERE answer = ? AND handle = ?",
+                (answer_id, handle),
+            ).fetchone()[0]
 
     def add_credential(self, *, name: str, handles: list[str], operations: list[str],
                        token_hash: str) -> dict:
@@ -300,12 +396,18 @@ def _write(conn: sqlite3.Connection) -> Iterator[None]:
 
 def _insert_comment(conn: sqlite3.Connection, *, page: str, section: str,
                     section_title: str, revision: str, parent: int | None, text: str,
-                    quote: str | None, actor: Mapping) -> dict:
+                    quote: str | None, actor: Mapping, owner: str) -> dict:
+    # The owner's last pull as the comment arrives, read under the write lock.
+    pulled = None
+    if owner:
+        found = conn.execute("SELECT pulled_at FROM pulls WHERE handle = ?", (owner,)).fetchone()
+        pulled = None if found is None else found[0]
     cursor = conn.execute(
         "INSERT INTO comments (page, section, section_title, revision, parent, text,"
-        " quote, actor, created_at, state) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        " quote, actor, created_at, state, arrival_owner, arrival_pull)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (page, section, section_title, revision, parent, text, quote,
-         _dump(actor), _now(), PENDING),
+         _dump(actor), _now(), PENDING, owner, pulled),
     )
     row = conn.execute("SELECT * FROM comments WHERE id = ?", (cursor.lastrowid,))
     return _comment(row.fetchone())
