@@ -27,7 +27,7 @@ from pathlib import Path
 
 import importlib.resources as _res
 
-from lotuspod import markdown
+from lotuspod import access, markdown
 
 _PKG = "lotuspod"
 
@@ -883,20 +883,38 @@ def config_path() -> Path | None:
     return next((path for path in candidates if path.is_file()), None)
 
 
-def publish_config() -> dict[str, str]:
-    """The config's [publish] section; {} when there is no config file."""
+def config_section(name: str) -> dict[str, str] | None:
+    """The config's [NAME] section; None when there is no config file or no
+    such section."""
     path = config_path()
     if path is None:
-        return {}
+        return None
     parser = configparser.ConfigParser(interpolation=None)
     try:
         with open(path, encoding="utf-8") as fh:
             parser.read_file(fh)
     except (OSError, UnicodeDecodeError, configparser.Error) as exc:
         raise ConfigError(f"cannot read config {path}: {exc}") from None
-    if not parser.has_section("publish"):
-        return {}
-    return {key: value.strip() for key, value in parser.items("publish")}
+    if not parser.has_section(name):
+        return None
+    return {key: value.strip() for key, value in parser.items(name)}
+
+
+def publish_config() -> dict[str, str]:
+    """The config's [publish] section; {} when there is no config file."""
+    return config_section("publish") or {}
+
+
+def access_verifier() -> access.Verifier | None:
+    """The Access verifier the config's [access] section describes; None
+    when there is no such section."""
+    section = config_section("access")
+    if section is None:
+        return None
+    try:
+        return access.Verifier(access.parse_config(section))
+    except ValueError as exc:
+        raise ConfigError(f"config {config_path()}: {exc}") from None
 
 
 def publish_target(args: argparse.Namespace) -> tuple[str, str, str]:
@@ -1161,15 +1179,82 @@ _PAGE_HEADERS = (
 )
 
 
+# Headers on every /api answer.
+_API_HEADERS = (
+    ("Content-Type", "application/json"),
+    ("Cache-Control", "no-store"),
+    ("X-Content-Type-Options", "nosniff"),
+)
+_API_READ_METHODS = ("GET", "HEAD")
+
+
 class _AllowListHandler(SimpleHTTPRequestHandler):
-    """Serve v2: answer only allow-listed names; everything else is a 404."""
+    """Serve v2: answer only allow-listed names; everything else is a 404.
+
+    /api paths never reach the file system or method dispatch: whatever the
+    method, each is answered only after the request's Access assertion
+    verifies (see parse_request and _serve_api).
+    """
 
     # Whether the response being written is a page's (see end_headers).
     _page_response = False
 
-    def __init__(self, *args, root: Path, **kwargs):
+    def __init__(self, *args, root: Path, verifier: access.Verifier | None = None, **kwargs):
         self.root = Path(root)
+        self.verifier = verifier
         super().__init__(*args, **kwargs)
+
+    def _api_path(self) -> str | None:
+        path = self.path.split("?", 1)[0].split("#", 1)[0]
+        return path if path == "/api" or path.startswith("/api/") else None
+
+    def _api_answer(self, status: int, payload: dict, headers: tuple = ()) -> None:
+        body = json.dumps(payload).encode("utf-8")
+        self._page_response = False
+        self.send_response(status)
+        for header, value in (*_API_HEADERS, *headers):
+            self.send_header(header, value)
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        if self.command != "HEAD":
+            self.wfile.write(body)
+
+    def _serve_api(self, path: str) -> None:
+        # The reader is known only from a verified assertion; the plain
+        # Cf-Access-Authenticated-User-Email header is never read.
+        if self.verifier is None:
+            self._api_answer(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "access_unconfigured"})
+            return
+        assertions = self.headers.get_all(access.ASSERTION_HEADER) or []
+        try:
+            if len(assertions) > 1:
+                raise access.InvalidAssertion("more than one assertion")
+            email = self.verifier.reader(assertions[0] if assertions else None)
+        except access.AccessError as exc:
+            self._api_answer(exc.status, {"error": exc.error})
+            return
+        if path != "/api/whoami":
+            self._api_answer(HTTPStatus.NOT_FOUND, {"error": "not_found"})
+        elif self.command not in _API_READ_METHODS:
+            self._api_answer(
+                HTTPStatus.METHOD_NOT_ALLOWED, {"error": "method_not_allowed"},
+                (("Allow", ", ".join(_API_READ_METHODS)),),
+            )
+        else:
+            self._api_answer(HTTPStatus.OK, {"actor": {"kind": "human", "email": email}})
+
+    def parse_request(self) -> bool:
+        # /api is answered here, before handle_one_request dispatches on the
+        # method, so every method (OPTIONS, TRACE, any other word) meets the
+        # guard. False tells handle_one_request the request is done.
+        if not super().parse_request():
+            return False
+        path = self._api_path()
+        if path is None:
+            return True
+        self._serve_api(path)
+        self.wfile.flush()
+        return False
 
     def translate_path(self, path: str) -> str:
         deny = str(self.root / _DENY_PATH_NAME)
@@ -1228,8 +1313,12 @@ def resolve_serve_host(host_override: str) -> str:
     return host_override if host_override else tailnet_ipv4()
 
 
-def _make_server(out_dir: Path, host: str, port: int) -> ThreadingHTTPServer:
-    handler = partial(_AllowListHandler, directory=str(out_dir), root=out_dir)
+def _make_server(out_dir: Path, host: str, port: int,
+                 verifier: access.Verifier | None = None) -> ThreadingHTTPServer:
+    """The allow-list server; /api answers 503 access_unconfigured without a verifier."""
+    handler = partial(
+        _AllowListHandler, directory=str(out_dir), root=out_dir, verifier=verifier
+    )
     return ThreadingHTTPServer((host, port), handler)
 
 
@@ -1239,9 +1328,10 @@ def cmd_serve(args: argparse.Namespace) -> int:
         raise FileNotFoundError(f"artifacts directory not found: {out_dir}")
 
     host = resolve_serve_host(args.host)
+    verifier = access_verifier()
 
     try:
-        server = _make_server(out_dir, host, args.port)
+        server = _make_server(out_dir, host, args.port, verifier=verifier)
     except OSError as exc:
         print(f"error: cannot bind {host}:{args.port}: {exc}", file=sys.stderr)
         return 1
@@ -1253,6 +1343,8 @@ def cmd_serve(args: argparse.Namespace) -> int:
     else:
         print(f"serving {out_dir} on the tailnet (v2 allow-list):")
     print(f"  http://{host}:{args.port}/")
+    if verifier is None:
+        print("note: no [access] section in the config; /api answers 503")
     if not args.host:
         dns_name = _tailnet_dns_name()
         if dns_name:

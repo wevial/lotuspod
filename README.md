@@ -267,6 +267,40 @@ subdirectories, traversal attempts (encoded or not), and directory listings
 are denied too. The allow-list is recomputed per request,
 so re-rendering an artifact publishes or unpublishes it live — no restart.
 
+## Who is reading: Cloudflare Access
+
+The site sits behind Cloudflare Access, and serve's `/api` routes know the
+signed-in reader only from the `Cf-Access-Jwt-Assertion` token Access signs.
+The plain `Cf-Access-Authenticated-User-Email` header is never read: serve
+listens on loopback, where any process on the host could send it. The
+settings go in an `[access]` section of the same config file `publish` reads
+(`$LOTUSPOD_CONFIG`, then the XDG location); keep the real team, audience and
+emails there only, never in this repository:
+
+```ini
+[access]
+issuer = https://TEAM.cloudflareaccess.com
+audience = APPLICATION_AUDIENCE_TAG
+certs_url = https://TEAM.cloudflareaccess.com/cdn-cgi/access/certs
+allowed_emails = reader@example.com, other.reader@example.com
+```
+
+Every `/api` request must carry an assertion whose RS256 signature verifies
+against a key in the team's key set (keys under 2048 bits are ignored), whose
+`iss` is `issuer`, whose `aud` holds `audience` exactly, which is unexpired and
+not issued in the future (60 seconds of leeway), and whose `email`, compared
+lower-cased, is in `allowed_emails`. `certs_url` may be `https:`, `http:` or
+(for tests) `file:`. The key set is fetched on first need and kept for an
+hour; an unknown key id refetches it at most once a minute, and after a fetch
+fails every `/api` request answers 503 until it is tried again a minute later.
+
+Answers are JSON with `Cache-Control: no-store`: no assertion is 401
+`signed_out`, one that does not verify 401 `invalid_assertion`, a verified one
+for an email not allowed 403 `forbidden`, a key set that cannot be fetched 503
+`access_unavailable`, and a config with no `[access]` section 503
+`access_unconfigured` (pages are served as before). `GET /api/whoami` answers
+`{"actor": {"kind": "human", "email": EMAIL}}`.
+
 ## What a page may run
 
 Every artifact page carries a Content-Security-Policy meta tag at the top of
@@ -333,8 +367,11 @@ Screenshots of the rendered pages are taken with Playwright, pinned in
 `tests.capture_site` renders a sample site into a scratch directory, serves
 it on a free loopback port around one command and names its URL in
 `LOTUSPOD_URL`; `e2e/playwright.config.ts` reads that as its base URL, so the
-config starts no server of its own. The screenshots go to the directory named
-by `CAPTURE_OUT`:
+config starts no server of its own. The site trusts the test Access key in
+`tests/fixtures/access/` (made for the tests only), and the fixture names an
+assertion it accepts in `LOTUSPOD_TEST_ASSERTION`, for a check to send as
+`Cf-Access-Jwt-Assertion`. The screenshots go to the directory named by
+`CAPTURE_OUT`:
 
 ```sh
 npm --prefix e2e ci --no-audit --no-fund

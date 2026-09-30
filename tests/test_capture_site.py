@@ -41,6 +41,27 @@ with open(sys.argv[1], "w", encoding="utf-8") as fh:
     json.dump(seen, fh)
 """
 
+# Asks /api/whoami with and without LOTUSPOD_TEST_ASSERTION and records
+# each answer's status, Cache-Control and JSON body.
+WHOAMI_COMMAND = """\
+import json, os, sys, urllib.error, urllib.request
+url = os.environ["LOTUSPOD_URL"] + "/api/whoami"
+seen = {}
+for label, headers in (
+    ("with", {"Cf-Access-Jwt-Assertion": os.environ["LOTUSPOD_TEST_ASSERTION"]}),
+    ("without", {}),
+):
+    try:
+        response = urllib.request.urlopen(urllib.request.Request(url, headers=headers), timeout=10)
+    except urllib.error.HTTPError as exc:
+        response = exc
+    with response:
+        seen[label] = [response.status, response.headers["Cache-Control"],
+                       json.loads(response.read().decode("utf-8"))]
+with open(sys.argv[1], "w", encoding="utf-8") as fh:
+    json.dump(seen, fh)
+"""
+
 # Records LOTUSPOD_URL and the working directory, then exits 3.
 RECORD_COMMAND = """\
 import json, os, sys
@@ -156,6 +177,20 @@ class ServedSiteTests(CaptureSiteTestCase):
         for path, (_status, body) in first.items():
             with self.subTest(path=path):
                 self.assertNotIn("2031-03-04", body)
+
+
+class TestAssertionTests(CaptureSiteTestCase):
+    def test_site_accepts_the_named_assertion(self):
+        proc = self.run_wrapper(
+            sys.executable, "-c", WHOAMI_COMMAND, str(self.record)
+        )
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        seen = json.loads(self.record.read_text(encoding="utf-8"))
+        self.assertEqual(
+            seen["with"],
+            [200, "no-store", {"actor": {"kind": "human", "email": "maintainer@example.com"}}],
+        )
+        self.assertEqual(seen["without"], [401, "no-store", {"error": "signed_out"}])
 
 
 class TeardownTests(CaptureSiteTestCase):

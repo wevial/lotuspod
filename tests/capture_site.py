@@ -4,7 +4,9 @@ Renders a fixed sample site with this checkout's own CLI into a fresh
 temporary directory, serves it with the site's own allow-list server on
 127.0.0.1 and a free port, runs the command it was given with the site's URL
 in LOTUSPOD_URL, then stops the server, removes the directory and exits with
-the command's code. It never reads or writes the operator's artifacts/ and
+the command's code. The site trusts the test Access key
+(tests/fixtures/access/), and LOTUSPOD_TEST_ASSERTION holds an assertion it
+accepts, for a browser check to send as Cf-Access-Jwt-Assertion. It never reads or writes the operator's artifacts/ and
 never binds the tailnet address.
 
 Run from the repo root:
@@ -33,11 +35,15 @@ from unittest import mock
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
-from lotuspod import cli  # noqa: E402
+from lotuspod import access, cli  # noqa: E402
+from tests import access_keys  # noqa: E402
 
 
 HOST = "127.0.0.1"
 URL_ENV = "LOTUSPOD_URL"
+ASSERTION_ENV = "LOTUSPOD_TEST_ASSERTION"
+# How long the fixture's assertion stays valid: longer than any capture run.
+ASSERTION_LIFETIME = 24 * 3600
 # A fixed date, so every run renders the same bytes.
 SAMPLE_DATE = "2026-01-01"
 
@@ -148,12 +154,14 @@ def main(argv: list[str] | None = None) -> int:
         except Exception as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 1
-        server = cli._make_server(directory, HOST, 0)
+        verifier = access.Verifier(access.parse_config(access_keys.config_section()))
+        server = cli._make_server(directory, HOST, 0, verifier=verifier)
         port = server.server_address[1]
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         env = dict(os.environ)
         env[URL_ENV] = f"http://{HOST}:{port}"
+        env[ASSERTION_ENV] = access_keys.assertion(lifetime=ASSERTION_LIFETIME)
         try:
             return subprocess.run(command, cwd=str(REPO_ROOT), env=env, check=False).returncode
         except OSError as exc:
