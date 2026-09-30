@@ -62,15 +62,11 @@ def _sample_clock() -> types.ModuleType:
 # No mermaid block anywhere: the page template would load Mermaid from a CDN,
 # and a capture without network must render the same page.
 ARTICLE_BODY = """\
-<p>A sample article for captures: two sections and one question.</p>
+<p>A sample article for captures: two sections.</p>
 <h2>First section</h2>
 <p>The outline links here.</p>
 <h2>Second section</h2>
-<p>The task list below renders as a response form.</p>
-<ul>
-<li><input type="checkbox" disabled> Looks right</li>
-<li><input type="checkbox" disabled> Needs work</li>
-</ul>
+<p>Rendered with the article variant.</p>
 """
 
 REPORT_BODY = """\

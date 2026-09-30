@@ -102,14 +102,13 @@ class ServedSiteTests(CaptureSiteTestCase):
         self.assertIn("artifact-outline-list", article)
         self.assertIn('href="#first-section"', article)
         self.assertIn('href="#second-section"', article)
-        self.assertIn('<form class="artifact-form"', article)
-        self.assertIn('data-page="capture-article"', article)
+        self.assertNotIn("<form", article)
 
         self.assertIn("artifact--report", seen["/capture-report.html"][1])
 
-    def test_form_script_is_served(self):
+    def test_form_script_answers_404(self):
         seen = self.fetch("/lotuspod-form.js")
-        self.assertEqual(seen["/lotuspod-form.js"][0], 200)
+        self.assertEqual(seen["/lotuspod-form.js"][0], 404)
 
     def test_hidden_page_answers_404(self):
         seen = self.fetch("/capture-hidden.html")

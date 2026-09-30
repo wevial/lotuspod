@@ -298,10 +298,8 @@ class ArtifactTopbarTests(TempDirTestCase):
             if proc.returncode != 0:
                 self.skipTest(f"previous theme unavailable: {proc.stderr.strip()}")
             (previous / filename).write_text(proc.stdout, encoding="utf-8")
-        # d0b2598 predates the favicon (KO-244) and the form script (KO-539);
-        # the copy step needs them present.
-        for filename in ("favicon.svg", "lotuspod-form.js"):
-            (previous / filename).write_bytes((cli.THEME_DIR / filename).read_bytes())
+        # d0b2598 predates the favicon (KO-244); the copy step needs it present.
+        (previous / "favicon.svg").write_bytes((cli.THEME_DIR / "favicon.svg").read_bytes())
         old_version = json.loads(
             (previous / "tokens.json").read_text(encoding="utf-8")
         )["version"]
@@ -736,7 +734,7 @@ class ServeAllowListTests(TempDirTestCase):
         allowed = self.allow_list()
         self.assertEqual(
             allowed,
-            {"index.html", "lotuspod.css", "favicon.svg", "lotuspod-form.js", "zeta.html"},
+            {"index.html", "lotuspod.css", "favicon.svg", "zeta.html"},
         )
         self.assertNotIn("alpha.html", allowed)
         self.assertNotIn("mike.html", allowed)
@@ -747,7 +745,7 @@ class ServeAllowListTests(TempDirTestCase):
         (self.out_dir / "junk.html").write_bytes(b"\xff\xfe\x00<not utf-8>")
         self.assertEqual(
             self.allow_list(),
-            {"index.html", "lotuspod.css", "favicon.svg", "lotuspod-form.js", "good.html"},
+            {"index.html", "lotuspod.css", "favicon.svg", "good.html"},
         )
 
     def test_allow_list_recomputed_on_rewrite(self):
@@ -1003,6 +1001,25 @@ class PublishHttpRoundTripTests(TempDirTestCase):
         for denied in ("/manifest.json", "/FINDINGS.md", "/alpha.html"):
             status, _ = self.fetch(denied)
             self.assertEqual(status, 404, denied)
+
+    def test_the_form_script_is_neither_copied_nor_served(self):
+        rc, _, err = self.render(
+            "asked", "--body",
+            '<ul><li><input type="checkbox" disabled> Yes</li>'
+            '<li><input type="checkbox" disabled checked> No</li></ul>',
+        )
+        self.assertEqual(rc, 0, err)
+        self.assertEqual(
+            sorted(p.name for p in self.out_dir.iterdir()),
+            ["FINDINGS.md", "alpha.html", "asked.html", "favicon.svg", "index.html",
+             "lotuspod.css", "manifest.json", "mike.html", "tango.html", "zeta.html"],
+        )
+        self.assertEqual(self.fetch("/lotuspod-form.js")[0], 404)
+        self.assertEqual(self.fetch("/lotuspod.css")[0], 200)
+        self.assertEqual(self.fetch("/favicon.svg")[0], 200)
+        # A copy left behind by an older render is not served either.
+        (self.out_dir / "lotuspod-form.js").write_text("// stale", encoding="utf-8")
+        self.assertEqual(self.fetch("/lotuspod-form.js")[0], 404)
 
     def test_republish_flips_live_while_published(self):
         self.assertEqual(self.fetch("/zeta.html")[0], 200)
@@ -1416,10 +1433,8 @@ class OutlineSideRenderTests(TempDirTestCase):
             if proc.returncode != 0:
                 self.skipTest(f"previous theme unavailable: {proc.stderr.strip()}")
             (previous / filename).write_text(proc.stdout, encoding="utf-8")
-        # d0b2598 predates the favicon (KO-244) and the form script (KO-539);
-        # the copy step needs them present.
-        for filename in ("favicon.svg", "lotuspod-form.js"):
-            (previous / filename).write_bytes((cli.THEME_DIR / filename).read_bytes())
+        # d0b2598 predates the favicon (KO-244); the copy step needs it present.
+        (previous / "favicon.svg").write_bytes((cli.THEME_DIR / "favicon.svg").read_bytes())
         old_version = json.loads(
             (previous / "tokens.json").read_text(encoding="utf-8")
         )["version"]
