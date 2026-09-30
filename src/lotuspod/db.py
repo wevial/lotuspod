@@ -9,6 +9,9 @@ run beside a write, and the busy timeout lets two writers take turns.
 
 Every row keeps the actor who wrote it and the page revision it was written
 against, so what the reader saw can be found again later.
+
+The machine credentials agents use on serve's socket are kept here too, by
+name, handles, operations and the SHA-256 of their token, never the token.
 """
 
 from __future__ import annotations
@@ -21,13 +24,14 @@ from pathlib import Path
 from typing import Iterator, Mapping
 
 DEFAULT_NAME = "lotuspod.sqlite3"
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 # Seconds a connection waits for another writer before giving up.
 BUSY_TIMEOUT = 30
 # The state of a reader's comment until an agent takes it up.
 PENDING = "pending"
 
-_SCHEMA = (
+# The statements that bring a database from the version before each to it.
+_SCHEMA = {1: (
     """CREATE TABLE answers (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         page TEXT NOT NULL,
@@ -55,11 +59,25 @@ _SCHEMA = (
         state TEXT NOT NULL
     )""",
     "CREATE INDEX comments_by_page ON comments(page, id)",
-)
+), 2: (
+    """CREATE TABLE credentials (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL UNIQUE,
+        handles TEXT NOT NULL,
+        operations TEXT NOT NULL,
+        token_hash TEXT NOT NULL UNIQUE,
+        created_at TEXT NOT NULL,
+        revoked_at TEXT
+    )""",
+)}
 
 
 class UnknownParent(LookupError):
     """A reply names no comment on its page."""
+
+
+class DuplicateCredential(ValueError):
+    """A credential of that name already exists, revoked or not."""
 
 
 def _now() -> str:
@@ -103,6 +121,17 @@ def _comment(row: sqlite3.Row) -> dict:
     }
 
 
+def _credential(row: sqlite3.Row) -> dict:
+    return {
+        "name": row["name"],
+        "handles": json.loads(row["handles"]),
+        "operations": json.loads(row["operations"]),
+        "tokenHash": row["token_hash"],
+        "createdAt": row["created_at"],
+        "revokedAt": row["revoked_at"],
+    }
+
+
 class Database:
     """The database file at path, opened afresh for each use."""
 
@@ -134,11 +163,12 @@ class Database:
                 f"database schema {version} is newer than this lotuspod's {SCHEMA_VERSION}"
             )
         with _write(conn):
-            # Another connection may have made it while this one waited.
-            if conn.execute("PRAGMA user_version").fetchone()[0] == 0:
-                for statement in _SCHEMA:
+            # Another connection may have moved it on while this one waited.
+            version = conn.execute("PRAGMA user_version").fetchone()[0]
+            for step in range(version + 1, SCHEMA_VERSION + 1):
+                for statement in _SCHEMA[step]:
                     conn.execute(statement)
-                conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
+            conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
 
     def add_answer(self, *, page: str, question: str, version: str, choice: str,
                    note: str, revision: str, actor: Mapping) -> dict:
@@ -219,6 +249,37 @@ class Database:
             else:
                 threads[row["parent"]]["replies"].append(_comment(row))
         return list(threads.values())
+
+    def add_credential(self, *, name: str, handles: list[str], operations: list[str],
+                       token_hash: str) -> dict:
+        """Store a credential; DuplicateCredential when name is taken."""
+        with self._connect() as conn, _write(conn):
+            if conn.execute("SELECT 1 FROM credentials WHERE name = ?", (name,)).fetchone():
+                raise DuplicateCredential(name)
+            cursor = conn.execute(
+                "INSERT INTO credentials (name, handles, operations, token_hash, created_at)"
+                " VALUES (?, ?, ?, ?, ?)",
+                (name, json.dumps(handles), json.dumps(operations), token_hash, _now()),
+            )
+            row = conn.execute("SELECT * FROM credentials WHERE id = ?", (cursor.lastrowid,))
+            return _credential(row.fetchone())
+
+    def credentials(self) -> list[dict]:
+        """Every credential, revoked ones too, oldest first."""
+        with self._connect() as conn:
+            rows = conn.execute("SELECT * FROM credentials ORDER BY id").fetchall()
+        return [_credential(row) for row in rows]
+
+    def revoke_credential(self, name: str) -> dict | None:
+        """Revoke the credential name, now unless it already is; None when
+        there is no such credential."""
+        with self._connect() as conn, _write(conn):
+            conn.execute(
+                "UPDATE credentials SET revoked_at = ? WHERE name = ? AND revoked_at IS NULL",
+                (_now(), name),
+            )
+            row = conn.execute("SELECT * FROM credentials WHERE name = ?", (name,)).fetchone()
+            return None if row is None else _credential(row)
 
 
 def _dump(value: Mapping) -> str:

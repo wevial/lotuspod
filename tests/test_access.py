@@ -386,7 +386,8 @@ class ServeCommandTests(unittest.TestCase):
         out, err = io.StringIO(), io.StringIO()
         with mock.patch.object(cli, "_make_server", return_value=server) as make, \
                 redirect_stdout(out), redirect_stderr(err):
-            rc = cli.main(["serve", "--host", HOST, "--port", "0", "--out-dir", str(self.work)])
+            rc = cli.main(["serve", "--host", HOST, "--port", "0", "--out-dir", str(self.work),
+                           "--socket", str(self.work / "lotuspod.sock")])
         return rc, make, out.getvalue(), err.getvalue()
 
     def test_serve_passes_the_configured_verifier(self):

@@ -348,6 +348,61 @@ page 404 `unknown_parent`. A read without exactly one `page` is 400
 `invalid_query`. Questions, versions, choices and sections are not yet checked
 against the page itself.
 
+## Agent credentials
+
+Agents on the writer host (the operator seat, Hermes profiles, one-off Claude
+Code or Codex sessions, the default responder) never use the `/api` routes,
+which are the reader's. serve also listens on a Unix socket, `lotuspod.sock`
+beside the database, or the path `serve --socket PATH` or an `[agents]`
+section's `socket` key in the config names:
+
+```ini
+[agents]
+socket = /home/writer/lotuspod/lotuspod.sock
+```
+
+The socket is made with mode 0600 and removed when serve stops; a socket file
+left by a serve that died is removed at start, but serve refuses to start when
+something still answers on it. Being on the same machine is not an identity:
+every request on the socket carries a machine credential the operator makes on
+the host.
+
+```sh
+lotuspod credential create hermes --handle hermes --op pull --op reply \
+  --out ~/.config/lotuspod/hermes.token
+lotuspod credential list          # --json for JSON; tokens are never shown
+lotuspod credential revoke hermes # ends it at once
+```
+
+`create` binds the credential to the owner handles it may act as (`--handle`,
+repeatable: 1 to 63 lower-case letters, digits and hyphens, starting with a
+letter or digit; a credential's name follows the same rule) and the operations
+it may do (`--op`, repeatable: `pull`, `claim`, `reply`, `publish`). It writes
+a new random token to the `--out` file with mode 0600, refusing a file that
+already exists, and the database keeps only the token's SHA-256. The commands
+take `--out-dir` and `--db` as serve does, and write the database directly.
+
+An agent sends `Authorization: Bearer TOKEN`; agent commands take `--socket`
+and `--credential FILE` (or `$LOTUSPOD_CREDENTIAL`), the socket defaulting to
+the config's `[agents] socket`, then `lotuspod.sock` beside the default
+database. A missing, unknown or revoked token is 401 `invalid_credential`. The
+socket answers only `/v1/` paths (the `/api` routes are not on it, and serve's
+port never answers `/v1/`), as JSON with `Cache-Control: no-store`:
+
+- `GET /v1/whoami` answers `{"credential": {name, handles, operations,
+  createdAt, revokedAt}}`.
+- `GET /v1/check?op=OP&handle=HANDLE` answers 200 when the credential may do OP
+  as HANDLE; an operation on behalf of a handle is allowed only when the
+  credential holds both, otherwise 403 `handle_not_allowed` or
+  `operation_not_allowed`.
+
+No socket route writes a reader's answer or comment, whatever the credential.
+
+Know the limit: processes running as the same user are not isolated from one
+another. Any process running as the same user can read the token files and the
+database. Credentials keep well-behaved agents to their own handles and record
+who acted; they do not isolate a hostile process running as the same user.
+
 ## What a page may run
 
 Every artifact page carries a Content-Security-Policy meta tag at the top of

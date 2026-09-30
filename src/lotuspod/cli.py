@@ -15,8 +15,10 @@ import os
 import re
 import shlex
 import shutil
+import signal
 import subprocess
 import sys
+import threading
 import urllib.parse
 from contextlib import contextmanager
 from functools import partial
@@ -27,7 +29,7 @@ from pathlib import Path
 
 import importlib.resources as _res
 
-from lotuspod import access, api, db, markdown
+from lotuspod import access, api, db, machine, markdown
 
 _PKG = "lotuspod"
 
@@ -917,6 +919,44 @@ def access_verifier() -> access.Verifier | None:
         raise ConfigError(f"config {config_path()}: {exc}") from None
 
 
+def configured_socket() -> Path | None:
+    """The socket the config's [agents] section names; None when it names none."""
+    value = (config_section("agents") or {}).get("socket", "")
+    return Path(value).expanduser() if value else None
+
+
+def agent_socket(args: argparse.Namespace) -> Path:
+    """The socket an agent command talks to: --socket, else the config's
+    [agents] socket, else lotuspod.sock beside the default database."""
+    if args.socket:
+        return Path(args.socket)
+    return configured_socket() or DEFAULT_OUTPUT_DIR.parent / machine.SOCKET_NAME
+
+
+def agent_token(args: argparse.Namespace) -> str:
+    """The token of --credential, else of $LOTUSPOD_CREDENTIAL's file."""
+    path = args.credential or os.environ.get(machine.CREDENTIAL_ENV, "")
+    if not path:
+        raise ConfigError(f"no credential: pass --credential FILE or set {machine.CREDENTIAL_ENV}")
+    try:
+        return machine.read_token(path)
+    except machine.CredentialError as exc:
+        raise ConfigError(str(exc)) from None
+
+
+def add_agent_options(parser: argparse.ArgumentParser) -> None:
+    """--socket and --credential, which every agent command takes."""
+    parser.add_argument(
+        "--socket", default="", metavar="PATH",
+        help="serve's agent socket (default: the config's [agents] socket, else "
+        f"{machine.SOCKET_NAME} beside the default database)",
+    )
+    parser.add_argument(
+        "--credential", default="", metavar="FILE",
+        help=f"the agent's credential file (default: ${machine.CREDENTIAL_ENV})",
+    )
+
+
 def publish_target(args: argparse.Namespace) -> tuple[str, str, str]:
     """(label, format, page name) of the source, or a refusal."""
     if args.source == "-":
@@ -1359,6 +1399,14 @@ def serve_db_path(out_dir: Path, db_arg: str) -> Path:
     return path
 
 
+def serve_socket_path(db_path: Path, socket_arg: str) -> Path:
+    """The agent socket serve listens on: --socket, else the config's
+    [agents] socket, else lotuspod.sock beside the database."""
+    if socket_arg:
+        return Path(socket_arg)
+    return configured_socket() or db_path.parent / machine.SOCKET_NAME
+
+
 def _make_server(out_dir: Path, host: str, port: int,
                  verifier: access.Verifier | None = None,
                  db_path: Path | None = None) -> ThreadingHTTPServer:
@@ -1384,6 +1432,7 @@ def cmd_serve(args: argparse.Namespace) -> int:
     except ValueError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
+    socket_path = serve_socket_path(db_path, args.socket)
     host = resolve_serve_host(args.host)
     verifier = access_verifier()
 
@@ -1391,6 +1440,12 @@ def cmd_serve(args: argparse.Namespace) -> int:
         server = _make_server(out_dir, host, args.port, verifier=verifier, db_path=db_path)
     except OSError as exc:
         print(f"error: cannot bind {host}:{args.port}: {exc}", file=sys.stderr)
+        return 1
+    try:
+        agents = machine.SocketServer(socket_path, db.Database(db_path))
+    except (OSError, machine.SocketInUse) as exc:
+        server.server_close()
+        print(f"error: cannot listen on {socket_path}: {exc}", file=sys.stderr)
         return 1
 
     if not (out_dir / INDEX_FILE).exists():
@@ -1401,6 +1456,7 @@ def cmd_serve(args: argparse.Namespace) -> int:
         print(f"serving {out_dir} on the tailnet (v2 allow-list):")
     print(f"  http://{host}:{args.port}/")
     print(f"answers and comments in {db_path}")
+    print(f"agents on {socket_path}")
     if verifier is None:
         print("note: no [access] section in the config; /api answers 503")
     if not args.host:
@@ -1408,12 +1464,83 @@ def cmd_serve(args: argparse.Namespace) -> int:
         if dns_name:
             print(f"  http://{dns_name}:{args.port}/")
     print("ctrl-c to stop")
+    # SIGTERM (systemd's stop) ends serve as ctrl-c does, so the socket is
+    # removed either way. Only the main thread may set a handler.
+    on_main = threading.current_thread() is threading.main_thread()
+    if on_main:
+        previous = signal.signal(signal.SIGTERM, _stop_serving)
+    agents_thread = threading.Thread(target=agents.serve_forever, daemon=True)
+    agents_thread.start()
     try:
         server.serve_forever()
     except KeyboardInterrupt:
         pass
     finally:
+        if on_main:
+            # A second SIGTERM must not cut the cleanup short.
+            signal.signal(signal.SIGTERM, signal.SIG_IGN)
+        agents.shutdown()
+        agents_thread.join()
+        agents.server_close()
         server.server_close()
+        if on_main:
+            signal.signal(signal.SIGTERM, previous)
+    return 0
+
+
+def _stop_serving(signum: int, frame: object) -> None:
+    raise KeyboardInterrupt
+
+
+def credential_db(args: argparse.Namespace) -> db.Database:
+    """The database serve keeps for the same --out-dir and --db."""
+    out_dir = Path(args.out_dir) if args.out_dir else DEFAULT_OUTPUT_DIR
+    return db.Database(serve_db_path(out_dir, args.db))
+
+
+def cmd_credential_create(args: argparse.Namespace) -> int:
+    try:
+        database = credential_db(args)
+        row = machine.create_credential(database, args.name, args.handle, args.op,
+                                        Path(args.out))
+    except (ValueError, machine.CredentialError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    print(f"credential {row['name']}: handles {', '.join(row['handles'])}; "
+          f"operations {', '.join(row['operations'])}")
+    print(f"token in {args.out} (mode 0600); the database keeps only its hash")
+    return 0
+
+
+def cmd_credential_list(args: argparse.Namespace) -> int:
+    try:
+        rows = [machine.public(row) for row in credential_db(args).credentials()]
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    if args.json:
+        print(json.dumps({"credentials": rows}, indent=2))
+        return 0
+    if not rows:
+        print("no credentials")
+    for row in rows:
+        state = f"revoked {row['revokedAt']}" if row["revokedAt"] else "active"
+        print(f"{row['name']}\thandles {','.join(row['handles'])}"
+              f"\toperations {','.join(row['operations'])}"
+              f"\tcreated {row['createdAt']}\t{state}")
+    return 0
+
+
+def cmd_credential_revoke(args: argparse.Namespace) -> int:
+    try:
+        row = credential_db(args).revoke_credential(args.name)
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    if row is None:
+        print(f"error: no credential named {args.name!r}", file=sys.stderr)
+        return 1
+    print(f"credential {row['name']} revoked {row['revokedAt']}")
     return 0
 
 
@@ -1540,7 +1667,58 @@ def build_parser() -> argparse.ArgumentParser:
         help=f"database of answers and comments (default: {db.DEFAULT_NAME} beside "
         "the artifacts directory; never inside it)",
     )
+    serve.add_argument(
+        "--socket",
+        default="",
+        metavar="PATH",
+        help="Unix socket agents reach serve on (default: the config's [agents] "
+        f"socket, else {machine.SOCKET_NAME} beside the database)",
+    )
     serve.set_defaults(func=cmd_serve)
+
+    credential = sub.add_parser(
+        "credential",
+        help="make, list and revoke the machine credentials agents use on serve's socket",
+    )
+    actions = credential.add_subparsers(dest="action", required=True)
+
+    def database_options(parser: argparse.ArgumentParser) -> None:
+        parser.add_argument(
+            "--out-dir", default="", help="artifacts directory (default: artifacts/)"
+        )
+        parser.add_argument(
+            "--db", default="", metavar="PATH",
+            help=f"serve's database (default: {db.DEFAULT_NAME} beside the artifacts directory)",
+        )
+
+    create = actions.add_parser(
+        "create", help="make a credential and write its token to a new file"
+    )
+    create.add_argument("name", metavar="NAME", help="the credential's name")
+    create.add_argument(
+        "--handle", action="append", default=[], metavar="HANDLE", required=True,
+        help="an owner handle it may act as (repeatable)",
+    )
+    create.add_argument(
+        "--op", action="append", default=[], metavar="OP", required=True,
+        help=f"an operation it may do, one of {', '.join(machine.OPERATIONS)} (repeatable)",
+    )
+    create.add_argument(
+        "--out", required=True, metavar="FILE",
+        help="new file for the token, made with mode 0600 (never overwritten)",
+    )
+    database_options(create)
+    create.set_defaults(func=cmd_credential_create)
+
+    listing = actions.add_parser("list", help="show credentials, never their tokens")
+    listing.add_argument("--json", action="store_true", help="print JSON")
+    database_options(listing)
+    listing.set_defaults(func=cmd_credential_list)
+
+    revoke = actions.add_parser("revoke", help="end a credential at once")
+    revoke.add_argument("name", metavar="NAME", help="the credential's name")
+    database_options(revoke)
+    revoke.set_defaults(func=cmd_credential_revoke)
 
     return parser
 
