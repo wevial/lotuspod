@@ -4,6 +4,11 @@ import os from 'node:os';
 import path from 'node:path';
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
 
+// At this width the boxes still open inline; panel.spec.ts checks the side
+// panel a wider window gets.
+const INLINE = { width: 1024, height: 768 };
+test.use({ viewport: INLINE });
+
 // The whole chain as the maintainer uses it: the signed-in reader answers a
 // decision and comments on the capture fixture's owned page in Chromium, and
 // the page's owner, hermes, reads both, claims the comment, revises the page
@@ -235,7 +240,9 @@ test.describe('the chain', () => {
     await test.step('6. without the assertion, answering and commenting are refused and nothing is stored', async () => {
       const before = await stored(request);
       // A context made in a test takes the project's options: clear the header.
-      const context = await browser.newContext({ baseURL: ENV.LOTUSPOD_URL, extraHTTPHeaders: {} });
+      const context = await browser.newContext({
+        baseURL: ENV.LOTUSPOD_URL, extraHTTPHeaders: {}, viewport: INLINE,
+      });
       try {
         expect((await context.request.get('/api/whoami')).status()).toBe(401);
         const outside = await context.newPage();

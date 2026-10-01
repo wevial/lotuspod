@@ -680,7 +680,7 @@ class IndexTableTests(TempDirTestCase):
         version = json.loads(
             (cli.THEME_DIR / "tokens.json").read_text(encoding="utf-8")
         )["version"]
-        self.assertEqual(version, "0.4.15")
+        self.assertEqual(version, "0.4.16")
         self.assertIn(f'href="lotuspod.css?v={version}"', first)
 
 

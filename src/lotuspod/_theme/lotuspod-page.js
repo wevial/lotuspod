@@ -11,9 +11,12 @@
 // state as its own mark outside what anyone wrote), and posts new threads and
 // replies. While a thread waits for an agent and the page is seen, it reads
 // the threads again, less often while nothing changes, and draws what is new
-// in place. It sends no credential of its own: the reader's Cloudflare
-// Access session is the only identity. Everything anyone wrote is set as
-// text, never as markup.
+// in place. Where the window has room right of the reading column, the
+// threads live in a side panel (aside.artifact-comments-panel) folded to a
+// rail of status dots, each box's summary becomes a one-line chip that opens
+// its section's thread there, and a thread can be resolved and reopened. It
+// sends no credential of its own: the reader's Cloudflare Access session is
+// the only identity. Everything anyone wrote is set as text, never as markup.
 (function () {
   "use strict";
 
@@ -22,6 +25,11 @@
   var SIGNED_OUT = "You are signed out. Reload the page to sign in.";
   var STALE = "This question has changed since the page loaded. Reload it.";
   var CHANGED = "Comments on sections that have changed";
+  var CHANGED_GROUP = "Sections that have changed";
+  // Whether the reader left the comments panel open or folded.
+  var PANEL = "lotuspod:comments-panel";
+  // The room the panel needs right of the reading column, in rem.
+  var ROOM = 21;
   // Each page's folded sections are kept under this and its path.
   var SECTIONS = "lotuspod:folded:";
   // Sent on a comment box when rows are drawn into it, and on the document
@@ -530,7 +538,8 @@
   // The comment boxes (lotuspod.comments): one per section, or one for the
   // page. Threads come from the comments route; each is shown in the box of
   // its section, or, when the page no longer has that section, in a list at
-  // the end of the body.
+  // the end of the body. Where the window has room for it, every thread is
+  // shown in the side panel instead (sidePanel below), and each box is a chip.
   function commentBoxes(boxes) {
     var page = boxes[0].dataset.page;
     var tag = document.querySelector('meta[name="lotuspod:owner"]');
@@ -539,9 +548,12 @@
     // "__proto__" included.
     var sections = new Map();
     var shown = new Map();
+    // Each box's form for a new thread, wherever it is shown.
+    var forms = new Map();
 
     boxes.forEach(function (box) {
       sections.set(box.dataset.section, box);
+      forms.set(box, box.querySelector("form.artifact-comment-form"));
     });
 
     // An agent's handle when an agent wrote the row; "" for anyone else. Only
@@ -921,9 +933,601 @@
       node.appendChild(form);
     }
 
+    // The threads of a section's box, oldest first.
+    function threadsOf(box) {
+      var found = [];
+      shown.forEach(function (thread) {
+        if (thread.box === box) {
+          found.push(thread);
+        }
+      });
+      return found.sort(function (a, b) { return a.root.id - b.root.id; });
+    }
+
     function summary(box) {
-      var count = box.querySelectorAll(".artifact-comment-thread").length;
+      var count = threadsOf(box).length;
       box.querySelector("summary").textContent = count ? "Comments (" + count + ")" : "Comment";
+    }
+
+    // The side panel (layout C of docs/design/margin-comments-mockup.html),
+    // shown while the window leaves ROOM right of the reading column: fixed
+    // to the window's right edge, folded to a rail of one dot per open thread
+    // or open with every thread listed under its section's heading, one
+    // entry open at a time. A thread's node is moved into its entry, never
+    // drawn twice, so its live reads, composer and live region go on as they
+    // were. Each box's summary is then a chip saying where its section's
+    // open threads stand, which opens them here: a box never opens, and
+    // nothing in the column moves when the panel or a thread changes.
+    function sidePanel() {
+      var column = document.querySelector(".artifact-body");
+      var api = { wide: false };
+      var arranged = false;
+      var open = false;
+      // The thread whose entry is open, if any.
+      var current = null;
+      var groups = new Map();
+      var dotsKey = null;
+
+      try {
+        open = localStorage.getItem(PANEL) === "open";
+      } catch (ignored) {
+        open = false;
+      }
+
+      function mute(node) {
+        node.setAttribute("aria-hidden", "true");
+        return node;
+      }
+
+      var aside = element("aside", "artifact-comments-panel");
+      aside.setAttribute("aria-label", "Comments");
+      aside.hidden = true;
+
+      var rail = element("div", "artifact-comments-rail");
+      var opener = element("button", "artifact-comments-opener");
+      opener.type = "button";
+      opener.setAttribute("aria-label", "Comments");
+      opener.setAttribute("aria-controls", "artifact-comments-sheet");
+      opener.setAttribute("aria-describedby", "artifact-comments-count");
+      opener.appendChild(mute(element("span", "artifact-comments-icon")));
+      var badge = element("span", "artifact-comments-badge");
+      var dots = mute(element("ol", "artifact-comments-dots"));
+      rail.append(opener, badge, dots,
+        mute(element("span", "artifact-comments-rail-label", "Comments")));
+
+      var sheet = element("div", "artifact-comments-sheet");
+      sheet.id = "artifact-comments-sheet";
+      var head = element("header", "artifact-comments-head");
+      var count = element("p", "artifact-comments-count");
+      count.id = "artifact-comments-count";
+      var fold = element("button", "artifact-comments-fold");
+      fold.type = "button";
+      fold.setAttribute("aria-label", "Fold comments");
+      fold.appendChild(mute(element("span", "", "»")));
+      head.append(element("h2", "artifact-comments-title", "Comments"), count, fold);
+      var list = element("div", "artifact-comments-groups");
+      sheet.append(head, list);
+      aside.append(rail, sheet);
+      document.body.appendChild(aside);
+
+      // The text of a box's section heading, without the mark a folded
+      // heading ends in.
+      function title(box) {
+        var heading = document.getElementById(box.dataset.section);
+        if (!heading || heading.tagName !== "H2") {
+          return "This page";
+        }
+        var copy = heading.cloneNode(true);
+        all(".artifact-section-mark", copy).forEach(function (mark) { mark.remove(); });
+        return copy.textContent.replace(/\s+/g, " ").trim() || "This page";
+      }
+
+      // A group: a section's heading, its threads, and for a section the
+      // page has, the control that opens the box's form here.
+      function group(name, box, index) {
+        var node = element("section", "artifact-comments-group");
+        var entries = element("ol", "artifact-comments-entries");
+        node.append(element("h3", "artifact-comments-group-title", name), entries);
+        list.appendChild(node);
+        var made = { node: node, entries: entries, box: box, toggle: null, holder: null };
+        if (box) {
+          var toggle = element("button", "artifact-comments-new", "Comment on this section");
+          toggle.type = "button";
+          var holder = element("div", "artifact-comments-compose");
+          holder.id = "artifact-comments-compose-" + index;
+          holder.hidden = true;
+          toggle.setAttribute("aria-controls", holder.id);
+          toggle.setAttribute("aria-expanded", "false");
+          toggle.addEventListener("click", function () { compose(made, holder.hidden); });
+          node.append(toggle, holder);
+          made.toggle = toggle;
+          made.holder = holder;
+        }
+        return made;
+      }
+
+      boxes.forEach(function (box, index) {
+        groups.set(box, group(title(box), box, index));
+      });
+      var strays = group(CHANGED_GROUP, null, -1);
+      strays.node.hidden = true;
+
+      // Unfold or fold a group's form for a new thread; unfolded, its field
+      // has focus.
+      function compose(made, show) {
+        made.holder.hidden = !show;
+        made.toggle.setAttribute("aria-expanded", show ? "true" : "false");
+        if (show) {
+          reveal(made.holder);
+          forms.get(made.box).elements.text.focus({ preventScroll: true });
+        }
+      }
+
+      // Scroll the panel's list, never the page, until node is in view.
+      function reveal(node) {
+        var outer = list.getBoundingClientRect();
+        var inner = node.getBoundingClientRect();
+        if (inner.top < outer.top || inner.bottom > outer.bottom) {
+          list.scrollTop += inner.top - outer.top - 8;
+        }
+      }
+
+      function setOpen(show, remember) {
+        open = show;
+        aside.classList.toggle("artifact-comments-panel--open", show);
+        rail.hidden = show;
+        sheet.hidden = !show;
+        opener.setAttribute("aria-expanded", show ? "true" : "false");
+        if (remember) {
+          try {
+            localStorage.setItem(PANEL, show ? "open" : "folded");
+          } catch (ignored) {
+            // Storage refused: the panel still opens, only unremembered.
+          }
+        }
+      }
+      setOpen(open, false);
+
+      rail.addEventListener("click", function () {
+        setOpen(true, true);
+        fold.focus({ preventScroll: true });
+      });
+      fold.addEventListener("click", function () {
+        setOpen(false, true);
+        opener.focus({ preventScroll: true });
+      });
+      aside.addEventListener("keydown", function (event) {
+        if (event.key === "Escape" && open) {
+          event.preventDefault();
+          setOpen(false, true);
+          opener.focus({ preventScroll: true });
+        }
+      });
+
+      // The newest reader comment in a thread.
+      function asked(thread) {
+        var found = thread.root;
+        rows(thread).forEach(function (entry) {
+          if (!agent(entry)) {
+            found = entry;
+          }
+        });
+        return found;
+      }
+
+      // Where a thread stands: answered, writing, waiting or failed.
+      function standing(thread) {
+        switch (asked(thread).state) {
+          case "claimed":
+            return "writing";
+          case "failed":
+            return "failed";
+          case "pending":
+          case "unavailable":
+          case "paused":
+            return "waiting";
+          default:
+            return "answered";
+        }
+      }
+
+      // Of some threads, the one whose newest reader comment is newest.
+      function latest(threads) {
+        var found = null;
+        threads.forEach(function (thread) {
+          if (!found || asked(thread).id > asked(found).id) {
+            found = thread;
+          }
+        });
+        return found;
+      }
+
+      function unresolvedOf(box) {
+        return threadsOf(box).filter(function (thread) { return !resolved(thread); });
+      }
+
+      function plural(n, one, many) {
+        return n + " " + (n === 1 ? one : many);
+      }
+
+      // The first words of what a thread's first comment says.
+      function opening(text) {
+        var words = String(text || "").replace(/\s+/g, " ").trim();
+        return words.length > 80 ? words.slice(0, 80).replace(/\s\S*$/, "") + "…" : words;
+      }
+
+      function tick() {
+        return mute(element("span", "artifact-comments-tick", "✓"));
+      }
+
+      function entry(thread) {
+        if (thread.entry) {
+          return thread.entry;
+        }
+        var id = thread.root.id;
+        function lead() {
+          var lines = [mute(element("span", "artifact-comments-entry-mark",
+            thread.root.quote ? "" : "§"))];
+          lines.push(element("span", "artifact-comments-entry-words", opening(thread.root.text)));
+          return lines;
+        }
+        var item = element("li", "artifact-comments-entry");
+        item.dataset.thread = String(id);
+        var body = element("div", "artifact-comments-entry-body");
+        body.id = "artifact-comments-entry-" + id;
+        var top = element("button", "artifact-comments-entry-head");
+        top.type = "button";
+        top.setAttribute("aria-controls", body.id);
+        var state = element("span", "artifact-comments-entry-state");
+        top.append.apply(top, lead().concat([state]));
+        var folded = element("div", "artifact-comments-entry-resolved");
+        var reopen = element("button", "artifact-comments-reopen", "Reopen");
+        reopen.type = "button";
+        var done = element("span", "artifact-comments-entry-done");
+        done.append(tick(), " resolved · ", reopen);
+        folded.append.apply(folded, lead().concat([done]));
+        var tools = element("div", "artifact-comments-entry-tools");
+        var resolve = element("button", "artifact-comments-resolve", "Resolve");
+        resolve.type = "button";
+        tools.appendChild(resolve);
+        body.appendChild(tools);
+        var status = element("p", "artifact-comments-entry-status");
+        status.setAttribute("role", "status");
+        item.append(top, folded, body, status);
+        var dot = element("li", "artifact-comments-dot");
+        thread.entry = {
+          item: item, head: top, state: state, folded: folded, body: body, resolve: resolve,
+          reopen: reopen, status: status, dot: dot, key: "",
+        };
+        top.addEventListener("click", function () {
+          if (current === thread) {
+            expand(null);
+          } else {
+            expand(thread);
+            bring(thread);
+          }
+        });
+        resolve.addEventListener("click", function () { settle(thread, true); });
+        reopen.addEventListener("click", function () { settle(thread, false); });
+        return thread.entry;
+      }
+
+      // Draw an entry as its thread now stands: open, folded to its head, or
+      // resolved to one dashed line.
+      function draw(thread) {
+        var made = entry(thread);
+        var done = resolved(thread);
+        var opened = !done && current === thread;
+        made.item.classList.toggle("artifact-comments-entry--resolved", done);
+        made.item.classList.toggle("artifact-comments-entry--open", opened);
+        made.head.hidden = done;
+        made.folded.hidden = !done;
+        made.body.hidden = !opened;
+        made.head.setAttribute("aria-expanded", opened ? "true" : "false");
+        var kind = standing(thread);
+        var handle = routed(asked(thread));
+        var key = [kind, handle, thread.replies.length].join("\n");
+        if (key === made.key) {
+          return;
+        }
+        made.key = key;
+        var said = element("span", "artifact-comments-entry-said artifact-comments-entry-said--" + kind);
+        if (kind === "answered") {
+          said.append(tick(), " Answered");
+        } else if (kind === "writing") {
+          said.textContent = handle + " is writing";
+        } else if (kind === "waiting") {
+          said.textContent = "Waiting for " + handle;
+        } else {
+          said.textContent = handle + " couldn't answer";
+        }
+        made.state.replaceChildren(said, " · ",
+          element("span", "artifact-comments-entry-count",
+            plural(thread.replies.length, "reply", "replies")));
+      }
+
+      function expand(thread) {
+        var before = current;
+        current = thread;
+        if (before && before !== thread) {
+          draw(before);
+        }
+        if (thread) {
+          draw(thread);
+          reveal(thread.entry.item);
+        }
+      }
+
+      // Bring a thread's chip into the window, opening its section first
+      // through its heading's button if it is folded.
+      function bring(thread) {
+        if (!thread.box) {
+          return;
+        }
+        var wrapper = thread.box.closest(".artifact-section-body");
+        if (wrapper && wrapper.hasAttribute("hidden")) {
+          var heading = wrapper.previousElementSibling;
+          var button = heading && heading.querySelector("button.artifact-section-toggle");
+          if (button) {
+            button.click();
+          }
+        }
+        var chip = thread.box.querySelector("summary");
+        var bar = document.querySelector(".artifact-topbar");
+        var top = bar ? bar.getBoundingClientRect().bottom : 0;
+        var rect = chip.getBoundingClientRect();
+        if (rect.top < top || rect.bottom > window.innerHeight) {
+          chip.scrollIntoView({ block: "center" });
+        }
+      }
+
+      // Resolve a thread, or reopen it.
+      async function settle(thread, resolve) {
+        var made = entry(thread);
+        var control = resolve ? made.resolve : made.reopen;
+        var focused = document.activeElement === control;
+        control.disabled = true;
+        made.status.textContent = "Saving...";
+        try {
+          var response = await fetch(COMMENTS, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ page: page, thread: thread.root.id, resolved: resolve }),
+          });
+          var payload = await json(response);
+          if (response.status !== 200 || !payload || !payload.resolution) {
+            made.status.textContent = failure(response, payload);
+            return;
+          }
+          made.status.textContent = "";
+          thread.resolution = payload.resolution;
+          if (resolve && current === thread) {
+            current = null;
+          }
+          if (!resolve) {
+            expand(thread);
+          }
+          refresh();
+          if (focused) {
+            (resolve ? made.reopen : made.head).focus({ preventScroll: true });
+          }
+        } catch (ignored) {
+          made.status.textContent = "Not saved: the site did not answer. Try again.";
+        } finally {
+          control.disabled = false;
+        }
+      }
+
+      // Every thread in page order: each box's, oldest first, then those
+      // on sections the page no longer has.
+      function ordered() {
+        var found = [];
+        boxes.forEach(function (box) {
+          found.push.apply(found, threadsOf(box));
+        });
+        var rest = [];
+        shown.forEach(function (thread) {
+          if (!thread.box) {
+            rest.push(thread);
+          }
+        });
+        return found.concat(rest.sort(function (a, b) { return a.root.id - b.root.id; }));
+      }
+
+      function face(text, agentFace) {
+        var node = element("span", "artifact-comment-chip-face" +
+          (agentFace ? " artifact-comment-chip-face--agent" : ""));
+        node.dataset.initial = text;
+        return node;
+      }
+
+      // A box's chip: where its section's open threads stand, in one line.
+      function chip(box) {
+        var summaryNode = box.querySelector("summary");
+        var threads = unresolvedOf(box);
+        var newest = latest(threads);
+        var kind = newest ? standing(newest) : "none";
+        var faces = mute(element("span", "artifact-comment-chip-faces"));
+        var parts = [];
+        if (newest) {
+          var question = asked(newest);
+          var handle = routed(question);
+          faces.appendChild(face(author(question).charAt(0).toUpperCase(), false));
+          if (kind === "writing") {
+            faces.appendChild(face(handle.charAt(0).toUpperCase(), true));
+            parts.push(mute(element("span", "artifact-comment-chip-pulse")),
+              handle + " is writing…");
+          } else if (kind === "waiting") {
+            var messages = threads.reduce(function (n, thread) { return n + rows(thread).length; }, 0);
+            parts.push(plural(messages, "comment", "comments"), " · ",
+              mute(element("span", "artifact-comment-chip-hollow")), "waiting");
+          } else if (kind === "failed") {
+            parts.push(mute(element("span", "artifact-comment-chip-bang")),
+              handle + " couldn't answer");
+          } else {
+            var replies = 0;
+            var answer = null;
+            threads.forEach(function (thread) {
+              replies += thread.replies.length;
+              thread.replies.forEach(function (reply) {
+                if (agent(reply) && (!answer || reply.id > answer.id)) {
+                  answer = reply;
+                }
+              });
+            });
+            var answerer = answer ? agent(answer) : handle;
+            faces.appendChild(face(answerer.charAt(0).toUpperCase(), true));
+            parts.push(plural(replies, "reply", "replies"), " · ",
+              element("span", "artifact-comment-chip-done"));
+            parts[parts.length - 1].append(tick(), " " + answerer + " answered");
+          }
+        } else {
+          faces.appendChild(element("span", "artifact-comment-chip-icon"));
+          parts.push("No comments", " · ", element("span", "artifact-comment-chip-act", "Comment"));
+        }
+        var text = element("span", "artifact-comment-chip-text");
+        text.append.apply(text, parts);
+        var key = kind + "\n" + faces.innerHTML + "\n" + text.textContent;
+        if (summaryNode.lotuspodChip === key) {
+          return;
+        }
+        summaryNode.lotuspodChip = key;
+        summaryNode.className = "artifact-comment-summary artifact-comment-chip artifact-comment-chip--" + kind;
+        summaryNode.replaceChildren(faces, text);
+      }
+
+      // The box's form for a new thread posted one: in the panel, the form
+      // folds and the new thread's entry opens.
+      api.posted = function (box, thread) {
+        if (!api.wide || !thread) {
+          return;
+        }
+        var made = groups.get(box);
+        var focused = made.holder.contains(document.activeElement)
+          || document.activeElement === document.body;
+        compose(made, false);
+        expand(thread);
+        if (focused) {
+          thread.entry.head.focus({ preventScroll: true });
+        }
+      };
+
+      // A chip: the panel opens at its section's newest open thread, or at
+      // its form for a new one.
+      function show(box) {
+        setOpen(true, true);
+        var newest = latest(unresolvedOf(box));
+        if (newest) {
+          expand(newest);
+          newest.entry.head.focus({ preventScroll: true });
+        } else {
+          compose(groups.get(box), true);
+        }
+      }
+
+      boxes.forEach(function (box) {
+        var summaryNode = box.querySelector("summary");
+        summaryNode.addEventListener("click", function (event) {
+          if (api.wide) {
+            event.preventDefault();
+            show(box);
+          }
+        });
+        summaryNode.addEventListener("keydown", function (event) {
+          if (api.wide && (event.key === "Enter" || event.key === " ")) {
+            event.preventDefault();
+            show(box);
+          }
+        });
+        summaryNode.addEventListener("keyup", function (event) {
+          if (api.wide && event.key === " ") {
+            event.preventDefault();
+          }
+        });
+        box.addEventListener("toggle", function () {
+          if (api.wide && box.open) {
+            box.open = false;
+          }
+        });
+      });
+
+      api.put = function (thread) {
+        var made = entry(thread);
+        if (thread.node.parentNode !== made.body) {
+          made.body.appendChild(thread.node);
+        }
+        var target = thread.box ? groups.get(thread.box) : strays;
+        if (made.item.parentNode !== target.entries) {
+          var after = all(":scope > li", target.entries).filter(function (item) {
+            return Number(item.dataset.thread) > thread.root.id;
+          })[0] || null;
+          target.entries.insertBefore(made.item, after);
+        }
+        strays.node.hidden = !strays.entries.firstChild;
+        draw(thread);
+      };
+
+      api.refresh = function () {
+        var threads = ordered();
+        var unresolved = threads.filter(function (thread) { return !resolved(thread); });
+        badge.textContent = String(unresolved.length);
+        badge.hidden = unresolved.length === 0;
+        count.textContent = unresolved.length + " open · " +
+          (threads.length - unresolved.length) + " resolved";
+        threads.forEach(draw);
+        var key = unresolved.map(function (thread) { return thread.root.id; }).join(" ");
+        if (key !== dotsKey) {
+          dotsKey = key;
+          dots.replaceChildren.apply(dots, unresolved.map(function (thread) { return thread.entry.dot; }));
+        }
+        unresolved.forEach(function (thread) {
+          var name = "artifact-comments-dot artifact-comments-dot--" + standing(thread);
+          if (thread.entry.dot.className !== name) {
+            thread.entry.dot.className = name;
+          }
+        });
+        boxes.forEach(chip);
+      };
+
+      // Whether the window leaves ROOM right of the reading column.
+      function roomy() {
+        if (!column) {
+          return false;
+        }
+        var rem = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+        return document.documentElement.clientWidth - column.getBoundingClientRect().right >= ROOM * rem;
+      }
+
+      // Show the threads in the panel or in the boxes, as the window allows.
+      api.arrange = function () {
+        var wide = roomy();
+        if (arranged && wide === api.wide) {
+          return;
+        }
+        arranged = true;
+        api.wide = wide;
+        aside.hidden = !wide;
+        boxes.forEach(function (box) {
+          var form = forms.get(box);
+          if (wide) {
+            box.open = false;
+            groups.get(box).holder.appendChild(form);
+          } else {
+            box.appendChild(form);
+            var summaryNode = box.querySelector("summary");
+            summaryNode.className = "artifact-comment-summary";
+            summaryNode.lotuspodChip = "";
+          }
+        });
+        var old = document.querySelector(".artifact-comments-changed");
+        if (old) {
+          old.hidden = wide;
+        }
+        shown.forEach(put);
+        refresh();
+      };
+
+      return api;
     }
 
     // The list at the end of the body for threads on sections the page no
@@ -947,11 +1551,18 @@
       }
       var known = shown.get(root.id);
       if (known) {
-        return merge(known, [root].concat(entry.replies || []));
+        var moved = Boolean(entry.resolution) && resolved(known) !== Boolean(entry.resolution.resolved);
+        if (entry.resolution) {
+          known.resolution = entry.resolution;
+        }
+        return merge(known, [root].concat(entry.replies || [])) || moved;
       }
       var list = element("ol", "artifact-comment-list");
       list.setAttribute("aria-live", "polite");
-      var thread = { root: root, replies: [], list: list, drawn: new Map(), typing: null, waitKey: null };
+      var thread = {
+        root: root, replies: [], list: list, drawn: new Map(), typing: null, waitKey: null,
+        resolution: entry.resolution || null, entry: null,
+      };
       var node = element("div", "artifact-comment-thread");
       node.dataset.thread = String(root.id);
       thread.node = node;
@@ -965,13 +1576,34 @@
       replyForm(thread, node);
       shown.set(root.id, thread);
       merge(thread, entry.replies || []);
-      if (box) {
-        box.querySelector(".artifact-comment-threads").appendChild(node);
-        summary(box);
-      } else {
-        changed().appendChild(node);
-      }
+      put(thread);
       return true;
+    }
+
+    function resolved(thread) {
+      return Boolean(thread.resolution && thread.resolution.resolved);
+    }
+
+    // Show a thread where the window has room for it: in the panel, else in
+    // its section's box or the list of changed sections.
+    function put(thread) {
+      if (panel.wide) {
+        panel.put(thread);
+      } else if (thread.box) {
+        thread.box.querySelector(".artifact-comment-threads").appendChild(thread.node);
+      } else {
+        changed().appendChild(thread.node);
+      }
+    }
+
+    // Draw what the threads say outside them: the boxes' summaries, or the
+    // panel and its chips.
+    function refresh() {
+      if (panel.wide) {
+        panel.refresh();
+      } else {
+        boxes.forEach(summary);
+      }
     }
 
     // The checks for replies: while a thread waits and the page is seen,
@@ -1018,8 +1650,9 @@
       timer = null;
       var first = waiting();
       if (first) {
-        var status = first.box
-          ? first.box.querySelector("form.artifact-comment-form .artifact-comment-status")
+        // In the panel a box's form may be folded away: the thread says it.
+        var status = first.box && !panel.wide
+          ? forms.get(first.box).querySelector(".artifact-comment-status")
           : first.node.querySelector(":scope > .artifact-comment-status");
         if (!status) {
           status = element("p", "artifact-comment-status");
@@ -1029,6 +1662,7 @@
         status.textContent = SIGNED_OUT;
       }
       shown.forEach(sync);
+      refresh();
     }
 
     async function read() {
@@ -1055,6 +1689,7 @@
         // A failed read keeps the schedule.
       }
       reading = false;
+      refresh();
       gap = touched || fresh ? FIRST : Math.min(gap * 1.5, LAST);
       fresh = false;
       plan();
@@ -1069,6 +1704,7 @@
       gap = FIRST;
       last = Date.now();
       fresh = reading;
+      refresh();
       plan();
     }
 
@@ -1083,7 +1719,7 @@
     });
 
     boxes.forEach(function (box) {
-      var form = box.querySelector("form.artifact-comment-form");
+      var form = forms.get(box);
       form.addEventListener("submit", async function (event) {
         event.preventDefault();
         var row = await post(form, {
@@ -1092,10 +1728,14 @@
         if (row) {
           add({ root: row, replies: [] });
           posted();
+          panel.posted(box, shown.get(row.id));
         }
       });
     });
 
+    var panel = sidePanel();
+    panel.arrange();
+    window.addEventListener("resize", panel.arrange);
     read();
   }
 

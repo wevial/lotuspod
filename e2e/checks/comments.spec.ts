@@ -2,6 +2,11 @@ import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { expect, test, type Locator, type Page } from '@playwright/test';
 
+// At this width the boxes still open inline; panel.spec.ts checks the side
+// panel a wider window gets.
+const INLINE = { width: 1024, height: 768 };
+test.use({ viewport: INLINE });
+
 // The capture fixture's comments page: three sections, each ending in a
 // comment box, owned by hermes. The fixture names an assertion its site
 // accepts; sending it is being signed in. hermes pulls on the fixture's agent

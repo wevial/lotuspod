@@ -1,5 +1,10 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 
+// At this width the boxes still open inline; panel.spec.ts checks the side
+// panel a wider window gets.
+const INLINE = { width: 1024, height: 768 };
+test.use({ viewport: INLINE });
+
 // The capture fixture's sections page: an intro, then three sections, each
 // folding under its heading and ending in a comment box; the second asks one
 // question. A folded heading's button ends in a mark of what waits in its

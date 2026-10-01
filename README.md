@@ -651,6 +651,46 @@ text and focus. Each thread's list of comments is a polite live region, so a
 new reply is read out; typing bubbles and the offline and paused lines only
 restate a state and are hidden from it.
 
+### The comments panel
+
+Wherever the window leaves at least 21rem between the reading column's right
+edge and its own (checked on load and on resize), a page's threads live in a
+side panel instead of its boxes, so opening a thread or a reply arriving never
+moves the text. Narrower windows keep the boxes, opening inline as above. The
+panel is an `aside` named "Comments", fixed to the window's right edge under
+the title bar. It starts folded to a 2.75rem rail: a "Comments" button, a
+badge counting the open (unresolved) threads, and one dot per open thread in
+page order, filled mint once its newest reader comment is `answered`, pulsing
+lavender while it is `claimed`, and a hollow amber ring while it is `pending`,
+`unavailable`, `paused` or `failed`. Opened, it is 20rem wide, headed
+"Comments" and "N open · M resolved" with a "Fold comments" control, and lists
+every thread under the text of its section's heading, in page order, with
+threads on sections the page no longer has last under "Sections that have
+changed". A section thread's entry is marked "§" and shows its first
+comment's opening words, its status ("✓ Answered", "HANDLE is writing",
+"Waiting for HANDLE", "HANDLE couldn't answer") and its reply count. One entry
+is open at a time and holds the whole thread as a box would, with a "Resolve"
+control; opening one scrolls the page to its section's chip, opening the
+section first if it is folded. Each group ends in "Comment on this section",
+which unfolds the box's own form in the panel. The page remembers whether the
+reader left the panel open or folded in `localStorage` (a page whose storage
+throws starts folded), and Escape folds it.
+
+Beside the panel, each box never opens: its summary is a one-line chip
+reading where its section's open threads stand. With none, "No comments ·
+Comment"; when the newest reader comment among them is `claimed`, "HANDLE is
+writing…"; `pending`, `unavailable` or `paused`, "N comments · waiting",
+counting every message in them; `failed`, "HANDLE couldn't answer"; otherwise
+"N replies · ✓ HANDLE answered", naming the newest agent reply's handle.
+Clicking it, or Enter or Space on it, opens the panel at that thread, or at
+the section's form when it has none.
+
+"Resolve" resolves a thread as the reader (`{page, thread, resolved: true}`,
+above): its entry folds to a dashed line, its opening words and "✓ resolved ·
+Reopen", and its dot leaves the rail. "Reopen" reopens it and shows its
+messages again. Under `prefers-reduced-motion: reduce` the pulsing dot keeps
+still and the panel opens without sliding.
+
 An agent's reply that carries a `revision` is followed by the centred line
 "HANDLE revised the page → revision R", linking to the page. Routing (below)
 sets `pending` and `unavailable`, and `paused` for a comment routed to

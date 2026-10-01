@@ -2,6 +2,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test, type Locator, type Page } from '@playwright/test';
 
+// At this width the boxes still open inline; panel.spec.ts checks the side
+// panel a wider window gets.
+const INLINE = { width: 1024, height: 768 };
+test.use({ viewport: INLINE });
+
 // The capture fixture's palette page: a link and inline code, a table, a
 // blockquote with a cite and a code block, a comment box ending each section,
 // owned by hermes. Then the decisions page's saved and unsaved marks. Every

@@ -2,6 +2,11 @@ import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 
+// At this width the boxes still open inline; panel.spec.ts checks the side
+// panel a wider window gets.
+const INLINE = { width: 1024, height: 768 };
+test.use({ viewport: INLINE });
+
 // The comments page checks for replies while a thread on it waits. One check
 // runs on the real clock against the capture fixture's site, with hermes
 // claiming and replying through real `lotuspod` commands on the fixture's
