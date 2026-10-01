@@ -433,33 +433,41 @@ diagram or a form starts no section, so a box never lands inside either.
 Each box is a `details.artifact-comment` with `data-page` and `data-section`
 (the heading's id, or `page`), holding the section's threads and a form to
 start a new one. The page script, `lotuspod-page.js`, reads the page's threads
-and shows each in its section's box: every comment's author, time and text, an
-agent's reply marked with its handle, and a reply box per thread. Posting
-adds the comment without a reload, and the box's summary reads "Comment", or
-"Comments (N)" once it holds threads. A thread whose section the page no
-longer has is listed at the end of the body under "Comments on sections that
-have changed". Every author and text is set as text, never as markup.
+and draws each in its section's box as a chat. A comment is a row: an avatar,
+a name line (address or handle, then time) and a bubble holding only its
+text. A comment whose actor's `kind` is `human` is the reader's: on the right,
+behind a round avatar with the address's first two letters. A comment whose
+actor's `kind` is `agent` is an agent's: on the left, behind a square lavender
+avatar, its handle in the mono voice and an `AGENT` tag. Whether a comment is
+an agent's is read from the verified actor's kind, never from an address; any
+other kind is drawn as a reader's row with no tag. Each thread ends in a
+rounded composer with a round send button for a reply, and the box ends in
+one for a new thread. Posting adds the comment without a reload, and the
+box's summary reads "Comment", or "Comments (N)" once it holds threads. A
+thread whose section the page no longer has is listed at the end of the body
+under "Comments on sections that have changed". Every author and text is set
+as text, never as markup.
 
-Each reader's comment shows its `state`, with the handle it is routed to (its
-`owner`, else the page's):
+A comment's `state` is never drawn inside a bubble or a name line. HANDLE is
+the handle it is routed to (its `owner`, else the page's):
 
 | `state` | shown |
 | --- | --- |
-| `pending` | waiting for HANDLE |
-| `unavailable` | HANDLE is offline; queued for it |
-| `claimed` | HANDLE is answering |
-| `answered` | answered |
-| `failed` | HANDLE could not answer: REASON (its `reason`) |
-| `paused` | the responder is paused |
+| `pending` | the thread, when this is its newest reader comment, ends in a typing bubble on the left behind a dashed avatar: "Waiting for HANDLE" |
+| `claimed` | the thread, when this is its newest reader comment, ends in a typing bubble behind the agent's avatar, under "HANDLE AGENT is writing" |
+| `unavailable` | a centred system line after the comment: "HANDLE is offline", "Your comment goes to HANDLE when it checks in again." |
+| `paused` | a centred system line after the comment: "The responder is paused", "Your comment waits until it is resumed." |
+| `failed` | a centred system line after the comment: "HANDLE couldn't answer", its `reason` (else "No reason given"), "To send it again, write a new comment." |
+| `answered` | nothing: the reply says it |
 
-An agent's reply that carries a `revision` shows "Revised the page · revision
-R", linking to the page. Routing (below) sets `pending` and `unavailable`, and
-`paused` for a comment routed to `responder` while the default responder is
-paused (see below); an agent's claim, reply, release and failure (see the
-pull loop) set `claimed`, `answered` and `failed`, with the handle that took
-it up as its `owner`; only a failed comment carries a `reason`. A comment
-grants no authority: an agent answers it and may revise its page, nothing
-else.
+An agent's reply that carries a `revision` is followed by the centred line
+"HANDLE revised the page → revision R", linking to the page. Routing (below)
+sets `pending` and `unavailable`, and `paused` for a comment routed to
+`responder` while the default responder is paused (see below); an agent's
+claim, reply, release and failure (see the pull loop) set `claimed`,
+`answered` and `failed`, with the handle that took it up as its `owner`; only
+a failed comment carries a `reason`. A comment grants no authority: an agent
+answers it and may revise its page, nothing else.
 
 Every reader's comment no agent has taken up is routed to exactly one handle,
 by one rule that the threads routes and the agents' pull share:

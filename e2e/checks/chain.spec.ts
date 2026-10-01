@@ -124,9 +124,11 @@ test.describe('the chain', () => {
       await heater.comment.click();
       await expect(heater.threads).toHaveCount(1);
       const thread = heater.threads.first();
-      await expect(thread.locator('.artifact-comment-author')).toHaveText(READER);
-      await expect(thread.locator('.artifact-comment-text')).toHaveText(COMMENT);
-      await expect(thread.locator('.artifact-comment-state')).toHaveText(`waiting for ${OWNER}`);
+      const mine = thread.locator('.artifact-comment-item--reader');
+      await expect(mine.locator('.artifact-comment-author')).toHaveText(READER);
+      await expect(mine.locator('.artifact-comment-text')).toHaveText(COMMENT);
+      await expect(thread.locator('.artifact-comment-typing--pending .artifact-comment-bubble'))
+        .toHaveText(`Waiting for ${OWNER}`);
     });
 
     let commentId = 0;
@@ -198,14 +200,20 @@ test.describe('the chain', () => {
       const heater = box(page, 'heater');
       await expect(heater.summary).toHaveText('Comments (1)');
       await heater.summary.click();
-      const items = heater.threads.first().locator('.artifact-comment-item');
+      const thread = heater.threads.first();
+      const items = thread.locator('.artifact-comment-item');
       await expect(items).toHaveCount(2);
-      await expect(items.nth(0).locator('.artifact-comment-state')).toHaveText('answered');
+      // Answered: the reply says it, so nothing waits and no state is drawn.
+      await expect(items.nth(0)).toHaveClass(/artifact-comment-item--reader/);
+      await expect(thread.locator('.artifact-comment-typing, .artifact-comment-notice')).toHaveCount(0);
       const reply = items.nth(1);
-      await expect(reply.locator('.artifact-comment-agent')).toHaveText(OWNER);
+      await expect(reply).toHaveClass(/artifact-comment-item--agent/);
+      await expect(reply.locator('.artifact-comment-handle')).toHaveText(OWNER);
+      await expect(reply.locator('.artifact-comment-agent')).toHaveText('AGENT');
       await expect(reply.locator('.artifact-comment-text')).toHaveText(REPLY);
-      const link = reply.getByRole('link', { name: /^Revised the page/ });
-      await expect(link).toHaveText(`Revised the page · revision ${revision}`);
+      const line = thread.locator('.artifact-comment-event');
+      await expect(line).toHaveText(`${OWNER} revised the page \u2192 revision ${revision}`);
+      const link = line.getByRole('link');
       await expect(link).toHaveAttribute('href', `${NAME}.html`);
 
       await link.click();

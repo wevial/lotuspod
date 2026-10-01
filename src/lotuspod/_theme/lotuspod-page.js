@@ -3,8 +3,10 @@
 //
 // For decisions it reads the page's answers, marks each current choice and
 // fills its note, and posts the reader's answer when a form is submitted. For
-// comments it reads the page's threads, shows each in its section's box with
-// every comment's state, and posts new threads and replies. It sends no
+// comments it reads the page's threads, draws each in its section's box as a
+// chat (the reader's comments on the right, agents' replies on the left, each
+// state as its own mark outside what anyone wrote), and posts new threads and
+// replies. It sends no
 // credential of its own: the reader's Cloudflare Access session is the only
 // identity. Everything anyone wrote is set as text, never as markup.
 (function () {
@@ -228,70 +230,183 @@
       sections.set(box.dataset.section, box);
     });
 
-    // An agent's handle when an agent wrote the row; "" for a reader.
+    // An agent's handle when an agent wrote the row; "" for anyone else. Only
+    // the verified actor's kind says a row is an agent's, never an address.
     function agent(row) {
       var actor = row && row.actor;
-      return actor && actor.kind !== "human" && actor.handle ? String(actor.handle) : "";
+      if (!actor || actor.kind !== "agent") {
+        return "";
+      }
+      return actor.handle ? String(actor.handle) : "agent";
     }
 
-    // Where a reader's comment stands. The handle is the agent it is routed
-    // to, else the page's owner.
-    function state(row) {
-      var handle = row.owner ? String(row.owner) : owner || "an agent";
-      switch (row.state) {
-        case "pending":
-          return "waiting for " + handle;
-        case "unavailable":
-          return handle + " is offline; queued for it";
-        case "claimed":
-          return handle + " is answering";
-        case "answered":
-          return "answered";
-        case "failed":
-          return handle + " could not answer: " +
-            (row.reason ? String(row.reason) : "no reason given");
-        case "paused":
-          return "the responder is paused";
-        default:
-          return String(row.state || "");
+    // Who wrote a row that is not an agent's: an address, else a handle.
+    function author(row) {
+      var actor = row && row.actor;
+      if (actor && actor.email) {
+        return String(actor.email);
       }
+      return actor && actor.handle ? String(actor.handle) : "someone";
     }
 
-    function comment(row) {
-      var handle = agent(row);
-      var item = element("li", "artifact-comment-item");
-      if (handle) {
-        item.classList.add("artifact-comment-item--agent");
+    // The agent a reader's comment is routed to, else the page's owner.
+    function routed(row) {
+      return row.owner ? String(row.owner) : owner || "an agent";
+    }
+
+    // A mark drawn by the stylesheet: no text, hidden from assistive technology.
+    function mark(kind) {
+      var node = element("span", "artifact-comment-mark artifact-comment-mark--" + kind);
+      node.setAttribute("aria-hidden", "true");
+      if (kind === "dots") {
+        node.append(element("i"), element("i"), element("i"));
       }
+      return node;
+    }
+
+    // A row: an avatar, then a column of a name line and what is said.
+    function row(className, avatar, avatarText) {
+      var item = element("li", "artifact-comment-row " + className);
+      var face = element("span", "artifact-comment-avatar " + avatar, avatarText);
+      face.setAttribute("aria-hidden", "true");
+      item.appendChild(face);
+      var column = element("div", "artifact-comment-col");
+      item.appendChild(column);
+      return { item: item, column: column };
+    }
+
+    // An agent's name line: the handle in the mono voice and its AGENT tag.
+    function agentName(handle) {
       var by = element("p", "artifact-comment-by");
-      by.appendChild(element("span", handle ? "artifact-comment-agent" : "artifact-comment-author",
-        handle || reader(row)));
-      var time = element("time", "artifact-comment-time", when(row.createdAt));
-      time.dateTime = String(row.createdAt || "");
+      by.appendChild(element("span", "artifact-comment-handle", handle));
+      by.appendChild(document.createTextNode(" "));
+      by.appendChild(element("span", "artifact-comment-agent", "AGENT"));
+      return by;
+    }
+
+    function comment(entry) {
+      var handle = agent(entry);
+      var name = handle || author(entry);
+      var drawn = handle
+        ? row("artifact-comment-item artifact-comment-item--agent", "artifact-comment-avatar--agent",
+          name.charAt(0).toUpperCase())
+        : row("artifact-comment-item artifact-comment-item--reader", "",
+          name.slice(0, 2).toUpperCase());
+      var by;
+      if (handle) {
+        by = agentName(handle);
+      } else {
+        by = element("p", "artifact-comment-by");
+        by.appendChild(element("span", "artifact-comment-author", name));
+      }
+      var time = element("time", "artifact-comment-time", when(entry.createdAt));
+      time.dateTime = String(entry.createdAt || "");
       by.appendChild(document.createTextNode(" "));
       by.appendChild(time);
-      item.appendChild(by);
-      item.appendChild(element("p", "artifact-comment-text", String(row.text || "")));
-      if (!handle) {
-        var standing = element("p", "artifact-comment-state", state(row));
-        standing.dataset.state = String(row.state || "");
-        item.appendChild(standing);
-      } else if (row.revision) {
-        // The reply carries the revision of the page it made.
-        var revised = element("p", "artifact-comment-revision");
-        var link = element("a", "", "Revised the page · revision " + row.revision);
-        link.href = encodeURIComponent(page) + ".html";
-        revised.appendChild(link);
-        item.appendChild(revised);
+      drawn.column.appendChild(by);
+      drawn.column.appendChild(element("p", "artifact-comment-text", String(entry.text || "")));
+      return drawn.item;
+    }
+
+    // The centred line after an agent's reply that revised the page.
+    function revised(entry) {
+      var line = element("li", "artifact-comment-event");
+      var text = element("span");
+      text.appendChild(document.createTextNode(agent(entry) + " "));
+      var link = element("a", "", "revised the page \u2192 revision ");
+      link.href = encodeURIComponent(page) + ".html";
+      link.appendChild(element("code", "", String(entry.revision)));
+      text.appendChild(link);
+      line.appendChild(text);
+      return line;
+    }
+
+    // A centred system line: a title behind its mark, then what follows.
+    function notice(state, kind, title, lines) {
+      var line = element("li", "artifact-comment-notice artifact-comment-notice--" + state);
+      line.dataset.state = state;
+      line.setAttribute("role", "note");
+      var head = element("p", "artifact-comment-notice-title");
+      head.appendChild(mark(kind));
+      head.appendChild(element("span", "", title));
+      line.appendChild(head);
+      lines.forEach(function (text) {
+        line.appendChild(element("p", "artifact-comment-notice-text", text));
+      });
+      return line;
+    }
+
+    // What a reader's comment's state draws after it; null for none.
+    function after(entry) {
+      var handle = routed(entry);
+      switch (entry.state) {
+        case "unavailable":
+          return notice("unavailable", "hollow", handle + " is offline",
+            ["Your comment goes to " + handle + " when it checks in again."]);
+        case "paused":
+          return notice("paused", "pause", "The responder is paused",
+            ["Your comment waits until it is resumed."]);
+        case "failed":
+          return notice("failed", "bang", handle + " couldn't answer", [
+            entry.reason ? String(entry.reason) : "No reason given",
+            "To send it again, write a new comment.",
+          ]);
+        default:
+          return null;
       }
-      return item;
+    }
+
+    // The typing bubble a thread ends in while its newest reader comment has
+    // no answer yet; null for none.
+    function typing(entry) {
+      var handle = routed(entry);
+      var drawn;
+      var bubble;
+      if (entry.state === "pending") {
+        drawn = row("artifact-comment-typing artifact-comment-typing--pending",
+          "artifact-comment-avatar--ghost", handle.charAt(0).toUpperCase());
+        bubble = element("p", "artifact-comment-bubble artifact-comment-bubble--ghost",
+          "Waiting for " + handle);
+        bubble.appendChild(mark("dots"));
+      } else if (entry.state === "claimed") {
+        drawn = row("artifact-comment-typing artifact-comment-typing--claimed",
+          "artifact-comment-avatar--agent", handle.charAt(0).toUpperCase());
+        var by = agentName(handle);
+        by.appendChild(document.createTextNode(" is writing"));
+        drawn.column.appendChild(by);
+        bubble = element("p", "artifact-comment-bubble artifact-comment-bubble--typing");
+        bubble.appendChild(mark("dots"));
+        bubble.appendChild(element("span", "artifact-comment-sr", handle + " is writing a reply"));
+      } else {
+        return null;
+      }
+      drawn.item.setAttribute("role", "status");
+      drawn.column.appendChild(bubble);
+      return drawn.item;
     }
 
     function fill(thread) {
-      thread.list.replaceChildren(comment(thread.root));
-      thread.replies.forEach(function (row) {
-        thread.list.appendChild(comment(row));
+      var rows = [thread.root].concat(thread.replies);
+      var newest = null;
+      thread.list.replaceChildren();
+      rows.forEach(function (entry) {
+        thread.list.appendChild(comment(entry));
+        if (agent(entry)) {
+          if (entry.revision) {
+            thread.list.appendChild(revised(entry));
+          }
+          return;
+        }
+        newest = entry;
+        var line = after(entry);
+        if (line) {
+          thread.list.appendChild(line);
+        }
       });
+      var waiting = newest && typing(newest);
+      if (waiting) {
+        thread.list.appendChild(waiting);
+      }
     }
 
     function failure(response, payload) {
