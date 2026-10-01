@@ -16,6 +16,7 @@ from __future__ import annotations
 import configparser
 import json
 import os
+import re
 import shlex
 import signal
 import sqlite3
@@ -171,6 +172,48 @@ class PromptTests(ResponderCase):
         self.assertFalse(Path(record["cwd"]).exists())
         self.assertEqual(self.replies("orphan", first["id"])[-1],
                          ("An answer.", "responder", ""))
+
+
+    def test_the_agent_reads_the_passage_and_the_revision_it_was_highlighted_on(self):
+        read = self.page_revision()
+        quote = {"exact": "lilies ````at```` dusk", "prefix": "source line: ",
+                 "suffix": ". ```Other```"}
+        status, _, row = self.api("POST", "/api/comments", {
+            "page": "orphan", "section": "greeting", "text": "Why dusk?", "quote": quote,
+            "revision": read})
+        self.assertEqual(status, 201, row)
+        self.publish("orphan", ORPHAN.replace("Nothing here.", "Something here."))
+        now = self.page_revision()
+        self.assertNotEqual(now, read)
+
+        done = self.respond()
+        self.assertEqual(done.returncode, 0, done.stderr)
+        [record] = self.records()
+        prompt = record["prompt"]
+        start = prompt.index(f"## The comment to answer: comment {row['id']}")
+        end = prompt.index("### The thread it belongs to")
+        answer, thread = prompt[start:end], prompt[end:]
+        self.assertIn('On the section headed "Greeting" (`greeting`).', answer)
+        self.assertIn(f"The reader highlighted a passage of this section on revision {read}; "
+                      f"the page is now at revision {now}. Answer about that passage.", answer)
+        around = quote["prefix"] + quote["exact"] + quote["suffix"]
+        for part, lead in ((answer, "The passage:"),
+                           (thread, f"The reader highlighted, on revision {read}:")):
+            with self.subTest(lead=lead):
+                found = re.search(re.escape(lead) + r"\n\n(`{3,})\n(.*?)\n\1\n\n"
+                                  r"With the words around it:\n\n(`{3,})\n(.*?)\n\3\n",
+                                  part, re.DOTALL)
+                self.assertIsNotNone(found, part)
+                exact_marks, exact, around_marks, got = found.groups()
+                self.assertEqual((exact, got), (quote["exact"], around))
+                self.assertGreater(len(exact_marks), 4)
+                self.assertGreater(len(around_marks), 4)
+        self.assertLess(answer.index("Answer about that passage."), answer.index("Why dusk?"))
+        self.assertNotIn("Quoting the page", prompt)
+
+    def page_revision(self) -> str:
+        page = (self.out / "orphan.html").read_text(encoding="utf-8")
+        return page.split('name="lotuspod:revision" content="', 1)[1].split('"', 1)[0]
 
 
 class FailureTests(ResponderCase):

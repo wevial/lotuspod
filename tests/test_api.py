@@ -329,6 +329,40 @@ class CommentTests(ApiTestCase):
             (200, {"page": "plan", "threads": [{"root": root, "replies": [reply, deeper]}]}),
         )
 
+    def test_a_new_thread_names_the_revision_the_reader_read(self):
+        quote = {"exact": "may freeze", "prefix": "The pond ", "suffix": "."}
+        status, row = self.comment(section="risks", text="When?", quote=quote,
+                                   revision=self.revision)
+        self.assertEqual(status, 201)
+        self.assertEqual((row["quote"], row["revision"]), (quote, self.revision))
+        stored = db.Database(self.db_path).comment(row["id"])
+        self.assertEqual((stored["quote"], stored["revision"]), (quote, self.revision))
+
+        self.assertNotEqual(self.revision, "0000000000ff")
+        self.assertEqual(
+            self.comment(section="risks", text="Stale.", quote=quote, revision="0000000000ff"),
+            (409, {"error": "stale_page"}),
+        )
+        _, got = self.ask("GET", "/api/comments?page=plan")
+        self.assertEqual([thread["root"]["id"] for thread in got["threads"]], [row["id"]])
+
+        status, unnamed = self.comment(section="risks", text="No revision.", quote=quote)
+        self.assertEqual(status, 201)
+        self.assertEqual(unnamed["revision"], self.revision)
+
+    def test_a_revision_not_a_short_string_or_on_a_reply_is_invalid(self):
+        _, root = self.comment(section="risks", text="A thread.")
+        new = {"page": "plan", "section": "risks", "text": "Hello"}
+        for body in ({**new, "revision": 7}, {**new, "revision": None},
+                     {**new, "revision": "r" * 101},
+                     {"page": "plan", "parent": root["id"], "text": "Hi",
+                      "revision": self.revision}):
+            with self.subTest(body=body):
+                self.assertEqual(self.ask("POST", "/api/comments", body),
+                                 (400, {"error": "invalid_body"}))
+        _, got = self.ask("GET", "/api/comments?page=plan")
+        self.assertEqual(got["threads"], [{"root": root, "replies": []}])
+
     def test_threads_come_oldest_first_and_gone_sections_have_no_title(self):
         _, goals = self.comment(section="goals", text="Which goal first?")
         # A thread on a section an earlier revision had: the route takes new

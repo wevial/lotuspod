@@ -178,9 +178,10 @@ class PullTestCase(unittest.TestCase):
             conn.close()
         return response.status, json.loads(payload.decode("utf-8"))
 
-    def comment(self, text: str, page: str = "plan", section: str = "risks") -> dict:
+    def comment(self, text: str, page: str = "plan", section: str = "risks",
+                **extra) -> dict:
         status, row = self.reader("POST", "/api/comments",
-                                  {"page": page, "section": section, "text": text})
+                                  {"page": page, "section": section, "text": text, **extra})
         self.assertEqual(status, 201, row)
         return row
 
@@ -456,6 +457,96 @@ class TextTests(PullTestCase):
         rc, out, _err = self.agent("show", "nowhere", "--json")
         self.assertNotEqual(rc, 0)
         self.assertEqual(json.loads(out), {"error": "unknown_page"})
+
+
+class PassageTests(PullTestCase):
+    """A comment on a highlighted passage, as the markdown prints it."""
+
+    QUOTE = {"exact": "may freeze", "prefix": "The pond ", "suffix": "."}
+    # The highlighted words, then the same words with the text around them.
+    PASSAGE = re.compile(r"The reader highlighted(?:, on revision ([0-9a-f]+|unknown))?:\n\n"
+                         r"(`{3,})\n(.*?)\n\2\n\nWith the words around it:\n\n"
+                         r"(`{3,})\n(.*?)\n\4\n", re.DOTALL)
+
+    def republish(self) -> None:
+        source = self.work / "plan.md"
+        source.write_text(PLAN.replace("Ship it.", "Ship it soon."), encoding="utf-8")
+        rc, _out, err = run_cli("publish", str(source), "--out-dir", str(self.out_dir),
+                                "--local", "--owner", "hermes", "--credential", str(self.desk))
+        self.assertEqual(rc, 0, err)
+
+    def markdown(self, *argv: str) -> str:
+        rc, out, err = self.agent(*argv)
+        self.assertEqual(rc, 0, err)
+        return out
+
+    def test_a_pull_prints_the_passage_and_the_revision_it_was_highlighted_on(self):
+        self.pull("hermes")
+        read = self.revision()
+        comment = self.comment("Freeze how hard?", quote=self.QUOTE, revision=read)
+        self.assertEqual(comment["revision"], read)
+        out = self.markdown("pull", "--owner", "hermes")
+        self.assertIn(f"- Passage: highlighted on revision {read}; "
+                      "the page is still at that revision", out)
+        self.assertNotIn("Quoting the page", out)
+
+        self.republish()
+        now = self.revision()
+        self.assertNotEqual(now, read)
+        out = self.markdown("pull", "--owner", "hermes")
+        self.assertIn(f"- Passage: highlighted on revision {read}; "
+                      f"the page is now at revision {now}", out)
+        self.assertLess(out.index("- State:"), out.index("- Passage:"))
+        # The item's passage, then the thread's first comment's.
+        passages = self.PASSAGE.findall(out)
+        self.assertEqual(len(passages), 2)
+        for highlighted_on, _marks, exact, _around_marks, around in passages:
+            self.assertEqual(exact, "may freeze")
+            self.assertEqual(around, "The pond may freeze.")
+        self.assertEqual([on for on, *_rest in passages], ["", read])
+        self.assertLess(out.index("The reader highlighted:"), out.index("Freeze how hard?"))
+
+    def test_a_comment_with_no_quote_prints_no_passage(self):
+        self.pull("hermes")
+        self.comment("Just a thought.")
+        out = self.markdown("pull", "--owner", "hermes")
+        self.assertIn("Just a thought.", out)
+        for absent in ("Passage:", "The reader highlighted", "Quoting the page"):
+            self.assertNotIn(absent, out)
+
+    def test_show_prints_the_passage_of_a_quoted_thread_only(self):
+        read = self.revision()
+        self.comment("On the words.", quote=self.QUOTE, revision=read)
+        self.comment("On the section.", section="goals")
+        out = self.markdown("show", "plan")
+        quoted, plain = out.split("## Section Goals")
+        self.assertEqual(self.PASSAGE.findall(quoted),
+                         [(read, "```", "may freeze", "```", "The pond may freeze.")])
+        self.assertIn(f"The reader highlighted, on revision {read}:", quoted)
+        self.assertIn("On the section.", plain)
+        self.assertNotIn("The reader highlighted", plain)
+        self.assertNotIn("With the words around it", plain)
+
+    def test_a_passage_sits_in_fences_longer_than_its_backticks(self):
+        self.pull("hermes")
+        quote = {"exact": "the ````pond```` may", "prefix": "", "suffix": " ```freeze```"}
+        self.comment("Which pond?", quote=quote)
+        out = self.markdown("pull", "--owner", "hermes")
+        passages = self.PASSAGE.findall(out)
+        self.assertEqual(len(passages), 2)
+        for _on, marks, exact, around_marks, around in passages:
+            self.assertEqual(exact, quote["exact"])
+            self.assertEqual(around, quote["exact"] + quote["suffix"])
+            self.assertGreater(len(marks), 4)
+            self.assertGreater(len(around_marks), 4)
+
+    def test_a_quoted_comment_is_routed_as_any_other(self):
+        self.pull("hermes")
+        self.pull("claude-3f9a2c")
+        named = self.comment("@claude-3f9a2c is this the right word?", quote=self.QUOTE)
+        plain = self.comment("Is this the right word?", quote=self.QUOTE)
+        self.assertEqual(self.pulled_comments("claude-3f9a2c"), [named["id"]])
+        self.assertEqual(self.pulled_comments("hermes"), [plain["id"]])
 
 
 class SchemaTests(PullTestCase):

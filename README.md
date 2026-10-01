@@ -462,7 +462,8 @@ twice.
   question as `{current, earlier}`, the newest answer and the older ones newest
   first.
 - `POST /api/comments` with `{page, section, text}` (and optionally a `quote`,
-  `{exact, prefix, suffix}`) opens a thread on a section; with
+  `{exact, prefix, suffix}`, and the `revision` the reader's page was rendered
+  at) opens a thread on a section; with
   `{page, parent, text}` it replies. It answers 201 with the row: `section`,
   `sectionTitle` (the text of the page's h2 with that id, or empty), `parent`,
   `quote`, and its routing state (`state` and `owner`, below). A reply takes its thread's section, and a
@@ -480,15 +481,20 @@ TLS), else `http`; one that is not
 missing, extra or mistyped field is 400 `invalid_body`, as are `question`,
 `version` or `choice` outside 1 to 100 characters, an empty `section` (any
 heading id's length is taken, since it must name one of the page's boxes),
-`text` outside 1 to 4000, `note` over 4000, and a quote whose `exact` is outside 1 to 500 or
-whose `prefix` or `suffix` is over 32. A page serve would not answer (hidden,
+`text` outside 1 to 4000, `note` over 4000, a quote whose `exact` is outside 1 to 500 or
+whose `prefix` or `suffix` is over 32 (code points, as Python counts them), a new
+thread's `revision` that is not a string of at most 100 characters, and any
+`revision` on a reply. A page serve would not answer (hidden,
 missing, not a page) is 404 `unknown_page`, and a reply to no comment on its
 page 404 `unknown_parent`. A read without exactly one `page` is 400
 `invalid_query`. An answer is checked against the page's own decision forms
 (below): a question the page does not ask is 400 `unknown_question`, a
 `version` other than the form's 409 `stale`, and a `choice` the form does not
 offer 400 `invalid_choice`. A new thread is checked against the page's comment
-boxes (below): a `section` the page has no box for is 400 `unknown_section`.
+boxes (below): a `section` the page has no box for is 400 `unknown_section`,
+and a `revision` other than the page's current one is 409 `stale_page`, so a
+quote is never stored against a revision its words were not taken from.
+Without a `revision` (a page rendered with none), a new thread is taken as is.
 
 ## Decisions for the maintainer
 
@@ -778,6 +784,16 @@ responder may claim it. Items are, comments first, oldest first:
   refused rather than overwriting the newer one. A page published before sources were kept
   has an empty `source` and `sourceFile`, and the revision of the page as
   rendered. The pull is the only way a page's source leaves the host's files.
+
+Without `--json`, `pull` prints each item as markdown, every reader's text in
+a fence longer than its longest run of backticks. A comment on a highlighted
+passage adds, after its state, `- Passage: highlighted on revision R; the page
+is now at revision P` (or `the page is still at that revision`), then "The
+reader highlighted:" with a fence holding the quote's `exact`, and "With the
+words around it:" with a fence holding `prefix + exact + suffix`. The thread's
+first comment, and each quoted first comment `show` prints, gives the same two
+fences under "The reader highlighted, on revision R:". A comment with no quote
+prints none of these.
 
 `ack-answer ID` needs `pull` for the page's owner; the owner's pulls leave an
 acknowledged answer out from then on. `show PAGE` needs `pull` for any handle

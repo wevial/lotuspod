@@ -191,13 +191,14 @@ def _author(row: dict) -> str:
     return f"the agent {actor.get('handle') or actor.get('name') or ''}".rstrip()
 
 
-def _message(row: dict, level: str) -> list[str]:
-    """One message of a thread: who wrote it and when, what it quotes, and
-    its text, a reader's marked as the reader's words."""
+def _message(row: dict, level: str, quoted: bool = True) -> list[str]:
+    """One message of a thread: who wrote it and when, what it quotes unless
+    quoted is false, and its text, a reader's marked as the reader's words."""
     kind = "Comment" if row.get("parent") is None else "Reply"
     lines = [f"{level} {kind} {row['id']} by {_author(row)}, {row['createdAt']}", ""]
-    if row.get("quote"):
-        lines += ["Quoting the page:", "", agents.fence(row["quote"]["exact"]), ""]
+    if quoted and row.get("quote"):
+        lead = f"The reader highlighted, on revision {row['revision'] or 'unknown'}:"
+        lines += agents.passage(row["quote"], lead)
     if (row.get("actor") or {}).get("kind") == "human":
         lines += ["The reader's words, as they wrote them:", ""]
     return lines + [agents.fence(row["text"], "text"), ""]
@@ -222,8 +223,12 @@ def prompt(item: dict) -> str:
         f"On the section headed \"{title}\" (`{comment['section']}`)." if title
         else f"On the section `{comment['section']}`.",
         "",
-        *_message(comment, "###"),
     ]
+    if comment.get("quote"):
+        lines += [f"The reader highlighted a passage of this section on "
+                  f"{agents.moved(comment, page['revision'])}. Answer about that passage.", "",
+                  *agents.passage(comment["quote"], "The passage:")]
+    lines += _message(comment, "###", quoted=False)
     about = "its first comment and its latest replies, oldest first"
     if item.get("omitted"):
         about += f"; {item['omitted']} earlier replies are left out"

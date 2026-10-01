@@ -98,6 +98,21 @@ def _section(row: dict) -> str:
     return f"{title} (`{row['section']}`)" if title else f"`{row['section']}`"
 
 
+def passage(quote: dict, lead: str) -> list[str]:
+    """A quote's highlighted words under lead, then the same words with the
+    text around them."""
+    around = quote["prefix"] + quote["exact"] + quote["suffix"]
+    return [lead, "", fence(quote["exact"]), "", "With the words around it:", "", fence(around), ""]
+
+
+def moved(comment: dict, revision: str) -> str:
+    """The revision a quote was highlighted on, beside the page's revision."""
+    if comment["revision"] == revision:
+        return f"revision {comment['revision'] or 'unknown'}; the page is still at that revision"
+    return (f"revision {comment['revision'] or 'unknown'}; "
+            f"the page is now at revision {revision or 'unknown'}")
+
+
 def _message(row: dict, level: str) -> list[str]:
     """One comment of a thread: who, when, where it stands, and its text."""
     kind = "Comment" if row.get("parent") is None else "Reply"
@@ -106,7 +121,8 @@ def _message(row: dict, level: str) -> list[str]:
         head += f" ({_standing(row)})"
     lines = [head, ""]
     if row.get("quote"):
-        lines += ["Quoting the page:", "", fence(row["quote"]["exact"]), ""]
+        lead = f"The reader highlighted, on revision {row['revision'] or 'unknown'}:"
+        lines += passage(row["quote"], lead)
     lines += [fence(row["text"]), ""]
     return lines
 
@@ -140,10 +156,12 @@ def pull_text(payload: dict) -> str:
                 f"- From: {_by(comment)} at {comment['createdAt']}, "
                 f"against revision {comment['revision'] or 'unknown'}",
                 f"- State: {_standing(comment)}",
-                "",
             ]
             if comment.get("quote"):
-                lines += ["Quoting the page:", "", fence(comment["quote"]["exact"]), ""]
+                lines += [f"- Passage: highlighted on {moved(comment, page['revision'])}", "",
+                          *passage(comment["quote"], "The reader highlighted:")]
+            else:
+                lines.append("")
             if comment.get("owner") == payload["owner"]:
                 take = f"- Claim: `lotuspod comments claim {comment['id']}`"
             else:

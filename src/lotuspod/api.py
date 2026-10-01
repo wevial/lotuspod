@@ -5,7 +5,7 @@ the reader as actor. Four routes:
 
     POST /api/answers     {page, question, version, choice, note}
     GET  /api/answers?page=NAME
-    POST /api/comments    {page, section, text[, quote]} or {page, parent, text}
+    POST /api/comments    {page, section, text[, quote][, revision]} or {page, parent, text}
     GET  /api/comments?page=NAME
 
 A POST is refused before anything is stored: 403 cross_origin when a browser
@@ -17,7 +17,8 @@ against the page's own decision forms: 400 unknown_question for a question
 the page does not ask, 409 stale for a version other than the page's, and
 400 invalid_choice for a choice its form does not offer. A new thread is
 checked against the page's comment boxes: 400 unknown_section for a section
-the page has no box for.
+the page has no box for, and 409 stale_page when it names a revision other
+than the page's, so a quote is never stored against words it was not taken from.
 
 Every reader's comment a route answers carries its routing state (see
 lotuspod.routing): `state` is `pending`, `unavailable` or `paused` until an
@@ -48,6 +49,7 @@ MAX_NAME = 100
 MAX_TEXT = 4000
 MAX_EXACT = 500
 MAX_CONTEXT = 32
+MAX_REVISION = 100
 # Seconds a request body may take to arrive.
 BODY_TIMEOUT = 10
 # A refused body up to this size is still read, and dropped: closing a
@@ -343,15 +345,19 @@ class Api:
                 )
             except db.UnknownParent:
                 raise Refusal(HTTPStatus.NOT_FOUND, "unknown_parent") from None
-        _keys(fields, {"page", "section", "text"}, frozenset({"quote"}))
+        _keys(fields, {"page", "section", "text"}, frozenset({"quote", "revision"}))
         # A heading's id may be any length, and must match one of the page's
         # boxes exactly: the body's own limit is the only one it needs.
         section = _text(fields["section"], 1, MAX_BODY)
         text = _text(fields["text"], 1, MAX_TEXT)
         quote = _quote(fields.get("quote"))
+        # The revision the reader's page was rendered at; absent when it had none.
+        read = _text(fields["revision"], 0, MAX_REVISION) if "revision" in fields else None
         page = self._page(fields["page"])
         if section not in page.comment_sections:
             raise Refusal(HTTPStatus.BAD_REQUEST, "unknown_section")
+        if read is not None and read != page.revision:
+            raise Refusal(HTTPStatus.CONFLICT, "stale_page")
         return self.database.add_comment(
             page=page.name, section=section, section_title=page.sections.get(section, ""),
             revision=page.revision, text=text, quote=quote, actor=actor, owner=page.owner,
