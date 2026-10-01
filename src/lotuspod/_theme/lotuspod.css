@@ -586,22 +586,33 @@ body {
 }
 
 /* Decisions for the maintainer: each question of the page's decisions table is
-   a form (lotuspod.decisions) on a faintly tinted card, its options one row of
-   radio buttons, the note a text-width field in the body voice, and the status
-   line and earlier answers in the muted voice of the meta line. */
+   a form (lotuspod.decisions) drawn inline in the prose's own voice, with a
+   quiet rule down its left edge. Its options are a list of themed radio rows,
+   the default carrying a muted "default" after its label; the note folds
+   behind "Add a note". The rule turns lavender and "Not saved" shows while the
+   picked answer differs from the saved one, and a saved answer folds the card
+   to one line with a "change" button, its note, who and when, and the earlier
+   answers in the muted voice of the meta line. */
 .artifact-decisions {
   display: grid;
-  gap: 1rem;
+  gap: 1.25rem;
   margin: 0 0 1.5em;
 }
 
+.artifact-decision [hidden] {
+  display: none;
+}
+
 .artifact-decision fieldset {
-  background: var(--row-tint);
-  border: 1px solid var(--hairline);
-  border-radius: var(--radius-block);
+  border: 0;
+  border-left: 2px solid var(--hairline-strong);
   margin: 0;
   min-width: 0;
-  padding: 1rem 1.25rem;
+  padding: 0.1rem 0 0.1rem 1rem;
+}
+
+.artifact-decision--dirty fieldset {
+  border-left-color: var(--color-lavender);
 }
 
 /* A floated legend sits inside the card instead of on its border. */
@@ -609,7 +620,7 @@ body {
   color: var(--color-white);
   float: left;
   font-weight: 600;
-  margin: 0 0 0.5em;
+  margin: 0 0 0.2em;
   padding: 0;
   width: 100%;
 }
@@ -623,16 +634,18 @@ body {
   border-radius: var(--radius-chip);
   color: var(--color-lavender);
   font-family: var(--font-mono);
-  font-size: 0.8em;
+  font-size: 0.78em;
   font-weight: 400;
   margin-right: 0.4em;
-  padding: 0.05em 0.45em;
+  padding: 0.05em 0.4em;
+  white-space: nowrap;
 }
 
-.artifact-body .artifact-decision-context {
+.artifact-body .artifact-decision-context,
+.artifact-body .artifact-decision-earlier {
   color: var(--color-muted-lavender);
   font-size: 0.9rem;
-  margin: 0 0 0.4em;
+  margin: 0 0 0.2em;
 }
 
 .artifact-decision-context-label {
@@ -640,39 +653,112 @@ body {
 }
 
 .artifact-decision-options {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem 1.5rem;
-  margin: 0.6em 0 0.8em;
+  display: grid;
+  gap: 0.1rem;
+  margin: 0.5em 0 0.4em;
 }
 
 .artifact-decision-option {
-  align-items: baseline;
+  align-items: center;
+  border-radius: var(--radius-block);
   cursor: pointer;
-  display: inline-flex;
-  gap: 0.5rem;
+  display: flex;
+  gap: 0.6rem;
+  margin-left: -0.45rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  padding: 0.28rem 0.45rem;
+}
+
+.artifact-decision-option:hover {
+  background: var(--row-tint);
+}
+
+.artifact-decision-option:has(:checked) {
+  background: var(--quote-tint);
+  color: var(--color-white);
 }
 
 .artifact-decision input[type="radio"] {
-  accent-color: var(--color-lavender);
+  appearance: none;
+  border: 1.5px solid var(--color-muted-lavender);
+  border-radius: 50%;
+  cursor: pointer;
   flex: none;
-  height: 1em;
+  height: 1.05em;
   margin: 0;
-  transform: translateY(0.12em);
-  width: 1em;
+  width: 1.05em;
 }
 
+.artifact-decision input[type="radio"]:checked {
+  background: radial-gradient(circle, var(--color-lavender) 0 36%, transparent 42%);
+  border-color: var(--color-lavender);
+}
+
+.artifact-decision-default,
 .artifact-decision-mark {
   color: var(--color-muted-lavender);
   font-size: 0.85em;
 }
 
-.artifact-decision-note {
+.artifact-decision-default::before {
+  content: "\00b7\00a0";
+}
+
+.artifact-decision :is(input, summary, button, textarea):focus-visible {
+  outline: 2px solid var(--color-lavender);
+  outline-offset: 2px;
+}
+
+.artifact-decision-foot,
+.artifact-decision-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 0.9rem;
+  gap: 0.5rem 1rem;
+  margin-top: 0.2em;
+}
+
+.artifact-decision-foot > details[open] {
+  flex: 1 1 100%;
+}
+
+.artifact-decision-note > summary {
+  color: var(--color-lavender);
+  cursor: pointer;
+  display: inline-block;
+  list-style: none;
+}
+
+.artifact-decision-note > summary::-webkit-details-marker {
+  display: none;
+}
+
+.artifact-decision-note > summary::before {
+  content: "+\00a0";
+}
+
+.artifact-decision-note > summary:hover,
+.artifact-decision-note[open] > summary {
+  color: var(--color-pale-lavender);
+}
+
+.artifact-decision-note[open] > summary {
+  margin-bottom: 0.4rem;
+}
+
+.artifact-decision-note[open] > summary::before {
+  content: "\2212\00a0";
+}
+
+/* The note of a page published before the fold: a label always open. */
+label.artifact-decision-note {
   display: block;
   margin: 0 0 0.8em;
 }
 
-.artifact-decision-note span {
+label.artifact-decision-note span {
   color: var(--color-muted-lavender);
   display: block;
   font-size: 0.85rem;
@@ -681,58 +767,128 @@ body {
 
 .artifact-decision textarea {
   background: var(--color-surface);
-  border: 1px solid var(--hairline);
+  border: 1px solid var(--color-muted-lavender);
   border-radius: var(--radius-block);
-  color: var(--body-ink);
+  color: var(--color-white);
   display: block;
   font-family: var(--font-body);
   font-size: inherit;
-  line-height: var(--leading-body);
-  min-height: 3.5rem;
-  padding: 0.5rem 0.8rem;
+  line-height: 1.5;
+  min-height: 4.6em;
+  padding: 0.55em 0.75em;
   resize: vertical;
   width: 100%;
 }
 
 .artifact-decision textarea:focus-visible {
   border-color: var(--color-lavender);
-  outline: none;
+  outline-offset: 1px;
 }
 
-.artifact-decision-actions {
-  align-items: baseline;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem 1rem;
-}
-
-.artifact-decision button {
-  background: var(--color-surface);
-  border: 1px solid var(--hairline-strong);
+.artifact-decision button[type="submit"] {
+  background: var(--color-lavender);
+  border: 1px solid var(--color-lavender);
   border-radius: var(--radius-pill);
-  color: var(--color-pale-lavender);
+  color: var(--color-night);
   cursor: pointer;
   font-family: var(--font-body);
-  font-size: 0.95rem;
-  padding: 0.4rem 1.2rem;
+  font-size: 0.95em;
+  font-weight: 600;
+  line-height: 1.3;
+  padding: 0.4em 1.1em;
 }
 
-.artifact-decision button:hover,
-.artifact-decision button:focus-visible {
-  border-color: var(--color-lavender);
-  color: var(--color-white);
-  outline: none;
+.artifact-decision button[type="submit"]:hover {
+  background: var(--color-pale-lavender);
+  border-color: var(--color-pale-lavender);
 }
 
-.artifact-decision button:disabled {
+.artifact-decision button[type="submit"]:disabled {
   cursor: default;
   opacity: 0.6;
+}
+
+.artifact-decision-unsaved {
+  align-items: center;
+  color: var(--color-pale-lavender);
+  display: inline-flex;
+  gap: 0.4em;
+}
+
+.artifact-decision-unsaved::before {
+  border: 1.5px solid var(--color-lavender);
+  border-radius: 50%;
+  content: "";
+  flex: none;
+  height: 0.55em;
+  width: 0.55em;
+}
+
+.artifact-decision-hint {
+  color: var(--color-muted-lavender);
 }
 
 .artifact-body .artifact-decision-status {
   color: var(--color-muted-lavender);
   font-size: 0.85rem;
   margin: 0;
+}
+
+.artifact-body .artifact-decision-status:empty {
+  display: none;
+}
+
+.artifact-body .artifact-decision-saved p {
+  margin: 0;
+}
+
+.artifact-body .artifact-decision-saved-line {
+  color: var(--color-pale-lavender);
+  margin-top: 0.2em;
+}
+
+.artifact-decision-check {
+  color: var(--color-lavender);
+  font-weight: 700;
+}
+
+.artifact-decision-saved-line strong {
+  color: var(--color-white);
+}
+
+.artifact-decision-change {
+  appearance: none;
+  background: none;
+  border: 0;
+  color: var(--color-lavender);
+  cursor: pointer;
+  font: inherit;
+  padding: 0;
+  text-decoration: underline;
+  text-decoration-color: rgba(183, 156, 244, 0.45);
+  text-underline-offset: 0.18em;
+}
+
+.artifact-decision-change:hover {
+  color: var(--color-pale-lavender);
+  text-decoration-color: currentColor;
+}
+
+.artifact-body .artifact-decision-saved-note {
+  border-left: 1px solid var(--hairline-strong);
+  color: var(--color-pale-lavender);
+  font-size: 0.9rem;
+  margin-top: 0.45em;
+  overflow-wrap: anywhere;
+  padding-left: 0.7rem;
+  white-space: pre-wrap;
+}
+
+.artifact-body .artifact-decision-saved-by {
+  color: var(--color-muted-lavender);
+  font-size: 0.85rem;
+  margin-top: 0.2em;
+  overflow-wrap: anywhere;
 }
 
 .artifact-decision-history {
@@ -747,6 +903,10 @@ body {
 
 .artifact-body .artifact-decision-history ol {
   margin: 0.4em 0 0;
+}
+
+.artifact-decision-history li {
+  overflow-wrap: anywhere;
 }
 
 .artifact-decision-history-choice {

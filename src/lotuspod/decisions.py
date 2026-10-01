@@ -36,7 +36,8 @@ VERSION_LENGTH = 12
 # The options a row with a Default and no Options column offers.
 ACCEPT = ("accept", "Accept the default")
 OTHER = ("other", "Something else")
-DEFAULT_MARK = "(default)"
+# The stylesheet draws the "· " before it.
+DEFAULT_MARK = "default"
 
 # Tags that end a table cell left open, at the table's own depth.
 _CELL_ENDS = frozenset({"tr", "td", "th", "thead", "tbody", "tfoot"})
@@ -216,8 +217,9 @@ def _questions(rows: list[list[dict]]) -> list[dict] | None:
             "question": question,
             "options": options,
             "marked": marked,
-            # The default's text, shown when no option carries the mark.
-            "default": "" if marked else default["html"] if default["text"] else "",
+            # The default's text, shown only when the row has no Options
+            # column: it is what "Accept the default" accepts.
+            "default": default["html"] if columns["options"] is None and default["text"] else "",
             "context": [(header[i]["html"], _cell(row, i)["html"])
                         for i in context if _cell(row, i)["text"]],
             "version": version(question["text"], [label for _, label in options]),
@@ -250,7 +252,7 @@ def _form(page: str, question: dict) -> str:
         )
     lines.append('<div class="artifact-decision-options">')
     for value, label in question["options"]:
-        mark = (f' <span class="artifact-decision-mark">{DEFAULT_MARK}</span>'
+        mark = (f' <span class="artifact-decision-default">{DEFAULT_MARK}</span>'
                 if value == question["marked"] else "")
         lines.append(
             f'<label class="artifact-decision-option"><input type="radio" name="choice" '
@@ -259,10 +261,14 @@ def _form(page: str, question: dict) -> str:
         )
     lines += [
         "</div>",
-        '<label class="artifact-decision-note"><span>Note</span>'
-        '<textarea name="note" rows="2" maxlength="4000"></textarea></label>',
-        '<div class="artifact-decision-actions"><button type="submit">Answer</button>'
-        '<p class="artifact-decision-status" role="status"></p></div>',
+        '<div class="artifact-decision-foot">',
+        '<details class="artifact-decision-note"><summary>Add a note</summary>'
+        '<textarea name="note" rows="2" maxlength="4000" aria-label="Note"></textarea></details>',
+        '<button type="submit">Save answer</button>',
+        '<span class="artifact-decision-unsaved" hidden>Not saved</span>',
+        '<span class="artifact-decision-hint">Not answered yet</span>',
+        '<p class="artifact-decision-status" role="status"></p>',
+        "</div>",
         "</fieldset>",
         "</form>",
     ]

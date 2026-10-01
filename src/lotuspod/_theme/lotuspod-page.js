@@ -1,8 +1,10 @@
 // Lotuspod page script: answers a page's decision forms (form.artifact-decision)
 // and shows and posts the comments of its sections (details.artifact-comment).
 //
-// For decisions it reads the page's answers, marks each current choice and
-// fills its note, and posts the reader's answer when a form is submitted. For
+// For decisions it reads the page's answers, folds each question answered as
+// the page now asks it to one saved line with a "change" button, marks a
+// choice or note not yet saved, and posts the reader's answer when a form is
+// submitted. For
 // comments it reads the page's threads, draws each in its section's box as a
 // chat (the reader's comments on the right, agents' replies on the left, each
 // state as its own mark outside what anyone wrote), and posts new threads and
@@ -70,12 +72,35 @@
       form.querySelector(".artifact-decision-status").textContent = text;
     }
 
-    function answered(form, row) {
-      var line = "Answered by " + reader(row) + ", " + when(row.createdAt);
-      if (row.version !== form.dataset.version) {
-        line += ", to an earlier wording of this question";
+    // The answer to the question as the page now asks it, if any.
+    function saved(form) {
+      var current = form.lotuspodAnswers.current;
+      return current && current.version === form.dataset.version ? current : null;
+    }
+
+    // Whether the picked option or the note differs from the saved answer.
+    function dirty(form) {
+      var answer = saved(form);
+      var picked = form.querySelector('input[name="choice"]:checked');
+      if (picked && (!answer || picked.value !== answer.choice)) {
+        return true;
       }
-      status(form, line);
+      return form.elements.note.value !== (answer && answer.note ? answer.note : "");
+    }
+
+    // The lavender rule and "Not saved" while the form differs from its
+    // answer; "Not answered yet" while nothing is answered or picked.
+    function mark(form) {
+      var changed = dirty(form);
+      form.classList.toggle("artifact-decision--dirty", changed);
+      var unsaved = form.querySelector(".artifact-decision-unsaved");
+      if (unsaved) {
+        unsaved.hidden = !changed;
+      }
+      var hint = form.querySelector(".artifact-decision-hint");
+      if (hint) {
+        hint.hidden = changed || Boolean(form.lotuspodAnswers.current);
+      }
     }
 
     function history(form) {
@@ -95,40 +120,105 @@
       list.replaceChildren();
       earlier.forEach(function (row) {
         var item = document.createElement("li");
-        var choice = document.createElement("span");
-        choice.className = "artifact-decision-history-choice";
-        choice.textContent = label(form, row.choice);
-        item.appendChild(choice);
+        item.appendChild(element("span", "artifact-decision-history-choice", label(form, row.choice)));
         if (row.note) {
-          var note = document.createElement("span");
-          note.className = "artifact-decision-history-note";
-          note.textContent = row.note;
           item.appendChild(document.createTextNode(" "));
-          item.appendChild(note);
+          item.appendChild(element("span", "artifact-decision-history-note", row.note));
         }
-        var by = document.createElement("span");
-        by.className = "artifact-decision-history-by";
-        by.textContent = reader(row) + ", " + when(row.createdAt);
         item.appendChild(document.createTextNode(" "));
-        item.appendChild(by);
+        item.appendChild(element("span", "artifact-decision-history-by",
+          reader(row) + ", " + when(row.createdAt)));
         list.appendChild(item);
       });
     }
 
-    // Show a form's stored answers; fill its inputs only when asked to, and
-    // only from an answer to the question as the page now asks it.
-    function show(form, fill) {
-      var current = form.lotuspodAnswers.current;
-      if (current) {
-        answered(form, current);
-        if (fill && current.version === form.dataset.version) {
-          radios(form).forEach(function (radio) {
-            radio.checked = radio.value === current.choice;
-          });
-          form.elements.note.value = current.note || "";
-        }
+    // The folded card: "✓ Saved · LABEL · change", the note, who and when.
+    function fold(form, answer) {
+      var block = form.querySelector(".artifact-decision-saved");
+      if (!block) {
+        block = element("div", "artifact-decision-saved");
+        var legend = form.querySelector("legend");
+        legend.parentNode.insertBefore(block, legend.nextSibling);
       }
+      var line = element("p", "artifact-decision-saved-line");
+      var check = element("span", "artifact-decision-check", "✓");
+      check.setAttribute("aria-hidden", "true");
+      var change = element("button", "artifact-decision-change", "change");
+      change.type = "button";
+      change.addEventListener("click", function () { unfold(form); });
+      line.append(check, " Saved · ", element("strong", "", label(form, answer.choice)),
+        " · ", change);
+      var parts = [line];
+      if (answer.note) {
+        parts.push(element("p", "artifact-decision-saved-note", answer.note));
+      }
+      var by = reader(answer) + " · " + when(answer.createdAt);
+      if (answer.supersedes) {
+        by += " · replaced an earlier answer";
+      }
+      parts.push(element("p", "artifact-decision-saved-by", by));
+      block.replaceChildren.apply(block, parts);
+      return change;
+    }
+
+    // Draw a form from its answers: folded under its legend when it holds an
+    // answer to the question as the page now asks it, open otherwise.
+    function draw(form) {
+      var answer = saved(form);
+      var folded = Boolean(answer) && !form.lotuspodEditing;
+      var current = form.lotuspodAnswers.current;
+      var earlier = form.querySelector(".artifact-decision-earlier");
+      if (current && !answer) {
+        if (!earlier) {
+          earlier = element("p", "artifact-decision-earlier");
+          var options = form.querySelector(".artifact-decision-options");
+          options.parentNode.insertBefore(earlier, options);
+        }
+        earlier.textContent = "Answered to an earlier wording by " + reader(current) + ", " +
+          when(current.createdAt);
+      } else if (earlier) {
+        earlier.remove();
+      }
+      var change = folded ? fold(form, answer) : null;
+      Array.prototype.forEach.call(form.querySelector("fieldset").children, function (child) {
+        if (child.tagName === "LEGEND" || child.classList.contains("artifact-decision-history")) {
+          return;
+        }
+        child.hidden = child.classList.contains("artifact-decision-saved") ? !folded : folded;
+      });
+      form.classList.toggle("artifact-decision--saved", folded);
       history(form);
+      mark(form);
+      return change;
+    }
+
+    // Fill a form's inputs from its answer to the question as the page now
+    // asks it; an answer to an earlier wording fills nothing.
+    function fill(form) {
+      var answer = saved(form);
+      if (!answer) {
+        return;
+      }
+      radios(form).forEach(function (radio) {
+        radio.checked = radio.value === answer.choice;
+      });
+      form.elements.note.value = answer.note || "";
+    }
+
+    // "change": the card open again with its answer picked and its note.
+    function unfold(form) {
+      fill(form);
+      var note = form.querySelector("details.artifact-decision-note");
+      if (note) {
+        note.open = Boolean(form.elements.note.value);
+      }
+      form.lotuspodEditing = true;
+      status(form, "");
+      draw(form);
+      var picked = form.querySelector('input[name="choice"]:checked');
+      if (picked) {
+        picked.focus();
+      }
     }
 
     function failure(response, payload) {
@@ -165,12 +255,7 @@
             note: form.elements.note.value,
           }),
         });
-        var payload = null;
-        try {
-          payload = await response.json();
-        } catch (ignored) {
-          payload = null;
-        }
+        var payload = await json(response);
         if (response.status !== 201 || !payload) {
           status(form, failure(response, payload));
           return;
@@ -180,7 +265,13 @@
           answers.earlier.unshift(answers.current);
         }
         answers.current = payload;
-        show(form, false);
+        // A pick or note changed while this was saving stays open, not saved.
+        form.lotuspodEditing = dirty(form);
+        status(form, "");
+        var change = draw(form);
+        if (change) {
+          change.focus();
+        }
       } catch (ignored) {
         status(form, "Your answer was not saved: the site did not answer. Try again.");
       } finally {
@@ -198,17 +289,29 @@
       forms.forEach(function (form) {
         var entry = Object.prototype.hasOwnProperty.call(questions, form.dataset.question)
           ? questions[form.dataset.question] : null;
-        // A form answered while this was loading already shows the newest.
+        // A form answered while this was loading already shows the newest,
+        // and one picked or written in (or restored by the browser) other
+        // than its answer stays open as the reader left it.
         if (entry && !form.lotuspodAnswers.current) {
+          var touched = form.querySelector('input[name="choice"]:checked') || form.elements.note.value;
           form.lotuspodAnswers = { current: entry.current, earlier: entry.earlier.slice() };
-          show(form, true);
+          if (touched && dirty(form)) {
+            form.lotuspodEditing = true;
+          } else {
+            fill(form);
+          }
+          draw(form);
         }
       });
     }
 
     forms.forEach(function (form) {
       form.lotuspodAnswers = { current: null, earlier: [] };
+      form.lotuspodEditing = false;
       form.addEventListener("submit", submit);
+      form.addEventListener("input", function () { mark(form); });
+      form.addEventListener("change", function () { mark(form); });
+      mark(form);
     });
     load().catch(function () {});
   }

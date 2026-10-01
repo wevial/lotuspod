@@ -379,15 +379,16 @@ for the maintainer" (any case), before the next h2, whose header row has a
 an HTML one alike get it. `#`, `Options` and `Default` columns are optional;
 any other column is shown under its question as context.
 
-Each row becomes a `form.artifact-decision` with one radio button per option
-and a note. Its question id is `decision-` and the slug of its `#` cell, or
-`decision-N` by row number without a `#` column. Options are the `Options`
-cell split on ` / `, each keyed by its slug; the one matching the `Default`
-cell is labelled "(default)", and none is pre-selected. With a `Default` but
-no `Options` column, a row offers "Accept the default" (`accept`) and
-"Something else" (`other`) and shows the default's text. A table with any row
-of fewer than two options is left exactly as written, and the page then loads
-no script.
+Each row becomes a `form.artifact-decision` with one radio button per option,
+a note folded behind "Add a note" and a "Save answer" button. Its question id
+is `decision-` and the slug of its `#` cell, or `decision-N` by row number
+without a `#` column. Options are the `Options` cell split on ` / `, each
+keyed by its slug; the one matching the `Default` cell carries a quiet
+"· default" mark, and none is pre-selected. With a `Default` but no `Options`
+column, a row offers "Accept the default" (`accept`) and "Something else"
+(`other`) and shows the default's text as "Default:", which is what "Accept
+the default" accepts. A table with any row of fewer than two options is left
+exactly as written, and the page then loads no script.
 
 Each form carries `data-version`, a short hash of its question's text and its
 options' labels. Rewording a question changes its version, so answers given
@@ -395,11 +396,23 @@ to the old wording are not attached to the new words: the answers route
 refuses a stale version (409), and the page shows an old answer as given "to
 an earlier wording" without filling the form from it.
 
+Each question is drawn as an inline card with a quiet rule down its left
+edge, its options one under another as radio rows. An unanswered card reads
+"Not answered yet". While the picked option or the note differs from the
+saved answer, the rule turns lavender and "Not saved" shows beside "Save
+answer"; a failed save keeps both and says why. A saved answer folds the card
+under its question to "✓ Saved · LABEL · change", then the note, then the
+reader and the time, with "replaced an earlier answer" when it superseded
+one. "change" opens the card again with the saved option picked and the note
+filled. An answer to an earlier wording leaves the card open and unpicked,
+with the line "Answered to an earlier wording by READER, TIME".
+
 A page with such forms loads the site's page script, `lotuspod-page.js`,
-which serve answers beside `lotuspod.css`. It reads the page's answers, marks
-each current choice, fills its note, and shows "Answered by READER, TIME" and
-a collapsed list of earlier answers. Answering again keeps the earlier answer
-as history. The script sends no credential of its own: the reader's Access
+which serve answers beside `lotuspod.css`. It reads the page's answers, folds
+each question answered as the page now asks it, and shows a collapsed list of
+earlier answers. Answering again keeps the earlier answer as history. A page
+published before the cards (an "Answer" button and a note always open) still
+saves and folds. The script sends no credential of its own: the reader's Access
 session is the only identity, so a reader who is signed out is told to reload
 the page to sign in. Reader text is set as text, never as markup.
 

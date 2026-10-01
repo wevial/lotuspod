@@ -59,6 +59,9 @@ class _Page(HTMLParser):
         self._form: dict | None = None
         self._label: dict | None = None
         self._button: dict | None = None
+        self._mark: list[str] | None = None
+        self._summary: list[str] | None = None
+        self._details = 0
         self._context = False
 
     def handle_starttag(self, tag, attrs):
@@ -70,17 +73,26 @@ class _Page(HTMLParser):
             self.scripts.append(attrs.get("src", ""))
         elif tag == "form":
             self._form = {"attrs": attrs, "radios": [], "labels": [], "notes": 0,
-                          "buttons": [], "context": []}
+                          "folded_notes": 0, "summaries": [], "buttons": [], "context": []}
             self.forms.append(self._form)
         elif self._form is None:
             return
         elif tag == "label" and "artifact-decision-option" in classes:
-            self._label = {"text": []}
+            self._label = {"text": [], "marks": [], "last": None}
             self._form["labels"].append(self._label)
+        elif tag == "span" and self._label is not None:
+            self._label["last"] = classes
+            if "artifact-decision-default" in classes:
+                self._mark = []
+        elif tag == "details":
+            self._details += 1
+        elif tag == "summary":
+            self._summary = []
         elif tag == "input" and attrs.get("type") == "radio":
             self._form["radios"].append(attrs)
         elif tag == "textarea":
             self._form["notes"] += attrs.get("name") == "note"
+            self._form["folded_notes"] += bool(self._details and attrs.get("name") == "note")
         elif tag == "button":
             self._button = {"type": attrs.get("type"), "text": []}
             self._form["buttons"].append(self._button)
@@ -89,6 +101,10 @@ class _Page(HTMLParser):
             self._form["context"].append([])
 
     def handle_data(self, data):
+        if self._mark is not None:
+            self._mark.append(data)
+        if self._summary is not None:
+            self._summary.append(data)
         if self._label is not None:
             self._label["text"].append(data)
         if self._button is not None:
@@ -97,7 +113,15 @@ class _Page(HTMLParser):
             self._form["context"][-1].append(data)
 
     def handle_endtag(self, tag):
-        if tag == "label" and self._label is not None:
+        if tag == "span" and self._mark is not None:
+            self._label["marks"].append("".join(self._mark))
+            self._mark = None
+        elif tag == "summary" and self._summary is not None:
+            self._form["summaries"].append(" ".join("".join(self._summary).split()))
+            self._summary = None
+        elif tag == "details" and self._details:
+            self._details -= 1
+        elif tag == "label" and self._label is not None:
             self._label["text"] = " ".join("".join(self._label["text"]).split())
             self._label = None
         elif tag == "button" and self._button is not None:
@@ -173,11 +197,19 @@ class FormTests(DecisionsTestCase):
                 self.assertEqual({radio["name"] for radio in form["radios"]}, {"choice"})
                 self.assertFalse(any("checked" in radio for radio in form["radios"]))
                 self.assertEqual(form["notes"], 1)
-                self.assertEqual(form["buttons"], [{"type": "submit", "text": "Answer"}])
+                self.assertEqual(form["folded_notes"], 1)
+                self.assertEqual(form["summaries"], ["Add a note"])
+                self.assertEqual(form["buttons"], [{"type": "submit", "text": "Save answer"}])
         self.assertEqual([label["text"] for label in page.forms[0]["labels"]],
-                         ["Sonnet (default)", "Opus"])
+                         ["Sonnet default", "Opus"])
         self.assertEqual([label["text"] for label in page.forms[1]["labels"]],
-                         ["Yes (default)", "No"])
+                         ["Yes default", "No"])
+        # The default's label ends in its mark; the others carry none.
+        for form in page.forms:
+            labels = form["labels"]
+            self.assertEqual([label["marks"] for label in labels], [["default"], []])
+            self.assertIn("artifact-decision-default", labels[0]["last"])
+        self.assertEqual([form["context"] for form in page.forms], [[], []])
         self.assertEqual([src.split("?")[0] for src in page.scripts], [cli.PAGE_SCRIPT])
 
     def test_the_forms_sit_inside_their_section(self):
@@ -242,6 +274,13 @@ class FormTests(DecisionsTestCase):
                          ["Accept the default", "Something else"])
         self.assertEqual([form["context"] for form in page.forms],
                          [["Default: Sonnet for now"], ["Default: Yes"]])
+
+    def test_a_default_matching_no_option_writes_no_default_line(self):
+        text = PLAN.replace("| Sonnet / Opus | Sonnet |", "| Sonnet / Opus | Haiku |")
+        page = read(self.render_markdown("plan", text))
+        self.assertEqual([[label["marks"] for label in form["labels"]] for form in page.forms],
+                         [[[], []], [["default"], []]])
+        self.assertEqual([form["context"] for form in page.forms], [[], []])
 
     def test_an_html_body_and_an_h3_heading_in_any_case(self):
         body = (

@@ -65,9 +65,13 @@ function decision(page: Page) {
   const form = page.locator(`form.artifact-decision[data-question="decision-1"]`);
   return {
     option: (name: string | RegExp) => form.getByRole('radio', { name }),
+    addNote: form.locator('details.artifact-decision-note > summary'),
     note: form.locator('textarea[name="note"]'),
-    answer: form.getByRole('button', { name: 'Answer' }),
+    answer: form.getByRole('button', { name: 'Save answer' }),
     status: form.locator('.artifact-decision-status'),
+    saved: form.locator('.artifact-decision-saved-line'),
+    savedNote: form.locator('.artifact-decision-saved-note'),
+    savedBy: form.locator('.artifact-decision-saved-by'),
   };
 }
 
@@ -114,9 +118,11 @@ test.describe('the chain', () => {
       await expect(page.getByText(`Published by ${OWNER}`)).toBeVisible();
       const question = decision(page);
       await question.option('Submerged').check();
+      await question.addNote.click();
       await question.note.fill(NOTE);
       await question.answer.click();
-      await expect(question.status).toContainText(`Answered by ${READER}`);
+      await expect(question.saved).toContainText('Saved \u00b7 Submerged \u00b7 change');
+      await expect(question.savedBy).toContainText(READER);
 
       const heater = box(page, 'heater');
       await heater.summary.click();
@@ -221,9 +227,9 @@ test.describe('the chain', () => {
       await expect(page.getByText(REVISED)).toBeVisible();
       await expect(page.getByText(`Published by ${OWNER}`)).toBeVisible();
       const question = decision(page);
-      await expect(question.option('Submerged')).toBeChecked();
-      await expect(question.note).toHaveValue(NOTE);
-      await expect(question.status).toContainText(`Answered by ${READER}`);
+      await expect(question.saved).toContainText('Saved \u00b7 Submerged \u00b7 change');
+      await expect(question.savedNote).toHaveText(NOTE);
+      await expect(question.savedBy).toContainText(READER);
     });
 
     await test.step('6. without the assertion, answering and commenting are refused and nothing is stored', async () => {
@@ -236,6 +242,7 @@ test.describe('the chain', () => {
         await outside.goto(PAGE);
         const question = decision(outside);
         await question.option(/^Floating/).check();
+        await question.addNote.click();
         await question.note.fill('Not signed in');
         await question.answer.click();
         await expect(question.status).toHaveText(SIGNED_OUT);
