@@ -31,7 +31,7 @@ from pathlib import Path
 import importlib.resources as _res
 
 from lotuspod import (access, agents, api, backup, comments, db, decisions, machine,
-                      markdown, responder, routing)
+                      markdown, media, responder, routing)
 
 _PKG = "lotuspod"
 
@@ -570,6 +570,7 @@ def cmd_render(args: argparse.Namespace) -> int:
         kicker = f"Lotuspod · Episode {args.episode}"
     summary_block = f'<p class="artifact-summary">{args.summary}</p>' if args.summary else ""
     body = args.body
+    out_dir = Path(args.out_dir) if args.out_dir else DEFAULT_OUTPUT_DIR
     markdown_path = getattr(args, "markdown", None)
     if markdown_path:
         # Read here rather than passed on the command line, so a body of any
@@ -578,7 +579,13 @@ def cmd_render(args: argparse.Namespace) -> int:
             text = sys.stdin.read()
         else:
             text = Path(markdown_path).read_text(encoding="utf-8")
-        body = markdown.to_body(text)
+        found = page_images(
+            text, "standard input" if markdown_path == "-" else markdown_path,
+            media.media_dir(out_dir), None, media.DEFAULT_MAX_BYTES,
+            local="render draws only /media/ URLs; publish stores a local image",
+            refused="nothing written",
+        )
+        body = markdown.to_body(text, image_sizes(found))
     # Before the outline, so the forms sit inside their section.
     body, has_decisions = decisions.render_decisions(body, args.name)
     body, outline = (body, []) if args.no_outline else outline_body(body)
@@ -608,7 +615,6 @@ def cmd_render(args: argparse.Namespace) -> int:
     }
     html = render_page(context)
 
-    out_dir = Path(args.out_dir) if args.out_dir else DEFAULT_OUTPUT_DIR
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / f"{args.name}.html"
 
@@ -1109,12 +1115,77 @@ def publish_over_ssh(args: argparse.Namespace, config: dict[str, str]) -> int:
     return done.returncode
 
 
+# A reference with a scheme (https:, data:) or a host (//host) is remote or
+# inline: the page policy's img-src 'self' would block it in the browser.
+_REMOTE_IMAGE = re.compile(r"[A-Za-z][A-Za-z0-9+.-]*:|//")
+
+
+def read_image(src: str, store_dir: Path, base: Path | None, cap: int,
+               local: str) -> media.Image:
+    """The image an image line's reference names: a stored one for a media
+    URL, else a file inside base, the source's directory. MediaError says why
+    it is refused; local is the reason a file is when there is no base."""
+    if _REMOTE_IMAGE.match(src):
+        raise media.MediaError(
+            "remote and inline images are not published, only files beside the source"
+        )
+    if src.startswith(media.URL_PREFIX):
+        image = media.load_stored(store_dir, src[len(media.URL_PREFIX):])
+        if image is None:
+            raise media.MediaError(f"names no image stored in {store_dir}")
+        return image
+    if base is None:
+        raise media.MediaError(local)
+    root = base.resolve()
+    path = (root / src).resolve()  # follows symbolic links
+    if src.startswith("/") or root not in path.parents:
+        raise media.MediaError("outside the source's directory")
+    if not path.exists():
+        raise media.MediaError("no such file")
+    if not path.is_file():
+        raise media.MediaError("not a regular file")
+    media.check_size(path.stat().st_size, cap)
+    return media.check(path.read_bytes(), src, cap)
+
+
+def page_images(text: str, label: str, store_dir: Path, base: Path | None, cap: int,
+                local: str, refused: str) -> dict[markdown.Image, media.Image]:
+    """Each image line of markdown text with the image it names, every one
+    read and checked; RuntimeError naming the first refused reference."""
+    found = {}
+    for line in markdown.images(text):
+        try:
+            found[line] = read_image(line.src, store_dir, base, cap, local)
+        except (media.MediaError, OSError) as exc:
+            reason = exc.strerror if isinstance(exc, OSError) and exc.strerror else exc
+            raise RuntimeError(f"image {line.src} in {label}: {reason}; {refused}") from None
+    return found
+
+
+def image_sizes(found: dict[markdown.Image, media.Image]) -> dict[str, tuple[int, int]]:
+    """Each media URL's width and height, as to_body takes them."""
+    return {image.url: (image.width, image.height) for image in found.values()}
+
+
+def media_cap() -> int:
+    """The config's [media] max_image_bytes, else the default."""
+    try:
+        return media.max_bytes(config_section("media"))
+    except ValueError as exc:
+        raise ConfigError(f"config {config_path()}: {exc}") from None
+
+
 def cmd_publish(args: argparse.Namespace) -> int:
     """Render a page from its source, keep the source, rebuild the manifest
     and the index, and commit and push once.
 
     When the config names a host and --local is not given, publish runs
     there over ssh instead (see publish_over_ssh).
+
+    A markdown page's images are read from beside its source and checked
+    with everything else; under the lock each is stored in the media
+    directory and its reference rewritten to its media URL, in the kept
+    source too, so a republish of the kept source needs no local files.
 
     Everything that can be refused is refused before anything is written.
     From the revision check to the commit the directory's publish lock is
@@ -1135,12 +1206,31 @@ def cmd_publish(args: argparse.Namespace) -> int:
         check_owner(args, out_dir)
     data = read_source(args, label)
     try:
-        text = data.decode("utf-8")
+        raw = data.decode("utf-8")
     except UnicodeDecodeError:
         raise RuntimeError(f"{label} is not UTF-8") from None
-    text = text.replace("\r\n", "\n").replace("\r", "\n")
+    text = raw.replace("\r\n", "\n").replace("\r", "\n")
+    found: dict[markdown.Image, media.Image] = {}
     if fmt == "markdown":
-        title, body = markdown_title(text), markdown.to_body(text)
+        if markdown.images(text):
+            try:
+                cap = media_cap()
+            except ConfigError as exc:
+                print(f"error: {exc}", file=sys.stderr)
+                return EXIT_CONFIG
+            found = page_images(
+                text, label, media.media_dir(out_dir),
+                None if args.source == "-" else Path(args.source).parent, cap,
+                local="a file beside the source needs the source as a file, not "
+                "standard input",
+                refused="nothing published",
+            )
+        # The kept source names each image by its media URL, as the page does.
+        moved = {line: image.url for line, image in found.items() if line.src != image.url}
+        if moved:
+            text = markdown.with_sources(text, moved)
+            data = markdown.with_sources(raw, moved).encode("utf-8")
+        title, body = markdown_title(text), markdown.to_body(text, image_sizes(found))
     else:
         title, body = html_title(text)
     if args.title is not None:
@@ -1161,6 +1251,9 @@ def cmd_publish(args: argparse.Namespace) -> int:
                 file=sys.stderr,
             )
             return EXIT_REVISION_CONFLICT
+
+        for image in found.values():
+            media.store(media.media_dir(out_dir), image)
 
         # A republish keeps what the page already says unless told otherwise.
         page = out_dir / f"{name}.html"
@@ -1355,6 +1448,15 @@ _API_HEADERS = (
 )
 _API_READ_METHODS = ("GET", "HEAD")
 
+# Headers on every /media answer. A stored name never changes its bytes, so
+# the browser keeps it for a year; private keeps shared caches (Cloudflare's
+# included) from holding it outside the Access gate.
+_MEDIA_HEADERS = (
+    ("X-Content-Type-Options", "nosniff"),
+    ("Cache-Control", "private, max-age=31536000, immutable"),
+)
+_MEDIA_PATH = re.compile(re.escape(media.URL_PREFIX) + f"({media.STORED_NAME.pattern})")
+
 
 class _AllowListHandler(SimpleHTTPRequestHandler):
     """Serve v2: answer only allow-listed names; everything else is a 404.
@@ -1365,8 +1467,10 @@ class _AllowListHandler(SimpleHTTPRequestHandler):
     routes are lotuspod.api's.
     """
 
-    # Whether the response being written is a page's (see end_headers).
+    # Whether the response being written is a page's, and the type of the
+    # stored image it is ("" when none; see end_headers and guess_type).
     _page_response = False
+    _media_type = ""
 
     def __init__(self, *args, root: Path, verifier: access.Verifier | None = None,
                  api: api.Api | None = None, **kwargs):
@@ -1382,6 +1486,7 @@ class _AllowListHandler(SimpleHTTPRequestHandler):
     def _api_answer(self, status: int, payload: dict, headers: tuple = ()) -> None:
         body = json.dumps(payload).encode("utf-8")
         self._page_response = False
+        self._media_type = ""
         self.send_response(status)
         for header, value in (*_API_HEADERS, *headers):
             self.send_header(header, value)
@@ -1439,6 +1544,11 @@ class _AllowListHandler(SimpleHTTPRequestHandler):
         # A request that climbs, or names a dotfile, is refused as written -
         # before normalisation could fold it back inside the directory.
         words = urllib.parse.unquote(path.split("?", 1)[0].split("#", 1)[0])
+        # A stored image, named exactly as stored, and nothing else there.
+        if words == media.URL_PREFIX.rstrip("/") or words.startswith(media.URL_PREFIX):
+            match = _MEDIA_PATH.fullmatch(words)
+            stored = match and media.stored_file(media.media_dir(self.root), match.group(1))
+            return str(stored) if stored else deny
         if any(word.startswith(".") for word in words.split("/")):
             return deny
         fs_path = Path(super().translate_path(path))
@@ -1472,12 +1582,29 @@ class _AllowListHandler(SimpleHTTPRequestHandler):
         if target == str(self.root / _DENY_PATH_NAME):
             self.send_error(HTTPStatus.NOT_FOUND, "File not found")
             return None
-        self._page_response = target.endswith(".html")
+        stored = Path(target)
+        if stored.parent == media.media_dir(self.root):
+            self._page_response = False
+            self._media_type = media.CONTENT_TYPES[stored.suffix[1:]]
+        else:
+            self._page_response, self._media_type = target.endswith(".html"), ""
         return super().send_head()
+
+    def send_error(self, *args, **kwargs):
+        # An error is never kept as a stored image is.
+        self._media_type = ""
+        super().send_error(*args, **kwargs)
+
+    def guess_type(self, path):
+        # A fixed map: mimetypes does not know .webp on every Python.
+        return self._media_type or super().guess_type(path)
 
     def end_headers(self):
         if self._page_response:
             for header, value in _PAGE_HEADERS:
+                self.send_header(header, value)
+        if self._media_type:
+            for header, value in _MEDIA_HEADERS:
                 self.send_header(header, value)
         super().end_headers()
 

@@ -1,5 +1,5 @@
 /*
- * Lotuspod theme "lotus" v0.4.11
+ * Lotuspod theme "lotus" v0.4.12
  * Tokens mirror theme/tokens.json.
  */
 
@@ -1552,6 +1552,27 @@ label.artifact-decision-note span {
 .artifact-body pre::-webkit-scrollbar-thumb {
   background: var(--hairline-strong);
   border-radius: var(--radius-pill);
+}
+
+/* An image line is a figure drawn at the image's intrinsic size, never wider
+   than the column: its width and height attributes reserve the box before the
+   bytes arrive, and height: auto keeps the ratio when the cap narrows it. The
+   link around it, to the full image, is only as wide as the image. */
+.artifact-body .artifact-figure {
+  margin: 0 0 1.5em;
+}
+
+.artifact-body .artifact-figure a {
+  display: block;
+  max-width: 100%;
+  width: fit-content;
+}
+
+.artifact-body .artifact-figure img {
+  border-radius: var(--radius-block);
+  display: block;
+  height: auto;
+  max-width: 100%;
 }
 
 /* A quotation is set-in material: an indented block on a quiet tint, in the

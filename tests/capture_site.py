@@ -16,7 +16,10 @@ database holds two machine credentials: `hermes` (pull, claim, reply and
 publish as hermes), which the comments page and the owned page name as their
 owner, and `claude-3f9a2c` (pull, claim and reply as itself). The owned page,
 capture-owned, is published from markdown, so the site keeps its source
-beside it. For an agent command, the command's environment names:
+beside it. So is the images page, capture-images, from a source with the
+fixture images (tests/fixtures/media/) beside it: its images are stored in
+lotuspod-media/ beside the site, as publish stores them for serve. For an
+agent command, the command's environment names:
 
     LOTUSPOD_TEST_SOCKET             the agent socket
     LOTUSPOD_TEST_CREDENTIAL_HERMES  hermes's credential file
@@ -181,6 +184,56 @@ Fit a heater before the first frost.
 | 1 | Which heater? | Floating / Submerged | Floating | The pump shares its outlet. |
 """
 
+# The images page: published from markdown, with the fixture images copied
+# beside its source as IMAGES_FILES names them. A wide chart, then photos (a
+# progressive JPEG and one turned by its EXIF orientation among them), then
+# three kinds of WebP and a GIF.
+IMAGES_PAGE = "capture-images"
+MEDIA_FIXTURES = REPO_ROOT / "tests" / "fixtures" / "media"
+IMAGES_FILES = {
+    "chart.png": "chart-1600x600.png",
+    "photos/fish.jpg": "fish-320x240.jpg",
+    "photos/pond.jpg": "pond-progressive-300x200.jpg",
+    "photos/turned.jpg": "turned-orientation6-160x96.jpg",
+    "lilies/lossy.webp": "lily-lossy-240x160.webp",
+    "lilies/lossless.webp": "lily-lossless-200x150.webp",
+    "lilies/extended.webp": "lily-extended-180x120.webp",
+    "frog.gif": "frog-140x100.gif",
+}
+IMAGES_SOURCE = """\
+# Capture images
+
+A sample page for captures: images published from markdown, each drawn at its
+own size and never wider than the column.
+
+## Chart
+
+The pump's hours for each month of the year, drawn wider than the column.
+
+![Pump hours per month](./chart.png)
+
+## Photos
+
+A fish in the pond, then the pond at dusk.
+
+![A fish in the pond](photos/fish.jpg)
+![The pond at dusk](photos/pond.jpg)
+
+A photo its camera turned a quarter; the browser turns it back.
+
+![A turned photo](photos/turned.jpg)
+
+## Lilies and a frog
+
+![A lily, lossy](lilies/lossy.webp)
+![A lily, lossless](lilies/lossless.webp)
+![A lily on clear water](lilies/extended.webp)
+
+The frog that sits on them.
+
+![A frog](frog.gif)
+"""
+
 SAMPLE_PAGES = (
     ("capture-article", "Capture article", ARTICLE_BODY, ()),
     ("capture-report", "Capture report", REPORT_BODY, ("--variant", "report")),
@@ -214,6 +267,11 @@ def render(out_dir: Path, db_path: Path) -> None:
                               credential_path(db_path, OTHER))
     source = db_path.with_name(f"{OWNED_PAGE}.md")
     source.write_text(OWNED_SOURCE, encoding="utf-8")
+    images_source = db_path.with_name("images") / f"{IMAGES_PAGE}.md"
+    for relative, fixture in IMAGES_FILES.items():
+        (images_source.parent / relative).parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(MEDIA_FIXTURES / fixture, images_source.parent / relative)
+    images_source.write_text(IMAGES_SOURCE, encoding="utf-8")
     steps = [
         (
             f"render {name}",
@@ -231,6 +289,13 @@ def render(out_dir: Path, db_path: Path) -> None:
             "publish", str(source), "--local", "--date", SAMPLE_DATE,
             "--out-dir", str(out_dir), "--owner", OWNER,
             "--credential", str(token), "--db", str(db_path),
+        ],
+    ))
+    steps.append((
+        f"publish {IMAGES_PAGE}",
+        [
+            "publish", str(images_source), "--local", "--date", SAMPLE_DATE,
+            "--out-dir", str(out_dir), "--variant", "article", "--no-comments",
         ],
     ))
     steps.append(("index", ["index", "--out-dir", str(out_dir)]))

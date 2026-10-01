@@ -13,6 +13,9 @@ artifacts/
 lotuspod.sqlite3
 lotuspod.sqlite3-*
 
+# a markdown page's images, beside artifacts/ and never in its repository
+lotuspod-media/
+
 # backup sets of both, beside artifacts/ (lotuspod backup's default --to)
 lotuspod-backups/
 

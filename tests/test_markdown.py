@@ -3,8 +3,14 @@
 `to_body()` is held byte for byte to the operator's converter, committed
 unchanged as tests/fixtures/markdown/reference_md2body.py and run as a
 subprocess on each fixture there. The markup is also witnessed by parsing it,
-independently of the reference. The fixtures stay in the subset of markdown
+independently of the reference. The six fixtures stay in the subset of markdown
 both converters handle.
+
+The image line (`![ALT](SRC)` alone on a line) is a Lotuspod-only extension
+outside the reference's subset, so it is held by parsed-tree tests instead,
+plus one parity check that it disturbs nothing around it: the images fixture
+matches the reference once each image line in its source is emptied (in its
+blockquote, when it is quoted) and each figure is taken out of the body.
 
 Run from the repo root:
 
@@ -15,6 +21,7 @@ from __future__ import annotations
 
 import io
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -25,11 +32,17 @@ from unittest import mock
 
 from tests.test_manifest_v2 import SRC_DIR, TempDirTestCase, run_cli
 
-from lotuspod.markdown import to_body
+from lotuspod import media
+from lotuspod.markdown import images, to_body, with_sources
 
 MARKDOWN_FIXTURES = Path(__file__).parent / "fixtures" / "markdown"
 REFERENCE = MARKDOWN_FIXTURES / "reference_md2body.py"
 FIXTURE_NAMES = ("headings", "lists", "tables", "quotes", "code", "cut")
+IMAGES_FIXTURE = MARKDOWN_FIXTURES / "images.md"
+MEDIA_FIXTURES = Path(__file__).parent / "fixtures" / "media"
+# A figure and the one newline joining it to the blocks beside it.
+_FIGURE = r'<figure class="artifact-figure">.*?</figure>'
+FIGURE_BLOCK = re.compile(rf"{_FIGURE}\n|\n{_FIGURE}|{_FIGURE}")
 
 VOID = {"br", "hr", "img", "input", "meta", "link"}
 
@@ -85,6 +98,27 @@ def parse(body: str) -> _Node:
     builder.close()
     assert builder.stack == [builder.root], "unclosed elements"
     return builder.root
+
+
+def media_url(digit: str, extension: str) -> str:
+    return f"/media/{digit * 64}.{extension}"
+
+
+# The sizes of the images the images fixture names.
+FIXTURE_SIZES = {
+    media_url("1", "png"): (1600, 600),
+    media_url("2", "jpg"): (320, 240),
+    media_url("3", "webp"): (240, 160),
+    media_url("4", "gif"): (140, 100),
+}
+
+
+def without_image_lines(text: str) -> str:
+    """text with each image line emptied, keeping a quoted one's markers."""
+    lines = text.split("\n")
+    for image in images(text):
+        lines[image.line] = re.match(r"(?: {0,3}>)*", lines[image.line]).group(0)
+    return "\n".join(lines)
 
 
 def reference_body(path: Path) -> bytes:
@@ -144,6 +178,94 @@ class ReferenceParityTests(unittest.TestCase):
         self.assertNotIn("Concrete commands", cut)
         self.assertNotIn("writer-host", cut)
         self.assertIn("a published item", cut)
+
+
+class ImageParityTests(unittest.TestCase):
+    def test_the_images_fixture_matches_the_reference_without_its_images(self):
+        source = IMAGES_FIXTURE.read_text(encoding="utf-8")
+        body = to_body(source, FIXTURE_SIZES)
+        self.assertEqual(body.count('<figure class="artifact-figure">'), 4)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            emptied = Path(tmp) / "images.md"
+            emptied.write_text(without_image_lines(source), encoding="utf-8")
+            expected = reference_body(emptied)
+        self.assertEqual(FIGURE_BLOCK.sub("", body).encode("utf-8"), expected)
+
+
+class ImageLineTests(unittest.TestCase):
+    URL = media_url("a", "png")
+
+    def body(self, text: str, sizes: dict | None = None) -> _Node:
+        return parse(to_body(text, sizes or {self.URL: (640, 480)}))
+
+    def assertFigure(self, node: _Node, src: str, alt: str, size: tuple[int, int]) -> None:
+        self.assertEqual((node.tag, node.attrs), ("figure", {"class": "artifact-figure"}))
+        (link,) = node.elements
+        self.assertEqual((link.tag, link.attrs), ("a", {"href": src}))
+        (img,) = link.elements
+        self.assertEqual(img.tag, "img")
+        self.assertEqual(img.attrs, {"src": src, "alt": alt, "loading": "lazy",
+                                     "width": str(size[0]), "height": str(size[1])})
+
+    def test_the_fixture_draws_each_image_line_as_a_linked_lazy_figure(self):
+        source = IMAGES_FIXTURE.read_text(encoding="utf-8")
+        root = parse(to_body(source, FIXTURE_SIZES))
+        figures = root.find_all("figure")
+        alts = ["A wide chart", "A photo of the pond", "A lily", "A quoted frog"]
+        self.assertEqual(len(figures), 4)
+        for figure, (src, size), alt in zip(figures, FIXTURE_SIZES.items(), alts):
+            with self.subTest(alt=alt):
+                self.assertFigure(figure, src, alt, size)
+        quoted = root.find_all("blockquote")[0]
+        self.assertEqual([e.tag for e in quoted.elements], ["p", "figure", "p"])
+        self.assertEqual([i.src for i in images(source)], list(FIXTURE_SIZES))
+
+    def test_an_image_line_between_paragraph_lines_splits_the_paragraph(self):
+        blocks = self.body(f"First line.\n![Chart]({self.URL})\nSecond line.\n").elements
+        self.assertEqual([b.tag for b in blocks], ["p", "figure", "p"])
+        self.assertEqual(blocks[0].text(), "First line.")
+        self.assertFigure(blocks[1], self.URL, "Chart", (640, 480))
+        self.assertEqual(blocks[2].text(), "Second line.")
+
+    def test_the_alt_text_is_escaped_in_its_attribute(self):
+        alt = 'Pump "A" < pump B & C'
+        body = to_body(f"![{alt}]({self.URL})\n", {self.URL: (640, 480)})
+        self.assertIn('alt="Pump &quot;A&quot; &lt; pump B &amp; C"', body)
+        self.assertEqual(parse(body).find_all("img")[0].attrs["alt"], alt)
+
+    def test_image_lines_in_a_fence_a_paragraph_a_list_a_table_or_after_the_cut_stay_text(self):
+        source = IMAGES_FIXTURE.read_text(encoding="utf-8")
+        root = parse(to_body(source, FIXTURE_SIZES))
+        self.assertNotIn("chart.png", [img.attrs["src"] for img in root.find_all("img")])
+        self.assertNotIn("chart.png", [i.src for i in images(source)])
+
+        (pre,) = root.find_all("pre")
+        self.assertEqual(pre.text(), "![in a code fence](chart.png)")
+        paragraphs = [p.text() for p in root.find_all("p")]
+        self.assertIn("See ![an inline image](chart.png) inside a paragraph line.", paragraphs)
+        items = [li.text() for li in root.find_all("li")]
+        self.assertIn("![in a list item](chart.png) ![in a continued list item](chart.png)",
+                      items)
+        cells = [td.text() for td in root.find_all("td")]
+        self.assertIn("![in a cell](chart.png)", cells)
+        self.assertNotIn("after the cut", root.text())
+        self.assertIn("![after the cut](chart.png)", source)
+
+    def test_an_image_line_without_a_size_is_refused(self):
+        with self.assertRaises(ValueError):
+            to_body(f"![Chart]({self.URL})\n", {})
+
+    def test_with_sources_rewrites_only_the_references_named(self):
+        text = "Intro.\r\n![A](a.png)\r\n> > ![B](b/b.png)  \r\n![C](c.png)\r\n"
+        found = images(text.replace("\r\n", "\n"))
+        self.assertEqual([(i.line, i.alt, i.src) for i in found],
+                         [(1, "A", "a.png"), (2, "B", "b/b.png"), (3, "C", "c.png")])
+        rewritten = with_sources(text, {found[0]: "/media/x.png", found[1]: "/media/y.png"})
+        self.assertEqual(
+            rewritten,
+            "Intro.\r\n![A](/media/x.png)\r\n> > ![B](/media/y.png)  \r\n![C](c.png)\r\n",
+        )
 
 
 class ParsedBodyTests(unittest.TestCase):
@@ -249,6 +371,37 @@ class RenderMarkdownTests(TempDirTestCase):
         self.assertEqual(proc.returncode, 0, proc.stderr)
         page = self.page("big").decode("utf-8")
         self.assertEqual(page.count("<p>A line of prose"), 2000)
+
+    def test_media_url_references_render_from_the_store_and_local_ones_are_refused(self):
+        site = self.out_dir / "site"
+        chart = (MEDIA_FIXTURES / "chart-1600x600.png").read_bytes()
+        image = media.check(chart, "chart.png")
+        media.store(media.media_dir(site), image)
+        md = self.out_dir / "page.md"
+        md.write_text(f"## Chart\n\n![Chart]({image.url})\n", encoding="utf-8")
+
+        rc, _, err = run_cli(
+            "render", "--markdown", str(md), "--name", "n", "--title", "T",
+            "--out-dir", str(site), *self.COMMON,
+        )
+        self.assertEqual(rc, 0, err)
+        img = parse((site / "n.html").read_text(encoding="utf-8")).find_all("img")[0]
+        self.assertEqual((img.attrs["src"], img.attrs["width"], img.attrs["height"]),
+                         (image.url, "1600", "600"))
+
+        for src, why in (("chart.png", "publish stores a local image"),
+                         (media_url("b", "png"), "names no image stored")):
+            with self.subTest(src=src):
+                md.write_text(f"![Chart]({src})\n", encoding="utf-8")
+                rc, _, err = run_cli(
+                    "render", "--markdown", str(md), "--name", "m", "--title", "T",
+                    "--out-dir", str(site), *self.COMMON,
+                )
+                self.assertEqual(rc, 1)
+                (line,) = err.splitlines()
+                self.assertIn(src, line)
+                self.assertIn(why, line)
+                self.assertFalse((site / "m.html").exists())
 
     def test_markdown_with_body_is_a_usage_error(self):
         md = self.out_dir / "page.md"

@@ -9,12 +9,24 @@ item), `>` blockquotes converted recursively, pipe tables, code spans,
 `<pre class="mermaid">` diagram block. Every `# ` line is dropped, since the
 title is passed separately, and everything from a `## Concrete commands`
 heading on is left out, which keeps host-only commands off published pages.
+
+One construct is Lotuspod's own and outside the reference's subset: a line
+that is only `![ALT](SRC)`, at the top level or in a blockquote, is an image
+drawn as a figure (and stops a paragraph). One in a code fence, a list item,
+a table cell or the middle of a paragraph line, or after the cut, stays text.
+The image line is held by parsed-tree tests instead, and by one parity check
+that the reference matches a fixture once its image lines are emptied and
+its figures taken out. `images()` names the image lines from the same walk
+`to_body()` draws them in, so publish reads and rewrites exactly the lines
+the page shows as images.
 """
 
 from __future__ import annotations
 
 import html
 import re
+from dataclasses import dataclass
+from typing import Callable, Mapping
 
 CUT = "\n## Concrete commands"
 
@@ -23,12 +35,70 @@ _QUOTE = re.compile(r"^ {0,3}>")
 _LIST_START = re.compile(r"^(-|\d+\.) ")
 _PARA_BREAK = re.compile(r"^(#|\||- |\d+\. |```)")
 _SEPARATOR_CELL = re.compile(r"-+")
+_IMAGE = re.compile(r"!\[([^\]]*)\]\(([^\s()]+)\)\s*")
+_LINE_END = re.compile(r"(\r\n|\r|\n)")
 
 
-def to_body(text: str) -> str:
-    """The body HTML for markdown `text`, ending with one newline."""
-    source = text.split(CUT)[0]
-    return "\n".join(_convert(source.split("\n"))) + "\n"
+@dataclass(frozen=True)
+class Image:
+    """An image line: its index among the source's lines, its alt text, its
+    reference as written, and how far from the line's end that reference
+    starts (an image line is the end of its line, after any `>` markers)."""
+
+    line: int
+    alt: str
+    src: str
+    tail: int
+
+
+def images(text: str) -> list[Image]:
+    """The image lines of markdown `text`, in order."""
+    found: list[Image] = []
+
+    def note(image: Image) -> str:
+        found.append(image)
+        return ""
+
+    _walk(text, note)
+    return found
+
+
+def to_body(text: str, sizes: Mapping[str, tuple[int, int]] | None = None) -> str:
+    """The body HTML for markdown `text`, ending with one newline.
+
+    `sizes` gives each image reference's width and height; ValueError names
+    an image line whose reference it does not give."""
+    sizes = sizes or {}
+
+    def figure(image: Image) -> str:
+        if image.src not in sizes:
+            raise ValueError(f"no size for image {image.src}")
+        width, height = sizes[image.src]
+        src = html.escape(image.src)
+        return (
+            f'<figure class="artifact-figure"><a href="{src}"><img src="{src}" '
+            f'alt="{html.escape(image.alt)}" loading="lazy" width="{width}" '
+            f'height="{height}"></a></figure>'
+        )
+
+    return "\n".join(_walk(text, figure)) + "\n"
+
+
+def with_sources(text: str, sources: Mapping[Image, str]) -> str:
+    """`text` with each of its image lines' references `sources` names
+    replaced, and nothing else changed (line endings included)."""
+    parts = _LINE_END.split(text)  # lines at even indices, their endings between
+    for image, src in sources.items():
+        line = parts[2 * image.line]
+        start = len(line) - image.tail
+        assert line[start:start + len(image.src)] == image.src, image
+        parts[2 * image.line] = line[:start] + src + line[start + len(image.src):]
+    return "".join(parts)
+
+
+def _walk(text: str, figure: Callable[[Image], str]) -> list[str]:
+    lines = text.split(CUT)[0].split("\n")
+    return _convert(lines, list(range(len(lines))), figure)
 
 
 def _inline(text: str) -> str:
@@ -66,9 +136,12 @@ def _render_list(block: list[str]) -> str:
     return emit(root["children"])
 
 
-def _convert(lines: list[str]) -> list[str]:
-    """Body HTML blocks for markdown `lines`; a blockquote's inner lines go
-    through the same conversion, so code blocks, lists and tables work inside."""
+def _convert(lines: list[str], numbers: list[int],
+             figure: Callable[[Image], str]) -> list[str]:
+    """Body HTML blocks for markdown `lines`, whose indices in the source are
+    `numbers`; a blockquote's inner lines go through the same conversion, so
+    code blocks, lists, tables and images work inside. `figure` draws an
+    image line."""
     out: list[str] = []
     i = 0
     while i < len(lines):
@@ -77,11 +150,19 @@ def _convert(lines: list[str]) -> list[str]:
             i += 1
             continue
         if _QUOTE.match(line):
-            inner = []
+            inner, inner_numbers = [], []
             while i < len(lines) and _QUOTE.match(lines[i]):
                 inner.append(re.sub(r"^ {0,3}> ?", "", lines[i]))
+                inner_numbers.append(numbers[i])
                 i += 1
-            out.append("<blockquote>" + "\n".join(_convert(inner)) + "</blockquote>")
+            blocks = _convert(inner, inner_numbers, figure)
+            out.append("<blockquote>" + "\n".join(blocks) + "</blockquote>")
+            continue
+        image = _IMAGE.fullmatch(line)
+        if image:
+            out.append(figure(Image(numbers[i], image.group(1), image.group(2),
+                                    len(line) - image.start(2))))
+            i += 1
             continue
         if line.startswith("```"):
             lang = line[3:].strip()
@@ -141,6 +222,7 @@ def _convert(lines: list[str]) -> list[str]:
             and lines[i].strip()
             and not _QUOTE.match(lines[i])
             and not _PARA_BREAK.match(lines[i])
+            and not _IMAGE.fullmatch(lines[i])
         ):
             para.append(lines[i])
             i += 1

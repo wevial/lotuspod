@@ -1,7 +1,8 @@
 """`lotuspod publish`: the kept treatment on a republish, sources and private
 files left out of listings and refused by serve, the publish lock under two
 racing publishes, a directory that is no repository, the refusals that write
-nothing, and a page published from standard input.
+nothing, a page published from standard input, and a markdown page's images
+stored beside the artifacts directory, with the references that are refused.
 
 Real git in temporary directories, with a local bare repository as origin;
 the CLI runs as a subprocess of this checkout's src/. No network.
@@ -9,9 +10,12 @@ the CLI runs as a subprocess of this checkout's src/. No network.
 
 from __future__ import annotations
 
+import hashlib
 import http.client
 import json
 import os
+import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -27,6 +31,12 @@ from lotuspod import cli  # noqa: E402
 TIMEOUT = 120
 
 POND = "# Pond\n\nStill water.\n\n## Fish\n\nThree.\n\n## Plants\n\nLilies.\n"
+MEDIA_FIXTURES = Path(__file__).parent / "fixtures" / "media"
+POND_IMAGES = (
+    "# Pond\n\nStill water.\n\n![Pump chart](./chart.png)\n\n"
+    "## Fish\n\n![Fish](photos/fish.jpg)\n\nThree.\n"
+)
+_BODY_RE = re.compile(r'<section class="artifact-body">.*?</section>', re.DOTALL)
 GARDEN = "<h1>Garden notes</h1>\n<h2>Beds</h2>\n<p>North.</p>\n<h2>Path</h2>\n<p>Gravel.</p>\n"
 
 
@@ -37,8 +47,9 @@ def git(cwd: Path, *argv: str) -> str:
     return done.stdout
 
 
-def lotuspod(*argv: str, cwd: Path, stdin: str | None = None) -> subprocess.CompletedProcess:
-    env = dict(os.environ, PYTHONPATH=str(SRC_DIR))
+def lotuspod(*argv: str, cwd: Path, stdin: str | None = None,
+             env: dict[str, str] | None = None) -> subprocess.CompletedProcess:
+    env = dict(os.environ, PYTHONPATH=str(SRC_DIR), **(env or {}))
     return subprocess.run(
         [sys.executable, "-m", "lotuspod", *argv],
         cwd=str(cwd), env=env, input=stdin, capture_output=True, text=True,
@@ -65,10 +76,11 @@ class PublishTestCase(unittest.TestCase):
         return path
 
     def publish(self, source: Path | str, *extra: str, out_dir: Path | None = None,
-                stdin: str | None = None) -> subprocess.CompletedProcess:
+                stdin: str | None = None,
+                env: dict[str, str] | None = None) -> subprocess.CompletedProcess:
         return lotuspod(
             "publish", str(source), "--out-dir", str(out_dir or self.out_dir), *extra,
-            cwd=self.tmp, stdin=stdin,
+            cwd=self.tmp, stdin=stdin, env=env,
         )
 
     def commits(self) -> int:
@@ -312,6 +324,158 @@ class StandardInputTests(PublishTestCase):
         for name in ("pond.html", "pond.md"):
             self.assertEqual((from_stdin / name).read_bytes(),
                              (from_file / name).read_bytes(), name)
+
+
+
+def stored_name(data: bytes, extension: str) -> str:
+    return f"{hashlib.sha256(data).hexdigest()}.{extension}"
+
+
+class ImageTestCase(PublishTestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.media = self.tmp / "lotuspod-media"
+        self.writing = self.tmp / "writing"
+        (self.writing / "photos").mkdir(parents=True)
+        self.chart = (MEDIA_FIXTURES / "chart-1600x600.png").read_bytes()
+        self.fish = (MEDIA_FIXTURES / "fish-320x240.jpg").read_bytes()
+        (self.writing / "chart.png").write_bytes(self.chart)
+        (self.writing / "photos" / "fish.jpg").write_bytes(self.fish)
+
+    def write(self, directory: Path, name: str, text: str) -> Path:
+        path = directory / name
+        path.write_text(text, encoding="utf-8")
+        return path
+
+    def assertRefused(self, done: subprocess.CompletedProcess, reference: str,
+                      reason: str) -> None:
+        """One error line naming the reference and why, and nothing written."""
+        self.assertEqual(done.returncode, 1, done.stdout)
+        lines = done.stderr.strip().splitlines()
+        self.assertEqual(len(lines), 1, done.stderr)
+        self.assertIn(reference, lines[0])
+        self.assertIn(reason, lines[0])
+        self.assertEqual(sorted(os.listdir(self.out_dir)), [".git"])
+        self.assertFalse(self.media.exists() and any(self.media.iterdir()))
+        self.assertEqual(self.commits(), 0)
+
+
+class ImageTests(ImageTestCase):
+    def test_images_are_stored_beside_the_artifacts_and_drawn_at_their_size(self):
+        source = self.write(self.writing, "pond.md", POND_IMAGES)
+        done = self.publish(source, "--local")
+        self.assertEqual(done.returncode, 0, done.stderr)
+
+        chart, fish = stored_name(self.chart, "png"), stored_name(self.fish, "jpg")
+        self.assertEqual(sorted(os.listdir(self.media)), sorted([chart, fish]))
+        self.assertEqual((self.media / chart).read_bytes(), self.chart)
+        self.assertEqual((self.media / fish).read_bytes(), self.fish)
+
+        page = self.page("pond")
+        for name, alt, width, height in ((chart, "Pump chart", 1600, 600),
+                                         (fish, "Fish", 320, 240)):
+            url = f"/media/{name}"
+            self.assertIn(
+                f'<figure class="artifact-figure"><a href="{url}"><img src="{url}" '
+                f'alt="{alt}" loading="lazy" width="{width}" height="{height}"></a></figure>',
+                page,
+            )
+        self.assertNotIn("chart.png", page)
+        self.assertNotIn("photos/fish.jpg", page)
+
+        kept = (self.out_dir / "pond.md").read_text(encoding="utf-8")
+        self.assertEqual(
+            kept,
+            POND_IMAGES.replace("./chart.png", f"/media/{chart}")
+            .replace("photos/fish.jpg", f"/media/{fish}"),
+        )
+        self.assertEqual(self.commits(), 1)
+        files = git(self.out_dir, "show", "--name-only", "--format=", "HEAD").split()
+        self.assertTrue(files)
+        for file in files:
+            self.assertFalse(file.endswith((".png", ".jpg", ".jpeg", ".webp", ".gif")), file)
+        self.assertEqual(git(self.out_dir, "status", "--porcelain", "--ignored"), "")
+
+    def test_the_kept_source_republishes_from_anywhere_and_a_missing_media_url_is_refused(self):
+        done = self.publish(self.write(self.writing, "pond.md", POND_IMAGES), "--local")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        body = _BODY_RE.search(self.page("pond")).group(0)
+        elsewhere = self.tmp / "elsewhere"
+        elsewhere.mkdir()
+        kept = shutil.copy(self.out_dir / "pond.md", elsewhere / "pond.md")
+
+        done = self.publish(kept, "--local")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(_BODY_RE.search(self.page("pond")).group(0), body)
+        self.assertEqual(len(os.listdir(self.media)), 2)
+
+        missing = f"/media/{'0' * 64}.png"
+        source = self.write(elsewhere, "pond.md", POND_IMAGES.replace("./chart.png", missing))
+        commits = self.commits()
+        done = self.publish(source, "--local")
+        self.assertEqual(done.returncode, 1)
+        self.assertIn(missing, done.stderr)
+        self.assertIn("names no image stored", done.stderr)
+        self.assertEqual(self.commits(), commits)
+        self.assertEqual(len(os.listdir(self.media)), 2)
+
+    def test_a_revision_conflict_stores_no_image(self):
+        source = self.write(self.writing, "pond.md", POND_IMAGES)
+        done = self.publish(source, "--local", "--expect-revision", "0" * 12)
+        self.assertEqual(done.returncode, 3)
+        self.assertFalse(self.media.exists())
+        self.assertEqual(sorted(os.listdir(self.out_dir)), [".git"])
+
+
+class ImageRefusalTests(ImageTestCase):
+    def publish_reference(self, reference: str, directory: Path | None = None,
+                          env: dict[str, str] | None = None) -> subprocess.CompletedProcess:
+        source = self.write(directory or self.writing, "pond.md",
+                            f"# Pond\n\n![Image]({reference})\n")
+        return self.publish(source, "--local", env=env)
+
+    def test_files_that_are_not_images_within_the_cap_are_refused(self):
+        shutil.copy(MEDIA_FIXTURES / "logo.svg", self.writing / "logo.svg")
+        shutil.copy(MEDIA_FIXTURES / "fish-320x240.jpg", self.writing / "jpeg.png")
+        shutil.copy(MEDIA_FIXTURES / "padded-48x32-2000-bytes.png", self.writing / "big.png")
+        self.assertEqual((self.writing / "big.png").stat().st_size, 2000)
+        config = self.tmp / "config.ini"
+        config.write_text("[media]\nmax_image_bytes = 1000\n", encoding="utf-8")
+
+        for reference, reason, env in (
+            ("./missing.png", "no such file", None),
+            ("logo.svg", "SVG images are not published", None),
+            ("jpeg.png", "a JPEG image named .png", None),
+            ("big.png", "2000 bytes, over the 1000-byte cap", {"LOTUSPOD_CONFIG": str(config)}),
+        ):
+            with self.subTest(reference=reference):
+                self.assertRefused(self.publish_reference(reference, env=env), reference, reason)
+
+        done = self.publish_reference("big.png")
+        self.assertEqual(done.returncode, 0, done.stderr)
+
+    def test_references_outside_the_source_directory_are_refused(self):
+        beside = self.tmp / "beside.png"
+        beside.write_bytes(self.chart)
+        (self.writing / "linked.png").symlink_to(beside)
+        cases = (
+            # From a source directory two steps below the root, /etc/passwd.
+            ("../../etc/passwd", self.tmp),
+            ("../beside.png", self.writing),
+            (str(beside), self.writing),
+            ("linked.png", self.writing),
+        )
+        for reference, directory in cases:
+            with self.subTest(reference=reference):
+                done = self.publish_reference(reference, directory)
+                self.assertRefused(done, reference, "outside the source's directory")
+
+    def test_remote_and_inline_images_are_refused(self):
+        for reference in ("https://example.com/a.png", "//example.com/a.png",
+                          "data:image/png;base64,iVBORw0KGgo="):
+            with self.subTest(reference=reference):
+                self.assertRefused(self.publish_reference(reference), reference,
+                                   "remote and inline images are not published")
 
 
 if __name__ == "__main__":

@@ -11,7 +11,8 @@ lotuspod/
 │   ├── _templates/artifact.html   # artifact template ({{placeholder}} substitution)
 │   ├── _templates/index.html      # index-page template
 │   └── _theme/            # tokens.json (colors, fonts, radii) + lotuspod.css
-└── artifacts/             # rendered output (gitignored)
+├── artifacts/             # rendered output (gitignored)
+└── lotuspod-media/        # markdown pages' images, beside artifacts/ (gitignored)
 ```
 
 ## Usage
@@ -105,10 +106,21 @@ The converter (`lotuspod.markdown.to_body`) takes a small subset of markdown:
 - `` `code spans` `` and `**bold**`.
 - Fenced code: a `mermaid` fence becomes a `<pre class="mermaid">` diagram
   block, any other fence a `<pre><code>` block.
+- Images: a line that is only `![ALT](SRC)`, at the top level or in a
+  blockquote, becomes a figure - a lazy `img` with the image's width and
+  height, inside a link to the full image - and stops a paragraph. The
+  stylesheet caps it at the column's width, its height following, so its box
+  is reserved before the bytes arrive. One inside a code fence, a paragraph
+  line, a list item or a table cell stays text; there are no titles and no
+  `srcset`.
 
 Everything from a `## Concrete commands` heading on is left out of the page,
-which keeps host-only commands off published pages. Links, images and task
-lists are not converted.
+which keeps host-only commands off published pages. Links and task lists are
+not converted.
+
+`render --markdown` draws an image only from a media URL (`/media/NAME`, an
+image `publish` has stored; see [Images](#images)) and refuses any other
+reference, naming `publish`, which is what stores a file beside the source.
 
 ## Publish a page
 
@@ -178,6 +190,56 @@ output passes through and its exit status is `publish`'s, so a revision
 conflict still exits 3. `--local` publishes on this machine regardless of the
 config, and `--out-dir` without `--local` is refused while a host is set. Keep
 the host's address in the local config only, never in this repository.
+
+### Images
+
+A markdown page shows images (see [From markdown](#from-markdown)):
+
+```markdown
+![Pump chart](./chart.png)
+![Fish](photos/fish.jpg)
+```
+
+`publish` on the writer host reads each image a page references relative to
+its source file's directory, and checks every one before anything is
+written. An image is accepted only when its first bytes are a PNG, JPEG, WebP
+or GIF and its extension (`.png`, `.jpg` or `.jpeg`, `.webp`, `.gif`) names
+that same type, and only within the size cap. Under the publish lock each is
+stored in `lotuspod-media/` beside the artifacts directory, as the lower-case
+hex SHA-256 of its bytes plus its type's extension (so one image stored twice
+is one file), and each reference is rewritten to that media URL, in the page
+and in the kept `NAME.md` alike - so a republish of the kept source (an
+agent's pull, edit and publish) needs no local files. The media directory is
+never inside the artifacts directory, which publish commits whole: no image
+reaches the artifacts repository. The page draws each image at its intrinsic
+width and height, read from the file's header; a JPEG whose EXIF orientation
+turns it a quarter has the two swapped, as browsers draw it.
+
+The cap is 10 MiB unless the config sets another:
+
+```ini
+[media]
+max_image_bytes = 10485760
+```
+
+A reference is either a path inside the source's directory or a media URL
+naming an image already stored. Anything else makes `publish` exit 1 with one
+line naming the reference and why, writing nothing - no page, no kept
+source, no media file, no commit:
+
+- a missing file, or one that is not a regular file;
+- SVG (it can carry script), any other type, an extension naming another
+  type than the file holds, a file cut short, or one over the cap;
+- a path that climbs out of the source's directory or is absolute, including
+  a symbolic link that points outside it;
+- a remote or inline image (`https:`, `http:`, `data:`, `//host`): the page
+  policy's `img-src 'self' data:` would block it in the reader's browser, and
+  readers' browsers never fetch third-party URLs from behind the Access gate;
+- a media URL naming no stored image.
+
+A source on standard input may use media URLs but not local files; images
+from another machine over ssh, images in an HTML source, and media in
+`backup` and `restore` are not handled yet.
 
 ## Manifest
 
@@ -273,6 +335,18 @@ dotfiles (`.git` included), a page or theme file that is a symbolic link,
 subdirectories, traversal attempts (encoded or not), and directory listings
 are denied too. The allow-list is recomputed per request,
 so re-rendering an artifact publishes or unpublishes it live — no restart.
+
+Images a page shows are answered from `lotuspod-media/` beside the artifacts
+directory (see [Images](#images)): a GET or HEAD of `/media/NAME`, where NAME
+is 64 lower-case hex digits, a dot and `png`, `jpg`, `webp` or `gif`, answers
+that file with its `Content-Type` (`image/png`, `image/jpeg`, `image/webp`,
+`image/gif`), `X-Content-Type-Options: nosniff` and `Cache-Control: private,
+max-age=31536000, immutable`. A name never changes its bytes, so the browser
+keeps it for a year; `private` keeps shared caches, Cloudflare's included,
+from holding it outside the Access gate. Anything else under `/media/` - the
+bare directory, any other name, a dotfile, a climb, a symbolic link - is a
+404. The URLs are same-origin, which the page policy's `img-src 'self'`
+allows.
 
 ## Who is reading: Cloudflare Access
 
@@ -1008,7 +1082,9 @@ assertion it accepts in `LOTUSPOD_TEST_ASSERTION`, for a check to send as
 scratch directory, beside the rendered site and never in it. It serves the
 site's agent socket there too, with a credential for `hermes` (pull, claim,
 reply, publish) and one for `claude-3f9a2c`, and publishes `capture-owned`,
-a page `hermes` owns, from markdown. For an agent command it names the socket
+a page `hermes` owns, from markdown, and `capture-images`, from markdown with
+the fixture images in `tests/fixtures/media/` beside its source, its images
+stored in `lotuspod-media/` beside the site. For an agent command it names the socket
 in `LOTUSPOD_TEST_SOCKET`, the credentials' files in
 `LOTUSPOD_TEST_CREDENTIAL_HERMES` and `LOTUSPOD_TEST_CREDENTIAL_OTHER`, the
 site's output directory in `LOTUSPOD_TEST_OUT` and its own Python in
@@ -1036,7 +1112,12 @@ reader-to-agent story: the signed-in reader answers and comments on
 `capture-owned` in Chromium, and `hermes`, through real `lotuspod comments`
 and `lotuspod publish` commands, alone receives both, claims the comment,
 revises the page expecting its revision and replies, which the reader sees
-after a reload; a reader without the assertion stores nothing. `python -m unittest tests.test_browser_checks` runs them
+after a reload; a reader without the assertion stores nothing.
+`e2e/checks/images.spec.ts` loads `capture-images` at 1280 and 360 pixels
+wide with every media response held back 500 ms, and checks that each image's
+natural size is its `width` and `height`, that no layout shift is recorded,
+that no image is wider than its column and that a click opens the media URL.
+`python -m unittest tests.test_browser_checks` runs them
 and skips when `e2e/node_modules` is not installed:
 
 ```sh
