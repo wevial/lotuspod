@@ -1,8 +1,10 @@
 """`lotuspod publish`: the kept treatment on a republish, sources and private
 files left out of listings and refused by serve, the publish lock under two
 racing publishes, a directory that is no repository, the refusals that write
-nothing, a page published from standard input, and a markdown page's images
-stored beside the artifacts directory, with the references that are refused.
+nothing, a page published from standard input, and a page's images - a
+markdown image line's or an HTML img element's - stored beside the artifacts
+directory, with the references that are refused, and --base for a source on
+standard input.
 
 Real git in temporary directories, with a local bare repository as origin;
 the CLI runs as a subprocess of this checkout's src/. No network.
@@ -37,6 +39,12 @@ POND_IMAGES = (
     "## Fish\n\n![Fish](photos/fish.jpg)\n\nThree.\n"
 )
 _BODY_RE = re.compile(r'<section class="artifact-body">.*?</section>', re.DOTALL)
+GARDEN_IMAGES = (
+    "<h1>Garden</h1>\n<p>Beds &amp; paths.</p>\n"
+    "<!-- <img src=\"draft.png\"> -->\n"
+    "<img alt='Chart'  src=chart.png>\n"
+    '<p><img src="photos/fish.jpg" alt="Fish" width="40" height="30"/></p>\n'
+)
 GARDEN = "<h1>Garden notes</h1>\n<h2>Beds</h2>\n<p>North.</p>\n<h2>Path</h2>\n<p>Gravel.</p>\n"
 
 
@@ -476,6 +484,85 @@ class ImageRefusalTests(ImageTestCase):
             with self.subTest(reference=reference):
                 self.assertRefused(self.publish_reference(reference), reference,
                                    "remote and inline images are not published")
+
+
+class HtmlImageTests(ImageTestCase):
+    def test_img_elements_are_stored_and_filled_in_and_nothing_else_changes(self):
+        done = self.publish(self.write(self.writing, "garden.html", GARDEN_IMAGES), "--local")
+        self.assertEqual(done.returncode, 0, done.stderr)
+
+        chart, fish = stored_name(self.chart, "png"), stored_name(self.fish, "jpg")
+        self.assertEqual(sorted(os.listdir(self.media)), sorted([chart, fish]))
+        chart_tag = (f"<img alt='Chart'  src=\"/media/{chart}\" loading=\"lazy\" "
+                     'width="1600" height="600">')
+        fish_tag = (f'<img src="/media/{fish}" loading="lazy" alt="Fish" width="40" '
+                    'height="30"/>')
+        kept = (self.out_dir / "garden.body.html").read_text(encoding="utf-8")
+        self.assertEqual(
+            kept,
+            GARDEN_IMAGES.replace("<img alt='Chart'  src=chart.png>", chart_tag)
+            .replace('<img src="photos/fish.jpg" alt="Fish" width="40" height="30"/>', fish_tag),
+        )
+        page = self.page("garden")
+        self.assertIn(chart_tag, page)
+        self.assertIn(fish_tag, page)
+        self.assertIn('<!-- <img src="draft.png"> -->', page)
+        self.assertEqual(self.commits(), 1)
+
+        # The kept source republishes as it is: every img already filled in.
+        elsewhere = self.tmp / "elsewhere"
+        elsewhere.mkdir()
+        again = shutil.copy(self.out_dir / "garden.body.html", elsewhere / "garden.html")
+        done = self.publish(again, "--local")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual((self.out_dir / "garden.body.html").read_text(encoding="utf-8"), kept)
+
+    def test_img_references_that_cannot_be_published_are_refused(self):
+        (self.tmp / "beside.png").write_bytes(self.chart)
+        cases = (
+            ('<img src="https://example.com/a.png" alt="A">', "https://example.com/a.png",
+             "remote and inline images are not published"),
+            ('<img src="chart.png" srcset="chart.png 2x" alt="A">', "chart.png 2x", "srcset"),
+            ('<picture><source srcset="photos/fish.jpg 1x"><img src="chart.png" alt="A">'
+             "</picture>", "photos/fish.jpg 1x", "srcset"),
+            ('<img src="../beside.png" alt="A">', "../beside.png",
+             "outside the source's directory"),
+        )
+        for element, reference, reason in cases:
+            with self.subTest(element=element):
+                source = self.write(self.writing, "garden.html",
+                                    f"<h1>Garden</h1>\n<p>{element}</p>\n")
+                self.assertRefused(self.publish(source, "--local"), reference, reason)
+
+
+class BaseTests(ImageTestCase):
+    ARGV = ("-", "--local", "--format", "markdown", "--name", "pond")
+
+    def test_standard_input_finds_its_images_under_base_and_is_refused_without(self):
+        done = self.publish(*self.ARGV, stdin=POND_IMAGES)
+        self.assertRefused(done, "./chart.png", "--base")
+
+        done = self.publish(*self.ARGV, "--base", str(self.writing), stdin=POND_IMAGES)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        chart, fish = stored_name(self.chart, "png"), stored_name(self.fish, "jpg")
+        self.assertEqual(sorted(os.listdir(self.media)), sorted([chart, fish]))
+        self.assertEqual(
+            (self.out_dir / "pond.md").read_text(encoding="utf-8"),
+            POND_IMAGES.replace("./chart.png", f"/media/{chart}")
+            .replace("photos/fish.jpg", f"/media/{fish}"),
+        )
+        self.assertIn(f'<img src="/media/{fish}" alt="Fish" loading="lazy" width="320" '
+                      'height="240">', self.page("pond"))
+
+    def test_base_names_another_directory_than_the_source_files(self):
+        elsewhere = self.tmp / "elsewhere"
+        elsewhere.mkdir()
+        source = self.write(elsewhere, "pond.md", POND_IMAGES)
+        done = self.publish(source, "--local")
+        self.assertRefused(done, "./chart.png", "no such file")
+        done = self.publish(source, "--local", "--base", str(self.writing))
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(len(os.listdir(self.media)), 2)
 
 
 if __name__ == "__main__":

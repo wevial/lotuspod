@@ -10,6 +10,7 @@ import fcntl
 import hashlib
 import html
 import ipaddress
+import io
 import json
 import os
 import re
@@ -19,14 +20,17 @@ import signal
 import sqlite3
 import subprocess
 import sys
+import tarfile
 import threading
 import urllib.parse
 from contextlib import contextmanager
+from dataclasses import dataclass
 from functools import partial
 from html.parser import HTMLParser
 from http import HTTPStatus
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from typing import Callable
 
 import importlib.resources as _res
 
@@ -579,13 +583,20 @@ def cmd_render(args: argparse.Namespace) -> int:
             text = sys.stdin.read()
         else:
             text = Path(markdown_path).read_text(encoding="utf-8")
-        found = page_images(
-            text, "standard input" if markdown_path == "-" else markdown_path,
-            media.media_dir(out_dir), None, media.DEFAULT_MAX_BYTES,
-            local="render draws only /media/ URLs; publish stores a local image",
-            refused="nothing written",
-        )
-        body = markdown.to_body(text, image_sizes(found))
+        label = "standard input" if markdown_path == "-" else markdown_path
+        store_dir = media.media_dir(out_dir)
+        sizes = {}
+        for line in markdown.images(text):
+            if not line.src.startswith(media.URL_PREFIX):
+                why = "render draws only /media/ URLs; publish stores a local image"
+            else:
+                image = media.load_stored(store_dir, line.src[len(media.URL_PREFIX):])
+                if image is not None:
+                    sizes[image.url] = (image.width, image.height)
+                    continue
+                why = f"names no image stored in {store_dir}"
+            raise RuntimeError(f"image {line.src} in {label}: {why}; nothing written")
+        body = markdown.to_body(text, sizes)
     # Before the outline, so the forms sit inside their section.
     body, has_decisions = decisions.render_decisions(body, args.name)
     body, outline = (body, []) if args.no_outline else outline_body(body)
@@ -1061,13 +1072,14 @@ def read_source(args: argparse.Namespace, label: str) -> bytes:
 
 
 def remote_publish_command(command: str, out_dir: str, fmt: str, name: str,
-                           args: argparse.Namespace) -> str:
+                           args: argparse.Namespace, archive: bool = False) -> str:
     """The command line ssh hands the writer host's shell.
 
     ssh joins its arguments into one string for the far shell, so every
     argument after COMMAND is quoted; COMMAND is the config owner's own
     shell text and is used as written. Each value rides as --option=value,
     so one beginning with '-' is never taken for an option on the far side.
+    archive adds --source-archive: standard input is a source archive.
     """
     argv = ["publish", "--local", "-", f"--out-dir={out_dir}", f"--format={fmt}",
             f"--name={name}"]
@@ -1086,14 +1098,20 @@ def remote_publish_command(command: str, out_dir: str, fmt: str, name: str,
             argv.append(f"{option}={value}")
     if not args.comments:
         argv.append("--no-comments")
+    if archive:
+        argv.append("--source-archive")
     return " ".join([command, *(shlex.quote(arg) for arg in argv)])
 
 
 def publish_over_ssh(args: argparse.Namespace, config: dict[str, str]) -> int:
     """Run publish on the config's host with the source on standard input.
 
-    The far side's output passes through and its exit status is returned
-    as it is, so a revision conflict still exits 3.
+    The images the source names are read and checked here, and its local
+    references rewritten to their media URLs; when there is at least one,
+    standard input is a source archive of the rewritten source and the
+    images, else the source's bytes as read. The far side's output passes
+    through and its exit status is returned as it is, so a revision
+    conflict still exits 3.
     """
     host = config["host"]
     out_dir = config.get("out_dir", "")
@@ -1104,10 +1122,15 @@ def publish_over_ssh(args: argparse.Namespace, config: dict[str, str]) -> int:
             f"--out-dir names a directory on this machine, but config {config_path()} "
             "publishes on its host; pass --local to publish here"
         )
+    if args.source_archive:
+        raise RuntimeError("--source-archive is what the writer host reads; pass --local")
     label, fmt, name = publish_target(args)
     data = read_source(args, label)
+    raw, images = send_images(fmt, decoded(data, label), label, source_base(args), media_cap)
+    if images:
+        data = source_archive(raw.encode("utf-8"), images)
     command = config.get("command") or DEFAULT_REMOTE_COMMAND
-    remote = remote_publish_command(command, out_dir, fmt, name, args)
+    remote = remote_publish_command(command, out_dir, fmt, name, args, archive=bool(images))
     try:
         done = subprocess.run(["ssh", host, remote], input=data)
     except OSError as exc:
@@ -1115,27 +1138,173 @@ def publish_over_ssh(args: argparse.Namespace, config: dict[str, str]) -> int:
     return done.returncode
 
 
+def decoded(data: bytes, label: str) -> str:
+    """A source's bytes as text; RuntimeError when they are not UTF-8."""
+    try:
+        return data.decode("utf-8")
+    except UnicodeDecodeError:
+        raise RuntimeError(f"{label} is not UTF-8") from None
+
+
+def normalized(raw: str) -> str:
+    """raw with every line ending a newline."""
+    return raw.replace("\r\n", "\n").replace("\r", "\n")
+
+
+def source_base(args: argparse.Namespace) -> Path | None:
+    """The directory a source's local image references resolve against:
+    --base, else the source file's directory; None for standard input."""
+    if args.base:
+        return Path(args.base)
+    return None if args.source == "-" else Path(args.source).parent
+
+
+# A source archive: an uncompressed POSIX tar of the member `source` and one
+# member `media/NAME` per image, NAME being its stored name.
+SOURCE_MEMBER = "source"
+MEDIA_MEMBER = "media/"
+
+
+def source_archive(data: bytes, images: dict[str, media.Image]) -> bytes:
+    """The source archive of source bytes data and images."""
+    out = io.BytesIO()
+    with tarfile.open(fileobj=out, mode="w", format=tarfile.USTAR_FORMAT) as archive:
+        members = [(SOURCE_MEMBER, data)]
+        members += [(MEDIA_MEMBER + name, image.data) for name, image in images.items()]
+        for member, content in members:
+            info = tarfile.TarInfo(member)
+            info.size = len(content)
+            info.mode = 0o644
+            archive.addfile(info, io.BytesIO(content))
+    return out.getvalue()
+
+
+class _KeptTail:
+    """A stream that keeps what is read from it from floor on, so the bytes a
+    tarfile reads past its last member can be looked at again."""
+
+    def __init__(self, stream) -> None:
+        self._stream = stream
+        self._kept = bytearray()
+        self._start = 0  # where in the stream _kept begins
+        self.floor = 0
+
+    def read(self, size: int = -1) -> bytes:
+        data = self._stream.read(size)
+        self._kept += data
+        cut = min(self.floor, self._start + len(self._kept)) - self._start
+        if cut > 0:
+            del self._kept[:cut]
+            self._start += cut
+        return data
+
+    def kept(self, position: int, size: int) -> bytes:
+        """The size bytes at position already read and kept, reading no more."""
+        return bytes(self._kept[position - self._start:position + size - self._start])
+
+    def at(self, position: int, size: int) -> bytes:
+        """The size bytes at position (fewer where the stream ends first)."""
+        while self._start + len(self._kept) < position + size:
+            more = self._stream.read(position + size - self._start - len(self._kept))
+            if not more:
+                break
+            self._kept += more
+        return bytes(self._kept[position - self._start:position + size - self._start])
+
+
+_END_OF_ARCHIVE = bytes(2 * tarfile.BLOCKSIZE)
+
+
+def read_source_archive(stream, cap: int) -> tuple[bytes, dict[str, media.Image]]:
+    """The source and the images of the source archive on stream, each image
+    checked again within cap; RuntimeError naming the first refused member.
+
+    The archive is read as a stream and nothing is extracted by its member
+    names: only regular files named `source` (once) or `media/` and a stored
+    name are taken, and an image's size is checked before its bytes are read.
+    A stream tarfile stops reading at a header cut short or malformed, as
+    at the end, so the archive must end with its end-of-archive marker
+    where tarfile stopped. It also takes PAX and GNU extension headers in
+    before the member they rename or resize, which a source archive never
+    has, so each member's header must start where the one before it ends.
+    """
+    source: bytes | None = None
+    images: dict[str, media.Image] = {}
+    seen: set[str] = set()
+    member: tarfile.TarInfo | None = None
+    tail = _KeptTail(stream)
+    header = 0  # where the next member's header should start
+
+    def refused(reason: object) -> RuntimeError:
+        return RuntimeError(f"archive member {member.name}: {reason}; nothing published")
+
+    try:
+        with tarfile.open(fileobj=tail, mode="r|") as archive:
+            for member in archive:
+                if member.offset_data != header + tarfile.BLOCKSIZE:
+                    hidden = tail.kept(header, tarfile.BLOCKSIZE)
+                    name = hidden[:100].split(b"\0", 1)[0].decode("utf-8", "replace")
+                    flag = hidden[156:157].decode("ascii", "replace")
+                    raise RuntimeError(
+                        f"archive member {name}: an extension header (type {flag!r}), which "
+                        "a source archive never has; nothing published"
+                    )
+                header = tail.floor = archive.offset  # where the next header starts
+                name = member.name
+                if name in seen:
+                    raise refused("named twice")
+                seen.add(name)
+                stored = name[len(MEDIA_MEMBER):] if name.startswith(MEDIA_MEMBER) else ""
+                if name != SOURCE_MEMBER and not media.STORED_NAME.fullmatch(stored):
+                    raise refused(f"neither {SOURCE_MEMBER} nor {MEDIA_MEMBER} and a "
+                                  "stored image name")
+                if member.type not in (tarfile.REGTYPE, tarfile.AREGTYPE):
+                    raise refused("not a regular file")
+                if name == SOURCE_MEMBER:
+                    source = archive.extractfile(member).read()
+                    continue
+                try:
+                    media.check_size(member.size, cap)
+                    image = media.check(archive.extractfile(member).read(), stored, cap)
+                except media.MediaError as exc:
+                    raise refused(exc) from None
+                if image.name != stored:
+                    raise refused("the SHA-256 of its bytes is not its name")
+                images[stored] = image
+            end = archive.offset
+    except tarfile.TarError as exc:
+        where = f"archive member {member.name}" if member else "the source archive"
+        raise RuntimeError(f"{where}: cut short or malformed ({exc}); nothing published") \
+            from None
+    if tail.at(end, len(_END_OF_ARCHIVE)) != _END_OF_ARCHIVE:
+        where = f"after archive member {member.name}" if member else "at its start"
+        raise RuntimeError(f"the source archive is cut short or malformed {where}: no "
+                           "end-of-archive marker follows; nothing published")
+    if source is None:
+        raise RuntimeError(f"the source archive has no {SOURCE_MEMBER} member; "
+                           "nothing published")
+    return source, images
+
+
 # A reference with a scheme (https:, data:) or a host (//host) is remote or
 # inline: the page policy's img-src 'self' would block it in the browser.
 _REMOTE_IMAGE = re.compile(r"[A-Za-z][A-Za-z0-9+.-]*:|//")
 
 
-def read_image(src: str, store_dir: Path, base: Path | None, cap: int,
-               local: str) -> media.Image:
-    """The image an image line's reference names: a stored one for a media
-    URL, else a file inside base, the source's directory. MediaError says why
-    it is refused; local is the reason a file is when there is no base."""
+def local_image(src: str, base: Path | None, cap: Callable[[], int]) -> media.Image | None:
+    """The image a local reference names, a file inside base; None for a
+    media URL, which the writing side looks up. MediaError says why it is
+    refused."""
     if _REMOTE_IMAGE.match(src):
         raise media.MediaError(
             "remote and inline images are not published, only files beside the source"
         )
     if src.startswith(media.URL_PREFIX):
-        image = media.load_stored(store_dir, src[len(media.URL_PREFIX):])
-        if image is None:
-            raise media.MediaError(f"names no image stored in {store_dir}")
-        return image
+        return None
     if base is None:
-        raise media.MediaError(local)
+        raise media.MediaError(
+            "a file needs --base DIR to be found from a source on standard input"
+        )
     root = base.resolve()
     path = (root / src).resolve()  # follows symbolic links
     if src.startswith("/") or root not in path.parents:
@@ -1144,27 +1313,187 @@ def read_image(src: str, store_dir: Path, base: Path | None, cap: int,
         raise media.MediaError("no such file")
     if not path.is_file():
         raise media.MediaError("not a regular file")
-    media.check_size(path.stat().st_size, cap)
-    return media.check(path.read_bytes(), src, cap)
+    media.check_size(path.stat().st_size, cap())
+    return media.check(path.read_bytes(), src, cap())
 
 
-def page_images(text: str, label: str, store_dir: Path, base: Path | None, cap: int,
-                local: str, refused: str) -> dict[markdown.Image, media.Image]:
-    """Each image line of markdown text with the image it names, every one
-    read and checked; RuntimeError naming the first refused reference."""
-    found = {}
-    for line in markdown.images(text):
+@dataclass(frozen=True, eq=False)
+class _Img:
+    """An img element of an HTML source: its start tag's span and text, and
+    the first value of each of its attributes."""
+
+    start: int
+    end: int
+    tag: str
+    attrs: dict
+
+    @property
+    def src(self) -> str:
+        return self.attrs["src"]
+
+
+class _ImgCollector(HTMLParser):
+    """Locate the body's img elements that have a src (see _H2Collector),
+    and the first srcset on an img or source element."""
+
+    def __init__(self, body: str) -> None:
+        super().__init__(convert_charrefs=True)
+        self._line_starts = [0]
+        for index, char in enumerate(body):
+            if char == "\n":
+                self._line_starts.append(index + 1)
+        self.images: list[_Img] = []
+        self.srcset: tuple[str, str] | None = None
+
+    def _offset(self) -> int:
+        line, column = self.getpos()
+        return self._line_starts[line - 1] + column
+
+    def handle_starttag(self, tag: str, attrs: list) -> None:
+        first: dict[str, str | None] = {}
+        for key, value in attrs:
+            first.setdefault(key, value)
+        if tag in ("img", "source") and "srcset" in first and self.srcset is None:
+            self.srcset = tag, first["srcset"] or ""
+        if tag == "img" and first.get("src") is not None:
+            start = self._offset()
+            source = self.get_starttag_text() or ""
+            self.images.append(_Img(start, start + len(source), source, first))
+
+
+def html_images(body: str) -> _ImgCollector:
+    parser = _ImgCollector(body)
+    parser.feed(body)
+    parser.close()
+    return parser
+
+
+_TAG_NAME = re.compile(r"<[a-zA-Z][^\t\n\r\f />\x00]*")
+_TAG_ATTR = re.compile(
+    r"""[\s/]*(?P<name>[^\s/>][^\s/=>]*)(?:\s*=+\s*(?P<value>'[^']*'|"[^"]*"|(?!['"])[^>\s]*))?"""
+)
+
+
+def img_tag(img: _Img, src: str | None = None, extra: str = "") -> str:
+    """img's start tag as written, with its src value replaced by src (when
+    given) and extra attributes spliced in just after it."""
+    at = _TAG_NAME.match(img.tag).end()
+    while True:
+        attr = _TAG_ATTR.match(img.tag, at)
+        if attr is None or attr.end() == at:
+            raise media.MediaError("its src attribute cannot be found in the tag as written")
+        if attr.group("name").lower() == "src":
+            break
+        at = attr.end()
+    value = attr.group("value") or ""
+    if value[:1] in ("'", '"'):
+        value = value[1:-1]
+    if html.unescape(value) != img.src:
+        raise media.MediaError("its src attribute cannot be found in the tag as written")
+    start, end = attr.span("value")
+    written = img.tag[start:end] if src is None else f'"{html.escape(src)}"'
+    return img.tag[:start] + written + extra + img.tag[end:]
+
+
+def _spliced(body: str, tags: list[tuple[_Img, str]]) -> str:
+    """body with each img's start tag replaced by its new one."""
+    pieces: list[str] = []
+    cursor = 0
+    for img, tag in tags:
+        pieces += [body[cursor:img.start], tag]
+        cursor = img.end
+    pieces.append(body[cursor:])
+    return "".join(pieces)
+
+
+def stored_image(src: str, store_dir: Path, sent: dict[str, media.Image]) -> media.Image:
+    """The image media URL src names, from sent or else the store;
+    MediaError when it names neither."""
+    name = src[len(media.URL_PREFIX):] if src.startswith(media.URL_PREFIX) else ""
+    image = sent.get(name) or media.load_stored(store_dir, name)
+    if image is None:
+        raise media.MediaError(f"names no image stored in {store_dir}")
+    return image
+
+
+def send_images(fmt: str, raw: str, label: str, base: Path | None,
+                cap: Callable[[], int], stored: Callable[[str], media.Image] | None = None,
+                ) -> tuple[str, dict[str, media.Image]]:
+    """The sending side of publish: raw, the source, with each local image
+    reference rewritten to its media URL, and the images those name by
+    stored name, each read from inside base and checked; RuntimeError naming
+    the first refused reference. Media URLs are left to the writing side,
+    unless stored, the writing side's lookup, is given to check them in turn."""
+    if fmt == "markdown":
+        refs: list = markdown.images(normalized(raw))
+    else:
+        found = html_images(raw)
+        if found.srcset is not None:
+            tag, srcset = found.srcset
+            raise RuntimeError(
+                f"srcset {srcset} on a {tag} element in {label}: srcset names images "
+                "publish never sees; give an img one src; nothing published"
+            )
+        refs = found.images
+    images: dict[str, media.Image] = {}
+    moved: list = []
+    for ref in refs:
         try:
-            found[line] = read_image(line.src, store_dir, base, cap, local)
+            image = local_image(ref.src, base, cap)
+            if image is None and stored is not None:
+                stored(ref.src)
+            elif image is not None:
+                moved.append((ref, image.url if fmt == "markdown" else img_tag(ref, image.url)))
+                images[image.name] = image
         except (media.MediaError, OSError) as exc:
             reason = exc.strerror if isinstance(exc, OSError) and exc.strerror else exc
-            raise RuntimeError(f"image {line.src} in {label}: {reason}; {refused}") from None
-    return found
+            raise RuntimeError(f"image {ref.src} in {label}: {reason}; nothing published") \
+                from None
+    if moved:
+        raw = markdown.with_sources(raw, dict(moved)) if fmt == "markdown" else \
+            _spliced(raw, moved)
+    return raw, images
 
 
-def image_sizes(found: dict[markdown.Image, media.Image]) -> dict[str, tuple[int, int]]:
-    """Each media URL's width and height, as to_body takes them."""
-    return {image.url: (image.width, image.height) for image in found.values()}
+def resolve_images(fmt: str, raw: str, label: str, store_dir: Path,
+                   sent: dict[str, media.Image]) -> tuple[str, dict[str, media.Image]]:
+    """The writing side of publish: every image raw refers to, by stored
+    name, from sent or else the store, and raw with each HTML img given
+    loading="lazy" and its intrinsic width and height where it has none of
+    its own. RuntimeError names a reference to no such image, or an image
+    in sent that raw does not refer to."""
+    if fmt == "markdown":
+        refs: list = markdown.images(normalized(raw))
+    else:
+        refs = html_images(raw).images
+    resolved = []
+    for ref in refs:
+        try:
+            resolved.append((ref, stored_image(ref.src, store_dir, sent)))
+        except media.MediaError as exc:
+            raise RuntimeError(f"image {ref.src} in {label}: {exc}; nothing published") \
+                from None
+    images = {image.name: image for _, image in resolved}
+    for name in sent:
+        if name not in images:
+            raise RuntimeError(f"archive member {MEDIA_MEMBER}{name}: {label} does not "
+                               "refer to it; nothing published")
+    if fmt == "html":
+        filled = []
+        for img, image in resolved:
+            extra = ""
+            if "loading" not in img.attrs:
+                extra += ' loading="lazy"'
+            if "width" not in img.attrs and "height" not in img.attrs:
+                extra += f' width="{image.width}" height="{image.height}"'
+            if extra:
+                try:
+                    filled.append((img, img_tag(img, extra=extra)))
+                except media.MediaError as exc:
+                    raise RuntimeError(f"image {img.src} in {label}: {exc}; "
+                                       "nothing published") from None
+        raw = _spliced(raw, filled)
+    return raw, images
 
 
 def media_cap() -> int:
@@ -1182,10 +1511,15 @@ def cmd_publish(args: argparse.Namespace) -> int:
     When the config names a host and --local is not given, publish runs
     there over ssh instead (see publish_over_ssh).
 
-    A markdown page's images are read from beside its source and checked
-    with everything else; under the lock each is stored in the media
-    directory and its reference rewritten to its media URL, in the kept
-    source too, so a republish of the kept source needs no local files.
+    Publish has two sides, run here in one process or split by ssh: the
+    sending side (send_images) reads each image the source names from
+    beside it, checks it and rewrites its reference to its media URL; the
+    writing side (resolve_images) finds every media URL's image among those
+    sent or in the store. Under the lock each sent image is stored in the
+    media directory, and the rewritten source is kept, so a republish of
+    the kept source needs no local files. With --source-archive, standard
+    input is a source archive (see read_source_archive) whose images are
+    checked again here.
 
     Everything that can be refused is refused before anything is written.
     From the revision check to the commit the directory's publish lock is
@@ -1204,33 +1538,27 @@ def cmd_publish(args: argparse.Namespace) -> int:
     label, fmt, name = publish_target(args)
     if args.owner:
         check_owner(args, out_dir)
-    data = read_source(args, label)
+    if args.source_archive and args.source != "-":
+        raise RuntimeError("--source-archive reads standard input: pass - as SOURCE")
+    store_dir = media.media_dir(out_dir)
     try:
-        raw = data.decode("utf-8")
-    except UnicodeDecodeError:
-        raise RuntimeError(f"{label} is not UTF-8") from None
-    text = raw.replace("\r\n", "\n").replace("\r", "\n")
-    found: dict[markdown.Image, media.Image] = {}
+        sent: dict[str, media.Image] = {}
+        if args.source_archive:
+            data, sent = read_source_archive(sys.stdin.buffer, media_cap())
+        else:
+            data = read_source(args, label)
+        raw, found = send_images(fmt, decoded(data, label), label, source_base(args),
+                                 media_cap, partial(stored_image, store_dir=store_dir, sent=sent))
+    except ConfigError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return EXIT_CONFIG
+    raw, images = resolve_images(fmt, raw, label, store_dir, {**sent, **found})
+    # The kept source names each image by its media URL, as the page does.
+    data = raw.encode("utf-8")
+    text = normalized(raw)
     if fmt == "markdown":
-        if markdown.images(text):
-            try:
-                cap = media_cap()
-            except ConfigError as exc:
-                print(f"error: {exc}", file=sys.stderr)
-                return EXIT_CONFIG
-            found = page_images(
-                text, label, media.media_dir(out_dir),
-                None if args.source == "-" else Path(args.source).parent, cap,
-                local="a file beside the source needs the source as a file, not "
-                "standard input",
-                refused="nothing published",
-            )
-        # The kept source names each image by its media URL, as the page does.
-        moved = {line: image.url for line, image in found.items() if line.src != image.url}
-        if moved:
-            text = markdown.with_sources(text, moved)
-            data = markdown.with_sources(raw, moved).encode("utf-8")
-        title, body = markdown_title(text), markdown.to_body(text, image_sizes(found))
+        sizes = {image.url: (image.width, image.height) for image in images.values()}
+        title, body = markdown_title(text), markdown.to_body(text, sizes)
     else:
         title, body = html_title(text)
     if args.title is not None:
@@ -1252,8 +1580,8 @@ def cmd_publish(args: argparse.Namespace) -> int:
             )
             return EXIT_REVISION_CONFLICT
 
-        for image in found.values():
-            media.store(media.media_dir(out_dir), image)
+        for image in images.values():
+            media.store(store_dir, image)
 
         # A republish keeps what the page already says unless told otherwise.
         page = out_dir / f"{name}.html"
@@ -2010,6 +2338,19 @@ def build_parser() -> argparse.ArgumentParser:
         "--local",
         action="store_true",
         help="publish on this machine even when the config names a host",
+    )
+    publish.add_argument(
+        "--base",
+        default="",
+        metavar="DIR",
+        help="the directory the source's image files are found in (default: the source "
+        "file's directory; a source on standard input has none)",
+    )
+    publish.add_argument(
+        "--source-archive",
+        action="store_true",
+        help="standard input is a tar of the source and its images, as publish sends "
+        "the writer host",
     )
     publish.set_defaults(func=cmd_publish)
 

@@ -434,6 +434,7 @@ class Responder:
                 summary=None, variant=None, expect_revision=expect,
                 out_dir=str(self.out_dir), owner="", credential="", db="",
                 comments=bool(comments.read_boxes(previous)), local=True,
+                base="", source_archive=False,
             )
             out, err = io.StringIO(), io.StringIO()
             try:

@@ -180,8 +180,9 @@ out_dir = /srv/lotuspod/artifacts
 ```
 
 With `host` set, `publish` runs `ssh HOST COMMAND publish --local - --out-dir
-OUT_DIR --format FORMAT --name NAME ...` with the source on standard input;
-the format and name are worked out here from the file name, and every
+OUT_DIR --format FORMAT --name NAME ...` with the source on standard input
+(and its images with it; see [Images](#images)); the format and name are
+worked out here from the file name, and every
 argument after `command` is shell-quoted (`command`, default `lotuspod`, is
 used as written); `--owner`, `--credential`, `--db` and `--no-comments` go
 along when given, so the credential file and the database named are the writer
@@ -193,27 +194,64 @@ the host's address in the local config only, never in this repository.
 
 ### Images
 
-A markdown page shows images (see [From markdown](#from-markdown)):
+A markdown page shows images (see [From markdown](#from-markdown)), and an
+HTML page body shows them with ordinary `img` elements:
 
 ```markdown
 ![Pump chart](./chart.png)
 ![Fish](photos/fish.jpg)
 ```
 
-`publish` on the writer host reads each image a page references relative to
-its source file's directory, and checks every one before anything is
-written. An image is accepted only when its first bytes are a PNG, JPEG, WebP
+```html
+<img src="chart.png" alt="Pump chart">
+<img src="photos/fish.jpg" alt="Fish" width="40" height="30">
+```
+
+`publish` reads each image a page references relative to its source file's
+directory - or to `--base DIR` when given - and checks every one before
+anything is written. A source on standard input has no directory of its own:
+one with a local image reference needs `--base`, and is refused naming
+`--base` without it:
+
+```sh
+lotuspod publish - --format markdown --name pond --base ~/notes < ~/notes/pond.md
+```
+
+An image is accepted only when its first bytes are a PNG, JPEG, WebP
 or GIF and its extension (`.png`, `.jpg` or `.jpeg`, `.webp`, `.gif`) names
 that same type, and only within the size cap. Under the publish lock each is
 stored in `lotuspod-media/` beside the artifacts directory, as the lower-case
 hex SHA-256 of its bytes plus its type's extension (so one image stored twice
 is one file), and each reference is rewritten to that media URL, in the page
-and in the kept `NAME.md` alike - so a republish of the kept source (an
-agent's pull, edit and publish) needs no local files. The media directory is
+and in the kept `NAME.md` or `NAME.body.html` alike - so a republish of the
+kept source (an agent's pull, edit and publish) needs no local files. The media directory is
 never inside the artifacts directory, which publish commits whole: no image
 reaches the artifacts repository. The page draws each image at its intrinsic
 width and height, read from the file's header; a JPEG whose EXIF orientation
 turns it a quarter has the two swapped, as browsers draw it.
+
+In an HTML source only the `img` elements' attributes change: `src` becomes
+the media URL, and an `img` with a media URL gets `loading="lazy"` when it
+has no `loading`, and its intrinsic `width` and `height` when it has neither
+(an author's own are kept). Everything else stays as written, and the kept
+`NAME.body.html` is the source so rewritten.
+
+Over ssh, the images are read and checked on the sending machine, and the
+references rewritten there. When at least one image is to be sent, the far
+command gains `--source-archive` and standard input is one uncompressed POSIX
+tar (`tar -tvf` lists it): a member `source`, the rewritten source, and one
+member `media/NAME` per image, under its stored name. A page with no image to
+send - none at all, or only media URLs - goes as its bytes with no
+`--source-archive`, as before. `--base` is read on the sending machine and
+never sent. The writer host trusts nothing in the archive: it reads it as a
+stream and extracts nothing by name, takes only regular files named `source`
+(once) or `media/` and a stored name, and checks each image again - its
+SHA-256 must be its name, its type the one its extension names, its size
+within the writer host's own `max_image_bytes` (read from its header before
+its bytes), and the source must refer to it; and every media URL in the
+source must be in the archive or already stored. A link, a directory, any
+other name, a repeated name, a PAX or GNU extension header, or an archive
+cut short is refused the same way, naming the member.
 
 The cap is 10 MiB unless the config sets another:
 
@@ -235,11 +273,14 @@ source, no media file, no commit:
 - a remote or inline image (`https:`, `http:`, `data:`, `//host`): the page
   policy's `img-src 'self' data:` would block it in the reader's browser, and
   readers' browsers never fetch third-party URLs from behind the Access gate;
+- a local file referenced from a source on standard input without `--base`;
+- a `srcset` on an `img` or `source` element, which would name images
+  publish never sees;
 - a media URL naming no stored image.
 
-A source on standard input may use media URLs but not local files; images
-from another machine over ssh, images in an HTML source, and media in
-`backup` and `restore` are not handled yet.
+Over ssh, a reference refused on the sending machine is refused before ssh
+runs. Media in `backup` and `restore`, CSS `url()` in an HTML source and
+`picture` without `srcset` are not handled yet.
 
 ## Manifest
 
