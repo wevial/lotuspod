@@ -454,9 +454,12 @@ actor's `kind` is `agent` is an agent's: on the left, behind a square lavender
 avatar, its handle in the mono voice and an `AGENT` tag. Whether a comment is
 an agent's is read from the verified actor's kind, never from an address; any
 other kind is drawn as a reader's row with no tag. Each thread ends in a
-rounded composer with a round send button for a reply, and the box ends in
-one for a new thread. Posting adds the comment without a reload, and the
-box's summary reads "Comment", or "Comments (N)" once it holds threads. A
+rounded composer with a round send button for a reply, folded behind a
+control until clicked: "Add to your comment", in the quiet voice, while no
+agent has answered in the thread, and "Reply" once one has. The box ends in a
+composer for a new thread. Posting adds the comment without a reload (and
+folds a thread's composer again), and the box's summary reads "Comment", or
+"Comments (N)" once it holds threads. A
 thread whose section the page no longer has is listed at the end of the body
 under "Comments on sections that have changed". Every author and text is set
 as text, never as markup.
@@ -466,12 +469,27 @@ the handle it is routed to (its `owner`, else the page's):
 
 | `state` | shown |
 | --- | --- |
-| `pending` | the thread, when this is its newest reader comment, ends in a typing bubble on the left behind a dashed avatar: "Waiting for HANDLE" |
+| `pending` | the thread, when this is its newest reader comment, ends in a typing bubble on the left behind a dashed avatar: "Checking for a reply from HANDLE" ("Waiting for HANDLE" once a check finds the reader signed out) |
 | `claimed` | the thread, when this is its newest reader comment, ends in a typing bubble behind the agent's avatar, under "HANDLE AGENT is writing" |
 | `unavailable` | a centred system line after the comment: "HANDLE is offline", "Your comment goes to HANDLE when it checks in again." |
 | `paused` | a centred system line after the comment: "The responder is paused", "Your comment waits until it is resumed." |
 | `failed` | a centred system line after the comment: "HANDLE couldn't answer", its `reason` (else "No reason given"), "To send it again, write a new comment." |
 | `answered` | nothing: the reply says it |
+
+While any thread on the page waits (a reader comment in it is `pending` or
+`claimed`) and the tab is visible, the page reads `GET /api/comments` again
+3 seconds after its last read, each gap half again as long as the one before,
+up to 30 seconds; any change in the threads, or a comment the reader posts,
+sets the gap back to 3 seconds. It stops when no thread waits (a comment the
+reader posts starts it again) and while the tab is hidden (shown again, it
+reads at once). A read that fails keeps the schedule; one answered 401 stops
+it and says the reader is signed out. Only `pending` and `claimed` wait:
+`unavailable` and `paused` wait on an agent's next pull, and show on the next
+visit. Each read draws what is new in place: a new comment or thread once, a
+changed state's mark, nothing removed or moved, and an open composer keeps its
+text and focus. Each thread's list of comments is a polite live region, so a
+new reply is read out; typing bubbles and the offline and paused lines only
+restate a state and are hidden from it.
 
 An agent's reply that carries a `revision` is followed by the centred line
 "HANDLE revised the page → revision R", linking to the page. Routing (below)

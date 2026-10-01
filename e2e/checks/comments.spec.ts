@@ -15,7 +15,7 @@ const OWNER = 'hermes';
 const AGENT = { kind: 'agent', handle: OWNER };
 const LAVENDER = 'rgb(183, 156, 244)';
 // Words a state may say; none of them is ever part of a comment.
-const STATE_WORDS = /Waiting|writing|offline|paused|couldn't answer|answered/i;
+const STATE_WORDS = /Waiting|Checking|writing|offline|paused|couldn't answer|answered/i;
 
 type Violation = { blockedURI: string; effectiveDirective: string };
 
@@ -218,7 +218,7 @@ test.describe('signed in', () => {
       await expect(mine.locator('.artifact-comment-author')).toHaveText(READER);
       await expect(mine.locator('.artifact-comment-text')).toHaveText('This step is out of order.');
       const typing = thread.locator('.artifact-comment-typing--pending');
-      await expect(typing.locator('.artifact-comment-bubble')).toHaveText(`Waiting for ${OWNER}`);
+      await expect(typing.locator('.artifact-comment-bubble')).toHaveText(`Checking for a reply from ${OWNER}`);
       expect(await drawn(thread)).toEqual(['reader', 'typing:pending']);
       // The reader's bubble sits on the right, the typing bubble on the left.
       const list = (await thread.locator('.artifact-comment-list').boundingBox())!;
@@ -239,8 +239,10 @@ test.describe('signed in', () => {
     await expect(risks.threads).toHaveCount(1);
     await shown();
 
+    // The composer is folded until opened; before an answer it adds to the comment.
+    await thread.getByRole('button', { name: 'Add to your comment' }).click();
     await thread.locator('form.artifact-comment-reply textarea[name="text"]').fill('It follows the heater.');
-    await thread.getByRole('button', { name: 'Reply' }).click();
+    await thread.getByRole('button', { name: 'Send' }).click();
     const items = thread.locator('.artifact-comment-item');
     await expect(items).toHaveCount(2);
     await expect(items.nth(1)).toHaveClass(/artifact-comment-item--reader/);
@@ -265,8 +267,8 @@ test.describe('signed in', () => {
     const pending = thread(page, roots.pending);
     expect(await drawn(pending)).toEqual(['reader', 'typing:pending']);
     const waiting = pending.locator('.artifact-comment-typing--pending');
-    await expect(waiting).toHaveAttribute('role', 'status');
-    await expect(waiting.locator('.artifact-comment-bubble')).toHaveText(`Waiting for ${OWNER}`);
+    await expect(waiting).toHaveAttribute('aria-hidden', 'true');
+    await expect(waiting.locator('.artifact-comment-bubble')).toHaveText(`Checking for a reply from ${OWNER}`);
     await expect(waiting.locator('.artifact-comment-avatar')).toHaveCSS('border-style', 'dashed');
 
     const claimed = thread(page, roots.claimed);
@@ -396,8 +398,12 @@ test.describe('signed in', () => {
     const link = thread(page, roots.answered).locator('.artifact-comment-event a').first();
     await tabTo(page, link);
     expect(await outline(link)).toEqual({ style: 'solid', width: 2, color: LAVENDER });
+    const reply = thread(page, roots.answered).getByRole('button', { name: 'Reply' });
+    await tabTo(page, reply);
+    expect(await outline(reply)).toEqual({ style: 'solid', width: 2, color: LAVENDER });
+    await page.keyboard.press('Enter');
     const field = thread(page, roots.answered).locator('form.artifact-comment-reply');
-    await tabTo(page, field.locator('textarea'));
+    await expect(field.locator('textarea')).toBeFocused();
     expect(await outline(field, '::before')).toEqual({ style: 'solid', width: 2, color: LAVENDER });
 
     const answered = thread(page, roots.answered);

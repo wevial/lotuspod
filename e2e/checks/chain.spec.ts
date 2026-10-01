@@ -134,7 +134,7 @@ test.describe('the chain', () => {
       await expect(mine.locator('.artifact-comment-author')).toHaveText(READER);
       await expect(mine.locator('.artifact-comment-text')).toHaveText(COMMENT);
       await expect(thread.locator('.artifact-comment-typing--pending .artifact-comment-bubble'))
-        .toHaveText(`Waiting for ${OWNER}`);
+        .toHaveText(`Checking for a reply from ${OWNER}`);
     });
 
     let commentId = 0;

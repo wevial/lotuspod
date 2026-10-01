@@ -8,9 +8,11 @@
 // comments it reads the page's threads, draws each in its section's box as a
 // chat (the reader's comments on the right, agents' replies on the left, each
 // state as its own mark outside what anyone wrote), and posts new threads and
-// replies. It sends no
-// credential of its own: the reader's Cloudflare Access session is the only
-// identity. Everything anyone wrote is set as text, never as markup.
+// replies. While a thread waits for an agent and the page is seen, it reads
+// the threads again, less often while nothing changes, and draws what is new
+// in place. It sends no credential of its own: the reader's Cloudflare
+// Access session is the only identity. Everything anyone wrote is set as
+// text, never as markup.
 (function () {
   "use strict";
 
@@ -439,16 +441,23 @@
       return line;
     }
 
+    // A system line that only restates a state: the thread's live region
+    // does not read it out.
+    function quiet(line) {
+      line.setAttribute("aria-hidden", "true");
+      return line;
+    }
+
     // What a reader's comment's state draws after it; null for none.
     function after(entry) {
       var handle = routed(entry);
       switch (entry.state) {
         case "unavailable":
-          return notice("unavailable", "hollow", handle + " is offline",
-            ["Your comment goes to " + handle + " when it checks in again."]);
+          return quiet(notice("unavailable", "hollow", handle + " is offline",
+            ["Your comment goes to " + handle + " when it checks in again."]));
         case "paused":
-          return notice("paused", "pause", "The responder is paused",
-            ["Your comment waits until it is resumed."]);
+          return quiet(notice("paused", "pause", "The responder is paused",
+            ["Your comment waits until it is resumed."]));
         case "failed":
           return notice("failed", "bang", handle + " couldn't answer", [
             entry.reason ? String(entry.reason) : "No reason given",
@@ -460,7 +469,8 @@
     }
 
     // The typing bubble a thread ends in while its newest reader comment has
-    // no answer yet; null for none.
+    // no answer yet; null for none. It only restates the state, so the
+    // thread's live region does not read it out.
     function typing(entry) {
       var handle = routed(entry);
       var drawn;
@@ -469,7 +479,7 @@
         drawn = row("artifact-comment-typing artifact-comment-typing--pending",
           "artifact-comment-avatar--ghost", handle.charAt(0).toUpperCase());
         bubble = element("p", "artifact-comment-bubble artifact-comment-bubble--ghost",
-          "Waiting for " + handle);
+          (checking ? "Checking for a reply from " : "Waiting for ") + handle);
         bubble.appendChild(mark("dots"));
       } else if (entry.state === "claimed") {
         drawn = row("artifact-comment-typing artifact-comment-typing--claimed",
@@ -483,33 +493,110 @@
       } else {
         return null;
       }
-      drawn.item.setAttribute("role", "status");
+      drawn.item.setAttribute("aria-hidden", "true");
       drawn.column.appendChild(bubble);
       return drawn.item;
     }
 
-    function fill(thread) {
-      var rows = [thread.root].concat(thread.replies);
+    function rows(thread) {
+      return [thread.root].concat(thread.replies);
+    }
+
+    // A thread waits while any reader comment in it has no answer yet.
+    function waits(thread) {
+      return rows(thread).some(function (entry) {
+        return !agent(entry) && (entry.state === "pending" || entry.state === "claimed");
+      });
+    }
+
+    // What a row draws after it, as a key: a mark is drawn again only when
+    // its key changes.
+    function markKey(entry) {
+      if (agent(entry)) {
+        return entry.revision ? "revision " + entry.revision : "";
+      }
+      return [entry.state, routed(entry), entry.reason || ""].join("\n");
+    }
+
+    // Draw what a thread does not show yet, in place: each comment once, by
+    // id, and a mark after it or the typing bubble at its end only when what
+    // that says has changed. Nothing drawn is moved, so the thread's live
+    // region reads out only what is new. True when anything was drawn.
+    function sync(thread) {
+      var list = thread.list;
+      var at = null;
       var newest = null;
-      thread.list.replaceChildren();
-      rows.forEach(function (entry) {
-        thread.list.appendChild(comment(entry));
-        if (agent(entry)) {
-          if (entry.revision) {
-            thread.list.appendChild(revised(entry));
-          }
-          return;
+      var touched = false;
+      function place(node) {
+        list.insertBefore(node, at ? at.nextSibling : list.firstChild);
+        at = node;
+      }
+      rows(thread).forEach(function (entry) {
+        var drawn = thread.drawn.get(entry.id);
+        if (drawn) {
+          at = drawn.item;
+        } else {
+          drawn = { item: comment(entry), mark: null, key: "" };
+          thread.drawn.set(entry.id, drawn);
+          place(drawn.item);
+          touched = true;
         }
-        newest = entry;
-        var line = after(entry);
-        if (line) {
-          thread.list.appendChild(line);
+        if (!agent(entry)) {
+          newest = entry;
+        }
+        var key = markKey(entry);
+        if (key !== drawn.key) {
+          if (drawn.mark) {
+            drawn.mark.remove();
+          }
+          drawn.mark = agent(entry) ? (entry.revision ? revised(entry) : null) : after(entry);
+          drawn.key = key;
+          touched = true;
+        }
+        if (drawn.mark) {
+          if (drawn.mark.parentNode) {
+            at = drawn.mark;
+          } else {
+            place(drawn.mark);
+          }
         }
       });
-      var waiting = newest && typing(newest);
-      if (waiting) {
-        thread.list.appendChild(waiting);
+      var waitKey = newest ? [newest.state, routed(newest), checking].join("\n") : "";
+      if (waitKey !== thread.waitKey) {
+        if (thread.typing) {
+          thread.typing.remove();
+        }
+        thread.typing = newest && typing(newest);
+        if (thread.typing) {
+          list.appendChild(thread.typing);
+        }
+        thread.waitKey = waitKey;
+        touched = true;
       }
+      label(thread, newest || thread.root);
+      return touched;
+    }
+
+    // Take rows into a thread by id: a new one is added, a known one takes
+    // the copy just read. True when anything was drawn.
+    function merge(thread, entries) {
+      entries.forEach(function (entry) {
+        if (!entry) {
+          return;
+        }
+        if (entry.id === thread.root.id) {
+          thread.root = entry;
+          return;
+        }
+        var known = thread.replies.findIndex(function (reply) { return reply.id === entry.id; });
+        if (known < 0) {
+          thread.replies.push(entry);
+        } else {
+          thread.replies[known] = entry;
+        }
+      });
+      thread.replies.sort(function (a, b) { return a.id - b.id; });
+      return sync(thread);
     }
 
     function failure(response, payload) {
@@ -548,32 +635,75 @@
       }
     }
 
-    function replyForm(thread) {
+    // The composer's control: "Reply" once an agent has answered in the
+    // thread; before that the quieter "Add to your comment", its field
+    // saying the agent reads it with the comment.
+    function label(thread, entry) {
+      var answered = rows(thread).some(function (each) { return agent(each) !== ""; });
+      var name = answered ? "Reply" : "Add to your comment";
+      var hint = answered ? "" : "Add detail. " + routed(entry) + " reads it with your comment.";
+      if (thread.toggle.textContent !== name) {
+        thread.toggle.textContent = name;
+        thread.toggle.classList.toggle("artifact-comment-toggle--quiet", !answered);
+        thread.field.setAttribute("aria-label", name);
+      }
+      if (thread.field.placeholder !== hint) {
+        thread.field.placeholder = hint;
+      }
+    }
+
+    // A thread's composer: a control that unfolds the reply form, folded
+    // until clicked.
+    function replyForm(thread, node) {
+      var toggle = element("button", "artifact-comment-toggle");
+      toggle.type = "button";
       var form = element("form", "artifact-comment-reply");
+      form.id = "artifact-comment-reply-" + thread.root.id;
+      toggle.setAttribute("aria-controls", form.id);
       var text = element("textarea");
       text.name = "text";
       text.rows = 2;
       text.maxLength = 4000;
       text.required = true;
-      text.setAttribute("aria-label", "Reply");
       form.appendChild(text);
       var actions = element("div", "artifact-comment-actions");
-      var button = element("button", "", "Reply");
+      var button = element("button", "", "Send");
       button.type = "submit";
       actions.appendChild(button);
       var status = element("p", "artifact-comment-status");
       status.setAttribute("role", "status");
       actions.appendChild(status);
       form.appendChild(actions);
+      thread.toggle = toggle;
+      thread.field = text;
+
+      function unfold(open) {
+        form.hidden = !open;
+        toggle.setAttribute("aria-expanded", open ? "true" : "false");
+      }
+      unfold(false);
+      toggle.addEventListener("click", function () {
+        unfold(form.hidden);
+        if (!form.hidden) {
+          text.focus();
+        }
+      });
       form.addEventListener("submit", async function (event) {
         event.preventDefault();
         var row = await post(form, { page: page, parent: thread.root.id, text: text.value });
         if (row) {
-          thread.replies.push(row);
-          fill(thread);
+          var focused = form.contains(document.activeElement)
+            || document.activeElement === document.body;
+          unfold(false);
+          if (focused) {
+            toggle.focus();
+          }
+          merge(thread, [row]);
+          posted();
         }
       });
-      return form;
+      node.appendChild(toggle);
+      node.appendChild(form);
     }
 
     function summary(box) {
@@ -593,34 +723,149 @@
       return list;
     }
 
+    // Show a thread as read: a new one lands in its section's box, a known
+    // one takes what it does not show yet. True when anything was drawn.
     function add(entry) {
       var root = entry.root;
-      if (!root || shown.has(root.id)) {
-        return;
+      if (!root) {
+        return false;
       }
-      var thread = {
-        root: root,
-        replies: (entry.replies || []).slice(),
-        list: element("ol", "artifact-comment-list"),
-      };
-      shown.set(root.id, thread);
+      var known = shown.get(root.id);
+      if (known) {
+        return merge(known, [root].concat(entry.replies || []));
+      }
+      var list = element("ol", "artifact-comment-list");
+      list.setAttribute("aria-live", "polite");
+      var thread = { root: root, replies: [], list: list, drawn: new Map(), typing: null, waitKey: null };
       var node = element("div", "artifact-comment-thread");
       node.dataset.thread = String(root.id);
+      thread.node = node;
       var box = sections.get(root.section) || null;
+      thread.box = box;
       if (!box) {
         node.appendChild(element("p", "artifact-comment-section",
           "On " + String(root.sectionTitle || root.section || "an earlier section")));
       }
-      node.appendChild(thread.list);
-      node.appendChild(replyForm(thread));
-      fill(thread);
+      node.appendChild(list);
+      replyForm(thread, node);
+      shown.set(root.id, thread);
+      merge(thread, entry.replies || []);
       if (box) {
         box.querySelector(".artifact-comment-threads").appendChild(node);
         summary(box);
       } else {
         changed().appendChild(node);
       }
+      return true;
     }
+
+    // The checks for replies: while a thread waits and the page is seen,
+    // read the threads again FIRST after the last read, each gap half again
+    // as long as the one before up to LAST, and the first gap again after
+    // any change or a comment the reader posts.
+    var FIRST = 3000;
+    var LAST = 30000;
+    var gap = FIRST;
+    var last = 0;
+    var timer = null;
+    var reading = false;
+    // The read in flight is followed by the first gap.
+    var fresh = false;
+    // False once a read finds the reader signed out.
+    var checking = true;
+
+    function waiting() {
+      var found = null;
+      shown.forEach(function (thread) {
+        if (!found && waits(thread)) {
+          found = thread;
+        }
+      });
+      return found;
+    }
+
+    function hidden() {
+      return document.visibilityState === "hidden";
+    }
+
+    function plan() {
+      clearTimeout(timer);
+      timer = null;
+      if (reading || !checking || hidden() || !waiting()) {
+        return;
+      }
+      timer = setTimeout(read, Math.max(0, last + gap - Date.now()));
+    }
+
+    function signedOut() {
+      checking = false;
+      clearTimeout(timer);
+      timer = null;
+      var first = waiting();
+      if (first) {
+        var status = first.box
+          ? first.box.querySelector("form.artifact-comment-form .artifact-comment-status")
+          : first.node.querySelector(":scope > .artifact-comment-status");
+        if (!status) {
+          status = element("p", "artifact-comment-status");
+          status.setAttribute("role", "status");
+          first.node.appendChild(status);
+        }
+        status.textContent = SIGNED_OUT;
+      }
+      shown.forEach(sync);
+    }
+
+    async function read() {
+      timer = null;
+      reading = true;
+      last = Date.now();
+      var touched = false;
+      try {
+        var response = await fetch(COMMENTS + "?page=" + encodeURIComponent(page));
+        if (response.status === 401) {
+          reading = false;
+          signedOut();
+          return;
+        }
+        if (response.status === 200) {
+          var payload = await json(response);
+          ((payload && payload.threads) || []).forEach(function (entry) {
+            if (add(entry)) {
+              touched = true;
+            }
+          });
+        }
+      } catch (ignored) {
+        // A failed read keeps the schedule.
+      }
+      reading = false;
+      gap = touched || fresh ? FIRST : Math.min(gap * 1.5, LAST);
+      fresh = false;
+      plan();
+    }
+
+    // The reader posted a comment: check again from the first gap.
+    function posted() {
+      if (!checking) {
+        checking = true;
+        shown.forEach(sync);
+      }
+      gap = FIRST;
+      last = Date.now();
+      fresh = reading;
+      plan();
+    }
+
+    document.addEventListener("visibilitychange", function () {
+      if (hidden()) {
+        clearTimeout(timer);
+        timer = null;
+      } else if (!timer && !reading && checking && waiting()) {
+        fresh = true;
+        read();
+      }
+    });
 
     boxes.forEach(function (box) {
       var form = box.querySelector("form.artifact-comment-form");
@@ -631,19 +876,12 @@
         });
         if (row) {
           add({ root: row, replies: [] });
+          posted();
         }
       });
     });
 
-    async function load() {
-      var response = await fetch(COMMENTS + "?page=" + encodeURIComponent(page));
-      if (!response.ok) {
-        return;
-      }
-      ((await response.json()).threads || []).forEach(add);
-    }
-
-    load().catch(function () {});
+    read();
   }
 
   var forms = all("form.artifact-decision");

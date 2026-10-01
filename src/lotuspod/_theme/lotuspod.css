@@ -1332,6 +1332,40 @@ label.artifact-decision-note span {
   outline-offset: 2px;
 }
 
+/* A thread's composer is folded behind a quiet text control at the thread's
+   right edge: "Add to your comment" in the muted voice until an agent has
+   answered, then "Reply" in lavender. */
+.artifact-comment-toggle {
+  appearance: none;
+  background: none;
+  border: 0;
+  border-radius: var(--radius-chip);
+  color: var(--color-lavender);
+  cursor: pointer;
+  display: block;
+  font-family: var(--font-body);
+  font-size: 0.85rem;
+  margin: 0.6em 0 0 auto;
+  padding: 0.1rem 0.25rem;
+}
+
+.artifact-comment-toggle--quiet {
+  color: var(--color-muted-lavender);
+}
+
+.artifact-comment-toggle:hover,
+.artifact-comment-toggle[aria-expanded="true"] {
+  color: var(--color-pale-lavender);
+}
+
+.artifact-comment-reply[hidden] {
+  display: none;
+}
+
+.artifact-comment-toggle + .artifact-comment-reply {
+  margin-top: 0.45em;
+}
+
 /* Below a box's threads, the form for a new one is set apart from the last
    thread's reply. */
 .artifact-comment-threads:not(:empty) + .artifact-comment-form {
