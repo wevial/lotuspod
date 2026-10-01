@@ -43,7 +43,8 @@ function section(page: Page, index: number) {
   return {
     heading,
     wrapper,
-    button: heading.getByRole('button', { name: TITLES[index], exact: true }),
+    // A folded heading's button may end in a mark of what waits in it.
+    button: heading.getByRole('button', { name: TITLES[index] }),
     paragraph: wrapper.locator(':scope > p').first(),
     box: wrapper.locator('details.artifact-comment'),
   };
@@ -94,7 +95,7 @@ test.describe('signed in', () => {
     await expect(second.wrapper).toHaveAttribute('hidden', 'until-found');
     expect(await second.button.evaluate((node) => node.tagName)).toBe('BUTTON');
     await expect(second.button).toHaveAttribute('type', 'button');
-    await expect(second.button).toHaveAccessibleName('Decisions for the maintainer');
+    await expect(second.button).toHaveAccessibleName(/^Decisions for the maintainer( 1 to answer)?$/);
     await expect(second.button).toHaveAttribute('aria-expanded', 'false');
     const id = await second.wrapper.getAttribute('id');
     expect(id).toBeTruthy();

@@ -1,5 +1,5 @@
 /*
- * Lotuspod theme "lotus" v0.4.14
+ * Lotuspod theme "lotus" v0.4.15
  * Tokens mirror theme/tokens.json.
  */
 
@@ -526,6 +526,19 @@ body {
 
 .artifact-section-toggle:hover {
   color: var(--color-pale-lavender);
+}
+
+/* What waits in a folded section, after its heading's text: "2 new", "1 to
+   answer", or both. In the outline control's quiet voice, on the heading's
+   baseline, kept to one line; it never moves or animates. */
+.artifact-section-mark {
+  color: var(--color-muted-lavender);
+  font-family: var(--font-body);
+  font-size: 0.8rem;
+  font-weight: 400;
+  letter-spacing: 0.04em;
+  margin-left: 0.35em;
+  white-space: nowrap;
 }
 
 .artifact-section-toggle:focus-visible,
@@ -2192,6 +2205,7 @@ label.artifact-decision-note span {
   }
 
   .artifact-section-toggle::before,
+  .artifact-section-mark,
   .artifact-sections-all {
     display: none;
   }

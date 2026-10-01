@@ -65,7 +65,14 @@ section's box and decision forms fold with it; the intro before the first
 button with a caret: pressing it hides the section (`hidden="until-found"`)
 and pressing it again shows it. Everything starts open; the page remembers in
 the browser's `localStorage` which sections the reader folded, and a "Collapse
-all" / "Expand all" control in the outline folds or opens them all. Find in
+all" / "Expand all" control in the outline folds or opens them all. A folded
+heading ends in a quiet mark of what waits in its section, part of its
+button's name: "2 new" counts the comments and replies drawn into the
+section's box while it was folded (after a reload, every thread already in a
+folded section, since the page keeps no record of what was seen), "1 to
+answer" its decision questions with no saved answer once the page has read
+the answers, and both read "1 new · 1 to answer". Opening the section, however
+it is opened, clears the new count; an open section has no mark. Find in
 page, a text fragment, a link to a section (the outline's included) and
 printing open what they need. Without the script every section shows. A body
 whose section headings are not all direct children of the body (each inside

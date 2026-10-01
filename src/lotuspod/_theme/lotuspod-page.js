@@ -24,6 +24,10 @@
   var CHANGED = "Comments on sections that have changed";
   // Each page's folded sections are kept under this and its path.
   var SECTIONS = "lotuspod:folded:";
+  // Sent on a comment box when rows are drawn into it, and on the document
+  // once the page's read of answers has finished.
+  var DRAWN = "lotuspod:drawn";
+  var ANSWERED = "lotuspod:answered";
 
   function when(stamp) {
     var date = new Date(stamp);
@@ -65,10 +69,14 @@
   // hidden="until-found", so find-in-page and a text fragment still reach it
   // and open it. A link to a heading or to anything in a folded section opens
   // it. What the reader folded is kept per page in localStorage, when the
-  // browser lets the page keep anything.
+  // browser lets the page keep anything. A folded heading's button ends in a
+  // mark saying what waits in its section: the comments and replies drawn
+  // into its box while it was folded, and its questions with no saved answer.
   function foldSections(wrappers) {
     var key = SECTIONS + location.pathname;
     var sections = [];
+    // False until the page's read of answers has finished.
+    var answered = false;
 
     function freeId(base) {
       var id = base;
@@ -97,8 +105,15 @@
       while (heading.firstChild) {
         button.appendChild(heading.firstChild);
       }
+      // The mark is inside the button, so its words are part of its name.
+      var mark = element("span", "artifact-section-mark");
+      mark.hidden = true;
+      button.append(" ", mark);
       heading.appendChild(button);
-      var section = { id: wrapper.dataset.section, heading: heading, wrapper: wrapper, button: button };
+      var section = {
+        id: wrapper.dataset.section, heading: heading, wrapper: wrapper, button: button,
+        mark: mark, fresh: 0,
+      };
       sections.push(section);
       button.addEventListener("click", function () {
         change([section], !folded(section));
@@ -107,6 +122,12 @@
       // it; one dispatched by a script leaves the attribute for us to remove.
       wrapper.addEventListener("beforematch", function () {
         change([section], false);
+      });
+      wrapper.addEventListener(DRAWN, function (event) {
+        if (folded(section)) {
+          section.fresh += event.detail.rows;
+          tally(section);
+        }
       });
     });
     if (!sections.length) {
@@ -122,9 +143,37 @@
         section.wrapper.setAttribute("hidden", "until-found");
       } else {
         section.wrapper.removeAttribute("hidden");
+        section.fresh = 0;
       }
       section.button.setAttribute("aria-expanded", fold ? "false" : "true");
+      tally(section);
     }
+
+    // Draw a section's mark: "N new", "N to answer" or both, only while it
+    // is folded and something waits. A question waits once the answers are
+    // read while its form is not folded to a saved answer.
+    function tally(section) {
+      var parts = [];
+      if (section.fresh) {
+        parts.push(section.fresh + " new");
+      }
+      var open = answered ? all("form.artifact-decision", section.wrapper).filter(function (form) {
+        return !form.classList.contains("artifact-decision--saved");
+      }).length : 0;
+      if (open) {
+        parts.push(open + " to answer");
+      }
+      // An open section's mark is empty as well as hidden, so its heading's
+      // text stays its title.
+      var shown = folded(section) && parts.length > 0;
+      section.mark.textContent = shown ? parts.join(" \u00b7 ") : "";
+      section.mark.hidden = !shown;
+    }
+
+    document.addEventListener(ANSWERED, function () {
+      answered = true;
+      sections.forEach(tally);
+    });
 
     function change(some, fold) {
       some.forEach(function (section) { set(section, fold); });
@@ -473,7 +522,9 @@
       form.addEventListener("change", function () { mark(form); });
       mark(form);
     });
-    load().catch(function () {});
+    load().catch(function () {}).then(function () {
+      document.dispatchEvent(new CustomEvent(ANSWERED));
+    });
   }
 
   // The comment boxes (lotuspod.comments): one per section, or one for the
@@ -679,12 +730,14 @@
     // Draw what a thread does not show yet, in place: each comment once, by
     // id, and a mark after it or the typing bubble at its end only when what
     // that says has changed. Nothing drawn is moved, so the thread's live
-    // region reads out only what is new. True when anything was drawn.
+    // region reads out only what is new. The box is told how many comments
+    // and replies were drawn. True when anything was drawn.
     function sync(thread) {
       var list = thread.list;
       var at = null;
       var newest = null;
       var touched = false;
+      var count = 0;
       function place(node) {
         list.insertBefore(node, at ? at.nextSibling : list.firstChild);
         at = node;
@@ -698,6 +751,7 @@
           thread.drawn.set(entry.id, drawn);
           place(drawn.item);
           touched = true;
+          count += 1;
         }
         if (!agent(entry)) {
           newest = entry;
@@ -732,6 +786,9 @@
         touched = true;
       }
       label(thread, newest || thread.root);
+      if (count && thread.box) {
+        thread.box.dispatchEvent(new CustomEvent(DRAWN, { bubbles: true, detail: { rows: count } }));
+      }
       return touched;
     }
 
