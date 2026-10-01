@@ -1,5 +1,6 @@
-"""`lotuspod backup` and `lotuspod restore`: one backup set of serve's database
-and the artifacts repository together, and a restore that is tested.
+"""`lotuspod backup` and `lotuspod restore`: one backup set of serve's database,
+the artifacts repository and the media directory together, and a restore that
+is tested.
 
     lotuspod backup [--db PATH] [--out-dir DIR] [--to BACKUPS] [--keep N] [--json]
     lotuspod backup --verify SET|latest [--to BACKUPS]
@@ -7,14 +8,20 @@ and the artifacts repository together, and a restore that is tested.
 
 A set is a directory BACKUPS/UTC-TIMESTAMP holding a copy of the database
 made with SQLite's online backup, a bundle of every ref of the artifacts
-repository, and manifest.json: each file's SHA-256, the database's schema
-version, the repository's HEAD and its origin, if it has one. Both are taken
-under the output directory's publish lock, so no publish lands between them
-while serve keeps answering. A set is written under a dotted name and renamed
+repository, media/ holding every stored image under its name, and
+manifest.json: each file's SHA-256, the images' names (an image's checksum is
+its name), the database's schema version, the repository's HEAD and its
+origin, if it has one. All three are taken under the output directory's
+publish lock, so no publish lands between them while serve keeps answering.
+An image the newest earlier set holds is hard-linked from it, so a set costs
+only the images added since. A set is written under a dotted name and renamed
 into place whole, so a set that is there is complete.
 
 A restore checks every checksum before it writes anything, and never writes
-over an existing database or output directory. It never pushes.
+over an existing database or output directory. Images go into the media
+directory beside the restored output directory, which may already exist: a
+file there under an image's name must hold that image, and nothing there is
+replaced or removed. It never pushes.
 """
 
 from __future__ import annotations
@@ -33,12 +40,14 @@ from contextlib import closing
 from pathlib import Path
 
 # cli imports this module too: only names used at call time are read from it.
-from lotuspod import cli, db
+from lotuspod import cli, db, media
 
 MANIFEST = "manifest.json"
 DATABASE = "lotuspod.sqlite3"
 BUNDLE = "artifacts.bundle"
-MANIFEST_VERSION = 1
+MEDIA = "media"
+# 2 added the media list; a set at 1 holds no images.
+MANIFEST_VERSION = 2
 DEFAULT_KEEP = 14
 DEFAULT_BACKUPS = "lotuspod-backups"
 LATEST = "latest"
@@ -120,8 +129,51 @@ def copy_database(source: Path, target: Path) -> int:
         raise Failed(f"cannot copy the database {source}: {exc}") from None
 
 
+def image_hash(name: str) -> str:
+    """The SHA-256 a stored image's name records."""
+    return name.partition(".")[0]
+
+
+def held_image(path: Path) -> bool:
+    """Whether path is a regular file holding the bytes its name hashes."""
+    try:
+        return (not path.is_symlink() and path.is_file()
+                and sha256(path) == image_hash(path.name))
+    except OSError:
+        return False
+
+
+def copy_media(source: Path, target: Path, earlier: Path | None) -> list[str]:
+    """Put every stored image in source into the new directory target,
+    hard-linked from earlier when that set already holds it; their names.
+    Temporary files, dotfiles, symbolic links and other names are left out,
+    and a missing source gives an empty target."""
+    target.mkdir(mode=0o700)
+    if not source.is_dir():
+        return []
+    names = []
+    for entry in os.scandir(source):
+        if not media.STORED_NAME.fullmatch(entry.name) \
+                or not entry.is_file(follow_symlinks=False):
+            continue
+        copy, linked = target / entry.name, False
+        held = earlier / MEDIA / entry.name if earlier else None
+        if held is not None and held_image(held):
+            try:
+                os.link(held, copy)
+                linked = True
+            except OSError:
+                pass
+        if not linked:
+            shutil.copyfile(entry.path, copy, follow_symlinks=False)
+            os.chmod(copy, 0o600)
+        names.append(entry.name)
+    return sorted(names)
+
+
 def take(db_path: Path, out_dir: Path, backups: Path) -> Path:
-    """Write one set of db_path and out_dir's repository into backups."""
+    """Write one set of db_path, out_dir's repository and its media directory
+    into backups."""
     if not out_dir.is_dir() or not own_repository(out_dir):
         raise Failed(f"{out_dir} is not its own git repository; nothing backed up")
     if db_path.exists() and not db_path.is_file():
@@ -135,6 +187,7 @@ def take(db_path: Path, out_dir: Path, backups: Path) -> Path:
                      "nothing backed up")
     backups.mkdir(parents=True, exist_ok=True)
     with cli.publish_lock(out_dir):
+        earlier = sets(backups)
         name = set_name()
         final = backups / name
         partial = backups / f".{name}.partial"
@@ -144,6 +197,8 @@ def take(db_path: Path, out_dir: Path, backups: Path) -> Path:
             git(out_dir, "bundle", "create", str(partial / BUNDLE), "--all")
             head = git(out_dir, "rev-parse", "--verify", "HEAD")
             remote = cli._git(out_dir, "remote", "get-url", "origin")
+            images = copy_media(media.media_dir(out_dir), partial / MEDIA,
+                                earlier[-1] if earlier else None)
             manifest = {
                 "version": MANIFEST_VERSION,
                 "created": _dt.datetime.now(_dt.timezone.utc).isoformat(timespec="seconds"),
@@ -151,6 +206,7 @@ def take(db_path: Path, out_dir: Path, backups: Path) -> Path:
                 "schema_version": schema,
                 "head": head,
                 "remote": remote.stdout.strip() if remote.returncode == 0 else None,
+                "media": images,
             }
             for file in (DATABASE, BUNDLE):
                 os.chmod(partial / file, 0o600)
@@ -182,6 +238,14 @@ def read_manifest(backup: Path) -> dict:
         raise Failed(f"{backup / MANIFEST} does not name {DATABASE} and {BUNDLE}")
     if not isinstance(manifest.get("head"), str) or not manifest["head"]:
         raise Failed(f"{backup / MANIFEST} records no HEAD")
+    version = manifest.get("version")
+    if "media" not in manifest and isinstance(version, int) and version < 2:
+        manifest["media"] = []
+    images = manifest.get("media")
+    if not isinstance(images, list) or not all(
+            isinstance(name, str) and media.STORED_NAME.fullmatch(name) for name in images) \
+            or len(set(images)) != len(images):
+        raise Failed(f"{backup / MANIFEST} does not list its images by their stored names")
     return manifest
 
 
@@ -194,13 +258,45 @@ def check(backup: Path) -> dict:
             raise Failed(f"{path} is missing")
         if sha256(path) != digest:
             raise Failed(f"{path} does not match its checksum in {MANIFEST}")
+    for name in manifest["media"]:
+        path = backup / MEDIA / name
+        if path.is_symlink() or not path.is_file():
+            raise Failed(f"{path} is missing")
+        if sha256(path) != image_hash(name):
+            raise Failed(f"{path} does not match the hash in its name")
     return manifest
+
+
+def restore_images(backup: Path, names: list[str], target: Path) -> None:
+    """Copy each image the set holds into target, through a temporary name
+    renamed into place, skipping one already there; never a link, since
+    target may be on another file system."""
+    if not names:
+        return
+    target.mkdir(parents=True, exist_ok=True)
+    for name in names:
+        final = target / name
+        if os.path.lexists(final):
+            continue
+        tmp = target / f".{name}.{os.getpid()}.{os.urandom(4).hex()}.tmp"
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o666)
+        try:
+            with os.fdopen(fd, "wb") as dst, open(backup / MEDIA / name, "rb") as src:
+                shutil.copyfileobj(src, dst)
+                dst.flush()
+                os.fsync(dst.fileno())
+            if not os.path.lexists(final):
+                os.rename(tmp, final)
+        finally:
+            tmp.unlink(missing_ok=True)
 
 
 def restore(backup: Path, db_path: Path, out_dir: Path) -> dict:
     """Rebuild the database at db_path and the repository at out_dir from the
-    set, with main checked out at its HEAD; its manifest. Nothing is written
-    unless every checksum matches and neither path exists."""
+    set, with main checked out at its HEAD, and add its images to the media
+    directory beside out_dir; its manifest. Nothing is written unless every
+    checksum matches, neither path exists, and every file already in the
+    media directory under one of the set's names holds that image."""
     manifest = check(backup)
     if db_path == out_dir or out_dir in db_path.parents:
         raise Failed(f"--db {db_path} is inside the output directory {out_dir}")
@@ -210,6 +306,15 @@ def restore(backup: Path, db_path: Path, out_dir: Path) -> dict:
             raise Failed(f"{taken} already exists; nothing restored")
     if os.path.lexists(out_dir):
         raise Failed(f"{out_dir} already exists; nothing restored")
+    store = media.media_dir(out_dir)
+    if manifest["media"]:
+        if os.path.lexists(store) and not store.is_dir():
+            raise Failed(f"{store} is not a directory; nothing restored")
+        for name in manifest["media"]:
+            there = store / name
+            if os.path.lexists(there) and not held_image(there):
+                raise Failed(f"{there} already exists and does not hold the image "
+                             "its name hashes; nothing restored")
 
     out_dir.parent.mkdir(parents=True, exist_ok=True)
     db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -228,6 +333,7 @@ def restore(backup: Path, db_path: Path, out_dir: Path) -> dict:
             wrote_db = True
             shutil.copyfileobj(src, dst)
         os.chmod(db_path, 0o600)
+        restore_images(backup, manifest["media"], store)
         if os.path.lexists(out_dir):
             raise Failed(f"{out_dir} already exists; nothing restored")
         clone.rename(out_dir)
@@ -277,6 +383,15 @@ def verify(backup: Path) -> dict:
         if head != manifest["head"]:
             raise Failed(f"{backup / BUNDLE} restores HEAD {head}, not the "
                          f"{manifest['head']} {MANIFEST} records")
+        store = media.media_dir(out_dir)
+        found = sorted(p.name for p in store.iterdir()) if store.is_dir() else []
+        if found != sorted(manifest["media"]):
+            raise Failed(f"{backup / MEDIA} restores {len(found)} images, not the "
+                         f"{len(manifest['media'])} {MANIFEST} lists")
+        for name in found:
+            if not held_image(store / name):
+                raise Failed(f"{backup / MEDIA / name} restores bytes that do not "
+                             "match the hash in its name")
     return manifest
 
 
@@ -288,7 +403,8 @@ def cmd_backup(args: argparse.Namespace) -> int:
             backup = resolve_set(args.verify, backups)
             manifest = verify(backup)
             print(f"verified {backup}: database schema {manifest['schema_version']} "
-                  f"intact, repository at {manifest['head']}")
+                  f"intact, repository at {manifest['head']}, "
+                  f"{len(manifest['media'])} images")
             return 0
         db_path = cli.serve_db_path(out_dir, args.db)
         made = take(db_path, out_dir, backups)
@@ -299,7 +415,7 @@ def cmd_backup(args: argparse.Namespace) -> int:
     if args.json:
         print(json.dumps({"backup": str(made)}))
     else:
-        print(f"backed up {db_path} and {out_dir} to {made}")
+        print(f"backed up {db_path}, {out_dir} and its images to {made}")
         if removed:
             print(f"removed {len(removed)} older set{'s' if len(removed) != 1 else ''}")
     return 0
@@ -315,7 +431,8 @@ def cmd_restore(args: argparse.Namespace) -> int:
     except (Failed, OSError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
-    print(f"restored {db_path} and {out_dir} at {manifest['head']}")
+    print(f"restored {db_path} and {out_dir} at {manifest['head']}, "
+          f"{len(manifest['media'])} images in {media.media_dir(out_dir)}")
     return 0
 
 
@@ -329,12 +446,14 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
     """Register `lotuspod backup` and `lotuspod restore`."""
     backup = sub.add_parser(
         "backup",
-        help="back up serve's database and the artifacts repository together, "
-        "or verify a backup set",
-        description="Write one backup set of serve's database and the artifacts "
-        "repository into BACKUPS/UTC-TIMESTAMP under the publish lock, while serve keeps "
-        "serving: a copy of the database, a git bundle of every ref, and manifest.json "
-        "with their SHA-256s, the schema version and HEAD. Keeps the newest --keep sets. "
+        help="back up serve's database, the artifacts repository and its images "
+        "together, or verify a backup set",
+        description="Write one backup set of serve's database, the artifacts "
+        "repository and its media directory into BACKUPS/UTC-TIMESTAMP under the publish "
+        "lock, while serve keeps serving: a copy of the database, a git bundle of every "
+        "ref, media/ with every stored image (hard-linked from the newest earlier set "
+        "when it holds one), and manifest.json with their SHA-256s, the images' names, "
+        "the schema version and HEAD. Keeps the newest --keep sets. "
         "With --verify, restore a set into scratch space and check it instead.",
     )
     backup.add_argument("--out-dir", default="",
@@ -354,16 +473,20 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
     backup.add_argument(
         "--verify", default=None, metavar="SET",
         help=f"restore SET ('{LATEST}': the newest in BACKUPS) into scratch space, check "
-        "the database's integrity, git fsck and HEAD, and exit 1 naming the first failure",
+        "the database's integrity, git fsck, HEAD and every image's hash, and exit 1 "
+        "naming the first failure",
     )
     backup.set_defaults(func=cmd_backup)
 
     restore_parser = sub.add_parser(
         "restore",
-        help="rebuild the database and the artifacts repository from a backup set",
-        description="Check every checksum in SET, then copy its database to --db and "
-        "clone its bundle into --out-dir with main checked out at the recorded HEAD. "
-        "Refuses, changing nothing, when either path exists. Never pushes.",
+        help="rebuild the database, the artifacts repository and its images from a "
+        "backup set",
+        description="Check every checksum in SET, then copy its database to --db, "
+        "clone its bundle into --out-dir with main checked out at the recorded HEAD, "
+        f"and copy its images into {media.MEDIA_DIR_NAME} beside --out-dir, adding to "
+        "it when it exists. Refuses, changing nothing, when either path exists or a "
+        "file already there under an image's name holds other bytes. Never pushes.",
     )
     restore_parser.add_argument("set", metavar="SET", help="a backup set directory")
     restore_parser.add_argument("--db", required=True, metavar="PATH",

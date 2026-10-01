@@ -990,10 +990,11 @@ the paths, copy it to `~/.config/systemd/user/`, then run
 
 ## Backups
 
-The writer host holds two things that belong together: serve's database of
-the reader's answers and comments and the agents' replies, and the artifacts
-repository of the pages they refer to. `lotuspod backup` takes one backup set
-of both while serve keeps serving:
+The writer host holds three things that belong together: serve's database of
+the reader's answers and comments and the agents' replies, the artifacts
+repository of the pages they refer to, and the media directory of the images
+those pages show. `lotuspod backup` takes one backup set of all three while
+serve keeps serving:
 
 ```sh
 lotuspod backup                       # --db PATH --out-dir DIR --to BACKUPS as needed
@@ -1007,30 +1008,49 @@ output directory that is not its own git repository. serve makes its
 database on first use, so a first backup that finds none makes it as serve
 would; once `BACKUPS` holds a set, a missing database is refused, writing
 no set and removing none, since it means a wrong `--db` or a lost file. Holding the publish
-lock, so no publish lands between the two, it copies the database with
-SQLite's online backup and bundles every ref of the repository with `git
-bundle create --all`, into a new directory `BACKUPS/UTC-TIMESTAMP` (mode
-0700, its files 0600): `lotuspod.sqlite3`, `artifacts.bundle`, and
-`manifest.json` with each file's SHA-256, the database's schema version, the
-repository's `HEAD` and its `origin`, if it has one. A set appears whole or
-not at all. `BACKUPS` is `--to`, else `lotuspod-backups` beside the artifacts
+lock, so no publish lands between them, it copies the database with
+SQLite's online backup, bundles every ref of the repository with `git
+bundle create --all`, and takes every stored image in `lotuspod-media`, into
+a new directory `BACKUPS/UTC-TIMESTAMP` (mode 0700, its files 0600):
+`lotuspod.sqlite3`, `artifacts.bundle`, `media/` with each image under its
+name, and `manifest.json` with each file's SHA-256, the images' names (an
+image's name is its SHA-256, so it is its checksum), the database's schema
+version, the repository's `HEAD` and its `origin`, if it has one. Only regular
+files under a stored name are taken: temporary files, dotfiles and symbolic
+links are left out, and no media directory yet gives an empty `media/`. An
+image the newest earlier set already holds is hard-linked from it rather than
+copied, so a nightly set costs only the images published since; each set
+holds its own link, so removing an older set leaves the newer sets' images.
+A set appears whole or not at all. `BACKUPS` is `--to`, else `lotuspod-backups` beside the artifacts
 directory, never inside it. The newest `--keep` sets (default 14) are kept
 and older ones removed; nothing else in `BACKUPS` is touched. `--json` prints
 `{"backup": PATH}`.
 
 `restore SET --db PATH --out-dir DIR` checks every file of the set against
-its checksum first, then copies the database to `--db` and clones the bundle
-into `--out-dir`, with `main` checked out at the recorded `HEAD` and `origin`
-set to the recorded remote (no `origin` when none was recorded). It never
-pushes. It exits 1 naming the file, and writes nothing, when a checksum does
-not match, and it refuses, changing nothing, when the database (or a `-wal`,
+its checksum, and every image against the hash in its name, first, then
+copies the database to `--db`, clones the bundle into `--out-dir`, with
+`main` checked out at the recorded `HEAD` and `origin` set to the recorded
+remote (no `origin` when none was recorded), and copies the images into
+`lotuspod-media` beside `--out-dir`, making it when missing. It never pushes.
+It exits 1 naming the file, and writes nothing, when a checksum does not
+match, and it refuses, changing nothing, when the database (or a `-wal`,
 `-shm` or `-journal` file beside it) or the output directory already exists:
 restore into fresh paths, check them with `lotuspod serve --out-dir DIR --db
-PATH`, then stop serve and move them into place.
+PATH`, then stop serve and move them into place. An existing media directory
+is added to, not refused, so a restore beside the live site shares its media
+directory: a name is its image's hash, so a file already there under one of
+the set's names is that image and is left as it is. One whose bytes do not
+match its name refuses the restore, naming it, before anything is written.
+Nothing in the media directory is replaced or removed, and images copied by a
+restore that then fails are left there, harmless since each name fixes its
+bytes. A set from before images were backed up lists none, and restores with
+no media directory.
 
 `backup --verify SET` (or `latest`, the newest set in `--to`) restores the
 set into a temporary directory, runs `PRAGMA integrity_check` and `git fsck`,
-compares `HEAD` with the manifest's, and exits 1 naming the first failure.
+compares `HEAD` with the manifest's, checks that every image the manifest
+lists came back with the hash its name records, and exits 1 naming the first
+failure.
 
 `deploy/lotuspod-backup.service` runs `lotuspod backup` and then `lotuspod
 backup --verify latest` from the same working directory and virtual

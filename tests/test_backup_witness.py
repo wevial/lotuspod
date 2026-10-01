@@ -1,7 +1,8 @@
 """Witness: `lotuspod backup` takes one backup set of the answers-and-comments
-database and the artifacts repository together while the site is serving,
-and `lotuspod restore` rebuilds both from it into fresh paths: the restored
-site serves the pages and the comments as they stood at the backup, and
+database, the artifacts repository and its images together while the site
+is serving, and `lotuspod restore` rebuilds them from it into fresh paths
+under a directory the live site shares nothing with: the restored site serves
+the pages, their images and the comments as they stood at the backup, and
 nothing written later. A restore refuses to write over an existing database
 or site.
 
@@ -30,6 +31,7 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
 SRC = REPO / "src"
+FISH = REPO / "tests" / "fixtures" / "media" / "fish-320x240.jpg"
 TIMEOUT = 120
 ISSUER = "https://witness.cloudflareaccess.com"
 AUDIENCE = "witness-audience"
@@ -289,6 +291,12 @@ Something worth keeping.
 More of it.
 """
 
+PICTURED = """\
+# Pictured page
+
+![A fish in the pond](fish.jpg)
+"""
+
 
 class BackupWitness(Site):
     def setUp(self):
@@ -306,14 +314,32 @@ class BackupWitness(Site):
         source.write_text(PAGE, encoding="utf-8")
         done = self.cli("publish", str(source), "--out-dir", str(self.out))
         self.assertEqual(done.returncode, 0, done.stderr)
+        (self.tmp / "fish.jpg").write_bytes(FISH.read_bytes())
+        pictured = self.tmp / "pictured.md"
+        pictured.write_text(PICTURED, encoding="utf-8")
+        done = self.cli("publish", str(pictured), "--out-dir", str(self.out))
+        self.assertEqual(done.returncode, 0, done.stderr)
         self.start_server()
+
+    def fetch(self, path):
+        """GET path through the site's port as the reader; its status and bytes."""
+        request = urllib.request.Request(f"http://127.0.0.1:{self.port}{path}",
+                                         headers={ASSERTION: assertion()})
+        try:
+            with urllib.request.urlopen(request, timeout=30) as response:
+                return response.status, response.read()
+        except urllib.error.HTTPError as error:
+            with error:
+                return error.code, error.read()
 
     def texts(self, page="kept"):
         status, _, body = self.api("GET", f"/api/comments?page={page}")
         self.assertEqual(status, 200, body)
         return [thread["root"].get("text") for thread in body.get("threads", [])]
 
-    def test_a_backup_taken_while_serving_restores_the_database_and_the_pages_together(self):
+    def test_a_backup_taken_while_serving_restores_the_database_the_pages_and_images(self):
+        image = "/media/" + hashlib.sha256(FISH.read_bytes()).hexdigest() + ".jpg"
+        self.assertEqual(self.fetch(image), (200, FISH.read_bytes()))
         self.comment("kept", "first", "Kept before the backup.")
         head = git(self.out, "rev-parse", "HEAD").stdout.strip()
         backups = self.tmp / "backups"
@@ -330,8 +356,14 @@ class BackupWitness(Site):
         self.comment("kept", "second", "Written after the backup.")
         self.assertEqual(len(self.texts()), 2)
 
-        restored_out = self.tmp / "restored-site"
-        restored_db = self.tmp / "restored.sqlite3"
+        # Restored under a parent of its own: beside the live site it would
+        # share the live media directory, and the image could come from there.
+        elsewhere = tempfile.TemporaryDirectory()
+        self.addCleanup(elsewhere.cleanup)
+        apart = Path(elsewhere.name).resolve()
+        self.assertFalse(apart.is_relative_to(self.tmp) or self.tmp.is_relative_to(apart))
+        restored_out = apart / "restored-site"
+        restored_db = apart / "restored.sqlite3"
         done = self.cli("restore", str(made), "--db", str(restored_db),
                         "--out-dir", str(restored_out))
         self.assertEqual(done.returncode, 0, done.stderr)
@@ -343,6 +375,10 @@ class BackupWitness(Site):
         status, _, html = self.api("GET", "/kept.html")
         self.assertEqual(status, 200)
         self.assertIn("Something worth keeping.", html)
+        status, page = self.fetch("/pictured.html")
+        self.assertEqual(status, 200)
+        self.assertIn(image.encode("ascii"), page)
+        self.assertEqual(self.fetch(image), (200, FISH.read_bytes()))
 
     def test_a_restore_never_writes_over_an_existing_database_or_site(self):
         backups = self.tmp / "backups"

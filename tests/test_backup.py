@@ -1,8 +1,9 @@
 """`lotuspod backup` and `lotuspod restore`: a set's manifest, a restore that
 checks every checksum before writing, `backup --verify` on a good set and on
 a truncated bundle, keeping the newest sets, refusing an output directory
-that is not a git repository, waiting for the publish lock, and the nightly
-systemd units.
+that is not a git repository, waiting for the publish lock, the set's images
+(hard-linked from the set before, checked against their names, and put back
+beside the restored site), and the nightly systemd units.
 
 Real git and SQLite; the CLI runs as a subprocess from this checkout's src/.
 
@@ -28,11 +29,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from lotuspod import backup, db  # noqa: E402
+from lotuspod import backup, db, media  # noqa: E402
 
 REPO = Path(__file__).resolve().parents[1]
 SRC = REPO / "src"
 TIMEOUT = 120
+FIXTURES = REPO / "tests" / "fixtures" / "media"
 
 
 def git(cwd: Path, *argv: str) -> subprocess.CompletedProcess:
@@ -91,11 +93,14 @@ class BackupTests(Backups):
         self.assertEqual(made.parent, self.backups)
         self.assertRegex(made.name, r"^\d{8}T\d{6}\.\d{6}Z$")
         self.assertEqual(sorted(p.name for p in made.iterdir()),
-                         ["artifacts.bundle", "lotuspod.sqlite3", "manifest.json"])
+                         ["artifacts.bundle", "lotuspod.sqlite3", "manifest.json", "media"])
+        self.assertEqual(list((made / "media").iterdir()), [])
         manifest = json.loads((made / "manifest.json").read_text(encoding="utf-8"))
         self.assertEqual(manifest["head"], self.head)
         self.assertEqual(manifest["schema_version"], db.SCHEMA_VERSION)
         self.assertEqual(manifest["remote"], str(self.bare))
+        self.assertEqual(manifest["version"], 2)
+        self.assertEqual(manifest["media"], [])
         for name in ("artifacts.bundle", "lotuspod.sqlite3"):
             self.assertEqual(manifest["files"][name], backup.sha256(made / name))
             self.assertEqual((made / name).stat().st_mode & 0o777, 0o600)
@@ -278,6 +283,135 @@ class BackupTests(Backups):
         stdout, stderr = running.communicate(timeout=TIMEOUT)
         self.assertEqual(running.returncode, 0, stderr)
         self.assertEqual(backup.sets(self.backups), [Path(json.loads(stdout)["backup"])])
+
+
+class MediaTests(Backups):
+    """The media directory beside the artifacts directory, as publish keeps it."""
+
+    def setUp(self):
+        super().setUp()
+        self.media = media.media_dir(self.out)
+
+    def store(self, fixture: str) -> str:
+        image = media.check((FIXTURES / fixture).read_bytes(), fixture)
+        media.store(self.media, image)
+        return image.name
+
+    def images(self, directory: Path) -> dict[str, bytes]:
+        return {p.name: p.read_bytes() for p in directory.iterdir()}
+
+    def restore(self, made: Path, parent: Path) -> subprocess.CompletedProcess:
+        return self.cli("restore", str(made), "--db", str(parent / "db.sqlite3"),
+                        "--out-dir", str(parent / "site"))
+
+    def test_a_set_holds_exactly_the_stored_images_and_lists_their_names(self):
+        names = [self.store("fish-320x240.jpg"), self.store("frog-140x100.gif")]
+        kept = self.images(self.media)
+        # What write_atomic leaves while it writes, a symbolic link named like
+        # a stored image, a dotfile and a name that is no stored name.
+        third = media.check((FIXTURES / "chart-1600x600.png").read_bytes(), "c.png").name
+        (self.media / f".{third}.123.0a1b2c3d.tmp").write_bytes(b"half an image")
+        (self.media / ("0" * 64 + ".png")).symlink_to(self.media / names[0])
+        (self.media / ".hidden").write_bytes(b"x")
+        (self.media / "notes.txt").write_bytes(b"x")
+        made = self.take()
+        self.assertEqual(self.images(made / "media"), kept)
+        manifest = json.loads((made / "manifest.json").read_text(encoding="utf-8"))
+        self.assertEqual(manifest["media"], sorted(names))
+        for name in names:
+            self.assertEqual((made / "media" / name).stat().st_mode & 0o777, 0o600)
+
+    def test_a_later_set_hard_links_the_images_the_set_before_holds(self):
+        first = [self.store("fish-320x240.jpg"), self.store("frog-140x100.gif")]
+        older = self.take()
+        third = self.store("chart-1600x600.png")
+        newer = self.take()
+        for name in first:
+            self.assertEqual((newer / "media" / name).stat().st_ino,
+                             (older / "media" / name).stat().st_ino, name)
+        self.assertEqual((newer / "media" / third).stat().st_nlink, 1)
+
+        kept = self.images(self.media)
+        newest = self.take("--keep", "1")
+        self.assertEqual(backup.sets(self.backups), [newest])
+        self.assertEqual(self.images(newest / "media"), kept)
+        done = self.cli("backup", "--verify", "latest", "--to", str(self.backups))
+        self.assertEqual(done.returncode, 0, done.stderr)
+
+    def test_a_restore_puts_the_images_beside_the_restored_site(self):
+        self.store("fish-320x240.jpg")
+        self.store("frog-140x100.gif")
+        made = self.take()
+        fresh = self.tmp / "new"
+        done = self.restore(made, fresh)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(self.images(fresh / "lotuspod-media"), self.images(made / "media"))
+        self.assertEqual(sorted(p.name for p in fresh.iterdir()),
+                         ["db.sqlite3", "lotuspod-media", "site"])
+
+    def test_a_restore_adds_to_a_media_directory_beside_it(self):
+        names = [self.store("fish-320x240.jpg"), self.store("frog-140x100.gif")]
+        made = self.take()
+        beside = self.tmp / "beside"
+        (beside / "lotuspod-media").mkdir(parents=True)
+        shutil.copyfile(self.media / names[0], beside / "lotuspod-media" / names[0])
+        unrelated = media.check((FIXTURES / "chart-1600x600.png").read_bytes(), "c.png")
+        media.store(beside / "lotuspod-media", unrelated)
+        done = self.restore(made, beside)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(self.images(beside / "lotuspod-media"),
+                         {**self.images(made / "media"), unrelated.name: unrelated.data})
+
+    def test_a_file_under_an_image_s_name_with_other_bytes_refuses_the_restore(self):
+        names = [self.store("fish-320x240.jpg"), self.store("frog-140x100.gif")]
+        made = self.take()
+        clash = self.tmp / "clash"
+        (clash / "lotuspod-media").mkdir(parents=True)
+        wrong = clash / "lotuspod-media" / names[1]
+        wrong.write_bytes(b"not the frog")
+        before = tree(self.tmp)
+        done = self.restore(made, clash)
+        self.assertEqual(done.returncode, 1, done.stderr)
+        self.assertIn(str(wrong), done.stderr)
+        self.assertEqual(tree(self.tmp), before)
+        self.assertEqual(wrong.read_bytes(), b"not the frog")
+
+    def test_a_changed_or_missing_image_fails_the_restore_and_the_verify(self):
+        names = [self.store("fish-320x240.jpg"), self.store("frog-140x100.gif")]
+        good = self.take()
+        changed, missing = self.tmp / "changed", self.tmp / "missing"
+        shutil.copytree(good, changed)
+        image = changed / "media" / names[0]
+        data = bytearray(image.read_bytes())
+        data[len(data) // 2] ^= 0x01
+        image.write_bytes(bytes(data))
+        shutil.copytree(good, missing)
+        (missing / "media" / names[1]).unlink()
+        for made, name in ((changed, names[0]), (missing, names[1])):
+            with self.subTest(set=made.name):
+                before = tree(self.tmp)
+                done = self.restore(made, self.tmp / f"restored-{made.name}")
+                self.assertEqual(done.returncode, 1, done.stderr)
+                self.assertIn(str(made / "media" / name), done.stderr)
+                self.assertEqual(tree(self.tmp), before)
+                done = self.cli("backup", "--verify", str(made))
+                self.assertEqual(done.returncode, 1, done.stderr)
+                self.assertIn(str(made / "media" / name), done.stderr)
+
+    def test_a_set_at_the_earlier_manifest_version_verifies_and_restores(self):
+        self.store("fish-320x240.jpg")
+        made = self.take()
+        shutil.rmtree(made / "media")
+        manifest = json.loads((made / "manifest.json").read_text(encoding="utf-8"))
+        del manifest["media"]
+        manifest["version"] = 1
+        (made / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+        done = self.cli("backup", "--verify", str(made))
+        self.assertEqual(done.returncode, 0, done.stderr)
+        fresh = self.tmp / "new"
+        done = self.restore(made, fresh)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(sorted(p.name for p in fresh.iterdir()), ["db.sqlite3", "site"])
 
 
 class UnitFileTests(unittest.TestCase):
