@@ -161,6 +161,31 @@ COMMENTS_BODY = """\
 <p>Fit a heater before the first frost.</p>
 """
 
+# The palette page: every element the palette colours, a section each, and a
+# comment box ending each section, owned by OWNER. No diagram, so the page
+# needs no network.
+PALETTE_BODY = """\
+<p>A sample page for captures: the palette on what a reader follows or copies.</p>
+<h2>Links and code</h2>
+<p>Read <a href="capture-article.html">the sample article</a>, then run <code>lotuspod publish</code> to put a page on the pond.</p>
+<h2>Table</h2>
+<table>
+<thead><tr><th>Month</th><th>Pump hours</th><th>Water</th></tr></thead>
+<tbody>
+<tr><td>December</td><td>310</td><td>Cold</td></tr>
+<tr><td>January</td><td>0</td><td>Frozen</td></tr>
+</tbody>
+</table>
+<h2>Quote</h2>
+<blockquote>
+<p>A pond in winter keeps its fish alive under a lid of ice, so long as the pump does not crack.</p>
+<cite>The pond keeper's notebook</cite>
+</blockquote>
+<h2>Code block</h2>
+<pre><code>lotuspod publish plan.md --owner hermes
+lotuspod comments pull --owner hermes</code></pre>
+"""
+
 # The owned page: published from markdown by OWNER, so its source is kept
 # beside it and reaches OWNER's pull. Two sections, then one question.
 OWNED_PAGE = "capture-owned"
@@ -242,6 +267,8 @@ SAMPLE_PAGES = (
     ("capture-scripts", "Capture body scripts", SCRIPTS_BODY, ()),
     ("capture-decisions", "Capture decisions", DECISIONS_BODY, ()),
     ("capture-comments", "Capture comments", COMMENTS_BODY,
+     ("--comments", "--owner", OWNER)),
+    ("capture-palette", "Capture palette", PALETTE_BODY,
      ("--comments", "--owner", OWNER)),
 )
 

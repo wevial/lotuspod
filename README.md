@@ -1201,5 +1201,25 @@ The lotus theme lives in `src/lotuspod/_theme/`: `tokens.json` is the source of 
 palette (dark/white/lavender: `night`, `deep_night`, `surface`, `glow`,
 `lavender`, `pale_lavender`, `muted_lavender`, `white`), typography,
 structural hairlines/tints (table rules, code and quote surfaces), and radii;
-`lotuspod.css` mirrors the tokens as CSS custom properties. Edit the
-CSS to restyle all artifacts.
+`lotuspod.css` mirrors the tokens as CSS custom properties (a `colors` key
+`k` as `--color-k`, a `structure` key `k` as `--k`, underscores as dashes).
+Edit the CSS to restyle all artifacts.
+
+Lavender is the brand: the buttons, the focus outline and the
+agents. Beside it, one colour per job:
+
+- **Sky**, for what a reader can follow or copy: `sky` for body links,
+  underlined in `link_line`; `pale_sky` for a link on hover, inline code on
+  its `code_chip`, and table header text on the `header_tint` band above its
+  `header_rule`. A code block's border is `code_edge`; a blockquote sits on
+  `quote_band` behind a 3-pixel `quote_rule` on its left.
+- **Rose**, for what is the reader's own: their bubble on `reader_tint` inside
+  a `reader_line` border, their avatar on `reader_avatar` with a `rose` ring
+  and `pale_rose` letters, and their name in `pale_rose`. `highlight` and
+  `highlight_line` are a passage highlight and its underline.
+- **Mint** for a saved answer's check, and **amber** for waiting: the dots of
+  a typing bubble, and a decision card's "Not saved", its ring and its left
+  rule.
+
+`tests/test_palette.py` checks every text colour at 4.5:1 or more on `night`
+and `surface`, and text on the tints.

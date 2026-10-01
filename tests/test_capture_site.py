@@ -196,6 +196,18 @@ class ServedSiteTests(CaptureSiteTestCase):
         self.assertEqual(seen["/lotuspod-page.js"][0], 200)
         self.assertNotIn("lotuspod-page.js", seen["/capture-article.html"][1])
 
+    def test_palette_page_has_every_coloured_element_and_a_box_per_section(self):
+        seen = self.fetch("/capture-palette.html")
+        status, page = seen["/capture-palette.html"]
+        self.assertEqual(status, 200)
+        self.assertEqual(page.count('<details class="artifact-comment" data-page="capture-palette"'), 4)
+        self.assertIn('<a href="capture-article.html">', page)
+        self.assertIn("<code>lotuspod publish</code>", page)
+        self.assertIn("<th>Month</th>", page)
+        self.assertIn("<cite>The pond keeper's notebook</cite>", page)
+        self.assertIn("<pre><code>", page)
+        self.assertIn('<script src="lotuspod-page.js?v=', page)
+
     def test_form_script_answers_404(self):
         seen = self.fetch("/lotuspod-form.js")
         self.assertEqual(seen["/lotuspod-form.js"][0], 404)

@@ -1,5 +1,5 @@
 /*
- * Lotuspod theme "lotus" v0.4.12
+ * Lotuspod theme "lotus" v0.4.13
  * Tokens mirror theme/tokens.json.
  */
 
@@ -12,6 +12,12 @@
   --color-pale-lavender: #d8cbfa;
   --color-muted-lavender: #948aad;
   --color-white: #ffffff;
+  --color-sky: #86b8ff;
+  --color-pale-sky: #cadeff;
+  --color-rose: #f4a3c9;
+  --color-pale-rose: #f9d4e6;
+  --color-mint: #92d9b5;
+  --color-amber: #ebc57f;
 
   --font-display: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
   --font-body: "Avenir Next", -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -36,6 +42,18 @@
   --row-tint: rgba(216, 203, 250, 0.04);
   --code-surface: rgba(216, 203, 250, 0.09);
   --quote-tint: rgba(183, 156, 244, 0.07);
+  --header-tint: #23263a;
+  --header-rule: rgba(134, 184, 255, 0.4);
+  --code-chip: rgba(134, 184, 255, 0.13);
+  --code-edge: rgba(134, 184, 255, 0.22);
+  --quote-band: rgba(134, 184, 255, 0.06);
+  --quote-rule: rgba(134, 184, 255, 0.6);
+  --link-line: rgba(134, 184, 255, 0.45);
+  --reader-tint: #312333;
+  --reader-line: rgba(244, 163, 201, 0.4);
+  --reader-avatar: #3e2c3e;
+  --highlight: rgba(244, 163, 201, 0.2);
+  --highlight-line: rgba(244, 163, 201, 0.7);
 
   --radius-chip: 4px;
   --radius-block: 8px;
@@ -612,7 +630,7 @@ body {
 }
 
 .artifact-decision--dirty fieldset {
-  border-left-color: var(--color-lavender);
+  border-left-color: var(--color-amber);
 }
 
 /* A floated legend sits inside the card instead of on its border. */
@@ -810,13 +828,13 @@ label.artifact-decision-note span {
 
 .artifact-decision-unsaved {
   align-items: center;
-  color: var(--color-pale-lavender);
+  color: var(--color-amber);
   display: inline-flex;
   gap: 0.4em;
 }
 
 .artifact-decision-unsaved::before {
-  border: 1.5px solid var(--color-lavender);
+  border: 1.5px solid var(--color-amber);
   border-radius: 50%;
   content: "";
   flex: none;
@@ -848,7 +866,7 @@ label.artifact-decision-note span {
 }
 
 .artifact-decision-check {
-  color: var(--color-lavender);
+  color: var(--color-mint);
   font-weight: 700;
 }
 
@@ -1057,6 +1075,12 @@ label.artifact-decision-note span {
   min-width: 0;
 }
 
+.artifact-comment-item--reader .artifact-comment-avatar {
+  background: var(--reader-avatar);
+  border-color: var(--color-rose);
+  color: var(--color-pale-rose);
+}
+
 .artifact-comment-item--reader .artifact-comment-col {
   align-items: flex-end;
 }
@@ -1076,7 +1100,7 @@ label.artifact-decision-note span {
 }
 
 .artifact-comment-author {
-  color: var(--color-pale-lavender);
+  color: var(--color-pale-rose);
   min-width: 0;
   overflow-wrap: anywhere;
 }
@@ -1115,8 +1139,8 @@ label.artifact-decision-note span {
 }
 
 .artifact-body .artifact-comment-item--reader .artifact-comment-text {
-  background: var(--color-glow);
-  border-color: var(--hairline-strong);
+  background: var(--reader-tint);
+  border-color: var(--reader-line);
   border-radius: var(--radius-card) var(--radius-card) var(--radius-chip) var(--radius-card);
 }
 
@@ -1177,6 +1201,12 @@ label.artifact-decision-note span {
 .artifact-comment-bubble--typing .artifact-comment-mark--dots {
   gap: 4px;
   margin: 0;
+}
+
+/* A thread waiting for its answer: the dots of either bubble are amber. */
+.artifact-comment-bubble--typing .artifact-comment-mark--dots,
+.artifact-comment-bubble--ghost .artifact-comment-mark--dots {
+  color: var(--color-amber);
 }
 
 .artifact-comment-bubble--typing .artifact-comment-mark--dots i {
@@ -1512,9 +1542,9 @@ label.artifact-decision-note span {
 }
 
 .artifact-body th {
-  background: var(--color-surface);
-  border-bottom-color: var(--hairline-strong);
-  color: var(--color-pale-lavender);
+  background: var(--header-tint);
+  border-bottom-color: var(--header-rule);
+  color: var(--color-pale-sky);
   font-weight: 600;
   white-space: nowrap;
 }
@@ -1579,8 +1609,9 @@ label.artifact-decision-note span {
    display serif, so it reads as someone else's voice. Deliberately unlike the
    header summary, which stays a hairline rail on body sans. */
 .artifact-body blockquote {
-  background: var(--quote-tint);
-  border-radius: var(--radius-block);
+  background: var(--quote-band);
+  border-left: 3px solid var(--quote-rule);
+  border-radius: 0 var(--radius-block) var(--radius-block) 0;
   color: var(--color-pale-lavender);
   font-family: var(--font-display);
   font-size: 1.05rem;
@@ -1618,9 +1649,9 @@ label.artifact-decision-note span {
    keep the prose line height; a block sets its own field and scrolls sideways
    rather than wrapping code at arbitrary points. */
 .artifact-body code {
-  background: var(--code-surface);
+  background: var(--code-chip);
   border-radius: var(--radius-chip);
-  color: var(--color-pale-lavender);
+  color: var(--color-pale-sky);
   font-family: var(--font-mono);
   font-size: 0.9em;
   overflow-wrap: break-word;
@@ -1629,7 +1660,7 @@ label.artifact-decision-note span {
 
 .artifact-body pre {
   background: var(--color-deep-night);
-  border: 1px solid var(--hairline);
+  border: 1px solid var(--code-edge);
   border-radius: var(--radius-block);
   font-family: var(--font-mono);
   font-size: 0.875rem;
@@ -1704,14 +1735,14 @@ label.artifact-decision-note span {
 }
 
 .artifact-body a {
-  color: var(--color-lavender);
-  text-decoration-color: rgba(183, 156, 244, 0.45);
+  color: var(--color-sky);
+  text-decoration-color: var(--link-line);
   text-decoration-thickness: 1px;
   text-underline-offset: 0.18em;
 }
 
 .artifact-body a:hover {
-  color: var(--color-pale-lavender);
+  color: var(--color-pale-sky);
   text-decoration-color: currentColor;
 }
 

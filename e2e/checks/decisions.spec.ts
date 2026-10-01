@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import { expect, test, type APIRequestContext, type Locator, type Page } from '@playwright/test';
 
 // The capture fixture's decisions page: two questions, each a form the page
@@ -10,7 +12,13 @@ const ASSERTION = process.env.LOTUSPOD_TEST_ASSERTION ?? '';
 const SIGNED_IN = { 'Cf-Access-Jwt-Assertion': ASSERTION };
 const READER = 'maintainer@example.com';
 const SIGNED_OUT = 'You are signed out. Reload the page to sign in.';
-const LAVENDER = 'rgb(183, 156, 244)';
+// An unsaved card's left rule: the theme's amber, as Chromium reports it.
+const AMBER = (() => {
+  const tokens = JSON.parse(fs.readFileSync(
+    path.resolve(__dirname, '..', '..', 'src', 'lotuspod', '_theme', 'tokens.json'), 'utf-8'));
+  const [r, g, b] = (tokens.colors.amber as string).slice(1).match(/../g)!.map((pair) => parseInt(pair, 16));
+  return `rgb(${r}, ${g}, ${b})`;
+})();
 
 // The forms lotuspod.decisions wrote for this page before decision cards A:
 // "(default)" after an option, a note always open, an "Answer" button.
@@ -213,7 +221,7 @@ test.describe('signed in', () => {
     await expect(first.unsaved).toBeVisible();
     await expect(first.unsaved).toHaveText('Not saved');
     await expect(first.hint).toBeHidden();
-    await expect(first.fieldset).toHaveCSS('border-left-color', LAVENDER);
+    await expect(first.fieldset).toHaveCSS('border-left-color', AMBER);
 
     await first.addNote.click();
     await expect(first.note).toBeVisible();
@@ -232,7 +240,7 @@ test.describe('signed in', () => {
       await expect(first.note).toBeHidden();
       await expect(first.save).toBeHidden();
       await expect(first.unsaved).toBeHidden();
-      await expect(first.fieldset).not.toHaveCSS('border-left-color', LAVENDER);
+      await expect(first.fieldset).not.toHaveCSS('border-left-color', AMBER);
     };
     await folded();
     await expect(first.change).toBeFocused();
@@ -284,7 +292,7 @@ test.describe('signed in', () => {
     await expect(first.saved).toBeHidden();
     await expect(first.option(/^Sonnet/)).toBeChecked();
     await expect(first.unsaved).toBeVisible();
-    await expect(first.fieldset).toHaveCSS('border-left-color', LAVENDER);
+    await expect(first.fieldset).toHaveCSS('border-left-color', AMBER);
 
     await first.save.click();
     await expect(first.saved).toContainText('Saved \u00b7 Sonnet \u00b7 change');
