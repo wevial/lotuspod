@@ -1,0 +1,1381 @@
+<h1>Comment and decision UI mock-up</h1>
+
+<style>
+/* Everything below is scoped to .lpm wrappers, so none of it reaches the template. */
+.lpm {
+  color: var(--body-ink);
+  font-size: max(0.94em, 0.875rem);
+  line-height: 1.55;
+  margin: 0 0 1.75em;
+}
+.lpm *, .lpm *::before, .lpm *::after { box-sizing: border-box; }
+.lpm p { margin: 0; }
+.lpm ul, .lpm ol { list-style: none; margin: 0; padding: 0; }
+.lpm li { margin: 0; padding: 0; }
+.lpm figure { margin: 0; }
+.lpm small { font-size: inherit; }
+
+/* Stage: states side by side, wider than the reading column, one per row on a phone. */
+.lpm.lpm-grid, .lpm .lpm-grid {
+  align-items: start;
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
+  max-width: var(--measure-full, 100%);
+  width: var(--measure-full, 100%);
+}
+.lpm .lpm-state {
+  border: 1px dashed var(--hairline);
+  border-radius: var(--radius-card);
+  min-width: 0;
+  padding: 0.85rem 1rem 1rem;
+}
+.lpm .lpm-state > figcaption {
+  color: var(--color-muted-lavender);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
+  margin: 0 0 0.9rem;
+  text-transform: uppercase;
+}
+.lpm .lpm-state > figcaption b { color: var(--color-lavender); font-weight: 400; margin-right: 0.5em; }
+@media (max-width: 30rem) {
+  .lpm .lpm-state { padding: 0.75rem 0.7rem 0.85rem; }
+}
+
+/* Shared parts */
+.lpm .lpm-sr {
+  clip-path: inset(50%);
+  height: 1px;
+  overflow: hidden;
+  position: absolute;
+  white-space: nowrap;
+  width: 1px;
+}
+.lpm :is(a, button, summary, input, textarea):focus-visible {
+  outline: 2px solid var(--color-lavender);
+  outline-offset: 2px;
+}
+.lpm summary { cursor: pointer; list-style: none; }
+.lpm summary::-webkit-details-marker { display: none; }
+.lpm .lpm-who { color: var(--color-pale-lavender); }
+.lpm .lpm-handle { color: var(--color-pale-lavender); font-family: var(--font-mono); font-size: 0.95em; }
+.lpm time { color: var(--color-muted-lavender); }
+.lpm .lpm-agent {
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-chip);
+  color: var(--color-lavender);
+  font-family: var(--font-mono);
+  font-size: 0.72em;
+  letter-spacing: 0.06em;
+  line-height: 1.5;
+  padding: 0 0.4em;
+  text-transform: uppercase;
+}
+.lpm .lpm-num {
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-chip);
+  color: var(--color-lavender);
+  font-family: var(--font-mono);
+  font-size: 0.78em;
+  font-weight: 400;
+  padding: 0.05em 0.4em;
+  white-space: nowrap;
+}
+.lpm .lpm-btn {
+  appearance: none;
+  background: var(--color-lavender);
+  border: 1px solid var(--color-lavender);
+  border-radius: var(--radius-pill);
+  color: var(--color-night);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.9em;
+  font-weight: 600;
+  line-height: 1.3;
+  padding: 0.4em 1.1em;
+}
+.lpm .lpm-btn:hover { background: var(--color-pale-lavender); border-color: var(--color-pale-lavender); }
+.lpm .lpm-btn--ghost { background: transparent; border-color: var(--hairline-strong); color: var(--color-pale-lavender); font-weight: 500; }
+.lpm .lpm-btn--ghost:hover { background: transparent; border-color: var(--color-lavender); color: var(--color-white); }
+.lpm .lpm-btn--sm { font-size: 0.8em; padding: 0.25em 0.8em; }
+.lpm .lpm-link {
+  appearance: none;
+  background: none;
+  border: 0;
+  color: var(--color-lavender);
+  cursor: pointer;
+  font: inherit;
+  padding: 0;
+  text-decoration: underline;
+  text-decoration-color: rgba(183, 156, 244, 0.45);
+  text-underline-offset: 0.18em;
+}
+.lpm .lpm-link:hover { color: var(--color-pale-lavender); text-decoration-color: currentColor; }
+.lpm .lpm-field {
+  background: var(--color-surface);
+  border: 1px solid var(--color-muted-lavender);
+  border-radius: var(--radius-block);
+  color: var(--color-white);
+  display: block;
+  font: inherit;
+  line-height: 1.5;
+  min-height: 4.6em;
+  padding: 0.55em 0.75em;
+  resize: vertical;
+  width: 100%;
+}
+.lpm .lpm-field::placeholder { color: var(--color-muted-lavender); opacity: 1; }
+.lpm .lpm-field:focus-visible { border-color: var(--color-lavender); outline-offset: 1px; }
+.lpm .lpm-compose-actions { align-items: center; display: flex; flex-wrap: wrap; gap: 0.5rem 0.9rem; margin-top: 0.55rem; }
+.lpm .lpm-compose-hint { color: var(--color-muted-lavender); font-size: 0.8em; }
+
+/* Status marks */
+.lpm .lpm-pulse {
+  animation: lpm-pulse 1.6s ease-in-out infinite;
+  background: var(--color-lavender);
+  border-radius: 50%;
+  display: inline-block;
+  flex: none;
+  height: 0.5em;
+  width: 0.5em;
+}
+.lpm .lpm-hollow { border: 1.5px solid currentColor; border-radius: 50%; display: inline-block; flex: none; height: 0.55em; width: 0.55em; }
+.lpm .lpm-bang {
+  background: var(--color-pale-lavender);
+  border-radius: 50%;
+  color: var(--color-night);
+  display: inline-grid;
+  flex: none;
+  font-size: 0.8em;
+  font-weight: 700;
+  height: 1.3em;
+  line-height: 1;
+  place-items: center;
+  width: 1.3em;
+}
+.lpm .lpm-dots { display: inline-flex; gap: 3px; margin-left: 0.3em; vertical-align: middle; }
+.lpm .lpm-dots i { animation: lpm-bounce 1.2s ease-in-out infinite; background: currentColor; border-radius: 50%; height: 4px; width: 4px; }
+.lpm .lpm-dots i:nth-child(2) { animation-delay: 0.15s; }
+.lpm .lpm-dots i:nth-child(3) { animation-delay: 0.3s; }
+.lpm .lpm-badge {
+  align-items: center;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-pill);
+  color: var(--color-pale-lavender);
+  display: inline-flex;
+  font-size: 0.92em;
+  gap: 0.4em;
+  line-height: 1.5;
+  padding: 0.05em 0.65em;
+  white-space: nowrap;
+}
+.lpm .lpm-badge--wait { background: var(--quote-tint); border-color: rgba(183, 156, 244, 0.6); }
+.lpm .lpm-badge--done { color: var(--color-muted-lavender); }
+.lpm .lpm-badge--fail { background: var(--code-surface); border-color: var(--color-pale-lavender); color: var(--color-white); }
+.lpm .lpm-badge--off { border-style: dashed; color: var(--color-muted-lavender); }
+
+@keyframes lpm-pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.35; transform: scale(0.7); } }
+@keyframes lpm-bounce { 0%, 70%, 100% { opacity: 0.3; transform: translateY(0); } 35% { opacity: 1; transform: translateY(-2px); } }
+@keyframes lpm-sweep { from { transform: translateX(-100%); } to { transform: translateX(260%); } }
+@media (prefers-reduced-motion: reduce) {
+  .lpm *, .lpm *::before, .lpm *::after { animation: none !important; }
+}
+
+/* ---------- Threads A: inline ---------- */
+.lpm .lpm-a { border-top: 1px solid var(--hairline); padding-top: 0.75rem; }
+.lpm .lpm-a-meta { align-items: center; color: var(--color-muted-lavender); display: flex; flex-wrap: wrap; font-size: 0.85em; gap: 0.2rem 0.5rem; }
+.lpm .lpm-a-meta .lpm-badge { margin-left: auto; }
+.lpm .lpm-a-text { margin-top: 0.3rem; }
+.lpm .lpm-a-sub { border-left: 2px solid var(--color-lavender); margin: 0.8rem 0 0 0.9rem; padding-left: 0.85rem; }
+.lpm .lpm-a-ghost {
+  border-left: 2px dashed var(--hairline-strong);
+  color: var(--color-muted-lavender);
+  font-size: 0.85em;
+  margin: 0.8rem 0 0 0.9rem;
+  padding: 0.15rem 0 0.15rem 0.85rem;
+}
+.lpm .lpm-a-ghost b { color: var(--color-pale-lavender); font-weight: 500; }
+.lpm .lpm-a-fail {
+  background: var(--code-surface);
+  border-left: 2px solid var(--color-pale-lavender);
+  border-radius: 0 var(--radius-block) var(--radius-block) 0;
+  font-size: 0.88em;
+  margin: 0.8rem 0 0 0.9rem;
+  padding: 0.5rem 0.75rem;
+}
+.lpm .lpm-a-fail strong { color: var(--color-white); font-weight: 600; }
+.lpm .lpm-a-fail p + p { color: var(--color-muted-lavender); margin-top: 0.2rem; }
+.lpm .lpm-a-rev { font-size: 0.85em; margin-top: 0.35rem; }
+.lpm .lpm-a-rev a { color: var(--color-lavender); }
+.lpm .lpm-a-reply { margin-top: 0.6rem; }
+.lpm .lpm-a-reply > summary { color: var(--color-lavender); display: inline-block; font-size: 0.85em; }
+.lpm .lpm-a-reply > summary::before { content: "\21A9\00a0"; }
+.lpm .lpm-a-reply--quiet > summary { color: var(--color-muted-lavender); }
+.lpm .lpm-a-reply > summary:hover { color: var(--color-pale-lavender); }
+.lpm .lpm-a-reply[open] > summary { color: var(--color-pale-lavender); margin-bottom: 0.45rem; }
+
+/* ---------- Threads B: cards ---------- */
+.lpm .lpm-b {
+  background: var(--color-surface);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-card);
+  box-shadow: 0 6px 18px rgba(13, 10, 21, 0.45);
+  overflow: hidden;
+  position: relative;
+}
+.lpm .lpm-b--live::before {
+  animation: lpm-sweep 1.8s linear infinite;
+  background: linear-gradient(90deg, transparent, var(--color-lavender), transparent);
+  content: "";
+  height: 2px;
+  left: 0;
+  position: absolute;
+  top: 0;
+  width: 40%;
+}
+@media (prefers-reduced-motion: reduce) { .lpm .lpm-b--live::before { display: none; } }
+.lpm .lpm-b--fail { border-color: rgba(216, 203, 250, 0.5); }
+.lpm .lpm-b-head { align-items: center; display: flex; flex-wrap: wrap; font-size: 0.85em; gap: 0.25rem 0.5rem; padding: 0.8rem 1rem 0; }
+.lpm .lpm-b-head .lpm-badge { margin-left: auto; }
+.lpm .lpm-b-body { padding: 0.35rem 1rem 0.9rem; }
+.lpm .lpm-b-sub {
+  background: var(--color-glow);
+  border-left: 2px solid var(--color-lavender);
+  border-radius: var(--radius-block);
+  margin: 0 0.6rem 0.6rem;
+  padding: 0.65rem 0.8rem 0.7rem;
+}
+.lpm .lpm-b-sub .lpm-b-head { padding: 0; }
+.lpm .lpm-b-sub p.lpm-b-said { margin-top: 0.3rem; }
+.lpm .lpm-b-rev {
+  align-items: center;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-pill);
+  color: var(--color-pale-lavender);
+  display: inline-flex;
+  font-size: 0.8em;
+  gap: 0.4em;
+  margin-top: 0.6rem;
+  padding: 0.15em 0.75em;
+  text-decoration: none;
+}
+.lpm .lpm-b-rev:hover { border-color: var(--color-lavender); color: var(--color-white); }
+.lpm .lpm-b-rev code { background: none; padding: 0; }
+.lpm .lpm-b-alert {
+  background: var(--code-surface);
+  border-radius: var(--radius-block);
+  display: grid;
+  font-size: 0.9em;
+  gap: 0.15rem 0.6rem;
+  grid-template-columns: auto 1fr;
+  margin: 0 0.6rem 0.6rem;
+  padding: 0.65rem 0.8rem;
+}
+.lpm .lpm-b-alert .lpm-bang { margin-top: 0.15em; }
+.lpm .lpm-b-alert strong { color: var(--color-white); font-weight: 600; }
+.lpm .lpm-b-alert p + p { color: var(--color-muted-lavender); grid-column: 2; }
+.lpm .lpm-b-alert--off { background: transparent; border: 1px dashed var(--hairline-strong); }
+.lpm .lpm-b-alert--off .lpm-hollow { color: var(--color-muted-lavender); margin-top: 0.45em; }
+.lpm .lpm-b-foot {
+  align-items: center;
+  border-top: 1px solid var(--hairline);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 0.85em;
+  gap: 0.5rem 0.75rem;
+  padding: 0.55rem 1rem;
+}
+.lpm .lpm-b-foot > details[open] { flex: 1 1 100%; }
+.lpm .lpm-b-foot > details > summary {
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-pill);
+  color: var(--color-pale-lavender);
+  display: inline-block;
+  padding: 0.15em 0.9em;
+}
+.lpm .lpm-b-foot > details > summary:hover { border-color: var(--color-lavender); color: var(--color-white); }
+.lpm .lpm-b-foot > details[open] > summary { margin-bottom: 0.55rem; }
+.lpm .lpm-b-live { align-items: center; color: var(--color-muted-lavender); display: inline-flex; margin-left: auto; }
+
+/* ---------- Threads C: chat ---------- */
+.lpm .lpm-c { display: flex; flex-direction: column; gap: 0.75rem; }
+.lpm .lpm-c-row { align-items: flex-end; display: flex; gap: 0.55rem; }
+.lpm .lpm-c-row--me { flex-direction: row-reverse; }
+.lpm .lpm-c-av {
+  background: var(--color-glow);
+  border: 1px solid var(--hairline-strong);
+  border-radius: 50%;
+  color: var(--color-pale-lavender);
+  display: grid;
+  flex: none;
+  font-size: 0.72rem;
+  font-weight: 600;
+  height: 2rem;
+  place-items: center;
+  width: 2rem;
+}
+.lpm .lpm-c-av--agent { background: var(--color-lavender); border-color: var(--color-lavender); border-radius: var(--radius-block); color: var(--color-night); font-family: var(--font-mono); }
+.lpm .lpm-c-av--ghost { background: transparent; border: 1px dashed var(--hairline-strong); border-radius: var(--radius-block); color: var(--color-muted-lavender); font-family: var(--font-mono); }
+.lpm .lpm-c-col { display: flex; flex-direction: column; max-width: 85%; min-width: 0; }
+.lpm .lpm-c-row--me .lpm-c-col { align-items: flex-end; }
+.lpm .lpm-c-name { align-items: center; color: var(--color-muted-lavender); display: flex; flex-wrap: wrap; font-size: 0.78em; gap: 0.1rem 0.45em; margin: 0 0.3rem 0.2rem; }
+.lpm .lpm-c-bubble {
+  background: var(--color-surface);
+  border: 1px solid var(--hairline);
+  border-bottom-left-radius: var(--radius-chip);
+  border-radius: var(--radius-card) var(--radius-card) var(--radius-card) var(--radius-chip);
+  padding: 0.5rem 0.8rem;
+}
+.lpm .lpm-c-row--me .lpm-c-bubble {
+  background: var(--color-glow);
+  border-color: var(--hairline-strong);
+  border-radius: var(--radius-card) var(--radius-card) var(--radius-chip) var(--radius-card);
+}
+.lpm .lpm-c-bubble--typing { align-items: center; align-self: flex-start; color: var(--color-lavender); display: inline-flex; padding: 0.7rem 0.9rem; }
+.lpm .lpm-c-bubble--typing .lpm-dots { gap: 4px; margin: 0; }
+.lpm .lpm-c-bubble--typing .lpm-dots i { height: 6px; width: 6px; }
+.lpm .lpm-c-bubble--ghost { align-self: flex-start; background: transparent; border-style: dashed; color: var(--color-muted-lavender); font-size: 0.85em; }
+.lpm .lpm-c-receipt { align-items: center; color: var(--color-muted-lavender); display: inline-flex; font-size: 0.75em; gap: 0.4em; margin: 0.3rem 0.3rem 0; }
+.lpm .lpm-c-receipt--wait { color: var(--color-pale-lavender); }
+.lpm .lpm-c-event { align-items: center; color: var(--color-muted-lavender); display: flex; font-size: 0.78em; gap: 0.6rem; text-align: center; }
+.lpm .lpm-c-event::before, .lpm .lpm-c-event::after { border-top: 1px solid var(--hairline); content: ""; flex: 1; min-width: 1rem; }
+.lpm .lpm-c-event a { color: var(--color-lavender); }
+.lpm .lpm-c-notice {
+  align-self: center;
+  background: var(--code-surface);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-block);
+  font-size: 0.85em;
+  max-width: 92%;
+  padding: 0.5rem 0.8rem;
+  text-align: center;
+}
+.lpm .lpm-c-notice strong { align-items: center; color: var(--color-white); display: inline-flex; font-weight: 600; gap: 0.4em; }
+.lpm .lpm-c-notice p + p { color: var(--color-muted-lavender); margin-top: 0.15rem; }
+.lpm .lpm-c-notice--off { background: transparent; border-style: dashed; }
+.lpm .lpm-c-notice--off strong { color: var(--color-pale-lavender); font-weight: 500; }
+.lpm .lpm-c-reply { align-self: flex-end; text-align: right; }
+.lpm .lpm-c-reply > summary { color: var(--color-lavender); display: inline-block; font-size: 0.85em; }
+.lpm .lpm-c-reply > summary::before { content: "\21A9\00a0"; }
+.lpm .lpm-c-reply--quiet > summary { color: var(--color-muted-lavender); }
+.lpm .lpm-c-reply[open] { align-self: stretch; }
+.lpm .lpm-c-reply[open] > summary { color: var(--color-pale-lavender); margin-bottom: 0.45rem; }
+.lpm .lpm-c-compose {
+  align-items: flex-end;
+  background: var(--color-surface);
+  border: 1px solid var(--color-muted-lavender);
+  border-radius: 1.3rem;
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.3rem 0.3rem 0.3rem 0.95rem;
+  text-align: left;
+}
+.lpm .lpm-c-compose:focus-within { border-color: var(--color-lavender); box-shadow: 0 0 0 2px rgba(183, 156, 244, 0.35); }
+.lpm .lpm-c-compose textarea {
+  background: transparent;
+  border: 0;
+  color: var(--color-white);
+  flex: 1;
+  font: inherit;
+  line-height: 1.45;
+  min-height: 2.4em;
+  min-width: 0;
+  padding: 0.4rem 0;
+  resize: none;
+}
+.lpm .lpm-c-compose textarea::placeholder { color: var(--color-muted-lavender); opacity: 1; }
+.lpm .lpm-c-compose textarea:focus-visible { outline: none; }
+.lpm .lpm-c-send {
+  appearance: none;
+  background: var(--color-lavender);
+  border: 0;
+  border-radius: 50%;
+  color: var(--color-night);
+  cursor: pointer;
+  display: grid;
+  flex: none;
+  font-size: 1rem;
+  font-weight: 700;
+  height: 2.1rem;
+  place-items: center;
+  width: 2.1rem;
+}
+.lpm .lpm-c-send:hover { background: var(--color-pale-lavender); }
+
+/* ---------- Decisions: shared ---------- */
+.lpm .lpm-ctx { color: var(--color-muted-lavender); font-size: 0.88em; margin-top: 0.2rem; }
+.lpm .lpm-radio {
+  appearance: none;
+  border: 1.5px solid var(--color-muted-lavender);
+  border-radius: 50%;
+  cursor: pointer;
+  flex: none;
+  height: 1.05em;
+  margin: 0;
+  width: 1.05em;
+}
+.lpm .lpm-radio:checked { background: radial-gradient(circle, var(--color-lavender) 0 36%, transparent 42%); border-color: var(--color-lavender); }
+.lpm .lpm-note > summary { color: var(--color-lavender); display: inline-block; }
+.lpm .lpm-note > summary::before { content: "+\00a0"; }
+.lpm .lpm-note > summary:hover { color: var(--color-pale-lavender); }
+.lpm .lpm-note[open] > summary::before { content: "\2212\00a0"; }
+.lpm .lpm-note[open] > summary { color: var(--color-pale-lavender); margin-bottom: 0.4rem; }
+.lpm .lpm-unsaved { align-items: center; color: var(--color-pale-lavender); display: inline-flex; gap: 0.4em; }
+.lpm .lpm-unsaved .lpm-hollow { color: var(--color-lavender); }
+.lpm .lpm-check { color: var(--color-lavender); font-weight: 700; }
+.lpm .lpm-saved-by { color: var(--color-muted-lavender); font-size: 0.82em; margin-top: 0.2rem; }
+.lpm .lpm-saved-note { border-left: 1px solid var(--hairline-strong); color: var(--color-pale-lavender); font-size: 0.88em; margin-top: 0.45rem; padding-left: 0.7rem; }
+
+/* ---------- Decisions A: inline ---------- */
+.lpm .lpm-da { border-left: 2px solid var(--hairline-strong); padding: 0.1rem 0 0.1rem 1rem; }
+.lpm .lpm-da--dirty { border-left-color: var(--color-lavender); }
+.lpm .lpm-da-q { color: var(--color-white); font-weight: 600; }
+.lpm .lpm-da-opts { display: grid; gap: 0.1rem; margin: 0.5rem 0 0.4rem; }
+.lpm .lpm-da-opt {
+  align-items: center;
+  border-radius: var(--radius-block);
+  cursor: pointer;
+  display: flex;
+  gap: 0.6rem;
+  margin-left: -0.45rem;
+  padding: 0.28rem 0.45rem;
+}
+.lpm .lpm-da-opt:hover { background: var(--row-tint); }
+.lpm .lpm-da-opt:has(:checked) { background: var(--quote-tint); color: var(--color-white); }
+.lpm .lpm-da-def { color: var(--color-muted-lavender); font-size: 0.8em; }
+.lpm .lpm-da-def::before { content: "\00b7\00a0"; }
+.lpm .lpm-da-foot { align-items: center; display: flex; flex-wrap: wrap; font-size: 0.88em; gap: 0.5rem 1rem; margin-top: 0.2rem; }
+.lpm .lpm-da-foot > details[open] { flex: 1 1 100%; }
+.lpm .lpm-da-foot .lpm-hint { color: var(--color-muted-lavender); }
+.lpm .lpm-da-saved { color: var(--color-pale-lavender); margin-top: 0.45rem; }
+
+/* ---------- Decisions B: card with segmented pills ---------- */
+.lpm .lpm-db {
+  background: var(--color-surface);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-card);
+  box-shadow: 0 6px 18px rgba(13, 10, 21, 0.45);
+  padding: 0.95rem 1rem 0.85rem;
+}
+.lpm .lpm-db--dirty { border-color: rgba(183, 156, 244, 0.6); }
+.lpm .lpm-db-head { align-items: baseline; display: flex; flex-wrap: wrap; gap: 0.3rem 0.55rem; }
+.lpm .lpm-db-q { color: var(--color-white); flex: 1 1 12rem; font-family: var(--font-display); font-size: 1.12em; line-height: 1.3; }
+.lpm .lpm-db-flag { align-items: center; color: var(--color-pale-lavender); display: inline-flex; gap: 0.4em; margin-left: auto; }
+.lpm .lpm-db-foot .lpm-db-flag + .lpm-btn { margin-left: 0; }
+.lpm .lpm-seg {
+  background: var(--color-night);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-pill);
+  display: inline-grid;
+  gap: 2px;
+  grid-auto-columns: auto;
+  grid-auto-flow: column;
+  margin: 0.75rem 0 0.35rem;
+  max-width: 100%;
+  padding: 3px;
+}
+.lpm .lpm-seg label { cursor: pointer; display: flex; position: relative; }
+.lpm .lpm-seg label > span {
+  align-items: center;
+  border-radius: var(--radius-pill);
+  color: var(--color-pale-lavender);
+  display: flex;
+  flex: 1;
+  font-size: 0.88em;
+  gap: 0.35em;
+  justify-content: center;
+  line-height: 1.25;
+  padding: 0.35em 0.75em;
+  text-align: center;
+}
+.lpm .lpm-seg label:hover > span { background: var(--color-glow); color: var(--color-white); }
+.lpm .lpm-seg input:checked + span { background: var(--color-lavender); color: var(--color-night); font-weight: 600; }
+.lpm .lpm-seg input:focus-visible + span { outline: 2px solid var(--color-lavender); outline-offset: 2px; }
+.lpm .lpm-seg-def { background: var(--color-lavender); border-radius: 50%; height: 5px; width: 5px; }
+.lpm .lpm-seg input:checked + span .lpm-seg-def { background: var(--color-night); }
+.lpm .lpm-db-legend { align-items: center; color: var(--color-muted-lavender); display: flex; font-size: 0.75em; gap: 0.4em; }
+.lpm .lpm-db-foot { align-items: center; border-top: 1px solid var(--hairline); display: flex; flex-wrap: wrap; font-size: 0.88em; gap: 0.5rem 0.9rem; margin-top: 0.8rem; padding-top: 0.7rem; }
+.lpm .lpm-db-foot > details[open] { flex: 1 1 100%; }
+.lpm .lpm-db-foot .lpm-btn { margin-left: auto; }
+.lpm .lpm-db-foot .lpm-hint { color: var(--color-muted-lavender); margin-left: auto; }
+.lpm .lpm-db-saved {
+  align-items: center;
+  background: var(--color-glow);
+  border-radius: var(--radius-pill);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 0.6rem;
+  margin-top: 0.75rem;
+  padding: 0.35rem 0.4rem 0.35rem 0.9rem;
+}
+.lpm .lpm-db-saved .lpm-btn { margin-left: auto; }
+
+/* ---------- Decisions C: compact inline control ---------- */
+.lpm .lpm-dc {
+  align-items: center;
+  background: var(--row-tint);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-card);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.75rem;
+  padding: 0.6rem 0.75rem;
+}
+.lpm .lpm-dc + .lpm-dc { margin-top: 0.6rem; }
+.lpm .lpm-dc--dirty { border-color: rgba(183, 156, 244, 0.6); }
+.lpm .lpm-dc-q { color: var(--color-white); flex: 1 1 13rem; font-size: 0.95em; }
+.lpm .lpm-dc-chips { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+.lpm .lpm-dc-chips label { cursor: pointer; position: relative; }
+.lpm .lpm-dc-chips label > span {
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-pill);
+  color: var(--color-pale-lavender);
+  display: inline-block;
+  font-size: 0.85em;
+  padding: 0.18em 0.75em;
+  white-space: nowrap;
+}
+.lpm .lpm-dc-chips label:hover > span { border-color: var(--color-lavender); color: var(--color-white); }
+.lpm .lpm-dc-chips input:checked + span { background: var(--color-lavender); border-color: var(--color-lavender); color: var(--color-night); font-weight: 600; }
+.lpm .lpm-dc-chips input:focus-visible + span { outline: 2px solid var(--color-lavender); outline-offset: 2px; }
+.lpm .lpm-dc-chips small { font-size: 0.78em; font-weight: 400; margin-left: 0.3em; opacity: 0.8; }
+.lpm .lpm-dc-tools { align-items: center; display: flex; flex: 1 1 100%; flex-wrap: wrap; font-size: 0.85em; gap: 0.4rem 0.9rem; }
+.lpm .lpm-dc-tools > details[open] { flex: 1 1 100%; }
+.lpm .lpm-dc-tools .lpm-field { min-height: 2.8em; }
+.lpm .lpm-dc-tools .lpm-btn { margin-left: auto; }
+.lpm .lpm-dc--saved { background: transparent; border-style: dashed; }
+.lpm .lpm-dc-saved { color: var(--color-pale-lavender); font-size: 0.88em; white-space: nowrap; }
+.lpm .lpm-hint { color: var(--color-muted-lavender); }
+
+/* ---------- Long threads and the chosen note ---------- */
+.lpm.lpm-long { max-width: 40rem; }
+.lpm .lpm-you {
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-chip);
+  color: var(--color-muted-lavender);
+  font-family: var(--font-mono);
+  font-size: 0.72em;
+  letter-spacing: 0.06em;
+  line-height: 1.5;
+  padding: 0 0.4em;
+  text-transform: uppercase;
+}
+.lpm .lpm-list { list-style: disc; margin: 0.35em 0 0; padding-left: 1.2em; }
+.lpm .lpm-list li { margin: 0.15em 0 0; padding-left: 0.15em; }
+.lpm .lpm-list li::marker { color: var(--color-lavender); }
+.lpm .lpm-a-rail { margin: 0.9rem 0 0 0.45rem; }
+.lpm .lpm-a-msg { border-left: 2px solid var(--hairline-strong); padding: 0 0 1.1rem 1.15rem; position: relative; }
+.lpm .lpm-a-msg:last-child { padding-bottom: 0.3rem; }
+.lpm .lpm-a-msg--agent { border-left-color: var(--color-lavender); }
+.lpm .lpm-a-msg::before {
+  background: var(--color-night);
+  border: 2px solid var(--hairline-strong);
+  border-radius: 50%;
+  content: "";
+  height: 10px;
+  left: -6px;
+  position: absolute;
+  top: 0.4em;
+  width: 10px;
+}
+.lpm .lpm-a-msg--agent::before { background: var(--color-lavender); border-color: var(--color-lavender); }
+.lpm .lpm-a--long > .lpm-a-reply { margin-left: 0.45rem; padding-left: 1.3rem; }
+.lpm .lpm-b-me { border-top: 1px solid var(--hairline); padding: 0.7rem 1rem 0.85rem; }
+.lpm .lpm-b-me .lpm-b-head { padding: 0; }
+.lpm .lpm-b-me p.lpm-b-said { margin-top: 0.3rem; }
+.lpm .lpm-b-sub + .lpm-b-me { border-top: 0; padding-top: 0.25rem; }
+.lpm.lpm-chosen {
+  align-items: center;
+  background: var(--quote-tint);
+  border: 1px solid rgba(183, 156, 244, 0.6);
+  border-radius: var(--radius-card);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 0.8rem;
+  padding: 0.7rem 1rem;
+}
+.lpm .lpm-chosen-mark {
+  background: var(--color-lavender);
+  border-radius: var(--radius-pill);
+  color: var(--color-night);
+  font-size: 0.85em;
+  font-weight: 600;
+  padding: 0.1em 0.8em;
+  white-space: nowrap;
+}
+.lpm .lpm-chosen-text { color: var(--color-pale-lavender); flex: 1 1 16rem; }
+.lpm.lpm-ref > summary {
+  border: 1px dashed var(--hairline-strong);
+  border-radius: var(--radius-pill);
+  color: var(--color-muted-lavender);
+  display: inline-block;
+  font-size: 0.9em;
+  padding: 0.25em 1em;
+}
+.lpm.lpm-ref > summary::before { content: "\25B8\00a0"; }
+.lpm.lpm-ref[open] > summary::before { content: "\25BE\00a0"; }
+.lpm.lpm-ref > summary:hover { border-color: var(--color-lavender); color: var(--color-pale-lavender); }
+.lpm.lpm-ref > .lpm-grid { margin-top: 1rem; opacity: 0.8; }
+</style>
+
+<p>Three looks for each of the two reader controls on a Lotuspod page: the comment thread at the end of a section, and the decision question card. Every state is drawn side by side and nothing here is wired up; the real comment box under each section is today's UI, for comparison.</p>
+
+<p><strong>Settled:</strong> decision cards A. Each thread style now opens with a long conversation, drawn in that style, above its gallery of states.</p>
+
+<p>The fixes common to all three: a comment's status is a badge in its header line, never a line under the text; a waiting thread says the page is checking and the reply appears in place without a reload; before an answer, <em>Reply</em> is quieter and reads as adding detail; a saved decision folds to one line with a way to change it.</p>
+
+<h2>Comment threads: A</h2>
+
+<p><strong>Inline.</strong> Stays in the prose: no card, a hairline between threads, the status as an outlined pill on the header line, an agent's reply indented under a lavender rule. The place the reply will land is held by a dashed rule while the page checks.</p>
+
+<h3>A long thread</h3>
+
+<div class="lpm lpm-long">
+  <article class="lpm-a lpm-a--long">
+    <p class="lpm-a-meta"><span class="lpm-who">reader@example.com</span> <span class="lpm-you">you</span> <time>2 h ago</time> <span class="lpm-badge lpm-badge--done"><span aria-hidden="true">&#10003;</span>Answered</span></p>
+    <p class="lpm-a-text">Retention says answers are kept for 90 days. Does that include the note attached to an answer?</p>
+    <ol class="lpm-a-rail">
+      <li class="lpm-a-msg lpm-a-msg--agent">
+        <p class="lpm-a-meta"><span class="lpm-handle">responder</span> <span class="lpm-agent">agent</span> <time>2 h ago</time></p>
+        <p class="lpm-a-text">Yes. A note is part of its answer, so it is kept and pruned with it. Comments are separate: they stay for as long as the page exists.</p>
+      </li>
+      <li class="lpm-a-msg">
+        <p class="lpm-a-meta"><span class="lpm-who">reader@example.com</span> <span class="lpm-you">you</span> <time>1 h ago</time> <span class="lpm-badge lpm-badge--done"><span aria-hidden="true">&#10003;</span>Answered</span></p>
+        <p class="lpm-a-text">And when the page is republished, which of those survive?</p>
+      </li>
+      <li class="lpm-a-msg lpm-a-msg--agent">
+        <p class="lpm-a-meta"><span class="lpm-handle">responder</span> <span class="lpm-agent">agent</span> <time>1 h ago</time></p>
+        <p class="lpm-a-text">All of them. A republish keeps:</p>
+        <ul class="lpm-list">
+          <li>answers, each tied to the revision it was given against;</li>
+          <li>comment threads, moved under "Comments on sections that have changed" when their section is gone;</li>
+          <li>the page's owner, unless <code>--owner</code> names a new one.</li>
+        </ul>
+      </li>
+      <li class="lpm-a-msg">
+        <p class="lpm-a-meta"><span class="lpm-who">reader@example.com</span> <span class="lpm-you">you</span> <time>48 min ago</time> <span class="lpm-badge lpm-badge--done"><span aria-hidden="true">&#10003;</span>Answered</span></p>
+        <p class="lpm-a-text">Please put that list in the Retention section, so it's on the page.</p>
+      </li>
+      <li class="lpm-a-msg lpm-a-msg--agent">
+        <p class="lpm-a-meta"><span class="lpm-handle">responder</span> <span class="lpm-agent">agent</span> <time>45 min ago</time></p>
+        <p class="lpm-a-text">Done: the three points are now under Retention, after the 90-day line.</p>
+        <p class="lpm-a-rev"><a href="#top">Revised the page &#8594; revision <code>3c91e0a</code></a></p>
+      </li>
+      <li class="lpm-a-msg">
+        <p class="lpm-a-meta"><span class="lpm-who">reader@example.com</span> <span class="lpm-you">you</span> <time>20 min ago</time> <span class="lpm-badge lpm-badge--done"><span aria-hidden="true">&#10003;</span>Answered</span></p>
+        <p class="lpm-a-text">Thanks, that reads well. @hermes can you double-check the numbers?</p>
+      </li>
+      <li class="lpm-a-msg lpm-a-msg--agent">
+        <p class="lpm-a-meta"><span class="lpm-handle">hermes</span> <span class="lpm-agent">agent</span> <time>12 min ago</time></p>
+        <p class="lpm-a-text">Checked against last night's backup report. The 90-day and 30-day rows match. The captures row says 14 days, but the report keeps them for 21, so that row needs fixing.</p>
+      </li>
+    </ol>
+    <details class="lpm-a-reply"><summary>Reply</summary></details>
+  </article>
+</div>
+
+<h3>Every state</h3>
+
+<div class="lpm lpm-grid">
+  <figure class="lpm-state">
+    <figcaption><b>1</b>Waiting, checking for a reply</figcaption>
+    <article class="lpm-a">
+      <p class="lpm-a-meta"><span class="lpm-who">reader@example.com</span> <time>just now</time> <span class="lpm-badge lpm-badge--wait"><span class="lpm-pulse" aria-hidden="true"></span>Waiting for responder</span></p>
+      <p class="lpm-a-text">The second diagram reads right to left on my phone. Is that intended, or should it flip to top-down on narrow screens?</p>
+      <p class="lpm-a-ghost" role="status">Checking for a reply<span class="lpm-dots" aria-hidden="true"><i></i><i></i><i></i></span><br>It will appear here; no need to reload.</p>
+      <details class="lpm-a-reply lpm-a-reply--quiet"><summary>Add to your comment</summary></details>
+    </article>
+  </figure>
+
+  <figure class="lpm-state">
+    <figcaption><b>2</b>Answering; reply open before an answer</figcaption>
+    <article class="lpm-a">
+      <p class="lpm-a-meta"><span class="lpm-who">reader@example.com</span> <time>1 min ago</time> <span class="lpm-badge lpm-badge--wait"><span class="lpm-pulse" aria-hidden="true"></span>responder is answering</span></p>
+      <p class="lpm-a-text">The second diagram reads right to left on my phone. Is that intended, or should it flip to top-down on narrow screens?</p>
+      <p class="lpm-a-ghost" role="status"><b>responder</b> is writing a reply<span class="lpm-dots" aria-hidden="true"><i></i><i></i><i></i></span></p>
+      <details class="lpm-a-reply lpm-a-reply--quiet" open><summary>Add to your comment</summary>
+        <textarea class="lpm-field" aria-label="Add to your comment" placeholder="Add detail. responder reads it with your comment."></textarea>
+        <div class="lpm-compose-actions"><button class="lpm-btn" type="button">Add</button><button class="lpm-link" type="button">Cancel</button></div>
+      </details>
+    </article>
+  </figure>
+
+  <figure class="lpm-state">
+    <figcaption><b>3</b>Answered</figcaption>
+    <article class="lpm-a">
+      <p class="lpm-a-meta"><span class="lpm-who">reader@example.com</span> <time>12 min ago</time> <span class="lpm-badge lpm-badge--done"><span aria-hidden="true">&#10003;</span>Answered</span></p>
+      <p class="lpm-a-text">Why is the owner window five minutes rather than one?</p>
+      <div class="lpm-a-sub">
+        <p class="lpm-a-meta"><span class="lpm-handle">responder</span> <span class="lpm-agent">agent</span> <time>10 min ago</time></p>
+        <p class="lpm-a-text">An agent that pulls every minute can miss a pull or two without its comments bouncing to the responder; five minutes covers that. The owner_window_sec setting changes it.</p>
+      </div>
+      <details class="lpm-a-reply"><summary>Reply</summary></details>
+    </article>
+  </figure>
+
+  <figure class="lpm-state">
+    <figcaption><b>4</b>Answered, and revised the page</figcaption>
+    <article class="lpm-a">
+      <p class="lpm-a-meta"><span class="lpm-who">reader@example.com</span> <time>1 h ago</time> <span class="lpm-badge lpm-badge--done"><span aria-hidden="true">&#10003;</span>Answered</span></p>
+      <p class="lpm-a-text">Does the nightly backup include answers and comments, or only the pages?</p>
+      <div class="lpm-a-sub">
+        <p class="lpm-a-meta"><span class="lpm-handle">operator</span> <span class="lpm-agent">agent</span> <time>58 min ago</time></p>
+        <p class="lpm-a-text">Both. The backup copies the database after a checkpoint, so answers and comments are in it. I added a sentence to Backups saying so.</p>
+        <p class="lpm-a-rev"><a href="#top">Revised the page &#8594; revision <code>1f54de0</code></a></p>
+      </div>
+      <details class="lpm-a-reply"><summary>Reply</summary></details>
+    </article>
+  </figure>
+
+  <figure class="lpm-state">
+    <figcaption><b>5</b>Failed</figcaption>
+    <article class="lpm-a">
+      <p class="lpm-a-meta"><span class="lpm-who">reader@example.com</span> <time>25 min ago</time> <span class="lpm-badge lpm-badge--fail"><span class="lpm-bang" aria-hidden="true">!</span>Couldn't answer</span></p>
+      <p class="lpm-a-text">@operator can you rerun the capture for this section? The screenshot is from before the rename.</p>
+      <div class="lpm-a-fail" role="note">
+        <p><strong>operator couldn't answer:</strong> the capture step timed out after 120 seconds.</p>
+        <p>To send it again, write a new comment.</p>
+      </div>
+    </article>
+  </figure>
+
+  <figure class="lpm-state">
+    <figcaption><b>6</b>Unavailable: the agent isn't listening</figcaption>
+    <article class="lpm-a">
+      <p class="lpm-a-meta"><span class="lpm-who">reader@example.com</span> <time>3 min ago</time> <span class="lpm-badge lpm-badge--off"><span class="lpm-hollow" aria-hidden="true"></span>Queued for hermes</span></p>
+      <p class="lpm-a-text">@hermes please check these numbers against last week's run.</p>
+      <p class="lpm-a-ghost"><b>hermes</b> is offline. Your comment waits in its queue and goes to hermes when it checks in again.</p>
+      <details class="lpm-a-reply lpm-a-reply--quiet"><summary>Add to your comment</summary></details>
+    </article>
+  </figure>
+
+  <figure class="lpm-state">
+    <figcaption><b>7</b>Reply open, after an answer</figcaption>
+    <article class="lpm-a">
+      <p class="lpm-a-meta"><span class="lpm-who">reader@example.com</span> <time>12 min ago</time> <span class="lpm-badge lpm-badge--done"><span aria-hidden="true">&#10003;</span>Answered</span></p>
+      <p class="lpm-a-text">Why is the owner window five minutes rather than one?</p>
+      <div class="lpm-a-sub">
+        <p class="lpm-a-meta"><span class="lpm-handle">responder</span> <span class="lpm-agent">agent</span> <time>10 min ago</time></p>
+        <p class="lpm-a-text">An agent that pulls every minute can miss a pull or two without its comments bouncing to the responder; five minutes covers that.</p>
+      </div>
+      <details class="lpm-a-reply" open><summary>Reply</summary>
+        <textarea class="lpm-field" aria-label="Reply to responder" placeholder="Reply to responder&#8230;">Makes sense. Can it be two minutes on this page only?</textarea>
+        <div class="lpm-compose-actions"><button class="lpm-btn" type="button">Send reply</button><button class="lpm-link" type="button">Cancel</button><span class="lpm-compose-hint">Goes to responder</span></div>
+      </details>
+    </article>
+  </figure>
+</div>
+
+<h2>Comment threads: B</h2>
+
+<p><strong>Cards.</strong> Each thread is a raised card: the status is a filled pill at the top right, an agent's reply sits in an inset panel, and the card's footer holds the Reply button and the live line. While the page checks, a thin light sweeps along the card's top edge.</p>
+
+<h3>A long thread</h3>
+
+<div class="lpm lpm-long">
+  <article class="lpm-b">
+    <header class="lpm-b-head"><span class="lpm-who">reader@example.com</span> <span class="lpm-you">you</span> <time>2 h ago</time> <span class="lpm-badge lpm-badge--done"><span aria-hidden="true">&#10003;</span>Answered</span></header>
+    <div class="lpm-b-body"><p>Retention says answers are kept for 90 days. Does that include the note attached to an answer?</p></div>
+    <div class="lpm-b-sub">
+      <div class="lpm-b-head"><span class="lpm-handle">responder</span> <span class="lpm-agent">agent</span> <time>2 h ago</time></div>
+      <p class="lpm-b-said">Yes. A note is part of its answer, so it is kept and pruned with it. Comments are separate: they stay for as long as the page exists.</p>
+    </div>
+    <div class="lpm-b-me">
+      <div class="lpm-b-head"><span class="lpm-who">reader@example.com</span> <span class="lpm-you">you</span> <time>1 h ago</time> <span class="lpm-badge lpm-badge--done"><span aria-hidden="true">&#10003;</span>Answered</span></div>
+      <p class="lpm-b-said">And when the page is republished, which of those survive?</p>
+    </div>
+    <div class="lpm-b-sub">
+      <div class="lpm-b-head"><span class="lpm-handle">responder</span> <span class="lpm-agent">agent</span> <time>1 h ago</time></div>
+      <p class="lpm-b-said">All of them. A republish keeps:</p>
+      <ul class="lpm-list">
+        <li>answers, each tied to the revision it was given against;</li>
+        <li>comment threads, moved under "Comments on sections that have changed" when their section is gone;</li>
+        <li>the page's owner, unless <code>--owner</code> names a new one.</li>
+      </ul>
+    </div>
+    <div class="lpm-b-me">
+      <div class="lpm-b-head"><span class="lpm-who">reader@example.com</span> <span class="lpm-you">you</span> <time>48 min ago</time> <span class="lpm-badge lpm-badge--done"><span aria-hidden="true">&#10003;</span>Answered</span></div>
+      <p class="lpm-b-said">Please put that list in the Retention section, so it's on the page.</p>
+    </div>
+    <div class="lpm-b-sub">
+      <div class="lpm-b-head"><span class="lpm-handle">responder</span> <span class="lpm-agent">agent</span> <time>45 min ago</time></div>
+      <p class="lpm-b-said">Done: the three points are now under Retention, after the 90-day line.</p>
+      <a class="lpm-b-rev" href="#top"><span aria-hidden="true">&#9998;</span>Revised the page &#8594; revision <code>3c91e0a</code></a>
+    </div>
+    <div class="lpm-b-me">
+      <div class="lpm-b-head"><span class="lpm-who">reader@example.com</span> <span class="lpm-you">you</span> <time>20 min ago</time> <span class="lpm-badge lpm-badge--done"><span aria-hidden="true">&#10003;</span>Answered</span></div>
+      <p class="lpm-b-said">Thanks, that reads well. @hermes can you double-check the numbers?</p>
+    </div>
+    <div class="lpm-b-sub">
+      <div class="lpm-b-head"><span class="lpm-handle">hermes</span> <span class="lpm-agent">agent</span> <time>12 min ago</time></div>
+      <p class="lpm-b-said">Checked against last night's backup report. The 90-day and 30-day rows match. The captures row says 14 days, but the report keeps them for 21, so that row needs fixing.</p>
+    </div>
+    <footer class="lpm-b-foot"><details><summary>Reply</summary></details></footer>
+  </article>
+</div>
+
+<h3>Every state</h3>
+
+<div class="lpm lpm-grid">
+  <figure class="lpm-state">
+    <figcaption><b>1</b>Waiting, checking for a reply</figcaption>
+    <article class="lpm-b lpm-b--live">
+      <header class="lpm-b-head"><span class="lpm-who">reader@example.com</span> <time>just now</time> <span class="lpm-badge lpm-badge--wait"><span class="lpm-pulse" aria-hidden="true"></span>Waiting for responder</span></header>
+      <div class="lpm-b-body"><p>The second diagram reads right to left on my phone. Is that intended, or should it flip to top-down on narrow screens?</p></div>
+      <footer class="lpm-b-foot">
+        <details><summary>Add to comment</summary></details>
+        <span class="lpm-b-live" role="status">Checking for a reply<span class="lpm-dots" aria-hidden="true"><i></i><i></i><i></i></span></span>
+      </footer>
+    </article>
+  </figure>
+
+  <figure class="lpm-state">
+    <figcaption><b>2</b>Answering; reply open before an answer</figcaption>
+    <article class="lpm-b lpm-b--live">
+      <header class="lpm-b-head"><span class="lpm-who">reader@example.com</span> <time>1 min ago</time> <span class="lpm-badge lpm-badge--wait"><span class="lpm-pulse" aria-hidden="true"></span>responder is answering</span></header>
+      <div class="lpm-b-body"><p>The second diagram reads right to left on my phone. Is that intended, or should it flip to top-down on narrow screens?</p></div>
+      <footer class="lpm-b-foot">
+        <details open><summary>Add to comment</summary>
+          <textarea class="lpm-field" aria-label="Add to your comment" placeholder="Add detail. responder reads it with your comment."></textarea>
+          <div class="lpm-compose-actions"><button class="lpm-btn" type="button">Add</button><button class="lpm-link" type="button">Cancel</button></div>
+        </details>
+        <span class="lpm-b-live" role="status">responder is writing<span class="lpm-dots" aria-hidden="true"><i></i><i></i><i></i></span></span>
+      </footer>
+    </article>
+  </figure>
+
+  <figure class="lpm-state">
+    <figcaption><b>3</b>Answered</figcaption>
+    <article class="lpm-b">
+      <header class="lpm-b-head"><span class="lpm-who">reader@example.com</span> <time>12 min ago</time> <span class="lpm-badge lpm-badge--done"><span aria-hidden="true">&#10003;</span>Answered</span></header>
+      <div class="lpm-b-body"><p>Why is the owner window five minutes rather than one?</p></div>
+      <div class="lpm-b-sub">
+        <div class="lpm-b-head"><span class="lpm-handle">responder</span> <span class="lpm-agent">agent</span> <time>10 min ago</time></div>
+        <p class="lpm-b-said">An agent that pulls every minute can miss a pull or two without its comments bouncing to the responder; five minutes covers that. The owner_window_sec setting changes it.</p>
+      </div>
+      <footer class="lpm-b-foot"><details><summary>Reply</summary></details></footer>
+    </article>
+  </figure>
+
+  <figure class="lpm-state">
+    <figcaption><b>4</b>Answered, and revised the page</figcaption>
+    <article class="lpm-b">
+      <header class="lpm-b-head"><span class="lpm-who">reader@example.com</span> <time>1 h ago</time> <span class="lpm-badge lpm-badge--done"><span aria-hidden="true">&#10003;</span>Answered</span></header>
+      <div class="lpm-b-body"><p>Does the nightly backup include answers and comments, or only the pages?</p></div>
+      <div class="lpm-b-sub">
+        <div class="lpm-b-head"><span class="lpm-handle">operator</span> <span class="lpm-agent">agent</span> <time>58 min ago</time></div>
+        <p class="lpm-b-said">Both. The backup copies the database after a checkpoint, so answers and comments are in it. I added a sentence to Backups saying so.</p>
+        <a class="lpm-b-rev" href="#top"><span aria-hidden="true">&#9998;</span>Revised the page &#8594; revision <code>1f54de0</code></a>
+      </div>
+      <footer class="lpm-b-foot"><details><summary>Reply</summary></details></footer>
+    </article>
+  </figure>
+
+  <figure class="lpm-state">
+    <figcaption><b>5</b>Failed</figcaption>
+    <article class="lpm-b lpm-b--fail">
+      <header class="lpm-b-head"><span class="lpm-who">reader@example.com</span> <time>25 min ago</time> <span class="lpm-badge lpm-badge--fail"><span class="lpm-bang" aria-hidden="true">!</span>Couldn't answer</span></header>
+      <div class="lpm-b-body"><p>@operator can you rerun the capture for this section? The screenshot is from before the rename.</p></div>
+      <div class="lpm-b-alert" role="note">
+        <span class="lpm-bang" aria-hidden="true">!</span>
+        <p><strong>operator couldn't answer:</strong> the capture step timed out after 120 seconds.</p>
+        <p>To send it again, write a new comment.</p>
+      </div>
+    </article>
+  </figure>
+
+  <figure class="lpm-state">
+    <figcaption><b>6</b>Unavailable: the agent isn't listening</figcaption>
+    <article class="lpm-b">
+      <header class="lpm-b-head"><span class="lpm-who">reader@example.com</span> <time>3 min ago</time> <span class="lpm-badge lpm-badge--off"><span class="lpm-hollow" aria-hidden="true"></span>Queued for hermes</span></header>
+      <div class="lpm-b-body"><p>@hermes please check these numbers against last week's run.</p></div>
+      <div class="lpm-b-alert lpm-b-alert--off">
+        <span class="lpm-hollow" aria-hidden="true"></span>
+        <p><strong>hermes is offline.</strong></p>
+        <p>Your comment waits in its queue and goes to hermes when it checks in again.</p>
+      </div>
+      <footer class="lpm-b-foot"><details><summary>Add to comment</summary></details></footer>
+    </article>
+  </figure>
+
+  <figure class="lpm-state">
+    <figcaption><b>7</b>Reply open, after an answer</figcaption>
+    <article class="lpm-b">
+      <header class="lpm-b-head"><span class="lpm-who">reader@example.com</span> <time>12 min ago</time> <span class="lpm-badge lpm-badge--done"><span aria-hidden="true">&#10003;</span>Answered</span></header>
+      <div class="lpm-b-body"><p>Why is the owner window five minutes rather than one?</p></div>
+      <div class="lpm-b-sub">
+        <div class="lpm-b-head"><span class="lpm-handle">responder</span> <span class="lpm-agent">agent</span> <time>10 min ago</time></div>
+        <p class="lpm-b-said">An agent that pulls every minute can miss a pull or two without its comments bouncing to the responder; five minutes covers that.</p>
+      </div>
+      <footer class="lpm-b-foot">
+        <details open><summary>Reply</summary>
+          <textarea class="lpm-field" aria-label="Reply to responder" placeholder="Reply to responder&#8230;">Makes sense. Can it be two minutes on this page only?</textarea>
+          <div class="lpm-compose-actions"><button class="lpm-btn" type="button">Send reply</button><button class="lpm-link" type="button">Cancel</button><span class="lpm-compose-hint">Goes to responder</span></div>
+        </details>
+      </footer>
+    </article>
+  </figure>
+</div>
+
+<h2>Comment threads: C</h2>
+
+<p><strong>Chat.</strong> A conversation: your comments on the right in tinted bubbles, agents on the left with a square lavender avatar so an agent is never mistaken for a person. Status reads as a small receipt under your bubble; the live check is a typing bubble in the spot the reply will take; failures, queueing and page revisions are centred system lines.</p>
+
+<h3>A long thread</h3>
+
+<div class="lpm lpm-long">
+  <div class="lpm-c">
+    <div class="lpm-c-row lpm-c-row--me">
+      <span class="lpm-c-av" aria-hidden="true">KO</span>
+      <div class="lpm-c-col">
+        <p class="lpm-c-name"><span class="lpm-who">reader@example.com</span> <span class="lpm-you">you</span> <time>2 h ago</time></p>
+        <p class="lpm-c-bubble">Retention says answers are kept for 90 days. Does that include the note attached to an answer?</p>
+      </div>
+    </div>
+    <div class="lpm-c-row">
+      <span class="lpm-c-av lpm-c-av--agent" aria-hidden="true">R</span>
+      <div class="lpm-c-col">
+        <p class="lpm-c-name"><span class="lpm-handle">responder</span> <span class="lpm-agent">agent</span> <time>2 h ago</time></p>
+        <div class="lpm-c-bubble"><p>Yes. A note is part of its answer, so it is kept and pruned with it. Comments are separate: they stay for as long as the page exists.</p></div>
+      </div>
+    </div>
+    <div class="lpm-c-row lpm-c-row--me">
+      <span class="lpm-c-av" aria-hidden="true">KO</span>
+      <div class="lpm-c-col">
+        <p class="lpm-c-name"><span class="lpm-who">reader@example.com</span> <span class="lpm-you">you</span> <time>1 h ago</time></p>
+        <p class="lpm-c-bubble">And when the page is republished, which of those survive?</p>
+      </div>
+    </div>
+    <div class="lpm-c-row">
+      <span class="lpm-c-av lpm-c-av--agent" aria-hidden="true">R</span>
+      <div class="lpm-c-col">
+        <p class="lpm-c-name"><span class="lpm-handle">responder</span> <span class="lpm-agent">agent</span> <time>1 h ago</time></p>
+        <div class="lpm-c-bubble"><p>All of them. A republish keeps:</p>
+          <ul class="lpm-list">
+            <li>answers, each tied to the revision it was given against;</li>
+            <li>comment threads, moved under "Comments on sections that have changed" when their section is gone;</li>
+            <li>the page's owner, unless <code>--owner</code> names a new one.</li>
+          </ul></div>
+      </div>
+    </div>
+    <div class="lpm-c-row lpm-c-row--me">
+      <span class="lpm-c-av" aria-hidden="true">KO</span>
+      <div class="lpm-c-col">
+        <p class="lpm-c-name"><span class="lpm-who">reader@example.com</span> <span class="lpm-you">you</span> <time>48 min ago</time></p>
+        <p class="lpm-c-bubble">Please put that list in the Retention section, so it's on the page.</p>
+      </div>
+    </div>
+    <div class="lpm-c-row">
+      <span class="lpm-c-av lpm-c-av--agent" aria-hidden="true">R</span>
+      <div class="lpm-c-col">
+        <p class="lpm-c-name"><span class="lpm-handle">responder</span> <span class="lpm-agent">agent</span> <time>45 min ago</time></p>
+        <div class="lpm-c-bubble"><p>Done: the three points are now under Retention, after the 90-day line.</p></div>
+      </div>
+    </div>
+    <p class="lpm-c-event"><span>responder <a href="#top">revised the page &#8594; revision <code>3c91e0a</code></a></span></p>
+    <div class="lpm-c-row lpm-c-row--me">
+      <span class="lpm-c-av" aria-hidden="true">KO</span>
+      <div class="lpm-c-col">
+        <p class="lpm-c-name"><span class="lpm-who">reader@example.com</span> <span class="lpm-you">you</span> <time>20 min ago</time></p>
+        <p class="lpm-c-bubble">Thanks, that reads well. @hermes can you double-check the numbers?</p>
+      </div>
+    </div>
+    <div class="lpm-c-row">
+      <span class="lpm-c-av lpm-c-av--agent" aria-hidden="true">H</span>
+      <div class="lpm-c-col">
+        <p class="lpm-c-name"><span class="lpm-handle">hermes</span> <span class="lpm-agent">agent</span> <time>12 min ago</time></p>
+        <div class="lpm-c-bubble"><p>Checked against last night's backup report. The 90-day and 30-day rows match. The captures row says 14 days, but the report keeps them for 21, so that row needs fixing.</p></div>
+      </div>
+    </div>
+    <details class="lpm-c-reply"><summary>Reply</summary></details>
+  </div>
+</div>
+
+<h3>Every state</h3>
+
+<div class="lpm lpm-grid">
+  <figure class="lpm-state">
+    <figcaption><b>1</b>Waiting, checking for a reply</figcaption>
+    <div class="lpm-c">
+      <div class="lpm-c-row lpm-c-row--me">
+        <span class="lpm-c-av" aria-hidden="true">KO</span>
+        <div class="lpm-c-col">
+          <p class="lpm-c-name"><span class="lpm-who">reader@example.com</span> <time>just now</time></p>
+          <p class="lpm-c-bubble">The second diagram reads right to left on my phone. Is that intended, or should it flip to top-down on narrow screens?</p>
+          <p class="lpm-c-receipt lpm-c-receipt--wait"><span class="lpm-pulse" aria-hidden="true"></span>Waiting for responder</p>
+        </div>
+      </div>
+      <div class="lpm-c-row" role="status">
+        <span class="lpm-c-av lpm-c-av--ghost" aria-hidden="true">R</span>
+        <div class="lpm-c-col"><p class="lpm-c-bubble lpm-c-bubble--ghost">Checking for a reply<span class="lpm-dots" aria-hidden="true"><i></i><i></i><i></i></span></p></div>
+      </div>
+      <details class="lpm-c-reply lpm-c-reply--quiet"><summary>Add to your comment</summary></details>
+    </div>
+  </figure>
+
+  <figure class="lpm-state">
+    <figcaption><b>2</b>Answering; reply open before an answer</figcaption>
+    <div class="lpm-c">
+      <div class="lpm-c-row lpm-c-row--me">
+        <span class="lpm-c-av" aria-hidden="true">KO</span>
+        <div class="lpm-c-col">
+          <p class="lpm-c-name"><span class="lpm-who">reader@example.com</span> <time>1 min ago</time></p>
+          <p class="lpm-c-bubble">The second diagram reads right to left on my phone. Is that intended, or should it flip to top-down on narrow screens?</p>
+          <p class="lpm-c-receipt">&#10003; Picked up by responder</p>
+        </div>
+      </div>
+      <div class="lpm-c-row" role="status">
+        <span class="lpm-c-av lpm-c-av--agent" aria-hidden="true">R</span>
+        <div class="lpm-c-col">
+          <p class="lpm-c-name"><span class="lpm-handle">responder</span> <span class="lpm-agent">agent</span> is writing</p>
+          <p class="lpm-c-bubble lpm-c-bubble--typing"><span class="lpm-dots" aria-hidden="true"><i></i><i></i><i></i></span><span class="lpm-sr">responder is writing a reply</span></p>
+        </div>
+      </div>
+      <details class="lpm-c-reply lpm-c-reply--quiet" open><summary>Add to your comment</summary>
+        <div class="lpm-c-compose">
+          <textarea aria-label="Add to your comment" rows="2" placeholder="Add detail. responder reads it with your comment."></textarea>
+          <button class="lpm-c-send" type="button" aria-label="Add">&#8593;</button>
+        </div>
+      </details>
+    </div>
+  </figure>
+
+  <figure class="lpm-state">
+    <figcaption><b>3</b>Answered</figcaption>
+    <div class="lpm-c">
+      <div class="lpm-c-row lpm-c-row--me">
+        <span class="lpm-c-av" aria-hidden="true">KO</span>
+        <div class="lpm-c-col">
+          <p class="lpm-c-name"><span class="lpm-who">reader@example.com</span> <time>12 min ago</time></p>
+          <p class="lpm-c-bubble">Why is the owner window five minutes rather than one?</p>
+        </div>
+      </div>
+      <div class="lpm-c-row">
+        <span class="lpm-c-av lpm-c-av--agent" aria-hidden="true">R</span>
+        <div class="lpm-c-col">
+          <p class="lpm-c-name"><span class="lpm-handle">responder</span> <span class="lpm-agent">agent</span> <time>10 min ago</time></p>
+          <p class="lpm-c-bubble">An agent that pulls every minute can miss a pull or two without its comments bouncing to the responder; five minutes covers that. The owner_window_sec setting changes it.</p>
+        </div>
+      </div>
+      <details class="lpm-c-reply"><summary>Reply</summary></details>
+    </div>
+  </figure>
+
+  <figure class="lpm-state">
+    <figcaption><b>4</b>Answered, and revised the page</figcaption>
+    <div class="lpm-c">
+      <div class="lpm-c-row lpm-c-row--me">
+        <span class="lpm-c-av" aria-hidden="true">KO</span>
+        <div class="lpm-c-col">
+          <p class="lpm-c-name"><span class="lpm-who">reader@example.com</span> <time>1 h ago</time></p>
+          <p class="lpm-c-bubble">Does the nightly backup include answers and comments, or only the pages?</p>
+        </div>
+      </div>
+      <div class="lpm-c-row">
+        <span class="lpm-c-av lpm-c-av--agent" aria-hidden="true">O</span>
+        <div class="lpm-c-col">
+          <p class="lpm-c-name"><span class="lpm-handle">operator</span> <span class="lpm-agent">agent</span> <time>58 min ago</time></p>
+          <p class="lpm-c-bubble">Both. The backup copies the database after a checkpoint, so answers and comments are in it. I added a sentence to Backups saying so.</p>
+        </div>
+      </div>
+      <p class="lpm-c-event"><span>operator <a href="#top">revised the page &#8594; revision <code>1f54de0</code></a></span></p>
+      <details class="lpm-c-reply"><summary>Reply</summary></details>
+    </div>
+  </figure>
+
+  <figure class="lpm-state">
+    <figcaption><b>5</b>Failed</figcaption>
+    <div class="lpm-c">
+      <div class="lpm-c-row lpm-c-row--me">
+        <span class="lpm-c-av" aria-hidden="true">KO</span>
+        <div class="lpm-c-col">
+          <p class="lpm-c-name"><span class="lpm-who">reader@example.com</span> <time>25 min ago</time></p>
+          <p class="lpm-c-bubble">@operator can you rerun the capture for this section? The screenshot is from before the rename.</p>
+        </div>
+      </div>
+      <div class="lpm-c-notice" role="note">
+        <p><strong><span class="lpm-bang" aria-hidden="true">!</span>operator couldn't answer</strong></p>
+        <p>The capture step timed out after 120 seconds. To send it again, write a new comment.</p>
+      </div>
+    </div>
+  </figure>
+
+  <figure class="lpm-state">
+    <figcaption><b>6</b>Unavailable: the agent isn't listening</figcaption>
+    <div class="lpm-c">
+      <div class="lpm-c-row lpm-c-row--me">
+        <span class="lpm-c-av" aria-hidden="true">KO</span>
+        <div class="lpm-c-col">
+          <p class="lpm-c-name"><span class="lpm-who">reader@example.com</span> <time>3 min ago</time></p>
+          <p class="lpm-c-bubble">@hermes please check these numbers against last week's run.</p>
+          <p class="lpm-c-receipt"><span class="lpm-hollow" aria-hidden="true"></span>Queued for hermes</p>
+        </div>
+      </div>
+      <div class="lpm-c-notice lpm-c-notice--off">
+        <p><strong><span class="lpm-hollow" aria-hidden="true"></span>hermes is offline</strong></p>
+        <p>Your comment goes to hermes when it checks in again.</p>
+      </div>
+      <details class="lpm-c-reply lpm-c-reply--quiet"><summary>Add to your comment</summary></details>
+    </div>
+  </figure>
+
+  <figure class="lpm-state">
+    <figcaption><b>7</b>Reply open, after an answer</figcaption>
+    <div class="lpm-c">
+      <div class="lpm-c-row">
+        <span class="lpm-c-av lpm-c-av--agent" aria-hidden="true">R</span>
+        <div class="lpm-c-col">
+          <p class="lpm-c-name"><span class="lpm-handle">responder</span> <span class="lpm-agent">agent</span> <time>10 min ago</time></p>
+          <p class="lpm-c-bubble">An agent that pulls every minute can miss a pull or two without its comments bouncing to the responder; five minutes covers that.</p>
+        </div>
+      </div>
+      <details class="lpm-c-reply" open><summary>Reply</summary>
+        <div class="lpm-c-compose">
+          <textarea aria-label="Reply to responder" rows="2" placeholder="Reply to responder&#8230;">Makes sense. Can it be two minutes on this page only?</textarea>
+          <button class="lpm-c-send" type="button" aria-label="Send reply">&#8593;</button>
+        </div>
+      </details>
+    </div>
+  </figure>
+</div>
+
+<h2>Decision cards: A</h2>
+<div class="lpm lpm-chosen"><span class="lpm-chosen-mark">&#10003; Chosen</span><p class="lpm-chosen-text">The maintainer picked this style for decision cards. B and C stay below for reference, folded.</p></div>
+
+<p><strong>Inline.</strong> A question in the prose's own voice with a quiet rule down its left edge. Options are a plain list of themed radio rows; the default carries a muted "default" after its label. The rule turns lavender while an answer is unsaved, and a saved answer folds to one line.</p>
+
+<div class="lpm lpm-grid">
+  <figure class="lpm-state">
+    <figcaption><b>1</b>Unanswered, three options</figcaption>
+    <div class="lpm-da">
+      <p class="lpm-da-q" id="da1-q"><span class="lpm-num">D1</span> How often should an open page check for new replies?</p>
+      <p class="lpm-ctx">Checks run only while a thread on the page is waiting.</p>
+      <div class="lpm-da-opts" role="radiogroup" aria-labelledby="da1-q">
+        <label class="lpm-da-opt"><input class="lpm-radio" type="radio" name="da1"><span>5 seconds</span><span class="lpm-da-def">default</span></label>
+        <label class="lpm-da-opt"><input class="lpm-radio" type="radio" name="da1"><span>15 seconds</span></label>
+        <label class="lpm-da-opt"><input class="lpm-radio" type="radio" name="da1"><span>Only on reload</span></label>
+      </div>
+      <div class="lpm-da-foot">
+        <details class="lpm-note"><summary>Add a note</summary><textarea class="lpm-field" aria-label="Note for D1"></textarea></details>
+        <span class="lpm-hint">Not answered yet</span>
+      </div>
+    </div>
+  </figure>
+
+  <figure class="lpm-state">
+    <figcaption><b>2</b>Selected, not saved</figcaption>
+    <div class="lpm-da lpm-da--dirty">
+      <p class="lpm-da-q" id="da2-q"><span class="lpm-num">D1</span> How often should an open page check for new replies?</p>
+      <p class="lpm-ctx">Checks run only while a thread on the page is waiting.</p>
+      <div class="lpm-da-opts" role="radiogroup" aria-labelledby="da2-q">
+        <label class="lpm-da-opt"><input class="lpm-radio" type="radio" name="da2"><span>5 seconds</span><span class="lpm-da-def">default</span></label>
+        <label class="lpm-da-opt"><input class="lpm-radio" type="radio" name="da2" checked><span>15 seconds</span></label>
+        <label class="lpm-da-opt"><input class="lpm-radio" type="radio" name="da2"><span>Only on reload</span></label>
+      </div>
+      <div class="lpm-da-foot">
+        <button class="lpm-btn" type="button">Save answer</button>
+        <details class="lpm-note"><summary>Add a note</summary><textarea class="lpm-field" aria-label="Note for D1"></textarea></details>
+        <span class="lpm-unsaved"><span class="lpm-hollow" aria-hidden="true"></span>Not saved</span>
+      </div>
+    </div>
+  </figure>
+
+  <figure class="lpm-state">
+    <figcaption><b>3</b>Two options, note open</figcaption>
+    <div class="lpm-da lpm-da--dirty">
+      <p class="lpm-da-q" id="da3-q"><span class="lpm-num">D2</span> Keep answered threads open?</p>
+      <p class="lpm-ctx">A folded thread shows one line: who answered, and when.</p>
+      <div class="lpm-da-opts" role="radiogroup" aria-labelledby="da3-q">
+        <label class="lpm-da-opt"><input class="lpm-radio" type="radio" name="da3"><span>Yes</span><span class="lpm-da-def">default</span></label>
+        <label class="lpm-da-opt"><input class="lpm-radio" type="radio" name="da3" checked><span>No</span></label>
+      </div>
+      <div class="lpm-da-foot">
+        <details class="lpm-note" open><summary>Note</summary><textarea class="lpm-field" aria-label="Note for D2">Fold them, but keep the newest one open.</textarea></details>
+        <button class="lpm-btn" type="button">Save answer</button>
+        <span class="lpm-unsaved"><span class="lpm-hollow" aria-hidden="true"></span>Not saved</span>
+      </div>
+    </div>
+  </figure>
+
+  <figure class="lpm-state">
+    <figcaption><b>4</b>Saved</figcaption>
+    <div class="lpm-da">
+      <p class="lpm-da-q"><span class="lpm-num">D2</span> Keep answered threads open?</p>
+      <p class="lpm-da-saved"><span class="lpm-check" aria-hidden="true">&#10003;</span> Saved &#183; <strong>Yes</strong> &#183; <button class="lpm-link" type="button">change</button></p>
+      <p class="lpm-saved-by">reader@example.com &#183; 2 min ago</p>
+    </div>
+    <div class="lpm-da" style="margin-top: 1.1rem;">
+      <p class="lpm-da-q"><span class="lpm-num">D1</span> How often should an open page check for new replies?</p>
+      <p class="lpm-da-saved"><span class="lpm-check" aria-hidden="true">&#10003;</span> Saved &#183; <strong>15 seconds</strong> &#183; <button class="lpm-link" type="button">change</button></p>
+      <p class="lpm-saved-note">Five feels busy for a page I leave open all day.</p>
+      <p class="lpm-saved-by">reader@example.com &#183; 1 h ago &#183; replaced an earlier answer</p>
+    </div>
+  </figure>
+</div>
+
+<h2>Decision cards: B</h2>
+
+<p><strong>Cards with segmented pills.</strong> Each question is a raised card with the question in the display serif. The options are one segmented pill control; a small dot marks the default. The footer holds the note and the Save button, and a saved card keeps its question and shows the answer as a tinted band with a Change button. <em>Not chosen; kept for reference.</em></p>
+
+<details class="lpm lpm-ref">
+<summary>Show decision cards B (not chosen)</summary>
+<div class="lpm-grid">
+  <figure class="lpm-state">
+    <figcaption><b>1</b>Unanswered, three options</figcaption>
+    <div class="lpm-db">
+      <div class="lpm-db-head"><span class="lpm-num">D1</span><p class="lpm-db-q" id="db1-q">How often should an open page check for new replies?</p></div>
+      <p class="lpm-ctx">Checks run only while a thread on the page is waiting.</p>
+      <div class="lpm-seg" role="radiogroup" aria-labelledby="db1-q">
+        <label><input class="lpm-sr" type="radio" name="db1"><span>5 s<span class="lpm-seg-def" aria-hidden="true"></span><span class="lpm-sr"> (default)</span></span></label>
+        <label><input class="lpm-sr" type="radio" name="db1"><span>15 s</span></label>
+        <label><input class="lpm-sr" type="radio" name="db1"><span>On reload</span></label>
+      </div>
+      <p class="lpm-db-legend" aria-hidden="true"><span class="lpm-seg-def"></span>default</p>
+      <div class="lpm-db-foot">
+        <details class="lpm-note"><summary>Add a note</summary><textarea class="lpm-field" aria-label="Note for D1"></textarea></details>
+        <span class="lpm-hint">Pick one to answer</span>
+      </div>
+    </div>
+  </figure>
+
+  <figure class="lpm-state">
+    <figcaption><b>2</b>Selected, not saved</figcaption>
+    <div class="lpm-db lpm-db--dirty">
+      <div class="lpm-db-head"><span class="lpm-num">D1</span><p class="lpm-db-q" id="db2-q">How often should an open page check for new replies?</p></div>
+      <p class="lpm-ctx">Checks run only while a thread on the page is waiting.</p>
+      <div class="lpm-seg" role="radiogroup" aria-labelledby="db2-q">
+        <label><input class="lpm-sr" type="radio" name="db2"><span>5 s<span class="lpm-seg-def" aria-hidden="true"></span><span class="lpm-sr"> (default)</span></span></label>
+        <label><input class="lpm-sr" type="radio" name="db2" checked><span>15 s</span></label>
+        <label><input class="lpm-sr" type="radio" name="db2"><span>On reload</span></label>
+      </div>
+      <p class="lpm-db-legend" aria-hidden="true"><span class="lpm-seg-def"></span>default</p>
+      <div class="lpm-db-foot">
+        <details class="lpm-note"><summary>Add a note</summary><textarea class="lpm-field" aria-label="Note for D1"></textarea></details>
+        <span class="lpm-db-flag"><span class="lpm-hollow" aria-hidden="true"></span>Not saved</span>
+        <button class="lpm-btn" type="button">Save</button>
+      </div>
+    </div>
+  </figure>
+
+  <figure class="lpm-state">
+    <figcaption><b>3</b>Two options, note open</figcaption>
+    <div class="lpm-db lpm-db--dirty">
+      <div class="lpm-db-head"><span class="lpm-num">D2</span><p class="lpm-db-q" id="db3-q">Keep answered threads open?</p></div>
+      <p class="lpm-ctx">A folded thread shows one line: who answered, and when.</p>
+      <div class="lpm-seg" role="radiogroup" aria-labelledby="db3-q">
+        <label><input class="lpm-sr" type="radio" name="db3"><span>Yes<span class="lpm-seg-def" aria-hidden="true"></span><span class="lpm-sr"> (default)</span></span></label>
+        <label><input class="lpm-sr" type="radio" name="db3" checked><span>No</span></label>
+      </div>
+      <div class="lpm-db-foot">
+        <details class="lpm-note" open><summary>Note</summary><textarea class="lpm-field" aria-label="Note for D2">Fold them, but keep the newest one open.</textarea></details>
+        <span class="lpm-db-flag"><span class="lpm-hollow" aria-hidden="true"></span>Not saved</span>
+        <button class="lpm-btn" type="button">Save</button>
+      </div>
+    </div>
+  </figure>
+
+  <figure class="lpm-state">
+    <figcaption><b>4</b>Saved</figcaption>
+    <div class="lpm-db">
+      <div class="lpm-db-head"><span class="lpm-num">D2</span><p class="lpm-db-q">Keep answered threads open?</p></div>
+      <div class="lpm-db-saved"><span class="lpm-check" aria-hidden="true">&#10003;</span><span>Saved &#183; <strong>Yes</strong></span><button class="lpm-btn lpm-btn--ghost lpm-btn--sm" type="button">Change</button></div>
+      <p class="lpm-saved-by">reader@example.com &#183; 2 min ago</p>
+    </div>
+    <div class="lpm-db" style="margin-top: 0.9rem;">
+      <div class="lpm-db-head"><span class="lpm-num">D1</span><p class="lpm-db-q">How often should an open page check for new replies?</p></div>
+      <div class="lpm-db-saved"><span class="lpm-check" aria-hidden="true">&#10003;</span><span>Saved &#183; <strong>15 s</strong></span><button class="lpm-btn lpm-btn--ghost lpm-btn--sm" type="button">Change</button></div>
+      <p class="lpm-saved-note">Five feels busy for a page I leave open all day.</p>
+      <p class="lpm-saved-by">reader@example.com &#183; 1 h ago &#183; replaced an earlier answer</p>
+    </div>
+  </figure>
+</div>
+</details>
+
+<h2>Decision cards: C</h2>
+
+<p><strong>Compact inline control.</strong> One question is one row: the question on the left and its choices as small chips beside it, wrapping underneath when the row is short of room. Choosing a chip shows Save and a note link on a second line; a saved question shrinks to a single dashed row. Pairs with the chat thread, where a decision can sit in the conversation like a quick reply. <em>Not chosen; kept for reference.</em></p>
+
+<details class="lpm lpm-ref">
+<summary>Show decision cards C (not chosen)</summary>
+<div class="lpm-grid">
+  <figure class="lpm-state">
+    <figcaption><b>1</b>Unanswered, three and two options</figcaption>
+    <div class="lpm-dc">
+      <p class="lpm-dc-q" id="dc1-q"><span class="lpm-num">D1</span> How often should an open page check for new replies?</p>
+      <div class="lpm-dc-chips" role="radiogroup" aria-labelledby="dc1-q">
+        <label><input class="lpm-sr" type="radio" name="dc1"><span>5 s<small>default</small></span></label>
+        <label><input class="lpm-sr" type="radio" name="dc1"><span>15 s</span></label>
+        <label><input class="lpm-sr" type="radio" name="dc1"><span>On reload</span></label>
+      </div>
+    </div>
+    <div class="lpm-dc">
+      <p class="lpm-dc-q" id="dc1b-q"><span class="lpm-num">D2</span> Keep answered threads open?</p>
+      <div class="lpm-dc-chips" role="radiogroup" aria-labelledby="dc1b-q">
+        <label><input class="lpm-sr" type="radio" name="dc1b"><span>Yes<small>default</small></span></label>
+        <label><input class="lpm-sr" type="radio" name="dc1b"><span>No</span></label>
+      </div>
+      <div class="lpm-dc-tools"><details class="lpm-note"><summary>Add a note</summary><textarea class="lpm-field" aria-label="Note for D2"></textarea></details></div>
+    </div>
+  </figure>
+
+  <figure class="lpm-state">
+    <figcaption><b>2</b>Selected, not saved</figcaption>
+    <div class="lpm-dc lpm-dc--dirty">
+      <p class="lpm-dc-q" id="dc2-q"><span class="lpm-num">D1</span> How often should an open page check for new replies?</p>
+      <div class="lpm-dc-chips" role="radiogroup" aria-labelledby="dc2-q">
+        <label><input class="lpm-sr" type="radio" name="dc2"><span>5 s<small>default</small></span></label>
+        <label><input class="lpm-sr" type="radio" name="dc2" checked><span>15 s</span></label>
+        <label><input class="lpm-sr" type="radio" name="dc2"><span>On reload</span></label>
+      </div>
+      <div class="lpm-dc-tools">
+        <span class="lpm-unsaved"><span class="lpm-hollow" aria-hidden="true"></span>Not saved</span>
+        <details class="lpm-note"><summary>Add a note</summary><textarea class="lpm-field" aria-label="Note for D1"></textarea></details>
+        <button class="lpm-btn lpm-btn--sm" type="button">Save</button>
+      </div>
+    </div>
+  </figure>
+
+  <figure class="lpm-state">
+    <figcaption><b>3</b>Two options, note open</figcaption>
+    <div class="lpm-dc lpm-dc--dirty">
+      <p class="lpm-dc-q" id="dc3-q"><span class="lpm-num">D2</span> Keep answered threads open?</p>
+      <div class="lpm-dc-chips" role="radiogroup" aria-labelledby="dc3-q">
+        <label><input class="lpm-sr" type="radio" name="dc3"><span>Yes<small>default</small></span></label>
+        <label><input class="lpm-sr" type="radio" name="dc3" checked><span>No</span></label>
+      </div>
+      <div class="lpm-dc-tools">
+        <details class="lpm-note" open><summary>Note</summary><textarea class="lpm-field" aria-label="Note for D2">Fold them, but keep the newest one open.</textarea></details>
+        <span class="lpm-unsaved"><span class="lpm-hollow" aria-hidden="true"></span>Not saved</span>
+        <button class="lpm-btn lpm-btn--sm" type="button">Save</button>
+      </div>
+    </div>
+  </figure>
+
+  <figure class="lpm-state">
+    <figcaption><b>4</b>Saved</figcaption>
+    <div class="lpm-dc lpm-dc--saved">
+      <p class="lpm-dc-q"><span class="lpm-num">D2</span> Keep answered threads open?</p>
+      <p class="lpm-dc-saved"><span class="lpm-check" aria-hidden="true">&#10003;</span> Saved &#183; <strong>Yes</strong> &#183; <button class="lpm-link" type="button">change</button></p>
+    </div>
+    <div class="lpm-dc lpm-dc--saved">
+      <p class="lpm-dc-q"><span class="lpm-num">D1</span> How often should an open page check for new replies?</p>
+      <p class="lpm-dc-saved"><span class="lpm-check" aria-hidden="true">&#10003;</span> Saved &#183; <strong>15 s</strong> &#183; <button class="lpm-link" type="button">change</button></p>
+      <p class="lpm-saved-by" style="flex: 1 1 100%; margin: 0;">reader@example.com &#183; 1 h ago &#183; with a note</p>
+    </div>
+  </figure>
+</div>
+</details>
+
+<h2>Which one?</h2>
+
+<p>Decision cards are settled on A. What remains is the thread style: A, B or C, or a mix of parts, for example B's card with A's thread line, or A's thread with C's typing bubble. Compare the long thread at the top of each section, say which in this section's comment box, and name anything that should change before it is built.</p>
+
+<p>Two behaviours are drawn the same way in all three thread styles, so say if either is wrong:</p>
+
+<ul>
+  <li>Before an agent answers you can still add to your comment; the link reads <em>Add to your comment</em> and is quieter, and becomes <em>Reply</em> once there is an answer. The other choice is to hide it until an answer arrives.</li>
+  <li>While a thread is waiting, the page checks every few seconds and drops the reply into place without a reload; once nothing is waiting, it stops checking.</li>
+</ul>
+
+<p>My suggestion: <strong>threads A.</strong> Its thread line keeps a long conversation readable without nesting deeper, it reads as part of the page like the chosen decision cards, and its status sits clearly in the header line.</p>
