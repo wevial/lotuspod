@@ -1,0 +1,1326 @@
+<h1>Margin comments mock-up</h1>
+
+<style>
+/* Everything below is scoped to .lpm wrappers, so none of it reaches the template. */
+.lpm {
+  color: var(--body-ink);
+  font-size: max(0.94em, 0.875rem);
+  line-height: 1.55;
+  margin: 0 0 1.75em;
+  position: relative;
+}
+.lpm *, .lpm *::before, .lpm *::after { box-sizing: border-box; }
+.lpm p { margin: 0; }
+.lpm ul, .lpm ol { list-style: none; margin: 0; padding: 0; }
+.lpm li { margin: 0; padding: 0; }
+.lpm figure { margin: 0; }
+.lpm small { font-size: inherit; }
+.lpm mark { color: inherit; }
+.lpm svg { flex: none; }
+
+/* Stage: wider than the reading column, one per row on a phone. */
+.lpm.lpm-grid, .lpm .lpm-grid {
+  align-items: start;
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
+  max-width: var(--measure-full, 100%);
+  width: var(--measure-full, 100%);
+}
+.lpm.lpm-wide { max-width: var(--measure-full, 100%); width: var(--measure-full, 100%); }
+.lpm .lpm-state {
+  border: 1px dashed var(--hairline);
+  border-radius: var(--radius-card);
+  min-width: 0;
+  padding: 0.85rem 1rem 1rem;
+}
+.lpm .lpm-state > figcaption {
+  color: var(--color-muted-lavender);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
+  margin: 0 0 0.9rem;
+  text-transform: uppercase;
+}
+.lpm .lpm-state > figcaption b { color: var(--color-lavender); font-weight: 400; margin-right: 0.5em; }
+.lpm .lpm-state-note { color: var(--color-muted-lavender); font-size: 0.82em; margin-top: 0.8rem; }
+@media (max-width: 30rem) {
+  .lpm .lpm-state { padding: 0.75rem 0.7rem 0.85rem; }
+}
+
+/* Shared parts */
+.lpm .lpm-sr {
+  clip-path: inset(50%);
+  height: 1px;
+  overflow: hidden;
+  position: absolute;
+  white-space: nowrap;
+  width: 1px;
+}
+.lpm :is(a, button, summary, input, textarea):focus-visible {
+  outline: 2px solid var(--color-lavender);
+  outline-offset: 2px;
+}
+.lpm summary { cursor: pointer; list-style: none; }
+.lpm summary::-webkit-details-marker { display: none; }
+.lpm .lpm-who { color: var(--color-pale-lavender); }
+.lpm .lpm-handle { color: var(--color-pale-lavender); font-family: var(--font-mono); font-size: 0.95em; }
+.lpm time { color: var(--color-muted-lavender); }
+.lpm .lpm-agent {
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-chip);
+  color: var(--color-lavender);
+  font-family: var(--font-mono);
+  font-size: 0.72em;
+  letter-spacing: 0.06em;
+  line-height: 1.5;
+  padding: 0 0.4em;
+  text-transform: uppercase;
+}
+.lpm .lpm-btn {
+  appearance: none;
+  background: var(--color-lavender);
+  border: 1px solid var(--color-lavender);
+  border-radius: var(--radius-pill);
+  color: var(--color-night);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.9em;
+  font-weight: 600;
+  line-height: 1.3;
+  padding: 0.4em 1.1em;
+}
+.lpm .lpm-btn:hover { background: var(--color-pale-lavender); border-color: var(--color-pale-lavender); }
+.lpm .lpm-link {
+  appearance: none;
+  background: none;
+  border: 0;
+  color: var(--color-lavender);
+  cursor: pointer;
+  font: inherit;
+  padding: 0;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--color-lavender) 45%, transparent);
+  text-underline-offset: 0.18em;
+}
+.lpm .lpm-link:hover { color: var(--color-pale-lavender); text-decoration-color: currentColor; }
+.lpm .lpm-check { color: var(--color-lavender); font-weight: 700; }
+
+/* Status marks */
+.lpm .lpm-pulse {
+  animation: lpm-pulse 1.6s ease-in-out infinite;
+  background: var(--color-lavender);
+  border-radius: 50%;
+  display: inline-block;
+  flex: none;
+  height: 0.5em;
+  width: 0.5em;
+}
+.lpm .lpm-hollow { border: 1.5px solid currentColor; border-radius: 50%; display: inline-block; flex: none; height: 0.55em; width: 0.55em; }
+.lpm .lpm-dots { display: inline-flex; gap: 3px; margin-left: 0.3em; vertical-align: middle; }
+.lpm .lpm-dots i { animation: lpm-bounce 1.2s ease-in-out infinite; background: currentColor; border-radius: 50%; height: 4px; width: 4px; }
+.lpm .lpm-dots i:nth-child(2) { animation-delay: 0.15s; }
+.lpm .lpm-dots i:nth-child(3) { animation-delay: 0.3s; }
+.lpm .lpm-badge {
+  align-items: center;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-pill);
+  color: var(--color-pale-lavender);
+  display: inline-flex;
+  font-size: 0.92em;
+  gap: 0.4em;
+  line-height: 1.5;
+  padding: 0.05em 0.65em;
+  white-space: nowrap;
+}
+.lpm .lpm-badge--wait { background: var(--quote-tint); border-color: color-mix(in srgb, var(--color-lavender) 60%, transparent); }
+.lpm .lpm-badge--done { color: var(--color-muted-lavender); }
+.lpm .lpm-badge--off { border-style: dashed; color: var(--color-muted-lavender); }
+
+@keyframes lpm-pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.35; transform: scale(0.7); } }
+@keyframes lpm-bounce { 0%, 70%, 100% { opacity: 0.3; transform: translateY(0); } 35% { opacity: 1; transform: translateY(-2px); } }
+@media (prefers-reduced-motion: reduce) {
+  .lpm *, .lpm *::before, .lpm *::after { animation: none !important; }
+}
+
+/* ---------- Threads C: chat (the chosen style, as shipped) ---------- */
+.lpm .lpm-c { display: flex; flex-direction: column; gap: 0.75rem; }
+.lpm .lpm-c-row { align-items: flex-end; display: flex; gap: 0.55rem; }
+.lpm .lpm-c-row--me { flex-direction: row-reverse; }
+.lpm .lpm-c-av {
+  background: var(--color-glow);
+  border: 1px solid var(--hairline-strong);
+  border-radius: 50%;
+  color: var(--color-pale-lavender);
+  display: grid;
+  flex: none;
+  font-size: 0.72rem;
+  font-weight: 600;
+  height: 2rem;
+  line-height: 1;
+  place-items: center;
+  width: 2rem;
+}
+.lpm .lpm-c-av--agent { background: var(--color-lavender); border-color: var(--color-lavender); border-radius: var(--radius-block); color: var(--color-night); font-family: var(--font-mono); }
+.lpm .lpm-c-col { display: flex; flex-direction: column; max-width: 85%; min-width: 0; }
+.lpm .lpm-c-row--me .lpm-c-col { align-items: flex-end; }
+.lpm .lpm-c-name { align-items: center; color: var(--color-muted-lavender); display: flex; flex-wrap: wrap; font-size: 0.78em; gap: 0.1rem 0.45em; margin: 0 0.3rem 0.2rem; }
+.lpm .lpm-c-row--me .lpm-c-name { justify-content: flex-end; }
+.lpm .lpm-c-bubble {
+  background: var(--color-surface);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-card) var(--radius-card) var(--radius-card) var(--radius-chip);
+  overflow-wrap: anywhere;
+  padding: 0.5rem 0.8rem;
+}
+.lpm .lpm-c-row--me .lpm-c-bubble {
+  background: var(--color-glow);
+  border-color: var(--hairline-strong);
+  border-radius: var(--radius-card) var(--radius-card) var(--radius-chip) var(--radius-card);
+}
+.lpm .lpm-c-bubble--typing { align-items: center; align-self: flex-start; color: var(--color-lavender); display: inline-flex; padding: 0.7rem 0.9rem; }
+.lpm .lpm-c-bubble--typing .lpm-dots { gap: 4px; margin: 0; }
+.lpm .lpm-c-bubble--typing .lpm-dots i { height: 6px; width: 6px; }
+.lpm .lpm-c-receipt { align-items: center; color: var(--color-muted-lavender); display: inline-flex; font-size: 0.75em; gap: 0.4em; margin: 0.3rem 0.3rem 0; }
+.lpm .lpm-c-receipt--wait { color: var(--color-pale-lavender); }
+.lpm .lpm-c-event { align-items: center; color: var(--color-muted-lavender); display: flex; font-size: 0.78em; gap: 0.6rem; text-align: center; }
+.lpm .lpm-c-event::before, .lpm .lpm-c-event::after { border-top: 1px solid var(--hairline); content: ""; flex: 1; min-width: 1rem; }
+.lpm .lpm-c-event > span { min-width: 0; overflow-wrap: anywhere; }
+.lpm .lpm-c-event a { color: var(--color-lavender); }
+.lpm .lpm-c-reply { align-self: flex-end; text-align: right; }
+.lpm .lpm-c-reply > summary { color: var(--color-lavender); display: inline-block; font-size: 0.85em; }
+.lpm .lpm-c-reply > summary::before { content: "\21A9\00a0"; }
+.lpm .lpm-c-compose {
+  align-items: flex-end;
+  background: var(--color-surface);
+  border: 1px solid var(--color-muted-lavender);
+  border-radius: 1.3rem;
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.3rem 0.3rem 0.3rem 0.95rem;
+  text-align: left;
+}
+.lpm .lpm-c-compose:focus-within { border-color: var(--color-lavender); box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-lavender) 35%, transparent); }
+.lpm .lpm-c-compose--focus { border-color: var(--color-lavender); box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-lavender) 35%, transparent); }
+.lpm .lpm-c-compose textarea {
+  background: transparent;
+  border: 0;
+  color: var(--color-white);
+  flex: 1;
+  font: inherit;
+  line-height: 1.45;
+  min-height: 2.4em;
+  min-width: 0;
+  padding: 0.4rem 0;
+  resize: none;
+}
+.lpm .lpm-c-compose textarea::placeholder { color: var(--color-muted-lavender); opacity: 1; }
+.lpm .lpm-c-compose textarea:focus-visible { outline: none; }
+.lpm .lpm-c-send {
+  appearance: none;
+  background: var(--color-lavender);
+  border: 0;
+  border-radius: 50%;
+  color: var(--color-night);
+  cursor: pointer;
+  display: grid;
+  flex: none;
+  font-size: 1rem;
+  font-weight: 700;
+  height: 2.1rem;
+  place-items: center;
+  width: 2.1rem;
+}
+.lpm .lpm-c-send:hover { background: var(--color-pale-lavender); }
+
+/* ---------- The recommendation and the pros and cons ---------- */
+.lpm.lpm-rec {
+  align-items: baseline;
+  background: var(--quote-tint);
+  border: 1px solid color-mix(in srgb, var(--color-lavender) 60%, transparent);
+  border-radius: var(--radius-card);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 0.8rem;
+  padding: 0.8rem 1rem;
+}
+.lpm .lpm-rec-mark {
+  background: var(--color-lavender);
+  border-radius: var(--radius-pill);
+  color: var(--color-night);
+  font-size: 0.85em;
+  font-weight: 600;
+  padding: 0.1em 0.8em;
+  white-space: nowrap;
+}
+.lpm .lpm-rec-text { color: var(--color-pale-lavender); flex: 1 1 18rem; }
+.lpm .lpm-rec-text strong { color: var(--color-white); }
+:is(.lpm.lpm-pc, .lpm .lpm-pc) { display: grid; gap: 0.3rem; list-style: none; margin: 0 0 1.25rem; padding: 0; }
+:is(.lpm.lpm-pc, .lpm .lpm-pc) li { margin: 0; padding: 0; display: grid; gap: 0.6rem; grid-template-columns: 1.3rem 1fr; }
+:is(.lpm.lpm-pc, .lpm .lpm-pc) li::before {
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-chip);
+  color: var(--color-lavender);
+  content: "+";
+  font-family: var(--font-mono);
+  font-size: 0.8em;
+  height: 1.35rem;
+  line-height: 1.25rem;
+  margin-top: 0.1rem;
+  text-align: center;
+}
+:is(.lpm.lpm-pc, .lpm .lpm-pc) li.lpm-con::before { color: var(--color-muted-lavender); content: "\2212"; }
+
+/* ---------- The comment highlight ---------- */
+.lpm .lpm-hl {
+  background: color-mix(in srgb, var(--color-lavender) 15%, transparent);
+  border-bottom: 2px solid color-mix(in srgb, var(--color-lavender) 50%, transparent);
+  border-radius: 3px 3px 0 0;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+  cursor: pointer;
+  padding: 0.05em 1px;
+}
+.lpm .lpm-hl + .lpm-hl { margin-left: 2px; }
+.lpm .lpm-hl:hover, .lpm .lpm-hl.is-hover {
+  background: color-mix(in srgb, var(--color-lavender) 26%, transparent);
+  border-bottom-color: var(--color-lavender);
+}
+.lpm .lpm-hl.is-active {
+  background: color-mix(in srgb, var(--color-lavender) 36%, transparent);
+  border-bottom-color: var(--color-lavender);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-lavender) 55%, transparent);
+  color: var(--color-white);
+}
+.lpm .lpm-hl.is-pending {
+  background: color-mix(in srgb, var(--color-lavender) 22%, transparent);
+  border-bottom: 2px dashed var(--color-lavender);
+}
+.lpm .lpm-hl .lpm-hl { margin: 0; padding: 0.05em 0; }
+.lpm .lpm-hl--strong {
+  background: color-mix(in srgb, var(--color-lavender) 30%, transparent);
+  border-bottom-color: transparent;
+  border-radius: 3px;
+  color: var(--color-white);
+}
+.lpm .lpm-hl--strong:hover, .lpm .lpm-hl--strong.is-hover {
+  background: color-mix(in srgb, var(--color-lavender) 46%, transparent);
+  border-bottom-color: transparent;
+}
+.lpm .lpm-hl--strong.is-active {
+  background: var(--color-lavender);
+  border-bottom-color: transparent;
+  box-shadow: none;
+  color: var(--color-night);
+}
+.lpm .lpm-hl-n {
+  background: transparent;
+  border: 1px solid var(--hairline-strong);
+  border-radius: 50%;
+  color: var(--color-lavender);
+  display: inline-grid;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  font-weight: 600;
+  height: 1.1rem;
+  line-height: 1;
+  margin: 0 0.1rem 0 0.05rem;
+  place-items: center;
+  position: relative;
+  top: -0.45em;
+  width: 1.1rem;
+}
+.lpm .lpm-hl-n--on { background: var(--color-lavender); border-color: var(--color-lavender); color: var(--color-night); }
+
+/* The browser's own selection, drawn. */
+.lpm .lpm-sel { background: rgba(64, 128, 255, 0.4); border-radius: 2px; -webkit-box-decoration-break: clone; box-decoration-break: clone; }
+.lpm .lpm-sel--one { white-space: nowrap; }
+.lpm .lpm-at { display: inline-block; height: 1em; position: relative; vertical-align: -0.1em; width: 0; }
+
+/* ---------- Floating Comment controls ---------- */
+.lpm .lpm-float {
+  align-items: center;
+  appearance: none;
+  background: var(--color-surface);
+  border: 1px solid color-mix(in srgb, var(--color-lavender) 60%, transparent);
+  border-radius: var(--radius-pill);
+  box-shadow: 0 8px 22px rgba(13, 10, 21, 0.5);
+  color: var(--color-white);
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  gap: 0.4rem;
+  line-height: 1.2;
+  padding: 0.38rem 0.8rem 0.38rem 0.6rem;
+  white-space: nowrap;
+}
+.lpm .lpm-float svg { color: var(--color-lavender); }
+.lpm .lpm-float kbd { color: var(--color-muted-lavender); font-family: var(--font-mono); font-size: 0.85em; font-weight: 400; margin-left: 0.2rem; }
+.lpm .lpm-at > .lpm-float--above { bottom: calc(100% + 0.6rem); left: 0; position: absolute; transform: translateX(-75%); }
+.lpm .lpm-at > .lpm-float--above::after {
+  background: inherit;
+  border-bottom: 1px solid color-mix(in srgb, var(--color-lavender) 60%, transparent);
+  border-right: 1px solid color-mix(in srgb, var(--color-lavender) 60%, transparent);
+  bottom: -5px;
+  content: "";
+  height: 8px;
+  left: 75%;
+  position: absolute;
+  transform: rotate(45deg);
+  width: 8px;
+}
+.lpm .lpm-at > .lpm-float--below { left: 0; position: absolute; top: calc(100% + 0.7rem); transform: translateX(-20%); }
+.lpm .lpm-iconbtn {
+  appearance: none;
+  background: var(--color-surface);
+  border: 1px solid color-mix(in srgb, var(--color-lavender) 60%, transparent);
+  border-radius: var(--radius-block);
+  box-shadow: 0 6px 16px rgba(13, 10, 21, 0.45);
+  color: var(--color-lavender);
+  cursor: pointer;
+  display: grid;
+  height: 2rem;
+  place-items: center;
+  width: 2rem;
+}
+.lpm .lpm-tip {
+  background: var(--color-pale-lavender);
+  border-radius: var(--radius-chip);
+  color: var(--color-night);
+  display: inline-block;
+  font-size: 0.7rem;
+  font-weight: 600;
+  margin-top: 0.4rem;
+  padding: 0.1rem 0.45rem;
+  white-space: nowrap;
+}
+
+/* ---------- Snippets: one paragraph of a page ---------- */
+.lpm .lpm-snip {
+  background: var(--color-deep-night);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-block);
+  font-size: 0.875rem;
+  line-height: 1.7;
+  padding: 2.8rem 1.1rem 1.1rem;
+}
+.lpm .lpm-snip p + p { margin-top: 0.8em; }
+.lpm .lpm-snip--margin {
+  align-items: start;
+  column-gap: 1rem;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 4.5rem;
+  padding-top: 1.1rem;
+}
+.lpm .lpm-snip--margin > .lpm-snip-mg { border-left: 1px dashed var(--hairline); display: flex; flex-direction: column; align-items: center; min-height: 100%; padding-left: 1rem; }
+.lpm .lpm-snip-mg-label { color: var(--color-muted-lavender); font-family: var(--font-mono); font-size: 0.6rem; letter-spacing: 0.1em; margin-top: auto; padding-top: 0.6rem; text-transform: uppercase; }
+
+/* ---------- Mini pages: a page column and a right margin ---------- */
+.lpm .lpm-frame {
+  background: var(--color-deep-night);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-card);
+  box-shadow: 0 18px 40px rgba(13, 10, 21, 0.45);
+  overflow: hidden;
+}
+.lpm .lpm-frame-bar {
+  align-items: baseline;
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--hairline);
+  display: flex;
+  gap: 0.45rem;
+  overflow: hidden;
+  padding: 0.45rem 0.95rem;
+  white-space: nowrap;
+}
+.lpm .lpm-frame-brand { color: var(--color-lavender); font-family: var(--font-mono); font-size: 0.66rem; letter-spacing: 0.12em; text-transform: uppercase; }
+.lpm .lpm-frame-sep { color: var(--color-muted-lavender); font-size: 0.75rem; }
+.lpm .lpm-frame-title { color: var(--color-white); font-family: var(--font-display); font-size: 0.88rem; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.lpm .lpm-narrow { display: none; }
+@media (max-width: 56rem) {
+  .lpm .lpm-narrow { color: var(--color-muted-lavender); display: block; font-size: 0.82em; margin: 0 0 0.5rem; }
+}
+.lpm .lpm-frame-scroll { overflow-x: auto; position: relative; scrollbar-color: var(--hairline-strong) transparent; scrollbar-width: thin; }
+.lpm .lpm-doc {
+  align-content: start;
+  align-items: start;
+  column-gap: 2.25rem;
+  display: grid;
+  font-size: 0.875rem;
+  grid-template-columns: minmax(0, 1fr) 17rem;
+  grid-template-rows: repeat(8, auto) 1fr;
+  line-height: 1.7;
+  min-width: 48rem;
+  padding: 1.5rem 1.5rem 1.75rem 2rem;
+}
+.lpm .lpm-doc--b { grid-template-columns: minmax(0, 1fr) 4.25rem; min-height: 37rem; }
+.lpm .lpm-doc--c { grid-template-columns: minmax(0, 1fr) 20rem; padding-right: 0; }
+.lpm .lpm-pg { grid-column: 1; }
+.lpm .lpm-mg { grid-column: 2; min-width: 0; }
+.lpm .lpm-r1 { grid-row: 1; }
+.lpm .lpm-r2 { grid-row: 2; }
+.lpm .lpm-r3 { grid-row: 3; }
+.lpm .lpm-r4 { grid-row: 4; }
+.lpm .lpm-r5 { grid-row: 5; }
+.lpm .lpm-r6 { grid-row: 6; }
+.lpm .lpm-r3-end { grid-row: 3 / -1; }
+.lpm .lpm-r-all { grid-row: 1 / -1; }
+.lpm .lpm-doc p.lpm-pg { margin: 0 0 0.95em; }
+.lpm .lpm-doc-h {
+  color: var(--color-white);
+  font-family: var(--font-display);
+  font-size: 1.3rem;
+  font-weight: 600;
+  line-height: 1.25;
+  margin: 0 0 0.75rem;
+}
+.lpm .lpm-mg-head { color: var(--color-muted-lavender); font-family: var(--font-mono); font-size: 0.66rem; letter-spacing: 0.08em; padding-top: 0.45rem; text-transform: uppercase; }
+.lpm .lpm-mg-head .lpm-link { color: var(--color-muted-lavender); text-decoration-color: var(--hairline-strong); }
+
+/* ---------- A: margin cards ---------- */
+.lpm .lpm-card {
+  background: var(--color-surface);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-card);
+  box-shadow: 0 4px 14px rgba(13, 10, 21, 0.3);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  padding: 0.6rem 0.75rem 0.65rem;
+  position: relative;
+}
+.lpm .lpm-card + .lpm-card { margin-top: 0.6rem; }
+.lpm .lpm-card .lpm-c { gap: 0.6rem; }
+.lpm .lpm-card .lpm-c-compose { margin-top: 0.7rem; }
+.lpm .lpm-card--lit {
+  border-color: color-mix(in srgb, var(--color-lavender) 60%, transparent);
+  box-shadow: 0 12px 30px rgba(13, 10, 21, 0.5), 0 0 0 1px color-mix(in srgb, var(--color-lavender) 22%, transparent);
+  padding: 0.7rem 0.8rem 0.8rem;
+}
+.lpm .lpm-card--nudge { margin-left: -1.4rem; }
+.lpm .lpm-card--nudge::before {
+  border-top: 2px solid var(--color-lavender);
+  content: "";
+  position: absolute;
+  right: 100%;
+  top: 0.95rem;
+  width: 0.95rem;
+}
+.lpm .lpm-card--nudge::after {
+  background: var(--color-lavender);
+  border-radius: 50%;
+  content: "";
+  height: 7px;
+  position: absolute;
+  right: calc(100% + 0.95rem - 3px);
+  top: calc(0.95rem - 2.5px);
+  width: 7px;
+}
+.lpm .lpm-card-head { align-items: center; display: flex; gap: 0.5rem; justify-content: space-between; margin: -0.1rem 0 0.65rem; }
+.lpm .lpm-card-by { align-items: center; color: var(--color-muted-lavender); display: flex; flex-wrap: wrap; font-size: 0.92em; gap: 0.15rem 0.45rem; }
+.lpm .lpm-card-text {
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  color: var(--body-ink);
+  display: -webkit-box;
+  margin-top: 0.3rem;
+  overflow: hidden;
+}
+.lpm .lpm-doc .lpm-card .lpm-card-text { -webkit-line-clamp: 1; }
+.lpm .lpm-card-foot { align-items: center; color: var(--color-muted-lavender); display: flex; flex-wrap: wrap; font-size: 0.88em; gap: 0.2rem 0.5rem; margin-top: 0.45rem; }
+.lpm .lpm-card-foot .lpm-badge { font-size: 0.95em; margin-left: auto; }
+.lpm .lpm-card-hint { align-items: center; color: var(--color-muted-lavender); display: flex; flex-wrap: wrap; font-size: 0.88em; gap: 0.3rem 0.6rem; justify-content: space-between; margin-top: 0.5rem; padding: 0 0.3rem; }
+.lpm .lpm-c-av.lpm-av-sm { font-size: 0.56rem; height: 1.3rem; width: 1.3rem; }
+.lpm .lpm-c-av--agent.lpm-av-sm { border-radius: var(--radius-chip); }
+.lpm .lpm-stack { display: inline-flex; }
+.lpm .lpm-stack > .lpm-c-av { box-shadow: 0 0 0 2px var(--color-surface); }
+.lpm .lpm-stack > .lpm-c-av + .lpm-c-av { margin-left: -0.35rem; }
+.lpm .lpm-resolve {
+  appearance: none;
+  background: transparent;
+  border: 1px solid var(--hairline-strong);
+  border-radius: 50%;
+  color: var(--color-muted-lavender);
+  cursor: pointer;
+  display: grid;
+  flex: none;
+  font-size: 0.8rem;
+  height: 1.65rem;
+  place-items: center;
+  width: 1.65rem;
+}
+.lpm .lpm-resolve:hover { border-color: var(--color-lavender); color: var(--color-lavender); }
+.lpm .lpm-card--resolved { background: transparent; border-style: dashed; box-shadow: none; }
+.lpm .lpm-card--resolved .lpm-card-text { color: var(--color-muted-lavender); }
+.lpm .lpm-card--detached { border-style: dashed; border-color: var(--hairline-strong); }
+.lpm .lpm-quote {
+  background: var(--quote-tint);
+  border-left: 2px solid var(--hairline-strong);
+  border-radius: 0 var(--radius-block) var(--radius-block) 0;
+  color: var(--color-pale-lavender);
+  font-family: var(--font-display);
+  font-size: 0.95em;
+  margin: 0 0 0.6rem;
+  padding: 0.35rem 0.7rem;
+}
+.lpm .lpm-quote del { color: var(--color-muted-lavender); text-decoration-color: var(--color-muted-lavender); }
+.lpm .lpm-quote-label { color: var(--color-muted-lavender); display: block; font-family: var(--font-body); font-size: 0.82em; }
+.lpm .lpm-card--detached .lpm-c-event { margin: 0 0 0.7rem; }
+
+/* ---------- B: gutter markers and the popover ---------- */
+.lpm .lpm-mk-pin { position: relative; }
+.lpm .lpm-mk {
+  align-items: center;
+  appearance: none;
+  background: var(--color-surface);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-pill);
+  color: var(--color-pale-lavender);
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  gap: 0.35rem;
+  padding: 0.18rem 0.5rem 0.18rem 0.22rem;
+  position: relative;
+}
+.lpm .lpm-mk .lpm-stack > .lpm-c-av { box-shadow: 0 0 0 2px var(--color-surface); }
+.lpm .lpm-mk--on { background: var(--color-glow); border-color: var(--color-lavender); box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-lavender) 25%, transparent); }
+.lpm .lpm-mk--on .lpm-stack > .lpm-c-av { box-shadow: 0 0 0 2px var(--color-glow); }
+.lpm .lpm-mk-dot { background: var(--color-lavender); border: 2px solid var(--color-deep-night); border-radius: 50%; height: 0.7rem; position: absolute; right: -0.2rem; top: -0.25rem; width: 0.7rem; }
+.lpm .lpm-pop {
+  position: absolute;
+  right: calc(100% + 0.75rem);
+  top: -0.6rem;
+  width: 21rem;
+  z-index: 1;
+}
+.lpm .lpm-pop::after {
+  background: var(--color-surface);
+  border-right: 1px solid color-mix(in srgb, var(--color-lavender) 60%, transparent);
+  border-top: 1px solid color-mix(in srgb, var(--color-lavender) 60%, transparent);
+  content: "";
+  height: 12px;
+  position: absolute;
+  right: -7px;
+  top: 0.95rem;
+  transform: rotate(45deg);
+  width: 12px;
+}
+
+/* ---------- C: side panel ---------- */
+.lpm .lpm-panel {
+  align-self: stretch;
+  background: var(--color-surface);
+  border-left: 1px solid var(--hairline-strong);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  margin: -1.5rem 0 -1.75rem;
+  padding: 1rem 1rem 1.25rem;
+}
+.lpm .lpm-panel-head { align-items: baseline; border-bottom: 1px solid var(--hairline); display: flex; flex-wrap: wrap; gap: 0.2rem 0.6rem; margin-bottom: 0.7rem; padding-bottom: 0.6rem; }
+.lpm .lpm-panel-title { color: var(--color-white); font-family: var(--font-display); font-size: 1.05rem; font-weight: 600; }
+.lpm .lpm-panel-count { color: var(--color-muted-lavender); }
+.lpm .lpm-panel-head .lpm-link { margin-left: auto; }
+.lpm .lpm-pi { border-radius: var(--radius-block); display: grid; gap: 0.55rem; grid-template-columns: 1.1rem minmax(0, 1fr); padding: 0.55rem 0.5rem 0.6rem 0.4rem; }
+.lpm .lpm-pi + .lpm-pi { margin-top: 0.2rem; }
+.lpm .lpm-pi:hover { background: var(--row-tint); }
+.lpm .lpm-pi > .lpm-hl-n { top: 0.15rem; }
+.lpm .lpm-pi--on { background: var(--color-night); border: 1px solid color-mix(in srgb, var(--color-lavender) 55%, transparent); }
+.lpm .lpm-pi--on:hover { background: var(--color-night); }
+.lpm .lpm-pi-quote { color: var(--color-pale-lavender); font-family: var(--font-display); font-style: italic; margin-bottom: 0.15rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lpm .lpm-pi--on .lpm-pi-quote { margin-bottom: 0.65rem; white-space: normal; }
+
+/* ---------- Highlight styles ---------- */
+.lpm .lpm-hlrow { border-top: 1px solid var(--hairline); display: grid; gap: 0.15rem 0.8rem; grid-template-columns: 4.75rem minmax(0, 1fr); padding: 0.6rem 0; }
+.lpm .lpm-hlrow:first-of-type { border-top: 0; padding-top: 0; }
+.lpm .lpm-hlrow > span:first-child { color: var(--color-muted-lavender); font-family: var(--font-mono); font-size: 0.66rem; letter-spacing: 0.08em; padding-top: 0.3rem; text-transform: uppercase; }
+.lpm .lpm-hlrow > p { font-size: 0.9rem; line-height: 1.75; }
+@media (max-width: 30rem) {
+  .lpm .lpm-hlrow { grid-template-columns: 1fr; }
+}
+
+/* ---------- Phones ---------- */
+.lpm.lpm-phones {
+  align-items: start;
+  display: grid;
+  gap: 1.5rem;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 19rem), 22.5rem));
+  max-width: var(--measure-full, 100%);
+  width: var(--measure-full, 100%);
+}
+.lpm .lpm-phones-alt { min-width: 0; }
+.lpm .lpm-phones-alt > figcaption { color: var(--color-pale-lavender); font-size: 0.9em; margin: 0 0 0.75rem; }
+.lpm .lpm-phones-alt > figcaption b { color: var(--color-white); display: block; font-family: var(--font-display); font-size: 1.15rem; font-weight: 600; }
+.lpm .lpm-phones-alt > figcaption .lpm-pc { margin: 0.4rem 0 0; }
+.lpm .lpm-phone {
+  background: var(--color-deep-night);
+  border: 1px solid var(--hairline-strong);
+  border-radius: 1.75rem;
+  box-shadow: 0 18px 40px rgba(13, 10, 21, 0.45);
+  max-width: 360px;
+  overflow: hidden;
+  position: relative;
+  width: 100%;
+}
+.lpm .lpm-phone .lpm-frame-bar { padding: 0.75rem 1.1rem 0.5rem; }
+.lpm .lpm-phone-body { font-size: 0.94rem; line-height: 1.65; padding: 1.1rem 1.1rem 1.4rem; }
+.lpm .lpm-phone-body p + p { margin-top: 0.85em; }
+.lpm .lpm-phone-body .lpm-doc-h { font-size: 1.25rem; }
+.lpm .lpm-phone--tall { height: 41rem; }
+.lpm .lpm-inline {
+  background: var(--color-surface);
+  border: 1px solid color-mix(in srgb, var(--color-lavender) 60%, transparent);
+  border-radius: var(--radius-card);
+  box-shadow: 0 10px 26px rgba(13, 10, 21, 0.45);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  margin: 0.8rem 0 1rem;
+  padding: 0.7rem 0.8rem 0.8rem;
+  position: relative;
+}
+.lpm .lpm-inline::before {
+  background: var(--color-surface);
+  border-left: 1px solid color-mix(in srgb, var(--color-lavender) 60%, transparent);
+  border-top: 1px solid color-mix(in srgb, var(--color-lavender) 60%, transparent);
+  content: "";
+  height: 12px;
+  left: 6rem;
+  position: absolute;
+  top: -7px;
+  transform: rotate(45deg);
+  width: 12px;
+}
+.lpm .lpm-close { appearance: none; background: none; border: 0; color: var(--color-muted-lavender); cursor: pointer; font: inherit; font-size: 1.1rem; line-height: 1; padding: 0.1rem 0.25rem; }
+.lpm .lpm-scrim { background: linear-gradient(to bottom, rgba(13, 10, 21, 0.05) 0%, rgba(13, 10, 21, 0.55) 45%); inset: 0; position: absolute; }
+.lpm .lpm-sheet {
+  background: var(--color-surface);
+  border-radius: 1.25rem 1.25rem 0 0;
+  border-top: 1px solid var(--hairline-strong);
+  bottom: 0;
+  box-shadow: 0 -12px 32px rgba(13, 10, 21, 0.5);
+  display: flex;
+  flex-direction: column;
+  font-size: 0.8125rem;
+  height: 63%;
+  left: 0;
+  line-height: 1.5;
+  position: absolute;
+  right: 0;
+}
+.lpm .lpm-sheet-grab { background: var(--hairline-strong); border-radius: var(--radius-pill); height: 4px; margin: 0.55rem auto 0.3rem; width: 2.5rem; }
+.lpm .lpm-sheet-head { align-items: center; display: flex; gap: 0.5rem; padding: 0.2rem 0.9rem 0.5rem; }
+.lpm .lpm-sheet-nav { align-items: center; color: var(--color-muted-lavender); display: flex; white-space: nowrap; font-family: var(--font-mono); font-size: 0.72rem; gap: 0.35rem; margin-right: auto; }
+.lpm .lpm-sheet-nav button { appearance: none; background: none; border: 1px solid var(--hairline-strong); border-radius: 50%; color: var(--color-pale-lavender); cursor: pointer; display: grid; font-size: 0.8rem; height: 1.6rem; place-items: center; width: 1.6rem; }
+.lpm .lpm-sheet-body { flex: 1; min-height: 0; overflow: hidden; padding: 0 0.9rem; }
+.lpm .lpm-sheet-foot { border-top: 1px solid var(--hairline); padding: 0.6rem 0.75rem 0.9rem; }
+.lpm .lpm-native {
+  background: #2c2c2e;
+  border-radius: 9px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
+  color: #fff;
+  display: flex;
+  font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 0.8rem;
+  left: 50%;
+  line-height: 1;
+  position: absolute;
+  top: -2.6rem;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+.lpm .lpm-native span { padding: 0.6rem 0.75rem; }
+.lpm .lpm-native span + span { border-left: 1px solid rgba(255, 255, 255, 0.2); }
+.lpm .lpm-handle-s, .lpm .lpm-handle-e { display: inline-block; height: 1.25em; position: relative; vertical-align: -0.25em; width: 0; }
+.lpm .lpm-handle-s::before, .lpm .lpm-handle-e::before { background: #4080ff; bottom: 0; content: ""; left: -1px; position: absolute; top: 0; width: 2px; }
+.lpm .lpm-handle-s::after, .lpm .lpm-handle-e::after { background: #4080ff; border-radius: 50%; content: ""; height: 9px; left: -4.5px; position: absolute; width: 9px; }
+.lpm .lpm-handle-s::after { top: -7px; }
+.lpm .lpm-handle-e::after { bottom: -7px; }
+.lpm .lpm-selpara { margin-top: 2.6rem; position: relative; }
+
+/* ---------- Settled picks ---------- */
+.lpm.lpm-chosen {
+  align-items: center;
+  background: var(--quote-tint);
+  border: 1px solid color-mix(in srgb, var(--color-lavender) 60%, transparent);
+  border-radius: var(--radius-card);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 0.8rem;
+  padding: 0.7rem 1rem;
+}
+.lpm .lpm-chosen-mark {
+  background: var(--color-lavender);
+  border-radius: var(--radius-pill);
+  color: var(--color-night);
+  font-size: 0.85em;
+  font-weight: 600;
+  padding: 0.1em 0.8em;
+  white-space: nowrap;
+}
+.lpm .lpm-chosen-text { color: var(--color-pale-lavender); flex: 1 1 16rem; }
+.lpm .lpm-state--chosen { border: 1px solid color-mix(in srgb, var(--color-lavender) 60%, transparent); }
+.lpm.lpm-ref > summary {
+  border: 1px dashed var(--hairline-strong);
+  border-radius: var(--radius-pill);
+  color: var(--color-muted-lavender);
+  display: inline-block;
+  font-size: 0.9em;
+  padding: 0.25em 1em;
+}
+.lpm.lpm-ref > summary::before { content: "\25B8\00a0"; }
+.lpm.lpm-ref[open] > summary::before { content: "\25BE\00a0"; }
+.lpm.lpm-ref > summary:hover { border-color: var(--color-lavender); color: var(--color-pale-lavender); }
+.lpm.lpm-ref > .lpm-grid { margin-top: 1rem; opacity: 0.85; }
+
+/* ---------- Section chips ---------- */
+.lpm .lpm-chip {
+  align-items: center;
+  appearance: none;
+  background: transparent;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-pill);
+  color: var(--color-pale-lavender);
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-size: 0.8rem;
+  gap: 0.45rem;
+  line-height: 1.4;
+  max-width: 100%;
+  padding: 0.22rem 0.8rem 0.22rem 0.3rem;
+  white-space: nowrap;
+}
+.lpm .lpm-chip:hover { border-color: var(--color-lavender); color: var(--color-white); }
+.lpm .lpm-chip .lpm-stack > .lpm-c-av { box-shadow: 0 0 0 2px var(--color-deep-night); }
+.lpm .lpm-chip-sep { color: var(--color-muted-lavender); }
+.lpm .lpm-chip-state { align-items: center; color: var(--color-muted-lavender); display: inline-flex; gap: 0.35em; }
+.lpm .lpm-chip--live { background: var(--quote-tint); border-color: color-mix(in srgb, var(--color-lavender) 60%, transparent); }
+.lpm .lpm-chip--live .lpm-chip-state { color: var(--color-pale-lavender); }
+.lpm .lpm-chip--quiet { border-color: var(--hairline); border-style: dashed; color: var(--color-muted-lavender); padding-left: 0.7rem; }
+.lpm .lpm-chip--quiet svg { color: var(--color-lavender); }
+.lpm .lpm-chip--quiet .lpm-chip-act { color: var(--color-lavender); }
+.lpm .lpm-chip--on { background: var(--color-glow); border-color: var(--color-lavender); box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-lavender) 22%, transparent); color: var(--color-white); }
+.lpm .lpm-chip--on .lpm-stack > .lpm-c-av { box-shadow: 0 0 0 2px var(--color-glow); }
+.lpm .lpm-chips { display: grid; gap: 0.85rem; }
+.lpm .lpm-chips > div { align-items: center; display: flex; flex-wrap: wrap; gap: 0.35rem 0.8rem; }
+.lpm .lpm-chips > div > span:last-child { color: var(--color-muted-lavender); font-size: 0.82em; }
+.lpm .lpm-doc .lpm-chip-row { margin: 0 0 1.4rem; }
+.lpm .lpm-chip-pin { display: inline-block; max-width: 100%; position: relative; }
+
+/* Today's comment box, as shipped */
+.lpm .lpm-page { font-size: 0.875rem; line-height: 1.7; padding: 1.25rem 1.4rem 1.4rem; }
+.lpm .lpm-page > p + p, .lpm .lpm-page > p + .lpm-doc-h { margin-top: 0.9em; }
+.lpm .lpm-page .lpm-doc-h { font-size: 1.15rem; margin-top: 1.3rem; }
+.lpm .lpm-page > .lpm-doc-h:first-child { margin-top: 0; }
+.lpm .lpm-old-chip { border: 1px solid var(--hairline); border-radius: var(--radius-pill); color: var(--color-muted-lavender); display: inline-block; font-size: 0.8rem; margin-top: 0.7rem; padding: 0.15rem 0.85rem; }
+.lpm .lpm-old-chip--open { border-color: var(--color-lavender); color: var(--color-pale-lavender); }
+.lpm .lpm-old-box { background: var(--row-tint); border: 1px solid var(--hairline); border-radius: var(--radius-block); font-size: 0.8125rem; line-height: 1.5; margin-top: 0.5rem; padding: 0.75rem 1rem 0.9rem; }
+.lpm .lpm-old-box .lpm-c-compose { margin-top: 0.75rem; }
+.lpm .lpm-was { align-items: center; color: var(--color-lavender); display: flex; font-family: var(--font-mono); font-size: 0.62rem; gap: 0.5rem; letter-spacing: 0.08em; margin: 0.55rem 0 0; text-transform: uppercase; }
+.lpm .lpm-was::after { border-top: 1px dashed var(--color-lavender); content: ""; flex: 1; }
+.lpm .lpm-tag {
+  background: var(--color-lavender);
+  border-radius: var(--radius-chip);
+  color: var(--color-night);
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  line-height: 1.5;
+  padding: 0.05rem 0.4rem;
+  text-transform: uppercase;
+  vertical-align: 0.2em;
+  white-space: nowrap;
+}
+.lpm .lpm-tag--quiet { background: transparent; border: 1px solid var(--hairline-strong); color: var(--color-pale-lavender); }
+.lpm .lpm-jumped { outline: 1px dashed color-mix(in srgb, var(--color-lavender) 70%, transparent); outline-offset: 4px; }
+
+/* Section threads in the rail and the panel */
+.lpm .lpm-r7 { grid-row: 7; }
+.lpm .lpm-r8 { grid-row: 8; }
+.lpm .lpm-r2-end { grid-row: 2 / -1; }
+.lpm .lpm-r5-end { grid-row: 5 / -1; }
+.lpm .lpm-pin { align-self: start; height: 0; }
+.lpm .lpm-card-quote { color: var(--color-pale-lavender); font-family: var(--font-display); font-style: italic; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lpm .lpm-doc .lpm-card-quote + .lpm-card-text { margin-top: 0.15rem; }
+.lpm .lpm-sec { align-items: baseline; display: flex; gap: 0.45rem; margin: 0 0 0.65rem; min-width: 0; }
+.lpm .lpm-sec b { border: 1px solid var(--hairline-strong); border-radius: var(--radius-chip); color: var(--color-lavender); flex: none; font-family: var(--font-mono); font-size: 0.62rem; font-weight: 600; letter-spacing: 0.08em; padding: 0 0.35rem; text-transform: uppercase; }
+.lpm .lpm-sec span { color: var(--color-pale-lavender); font-family: var(--font-display); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lpm .lpm-hl-n--sec { font-family: var(--font-display); font-size: 0.72rem; }
+.lpm .lpm-pgrp { border-top: 1px solid var(--hairline); color: var(--color-muted-lavender); font-family: var(--font-mono); font-size: 0.6rem; letter-spacing: 0.08em; margin: 0.6rem 0 0.25rem; overflow: hidden; padding-top: 0.6rem; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
+.lpm .lpm-pgrp:first-child { border-top: 0; margin-top: 0; padding-top: 0; }
+.lpm .lpm-pline { align-items: center; border-radius: var(--radius-block); display: grid; gap: 0.5rem; grid-template-columns: 1.1rem minmax(0, 1fr) auto; padding: 0.35rem 0.4rem; }
+.lpm .lpm-pline:hover { background: var(--row-tint); }
+.lpm .lpm-pline > .lpm-hl-n { top: 0; }
+.lpm .lpm-pline-q { color: var(--color-pale-lavender); font-family: var(--font-display); font-style: italic; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lpm .lpm-pline-q--sec { font-style: normal; }
+.lpm .lpm-pline-s { align-items: center; color: var(--color-muted-lavender); display: inline-flex; font-size: 0.9em; gap: 0.35rem; white-space: nowrap; }
+.lpm .lpm-pline-s .lpm-pulse { height: 0.45rem; width: 0.45rem; }
+.lpm .lpm-panel-tools { align-items: center; display: inline-flex; gap: 0.6rem; margin-left: auto; }
+.lpm .lpm-panel-tools .lpm-link { margin-left: 0; }
+.lpm .lpm-fold { appearance: none; background: transparent; border: 1px solid var(--hairline-strong); border-radius: var(--radius-chip); color: var(--color-pale-lavender); cursor: pointer; font: inherit; font-size: 0.8rem; height: 1.5rem; line-height: 1; width: 1.5rem; }
+.lpm .lpm-fold:hover { border-color: var(--color-lavender); color: var(--color-white); }
+.lpm .lpm-panel--quiet { background: var(--row-tint); border-left-color: var(--hairline); }
+.lpm .lpm-dim { align-items: center; color: var(--color-muted-lavender); display: flex; font-family: var(--font-mono); font-size: 0.6rem; gap: 0.4rem; letter-spacing: 0.06em; margin: -0.35rem 0 0.7rem; }
+.lpm .lpm-dim::before, .lpm .lpm-dim::after { border-top: 1px solid var(--hairline-strong); content: ""; flex: 1; }
+.lpm .lpm-dim::before { border-left: 1px solid var(--hairline-strong); height: 6px; }
+.lpm .lpm-dim::after { border-right: 1px solid var(--hairline-strong); height: 6px; }
+.lpm .lpm-doc--rail { grid-template-columns: minmax(0, 1fr) 2.75rem; padding-right: 0; }
+.lpm .lpm-rail {
+  align-items: center;
+  align-self: stretch;
+  background: var(--color-surface);
+  border-left: 1px solid var(--hairline-strong);
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  margin: -1.5rem 0 -1.75rem;
+  padding: 0.85rem 0 1rem;
+}
+.lpm .lpm-rail-open { align-items: center; appearance: none; background: transparent; border: 1px solid var(--hairline-strong); border-radius: var(--radius-block); color: var(--color-lavender); cursor: pointer; display: grid; height: 2rem; justify-items: center; place-items: center; position: relative; width: 2rem; }
+.lpm .lpm-rail-open:hover { border-color: var(--color-lavender); }
+.lpm .lpm-rail-n { background: var(--color-lavender); border-radius: var(--radius-pill); color: var(--color-night); font-family: var(--font-mono); font-size: 0.58rem; font-weight: 700; line-height: 1; padding: 0.15rem 0.3rem; position: absolute; right: -0.45rem; top: -0.45rem; }
+.lpm .lpm-rail-sep { border-top: 1px solid var(--hairline); width: 1.4rem; }
+.lpm .lpm-rail-dot { border: 1.5px solid var(--color-muted-lavender); border-radius: 50%; display: block; height: 0.55rem; width: 0.55rem; }
+.lpm .lpm-rail-dot--done { background: var(--color-muted-lavender); }
+.lpm .lpm-rail-dot--live { animation: lpm-pulse 1.6s ease-in-out infinite; background: var(--color-lavender); border-color: var(--color-lavender); }
+.lpm .lpm-rail-label { color: var(--color-muted-lavender); font-family: var(--font-mono); font-size: 0.56rem; letter-spacing: 0.1em; margin-top: auto; text-transform: uppercase; writing-mode: vertical-rl; }
+
+/* Live reply, before and after */
+.lpm .lpm-reading { box-shadow: inset 3px 0 0 var(--color-lavender); margin-left: -0.9rem; padding-left: 0.9rem; }
+.lpm .lpm-reading .lpm-tag { margin-left: 0.35rem; }
+.lpm .lpm-card-tag { position: absolute; right: 0.6rem; top: -0.55rem; }
+.lpm .lpm-ba-label { color: var(--color-pale-lavender); font-family: var(--font-display); font-size: 1.05rem; font-weight: 600; margin: 0 0 0.5rem; }
+.lpm .lpm-ba-label + .lpm-frame { margin-bottom: 1.25rem; }
+
+/* Narrow window: the thread as a popover under its chip */
+.lpm .lpm-frame--narrow { max-width: 40rem; }
+.lpm .lpm-page--tall { min-height: 37rem; }
+.lpm .lpm-pop-below { left: -0.3rem; position: absolute; top: calc(100% + 0.75rem); width: min(22rem, calc(100vw - 5.5rem)); z-index: 1; }
+.lpm .lpm-pop-below::after {
+  background: var(--color-surface);
+  border-left: 1px solid color-mix(in srgb, var(--color-lavender) 60%, transparent);
+  border-top: 1px solid color-mix(in srgb, var(--color-lavender) 60%, transparent);
+  content: "";
+  height: 12px;
+  left: 1.5rem;
+  position: absolute;
+  top: -7px;
+  transform: rotate(45deg);
+  width: 12px;
+}
+.lpm .lpm-pop-below .lpm-card-head + .lpm-sec { margin-top: -0.2rem; }
+.lpm .lpm-doc--b-tall { min-height: 46rem; }
+.lpm .lpm-mk-sec { align-items: center; background: var(--color-glow); border: 1px solid var(--hairline-strong); border-radius: var(--radius-chip); color: var(--color-lavender); display: inline-grid; font-family: var(--font-display); font-size: 0.8rem; font-weight: 600; height: 1.3rem; justify-items: center; line-height: 1; width: 1.3rem; }
+.lpm .lpm-panel--solo { align-self: start; border: 1px solid var(--hairline-strong); border-radius: var(--radius-card); margin: 0; }
+.lpm .lpm-pline--resolved { border: 1px dashed var(--hairline-strong); margin-top: 0.3rem; opacity: 0.75; }
+.lpm .lpm-pline--resolved .lpm-pline-q { color: var(--color-muted-lavender); }
+.lpm .lpm-pline--resolved .lpm-hl-n { color: var(--color-muted-lavender); }
+.lpm .lpm-pline-more { border-top: 1px solid var(--hairline); color: var(--color-muted-lavender); display: flex; font-size: 0.9em; justify-content: space-between; margin-top: 0.55rem; padding: 0.5rem 0.4rem 0; }
+.lpm .lpm-pline-more--open { border-top: 0; color: var(--color-pale-lavender); margin-top: 0; padding-top: 0; }
+.lpm .lpm-inset { border: 1px dashed var(--hairline-strong); border-radius: var(--radius-block); font-size: 0.8125rem; line-height: 1.5; margin-top: 0.75rem; padding: 0.55rem 0.6rem 0.6rem; }
+.lpm .lpm-inset-label { color: var(--color-muted-lavender); font-family: var(--font-mono); font-size: 0.6rem; letter-spacing: 0.08em; margin: 0 0 0.4rem 0.4rem; text-transform: uppercase; }
+.lpm.lpm-revs { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr)); margin-bottom: 1rem; max-width: var(--measure-full, 100%); width: var(--measure-full, 100%); }
+.lpm .lpm-rev { background: var(--color-deep-night); border: 1px solid var(--hairline); border-radius: var(--radius-block); font-size: 0.875rem; line-height: 1.7; padding: 0.65rem 1rem 0.8rem; }
+.lpm .lpm-rev-label { color: var(--color-lavender); font-family: var(--font-mono); font-size: 0.62rem; letter-spacing: 0.1em; margin-bottom: 0.3rem; text-transform: uppercase; }
+.lpm .lpm-rev-label span { color: var(--color-muted-lavender); letter-spacing: 0.04em; text-transform: none; }
+.lpm ins.lpm-changed { border-bottom: 1px dotted var(--color-muted-lavender); color: var(--color-white); text-decoration: none; }
+.lpm .lpm-pi--detached { border: 1px dashed var(--hairline-strong); }
+.lpm .lpm-pi--detached .lpm-pi-quote { font-style: normal; margin-bottom: 0.6rem; white-space: normal; }
+.lpm .lpm-pi--detached del { color: var(--color-muted-lavender); font-family: var(--font-display); font-style: italic; }
+.lpm .lpm-pi--detached .lpm-pi-why { color: var(--color-muted-lavender); font-family: var(--font-body); font-size: 0.9em; }
+.lpm.lpm-pair-h { color: var(--color-pale-lavender); font-family: var(--font-display); font-size: 1.1rem; font-weight: 600; margin: 1.6rem 0 0.6rem; }
+.lpm.lpm-pair-h b { background: var(--color-lavender); border-radius: var(--radius-chip); color: var(--color-night); font-family: var(--font-mono); font-size: 0.72rem; margin-right: 0.5rem; padding: 0.05rem 0.4rem; vertical-align: 0.15em; }
+</style>
+<p>Ways to comment on a highlighted passage, the way Google Docs does it, and to give section comments the same treatment, so opening a thread never shoves the page down. Three layouts follow, A, B and C, each drawn whole with passage and section threads together; what works the same in all three comes after them. Nothing here is wired up.</p>
+<div class="lpm lpm-rec"><span class="lpm-rec-mark">Recommendation</span><p class="lpm-rec-text"><strong>Layout C, the side panel folded to a rail, for passage and section threads alike, with Subtle highlights.</strong> Section threads are long agent conversations: in A an open one pushes every card below it off its line, and in B it covers the text, while C gives it the panel&#8217;s full height and costs 2.75rem when folded. If a phone layout is wanted now, P2, the bottom sheet.</p></div>
+<h2>Decisions for the maintainer</h2>
+<p>Pick here instead of commenting; each answer saves on its own. Comment on a section if none of the options fit.</p>
+<table>
+<thead><tr><th>#</th><th>Question</th><th>Options</th><th>Default</th></tr></thead>
+<tbody>
+<tr><td>D1</td><td>Wide screens: where do comment threads live?</td><td>A, cards in the margin / B, markers in the margin / C, side panel folded to a rail</td><td>C, side panel folded to a rail</td></tr>
+<tr><td>D2</td><td>Section comments: open in the same margin or panel as passage comments, instead of expanding inline?</td><td>Yes, same place / No, keep them inline</td><td>Yes, same place</td></tr>
+<tr><td>D3</td><td>Highlight style for commented text?</td><td>Subtle / Strong</td><td>Subtle</td></tr>
+<tr><td>D4</td><td>Phone layout?</td><td>P1, inline under the paragraph / P2, bottom sheet / Decide later</td><td>Decide later</td></tr>
+<tr><td>D5</td><td>Resolved threads?</td><td>Fold to a dashed card with Reopen / Hide behind a resolved count</td><td>Fold to a dashed card with Reopen</td></tr>
+<tr><td>D6</td><td>A thread whose passage changed in a later revision?</td><td>Keep it listed with the old quote struck through / Hide it</td><td>Keep it listed with the old quote struck through</td></tr>
+</tbody>
+</table>
+
+<h2>The problem: today&#8217;s jump</h2>
+<p>Today each section ends in a <em>Comments (2)</em> chip, and opening it unfolds the whole thread in the reading column, so everything below drops by about 480px. In every layout below, the text never moves: the chip stays where it is and becomes a summary, and the thread opens beside or over the text.</p>
+<div class="lpm lpm-grid">
+<figure class="lpm-state"><figcaption><b>Now</b>Chip closed</figcaption><div class="lpm-frame"><div class="lpm-page"><p class="lpm-doc-h">How a page checks for replies</p><p>In a background tab the page slows to one check a minute and catches up the moment the tab comes back, so a reader who switches away misses nothing.</p><span class="lpm-old-chip">Comments (2)</span><p class="lpm-doc-h">What a check costs <span class="lpm-tag lpm-tag--quiet">next heading</span></p><p>An empty check returns about 200 bytes and takes under 10 ms on the server.</p></div></div></figure>
+<figure class="lpm-state"><figcaption><b>Now</b>Chip open: everything below moves</figcaption><div class="lpm-frame"><div class="lpm-page"><p class="lpm-doc-h">How a page checks for replies</p><p>In a background tab the page slows to one check a minute and catches up the moment the tab comes back, so a reader who switches away misses nothing.</p><span class="lpm-old-chip lpm-old-chip--open">Comments (2)</span><p class="lpm-was">the next heading was here</p><div class="lpm-old-box"><div class="lpm-c"><div class="lpm-c-row lpm-c-row--me"><span class="lpm-c-av" aria-hidden="true">Y</span><div class="lpm-c-col"><p class="lpm-c-name"><span class="lpm-who">you</span> <time>1 h ago</time></p><p class="lpm-c-bubble">Should this section say what happens when the server restarts?</p></div></div><div class="lpm-c-row"><span class="lpm-c-av lpm-c-av--agent" aria-hidden="true">H</span><div class="lpm-c-col"><p class="lpm-c-name"><span class="lpm-handle">hermes</span> <span class="lpm-agent">agent</span> <time>58 min ago</time></p><p class="lpm-c-bubble">Open pages retry after 30 seconds and catch up. I checked the client code.</p></div></div><div class="lpm-c-row"><span class="lpm-c-av lpm-c-av--agent" aria-hidden="true">O</span><div class="lpm-c-col"><p class="lpm-c-name"><span class="lpm-handle">operator</span> <span class="lpm-agent">agent</span> <time>55 min ago</time></p><p class="lpm-c-bubble">I added that as the last paragraph of this section.</p></div></div><p class="lpm-c-event"><span>operator <a href="#top">revised the page &#8594; revision 6</a></span></p></div><div class="lpm-c-compose"><textarea aria-label="Reply" rows="1" placeholder="Reply&#8230;"></textarea><button class="lpm-c-send" type="button" aria-label="Send reply">&#8593;</button></div></div><p class="lpm-doc-h"><span class="lpm-jumped">What a check costs</span> <span class="lpm-tag">&#8595; pushed down</span></p><p>An empty check returns about 200 bytes and takes under 10 ms on the server.</p></div></div></figure>
+</div>
+<h2>Selecting text</h2>
+<div class="lpm lpm-chosen"><span class="lpm-chosen-mark">&#10003; Chosen</span><p class="lpm-chosen-text">The maintainer picked (i), the pill above the selection. The margin icon (ii) stays below for reference, folded.</p></div>
+
+<p>Select any text on the page and a Comment pill appears just above the end of the selection.</p>
+
+<div class="lpm lpm-grid">
+  <figure class="lpm-state lpm-state--chosen">
+    <figcaption><b>i</b>A pill above the end of the selection &#183; chosen</figcaption>
+    <div class="lpm-snip">
+      <p>A reply lands in place, under the comment it answers, without a reload. Nothing else on the page moves, so <span class="lpm-sel lpm-sel--one">a reader halfway through</span><span class="lpm-at"><button class="lpm-float lpm-float--above" type="button"><svg viewBox="0 0 20 20" width="15" height="15" aria-hidden="true"><path d="M4 3.5h12a1.8 1.8 0 0 1 1.8 1.8v7a1.8 1.8 0 0 1-1.8 1.8H9.2l-3.7 3v-3H4a1.8 1.8 0 0 1-1.8-1.8v-7A1.8 1.8 0 0 1 4 3.5z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M10 6.4v5.2M7.4 9h5.2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Comment</button></span> a paragraph keeps their place.</p>
+    </div>
+    <p class="lpm-state-note">Close to the hand, the way Medium does it. It sits over the line above, and leans left so it stays inside the column at the right edge.</p>
+  </figure>
+</div>
+
+<details class="lpm lpm-ref">
+<summary>Show the margin icon (ii, not chosen)</summary>
+<div class="lpm-grid">
+  <figure class="lpm-state">
+    <figcaption><b>ii</b>An icon in the margin, level with the selection</figcaption>
+    <div class="lpm-snip lpm-snip--margin">
+      <p><span class="lpm-sel">Nothing else on the page moves</span>, so a reader halfway through a paragraph keeps their place. When the last waiting thread is answered the page stops checking.</p>
+      <div class="lpm-snip-mg">
+        <button class="lpm-iconbtn" type="button" aria-label="Add a comment"><svg viewBox="0 0 20 20" width="17" height="17" aria-hidden="true"><path d="M4 3.5h12a1.8 1.8 0 0 1 1.8 1.8v7a1.8 1.8 0 0 1-1.8 1.8H9.2l-3.7 3v-3H4a1.8 1.8 0 0 1-1.8-1.8v-7A1.8 1.8 0 0 1 4 3.5z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M10 6.4v5.2M7.4 9h5.2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></button>
+        <span class="lpm-tip" aria-hidden="true">Comment</span>
+        <span class="lpm-snip-mg-label">margin</span>
+      </div>
+    </div>
+    <p class="lpm-state-note">As Docs does it. Never covers the text, and the new card opens right where the icon is. Needs the margin, so on a phone it falls back to the pill.</p>
+  </figure>
+</div>
+</details>
+
+<h2>Layout A: cards in the margin</h2>
+<p><strong>A card per thread in a 17rem margin, level with what it is about.</strong> A passage card shows its quote; a section card sits level with the section&#8217;s chip and is labelled <em>Section</em>. A folded card shows the first message and the reply count; the open card widens toward the text, joined to it by a lavender tick; cards below it move down rather than overlap.</p>
+<ul class="lpm lpm-pc"><li>Every thread is visible beside its words, with its status, without a click.</li><li>A section thread is just one more card; the chip opens it in place.</li><li class="lpm-con">Needs a 17rem margin all the time.</li><li class="lpm-con">One long open thread, usually a section thread, pushes every card below it off its line.</li></ul><div class="lpm lpm-wide"><p class="lpm-narrow">A wide-screen layout: scroll the frame sideways to see the margin.</p><div class="lpm-frame"><div class="lpm-frame-bar"><span class="lpm-frame-brand">Lotuspod</span><span class="lpm-frame-sep">:</span><span class="lpm-frame-title">Reply checks on open pages</span></div><div class="lpm-frame-scroll"><div class="lpm-doc"><p class="lpm-doc-h lpm-pg lpm-r1">How a page checks for replies</p><p class="lpm-pg lpm-r2">While a comment waits, the page checks <mark class="lpm-hl">every five seconds</mark> for a reply. Checks run only while some thread on the page is still waiting, so a page left open overnight costs nothing once its threads are answered.</p><p class="lpm-pg lpm-r3">Each check is <mark class="lpm-hl">answered from the server's cache</mark>: it asks only for threads that changed since the last check, and an empty answer is a few bytes, so a dozen open tabs barely register.</p><p class="lpm-pg lpm-r4">In a background tab the page slows to one check a minute and catches up the moment the tab comes back, so a reader who switches away misses nothing.</p><div class="lpm-pg lpm-r5 lpm-chip-row"><button class="lpm-chip lpm-chip--on" type="button"><span class="lpm-stack"><span class="lpm-c-av lpm-av-sm" aria-hidden="true">Y</span><span class="lpm-c-av lpm-c-av--agent lpm-av-sm" aria-hidden="true">O</span></span>2 replies<span class="lpm-chip-sep">&#183;</span><span class="lpm-chip-state"><span aria-hidden="true">&#10003;</span>operator answered</span></button></div><p class="lpm-doc-h lpm-pg lpm-r6">What a check costs</p><p class="lpm-pg lpm-r7">An empty check returns <mark class="lpm-hl">about 200 bytes</mark> and takes under 10 ms on the server, so even a page left open all week adds little load.</p><div class="lpm-pg lpm-r8"><button class="lpm-chip lpm-chip--quiet" type="button"><svg viewBox="0 0 20 20" width="14" height="14" aria-hidden="true"><path d="M4 3.5h12a1.8 1.8 0 0 1 1.8 1.8v7a1.8 1.8 0 0 1-1.8 1.8H9.2l-3.7 3v-3H4a1.8 1.8 0 0 1-1.8-1.8v-7A1.8 1.8 0 0 1 4 3.5z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M10 6.4v5.2M7.4 9h5.2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>No comments<span class="lpm-chip-sep">&#183;</span><span class="lpm-chip-act">Comment</span></button></div><p class="lpm-mg lpm-mg-head lpm-r1">4 threads &#183; <button class="lpm-link" type="button">1 resolved</button></p><div class="lpm-mg lpm-r2 lpm-pin"><article class="lpm-card"><p class="lpm-card-quote">&#8220;every five seconds&#8221;</p><p class="lpm-card-text"><span class="lpm-who">you:</span> Is five seconds too eager for a page I leave open all day?</p><p class="lpm-card-foot"><span class="lpm-stack"><span class="lpm-c-av lpm-c-av--agent lpm-av-sm" aria-hidden="true">O</span></span>2 replies <span class="lpm-badge lpm-badge--done"><span aria-hidden="true">&#10003;</span>Answered</span></p></article></div><div class="lpm-mg lpm-r3 lpm-pin"><article class="lpm-card"><p class="lpm-card-quote">&#8220;answered from the server's cache&#8221;</p><p class="lpm-card-text"><span class="lpm-who">you:</span> What happens after a deploy, when the cache is cold?</p><p class="lpm-card-foot"><span class="lpm-stack"><span class="lpm-c-av lpm-c-av--agent lpm-av-sm" aria-hidden="true">O</span><span class="lpm-c-av lpm-c-av--agent lpm-av-sm" aria-hidden="true">H</span></span>3 replies <span class="lpm-badge lpm-badge--wait"><span class="lpm-pulse" aria-hidden="true"></span>hermes</span></p></article></div><div class="lpm-mg lpm-r5-end"><article class="lpm-card lpm-card--lit lpm-card--nudge"><header class="lpm-card-head"><span class="lpm-badge lpm-badge--done"><span aria-hidden="true">&#10003;</span>Answered</span><button class="lpm-resolve" type="button" aria-label="Resolve thread">&#10003;</button></header><p class="lpm-sec"><b>Section</b><span>How a page checks for replies</span></p><div class="lpm-c"><div class="lpm-c-row lpm-c-row--me"><span class="lpm-c-av" aria-hidden="true">Y</span><div class="lpm-c-col"><p class="lpm-c-name"><span class="lpm-who">you</span> <time>1 h ago</time></p><p class="lpm-c-bubble">Should this section say what happens when the server restarts?</p></div></div><div class="lpm-c-row"><span class="lpm-c-av lpm-c-av--agent" aria-hidden="true">H</span><div class="lpm-c-col"><p class="lpm-c-name"><span class="lpm-handle">hermes</span> <span class="lpm-agent">agent</span> <time>58 min ago</time></p><p class="lpm-c-bubble">Open pages retry after 30 seconds and catch up. I checked the client code.</p></div></div><div class="lpm-c-row"><span class="lpm-c-av lpm-c-av--agent" aria-hidden="true">O</span><div class="lpm-c-col"><p class="lpm-c-name"><span class="lpm-handle">operator</span> <span class="lpm-agent">agent</span> <time>55 min ago</time></p><p class="lpm-c-bubble">I added that as the last paragraph of this section.</p></div></div><p class="lpm-c-event"><span>operator <a href="#top">revised the page &#8594; revision 6</a></span></p></div><div class="lpm-c-compose"><textarea aria-label="Reply" rows="1" placeholder="Reply&#8230;"></textarea><button class="lpm-c-send" type="button" aria-label="Send reply">&#8593;</button></div></article><article class="lpm-card"><span class="lpm-tag lpm-card-tag">pushed down</span><p class="lpm-card-quote">&#8220;about 200 bytes&#8221;</p><p class="lpm-card-text"><span class="lpm-who">you:</span> Is that with or without compression?</p><p class="lpm-card-foot"><span class="lpm-stack"><span class="lpm-c-av lpm-c-av--agent lpm-av-sm" aria-hidden="true">H</span></span>1 reply <span class="lpm-badge lpm-badge--done"><span aria-hidden="true">&#10003;</span>Answered</span></p></article></div></div></div></div></div>
+<p>Drawn: two folded passage cards, the section card open beside its chip, and the next passage card pushed down below it. Its passage is now level with the open card, not with its own card.</p>
+<h2>Layout B: markers in the margin</h2>
+<p><strong>The margin holds only a small marker per thread</strong>, level with its passage: who is in it, how many messages, and a dot while an agent is writing. A section thread gets a &#167; marker level with its chip. Clicking a marker or the chip opens the thread in a popover anchored to the marker, over the text.</p>
+<ul class="lpm lpm-pc"><li>The page stays nearly as clean as today; the gutter costs about 4rem.</li><li>Section and passage threads look the same: one marker each.</li><li class="lpm-con">Nothing to read until you click; status is only a dot.</li><li class="lpm-con">The popover covers the text beside it, and a long section thread makes a tall popover.</li></ul><div class="lpm lpm-wide"><p class="lpm-narrow">A wide-screen layout: scroll the frame sideways to see the margin.</p><div class="lpm-frame"><div class="lpm-frame-bar"><span class="lpm-frame-brand">Lotuspod</span><span class="lpm-frame-sep">:</span><span class="lpm-frame-title">Reply checks on open pages</span></div><div class="lpm-frame-scroll"><div class="lpm-doc lpm-doc--b lpm-doc--b-tall"><p class="lpm-doc-h lpm-pg lpm-r1">How a page checks for replies</p><p class="lpm-pg lpm-r2">While a comment waits, the page checks <mark class="lpm-hl">every five seconds</mark> for a reply. Checks run only while some thread on the page is still waiting, so a page left open overnight costs nothing once its threads are answered.</p><p class="lpm-pg lpm-r3">Each check is <mark class="lpm-hl">answered from the server's cache</mark>: it asks only for threads that changed since the last check, and an empty answer is a few bytes, so a dozen open tabs barely register.</p><p class="lpm-pg lpm-r4">In a background tab the page slows to one check a minute and catches up the moment the tab comes back, so a reader who switches away misses nothing.</p><div class="lpm-pg lpm-r5 lpm-chip-row"><button class="lpm-chip lpm-chip--on" type="button"><span class="lpm-stack"><span class="lpm-c-av lpm-av-sm" aria-hidden="true">Y</span><span class="lpm-c-av lpm-c-av--agent lpm-av-sm" aria-hidden="true">O</span></span>2 replies<span class="lpm-chip-sep">&#183;</span><span class="lpm-chip-state"><span aria-hidden="true">&#10003;</span>operator answered</span></button></div><p class="lpm-doc-h lpm-pg lpm-r6">What a check costs</p><p class="lpm-pg lpm-r7">An empty check returns <mark class="lpm-hl">about 200 bytes</mark> and takes under 10 ms on the server, so even a page left open all week adds little load.</p><div class="lpm-pg lpm-r8"><button class="lpm-chip lpm-chip--quiet" type="button"><svg viewBox="0 0 20 20" width="14" height="14" aria-hidden="true"><path d="M4 3.5h12a1.8 1.8 0 0 1 1.8 1.8v7a1.8 1.8 0 0 1-1.8 1.8H9.2l-3.7 3v-3H4a1.8 1.8 0 0 1-1.8-1.8v-7A1.8 1.8 0 0 1 4 3.5z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M10 6.4v5.2M7.4 9h5.2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>No comments<span class="lpm-chip-sep">&#183;</span><span class="lpm-chip-act">Comment</span></button></div><div class="lpm-mg lpm-r2 lpm-mk-pin"><button class="lpm-mk" type="button" aria-label="Thread: 3 messages, answered"><span class="lpm-stack"><span class="lpm-c-av lpm-av-sm" aria-hidden="true">Y</span><span class="lpm-c-av lpm-c-av--agent lpm-av-sm" aria-hidden="true">O</span></span>3</button></div><div class="lpm-mg lpm-r3 lpm-mk-pin"><button class="lpm-mk" type="button" aria-label="Thread: 4 messages, hermes is writing"><span class="lpm-stack"><span class="lpm-c-av lpm-av-sm" aria-hidden="true">Y</span><span class="lpm-c-av lpm-c-av--agent lpm-av-sm" aria-hidden="true">H</span></span>4<span class="lpm-mk-dot" aria-hidden="true"></span></button></div><div class="lpm-mg lpm-r5 lpm-mk-pin"><button class="lpm-mk lpm-mk--on" type="button" aria-label="Section thread: 3 messages, answered"><span class="lpm-mk-sec" aria-hidden="true">&#167;</span>3</button><article class="lpm-pop lpm-card lpm-card--lit" role="dialog" aria-label="Section thread"><header class="lpm-card-head"><span class="lpm-badge lpm-badge--done"><span aria-hidden="true">&#10003;</span>Answered</span><button class="lpm-close" type="button" aria-label="Close thread">&#215;</button></header><p class="lpm-sec"><b>Section</b><span>How a page checks for replies</span></p><div class="lpm-c"><div class="lpm-c-row lpm-c-row--me"><span class="lpm-c-av" aria-hidden="true">Y</span><div class="lpm-c-col"><p class="lpm-c-name"><span class="lpm-who">you</span> <time>1 h ago</time></p><p class="lpm-c-bubble">Should this section say what happens when the server restarts?</p></div></div><div class="lpm-c-row"><span class="lpm-c-av lpm-c-av--agent" aria-hidden="true">H</span><div class="lpm-c-col"><p class="lpm-c-name"><span class="lpm-handle">hermes</span> <span class="lpm-agent">agent</span> <time>58 min ago</time></p><p class="lpm-c-bubble">Open pages retry after 30 seconds and catch up. I checked the client code.</p></div></div><div class="lpm-c-row"><span class="lpm-c-av lpm-c-av--agent" aria-hidden="true">O</span><div class="lpm-c-col"><p class="lpm-c-name"><span class="lpm-handle">operator</span> <span class="lpm-agent">agent</span> <time>55 min ago</time></p><p class="lpm-c-bubble">I added that as the last paragraph of this section.</p></div></div><p class="lpm-c-event"><span>operator <a href="#top">revised the page &#8594; revision 6</a></span></p></div><div style="margin-top: 0.7rem;"><div class="lpm-c-compose"><textarea aria-label="Reply" rows="1" placeholder="Reply&#8230;"></textarea><button class="lpm-c-send" type="button" aria-label="Send reply">&#8593;</button></div></div></article></div><div class="lpm-mg lpm-r7 lpm-mk-pin"><button class="lpm-mk" type="button" aria-label="Thread: 2 messages, answered"><span class="lpm-stack"><span class="lpm-c-av lpm-av-sm" aria-hidden="true">Y</span><span class="lpm-c-av lpm-c-av--agent lpm-av-sm" aria-hidden="true">H</span></span>2</button></div></div></div></div></div>
+<p>Drawn: passage markers for threads 1, 2 and 3, and the section&#8217;s &#167; marker open, with its thread in the popover. The chip in the column shows the same thread&#8217;s summary.</p>
+<h2>Layout C: side panel</h2>
+<p><strong>A fixed panel on the right lists every thread in page order</strong>, grouped under its section heading: passage threads by number, the section's own thread marked &#167;. Clicking a chip, a highlight or a number opens the panel and scrolls it to that thread; hovering a thread in the panel lights its passage.</p>
+<ul class="lpm lpm-pc"><li>Every thread in one list, in page order, grouped by section: easy to review.</li><li>Long threads, section threads above all, get the panel&#8217;s full height and scroll on their own.</li><li>Folds to a 2.75rem rail that still shows each thread&#8217;s state.</li><li class="lpm-con">20rem of width while open.</li><li class="lpm-con">The tie to a passage is a number and a hover, not a position.</li></ul><h4>Opened from a chip</h4>
+<div class="lpm lpm-wide"><p class="lpm-narrow">A wide-screen layout: scroll the frame sideways to see the margin.</p><div class="lpm-frame"><div class="lpm-frame-bar"><span class="lpm-frame-brand">Lotuspod</span><span class="lpm-frame-sep">:</span><span class="lpm-frame-title">Reply checks on open pages</span></div><div class="lpm-frame-scroll"><div class="lpm-doc lpm-doc--c"><p class="lpm-doc-h lpm-pg lpm-r1">How a page checks for replies</p><p class="lpm-pg lpm-r2">While a comment waits, the page checks <mark class="lpm-hl">every five seconds</mark><span class="lpm-hl-n">1</span> for a reply. Checks run only while some thread on the page is still waiting, so a page left open overnight costs nothing once its threads are answered.</p><p class="lpm-pg lpm-r3">Each check is <mark class="lpm-hl">answered from the server's cache</mark><span class="lpm-hl-n">2</span>: it asks only for threads that changed since the last check, and an empty answer is a few bytes, so a dozen open tabs barely register.</p><p class="lpm-pg lpm-r4">In a background tab the page slows to one check a minute and catches up the moment the tab comes back, so a reader who switches away misses nothing.</p><div class="lpm-pg lpm-r5 lpm-chip-row"><button class="lpm-chip lpm-chip--on" type="button"><span class="lpm-stack"><span class="lpm-c-av lpm-av-sm" aria-hidden="true">Y</span><span class="lpm-c-av lpm-c-av--agent lpm-av-sm" aria-hidden="true">O</span></span>2 replies<span class="lpm-chip-sep">&#183;</span><span class="lpm-chip-state"><span aria-hidden="true">&#10003;</span>operator answered</span></button></div><p class="lpm-doc-h lpm-pg lpm-r6">What a check costs</p><p class="lpm-pg lpm-r7">An empty check returns <mark class="lpm-hl">about 200 bytes</mark><span class="lpm-hl-n">3</span> and takes under 10 ms on the server, so even a page left open all week adds little load.</p><div class="lpm-pg lpm-r8"><button class="lpm-chip lpm-chip--quiet" type="button"><svg viewBox="0 0 20 20" width="14" height="14" aria-hidden="true"><path d="M4 3.5h12a1.8 1.8 0 0 1 1.8 1.8v7a1.8 1.8 0 0 1-1.8 1.8H9.2l-3.7 3v-3H4a1.8 1.8 0 0 1-1.8-1.8v-7A1.8 1.8 0 0 1 4 3.5z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M10 6.4v5.2M7.4 9h5.2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>No comments<span class="lpm-chip-sep">&#183;</span><span class="lpm-chip-act">Comment</span></button></div><aside class="lpm-mg lpm-r-all lpm-panel" aria-label="Comments"><header class="lpm-panel-head"><span class="lpm-panel-title">Comments</span><span class="lpm-panel-count">3 open</span><span class="lpm-panel-tools"><button class="lpm-link" type="button">1 resolved</button><button class="lpm-fold" type="button" aria-label="Fold the panel">&#187;</button></span></header><p class="lpm-pgrp">How a page checks for replies</p><div class="lpm-pline"><span class="lpm-hl-n">1</span><span class="lpm-pline-q">every five seconds</span><span class="lpm-pline-s"><span aria-hidden="true">&#10003;</span>2</span></div><div class="lpm-pline"><span class="lpm-hl-n">2</span><span class="lpm-pline-q">answered from the server's cache</span><span class="lpm-pline-s"><span class="lpm-pulse" aria-hidden="true"></span>3</span></div><div class="lpm-pi lpm-pi--on"><span class="lpm-hl-n lpm-hl-n--on lpm-hl-n--sec">&#167;</span><div><header class="lpm-card-head"><span class="lpm-badge lpm-badge--done"><span aria-hidden="true">&#10003;</span>Answered</span><button class="lpm-resolve" type="button" aria-label="Resolve thread">&#10003;</button></header><p class="lpm-sec"><b>Section</b><span>How a page checks for replies</span></p><div class="lpm-c"><div class="lpm-c-row lpm-c-row--me"><span class="lpm-c-av" aria-hidden="true">Y</span><div class="lpm-c-col"><p class="lpm-c-name"><span class="lpm-who">you</span> <time>1 h ago</time></p><p class="lpm-c-bubble">Should this section say what happens when the server restarts?</p></div></div><div class="lpm-c-row"><span class="lpm-c-av lpm-c-av--agent" aria-hidden="true">H</span><div class="lpm-c-col"><p class="lpm-c-name"><span class="lpm-handle">hermes</span> <span class="lpm-agent">agent</span> <time>58 min ago</time></p><p class="lpm-c-bubble">Open pages retry after 30 seconds and catch up. I checked the client code.</p></div></div><div class="lpm-c-row"><span class="lpm-c-av lpm-c-av--agent" aria-hidden="true">O</span><div class="lpm-c-col"><p class="lpm-c-name"><span class="lpm-handle">operator</span> <span class="lpm-agent">agent</span> <time>55 min ago</time></p><p class="lpm-c-bubble">I added that as the last paragraph of this section.</p></div></div><p class="lpm-c-event"><span>operator <a href="#top">revised the page &#8594; revision 6</a></span></p></div><div style="margin-top: 0.7rem;"><div class="lpm-c-compose"><textarea aria-label="Reply" rows="1" placeholder="Reply&#8230;"></textarea><button class="lpm-c-send" type="button" aria-label="Send reply">&#8593;</button></div></div></div></div><p class="lpm-pgrp">What a check costs</p><div class="lpm-pline"><span class="lpm-hl-n">3</span><span class="lpm-pline-q">about 200 bytes</span><span class="lpm-pline-s"><span class="lpm-hollow" aria-hidden="true"></span>1</span></div></aside></div></div></div></div>
+<h4>Nothing open: quiet</h4>
+<div class="lpm lpm-wide"><p class="lpm-narrow">A wide-screen layout: scroll the frame sideways to see the margin.</p><div class="lpm-frame"><div class="lpm-frame-bar"><span class="lpm-frame-brand">Lotuspod</span><span class="lpm-frame-sep">:</span><span class="lpm-frame-title">Reply checks on open pages</span></div><div class="lpm-frame-scroll"><div class="lpm-doc lpm-doc--c"><p class="lpm-doc-h lpm-pg lpm-r1">How a page checks for replies</p><p class="lpm-pg lpm-r2">While a comment waits, the page checks <mark class="lpm-hl">every five seconds</mark><span class="lpm-hl-n">1</span> for a reply. Checks run only while some thread on the page is still waiting, so a page left open overnight costs nothing once its threads are answered.</p><p class="lpm-pg lpm-r3">Each check is <mark class="lpm-hl">answered from the server's cache</mark><span class="lpm-hl-n">2</span>: it asks only for threads that changed since the last check, and an empty answer is a few bytes, so a dozen open tabs barely register.</p><div class="lpm-pg lpm-r4 lpm-chip-row"><button class="lpm-chip" type="button"><span class="lpm-stack"><span class="lpm-c-av lpm-av-sm" aria-hidden="true">Y</span><span class="lpm-c-av lpm-c-av--agent lpm-av-sm" aria-hidden="true">O</span></span>2 replies<span class="lpm-chip-sep">&#183;</span><span class="lpm-chip-state"><span aria-hidden="true">&#10003;</span>operator answered</span></button></div><p class="lpm-doc-h lpm-pg lpm-r5">What a check costs</p><p class="lpm-pg lpm-r6">An empty check returns <mark class="lpm-hl">about 200 bytes</mark><span class="lpm-hl-n">3</span> and takes under 10 ms on the server, so even a page left open all week adds little load.</p><aside class="lpm-mg lpm-r-all lpm-panel lpm-panel--quiet" aria-label="Comments"><header class="lpm-panel-head"><span class="lpm-panel-title">Comments</span><span class="lpm-panel-count">4</span><span class="lpm-panel-tools"><button class="lpm-fold" type="button" aria-label="Fold the panel">&#187;</button></span></header><p class="lpm-dim">20rem</p><p class="lpm-pgrp">How a page checks for replies</p><div class="lpm-pline"><span class="lpm-hl-n">1</span><span class="lpm-pline-q">every five seconds</span><span class="lpm-pline-s"><span aria-hidden="true">&#10003;</span>2</span></div><div class="lpm-pline"><span class="lpm-hl-n">2</span><span class="lpm-pline-q">answered from the server's cache</span><span class="lpm-pline-s"><span class="lpm-pulse" aria-hidden="true"></span>3</span></div><div class="lpm-pline"><span class="lpm-hl-n lpm-hl-n--sec">&#167;</span><span class="lpm-pline-q lpm-pline-q--sec">Section thread</span><span class="lpm-pline-s"><span aria-hidden="true">&#10003;</span>2</span></div><p class="lpm-pgrp">What a check costs</p><div class="lpm-pline"><span class="lpm-hl-n">3</span><span class="lpm-pline-q">about 200 bytes</span><span class="lpm-pline-s"><span class="lpm-hollow" aria-hidden="true"></span>1</span></div></aside></div></div></div></div>
+<h4>Folded to a rail</h4>
+<div class="lpm lpm-wide"><p class="lpm-narrow">A wide-screen layout: scroll the frame sideways to see the margin.</p><div class="lpm-frame"><div class="lpm-frame-bar"><span class="lpm-frame-brand">Lotuspod</span><span class="lpm-frame-sep">:</span><span class="lpm-frame-title">Reply checks on open pages</span></div><div class="lpm-frame-scroll"><div class="lpm-doc lpm-doc--rail"><p class="lpm-doc-h lpm-pg lpm-r1">How a page checks for replies</p><p class="lpm-pg lpm-r2">While a comment waits, the page checks <mark class="lpm-hl">every five seconds</mark><span class="lpm-hl-n">1</span> for a reply. Checks run only while some thread on the page is still waiting, so a page left open overnight costs nothing once its threads are answered.</p><p class="lpm-pg lpm-r3">Each check is <mark class="lpm-hl">answered from the server's cache</mark><span class="lpm-hl-n">2</span>: it asks only for threads that changed since the last check, and an empty answer is a few bytes, so a dozen open tabs barely register.</p><div class="lpm-pg lpm-r4 lpm-chip-row"><button class="lpm-chip" type="button"><span class="lpm-stack"><span class="lpm-c-av lpm-av-sm" aria-hidden="true">Y</span><span class="lpm-c-av lpm-c-av--agent lpm-av-sm" aria-hidden="true">O</span></span>2 replies<span class="lpm-chip-sep">&#183;</span><span class="lpm-chip-state"><span aria-hidden="true">&#10003;</span>operator answered</span></button></div><p class="lpm-doc-h lpm-pg lpm-r5">What a check costs</p><p class="lpm-pg lpm-r6">An empty check returns <mark class="lpm-hl">about 200 bytes</mark><span class="lpm-hl-n">3</span> and takes under 10 ms on the server, so even a page left open all week adds little load.</p><aside class="lpm-mg lpm-r-all lpm-rail" aria-label="Comments, folded"><button class="lpm-rail-open" type="button" aria-label="Open comments, 4 threads"><svg viewBox="0 0 20 20" width="14" height="14" aria-hidden="true"><path d="M4 3.5h12a1.8 1.8 0 0 1 1.8 1.8v7a1.8 1.8 0 0 1-1.8 1.8H9.2l-3.7 3v-3H4a1.8 1.8 0 0 1-1.8-1.8v-7A1.8 1.8 0 0 1 4 3.5z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M10 6.4v5.2M7.4 9h5.2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg><span class="lpm-rail-n">4</span></button><span class="lpm-rail-sep" aria-hidden="true"></span><span class="lpm-rail-dot lpm-rail-dot--done" title="1: answered"></span><span class="lpm-rail-dot lpm-rail-dot--live" title="2: hermes is writing"></span><span class="lpm-rail-dot lpm-rail-dot--done" title="Section: answered"></span><span class="lpm-rail-dot" title="3: waiting"></span><span class="lpm-rail-label" aria-hidden="true">Comments</span></aside></div></div></div></div>
+<p>Folded, the panel is a 2.75rem rail: a count, and one dot per thread in page order (filled when answered, pulsing while an agent writes, hollow while waiting). Clicking the rail, a chip, a highlight or a number opens it. The page remembers open or folded per reader.</p>
+<p><em>The sections from here to Phone behave the same whichever layout is chosen, so each is drawn once.</em></p>
+<h2>Richer chips</h2>
+<p>The chip at the end of each section says where its thread stands, so most of the time there is no need to open it. It counts the section's own thread; passage threads show on their highlights.</p>
+<div class="lpm lpm-grid"><figure class="lpm-state"><figcaption><b>Chip</b>Four states, and open</figcaption><div class="lpm-chips">
+<div><button class="lpm-chip" type="button"><span class="lpm-stack"><span class="lpm-c-av lpm-av-sm" aria-hidden="true">Y</span><span class="lpm-c-av lpm-c-av--agent lpm-av-sm" aria-hidden="true">O</span></span>2 replies<span class="lpm-chip-sep">&#183;</span><span class="lpm-chip-state"><span aria-hidden="true">&#10003;</span>operator answered</span></button><span>An agent has answered</span></div>
+<div><button class="lpm-chip lpm-chip--live" type="button"><span class="lpm-stack"><span class="lpm-c-av lpm-av-sm" aria-hidden="true">Y</span><span class="lpm-c-av lpm-c-av--agent lpm-av-sm" aria-hidden="true">O</span></span><span class="lpm-chip-state"><span class="lpm-pulse" aria-hidden="true"></span>operator is writing<span class="lpm-dots" aria-hidden="true"><i></i><i></i><i></i></span></span></button><span>An agent is replying now</span></div>
+<div><button class="lpm-chip" type="button"><span class="lpm-stack"><span class="lpm-c-av lpm-av-sm" aria-hidden="true">Y</span></span>1 comment<span class="lpm-chip-sep">&#183;</span><span class="lpm-chip-state"><span class="lpm-hollow" aria-hidden="true"></span>waiting</span></button><span>No agent has picked it up yet</span></div>
+<div><button class="lpm-chip lpm-chip--quiet" type="button"><svg viewBox="0 0 20 20" width="14" height="14" aria-hidden="true"><path d="M4 3.5h12a1.8 1.8 0 0 1 1.8 1.8v7a1.8 1.8 0 0 1-1.8 1.8H9.2l-3.7 3v-3H4a1.8 1.8 0 0 1-1.8-1.8v-7A1.8 1.8 0 0 1 4 3.5z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M10 6.4v5.2M7.4 9h5.2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>No comments<span class="lpm-chip-sep">&#183;</span><span class="lpm-chip-act">Comment</span></button><span>Quiet when there is nothing</span></div>
+<div><button class="lpm-chip lpm-chip--on" type="button"><span class="lpm-stack"><span class="lpm-c-av lpm-av-sm" aria-hidden="true">Y</span><span class="lpm-c-av lpm-c-av--agent lpm-av-sm" aria-hidden="true">O</span></span>2 replies<span class="lpm-chip-sep">&#183;</span><span class="lpm-chip-state"><span aria-hidden="true">&#10003;</span>operator answered</span></button><span>Its thread is open</span></div>
+</div></figure></div>
+<h2>A reply arriving</h2>
+<p>You are reading further down while an earlier thread waits. The reply lands in its card; the text never moves, and cards push cards. Drawn in A; in B only the open popover grows, and in C only the panel&#8217;s list.</p>
+<h4>Before: operator is writing</h4>
+<div class="lpm lpm-wide"><p class="lpm-narrow">A wide-screen layout: scroll the frame sideways to see the margin.</p><div class="lpm-frame"><div class="lpm-frame-bar"><span class="lpm-frame-brand">Lotuspod</span><span class="lpm-frame-sep">:</span><span class="lpm-frame-title">Reply checks on open pages</span></div><div class="lpm-frame-scroll"><div class="lpm-doc"><p class="lpm-doc-h lpm-pg lpm-r1">How a page checks for replies</p><p class="lpm-pg lpm-r2">Each check is <mark class="lpm-hl is-active">answered from the server's cache</mark>: it asks only for threads that changed since the last check, and an empty answer is a few bytes, so a dozen open tabs barely register.</p><p class="lpm-pg lpm-r3">In a background tab the page slows to one check a minute and catches up the moment the tab comes back, so a reader who switches away misses nothing.</p><p class="lpm-doc-h lpm-pg lpm-r4">What a check costs</p><p class="lpm-pg lpm-r5">An empty check returns <mark class="lpm-hl">about 200 bytes</mark> and takes under 10 ms on the server, so even a page left open all week adds little load.</p><p class="lpm-pg lpm-r6 lpm-reading">A page that is closed costs nothing: checks stop with the tab, and nothing is kept for it on the server. <span class="lpm-tag">you are here</span></p><div class="lpm-mg lpm-r2-end"><article class="lpm-card lpm-card--lit lpm-card--nudge"><header class="lpm-card-head"><span class="lpm-badge lpm-badge--wait"><span class="lpm-pulse" aria-hidden="true"></span>operator is answering</span><button class="lpm-resolve" type="button" aria-label="Resolve thread">&#10003;</button></header><div class="lpm-c"><div class="lpm-c-row lpm-c-row--me"><span class="lpm-c-av" aria-hidden="true">Y</span><div class="lpm-c-col"><p class="lpm-c-name"><span class="lpm-who">you</span> <time>3 min ago</time></p><p class="lpm-c-bubble">@operator is the cache shared between pages?</p></div></div><div class="lpm-c-row" role="status"><span class="lpm-c-av lpm-c-av--agent" aria-hidden="true">O</span><div class="lpm-c-col"><p class="lpm-c-name"><span class="lpm-handle">operator</span> <span class="lpm-agent">agent</span> is writing</p><p class="lpm-c-bubble lpm-c-bubble--typing"><span class="lpm-dots" aria-hidden="true"><i></i><i></i><i></i></span><span class="lpm-sr">operator is writing a reply</span></p></div></div></div></article><article class="lpm-card"><p class="lpm-card-quote">&#8220;about 200 bytes&#8221;</p><p class="lpm-card-text"><span class="lpm-who">you:</span> Is that with or without compression?</p><p class="lpm-card-foot"><span class="lpm-stack"><span class="lpm-c-av lpm-c-av--agent lpm-av-sm" aria-hidden="true">H</span></span>1 reply <span class="lpm-badge lpm-badge--done"><span aria-hidden="true">&#10003;</span>Answered</span></p></article></div></div></div></div></div>
+<h4>After: the reply has landed</h4>
+<div class="lpm lpm-wide"><p class="lpm-narrow">A wide-screen layout: scroll the frame sideways to see the margin.</p><div class="lpm-frame"><div class="lpm-frame-bar"><span class="lpm-frame-brand">Lotuspod</span><span class="lpm-frame-sep">:</span><span class="lpm-frame-title">Reply checks on open pages</span></div><div class="lpm-frame-scroll"><div class="lpm-doc"><p class="lpm-doc-h lpm-pg lpm-r1">How a page checks for replies</p><p class="lpm-pg lpm-r2">Each check is <mark class="lpm-hl is-active">answered from the server's cache</mark>: it asks only for threads that changed since the last check, and an empty answer is a few bytes, so a dozen open tabs barely register.</p><p class="lpm-pg lpm-r3">In a background tab the page slows to one check a minute and catches up the moment the tab comes back, so a reader who switches away misses nothing.</p><p class="lpm-doc-h lpm-pg lpm-r4">What a check costs</p><p class="lpm-pg lpm-r5">An empty check returns <mark class="lpm-hl">about 200 bytes</mark> and takes under 10 ms on the server, so even a page left open all week adds little load.</p><p class="lpm-pg lpm-r6 lpm-reading">A page that is closed costs nothing: checks stop with the tab, and nothing is kept for it on the server. <span class="lpm-tag">you are here</span></p><div class="lpm-mg lpm-r2-end"><article class="lpm-card lpm-card--lit lpm-card--nudge"><header class="lpm-card-head"><span class="lpm-badge lpm-badge--done"><span aria-hidden="true">&#10003;</span>Answered</span><button class="lpm-resolve" type="button" aria-label="Resolve thread">&#10003;</button></header><div class="lpm-c"><div class="lpm-c-row lpm-c-row--me"><span class="lpm-c-av" aria-hidden="true">Y</span><div class="lpm-c-col"><p class="lpm-c-name"><span class="lpm-who">you</span> <time>3 min ago</time></p><p class="lpm-c-bubble">@operator is the cache shared between pages?</p></div></div><div class="lpm-c-row"><span class="lpm-c-av lpm-c-av--agent" aria-hidden="true">O</span><div class="lpm-c-col"><p class="lpm-c-name"><span class="lpm-handle">operator</span> <span class="lpm-agent">agent</span> <time>just now</time></p><p class="lpm-c-bubble">Yes. One cache for the whole site, so a cold start is paid once, by whichever page checks first.</p></div></div></div></article><article class="lpm-card"><span class="lpm-tag lpm-card-tag">moved down</span><p class="lpm-card-quote">&#8220;about 200 bytes&#8221;</p><p class="lpm-card-text"><span class="lpm-who">you:</span> Is that with or without compression?</p><p class="lpm-card-foot"><span class="lpm-stack"><span class="lpm-c-av lpm-c-av--agent lpm-av-sm" aria-hidden="true">H</span></span>1 reply <span class="lpm-badge lpm-badge--done"><span aria-hidden="true">&#10003;</span>Answered</span></p></article></div></div></div></div></div>
+<h2>Narrow window: a popover</h2>
+<p>When the window is too narrow for a margin (roughly 700 to 1100px) but is not a phone, the thread opens as a popover under its chip, over the text, like B's markers. A highlight opens the same popover under the passage. Nothing below moves.</p>
+<div class="lpm"><div class="lpm-frame lpm-frame--narrow"><div class="lpm-frame-bar"><span class="lpm-frame-brand">Lotuspod</span><span class="lpm-frame-sep">:</span><span class="lpm-frame-title">Reply checks on open pages</span></div><div class="lpm-page lpm-page--tall"><p class="lpm-doc-h">How a page checks for replies</p><p>In a background tab the page slows to one check a minute and catches up the moment the tab comes back, so a reader who switches away misses nothing.</p><div style="margin-top: 0.8rem;"><span class="lpm-chip-pin"><button class="lpm-chip lpm-chip--on" type="button"><span class="lpm-stack"><span class="lpm-c-av lpm-av-sm" aria-hidden="true">Y</span><span class="lpm-c-av lpm-c-av--agent lpm-av-sm" aria-hidden="true">O</span></span>2 replies<span class="lpm-chip-sep">&#183;</span><span class="lpm-chip-state"><span aria-hidden="true">&#10003;</span>operator answered</span></button><article class="lpm-pop-below lpm-card lpm-card--lit" role="dialog" aria-label="Section thread"><header class="lpm-card-head"><span class="lpm-badge lpm-badge--done"><span aria-hidden="true">&#10003;</span>Answered</span><button class="lpm-close" type="button" aria-label="Close thread">&#215;</button></header><p class="lpm-sec"><b>Section</b><span>How a page checks for replies</span></p><div class="lpm-c"><div class="lpm-c-row lpm-c-row--me"><span class="lpm-c-av" aria-hidden="true">Y</span><div class="lpm-c-col"><p class="lpm-c-name"><span class="lpm-who">you</span> <time>1 h ago</time></p><p class="lpm-c-bubble">Should this section say what happens when the server restarts?</p></div></div><div class="lpm-c-row"><span class="lpm-c-av lpm-c-av--agent" aria-hidden="true">H</span><div class="lpm-c-col"><p class="lpm-c-name"><span class="lpm-handle">hermes</span> <span class="lpm-agent">agent</span> <time>58 min ago</time></p><p class="lpm-c-bubble">Open pages retry after 30 seconds and catch up. I checked the client code.</p></div></div><div class="lpm-c-row"><span class="lpm-c-av lpm-c-av--agent" aria-hidden="true">O</span><div class="lpm-c-col"><p class="lpm-c-name"><span class="lpm-handle">operator</span> <span class="lpm-agent">agent</span> <time>55 min ago</time></p><p class="lpm-c-bubble">I added that as the last paragraph of this section.</p></div></div><p class="lpm-c-event"><span>operator <a href="#top">revised the page &#8594; revision 6</a></span></p></div><div style="margin-top: 0.7rem;"><div class="lpm-c-compose"><textarea aria-label="Reply" rows="1" placeholder="Reply&#8230;"></textarea><button class="lpm-c-send" type="button" aria-label="Send reply">&#8593;</button></div></div></article></span></div><p class="lpm-doc-h">What a check costs</p><p>An empty check returns <mark class="lpm-hl">about 200 bytes</mark> and takes under 10 ms on the server, so even a page left open all week adds little load.</p><p>A page that is closed costs nothing: checks stop with the tab, and nothing is kept for it on the server.</p></div></div></div>
+
+<h2>Thread states</h2>
+<p><strong>Decide:</strong> D5 (resolved threads) and D6 (threads whose passage changed) are answered in <a href="#decisions-for-the-maintainer">Decisions for the maintainer</a> at the top, until pages can hold a decisions form in each section.</p>
+
+<p class="lpm lpm-pair-h"><b>D5</b>A resolved thread</p>
+<p>Thread 3 has been resolved. Two ways the panel can show it; the open threads are the same in both.</p>
+<div class="lpm lpm-grid">
+<figure class="lpm-state"><figcaption><b>D5</b>Fold to a dashed card with Reopen</figcaption><aside class="lpm-panel lpm-panel--solo" aria-label="Comments"><header class="lpm-panel-head"><span class="lpm-panel-title">Comments</span><span class="lpm-panel-count">2 open</span></header><p class="lpm-pgrp">How a page checks for replies</p><div class="lpm-pline"><span class="lpm-hl-n">1</span><span class="lpm-pline-q">every five seconds</span><span class="lpm-pline-s"><span aria-hidden="true">&#10003;</span>2</span></div><div class="lpm-pline"><span class="lpm-hl-n">2</span><span class="lpm-pline-q">answered from the server's cache</span><span class="lpm-pline-s"><span class="lpm-pulse" aria-hidden="true"></span>3</span></div><p class="lpm-pgrp">What a check costs</p><div class="lpm-pline lpm-pline--resolved"><span class="lpm-hl-n">3</span><span class="lpm-pline-q">about 200 bytes</span><span class="lpm-pline-s"><span aria-hidden="true">&#10003;</span>resolved &#183; <button class="lpm-link" type="button">Reopen</button></span></div></aside><p class="lpm-state-note">Good for keeping the whole discussion in view: every thread stays listed, at the cost of one quiet row each.</p></figure>
+<figure class="lpm-state"><figcaption><b>D5</b>Hide behind a resolved count</figcaption><aside class="lpm-panel lpm-panel--solo" aria-label="Comments"><header class="lpm-panel-head"><span class="lpm-panel-title">Comments</span><span class="lpm-panel-count">2 open</span></header><p class="lpm-pgrp">How a page checks for replies</p><div class="lpm-pline"><span class="lpm-hl-n">1</span><span class="lpm-pline-q">every five seconds</span><span class="lpm-pline-s"><span aria-hidden="true">&#10003;</span>2</span></div><div class="lpm-pline"><span class="lpm-hl-n">2</span><span class="lpm-pline-q">answered from the server's cache</span><span class="lpm-pline-s"><span class="lpm-pulse" aria-hidden="true"></span>3</span></div><div class="lpm-pline-more"><button class="lpm-link" type="button">1 resolved &#9656;</button></div><div class="lpm-inset"><p class="lpm-inset-label">Expanded</p><div class="lpm-pline-more lpm-pline-more--open"><span>1 resolved &#9662;</span></div><p class="lpm-pgrp" style="border-top: 0; margin-top: 0.2rem; padding-top: 0;">What a check costs</p><div class="lpm-pline lpm-pline--resolved"><span class="lpm-hl-n">3</span><span class="lpm-pline-q">about 200 bytes</span><span class="lpm-pline-s"><span aria-hidden="true">&#10003;</span>resolved &#183; <button class="lpm-link" type="button">Reopen</button></span></div></div></aside><p class="lpm-state-note">Good for busy pages: the list holds only what still needs you, and one click shows the rest.</p></figure>
+</div>
+<p class="lpm lpm-pair-h"><b>D6</b>A thread whose passage changed</p>
+<p>Thread 1 was on &#8220;every five seconds&#8221;. Revision 4 rewrote that sentence, so the highlight has nothing left to sit on.</p>
+<div class="lpm lpm-revs">
+<div class="lpm-rev"><p class="lpm-rev-label">Revision 3 <span>&#183; thread 1 is here</span></p><p>While a comment waits, the page checks <mark class="lpm-hl">every five seconds</mark><span class="lpm-hl-n">1</span> for a reply.</p></div>
+<div class="lpm-rev"><p class="lpm-rev-label">Revision 4 <span>&#183; the sentence changed</span></p><p>While a comment waits, the page checks <ins class="lpm-changed">on a backing-off schedule</ins> for a reply.</p></div>
+</div>
+<div class="lpm lpm-grid">
+<figure class="lpm-state"><figcaption><b>D6</b>Keep it, old quote struck through</figcaption><aside class="lpm-panel lpm-panel--solo" aria-label="Comments"><header class="lpm-panel-head"><span class="lpm-panel-title">Comments</span><span class="lpm-panel-count">2 open</span></header><p class="lpm-pgrp">How a page checks for replies</p><div class="lpm-pi lpm-pi--detached"><span class="lpm-hl-n">1</span><div><p class="lpm-pi-quote"><del>every five seconds</del> <span class="lpm-pi-why">&#183; this passage changed in <a href="#top">revision 4</a></span></p><div class="lpm-c"><div class="lpm-c-row lpm-c-row--me"><span class="lpm-c-av" aria-hidden="true">Y</span><div class="lpm-c-col"><p class="lpm-c-name"><span class="lpm-who">you</span> <time>yesterday</time></p><p class="lpm-c-bubble">Is five seconds too eager for a page I leave open all day?</p></div></div><div class="lpm-c-row"><span class="lpm-c-av lpm-c-av--agent" aria-hidden="true">O</span><div class="lpm-c-col"><p class="lpm-c-name"><span class="lpm-handle">operator</span> <span class="lpm-agent">agent</span> <time>yesterday</time></p><p class="lpm-c-bubble">It only checks while a thread waits. I will look at backing off when nothing changes.</p></div></div></div><details class="lpm-c-reply" style="margin-top: 0.5rem;"><summary>Reply</summary></details></div></div><div class="lpm-pline"><span class="lpm-hl-n">2</span><span class="lpm-pline-q">answered from the server's cache</span><span class="lpm-pline-s"><span class="lpm-pulse" aria-hidden="true"></span>3</span></div></aside><p class="lpm-state-note">Good for keeping what was said: the conversation stays readable, and the struck quote says why it no longer points at the text.</p></figure>
+<figure class="lpm-state"><figcaption><b>D6</b>Hide it</figcaption><aside class="lpm-panel lpm-panel--solo" aria-label="Comments"><header class="lpm-panel-head"><span class="lpm-panel-title">Comments</span><span class="lpm-panel-count">1 open</span></header><p class="lpm-pgrp">How a page checks for replies</p><div class="lpm-pline"><span class="lpm-hl-n">1</span><span class="lpm-pline-q">answered from the server's cache</span><span class="lpm-pline-s"><span class="lpm-pulse" aria-hidden="true"></span>3</span></div></aside><p class="lpm-state-note">Good for a panel that matches the current text exactly; the old conversation is no longer on the page.</p></figure>
+</div>
+
+
+<p>Drawn as A&#8217;s margin cards; B&#8217;s popover and C&#8217;s panel hold the same card body. The highlight follows the thread: dashed while the comment is being written, lit while the card is open, gone once the thread is resolved.</p>
+
+<div class="lpm lpm-grid">
+  <figure class="lpm-state">
+    <figcaption><b>1</b>New comment from a selection</figcaption>
+    <p class="lpm-snip" style="padding-top: 0.8rem; margin-bottom: 0.8rem;">A reply lands in place, <mark class="lpm-hl is-pending">under the comment it answers</mark>, without a reload.</p>
+    <article class="lpm-card lpm-card--lit">
+      <p class="lpm-card-by" style="margin-bottom: 0.55rem;"><span class="lpm-c-av lpm-av-sm" aria-hidden="true">Y</span><span class="lpm-who">you</span></p>
+      <div class="lpm-c-compose lpm-c-compose--focus">
+        <textarea aria-label="Comment on the selected passage" rows="2" placeholder="Comment, or @ an agent&#8230;">Can a reader turn the checks off for one page?</textarea>
+        <button class="lpm-c-send" type="button" aria-label="Comment">&#8593;</button>
+      </div>
+      <p class="lpm-card-hint"><span>Goes to <span class="lpm-handle">operator</span>, the page owner</span><button class="lpm-link" type="button">Cancel</button></p>
+    </article>
+  </figure>
+
+  <figure class="lpm-state">
+    <figcaption><b>2</b>Waiting on an agent</figcaption>
+    <p class="lpm-snip" style="padding-top: 0.8rem; margin-bottom: 0.8rem;">A reply lands in place, <mark class="lpm-hl is-active">under the comment it answers</mark>, without a reload.</p>
+    <article class="lpm-card lpm-card--lit">
+      <header class="lpm-card-head"><span class="lpm-badge lpm-badge--wait"><span class="lpm-pulse" aria-hidden="true"></span>operator is answering</span><button class="lpm-resolve" type="button" aria-label="Resolve thread">&#10003;</button></header>
+      <div class="lpm-c">
+        <div class="lpm-c-row lpm-c-row--me">
+          <span class="lpm-c-av" aria-hidden="true">Y</span>
+          <div class="lpm-c-col">
+            <p class="lpm-c-name"><span class="lpm-who">you</span> <time>1 min ago</time></p>
+            <p class="lpm-c-bubble">Can a reader turn the checks off for one page?</p>
+            <p class="lpm-c-receipt">&#10003; Picked up by operator</p>
+          </div>
+        </div>
+        <div class="lpm-c-row" role="status">
+          <span class="lpm-c-av lpm-c-av--agent" aria-hidden="true">O</span>
+          <div class="lpm-c-col">
+            <p class="lpm-c-name"><span class="lpm-handle">operator</span> <span class="lpm-agent">agent</span> is writing</p>
+            <p class="lpm-c-bubble lpm-c-bubble--typing"><span class="lpm-dots" aria-hidden="true"><i></i><i></i><i></i></span><span class="lpm-sr">operator is writing a reply</span></p>
+          </div>
+        </div>
+      </div>
+    </article>
+  </figure>
+
+  <figure class="lpm-state">
+    <figcaption><b>3</b>Answered</figcaption>
+    <p class="lpm-snip" style="padding-top: 0.8rem; margin-bottom: 0.8rem;">A reply lands in place, <mark class="lpm-hl is-active">under the comment it answers</mark>, without a reload.</p>
+    <article class="lpm-card lpm-card--lit">
+      <header class="lpm-card-head"><span class="lpm-badge lpm-badge--done"><span aria-hidden="true">&#10003;</span>Answered</span><button class="lpm-resolve" type="button" aria-label="Resolve thread">&#10003;</button></header>
+      <div class="lpm-c">
+        <div class="lpm-c-row lpm-c-row--me">
+          <span class="lpm-c-av" aria-hidden="true">Y</span>
+          <div class="lpm-c-col">
+            <p class="lpm-c-name"><span class="lpm-who">you</span> <time>12 min ago</time></p>
+            <p class="lpm-c-bubble">Can a reader turn the checks off for one page?</p>
+          </div>
+        </div>
+        <div class="lpm-c-row">
+          <span class="lpm-c-av lpm-c-av--agent" aria-hidden="true">O</span>
+          <div class="lpm-c-col">
+            <p class="lpm-c-name"><span class="lpm-handle">operator</span> <span class="lpm-agent">agent</span> <time>10 min ago</time></p>
+            <p class="lpm-c-bubble">Not yet. I added a line under Reply checks saying so, and filed it as a follow-up.</p>
+          </div>
+        </div>
+        <p class="lpm-c-event"><span>operator <a href="#top">revised the page &#8594; revision 5</a></span></p>
+        <details class="lpm-c-reply"><summary>Reply</summary></details>
+      </div>
+    </article>
+  </figure>
+
+  <figure class="lpm-state">
+    <figcaption><b>4</b>Resolved</figcaption>
+    <p class="lpm-snip" style="padding-top: 0.8rem; margin-bottom: 0.8rem;">While a comment waits, the page checks every five seconds for a reply.</p>
+    <article class="lpm-card lpm-card--resolved">
+      <p class="lpm-card-by"><span class="lpm-check" aria-hidden="true">&#10003;</span> Resolved by <span class="lpm-who">you</span> <time>2 h ago</time></p>
+      <p class="lpm-card-text">Is five seconds too eager for a page I leave open all day? It feels like a lot of traffic for one tab.</p>
+      <p class="lpm-card-foot"><span class="lpm-stack"><span class="lpm-c-av lpm-c-av--agent lpm-av-sm" aria-hidden="true">O</span></span>3 messages <button class="lpm-link" type="button" style="margin-left: auto;">Reopen</button></p>
+    </article>
+    <p class="lpm-state-note">The highlight goes. The card folds into "1 resolved" at the top of the margin and shows like this only when that is opened.</p>
+  </figure>
+
+  <figure class="lpm-state">
+    <figcaption><b>5</b>Detached: the passage changed</figcaption>
+    <article class="lpm-card lpm-card--detached">
+      <header class="lpm-card-head"><span class="lpm-badge lpm-badge--off"><span class="lpm-hollow" aria-hidden="true"></span>Passage changed</span><button class="lpm-resolve" type="button" aria-label="Resolve thread">&#10003;</button></header>
+      <div class="lpm-quote"><span class="lpm-quote-label">Was on</span><del>slows to one check a minute</del></div>
+      <p class="lpm-c-event"><span>The passage this was on changed in <a href="#top">revision 4</a></span></p>
+      <div class="lpm-c">
+        <div class="lpm-c-row lpm-c-row--me">
+          <span class="lpm-c-av" aria-hidden="true">Y</span>
+          <div class="lpm-c-col">
+            <p class="lpm-c-name"><span class="lpm-who">you</span> <time>yesterday</time></p>
+            <p class="lpm-c-bubble">Does a phone in my pocket count as a background tab?</p>
+          </div>
+        </div>
+        <div class="lpm-c-row">
+          <span class="lpm-c-av lpm-c-av--agent" aria-hidden="true">H</span>
+          <div class="lpm-c-col">
+            <p class="lpm-c-name"><span class="lpm-handle">hermes</span> <span class="lpm-agent">agent</span> <time>yesterday</time></p>
+            <p class="lpm-c-bubble">Yes. A locked phone pauses the tab, so it checks once when you unlock it.</p>
+          </div>
+        </div>
+        <details class="lpm-c-reply"><summary>Reply</summary></details>
+      </div>
+    </article>
+    <p class="lpm-state-note">Kept in the margin by the paragraph nearest where the passage was, with a dashed edge and no highlight.</p>
+  </figure>
+</div>
+
+<h2>Highlight styles</h2>
+
+<p>The persistent highlight on commented text, in two strengths. Hover and the open thread are drawn on the same sentence; the last rows show two threads that overlap and two that touch. Hover a highlight here to see it live.</p>
+
+<div class="lpm lpm-grid">
+  <figure class="lpm-state">
+    <figcaption><b>Subtle</b>Tint and underline &#183; recommended</figcaption>
+    <div class="lpm-hlrow"><span>Idle</span><p>In a background tab the page <mark class="lpm-hl">slows to one check a minute</mark> and catches up.</p></div>
+    <div class="lpm-hlrow"><span>Hover</span><p>In a background tab the page <mark class="lpm-hl is-hover">slows to one check a minute</mark> and catches up.</p></div>
+    <div class="lpm-hlrow"><span>Active</span><p>In a background tab the page <mark class="lpm-hl is-active">slows to one check a minute</mark> and catches up.</p></div>
+    <div class="lpm-hlrow"><span>Overlap</span><p>Each check is <mark class="lpm-hl">answered from <mark class="lpm-hl">the server's cache</mark></mark><mark class="lpm-hl">, so an empty answer</mark> is a few bytes.</p></div>
+    <div class="lpm-hlrow"><span>2 open</span><p>Each check is <mark class="lpm-hl">answered from <mark class="lpm-hl is-active">the server's cache</mark></mark><mark class="lpm-hl is-active">, so an empty answer</mark> is a few bytes.</p></div>
+    <div class="lpm-hlrow"><span>Touching</span><p>The page <mark class="lpm-hl">stops checking </mark><mark class="lpm-hl is-hover">when the last thread is answered</mark>, until someone comments.</p></div>
+  </figure>
+
+  <figure class="lpm-state">
+    <figcaption><b>Strong</b>Solid tint, filled when open</figcaption>
+    <div class="lpm-hlrow"><span>Idle</span><p>In a background tab the page <mark class="lpm-hl lpm-hl--strong">slows to one check a minute</mark> and catches up.</p></div>
+    <div class="lpm-hlrow"><span>Hover</span><p>In a background tab the page <mark class="lpm-hl lpm-hl--strong is-hover">slows to one check a minute</mark> and catches up.</p></div>
+    <div class="lpm-hlrow"><span>Active</span><p>In a background tab the page <mark class="lpm-hl lpm-hl--strong is-active">slows to one check a minute</mark> and catches up.</p></div>
+    <div class="lpm-hlrow"><span>Overlap</span><p>Each check is <mark class="lpm-hl lpm-hl--strong">answered from <mark class="lpm-hl lpm-hl--strong">the server's cache</mark></mark><mark class="lpm-hl lpm-hl--strong">, so an empty answer</mark> is a few bytes.</p></div>
+    <div class="lpm-hlrow"><span>2 open</span><p>Each check is <mark class="lpm-hl lpm-hl--strong">answered from <mark class="lpm-hl lpm-hl--strong is-active">the server's cache</mark></mark><mark class="lpm-hl lpm-hl--strong is-active">, so an empty answer</mark> is a few bytes.</p></div>
+    <div class="lpm-hlrow"><span>Touching</span><p>The page <mark class="lpm-hl lpm-hl--strong">stops checking </mark><mark class="lpm-hl lpm-hl--strong is-hover">when the last thread is answered</mark>, until someone comments.</p></div>
+  </figure>
+</div>
+
+<p>Where two threads cover the same words the tints stack, so the shared part reads darker; hovering or opening one lights only its own range. Touching highlights keep a hairline gap and their own rounded ends. Subtle keeps a page with many comments readable; Strong is easier to spot on a long page but turns the open passage into a solid block.</p>
+
+<h2>Phone</h2>
+
+<p>Lower priority: the maintainer reads mostly on desktop. Each frame is 360px wide. On a phone there is no margin, so a thread opens from its highlight or chip; P2's sheet holds section threads too.</p>
+
+<div class="lpm lpm-phones">
+  <figure class="lpm-phones-alt">
+    <figcaption><b>P1: inline, under the paragraph</b>Tapping a highlight opens its thread right below the paragraph.
+      <ul class="lpm-pc">
+        <li>The thread sits with its text; nothing floats.</li>
+        <li class="lpm-con">Pushes the rest of the page down, and the keyboard can cover the composer.</li>
+      </ul>
+    </figcaption>
+    <div class="lpm-phone">
+      <div class="lpm-frame-bar"><span class="lpm-frame-brand">Lotuspod</span><span class="lpm-frame-sep">:</span><span class="lpm-frame-title">Reply checks on open pages</span></div>
+      <div class="lpm-phone-body">
+        <p class="lpm-doc-h">How a page checks for replies</p>
+        <p>Each check is <mark class="lpm-hl is-active">answered from the server's cache</mark>: it asks only for threads that changed since the last check.</p>
+        <article class="lpm-inline">
+          <header class="lpm-card-head"><span class="lpm-badge lpm-badge--wait"><span class="lpm-pulse" aria-hidden="true"></span>hermes is answering</span><button class="lpm-close" type="button" aria-label="Close thread">&#215;</button></header>
+          <div class="lpm-c">
+            <div class="lpm-c-row lpm-c-row--me">
+              <span class="lpm-c-av" aria-hidden="true">Y</span>
+              <div class="lpm-c-col">
+                <p class="lpm-c-name"><span class="lpm-who">you</span> <time>40 min ago</time></p>
+                <p class="lpm-c-bubble">What happens after a deploy, when the cache is cold?</p>
+              </div>
+            </div>
+            <div class="lpm-c-row">
+              <span class="lpm-c-av lpm-c-av--agent" aria-hidden="true">O</span>
+              <div class="lpm-c-col">
+                <p class="lpm-c-name"><span class="lpm-handle">operator</span> <span class="lpm-agent">agent</span> <time>38 min ago</time></p>
+                <p class="lpm-c-bubble">The first check reads the database and fills the cache. One slow request per page, not per tab.</p>
+              </div>
+            </div>
+            <div class="lpm-c-row" role="status">
+              <span class="lpm-c-av lpm-c-av--agent" aria-hidden="true">H</span>
+              <div class="lpm-c-col">
+                <p class="lpm-c-name"><span class="lpm-handle">hermes</span> <span class="lpm-agent">agent</span> is writing</p>
+                <p class="lpm-c-bubble lpm-c-bubble--typing"><span class="lpm-dots" aria-hidden="true"><i></i><i></i><i></i></span><span class="lpm-sr">hermes is writing a reply</span></p>
+              </div>
+            </div>
+          </div>
+          <div class="lpm-c-compose" style="margin-top: 0.7rem;">
+            <textarea aria-label="Reply" rows="1" placeholder="Reply&#8230;"></textarea>
+            <button class="lpm-c-send" type="button" aria-label="Send reply">&#8593;</button>
+          </div>
+        </article>
+        <p>In a background tab the page <mark class="lpm-hl">slows to one check a minute</mark> and catches up the moment the tab comes back.</p>
+      </div>
+    </div>
+  </figure>
+
+  <figure class="lpm-phones-alt">
+    <figcaption><b>P2: bottom sheet</b>Tapping a highlight slides the thread up from the bottom; arrows step to the next thread.
+      <ul class="lpm-pc">
+        <li>The text stays put, the passage stays in view, and the composer sits by the keyboard.</li>
+        <li class="lpm-con">Covers half the page while open.</li>
+      </ul>
+    </figcaption>
+    <div class="lpm-phone lpm-phone--tall">
+      <div class="lpm-frame-bar"><span class="lpm-frame-brand">Lotuspod</span><span class="lpm-frame-sep">:</span><span class="lpm-frame-title">Reply checks on open pages</span></div>
+      <div class="lpm-phone-body">
+        <p class="lpm-doc-h">How a page checks for replies</p>
+        <p>Each check is <mark class="lpm-hl is-active">answered from the server's cache</mark>: it asks only for threads that changed since the last check.</p>
+        <p>In a background tab the page <mark class="lpm-hl">slows to one check a minute</mark> and catches up the moment the tab comes back.</p>
+        <p>A reply lands in place, under the comment it answers, without a reload.</p>
+      </div>
+      <div class="lpm-scrim" aria-hidden="true"></div>
+      <article class="lpm-sheet" role="dialog" aria-label="Thread on: answered from the server's cache">
+        <div class="lpm-sheet-grab" aria-hidden="true"></div>
+        <header class="lpm-sheet-head">
+          <span class="lpm-sheet-nav"><button type="button" aria-label="Previous thread">&#8249;</button>2 of 3<button type="button" aria-label="Next thread">&#8250;</button></span>
+          <span class="lpm-badge lpm-badge--wait"><span class="lpm-pulse" aria-hidden="true"></span>hermes is answering</span>
+          <button class="lpm-close" type="button" aria-label="Close thread">&#215;</button>
+        </header>
+        <div class="lpm-sheet-body">
+          <div class="lpm-c">
+            <div class="lpm-c-row lpm-c-row--me">
+              <span class="lpm-c-av" aria-hidden="true">Y</span>
+              <div class="lpm-c-col">
+                <p class="lpm-c-name"><span class="lpm-who">you</span> <time>40 min ago</time></p>
+                <p class="lpm-c-bubble">What happens after a deploy, when the cache is cold?</p>
+              </div>
+            </div>
+            <div class="lpm-c-row">
+              <span class="lpm-c-av lpm-c-av--agent" aria-hidden="true">O</span>
+              <div class="lpm-c-col">
+                <p class="lpm-c-name"><span class="lpm-handle">operator</span> <span class="lpm-agent">agent</span> <time>38 min ago</time></p>
+                <p class="lpm-c-bubble">The first check reads the database and fills the cache. One slow request per page, not per tab.</p>
+              </div>
+            </div>
+            <div class="lpm-c-row" role="status">
+              <span class="lpm-c-av lpm-c-av--agent" aria-hidden="true">H</span>
+              <div class="lpm-c-col">
+                <p class="lpm-c-name"><span class="lpm-handle">hermes</span> <span class="lpm-agent">agent</span> is writing</p>
+                <p class="lpm-c-bubble lpm-c-bubble--typing"><span class="lpm-dots" aria-hidden="true"><i></i><i></i><i></i></span><span class="lpm-sr">hermes is writing a reply</span></p>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="lpm-sheet-foot">
+          <div class="lpm-c-compose">
+            <textarea aria-label="Reply" rows="1" placeholder="Reply&#8230;"></textarea>
+            <button class="lpm-c-send" type="button" aria-label="Send reply">&#8593;</button>
+          </div>
+        </div>
+      </article>
+    </div>
+  </figure>
+
+<figure class="lpm-phones-alt"><figcaption><b>P2 with a section thread</b>Tapping a chip opens its section thread in the same sheet, labelled with the heading.</figcaption><div class="lpm-phone lpm-phone--tall"><div class="lpm-frame-bar"><span class="lpm-frame-brand">Lotuspod</span><span class="lpm-frame-sep">:</span><span class="lpm-frame-title">Reply checks on open pages</span></div><div class="lpm-phone-body"><p>In a background tab the page slows to one check a minute and catches up the moment the tab comes back, so a reader who switches away misses nothing.</p><p style="margin-top: 0.8rem;"><button class="lpm-chip lpm-chip--on" type="button"><span class="lpm-stack"><span class="lpm-c-av lpm-av-sm" aria-hidden="true">Y</span><span class="lpm-c-av lpm-c-av--agent lpm-av-sm" aria-hidden="true">O</span></span>2 replies<span class="lpm-chip-sep">&#183;</span><span class="lpm-chip-state"><span aria-hidden="true">&#10003;</span>operator answered</span></button></p><p class="lpm-doc-h" style="margin-top: 1.2rem;">What a check costs</p><p>An empty check returns <mark class="lpm-hl">about 200 bytes</mark> and takes under 10 ms on the server, so even a page left open all week adds little load.</p></div><div class="lpm-scrim" aria-hidden="true"></div><article class="lpm-sheet" role="dialog" aria-label="Section thread"><div class="lpm-sheet-grab" aria-hidden="true"></div><header class="lpm-sheet-head"><span class="lpm-sheet-nav"><button type="button" aria-label="Previous thread">&#8249;</button>3 of 4<button type="button" aria-label="Next thread">&#8250;</button></span><span class="lpm-badge lpm-badge--done"><span aria-hidden="true">&#10003;</span>Answered</span><button class="lpm-close" type="button" aria-label="Close thread">&#215;</button></header><div class="lpm-sheet-body"><p class="lpm-sec"><b>Section</b><span>How a page checks for replies</span></p><div class="lpm-c"><div class="lpm-c-row lpm-c-row--me"><span class="lpm-c-av" aria-hidden="true">Y</span><div class="lpm-c-col"><p class="lpm-c-name"><span class="lpm-who">you</span> <time>1 h ago</time></p><p class="lpm-c-bubble">Should this section say what happens when the server restarts?</p></div></div><div class="lpm-c-row"><span class="lpm-c-av lpm-c-av--agent" aria-hidden="true">H</span><div class="lpm-c-col"><p class="lpm-c-name"><span class="lpm-handle">hermes</span> <span class="lpm-agent">agent</span> <time>58 min ago</time></p><p class="lpm-c-bubble">Open pages retry after 30 seconds and catch up. I checked the client code.</p></div></div><div class="lpm-c-row"><span class="lpm-c-av lpm-c-av--agent" aria-hidden="true">O</span><div class="lpm-c-col"><p class="lpm-c-name"><span class="lpm-handle">operator</span> <span class="lpm-agent">agent</span> <time>55 min ago</time></p><p class="lpm-c-bubble">I added that as the last paragraph of this section.</p></div></div><p class="lpm-c-event"><span>operator <a href="#top">revised the page &#8594; revision 6</a></span></p></div></div><div class="lpm-sheet-foot"><div class="lpm-c-compose"><textarea aria-label="Reply" rows="1" placeholder="Reply&#8230;"></textarea><button class="lpm-c-send" type="button" aria-label="Send reply">&#8593;</button></div></div></article></div></figure>
+
+  <figure class="lpm-phones-alt">
+    <figcaption><b>Selecting on a phone</b>For both P1 and P2. The system menu holds the space above the selection, so Comment sits just below its end.</figcaption>
+    <div class="lpm-phone">
+      <div class="lpm-frame-bar"><span class="lpm-frame-brand">Lotuspod</span><span class="lpm-frame-sep">:</span><span class="lpm-frame-title">Reply checks on open pages</span></div>
+      <div class="lpm-phone-body">
+        <p>When the last waiting thread is answered the page stops checking. It starts again only when someone comments.</p>
+        <p class="lpm-selpara"><span class="lpm-native" aria-hidden="true"><span>Copy</span><span>Look Up</span><span>Share</span><span>&#8250;</span></span><span class="lpm-handle-s" aria-hidden="true"></span><span class="lpm-sel">A reply lands in place, under the comment it answers</span><span class="lpm-handle-e" aria-hidden="true"></span><span class="lpm-at"><button class="lpm-float lpm-float--below" type="button"><svg viewBox="0 0 20 20" width="15" height="15" aria-hidden="true"><path d="M4 3.5h12a1.8 1.8 0 0 1 1.8 1.8v7a1.8 1.8 0 0 1-1.8 1.8H9.2l-3.7 3v-3H4a1.8 1.8 0 0 1-1.8-1.8v-7A1.8 1.8 0 0 1 4 3.5z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M10 6.4v5.2M7.4 9h5.2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Comment</button></span>, without a reload. Nothing else on the page moves, so a reader halfway through a paragraph keeps their place.</p>
+        <p>In a background tab the page slows to one check a minute and catches up the moment the tab comes back.</p>
+      </div>
+    </div>
+  </figure>
+</div>
+
+<h2>Which one?</h2>
+
+<table>
+<thead><tr><th></th><th>A: cards in the margin</th><th>B: markers in the margin</th><th>C: side panel</th></tr></thead>
+<tbody>
+<tr><td>Section threads</td><td>One more card, level with its chip</td><td>A &#167; marker by its chip, opening a popover</td><td>Listed under their heading, marked &#167;</td></tr>
+<tr><td>Many threads</td><td>Cards stack and drift from their lines</td><td>Markers stay put; one thread open at a time</td><td>One list in page order, made for it</td></tr>
+<tr><td>Long agent conversations</td><td>An open one pushes every card below it</td><td>A tall popover over the text</td><td>The panel&#8217;s full height, scrolling on its own</td></tr>
+<tr><td>Width cost</td><td>17rem, always</td><td>About 4rem</td><td>20rem open, 2.75rem folded</td></tr>
+<tr><td>Status without a click</td><td>Yes, on every card</td><td>A dot on the marker</td><td>Yes, in the list, and as dots on the rail</td></tr>
+</tbody>
+</table>
+
+<p>Every layout keeps the chip summary at the end of each section, so a section&#8217;s state is readable in the column whichever is chosen.</p>
+
+<p><strong>My pick: C, folded to a rail by default.</strong> Lotuspod threads are agent conversations that run long, and C is the only layout where a long thread disturbs neither the text nor the other threads, while the chips and the rail&#8217;s dots still show state as you read. If most pages end up with two or three short threads, A reads better and I would switch.</p>
