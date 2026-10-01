@@ -1,5 +1,5 @@
 /*
- * Lotuspod theme "lotus" v0.4.13
+ * Lotuspod theme "lotus" v0.4.14
  * Tokens mirror theme/tokens.json.
  */
 
@@ -261,6 +261,7 @@ body {
    first sentence. */
 .artifact-outline {
   margin: 1.75rem 0 0;
+  position: relative;
 }
 
 .artifact-outline-disclosure {
@@ -312,6 +313,30 @@ body {
 
 .artifact-outline-list a:hover,
 .artifact-outline-list a:focus-visible {
+  color: var(--color-lavender);
+}
+
+/* The control the page script adds to the outline to fold or open every
+   section at once, in the summary's quiet voice. Above the prose it sits at
+   the right end of the summary's line, out of the flow, so adding it moves
+   nothing on the page. */
+.artifact-sections-all {
+  background: none;
+  border: 0;
+  border-radius: var(--radius-block);
+  color: var(--color-muted-lavender);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.8rem;
+  letter-spacing: 0.04em;
+  margin: 0;
+  padding: 0.7rem 0;
+  position: absolute;
+  right: 1rem;
+  top: 1px;
+}
+
+.artifact-sections-all:hover {
   color: var(--color-lavender);
 }
 
@@ -394,6 +419,13 @@ body {
     border-top: 0;
     padding: 0.35rem 0 0;
   }
+
+  /* In the rail, under the list: the prose beside it does not move. */
+  .artifact-sections-all {
+    margin: 0.75rem 0 0 1.15rem;
+    padding: 0.2rem 0;
+    position: static;
+  }
 }
 
 /* Body: a reading column. Measure is capped in ch so long-form prose keeps a
@@ -418,6 +450,12 @@ body {
 }
 
 .artifact-body > :last-child {
+  margin-bottom: 0;
+}
+
+/* A folding page wraps each section's content: the last section's last block
+   ends the body as the body's last child did. */
+.artifact-body > .artifact-section-body:last-child > :last-child {
   margin-bottom: 0;
 }
 
@@ -447,6 +485,53 @@ body {
   /* An outline link lands here: leave the heading a little air above it
      rather than jamming it against the top of the window. */
   scroll-margin-top: 1.5rem;
+}
+
+/* A folding section's heading: its text is a button that looks like the
+   heading it sits in, with a caret hung in the gutter before the text that
+   points down while the section is open and right once it is folded. Hung,
+   it moves no text when the page script adds it. No transition: a section
+   folds and opens at once. */
+.artifact-section-toggle {
+  background: none;
+  border: 0;
+  border-radius: var(--radius-block);
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  letter-spacing: inherit;
+  margin: 0;
+  padding: 0;
+  position: relative;
+  text-align: inherit;
+}
+
+.artifact-section-toggle::before {
+  border-bottom: 0.1em solid var(--color-lavender);
+  border-right: 0.1em solid var(--color-lavender);
+  content: "";
+  height: 0.34em;
+  left: -0.85em;
+  position: absolute;
+  top: 0.4em;
+  transform: rotate(45deg);
+  width: 0.34em;
+}
+
+.artifact-section-toggle[aria-expanded="false"]::before {
+  left: -0.95em;
+  top: 0.52em;
+  transform: rotate(-45deg);
+}
+
+.artifact-section-toggle:hover {
+  color: var(--color-pale-lavender);
+}
+
+.artifact-section-toggle:focus-visible,
+.artifact-sections-all:focus-visible {
+  outline: 2px solid var(--color-lavender);
+  outline-offset: 2px;
 }
 
 .artifact-body h3 {
@@ -1708,11 +1793,14 @@ label.artifact-decision-note span {
    of the reading column and take the page container's width. Nested inside
    prose, in a quote or a list item, they stay within their parent instead. */
 .artifact-body > table,
-.artifact-body > pre {
+.artifact-body > pre,
+.artifact-section-body > table,
+.artifact-section-body > pre {
   max-width: var(--measure-full);
 }
 
-.artifact-body > pre {
+.artifact-body > pre,
+.artifact-section-body > pre {
   width: var(--measure-full);
 }
 
@@ -2092,4 +2180,19 @@ label.artifact-decision-note span {
 .index-empty code {
   color: var(--color-lavender);
   font-family: var(--font-mono);
+}
+
+/* On paper every section is open, whatever the reader folded, and nothing
+   that only folds is drawn. Chromium hides an until-found section with
+   content-visibility rather than display. */
+@media print {
+  .artifact-section-body[hidden] {
+    content-visibility: visible;
+    display: block;
+  }
+
+  .artifact-section-toggle::before,
+  .artifact-sections-all {
+    display: none;
+  }
 }

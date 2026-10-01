@@ -35,7 +35,7 @@ from typing import Callable
 import importlib.resources as _res
 
 from lotuspod import (access, agents, api, backup, comments, db, decisions, machine,
-                      markdown, media, responder, routing)
+                      markdown, media, responder, routing, sections)
 
 _PKG = "lotuspod"
 
@@ -259,8 +259,9 @@ def script_warning(name: str, body: str) -> str:
     )
 
 
-# The page script answers decision forms (lotuspod.decisions) and shows and
-# posts comments (lotuspod.comments); only a page with either loads it.
+# The page script answers decision forms (lotuspod.decisions), shows and
+# posts comments (lotuspod.comments) and folds sections (lotuspod.sections);
+# only a page with any of them loads it.
 PAGE_SCRIPT = "lotuspod-page.js"
 THEME_FILES = ("lotuspod.css", "favicon.svg", PAGE_SCRIPT)
 
@@ -603,6 +604,8 @@ def cmd_render(args: argparse.Namespace) -> int:
     # After the outline, so each box names its heading's id.
     if with_comments:
         body = comments.render_comments(body, args.name)
+    # Last, so each section's box and forms fall inside its wrapper.
+    body, wrapped = sections.wrap_sections(body) if outline else (body, False)
     context = {
         "title": args.title,
         "kicker": kicker,
@@ -619,7 +622,7 @@ def cmd_render(args: argparse.Namespace) -> int:
         "owner": owner,
         "variant_class": variant_class(args.variant),
         "mermaid": has_mermaid_block(body),
-        "page_script_needed": has_decisions or with_comments,
+        "page_script_needed": has_decisions or with_comments or wrapped,
         "page_script": PAGE_SCRIPT,
         "mermaid_theme_variables": mermaid_theme_variables(tokens),
         "mermaid_dir": MERMAID_DIR,

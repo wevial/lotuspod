@@ -680,7 +680,7 @@ class IndexTableTests(TempDirTestCase):
         version = json.loads(
             (cli.THEME_DIR / "tokens.json").read_text(encoding="utf-8")
         )["version"]
-        self.assertEqual(version, "0.4.13")
+        self.assertEqual(version, "0.4.14")
         self.assertIn(f'href="lotuspod.css?v={version}"', first)
 
 
@@ -1087,7 +1087,9 @@ class OutlineTests(TempDirTestCase):
     def test_no_outline_matches_the_page_without_an_outline(self):
         """Opting out drops both halves at once - the ids and the section list
         built from them - leaving the page a body with no outline at all."""
-        with_ids = self.rendered(self.TWO_H2)
+        # Sections fold only on a page with an outline; left unwrapped here.
+        with mock.patch.object(cli.sections, "wrap_sections", lambda body: (body, False)):
+            with_ids = self.rendered(self.TWO_H2)
         opted_out = self.rendered(self.TWO_H2, "--no-outline")
         without_nav = re.sub(
             r'<nav class="artifact-outline".*?</nav>', "", with_ids, flags=re.DOTALL
@@ -1247,7 +1249,9 @@ class MermaidTests(TempDirTestCase):
     def test_a_page_without_a_diagram_block_never_mentions_mermaid(self):
         page = self.rendered("<p>Plain prose.</p><h2>A</h2><p>x</p><h2>B</h2><p>y</p>")
         self.assertNotIn("mermaid", page)
-        self.assertNotIn("<script", page)
+        # The one script is the page script, which folds the two sections.
+        self.assertEqual(re.findall(r"<script[^>]*>", page),
+                         [f'<script src="{cli.PAGE_SCRIPT}?v={cli.load_tokens()["version"]}" defer>'])
 
     def test_the_flag_and_palette_reach_the_template_context(self):
         with mock.patch.object(

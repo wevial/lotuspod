@@ -66,8 +66,9 @@ def run_cli(*argv: str) -> tuple[int, str, str]:
 
 
 class _Page(HTMLParser):
-    """A page's body as its top-level elements, with each comment box's
-    parts, plus its scripts, meta tags and owner line."""
+    """A page's body as its top-level elements, each section wrapper's with
+    its own direct children, and each comment box's parts, plus its scripts,
+    meta tags and owner line."""
 
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
@@ -96,7 +97,10 @@ class _Page(HTMLParser):
         if self._depth is None:
             return
         if self._depth == 0:
-            self.elements.append({"tag": tag, "attrs": attrs})
+            self.elements.append({"tag": tag, "attrs": attrs, "children": []})
+        elif self._depth == 1 and "artifact-section-body" in self.elements[-1]["attrs"].get(
+                "class", "").split():
+            self.elements[-1]["children"].append({"tag": tag, "attrs": attrs})
         if tag == "details" and "artifact-comment" in classes:
             self._box = {"attrs": attrs, "depth": self._depth, "textareas": [], "buttons": [],
                          "forms": 0, "summary": []}
@@ -187,19 +191,20 @@ class BoxTests(CommentsTestCase):
         page = read(self.page("plan"))
         self.assertEqual(len(page.boxes), 3)
 
-        # The body's top-level elements, cut at each h2: every section's last
-        # element is its box, and no section holds another.
-        sections: list[list[dict]] = []
-        for element in page.elements:
-            if element["tag"] == "h2":
-                sections.append([element])
-            elif sections:
-                sections[-1].append(element)
-        self.assertEqual([section[0]["attrs"]["id"] for section in sections],
+        # The body's top-level elements are each section's heading and its
+        # wrapper: every wrapper's last element is its box, and no section
+        # holds another.
+        self.assertEqual(page.elements[0]["tag"], "p")
+        sections = list(zip(page.elements[1::2], page.elements[2::2]))
+        self.assertEqual(len(page.elements), 1 + 2 * len(sections))
+        self.assertEqual([heading["attrs"]["id"] for heading, _ in sections],
                          ["findings", "kept", "next-steps"])
-        for section in sections:
-            heading, *rest = section
+        for heading, wrapper in sections:
+            rest = wrapper["children"]
             with self.subTest(section=heading["attrs"]["id"]):
+                self.assertEqual(heading["tag"], "h2")
+                self.assertEqual(wrapper["attrs"]["class"], "artifact-section-body")
+                self.assertEqual(wrapper["attrs"]["data-section"], heading["attrs"]["id"])
                 found = [e for e in rest if "artifact-comment" in e["attrs"].get("class", "")]
                 self.assertEqual(len(found), 1)
                 self.assertIs(found[0], rest[-1])
@@ -238,8 +243,9 @@ class BoxTests(CommentsTestCase):
         self.assertEqual(rc, 0, err)
         self.assertEqual(comments.read_boxes(self.page("plan")), ["one", "two"])
         page = read(self.page("plan"))
-        self.assertEqual([e["tag"] for e in page.elements],
-                         ["h2", "form", "details", "h2", "p", "details"])
+        self.assertEqual([e["tag"] for e in page.elements], ["h2", "div", "h2", "div"])
+        self.assertEqual([[c["tag"] for c in e["children"]] for e in page.elements[1::2]],
+                         [["form", "details"], ["p", "details"]])
 
 
 class WithoutCommentsTests(CommentsTestCase):
@@ -256,7 +262,8 @@ class WithoutCommentsTests(CommentsTestCase):
         self.assertEqual(rc, 0, err)
         page = read(self.page("plan"))
         self.assertEqual(page.boxes, [])
-        self.assertNotIn(cli.PAGE_SCRIPT, [src.split("?")[0] for src in page.scripts])
+        # Still loaded, to fold the page's sections.
+        self.assertIn(cli.PAGE_SCRIPT, [src.split("?")[0] for src in page.scripts])
 
     def test_publish_comments_by_default_and_not_with_no_comments(self):
         rc, err = self.publish(self.source())
@@ -266,7 +273,8 @@ class WithoutCommentsTests(CommentsTestCase):
         self.assertEqual(rc, 0, err)
         page = read(self.page("pond"))
         self.assertEqual(page.boxes, [])
-        self.assertNotIn(cli.PAGE_SCRIPT, [src.split("?")[0] for src in page.scripts])
+        # Still loaded, to fold the page's sections.
+        self.assertIn(cli.PAGE_SCRIPT, [src.split("?")[0] for src in page.scripts])
 
 
 class OwnerTests(CommentsTestCase):

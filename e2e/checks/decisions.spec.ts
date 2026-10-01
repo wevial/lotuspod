@@ -9,8 +9,8 @@ import { expect, test, type APIRequestContext, type Locator, type Page } from '@
 const PAGE = '/capture-decisions.html';
 const ANSWERS = '/api/answers?page=capture-decisions';
 // The fixture's sections page asks one question in each of two sections.
-const SECTIONS = '/capture-sections.html';
-const SECTIONS_ANSWERS = '/api/answers?page=capture-sections';
+const SECTIONS = '/capture-section-questions.html';
+const SECTIONS_ANSWERS = '/api/answers?page=capture-section-questions';
 const ASSERTION = process.env.LOTUSPOD_TEST_ASSERTION ?? '';
 const SIGNED_IN = { 'Cf-Access-Jwt-Assertion': ASSERTION };
 const READER = 'maintainer@example.com';

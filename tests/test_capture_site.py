@@ -194,7 +194,19 @@ class ServedSiteTests(CaptureSiteTestCase):
         self.assertIn('<script src="lotuspod-page.js?v=', page)
         self.assertNotIn("<table", page)
         self.assertEqual(seen["/lotuspod-page.js"][0], 200)
-        self.assertNotIn("lotuspod-page.js", seen["/capture-article.html"][1])
+        # The article has no forms, but folds its two sections.
+        self.assertIn('<script src="lotuspod-page.js?v=', seen["/capture-article.html"][1])
+
+    def test_sections_page_wraps_each_section_with_its_box_and_form(self):
+        seen = self.fetch("/capture-sections.html")
+        status, page = seen["/capture-sections.html"]
+        self.assertEqual(status, 200)
+        self.assertEqual(page.count('<div class="artifact-section-body"'), 3)
+        self.assertEqual(page.count('<details class="artifact-comment" data-page="capture-sections"'), 3)
+        self.assertEqual(page.count('<form class="artifact-decision"'), 1)
+        self.assertIn("frazil", page)
+        self.assertIn("<pre><code>", page)
+        self.assertIn('<script src="lotuspod-page.js?v=', page)
 
     def test_palette_page_has_every_coloured_element_and_a_box_per_section(self):
         seen = self.fetch("/capture-palette.html")

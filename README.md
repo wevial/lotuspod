@@ -56,6 +56,22 @@ links: the layout is a container query away.
 
 Pass `--no-outline` to skip the ids and the outline list entirely.
 
+A page with an outline folds each section under its heading, as on Wikipedia.
+Render wraps everything from just after each section's `<h2>` to the next one
+(or the end of the body) in one `<div class="artifact-section-body">` whose
+`data-section` is the heading's id, after the comment boxes are placed, so a
+section's box and decision forms fold with it; the intro before the first
+`<h2>` is never wrapped. The page script then turns each heading's text into a
+button with a caret: pressing it hides the section (`hidden="until-found"`)
+and pressing it again shows it. Everything starts open; the page remembers in
+the browser's `localStorage` which sections the reader folded, and a "Collapse
+all" / "Expand all" control in the outline folds or opens them all. Find in
+page, a text fragment, a link to a section (the outline's included) and
+printing open what they need. Without the script every section shows. A body
+whose section headings are not all direct children of the body (each inside
+its own `<section>`, say), or with no outline, is left exactly as written;
+pages published before folding stay open until republished.
+
 A body may carry diagrams as Mermaid source in a `<pre class="mermaid">` block:
 
 ```html
@@ -1079,7 +1095,8 @@ page holds. A page runs only the site's own script files, the pinned Mermaid
 (`https://cdn.jsdelivr.net/npm/mermaid@11.4.1/`, allowed only on a page with a
 diagram) and the inline scripts the page template writes, each allowed by its
 `sha256` hash; today that is the Mermaid start-up module alone. A page with
-decision forms also loads the site's page script, `lotuspod-page.js`. Styles may be
+decision forms, comment boxes or folding sections also loads the site's page
+script, `lotuspod-page.js`. Styles may be
 inline, since Mermaid sets them so; images come from the site or `data:`
 URLs; plugins, `<base>` and forms posting elsewhere are refused.
 
@@ -1180,6 +1197,10 @@ after a reload; a reader without the assertion stores nothing.
 wide with every media response held back 500 ms, and checks that each image's
 natural size is its `width` and `height`, that no layout shift is recorded,
 that no image is wider than its column and that a click opens the media URL.
+`e2e/checks/sections.spec.ts` folds and opens the sections of
+`capture-sections` by mouse, keyboard, a text fragment, a link and the
+fold-all control, and checks what a reload remembers, print, and the page
+without scripts.
 `python -m unittest tests.test_browser_checks` runs them
 and skips when `e2e/node_modules` is not installed:
 
@@ -1193,7 +1214,8 @@ python -m tests.capture_site \
 `src/lotuspod/_templates/artifact.html` uses `{{placeholder}}` substitution with the context:
 `title`, `kicker`, `date`, `summary_block`, `body`, `theme_name`, `theme_version`,
 plus the `mermaid` section flag with its `mermaid_theme_variables` and `mermaid_dir`,
-the `page_script_needed` section flag (decision forms or comment boxes) with
+the `page_script_needed` section flag (decision forms, comment boxes or folding
+sections) with
 the `page_script` it loads, the `owner` section and its handle,
 and the page `policy`, which the renderer fills in last.
 

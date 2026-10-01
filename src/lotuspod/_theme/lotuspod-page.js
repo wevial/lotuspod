@@ -1,5 +1,6 @@
-// Lotuspod page script: answers a page's decision forms (form.artifact-decision)
-// and shows and posts the comments of its sections (details.artifact-comment).
+// Lotuspod page script: answers a page's decision forms (form.artifact-decision),
+// shows and posts the comments of its sections (details.artifact-comment) and
+// folds each section (div.artifact-section-body) under its heading.
 //
 // For decisions it reads the page's answers, folds each question answered as
 // the page now asks it to one saved line with a "change" button, marks a
@@ -21,6 +22,8 @@
   var SIGNED_OUT = "You are signed out. Reload the page to sign in.";
   var STALE = "This question has changed since the page loaded. Reload it.";
   var CHANGED = "Comments on sections that have changed";
+  // Each page's folded sections are kept under this and its path.
+  var SECTIONS = "lotuspod:folded:";
 
   function when(stamp) {
     var date = new Date(stamp);
@@ -55,6 +58,161 @@
       node.textContent = text;
     }
     return node;
+  }
+
+  // The page's sections (div.artifact-section-body, each just after its h2):
+  // each heading's text becomes a button that folds its section away with
+  // hidden="until-found", so find-in-page and a text fragment still reach it
+  // and open it. A link to a heading or to anything in a folded section opens
+  // it. What the reader folded is kept per page in localStorage, when the
+  // browser lets the page keep anything.
+  function foldSections(wrappers) {
+    var key = SECTIONS + location.pathname;
+    var sections = [];
+
+    function freeId(base) {
+      var id = base;
+      for (var n = 2; document.getElementById(id); n += 1) {
+        id = base + "-" + n;
+      }
+      return id;
+    }
+
+    wrappers.forEach(function (wrapper) {
+      var heading = wrapper.previousElementSibling;
+      if (!heading || heading.tagName !== "H2") {
+        return;
+      }
+      if (!wrapper.id) {
+        wrapper.id = freeId("section-body-" + wrapper.dataset.section);
+      }
+      // A button may not hold a link: such a section stays open.
+      if (heading.querySelector("a")) {
+        return;
+      }
+      var button = element("button", "artifact-section-toggle");
+      button.type = "button";
+      button.setAttribute("aria-controls", wrapper.id);
+      button.setAttribute("aria-expanded", "true");
+      while (heading.firstChild) {
+        button.appendChild(heading.firstChild);
+      }
+      heading.appendChild(button);
+      var section = { id: wrapper.dataset.section, heading: heading, wrapper: wrapper, button: button };
+      sections.push(section);
+      button.addEventListener("click", function () {
+        change([section], !folded(section));
+      });
+      // The browser opens a section itself when find or a fragment lands in
+      // it; one dispatched by a script leaves the attribute for us to remove.
+      wrapper.addEventListener("beforematch", function () {
+        change([section], false);
+      });
+    });
+    if (!sections.length) {
+      return;
+    }
+
+    function folded(section) {
+      return section.wrapper.hasAttribute("hidden");
+    }
+
+    function set(section, fold) {
+      if (fold) {
+        section.wrapper.setAttribute("hidden", "until-found");
+      } else {
+        section.wrapper.removeAttribute("hidden");
+      }
+      section.button.setAttribute("aria-expanded", fold ? "false" : "true");
+    }
+
+    function change(some, fold) {
+      some.forEach(function (section) { set(section, fold); });
+      label();
+      try {
+        var ids = sections.filter(folded).map(function (section) { return section.id; });
+        if (ids.length) {
+          localStorage.setItem(key, JSON.stringify(ids));
+        } else {
+          localStorage.removeItem(key);
+        }
+      } catch (ignored) {
+        // Storage refused: the sections still fold, only unremembered.
+      }
+    }
+
+    // Open the section the element named id is in or heads; true if it was
+    // folded.
+    function reveal(id) {
+      var target = id && document.getElementById(id);
+      var found = target && sections.filter(function (section) {
+        return section.heading === target || section.wrapper.contains(target);
+      })[0];
+      if (!found || !folded(found)) {
+        return false;
+      }
+      change([found], false);
+      return true;
+    }
+
+    function fragment(hash) {
+      try {
+        return decodeURIComponent(hash.slice(1));
+      } catch (ignored) {
+        return hash.slice(1);
+      }
+    }
+
+    var every = null;
+    var outline = document.querySelector("nav.artifact-outline");
+    if (outline) {
+      every = element("button", "artifact-sections-all");
+      every.type = "button";
+      outline.appendChild(every);
+      every.addEventListener("click", function () {
+        change(sections, sections.some(function (section) { return !folded(section); }));
+      });
+    }
+
+    function label() {
+      if (every) {
+        every.textContent = sections.every(folded) ? "Expand all" : "Collapse all";
+      }
+    }
+
+    var kept = [];
+    try {
+      kept = JSON.parse(localStorage.getItem(key) || "[]");
+    } catch (ignored) {
+      kept = [];
+    }
+    var restored = false;
+    sections.forEach(function (section) {
+      if (Array.isArray(kept) && kept.indexOf(section.id) >= 0) {
+        set(section, true);
+        restored = true;
+      }
+    });
+    label();
+
+    // After the kept state, so the section the URL names ends open.
+    var target = location.hash && document.getElementById(fragment(location.hash));
+    if (target && (reveal(target.id) || restored)) {
+      target.scrollIntoView();
+    }
+    window.addEventListener("hashchange", function () {
+      var id = fragment(location.hash);
+      if (reveal(id)) {
+        document.getElementById(id).scrollIntoView();
+      }
+    });
+    // A link to the fragment the URL already holds fires no hashchange.
+    document.addEventListener("click", function (event) {
+      var link = event.target.closest && event.target.closest("a[href^='#']");
+      if (link) {
+        reveal(fragment(link.getAttribute("href")));
+      }
+    });
   }
 
   function answerForms(forms) {
@@ -884,6 +1042,10 @@
     read();
   }
 
+  var wrappers = all("div.artifact-section-body");
+  if (wrappers.length) {
+    foldSections(wrappers);
+  }
   var forms = all("form.artifact-decision");
   if (forms.length) {
     answerForms(forms);

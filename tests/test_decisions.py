@@ -212,7 +212,10 @@ class DecisionsTestCase(unittest.TestCase):
         page = read(page_html)
         self.assertEqual(page.forms, [])
         self.assertEqual(page.tables, 1)
-        self.assertEqual(page.scripts, [])
+        # A page with sections still loads the page script, to fold them.
+        folds = 'class="artifact-section-body"' in page_html
+        self.assertEqual([src.split("?")[0] for src in page.scripts],
+                         [cli.PAGE_SCRIPT] if folds else [])
 
 
 class FormTests(DecisionsTestCase):
