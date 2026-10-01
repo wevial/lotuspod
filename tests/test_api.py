@@ -14,6 +14,7 @@ import io
 import json
 import os
 import re
+import sqlite3
 import sys
 import tempfile
 import threading
@@ -326,7 +327,8 @@ class CommentTests(ApiTestCase):
 
         self.assertEqual(
             self.ask("GET", "/api/comments?page=plan"),
-            (200, {"page": "plan", "threads": [{"root": root, "replies": [reply, deeper]}]}),
+            (200, {"page": "plan", "threads": [{"root": root, "replies": [reply, deeper],
+                                                "resolution": db.UNRESOLVED}]}),
         )
 
     def test_a_new_thread_names_the_revision_the_reader_read(self):
@@ -361,7 +363,8 @@ class CommentTests(ApiTestCase):
                 self.assertEqual(self.ask("POST", "/api/comments", body),
                                  (400, {"error": "invalid_body"}))
         _, got = self.ask("GET", "/api/comments?page=plan")
-        self.assertEqual(got["threads"], [{"root": root, "replies": []}])
+        self.assertEqual(got["threads"],
+                         [{"root": root, "replies": [], "resolution": db.UNRESOLVED}])
 
     def test_threads_come_oldest_first_and_gone_sections_have_no_title(self):
         _, goals = self.comment(section="goals", text="Which goal first?")
@@ -378,8 +381,110 @@ class CommentTests(ApiTestCase):
         self.assertEqual(reply["sectionTitle"], "")
         self.assertIsNone(reply["quote"])
         _, got = self.ask("GET", "/api/comments?page=plan")
-        self.assertEqual(got["threads"], [{"root": goals, "replies": []},
-                                          {"root": elsewhere, "replies": [reply]}])
+        self.assertEqual(got["threads"],
+                         [{"root": goals, "replies": [], "resolution": db.UNRESOLVED},
+                          {"root": elsewhere, "replies": [reply],
+                           "resolution": db.UNRESOLVED}])
+
+
+class ResolutionTests(ApiTestCase):
+    """{page, thread, resolved}: the reader resolves and reopens a thread."""
+
+    def resolve(self, thread: int, resolved: bool = True, page: str = "plan"):
+        return self.ask("POST", "/api/comments",
+                        {"page": page, "thread": thread, "resolved": resolved})
+
+    def stored(self) -> list[tuple]:
+        """Every resolutions row: (thread, resolved, actor, at), oldest first."""
+        conn = sqlite3.connect(str(self.db_path))
+        try:
+            return [(thread, bool(resolved), json.loads(actor), at) for thread, resolved, actor, at
+                    in conn.execute("SELECT thread, resolved, actor, at FROM resolutions"
+                                    " ORDER BY id")]
+        finally:
+            conn.close()
+
+    def resolution(self, thread: int) -> dict:
+        _, got = self.ask("GET", "/api/comments?page=plan")
+        [found] = [found for found in got["threads"] if found["root"]["id"] == thread]
+        return found["resolution"]
+
+    def test_the_reader_resolves_and_reopens_a_thread(self):
+        _, root = self.comment(section="risks", text="What if it does?")
+        self.assertEqual(self.resolution(root["id"]), db.UNRESOLVED)
+
+        status, got = self.resolve(root["id"])
+        self.assertEqual(status, 200)
+        self.assertEqual(set(got), {"thread", "resolution"})
+        self.assertEqual(got["thread"], root["id"])
+        resolved = got["resolution"]
+        self.assertEqual((resolved["resolved"], resolved["actor"]), (True, ACTOR))
+        self.assertRegex(resolved["at"], CREATED_AT)
+        self.assertEqual(self.resolution(root["id"]), resolved)
+        self.assertEqual(self.stored(), [(root["id"], True, ACTOR, resolved["at"])])
+
+        # Resolving a resolved thread answers its resolution and stores nothing.
+        self.assertEqual(self.resolve(root["id"]), (200, got))
+        self.assertEqual(len(self.stored()), 1)
+
+        status, got = self.resolve(root["id"], False)
+        self.assertEqual(status, 200)
+        reopened = got["resolution"]
+        self.assertEqual((reopened["resolved"], reopened["actor"]), (False, ACTOR))
+        self.assertRegex(reopened["at"], CREATED_AT)
+        self.assertEqual(self.resolution(root["id"]), reopened)
+        self.assertEqual([row[:3] for row in self.stored()],
+                         [(root["id"], True, ACTOR), (root["id"], False, ACTOR)])
+        # A comment's routing state is its own.
+        _, got = self.ask("GET", "/api/comments?page=plan")
+        self.assertEqual(got["threads"][0]["root"]["state"], root["state"])
+
+    def test_resolutions_that_name_no_thread_or_are_not_as_described_store_nothing(self):
+        _, root = self.comment(section="risks", text="A thread.")
+        _, reply = self.comment(parent=root["id"], text="A reply.")
+        _, elsewhere = self.comment(page="other", section="page", text="On another page.")
+        for label, thread in (("a reply", reply["id"]), ("another page's thread", elsewhere["id"]),
+                              ("no comment", 999999)):
+            with self.subTest(label):
+                self.assertEqual(self.resolve(thread), (404, {"error": "unknown_thread"}))
+        body = {"page": "plan", "thread": root["id"], "resolved": True}
+        for label, sent in (("resolved a string", {**body, "resolved": "yes"}),
+                            ("resolved missing", {"page": "plan", "thread": root["id"]}),
+                            ("an extra key", {**body, "text": "Done."})):
+            with self.subTest(label):
+                self.assertEqual(self.ask("POST", "/api/comments", sent),
+                                 (400, {"error": "invalid_body"}))
+        self.assertEqual(self.stored(), [])
+        self.assertEqual(self.resolution(root["id"]), db.UNRESOLVED)
+
+    def test_a_resolution_is_refused_as_every_post_is(self):
+        _, root = self.comment(section="risks", text="A thread.")
+        body = {"page": "plan", "thread": root["id"], "resolved": True}
+        for headers, status, error in (
+            ({"Content-Type": "text/plain"}, 415, "unsupported_media_type"),
+            ({"Origin": "https://elsewhere.example"}, 403, "cross_origin"),
+            ({"Sec-Fetch-Site": "cross-site"}, 403, "cross_origin"),
+        ):
+            with self.subTest(headers=headers):
+                self.assertEqual(self.ask("POST", "/api/comments", body, headers=headers),
+                                 (status, {"error": error}))
+        self.assertEqual(self.resolve(root["id"], page="secret"),
+                         (404, {"error": "unknown_page"}))
+        self.assertEqual(self.stored(), [])
+
+    def test_a_reply_to_a_resolved_thread_reopens_it(self):
+        _, root = self.comment(section="risks", text="What if it does?")
+        self.assertEqual(self.resolve(root["id"])[0], 200)
+        status, reply = self.comment(parent=root["id"], text="Not yet.")
+        self.assertEqual(status, 201, reply)
+        reopened = self.resolution(root["id"])
+        self.assertEqual((reopened["resolved"], reopened["actor"]), (False, reply["actor"]))
+        self.assertGreaterEqual(reopened["at"], reply["createdAt"])
+        self.assertEqual([row[1:3] for row in self.stored()], [(True, ACTOR), (False, ACTOR)])
+
+        # A reply to an open thread stores no resolution.
+        self.assertEqual(self.comment(parent=root["id"], text="Still open.")[0], 201)
+        self.assertEqual(len(self.stored()), 2)
 
 
 class SignedOutTests(ApiTestCase):

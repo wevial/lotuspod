@@ -5,14 +5,16 @@ the reader as actor. Four routes:
 
     POST /api/answers     {page, question, version, choice, note}
     GET  /api/answers?page=NAME
-    POST /api/comments    {page, section, text[, quote][, revision]} or {page, parent, text}
+    POST /api/comments    {page, section, text[, quote][, revision]}, {page, parent, text}
+                          or {page, thread, resolved}
     GET  /api/comments?page=NAME
 
 A POST is refused before anything is stored: 403 cross_origin when a browser
 sent it from another site, 415 when it is not JSON, 411 without a length,
 413 over MAX_BODY bytes, 400 invalid_body for a body that is not the one
 described, 404 unknown_page for a page serve would not answer, and 404
-unknown_parent for a reply to no comment on its page. An answer is checked
+unknown_parent for a reply to no comment on its page, and 404 unknown_thread
+for a resolution naming no thread's first comment on its page. An answer is checked
 against the page's own decision forms: 400 unknown_question for a question
 the page does not ask, 409 stale for a version other than the page's, and
 400 invalid_choice for a choice its form does not offer. A new thread is
@@ -23,6 +25,11 @@ than the page's, so a quote is never stored against words it was not taken from.
 Every reader's comment a route answers carries its routing state (see
 lotuspod.routing): `state` is `pending`, `unavailable` or `paused` until an
 agent takes it up, and `owner` is the handle it is routed to (null on an agent's reply).
+
+`{page, thread, resolved}` resolves the thread whose first comment is
+`thread`, or reopens it, as the reader, and answers 200 {thread, resolution};
+a row is stored only when it changes the resolution. A reader's reply to a
+resolved thread reopens it.
 """
 
 from __future__ import annotations
@@ -262,10 +269,11 @@ class Api:
         try:
             if method == "POST":
                 if path == ANSWERS:
-                    row = self._post_answer(headers, body, actor)
-                else:
-                    row = self._post_comment(headers, body, actor)
-                return HTTPStatus.CREATED, row, ()
+                    return HTTPStatus.CREATED, self._post_answer(headers, body, actor), ()
+                fields = self._json_body(headers, body)
+                if "thread" in fields:
+                    return HTTPStatus.OK, self._post_resolution(fields, actor), ()
+                return HTTPStatus.CREATED, self._post_comment(fields, actor), ()
             page = self._page(self._query_page(query))
             if path == ANSWERS:
                 payload = {"page": page.name, "questions": self.database.answers(page.name)}
@@ -326,13 +334,26 @@ class Api:
             question_text=asked.text, choice_label=asked.labels.get(choice, choice),
         )
 
-    def _post_comment(self, headers: Message, body: Body, actor: Mapping) -> dict:
-        row = self._store_comment(headers, body, actor)
+    def _post_resolution(self, fields: dict, actor: Mapping) -> dict:
+        _keys(fields, {"page", "thread", "resolved"})
+        root = _id(fields["thread"])
+        resolved = fields["resolved"]
+        if not isinstance(resolved, bool):
+            raise _invalid()
+        page = self._page(fields["page"])
+        try:
+            resolution = self.database.resolve(root, page=page.name, resolved=resolved,
+                                               actor=actor)
+        except db.Refused as exc:
+            raise Refusal(HTTPStatus.NOT_FOUND, exc.error) from None
+        return {"thread": root, "resolution": resolution}
+
+    def _post_comment(self, fields: dict, actor: Mapping) -> dict:
+        row = self._store_comment(fields, actor)
         return routing.public(row, routing.last_pulls(self.database), self.window, self.clock(),
                               self.database.responder_paused())
 
-    def _store_comment(self, headers: Message, body: Body, actor: Mapping) -> dict:
-        fields = self._json_body(headers, body)
+    def _store_comment(self, fields: dict, actor: Mapping) -> dict:
         if "parent" in fields:
             _keys(fields, {"page", "parent", "text"})
             parent = _id(fields["parent"])

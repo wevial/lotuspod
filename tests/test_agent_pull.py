@@ -252,7 +252,9 @@ class PullTests(PullTestCase):
             "source": (self.out_dir / "plan.md").read_text(encoding="utf-8"),
         }
         self.assertEqual(page["source"], PLAN)
-        self.assertEqual(set(comment_item), {"kind", "comment", "thread", "omitted", "page"})
+        self.assertEqual(set(comment_item),
+                         {"kind", "comment", "thread", "omitted", "resolution", "page"})
+        self.assertEqual(comment_item["resolution"], db.UNRESOLVED)
         self.assertEqual(comment_item["page"], page)
         got = comment_item["comment"]
         self.assertEqual(got["id"], comment["id"])
@@ -459,6 +461,59 @@ class TextTests(PullTestCase):
         self.assertEqual(json.loads(out), {"error": "unknown_page"})
 
 
+class ResolvedThreadTests(PullTestCase):
+    """A resolved thread is still pulled, and its markdown says who resolved it."""
+
+    def resolve(self, thread: int) -> dict:
+        status, got = self.reader("POST", "/api/comments",
+                                  {"page": "plan", "thread": thread, "resolved": True})
+        self.assertEqual(status, 200, got)
+        return got["resolution"]
+
+    def markdown(self, *argv: str) -> str:
+        rc, out, err = self.agent(*argv)
+        self.assertEqual(rc, 0, err)
+        return out
+
+    def test_a_pending_comment_in_a_resolved_thread_is_pulled_with_the_resolution(self):
+        self.pull("hermes")
+        done = self.comment("Is the heater enough?")
+        resolution = self.resolve(done["id"])
+        later = self.reply(done["id"], "One more thing.")
+        # The reply reopened it: resolve it again, leaving both comments pending.
+        resolution = self.resolve(done["id"])
+        self.assertEqual((resolution["resolved"], resolution["actor"]), (True, READER))
+        still = self.comment("Who watches the pond?", section="goals")
+
+        items = {item["comment"]["id"]: item for item in self.pull("hermes")
+                 if item["kind"] == "comment"}
+        self.assertEqual(sorted(items), sorted([done["id"], later["id"], still["id"]]))
+        for comment_id in (done["id"], later["id"]):
+            item = items[comment_id]
+            self.assertEqual(item["comment"]["state"], "pending")
+            self.assertEqual(item["resolution"], resolution)
+        self.assertEqual(items[still["id"]]["resolution"], db.UNRESOLVED)
+        self.assertEqual(self.row(done["id"])["state"], "pending")
+
+        line = f"Resolved by {keys.EMAIL} at {resolution['at']}"
+        out = self.markdown("pull", "--owner", "hermes")
+        parts = re.split(r"^## \d+\. ", out, flags=re.MULTILINE)[1:]
+        self.assertEqual(len(parts), 3)
+        for part in parts:
+            thread = part[part.index("### Thread"):]
+            if part.startswith(f"Comment {still['id']} "):
+                self.assertNotIn("Resolved by", part)
+            else:
+                _heading, rest = thread.split("\n\n", 1)
+                self.assertTrue(rest.startswith(line + "\n"), thread)
+
+        out = self.markdown("show", "plan")
+        resolved, plain = out.split("## Section Goals")
+        self.assertIn(f"## Section Risks (`risks`)\n\n{line}\n", resolved)
+        self.assertEqual(resolved.count("Resolved by"), 1)
+        self.assertNotIn("Resolved by", plain)
+
+
 class PassageTests(PullTestCase):
     """A comment on a highlighted passage, as the markdown prints it."""
 
@@ -593,7 +648,7 @@ class SchemaTests(PullTestCase):
                              db.SCHEMA_VERSION)
         finally:
             conn.close()
-        self.assertEqual(db.SCHEMA_VERSION, 5)
+        self.assertEqual(db.SCHEMA_VERSION, 6)
 
 
 class OwnerWindowOptionTests(unittest.TestCase):

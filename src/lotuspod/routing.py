@@ -23,7 +23,8 @@ claimed.
 `route()` is a pure function of the comment (which keeps its page's owner and
 that owner's last pull as it arrived, and its claim), the last-pull times,
 the window, the clock and whether the responder is paused, so the threads
-routes, the pull and the claim all agree.
+routes, the pull and the claim all agree. A thread's resolution plays no
+part: a comment in a resolved thread is routed as any other.
 """
 
 from __future__ import annotations
@@ -147,10 +148,11 @@ def public(comment: Mapping, pulls: Mapping[str, float], window: float, now: flo
 
 def thread(found: Mapping, pulls: Mapping[str, float], window: float, now: float,
            paused: bool = False) -> dict:
-    """A thread {root, replies} as it is shown."""
+    """A thread {root, replies, resolution} as it is shown."""
     return {
         "root": public(found["root"], pulls, window, now, paused),
         "replies": [public(row, pulls, window, now, paused) for row in found["replies"]],
+        "resolution": found["resolution"],
     }
 
 

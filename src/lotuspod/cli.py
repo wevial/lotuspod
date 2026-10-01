@@ -2450,11 +2450,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     audit = sub.add_parser(
         "audit",
-        help="list every claim, reply, release and failure by an agent, and every "
-        "republish by the responder, oldest first",
-        description="List every claim, reply, release and failure agents made on serve's "
-        "socket, and every page the responder republished, oldest first: when, which "
-        "comment on which page, the credential and handle that acted, and the idempotency "
+        help="list every claim, reply, release, failure, resolve and reopen by an agent, "
+        "and every republish by the responder, oldest first",
+        description="List every claim, reply, release, failure, resolve and reopen agents "
+        "made on serve's socket, and every page the responder republished, oldest first: "
+        "when, which comment (a thread's first, for a resolve or reopen) on which page, the credential and handle that acted, and the idempotency "
         "key of a reply or of the reply a republish was for. Reads serve's database directly.",
     )
     audit.add_argument("--page", default=None, metavar="NAME", help="only this page's")

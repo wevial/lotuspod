@@ -28,6 +28,10 @@ credential that exists and is not revoked:
     POST /v1/comments/ID/release        {claimToken}: route it again (needs claim)
     POST /v1/comments/ID/fail           {claimToken, reason}: leave it failed
                                         (needs claim)
+    POST /v1/threads/ID/resolve         resolve the thread whose first comment
+    POST /v1/threads/ID/reopen          is ID, or reopen it (needs reply, and
+                                        the page's owner or the handle its
+                                        first comment is routed to)
 
 A pull records that HANDLE is listening and takes nothing off the queue: the
 same items come back until they are claimed or acknowledged. A page's owner
@@ -44,7 +48,14 @@ credential's current claim and its token is 409 not_claimed. A reply's key
 names it for good: the same credential sending the same key again gets the
 reply stored the first time.
 
-No socket route writes a reader's answer or comment, whatever the credential.
+A resolve or reopen acts as the page's owner when the credential holds it,
+else as the handle the thread's first comment is routed to; it is refused
+403 not_routed when the credential holds neither, and 404 unknown_thread
+when ID is not a thread's first comment. It answers {thread, resolution},
+and each change is one transaction, written to the audit trail.
+
+No socket route writes a reader's answer, comment or resolution as the
+reader, whatever the credential.
 """
 
 from __future__ import annotations
@@ -88,14 +99,17 @@ METHODS = ("GET", "HEAD")
 _ACK = re.compile(r"/v1/answers/([1-9][0-9]{0,18})/ack")
 # POST /v1/comments/ID/claim, /reply, /release and /fail
 _COMMENT = re.compile(r"/v1/comments/([1-9][0-9]{0,18})/(claim|reply|release|fail)")
+# POST /v1/threads/ID/resolve and /reopen
+_THREAD = re.compile(r"/v1/threads/([1-9][0-9]{0,18})/(resolve|reopen)")
 ACK_METHODS = ("POST",)
 # Characters of a claim token or an idempotency key, and of a failure's reason.
 MAX_KEY = 200
 MAX_REASON = 200
 CLAIM_BYTES = 32
-# The HTTP status of each refusal a claim, reply, release or failure meets.
+# The HTTP status of each refusal a claim, reply, release, failure or resolution meets.
 _REFUSED = {
     "unknown_comment": HTTPStatus.NOT_FOUND,
+    "unknown_thread": HTTPStatus.NOT_FOUND,
     "unknown_page": HTTPStatus.NOT_FOUND,
     "not_routed": HTTPStatus.FORBIDDEN,
     "settled": HTTPStatus.CONFLICT,
@@ -280,9 +294,10 @@ class Routes:
         path, _, query = target.split("#", 1)[0].partition("?")
         ack = _ACK.fullmatch(path)
         acting = _COMMENT.fullmatch(path)
-        if path not in ROUTES and ack is None and acting is None:
+        resolving = _THREAD.fullmatch(path)
+        if path not in ROUTES and ack is None and acting is None and resolving is None:
             return HTTPStatus.NOT_FOUND, {"error": "not_found"}, ()
-        allowed = METHODS if ack is None and acting is None else ACK_METHODS
+        allowed = METHODS if path in ROUTES else ACK_METHODS
         if method not in allowed:
             return (HTTPStatus.METHOD_NOT_ALLOWED, {"error": "method_not_allowed"},
                     (("Allow", ", ".join(allowed)),))
@@ -302,6 +317,9 @@ class Routes:
             if acting is not None:
                 return HTTPStatus.OK, self._act(credential, int(acting.group(1)),
                                                 acting.group(2), headers, body), ()
+            if resolving is not None:
+                return HTTPStatus.OK, self._resolve(credential, int(resolving.group(1)),
+                                                    resolving.group(2) == "resolve"), ()
             return HTTPStatus.OK, self._ack(credential, int(ack.group(1))), ()
         except api.Refusal as exc:
             return exc.status, {"error": exc.error}, ()
@@ -356,6 +374,8 @@ class Routes:
                 "thread": [routing.public(row, pulls, self.window, now, paused)
                            for row in (found["root"], *found["replies"][omitted:])],
                 "omitted": omitted,
+                # The thread's resolution: a comment in a resolved thread still waits.
+                "resolution": found["resolution"],
                 "page": item_page(page),
             })
         for found in self.database.unacknowledged_answers(owner):
@@ -436,6 +456,27 @@ class Routes:
                                   text=text, revision=revision, clock=self.clock,
                                   page_of=self._current)
         return self._shown(row)
+
+    def _resolve(self, credential: Mapping, root: int, resolved: bool) -> dict:
+        """Resolve or reopen the thread whose first comment is root."""
+        _allow_op(credential, "reply")
+        found = self.database.comment(root)
+        if found is None or found["parent"] is not None:
+            raise api.Refusal(HTTPStatus.NOT_FOUND, "unknown_thread")
+        page = self._page(found["page"])
+        if page is None:
+            raise api.Refusal(HTTPStatus.NOT_FOUND, "unknown_page")
+        routed = self._shown(found)["owner"]
+        if page.owner and page.owner in credential["handles"]:
+            handle = page.owner
+        elif routed in credential["handles"]:
+            handle = routed
+        else:
+            raise api.Refusal(HTTPStatus.FORBIDDEN, "not_routed")
+        actor = {"kind": "agent", "handle": handle, "credential": credential["name"]}
+        resolution = self.database.resolve(root, page=page.name, resolved=resolved,
+                                           actor=actor, credential=credential["name"])
+        return {"thread": root, "resolution": resolution}
 
     def _current(self, name: str) -> dict | None:
         """The page's revision, as a pull gives it, and its sections; None

@@ -28,6 +28,11 @@ credential, so a retried reply is found again rather than stored twice. Each
 claim, reply, release and failure writes a row to the audit table in the
 same transaction, and the default responder writes one for each page it
 republishes. Whether the responder is paused is kept here too.
+
+A thread's resolution is kept as a history: each time a reader or an agent
+resolves or reopens it, one row in resolutions names who did and when, and
+the thread's resolution is its newest row. A reader's reply to a resolved
+thread reopens it. A resolution never changes a comment's state.
 """
 
 from __future__ import annotations
@@ -41,7 +46,7 @@ from pathlib import Path
 from typing import Callable, Iterator, Mapping
 
 DEFAULT_NAME = "lotuspod.sqlite3"
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 # Seconds a connection waits for another writer before giving up.
 BUSY_TIMEOUT = 30
 # The state of a reader's comment until an agent takes it up.
@@ -139,9 +144,21 @@ _SCHEMA = {1: (
     )""",
     # The revision the responder republished a page at, on its audit row.
     "ALTER TABLE audit ADD COLUMN revision TEXT",
+), 6: (
+    # Each time a thread, named by its first comment, is resolved or reopened.
+    """CREATE TABLE resolutions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        thread INTEGER NOT NULL REFERENCES comments(id),
+        resolved INTEGER NOT NULL,
+        actor TEXT NOT NULL,
+        at TEXT NOT NULL
+    )""",
+    "CREATE INDEX resolutions_by_thread ON resolutions(thread, id)",
 )}
 # The settings row that holds whether the responder is paused.
 _PAUSED = "responder_paused"
+# The resolution of a thread no one has resolved or reopened.
+UNRESOLVED = {"resolved": False, "actor": None, "at": None}
 
 
 class UnknownParent(LookupError):
@@ -153,9 +170,9 @@ class DuplicateCredential(ValueError):
 
 
 class Refused(Exception):
-    """A claim, reply, release or failure refused, naming why: unknown_comment,
-    unknown_page, settled, not_routed, claimed, not_claimed or
-    revision_mismatch. Nothing is stored."""
+    """A claim, reply, release, failure or resolution refused, naming why:
+    unknown_comment, unknown_thread, unknown_page, settled, not_routed,
+    claimed, not_claimed or revision_mismatch. Nothing is stored."""
 
     def __init__(self, error: str) -> None:
         super().__init__(error)
@@ -230,6 +247,12 @@ def _audit(row: sqlite3.Row) -> dict:
         "key": row["key"],
         "revision": row["revision"],
     }
+
+
+def _resolution(row: sqlite3.Row | None) -> dict:
+    if row is None:
+        return dict(UNRESOLVED)
+    return {"resolved": bool(row["resolved"]), "actor": _actor(row["actor"]), "at": row["at"]}
 
 
 def _credential(row: sqlite3.Row) -> dict:
@@ -338,6 +361,7 @@ class Database:
         A reply to a reply joins the same thread: its parent is the thread's
         first comment. sections maps the page's section ids to their titles
         at revision. UnknownParent when parent is not a comment on page.
+        A reply to a resolved thread reopens it, with actor as the reopener.
         """
         with self._connect() as conn, _write(conn):
             found = conn.execute(
@@ -346,25 +370,69 @@ class Database:
             if found is None or found["page"] != page:
                 raise UnknownParent(parent)
             root = found["id"] if found["parent"] is None else found["parent"]
-            return _insert_comment(
+            row = _insert_comment(
                 conn, page=page, section=found["section"],
                 section_title=sections.get(found["section"], ""), revision=revision,
                 parent=root, text=text, quote=None, actor=actor, owner=owner,
             )
+            if _resolution(_newest(conn, root))["resolved"]:
+                _insert_resolution(conn, root, False, actor)
+            return row
 
     def threads(self, page: str) -> list[dict]:
-        """The page's threads as {root, replies}, oldest first throughout."""
+        """The page's threads as {root, replies, resolution}, oldest first
+        throughout."""
         with self._connect() as conn:
             rows = conn.execute(
                 "SELECT * FROM comments WHERE page = ? ORDER BY id", (page,)
             ).fetchall()
+            # Oldest first, so each thread's newest row is the one left.
+            changes = conn.execute(
+                "SELECT resolutions.* FROM resolutions JOIN comments"
+                " ON comments.id = resolutions.thread WHERE comments.page = ?"
+                " ORDER BY resolutions.id", (page,)
+            ).fetchall()
+        newest = {row["thread"]: row for row in changes}
         threads: dict[int, dict] = {}
         for row in rows:
             if row["parent"] is None:
-                threads[row["id"]] = {"root": _comment(row), "replies": []}
+                threads[row["id"]] = {"root": _comment(row), "replies": [],
+                                      "resolution": _resolution(newest.get(row["id"]))}
             else:
                 threads[row["parent"]]["replies"].append(_comment(row))
         return list(threads.values())
+
+    def resolve(self, root: int, *, page: str, resolved: bool, actor: Mapping,
+                credential: str | None = None) -> dict:
+        """Resolve the thread whose first comment is root on page, or reopen
+        it when resolved is False, as actor; the thread's resolution.
+
+        A row is stored only when it changes the resolution. With
+        credential, the agent's, the change is written to the audit trail
+        too, as actor's handle. Refused unknown_thread when root is not the
+        first comment of a thread on page.
+        """
+        with self._connect() as conn, _write(conn):
+            found = _row(conn, root)
+            if found is None or found["page"] != page or found["parent"] is not None:
+                raise Refused("unknown_thread")
+            current = _resolution(_newest(conn, root))
+            if current["resolved"] == resolved:
+                return current
+            _insert_resolution(conn, root, resolved, actor)
+            if credential is not None:
+                _record(conn, "resolve" if resolved else "reopen", _comment(found),
+                        credential, actor["handle"], None)
+            return _resolution(_newest(conn, root))
+
+    def resolutions(self, root: int) -> list[dict]:
+        """Every resolution the thread of first comment root has had, oldest
+        first."""
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT * FROM resolutions WHERE thread = ? ORDER BY id", (root,)
+            ).fetchall()
+        return [_resolution(row) for row in rows]
 
     def open_comments(self) -> list[dict]:
         """Every comment not yet answered or failed, claimed ones too (a
@@ -542,8 +610,9 @@ class Database:
             )
 
     def audit(self, page: str | None = None) -> list[dict]:
-        """Every claim, reply, release and failure, and every republish by
-        the responder, on page or on any page, oldest first."""
+        """Every claim, reply, release, failure, resolve and reopen by an
+        agent, and every republish by the responder, on page or on any page,
+        oldest first."""
         with self._connect() as conn:
             if page is None:
                 rows = conn.execute("SELECT * FROM audit ORDER BY id").fetchall()
@@ -554,12 +623,15 @@ class Database:
         return [_audit(row) for row in rows]
 
     def thread(self, root: int) -> dict:
-        """The thread of comment root as {root, replies}, oldest first."""
+        """The thread of comment root as {root, replies, resolution}, oldest
+        first."""
         with self._connect() as conn:
             rows = conn.execute(
                 "SELECT * FROM comments WHERE id = ? OR parent = ? ORDER BY id", (root, root)
             ).fetchall()
-        return {"root": _comment(rows[0]), "replies": [_comment(row) for row in rows[1:]]}
+            resolution = _resolution(_newest(conn, root))
+        return {"root": _comment(rows[0]), "replies": [_comment(row) for row in rows[1:]],
+                "resolution": resolution}
 
     def record_pull(self, handle: str) -> str:
         """Record that handle pulled now; the time it did."""
@@ -690,6 +762,21 @@ def _record(conn: sqlite3.Connection, action: str, comment: Mapping, credential:
         "INSERT INTO audit (at, action, comment, page, credential, handle, key, revision)"
         " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
         (_now(), action, comment["id"], comment["page"], credential, handle, key, revision),
+    )
+
+
+def _newest(conn: sqlite3.Connection, root: int) -> sqlite3.Row | None:
+    """The newest resolution row of the thread of first comment root."""
+    return conn.execute(
+        "SELECT * FROM resolutions WHERE thread = ? ORDER BY id DESC LIMIT 1", (root,)
+    ).fetchone()
+
+
+def _insert_resolution(conn: sqlite3.Connection, root: int, resolved: bool,
+                       actor: Mapping) -> None:
+    conn.execute(
+        "INSERT INTO resolutions (thread, resolved, actor, at) VALUES (?, ?, ?, ?)",
+        (root, int(resolved), _dump(actor), _now()),
     )
 
 

@@ -471,13 +471,27 @@ twice.
 - `POST /api/comments` with `{page, section, text}` (and optionally a `quote`,
   `{exact, prefix, suffix}`, and the `revision` the reader's page was rendered
   at) opens a thread on a section; with
-  `{page, parent, text}` it replies. It answers 201 with the row: `section`,
+  `{page, parent, text}` it replies; with `{page, thread, resolved}` it
+  resolves or reopens a thread (below). A new thread or reply answers 201 with the row: `section`,
   `sectionTitle` (the text of the page's h2 with that id, or empty), `parent`,
   `quote`, and its routing state (`state` and `owner`, below). A reply takes its thread's section, and a
   reply to a reply joins the same thread: `parent` is always the thread's first
   comment.
 - `GET /api/comments?page=NAME` answers `{page, threads}`: each as
-  `{root, replies}`, threads and replies oldest first.
+  `{root, replies, resolution}`, threads and replies oldest first.
+
+A thread is resolved or open, and every change is kept: who made it and
+when. A thread's `resolution` is `{resolved, actor, at}` as its newest
+change left it, or `{resolved: false, actor: null, at: null}` when nothing
+has changed it. `POST /api/comments` with `{page, thread, resolved}`, where
+`thread` is the id of a thread's first comment on that page (else 404
+`unknown_thread`) and `resolved` a boolean, resolves the thread, or reopens
+it, as the reader, and answers 200 `{thread, resolution}`; a change is stored
+only when it changes the resolution, so resolving a resolved thread stores
+nothing. A reader's reply to a resolved thread reopens it, as that reader.
+Agents resolve and reopen threads too (`lotuspod comments resolve` and
+`reopen`, below). A resolution never changes a comment's routing: a pending
+comment in a resolved thread is still routed and pulled.
 
 Every answer is JSON with `Cache-Control: no-store`, and a refused request
 stores nothing. A POST sent from a page of another origin (its `Origin`, or
@@ -486,7 +500,7 @@ is its `Host` over the scheme `X-Forwarded-Proto` names (the tunnel ends the
 TLS), else `http`; one that is not
 `application/json` 415; one with no length 411; a body over 16 KiB 413. A
 missing, extra or mistyped field is 400 `invalid_body`, as are `question`,
-`version` or `choice` outside 1 to 100 characters, an empty `section` (any
+`version` or `choice` outside 1 to 100 characters, a `resolved` that is not a boolean, an empty `section` (any
 heading id's length is taken, since it must name one of the page's boxes),
 `text` outside 1 to 4000, `note` over 4000, a quote whose `exact` is outside 1 to 500 or
 whose `prefix` or `suffix` is over 32 (code points, as Python counts them), a new
@@ -760,6 +774,8 @@ a credential that may `pull` as its handle:
 lotuspod comments pull --owner hermes --json   # GET /v1/pull?owner=hermes
 lotuspod comments ack-answer 12                # POST /v1/answers/12/ack
 lotuspod comments show pond-plan --json        # GET /v1/threads?page=pond-plan
+lotuspod comments resolve 7                    # POST /v1/threads/7/resolve
+lotuspod comments reopen 7                     # POST /v1/threads/7/reopen
 ```
 
 `pull` records that the handle is listening and returns its items. It claims
@@ -770,12 +786,13 @@ routed to it as it arrived after the owner window passes it to `responder`,
 until an agent takes it up; its `owner` is then `responder`, and only the
 responder may claim it. Items are, comments first, oldest first:
 
-- `{"kind": "comment", "comment", "thread", "omitted", "page"}` for each
+- `{"kind": "comment", "comment", "thread", "omitted", "resolution", "page"}` for each
   reader's comment routed to the handle (above) that no agent holds a current
   claim on. `comment` carries its verified `actor`, its section, the revision
   it was written against and its routing state; `thread` is a list, the
-  thread's first comment and at most its last 20 replies, oldest first, and
-  `omitted` counts the replies left out.
+  thread's first comment and at most its last 20 replies, oldest first,
+  `omitted` counts the replies left out, and `resolution` is the thread's
+  (above).
 - `{"kind": "answer", "answer", "question", "page"}` for each answer on a page
   the handle owns that it has not acknowledged, superseded ones included (each
   names the answer it `supersedes`). `question` is `{id, text, label,
@@ -800,12 +817,23 @@ reader highlighted:" with a fence holding the quote's `exact`, and "With the
 words around it:" with a fence holding `prefix + exact + suffix`. The thread's
 first comment, and each quoted first comment `show` prints, gives the same two
 fences under "The reader highlighted, on revision R:". A comment with no quote
-prints none of these.
+prints none of these. Under the heading of a resolved thread, `pull` and
+`show` print "Resolved by WHO at TIME".
 
 `ack-answer ID` needs `pull` for the page's owner; the owner's pulls leave an
 acknowledged answer out from then on. `show PAGE` needs `pull` for any handle
 and prints what the reader's `GET /api/comments?page=PAGE` answers, so an
 owner coming back later can catch up.
+
+`resolve ID` (`POST /v1/threads/ID/resolve`) and `reopen ID` (`POST
+/v1/threads/ID/reopen`), where ID is a thread's first comment, resolve or
+reopen that thread and answer `{thread, resolution}`; without `--json` they
+print "thread ID resolved by HANDLE at TIME" (or "reopened"). They need
+`reply`, and a credential holding the page's owner or the handle the thread's
+first comment is routed to (its `owner` in `show`), else 403 `not_routed`;
+an unknown thread is 404 `unknown_thread`. The actor is `{"kind": "agent",
+"handle", "credential"}`, its handle the page's owner when the credential
+holds it, else the routed one. Neither changes any comment's routing.
 
 To answer a comment, an agent claims it, then replies under the claim, so two
 agents sharing a handle never both answer and a retry after a crash never
@@ -850,12 +878,12 @@ work, and after a crash send the reply again with the same key: it lands
 once, whatever happened in between. A new key is a new reply, and needs a
 current claim.
 
-Every claim, reply, release and failure is written, in the same
+Every claim, reply, release, failure, resolve and reopen is written, in the same
 transaction, to an audit trail naming the credential and handle that acted,
 and so is every page the default responder republishes (action `publish`).
 On the host, `lotuspod audit [--page NAME] [--json]` (with `--out-dir` and
-`--db` as serve takes them) lists them oldest first: time, action, comment,
-page, credential, handle, the key of a reply or of the reply a republish
+`--db` as serve takes them) lists them oldest first: time, action, comment
+(the thread's first, for a resolve or reopen), page, credential, handle, the key of a reply or of the reply a republish
 was for, and the revision a republish made; `--json` prints them as a JSON
 list of `{id, at, action, comment, page, credential, handle, key,
 revision}`.
@@ -865,7 +893,7 @@ markdown naming the page, section, revision and source file, with every text
 a reader wrote in a fence longer than its longest run of backticks. A refusal
 exits 1, printing `{"error": CODE}` with `--json`: `handle_not_allowed` or
 `operation_not_allowed` for a credential that may not, `invalid_credential`,
-`unknown_page`, `unknown_answer`, `unknown_comment`, `not_routed`, `claimed`,
+`unknown_page`, `unknown_answer`, `unknown_comment`, `unknown_thread`, `not_routed`, `claimed`,
 `settled`, `not_claimed`, `revision_mismatch`, and on this side
 `no_credential` or `socket_unavailable`.
 

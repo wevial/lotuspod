@@ -10,6 +10,8 @@
                                             POST /v1/comments/ID/release
     lotuspod comments fail ID --claim TOKEN --reason TEXT
                                             POST /v1/comments/ID/fail
+    lotuspod comments resolve ID            POST /v1/threads/ID/resolve
+    lotuspod comments reopen ID             POST /v1/threads/ID/reopen
 
 Each takes --socket and --credential as every agent command does, prints the
 socket's JSON with --json and readable markdown without it, and exits 1 on a
@@ -113,6 +115,13 @@ def moved(comment: dict, revision: str) -> str:
             f"the page is now at revision {revision or 'unknown'}")
 
 
+def _resolved(resolution: dict | None) -> list[str]:
+    """The line under a resolved thread's heading; none under another."""
+    if not resolution or not resolution["resolved"]:
+        return []
+    return [f"Resolved by {_by(resolution)} at {resolution['at']}", ""]
+
+
 def _message(row: dict, level: str) -> list[str]:
     """One comment of a thread: who, when, where it stands, and its text."""
     kind = "Comment" if row.get("parent") is None else "Reply"
@@ -171,7 +180,7 @@ def pull_text(payload: dict) -> str:
             about = "the thread's first comment and its latest replies"
             if item["omitted"]:
                 about += f"; {item['omitted']} earlier replies left out"
-            lines += [f"### Thread ({about})", ""]
+            lines += [f"### Thread ({about})", "", *_resolved(item.get("resolution"))]
             for row in thread:
                 lines += _message(row, "####")
         else:
@@ -216,7 +225,7 @@ def show_text(payload: dict) -> str:
         lines.append("No comments yet.")
     for thread in threads:
         root = thread["root"]
-        lines += [f"## Section {_section(root)}", ""]
+        lines += [f"## Section {_section(root)}", "", *_resolved(thread.get("resolution"))]
         for row in (root, *thread["replies"]):
             lines += _message(row, "###")
     return "\n".join(lines).rstrip("\n")
@@ -236,6 +245,14 @@ def settled_text(payload: dict) -> str:
     if payload.get("reason"):
         line += f": {payload['reason']}"
     return line
+
+
+def resolution_text(payload: dict) -> str:
+    resolution = payload["resolution"]
+    if resolution["actor"] is None:
+        return f"thread {payload['thread']} is not resolved"
+    done = "resolved" if resolution["resolved"] else "reopened"
+    return f"thread {payload['thread']} {done} by {_by(resolution)} at {resolution['at']}"
 
 
 def cmd_pull(args: argparse.Namespace) -> int:
@@ -284,6 +301,14 @@ def cmd_fail(args: argparse.Namespace) -> int:
                 {"claimToken": args.claim, "reason": args.reason})
 
 
+def cmd_resolve(args: argparse.Namespace) -> int:
+    return _run(args, "POST", f"/v1/threads/{args.id}/resolve", resolution_text)
+
+
+def cmd_reopen(args: argparse.Namespace) -> int:
+    return _run(args, "POST", f"/v1/threads/{args.id}/reopen", resolution_text)
+
+
 def _answer_id(value: str) -> int:
     if not value.isdigit() or int(value) < 1:
         raise argparse.ArgumentTypeError(f"not an answer id: {value!r}")
@@ -300,8 +325,8 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
     """Register `lotuspod comments` and its actions."""
     parser = sub.add_parser(
         "comments",
-        help="read the comments routed to an agent and the answers on its pages, and "
-        "claim and answer comments, over serve's socket",
+        help="read the comments routed to an agent and the answers on its pages, "
+        "claim and answer comments, and resolve and reopen threads, over serve's socket",
     )
     actions = parser.add_subparsers(dest="action", required=True)
 
@@ -396,3 +421,19 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
     fail.add_argument("--json", action="store_true", help="print the socket's JSON")
     cli.add_agent_options(fail)
     fail.set_defaults(func=cmd_fail)
+
+    for action, func in (("resolve", cmd_resolve), ("reopen", cmd_reopen)):
+        change = actions.add_parser(
+            action,
+            help=f"{action} a thread on a page the credential owns or whose first comment is "
+            "routed to it",
+            description=f"{action.capitalize()} the thread whose first comment is ID, as the "
+            "page's owner when the credential holds it, else as the handle the first comment "
+            "is routed to; the change is kept with who made it and when, and written to the "
+            "audit trail. Changes no comment's routing. Needs a credential with reply.",
+        )
+        change.add_argument("id", type=_comment_id, metavar="ID",
+                            help="the id of the thread's first comment")
+        change.add_argument("--json", action="store_true", help="print the socket's JSON")
+        cli.add_agent_options(change)
+        change.set_defaults(func=func)
