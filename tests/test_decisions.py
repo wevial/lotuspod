@@ -1,6 +1,9 @@
 """Test suite for decision tables: a "Decisions for the maintainer" table in a
 page body renders as one radio form per row, tables that do not qualify are
-left as written, and `lotuspod answers` prints what was answered.
+left as written, and `lotuspod answers` prints what was answered. A page
+may hold a decisions table in each of its sections; a body with one is held
+byte for byte to tests/fixtures/decisions/one_table.expected.html, rendered
+before a page could hold more.
 
 The markup is witnessed by parsing it, never by matching strings, except
 where a table must survive byte for byte.
@@ -12,18 +15,25 @@ Run from the repo root:
 
 from __future__ import annotations
 
+import http.client
 import io
 import json
+import os
 import sys
 import tempfile
+import threading
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from html.parser import HTMLParser
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from lotuspod import cli, db, decisions, markdown  # noqa: E402
+from lotuspod import access, cli, db, decisions, markdown  # noqa: E402
+from tests import access_keys  # noqa: E402
+
+FIXTURES = Path(__file__).resolve().parent / "fixtures" / "decisions"
 
 READER = {"kind": "human", "email": "maintainer@example.com"}
 
@@ -46,6 +56,32 @@ The responder needs a model, and the archive needs a rule.
 ## Decisions for the maintainer
 
 {TABLE}"""
+
+
+# Two sections, each asking its own question under its own decisions heading.
+SECTIONS = """\
+# Pond plan
+
+## Pump
+
+The pump stops when the water freezes.
+
+### Decisions for the maintainer
+
+| # | Question | Options |
+| --- | --- | --- |
+| D1 | Which pump? | Floating / Submerged |
+
+## Heater
+
+A heater keeps a hole in the ice.
+
+### Decisions for the maintainer
+
+| # | Question | Options |
+| --- | --- | --- |
+| D2 | Which heater? | Electric / Solar |
+"""
 
 
 class _Page(HTMLParser):
@@ -306,6 +342,59 @@ class FormTests(DecisionsTestCase):
         forms = decisions.read_forms((self.out_dir / "plan.html").read_text(encoding="utf-8"))
         self.assertEqual([form.text for form in forms.values()], ["Go?"])
 
+    def test_each_section_s_table_becomes_forms_in_that_section(self):
+        page_html = self.render_markdown("pond", SECTIONS)
+        page = read(page_html)
+        self.assertEqual(page.tables, 0)
+        self.assertEqual([form["attrs"]["data-question"] for form in page.forms],
+                         ["decision-d1", "decision-d2"])
+        heater = page_html.index('<h2 id="heater">')
+        pump = page_html.index('<h2 id="pump">')
+        first = page_html.index('data-question="decision-d1"')
+        second = page_html.index('data-question="decision-d2"')
+        self.assertLess(pump, first)
+        self.assertLess(first, heater)
+        self.assertLess(heater, second)
+        self.assertEqual(page_html.count('<div class="artifact-decisions">'), 2)
+        self.assertEqual([src.split("?")[0] for src in page.scripts], [cli.PAGE_SCRIPT])
+
+    def test_read_forms_reads_every_section_s_questions(self):
+        forms = decisions.read_forms(self.render_markdown("pond", SECTIONS))
+        self.assertEqual(list(forms), ["decision-d1", "decision-d2"])
+        self.assertEqual([form.text for form in forms.values()], ["Which pump?", "Which heater?"])
+        self.assertEqual(forms["decision-d2"].options, (("electric", "Electric"), ("solar", "Solar")))
+
+    def test_a_number_repeated_across_tables_is_deduplicated(self):
+        text = SECTIONS.replace("| D2 |", "| D1 |") + (
+            "\n## Archive\n\n### Decisions for the maintainer\n\n"
+            "| Question | Options |\n| --- | --- |\n| Keep it? | Yes / No |\n"
+        )
+        page = read(self.render_markdown("pond", text))
+        self.assertEqual([form["attrs"]["data-question"] for form in page.forms],
+                         ["decision-d1", "decision-d1-2", "decision-1"])
+
+    def test_a_row_number_is_counted_within_its_own_table(self):
+        text = SECTIONS.replace("| D1 |", "|  |").replace("| D2 |", "|  |")
+        page = read(self.render_markdown("pond", text))
+        self.assertEqual([form["attrs"]["data-question"] for form in page.forms],
+                         ["decision-1", "decision-1-2"])
+
+    def test_a_table_left_as_written_takes_no_ids(self):
+        text = SECTIONS.replace("| D1 | Which pump? | Floating / Submerged |",
+                                "| D1 | Which pump? | Floating |")
+        page_html = self.render_markdown("pond", text)
+        page = read(page_html)
+        self.assertEqual(page.tables, 1)
+        self.assertEqual([form["attrs"]["data-question"] for form in page.forms], ["decision-d2"])
+        self.assertLess(page_html.index("<table"), page_html.index('<h2 id="heater">'))
+
+    def test_one_decisions_table_renders_as_before_a_page_could_hold_more(self):
+        body = (FIXTURES / "one_table.body.html").read_text(encoding="utf-8")
+        rendered, made = decisions.render_decisions(body, "plan")
+        self.assertTrue(made)
+        self.assertEqual(rendered.encode("utf-8"),
+                         (FIXTURES / "one_table.expected.html").read_bytes())
+
     def test_read_forms_reads_the_rendered_questions_back(self):
         forms = decisions.read_forms(self.render_markdown("plan", PLAN))
         self.assertEqual(list(forms), ["decision-1", "decision-2"])
@@ -354,6 +443,99 @@ class LeftAsWrittenTests(DecisionsTestCase):
         self.assertIn(body.split("\n", 1)[1].strip(), page_html)
         self.assertNotIn("artifact-decision", page_html)
         self.assertNotIn(cli.PAGE_SCRIPT, page_html)
+
+
+class MovedQuestionTests(DecisionsTestCase):
+    """A question moved into another section's table keeps its answers."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        config = self.work / "config.ini"
+        config.write_text(access_keys.config_text(), encoding="utf-8")
+        env = mock.patch.dict(os.environ, {"LOTUSPOD_CONFIG": str(config)})
+        env.start()
+        self.addCleanup(env.stop)
+        patcher = mock.patch.object(cli._AllowListHandler, "log_message", lambda *a: None)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.source = self.work / "pond.md"
+        verifier = access.Verifier(access.parse_config(access_keys.config_section()))
+        server = cli._make_server(self.out_dir, "127.0.0.1", 0, verifier=verifier,
+                                  db_path=self.work / "lotuspod.sqlite3")
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        self.port = server.server_address[1]
+
+        def stop() -> None:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=5)
+
+        self.addCleanup(stop)
+
+    def publish(self, text: str) -> dict[str, decisions.Form]:
+        self.source.write_text(text, encoding="utf-8")
+        rc, _, err = run_cli("publish", str(self.source), "--name", "pond",
+                             "--out-dir", str(self.out_dir), "--local")
+        self.assertEqual(rc, 0, err)
+        return decisions.read_forms((self.out_dir / "pond.html").read_text(encoding="utf-8"))
+
+    def ask(self, method: str, path: str, body: dict | None = None) -> tuple[int, dict]:
+        headers = {"Cf-Access-Jwt-Assertion": access_keys.assertion()}
+        raw = None
+        if body is not None:
+            raw = json.dumps(body).encode("utf-8")
+            headers["Content-Type"] = "application/json"
+        conn = http.client.HTTPConnection("127.0.0.1", self.port, timeout=15)
+        try:
+            conn.request(method, path, body=raw, headers=headers)
+            response = conn.getresponse()
+            return response.status, json.loads(response.read().decode("utf-8"))
+        finally:
+            conn.close()
+
+    def test_an_answer_follows_its_question_into_another_section(self):
+        one_table = """\
+# Pond plan
+
+## Pump
+
+The pump stops when the water freezes.
+
+## Heater
+
+A heater keeps a hole in the ice.
+
+## Decisions for the maintainer
+
+| # | Question | Options |
+| --- | --- | --- |
+| D1 | Which pump? | Floating / Submerged |
+| D2 | Which heater? | Electric / Solar |
+"""
+        before = self.publish(one_table)
+        self.assertEqual(list(before), ["decision-d1", "decision-d2"])
+        status, saved = self.ask("POST", "/api/answers", {
+            "page": "pond", "question": "decision-d2", "version": before["decision-d2"].version,
+            "choice": "solar", "note": "Sun on the pond",
+        })
+        self.assertEqual(status, 201, saved)
+
+        after = self.publish(SECTIONS)
+        page_html = (self.out_dir / "pond.html").read_text(encoding="utf-8")
+        # D2 now sits in the heater section's own table.
+        self.assertLess(page_html.index('<h2 id="heater">'),
+                        page_html.index('data-question="decision-d2"'))
+        self.assertEqual(after["decision-d2"], before["decision-d2"])
+
+        status, got = self.ask("GET", "/api/answers?page=pond")
+        self.assertEqual(status, 200)
+        self.assertEqual(list(got["questions"]), ["decision-d2"])
+        current = got["questions"]["decision-d2"]["current"]
+        self.assertEqual((current["choice"], current["note"]), ("solar", "Sun on the pond"))
+        # The page script fills a form from an answer to its own version.
+        self.assertEqual(current["version"], after["decision-d2"].version)
+        self.assertEqual(after["decision-d2"].label(current["choice"]), "Solar")
 
 
 class AnswersCommandTests(DecisionsTestCase):

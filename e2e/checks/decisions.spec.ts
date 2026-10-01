@@ -8,6 +8,9 @@ import { expect, test, type APIRequestContext, type Locator, type Page } from '@
 // signed out.
 const PAGE = '/capture-decisions.html';
 const ANSWERS = '/api/answers?page=capture-decisions';
+// The fixture's sections page asks one question in each of two sections.
+const SECTIONS = '/capture-sections.html';
+const SECTIONS_ANSWERS = '/api/answers?page=capture-sections';
 const ASSERTION = process.env.LOTUSPOD_TEST_ASSERTION ?? '';
 const SIGNED_IN = { 'Cf-Access-Jwt-Assertion': ASSERTION };
 const READER = 'maintainer@example.com';
@@ -396,6 +399,44 @@ test.describe('signed in', () => {
     }
     expect(seen.errors).toEqual([]);
     expect(await seen.violations()).toEqual([]);
+  });
+
+  test('an answer saved in the second section folds there and leaves the first section open', async ({ page, request }) => {
+    const seen = await watch(page);
+    await page.goto(SECTIONS);
+    const pump = decision(page, 'decision-d1');
+    const heater = decision(page, 'decision-d2');
+    // Each question sits in its own section, under the heading it is about.
+    const order = await page.evaluate(() => [
+      ...document.querySelectorAll('h2, form.artifact-decision'),
+    ].map((node) => (node as HTMLElement).dataset.question ?? node.textContent!.trim()));
+    expect(order).toEqual(['Pump', 'decision-d1', 'Heater', 'decision-d2']);
+
+    await heater.option('Solar').check();
+    await expect(heater.unsaved).toBeVisible();
+    await heater.save.click();
+    const folded = async () => {
+      await expect(heater.saved).toContainText('Saved · Solar · change');
+      for (const radio of await heater.radios.all()) await expect(radio).toBeHidden();
+      await expect(heater.save).toBeHidden();
+      await expect(pump.saved).toHaveCount(0);
+      await expect(pump.hint).toHaveText('Not answered yet');
+      await expect(pump.unsaved).toBeHidden();
+      await expect(pump.save).toBeVisible();
+      for (const radio of await pump.radios.all()) {
+        await expect(radio).toBeVisible();
+        await expect(radio).not.toBeChecked();
+      }
+    };
+    await folded();
+    const response = await request.get(SECTIONS_ANSWERS, { headers: SIGNED_IN });
+    const questions = (await response.json()).questions;
+    expect(Object.keys(questions)).toEqual(['decision-d2']);
+    expect(questions['decision-d2'].current).toMatchObject({ choice: 'solar' });
+
+    await page.reload();
+    await folded();
+    expect(seen.errors).toEqual([]);
   });
 
   test('at 360 pixels wide the cards fit, open, unsaved and folded', async ({ page }) => {

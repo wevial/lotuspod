@@ -490,9 +490,11 @@ and `publish` turn it into forms the maintainer answers on the page:
 
 The table taken is the first one after an h2 or h3 whose text is "Decisions
 for the maintainer" (any case), before the next h2, whose header row has a
-`Question` column. The pass works on the body's HTML, so a markdown page and
-an HTML one alike get it. `#`, `Options` and `Default` columns are optional;
-any other column is shown under its question as context.
+`Question` column. A page may hold several decisions tables, each under its
+own heading, so a question can sit in the section it is about. The pass
+works on the body's HTML, so a markdown page and an HTML one alike get it.
+`#`, `Options` and `Default` columns are optional; any other column is shown
+under its question as context.
 
 Each row becomes a `form.artifact-decision` with one radio button per option,
 a note folded behind "Add a note" and a "Save answer" button. Its question id

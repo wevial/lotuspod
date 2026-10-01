@@ -149,6 +149,30 @@ DECISIONS_BODY = """\
 </table>
 """
 
+# A plan page asking each question in the section it is about: two sections,
+# each with its own decisions table. No diagram, so the page needs no network.
+SECTIONS_BODY = """\
+<p>A sample plan for captures: each section asks its own question.</p>
+<h2>Pump</h2>
+<p>The pond pump stops when the water freezes.</p>
+<h3>Decisions for the maintainer</h3>
+<table>
+<thead><tr><th>#</th><th>Question</th><th>Options</th><th>Default</th><th>Why it matters</th></tr></thead>
+<tbody>
+<tr><td>D1</td><td>Which pump?</td><td>Floating / Submerged</td><td>Floating</td><td>A floating pump rides the ice.</td></tr>
+</tbody>
+</table>
+<h2>Heater</h2>
+<p>A heater keeps a hole in the ice for the fish.</p>
+<h3>Decisions for the maintainer</h3>
+<table>
+<thead><tr><th>#</th><th>Question</th><th>Options</th><th>Default</th><th>Why it matters</th></tr></thead>
+<tbody>
+<tr><td>D2</td><td>Which heater?</td><td>Electric / Solar</td><td>Electric</td><td>The pump shares its outlet.</td></tr>
+</tbody>
+</table>
+"""
+
 # A plan page with a comment box ending each of its three sections, owned by
 # OWNER. No diagram, so the page needs no network.
 COMMENTS_BODY = """\
@@ -266,6 +290,7 @@ SAMPLE_PAGES = (
     ("capture-diagram", "Capture diagram", DIAGRAM_BODY, ()),
     ("capture-scripts", "Capture body scripts", SCRIPTS_BODY, ()),
     ("capture-decisions", "Capture decisions", DECISIONS_BODY, ()),
+    ("capture-sections", "Capture sections", SECTIONS_BODY, ()),
     ("capture-comments", "Capture comments", COMMENTS_BODY,
      ("--comments", "--owner", OWNER)),
     ("capture-palette", "Capture palette", PALETTE_BODY,

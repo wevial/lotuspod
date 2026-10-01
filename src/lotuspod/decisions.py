@@ -1,17 +1,19 @@
-"""A page's "Decisions for the maintainer" table, answered on the page.
+"""A page's "Decisions for the maintainer" tables, answered on the page.
 
-The first table after an h2 or h3 whose text is "Decisions for the
-maintainer" (any case), before the next h2, whose header row has a
-"Question" column, becomes one radio form per row: `render_decisions()`
-replaces it in the body HTML, so markdown and HTML sources alike get it.
-`#`, `Options` and `Default` columns are optional; any other column is shown
-under its question as context.
+Under each h2 or h3 whose text is "Decisions for the maintainer" (any case),
+the first table before the next h2 (or the next such heading) whose header
+row has a "Question" column becomes one radio form per row:
+`render_decisions()` replaces it in the body HTML, so markdown and HTML
+sources alike get it. A page may so ask each question in the section it is
+about. `#`, `Options` and `Default` columns are optional; any other column
+is shown under its question as context.
 
 Each form carries `data-question` (`decision-` and the slug of its `#` cell,
-or its row number) and `data-version`, a short hash of the question's text
-and its options' labels: rewording a question strands the answers given to
-the old wording instead of attaching them to the new words. A table with any
-row of fewer than two options is left exactly as written.
+or its row number in its table), unique across the page, and
+`data-version`, a short hash of the question's text and its options' labels:
+rewording a question strands the answers given to the old wording instead of
+attaching them to the new words. A table with any row of fewer than two
+options is left exactly as written.
 
 `read_forms()` reads the forms back from a finished page, which is how the
 answers route knows what a page asks and `lotuspod answers` its labels.
@@ -64,7 +66,7 @@ def _text(parts: list[str]) -> str:
 
 
 class _TableFinder(HTMLParser):
-    """Locate the decisions table: its source span and each row's cells.
+    """Locate the decisions tables: each one's source span and rows' cells.
 
     Spans are recorded against the source string, as _H2Collector's are, so
     a table that is not replaced is never re-serialized. Headings and tables
@@ -80,12 +82,13 @@ class _TableFinder(HTMLParser):
                 self._line_starts.append(index + 1)
         self._mermaid_depth = 0
         self._heading: list[str] | None = None
-        # Whether a decisions heading is in force (until the next h2).
+        # Whether a decisions heading is in force: until the next h2, or
+        # until it has yielded its table.
         self._armed = False
         self._depth = 0
         self._candidate: dict | None = None
         self._cell: dict | None = None
-        self.table: dict | None = None
+        self.tables: list[dict] = []
 
     def _offset(self) -> int:
         line, column = self.getpos()
@@ -110,7 +113,7 @@ class _TableFinder(HTMLParser):
             classes = next((v for k, v in attrs if k == "class" and v), "").split()
             if self._mermaid_depth or "mermaid" in classes:
                 self._mermaid_depth += 1
-        if self._mermaid_depth or self.table is not None:
+        if self._mermaid_depth:
             return
         if tag in ("h2", "h3") and not self._depth:
             if tag == "h2":
@@ -139,7 +142,7 @@ class _TableFinder(HTMLParser):
         if tag == "pre" and self._mermaid_depth:
             self._mermaid_depth -= 1
             return
-        if self._mermaid_depth or self.table is not None:
+        if self._mermaid_depth:
             return
         if tag in ("h2", "h3") and self._heading is not None:
             # An h2 opening has already ended any section in force.
@@ -153,7 +156,8 @@ class _TableFinder(HTMLParser):
                 candidate["end"] = self._after_tag()
                 candidate["rows"] = [row for row in candidate["rows"] if row]
                 if candidate["rows"] and _column(candidate["rows"][0], "question") is not None:
-                    self.table = candidate
+                    self.tables.append(candidate)
+                    self._armed = False
             self._depth -= 1
         elif self._depth == 1 and self._candidate is not None and tag in _CELL_ENDS:
             self._close_cell()
@@ -175,12 +179,15 @@ def _cell(row: list[dict], index: int | None) -> dict:
     return row[index]
 
 
-def _questions(rows: list[list[dict]]) -> list[dict] | None:
-    """Each row's question; None when a row does not make one."""
+def _questions(rows: list[list[dict]], taken: set[str]) -> list[dict] | None:
+    """Each row's question; None when a row does not make one.
+
+    Ids already in taken, the page's earlier tables', are not reused; each
+    new id is added to it.
+    """
     header, body = rows[0], rows[1:]
     columns = {name: _column(header, name) for name in ("#", "question", "options", "default")}
     context = [i for i in range(len(header)) if i not in columns.values()]
-    taken: set[str] = set()
     questions = []
     for number, row in enumerate(body, start=1):
         question = _cell(row, columns["question"])
@@ -276,23 +283,29 @@ def _form(page: str, question: dict) -> str:
 
 
 def render_decisions(body: str, page: str) -> tuple[str, bool]:
-    """(body with its decisions table as forms, whether it has any forms).
+    """(body with its decisions tables as forms, whether it has any forms).
 
-    A body without a decisions table, or whose table has a row of fewer
-    than two options, comes back exactly as written.
+    A decisions table with a row of fewer than two options is left exactly
+    as written, so a body without a table that makes forms comes back as
+    written.
     """
     finder = _TableFinder(body)
     finder.feed(body)
     finder.close()
-    table = finder.table
-    if table is None:
-        return body, False
-    questions = _questions(table["rows"])
-    if not questions:
-        return body, False
-    forms = "\n".join(_form(page, question) for question in questions)
-    block = f'<div class="artifact-decisions">\n{forms}\n</div>'
-    return body[:table["start"]] + block + body[table["end"]:], True
+    taken: set[str] = set()
+    blocks = []
+    for table in finder.tables:
+        ids = set(taken)
+        questions = _questions(table["rows"], ids)
+        if not questions:
+            continue
+        taken = ids
+        forms = "\n".join(_form(page, question) for question in questions)
+        blocks.append((table, f'<div class="artifact-decisions">\n{forms}\n</div>'))
+    # Last first, so the spans before each replacement still hold.
+    for table, block in reversed(blocks):
+        body = body[:table["start"]] + block + body[table["end"]:]
+    return body, bool(blocks)
 
 
 class _FormReader(HTMLParser):
