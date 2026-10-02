@@ -514,6 +514,43 @@ class ResolvedThreadTests(PullTestCase):
         self.assertNotIn("Resolved by", plain)
 
 
+class FollowUpPullTests(PullTestCase):
+    """An agent's follow-up is in the thread a later pull and `show` give."""
+
+    def prepare(self) -> None:
+        self.hermes = self.work / "hermes.token"
+        machine.create_credential(db.Database(self.db_path), "hermes", ["hermes"],
+                                  ["pull", "claim", "reply"], self.hermes)
+
+    def as_hermes(self, *argv: str) -> dict:
+        rc, out, err = self.agent(*argv, "--json", credential=self.hermes)
+        self.assertEqual(rc, 0, out + err)
+        return json.loads(out)
+
+    def test_a_reader_comment_after_a_follow_up_is_pulled_with_it_in_its_thread(self):
+        self.pull("hermes", credential=self.hermes)
+        asked = self.comment("Is the heater enough?")
+        claim = self.as_hermes("claim", str(asked["id"]))
+        first = self.as_hermes("reply", str(asked["id"]), f"--claim={claim['claimToken']}",
+                               "--key", "pull-1", "--text", "I'll ask the author.")
+        follow = self.as_hermes("follow-up", str(asked["id"]), "--key", "pull-2",
+                                "--text", "The author says it is.")
+        # A follow-up is no reader's comment: nothing new waits.
+        self.assertEqual(self.pull("hermes", credential=self.hermes), [])
+
+        later = self.reply(asked["id"], "Thanks. And the pump?")
+        [item] = [item for item in self.pull("hermes", credential=self.hermes)
+                  if item["kind"] == "comment"]
+        self.assertEqual(item["comment"]["id"], later["id"])
+        self.assertEqual([row["id"] for row in item["thread"]],
+                         [asked["id"], first["id"], follow["id"], later["id"]])
+
+        rc, out, err = self.agent("show", "plan")
+        self.assertEqual(rc, 0, err)
+        self.assertIn(f"### Reply {follow['id']}, hermes, {follow['createdAt']}\n", out)
+        self.assertLess(out.index("I'll ask the author."), out.index("The author says it is."))
+
+
 class PassageTests(PullTestCase):
     """A comment on a highlighted passage, as the markdown prints it."""
 

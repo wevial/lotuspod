@@ -639,12 +639,15 @@ the handle it is routed to (its `owner`, else the page's):
 | `answered` | nothing: the reply says it |
 
 While any thread on the page waits (a reader comment in it is `pending` or
-`claimed`) and the tab is visible, the page reads `GET /api/comments` again
+`claimed`), or the reader has a thread in view (in the panel, a popover or
+the sheet), and the tab is visible, the page reads `GET /api/comments` again
 3 seconds after its last read, each gap half again as long as the one before,
 up to 30 seconds; any change in the threads, or a comment the reader posts,
-sets the gap back to 3 seconds. It stops when no thread waits (a comment the
-reader posts starts it again) and while the tab is hidden (shown again, it
-reads at once). A read that fails keeps the schedule; one answered 401 stops
+sets the gap back to 3 seconds. A thread in view is read so that an agent's
+follow-up to a thread it answered arrives while the reader looks at it. It
+stops when no thread waits and none is in view (a comment the reader posts,
+or opening a thread, starts it again) and while the tab is hidden (shown
+again, it reads at once). A read that fails keeps the schedule; one answered 401 stops
 it and says the reader is signed out. Only `pending` and `claimed` wait:
 `unavailable` and `paused` wait on an agent's next pull, and show on the next
 visit. Each read draws what is new in place: a new comment or thread once, a
@@ -1004,6 +1007,13 @@ parses when passed as `--claim=TOKEN`.
   --reason TEXT` (up to 200 characters) leaves it `failed`, the reason on the
   page; nothing retries it, and the reader routes it again by writing a new
   comment. Both need `claim` and the current claim, else 409 `not_claimed`.
+- `follow-up ID --key KEY (--text TEXT | --text-file PATH) [--revision R]`
+  (`POST /v1/threads/ID/follow-up` with `{idempotencyKey, text[, revision,
+  reopen]}`) adds a message to the thread whose first comment is ID with no
+  claim, so a result an earlier reply promised reaches the reader there: it
+  needs `reply` and the page's owner or the handle that answered the thread
+  (else 403 `not_routed`), lands once per KEY as a reply does, changes no
+  comment's state, and reopens a resolved thread only with `reopen: true`.
 
 The key is the retry mechanism. Choose one key per intended reply before
 acting (the handle, the comment and a counter will do), keep it with the

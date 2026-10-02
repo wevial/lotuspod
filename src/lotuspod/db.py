@@ -24,9 +24,10 @@ owner was listening when it came, whatever pulls follow.
 An agent takes a reader's comment up by claiming it: the comment keeps the
 claim's credential, handle, token hash and expiry, and becomes `claimed`.
 An agent's reply keeps the credential's idempotency key, unique per
-credential, so a retried reply is found again rather than stored twice. Each
-claim, reply, release and failure writes a row to the audit table in the
-same transaction, and the default responder writes one for each page it
+credential, so a retried reply is found again rather than stored twice. An
+agent may add a follow-up to a thread with no claim, kept the same way, and
+it changes no comment's state. Each claim, reply, follow-up, release and
+failure writes a row to the audit table in the same transaction, and the default responder writes one for each page it
 republishes. Whether the responder is paused is kept here too.
 
 A thread's resolution is kept as a history: each time a reader or an agent
@@ -542,6 +543,52 @@ class Database:
             _record(conn, "reply", found, credential, handle, key)
             return _comment(_row(conn, cursor.lastrowid))
 
+    def follow_up(self, root: int, *, credential: str, handle: str, key: str, text: str,
+                  revision: str | None, reopen: bool,
+                  page_of: Callable[[str], Mapping | None]) -> dict:
+        """Store credential's message, as handle, in the thread whose first
+        comment is root, with no claim; the message.
+
+        A key credential has used before answers the message stored with
+        it. Otherwise refused unknown_thread when root is not a reader's
+        first comment, and unknown_page and revision_mismatch as reply is.
+        No comment's state changes. With reopen, a resolved thread is
+        reopened as handle; else its resolution stays as it is.
+        """
+        with self._connect() as conn, _write(conn):
+            stored = conn.execute(
+                "SELECT * FROM comments WHERE reply_credential = ? AND reply_key = ?",
+                (credential, key),
+            ).fetchone()
+            if stored is not None:
+                return _comment(stored)
+            row = _row(conn, root)
+            if (row is None or row["parent"] is not None
+                    or json.loads(row["actor"]).get("kind") != "human"):
+                raise Refused("unknown_thread")
+            found = _comment(row)
+            page = page_of(found["page"])
+            if page is None:
+                raise Refused("unknown_page")
+            if revision is not None and revision != page["revision"] and not _published(
+                    conn, root, credential, key, revision):
+                raise Refused("revision_mismatch")
+            actor = {"kind": "agent", "handle": handle, "credential": credential}
+            cursor = conn.execute(
+                "INSERT INTO comments (page, section, section_title, revision, parent, text,"
+                " quote, actor, created_at, state, reply_credential, reply_key)"
+                " VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?)",
+                (found["page"], found["section"],
+                 page["sections"].get(found["section"], ""),
+                 revision or "", root, text, _dump(actor), _now(), ANSWERED,
+                 credential, key),
+            )
+            _record(conn, "follow-up", found, credential, handle, key)
+            if reopen and _resolution(_newest(conn, root))["resolved"]:
+                _insert_resolution(conn, root, False, actor)
+                _record(conn, "reopen", found, credential, handle, None)
+            return _comment(_row(conn, cursor.lastrowid))
+
     def release(self, comment_id: int, *, credential: str, token_hash: str,
                 clock: Callable[[], float]) -> dict:
         """End credential's current claim on comment_id and route it again;
@@ -610,8 +657,8 @@ class Database:
             )
 
     def audit(self, page: str | None = None) -> list[dict]:
-        """Every claim, reply, release, failure, resolve and reopen by an
-        agent, and every republish by the responder, on page or on any page,
+        """Every claim, reply, follow-up, release, failure, resolve and
+        reopen by an agent, and every republish by the responder, on page or on any page,
         oldest first."""
         with self._connect() as conn:
             if page is None:

@@ -6,6 +6,8 @@
     lotuspod comments claim ID              POST /v1/comments/ID/claim
     lotuspod comments reply ID --claim TOKEN --key KEY (--text TEXT | --text-file PATH)
         [--revision R]                      POST /v1/comments/ID/reply
+    lotuspod comments follow-up ID --key KEY (--text TEXT | --text-file PATH)
+        [--revision R]                      POST /v1/threads/ID/follow-up
     lotuspod comments release ID --claim TOKEN
                                             POST /v1/comments/ID/release
     lotuspod comments fail ID --claim TOKEN --reason TEXT
@@ -273,22 +275,39 @@ def cmd_claim(args: argparse.Namespace) -> int:
     return _run(args, "POST", f"/v1/comments/{args.id}/claim", claim_text)
 
 
+def _text(args: argparse.Namespace) -> str | None:
+    """The message's text, from --text or --text-file; None, once the
+    refusal is printed, when the file cannot be read."""
+    if args.text_file is None:
+        return args.text
+    try:
+        with open(args.text_file, encoding="utf-8") as fh:
+            return fh.read()
+    except (OSError, UnicodeDecodeError) as exc:
+        print(f"error: cannot read {args.text_file}: {exc}", file=sys.stderr)
+        if args.json:
+            print(json.dumps({"error": "unreadable_text"}))
+        return None
+
+
 def cmd_reply(args: argparse.Namespace) -> int:
-    if args.text_file is not None:
-        try:
-            with open(args.text_file, encoding="utf-8") as fh:
-                text = fh.read()
-        except (OSError, UnicodeDecodeError) as exc:
-            print(f"error: cannot read {args.text_file}: {exc}", file=sys.stderr)
-            if args.json:
-                print(json.dumps({"error": "unreadable_text"}))
-            return 1
-    else:
-        text = args.text
+    text = _text(args)
+    if text is None:
+        return 1
     body = {"claimToken": args.claim, "idempotencyKey": args.key, "text": text}
     if args.revision is not None:
         body["revision"] = args.revision
     return _run(args, "POST", f"/v1/comments/{args.id}/reply", reply_text, body)
+
+
+def cmd_follow_up(args: argparse.Namespace) -> int:
+    text = _text(args)
+    if text is None:
+        return 1
+    body = {"idempotencyKey": args.key, "text": text}
+    if args.revision is not None:
+        body["revision"] = args.revision
+    return _run(args, "POST", f"/v1/threads/{args.id}/follow-up", reply_text, body)
 
 
 def cmd_release(args: argparse.Namespace) -> int:
@@ -400,6 +419,32 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
     reply.add_argument("--json", action="store_true", help="print the socket's JSON")
     cli.add_agent_options(reply)
     reply.set_defaults(func=cmd_reply)
+
+    follow = actions.add_parser(
+        "follow-up",
+        help="add a message to a thread the credential answered or whose page it owns, "
+        "with no claim, once per idempotency key",
+        description="Add a message to the thread whose first comment is ID, as the page's "
+        "owner when the credential holds it, else as the handle the first comment is routed "
+        "to (the one that answered it): a result promised in an earlier reply reaches the "
+        "reader in the same thread. Needs no claim and changes no comment's state; a "
+        "resolved thread stays resolved. KEY works as a reply's does: the same KEY again "
+        "prints the message stored with it, and nothing is stored twice. --revision works "
+        "as a reply's does. Needs a credential with reply.",
+    )
+    follow.add_argument("id", type=_comment_id, metavar="ID",
+                        help="the id of the thread's first comment")
+    follow.add_argument("--key", required=True, metavar="KEY",
+                        help="the idempotency key of this message, chosen before acting")
+    text = follow.add_mutually_exclusive_group(required=True)
+    text.add_argument("--text", metavar="TEXT", help="the message's text")
+    text.add_argument("--text-file", metavar="PATH",
+                      help="a UTF-8 file holding the message's text")
+    follow.add_argument("--revision", default=None, metavar="R",
+                        help="the page's revision after the agent revised it")
+    follow.add_argument("--json", action="store_true", help="print the socket's JSON")
+    cli.add_agent_options(follow)
+    follow.set_defaults(func=cmd_follow_up)
 
     release = actions.add_parser(
         "release", help="end a claim unanswered, so the comment is routed again",

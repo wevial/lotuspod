@@ -355,6 +355,153 @@ class AuditTests(ClaimTestCase):
         self.assertIn("credential resp", out)
 
 
+class FollowUpTests(ClaimTestCase):
+    """`lotuspod comments follow-up`: an agent adds to a thread it answered."""
+
+    def answered(self, name: str = "hermes", page: str = "plan",
+                 section: str = "risks") -> tuple[dict, dict]:
+        """A reader's comment name has claimed and answered, and the reply."""
+        comment = self.comment("Is the heater enough?", page=page, section=section)
+        token = self.claim(name, comment["id"])
+        rc, reply = self.send_reply(name, comment["id"], token, f"{name}-{comment['id']}-1",
+                                    "I'm asking the author; I'll post their answer here.")
+        self.assertEqual(rc, 0, reply)
+        return comment, reply
+
+    def follow_up(self, name: str, thread: int, key: str,
+                  text: str = "The author says it is.", *extra: str) -> tuple[int, dict]:
+        return self.act(name, "follow-up", str(thread), "--key", key, "--text", text, *extra)
+
+    def socket_follow_up(self, name: str, thread: int, body: dict) -> tuple[int, dict]:
+        token = machine.read_token(self.creds[name])
+        return machine.request(self.socket_path, token, "POST",
+                               f"/v1/threads/{thread}/follow-up", body)
+
+    def thread_of(self, root: int, page: str = "plan") -> dict:
+        for thread in self.threads(page):
+            if thread["root"]["id"] == root:
+                return thread
+        self.fail(f"no thread {root}")
+
+    def test_an_answered_thread_takes_a_follow_up_and_stays_answered(self):
+        self.pull("hermes")
+        comment, reply = self.answered()
+        # The comment is settled: no second claim, so no second reply.
+        rc, refused = self.act("hermes", "claim", str(comment["id"]))
+        self.assertEqual((rc, refused), (1, {"error": "settled"}))
+
+        rc, follow = self.follow_up("hermes", comment["id"], "hermes-follow-1")
+        self.assertEqual(rc, 0, follow)
+        self.assertEqual(follow["actor"],
+                         {"kind": "agent", "handle": "hermes", "credential": "hermes"})
+        self.assertEqual((follow["parent"], follow["text"], follow["revision"]),
+                         (comment["id"], "The author says it is.", ""))
+        thread = self.thread_of(comment["id"])
+        self.assertEqual([row["id"] for row in (thread["root"], *thread["replies"])],
+                         [comment["id"], reply["id"], follow["id"]])
+        self.assertEqual(thread["replies"][1], follow)
+        self.assertEqual(self.row(comment["id"])["state"], "answered")
+        self.assertEqual(self.row(comment["id"])["owner"], "hermes")
+        self.assertNotIn(comment["id"], self.pulled_comments("hermes"))
+        rc, refused = self.act("hermes", "claim", str(comment["id"]))
+        self.assertEqual((rc, refused), (1, {"error": "settled"}))
+
+        rc, out, err = self.agent("follow-up", str(comment["id"]), "--key", "hermes-follow-1",
+                                  "--text", "The author says it is.",
+                                  credential=self.creds["hermes"])
+        self.assertEqual(rc, 0, err)
+        self.assertEqual(out.strip(),
+                         f"reply {follow['id']} stored in the thread of comment {comment['id']}")
+
+    def test_the_same_key_twice_stores_one_follow_up(self):
+        self.pull("hermes")
+        comment, reply = self.answered()
+        text = self.work / "follow.md"
+        text.write_text("The author says it is.\n", encoding="utf-8")
+        rc, first = self.act("hermes", "follow-up", str(comment["id"]), "--key", "f-1",
+                             "--text-file", str(text))
+        self.assertEqual(rc, 0, first)
+        rc, again = self.act("hermes", "follow-up", str(comment["id"]), "--key", "f-1",
+                             "--text-file", str(text))
+        self.assertEqual((rc, again), (0, first))
+        self.assertEqual(self.replies(comment["id"]), [reply, first])
+        # Another credential of the same handle may add its own.
+        rc, other = self.follow_up("hermes-two", comment["id"], "f-1", "And one more.")
+        self.assertEqual(rc, 0, other)
+        self.assertEqual(self.replies(comment["id"]), [reply, first, other])
+
+    def test_a_credential_of_neither_the_owner_nor_the_routed_handle_is_refused(self):
+        self.pull("hermes")
+        comment, reply = self.answered()
+        rc, refused = self.follow_up("resp", comment["id"], "resp-1")
+        self.assertEqual((rc, refused), (1, {"error": "not_routed"}))
+        status, payload = self.socket_follow_up("resp", comment["id"],
+                                                {"idempotencyKey": "resp-2", "text": "Hi"})
+        self.assertEqual((status, payload), (403, {"error": "not_routed"}))
+        rc, refused = self.follow_up("mute", comment["id"], "mute-1")
+        self.assertEqual((rc, refused), (1, {"error": "operation_not_allowed"}))
+        rc, refused = self.follow_up("hermes", reply["id"], "on-a-reply")
+        self.assertEqual((rc, refused), (1, {"error": "unknown_thread"}))
+        rc, refused = self.follow_up("hermes", comment["id"], "rev-1", "Cut.",
+                                     "--revision", "000000000000")
+        self.assertEqual((rc, refused), (1, {"error": "revision_mismatch"}))
+        self.assertEqual(self.replies(comment["id"]), [reply])
+        self.assertEqual(self.row(comment["id"])["state"], "answered")
+
+        # On a page with no owner, the handle that answered the thread may.
+        self.pull("responder")
+        loose, answer = self.answered("resp", page="loose", section="one")
+        rc, follow = self.follow_up("resp", loose["id"], "resp-3")
+        self.assertEqual(rc, 0, follow)
+        self.assertEqual(follow["actor"]["handle"], "responder")
+        self.assertEqual(self.replies(loose["id"], page="loose"), [answer, follow])
+
+    def test_a_resolved_thread_is_reopened_only_when_asked(self):
+        self.pull("hermes")
+        comment, reply = self.answered()
+        status, got = self.reader("POST", "/api/comments",
+                                  {"page": "plan", "thread": comment["id"], "resolved": True})
+        self.assertEqual(status, 200, got)
+        resolved = got["resolution"]
+
+        rc, quiet = self.follow_up("hermes", comment["id"], "quiet-1")
+        self.assertEqual(rc, 0, quiet)
+        thread = self.thread_of(comment["id"])
+        self.assertEqual(thread["resolution"], resolved)
+        self.assertEqual(thread["replies"], [reply, quiet])
+
+        status, loud = self.socket_follow_up("hermes", comment["id"], {
+            "idempotencyKey": "loud-1", "text": "Reopening: the author changed their mind.",
+            "reopen": True})
+        self.assertEqual(status, 200, loud)
+        thread = self.thread_of(comment["id"])
+        self.assertEqual(thread["replies"], [reply, quiet, loud])
+        self.assertFalse(thread["resolution"]["resolved"])
+        self.assertEqual(thread["resolution"]["actor"],
+                         {"kind": "agent", "handle": "hermes", "credential": "hermes"})
+        self.assertEqual(self.row(comment["id"])["state"], "answered")
+
+        status, refused = self.socket_follow_up("hermes", comment["id"], {
+            "idempotencyKey": "bad-1", "text": "x", "reopen": "yes"})
+        self.assertEqual((status, refused), (400, {"error": "invalid_body"}))
+        self.assertEqual(len(self.replies(comment["id"])), 3)
+
+    def test_a_follow_up_is_one_audit_row(self):
+        self.pull("hermes")
+        comment, _reply = self.answered()
+        self.follow_up("hermes-two", comment["id"], "audit-f-1")
+        # A retried key and a refusal are not actions.
+        self.follow_up("hermes-two", comment["id"], "audit-f-1")
+        self.follow_up("resp", comment["id"], "audit-f-2")
+        rc, out, err = run_cli("audit", "--json", "--out-dir", str(self.out_dir))
+        self.assertEqual(rc, 0, err)
+        rows = [(row["action"], row["comment"], row["page"], row["credential"], row["handle"],
+                 row["key"]) for row in json.loads(out)]
+        self.assertEqual(rows[-1], ("follow-up", comment["id"], "plan", "hermes-two", "hermes",
+                                    "audit-f-1"))
+        self.assertEqual([row[0] for row in rows], ["claim", "reply", "follow-up"])
+
+
 class SchemaTests(unittest.TestCase):
     def test_a_version_three_database_keeps_its_rows(self):
         with tempfile.TemporaryDirectory() as tmp:

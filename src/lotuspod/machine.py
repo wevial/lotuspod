@@ -32,6 +32,10 @@ credential that exists and is not revoked:
     POST /v1/threads/ID/reopen          is ID, or reopen it (needs reply, and
                                         the page's owner or the handle its
                                         first comment is routed to)
+    POST /v1/threads/ID/follow-up       {idempotencyKey, text[, revision,
+                                        reopen]}: add a message to that
+                                        thread with no claim, once per key
+                                        (needs reply, as resolve does)
 
 A pull records that HANDLE is listening and takes nothing off the queue: the
 same items come back until they are claimed or acknowledged. A page's owner
@@ -39,11 +43,11 @@ also reads the comments routed to it as they arrived that have since passed
 to the responder, until an agent takes them up; only the responder may claim
 them. The pull is the only way a page's kept source leaves the host's files.
 
-Each claim, reply, release and failure is one database transaction, written
-to the audit trail with the credential and handle that acted. A claim is
-refused 409 claimed while another credential's is current, 403 not_routed
-for a comment routed to none of the credential's handles, and 409 settled
-once it is answered or failed; a reply, release or failure without the
+Each claim, reply, follow-up, release and failure is one database
+transaction, written to the audit trail with the credential and handle that
+acted. A claim is refused 409 claimed while another credential's is
+current, 403 not_routed for a comment routed to none of the credential's
+handles, and 409 settled once it is answered or failed; a reply, release or failure without the
 credential's current claim and its token is 409 not_claimed. A reply's key
 names it for good: the same credential sending the same key again gets the
 reply stored the first time.
@@ -53,6 +57,13 @@ else as the handle the thread's first comment is routed to; it is refused
 403 not_routed when the credential holds neither, and 404 unknown_thread
 when ID is not a thread's first comment. It answers {thread, resolution},
 and each change is one transaction, written to the audit trail.
+
+A follow-up lets an agent that answered a thread bring a promised result
+to it: it acts as a resolve does and is refused as one is, and answers the
+message, stored as an agent's reply in the thread. It changes no comment's
+state, so nothing is claimed, settled or routed again, and a resolved thread
+stays resolved unless reopen is true. Its key names it for good, as a
+reply's does, and its revision is checked as a reply's is.
 
 No socket route writes a reader's answer, comment or resolution as the
 reader, whatever the credential.
@@ -100,8 +111,8 @@ METHODS = ("GET", "HEAD")
 _ACK = re.compile(r"/v1/answers/([1-9][0-9]{0,18})/ack")
 # POST /v1/comments/ID/claim, /reply, /release and /fail
 _COMMENT = re.compile(r"/v1/comments/([1-9][0-9]{0,18})/(claim|reply|release|fail)")
-# POST /v1/threads/ID/resolve and /reopen
-_THREAD = re.compile(r"/v1/threads/([1-9][0-9]{0,18})/(resolve|reopen)")
+# POST /v1/threads/ID/resolve, /reopen and /follow-up
+_THREAD = re.compile(r"/v1/threads/([1-9][0-9]{0,18})/(resolve|reopen|follow-up)")
 ACK_METHODS = ("POST",)
 # Characters of a claim token or an idempotency key, and of a failure's reason.
 MAX_KEY = 200
@@ -328,6 +339,9 @@ class Routes:
             if acting is not None:
                 return HTTPStatus.OK, self._act(credential, int(acting.group(1)),
                                                 acting.group(2), headers, body), ()
+            if resolving is not None and resolving.group(2) == "follow-up":
+                return HTTPStatus.OK, self._follow_up(credential, int(resolving.group(1)),
+                                                      headers, body), ()
             if resolving is not None:
                 return HTTPStatus.OK, self._resolve(credential, int(resolving.group(1)),
                                                     resolving.group(2) == "resolve"), ()
@@ -468,8 +482,10 @@ class Routes:
                                   page_of=self._current)
         return self._shown(row)
 
-    def _resolve(self, credential: Mapping, root: int, resolved: bool) -> dict:
-        """Resolve or reopen the thread whose first comment is root."""
+    def _thread_handle(self, credential: Mapping, root: int) -> tuple[api.Page, str]:
+        """The page of the thread whose first comment is root, and the handle
+        credential acts on it as: the page's owner when it holds it, else the
+        handle the first comment is routed to."""
         _allow_op(credential, "reply")
         found = self.database.comment(root)
         if found is None or found["parent"] is not None:
@@ -479,15 +495,37 @@ class Routes:
             raise api.Refusal(HTTPStatus.NOT_FOUND, "unknown_page")
         routed = self._shown(found)["owner"]
         if page.owner and page.owner in credential["handles"]:
-            handle = page.owner
-        elif routed in credential["handles"]:
-            handle = routed
-        else:
-            raise api.Refusal(HTTPStatus.FORBIDDEN, "not_routed")
+            return page, page.owner
+        if routed in credential["handles"]:
+            return page, routed
+        raise api.Refusal(HTTPStatus.FORBIDDEN, "not_routed")
+
+    def _resolve(self, credential: Mapping, root: int, resolved: bool) -> dict:
+        """Resolve or reopen the thread whose first comment is root."""
+        page, handle = self._thread_handle(credential, root)
         actor = {"kind": "agent", "handle": handle, "credential": credential["name"]}
         resolution = self.database.resolve(root, page=page.name, resolved=resolved,
                                            actor=actor, credential=credential["name"])
         return {"thread": root, "resolution": resolution}
+
+    def _follow_up(self, credential: Mapping, root: int, headers: Message,
+                   body: api.Body | None) -> dict:
+        """Add credential's message to the thread whose first comment is root."""
+        _page, handle = self._thread_handle(credential, root)
+        fields = _json_body(headers, body)
+        api._keys(fields, {"idempotencyKey", "text"}, frozenset({"revision", "reopen"}))
+        key = api._text(fields["idempotencyKey"], 1, MAX_KEY)
+        text = api._text(fields["text"], 1, api.MAX_TEXT)
+        revision = fields.get("revision")
+        if revision is not None:
+            revision = api._text(revision, 1, api.MAX_NAME)
+        reopen = fields.get("reopen", False)
+        if not isinstance(reopen, bool):
+            raise api.Refusal(HTTPStatus.BAD_REQUEST, "invalid_body")
+        row = self.database.follow_up(root, credential=credential["name"], handle=handle,
+                                      key=key, text=text, revision=revision, reopen=reopen,
+                                      page_of=self._current)
+        return self._shown(row)
 
     def _current(self, name: str) -> dict | None:
         """The page's revision, as a pull gives it, and its sections; None

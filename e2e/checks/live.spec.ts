@@ -290,6 +290,56 @@ test.describe('signed in', () => {
     expect(reads.errors).toEqual([]);
   });
 
+  test("an agent's follow-up on an answered thread in view is drawn as its message at the next read", async ({ page }) => {
+    const reads = await watchReads(page);
+    const root = row({ state: 'answered' });
+    const answer = reply(root, "I'm asking the author; I'll post their answer here.");
+    const FOLLOW = 'The author says the heater is enough.';
+    const followUp = reply(root, FOLLOW);
+    // The only thread on the page, answered: nothing waits. The follow-up is
+    // there from the second read on.
+    await serve(page, (n) => ({ threads: [{ root, replies: n < 2 ? [answer] : [answer, followUp] }] }));
+    await stopClock(page);
+    await load(page);
+    // Out of view, an answered thread is not read again.
+    await pass(page, 60_000);
+    expect(await reads.times()).toHaveLength(1);
+
+    const findings = box(page, 'findings');
+    await findings.summary.click();
+    const answered = thread(page, root);
+    await expect(answered.node).toBeVisible();
+    await pass(page, 5000);
+    expect((await reads.times()).length).toBeGreaterThanOrEqual(2);
+    await expect(answered.agents).toHaveCount(2);
+    const theirs = answered.agents.nth(1);
+    await expect(theirs.locator('.artifact-comment-text')).toHaveText(FOLLOW);
+    await expect(theirs.locator('.artifact-comment-handle')).toHaveText(OWNER);
+    await expect(theirs).toBeVisible();
+    // After the first reply, in the thread's polite live region, left of the reader's.
+    const first = (await answered.agents.first().boundingBox())!;
+    const second = (await theirs.boundingBox())!;
+    expect(second.y).toBeGreaterThan(first.y);
+    await expect(theirs.locator('xpath=ancestor::*[@aria-live="polite"]')).toHaveCount(1);
+    const left = (await theirs.locator('.artifact-comment-text').boundingBox())!;
+    const right = (await answered.readers.first().locator('.artifact-comment-text').boundingBox())!;
+    expect(left.x).toBeLessThan(right.x);
+    // The reader's comment stays answered, and is drawn once.
+    await expect(answered.readers).toHaveCount(1);
+    await expect(answered.node.locator('.artifact-comment-typing')).toHaveCount(0);
+    await expect(answered.toggle).toHaveText('Reply');
+    await expect(page.getByText(FOLLOW, { exact: true })).toHaveCount(1);
+
+    // Closed again, the thread is out of view: the reads stop.
+    await findings.popover.getByRole('button', { name: 'Close' }).click();
+    await expect(answered.node).toBeHidden();
+    await pass(page, 30_000);
+    const stopped = (await reads.times()).length;
+    await pass(page, 120_000);
+    expect(await reads.times()).toHaveLength(stopped);
+    expect(reads.errors).toEqual([]);
+  });
+
   test('a hidden page reads nothing, and reads at once when seen again', async ({ page }) => {
     const reads = await watchReads(page);
     await serve(page, () => ({ threads: [{ root: row({ state: 'pending' }), replies: [] }] }));

@@ -1710,6 +1710,7 @@
       node.appendChild(list);
       replyForm(thread, node);
       shown.set(root.id, thread);
+      watch(node);
       merge(thread, entry.replies || []);
       put(thread);
       return true;
@@ -1731,10 +1732,11 @@
       panel.refresh();
     }
 
-    // The checks for replies: while a thread waits and the page is seen,
-    // read the threads again FIRST after the last read, each gap half again
-    // as long as the one before up to LAST, and the first gap again after
-    // any change or a comment the reader posts.
+    // The checks for replies: while a thread waits, or the reader has a
+    // thread in view (an agent may add to one it answered), and the page is
+    // seen, read the threads again FIRST after the last read, each gap half
+    // again as long as the one before up to LAST, and the first gap again
+    // after any change or a comment the reader posts.
     var FIRST = 3000;
     var LAST = 30000;
     var gap = FIRST;
@@ -1745,6 +1747,31 @@
     var fresh = false;
     // False once a read finds the reader signed out.
     var checking = true;
+    // The thread nodes in view, in a box, the panel, a popover or the sheet.
+    var viewed = new Set();
+    var viewing = typeof IntersectionObserver === "function"
+      ? new IntersectionObserver(function (changes) {
+        changes.forEach(function (change) {
+          if (change.isIntersecting) {
+            viewed.add(change.target);
+          } else {
+            viewed.delete(change.target);
+          }
+        });
+        plan();
+      })
+      : null;
+
+    function watch(node) {
+      if (viewing) {
+        viewing.observe(node);
+      }
+    }
+
+    // Whether anything calls for another read.
+    function wanted() {
+      return viewed.size > 0 || Boolean(waiting());
+    }
 
     function waiting() {
       var found = null;
@@ -1763,7 +1790,7 @@
     function plan() {
       clearTimeout(timer);
       timer = null;
-      if (reading || !checking || hidden() || !waiting()) {
+      if (reading || !checking || hidden() || !wanted()) {
         return;
       }
       timer = setTimeout(read, Math.max(0, last + gap - Date.now()));
@@ -1835,7 +1862,7 @@
       if (hidden()) {
         clearTimeout(timer);
         timer = null;
-      } else if (!timer && !reading && checking && waiting()) {
+      } else if (!timer && !reading && checking && wanted()) {
         fresh = true;
         read();
       }
