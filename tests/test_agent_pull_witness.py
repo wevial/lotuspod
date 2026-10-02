@@ -365,7 +365,7 @@ class AgentPullWitness(Site):
         self.assertEqual(self.pull(self.hermes, "hermes"), [])
 
         root = self.comment("pond-review", "risks", "Is risk two real?")
-        self.assertEqual(root.get("actor"), {"kind": "human", "email": READER})
+        self.assertEqual(root.get("actor"), {"kind": "human", "name": "maintainer"})
         self.assertEqual(root.get("state"), "pending")
         form = self.page.forms[0]
         status, _, answer = self.api("POST", "/api/answers", {

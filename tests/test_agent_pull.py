@@ -31,12 +31,14 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from lotuspod import cli, db, decisions, machine, routing  # noqa: E402
+from lotuspod import api, cli, db, decisions, machine, routing  # noqa: E402
 from tests import access_keys as keys  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 HOST = "127.0.0.1"
 READER = {"kind": "human", "email": keys.EMAIL}
+# The reader as the page's routes show them.
+SHOWN = {"kind": "human", "name": "maintainer"}
 
 PLAN = """\
 # Plan
@@ -267,7 +269,8 @@ class PullTests(PullTestCase):
 
         self.assertEqual(set(answer_item), {"kind", "answer", "question", "page"})
         self.assertEqual(answer_item["page"], page)
-        self.assertEqual(answer_item["answer"], answer)
+        # The page is shown the reader's name; the agents get the address.
+        self.assertEqual(api.shown(answer_item["answer"]), answer)
         self.assertEqual(answer_item["answer"]["actor"], READER)
         self.assertEqual(answer_item["question"], {"id": "decision-1", "text": "Freeze the pond?",
                                                    "label": "Yes", "reworded": False})
@@ -449,7 +452,7 @@ class TextTests(PullTestCase):
         self.assertEqual(rc, 0, err)
         shown = json.loads(out)
         self.assertEqual(len(shown["threads"]), 2)
-        self.assertEqual(shown, {"page": "plan", "threads": self.threads()})
+        self.assertEqual(api.shown(shown), {"page": "plan", "threads": self.threads()})
 
         rc, out, err = self.agent("show", "plan")
         self.assertEqual(rc, 0, err)
@@ -482,7 +485,7 @@ class ResolvedThreadTests(PullTestCase):
         later = self.reply(done["id"], "One more thing.")
         # The reply reopened it: resolve it again, leaving both comments pending.
         resolution = self.resolve(done["id"])
-        self.assertEqual((resolution["resolved"], resolution["actor"]), (True, READER))
+        self.assertEqual((resolution["resolved"], resolution["actor"]), (True, SHOWN))
         still = self.comment("Who watches the pond?", section="goals")
 
         items = {item["comment"]["id"]: item for item in self.pull("hermes")
@@ -491,7 +494,8 @@ class ResolvedThreadTests(PullTestCase):
         for comment_id in (done["id"], later["id"]):
             item = items[comment_id]
             self.assertEqual(item["comment"]["state"], "pending")
-            self.assertEqual(item["resolution"], resolution)
+            self.assertEqual(item["resolution"]["actor"], READER)
+            self.assertEqual(api.shown(item["resolution"]), resolution)
         self.assertEqual(items[still["id"]]["resolution"], db.UNRESOLVED)
         self.assertEqual(self.row(done["id"])["state"], "pending")
 

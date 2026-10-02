@@ -19,7 +19,8 @@ const SIGNED_IN = { 'Cf-Access-Jwt-Assertion': ASSERTION };
 const FOLDED = `lotuspod:folded:${PAGE}`;
 const IDS = ['findings', 'decisions-for-the-maintainer', 'next-steps'];
 const TITLES = ['Findings', 'Decisions for the maintainer', 'Next steps'];
-const READER = 'maintainer@example.com';
+// The reader as a page names them: their address's part before the @.
+const READER = 'maintainer';
 const AGENT = { kind: 'agent', handle: 'hermes' };
 const START = Date.parse('2026-09-30T12:00:00Z');
 
@@ -86,7 +87,7 @@ function comment(fields: Record<string, unknown>) {
     parent: null,
     text: `Comment ${id}`,
     quote: null,
-    actor: { kind: 'human', email: READER },
+    actor: { kind: 'human', name: READER },
     createdAt: '2026-09-30T10:00:00.000Z',
     state: 'pending',
     ...fields,
@@ -169,7 +170,7 @@ function answered(asked: { question: string; version: string; choice: string }) 
     [asked.question]: {
       current: {
         id: 1, page: SLUG, question: asked.question, version: asked.version, choice: asked.choice,
-        note: '', revision: 'abc123abc123', actor: { kind: 'human', email: READER },
+        note: '', revision: 'abc123abc123', actor: { kind: 'human', name: READER },
         createdAt: '2026-10-01T09:30:00Z', supersedes: null,
       },
       earlier: [],

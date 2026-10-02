@@ -16,7 +16,8 @@ const PAGE = '/capture-palette.html';
 const DECISIONS = '/capture-decisions.html';
 const ASSERTION = process.env.LOTUSPOD_TEST_ASSERTION ?? '';
 const SIGNED_IN = { 'Cf-Access-Jwt-Assertion': ASSERTION };
-const READER = 'maintainer@example.com';
+// The reader as a page names them: their address's part before the @.
+const READER = 'maintainer';
 const OWNER = 'hermes';
 const TOKENS = JSON.parse(fs.readFileSync(
   path.resolve(__dirname, '..', '..', 'src', 'lotuspod', '_theme', 'tokens.json'), 'utf-8'));
@@ -72,7 +73,7 @@ function row(fields: Record<string, unknown>) {
     parent: null,
     text: `Comment ${id}`,
     quote: null,
-    actor: { kind: 'human', email: READER },
+    actor: { kind: 'human', name: READER },
     createdAt: '2026-09-30T10:00:00.000Z',
     state: 'pending',
     ...fields,
@@ -224,7 +225,7 @@ test.describe('signed in', () => {
           'decision-1': {
             current: {
               id: 1, page: 'capture-decisions', question: 'decision-1', version, choice: 'opus', note: '',
-              revision: 'abc123abc123', actor: { kind: 'human', email: READER },
+              revision: 'abc123abc123', actor: { kind: 'human', name: READER },
               createdAt: '2026-10-01T09:30:00Z', supersedes: null,
             },
             earlier: [],

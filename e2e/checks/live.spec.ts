@@ -24,7 +24,8 @@ const HERMES = ENV.LOTUSPOD_TEST_CREDENTIAL_HERMES ?? '';
 const PYTHON = ENV.LOTUSPOD_TEST_PYTHON ?? '';
 // This checkout's package, whatever lotuspod is installed.
 const SRC = path.resolve(__dirname, '..', '..', 'src');
-const READER = 'maintainer@example.com';
+// The reader as a page names them: their address's part before the @.
+const READER = 'maintainer';
 const OWNER = 'hermes';
 const AGENT = { kind: 'agent', handle: OWNER };
 const START = Date.parse('2026-09-30T12:00:00Z');
@@ -83,7 +84,7 @@ function row(fields: Record<string, unknown>) {
     parent: null,
     text: `Comment ${id}`,
     quote: null,
-    actor: { kind: 'human', email: READER },
+    actor: { kind: 'human', name: READER },
     createdAt: '2026-09-30T10:00:00.000Z',
     state: 'pending',
     ...fields,

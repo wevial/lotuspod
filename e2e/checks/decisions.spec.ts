@@ -13,7 +13,8 @@ const SECTIONS = '/capture-section-questions.html';
 const SECTIONS_ANSWERS = '/api/answers?page=capture-section-questions';
 const ASSERTION = process.env.LOTUSPOD_TEST_ASSERTION ?? '';
 const SIGNED_IN = { 'Cf-Access-Jwt-Assertion': ASSERTION };
-const READER = 'maintainer@example.com';
+// The reader as a page names them: their address's part before the @.
+const READER = 'maintainer';
 const SIGNED_OUT = 'You are signed out. Reload the page to sign in.';
 // An unsaved card's left rule: the theme's amber, as Chromium reports it.
 const AMBER = (() => {
@@ -106,7 +107,7 @@ async function stored(request: APIRequestContext) {
 function row(question: string, version: string, choice: string, note = '') {
   return {
     id: 1, page: 'capture-decisions', question, version, choice, note,
-    revision: 'abc123abc123', actor: { kind: 'human', email: READER },
+    revision: 'abc123abc123', actor: { kind: 'human', name: READER },
     createdAt: '2026-10-01T09:30:00Z', supersedes: null,
   };
 }

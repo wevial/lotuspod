@@ -30,6 +30,10 @@ agent takes it up, and `owner` is the handle it is routed to (null on an agent's
 `thread`, or reopens it, as the reader, and answers 200 {thread, resolution};
 a row is stored only when it changes the resolution. A reader's reply to a
 resolved thread reopens it.
+
+A reader's actor leaves a route as {kind: human, name}: the name is the part
+of their address before its last @, and the address itself never reaches a
+page. The agents' socket (lotuspod.machine) still sees the address.
 """
 
 from __future__ import annotations
@@ -248,6 +252,25 @@ def cross_origin(headers: Message) -> bool:
     return origins[0].strip().lower() != f"{scheme}://{host}"
 
 
+def named(actor: object) -> object:
+    """A reader's actor as a page is shown it: {kind: human, name}, name the
+    address's part before its last @; any other actor as it is."""
+    if not isinstance(actor, Mapping) or actor.get("kind") != "human":
+        return actor
+    email = str(actor.get("email") or "")
+    return {"kind": "human", "name": email.rsplit("@", 1)[0]}
+
+
+def shown(value: object) -> object:
+    """value, a route's payload, with every actor in it named."""
+    if isinstance(value, Mapping):
+        return {key: named(item) if key == "actor" else shown(item)
+                for key, item in value.items()}
+    if isinstance(value, list):
+        return [shown(item) for item in value]
+    return value
+
+
 class Api:
     """The four routes over one database; pages(name) is the Page serve
     would answer for name, or None; window is routing's owner window."""
@@ -263,6 +286,11 @@ class Api:
     def answer(self, method: str, path: str, query: str, headers: Message,
                body: Body, actor: Mapping) -> Answer:
         """The answer to one request for path, one of ROUTES."""
+        status, payload, extra = self._answer(method, path, query, headers, body, actor)
+        return status, shown(payload), extra
+
+    def _answer(self, method: str, path: str, query: str, headers: Message,
+                body: Body, actor: Mapping) -> Answer:
         if method not in METHODS:
             return (HTTPStatus.METHOD_NOT_ALLOWED, {"error": "method_not_allowed"},
                     (("Allow", ", ".join(METHODS)),))

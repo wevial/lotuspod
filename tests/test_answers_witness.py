@@ -359,13 +359,13 @@ class AnswersWitness(Site):
         status, row = self.answer(form, form["choices"][1], "Opus for page edits",
                                   token=assertion(email="Maintainer@Example.com"))
         self.assertEqual(status, 201, row)
-        self.assertEqual(row.get("actor"), {"kind": "human", "email": READER})
+        self.assertEqual(row.get("actor"), {"kind": "human", "name": "maintainer"})
         questions = self.questions()
         self.assertEqual(list(questions), [form["question"]])
         current = questions[form["question"]]["current"]
         self.assertEqual((current.get("choice"), current.get("note")),
                          (form["choices"][1], "Opus for page edits"))
-        self.assertEqual(current.get("actor"), {"kind": "human", "email": READER})
+        self.assertEqual(current.get("actor"), {"kind": "human", "name": "maintainer"})
         self.assertEqual(questions[form["question"]]["earlier"], [])
         done = self.cli("answers", "model-choice", "--json", "--db", str(self.db),
                         "--out-dir", str(self.out))
@@ -374,6 +374,9 @@ class AnswersWitness(Site):
             printed = json.loads(done.stdout)
         except ValueError:
             self.fail(f"`lotuspod answers --json` printed no JSON: {done.stdout!r}")
+        printed_current = printed["questions"][form["question"]]["current"]
+        self.assertEqual(printed_current.get("actor"), {"kind": "human", "email": READER})
+        printed_current["actor"] = current["actor"]
         self.assertEqual(printed.get("questions"), questions)
 
     def test_a_new_answer_replaces_the_current_one_and_keeps_it_as_history(self):

@@ -16,7 +16,8 @@ const PAGE = '/capture-comments.html';
 const THREADS = (url: URL) => url.pathname === '/api/comments';
 const ASSERTION = process.env.LOTUSPOD_TEST_ASSERTION ?? '';
 const SIGNED_IN = { 'Cf-Access-Jwt-Assertion': ASSERTION };
-const READER = 'maintainer@example.com';
+// The reader as a page names them: their address's part before the @.
+const READER = 'maintainer';
 const OWNER = 'hermes';
 const AGENT = { kind: 'agent', handle: OWNER };
 const LAVENDER = 'rgb(183, 156, 244)';
@@ -107,7 +108,7 @@ function row(fields: Record<string, unknown>) {
     parent: null,
     text: `Comment ${id}`,
     quote: null,
-    actor: { kind: 'human', email: READER },
+    actor: { kind: 'human', name: READER },
     createdAt: '2026-09-30T10:00:00.000Z',
     state: 'pending',
     ...fields,
@@ -122,7 +123,7 @@ function everyState() {
     unavailable: row({ state: 'unavailable' }),
     answered: row({
       state: 'answered', text: 'Swap steps two and three?', revision: 'a1b2c3a1b2c3',
-      actor: { kind: 'human', email: 'hermes@example.com' },
+      actor: { kind: 'human', name: 'hermes' },
     }),
     markup: row({ state: 'answered', text: '<img src="x.png" alt="injected">' }),
     claimed: row({ state: 'claimed', section: 'risks', sectionTitle: 'Risks' }),
@@ -245,6 +246,8 @@ test.describe('signed in', () => {
       await expect(mine).toHaveCount(1);
       await expect(mine.locator('.artifact-comment-author')).toHaveText(READER);
       await expect(mine.locator('.artifact-comment-text')).toHaveText('This step is out of order.');
+      // The page names the reader, never by their address.
+      expect(await page.locator('body').textContent()).not.toContain('@example.com');
       const typing = thread.locator('.artifact-comment-typing--pending');
       await expect(typing.locator('.artifact-comment-bubble')).toHaveText(`Checking for a reply from ${OWNER}`);
       expect(await drawn(thread)).toEqual(['reader', 'typing:pending']);
@@ -381,8 +384,8 @@ test.describe('signed in', () => {
     const items = answered.locator('.artifact-comment-item');
     const mine = items.nth(0);
     const reply = items.nth(1);
-    // The reader's address names hermes; the actor's kind still says a reader wrote it.
-    await expect(mine.locator('.artifact-comment-author')).toHaveText('hermes@example.com');
+    // The reader's name is hermes; the actor's kind still says a reader wrote it.
+    await expect(mine.locator('.artifact-comment-author')).toHaveText('hermes');
     await expect(mine.locator('.artifact-comment-avatar')).toHaveText('HE');
     await expect(mine.locator('.artifact-comment-agent')).toHaveCount(0);
     await expect(mine.locator('.artifact-comment-avatar')).toHaveCSS('border-radius', '50%');

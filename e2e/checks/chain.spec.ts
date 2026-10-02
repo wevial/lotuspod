@@ -23,6 +23,8 @@ const ASSERTION = ENV.LOTUSPOD_TEST_ASSERTION ?? '';
 const SIGNED_IN = { 'Cf-Access-Jwt-Assertion': ASSERTION };
 const SIGNED_OUT = 'You are signed out. Reload the page to sign in.';
 const READER = 'maintainer@example.com';
+// The page names the reader by their address's part before the @.
+const NAME_SHOWN = 'maintainer';
 const OWNER = 'hermes';
 const OTHER = 'claude-3f9a2c';
 const SOCKET = ENV.LOTUSPOD_TEST_SOCKET ?? '';
@@ -131,7 +133,7 @@ test.describe('the chain', () => {
       await question.note.fill(NOTE);
       await question.answer.click();
       await expect(question.saved).toContainText('Saved \u00b7 Submerged \u00b7 change');
-      await expect(question.savedBy).toContainText(READER);
+      await expect(question.savedBy).toContainText(NAME_SHOWN);
 
       const heater = box(page, 'heater');
       await heater.summary.click();
@@ -141,7 +143,7 @@ test.describe('the chain', () => {
       await expect(heater.threads).toHaveCount(1);
       const thread = heater.threads.first();
       const mine = thread.locator('.artifact-comment-item--reader');
-      await expect(mine.locator('.artifact-comment-author')).toHaveText(READER);
+      await expect(mine.locator('.artifact-comment-author')).toHaveText(NAME_SHOWN);
       await expect(mine.locator('.artifact-comment-text')).toHaveText(COMMENT);
       await expect(thread.locator('.artifact-comment-typing--pending .artifact-comment-bubble'))
         .toHaveText(`Checking for a reply from ${OWNER}`);
@@ -239,7 +241,7 @@ test.describe('the chain', () => {
       const question = decision(page);
       await expect(question.saved).toContainText('Saved \u00b7 Submerged \u00b7 change');
       await expect(question.savedNote).toHaveText(NOTE);
-      await expect(question.savedBy).toContainText(READER);
+      await expect(question.savedBy).toContainText(NAME_SHOWN);
     });
 
     await test.step('6. without the assertion, answering and commenting are refused and nothing is stored', async () => {

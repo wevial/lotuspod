@@ -25,11 +25,13 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from lotuspod import access, cli, db, decisions, routing  # noqa: E402
+from lotuspod import access, api, cli, db, decisions, routing  # noqa: E402
 from tests import access_keys as keys  # noqa: E402
 
 HOST = "127.0.0.1"
 ACTOR = {"kind": "human", "email": keys.EMAIL}
+# The reader as the routes show them: their address's part before the @.
+SHOWN = {"kind": "human", "name": "maintainer"}
 CREATED_AT = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$")
 
 PLAN = """\
@@ -193,10 +195,10 @@ class AnswerTests(ApiTestCase):
             {key: first[key] for key in first if key not in ("id", "createdAt")},
             {"page": "plan", "question": "decision-1", "version": self.version(),
              "choice": "yes", "note": "first thoughts", "revision": self.revision,
-             "actor": ACTOR, "supersedes": None},
+             "actor": SHOWN, "supersedes": None},
         )
         self.assertRegex(first["createdAt"], CREATED_AT)
-        self.assertEqual(second["actor"], ACTOR)
+        self.assertEqual(second["actor"], SHOWN)
         self.assertEqual(second["revision"], self.revision)
         self.assertEqual(second["supersedes"], first["id"])
         self.assertNotEqual(second["id"], first["id"])
@@ -311,7 +313,7 @@ class CommentTests(ApiTestCase):
             {key: root[key] for key in root if key not in ("id", "createdAt")},
             {"page": "plan", "section": "risks", "sectionTitle": "Risks",
              "revision": self.revision, "parent": None, "text": "What if it does?",
-             "quote": quote, "actor": ACTOR,
+             "quote": quote, "actor": SHOWN,
              # The page has no owner and the responder has never pulled.
              "state": "unavailable", "owner": "responder"},
         )
@@ -323,7 +325,7 @@ class CommentTests(ApiTestCase):
             self.assertIsNone(row["quote"])
             self.assertEqual(row["state"], "unavailable")
             self.assertEqual(row["owner"], "responder")
-            self.assertEqual(row["actor"], ACTOR)
+            self.assertEqual(row["actor"], SHOWN)
 
         self.assertEqual(
             self.ask("GET", "/api/comments?page=plan"),
@@ -374,7 +376,7 @@ class CommentTests(ApiTestCase):
             page="plan", section="nowhere", section_title="Nowhere", revision="0" * 12,
             text="A section not on the page.", quote=None, actor=ACTOR,
         )
-        elsewhere = routing.public(elsewhere, {}, routing.DEFAULT_WINDOW, 0)
+        elsewhere = api.shown(routing.public(elsewhere, {}, routing.DEFAULT_WINDOW, 0))
         _, reply = self.comment(parent=elsewhere["id"], text="Still here.")
         self.assertEqual(goals["sectionTitle"], "Goals")
         self.assertEqual(reply["section"], "nowhere")
@@ -418,7 +420,7 @@ class ResolutionTests(ApiTestCase):
         self.assertEqual(set(got), {"thread", "resolution"})
         self.assertEqual(got["thread"], root["id"])
         resolved = got["resolution"]
-        self.assertEqual((resolved["resolved"], resolved["actor"]), (True, ACTOR))
+        self.assertEqual((resolved["resolved"], resolved["actor"]), (True, SHOWN))
         self.assertRegex(resolved["at"], CREATED_AT)
         self.assertEqual(self.resolution(root["id"]), resolved)
         self.assertEqual(self.stored(), [(root["id"], True, ACTOR, resolved["at"])])
@@ -430,7 +432,7 @@ class ResolutionTests(ApiTestCase):
         status, got = self.resolve(root["id"], False)
         self.assertEqual(status, 200)
         reopened = got["resolution"]
-        self.assertEqual((reopened["resolved"], reopened["actor"]), (False, ACTOR))
+        self.assertEqual((reopened["resolved"], reopened["actor"]), (False, SHOWN))
         self.assertRegex(reopened["at"], CREATED_AT)
         self.assertEqual(self.resolution(root["id"]), reopened)
         self.assertEqual([row[:3] for row in self.stored()],
@@ -485,6 +487,40 @@ class ResolutionTests(ApiTestCase):
         # A reply to an open thread stores no resolution.
         self.assertEqual(self.comment(parent=root["id"], text="Still open.")[0], 201)
         self.assertEqual(len(self.stored()), 2)
+
+
+class ReaderNameTests(ApiTestCase):
+    """A page is shown the reader's name, never their address."""
+
+    def test_comments_name_the_reader_without_their_address(self):
+        _, root = self.comment(section="risks", text="What if it does?")
+        self.comment(parent=root["id"], text="Then we skate.")
+        self.assertEqual(self.ask("POST", "/api/comments",
+                                  {"page": "plan", "thread": root["id"], "resolved": True})[0], 200)
+        _, got = self.ask("GET", "/api/comments?page=plan")
+        [thread] = got["threads"]
+        self.assertEqual(thread["root"]["actor"], {"kind": "human", "name": "maintainer"})
+        self.assertEqual(thread["replies"][0]["actor"], SHOWN)
+        self.assertEqual(thread["resolution"]["actor"], SHOWN)
+        self.assertNotIn("@example.com", json.dumps(got))
+        # The database keeps the address.
+        self.assertEqual(db.Database(self.db_path).comment(root["id"])["actor"], ACTOR)
+
+    def test_answers_name_the_reader_without_their_address(self):
+        _, first = self.answer(choice="yes")
+        self.assertEqual(first["actor"], SHOWN)
+        self.answer(choice="no")
+        _, got = self.ask("GET", "/api/answers?page=plan")
+        entry = got["questions"]["decision-1"]
+        self.assertEqual(entry["current"]["actor"], {"kind": "human", "name": "maintainer"})
+        self.assertEqual(entry["earlier"][0]["actor"], SHOWN)
+        self.assertNotIn("@example.com", json.dumps(got))
+
+    def test_the_name_is_everything_before_the_last_at(self):
+        self.assertEqual(api.named({"kind": "human", "email": "a@b@example.com"}),
+                         {"kind": "human", "name": "a@b"})
+        agent = {"kind": "agent", "handle": "hermes", "credential": "c1"}
+        self.assertEqual(api.named(agent), agent)
 
 
 class SignedOutTests(ApiTestCase):

@@ -23,11 +23,12 @@ const HERMES = ENV.LOTUSPOD_TEST_CREDENTIAL_HERMES ?? '';
 const PYTHON = ENV.LOTUSPOD_TEST_PYTHON ?? '';
 // This checkout's package, whatever lotuspod is installed.
 const SRC = path.resolve(__dirname, '..', '..', 'src');
-const READER = 'maintainer@example.com';
+// The reader as a page names them: their address's part before the @.
+const READER = 'maintainer';
 const OWNER = 'hermes';
 const AGENT = { kind: 'agent', handle: OWNER };
 const OPEN = { resolved: false, actor: null, at: null };
-const RESOLVED = { resolved: true, actor: { kind: 'human', email: READER }, at: '2026-09-30T11:00:00.000Z' };
+const RESOLVED = { resolved: true, actor: { kind: 'human', name: READER }, at: '2026-09-30T11:00:00.000Z' };
 const WIDE = { width: 1440, height: 900 };
 const START = Date.parse('2026-09-30T12:00:00Z');
 
@@ -155,7 +156,7 @@ function row(fields: Record<string, unknown>) {
     parent: null,
     text: `Comment ${id}`,
     quote: null,
-    actor: { kind: 'human', email: READER },
+    actor: { kind: 'human', name: READER },
     createdAt: '2026-09-30T10:00:00.000Z',
     state: 'pending',
     ...fields,
@@ -507,7 +508,7 @@ test.describe('signed in', () => {
     await expect(box(page, 'findings').chip).toHaveText('No comments · Comment');
     const stored = await readThread(request, asked.id);
     expect(stored.resolution.resolved).toBe(true);
-    expect(stored.resolution.actor).toMatchObject({ kind: 'human', email: READER });
+    expect(stored.resolution.actor).toEqual({ kind: 'human', name: READER });
 
     await page.reload();
     await settle(page);

@@ -24,7 +24,8 @@ const PYTHON = ENV.LOTUSPOD_TEST_PYTHON ?? '';
 const SRC = path.resolve(__dirname, '..', '..', 'src');
 const TOKENS = JSON.parse(fs.readFileSync(
   path.resolve(__dirname, '..', '..', 'src', 'lotuspod', '_theme', 'tokens.json'), 'utf-8'));
-const READER = 'maintainer@example.com';
+// The reader as a page names them: their address's part before the @.
+const READER = 'maintainer';
 const OWNER = 'hermes';
 const OPEN = { resolved: false, actor: null, at: null };
 const WIDE = { width: 1440, height: 900 };
@@ -167,7 +168,7 @@ function row(fields: Record<string, unknown>) {
     parent: null,
     text: `Comment ${id}`,
     quote: null,
-    actor: { kind: 'human', email: READER },
+    actor: { kind: 'human', name: READER },
     createdAt: '2026-09-30T10:00:00.000Z',
     state: 'answered',
     ...fields,

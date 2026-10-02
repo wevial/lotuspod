@@ -35,11 +35,11 @@
       return actor.handle ? String(actor.handle) : "agent";
     }
 
-    // Who wrote a row that is not an agent's: an address, else a handle.
+    // Who wrote a row that is not an agent's: a reader's name, else a handle.
     function author(row) {
       var actor = row && row.actor;
-      if (actor && actor.email) {
-        return String(actor.email);
+      if (actor && actor.name) {
+        return String(actor.name);
       }
       return actor && actor.handle ? String(actor.handle) : "someone";
     }

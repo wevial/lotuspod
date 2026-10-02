@@ -74,8 +74,13 @@
     return date.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
   }
 
+  // A reader's name, else a handle; never an address.
   function reader(row) {
-    return row && row.actor && row.actor.email ? String(row.actor.email) : "someone";
+    var actor = row && row.actor;
+    if (actor && actor.name) {
+      return String(actor.name);
+    }
+    return actor && actor.handle ? String(actor.handle) : "someone";
   }
 
   function all(selector, root) {
