@@ -119,6 +119,17 @@ with open(sys.argv[1], "w", encoding="utf-8") as fh:
     json.dump(seen, fh)
 """
 
+# Fetches the passages page and records it with the source beside the site.
+PASSAGES_COMMAND = """\
+import json, os, pathlib, sys, urllib.request
+with urllib.request.urlopen(os.environ["LOTUSPOD_URL"] + "/capture-passages.html", timeout=10) as response:
+    seen = {"page": [response.status, response.read().decode("utf-8")]}
+source = pathlib.Path(os.environ["LOTUSPOD_TEST_OUT"]).parent / "capture-passages.md"
+seen["source"] = source.read_text(encoding="utf-8") if source.is_file() else None
+with open(sys.argv[1], "w", encoding="utf-8") as fh:
+    json.dump(seen, fh)
+"""
+
 # Records LOTUSPOD_URL and the working directory, then exits 3.
 RECORD_COMMAND = """\
 import json, os, sys
@@ -219,6 +230,28 @@ class ServedSiteTests(CaptureSiteTestCase):
         self.assertIn("<cite>The pond keeper's notebook</cite>", page)
         self.assertIn("<pre><code>", page)
         self.assertIn('<script src="lotuspod-page.js?v=', page)
+
+    def test_passages_page_is_owned_and_its_source_is_beside_the_site(self):
+        from tests import capture_site
+
+        proc = self.run_wrapper(sys.executable, "-c", PASSAGES_COMMAND, str(self.record))
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        seen = json.loads(self.record.read_text(encoding="utf-8"))
+        status, page = seen["page"]
+        self.assertEqual(status, 200)
+        self.assertIn("Published by hermes", page)
+        self.assertIn('<meta name="lotuspod:revision"', page)
+        self.assertEqual(page.count('<details class="artifact-comment" data-page="capture-passages"'), 3)
+        self.assertEqual(page.count('<form class="artifact-decision"'), 1)
+        self.assertIn(
+            "<p>The pond pump stops when the water freezes. The heater on the north wall keeps "
+            "the outlet clear, and the pump stops again only in a hard frost.</p>", page)
+        self.assertIn("<li>A frozen pump may crack before anyone notices.</li>", page)
+        self.assertIn("<li>A cracked pump floods the bed below it.</li>", page)
+        long = [line for line in page.splitlines() if line.startswith("<p>Through the winter")]
+        self.assertEqual(len(long), 1)
+        self.assertGreater(len(long[0]) - len("<p></p>"), 500)
+        self.assertEqual(seen["source"], capture_site.PASSAGES_SOURCE)
 
     def test_form_script_answers_404(self):
         seen = self.fetch("/lotuspod-form.js")

@@ -16,7 +16,9 @@ database holds two machine credentials: `hermes` (pull, claim, reply and
 publish as hermes), which the comments page and the owned page name as their
 owner, and `claude-3f9a2c` (pull, claim and reply as itself). The owned page,
 capture-owned, is published from markdown, so the site keeps its source
-beside it. So is the images page, capture-images, from a source with the
+beside it. So is the passages page, capture-passages, owned by hermes too,
+from capture-passages.md in the directory that holds the site (the parent
+of LOTUSPOD_TEST_OUT), so a check can publish it again. So is the images page, capture-images, from a source with the
 fixture images (tests/fixtures/media/) beside it: its images are stored in
 lotuspod-media/ beside the site, as publish stores them for serve. For an
 agent command, the command's environment names:
@@ -255,6 +257,33 @@ Fit a heater before the first frost.
 | 1 | Which heater? | Floating / Submerged | Floating | The pump shares its outlet. |
 """
 
+# The passages page: published from markdown by OWNER, for comments on
+# selected words. Findings holds "pump stops" twice and a paragraph of more
+# than 500 characters; Risks is a list; the page ends with one question.
+PASSAGES_PAGE = "capture-passages"
+PASSAGES_SOURCE = """\
+# Capture passages
+
+A sample report for captures: select words in a section to comment on them.
+
+## Findings
+
+The pond pump stops when the water freezes. The heater on the north wall keeps the outlet clear, and the pump stops again only in a hard frost.
+
+Through the winter the pond was checked each morning at first light. The ice formed first along the reeds on the shallow eastern side, where the water is barely a hand deep, and spread towards the middle over three or four nights of frost. The fish gathered in the deep water under the willow, where the bottom stays at four degrees even when the surface is frozen solid. Each morning the outlet was cleared by hand, the depth of the ice was written down, and the temperature of the water was read from the probe tied to the jetty. By February the notebook held forty mornings of readings.
+
+## Risks
+
+- A frozen pump may crack before anyone notices.
+- A cracked pump floods the bed below it.
+
+## Decisions for the maintainer
+
+| # | Question | Options | Default | Why it matters |
+|---|---|---|---|---|
+| 1 | Which heater? | Floating / Submerged | Floating | The pump shares its outlet. |
+"""
+
 # The images page: published from markdown, with the fixture images copied
 # beside its source as IMAGES_FILES names them. A wide chart, then photos (a
 # progressive JPEG and one turned by its EXIF orientation among them), then
@@ -343,6 +372,8 @@ def render(out_dir: Path, db_path: Path) -> None:
                               credential_path(db_path, OTHER))
     source = db_path.with_name(f"{OWNED_PAGE}.md")
     source.write_text(OWNED_SOURCE, encoding="utf-8")
+    passages_source = db_path.with_name(f"{PASSAGES_PAGE}.md")
+    passages_source.write_text(PASSAGES_SOURCE, encoding="utf-8")
     images_source = db_path.with_name("images") / f"{IMAGES_PAGE}.md"
     for relative, fixture in IMAGES_FILES.items():
         (images_source.parent / relative).parent.mkdir(parents=True, exist_ok=True)
@@ -363,6 +394,14 @@ def render(out_dir: Path, db_path: Path) -> None:
         f"publish {OWNED_PAGE}",
         [
             "publish", str(source), "--local", "--date", SAMPLE_DATE,
+            "--out-dir", str(out_dir), "--owner", OWNER,
+            "--credential", str(token), "--db", str(db_path),
+        ],
+    ))
+    steps.append((
+        f"publish {PASSAGES_PAGE}",
+        [
+            "publish", str(passages_source), "--local", "--date", SAMPLE_DATE,
             "--out-dir", str(out_dir), "--owner", OWNER,
             "--credential", str(token), "--db", str(db_path),
         ],

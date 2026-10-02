@@ -14,7 +14,10 @@
 // in place. Where the window has room right of the reading column, the
 // threads live in a side panel (aside.artifact-comments-panel) folded to a
 // rail of status dots, each box's summary becomes a one-line chip that opens
-// its section's thread there, and a thread can be resolved and reopened. It
+// its section's thread there, and a thread can be resolved and reopened.
+// Words selected in the body can be commented on: a pill above the selection
+// opens a composer, and each thread on a passage highlights its words with a
+// number, found again from its quote on every revision of the page. It
 // sends no credential of its own: the reader's Cloudflare Access session is
 // the only identity. Everything anyone wrote is set as text, never as markup.
 (function () {
@@ -24,6 +27,7 @@
   var COMMENTS = "/api/comments";
   var SIGNED_OUT = "You are signed out. Reload the page to sign in.";
   var STALE = "This question has changed since the page loaded. Reload it.";
+  var STALE_PAGE = "This page has changed since it loaded. Reload it to comment on this passage.";
   var CHANGED = "Comments on sections that have changed";
   var CHANGED_GROUP = "Sections that have changed";
   // Whether the reader left the comments panel open or folded.
@@ -36,6 +40,22 @@
   // once the page's read of answers has finished.
   var DRAWN = "lotuspod:drawn";
   var ANSWERED = "lotuspod:answered";
+  // What the page's text leaves out and no passage may hold: the comment UI,
+  // decision forms, diagrams and the list of changed sections.
+  var APART = "details.artifact-comment, .artifact-comments-changed, .artifact-comments-panel, " +
+    ".artifact-passage-composer, form.artifact-decision, pre.mermaid, svg";
+  // What the page's text leaves out as never read: the marks and numbers the
+  // page script draws, and what is not shown at all.
+  var UNSEEN = "script, style, template, noscript, .artifact-section-mark, .artifact-passage-number";
+  var BLOCK = new RegExp("^(ADDRESS|ARTICLE|ASIDE|BLOCKQUOTE|BR|CAPTION|DD|DETAILS|DIV|DL|DT|" +
+    "FIELDSET|FIGCAPTION|FIGURE|FOOTER|FORM|H[1-6]|HEADER|HR|LI|MAIN|NAV|OL|P|PRE|SECTION|" +
+    "SUMMARY|TABLE|TBODY|TD|TFOOT|TH|THEAD|TR|UL)$");
+  // A passage's length and the words kept either side of it, in code
+  // points, as the comments route counts them.
+  var MAX_EXACT = 500;
+  var CONTEXT = 32;
+  // How long the selection must keep still before the pill shows, in ms.
+  var STILL = 200;
 
   function when(stamp) {
     var date = new Date(stamp);
@@ -70,6 +90,179 @@
       node.textContent = text;
     }
     return node;
+  }
+
+  // Whitespace of any kind, a no-break or thin space as much as a newline:
+  // the text and the quotes found in it collapse the same runs.
+  var WHITE = /\s/;
+  var WHITE_RUNS = /\s+/g;
+
+  // The page's text, from which a passage is anchored and found again: the
+  // text nodes of root in document order, leaving out APART and UNSEEN, with
+  // the start of each block element as one space and every run of whitespace
+  // as one space. spots.get(node)[k] is the text's length before the node's
+  // character k; a character that adds nothing (whitespace in a run) has the
+  // same spot as the one after it.
+  function textModel(root) {
+    var model = { text: "", nodes: [], spots: new Map() };
+    var parts = [];
+    var length = 0;
+    // True while the text is empty or ends in a space.
+    var space = true;
+    var skip = APART + ", " + UNSEEN;
+    function walk(parent) {
+      for (var child = parent.firstChild; child; child = child.nextSibling) {
+        if (child.nodeType === Node.TEXT_NODE) {
+          var data = child.data;
+          var spots = new Int32Array(data.length + 1);
+          var out = "";
+          for (var k = 0; k < data.length; k += 1) {
+            spots[k] = length;
+            if (!WHITE.test(data.charAt(k))) {
+              out += data.charAt(k);
+              length += 1;
+              space = false;
+            } else if (!space) {
+              out += " ";
+              length += 1;
+              space = true;
+            }
+          }
+          spots[data.length] = length;
+          parts.push(out);
+          model.nodes.push(child);
+          model.spots.set(child, spots);
+        } else if (child.nodeType === Node.ELEMENT_NODE && !child.matches(skip)) {
+          if (BLOCK.test(child.tagName) && !space) {
+            parts.push(" ");
+            length += 1;
+            space = true;
+          }
+          walk(child);
+        }
+      }
+    }
+    if (root) {
+      walk(root);
+    }
+    model.text = parts.join("");
+    return model;
+  }
+
+  // Where in a model's text a boundary point falls: at the first of its
+  // text nodes the point is not after.
+  function offsetOf(model, container, offset) {
+    var spots = model.spots.get(container);
+    if (spots) {
+      return spots[Math.min(offset, spots.length - 1)];
+    }
+    var point = document.createRange();
+    point.setStart(container, offset);
+    var low = 0;
+    var high = model.nodes.length;
+    while (low < high) {
+      var middle = (low + high) >> 1;
+      if (point.comparePoint(model.nodes[middle], 0) >= 0) {
+        high = middle;
+      } else {
+        low = middle + 1;
+      }
+    }
+    return low < model.nodes.length ? model.spots.get(model.nodes[low])[0] : model.text.length;
+  }
+
+  // The runs of text nodes that hold text[start, end) of a model, in order:
+  // each {node, from, to}, without whitespace in a run before start.
+  function pieces(model, start, end) {
+    var found = [];
+    model.nodes.forEach(function (node) {
+      var spots = model.spots.get(node);
+      if (spots[spots.length - 1] <= start || spots[0] >= end) {
+        return;
+      }
+      var from = -1;
+      var to = -1;
+      for (var k = 0; k + 1 < spots.length; k += 1) {
+        var said = spots[k + 1] > spots[k];
+        if (spots[k] < end && (said ? spots[k] >= start : spots[k] > start)) {
+          if (from < 0) {
+            from = k;
+          }
+          to = k + 1;
+        }
+      }
+      if (from >= 0) {
+        found.push({ node: node, from: from, to: to });
+      }
+    });
+    return found;
+  }
+
+  // Of a model's occurrences of a quote's words, the one between its prefix
+  // and suffix when it is the only such one, else the only one; null when
+  // there is none or more than one to choose between.
+  function locate(model, quote) {
+    var squeeze = function (words) { return String(words || "").replace(WHITE_RUNS, " "); };
+    var exact = squeeze(quote.exact).trim();
+    var prefix = squeeze(quote.prefix);
+    var suffix = squeeze(quote.suffix);
+    var text = model.text;
+    if (!exact) {
+      return null;
+    }
+    var hits = [];
+    for (var at = text.indexOf(exact); at >= 0; at = text.indexOf(exact, at + 1)) {
+      hits.push(at);
+    }
+    var framed = hits.filter(function (hit) {
+      return text.slice(0, hit).endsWith(prefix) && text.startsWith(suffix, hit + exact.length);
+    });
+    var hit = framed.length === 1 ? framed[0] : hits.length === 1 ? hits[0] : -1;
+    return hit < 0 ? null : { start: hit, end: hit + exact.length };
+  }
+
+  // Wrap text[start, end) of the root's text in elements make() returns,
+  // one around each run of a text node, split at the passage's edges and
+  // never across an element. A run of whitespace beside a block is left out:
+  // drawn, it would take a line of its own. The wrappers, in order.
+  function wrap(root, start, end, make) {
+    var made = [];
+    pieces(textModel(root), start, end).forEach(function (piece) {
+      var node = piece.node;
+      // A passage starts and ends in words, so a run of whitespace is a
+      // whole text node.
+      if (!/\S/.test(node.data) && [node.previousSibling, node.nextSibling].some(function (side) {
+        return !side || BLOCK.test(side.nodeName);
+      })) {
+        return;
+      }
+      if (piece.to < node.length) {
+        node.splitText(piece.to);
+      }
+      if (piece.from > 0) {
+        node = node.splitText(piece.from);
+      }
+      var wrapper = make();
+      node.parentNode.insertBefore(wrapper, node);
+      wrapper.appendChild(node);
+      made.push(wrapper);
+    });
+    return made;
+  }
+
+  // Take wrappers away, leaving what they held where they were.
+  function unwrap(wrappers) {
+    wrappers.forEach(function (wrapper) {
+      var parent = wrapper.parentNode;
+      if (!parent) {
+        return;
+      }
+      while (wrapper.firstChild) {
+        parent.insertBefore(wrapper.firstChild, wrapper);
+      }
+      parent.removeChild(wrapper);
+      parent.normalize();
+    });
   }
 
   // The page's sections (div.artifact-section-body, each just after its h2):
@@ -540,10 +733,14 @@
   // its section, or, when the page no longer has that section, in a list at
   // the end of the body. Where the window has room for it, every thread is
   // shown in the side panel instead (sidePanel below), and each box is a chip.
+  // A thread on a passage (selectPassages below) is also drawn on its words.
   function commentBoxes(boxes) {
     var page = boxes[0].dataset.page;
     var tag = document.querySelector('meta[name="lotuspod:owner"]');
     var owner = tag ? tag.content : "";
+    var stamp = document.querySelector('meta[name="lotuspod:revision"]');
+    var revision = stamp ? stamp.content : null;
+    var article = document.querySelector(".artifact-body");
     // Maps, not objects: a section id is the author's and may be any name,
     // "__proto__" included.
     var sections = new Map();
@@ -630,7 +827,10 @@
       by.appendChild(document.createTextNode(" "));
       by.appendChild(time);
       drawn.column.appendChild(by);
-      drawn.column.appendChild(element("p", "artifact-comment-text", String(entry.text || "")));
+      var said = element("p", "artifact-comment-text", String(entry.text || ""));
+      // A passage's highlight is described by its thread's first comment.
+      said.id = "artifact-comment-text-" + entry.id;
+      drawn.column.appendChild(said);
       return drawn.item;
     }
 
@@ -830,6 +1030,9 @@
       if (response.status === 401) {
         return SIGNED_OUT;
       }
+      if (response.status === 409 && payload && payload.error === "stale_page") {
+        return STALE_PAGE;
+      }
       var error = payload && payload.error ? String(payload.error) : "status " + response.status;
       return "Not saved (" + error + "). Try again.";
     }
@@ -947,6 +1150,444 @@
     function summary(box) {
       var count = threadsOf(box).length;
       box.querySelector("summary").textContent = count ? "Comments (" + count + ")" : "Comment";
+    }
+
+    // Comments on passages. Words selected in the body, within one section,
+    // show a pill just above the selection's end, and pressing it (or
+    // Control+Alt+M) opens a composer quoting them, the words under a dashed
+    // mark: in the panel's group of their section, else in their section's
+    // box. A thread whose first comment quotes a passage is found in the
+    // page's text from its quote and drawn on its words: a highlight, then
+    // its number, which is its entry's in the panel. One not found is listed
+    // with its quote struck through; a resolved one is not drawn.
+    function selectPassages() {
+      var api = {};
+      // The thread the pointer is on, on the page and in the panel.
+      var pointed = { page: null, entry: null };
+      // The open composer: its holder, the marks on its words and its box.
+      var open = null;
+      // Where a thread just posted from a selection starts in the page's
+      // text, so its words are those selected even where they occur twice.
+      var hints = new Map();
+
+      api.detached = function (thread) {
+        return Boolean(thread.root.quote) && thread.spot === null && !resolved(thread);
+      };
+
+      // What a passage's entry and box say of its words: the quote, struck
+      // through once the words are not found, and why.
+      api.said = function (thread) {
+        var exact = String(thread.root.quote.exact || "");
+        if (!api.detached(thread)) {
+          return [element("span", "artifact-passage-quoted", exact)];
+        }
+        return [
+          element("del", "artifact-passage-quoted", exact),
+          element("span", "artifact-passage-why", " · this passage changed" +
+            (revision ? " in revision " + revision : "")),
+        ];
+      };
+
+      // What a thread's entry and head show change only with this.
+      api.key = function (thread) {
+        return thread.n + " " + api.detached(thread);
+      };
+
+      // A thread's words are lit while the pointer is on them or on its
+      // entry, and while its entry is open in the panel.
+      api.shine = function (thread) {
+        var on = thread === pointed.page || thread === pointed.entry ||
+          (panel.wide && panel.current() === thread);
+        thread.marks.forEach(function (mark) {
+          mark.classList.toggle("artifact-passage--lit", on);
+        });
+        if (thread.number) {
+          thread.number.classList.toggle("artifact-passage-number--lit", on);
+        }
+      };
+
+      api.point = function (thread, where) {
+        var before = pointed[where];
+        if (before === thread) {
+          return;
+        }
+        pointed[where] = thread;
+        if (before) {
+          api.shine(before);
+        }
+        if (thread) {
+          api.shine(thread);
+        }
+      };
+
+      function find(model, thread) {
+        var exact = String(thread.root.quote.exact || "");
+        var hint = hints.get(thread.root.id);
+        hints.delete(thread.root.id);
+        if (hint !== undefined && model.text.slice(hint, hint + exact.length) === exact) {
+          return { start: hint, end: hint + exact.length };
+        }
+        return locate(model, thread.root.quote);
+      }
+
+      function draw(thread) {
+        var id = String(thread.root.id);
+        thread.marks = wrap(article, thread.spot.start, thread.spot.end, function () {
+          var mark = element("mark", "artifact-passage");
+          mark.dataset.thread = id;
+          mark.setAttribute("aria-describedby", "artifact-comment-text-" + id);
+          return mark;
+        });
+        if (!thread.marks.length) {
+          thread.spot = null;
+          return;
+        }
+        thread.marks[0].classList.add("artifact-passage--first");
+        var number = element("span", "artifact-passage-number");
+        number.setAttribute("aria-hidden", "true");
+        number.dataset.thread = id;
+        var last = thread.marks[thread.marks.length - 1];
+        last.parentNode.insertBefore(number, last.nextSibling);
+        thread.number = number;
+        api.shine(thread);
+      }
+
+      function erase(thread) {
+        if (thread.number) {
+          thread.number.remove();
+          thread.number = null;
+        }
+        unwrap(thread.marks);
+        thread.marks = [];
+      }
+
+      // Where a thread's section is in the page, those it no longer has last.
+      function sectionAt(thread) {
+        var at = boxes.indexOf(thread.box);
+        return at < 0 ? boxes.length : at;
+      }
+
+      // Find each open passage thread not looked for yet, draw it or take a
+      // resolved one away, and number them: those drawn in page order, then
+      // those not found.
+      api.update = function () {
+        var threads = [];
+        shown.forEach(function (thread) {
+          if (thread.root.quote) {
+            threads.push(thread);
+          }
+        });
+        var model = null;
+        var found = [];
+        threads.forEach(function (thread) {
+          if (resolved(thread)) {
+            erase(thread);
+            thread.spot = undefined;
+          } else if (thread.spot === undefined) {
+            model = model || textModel(article);
+            thread.spot = find(model, thread);
+            if (thread.spot) {
+              found.push(thread);
+            }
+          }
+        });
+        // Drawing splits text nodes, never the text: each draws from its own read.
+        found.forEach(draw);
+        var drawn = threads.filter(function (thread) {
+          return thread.marks.length > 0;
+        }).sort(function (a, b) {
+          return a.spot.start - b.spot.start || a.root.id - b.root.id;
+        });
+        var lost = threads.filter(api.detached).sort(function (a, b) {
+          return sectionAt(a) - sectionAt(b) || a.root.id - b.root.id;
+        });
+        threads.forEach(function (thread) {
+          thread.n = 0;
+        });
+        drawn.concat(lost).forEach(function (thread, index) {
+          thread.n = index + 1;
+        });
+        drawn.forEach(function (thread) {
+          if (thread.number.textContent !== String(thread.n)) {
+            thread.number.textContent = String(thread.n);
+          }
+        });
+        threads.forEach(function (thread) {
+          var key = api.key(thread);
+          if (thread.head && thread.headKey !== key) {
+            thread.headKey = key;
+            thread.head.replaceChildren.apply(thread.head, api.said(thread));
+          }
+        });
+      };
+
+      // Put the open composer where the window has room for it.
+      api.place = function () {
+        if (!open) {
+          return;
+        }
+        if (panel.wide) {
+          panel.compose(open.box, open.holder);
+        } else {
+          var form = forms.get(open.box);
+          open.box.open = true;
+          open.box.insertBefore(open.holder, form.parentNode === open.box ? form : null);
+        }
+      };
+
+      if (!article) {
+        return api;
+      }
+
+      function close(mine) {
+        mine.holder.remove();
+        unwrap(mine.marks);
+        if (open === mine) {
+          open = null;
+        }
+      }
+
+      // Whether a boundary point may be part of a passage: in the body, out
+      // of everything APART.
+      function inside(node) {
+        var parent = node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
+        return Boolean(parent) && article.contains(parent) && !parent.closest(APART);
+      }
+
+      // The first section box after a boundary point.
+      function boxAfter(node, offset) {
+        var point = document.createRange();
+        point.setStart(node, offset);
+        return boxes.filter(function (box) { return point.comparePoint(box, 0) > 0; })[0] || null;
+      }
+
+      // The passage the reader has selected, or null when it is not one a
+      // comment can be on: 1 to MAX_EXACT characters of the page's text, all
+      // in it and in one section.
+      function selected() {
+        var selection = document.getSelection();
+        if (!selection || !selection.rangeCount || selection.isCollapsed) {
+          return null;
+        }
+        var range = selection.getRangeAt(0);
+        if (!inside(range.startContainer) || !inside(range.endContainer)) {
+          return null;
+        }
+        var model = textModel(article);
+        var text = model.text;
+        var start = offsetOf(model, range.startContainer, range.startOffset);
+        var end = offsetOf(model, range.endContainer, range.endOffset);
+        while (start < end && text.charAt(start) === " ") {
+          start += 1;
+        }
+        while (end > start && text.charAt(end - 1) === " ") {
+          end -= 1;
+        }
+        var exact = text.slice(start, end);
+        var size = Array.from(exact).length;
+        var runs = pieces(model, start, end);
+        if (size < 1 || size > MAX_EXACT || !runs.length) {
+          return null;
+        }
+        var first = runs[0];
+        var last = runs[runs.length - 1];
+        var span = document.createRange();
+        span.setStart(first.node, first.from);
+        span.setEnd(last.node, last.to);
+        if (all(APART, article).some(function (node) { return span.intersectsNode(node); })) {
+          return null;
+        }
+        var box = boxAfter(first.node, first.from);
+        if (!box || box !== boxAfter(last.node, last.to)) {
+          return null;
+        }
+        var tail = document.createRange();
+        tail.setStart(last.node, last.from);
+        tail.setEnd(last.node, last.to);
+        // A few units more than the context, so no code point is cut in two.
+        var before = Array.from(text.slice(Math.max(0, start - 2 * CONTEXT - 2), start));
+        var after = Array.from(text.slice(end, end + 2 * CONTEXT + 2));
+        return {
+          box: box, start: start, tail: tail,
+          quote: {
+            exact: exact,
+            prefix: before.slice(Math.max(0, before.length - CONTEXT)).join(""),
+            suffix: after.slice(0, CONTEXT).join(""),
+          },
+        };
+      }
+
+      var pill = element("button", "artifact-passage-pill");
+      pill.type = "button";
+      // It never takes focus: the selection stays as it is.
+      pill.tabIndex = -1;
+      pill.hidden = true;
+      pill.setAttribute("aria-keyshortcuts", "Control+Alt+M");
+      var icon = element("span", "artifact-passage-pill-icon");
+      icon.setAttribute("aria-hidden", "true");
+      pill.append(icon, "Comment");
+      document.body.appendChild(pill);
+
+      // The pill just above the end of the selection, leaning left of it and
+      // inside the reading column.
+      function offer(found) {
+        var rects = found.tail.getClientRects();
+        var line = rects[rects.length - 1];
+        if (!line) {
+          return;
+        }
+        pill.hidden = false;
+        var width = pill.offsetWidth;
+        var column = article.getBoundingClientRect();
+        var left = Math.max(column.left, Math.min(line.right - width * 0.75, column.right - width));
+        pill.style.left = Math.round(left + window.scrollX) + "px";
+        pill.style.top = Math.round(line.top + window.scrollY - pill.offsetHeight - 8) + "px";
+        pill.style.setProperty("--artifact-passage-tip",
+          Math.round(Math.max(12, Math.min(width - 12, line.right - left))) + "px");
+      }
+
+      // Once the selection keeps still, with no button held, offer the pill.
+      var settling = null;
+      var pressed = false;
+      function steady() {
+        pill.hidden = true;
+        clearTimeout(settling);
+        settling = setTimeout(function () {
+          var found = pressed ? null : selected();
+          if (found) {
+            offer(found);
+          }
+        }, STILL);
+      }
+      document.addEventListener("selectionchange", steady);
+      document.addEventListener("pointerdown", function (event) {
+        pressed = !pill.contains(event.target);
+      });
+      document.addEventListener("pointerup", function () {
+        if (pressed) {
+          pressed = false;
+          steady();
+        }
+      });
+      window.addEventListener("resize", function () {
+        pill.hidden = true;
+      });
+
+      function compose(found) {
+        if (open) {
+          close(open);
+        }
+        pill.hidden = true;
+        var holder = element("div", "artifact-passage-composer");
+        holder.appendChild(element("p", "artifact-passage-quote", found.quote.exact));
+        var form = element("form", "artifact-comment-form artifact-passage-form");
+        var field = element("textarea");
+        field.name = "text";
+        field.rows = 2;
+        field.maxLength = 4000;
+        field.required = true;
+        field.setAttribute("aria-label", "Comment on the selected words");
+        var actions = element("div", "artifact-comment-actions");
+        var send = element("button", "", "Comment");
+        send.type = "submit";
+        var status = element("p", "artifact-comment-status");
+        status.setAttribute("role", "status");
+        actions.append(send, status);
+        form.append(field, actions);
+        var quit = element("button", "artifact-passage-cancel", "Cancel");
+        quit.type = "button";
+        holder.append(form, quit);
+        var marks = wrap(article, found.start, found.start + found.quote.exact.length, function () {
+          return element("mark", "artifact-passage artifact-passage--pending");
+        });
+        var mine = { holder: holder, marks: marks, box: found.box };
+        open = mine;
+        document.getSelection().removeAllRanges();
+        api.place();
+        field.focus({ preventScroll: panel.wide });
+
+        quit.addEventListener("click", function () { close(mine); });
+        holder.addEventListener("keydown", function (event) {
+          if (event.key === "Escape") {
+            // The panel would fold on it too.
+            event.preventDefault();
+            event.stopPropagation();
+            close(mine);
+          }
+        });
+        form.addEventListener("submit", async function (event) {
+          event.preventDefault();
+          var fields = {
+            page: page, section: found.box.dataset.section, text: field.value, quote: found.quote,
+          };
+          if (revision !== null) {
+            fields.revision = revision;
+          }
+          var row = await post(form, fields);
+          if (!row) {
+            return;
+          }
+          var focused = holder.contains(document.activeElement) || document.activeElement === document.body;
+          if (open === mine) {
+            close(mine);
+          }
+          hints.set(row.id, found.start);
+          add({ root: row, replies: [] });
+          posted();
+          panel.started(shown.get(row.id), focused);
+        });
+      }
+
+      pill.addEventListener("mousedown", function (event) {
+        event.preventDefault();
+      });
+      pill.addEventListener("click", function () {
+        var found = selected();
+        if (found) {
+          compose(found);
+        }
+      });
+      document.addEventListener("keydown", function (event) {
+        if (!event.ctrlKey || !event.altKey || event.metaKey || event.shiftKey ||
+            (event.code !== "KeyM" && String(event.key).toLowerCase() !== "m")) {
+          return;
+        }
+        var found = selected();
+        if (found) {
+          event.preventDefault();
+          compose(found);
+        }
+      });
+
+      // The thread whose highlight or number a node is in, if any.
+      function threadAt(node) {
+        var drawn = node && node.closest &&
+          node.closest("mark.artifact-passage[data-thread], .artifact-passage-number");
+        return drawn ? shown.get(Number(drawn.dataset.thread)) || null : null;
+      }
+      article.addEventListener("mouseover", function (event) {
+        api.point(threadAt(event.target), "page");
+      });
+      article.addEventListener("mouseleave", function () {
+        api.point(null, "page");
+      });
+      // A highlight opens its thread: in the panel, else in its box.
+      article.addEventListener("click", function (event) {
+        var thread = threadAt(event.target);
+        var selection = document.getSelection();
+        if (!thread || (selection && !selection.isCollapsed)) {
+          return;
+        }
+        if (panel.wide) {
+          panel.open(thread);
+          return;
+        }
+        if (thread.box) {
+          thread.box.open = true;
+        }
+        thread.node.scrollIntoView({ block: "nearest" });
+      });
+      return api;
     }
 
     // The side panel (layout C of docs/design/margin-comments-mockup.html),
@@ -1165,11 +1806,16 @@
           return thread.entry;
         }
         var id = thread.root.id;
+        // A mark and words, filled in by draw: a passage's number and quote,
+        // or § and what the thread's first comment says.
+        var marks = [];
+        var words = [];
         function lead() {
-          var lines = [mute(element("span", "artifact-comments-entry-mark",
-            thread.root.quote ? "" : "§"))];
-          lines.push(element("span", "artifact-comments-entry-words", opening(thread.root.text)));
-          return lines;
+          var mark = mute(element("span", "artifact-comments-entry-mark"));
+          var said = element("span", "artifact-comments-entry-words");
+          marks.push(mark);
+          words.push(said);
+          return [mark, said];
         }
         var item = element("li", "artifact-comments-entry");
         item.dataset.thread = String(id);
@@ -1197,8 +1843,11 @@
         var dot = element("li", "artifact-comments-dot");
         thread.entry = {
           item: item, head: top, state: state, folded: folded, body: body, resolve: resolve,
-          reopen: reopen, status: status, dot: dot, key: "",
+          reopen: reopen, status: status, dot: dot, key: "", marks: marks, words: words, leadKey: null,
         };
+        // Pointing at a passage's entry lights its words.
+        item.addEventListener("mouseenter", function () { passages.point(thread, "entry"); });
+        item.addEventListener("mouseleave", function () { passages.point(null, "entry"); });
         top.addEventListener("click", function () {
           if (current === thread) {
             expand(null);
@@ -1224,6 +1873,23 @@
         made.folded.hidden = !done;
         made.body.hidden = !opened;
         made.head.setAttribute("aria-expanded", opened ? "true" : "false");
+        var leadKey = passages.key(thread);
+        if (leadKey !== made.leadKey) {
+          made.leadKey = leadKey;
+          var quoted = Boolean(thread.root.quote);
+          made.item.classList.toggle("artifact-comments-entry--passage", quoted);
+          made.item.classList.toggle("artifact-comments-entry--detached", passages.detached(thread));
+          made.marks.forEach(function (mark) {
+            mark.textContent = quoted ? (thread.n ? String(thread.n) : "") : "§";
+          });
+          made.words.forEach(function (words) {
+            if (quoted) {
+              words.replaceChildren.apply(words, passages.said(thread));
+            } else {
+              words.textContent = opening(thread.root.text);
+            }
+          });
+        }
         var kind = standing(thread);
         var handle = routed(asked(thread));
         var key = [kind, handle, thread.replies.length].join("\n");
@@ -1251,20 +1917,23 @@
         current = thread;
         if (before && before !== thread) {
           draw(before);
+          passages.shine(before);
         }
         if (thread) {
           draw(thread);
+          passages.shine(thread);
           reveal(thread.entry.item);
         }
       }
 
-      // Bring a thread's chip into the window, opening its section first
-      // through its heading's button if it is folded.
+      // Bring a thread's highlight, else its chip, into the window, opening
+      // its section first through its heading's button if it is folded.
       function bring(thread) {
-        if (!thread.box) {
+        var target = thread.marks[0] || (thread.box && thread.box.querySelector("summary"));
+        if (!target) {
           return;
         }
-        var wrapper = thread.box.closest(".artifact-section-body");
+        var wrapper = target.closest(".artifact-section-body");
         if (wrapper && wrapper.hasAttribute("hidden")) {
           var heading = wrapper.previousElementSibling;
           var button = heading && heading.querySelector("button.artifact-section-toggle");
@@ -1272,12 +1941,11 @@
             button.click();
           }
         }
-        var chip = thread.box.querySelector("summary");
         var bar = document.querySelector(".artifact-topbar");
         var top = bar ? bar.getBoundingClientRect().bottom : 0;
-        var rect = chip.getBoundingClientRect();
+        var rect = target.getBoundingClientRect();
         if (rect.top < top || rect.bottom > window.innerHeight) {
-          chip.scrollIntoView({ block: "center" });
+          target.scrollIntoView({ block: "center" });
         }
       }
 
@@ -1412,6 +2080,37 @@
         }
       };
 
+      api.current = function () {
+        return current;
+      };
+
+      // A highlight: the panel opens at its thread.
+      api.open = function (thread) {
+        setOpen(true, true);
+        expand(thread);
+        thread.entry.head.focus({ preventScroll: true });
+      };
+
+      // A passage's composer: in its section's group, above the threads, with
+      // the panel open.
+      api.compose = function (box, holder) {
+        setOpen(true, true);
+        var made = groups.get(box);
+        made.node.insertBefore(holder, made.entries);
+        reveal(holder);
+      };
+
+      // A thread was posted from a passage's composer: its entry opens.
+      api.started = function (thread, focused) {
+        if (!api.wide || !thread) {
+          return;
+        }
+        expand(thread);
+        if (focused) {
+          thread.entry.head.focus({ preventScroll: true });
+        }
+      };
+
       // A chip: the panel opens at its section's newest open thread, or at
       // its form for a new one.
       function show(box) {
@@ -1458,14 +2157,39 @@
         }
         var target = thread.box ? groups.get(thread.box) : strays;
         if (made.item.parentNode !== target.entries) {
-          var after = all(":scope > li", target.entries).filter(function (item) {
-            return Number(item.dataset.thread) > thread.root.id;
-          })[0] || null;
-          target.entries.insertBefore(made.item, after);
+          target.entries.appendChild(made.item);
+          sort(target);
         }
         strays.node.hidden = !strays.entries.firstChild;
         draw(thread);
       };
+
+      // Where a thread is listed in its group: its passages by number, then
+      // its resolved passages, then its § threads, each oldest first.
+      function rank(thread) {
+        if (!thread.root.quote) {
+          return [2, thread.root.id];
+        }
+        return thread.n ? [0, thread.n] : [1, thread.root.id];
+      }
+
+      // Put a group's entries in order, moving only those out of place.
+      function sort(made) {
+        var threads = all(":scope > li", made.entries).map(function (item) {
+          return shown.get(Number(item.dataset.thread));
+        });
+        threads.sort(function (a, b) {
+          var left = rank(a);
+          var right = rank(b);
+          return left[0] - right[0] || left[1] - right[1];
+        });
+        threads.forEach(function (thread, index) {
+          var at = made.entries.children[index];
+          if (at !== thread.entry.item) {
+            made.entries.insertBefore(thread.entry.item, at);
+          }
+        });
+      }
 
       api.refresh = function () {
         var threads = ordered();
@@ -1475,6 +2199,8 @@
         count.textContent = unresolved.length + " open · " +
           (threads.length - unresolved.length) + " resolved";
         threads.forEach(draw);
+        groups.forEach(sort);
+        sort(strays);
         var key = unresolved.map(function (thread) { return thread.root.id; }).join(" ");
         if (key !== dotsKey) {
           dotsKey = key;
@@ -1525,6 +2251,7 @@
         }
         shown.forEach(put);
         refresh();
+        passages.place();
       };
 
       return api;
@@ -1562,6 +2289,9 @@
       var thread = {
         root: root, replies: [], list: list, drawn: new Map(), typing: null, waitKey: null,
         resolution: entry.resolution || null, entry: null,
+        // A passage thread's words: undefined until looked for, null when
+        // not found; its highlights, its number node and its number.
+        spot: undefined, marks: [], number: null, n: 0, head: null, headKey: null,
       };
       var node = element("div", "artifact-comment-thread");
       node.dataset.thread = String(root.id);
@@ -1571,6 +2301,11 @@
       if (!box) {
         node.appendChild(element("p", "artifact-comment-section",
           "On " + String(root.sectionTitle || root.section || "an earlier section")));
+      }
+      if (root.quote) {
+        // Headed by its quote in a box; the panel's entry says it instead.
+        thread.head = element("p", "artifact-passage-head");
+        node.appendChild(thread.head);
       }
       node.appendChild(list);
       replyForm(thread, node);
@@ -1596,9 +2331,10 @@
       }
     }
 
-    // Draw what the threads say outside them: the boxes' summaries, or the
-    // panel and its chips.
+    // Draw what the threads say outside them: the passages' highlights, and
+    // the boxes' summaries or the panel and its chips.
     function refresh() {
+      passages.update();
       if (panel.wide) {
         panel.refresh();
       } else {
@@ -1733,6 +2469,7 @@
       });
     });
 
+    var passages = selectPassages();
     var panel = sidePanel();
     panel.arrange();
     window.addEventListener("resize", panel.arrange);

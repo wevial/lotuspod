@@ -1,5 +1,5 @@
 /*
- * Lotuspod theme "lotus" v0.4.16
+ * Lotuspod theme "lotus" v0.4.17
  * Tokens mirror theme/tokens.json.
  */
 
@@ -1676,7 +1676,8 @@ label.artifact-decision-note span {
 
 /* A speech bubble, drawn without text. */
 .artifact-comments-icon,
-.artifact-comment-chip-icon {
+.artifact-comment-chip-icon,
+.artifact-passage-pill-icon {
   border: 1.5px solid currentColor;
   border-radius: 3px;
   display: block;
@@ -1686,7 +1687,8 @@ label.artifact-decision-note span {
 }
 
 .artifact-comments-icon::after,
-.artifact-comment-chip-icon::after {
+.artifact-comment-chip-icon::after,
+.artifact-passage-pill-icon::after {
   border-left: 1.5px solid currentColor;
   bottom: -0.3rem;
   content: "";
@@ -2025,6 +2027,195 @@ label.artifact-decision-note span {
 
 .artifact-comments-compose .artifact-comment-form {
   margin-top: 0.45rem;
+}
+
+/* Comments on passages (docs/design/margin-comments-mockup.html, "Selecting
+   text" and the Subtle style of "Highlight styles"). Selected words get a
+   pill just above the selection's end, its tip at that end. A passage
+   commented on wears the rose tint over a rose underline, then its number in
+   a small ring, and lights while pointed at or while its thread is open;
+   overlapping passages stack their tints and touching ones keep a hairline
+   gap. The words a composer quotes wear a dashed underline. */
+.artifact-passage-pill {
+  align-items: center;
+  appearance: none;
+  background: var(--color-surface);
+  border: 1px solid color-mix(in srgb, var(--color-lavender) 60%, transparent);
+  border-radius: var(--radius-pill);
+  box-shadow: 0 8px 22px rgba(13, 10, 21, 0.5);
+  color: var(--color-white);
+  cursor: pointer;
+  display: inline-flex;
+  font-family: var(--font-body);
+  font-size: 0.82rem;
+  font-weight: 600;
+  gap: 0.45rem;
+  line-height: 1.2;
+  margin: 0;
+  padding: 0.38rem 0.8rem 0.38rem 0.65rem;
+  position: absolute;
+  white-space: nowrap;
+  z-index: 1;
+}
+
+.artifact-passage-pill::after {
+  background: inherit;
+  border-bottom: 1px solid color-mix(in srgb, var(--color-lavender) 60%, transparent);
+  border-right: 1px solid color-mix(in srgb, var(--color-lavender) 60%, transparent);
+  bottom: -5px;
+  content: "";
+  height: 8px;
+  left: var(--artifact-passage-tip, 75%);
+  margin-left: -4px;
+  position: absolute;
+  transform: rotate(45deg);
+  width: 8px;
+}
+
+.artifact-passage-pill:hover {
+  border-color: var(--color-lavender);
+}
+
+.artifact-passage-pill-icon {
+  color: var(--color-lavender);
+  margin-bottom: 0.2rem;
+}
+
+.artifact-passage-pill[hidden] {
+  display: none;
+}
+
+.artifact-body mark.artifact-passage {
+  background-color: var(--highlight);
+  border-bottom: 2px solid var(--highlight-line);
+  border-radius: 3px 3px 0 0;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+  color: inherit;
+  cursor: pointer;
+  padding: 0.05em 0;
+}
+
+.artifact-body mark.artifact-passage + mark.artifact-passage--first {
+  margin-left: 2px;
+}
+
+.artifact-body mark.artifact-passage--lit {
+  background-color: color-mix(in srgb, var(--color-rose) 34%, transparent);
+  border-bottom-color: var(--color-rose);
+}
+
+.artifact-body mark.artifact-passage--pending {
+  border-bottom-color: var(--color-rose);
+  border-bottom-style: dashed;
+  cursor: text;
+}
+
+.artifact-passage-number {
+  border: 1px solid var(--highlight-line);
+  border-radius: var(--radius-pill);
+  color: var(--color-pale-rose);
+  cursor: pointer;
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  font-style: normal;
+  font-weight: 600;
+  line-height: 1;
+  margin: 0 0.1rem 0 0.15rem;
+  min-width: 0.7rem;
+  padding: 0.15rem 0.22rem;
+  position: relative;
+  text-align: center;
+  top: -0.6em;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.artifact-passage-number--lit {
+  background: var(--color-rose);
+  border-color: var(--color-rose);
+  color: var(--color-night);
+}
+
+/* A passage's quote, italic in the display voice: it heads its thread in a
+   box, and its entry in the panel. */
+.artifact-passage-quoted {
+  color: var(--color-pale-lavender);
+  font-family: var(--font-display);
+  font-style: italic;
+}
+
+del.artifact-passage-quoted {
+  color: var(--color-muted-lavender);
+}
+
+.artifact-passage-why {
+  color: var(--color-muted-lavender);
+  font-size: 0.9em;
+}
+
+.artifact-body .artifact-passage-head {
+  border-left: 2px solid var(--highlight-line);
+  margin: 0 0 0.75em;
+  overflow-wrap: anywhere;
+  padding: 0 0 0 0.6rem;
+}
+
+.artifact-comments-panel .artifact-passage-head {
+  display: none;
+}
+
+.artifact-comments-entry--passage .artifact-comments-entry-mark {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  font-weight: 600;
+}
+
+/* A passage not found: its whole quote and why, on as many lines as they take. */
+.artifact-comments-entry--detached .artifact-comments-entry-head .artifact-comments-entry-words {
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.artifact-passage-composer {
+  margin: 0.45rem 0.25rem 0.75rem;
+}
+
+.artifact-comment .artifact-passage-composer {
+  margin: 0.9em 0 0;
+}
+
+:is(.artifact-body, .artifact-comments-panel) .artifact-passage-quote {
+  border-left: 2px dashed var(--color-rose);
+  color: var(--color-pale-lavender);
+  font-family: var(--font-display);
+  font-style: italic;
+  margin: 0 0 0.5rem;
+  overflow-wrap: anywhere;
+  padding: 0 0 0 0.6rem;
+}
+
+.artifact-passage-composer .artifact-comment-form {
+  margin: 0;
+}
+
+.artifact-passage-cancel {
+  appearance: none;
+  background: none;
+  border: 0;
+  border-radius: var(--radius-chip);
+  color: var(--color-lavender);
+  cursor: pointer;
+  display: block;
+  font: inherit;
+  font-size: 0.85rem;
+  margin: 0.4rem 0 0 auto;
+  padding: 0 0.25rem;
+}
+
+.artifact-passage-cancel:hover {
+  color: var(--color-pale-lavender);
 }
 
 /* Last, so a hidden part stays hidden whatever display its class gives it. */

@@ -691,6 +691,56 @@ Reopen", and its dot leaves the rail. "Reopen" reopens it and shows its
 messages again. Under `prefers-reduced-motion: reduce` the pulsing dot keeps
 still and the panel opens without sliding.
 
+### Comments on passages
+
+A comment can be on words of a section rather than the whole of it, as in a
+shared document. Selecting words in a page's body, once the selection keeps
+still, shows a "Comment" pill just above the end of the selection, inside the
+reading column; it never takes focus, and Control+Alt+M (named in its
+`aria-keyshortcuts`) does what pressing it does, so a selection made from the
+keyboard works too. It shows only for 1 to 500 characters of the page's text
+that lie wholly in it and within one section. The page's text, from which a
+passage is quoted and found again, is the body's text in document order
+without the comment boxes and chips, the panel, any composer, decision forms,
+diagrams and the list of changed sections; the start of each block counts as
+one space, every run of whitespace is one space, and lengths count code
+points. Code in a `pre` block may be commented on; a decision form, a diagram
+or words in two sections may not.
+
+The pill opens a composer quoting the words, which wait under a dashed
+highlight: in the panel, opened if folded, under their section's heading, or,
+in a window without room for the panel, in their section's box. Escape or
+"Cancel" takes it away and posts nothing. "Comment" posts the thread with its
+quote (`{page, section, text, quote: {exact, prefix, suffix}, revision}`):
+the selected words without whitespace at their edges, the 32 code points
+either side of them (fewer at the text's edges) and the page's
+`lotuspod:revision`. Answered `409 stale_page`, the composer keeps its text
+and says "This page has changed since it loaded. Reload it to comment on this
+passage."
+
+Each unresolved thread whose first comment quotes a passage is found in the
+page's text whenever it is read, on any revision: among the occurrences of
+its words, the one between its prefix and suffix when exactly one is, else
+the only occurrence, if there is one. It is never guessed between two. Its
+words then wear a rose tint over a rose underline (the theme's `highlight`
+and `highlight-line`), one `mark.artifact-passage` around each run of text,
+each naming the thread's first comment in `aria-describedby`, and a small
+number after them, hidden from assistive technology. The words light up while
+the pointer is on them or on their entry, and while their thread is open;
+overlapping passages stack their tints. Passages found are numbered 1, 2, 3
+in page order, and the panel lists each under its section, by number, before
+the section's § threads, showing its quote and status. Clicking the words or
+the number opens the panel at the thread, and clicking the entry scrolls the
+page to the words; without the panel, the thread is in its section's box,
+headed by its quote, and clicking the words opens the box.
+
+A thread whose words are not found draws nothing on the page and keeps a
+numbered entry after its section's passages found (or under "Sections that
+have changed"), headed by its old quote struck through and "this passage
+changed in revision R", R being the page's revision now. Its conversation and
+its composer go on as before. A resolved passage thread draws neither
+highlight nor number; reopening it draws them again.
+
 An agent's reply that carries a `revision` is followed by the centred line
 "HANDLE revised the page → revision R", linking to the page. Routing (below)
 sets `pending` and `unavailable`, and `paused` for a comment routed to
