@@ -39,6 +39,11 @@ const HEATER_QUOTE = {
 const SENTENCE = 'The heater on the north wall keeps the outlet clear, and the pump stops again only in a hard frost.';
 const FINDINGS = `The pond pump stops when the water freezes. ${SENTENCE}`;
 const STALE = 'This page has changed since it loaded. Reload it to comment on this passage.';
+// The Risks item whose words "the bed" a check makes a link to the article
+// page, as the page's markdown has no links.
+const BED = 'the bed';
+const BED_QUOTE = { exact: BED, prefix: 'A cracked pump floods ', suffix: ' below it.' };
+const FLOODS_ITEM = '<li>A cracked pump floods the bed below it.</li>';
 
 test.use({ viewport: WIDE });
 
@@ -179,6 +184,20 @@ function row(fields: Record<string, unknown>) {
 async function serve(page: Page, threads: unknown[]) {
   await page.route((url) => url.pathname === '/api/comments', (route) =>
     route.fulfill({ json: { page: SLUG, threads } }));
+}
+
+// Serve the page with the Risks item's words "the bed" a link to the
+// article page.
+async function linkBed(page: Page) {
+  await page.route((url) => url.pathname === PAGE, async (route) => {
+    const response = await route.fetch();
+    const body = await response.text();
+    expect(body).toContain(FLOODS_ITEM);
+    await route.fulfill({
+      response,
+      body: body.replace(FLOODS_ITEM, '<li>A cracked pump floods <a href="capture-article.html">the bed</a> below it.</li>'),
+    });
+  });
 }
 
 // Show only the threads this check made: the site answers every read and
@@ -374,9 +393,9 @@ test.describe('signed in', () => {
       const number = await drawn.last().evaluate((node) => {
         const after = node.nextElementSibling;
         return after && after.classList.contains('artifact-passage-number')
-          ? { text: after.textContent, hidden: after.getAttribute('aria-hidden') } : null;
+          ? { tag: after.localName, text: after.textContent, label: after.getAttribute('aria-label') } : null;
       });
-      expect(number).toEqual({ text: '1', hidden: 'true' });
+      expect(number).toEqual({ tag: 'button', text: '1', label: 'Open comment 1' });
       for (const described of await drawn.evaluateAll((nodes) => nodes.map((node) => {
         const named = document.getElementById(node.getAttribute('aria-describedby') ?? '');
         return named ? { text: named.textContent, thread: named.closest('[data-thread]')?.getAttribute('data-thread') } : null;
@@ -410,6 +429,108 @@ test.describe('signed in', () => {
     expect(rgba(lit)).not.toEqual(rgba(TOKENS.structure.highlight));
     await page.mouse.move(5, 5);
     await expect(marks(page, id).first()).not.toHaveClass(/artifact-passage--lit/);
+    await seen.clean();
+  });
+
+  test('a passage number is a button named for its thread, and on plain words it and the highlight open it', async ({ page }) => {
+    const seen = await watch(page);
+    const heater = row({ text: 'Which heater is it?', quote: HEATER_QUOTE });
+    const bed = row({ section: 'risks', sectionTitle: 'Risks', text: 'How far does it flood?', quote: BED_QUOTE });
+    await serve(page, [{ root: heater, replies: [], resolution: OPEN }, { root: bed, replies: [], resolution: OPEN }]);
+    await linkBed(page);
+    await load(page);
+    const first = page.getByRole('button', { name: 'Open comment 1', exact: true });
+    const second = page.getByRole('button', { name: 'Open comment 2', exact: true });
+    await expect(first).toHaveAttribute('data-thread', String(heater.id));
+    await expect(first).toHaveText('1');
+    await expect(first).not.toHaveAttribute('aria-hidden');
+    await expect(second).toHaveAttribute('data-thread', String(bed.id));
+    await expect(second).toHaveText('2');
+
+    const side = panel(page);
+    const mine = entry(page, heater.id);
+    await marks(page, heater.id).first().click();
+    await expect(side.fold).toBeVisible();
+    await expect(mine.head).toHaveAttribute('aria-expanded', 'true');
+    await expect(mine.head).toBeFocused();
+    await mine.head.click();
+    await expect(mine.head).toHaveAttribute('aria-expanded', 'false');
+
+    await first.click();
+    await expect(mine.head).toHaveAttribute('aria-expanded', 'true');
+    await expect(mine.head).toBeFocused();
+    await expect(mine.readers.locator('.artifact-comment-text')).toHaveText('Which heater is it?');
+    await seen.clean();
+  });
+
+  test('a passage on a link opens from its number, outside the link, by click, Enter and Space, and the link still follows', async ({ page }) => {
+    const seen = await watch(page);
+    const root = row({ section: 'risks', sectionTitle: 'Risks', text: 'How far does it flood?', quote: BED_QUOTE });
+    await serve(page, [{ root, replies: [], resolution: OPEN }]);
+    await linkBed(page);
+    await load(page);
+    const link = page.locator('.artifact-body a', { hasText: BED });
+    const drawn = marks(page, root.id);
+    await expect(drawn).toHaveCount(1);
+    expect(await joined(drawn)).toBe(BED);
+    expect(await drawn.evaluate((node) => node.closest('a')?.getAttribute('href'))).toBe('capture-article.html');
+    const number = page.getByRole('button', { name: 'Open comment 1', exact: true });
+    await expect(number).toHaveAttribute('data-thread', String(root.id));
+    const placed = await number.evaluate((node) => ({
+      inLink: node.closest('a') !== null,
+      before: node.previousElementSibling?.localName,
+      beforeText: node.previousElementSibling?.textContent,
+    }));
+    expect(placed).toEqual({ inLink: false, before: 'a', beforeText: BED });
+
+    // A click on the number opens the thread and stays on the page.
+    const side = panel(page);
+    const mine = entry(page, root.id);
+    const url = page.url();
+    await number.click();
+    await expect(side.fold).toBeVisible();
+    await expect(mine.head).toHaveAttribute('aria-expanded', 'true');
+    await expect(mine.head).toBeFocused();
+    await expect(mine.readers.locator('.artifact-comment-text')).toHaveText('How far does it flood?');
+    await page.waitForTimeout(300);
+    expect(page.url()).toBe(url);
+
+    // From the link, Tab reaches the number, and Enter or Space opens it,
+    // with nothing selected or with the link's words selected.
+    const selectBed = async () => {
+      await choose(page, '.artifact-body li', BED, BED);
+      expect(await page.evaluate(() => String(document.getSelection()))).toBe(BED);
+    };
+    for (const key of ['Enter', 'Space']) {
+      for (const selecting of [false, true]) {
+        const name = `${key}${selecting ? ' with the words selected' : ''}`;
+        await page.evaluate(() => document.getSelection()!.removeAllRanges());
+        await mine.head.click();
+        await expect(mine.head).toHaveAttribute('aria-expanded', 'false');
+        await link.focus();
+        if (selecting) await selectBed();
+        await page.keyboard.press('Tab');
+        await expect(number, name).toBeFocused();
+        await page.keyboard.press(key);
+        await expect(mine.head, name).toHaveAttribute('aria-expanded', 'true');
+        await expect(mine.head, name).toBeFocused();
+        expect(page.url(), name).toBe(url);
+      }
+    }
+
+    // With the link's words selected, a click on the number opens it too.
+    await mine.head.click();
+    await expect(mine.head).toHaveAttribute('aria-expanded', 'false');
+    await selectBed();
+    await number.click();
+    await expect(mine.head).toHaveAttribute('aria-expanded', 'true');
+    await expect(mine.head).toBeFocused();
+    expect(page.url()).toBe(url);
+    await page.evaluate(() => document.getSelection()!.removeAllRanges());
+
+    // A click on the highlighted words follows the link.
+    await drawn.click();
+    await expect(page).toHaveURL(/\/capture-article\.html$/);
     await seen.clean();
   });
 

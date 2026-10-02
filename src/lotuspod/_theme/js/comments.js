@@ -549,11 +549,17 @@
           return;
         }
         thread.marks[0].classList.add("artifact-passage--first");
-        var number = element("span", "artifact-passage-number");
-        number.setAttribute("aria-hidden", "true");
+        // Its number is a button that opens it, after the last mark or,
+        // when that is in a link, after the outermost link: the link and the
+        // thread each keep their own target.
+        var number = element("button", "artifact-passage-number");
+        number.type = "button";
         number.dataset.thread = id;
-        var last = thread.marks[thread.marks.length - 1];
-        last.parentNode.insertBefore(number, last.nextSibling);
+        var after = thread.marks[thread.marks.length - 1];
+        for (var link = after.closest("a"); link && article.contains(link); link = link.parentNode.closest("a")) {
+          after = link;
+        }
+        after.parentNode.insertBefore(number, after.nextSibling);
         thread.number = number;
         api.shine(thread);
       }
@@ -616,6 +622,7 @@
         drawn.forEach(function (thread) {
           if (thread.number.textContent !== String(thread.n)) {
             thread.number.textContent = String(thread.n);
+            thread.number.setAttribute("aria-label", "Open comment " + thread.n);
           }
         });
         threads.forEach(function (thread) {
@@ -925,12 +932,18 @@
       article.addEventListener("mouseleave", function () {
         api.point(null, "page");
       });
-      // A highlight opens its thread: in the panel, else in a popover under
-      // it or the bottom sheet.
+      // A highlight or its number opens its thread: in the panel, else in a
+      // popover under it or the bottom sheet. A click on a highlight that
+      // ends a selection, or is in a link, is left to them; its number, a
+      // button outside any link, opens the thread whatever is selected.
       article.addEventListener("click", function (event) {
         var thread = threadAt(event.target);
         var selection = document.getSelection();
-        if (!thread || (selection && !selection.isCollapsed)) {
+        if (!thread) {
+          return;
+        }
+        if (!event.target.closest(".artifact-passage-number") &&
+            ((selection && !selection.isCollapsed) || event.target.closest("a"))) {
           return;
         }
         if (panel.wide) {

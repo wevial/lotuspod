@@ -1226,7 +1226,12 @@
   cursor: text;
 }
 
+/* A passage's number: a button that opens its thread, drawn as a small
+   outlined badge beside its words. */
 .artifact-passage-number {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
   border: 1px solid var(--highlight-line);
   border-radius: var(--radius-pill);
   color: var(--color-pale-rose);
@@ -1251,6 +1256,11 @@
   background: var(--color-rose);
   border-color: var(--color-rose);
   color: var(--color-night);
+}
+
+.artifact-passage-number:focus-visible {
+  outline: 2px solid var(--color-lavender);
+  outline-offset: 2px;
 }
 
 /* A passage's quote, italic in the display voice: it heads its thread in a
