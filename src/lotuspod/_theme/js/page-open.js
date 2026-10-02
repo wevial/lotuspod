@@ -19,6 +19,8 @@
 // opened it (div.artifact-comments-popover), or on a phone in a bottom sheet
 // (div.artifact-comments-bottom-sheet) that steps through the page's threads.
 // A top-level table is kept short of the panel, open or folded.
+// One that scrolls, where the window has free width beside it, can be
+// expanded into that width, up to the panel.
 // Words selected in the body can be commented on: a pill by the selection
 // opens a composer, and each thread on a passage highlights its words with a
 // number, found again from its quote on every revision of the page. It
@@ -58,7 +60,8 @@
     "form.artifact-decision, pre.mermaid, svg";
   // What the page's text leaves out as never read: the marks and numbers the
   // page script draws, and what is not shown at all.
-  var UNSEEN = "script, style, template, noscript, .artifact-section-mark, .artifact-passage-number";
+  var UNSEEN = "script, style, template, noscript, .artifact-section-mark, .artifact-passage-number, " +
+    ".artifact-table-expand";
   var BLOCK = new RegExp("^(ADDRESS|ARTICLE|ASIDE|BLOCKQUOTE|BR|CAPTION|DD|DETAILS|DIV|DL|DT|" +
     "FIELDSET|FIGCAPTION|FIGURE|FOOTER|FORM|H[1-6]|HEADER|HR|LI|MAIN|NAV|OL|P|PRE|SECTION|" +
     "SUMMARY|TABLE|TBODY|TD|TFOOT|TH|THEAD|TR|UL)$");

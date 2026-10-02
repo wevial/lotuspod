@@ -1623,3 +1623,11 @@ agents. Beside it, one colour per job:
 
 `tests/test_palette.py` checks every text colour at 4.5:1 or more on `night`
 and `surface`, and text on the tints.
+
+A top-level table keeps the reading layout's width and scrolls inside itself
+when it is wider. Where the window has at least 4rem of free width beside such
+a table, a small Expand button under its left edge widens it to the right, to
+its natural width or up to 1rem short of the comments panel, without moving
+anything above or beside it; Collapse restores it. The choice is kept per
+table for the tab's session (`sessionStorage`), so a new visit starts at the
+reading width, and the button hides while the window leaves no room for it.

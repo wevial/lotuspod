@@ -1,0 +1,56 @@
+
+/* An expanded table: a top-level table the reader asked to widen lifts its
+   --measure-full cap to the room left of the comments panel (js/tables.js)
+   and grows to the right of the reading column, never past its natural
+   width. Its left edge stays where it was. */
+.artifact-body > table.artifact-table--expanded,
+.artifact-section-body > table.artifact-table--expanded {
+  max-width: var(--table-room, var(--measure-full));
+}
+
+/* While a table expands or collapses, the page script keeps its top in place
+   itself (js/table-expand.js). */
+.artifact-body table.artifact-table--holding {
+  overflow-anchor: none;
+}
+
+/* The Expand button sits in the table's bottom margin at its left edge, in a
+   holder with no height: margins collapse through it, so a page with the
+   button lays out exactly as one without it. */
+.artifact-table-expand {
+  height: 0;
+  position: relative;
+}
+
+/* A table that ends its body keeps the margin it would have had last. */
+.artifact-body > table:has(+ .artifact-table-expand:last-child),
+.artifact-section-body > table:has(+ .artifact-table-expand:last-child) {
+  margin-bottom: 0;
+}
+
+.artifact-table-expand-button {
+  background: none;
+  border: 0;
+  border-radius: var(--radius-chip);
+  bottom: 0.15rem;
+  color: var(--color-muted-lavender);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.75rem;
+  left: 0;
+  letter-spacing: 0.04em;
+  line-height: 1.3;
+  margin: 0;
+  padding: 0 0.2rem;
+  position: absolute;
+  white-space: nowrap;
+}
+
+.artifact-table-expand-button:hover {
+  color: var(--color-lavender);
+}
+
+.artifact-table-expand-button:focus-visible {
+  outline: 2px solid var(--color-lavender);
+  outline-offset: 2px;
+}

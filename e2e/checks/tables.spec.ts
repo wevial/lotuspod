@@ -19,10 +19,10 @@ const SIZES = [
 const SIGNED_IN = { 'Cf-Access-Jwt-Assertion': process.env.LOTUSPOD_TEST_ASSERTION ?? '' };
 const TOP_LEVEL = '.artifact-body > table, .artifact-section-body > table';
 const PANEL = 'aside.artifact-comments-panel';
-// The fixture's tables, in page order.
-const WIDE = 0;
-const LONG_FIRST = 1;
-const FINDINGS = 2;
+// The fixture's tables, in page order, after the ledger.
+const WIDE = 1;
+const LONG_FIRST = 2;
+const FINDINGS = 3;
 
 type Box = { left: number; right: number; top: number; bottom: number };
 
@@ -32,7 +32,7 @@ async function load(page: Page, target: { url: string; slug: string }) {
   await page.route((url) => url.pathname === '/api/comments', (route) =>
     route.fulfill({ json: { page: target.slug, threads: [] } }));
   await page.goto(target.url);
-  await expect(page.locator('.artifact-body table')).toHaveCount(6);
+  await expect(page.locator('.artifact-body table')).toHaveCount(7);
 }
 
 // Wait until the panel, if shown, has finished changing width, and a frame

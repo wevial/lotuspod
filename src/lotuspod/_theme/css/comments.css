@@ -12,6 +12,10 @@
   margin: 0 0 1.5em;
 }
 
+/* Its line is the height of the chip the page script draws in its place
+   (.artifact-comment-chip, its faces 1.3rem), set at the top of its line as
+   the chip is, so a page lays out the same with scripts as without, whatever
+   the variant's leading. */
 .artifact-comment-summary {
   border: 1px solid var(--hairline);
   border-radius: var(--radius-pill);
@@ -19,8 +23,10 @@
   cursor: pointer;
   display: inline-block;
   font-size: 0.85rem;
+  line-height: 1.3rem;
   list-style: none;
   padding: 0.2rem 0.9rem;
+  vertical-align: top;
 }
 
 .artifact-comment-summary::-webkit-details-marker {

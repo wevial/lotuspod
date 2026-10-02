@@ -252,13 +252,25 @@ lotuspod comments pull --owner hermes</code></pre>
 """
 
 # The tables pages, one per variant: the same tables, each in a section that
-# ends in a comment box, owned by OWNER. An eight-column table with long
+# ends in a comment box, owned by OWNER. A fourteen-column ledger about 2400
+# pixels wide at its natural width, with a paragraph after it and the rest of
+# the page below it to scroll through, an eight-column table with long
 # cells, a two-column table whose first column is a long sentence, a
 # three-column table shaped like a Finding, Status and Where table, a table
 # with long code spans and links, a small two-column table and a table inside
 # a list item. No diagram, so the page needs no network.
 TABLES_BODY = """\
 <p>A sample page for captures: tables of every shape, each fitting its column or scrolling inside itself.</p>
+<h2>Ledger</h2>
+<table>
+<thead><tr><th>Week</th><th>Pond</th><th>Water</th><th>Air</th><th>Ice</th><th>Wind</th><th>Rain</th><th>Pump</th><th>Heater</th><th>Outlet</th><th>Fish</th><th>Plants</th><th>Checked by</th><th>Keeper's note</th></tr></thead>
+<tbody>
+<tr><td>First of December</td><td>North by the willow</td><td>Six degrees</td><td>Two degrees at dawn</td><td>None on open water</td><td>Light from the west</td><td>A shower at noon</td><td>Running all day</td><td>Off until the frost</td><td>Clear and fast</td><td>Feeding at noon</td><td>Reeds cut back</td><td>The keeper</td><td>The leaves are out of the net</td></tr>
+<tr><td>Second of January</td><td>South by the reeds</td><td>Three degrees</td><td>Minus six at dawn</td><td>Nine centimetres</td><td>Still all morning</td><td>None all week</td><td>Stopped twice</td><td>Holding a hole open</td><td>Cleared by hand</td><td>Still on the bottom</td><td>Frozen in</td><td>The neighbour's boy</td><td>The cable sheath has split on the path</td></tr>
+<tr><td>Last of February</td><td>Both ponds</td><td>Five degrees</td><td>Four at midday</td><td>Only in the shade</td><td>Gusts from the north</td><td>Heavy at night</td><td>Running again</td><td>Off for the spring</td><td>Fast with the melt</td><td>Rising to feed</td><td>First shoots</td><td>The keeper</td><td>A heron came twice and went away with nothing</td></tr>
+</tbody>
+</table>
+<p>The ledger is kept by the shed door and copied here each Sunday evening.</p>
 <h2>Wide</h2>
 <table>
 <thead><tr><th>Pond</th><th>Pump</th><th>Heater</th><th>Outlet</th><th>Fish</th><th>Ice</th><th>Checked by</th><th>Notes</th></tr></thead>

@@ -113,6 +113,18 @@ class DeclaredOrderTests(ThemeCopyTestCase):
         problems = source_problems(cli.THEME_DIR, cli.THEME_SOURCES)
         self.assertEqual(problems, [], "\n".join(problems))
 
+    def test_the_table_expand_sources_are_declared(self):
+        """LOTUS-50: the Expand button reads the room js/tables.js publishes,
+        so js/table-expand.js is joined after it and before js/page-close.js;
+        its styles are declared in the stylesheet's order."""
+        script = cli.THEME_SOURCES[cli.PAGE_SCRIPT]
+        self.assertIn("js/table-expand.js", script)
+        self.assertGreater(script.index("js/table-expand.js"), script.index("js/tables.js"))
+        self.assertEqual(script[-1], "js/page-close.js")
+        self.assertIn("css/table-expand.css", cli.THEME_SOURCES["lotuspod.css"])
+        problems = source_problems(cli.THEME_DIR, cli.THEME_SOURCES)
+        self.assertEqual(problems, [], "\n".join(problems))
+
     def test_a_source_not_in_the_declared_order_is_named(self):
         theme = self.theme_copy()
         (theme / "css" / "stray.css").write_text(".stray {}\n", encoding="utf-8")

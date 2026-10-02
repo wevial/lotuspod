@@ -279,6 +279,7 @@ THEME_SOURCES = {
         "css/live-page.css",
         "css/prose.css",
         "css/report.css",
+        "css/table-expand.css",
         "css/index.css",
     ),
     PAGE_SCRIPT: (
@@ -289,6 +290,7 @@ THEME_SOURCES = {
         "js/live-page.js",
         "js/comments.js",
         "js/tables.js",
+        "js/table-expand.js",
         "js/page-close.js",
     ),
 }
