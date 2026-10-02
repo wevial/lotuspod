@@ -102,6 +102,17 @@ class DeclaredOrderTests(ThemeCopyTestCase):
         problems = source_problems(cli.THEME_DIR, cli.THEME_SOURCES)
         self.assertEqual(problems, [], "\n".join(problems))
 
+    def test_the_tables_script_is_declared_after_the_comments_script(self):
+        """LOTUS-49: a table's room is measured against the comments panel,
+        which the comments script makes, so js/tables.js is joined after
+        js/comments.js and before js/page-close.js closes the script."""
+        script = cli.THEME_SOURCES[cli.PAGE_SCRIPT]
+        self.assertIn("js/tables.js", script)
+        self.assertGreater(script.index("js/tables.js"), script.index("js/comments.js"))
+        self.assertEqual(script[-1], "js/page-close.js")
+        problems = source_problems(cli.THEME_DIR, cli.THEME_SOURCES)
+        self.assertEqual(problems, [], "\n".join(problems))
+
     def test_a_source_not_in_the_declared_order_is_named(self):
         theme = self.theme_copy()
         (theme / "css" / "stray.css").write_text(".stray {}\n", encoding="utf-8")

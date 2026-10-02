@@ -234,6 +234,68 @@ PALETTE_BODY = """\
 lotuspod comments pull --owner hermes</code></pre>
 """
 
+# The tables pages, one per variant: the same tables, each in a section that
+# ends in a comment box, owned by OWNER. An eight-column table with long
+# cells, a two-column table whose first column is a long sentence, a
+# three-column table shaped like a Finding, Status and Where table, a table
+# with long code spans and links, a small two-column table and a table inside
+# a list item. No diagram, so the page needs no network.
+TABLES_BODY = """\
+<p>A sample page for captures: tables of every shape, each fitting its column or scrolling inside itself.</p>
+<h2>Wide</h2>
+<table>
+<thead><tr><th>Pond</th><th>Pump</th><th>Heater</th><th>Outlet</th><th>Fish</th><th>Ice</th><th>Checked by</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td>North pond by the willow</td><td>Floating pump on a float of cork and rope</td><td>Electric heater on the north wall</td><td>Cleared by hand each morning at first light</td><td>Twelve koi and a tench</td><td>Four centimetres by the end of January</td><td>The keeper and the neighbour's boy</td><td>The pump stopped twice in the hard frost and started again at noon</td></tr>
+<tr><td>South pond by the reeds</td><td>Submerged pump in the deep water under the jetty</td><td>Solar heater on a pole by the shed</td><td>Left to freeze over in the coldest week</td><td>Goldfish and a frog that sits on the lilies</td><td>Nine centimetres along the reeds on the shallow side</td><td>The keeper alone</td><td>The heater kept a hole in the ice until the panel was covered in snow</td></tr>
+</tbody>
+</table>
+<h2>Long first cell</h2>
+<table>
+<thead><tr><th>Finding</th><th>Answer</th></tr></thead>
+<tbody>
+<tr><td>The pond pump stops whenever the water around its intake freezes, and it starts again by itself once the ice has thawed in the afternoon sun</td><td>Fit a heater beside the intake</td></tr>
+<tr><td>Short one</td><td>Leave it</td></tr>
+</tbody>
+</table>
+<h2>Findings table</h2>
+<table>
+<thead><tr><th>Finding</th><th>Status</th><th>Where</th></tr></thead>
+<tbody>
+<tr><td>The pump seized under a crust of frazil ice in January, because the float let it sink below the surface where the ice formed first, and nobody noticed until the outlet had stopped for a whole morning and the water had gone still across the pond</td><td>Fixed by a larger float in February</td><td>North pond, under the willow by the jetty</td></tr>
+<tr><td>The heater's cable runs across the path to the shed, where it is trodden on each morning by whoever clears the outlet, and its sheath has split in two places along the length that lies on the gravel</td><td>Open, waiting for a buried conduit</td><td>The path from the shed to the north pond</td></tr>
+</tbody>
+</table>
+<h2>Code and links</h2>
+<table>
+<thead><tr><th>Command</th><th>Page</th></tr></thead>
+<tbody>
+<tr><td><code>lotuspod publish artifacts/pond-pump-winter-maintenance-report-2026.md --owner hermes --comments --variant report</code></td><td><a href="capture-article.html">https://pond.example.com/pond-pump-winter-maintenance-report-2026.html</a></td></tr>
+<tr><td><code>lotuspod comments pull --owner hermes --json --socket /run/lotuspod/agent.sock</code></td><td><a href="capture-report.html">https://pond.example.com/capture-report.html</a></td></tr>
+</tbody>
+</table>
+<h2>Small</h2>
+<table>
+<thead><tr><th>Month</th><th>Pump hours</th></tr></thead>
+<tbody>
+<tr><td>December</td><td>310</td></tr>
+<tr><td>January</td><td>0</td></tr>
+</tbody>
+</table>
+<h2>Listed</h2>
+<ul>
+<li>
+<p>The readings taken through the winter:</p>
+<table>
+<thead><tr><th>Morning</th><th>Ice</th><th>Water</th><th>Outlet</th></tr></thead>
+<tbody>
+<tr><td>The first of January, a clear frosty morning</td><td>Two centimetres along the reeds</td><td>Four degrees under the willow</td><td>Cleared by hand before breakfast</td></tr>
+</tbody>
+</table>
+</li>
+</ul>
+"""
+
 # The owned page: published from markdown by OWNER, so its source is kept
 # beside it and reaches OWNER's pull. Two sections, then one question.
 OWNED_PAGE = "capture-owned"
@@ -348,6 +410,10 @@ SAMPLE_PAGES = (
      ("--comments", "--owner", OWNER)),
     ("capture-palette", "Capture palette", PALETTE_BODY,
      ("--comments", "--owner", OWNER)),
+    ("capture-tables", "Capture tables", TABLES_BODY,
+     ("--comments", "--owner", OWNER)),
+    ("capture-tables-report", "Capture tables report", TABLES_BODY,
+     ("--variant", "report", "--comments", "--owner", OWNER)),
 )
 
 

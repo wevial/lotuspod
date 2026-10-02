@@ -18,6 +18,7 @@
 // without that room a thread opens over the text, in a popover under what
 // opened it (div.artifact-comments-popover), or on a phone in a bottom sheet
 // (div.artifact-comments-bottom-sheet) that steps through the page's threads.
+// A top-level table is kept short of the panel, open or folded.
 // Words selected in the body can be commented on: a pill by the selection
 // opens a composer, and each thread on a passage highlights its words with a
 // number, found again from its quote on every revision of the page. It

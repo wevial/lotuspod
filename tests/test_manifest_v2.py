@@ -1676,14 +1676,33 @@ class ReportVariantTests(TempDirTestCase):
         self.assertIn("box-shadow: none", header)
         self.assertIn("border-bottom: 1px solid var(--hairline)", header)
 
-    def test_report_tables_lay_out_as_tables_at_the_reading_column(self):
+    def test_report_tables_scroll_inside_themselves_as_article_tables_do(self):
+        """A report table keeps the article's scroll container (css/prose.css);
+        display: table would grow it past its cap to its min-content width."""
         table = next(
             rule for rule in self.css.split("}")
             if ".artifact--report .artifact-body table" in rule
         )
-        self.assertIn("display: table", table)
-        self.assertIn("width: var(--measure-full)", table)
+        self.assertNotIn("display:", table)
+        self.assertNotIn("width:", table)
         self.assertNotIn("overflow", table)
+        article = re.search(
+            r"(?m)^\.artifact-body table \{([^}]*)\}", self.css
+        ).group(1)
+        self.assertIn("display: block", article)
+        self.assertIn("overflow-x: auto", article)
+        self.assertIn("max-width: 100%", article)
+        first = next(
+            rule for rule in self.css.split("}")
+            if ".artifact--report .artifact-body td:first-child" in rule
+        )
+        self.assertNotIn("nowrap", first)
+        self.assertIn("max-width:", first)
+        self.assertIn(
+            "max-width: min(var(--measure-full), "
+            "var(--table-room, var(--measure-full)))",
+            self.css,
+        )
         self.assertIn("overflow-wrap: anywhere", self.report_rules)
         self.assertIn("max-width: 100rem", self.report_rules)
 

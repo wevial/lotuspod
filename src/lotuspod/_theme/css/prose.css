@@ -15,9 +15,12 @@
   width: max-content;
 }
 
+/* A cell never narrows past a readable width: a table with more columns than
+   its width can hold at that scrolls rather than wrapping a word per line. */
 .artifact-body th,
 .artifact-body td {
   border-bottom: 1px solid var(--hairline);
+  min-width: 6rem;
   padding: 0.6rem 0.9rem;
   text-align: left;
   vertical-align: top;
@@ -194,6 +197,14 @@
 .artifact-section-body > table,
 .artifact-section-body > pre {
   max-width: var(--measure-full);
+}
+
+/* A table stops short of the comments panel fixed over the margin, open or
+   folded: the page script (js/tables.js) publishes the room left of it as
+   --table-room. Without the script, the container's width is the cap. */
+.artifact-body > table,
+.artifact-section-body > table {
+  max-width: min(var(--measure-full), var(--table-room, var(--measure-full)));
 }
 
 .artifact-body > pre,

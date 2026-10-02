@@ -286,6 +286,7 @@ THEME_SOURCES = {
         "js/narrow.js",
         "js/live-page.js",
         "js/comments.js",
+        "js/tables.js",
         "js/page-close.js",
     ),
 }
