@@ -273,6 +273,7 @@ THEME_SOURCES = {
         "css/base.css",
         "css/forms.css",
         "css/decisions.css",
+        "css/attachments.css",
         "css/comments.css",
         "css/narrow.css",
         "css/live-page.css",
@@ -284,6 +285,7 @@ THEME_SOURCES = {
         "js/page-open.js",
         "js/decisions.js",
         "js/narrow.js",
+        "js/attachments.js",
         "js/live-page.js",
         "js/comments.js",
         "js/tables.js",
@@ -1851,8 +1853,8 @@ class _AllowListHandler(SimpleHTTPRequestHandler):
 
     /api paths never reach the file system or method dispatch: whatever the
     method, each is answered only after the request's Access assertion
-    verifies (see parse_request and _serve_api). The answers, comments
-    and revision routes are lotuspod.api's.
+    verifies (see parse_request and _serve_api). The answers, comments,
+    media and revision routes are lotuspod.api's.
     """
 
     # Whether the response being written is a page's, and the type of the
@@ -2031,12 +2033,16 @@ def serve_socket_path(db_path: Path, socket_arg: str) -> Path:
 def _make_server(out_dir: Path, host: str, port: int,
                  verifier: access.Verifier | None = None,
                  db_path: Path | None = None,
-                 window: int = routing.DEFAULT_WINDOW) -> ThreadingHTTPServer:
+                 window: int = routing.DEFAULT_WINDOW,
+                 max_image_bytes: int = media.DEFAULT_MAX_BYTES) -> ThreadingHTTPServer:
     """The allow-list server; /api answers 503 access_unconfigured without a
-    verifier, and has no answers, comments and revision routes without a database."""
+    verifier, and has no answers, comments, media and revision routes without
+    a database. Uploads go to the media store beside out_dir, within
+    max_image_bytes."""
     routes = None
     if db_path is not None:
-        routes = api.Api(db.Database(db_path), partial(api_page, out_dir), window)
+        routes = api.Api(db.Database(db_path), partial(api_page, out_dir), window,
+                         media_dir=media.media_dir(out_dir), max_image_bytes=max_image_bytes)
     handler = partial(
         _AllowListHandler, directory=str(out_dir), root=out_dir, verifier=verifier,
         api=routes,
@@ -2087,12 +2093,13 @@ def cmd_serve(args: argparse.Namespace) -> int:
     socket_path = serve_socket_path(db_path, args.socket)
     window = owner_window(args.owner_window)
     claim_sec = claim_seconds()
+    image_cap = media_cap()
     host = resolve_serve_host(args.host)
     verifier = access_verifier()
 
     try:
         server = _make_server(out_dir, host, args.port, verifier=verifier, db_path=db_path,
-                              window=window)
+                              window=window, max_image_bytes=image_cap)
     except OSError as exc:
         print(f"error: cannot bind {host}:{args.port}: {exc}", file=sys.stderr)
         return 1

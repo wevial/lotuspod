@@ -1,0 +1,126 @@
+/* Images on a comment (attachments.js). In a composer the images attached
+   sit under the field's frame, each a thumbnail with its Remove button,
+   beside the "Add image" button, and the status line moves below them.
+   Under a comment its images are a row of thumbnails, each a link to the
+   full size. A thumbnail's width and height attributes are its drawn size,
+   so its box is there before its bytes. Every rule here is one class more
+   specific than the composer's button rules in comments.css, which come
+   later. */
+:is(.artifact-comment-form, .artifact-comment-reply) .artifact-attach {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  grid-column: 1 / -1;
+  grid-row: 2;
+  margin: 0.45rem 0.6rem 0;
+}
+
+:is(.artifact-comment-form, .artifact-comment-reply) .artifact-comment-actions .artifact-comment-status {
+  grid-row: 3;
+}
+
+.artifact-attach .artifact-attach-tray,
+.artifact-comment-col .artifact-comment-images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.artifact-attach .artifact-attach-tray[hidden] {
+  display: none;
+}
+
+.artifact-attach .artifact-attach-item,
+.artifact-comment-images > li {
+  margin: 0;
+  padding: 0;
+}
+
+.artifact-attach .artifact-attach-item {
+  align-items: flex-start;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.artifact-attach-thumb {
+  background: var(--color-glow);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-block);
+  display: block;
+  object-fit: cover;
+}
+
+.artifact-attach .artifact-attach-holder {
+  align-items: center;
+  background: var(--color-glow);
+  border: 1px dashed var(--hairline-strong);
+  border-radius: var(--radius-block);
+  color: var(--color-muted-lavender);
+  display: flex;
+  font-size: 0.78rem;
+  height: 4.5rem;
+  justify-content: center;
+  width: 4.5rem;
+}
+
+:is(.artifact-comment-form, .artifact-comment-reply) .artifact-attach :is(.artifact-attach-add, .artifact-attach-remove) {
+  appearance: none;
+  background: none;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-pill);
+  color: var(--color-lavender);
+  cursor: pointer;
+  font-family: var(--font-body);
+  font-size: 0.8rem;
+  height: auto;
+  line-height: 1.4;
+  margin: 0;
+  overflow: visible;
+  padding: 0.15rem 0.65rem;
+  position: static;
+  width: auto;
+}
+
+:is(.artifact-comment-form, .artifact-comment-reply) .artifact-attach .artifact-attach-remove {
+  border-color: transparent;
+  color: var(--color-muted-lavender);
+  padding: 0 0.3rem;
+}
+
+:is(.artifact-comment-form, .artifact-comment-reply) .artifact-attach :is(.artifact-attach-add, .artifact-attach-remove)::before,
+:is(.artifact-comment-form, .artifact-comment-reply) .artifact-attach :is(.artifact-attach-add, .artifact-attach-remove)::after {
+  content: none;
+}
+
+:is(.artifact-comment-form, .artifact-comment-reply) .artifact-attach :is(.artifact-attach-add, .artifact-attach-remove):hover {
+  background: none;
+  color: var(--color-pale-lavender);
+}
+
+:is(.artifact-comment-form, .artifact-comment-reply) .artifact-attach :is(.artifact-attach-add, .artifact-attach-remove):disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.artifact-comment-col .artifact-comment-images {
+  margin-top: 0.35rem;
+}
+
+.artifact-comment-item--reader .artifact-comment-images {
+  justify-content: flex-end;
+}
+
+.artifact-comment-image {
+  border-radius: var(--radius-block);
+  display: block;
+}
+
+.artifact-comment-image:focus-visible {
+  outline: 2px solid var(--color-lavender);
+  outline-offset: 2px;
+}

@@ -19,6 +19,8 @@
     var shown = new Map();
     // Each box's form for a new thread, wherever it is shown.
     var forms = new Map();
+    // Each composer's attachments, by its form.
+    var attached = new Map();
 
     boxes.forEach(function (box) {
       sections.set(box.dataset.section, box);
@@ -108,6 +110,11 @@
       // A passage's highlight is described by its thread's first comment.
       said.id = "artifact-comment-text-" + entry.id;
       drawn.column.appendChild(said);
+      var images = commentImages(entry);
+      if (images) {
+        said.hidden = !entry.text;
+        drawn.column.appendChild(images);
+      }
       return drawn.item;
     }
 
@@ -314,10 +321,22 @@
       return "Not saved (" + error + "). Try again.";
     }
 
-    // Post body from form; the stored row, or null with the form told why.
+    // Post body from form, with the images attached to it; the stored row,
+    // or null with the form told why. While it saves, the composer takes no
+    // other image and keeps those it sends.
     async function post(form, body) {
       var status = form.querySelector(".artifact-comment-status");
       var button = form.querySelector('button[type="submit"]');
+      var images = attached.get(form);
+      if (images && images.busy()) {
+        status.textContent = "Wait until the images have uploaded.";
+        return null;
+      }
+      var names = images ? images.sending() : [];
+      if (names.length) {
+        body.images = names;
+      }
+      var saved = false;
       button.disabled = true;
       status.textContent = "Saving...";
       try {
@@ -333,11 +352,15 @@
         }
         status.textContent = "";
         form.elements.text.value = "";
+        saved = true;
         return payload;
       } catch (ignored) {
         status.textContent = "Not saved: the site did not answer. Try again.";
         return null;
       } finally {
+        if (images) {
+          images.sent(saved);
+        }
         button.disabled = false;
       }
     }
@@ -381,6 +404,7 @@
       status.setAttribute("role", "status");
       actions.appendChild(status);
       form.appendChild(actions);
+      attached.set(form, attachments(form, text));
       thread.toggle = toggle;
       thread.field = text;
       thread.unfold = unfold;
@@ -614,17 +638,20 @@
       };
 
       // The open composer's words, its section (and where its box is among
-      // the page's) and what is written in it, to open again after a reload
-      // (api.reopen); null when none is open.
+      // the page's), what is written in it and the images attached, to open
+      // again after a reload (api.reopen); null when none is open. held
+      // says whether it has images attached or on their way.
       api.writing = function () {
         return open ? {
           quote: open.quote, section: open.box.dataset.section, index: boxes.indexOf(open.box),
-          text: open.field.value,
+          text: open.field.value, images: attached.get(open.form).kept(),
+          held: attached.get(open.form).held(),
         } : null;
       };
 
       // Open a composer again on the words kept, where the page still has
-      // them, holding the text kept; false when it has them no more.
+      // them, holding the text and images kept; false when it has them no
+      // more.
       api.reopen = function (kept) {
         if (!article || !kept.quote || typeof kept.quote.exact !== "string") {
           return false;
@@ -638,6 +665,10 @@
         }
         compose({ box: box, start: spot.start, quote: kept.quote });
         open.field.value = String(kept.text || "");
+        var over = attached.get(open.form).restore(kept.images);
+        if (over) {
+          open.form.querySelector(".artifact-comment-status").textContent = over;
+        }
         return true;
       };
 
@@ -805,13 +836,16 @@
         status.setAttribute("role", "status");
         actions.append(send, status);
         form.append(field, actions);
+        attached.set(form, attachments(form, field));
         var quit = element("button", "artifact-passage-cancel", "Cancel");
         quit.type = "button";
         holder.append(form, quit);
         var marks = wrap(article, found.start, found.start + found.quote.exact.length, function () {
           return element("mark", "artifact-passage artifact-passage--pending");
         });
-        var mine = { holder: holder, marks: marks, box: found.box, quote: found.quote, field: field };
+        var mine = {
+          holder: holder, marks: marks, box: found.box, quote: found.quote, field: field, form: form,
+        };
         open = mine;
         document.getSelection().removeAllRanges();
         api.place();
@@ -1204,7 +1238,7 @@
             if (quoted) {
               words.replaceChildren.apply(words, passages.said(thread));
             } else {
-              words.textContent = opening(thread.root.text);
+              words.textContent = opening(thread.root.text || imageWords(thread.root));
             }
           });
         }
@@ -1896,13 +1930,19 @@
         var response = await fetch(COMMENTS + "?page=" + encodeURIComponent(page));
         if (response.status === 401) {
           reading = false;
+          settleImageCap(null, SIGNED_OUT);
           signedOut();
           restore();
           return;
         }
-        if (response.status === 200) {
-          var payload = await json(response);
-          ((payload && payload.threads) || []).forEach(function (entry) {
+        var payload = response.status === 200 ? await json(response) : null;
+        if (payload && typeof payload.maxImageBytes === "number") {
+          settleImageCap(payload.maxImageBytes);
+        } else {
+          settleImageCap(null, NO_CAP);
+        }
+        if (payload) {
+          (payload.threads || []).forEach(function (entry) {
             if (add(entry)) {
               touched = true;
             }
@@ -1911,6 +1951,7 @@
         }
       } catch (ignored) {
         // A failed read keeps the schedule.
+        settleImageCap(null, NO_CAP);
       }
       reading = false;
       refresh();
@@ -1926,35 +1967,41 @@
     function composers() {
       var found = [];
       forms.forEach(function (form, box) {
-        found.push({ section: box.dataset.section, index: boxes.indexOf(box), field: form.elements.text });
+        found.push({
+          section: box.dataset.section, index: boxes.indexOf(box), field: form.elements.text,
+          images: attached.get(form),
+        });
       });
       shown.forEach(function (thread) {
         found.push({
           thread: thread.root.id, section: thread.root.section, index: boxes.indexOf(thread.box),
-          field: thread.field,
+          field: thread.field, images: attached.get(thread.field.form),
         });
       });
       return found;
     }
 
+    // Whether a composer holds text or images not sent.
+    function holding(each) {
+      return each.field.value.trim() !== "" || each.images.held();
+    }
+
     // Kept over a reload of the page (js/live-page.js): what is open, and
-    // the text not sent in each composer.
+    // the text and uploaded images not sent in each composer. An image
+    // still uploading is unsent too, so a hidden page waits for the reader.
     live.keep({
       unsent: function () {
         var passage = passages.writing();
-        return Boolean(passage && passage.text.trim()) || composers().some(function (each) {
-          return each.field.value.trim() !== "";
-        });
+        return Boolean(passage && (passage.text.trim() || passage.held)) || composers().some(holding);
       },
       save: function () {
         return {
           open: panel.held(),
           passage: passages.writing(),
-          texts: composers().filter(function (each) {
-            return each.field.value.trim() !== "";
-          }).map(function (each) {
+          texts: composers().filter(holding).map(function (each) {
             return {
               thread: each.thread, section: each.section, index: each.index, text: each.field.value,
+              images: each.images.kept(),
             };
           }),
         };
@@ -1962,13 +2009,15 @@
     });
 
     // What was kept before the page reloaded, given back once the threads
-    // are first read: the text in each composer, then what was open, then
+    // are first read: the text and images in each composer, then what was
+    // open, then
     // the scroll position the reader had (live.place: opening a thread over
     // the text may scroll the page to it). Text whose place the new
     // revision no longer has (a section renamed or gone, a passage's words
     // changed, a thread not read) is never lost: it goes to the form for a
     // new thread on its section, else on the box where its section was,
     // else on the page's first, which opens with the reason beside it.
+    // Images go with their text, up to MAX_IMAGES a composer.
     var kept = live.kept();
     function restore() {
       var was = kept;
@@ -1977,26 +2026,43 @@
         return;
       }
       var moved = null;
+      // Add each's text and images to form; why some images were not.
+      function join(form, each) {
+        var field = form.elements.text;
+        var text = String(each.text || "");
+        if (text.trim()) {
+          field.value = field.value.trim() ? field.value + "\n\n" + text : text;
+        }
+        return attached.get(form).restore(each.images);
+      }
+      function told(form, why) {
+        if (why) {
+          form.querySelector(".artifact-comment-status").textContent = why;
+        }
+      }
       function rehome(each, why) {
         var box = (typeof each.section === "string" && sections.get(each.section)) ||
           boxes[Number(each.index)] || boxes[0];
-        var field = forms.get(box).elements.text;
-        field.value = (field.value.trim() ? field.value + "\n\n" : "") + String(each.text);
-        forms.get(box).querySelector(".artifact-comment-status").textContent = why;
+        var form = forms.get(box);
+        var over = join(form, each);
+        told(form, over ? why + " " + over : why);
         moved = box;
       }
+      function worth(each) {
+        return String(each.text || "").trim() !== "" || (Array.isArray(each.images) && each.images.length > 0);
+      }
       (Array.isArray(was.texts) ? was.texts : []).forEach(function (each) {
-        if (!each || !String(each.text || "").trim()) {
+        if (!each || typeof each !== "object" || !worth(each)) {
           return;
         }
         var thread = each.thread ? shown.get(each.thread) : null;
         var box = !each.thread && typeof each.section === "string" ? sections.get(each.section) : null;
         if (thread) {
-          thread.field.value = String(each.text);
+          thread.field.value = String(each.text || "");
+          told(thread.field.form, attached.get(thread.field.form).restore(each.images));
           thread.unfold(true);
         } else if (box) {
-          var field = forms.get(box).elements.text;
-          field.value = field.value.trim() ? field.value + "\n\n" + String(each.text) : String(each.text);
+          told(forms.get(box), join(forms.get(box), each));
         } else {
           rehome(each, PLACE_GONE);
         }
@@ -2005,7 +2071,7 @@
         panel.reopen(was.open);
       }
       var passage = was.passage && typeof was.passage === "object" ? was.passage : null;
-      if (passage && !passages.reopen(passage) && String(passage.text || "").trim()) {
+      if (passage && !passages.reopen(passage) && worth(passage)) {
         rehome(passage, PASSAGE_GONE);
       }
       if (moved) {
@@ -2039,6 +2105,7 @@
 
     boxes.forEach(function (box) {
       var form = forms.get(box);
+      attached.set(form, attachments(form, form.elements.text));
       form.addEventListener("submit", async function (event) {
         event.preventDefault();
         var row = await post(form, {

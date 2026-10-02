@@ -412,6 +412,20 @@ bare directory, any other name, a dotfile, a climb, a symbolic link - is a
 404. The URLs are same-origin, which the page policy's `img-src 'self'`
 allows.
 
+A reader adds images to the store too, to attach to a comment (see
+[Comments](#comments)). `POST /api/media`, behind the Access check and the
+cross-origin refusal of the other POSTs (see [Answers and
+comments](#answers-and-comments)), takes one image as its body with
+`Content-Type` `image/png`, `image/jpeg`, `image/webp` or `image/gif`. The
+bytes are checked as a page's images are, under that declared type, within the
+config's `[media] max_image_bytes` (which serve reads at start), and stored
+once under their name; it answers 201 `{name, url, width, height}`. Any other
+type, SVG included, is 415 `unsupported_media_type`; a body over the cap 413
+`body_too_large`; bytes that are not a whole image of the declared type 400
+`invalid_image`. A reader has 20 accepted uploads in any 10 minutes, counted
+in serve's memory; the next is 429 `too_many_uploads`. Nothing refused is
+stored. Images no comment names are kept.
+
 ## Who is reading: Cloudflare Access
 
 The site sits behind Cloudflare Access, and serve's `/api` routes know the
@@ -457,7 +471,8 @@ three. A `--db` inside the artifacts directory is refused at start (exit 1):
 the artifacts repository commits everything there. serve never answers the
 file either way.
 
-Five routes sit behind the Access check above; each row records the verified
+Five routes sit behind the Access check above (with `POST /api/media`, under
+[Serve](#serve)); each row records the verified
 reader as `actor`, the page's `lotuspod:revision` when it was written as
 `revision`, and `createdAt` (UTC, ISO 8601). Ids are integers never given out
 twice.
@@ -477,9 +492,14 @@ twice.
   `quote`, and its routing state (`state` and `owner`, below). A reply takes its thread's section, and a
   reply to a reply joins the same thread: `parent` is always the thread's first
   comment.
-- `GET /api/comments?page=NAME` answers `{page, revision, threads}`: the
-  page's current revision, and each thread as `{root, replies, resolution}`,
-  threads and replies oldest first.
+- A new thread or reply may name up to 4 uploaded images as `images`, a list
+  of their stored names in the order they are shown; a comment with images may
+  have empty `text`. Every comment row carries `images`, each `{name, url,
+  width, height}`, and `[]` when it has none.
+- `GET /api/comments?page=NAME` answers `{page, revision, threads,
+  maxImageBytes}`: the page's current revision, each thread as `{root,
+  replies, resolution}`, threads and replies oldest first, and the largest
+  image `POST /api/media` takes.
 - `GET /api/revision?page=NAME` answers `{revision}`, the page's current
   revision alone; it is only read (any other method is 405).
 
@@ -492,15 +512,16 @@ its tab is seen again. Once they differ, a banner fixed over the top of the
 window, which moves no text and is announced politely, reads "A newer version
 of this page is available" with a Reload button. Reload brings the new
 revision back at the same scroll position, with the comments thread that was
-open open again and any comment or reply not yet sent back in its composer
-(kept per page in sessionStorage; where the browser keeps nothing, the page
-still reloads, at its top). Text written where the new revision has no
-place for it, on a section renamed or removed or on words that changed,
-opens in a form for a new thread on its section, else on the section in
-the same place, else on the first, saying why. A page that notices while its
-tab is hidden, with no unsent text in a composer, reloads itself the same
-way, so it is current when the reader comes back; with unsent text it waits,
-the banner showing.
+open open again and any comment or reply not yet sent back in its composer,
+its text and its uploaded images (kept per page in sessionStorage; where the
+browser keeps nothing, the page still reloads, at its top). A comment
+written where the new revision has no place for it, on a section renamed or
+removed or on words that changed, opens in a form for a new thread on its
+section, else on the section in the same place, else on the first, saying
+why. A page that notices while its tab is hidden, with no unsent text or
+image in a composer, reloads itself the same way, so it is current when the
+reader comes back; with one, or an image still uploading, it waits, the
+banner showing.
 
 A thread is resolved or open, and every change is kept: who made it and
 when. A thread's `resolution` is `{resolved, actor, at}` as its newest
@@ -527,7 +548,9 @@ heading id's length is taken, since it must name one of the page's boxes),
 `text` outside 1 to 4000, `note` over 4000, a quote whose `exact` is outside 1 to 500 or
 whose `prefix` or `suffix` is over 32 (code points, as Python counts them), a new
 thread's `revision` that is not a string of at most 100 characters, and any
-`revision` on a reply. A page serve would not answer (hidden,
+`revision` on a reply, and `images` that is not a list of 1 to 4 distinct
+stored names (an empty list, five, or a path among them). A name not in the
+media store is 400 `unknown_image`. A page serve would not answer (hidden,
 missing, not a page) is 404 `unknown_page`, and a reply to no comment on its
 page 404 `unknown_parent`. A read without exactly one `page` is 400
 `invalid_query`. An answer is checked against the page's own decision forms
@@ -650,6 +673,20 @@ read without the script keeps the plain box. A thread whose section the page
 no longer has is listed at the end of the body under "Comments on sections
 that have changed" (in the panel, where there is one). Every author and text
 is set as text, never as markup.
+
+Every composer takes up to 4 images, pasted into its field or picked with its
+"Add image" button. The page refuses a file that is not a PNG, JPEG, WebP or
+GIF, or is over the `maxImageBytes` the threads route reports, in the
+composer's status line, and never sends it (a file attached before the page's
+first read of the threads waits for it); any other is uploaded to
+`POST /api/media` at once and shown as a small thumbnail with a Remove button,
+and sending the comment names the uploaded images. While it saves, the
+composer takes no other image and its images cannot be removed. An image
+attached twice is attached once. A thumbnail shows the uploaded `/media/`
+URL, never a `blob:` one, so the page policy's `img-src 'self' data:` holds. A comment's images are drawn under its text as
+thumbnails, each a link that opens the full-size image in a new tab; each
+box is sized from the stored width and height, so nothing moves when the bytes
+arrive. A comment of images alone draws no empty bubble.
 
 A comment's `state` is never drawn inside a bubble or a name line. HANDLE is
 the handle it is routed to (its `owner`, else the page's):

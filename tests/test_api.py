@@ -9,6 +9,7 @@ Run from the repo root:
 
 from __future__ import annotations
 
+import hashlib
 import http.client
 import io
 import json
@@ -25,7 +26,7 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from lotuspod import access, api, cli, db, decisions, routing  # noqa: E402
+from lotuspod import access, api, cli, db, decisions, media, routing  # noqa: E402
 from tests import access_keys as keys  # noqa: E402
 
 HOST = "127.0.0.1"
@@ -114,10 +115,13 @@ class ApiTestCase(unittest.TestCase):
         self.server = None
         self.start()
 
-    def start(self, db_path: Path | None = None) -> None:
-        verifier = access.Verifier(access.parse_config(keys.config_section()))
+    def start(self, db_path: Path | None = None, *, allowed_emails: str = keys.EMAIL,
+              max_image_bytes: int = media.DEFAULT_MAX_BYTES) -> None:
+        verifier = access.Verifier(access.parse_config(
+            keys.config_section(allowed_emails=allowed_emails)))
         server = cli._make_server(self.out_dir, HOST, 0, verifier=verifier,
-                                  db_path=db_path or self.db_path)
+                                  db_path=db_path or self.db_path,
+                                  max_image_bytes=max_image_bytes)
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         self.server = server
@@ -185,7 +189,8 @@ class ApiTestCase(unittest.TestCase):
                          (200, {"page": page, "questions": {}}))
         self.assertEqual(self.ask("GET", f"/api/comments?page={page}"),
                          (200, {"page": page, "revision": self.page_revision(page),
-                                "threads": []}))
+                                "threads": [],
+                                "maxImageBytes": media.DEFAULT_MAX_BYTES}))
 
 
 class AnswerTests(ApiTestCase):
@@ -317,7 +322,7 @@ class CommentTests(ApiTestCase):
             {key: root[key] for key in root if key not in ("id", "createdAt")},
             {"page": "plan", "section": "risks", "sectionTitle": "Risks",
              "revision": self.revision, "parent": None, "text": "What if it does?",
-             "quote": quote, "actor": SHOWN,
+             "quote": quote, "images": [], "actor": SHOWN,
              # The page has no owner and the responder has never pulled.
              "state": "unavailable", "owner": "responder"},
         )
@@ -335,7 +340,8 @@ class CommentTests(ApiTestCase):
             self.ask("GET", "/api/comments?page=plan"),
             (200, {"page": "plan", "revision": self.revision,
                    "threads": [{"root": root, "replies": [reply, deeper],
-                                "resolution": db.UNRESOLVED}]}),
+                                "resolution": db.UNRESOLVED}],
+                   "maxImageBytes": media.DEFAULT_MAX_BYTES}),
         )
 
     def test_a_new_thread_names_the_revision_the_reader_read(self):
@@ -712,6 +718,203 @@ class RestartTests(ApiTestCase):
         _, later = self.answer()
         self.assertEqual(later["supersedes"], answer["id"])
         self.assertGreater(later["id"], answer["id"])
+
+
+MEDIA_FIXTURES = Path(__file__).resolve().parent / "fixtures" / "media"
+PNG = MEDIA_FIXTURES / "chart-1600x600.png"
+JPEG = MEDIA_FIXTURES / "fish-320x240.jpg"
+WEBP = MEDIA_FIXTURES / "lily-lossy-240x160.webp"
+GIF = MEDIA_FIXTURES / "frog-140x100.gif"
+SVG = MEDIA_FIXTURES / "logo.svg"
+PADDED = MEDIA_FIXTURES / "padded-48x32-2000-bytes.png"
+SIZE = re.compile(r"-(\d+)x(\d+)")
+UPLOADS = ((PNG, "image/png", "png"), (JPEG, "image/jpeg", "jpg"),
+           (WEBP, "image/webp", "webp"), (GIF, "image/gif", "gif"))
+OTHER_READER = "heron@example.com"
+
+
+class MediaTestCase(ApiTestCase):
+    """POST /api/media into the media store beside the output directory."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.media_dir = media.media_dir(self.out_dir)
+
+    def upload(self, data: bytes | Path, media_type: str, **kwargs):
+        if isinstance(data, Path):
+            data = data.read_bytes()
+        headers = {"Content-Type": media_type, **kwargs.pop("headers", {})}
+        return self.ask("POST", "/api/media", raw=data, headers=headers, **kwargs)
+
+    def stored(self) -> list[str]:
+        """The names in the media store."""
+        if not self.media_dir.is_dir():
+            return []
+        return sorted(path.name for path in self.media_dir.iterdir())
+
+    def api(self) -> api.Api:
+        """The routes the running server answers with."""
+        return self.server.RequestHandlerClass.keywords["api"]
+
+
+class UploadTests(MediaTestCase):
+    def test_each_type_is_stored_under_its_hash_with_its_size(self):
+        for path, media_type, extension in UPLOADS:
+            with self.subTest(path.name):
+                status, got = self.upload(path, media_type)
+                self.assertEqual(status, 201, got)
+                name = f"{hashlib.sha256(path.read_bytes()).hexdigest()}.{extension}"
+                width, height = (int(n) for n in SIZE.search(path.name).groups())
+                self.assertEqual(got, {"name": name, "url": f"/media/{name}",
+                                       "width": width, "height": height})
+                self.assertEqual((self.media_dir / name).read_bytes(), path.read_bytes())
+        before = self.stored()
+        self.assertEqual(len(before), 4)
+        status, again = self.upload(PNG, "image/png")
+        self.assertEqual(status, 201, again)
+        self.assertEqual(self.stored(), before)
+
+    def test_uploads_not_a_whole_image_of_their_type_store_nothing(self):
+        png = PNG.read_bytes()
+        for label, data, media_type, kwargs, status, error in (
+            ("SVG", SVG.read_bytes(), "image/svg+xml", {}, 415, "unsupported_media_type"),
+            ("HTML", b"<!doctype html><p>Hello</p>", "text/html", {}, 415,
+             "unsupported_media_type"),
+            ("JPEG declared PNG", JPEG.read_bytes(), "image/png", {}, 400, "invalid_image"),
+            ("PNG cut in half", png[:len(png) // 2], "image/png", {}, 400, "invalid_image"),
+            ("another site", png, "image/png",
+             {"headers": {"Origin": "https://elsewhere.example"}}, 403, "cross_origin"),
+        ):
+            with self.subTest(label):
+                self.assertEqual(self.upload(data, media_type, **kwargs),
+                                 (status, {"error": error}))
+        status, _ = self.upload(png, "image/png", assertion=None)
+        self.assertEqual(status, 401)
+        self.assertEqual(self.stored(), [])
+
+    def test_only_a_post_is_taken(self):
+        status, got = self.ask("GET", "/api/media")
+        self.assertEqual((status, got), (405, {"error": "method_not_allowed"}))
+        self.assertEqual(self.stored(), [])
+
+    def test_an_upload_over_the_cap_is_refused(self):
+        self.stop()
+        self.start(max_image_bytes=2000)
+        self.assertEqual(PADDED.stat().st_size, 2000)
+        self.assertEqual(self.upload(PNG, "image/png"), (413, {"error": "body_too_large"}))
+        self.assertEqual(self.stored(), [])
+        status, got = self.upload(PADDED, "image/png")
+        self.assertEqual(status, 201, got)
+        self.assertEqual(self.stored(), [got["name"]])
+        _, threads = self.ask("GET", "/api/comments?page=plan")
+        self.assertEqual(threads["maxImageBytes"], 2000)
+
+    def test_a_reader_has_twenty_uploads_in_any_ten_minutes(self):
+        self.stop()
+        self.start(allowed_emails=f"{keys.EMAIL} {OTHER_READER}")
+        now = [1_800_000_000.0]
+        self.api().clock = lambda: now[0]
+        for n in range(api.UPLOAD_LIMIT):
+            now[0] += 1
+            self.assertEqual(self.upload(GIF, "image/gif")[0], 201, n)
+        self.assertEqual(api.UPLOAD_LIMIT, 20)
+        self.assertEqual(self.upload(GIF, "image/gif"), (429, {"error": "too_many_uploads"}))
+        other = keys.assertion(OTHER_READER)
+        self.assertEqual(self.upload(JPEG, "image/jpeg", assertion=other)[0], 201)
+        self.assertEqual(self.upload(PNG, "image/png"), (429, {"error": "too_many_uploads"}))
+        self.assertEqual(len(self.stored()), 2)
+        # Ten minutes after the first upload, it no longer counts.
+        now[0] = 1_800_000_000.0 + 1 + api.UPLOAD_WINDOW
+        status, got = self.upload(PNG, "image/png")
+        self.assertEqual(status, 201, got)
+        self.assertIn(got["name"], self.stored())
+        self.assertEqual(self.upload(PNG, "image/png"), (429, {"error": "too_many_uploads"}))
+
+
+class CommentImageTests(MediaTestCase):
+    def test_a_reply_names_its_images_in_order(self):
+        _, fish = self.upload(JPEG, "image/jpeg")
+        _, chart = self.upload(PNG, "image/png")
+        status, root = self.comment(section="risks", text="No images.")
+        self.assertEqual(status, 201, root)
+        self.assertEqual(root["images"], [])
+        status, reply = self.comment(parent=root["id"], text="",
+                                     images=[fish["name"], chart["name"]])
+        self.assertEqual(status, 201, reply)
+        self.assertEqual(reply["text"], "")
+        self.assertEqual(reply["images"], [fish, chart])
+        status, got = self.ask("GET", "/api/comments?page=plan")
+        self.assertEqual(status, 200)
+        [thread] = got["threads"]
+        self.assertEqual(thread["root"]["images"], [])
+        self.assertEqual(thread["replies"], [reply])
+        self.assertEqual([(image["url"], image["width"], image["height"])
+                          for image in thread["replies"][0]["images"]],
+                         [(fish["url"], 320, 240), (chart["url"], 1600, 600)])
+
+    def test_a_new_thread_names_its_images(self):
+        _, frog = self.upload(GIF, "image/gif")
+        status, root = self.comment(section="goals", text="", images=[frog["name"]])
+        self.assertEqual(status, 201, root)
+        self.assertEqual(root["images"], [frog])
+        self.assertEqual(db.Database(self.db_path).comment(root["id"])["images"], [frog])
+
+    def test_images_not_named_as_stored_are_refused(self):
+        uploaded = [self.upload(path, media_type)[1]["name"] for path, media_type, _ in UPLOADS]
+        uploaded.append(self.upload(PADDED, "image/png")[1]["name"])
+        self.assertEqual(len(set(uploaded)), 5)
+        _, root = self.comment(section="risks", text="A thread.")
+        absent = "0" * 64 + ".png"
+        self.assertFalse((self.media_dir / absent).exists())
+        self.assertTrue((self.media_dir / ".." / self.db_path.name).is_file())
+        for label, images, error in (
+            ("not stored", [absent], "unknown_image"),
+            ("the database", ["../" + self.db_path.name], "invalid_body"),
+            ("five", uploaded, "invalid_body"),
+            ("none", [], "invalid_body"),
+            ("one twice", [uploaded[0], uploaded[0]], "invalid_body"),
+            ("not a list", uploaded[0], "invalid_body"),
+        ):
+            for kind, body in (("new thread", {"section": "risks"}),
+                               ("reply", {"parent": root["id"]})):
+                with self.subTest(label, kind=kind):
+                    self.assertEqual(self.comment(text="", images=images, **body),
+                                     (400, {"error": error}))
+        self.assertEqual(self.comment(section="risks", text=""), (400, {"error": "invalid_body"}))
+        _, got = self.ask("GET", "/api/comments?page=plan")
+        self.assertEqual(got["threads"],
+                         [{"root": root, "replies": [], "resolution": db.UNRESOLVED}])
+
+
+class SchemaTests(ApiTestCase):
+    def test_a_comment_from_before_images_keeps_its_text(self):
+        self.stop()
+        path = self.work / "before.sqlite3"
+        conn = sqlite3.connect(str(path))
+        for step in range(1, db.SCHEMA_VERSION):
+            for statement in db._SCHEMA[step]:
+                conn.execute(statement)
+        conn.execute(
+            "INSERT INTO comments (page, section, section_title, revision, parent, text,"
+            " quote, actor, created_at, state) VALUES ('plan', 'risks', 'Risks', ?, NULL,"
+            " 'Kept from before.', NULL, ?, '2026-01-02T03:04:05.000Z', 'pending')",
+            (self.revision, json.dumps(ACTOR)),
+        )
+        conn.execute(f"PRAGMA user_version = {db.SCHEMA_VERSION - 1}")
+        conn.commit()
+        conn.close()
+        self.start(path)
+        status, got = self.ask("GET", "/api/comments?page=plan")
+        self.assertEqual(status, 200, got)
+        [thread] = got["threads"]
+        self.assertEqual((thread["root"]["text"], thread["root"]["images"]),
+                         ("Kept from before.", []))
+        conn = sqlite3.connect(str(path))
+        try:
+            self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0],
+                             db.SCHEMA_VERSION)
+        finally:
+            conn.close()
 
 
 class ServeCommandTests(unittest.TestCase):

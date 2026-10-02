@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
+import { expect, test, type APIRequestContext, type Locator, type Page } from '@playwright/test';
 
 // Wide enough for the side panel: a thread opens in it.
 const WIDE = { width: 1440, height: 900 };
@@ -26,6 +26,8 @@ const OWNER = 'hermes';
 const NEWER = 'A newer version of this page is available';
 const CHECK = 60_000;
 const START = Date.parse('2026-10-02T12:00:00Z');
+const FISH = path.resolve(__dirname, '..', '..', 'tests', 'fixtures', 'media', 'fish-320x240.jpg');
+const MEDIA_URL = /^\/media\/[0-9a-f]{64}\.jpg$/;
 
 function run(...args: string[]) {
   return execFileSync(PYTHON, ['-m', 'lotuspod', ...args], {
@@ -121,6 +123,26 @@ async function setVisibility(page: Page, state: 'hidden' | 'visible') {
     Object.defineProperty(document, 'hidden', { value: state === 'hidden', configurable: true });
     document.dispatchEvent(new Event('visibilitychange'));
   }, state);
+}
+
+// Paste the fish JPEG into a field, as the clipboard hands it to the page,
+// and wait for its upload to be answered.
+async function pasteFish(page: Page, field: Locator) {
+  const base64 = fs.readFileSync(FISH).toString('base64');
+  const uploaded = page.waitForResponse((response) => new URL(response.url()).pathname === '/api/media');
+  await field.evaluate((node, base64) => {
+    const data = new DataTransfer();
+    const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+    data.items.add(new File([bytes], 'fish.jpg', { type: 'image/jpeg' }));
+    node.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }));
+  }, base64);
+  expect((await uploaded).status()).toBe(201);
+}
+
+// The thumbnails attached in a form: their /media/ paths, once drawn.
+async function attachedIn(form: Locator) {
+  return form.locator('.artifact-attach-item img').evaluateAll((images) =>
+    images.map((img) => new URL((img as HTMLImageElement).src).pathname));
 }
 
 // Where every element of the page's main column is, in the window.
@@ -482,6 +504,100 @@ test.describe('signed in', () => {
     expect(await page.evaluate(() => (window as any).__stayed)).toBe('this page');
     expect(await revisionOf(page)).toBe(first);
     await expect(field).toHaveValue(UNSENT);
+    expect(errors).toEqual([]);
+  });
+
+  test('a hidden page with only an image attached waits for the reader, the image intact', async ({ page }) => {
+    const errors = watchErrors(page);
+    const name = 'live-page-unsent-image';
+    const first = publish(name, source('Live page unsent image', 'first'));
+    await stopClock(page);
+    await open(page, name);
+    await page.locator('details.artifact-comment[data-section="findings"] summary').click();
+    const field = page.locator('.artifact-comments-panel')
+      .getByRole('textbox', { name: 'Comment on Findings' });
+    await expect(field).toBeFocused();
+    const form = page.locator('.artifact-comments-panel form.artifact-comment-form')
+      .filter({ has: page.getByRole('textbox', { name: 'Comment on Findings' }) });
+    await pasteFish(page, field);
+    await expect(form.locator('.artifact-attach-item img')).toHaveCount(1);
+    const attached = await attachedIn(form);
+    await page.evaluate(() => { (window as any).__stayed = 'this page'; });
+    await setVisibility(page, 'hidden');
+
+    publish(name, source('Live page unsent image', 'second'));
+    await page.clock.runFor(CHECK);
+    await expect(banner(page).node).toBeAttached();
+    await setVisibility(page, 'visible');
+
+    await expect(banner(page).node).toBeVisible();
+    expect(await page.evaluate(() => (window as any).__stayed)).toBe('this page');
+    expect(await revisionOf(page)).toBe(first);
+    expect(await attachedIn(form)).toEqual(attached);
+    expect(errors).toEqual([]);
+  });
+
+  test('Reload keeps the image attached in a reply with no text, and the reply sends it', async ({ page, request }) => {
+    const errors = watchErrors(page);
+    const name = 'live-page-reply-image';
+    publish(name, source('Live page reply image', 'first'));
+    const root = await comment(request, name, 'risks', 'What does the ice look like?');
+    await stopClock(page);
+    await open(page, name);
+    await page.locator('details.artifact-comment[data-section="risks"] summary').click();
+    const entry = page.locator(`.artifact-comments-panel li.artifact-comments-entry[data-thread="${root.id}"]`);
+    await expect(entry).toHaveClass(/artifact-comments-entry--open/);
+    const node = entry.locator('.artifact-comment-thread');
+    await node.locator('.artifact-comment-toggle').click();
+    const form = node.locator('form.artifact-comment-reply');
+    const field = form.locator('textarea[name="text"]');
+    await pasteFish(page, field);
+    const attached = await attachedIn(form);
+    expect(attached).toHaveLength(1);
+    expect(attached[0]).toMatch(MEDIA_URL);
+
+    const second = publish(name, source('Live page reply image', 'second'));
+    await page.clock.runFor(CHECK);
+    const loaded = page.waitForEvent('load');
+    await banner(page).reload.click();
+    await loaded;
+
+    expect(await revisionOf(page)).toBe(second);
+    await expect(field).toBeVisible();
+    await expect(field).toHaveValue('');
+    await expect(form.locator('.artifact-attach-item img')).toHaveCount(1);
+    expect(await attachedIn(form)).toEqual(attached);
+    const [posted] = await Promise.all([
+      page.waitForResponse((r) => new URL(r.url()).pathname === '/api/comments' && r.request().method() === 'POST'),
+      form.getByRole('button', { name: 'Send' }).click(),
+    ]);
+    expect(posted.status()).toBe(201);
+    expect((await posted.json()).images.map((image: { url: string }) => image.url)).toEqual(attached);
+    expect(errors).toEqual([]);
+  });
+
+  test('Reload opens a passage composer again with the image attached in it', async ({ page }) => {
+    const errors = watchErrors(page);
+    const name = 'live-page-passage-image';
+    publish(name, source('Live page passage image', 'first'));
+    await stopClock(page);
+    await open(page, name);
+    const field = await selectPassage(page, 'Risks, paragraph 1', 18);
+    const form = page.locator('form.artifact-passage-form');
+    await pasteFish(page, field);
+    const attached = await attachedIn(form);
+    expect(attached).toHaveLength(1);
+
+    const second = publish(name, source('Live page passage image', 'second'));
+    await page.clock.runFor(CHECK);
+    const loaded = page.waitForEvent('load');
+    await banner(page).reload.click();
+    await loaded;
+
+    expect(await revisionOf(page)).toBe(second);
+    await expect(page.locator('mark.artifact-passage--pending')).toHaveText('Risks, paragraph 1');
+    await expect(form.locator('.artifact-attach-item img')).toHaveCount(1);
+    expect(await attachedIn(form)).toEqual(attached);
     expect(errors).toEqual([]);
   });
 

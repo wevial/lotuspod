@@ -29,7 +29,7 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from lotuspod import access, cli, comments, db, machine  # noqa: E402
+from lotuspod import access, cli, comments, db, machine, media  # noqa: E402
 from tests import access_keys as keys  # noqa: E402
 from tests.test_forms import normalised_page  # noqa: E402
 
@@ -388,7 +388,8 @@ class SectionCheckTests(CommentsTestCase):
                 )
         revision = cli.page_revision(self.out_dir, "pond")
         self.assertEqual(self.ask("GET", "/api/comments?page=pond"),
-                         (200, {"page": "pond", "revision": revision, "threads": []}))
+                         (200, {"page": "pond", "revision": revision, "threads": [],
+                                "maxImageBytes": media.DEFAULT_MAX_BYTES}))
         status, row = self.ask("POST", "/api/comments",
                                {"page": "pond", "section": "risks", "text": "Hello"})
         self.assertEqual(status, 201, row)

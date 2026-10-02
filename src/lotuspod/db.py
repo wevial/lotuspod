@@ -35,6 +35,11 @@ A thread's resolution is kept as a history: each time a reader or an agent
 resolves or reopens it, one row in resolutions names who did and when, and
 the thread's resolution is its newest row. A reader's reply to a resolved
 thread reopens it. A resolution never changes a comment's state.
+
+A reader's comment may name up to four images in the media store
+(lotuspod.media), each kept by its stored name with its width and height; a
+comment row carries them as `images`, each with its /media/ URL, and an
+empty list when it has none.
 """
 
 from __future__ import annotations
@@ -45,10 +50,12 @@ import json
 import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Callable, Iterator, Mapping
+from typing import Callable, Iterator, Mapping, Sequence
+
+from lotuspod import media
 
 DEFAULT_NAME = "lotuspod.sqlite3"
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8
 # Seconds a connection waits for another writer before giving up.
 BUSY_TIMEOUT = 30
 # The state of a reader's comment until an agent takes it up.
@@ -159,6 +166,10 @@ _SCHEMA = {1: (
 ), 7: (
     # The model an agent's reply names as having written it.
     "ALTER TABLE comments ADD COLUMN model TEXT",
+), 8: (
+    # A reader's comment's images: a JSON list of {name, width, height}, the
+    # names stored in lotuspod-media/; NULL when it has none.
+    "ALTER TABLE comments ADD COLUMN images TEXT",
 )}
 # The settings row that holds whether the responder is paused.
 _PAUSED = "responder_paused"
@@ -226,6 +237,7 @@ def _comment(row: sqlite3.Row) -> dict:
         "parent": row["parent"],
         "text": row["text"],
         "quote": None if row["quote"] is None else json.loads(row["quote"]),
+        "images": _images(row["images"]),
         "actor": _actor(row["actor"]),
         "createdAt": row["created_at"],
         "state": row["state"],
@@ -241,6 +253,14 @@ def _comment(row: sqlite3.Row) -> dict:
     if row["model"] is not None:
         found["model"] = row["model"]
     return found
+
+
+def _images(text: str | None) -> list[dict]:
+    """A comment's stored images, each with the URL serve answers it at."""
+    if text is None:
+        return []
+    return [{"name": image["name"], "url": media.URL_PREFIX + image["name"],
+             "width": image["width"], "height": image["height"]} for image in json.loads(text)]
 
 
 def _audit(row: sqlite3.Row) -> dict:
@@ -351,24 +371,28 @@ class Database:
         return questions
 
     def add_comment(self, *, page: str, section: str, section_title: str, revision: str,
-                    text: str, quote: Mapping | None, actor: Mapping, owner: str = "") -> dict:
+                    text: str, quote: Mapping | None, actor: Mapping, owner: str = "",
+                    images: Sequence[Mapping] = ()) -> dict:
         """Store a comment opening a new thread on section of a page owned
-        by owner ("" when it has none)."""
+        by owner ("" when it has none), with its images, each {name, width,
+        height}."""
         with self._connect() as conn, _write(conn):
             return _insert_comment(
                 conn, page=page, section=section, section_title=section_title,
                 revision=revision, parent=None, text=text,
                 quote=None if quote is None else _dump(quote), actor=actor, owner=owner,
+                images=images,
             )
 
     def add_reply(self, *, page: str, parent: int, revision: str,
                   sections: Mapping[str, str], text: str, actor: Mapping,
-                  owner: str = "") -> dict:
+                  owner: str = "", images: Sequence[Mapping] = ()) -> dict:
         """Store a reply in the thread of comment parent, on its section.
 
         A reply to a reply joins the same thread: its parent is the thread's
         first comment. sections maps the page's section ids to their titles
-        at revision. UnknownParent when parent is not a comment on page.
+        at revision; images are as add_comment's. UnknownParent when parent
+        is not a comment on page.
         A reply to a resolved thread reopens it, with actor as the reopener.
         """
         with self._connect() as conn, _write(conn):
@@ -382,6 +406,7 @@ class Database:
                 conn, page=page, section=found["section"],
                 section_title=sections.get(found["section"], ""), revision=revision,
                 parent=root, text=text, quote=None, actor=actor, owner=owner,
+                images=images,
             )
             if _resolution(_newest(conn, root))["resolved"]:
                 _insert_resolution(conn, root, False, actor)
@@ -785,6 +810,13 @@ def _write(conn: sqlite3.Connection) -> Iterator[None]:
     conn.execute("COMMIT")
 
 
+def _stored_images(images: Sequence[Mapping]) -> str | None:
+    if not images:
+        return None
+    return json.dumps([{"name": image["name"], "width": image["width"],
+                        "height": image["height"]} for image in images])
+
+
 def _row(conn: sqlite3.Connection, comment_id: int) -> sqlite3.Row:
     return conn.execute("SELECT * FROM comments WHERE id = ?", (comment_id,)).fetchone()
 
@@ -847,7 +879,8 @@ def _published(conn: sqlite3.Connection, comment_id: int, credential: str, key: 
 
 def _insert_comment(conn: sqlite3.Connection, *, page: str, section: str,
                     section_title: str, revision: str, parent: int | None, text: str,
-                    quote: str | None, actor: Mapping, owner: str) -> dict:
+                    quote: str | None, actor: Mapping, owner: str,
+                    images: Sequence[Mapping] = ()) -> dict:
     # The owner's last pull as the comment arrives, read under the write lock.
     pulled = None
     if owner:
@@ -855,10 +888,10 @@ def _insert_comment(conn: sqlite3.Connection, *, page: str, section: str,
         pulled = None if found is None else found[0]
     cursor = conn.execute(
         "INSERT INTO comments (page, section, section_title, revision, parent, text,"
-        " quote, actor, created_at, state, arrival_owner, arrival_pull)"
-        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        " quote, actor, created_at, state, arrival_owner, arrival_pull, images)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (page, section, section_title, revision, parent, text, quote,
-         _dump(actor), _now(), PENDING, owner, pulled),
+         _dump(actor), _now(), PENDING, owner, pulled, _stored_images(images)),
     )
     row = conn.execute("SELECT * FROM comments WHERE id = ?", (cursor.lastrowid,))
     return _comment(row.fetchone())

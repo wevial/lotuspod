@@ -1,13 +1,14 @@
 """The reader's answers and comments over /api, for the verified reader only.
 
 serve hands a request here only after its Access assertion verifies, with
-the reader as actor. Five routes:
+the reader as actor. Six routes:
 
     POST /api/answers     {page, question, version, choice, note}
     GET  /api/answers?page=NAME
-    POST /api/comments    {page, section, text[, quote][, revision]}, {page, parent, text}
-                          or {page, thread, resolved}
+    POST /api/comments    {page, section, text[, quote][, revision][, images]},
+                          {page, parent, text[, images]} or {page, thread, resolved}
     GET  /api/comments?page=NAME
+    POST /api/media       one image's bytes
     GET  /api/revision?page=NAME
 
 A read of the comments carries the page's current revision beside its
@@ -31,6 +32,22 @@ Every reader's comment a route answers carries its routing state (see
 lotuspod.routing): `state` is `pending`, `unavailable` or `paused` until an
 agent takes it up, and `owner` is the handle it is routed to (null on an agent's reply).
 
+`images` names 1 to MAX_IMAGES images the reader uploaded, by their stored
+names, in the order they are shown: 400 invalid_body for anything else, and
+400 unknown_image for a name not in the media store. A comment with images
+may have empty text. Every comment a route answers carries `images`, each
+{name, url, width, height}, an empty list when it has none; the comments
+route's GET also answers `maxImageBytes`, the largest upload it takes.
+
+POST /api/media takes one image as its body, with Content-Type image/png,
+image/jpeg, image/webp or image/gif, and answers 201 {name, url, width,
+height} once it is in the media store (lotuspod.media). It is refused, with
+nothing stored: 403 cross_origin as any POST, 415 unsupported_media_type for
+any other type, 411 without a length, 413 body_too_large over the store's
+cap, 400 invalid_image when the bytes are not a whole image of the declared
+type, and 429 too_many_uploads once the reader has had UPLOAD_LIMIT accepted
+in the last UPLOAD_WINDOW seconds.
+
 `{page, thread, resolved}` resolves the thread whose first comment is
 `thread`, or reopens it, as the reader, and answers 200 {thread, resolution};
 a row is stored only when it changes the resolution. A reader's reply to a
@@ -46,19 +63,23 @@ from __future__ import annotations
 import json
 import socket
 import sqlite3
+import threading
 import time
 import urllib.parse
+from collections import deque
 from dataclasses import dataclass, field
 from email.message import Message
 from http import HTTPStatus
+from pathlib import Path
 from typing import BinaryIO, Callable, Mapping
 
-from lotuspod import db, routing
+from lotuspod import db, media, routing
 
 ANSWERS = "/api/answers"
 COMMENTS = "/api/comments"
+MEDIA = "/api/media"
 REVISION = "/api/revision"
-ROUTES = (ANSWERS, COMMENTS, REVISION)
+ROUTES = (ANSWERS, COMMENTS, MEDIA, REVISION)
 METHODS = ("GET", "HEAD", "POST")
 # The methods of a route that is only read.
 READ_METHODS = ("GET", "HEAD")
@@ -69,6 +90,15 @@ MAX_TEXT = 4000
 MAX_EXACT = 500
 MAX_CONTEXT = 32
 MAX_REVISION = 100
+# The images one comment may name.
+MAX_IMAGES = 4
+# Accepted uploads one reader may make in any UPLOAD_WINDOW seconds.
+UPLOAD_LIMIT = 20
+UPLOAD_WINDOW = 600
+# The extension an upload's file name takes from its declared type, so
+# media.check refuses bytes of another type.
+UPLOAD_TYPES = {"image/png": "png", "image/jpeg": "jpg", "image/webp": "webp",
+                "image/gif": "gif"}
 # Seconds a request body may take to arrive.
 BODY_TIMEOUT = 10
 # A refused body up to this size is still read, and dropped: closing a
@@ -225,6 +255,17 @@ def _quote(value: object) -> dict | None:
     }
 
 
+def _image_names(value: object) -> list[str]:
+    """value as 1 to MAX_IMAGES distinct stored names; Refusal for anything else."""
+    if not isinstance(value, list) or not 1 <= len(value) <= MAX_IMAGES:
+        raise _invalid()
+    if not all(isinstance(name, str) and media.STORED_NAME.fullmatch(name) for name in value):
+        raise _invalid()
+    if len(set(value)) != len(value):
+        raise _invalid()
+    return value
+
+
 def _id(value: object) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= _MAX_ID:
         raise _invalid()
@@ -280,16 +321,25 @@ def shown(value: object) -> object:
 
 
 class Api:
-    """The five routes over one database; pages(name) is the Page serve
-    would answer for name, or None; window is routing's owner window."""
+    """The six routes over one database; pages(name) is the Page serve
+    would answer for name, or None; window is routing's owner window.
+    media_dir is the media store and max_image_bytes its cap; without a
+    store, uploads and comments naming images answer 503."""
 
     def __init__(self, database: db.Database, pages: Callable[[str], Page | None],
                  window: float = routing.DEFAULT_WINDOW,
-                 clock: Callable[[], float] = time.time) -> None:
+                 clock: Callable[[], float] = time.time,
+                 media_dir: Path | None = None,
+                 max_image_bytes: int = media.DEFAULT_MAX_BYTES) -> None:
         self.database = database
         self.pages = pages
         self.window = window
         self.clock = clock
+        self.media_dir = media_dir
+        self.max_image_bytes = max_image_bytes
+        # Each reader's accepted uploads, oldest first, kept in memory only.
+        self._uploads: dict[str, deque[float]] = {}
+        self._uploads_lock = threading.Lock()
 
     def answer(self, method: str, path: str, query: str, headers: Message,
                body: Body, actor: Mapping) -> Answer:
@@ -304,6 +354,11 @@ class Api:
             return (HTTPStatus.METHOD_NOT_ALLOWED, {"error": "method_not_allowed"},
                     (("Allow", ", ".join(methods)),))
         try:
+            if path == MEDIA:
+                if method != "POST":
+                    return (HTTPStatus.METHOD_NOT_ALLOWED, {"error": "method_not_allowed"},
+                            (("Allow", "POST"),))
+                return HTTPStatus.CREATED, self._post_media(headers, body, actor), ()
             if method == "POST":
                 if path == ANSWERS:
                     return HTTPStatus.CREATED, self._post_answer(headers, body, actor), ()
@@ -319,7 +374,8 @@ class Api:
             else:
                 payload = {"page": page.name, "revision": page.revision,
                            "threads": routing.threads(
-                               self.database, page.name, self.window, self.clock())}
+                               self.database, page.name, self.window, self.clock()),
+                           "maxImageBytes": self.max_image_bytes}
             return HTTPStatus.OK, payload, ()
         except Refusal as exc:
             return exc.status, {"error": exc.error}, ()
@@ -352,6 +408,69 @@ class Api:
         if _media_type(headers) != "application/json":
             raise Refusal(HTTPStatus.UNSUPPORTED_MEDIA_TYPE, "unsupported_media_type")
         return _json_object(body.read(MAX_BODY))
+
+    def _post_media(self, headers: Message, body: Body, actor: Mapping) -> dict:
+        if cross_origin(headers):
+            raise Refusal(HTTPStatus.FORBIDDEN, "cross_origin")
+        extension = UPLOAD_TYPES.get(_media_type(headers))
+        if extension is None:
+            raise Refusal(HTTPStatus.UNSUPPORTED_MEDIA_TYPE, "unsupported_media_type")
+        if self.media_dir is None:
+            raise Refusal(HTTPStatus.SERVICE_UNAVAILABLE, "storage_unavailable")
+        reader = str(actor.get("email") or "")
+        self._take_upload(reader, reserve=False)
+        data = body.read(self.max_image_bytes)
+        try:
+            image = media.check(data, f"upload.{extension}", self.max_image_bytes)
+        except media.MediaError:
+            raise Refusal(HTTPStatus.BAD_REQUEST, "invalid_image") from None
+        at = self._take_upload(reader, reserve=True)
+        try:
+            media.store(self.media_dir, image)
+        except OSError:
+            self._give_back(reader, at)
+            raise
+        return {"name": image.name, "url": image.url, "width": image.width,
+                "height": image.height}
+
+    def _take_upload(self, reader: str, reserve: bool) -> float:
+        """Refusal too_many_uploads when reader has had UPLOAD_LIMIT uploads
+        in the last UPLOAD_WINDOW seconds; with reserve, count one more now.
+        The time it was counted at."""
+        now = self.clock()
+        with self._uploads_lock:
+            times = self._uploads.setdefault(reader, deque())
+            while times and times[0] <= now - UPLOAD_WINDOW:
+                times.popleft()
+            if len(times) >= UPLOAD_LIMIT:
+                raise Refusal(HTTPStatus.TOO_MANY_REQUESTS, "too_many_uploads")
+            if reserve:
+                times.append(now)
+            elif not times:
+                del self._uploads[reader]
+        return now
+
+    def _give_back(self, reader: str, at: float) -> None:
+        """Take back the upload counted for reader at `at`, never stored."""
+        with self._uploads_lock:
+            times = self._uploads.get(reader)
+            if times is not None and at in times:
+                times.remove(at)
+
+    def _images(self, names: list[str] | None) -> list[dict]:
+        """Each stored image names names, as {name, width, height}; Refusal
+        unknown_image when one is not in the media store."""
+        if not names:
+            return []
+        if self.media_dir is None:
+            raise Refusal(HTTPStatus.SERVICE_UNAVAILABLE, "storage_unavailable")
+        found = []
+        for name in names:
+            image = media.load_stored(self.media_dir, name)
+            if image is None:
+                raise Refusal(HTTPStatus.BAD_REQUEST, "unknown_image")
+            found.append({"name": name, "width": image.width, "height": image.height})
+        return found
 
     def _post_answer(self, headers: Message, body: Body, actor: Mapping) -> dict:
         fields = self._json_body(headers, body)
@@ -394,23 +513,28 @@ class Api:
                               self.database.responder_paused())
 
     def _store_comment(self, fields: dict, actor: Mapping) -> dict:
+        names = _image_names(fields["images"]) if "images" in fields else None
+        # A comment with images may say nothing more.
+        least = 0 if names else 1
         if "parent" in fields:
-            _keys(fields, {"page", "parent", "text"})
+            _keys(fields, {"page", "parent", "text"}, frozenset({"images"}))
             parent = _id(fields["parent"])
-            text = _text(fields["text"], 1, MAX_TEXT)
+            text = _text(fields["text"], least, MAX_TEXT)
             page = self._page(fields["page"])
+            images = self._images(names)
             try:
                 return self.database.add_reply(
                     page=page.name, parent=parent, revision=page.revision,
                     sections=page.sections, text=text, actor=actor, owner=page.owner,
+                    images=images,
                 )
             except db.UnknownParent:
                 raise Refusal(HTTPStatus.NOT_FOUND, "unknown_parent") from None
-        _keys(fields, {"page", "section", "text"}, frozenset({"quote", "revision"}))
+        _keys(fields, {"page", "section", "text"}, frozenset({"quote", "revision", "images"}))
         # A heading's id may be any length, and must match one of the page's
         # boxes exactly: the body's own limit is the only one it needs.
         section = _text(fields["section"], 1, MAX_BODY)
-        text = _text(fields["text"], 1, MAX_TEXT)
+        text = _text(fields["text"], least, MAX_TEXT)
         quote = _quote(fields.get("quote"))
         # The revision the reader's page was rendered at; absent when it had none.
         read = _text(fields["revision"], 0, MAX_REVISION) if "revision" in fields else None
@@ -419,7 +543,9 @@ class Api:
             raise Refusal(HTTPStatus.BAD_REQUEST, "unknown_section")
         if read is not None and read != page.revision:
             raise Refusal(HTTPStatus.CONFLICT, "stale_page")
+        images = self._images(names)
         return self.database.add_comment(
             page=page.name, section=section, section_title=page.sections.get(section, ""),
             revision=page.revision, text=text, quote=quote, actor=actor, owner=page.owner,
+            images=images,
         )
