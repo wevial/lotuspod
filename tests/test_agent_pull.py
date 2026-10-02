@@ -14,6 +14,7 @@ Run from the repo root:
 
 from __future__ import annotations
 
+import hashlib
 import http.client
 import io
 import json
@@ -31,7 +32,7 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from lotuspod import api, cli, db, decisions, machine, routing  # noqa: E402
+from lotuspod import api, cli, db, decisions, machine, media, routing  # noqa: E402
 from tests import access_keys as keys  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -62,6 +63,10 @@ The pond may freeze.
 """
 
 LOOSE = "# Loose\n\nA page nobody owns.\n\n## One\n\nFirst.\n\n## Two\n\nSecond.\n"
+
+MEDIA_FIXTURES = Path(__file__).resolve().parent / "fixtures" / "media"
+CHART = MEDIA_FIXTURES / "chart-1600x600.png"
+FISH = MEDIA_FIXTURES / "fish-320x240.jpg"
 
 
 def run_cli(*argv: str) -> tuple[int, str, str]:
@@ -582,6 +587,109 @@ class ModelPullTests(PullTestCase):
                 self.assertIn(f"{level} Reply {plain['id']}, hermes, {plain['createdAt']}\n",
                               out)
                 self.assertEqual(out.count("model "), 1)
+
+
+class ImageTests(PullTestCase):
+    """A comment's images, as `pull` and `show` give them to an agent: each
+    with the path of its file in the media directory on this host."""
+
+    def upload(self, path: Path, media_type: str) -> dict:
+        conn = http.client.HTTPConnection(HOST, self.port, timeout=15)
+        try:
+            conn.request("POST", "/api/media", body=path.read_bytes(),
+                         headers={"Cf-Access-Jwt-Assertion": keys.assertion(),
+                                  "Content-Type": media_type})
+            response = conn.getresponse()
+            payload = json.loads(response.read().decode("utf-8"))
+        finally:
+            conn.close()
+        self.assertEqual(response.status, 201, payload)
+        return payload
+
+    def thread_with_images(self) -> tuple[dict, dict, list[dict]]:
+        """A pending comment for hermes carrying the chart then the fish, and
+        a reader's reply carrying none."""
+        self.pull("hermes")
+        uploaded = [self.upload(CHART, "image/png"), self.upload(FISH, "image/jpeg")]
+        root = self.comment("See these.", images=[image["name"] for image in uploaded])
+        reply = self.reply(root["id"], "And nothing more.")
+        return root, reply, uploaded
+
+    def pulled(self, comment_id: int) -> dict:
+        [item] = [item for item in self.pull("hermes")
+                  if item["kind"] == "comment" and item["comment"]["id"] == comment_id]
+        return item
+
+    def test_a_pull_gives_each_image_s_path_in_the_media_directory(self):
+        root, _reply, uploaded = self.thread_with_images()
+        media_dir = media.media_dir(self.out_dir)
+        item = self.pulled(root["id"])
+        images = item["comment"]["images"]
+        self.assertEqual([image["name"] for image in images],
+                         [image["name"] for image in uploaded])
+        for image, sent, size in zip(images, uploaded, ((1600, 600), (320, 240))):
+            self.assertEqual(set(image), {"name", "url", "width", "height", "path"})
+            self.assertEqual({key: image[key] for key in ("name", "url", "width", "height")},
+                             sent)
+            self.assertEqual((image["width"], image["height"]), size)
+            path = Path(image["path"])
+            self.assertTrue(path.is_absolute())
+            self.assertEqual(path.parent, media_dir)
+            stem, _, _ = image["name"].partition(".")
+            self.assertEqual(hashlib.sha256(path.read_bytes()).hexdigest(), stem)
+        self.assertEqual(item["thread"][0]["images"], images)
+        self.assertEqual(item["thread"][1]["images"], [])
+
+    def test_show_gives_the_same_paths_as_the_pull(self):
+        root, reply, _uploaded = self.thread_with_images()
+        pulled = self.pulled(root["id"])["comment"]["images"]
+        rc, out, err = self.agent("show", "plan", "--json")
+        self.assertEqual(rc, 0, err)
+        [thread] = json.loads(out)["threads"]
+        self.assertEqual((thread["root"]["id"], thread["root"]["images"]), (root["id"], pulled))
+        self.assertEqual([(row["id"], row["images"]) for row in thread["replies"]],
+                         [(reply["id"], [])])
+
+    def test_an_image_whose_file_is_gone_has_no_path(self):
+        root, _reply, uploaded = self.thread_with_images()
+        (media.media_dir(self.out_dir) / uploaded[0]["name"]).unlink()
+        images = self.pulled(root["id"])["comment"]["images"]
+        self.assertEqual([image["name"] for image in images],
+                         [image["name"] for image in uploaded])
+        self.assertIsNone(images[0]["path"])
+        self.assertEqual(Path(images[1]["path"]),
+                         media.media_dir(self.out_dir) / uploaded[1]["name"])
+
+    def test_pull_and_show_print_a_line_for_each_image_under_its_message(self):
+        root, reply, uploaded = self.thread_with_images()
+        media_dir = media.media_dir(self.out_dir)
+        (media_dir / uploaded[0]["name"]).unlink()
+        gone = (f"- Image {uploaded[0]['url']}, 1600x600, not in the media directory\n")
+        kept = (f"- Image {uploaded[1]['url']}, 320x240, "
+                f"file {media_dir / uploaded[1]['name']}\n")
+        for argv, level in ((("pull", "--owner", "hermes"), "####"), (("show", "plan"), "###")):
+            with self.subTest(command=argv[0]):
+                rc, out, err = self.agent(*argv)
+                self.assertEqual(rc, 0, err)
+                start = out.index(f"{level} Comment {root['id']},")
+                end = out.index(f"{level} Reply {reply['id']},")
+                message = out[start:end]
+                self.assertIn("See these.", message)
+                self.assertIn(gone + kept, message)
+                self.assertLess(message.index("See these."), message.index(gone))
+                after = out[end:]
+                after = after[:after.index("\n#")] if "\n#" in after else after
+                self.assertNotIn("- Image", after)
+        # The comment being pulled lists its images too, as the first message
+        # of its own item's thread and of the reply's; the reply lists none.
+        rc, out, err = self.agent("pull", "--owner", "hermes")
+        self.assertEqual(rc, 0, err)
+        self.assertEqual(out.count(gone), 3)
+        self.assertEqual(out.count(kept), 3)
+        self.assertEqual(out.count("- Image "), 6)
+        pulled = out[out.index(f"## 1. Comment {root['id']} "):out.index("### Thread")]
+        self.assertLess(pulled.index("See these."), pulled.index(gone + kept))
+        self.assertLess(pulled.index(gone + kept), pulled.index("- Claim:"))
 
 
 class PassageTests(PullTestCase):

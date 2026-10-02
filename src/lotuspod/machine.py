@@ -43,6 +43,11 @@ also reads the comments routed to it as they arrived that have since passed
 to the responder, until an agent takes them up; only the responder may claim
 them. The pull is the only way a page's kept source leaves the host's files.
 
+In the pull and threads answers, each image of each comment also carries
+`path`: the absolute path of its file in the media directory, or null when
+the file is no longer there, so an agent on this host reads its bytes there
+(a file's name is the SHA-256 of its bytes). The reader's routes never carry it.
+
 Each claim, reply, follow-up, release and failure is one database
 transaction, written to the audit trail with the credential and handle that
 acted. A claim is refused 409 claimed while another credential's is
@@ -93,7 +98,7 @@ from http import HTTPStatus
 from pathlib import Path
 from typing import Callable, Mapping
 
-from lotuspod import api, db, routing
+from lotuspod import api, db, media, routing
 
 OPERATIONS = ("pull", "claim", "reply", "publish")
 # An owner handle, and a credential's name: 1 to 63 lower-case letters,
@@ -297,7 +302,8 @@ class Routes:
     pages(name) is the Page serve would answer for name, or None, and
     describe(page) the page as a pulled item shows it, its kept source
     included; window is routing's owner window, and claim_sec how long a
-    claim lasts.
+    claim lasts. media_dir is the media store comments' images are found
+    in; without one, no image has a path.
     """
 
     def __init__(self, database: db.Database,
@@ -305,8 +311,10 @@ class Routes:
                  describe: Callable[[api.Page], dict] | None = None,
                  window: float = routing.DEFAULT_WINDOW,
                  clock: Callable[[], float] = time.time,
-                 claim_sec: float = routing.DEFAULT_CLAIM) -> None:
+                 claim_sec: float = routing.DEFAULT_CLAIM,
+                 media_dir: Path | None = None) -> None:
         self.database = database
+        self.media_dir = media_dir
         self.pages = pages
         self.describe = describe or _describe
         self.window = window
@@ -405,9 +413,10 @@ class Routes:
             omitted = max(0, len(found["replies"]) - routing.THREAD_TAIL)
             items.append({
                 "kind": "comment",
-                "comment": routing.public(comment, pulls, self.window, now, paused),
+                "comment": self._located(
+                    routing.public(comment, pulls, self.window, now, paused)),
                 # The thread's first comment and its latest replies, oldest first.
-                "thread": [routing.public(row, pulls, self.window, now, paused)
+                "thread": [self._located(routing.public(row, pulls, self.window, now, paused))
                            for row in (found["root"], *found["replies"][omitted:])],
                 "omitted": omitted,
                 # The thread's resolution: a comment in a resolved thread still waits.
@@ -445,8 +454,21 @@ class Routes:
         page = self._page(name)
         if page is None:
             raise api.Refusal(HTTPStatus.NOT_FOUND, "unknown_page")
-        return {"page": page.name,
-                "threads": routing.threads(self.database, page.name, self.window, self.clock())}
+        threads = routing.threads(self.database, page.name, self.window, self.clock())
+        for thread in threads:
+            thread["root"] = self._located(thread["root"])
+            thread["replies"] = [self._located(row) for row in thread["replies"]]
+        return {"page": page.name, "threads": threads}
+
+    def _located(self, row: dict) -> dict:
+        """row with each image's path on this host: its file in the media
+        directory, or None when it is not there."""
+        images = []
+        for image in row.get("images") or ():
+            stored = None if self.media_dir is None else media.stored_file(
+                self.media_dir, image["name"])
+            images.append({**image, "path": None if stored is None else str(stored)})
+        return {**row, "images": images}
 
     def _ack(self, credential: Mapping, answer_id: int) -> dict:
         answer = self.database.answer(answer_id)
@@ -679,9 +701,11 @@ class SocketServer(socketserver.ThreadingMixIn, socketserver.UnixStreamServer):
                  pages: Callable[[str], api.Page | None] = _no_page,
                  describe: Callable[[api.Page], dict] | None = None,
                  window: float = routing.DEFAULT_WINDOW,
-                 claim_sec: float = routing.DEFAULT_CLAIM) -> None:
+                 claim_sec: float = routing.DEFAULT_CLAIM,
+                 media_dir: Path | None = None) -> None:
         self.path = Path(path)
-        self.routes = Routes(database, pages, describe, window, claim_sec=claim_sec)
+        self.routes = Routes(database, pages, describe, window, claim_sec=claim_sec,
+                             media_dir=media_dir)
         self._inode: int | None = None
         clear_stale(self.path)
         # Never, even briefly, readable or writable by anyone else.

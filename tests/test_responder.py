@@ -14,6 +14,7 @@ Run from the repo root:
 from __future__ import annotations
 
 import configparser
+import hashlib
 import json
 import os
 import re
@@ -24,12 +25,16 @@ import subprocess
 import sys
 import time
 import unittest
+import urllib.request
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from lotuspod import cli, responder  # noqa: E402
-from tests.test_responder_witness import REPO, READER, Site, git  # noqa: E402
+from lotuspod import cli, media, responder  # noqa: E402
+from tests.test_responder_witness import (  # noqa: E402
+    ASSERTION, REPO, READER, Site, assertion, git)
+
+MEDIA_FIXTURES = Path(__file__).resolve().parent / "fixtures" / "media"
 
 ORPHAN = """\
 # Orphan page
@@ -54,16 +59,20 @@ HTML_PAGE = """\
 OPS = ["pull", "claim", "reply", "publish"]
 
 # A stand-in agent: it records its standard input, its environment's page
-# variables, its working directory and its arguments to $RECORD, appends
+# variables, its working directory, the SHA-256 of each file in its images
+# directory (None without one) and its arguments to $RECORD, appends
 # $APPEND to the source copy when set, and prints $ANSWER.
 RECORDER = """\
-import json, os, pathlib, sys
+import hashlib, json, os, pathlib, sys
 prompt = sys.stdin.read()
 source = os.environ.get("LOTUSPOD_PAGE_SOURCE", "")
 record = {"prompt": prompt, "argv": sys.argv[1:], "source": source,
           "page": os.environ.get("LOTUSPOD_PAGE"), "cwd": os.getcwd(),
           "files": sorted(os.listdir(".")),
-          "credential": os.environ.get("LOTUSPOD_CREDENTIAL")}
+          "credential": os.environ.get("LOTUSPOD_CREDENTIAL"),
+          "images": {path.name: hashlib.sha256(path.read_bytes()).hexdigest()
+                     for path in pathlib.Path("images").iterdir()}
+          if os.path.isdir("images") else None}
 with open(os.environ["RECORD"], "a", encoding="utf-8") as log:
     log.write(json.dumps(record) + "\\n")
 if os.environ.get("APPEND") and source:
@@ -214,6 +223,108 @@ class PromptTests(ResponderCase):
     def page_revision(self) -> str:
         page = (self.out / "orphan.html").read_text(encoding="utf-8")
         return page.split('name="lotuspod:revision" content="', 1)[1].split('"', 1)[0]
+
+
+class ImageTests(ResponderCase):
+    """The images of the comment and its thread, copied beside the source."""
+
+    def upload(self, fixture: str, media_type: str) -> dict:
+        request = urllib.request.Request(
+            f"http://127.0.0.1:{self.port}/api/media",
+            data=(MEDIA_FIXTURES / fixture).read_bytes(),
+            headers={ASSERTION: assertion(), "Content-Type": media_type}, method="POST")
+        with urllib.request.urlopen(request, timeout=30) as response:
+            self.assertEqual(response.status, 201)
+            return json.loads(response.read().decode("utf-8"))
+
+    def post(self, body: dict) -> dict:
+        status, _, row = self.api("POST", "/api/comments", {"page": "orphan", **body})
+        self.assertEqual(status, 201, row)
+        return row
+
+    def media_dir(self) -> Path:
+        return media.media_dir(self.out)
+
+    def message(self, prompt: str, level: str, kind: str, row: dict) -> str:
+        """The part of prompt under one message's heading."""
+        start = prompt.index(f"{level} {kind} {row['id']} by ")
+        end = prompt.find("\n#", start)
+        return prompt[start:] if end < 0 else prompt[start:end]
+
+    def test_the_agent_finds_each_image_beside_the_source_under_its_message(self):
+        chart = self.upload("chart-1600x600.png", "image/png")
+        fish = self.upload("fish-320x240.jpg", "image/jpeg")
+        root = self.post({"section": "greeting", "text": "Look at the pond."})
+        earlier = self.post({"parent": root["id"], "text": "Here it is.",
+                             "images": [chart["name"]]})
+        target = self.post({"parent": root["id"], "text": "And this fish?",
+                            "images": [fish["name"]]})
+        revision = self.page_revision()
+
+        done = self.respond()
+        self.assertEqual(done.returncode, 0, done.stderr)
+        [record] = [r for r in self.records()
+                    if f"comment to answer: comment {target['id']}\n" in r["prompt"]]
+        stored = {image["name"]: hashlib.sha256(
+            (self.media_dir() / image["name"]).read_bytes()).hexdigest()
+            for image in (chart, fish)}
+        self.assertEqual(record["images"], stored)
+        self.assertEqual(record["files"], ["images", "orphan.md"])
+        prompt = record["prompt"]
+        chart_line = f"- Image images/{chart['name']}, 1600x600\n"
+        fish_line = f"- Image images/{fish['name']}, 320x240\n"
+        answer = prompt[prompt.index("## The comment to answer"):
+                        prompt.index("### The thread it belongs to")]
+        self.assertIn(fish_line, answer)
+        self.assertNotIn(chart_line, answer)
+        for row, line, other in ((earlier, chart_line, fish_line),
+                                 (target, fish_line, chart_line)):
+            with self.subTest(message=row["text"]):
+                shown = self.message(prompt, "####", "Reply", row)
+                self.assertIn(row["text"], shown)
+                self.assertIn(line, shown)
+                self.assertNotIn(other, shown)
+        self.assertNotIn("- Image ", self.message(prompt, "####", "Comment", root))
+        self.assertNotIn("missing", prompt)
+        self.assertFalse(Path(record["cwd"]).exists())
+        # The copies are no edit: the page stays at its revision.
+        self.assertEqual(self.page_revision(), revision)
+        # Each of the three reader's messages is answered, the last one last.
+        replies = self.replies("orphan", root["id"])
+        self.assertEqual(replies.count(("An answer.", "responder", "")), 3)
+        self.assertEqual(replies[-1], ("An answer.", "responder", ""))
+
+    def test_an_image_whose_file_is_gone_is_named_missing(self):
+        fish = self.upload("fish-320x240.jpg", "image/jpeg")
+        row = self.post({"section": "greeting", "text": "What fish is this?",
+                         "images": [fish["name"]]})
+        (self.media_dir() / fish["name"]).unlink()
+
+        done = self.respond()
+        self.assertEqual(done.returncode, 0, done.stderr)
+        [record] = self.records()
+        self.assertEqual(record["images"], {})
+        prompt = record["prompt"]
+        missing = (f"- Image {fish['name']}, 320x240: missing, no longer in the media store, "
+                   "so you cannot see it\n")
+        answer = prompt[prompt.index("## The comment to answer"):
+                        prompt.index("### The thread it belongs to")]
+        self.assertIn(missing, answer)
+        self.assertIn(missing, self.message(prompt, "####", "Comment", row))
+        self.assertNotIn("images/", prompt.replace(responder.LIMITS, ""))
+        self.assertEqual(self.replies("orphan", row["id"]), [("An answer.", "responder", "")])
+
+    def test_a_comment_with_no_images_has_no_image_lines_and_no_images_directory(self):
+        row = self.comment("orphan", "greeting", "No pictures here.")
+        done = self.respond()
+        self.assertEqual(done.returncode, 0, done.stderr)
+        [record] = self.records()
+        self.assertNotIn("- Image ", record["prompt"])
+        self.assertIsNone(record["images"])
+        self.assertEqual(record["files"], ["orphan.md"])
+        self.assertEqual(self.replies("orphan", row["id"]), [("An answer.", "responder", "")])
+
+    page_revision = PromptTests.page_revision
 
 
 class FailureTests(ResponderCase):

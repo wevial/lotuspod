@@ -2107,6 +2107,7 @@ def cmd_serve(args: argparse.Namespace) -> int:
         sockets = machine.SocketServer(
             socket_path, db.Database(db_path), pages=partial(api_page, out_dir),
             describe=partial(agent_page, out_dir), window=window, claim_sec=claim_sec,
+            media_dir=media.media_dir(out_dir),
         )
     except (OSError, machine.SocketInUse) as exc:
         server.server_close()

@@ -19,7 +19,9 @@ Each takes --socket and --credential as every agent command does, prints the
 socket's JSON with --json and readable markdown without it, and exits 1 on a
 refusal, printing {"error": CODE} with --json. In the markdown, every text a
 reader wrote sits in a fence longer than its longest run of backticks, so no
-reader's text can end its fence and pass for the output around it.
+reader's text can end its fence and pass for the output around it. Each
+image a comment carries is a line under its text: its URL, its size, and
+the path of its file on this host, which an agent reads to see it.
 """
 
 from __future__ import annotations
@@ -124,9 +126,20 @@ def _resolved(resolution: dict | None) -> list[str]:
     return [f"Resolved by {_by(resolution)} at {resolution['at']}", ""]
 
 
+def images(row: dict) -> list[str]:
+    """A line for each image row carries, then a blank line; none without
+    images."""
+    lines = []
+    for image in row.get("images") or ():
+        where = (f"file {image['path']}" if image.get("path")
+                 else "not in the media directory")
+        lines.append(f"- Image {image['url']}, {image['width']}x{image['height']}, {where}")
+    return [*lines, ""] if lines else []
+
+
 def _message(row: dict, level: str) -> list[str]:
     """One comment of a thread: who, when, which model wrote it, where it
-    stands, and its text."""
+    stands, its text and its images."""
     kind = "Comment" if row.get("parent") is None else "Reply"
     head = f"{level} {kind} {row['id']}, {_by(row)}, {row['createdAt']}"
     if row.get("model"):
@@ -137,7 +150,7 @@ def _message(row: dict, level: str) -> list[str]:
     if row.get("quote"):
         lead = f"The reader highlighted, on revision {row['revision'] or 'unknown'}:"
         lines += passage(row["quote"], lead)
-    lines += [fence(row["text"]), ""]
+    lines += [fence(row["text"]), "", *images(row)]
     return lines
 
 
@@ -181,7 +194,7 @@ def pull_text(payload: dict) -> str:
             else:
                 take = (f"- Passed to {comment.get('owner')} once the owner window ended; "
                         "only it may claim this")
-            lines += [fence(comment["text"]), "", take, ""]
+            lines += [fence(comment["text"]), "", *images(comment), take, ""]
             about = "the thread's first comment and its latest replies"
             if item["omitted"]:
                 about += f"; {item['omitted']} earlier replies left out"

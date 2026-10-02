@@ -987,7 +987,12 @@ responder may claim it. Items are, comments first, oldest first:
   it was written against and its routing state; `thread` is a list, the
   thread's first comment and at most its last 20 replies, oldest first,
   `omitted` counts the replies left out, and `resolution` is the thread's
-  (above).
+  (above). Each comment's `images` (above) also gives each image's `path`:
+  the absolute path of its file in `lotuspod-media/` on the writer host, or
+  `null` when the file is no longer there. The `/media/` URL sits behind
+  Access, so an agent reads an image's bytes from its path; the file's name
+  is the SHA-256 of its bytes before the extension, so an agent can check it.
+  `show` gives the same `path`s; the reader's routes never carry one.
 - `{"kind": "answer", "answer", "question", "page"}` for each answer on a page
   the handle owns that it has not acknowledged, superseded ones included (each
   names the answer it `supersedes`). `question` is `{id, text, label,
@@ -1013,7 +1018,10 @@ words around it:" with a fence holding `prefix + exact + suffix`. The thread's
 first comment, and each quoted first comment `show` prints, gives the same two
 fences under "The reader highlighted, on revision R:". A comment with no quote
 prints none of these. Under the heading of a resolved thread, `pull` and
-`show` print "Resolved by WHO at TIME".
+`show` print "Resolved by WHO at TIME". Under a message's text, `pull` and
+`show` print a line for each of its images, `- Image /media/NAME, WxH, file
+PATH`, or `not in the media directory` in place of `file PATH` when its file
+is gone; a message with no images prints none.
 
 `ack-answer ID` needs `pull` for the page's owner; the owner's pulls leave an
 acknowledged answer out from then on. `show PAGE` needs `pull` for any handle
@@ -1211,6 +1219,12 @@ claimed first is skipped) and runs the agent command once:
   authors (the first comment and at most its last 20 replies, each reader's
   text marked as the reader's words), and the source. A page with no kept
   source cannot be revised, and the prompt says so.
+- When the comment or its thread carries images, the scratch directory also
+  holds an `images` directory with a copy of each image still in the media
+  store, under its stored name. The prompt names each copy under the message
+  it belongs to (`- Image images/NAME, WxH`), or the image as missing when
+  its file is gone, and lets the agent read those copies. The copies go with
+  the scratch directory and are never an edit of the page.
 - Its trimmed standard output is the reply. When it changed the copy, the
   page is republished from it first, through `lotuspod publish`'s own code,
   only if the page is still at the revision the agent read, keeping the

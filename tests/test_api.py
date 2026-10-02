@@ -859,6 +859,30 @@ class CommentImageTests(MediaTestCase):
         self.assertEqual(root["images"], [frog])
         self.assertEqual(db.Database(self.db_path).comment(root["id"])["images"], [frog])
 
+    def test_the_reader_never_sees_where_an_image_is_kept(self):
+        _, fish = self.upload(JPEG, "image/jpeg")
+        _, chart = self.upload(PNG, "image/png")
+        status, root = self.comment(section="risks", text="See these.",
+                                    images=[fish["name"], chart["name"]])
+        self.assertEqual(status, 201, root)
+        conn = http.client.HTTPConnection(HOST, self.port, timeout=15)
+        try:
+            conn.request("GET", "/api/comments?page=plan",
+                         headers={"Cf-Access-Jwt-Assertion": keys.assertion()})
+            response = conn.getresponse()
+            text = response.read().decode("utf-8")
+        finally:
+            conn.close()
+        self.assertEqual(response.status, 200, text)
+        [thread] = json.loads(text)["threads"]
+        self.assertEqual(thread["root"]["images"], [fish, chart])
+        for image in thread["root"]["images"]:
+            self.assertEqual(set(image), {"name", "url", "width", "height"})
+        self.assertTrue((self.media_dir / fish["name"]).is_file())
+        self.assertNotIn(str(self.media_dir), text)
+        self.assertNotIn(str(self.media_dir.resolve()), text)
+        self.assertNotIn(media.MEDIA_DIR_NAME, text)
+
     def test_images_not_named_as_stored_are_refused(self):
         uploaded = [self.upload(path, media_type)[1]["name"] for path, media_type, _ in UPLOADS]
         uploaded.append(self.upload(PADDED, "image/png")[1]["name"])
