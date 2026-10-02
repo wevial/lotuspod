@@ -72,6 +72,7 @@ import socket
 import socketserver
 import sqlite3
 import stat
+import string
 import time
 import urllib.parse
 from email.message import Message
@@ -142,6 +143,16 @@ def is_handle(value: str) -> bool:
 
 def token_hash(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8", "replace")).hexdigest()
+
+
+def claim_token() -> str:
+    """A new claim token. token_urlsafe's alphabet holds "-", and a token
+    starting with one reads as an option to `--claim TOKEN`, so a leading
+    "-" becomes a letter; the length and alphabet stay as they were."""
+    token = secrets.token_urlsafe(CLAIM_BYTES)
+    if token.startswith("-"):
+        token = secrets.choice(string.ascii_letters) + token[1:]
+    return token
 
 
 def _unique(values: list[str]) -> list[str]:
@@ -497,7 +508,7 @@ class Routes:
             routed = routing.route(comment, last, self.window, now)
             return None if routed is None else routed[0]
 
-        token = secrets.token_urlsafe(CLAIM_BYTES)
+        token = claim_token()
         row = self.database.claim(
             comment_id, credential=credential["name"], handles=credential["handles"],
             token_hash=token_hash(token), claim_sec=self.claim_sec, clock=self.clock,

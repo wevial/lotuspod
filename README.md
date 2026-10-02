@@ -939,6 +939,9 @@ lotuspod comments release 7 --claim TOKEN      # back to routing, unanswered
 lotuspod comments fail 7 --claim TOKEN --reason "source missing"
 ```
 
+A claim token never starts with `-`; one issued by an older serve may, and
+parses when passed as `--claim=TOKEN`.
+
 - `claim ID` (`POST /v1/comments/ID/claim`) needs `claim` and the handle the
   comment is routed to (else 403 `not_routed`). It is atomic: while another
   credential's claim is current it is 409 `claimed`, and an answered or failed

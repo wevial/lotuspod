@@ -15,6 +15,7 @@ Run from the repo root:
 from __future__ import annotations
 
 import json
+import secrets
 import socket
 import sqlite3
 import sys
@@ -23,6 +24,7 @@ import threading
 import time
 import unittest
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
@@ -266,6 +268,42 @@ class SettleTests(ClaimTestCase):
                                "--reason", "x" * 201)
         self.assertEqual((rc, refused), (1, {"error": "invalid_body"}))
         self.assertEqual(self.row(other["id"])["state"], "claimed")
+
+
+class TokenTests(ClaimTestCase):
+    """A claim token never starts with "-", so `--claim TOKEN` parses."""
+
+    def dashed(self) -> mock._patch:
+        """token_urlsafe, stubbed to start every token it makes with "-"."""
+        real = secrets.token_urlsafe
+        return mock.patch.object(machine.secrets, "token_urlsafe",
+                                 lambda nbytes=None: "-" + real(nbytes)[1:])
+
+    def test_a_token_that_would_start_with_a_dash_does_not(self):
+        self.pull("hermes")
+        comment = self.comment("Is the heater enough?")
+        with self.dashed():
+            token = self.claim("hermes", comment["id"])
+        self.assertFalse(token.startswith("-"), token)
+        self.assertEqual(len(token), len(secrets.token_urlsafe(machine.CLAIM_BYTES)))
+
+    def test_a_reply_parses_such_a_token_after_dash_dash_claim(self):
+        self.pull("hermes")
+        comment = self.comment("Is the heater enough?")
+        with self.dashed():
+            token = self.claim("hermes", comment["id"])
+        rc, reply = self.send_reply("hermes", comment["id"], token, "dash-1", "It is.")
+        self.assertEqual(rc, 0, reply)
+        self.assertEqual(self.replies(comment["id"]), [reply])
+        self.assertEqual(self.row(comment["id"])["state"], "answered")
+
+    def test_no_token_starts_with_a_dash(self):
+        self.pull("hermes")
+        comment = self.comment("Is the heater enough?")
+        # Each claim of a credential's own current claim renews it with a new token.
+        tokens = [self.claim("hermes", comment["id"]) for _ in range(2000)]
+        self.assertEqual(len(set(tokens)), 2000)
+        self.assertEqual([token for token in tokens if token.startswith("-")], [])
 
 
 class AuditTests(ClaimTestCase):
