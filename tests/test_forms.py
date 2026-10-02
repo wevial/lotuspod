@@ -166,7 +166,7 @@ class PageScriptTests(FormsTestCase):
         with urllib.request.urlopen(url, timeout=5) as response:
             self.assertEqual(response.status, 200)
             served = response.read()
-        self.assertEqual(served, (cli.THEME_DIR / "lotuspod-page.js").read_bytes())
+        self.assertEqual(served, cli.theme_file_bytes(cli.PAGE_SCRIPT))
 
 
 if __name__ == "__main__":

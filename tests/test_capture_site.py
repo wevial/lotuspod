@@ -400,6 +400,22 @@ class TeardownTests(CaptureSiteTestCase):
 
         self.assertEqual(list(self.scratch.iterdir()), [])
 
+    def test_joined_stylesheet_sits_in_the_theme_while_the_command_runs(self):
+        from tests import capture_site
+
+        packaged = capture_site.PACKAGED_CSS
+        self.assertFalse(packaged.exists())
+        proc = self.run_wrapper(
+            sys.executable, "-c",
+            "import pathlib, sys; pathlib.Path(sys.argv[2]).write_bytes("
+            "pathlib.Path(sys.argv[1]).read_bytes())",
+            str(packaged), str(self.record),
+        )
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual(self.record.read_bytes(),
+                         capture_site.cli.theme_file_bytes("lotuspod.css"))
+        self.assertFalse(packaged.exists())
+
     def test_no_command_exits_2_with_usage(self):
         proc = self.run_wrapper()
         self.assertEqual(proc.returncode, 2)

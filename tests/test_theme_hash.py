@@ -73,15 +73,19 @@ class AddressTests(ThemeHashTestCase):
 
 class ThemeEditTests(ThemeHashTestCase):
     def assert_edit_moves_the_address(self, filename: str) -> None:
+        """Flip one byte of the served file filename's last source."""
+        source = cli.THEME_SOURCES[filename][-1]
         unchanged = self.theme_copy()
         with mock.patch.object(cli, "THEME_DIR", unchanged):
             before = self.rendered("before")
         changed = self.theme_copy()
-        data = bytearray((changed / filename).read_bytes())
-        data[-1] ^= 0x01
-        (changed / filename).write_bytes(bytes(data))
+        edited = bytearray((changed / source).read_bytes())
+        edited[-1] ^= 0x01
+        (changed / source).write_bytes(bytes(edited))
         with mock.patch.object(cli, "THEME_DIR", changed):
             after = self.rendered("after")
+            data = cli.theme_file_bytes(filename)
+        self.assertTrue(data.endswith(bytes(edited)))
 
         for page in (before, after):
             self.assertRegex(stylesheet_hash(page), HASH)
@@ -122,7 +126,7 @@ class OldAddressTests(ThemeHashTestCase):
         for filename in ("lotuspod.css", cli.PAGE_SCRIPT):
             with self.subTest(filename=filename):
                 current = fetch(f"/{filename}?v={theme_hash}")
-                self.assertEqual(current, (cli.THEME_DIR / filename).read_bytes())
+                self.assertEqual(current, cli.theme_file_bytes(filename))
                 self.assertEqual(fetch(f"/{filename}?v={OLD_VERSION}"), current)
 
 

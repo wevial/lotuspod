@@ -1,0 +1,232 @@
+
+/* Tables are read as data, not framed as cards: hairline rules carry the grid,
+   the header band is the only tinted surface, and the table scrolls itself when
+   a wide one outgrows the container - no wrapper markup, no unreachable
+   content, no shrunken type. */
+.artifact-body table {
+  border-collapse: collapse;
+  display: block;
+  font-size: 0.95rem;
+  margin: 0 0 1.5em;
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-color: var(--hairline-strong) transparent;
+  scrollbar-width: thin;
+  width: max-content;
+}
+
+.artifact-body th,
+.artifact-body td {
+  border-bottom: 1px solid var(--hairline);
+  padding: 0.6rem 0.9rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+.artifact-body th {
+  background: var(--header-tint);
+  border-bottom-color: var(--header-rule);
+  color: var(--color-pale-sky);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.artifact-body tbody tr:nth-child(even) {
+  background: var(--row-tint);
+}
+
+.artifact-body tbody tr:last-child td,
+.artifact-body tbody tr:last-child th {
+  border-bottom: 0;
+}
+
+.artifact-body caption {
+  caption-side: bottom;
+  color: var(--color-muted-lavender);
+  font-size: 0.9rem;
+  padding-top: 0.6rem;
+  text-align: left;
+}
+
+/* The scrollbar is the affordance, so it is drawn in the palette rather than
+   left as a bright system bar across a dark page. */
+.artifact-body table::-webkit-scrollbar,
+.artifact-body pre::-webkit-scrollbar {
+  height: 8px;
+}
+
+.artifact-body table::-webkit-scrollbar-track,
+.artifact-body pre::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.artifact-body table::-webkit-scrollbar-thumb,
+.artifact-body pre::-webkit-scrollbar-thumb {
+  background: var(--hairline-strong);
+  border-radius: var(--radius-pill);
+}
+
+/* An image line is a figure drawn at the image's intrinsic size, never wider
+   than the column: its width and height attributes reserve the box before the
+   bytes arrive, and height: auto keeps the ratio when the cap narrows it. The
+   link around it, to the full image, is only as wide as the image. */
+.artifact-body .artifact-figure {
+  margin: 0 0 1.5em;
+}
+
+.artifact-body .artifact-figure a {
+  display: block;
+  max-width: 100%;
+  width: fit-content;
+}
+
+.artifact-body .artifact-figure img {
+  border-radius: var(--radius-block);
+  display: block;
+  height: auto;
+  max-width: 100%;
+}
+
+/* A quotation is set-in material: an indented block on a quiet tint, in the
+   display serif, so it reads as someone else's voice. Deliberately unlike the
+   header summary, which stays a hairline rail on body sans. */
+.artifact-body blockquote {
+  background: var(--quote-band);
+  border-left: 3px solid var(--quote-rule);
+  border-radius: 0 var(--radius-block) var(--radius-block) 0;
+  color: var(--color-pale-lavender);
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  margin: 1.6em 0;
+  padding: 1.1rem 1.35rem;
+}
+
+.artifact-body blockquote > :first-child {
+  margin-top: 0;
+}
+
+.artifact-body blockquote > :last-child {
+  margin-bottom: 0;
+}
+
+/* A quote inside a quote deepens the indent; it does not stack another tint. */
+.artifact-body blockquote blockquote {
+  background: none;
+  border-left: 1px solid var(--hairline-strong);
+  border-radius: 0;
+  padding: 0 0 0 1rem;
+}
+
+.artifact-body blockquote cite,
+.artifact-body blockquote footer {
+  color: var(--color-muted-lavender);
+  display: block;
+  font-family: var(--font-body);
+  font-size: 0.9rem;
+  font-style: normal;
+  margin-top: 0.65rem;
+}
+
+/* Mono is for code and data only. Inline code sits on a chip small enough to
+   keep the prose line height; a block sets its own field and scrolls sideways
+   rather than wrapping code at arbitrary points. */
+.artifact-body code {
+  background: var(--code-chip);
+  border-radius: var(--radius-chip);
+  color: var(--color-pale-sky);
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  overflow-wrap: break-word;
+  padding: 0.15em 0.35em;
+}
+
+.artifact-body pre {
+  background: var(--color-deep-night);
+  border: 1px solid var(--code-edge);
+  border-radius: var(--radius-block);
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+  line-height: 1.55;
+  margin: 0 0 1.5em;
+  max-width: 100%;
+  overflow-x: auto;
+  padding: 1rem 1.15rem;
+  scrollbar-color: var(--hairline-strong) transparent;
+  scrollbar-width: thin;
+}
+
+.artifact-body pre code {
+  background: none;
+  border-radius: 0;
+  color: var(--body-ink);
+  font-size: inherit;
+  overflow-wrap: normal;
+  padding: 0;
+  white-space: pre;
+}
+
+/* A diagram block. Until Mermaid runs - or without scripting - it reads as the
+   source text in the pre style above. Once drawn, the SVG sits centred on the
+   page's own background and scrolls sideways when wider than the measure. */
+.artifact-body pre.mermaid {
+  text-align: center;
+}
+
+.artifact-body pre.mermaid[data-processed] {
+  background: transparent;
+  border: 0;
+  overflow-x: auto;
+  padding: 0;
+}
+
+.artifact-body pre.mermaid svg {
+  display: inline-block;
+  height: auto;
+  max-width: none;
+}
+
+/* Tables and code blocks are structure, not prose - they are read as a whole
+   unit rather than line by line - so at the top level of the body they step out
+   of the reading column and take the page container's width. Nested inside
+   prose, in a quote or a list item, they stay within their parent instead. */
+.artifact-body > table,
+.artifact-body > pre,
+.artifact-section-body > table,
+.artifact-section-body > pre {
+  max-width: var(--measure-full);
+}
+
+.artifact-body > pre,
+.artifact-section-body > pre {
+  width: var(--measure-full);
+}
+
+/* Light-on-dark: emphasis lifts to pure white rather than piling on weight,
+   which would bloom against the night background. */
+.artifact-body strong {
+  color: var(--color-white);
+  font-weight: 600;
+}
+
+.artifact-body em {
+  color: var(--color-white);
+  font-style: italic;
+}
+
+.artifact-body hr {
+  border: 0;
+  border-top: 1px solid var(--hairline);
+  margin: 2.75rem 0;
+}
+
+.artifact-body a {
+  color: var(--color-sky);
+  text-decoration-color: var(--link-line);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.18em;
+}
+
+.artifact-body a:hover {
+  color: var(--color-pale-sky);
+  text-decoration-color: currentColor;
+}

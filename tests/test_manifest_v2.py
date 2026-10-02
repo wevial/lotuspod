@@ -65,6 +65,11 @@ def run_cli(*argv: str) -> tuple[int, str, str]:
 _STYLESHEET_LINK = re.compile(r'<link rel="stylesheet" href="lotuspod\.css\?v=([^"]*)">')
 
 
+def served_css() -> str:
+    """The stylesheet serve answers: its theme sources, joined."""
+    return cli.theme_file_bytes("lotuspod.css").decode("utf-8")
+
+
 def stylesheet_hash(page: str) -> str:
     """The theme hash a page's stylesheet link carries after ?v=."""
     found = _STYLESHEET_LINK.search(page)
@@ -175,7 +180,7 @@ class ArtifactNavTests(TempDirTestCase):
         self.assertIn('href="index.html"', self.rendered("draft", "--hidden"))
 
     def test_theme_styles_the_back_link(self):
-        css = (cli.THEME_DIR / "lotuspod.css").read_text(encoding="utf-8")
+        css = served_css()
         self.assertIn(".artifact-nav", css)
 
     def test_back_link_does_not_disturb_listing_metadata(self):
@@ -209,7 +214,7 @@ class ArtifactTopbarTests(TempDirTestCase):
         return (self.out_dir / f"{name}.html").read_text(encoding="utf-8")
 
     def theme_css(self) -> str:
-        return (cli.THEME_DIR / "lotuspod.css").read_text(encoding="utf-8")
+        return served_css()
 
     def test_bar_is_the_first_child_of_main_and_carries_both_links(self):
         page = self.rendered()
@@ -312,10 +317,13 @@ class ArtifactTopbarTests(TempDirTestCase):
         # d0b2598 predates the favicon (KO-244) and the page script; the copy
         # step needs them present.
         for filename in ("favicon.svg", cli.PAGE_SCRIPT):
-            (previous / filename).write_bytes((cli.THEME_DIR / filename).read_bytes())
+            (previous / filename).write_bytes(cli.theme_file_bytes(filename))
 
         after = self.rendered()
-        with mock.patch.object(cli, "THEME_DIR", previous):
+        # The older stylesheet is the only stylesheet source: each file in
+        # the older theme is served as it is.
+        with mock.patch.object(cli, "THEME_DIR", previous), \
+                mock.patch.object(cli, "THEME_SOURCES", {}):
             before = self.rendered()
 
         old_hash, new_hash = stylesheet_hash(before), stylesheet_hash(after)
@@ -330,7 +338,7 @@ class ThemeCssSyncTests(TempDirTestCase):
     """A theme upgrade must reach directories rendered by an older version."""
 
     def packaged_css(self) -> bytes:
-        return (cli.THEME_DIR / "lotuspod.css").read_bytes()
+        return cli.theme_file_bytes("lotuspod.css")
 
     def css_copy(self) -> Path:
         return self.out_dir / "lotuspod.css"
@@ -581,7 +589,7 @@ class IndexHeaderTests(TempDirTestCase):
         self.assertNotIn("artifact-kicker", self.build_index())
 
     def test_theme_gives_the_header_no_card(self):
-        css = (cli.THEME_DIR / "lotuspod.css").read_text(encoding="utf-8")
+        css = served_css()
         self.assertNotIn(".index-header", css)
 
 
@@ -594,7 +602,7 @@ class IndexTableTests(TempDirTestCase):
         return (self.out_dir / "index.html").read_text(encoding="utf-8")
 
     def theme_css(self) -> str:
-        return (cli.THEME_DIR / "lotuspod.css").read_text(encoding="utf-8")
+        return served_css()
 
     def test_artifacts_are_listed_as_table_rows(self):
         make_mixed_fixture(self.out_dir)
@@ -699,7 +707,7 @@ class IndexTableWidthTests(unittest.TestCase):
     KO_233_COMMIT = "3adc05d"
 
     def theme_css(self) -> str:
-        return (cli.THEME_DIR / "lotuspod.css").read_text(encoding="utf-8")
+        return served_css()
 
     def index_table_block(self, css: str) -> str:
         blocks = self.BLOCK.findall(css)
@@ -1279,7 +1287,7 @@ class MermaidTests(TempDirTestCase):
         self.assertFalse(cli.has_mermaid_block('<pre class="mermaids">x</pre>'))
 
     def test_the_theme_styles_the_diagram_block(self):
-        css = (cli.THEME_DIR / "lotuspod.css").read_text(encoding="utf-8")
+        css = served_css()
         self.assertIn(".artifact-body pre.mermaid", css)
 
     def test_the_readme_shows_the_diagram_block_form(self):
@@ -1331,7 +1339,7 @@ class OutlineThemeTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
-        cls.css = (cli.THEME_DIR / "lotuspod.css").read_text(encoding="utf-8")
+        cls.css = served_css()
         cls.wide = cls.css.split("@container (min-width: 58rem) {")[1].split("\n}\n")[0]
 
     def test_narrow_disclosure_is_styled(self):
@@ -1399,7 +1407,7 @@ class ReportVariantRailTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
-        css = (cli.THEME_DIR / "lotuspod.css").read_text(encoding="utf-8")
+        css = served_css()
         wide_blocks = [
             b.split("\n}\n")[0]
             for b in css.split("@container (min-width: 58rem) {")[1:]
@@ -1446,10 +1454,13 @@ class OutlineSideRenderTests(TempDirTestCase):
         # d0b2598 predates the favicon (KO-244) and the page script; the copy
         # step needs them present.
         for filename in ("favicon.svg", cli.PAGE_SCRIPT):
-            (previous / filename).write_bytes((cli.THEME_DIR / filename).read_bytes())
+            (previous / filename).write_bytes(cli.theme_file_bytes(filename))
 
         after = self.rendered()
-        with mock.patch.object(cli, "THEME_DIR", previous):
+        # The older stylesheet is the only stylesheet source: each file in
+        # the older theme is served as it is.
+        with mock.patch.object(cli, "THEME_DIR", previous), \
+                mock.patch.object(cli, "THEME_SOURCES", {}):
             before = self.rendered()
 
         old_hash, new_hash = stylesheet_hash(before), stylesheet_hash(after)
@@ -1569,7 +1580,7 @@ class ReportVariantTests(TempDirTestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
-        cls.css = (cli.THEME_DIR / "lotuspod.css").read_text(encoding="utf-8")
+        cls.css = served_css()
         cls.tokens = cli.load_tokens()
 
     def rendered(self, *extra: str) -> str:
@@ -1632,8 +1643,12 @@ class ReportVariantTests(TempDirTestCase):
     def test_report_ruleset_is_scoped_and_in_the_one_stylesheet(self):
         """One lotuspod.css is what serve allow-lists - no second sheet."""
         self.assertIn(".artifact--report", self.css)
+        cli.sync_theme_css(self.out_dir)
+        self.assertEqual(sorted(p.name for p in self.out_dir.glob("*.css")), ["lotuspod.css"])
+        self.assertEqual(sorted(p.name for p in self.out_dir.glob("*.js")), [cli.PAGE_SCRIPT])
         self.assertEqual(
-            sorted(p.name for p in cli.THEME_DIR.glob("*.css")), ["lotuspod.css"]
+            cli.serve_allow_list(self.out_dir),
+            {"index.html", "lotuspod.css", "favicon.svg", "lotuspod-page.js"},
         )
         for rule in self.css.split("}"):
             if "--size-body-report" in rule or "--leading-body-report" in rule:

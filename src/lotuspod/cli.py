@@ -264,6 +264,26 @@ def script_warning(name: str, body: str) -> str:
 # only a page with any of them loads it.
 PAGE_SCRIPT = "lotuspod-page.js"
 THEME_FILES = ("lotuspod.css", "favicon.svg", PAGE_SCRIPT)
+# The served files written as one source per feature, relative to THEME_DIR:
+# each is its sources joined in this order, byte for byte. A theme file not
+# named here is served as it is. A new feature's file takes one line here.
+THEME_SOURCES = {
+    "lotuspod.css": (
+        "css/base.css",
+        "css/forms.css",
+        "css/decisions.css",
+        "css/comments.css",
+        "css/prose.css",
+        "css/report.css",
+        "css/index.css",
+    ),
+    PAGE_SCRIPT: (
+        "js/page-open.js",
+        "js/decisions.js",
+        "js/comments.js",
+        "js/page-close.js",
+    ),
+}
 
 
 def write_atomic(path: Path, data: bytes) -> None:
@@ -294,7 +314,16 @@ def theme_files() -> list[tuple[str, bytes]]:
     names them, so the ?v= address always follows what serve answers.
     THEME_DIR is read at call time, never at import.
     """
-    return [(filename, (THEME_DIR / filename).read_bytes()) for filename in THEME_FILES]
+    return [(filename, theme_file_bytes(filename)) for filename in THEME_FILES]
+
+
+def theme_file_bytes(filename: str) -> bytes:
+    """The bytes of one served theme file: its sources (THEME_SOURCES) joined
+    in their declared order, or the file itself when it has none."""
+    sources = THEME_SOURCES.get(filename)
+    if sources is None:
+        return (THEME_DIR / filename).read_bytes()
+    return b"".join((THEME_DIR / source).read_bytes() for source in sources)
 
 
 def theme_hash() -> str:

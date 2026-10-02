@@ -1461,6 +1461,10 @@ structural hairlines/tints (table rules, code and quote surfaces), and radii;
 `lotuspod.css` mirrors the tokens as CSS custom properties (a `colors` key
 `k` as `--color-k`, a `structure` key `k` as `--k`, underscores as dashes).
 Edit the CSS to restyle all artifacts.
+A feature's CSS goes in its own file in `src/lotuspod/_theme/css/` and its JS in
+`src/lotuspod/_theme/js/`, and each new file takes one line in the declared
+order (`THEME_SOURCES` in `cli.py`), which render joins into the one
+`lotuspod.css` and `lotuspod-page.js` it serves.
 Pages address the stylesheet and page script by a hash of the theme files, so
 there is no version to raise.
 

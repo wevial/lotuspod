@@ -1,0 +1,89 @@
+
+/* A response form reads as part of the prose: its choices are a list without
+   markers, the note is a text-width field in the body voice, and the status
+   line under the button speaks in the muted voice of the meta line. */
+.artifact-form {
+  margin: 0 0 1.15em;
+}
+
+.artifact-body .artifact-form-choices {
+  list-style: none;
+  margin: 0 0 0.85em;
+  padding-left: 0;
+}
+
+.artifact-body .artifact-form-choices li {
+  padding-left: 0;
+}
+
+.artifact-form label {
+  align-items: baseline;
+  cursor: pointer;
+  display: flex;
+  gap: 0.6rem;
+}
+
+.artifact-form input[type="checkbox"] {
+  accent-color: var(--color-lavender);
+  flex: none;
+  height: 1em;
+  margin: 0;
+  /* Baseline alignment would hang the box off the line; sit it on the text. */
+  transform: translateY(0.12em);
+  width: 1em;
+}
+
+.artifact-form-note {
+  background: var(--color-surface);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-block);
+  color: var(--body-ink);
+  display: block;
+  font-family: var(--font-body);
+  font-size: inherit;
+  line-height: var(--leading-body);
+  margin: 0 0 0.85em;
+  min-height: 6rem;
+  padding: 0.6rem 0.8rem;
+  resize: vertical;
+  width: 100%;
+}
+
+.artifact-form-note:focus-visible {
+  border-color: var(--color-lavender);
+  outline: none;
+}
+
+.artifact-form button {
+  background: var(--color-surface);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-pill);
+  color: var(--color-pale-lavender);
+  cursor: pointer;
+  font-family: var(--font-body);
+  font-size: 0.95rem;
+  padding: 0.45rem 1.2rem;
+}
+
+.artifact-form button:hover,
+.artifact-form button:focus-visible {
+  border-color: var(--color-lavender);
+  color: var(--color-white);
+  outline: none;
+}
+
+.artifact-form :disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.artifact-form label:has(:disabled) {
+  cursor: default;
+}
+
+.artifact-body .artifact-form-status {
+  color: var(--color-muted-lavender);
+  font-size: 0.85rem;
+  margin: 0.6em 0 0;
+  min-height: 1.7em;
+}

@@ -425,6 +425,23 @@ def render(out_dir: Path, db_path: Path) -> None:
             raise RuntimeError(f"{step} failed with exit code {rc}")
 
 
+# The browser checks read the packaged stylesheet from here, as the bytes a
+# restored theme serves. The theme keeps it as per-feature sources, so the
+# fixture writes the joined stylesheet here while COMMAND runs and removes it
+# after; it is gitignored and never packaged.
+PACKAGED_CSS = REPO_ROOT / "src" / "lotuspod" / "_theme" / "lotuspod.css"
+
+
+def write_packaged_css() -> bool:
+    """Write the joined stylesheet to PACKAGED_CSS unless it is there already
+    (a run beside this one wrote it). True when this call wrote it."""
+    joined = cli.theme_file_bytes("lotuspod.css")
+    if PACKAGED_CSS.is_file() and PACKAGED_CSS.read_bytes() == joined:
+        return False
+    cli.write_atomic(PACKAGED_CSS, joined)
+    return True
+
+
 def main(argv: list[str] | None = None) -> int:
     command = list(sys.argv[1:] if argv is None else argv)
     if not command:
@@ -437,6 +454,7 @@ def main(argv: list[str] | None = None) -> int:
     socket_path = directory / machine.SOCKET_NAME
     server = None
     thread = None
+    wrote_css = False
     sockets = None
     socket_thread = None
     try:
@@ -467,12 +485,15 @@ def main(argv: list[str] | None = None) -> int:
         env[OTHER_ENV] = str(credential_path(db_path, OTHER))
         env[OUT_ENV] = str(site)
         env[PYTHON_ENV] = sys.executable
+        wrote_css = write_packaged_css()
         try:
             return subprocess.run(command, cwd=str(REPO_ROOT), env=env, check=False).returncode
         except OSError as exc:
             print(f"error: cannot run {command[0]}: {exc}", file=sys.stderr)
             return 1
     finally:
+        if wrote_css:
+            PACKAGED_CSS.unlink(missing_ok=True)
         if sockets is not None:
             if socket_thread is not None:
                 sockets.shutdown()

@@ -6,8 +6,9 @@ into the fixture's site (LOTUSPOD_TEST_OUT):
 
     python -m tests.theme_change change COMMENT
         copies the packaged theme to a scratch directory, appends COMMENT to
-        the copy's stylesheet and renders the page with cli.THEME_DIR
-        pointed at the copy, so the site serves the changed stylesheet;
+        the copy's last stylesheet source and renders the page with
+        cli.THEME_DIR pointed at the copy, so the site serves a stylesheet
+        ending in COMMENT;
     python -m tests.theme_change restore
         renders the page again from the packaged theme, so the site serves
         the packaged stylesheet once more.
@@ -64,7 +65,8 @@ def main(argv: list[str] | None = None) -> int:
     with tempfile.TemporaryDirectory(prefix="lotuspod-theme-") as scratch:
         theme = Path(scratch) / "theme"
         shutil.copytree(cli.THEME_DIR, theme)
-        with (theme / "lotuspod.css").open("a", encoding="utf-8") as fh:
+        last_source = cli.THEME_SOURCES["lotuspod.css"][-1]
+        with (theme / last_source).open("a", encoding="utf-8") as fh:
             fh.write(args[1])
         with mock.patch.object(cli, "THEME_DIR", theme):
             render(out_dir)

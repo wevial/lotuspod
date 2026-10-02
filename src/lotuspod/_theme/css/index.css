@@ -1,0 +1,235 @@
+
+.index {
+  max-width: 72rem;
+  margin: 0;
+  padding: 1.5rem 1.5rem 3rem;
+}
+
+/* The index masthead is the page's own voice, not an entry: it wears no card,
+   so the listing below is the only surface that lifts off the night. */
+.index-title {
+  color: var(--color-white);
+  font-family: var(--font-display);
+  font-size: clamp(1.75rem, 4vw, 2.5rem);
+  line-height: 1.15;
+  margin: 0 0 0.5rem;
+}
+
+/* The updated-stamp rides the title's baseline instead of taking its own
+   line: small, muted, out of the way. */
+.index-updated {
+  color: var(--color-muted-lavender);
+  font-family: var(--font-body);
+  font-size: 0.85rem;
+  font-weight: 400;
+  margin-left: 0.75rem;
+  white-space: nowrap;
+}
+
+/* Search sits above the listing in the quiet meta voice, and is revealed by the
+   index script - the markup ships it hidden, so a page without scripting never
+   shows a control that cannot filter. */
+.index-controls {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 1.5rem;
+}
+
+/* The display above outranks the UA stylesheet's [hidden] rule, so the hidden
+   state has to be restated here. */
+.index-controls[hidden] {
+  display: none;
+}
+
+.index-search-label {
+  color: var(--color-muted-lavender);
+  font-size: 0.8rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.index-search {
+  background: var(--color-surface);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-pill);
+  color: var(--color-white);
+  font-family: var(--font-body);
+  font-size: 0.95rem;
+  min-width: 16rem;
+  padding: 0.45rem 0.95rem;
+}
+
+.index-search::placeholder {
+  color: var(--color-muted-lavender);
+}
+
+.index-search:focus-visible {
+  border-color: var(--color-lavender);
+  outline: none;
+}
+
+.index-count {
+  color: var(--color-muted-lavender);
+  font-size: 0.85rem;
+  margin: 0;
+}
+
+/* Episodes are uniform records, so the listing is a table rather than a stack
+   of cards: columns let one field be scanned down the page. It borrows the body
+   table's language - hairline rules, a single tinted header band, and its own
+   sideways scroll when the columns outgrow a narrow viewport. */
+.index-table {
+  border-collapse: collapse;
+  display: block;
+  font-size: 0.95rem;
+  /* As wide as the .index container, so the table shares the masthead's
+     centred column on a wide screen instead of hugging the viewport edge. */
+  margin: 1.25rem 0 0;
+  max-width: 100%;
+  width: 100%;
+  overflow-x: auto;
+  scrollbar-color: var(--hairline-strong) transparent;
+  scrollbar-width: thin;
+}
+
+.index-table th,
+.index-table td {
+  border-bottom: 1px solid var(--hairline);
+  padding: 0.65rem 0.9rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+/* The header cell hands its padding to the sort button, so the whole cell is
+   the hit target rather than just the words inside it. */
+.index-table thead th {
+  background: var(--color-surface);
+  border-bottom-color: var(--hairline-strong);
+  color: var(--color-pale-lavender);
+  font-weight: 600;
+  padding: 0;
+  white-space: nowrap;
+}
+
+.index-table tbody tr:nth-child(even) {
+  background: var(--row-tint);
+}
+
+.index-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+/* Table display roles outrank [hidden] too, so filtered-out rows say it here. */
+.index-table tbody tr[hidden] {
+  display: none;
+}
+
+.index-table::-webkit-scrollbar {
+  height: 8px;
+}
+
+.index-table::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.index-table::-webkit-scrollbar-thumb {
+  background: var(--hairline-strong);
+  border-radius: var(--radius-pill);
+}
+
+/* The sort arrow is drawn from aria-sort, which is also what a screen reader
+   announces - one source of state, no indicator markup to keep in step. */
+.sort-button {
+  background: none;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  padding: 0.65rem 0.9rem;
+  text-align: left;
+  width: 100%;
+}
+
+.sort-button:hover,
+.sort-button:focus-visible {
+  color: var(--color-lavender);
+}
+
+.sort-button::after {
+  color: var(--color-muted-lavender);
+  content: "\2195";
+  margin-left: 0.4rem;
+}
+
+.index-table th[aria-sort="ascending"] .sort-button::after {
+  color: var(--color-lavender);
+  content: "\2191";
+}
+
+.index-table th[aria-sort="descending"] .sort-button::after {
+  color: var(--color-lavender);
+  content: "\2193";
+}
+
+.episode-number {
+  color: var(--color-lavender);
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
+.episode-title a {
+  color: var(--color-white);
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  text-decoration: none;
+}
+
+.episode-title a:hover,
+.episode-title a:focus-visible {
+  color: var(--color-pale-lavender);
+  text-decoration: underline;
+}
+
+.episode-date {
+  color: var(--color-muted-lavender);
+  white-space: nowrap;
+}
+
+.episode-summary {
+  color: var(--color-pale-lavender);
+  max-width: 48ch;
+}
+
+.index-empty {
+  border: 1px dashed rgba(148, 138, 173, 0.5);
+  border-radius: var(--radius-card);
+  color: var(--color-muted-lavender);
+  margin-top: 1.5rem;
+  padding: 1.5rem;
+  text-align: center;
+}
+
+.index-empty code {
+  color: var(--color-lavender);
+  font-family: var(--font-mono);
+}
+
+/* On paper every section is open, whatever the reader folded, and nothing
+   that only folds is drawn. Chromium hides an until-found section with
+   content-visibility rather than display. */
+@media print {
+  .artifact-section-body[hidden] {
+    content-visibility: visible;
+    display: block;
+  }
+
+  .artifact-section-toggle::before,
+  .artifact-section-mark,
+  .artifact-sections-all,
+  .artifact-comments-panel {
+    display: none;
+  }
+}

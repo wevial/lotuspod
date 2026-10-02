@@ -1,0 +1,627 @@
+/*
+ * Lotuspod theme "lotus"
+ * Tokens mirror theme/tokens.json.
+ */
+
+:root {
+  --color-night: #16121f;
+  --color-deep-night: #0d0a15;
+  --color-surface: #1e1930;
+  --color-glow: #272043;
+  --color-lavender: #b79cf4;
+  --color-pale-lavender: #d8cbfa;
+  --color-muted-lavender: #948aad;
+  --color-white: #ffffff;
+  --color-sky: #86b8ff;
+  --color-pale-sky: #cadeff;
+  --color-rose: #f4a3c9;
+  --color-pale-rose: #f9d4e6;
+  --color-mint: #92d9b5;
+  --color-amber: #ebc57f;
+
+  --font-display: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  --font-body: "Avenir Next", -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --measure-prose: 66ch;
+  --body-ink: rgba(255, 255, 255, 0.87);
+  --size-body: 1.0625rem;
+  --size-h2: clamp(1.45rem, 4vw, 1.95rem);
+  --size-h3: 1.375rem;
+  --size-h4: 1.125rem;
+  --size-h5: 0.875rem;
+  --leading-body: 1.7;
+  --leading-heading: 1.25;
+  --size-body-report: 0.875rem;
+  --leading-body-report: 1.6;
+
+  --topbar-height: 2.75rem;
+
+  --hairline: rgba(216, 203, 250, 0.16);
+  --hairline-strong: rgba(216, 203, 250, 0.32);
+  --row-tint: rgba(216, 203, 250, 0.04);
+  --code-surface: rgba(216, 203, 250, 0.09);
+  --quote-tint: rgba(183, 156, 244, 0.07);
+  --header-tint: #23263a;
+  --header-rule: rgba(134, 184, 255, 0.4);
+  --code-chip: rgba(134, 184, 255, 0.13);
+  --code-edge: rgba(134, 184, 255, 0.22);
+  --quote-band: rgba(134, 184, 255, 0.06);
+  --quote-rule: rgba(134, 184, 255, 0.6);
+  --link-line: rgba(134, 184, 255, 0.45);
+  --reader-tint: #312333;
+  --reader-line: rgba(244, 163, 201, 0.4);
+  --reader-avatar: #3e2c3e;
+  --highlight: rgba(244, 163, 201, 0.2);
+  --highlight-line: rgba(244, 163, 201, 0.7);
+
+  --radius-chip: 4px;
+  --radius-block: 8px;
+  --radius-card: 14px;
+  --radius-pill: 999px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background:
+    radial-gradient(1200px 600px at 85% -10%, var(--color-glow) 0%, transparent 60%),
+    radial-gradient(900px 500px at -10% 110%, var(--color-glow) 0%, transparent 55%),
+    var(--color-night);
+  color: var(--color-white);
+  font-family: var(--font-body);
+  line-height: 1.65;
+  min-height: 100vh;
+}
+
+.artifact {
+  container-type: inline-size;
+  max-width: 72rem;
+  margin: 0;
+  padding: 4rem 1.5rem 3rem;
+}
+
+/* Title bar: once the header has scrolled off, a one-line "Lotuspod: TITLE"
+   strip stays pinned to the top of the viewport as a way back to the index
+   and to the top of the page. It is fixed to the viewport, present from the
+   first pixel whatever its place in the document; the scroll-driven reveal
+   below is what keeps it out of the way while the header is still in view. Its z-index sits above the
+   outline rail, whose sticky top clears --topbar-height so the bar never
+   covers "On this page".
+
+   The bar is fixed to the viewport edges, so it spans the full width
+   whatever the page container measures and reserves no room in flow: at
+   scroll 0 the nav sits exactly where it sat before the bar existed. */
+.artifact-topbar {
+  align-items: baseline;
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--hairline);
+  box-sizing: border-box;
+  display: flex;
+  gap: 0.5rem;
+  height: var(--topbar-height);
+  left: 0;
+  line-height: 1.4;
+  padding: 0.6rem 1.5rem;
+  position: fixed;
+  right: 0;
+  text-wrap: nowrap;
+  top: 0;
+  white-space: nowrap;
+  z-index: 3;
+}
+
+.artifact-topbar a {
+  text-decoration: none;
+}
+
+.artifact-topbar-brand {
+  color: var(--color-lavender);
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.artifact-topbar-sep {
+  color: var(--color-muted-lavender);
+  flex: none;
+}
+
+.artifact-topbar-title {
+  color: var(--color-white);
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.artifact-topbar a:hover,
+.artifact-topbar a:focus-visible {
+  color: var(--color-pale-lavender);
+}
+
+/* Where the browser can drive an animation from the scroll position, the bar
+   starts hidden and slides in over the first 12rem of scroll - roughly the
+   distance that takes the header off the screen. Without the feature the bar
+   is simply visible from the start, which is a fair fallback. */
+@supports (animation-timeline: scroll()) {
+  @keyframes topbar-reveal {
+    from {
+      opacity: 0;
+      transform: translateY(-100%);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  .artifact-topbar {
+    animation: topbar-reveal linear both;
+    animation-timeline: scroll(root);
+    animation-range: 0 12rem;
+  }
+
+  /* Reduced motion: keep the opacity fade, drop the slide. */
+  @media (prefers-reduced-motion: reduce) {
+    @keyframes topbar-reveal {
+      from {
+        opacity: 0;
+        transform: none;
+      }
+      to {
+        opacity: 1;
+        transform: none;
+      }
+    }
+  }
+}
+
+/* A quiet way back to the index: it sits above the header card in the muted
+   voice of the meta line, so it is available without competing with the title.
+   Affordance comes from the arrow and the hover lift into lavender - no button
+   chrome, and no underline at rest. */
+.artifact-nav {
+  font-size: 0.85rem;
+  margin: 0 0 1.25rem;
+}
+
+.artifact-nav a {
+  color: var(--color-muted-lavender);
+  text-decoration: none;
+}
+
+.artifact-nav a:hover,
+.artifact-nav a:focus-visible {
+  color: var(--color-lavender);
+}
+
+.artifact-header {
+  background: var(--color-surface);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-card);
+  box-shadow: 0 10px 30px rgba(13, 10, 21, 0.55);
+  padding: 2.25rem 2rem 1.75rem;
+}
+
+.artifact-kicker {
+  color: var(--color-lavender);
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  margin: 0 0 0.75rem;
+}
+
+.artifact-title {
+  color: var(--color-white);
+  font-family: var(--font-display);
+  font-size: clamp(1.75rem, 4vw, 2.5rem);
+  line-height: 1.15;
+  margin: 0 0 0.5rem;
+}
+
+.artifact-meta {
+  color: var(--color-muted-lavender);
+  font-size: 0.9rem;
+  margin: 0;
+}
+
+.artifact-summary {
+  border-left: 1px solid var(--hairline-strong);
+  color: var(--color-pale-lavender);
+  font-size: 1.05rem;
+  margin: 1.25rem 0 0;
+  padding-left: 1rem;
+}
+
+.artifact-owner {
+  color: var(--color-muted-lavender);
+  font-size: 0.9rem;
+  margin: 0.25rem 0 0;
+}
+
+/* Body and outline are one unit: a single column on a narrow page, and a
+   reading column beside a rail once there is room for both. The grid forms
+   only when an outline is actually there - a page under the two-heading
+   threshold, or one rendered with --no-outline, keeps the plain column. */
+.artifact-main {
+  --outline-rail: 15rem;
+  --outline-gap: 2.5rem;
+}
+
+/* Narrow: a disclosure above the prose, collapsed. A phone screen belongs to
+   the article, so the outline announces itself in one line and waits to be
+   asked - open by default it costs a full viewport of scrolling before the
+   first sentence. */
+.artifact-outline {
+  margin: 1.75rem 0 0;
+  position: relative;
+}
+
+.artifact-outline-disclosure {
+  background: var(--color-surface);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-block);
+  padding: 0 1rem;
+}
+
+.artifact-outline-summary {
+  color: var(--color-muted-lavender);
+  cursor: pointer;
+  font-size: 0.8rem;
+  letter-spacing: 0.12em;
+  padding: 0.7rem 0;
+  text-transform: uppercase;
+}
+
+.artifact-outline-summary:hover,
+.artifact-outline-summary:focus-visible {
+  color: var(--color-lavender);
+}
+
+.artifact-outline-summary::marker {
+  color: var(--color-lavender);
+}
+
+/* Numbers would compete with the section names, so the ordered list is drawn
+   unmarked - it carries role="list" because dropping the marker also drops
+   list semantics in some screen readers. */
+.artifact-outline-list {
+  border-top: 1px solid var(--hairline);
+  list-style: none;
+  margin: 0;
+  padding: 0.5rem 0 0.85rem;
+}
+
+/* Section links are navigation, not prose: no underline at rest, the whole
+   line is the hit target, and hover lifts into lavender like the back-link. */
+.artifact-outline-list a {
+  color: var(--color-pale-lavender);
+  display: block;
+  font-size: 0.9rem;
+  line-height: 1.4;
+  padding: 0.3rem 0;
+  text-decoration: none;
+  text-wrap: pretty;
+}
+
+.artifact-outline-list a:hover,
+.artifact-outline-list a:focus-visible {
+  color: var(--color-lavender);
+}
+
+/* The control the page script adds to the outline to fold or open every
+   section at once, in the summary's quiet voice. Above the prose it sits at
+   the right end of the summary's line, out of the flow, so adding it moves
+   nothing on the page. */
+.artifact-sections-all {
+  background: none;
+  border: 0;
+  border-radius: var(--radius-block);
+  color: var(--color-muted-lavender);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.8rem;
+  letter-spacing: 0.04em;
+  margin: 0;
+  padding: 0.7rem 0;
+  position: absolute;
+  right: 1rem;
+  top: 1px;
+}
+
+.artifact-sections-all:hover {
+  color: var(--color-lavender);
+}
+
+/* Wide: the reading column is capped well inside the container, so the
+   outline moves into the gutter it leaves and rides along as a sticky rail on
+   the left, ahead of the prose in reading order - the prose keeps its measure
+   untouched. Measured against the page container rather than the viewport,
+   the same box --measure-full is figured from. */
+@container (min-width: 58rem) {
+  .artifact-main:has(.artifact-outline) {
+    align-items: start;
+    column-gap: var(--outline-gap);
+    display: grid;
+    grid-template-columns: var(--outline-rail) minmax(0, 1fr);
+  }
+
+  .artifact-main:has(.artifact-outline) > .artifact-body {
+    /* The rail now stands in part of the container, so a block stepping out
+       of the reading column stops at the column edge, not under the rail. */
+    --measure-full: calc(
+      100cqi - 0.5rem - var(--outline-rail) - var(--outline-gap)
+    );
+    grid-area: 1 / 2;
+  }
+
+  /* Sticky within the row it shares with the body, and scrollable itself if a
+     long outline outgrows the screen - a rail that runs off the bottom would
+     be navigation you cannot reach. */
+  .artifact-outline {
+    grid-area: 1 / 1;
+    max-height: calc(100vh - var(--topbar-height) - 3rem);
+    overflow-y: auto;
+    position: sticky;
+    scrollbar-color: var(--hairline-strong) transparent;
+    scrollbar-width: thin;
+    top: calc(var(--topbar-height) + 1.5rem);
+  }
+
+  /* In the gutter the card would read as a second surface competing with the
+     header, so the rail is drawn as a hairline margin note instead. */
+  .artifact-outline-disclosure {
+    background: none;
+    border: 0;
+    border-left: 1px solid var(--hairline);
+    border-radius: 0;
+    padding: 0 0 0 1.15rem;
+  }
+
+  /* The gutter is empty space the prose never wanted, so out here the list
+     costs the reader nothing and stays open - the markup ships collapsed for
+     the phone, and this is the one rule that undoes it. Where
+     ::details-content is not understood the rail simply arrives folded, one
+     click from the same list. */
+  .artifact-outline-disclosure::details-content {
+    content-visibility: visible;
+  }
+
+  /* Held open by CSS, the summary can no longer close anything, so it drops
+     the affordances that would promise it can and reads as the rail's
+     heading. */
+  .artifact-outline-summary {
+    cursor: default;
+    list-style: none;
+  }
+
+  .artifact-outline-summary::marker,
+  .artifact-outline-summary::-webkit-details-marker {
+    content: "";
+    display: none;
+  }
+
+  /* Hover lift too: it reads as "this does something" on a heading that no
+     longer does. Focus keeps its lift - the summary is still reachable by
+     keyboard, and a focus ring that goes nowhere visible is worse. */
+  .artifact-outline-summary:hover {
+    color: var(--color-muted-lavender);
+  }
+
+  .artifact-outline-list {
+    border-top: 0;
+    padding: 0.35rem 0 0;
+  }
+
+  /* In the rail, under the list: the prose beside it does not move. */
+  .artifact-sections-all {
+    margin: 0.75rem 0 0 1.15rem;
+    padding: 0.2rem 0;
+    position: static;
+  }
+}
+
+/* Body: a reading column. Measure is capped in ch so long-form prose keeps a
+   comfortable line length at any viewport; paragraph spacing (never indent)
+   carries the rhythm. The cap stays on this box rather than on the blocks
+   inside it, because a body may arrive as bare text with no element child to
+   hang a cap on - capping the box catches every line either way. Structure that
+   is read as a unit steps back out to --measure-full. */
+.artifact-body {
+  /* How far a block may reach out of the reading column: the page container's
+     content box, less this box's own side padding. */
+  --measure-full: calc(100cqi - 0.5rem);
+  color: var(--body-ink);
+  font-size: var(--size-body);
+  line-height: var(--leading-body);
+  max-width: var(--measure-prose);
+  padding: 1.75rem 0.25rem 0;
+}
+
+.artifact-body > :first-child {
+  margin-top: 0;
+}
+
+.artifact-body > :last-child {
+  margin-bottom: 0;
+}
+
+/* A folding page wraps each section's content: the last section's last block
+   ends the body as the body's last child did. */
+.artifact-body > .artifact-section-body:last-child > :last-child {
+  margin-bottom: 0;
+}
+
+.artifact-body p {
+  margin: 0 0 1.15em;
+  text-wrap: pretty;
+}
+
+/* Heading roles: display serif for the two section levels, body sans below
+   them, each with more space above than below so a heading binds to the text
+   it introduces rather than floating between blocks. */
+.artifact-body h2,
+.artifact-body h3,
+.artifact-body h4,
+.artifact-body h5,
+.artifact-body h6 {
+  line-height: var(--leading-heading);
+  text-wrap: balance;
+}
+
+.artifact-body h2 {
+  color: var(--color-white);
+  font-family: var(--font-display);
+  font-size: var(--size-h2);
+  font-weight: 600;
+  margin: 3rem 0 0.85rem;
+  /* An outline link lands here: leave the heading a little air above it
+     rather than jamming it against the top of the window. */
+  scroll-margin-top: 1.5rem;
+}
+
+/* A folding section's heading: its text is a button that looks like the
+   heading it sits in, with a caret hung in the gutter before the text that
+   points down while the section is open and right once it is folded. Hung,
+   it moves no text when the page script adds it. No transition: a section
+   folds and opens at once. */
+.artifact-section-toggle {
+  background: none;
+  border: 0;
+  border-radius: var(--radius-block);
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  letter-spacing: inherit;
+  margin: 0;
+  padding: 0;
+  position: relative;
+  text-align: inherit;
+}
+
+.artifact-section-toggle::before {
+  border-bottom: 0.1em solid var(--color-lavender);
+  border-right: 0.1em solid var(--color-lavender);
+  content: "";
+  height: 0.34em;
+  left: -0.85em;
+  position: absolute;
+  top: 0.4em;
+  transform: rotate(45deg);
+  width: 0.34em;
+}
+
+.artifact-section-toggle[aria-expanded="false"]::before {
+  left: -0.95em;
+  top: 0.52em;
+  transform: rotate(-45deg);
+}
+
+.artifact-section-toggle:hover {
+  color: var(--color-pale-lavender);
+}
+
+/* What waits in a folded section, after its heading's text: "2 new", "1 to
+   answer", or both. In the outline control's quiet voice, on the heading's
+   baseline, kept to one line; it never moves or animates. */
+.artifact-section-mark {
+  color: var(--color-muted-lavender);
+  font-family: var(--font-body);
+  font-size: 0.8rem;
+  font-weight: 400;
+  letter-spacing: 0.04em;
+  margin-left: 0.35em;
+  white-space: nowrap;
+}
+
+.artifact-section-toggle:focus-visible,
+.artifact-sections-all:focus-visible {
+  outline: 2px solid var(--color-lavender);
+  outline-offset: 2px;
+}
+
+.artifact-body h3 {
+  color: var(--color-pale-lavender);
+  font-family: var(--font-display);
+  font-size: var(--size-h3);
+  font-weight: 600;
+  margin: 2.25rem 0 0.65rem;
+}
+
+.artifact-body h4 {
+  color: var(--color-lavender);
+  font-family: var(--font-body);
+  font-size: var(--size-h4);
+  font-weight: 600;
+  margin: 1.85rem 0 0.5rem;
+}
+
+.artifact-body h5,
+.artifact-body h6 {
+  color: var(--color-muted-lavender);
+  font-family: var(--font-body);
+  font-size: var(--size-h5);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  margin: 1.6rem 0 0.45rem;
+  text-transform: uppercase;
+}
+
+.artifact-body ul,
+.artifact-body ol {
+  margin: 0 0 1.15em;
+  padding-left: 1.4rem;
+}
+
+.artifact-body li {
+  margin: 0 0 0.4em;
+  padding-left: 0.2rem;
+}
+
+.artifact-body li::marker {
+  color: var(--color-lavender);
+}
+
+.artifact-body ol > li::marker {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+}
+
+.artifact-body ul ul {
+  list-style-type: circle;
+}
+
+.artifact-body ul ul ul {
+  list-style-type: square;
+}
+
+/* A nested list belongs to the item above it: close below, open after. */
+.artifact-body li > ul,
+.artifact-body li > ol {
+  margin: 0.4em 0 0.15em;
+}
+
+.artifact-body li > p {
+  margin: 0 0 0.5em;
+}
+
+.artifact-footer {
+  color: var(--color-muted-lavender);
+  font-size: 0.85rem;
+  letter-spacing: 0.08em;
+  margin-top: 2.5rem;
+  text-align: center;
+}

@@ -1,0 +1,1318 @@
+
+/* Comments (lotuspod.comments): each section ends in a folded box whose
+   summary is a quiet pill; open, it holds the section's threads as a chat. The
+   reader's comments sit on the right in tinted bubbles behind a round avatar;
+   an agent's replies sit on the left behind a square lavender avatar, the
+   handle in the mono voice and an AGENT tag, so a reply is never mistaken for
+   a person's. A state is never part of what anyone wrote: a typing bubble
+   while an agent has not answered, and centred system lines for failures,
+   queueing, a paused responder and page revisions. Every field is a rounded
+   composer with a round send button whose text stays its accessible name. */
+.artifact-comment {
+  margin: 0 0 1.5em;
+}
+
+.artifact-comment-summary {
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-pill);
+  color: var(--color-muted-lavender);
+  cursor: pointer;
+  display: inline-block;
+  font-size: 0.85rem;
+  list-style: none;
+  padding: 0.2rem 0.9rem;
+}
+
+.artifact-comment-summary::-webkit-details-marker {
+  display: none;
+}
+
+.artifact-comment-summary:hover,
+.artifact-comment-summary:focus-visible,
+.artifact-comment[open] > .artifact-comment-summary {
+  border-color: var(--color-lavender);
+  color: var(--color-pale-lavender);
+}
+
+.artifact-comment[open] {
+  background: var(--row-tint);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-block);
+  padding: 0.75rem 1.25rem 1rem;
+}
+
+.artifact-comment :is(a, button, summary, textarea):focus-visible,
+.artifact-comments-changed :is(a, button, textarea):focus-visible,
+.artifact-comments-panel :is(a, button, textarea):focus-visible {
+  outline: 2px solid var(--color-lavender);
+  outline-offset: 2px;
+}
+
+.artifact-comment-thread {
+  border-top: 1px solid var(--hairline);
+  font-size: 0.94rem;
+  line-height: 1.55;
+  margin: 0.8em 0 0;
+  padding: 0.9em 0 0;
+}
+
+:is(.artifact-body, .artifact-comments-panel) .artifact-comment-section {
+  color: var(--color-muted-lavender);
+  font-size: 0.85rem;
+  margin: 0 0 0.6em;
+}
+
+:is(.artifact-body, .artifact-comments-panel) .artifact-comment-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.artifact-comment-list > li {
+  margin: 0;
+  padding: 0;
+}
+
+:is(.artifact-body, .artifact-comments-panel) .artifact-comment-list p {
+  margin: 0;
+}
+
+.artifact-comment-row {
+  align-items: flex-end;
+  display: flex;
+  gap: 0.55rem;
+}
+
+.artifact-comment-item--reader {
+  flex-direction: row-reverse;
+}
+
+.artifact-comment-avatar {
+  background: var(--color-glow);
+  border: 1px solid var(--hairline-strong);
+  border-radius: 50%;
+  color: var(--color-pale-lavender);
+  display: grid;
+  flex: none;
+  font-size: 0.72rem;
+  font-weight: 600;
+  height: 2rem;
+  line-height: 1;
+  place-items: center;
+  width: 2rem;
+}
+
+.artifact-comment-avatar--agent {
+  background: var(--color-lavender);
+  border-color: var(--color-lavender);
+  border-radius: var(--radius-block);
+  color: var(--color-night);
+  font-family: var(--font-mono);
+}
+
+.artifact-comment-avatar--ghost {
+  background: transparent;
+  border-style: dashed;
+  border-radius: var(--radius-block);
+  color: var(--color-muted-lavender);
+  font-family: var(--font-mono);
+}
+
+.artifact-comment-col {
+  display: flex;
+  flex-direction: column;
+  max-width: 85%;
+  min-width: 0;
+}
+
+.artifact-comment-item--reader .artifact-comment-avatar {
+  background: var(--reader-avatar);
+  border-color: var(--color-rose);
+  color: var(--color-pale-rose);
+}
+
+.artifact-comment-item--reader .artifact-comment-col {
+  align-items: flex-end;
+}
+
+:is(.artifact-body, .artifact-comments-panel) .artifact-comment-by {
+  align-items: center;
+  color: var(--color-muted-lavender);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 0.78em;
+  gap: 0.1rem 0.45em;
+  margin: 0 0.3rem 0.2rem;
+}
+
+:is(.artifact-body, .artifact-comments-panel) .artifact-comment-item--reader .artifact-comment-by {
+  justify-content: flex-end;
+}
+
+.artifact-comment-author {
+  color: var(--color-pale-rose);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.artifact-comment-handle {
+  color: var(--color-pale-lavender);
+  font-family: var(--font-mono);
+  font-size: 0.95em;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.artifact-comment-agent {
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-chip);
+  color: var(--color-lavender);
+  font-family: var(--font-mono);
+  font-size: 0.72em;
+  letter-spacing: 0.06em;
+  line-height: 1.5;
+  padding: 0 0.4em;
+}
+
+:is(.artifact-body, .artifact-comments-panel) .artifact-comment-text,
+:is(.artifact-body, .artifact-comments-panel) .artifact-comment-bubble {
+  background: var(--color-surface);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-card) var(--radius-card) var(--radius-card) var(--radius-chip);
+  margin: 0;
+  padding: 0.5rem 0.8rem;
+}
+
+:is(.artifact-body, .artifact-comments-panel) .artifact-comment-text {
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+:is(.artifact-body, .artifact-comments-panel) .artifact-comment-item--reader .artifact-comment-text {
+  background: var(--reader-tint);
+  border-color: var(--reader-line);
+  border-radius: var(--radius-card) var(--radius-card) var(--radius-chip) var(--radius-card);
+}
+
+:is(.artifact-body, .artifact-comments-panel) .artifact-comment-bubble--typing {
+  align-items: center;
+  align-self: flex-start;
+  color: var(--color-lavender);
+  display: inline-flex;
+  padding: 0.7rem 0.9rem;
+}
+
+:is(.artifact-body, .artifact-comments-panel) .artifact-comment-bubble--ghost {
+  align-self: flex-start;
+  background: transparent;
+  border-style: dashed;
+  color: var(--color-muted-lavender);
+  font-size: 0.85em;
+}
+
+.artifact-comment-sr {
+  clip-path: inset(50%);
+  height: 1px;
+  overflow: hidden;
+  position: absolute;
+  white-space: nowrap;
+  width: 1px;
+}
+
+/* The marks: drawn here, never text, so no state reads as words. */
+.artifact-comment-mark {
+  display: inline-block;
+  flex: none;
+}
+
+.artifact-comment-mark--dots {
+  display: inline-flex;
+  gap: 3px;
+  margin-left: 0.4em;
+  vertical-align: middle;
+}
+
+.artifact-comment-mark--dots i {
+  animation: artifact-comment-bounce 1.2s ease-in-out infinite;
+  background: currentColor;
+  border-radius: 50%;
+  height: 4px;
+  width: 4px;
+}
+
+.artifact-comment-mark--dots i:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.artifact-comment-mark--dots i:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+.artifact-comment-bubble--typing .artifact-comment-mark--dots {
+  gap: 4px;
+  margin: 0;
+}
+
+/* A thread waiting for its answer: the dots of either bubble are amber. */
+.artifact-comment-bubble--typing .artifact-comment-mark--dots,
+.artifact-comment-bubble--ghost .artifact-comment-mark--dots {
+  color: var(--color-amber);
+}
+
+.artifact-comment-bubble--typing .artifact-comment-mark--dots i {
+  height: 6px;
+  width: 6px;
+}
+
+.artifact-comment-mark--hollow {
+  border: 1.5px solid currentColor;
+  border-radius: 50%;
+  height: 0.55em;
+  width: 0.55em;
+}
+
+.artifact-comment-mark--pause {
+  border-left: 2px solid currentColor;
+  border-right: 2px solid currentColor;
+  height: 0.6em;
+  width: 0.5em;
+}
+
+.artifact-comment-mark--bang {
+  background: var(--color-pale-lavender);
+  border-radius: 50%;
+  color: var(--color-night);
+  display: inline-grid;
+  font-size: 0.8em;
+  font-weight: 700;
+  height: 1.3em;
+  line-height: 1;
+  place-items: center;
+  width: 1.3em;
+}
+
+.artifact-comment-mark--bang::before {
+  content: "!";
+}
+
+@keyframes artifact-comment-bounce {
+  0%,
+  70%,
+  100% {
+    opacity: 0.3;
+    transform: translateY(0);
+  }
+  35% {
+    opacity: 1;
+    transform: translateY(-2px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .artifact-comment-mark--dots i {
+    animation: none;
+  }
+}
+
+/* System lines: centred, outside every bubble. */
+:is(.artifact-body, .artifact-comments-panel) .artifact-comment-event {
+  align-items: center;
+  color: var(--color-muted-lavender);
+  display: flex;
+  font-size: 0.78em;
+  gap: 0.6rem;
+  text-align: center;
+}
+
+.artifact-comment-event::before,
+.artifact-comment-event::after {
+  border-top: 1px solid var(--hairline);
+  content: "";
+  flex: 1;
+  min-width: 1rem;
+}
+
+.artifact-comment-event > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+:is(.artifact-body, .artifact-comments-panel) .artifact-comment-notice {
+  align-self: center;
+  background: var(--code-surface);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-block);
+  font-size: 0.85em;
+  max-width: 92%;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  padding: 0.5rem 0.8rem;
+  text-align: center;
+}
+
+:is(.artifact-body, .artifact-comments-panel) .artifact-comment-notice-title {
+  align-items: center;
+  color: var(--color-white);
+  display: flex;
+  font-weight: 600;
+  gap: 0.4em;
+  justify-content: center;
+}
+
+:is(.artifact-body, .artifact-comments-panel) .artifact-comment-notice-text {
+  color: var(--color-pale-lavender);
+  margin-top: 0.15rem;
+}
+
+:is(.artifact-body, .artifact-comments-panel) .artifact-comment-notice--unavailable,
+:is(.artifact-body, .artifact-comments-panel) .artifact-comment-notice--paused {
+  background: transparent;
+  border-style: dashed;
+}
+
+:is(.artifact-body, .artifact-comments-panel) :is(.artifact-comment-notice--unavailable, .artifact-comment-notice--paused)
+  .artifact-comment-notice-title {
+  color: var(--color-pale-lavender);
+  font-weight: 500;
+}
+
+:is(.artifact-body, .artifact-comments-panel) :is(.artifact-comment-notice--unavailable, .artifact-comment-notice--paused)
+  .artifact-comment-notice-text {
+  color: var(--color-muted-lavender);
+}
+
+/* The composer: the box's form for a new thread and each thread's reply
+   form. Their markup is a field, then the send button and the status line;
+   the grid sets the field and the button in one rounded frame, drawn behind
+   them, and the status line under it. */
+.artifact-comment-form,
+.artifact-comment-reply {
+  align-items: end;
+  display: grid;
+  gap: 0 0.5rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+  margin: 0.9em 0 0;
+}
+
+.artifact-comment-form::before,
+.artifact-comment-reply::before {
+  align-self: stretch;
+  background: var(--color-surface);
+  border: 1px solid var(--color-muted-lavender);
+  border-radius: 1.3rem;
+  content: "";
+  grid-column: 1 / -1;
+  grid-row: 1;
+}
+
+.artifact-comment-form:has(textarea:focus-visible)::before,
+.artifact-comment-reply:has(textarea:focus-visible)::before {
+  border-color: var(--color-lavender);
+  outline: 2px solid var(--color-lavender);
+  outline-offset: 2px;
+}
+
+/* A thread's composer is folded behind a quiet text control at the thread's
+   right edge: "Add to your comment" in the muted voice until an agent has
+   answered, then "Reply" in lavender. */
+.artifact-comment-toggle {
+  appearance: none;
+  background: none;
+  border: 0;
+  border-radius: var(--radius-chip);
+  color: var(--color-lavender);
+  cursor: pointer;
+  display: block;
+  font-family: var(--font-body);
+  font-size: 0.85rem;
+  margin: 0.6em 0 0 auto;
+  padding: 0.1rem 0.25rem;
+}
+
+.artifact-comment-toggle--quiet {
+  color: var(--color-muted-lavender);
+}
+
+.artifact-comment-toggle:hover,
+.artifact-comment-toggle[aria-expanded="true"] {
+  color: var(--color-pale-lavender);
+}
+
+.artifact-comment-reply[hidden] {
+  display: none;
+}
+
+.artifact-comment-toggle + .artifact-comment-reply {
+  margin-top: 0.45em;
+}
+
+/* Below a box's threads, the form for a new one is set apart from the last
+   thread's reply. */
+.artifact-comment-threads:not(:empty) + .artifact-comment-form {
+  border-top: 1px solid var(--hairline);
+  padding: 0.9em 0 0;
+}
+
+.artifact-comment-actions {
+  display: contents;
+}
+
+.artifact-comment-form textarea,
+.artifact-comment-reply textarea {
+  background: transparent;
+  border: 0;
+  color: var(--color-white);
+  display: block;
+  field-sizing: content;
+  font-family: var(--font-body);
+  font-size: inherit;
+  grid-column: 1;
+  grid-row: 1;
+  line-height: 1.45;
+  margin: 0;
+  max-height: 14em;
+  min-height: 2.65em;
+  min-width: 0;
+  padding: 0.6rem 0 0.6rem 0.95rem;
+  resize: none;
+  width: 100%;
+}
+
+.artifact-comment .artifact-comment-form textarea:focus-visible,
+.artifact-comment .artifact-comment-reply textarea:focus-visible,
+.artifact-comments-changed .artifact-comment-reply textarea:focus-visible,
+.artifact-comments-panel :is(.artifact-comment-form, .artifact-comment-reply) textarea:focus-visible {
+  outline: none;
+}
+
+.artifact-comment-form button,
+.artifact-comment-reply button {
+  appearance: none;
+  background: var(--color-lavender);
+  border: 0;
+  border-radius: 50%;
+  color: transparent;
+  cursor: pointer;
+  font-size: 0;
+  grid-column: 2;
+  grid-row: 1;
+  height: 2.1rem;
+  margin: 0.3rem 0.3rem 0.3rem 0;
+  overflow: hidden;
+  padding: 0;
+  position: relative;
+  width: 2.1rem;
+}
+
+/* The arrow, drawn without text so the button's name stays its words. */
+.artifact-comment-form button::before,
+.artifact-comment-reply button::before,
+.artifact-comment-form button::after,
+.artifact-comment-reply button::after {
+  content: "";
+  left: 50%;
+  position: absolute;
+}
+
+.artifact-comment-form button::before,
+.artifact-comment-reply button::before {
+  background: var(--color-night);
+  border-radius: 1px;
+  bottom: 28%;
+  margin-left: -1px;
+  top: 30%;
+  width: 2px;
+}
+
+.artifact-comment-form button::after,
+.artifact-comment-reply button::after {
+  border-left: 2px solid var(--color-night);
+  border-top: 2px solid var(--color-night);
+  height: 0.6rem;
+  top: 32%;
+  transform: translateX(-50%) rotate(45deg);
+  width: 0.6rem;
+}
+
+.artifact-comment-form button:hover,
+.artifact-comment-reply button:hover {
+  background: var(--color-pale-lavender);
+}
+
+.artifact-comment-form button:disabled,
+.artifact-comment-reply button:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+:is(.artifact-body, .artifact-comments-panel) .artifact-comment-status {
+  color: var(--color-muted-lavender);
+  font-size: 0.85rem;
+  grid-column: 1 / -1;
+  grid-row: 2;
+  margin: 0 0.95rem;
+}
+
+:is(.artifact-body, .artifact-comments-panel) .artifact-comment-status:not(:empty) {
+  margin-top: 0.35rem;
+}
+
+.artifact-comments-changed {
+  border-top: 1px solid var(--hairline-strong);
+  margin: 3rem 0 0;
+}
+
+/* The comments panel: where the window leaves room right of the reading
+   column, the page script lists every thread in an aside fixed to the
+   window's right edge under the title bar. Folded, it is a 2.75rem rail: the
+   button that opens it, a badge counting the open threads and a dot for each,
+   mint once answered, a pulsing lavender while an agent writes, a hollow
+   amber ring while it waits. Open, it is 20rem wide and scrolls its list on
+   its own, grouped under each section's heading; the open entry holds its
+   thread as the box would, and a resolved one folds to a dashed line. It lies
+   over the margin, never the column, so nothing in the column moves. */
+.artifact-comments-panel {
+  background: var(--color-surface);
+  border-left: 1px solid var(--hairline-strong);
+  bottom: 0;
+  color: var(--body-ink);
+  display: flex;
+  flex-direction: column;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  overflow: hidden;
+  position: fixed;
+  right: 0;
+  top: var(--topbar-height);
+  transition: width 0.2s ease-out;
+  width: 2.75rem;
+  z-index: 2;
+}
+
+.artifact-comments-panel--open {
+  width: 20rem;
+}
+
+.artifact-comments-rail {
+  align-items: center;
+  cursor: pointer;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 0.6rem;
+  min-height: 0;
+  padding: 0.85rem 0 1rem;
+  position: relative;
+  width: 2.75rem;
+}
+
+.artifact-comments-opener {
+  appearance: none;
+  background: transparent;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-block);
+  color: var(--color-lavender);
+  cursor: pointer;
+  display: grid;
+  flex: none;
+  height: 2rem;
+  padding: 0;
+  place-items: center;
+  width: 2rem;
+}
+
+.artifact-comments-opener:hover {
+  border-color: var(--color-lavender);
+}
+
+/* A speech bubble, drawn without text. */
+.artifact-comments-icon,
+.artifact-comment-chip-icon,
+.artifact-passage-pill-icon {
+  border: 1.5px solid currentColor;
+  border-radius: 3px;
+  display: block;
+  height: 0.7rem;
+  position: relative;
+  width: 0.85rem;
+}
+
+.artifact-comments-icon::after,
+.artifact-comment-chip-icon::after,
+.artifact-passage-pill-icon::after {
+  border-left: 1.5px solid currentColor;
+  bottom: -0.3rem;
+  content: "";
+  height: 0.3rem;
+  left: 0.15rem;
+  position: absolute;
+}
+
+.artifact-comments-badge {
+  background: var(--color-lavender);
+  border-radius: var(--radius-pill);
+  color: var(--color-night);
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  font-weight: 700;
+  line-height: 1;
+  padding: 0.15rem 0.3rem;
+  pointer-events: none;
+  position: absolute;
+  right: 0.1rem;
+  top: 0.45rem;
+}
+
+.artifact-comments-dots {
+  align-items: center;
+  border-top: 1px solid var(--hairline);
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  list-style: none;
+  margin: 0;
+  min-height: 0;
+  overflow: hidden;
+  padding: 0.6rem 0 0;
+  width: 1.4rem;
+}
+
+.artifact-comments-dot {
+  border: 1.5px solid var(--color-amber);
+  border-radius: 50%;
+  flex: none;
+  height: 0.6rem;
+  width: 0.6rem;
+}
+
+.artifact-comments-dot--answered {
+  background: var(--color-mint);
+  border-color: var(--color-mint);
+}
+
+.artifact-comments-dot--writing {
+  animation: artifact-comments-pulse 1.6s ease-in-out infinite;
+  background: var(--color-lavender);
+  border-color: var(--color-lavender);
+}
+
+.artifact-comments-rail-label {
+  color: var(--color-muted-lavender);
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.1em;
+  margin-top: auto;
+  text-transform: uppercase;
+  writing-mode: vertical-rl;
+}
+
+.artifact-comments-sheet {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  width: 20rem;
+}
+
+.artifact-comments-head {
+  align-items: baseline;
+  border-bottom: 1px solid var(--hairline);
+  display: flex;
+  flex: none;
+  gap: 0.2rem 0.6rem;
+  padding: 0.85rem 0.85rem 0.6rem 1rem;
+}
+
+.artifact-comments-title {
+  color: var(--color-white);
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  font-weight: 600;
+  line-height: 1.3;
+  margin: 0;
+}
+
+.artifact-comments-count {
+  color: var(--color-muted-lavender);
+  margin: 0;
+  white-space: nowrap;
+}
+
+.artifact-comments-fold {
+  align-self: center;
+  appearance: none;
+  background: transparent;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-chip);
+  color: var(--color-pale-lavender);
+  cursor: pointer;
+  flex: none;
+  font: inherit;
+  height: 1.6rem;
+  line-height: 1;
+  margin-left: auto;
+  padding: 0;
+  width: 1.6rem;
+}
+
+.artifact-comments-fold:hover {
+  border-color: var(--color-lavender);
+  color: var(--color-white);
+}
+
+.artifact-comments-groups {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0.5rem 0.75rem 1.5rem;
+  scrollbar-color: var(--hairline-strong) transparent;
+  scrollbar-width: thin;
+}
+
+.artifact-comments-group + .artifact-comments-group {
+  border-top: 1px solid var(--hairline);
+  margin-top: 0.7rem;
+  padding-top: 0.5rem;
+}
+
+.artifact-comments-group-title {
+  color: var(--color-muted-lavender);
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  font-weight: 400;
+  letter-spacing: 0.08em;
+  line-height: 1.4;
+  margin: 0.35rem 0.4rem 0.3rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.artifact-comments-entries {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.artifact-comments-entry {
+  border: 1px solid transparent;
+  border-radius: var(--radius-block);
+  margin: 0.2rem 0 0;
+}
+
+.artifact-comments-entry--open {
+  background: var(--color-night);
+  border-color: var(--hairline-strong);
+}
+
+.artifact-comments-entry-head,
+.artifact-comments-entry-resolved {
+  display: grid;
+  gap: 0.1rem 0.5rem;
+  grid-template-columns: 1.1rem minmax(0, 1fr);
+  padding: 0.45rem 0.5rem 0.5rem 0.4rem;
+}
+
+.artifact-comments-entry-head {
+  appearance: none;
+  background: none;
+  border: 0;
+  border-radius: var(--radius-block);
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  margin: 0;
+  text-align: left;
+  width: 100%;
+}
+
+.artifact-comments-entry-head:hover {
+  background: var(--row-tint);
+}
+
+.artifact-comments-entry-mark {
+  border: 1px solid var(--hairline-strong);
+  border-radius: 50%;
+  color: var(--color-lavender);
+  display: grid;
+  font-family: var(--font-display);
+  font-size: 0.72rem;
+  height: 1.1rem;
+  line-height: 1;
+  margin-top: 0.1rem;
+  place-items: center;
+  width: 1.1rem;
+}
+
+.artifact-comments-entry--open .artifact-comments-entry-mark {
+  background: var(--color-lavender);
+  border-color: var(--color-lavender);
+  color: var(--color-night);
+}
+
+.artifact-comments-entry-words {
+  color: var(--color-pale-lavender);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.artifact-comments-entry-state {
+  color: var(--color-muted-lavender);
+  font-size: 0.9em;
+  grid-column: 2;
+}
+
+.artifact-comments-tick {
+  color: var(--color-mint);
+}
+
+/* Resolved: one greyed, dashed line, with Reopen at its end. */
+.artifact-comments-entry-resolved {
+  align-items: center;
+  border: 1px dashed var(--hairline-strong);
+  border-radius: var(--radius-block);
+  grid-template-columns: 1.1rem minmax(0, 1fr) auto;
+  padding: 0.35rem 0.5rem 0.35rem 0.4rem;
+}
+
+.artifact-comments-entry-resolved .artifact-comments-entry-mark {
+  color: var(--color-muted-lavender);
+  margin: 0;
+}
+
+.artifact-comments-entry-resolved .artifact-comments-entry-words,
+.artifact-comments-entry-done {
+  color: var(--color-muted-lavender);
+}
+
+.artifact-comments-entry-done {
+  font-size: 0.9em;
+  white-space: nowrap;
+}
+
+.artifact-comments-reopen,
+.artifact-comments-new {
+  appearance: none;
+  background: none;
+  border: 0;
+  border-radius: var(--radius-chip);
+  color: var(--color-lavender);
+  cursor: pointer;
+  font: inherit;
+  padding: 0;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--color-lavender) 45%, transparent);
+  text-underline-offset: 0.18em;
+}
+
+.artifact-comments-reopen:hover,
+.artifact-comments-new:hover {
+  color: var(--color-pale-lavender);
+  text-decoration-color: currentColor;
+}
+
+.artifact-comments-new {
+  display: block;
+  font-size: 0.9em;
+  margin: 0.45rem 0.4rem 0.15rem;
+}
+
+.artifact-comments-entry-body {
+  padding: 0 0.6rem 0.75rem;
+}
+
+.artifact-comments-entry-tools {
+  display: flex;
+  justify-content: flex-end;
+  margin: 0 0 0.6rem;
+}
+
+.artifact-comments-resolve {
+  appearance: none;
+  background: transparent;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-pill);
+  color: var(--color-pale-lavender);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.85em;
+  line-height: 1.5;
+  padding: 0 0.7rem;
+}
+
+.artifact-comments-resolve:hover {
+  border-color: var(--color-lavender);
+  color: var(--color-white);
+}
+
+.artifact-comments-resolve:disabled,
+.artifact-comments-reopen:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.artifact-comments-entry-status {
+  color: var(--color-muted-lavender);
+  font-size: 0.85em;
+  margin: 0 0.5rem 0.4rem;
+}
+
+.artifact-comments-entry-status:empty {
+  display: none;
+}
+
+.artifact-comments-panel .artifact-comment-thread {
+  border-top: 0;
+  font-size: inherit;
+  margin: 0;
+  padding: 0;
+}
+
+.artifact-comments-compose {
+  padding: 0 0.25rem;
+}
+
+.artifact-comments-compose .artifact-comment-form {
+  margin-top: 0.45rem;
+}
+
+/* Comments on passages (docs/design/margin-comments-mockup.html, "Selecting
+   text" and the Subtle style of "Highlight styles"). Selected words get a
+   pill just above the selection's end, its tip at that end. A passage
+   commented on wears the rose tint over a rose underline, then its number in
+   a small ring, and lights while pointed at or while its thread is open;
+   overlapping passages stack their tints and touching ones keep a hairline
+   gap. The words a composer quotes wear a dashed underline. */
+.artifact-passage-pill {
+  align-items: center;
+  appearance: none;
+  background: var(--color-surface);
+  border: 1px solid color-mix(in srgb, var(--color-lavender) 60%, transparent);
+  border-radius: var(--radius-pill);
+  box-shadow: 0 8px 22px rgba(13, 10, 21, 0.5);
+  color: var(--color-white);
+  cursor: pointer;
+  display: inline-flex;
+  font-family: var(--font-body);
+  font-size: 0.82rem;
+  font-weight: 600;
+  gap: 0.45rem;
+  line-height: 1.2;
+  margin: 0;
+  padding: 0.38rem 0.8rem 0.38rem 0.65rem;
+  position: absolute;
+  white-space: nowrap;
+  z-index: 1;
+}
+
+.artifact-passage-pill::after {
+  background: inherit;
+  border-bottom: 1px solid color-mix(in srgb, var(--color-lavender) 60%, transparent);
+  border-right: 1px solid color-mix(in srgb, var(--color-lavender) 60%, transparent);
+  bottom: -5px;
+  content: "";
+  height: 8px;
+  left: var(--artifact-passage-tip, 75%);
+  margin-left: -4px;
+  position: absolute;
+  transform: rotate(45deg);
+  width: 8px;
+}
+
+.artifact-passage-pill:hover {
+  border-color: var(--color-lavender);
+}
+
+.artifact-passage-pill-icon {
+  color: var(--color-lavender);
+  margin-bottom: 0.2rem;
+}
+
+.artifact-passage-pill[hidden] {
+  display: none;
+}
+
+.artifact-body mark.artifact-passage {
+  background-color: var(--highlight);
+  border-bottom: 2px solid var(--highlight-line);
+  border-radius: 3px 3px 0 0;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+  color: inherit;
+  cursor: pointer;
+  padding: 0.05em 0;
+}
+
+.artifact-body mark.artifact-passage + mark.artifact-passage--first {
+  margin-left: 2px;
+}
+
+.artifact-body mark.artifact-passage--lit {
+  background-color: color-mix(in srgb, var(--color-rose) 34%, transparent);
+  border-bottom-color: var(--color-rose);
+}
+
+.artifact-body mark.artifact-passage--pending {
+  border-bottom-color: var(--color-rose);
+  border-bottom-style: dashed;
+  cursor: text;
+}
+
+.artifact-passage-number {
+  border: 1px solid var(--highlight-line);
+  border-radius: var(--radius-pill);
+  color: var(--color-pale-rose);
+  cursor: pointer;
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  font-style: normal;
+  font-weight: 600;
+  line-height: 1;
+  margin: 0 0.1rem 0 0.15rem;
+  min-width: 0.7rem;
+  padding: 0.15rem 0.22rem;
+  position: relative;
+  text-align: center;
+  top: -0.6em;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.artifact-passage-number--lit {
+  background: var(--color-rose);
+  border-color: var(--color-rose);
+  color: var(--color-night);
+}
+
+/* A passage's quote, italic in the display voice: it heads its thread in a
+   box, and its entry in the panel. */
+.artifact-passage-quoted {
+  color: var(--color-pale-lavender);
+  font-family: var(--font-display);
+  font-style: italic;
+}
+
+del.artifact-passage-quoted {
+  color: var(--color-muted-lavender);
+}
+
+.artifact-passage-why {
+  color: var(--color-muted-lavender);
+  font-size: 0.9em;
+}
+
+.artifact-body .artifact-passage-head {
+  border-left: 2px solid var(--highlight-line);
+  margin: 0 0 0.75em;
+  overflow-wrap: anywhere;
+  padding: 0 0 0 0.6rem;
+}
+
+.artifact-comments-panel .artifact-passage-head {
+  display: none;
+}
+
+.artifact-comments-entry--passage .artifact-comments-entry-mark {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  font-weight: 600;
+}
+
+/* A passage not found: its whole quote and why, on as many lines as they take. */
+.artifact-comments-entry--detached .artifact-comments-entry-head .artifact-comments-entry-words {
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.artifact-passage-composer {
+  margin: 0.45rem 0.25rem 0.75rem;
+}
+
+.artifact-comment .artifact-passage-composer {
+  margin: 0.9em 0 0;
+}
+
+:is(.artifact-body, .artifact-comments-panel) .artifact-passage-quote {
+  border-left: 2px dashed var(--color-rose);
+  color: var(--color-pale-lavender);
+  font-family: var(--font-display);
+  font-style: italic;
+  margin: 0 0 0.5rem;
+  overflow-wrap: anywhere;
+  padding: 0 0 0 0.6rem;
+}
+
+.artifact-passage-composer .artifact-comment-form {
+  margin: 0;
+}
+
+.artifact-passage-cancel {
+  appearance: none;
+  background: none;
+  border: 0;
+  border-radius: var(--radius-chip);
+  color: var(--color-lavender);
+  cursor: pointer;
+  display: block;
+  font: inherit;
+  font-size: 0.85rem;
+  margin: 0.4rem 0 0 auto;
+  padding: 0 0.25rem;
+}
+
+.artifact-passage-cancel:hover {
+  color: var(--color-pale-lavender);
+}
+
+/* Last, so a hidden part stays hidden whatever display its class gives it. */
+.artifact-comments-panel[hidden],
+.artifact-comments-panel [hidden] {
+  display: none;
+}
+
+/* A box in the panel's company: its summary is a one-line chip saying where
+   its section's open threads stand, the faces of who wrote and answered
+   before it. Every state is the same height, so a reply arriving moves
+   nothing below it. */
+.artifact-comment-chip {
+  align-items: center;
+  display: inline-flex;
+  gap: 0.45rem;
+  line-height: 1.4;
+  max-width: 100%;
+  padding: 0.2rem 0.85rem 0.2rem 0.3rem;
+  vertical-align: top;
+  white-space: nowrap;
+}
+
+.artifact-comment-chip-faces {
+  align-items: center;
+  display: inline-flex;
+  flex: none;
+  height: 1.3rem;
+}
+
+.artifact-comment-chip-face {
+  background: var(--reader-avatar);
+  border: 1px solid var(--color-rose);
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px var(--color-night);
+  color: var(--color-pale-rose);
+  display: inline-grid;
+  font-size: 0.56rem;
+  font-weight: 600;
+  height: 1.3rem;
+  line-height: 1;
+  place-items: center;
+  width: 1.3rem;
+}
+
+.artifact-comment-chip-face::before {
+  content: attr(data-initial);
+}
+
+.artifact-comment-chip-face + .artifact-comment-chip-face {
+  margin-left: -0.35rem;
+}
+
+.artifact-comment-chip-face--agent {
+  background: var(--color-lavender);
+  border-color: var(--color-lavender);
+  border-radius: var(--radius-chip);
+  color: var(--color-night);
+  font-family: var(--font-mono);
+}
+
+.artifact-comment-chip-icon {
+  color: var(--color-lavender);
+  margin: 0 0.15rem 0 0.35rem;
+}
+
+.artifact-comment-chip-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.artifact-comment-chip--none {
+  border-style: dashed;
+}
+
+.artifact-comment-chip-act {
+  color: var(--color-lavender);
+}
+
+.artifact-comment-chip--writing {
+  background: var(--quote-tint);
+  border-color: color-mix(in srgb, var(--color-lavender) 60%, transparent);
+  color: var(--color-pale-lavender);
+}
+
+.artifact-comment-chip-pulse,
+.artifact-comment-chip-hollow {
+  border-radius: 50%;
+  display: inline-block;
+  height: 0.55em;
+  margin-right: 0.4em;
+  vertical-align: 0.05em;
+  width: 0.55em;
+}
+
+.artifact-comment-chip-pulse {
+  animation: artifact-comments-pulse 1.6s ease-in-out infinite;
+  background: var(--color-lavender);
+}
+
+.artifact-comment-chip-hollow {
+  border: 1.5px solid var(--color-amber);
+}
+
+.artifact-comment-chip-bang {
+  background: var(--color-amber);
+  border-radius: 50%;
+  color: var(--color-night);
+  display: inline-grid;
+  font-size: 0.8em;
+  font-weight: 700;
+  height: 1.2em;
+  line-height: 1;
+  margin-right: 0.4em;
+  place-items: center;
+  vertical-align: -0.15em;
+  width: 1.2em;
+}
+
+.artifact-comment-chip-bang::before {
+  content: "!";
+}
+
+@keyframes artifact-comments-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.35;
+    transform: scale(0.7);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .artifact-comments-panel {
+    transition: none;
+  }
+
+  .artifact-comments-dot--writing,
+  .artifact-comment-chip-pulse {
+    animation: none;
+  }
+}
