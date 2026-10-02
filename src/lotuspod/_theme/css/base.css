@@ -448,7 +448,7 @@ body {
 }
 
 .artifact-body h2 {
-  color: var(--color-white);
+  color: var(--color-lavender);
   font-family: var(--font-display);
   font-size: var(--size-h2);
   font-weight: 600;

@@ -14,6 +14,10 @@ test.use({ viewport: MEDIUM });
 // expected colour is read from the theme's tokens, never from the stylesheet.
 const PAGE = '/capture-palette.html';
 const DECISIONS = '/capture-decisions.html';
+// A section heading and a subsection heading under it, and a page whose
+// sections fold under their headings.
+const SUBSECTIONS = '/capture-section-questions.html';
+const SECTIONS = '/capture-sections.html';
 const ASSERTION = process.env.LOTUSPOD_TEST_ASSERTION ?? '';
 const SIGNED_IN = { 'Cf-Access-Jwt-Assertion': ASSERTION };
 // The reader as a page names them: their address's part before the @.
@@ -153,6 +157,52 @@ test.describe('signed in', () => {
     await expect(block).toHaveCSS('border-top-color', rgb(STRUCTURE.code_edge));
     await expect(block).toHaveCSS('border-left-color', rgb(STRUCTURE.code_edge));
     await expect(block).toHaveCSS('background-color', rgb(COLORS.deep_night));
+    await clean(seen);
+  });
+
+  test('a section title is lavender, apart from body text and a pale-lavender subsection title', async ({ page }) => {
+    const seen = await watch(page);
+    await page.goto(SUBSECTIONS);
+    const body = page.locator('.artifact-body');
+    const sections = body.locator('h2');
+    const subsections = body.locator('h3');
+    await expect(sections).toHaveCount(2);
+    await expect(subsections).toHaveCount(2);
+    const text = await css(body.locator('p').first(), 'color');
+    for (const heading of await sections.all()) {
+      await expect(heading).toHaveCSS('color', rgb(COLORS.lavender));
+      expect(await css(heading, 'color')).not.toBe(text);
+    }
+    for (const heading of await subsections.all()) {
+      await expect(heading).toHaveCSS('color', rgb(COLORS.pale_lavender));
+      expect(await css(heading, 'color')).not.toBe(rgb(COLORS.lavender));
+    }
+    await clean(seen);
+  });
+
+  test('a folded section title keeps a visible focus ring around its lavender text', async ({ page }) => {
+    const seen = await watch(page);
+    await page.goto(SECTIONS);
+    const heading = page.locator('h2#findings');
+    const button = heading.getByRole('button', { name: 'Findings' });
+    await button.click();
+    await expect(button).toHaveAttribute('aria-expanded', 'false');
+    // Away from the button, whose hover lightens its text.
+    await page.mouse.move(0, 0);
+    await expect(heading).toHaveCSS('color', rgb(COLORS.lavender));
+    await expect(button).toHaveCSS('color', rgb(COLORS.lavender));
+    expect(await css(button, 'border-bottom-color', '::before')).toBe(rgb(COLORS.lavender));
+
+    await page.locator('.artifact-outline-list a').last().focus();
+    let reached = false;
+    for (let presses = 0; presses < 2 && !reached; presses += 1) {
+      await page.keyboard.press('Tab');
+      reached = await button.evaluate((node) => node === document.activeElement && node.matches(':focus-visible'));
+    }
+    expect(reached).toBe(true);
+    expect(await css(button, 'outline-style')).not.toBe('none');
+    expect(parseFloat(await css(button, 'outline-width'))).toBeGreaterThan(0);
+    expect(await css(button, 'outline-color')).not.toBe(rgb(COLORS.night));
     await clean(seen);
   });
 
