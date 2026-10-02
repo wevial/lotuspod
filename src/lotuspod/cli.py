@@ -629,9 +629,8 @@ def cmd_render(args: argparse.Namespace) -> int:
     if owner and not getattr(args, "owner_checked", False):
         check_owner(args, Path(args.out_dir) if args.out_dir else DEFAULT_OUTPUT_DIR)
     tokens = load_tokens()
-    kicker = "Lotuspod"
-    if args.episode:
-        kicker = f"Lotuspod · Episode {args.episode}"
+    # The title bar already names the site; a kicker shows only an episode.
+    kicker = f"Lotuspod · Episode {args.episode}" if args.episode else ""
     summary_block = f'<p class="artifact-summary">{args.summary}</p>' if args.summary else ""
     body = args.body
     out_dir = Path(args.out_dir) if args.out_dir else DEFAULT_OUTPUT_DIR

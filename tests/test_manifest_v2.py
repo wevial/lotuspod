@@ -1,7 +1,8 @@
 """Test suite for manifest v2 and fail-closed visibility behavior.
 
 Covers the shared visibility rule end to end: extract_visibility edges,
-render's flag writing, the artifact page's back-link to the index,
+render's flag writing, the artifact page's header (title first, no
+back link, a kicker only for an episode),
 render's deterministic h2 ids and the outline data they feed,
 manifest v2 uniform schema + fail-closed listing,
 the index page's same rule, serve v2's allow-list plus the request
@@ -156,35 +157,60 @@ class RenderFlagTests(TempDirTestCase):
         self.assert_flag_marker("draft", "false")
 
 
-class ArtifactNavTests(TempDirTestCase):
-    """Every rendered artifact offers a way back to the index."""
+class ArtifactHeaderTests(TempDirTestCase):
+    """LOTUS-53: a page starts with its title; the title bar is the way back.
+
+    No back link sits above the header, and a kicker shows only an episode,
+    since the bar already names the site and links to the index."""
+
+    HEADER = re.compile(r'<header class="artifact-header">\s*<(\w+) class="([^"]+)"')
 
     def rendered(self, name: str = "ep-001", *extra: str) -> str:
         rc, _, err = self.render(name, *extra)
         self.assertEqual(rc, 0, err)
         return (self.out_dir / f"{name}.html").read_text(encoding="utf-8")
 
-    def test_render_links_back_to_the_index(self):
-        page = self.rendered()
-        self.assertIn('<nav class="artifact-nav">', page)
-        self.assertIn('href="index.html"', page)
+    def test_page_without_an_episode_opens_with_its_title(self):
+        for name, extra in (("ep-001", ()), ("draft", ("--hidden",))):
+            with self.subTest(name=name):
+                page = self.rendered(name, *extra)
+                self.assertNotIn("artifact-nav", page)
+                self.assertNotIn("artifact-kicker", page)
+                first = self.HEADER.search(page)
+                self.assertIsNotNone(first)
+                self.assertEqual(first.groups(), ("h1", "artifact-title"))
 
-    def test_back_link_sits_above_the_header(self):
+    def test_episode_page_keeps_its_kicker_and_no_back_link(self):
+        page = self.rendered("ep-003", "--episode", "3")
+        self.assertNotIn("artifact-nav", page)
+        self.assertEqual(
+            re.findall(r'<p class="artifact-kicker">(.*?)</p>', page),
+            ["Lotuspod · Episode 3"],
+        )
+        first = self.HEADER.search(page)
+        self.assertEqual(first.groups(), ("p", "artifact-kicker"))
+
+    def test_title_bar_is_the_only_link_to_the_index(self):
         page = self.rendered()
-        self.assertLess(
-            page.index('class="artifact-nav"'),
-            page.index('class="artifact-header"'),
+        self.assertEqual(
+            re.findall(r'<a [^>]*href="index\.html"[^>]*>', page),
+            ['<a class="artifact-topbar-brand" href="index.html">'],
         )
 
-    def test_hidden_render_links_back_too(self):
-        self.assertIn('href="index.html"', self.rendered("draft", "--hidden"))
+    def test_theme_has_no_back_link_rule(self):
+        self.assertNotIn(".artifact-nav", served_css())
 
-    def test_theme_styles_the_back_link(self):
-        css = served_css()
-        self.assertIn(".artifact-nav", css)
+    def test_manifest_records_a_kicker_only_for_an_episode(self):
+        self.render("ep-002", "--episode", "2", "--date", "2026-03-04")
+        self.render("plain", "--date", "2026-03-05")
+        rc, _, err = run_cli("manifest", "--out-dir", str(self.out_dir))
+        self.assertEqual(rc, 0, err)
+        data = json.loads((self.out_dir / "manifest.json").read_text(encoding="utf-8"))
+        episodes = {entry["file"]: entry["episode"] for entry in data["artifacts"]}
+        self.assertEqual(episodes, {"ep-002.html": "2", "plain.html": ""})
 
-    def test_back_link_does_not_disturb_listing_metadata(self):
-        """The nav's <a> must not be mistaken for artifact metadata."""
+    def test_episode_kicker_still_feeds_listing_metadata(self):
+        """The manifest reads an episode back from the kicker as before."""
         self.render(
             "ep-002", "--episode", "2", "--date", "2026-03-04",
             "--summary", "back from the pond",

@@ -153,25 +153,6 @@ body {
   color: var(--color-pale-lavender);
 }
 
-/* A quiet way back to the index: it sits above the header card in the muted
-   voice of the meta line, so it is available without competing with the title.
-   Affordance comes from the arrow and the hover lift into lavender - no button
-   chrome, and no underline at rest. */
-.artifact-nav {
-  font-size: 0.85rem;
-  margin: 0 0 1.25rem;
-}
-
-.artifact-nav a {
-  color: var(--color-muted-lavender);
-  text-decoration: none;
-}
-
-.artifact-nav a:hover,
-.artifact-nav a:focus-visible {
-  color: var(--color-lavender);
-}
-
 .artifact-header {
   background: var(--color-surface);
   border: 1px solid var(--hairline);

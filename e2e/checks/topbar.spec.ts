@@ -1,7 +1,7 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 
 // The title bar from the top of the page: the capture fixture's palette
-// page, which has five sections, comments and room to scroll 600 pixels at
+// page, which has five sections, comments and room to scroll 500 pixels at
 // 1440 by 900, and the same page on a 360-pixel phone.
 // The bar is visible at scroll 0, the page reserves its height so nothing in
 // the page starts under it, and the open comments panel meets the bar's
@@ -12,7 +12,7 @@ const SLUG = 'capture-palette';
 const SIGNED_IN = { 'Cf-Access-Jwt-Assertion': process.env.LOTUSPOD_TEST_ASSERTION ?? '' };
 const WIDE = { width: 1440, height: 900 };
 const PHONE = { width: 360, height: 780 };
-const SCROLL = 600;
+const SCROLL = 500;
 
 test.use({ extraHTTPHeaders: SIGNED_IN });
 
@@ -48,7 +48,7 @@ async function scrollTo(page: Page, y: number) {
   await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(y);
 }
 
-test('at scroll 0 the bar is visible and the back link starts below it', async ({ page }) => {
+test('at scroll 0 the bar is visible, links to the index, and the title starts below it', async ({ page }) => {
   await page.setViewportSize(WIDE);
   const errors = await load(page);
   const bar = page.locator('.artifact-topbar');
@@ -56,9 +56,18 @@ test('at scroll 0 the bar is visible and the back link starts below it', async (
   expect(await shown(bar)).toEqual({ opacity: '1', transform: 'none', visibility: 'visible' });
   const edge = (await rect(bar)).bottom;
   expect(edge).toBeGreaterThan(0);
-  const back = page.locator('.artifact-nav a');
-  await expect(back).toHaveText(/Lotuspod/);
-  expect((await rect(back)).top).toBeGreaterThanOrEqual(edge);
+  // The bar is the way back to the index: the page has no back link or plain
+  // kicker of its own, so its header opens with the title.
+  const home = bar.locator('a.artifact-topbar-brand');
+  await expect(home).toHaveText('Lotuspod');
+  expect(await home.evaluate((node) => (node as HTMLAnchorElement).href))
+    .toBe(new URL('/index.html', page.url()).href);
+  await expect(page.locator('.artifact-nav')).toHaveCount(0);
+  await expect(page.locator('.artifact-kicker')).toHaveCount(0);
+  const title = page.locator('header.artifact-header > :first-child');
+  await expect(title).toHaveClass('artifact-title');
+  expect(await title.evaluate((node) => node.tagName)).toBe('H1');
+  expect((await rect(title)).top).toBeGreaterThan(edge);
   expect((await rect(page.locator('.artifact-header'))).top).toBeGreaterThanOrEqual(edge);
   expect((await rect(page.locator('.artifact-outline'))).top).toBeGreaterThanOrEqual(edge);
   expect(errors).toEqual([]);
@@ -100,7 +109,6 @@ test('on a phone the bar is visible at scroll 0, the title is clear of it, and n
   const middle = { x: (heading.left + heading.right) / 2, y: (heading.top + heading.bottom) / 2 };
   expect(await page.evaluate(({ x, y }) =>
     document.elementFromPoint(x, y)?.closest('h1.artifact-title') !== null, middle)).toBe(true);
-  expect((await rect(page.locator('.artifact-nav a'))).top).toBeGreaterThanOrEqual(edge);
   const widths = await page.evaluate(() => ({
     scroll: document.documentElement.scrollWidth, viewport: document.documentElement.clientWidth,
   }));

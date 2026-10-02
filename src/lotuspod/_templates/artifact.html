@@ -19,13 +19,9 @@
       <a class="artifact-topbar-title" href="#top">{{title}}</a>
     </div>
 
-    <nav class="artifact-nav">
-      <a href="index.html"><span aria-hidden="true">&#8592;</span> Lotuspod</a>
-    </nav>
-
     <header class="artifact-header">
-      <p class="artifact-kicker">{{kicker}}</p>
-      <h1 class="artifact-title">{{title}}</h1>
+{{#kicker}}      <p class="artifact-kicker">{{kicker}}</p>
+{{/kicker}}      <h1 class="artifact-title">{{title}}</h1>
       <p class="artifact-meta"><time datetime="{{date}}">{{date}}</time></p>
 {{#owner}}      <p class="artifact-owner">Published by {{owner}}</p>
 {{/owner}}      {{summary_block}}
