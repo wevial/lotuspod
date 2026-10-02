@@ -40,6 +40,9 @@
   var CHANGED_GROUP = "Sections that have changed";
   // Whether the reader left the comments panel open or folded.
   var PANEL = "lotuspod:comments-panel";
+  // Whether the reader shows the panel's resolved threads, kept for the
+  // session under this and the page's path.
+  var RESOLVED_SHOWN = "lotuspod:resolved-shown:";
   // The room the panel needs right of the reading column, in rem.
   var ROOM = 21;
   // Without that room, the narrowest window a popover opens in; narrower,

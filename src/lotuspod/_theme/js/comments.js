@@ -962,11 +962,20 @@
       var current = null;
       var groups = new Map();
       var dotsKey = null;
+      // Whether resolved threads are listed: hidden unless the reader shows
+      // them, for the page in this session.
+      var resolvedShown = false;
+      var resolvedKey = RESOLVED_SHOWN + location.pathname;
 
       try {
         open = localStorage.getItem(PANEL) === "open";
       } catch (ignored) {
         open = false;
+      }
+      try {
+        resolvedShown = sessionStorage.getItem(resolvedKey) === "1";
+      } catch (ignored) {
+        resolvedShown = false;
       }
 
       function mute(node) {
@@ -999,7 +1008,13 @@
       fold.type = "button";
       fold.setAttribute("aria-label", "Fold comments");
       fold.appendChild(mute(element("span", "", "»")));
-      head.append(element("h2", "artifact-comments-title", "Comments"), count, fold);
+      // Shows or hides the resolved threads; not drawn while there are none.
+      var showResolved = element("button", "artifact-comments-show-resolved");
+      showResolved.type = "button";
+      showResolved.hidden = true;
+      var tally = element("div", "artifact-comments-tally");
+      tally.append(count, showResolved);
+      head.append(element("h2", "artifact-comments-title", "Comments"), tally, fold);
       var list = element("div", "artifact-comments-groups");
       // The one way to start a thread on a section: a button opening a list
       // of the page's sections, under a word saying when there are no threads.
@@ -1159,9 +1174,17 @@
         unpick(document.activeElement === document.body || start.contains(document.activeElement));
       }, true);
 
-      // Whether a group is listed: it holds a thread, or a form open in it.
+      // Whether a group holds a thread that is listed: an open one, or a
+      // resolved one while they are shown.
+      function showing(made) {
+        return Boolean(resolvedShown ? made.entries.firstChild :
+          made.entries.querySelector(":scope > .artifact-comments-entry:not(.artifact-comments-entry--resolved)"));
+      }
+
+      // Whether a group is listed: it holds a listed thread, or a form open
+      // in it.
       function busy(made) {
-        return Boolean(made.entries.firstChild) ||
+        return showing(made) ||
           (!made.holder.hidden && made.node.contains(made.holder)) ||
           Boolean(made.node.querySelector(".artifact-passage-composer"));
       }
@@ -1171,6 +1194,7 @@
       // stays where it is.
       function tidy() {
         none.hidden = shown.size > 0;
+        strays.node.hidden = !showing(strays);
         var changes = [];
         groups.forEach(function (made) {
           if (made.node.hidden === busy(made)) {
@@ -1242,6 +1266,36 @@
         }
       }
       setOpen(open, false);
+
+      // Show or hide the resolved threads, and the groups holding only them.
+      function setResolvedShown(show, remember) {
+        resolvedShown = show;
+        aside.classList.toggle("artifact-comments-panel--resolved-shown", show);
+        showResolved.setAttribute("aria-pressed", show ? "true" : "false");
+        if (remember) {
+          try {
+            if (show) {
+              sessionStorage.setItem(resolvedKey, "1");
+            } else {
+              sessionStorage.removeItem(resolvedKey);
+            }
+          } catch (ignored) {
+            // Storage refused: the threads still show, only unremembered.
+          }
+        }
+      }
+      setResolvedShown(resolvedShown, false);
+
+      // The control's words, for the page's n resolved threads.
+      function labelResolved(n) {
+        showResolved.hidden = n === 0;
+        showResolved.textContent = resolvedShown ? "Hide resolved" : "Show resolved (" + n + ")";
+      }
+
+      showResolved.addEventListener("click", function () {
+        setResolvedShown(!resolvedShown, true);
+        api.refresh();
+      });
 
       rail.addEventListener("click", function () {
         setOpen(true, true);
@@ -1517,7 +1571,11 @@
           refresh();
           if (focused) {
             // A popover or the sheet shows no head: Resolve takes the focus.
-            (resolve ? made.reopen : api.wide ? made.head : made.resolve).focus({ preventScroll: true });
+            // A thread resolved in the panel while resolved ones are hidden
+            // leaves the list: the control showing them takes it.
+            var gone = resolve && api.wide && !resolvedShown;
+            (gone ? showResolved : resolve ? made.reopen : api.wide ? made.head : made.resolve)
+              .focus({ preventScroll: true });
           }
         } catch (ignored) {
           made.status.textContent = "Not saved: the site did not answer. Try again.";
@@ -1731,8 +1789,8 @@
             sort(target);
           }
         }
-        strays.node.hidden = !strays.entries.firstChild;
         draw(thread);
+        strays.node.hidden = !showing(strays);
       };
 
       // Without room for the panel, one thing at a time opens over the text,
@@ -1790,6 +1848,7 @@
         badge.hidden = unresolved.length === 0;
         count.textContent = unresolved.length + " open · " +
           (threads.length - unresolved.length) + " resolved";
+        labelResolved(threads.length - unresolved.length);
         threads.forEach(draw);
         groups.forEach(sort);
         sort(strays);

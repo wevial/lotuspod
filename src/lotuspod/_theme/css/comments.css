@@ -756,6 +756,43 @@
   white-space: nowrap;
 }
 
+/* The counts, and under them when they leave no room, the quiet control
+   that shows or hides the resolved threads. */
+.artifact-comments-tally {
+  align-items: baseline;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.1rem 0.6rem;
+  min-width: 0;
+}
+
+.artifact-comments-show-resolved {
+  appearance: none;
+  background: none;
+  border: 0;
+  border-radius: var(--radius-chip);
+  color: var(--color-muted-lavender);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.85em;
+  padding: 0;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--color-muted-lavender) 45%, transparent);
+  text-underline-offset: 0.18em;
+  white-space: nowrap;
+}
+
+.artifact-comments-show-resolved:hover,
+.artifact-comments-show-resolved[aria-pressed="true"] {
+  color: var(--color-pale-lavender);
+  text-decoration-color: currentColor;
+}
+
+/* Resolved threads are hidden from the panel until the reader shows them. */
+.artifact-comments-panel:not(.artifact-comments-panel--resolved-shown) .artifact-comments-entry--resolved {
+  display: none;
+}
+
 .artifact-comments-fold {
   align-self: center;
   appearance: none;

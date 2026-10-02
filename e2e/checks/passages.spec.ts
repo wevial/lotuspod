@@ -686,6 +686,8 @@ test.describe('signed in', () => {
     await expect(marks(page, asked.id)).toHaveCount(0);
     await expect(page.locator(`.artifact-passage-number[data-thread="${asked.id}"]`)).toHaveCount(0);
     await expect(page.locator('.artifact-body p', { hasText: 'The pond pump' })).toHaveText(FINDINGS);
+    await expect(thread.item).toBeHidden();
+    await side.aside.getByRole('button', { name: 'Show resolved (1)' }).click();
     await thread.reopen.click();
     await expect(thread.head).toHaveAttribute('aria-expanded', 'true');
     expect(await joined(marks(page, asked.id))).toBe(HEATER);

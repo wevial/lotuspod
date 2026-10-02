@@ -97,6 +97,7 @@ function panel(page: Page) {
     badge: aside.locator('.artifact-comments-badge'),
     dots: aside.locator('.artifact-comments-dot'),
     count: aside.locator('.artifact-comments-count'),
+    showResolved: aside.locator('.artifact-comments-show-resolved'),
     fold: aside.getByRole('button', { name: 'Fold comments' }),
     titles: aside.locator('.artifact-comments-group:not([hidden]) > .artifact-comments-group-title'),
     group: (title: string) => aside.locator('.artifact-comments-group')
@@ -281,6 +282,34 @@ async function loadFive(page: Page) {
   return side;
 }
 
+// A long review on the five-section page: two open threads in Findings, and
+// three resolved, one in Risks and two in Costs.
+function review() {
+  return [
+    ...onFive({ findings: 'Findings' }),
+    ...onFive({ findings: 'Findings' }),
+    ...onFive({ risks: 'Risks' }, RESOLVED),
+    ...onFive({ costs: 'Costs' }, RESOLVED),
+    ...onFive({ costs: 'Costs' }, RESOLVED),
+  ];
+}
+
+// Answer reads with the threads as they now stand, and a post resolving or
+// reopening one by changing it.
+async function serveReview(page: Page, threads: any[]) {
+  await page.route((url) => url.pathname === '/api/comments', async (route) => {
+    const request = route.request();
+    if (request.method() === 'POST') {
+      const body = request.postDataJSON();
+      const thread = threads.find((each) => each.root.id === body.thread);
+      thread.resolution = body.resolved ? RESOLVED : OPEN;
+      await route.fulfill({ json: { page: FIVE_SLUG, thread: body.thread, resolution: thread.resolution } });
+      return;
+    }
+    await route.fulfill({ json: { page: FIVE_SLUG, threads } });
+  });
+}
+
 // The panel's one way to start a thread on a section.
 function picker(page: Page) {
   const aside = page.locator('aside.artifact-comments-panel');
@@ -351,10 +380,9 @@ test.describe('signed in', () => {
     await expect.poll(async () => (await side.aside.boundingBox())!.width).toBeGreaterThan(300);
     expect((await side.aside.boundingBox())!.width).toBeLessThanOrEqual(330);
     await expect(side.count).toHaveText('3 open · 1 resolved');
-    await expect(side.titles).toHaveText(['Findings', 'Risks', 'Next steps']);
+    await expect(side.titles).toHaveText(['Findings', 'Risks']);
     await expect(side.group('Findings').locator('.artifact-comments-entry')).toHaveCount(1);
     await expect(side.group('Risks').locator('.artifact-comments-entry')).toHaveCount(2);
-    await expect(side.group('Next steps').locator('.artifact-comments-entry')).toHaveCount(1);
     for (const root of [answered, writing, waiting]) {
       await expect(entry(page, root).mark).toHaveText('§');
     }
@@ -363,6 +391,10 @@ test.describe('signed in', () => {
     await expect(entry(page, writing).state).toContainText(`${OWNER} is writing`);
     await expect(entry(page, waiting).state).toContainText(`Waiting for ${OWNER}`);
     const done = entry(page, resolved);
+    await expect(done.item).toBeHidden();
+    await side.showResolved.click();
+    await expect(side.titles).toHaveText(['Findings', 'Risks', 'Next steps']);
+    await expect(side.group('Next steps').locator('.artifact-comments-entry')).toHaveCount(1);
     await expect(done.head).toBeHidden();
     await expect(done.resolved).toBeVisible();
     await expect(done.resolved.locator('.artifact-comments-entry-mark')).toHaveText('§');
@@ -537,7 +569,7 @@ test.describe('signed in', () => {
     await seen.clean();
   });
 
-  test('Resolve folds a thread to its dashed line and Reopen brings it back', async ({ page, request }) => {
+  test('Resolve takes a thread out of the list, shown it is a dashed line, and Reopen brings it back', async ({ page, request }) => {
     test.setTimeout(120_000);
     const seen = await watch(page);
     hermes('pull', '--owner', OWNER);
@@ -556,18 +588,25 @@ test.describe('signed in', () => {
     await expect(thread.head).toHaveAttribute('aria-expanded', 'true');
     await expect(thread.agents).toHaveCount(1);
     await thread.resolve.click();
-    await expect(thread.done).toHaveText('✓ resolved · Reopen');
-    await expect(thread.head).toBeHidden();
-    await expect(thread.readers).toBeHidden();
+    await expect(thread.item).toBeHidden();
+    await expect(side.titles).toHaveText(['Risks']);
+    await expect(side.showResolved).toHaveText('Show resolved (1)');
+    await expect(side.showResolved).toBeFocused();
     await expect(side.count).toHaveText('1 open · 1 resolved');
     await expect(side.badge).toHaveText('1');
     await expect(box(page, 'findings').chip).toHaveText('No comments · Comment');
     const stored = await readThread(request, asked.id);
     expect(stored.resolution.resolved).toBe(true);
     expect(stored.resolution.actor).toEqual({ kind: 'human', name: READER });
+    await side.showResolved.click();
+    await expect(thread.done).toBeVisible();
+    await expect(thread.done).toHaveText('✓ resolved · Reopen');
+    await expect(thread.head).toBeHidden();
+    await expect(thread.readers).toBeHidden();
 
     await page.reload();
     await settle(page);
+    await expect(thread.done).toBeVisible();
     await expect(thread.done).toHaveText('✓ resolved · Reopen');
     await side.fold.click();
     await expect(side.badge).toHaveText('1');
@@ -771,13 +810,145 @@ test.describe('signed in', () => {
     await seen.clean();
   });
 
-  test('a section with only a resolved thread is listed', async ({ page }) => {
+  test('a section with only a resolved thread is listed once resolved threads are shown', async ({ page }) => {
     const seen = await watch(page);
     await serve(page, () => onFive({ heater: 'Heater' }, RESOLVED), FIVE_SLUG);
     const side = await loadFive(page);
     await expect(side.count).toHaveText('0 open · 1 resolved');
-    await expect(side.titles).toHaveText(['Heater']);
+    await expect(side.titles).toHaveCount(0);
     await expect(picker(page).none).toBeHidden();
+    await side.showResolved.click();
+    await expect(side.titles).toHaveText(['Heater']);
+    await seen.clean();
+  });
+
+  test('resolved threads are hidden until the reader shows them, and the page remembers it for the session', async ({ page, browser }) => {
+    const seen = await watch(page);
+    const threads = review();
+    const [first, second, risk, cost, other] = threads.map((thread) => thread.root);
+    await serveReview(page, threads);
+    const side = await loadFive(page);
+    await expect(side.count).toHaveText('2 open · 3 resolved');
+    await expect(side.titles).toHaveText(['Findings']);
+    await expect(side.group('Findings').locator('.artifact-comments-entry:visible')).toHaveCount(2);
+    for (const root of [risk, cost, other]) {
+      await expect(entry(page, root).item).toBeHidden();
+    }
+    await expect(side.showResolved).toHaveText('Show resolved (3)');
+    await expect(side.showResolved).toHaveAttribute('aria-pressed', 'false');
+    // Beside the counts, in the panel's head.
+    const head = (await side.aside.locator('.artifact-comments-head').boundingBox())!;
+    const control = (await side.showResolved.boundingBox())!;
+    expect(control.y).toBeGreaterThanOrEqual(head.y);
+    expect(control.y + control.height).toBeLessThanOrEqual(head.y + head.height);
+    // The rail's dots stay the open threads'.
+    await side.fold.click();
+    await expect(side.dots).toHaveCount(2);
+    await side.opener.click();
+
+    await side.showResolved.click();
+    await expect(side.titles).toHaveText(['Findings', 'Risks', 'Costs']);
+    for (const root of [risk, cost, other]) {
+      await expect(entry(page, root).done).toBeVisible();
+      await expect(entry(page, root).done).toHaveText('✓ resolved · Reopen');
+    }
+    await expect(side.showResolved).toHaveText('Hide resolved');
+    await expect(side.showResolved).toHaveAttribute('aria-pressed', 'true');
+    await expect(entry(page, first).head).toBeVisible();
+    await expect(entry(page, second).head).toBeVisible();
+
+    await page.reload();
+    await settle(page);
+    await expect(side.titles).toHaveText(['Findings', 'Risks', 'Costs']);
+    await expect(entry(page, risk).done).toBeVisible();
+    await expect(side.showResolved).toHaveText('Hide resolved');
+    await expect(side.showResolved).toHaveAttribute('aria-pressed', 'true');
+    await seen.clean();
+
+    // A new session starts with them hidden.
+    const fresh = await browser.newContext({ viewport: WIDE, extraHTTPHeaders: SIGNED_IN });
+    try {
+      const again = await fresh.newPage();
+      const watched = await watch(again);
+      await serveReview(again, review());
+      const sideAgain = await loadFive(again);
+      await expect(sideAgain.titles).toHaveText(['Findings']);
+      await expect(sideAgain.showResolved).toHaveText('Show resolved (3)');
+      await expect(sideAgain.showResolved).toHaveAttribute('aria-pressed', 'false');
+      await watched.clean();
+    } finally {
+      await fresh.close();
+    }
+  });
+
+  test('a resolved thread reopened while shown moves among the open ones, and one resolved while hidden leaves the list', async ({ page }) => {
+    const seen = await watch(page);
+    const threads = review();
+    const [first, , risk, cost] = threads.map((thread) => thread.root);
+    await serveReview(page, threads);
+    const side = await loadFive(page);
+    await side.showResolved.click();
+    await entry(page, cost).reopen.click();
+    const reopened = entry(page, cost);
+    await expect(reopened.resolved).toBeHidden();
+    await expect(reopened.head).toBeVisible();
+    await expect(reopened.head).toHaveAttribute('aria-expanded', 'true');
+    await expect(side.count).toHaveText('3 open · 2 resolved');
+    await expect(side.showResolved).toHaveText('Hide resolved');
+
+    // Hidden again: the reopened thread stays among the open ones, its
+    // section with it, and the control counts one fewer.
+    await side.showResolved.click();
+    await expect(side.showResolved).toHaveText('Show resolved (2)');
+    await expect(side.titles).toHaveText(['Findings', 'Costs']);
+    await expect(side.group('Costs').locator('.artifact-comments-entry:visible')).toHaveCount(1);
+    await expect(reopened.head).toBeVisible();
+    await expect(entry(page, risk).item).toBeHidden();
+
+    // Resolved while hidden, a thread leaves the list.
+    await entry(page, first).head.click();
+    await entry(page, first).resolve.click();
+    await expect(entry(page, first).item).toBeHidden();
+    await expect(side.showResolved).toHaveText('Show resolved (3)');
+    await expect(side.count).toHaveText('2 open · 3 resolved');
+    await expect(side.titles).toHaveText(['Findings', 'Costs']);
+    await seen.clean();
+  });
+
+  test('a page with no resolved threads draws no control to show them', async ({ page }) => {
+    const seen = await watch(page);
+    await serve(page, () => onFive({ findings: 'Findings', costs: 'Costs' }), FIVE_SLUG);
+    const side = await loadFive(page);
+    await expect(side.count).toHaveText('2 open · 0 resolved');
+    await expect(side.aside.getByRole('button', { name: /resolved/ })).toHaveCount(0);
+    await expect(side.showResolved).toBeHidden();
+    await seen.clean();
+  });
+
+  test('with storage that throws, resolved threads still show and hide', async ({ page }) => {
+    const seen = await watch(page);
+    await page.addInitScript(() => {
+      Object.defineProperty(window, 'sessionStorage', {
+        configurable: true,
+        get() { throw new DOMException('Storage is off', 'SecurityError'); },
+      });
+    });
+    const threads = review();
+    const [, , risk] = threads.map((thread) => thread.root);
+    await serveReview(page, threads);
+    const side = await loadFive(page);
+    expect(await page.evaluate(() => {
+      try { return typeof window.sessionStorage; } catch (error) { return 'throws'; }
+    })).toBe('throws');
+    await expect(side.titles).toHaveText(['Findings']);
+    await side.showResolved.click();
+    await expect(side.titles).toHaveText(['Findings', 'Risks', 'Costs']);
+    await expect(entry(page, risk).done).toBeVisible();
+    await expect(side.showResolved).toHaveAttribute('aria-pressed', 'true');
+    await side.showResolved.click();
+    await expect(side.titles).toHaveText(['Findings']);
+    await expect(entry(page, risk).item).toBeHidden();
+    await expect(side.showResolved).toHaveText('Show resolved (3)');
     await seen.clean();
   });
 
