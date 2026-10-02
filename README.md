@@ -618,11 +618,13 @@ rounded composer with a round send button for a reply, folded behind a
 control until clicked: "Add to your comment", in the quiet voice, while no
 agent has answered in the thread, and "Reply" once one has. The box ends in a
 composer for a new thread. Posting adds the comment without a reload (and
-folds a thread's composer again), and the box's summary reads "Comment", or
-"Comments (N)" once it holds threads. A
-thread whose section the page no longer has is listed at the end of the body
-under "Comments on sections that have changed". Every author and text is set
-as text, never as markup.
+folds a thread's composer again). With the page script a box never opens in
+the text: its summary is a chip (below) that opens its threads in the
+comments panel, a popover or a bottom sheet, as the window allows; a page
+read without the script keeps the plain box. A thread whose section the page
+no longer has is listed at the end of the body under "Comments on sections
+that have changed" (in the panel, where there is one). Every author and text
+is set as text, never as markup.
 
 A comment's `state` is never drawn inside a bubble or a name line. HANDLE is
 the handle it is routed to (its `owner`, else the page's):
@@ -656,7 +658,8 @@ restate a state and are hidden from it.
 Wherever the window leaves at least 21rem between the reading column's right
 edge and its own (checked on load and on resize), a page's threads live in a
 side panel instead of its boxes, so opening a thread or a reply arriving never
-moves the text. Narrower windows keep the boxes, opening inline as above. The
+moves the text. Narrower windows open a thread over the text instead, in a
+popover or a bottom sheet (below); no width opens a box inline. The
 panel is an `aside` named "Comments", fixed to the window's right edge under
 the title bar. It starts folded to a 2.75rem rail: a "Comments" button, a
 badge counting the open (unresolved) threads, and one dot per open thread in
@@ -676,14 +679,15 @@ which unfolds the box's own form in the panel. The page remembers whether the
 reader left the panel open or folded in `localStorage` (a page whose storage
 throws starts folded), and Escape folds it.
 
-Beside the panel, each box never opens: its summary is a one-line chip
-reading where its section's open threads stand. With none, "No comments ·
+At any width, each box never opens: its summary is a one-line chip reading
+where its section's open threads stand. With none, "No comments ·
 Comment"; when the newest reader comment among them is `claimed`, "HANDLE is
 writing…"; `pending`, `unavailable` or `paused`, "N comments · waiting",
 counting every message in them; `failed`, "HANDLE couldn't answer"; otherwise
 "N replies · ✓ HANDLE answered", naming the newest agent reply's handle.
 Clicking it, or Enter or Space on it, opens the panel at that thread, or at
-the section's form when it has none.
+the section's form when it has none; without the panel, it opens them in a
+popover or the bottom sheet.
 
 "Resolve" resolves a thread as the reader (`{page, thread, resolved: true}`,
 above): its entry folds to a dashed line, its opening words and "✓ resolved ·
@@ -691,12 +695,47 @@ Reopen", and its dot leaves the rail. "Reopen" reopens it and shows its
 messages again. Under `prefers-reduced-motion: reduce` the pulsing dot keeps
 still and the panel opens without sliding.
 
+### Without room for the panel: a popover, or a bottom sheet
+
+A window without room for the panel but at least 700 pixels wide opens a
+thread in a popover (`div.artifact-comments-popover`), and a narrower one, a
+phone, in a bottom sheet (`div.artifact-comments-bottom-sheet`); the mode is checked
+on load and on resize, and what is open moves to the new place, a field's
+typed text with it. Either holds the thread as the panel's open entry does,
+the same nodes moved in from the panel and back, never drawn twice, so a
+reply arriving is drawn in it in place. Both are their own theme sources,
+`js/narrow.js` and `css/narrow.css`.
+
+The popover is a non-modal dialog named by what it holds: "Section HEADING",
+or a passage's number and opening words. It opens under the chip or the
+highlight that opened it, inside the window and over the text, which never
+moves, and scrolls on its own. One is open at a time. A chip's popover holds
+its section's own threads (and those on passages not found, and resolved
+ones), each with its status and "Resolve", and "Comment on this section"; a
+chip reading "No comments · Comment" opens it at the section's form, its
+field focused. A highlight's popover holds its thread. Escape, its "Close"
+button or a click outside closes it and gives the focus back to the chip or
+highlight that opened it.
+
+The bottom sheet is a dialog fixed to the bottom of the window, at most 60%
+of its height, that slides up (at once under `prefers-reduced-motion:
+reduce`) when a highlight or a chip is tapped. Its header holds "‹", "N of
+M" and "›" ("Previous thread" and "Next thread"), the thread's status and
+"Close". M counts every open thread on the page: those on passages by their
+numbers, then each section's own, labelled "Section HEADING", then those on
+sections the page no longer has. A chip opens it
+at its section's newest open thread, or at its form when it has none. The
+sheet scrolls on its own, rises above an on-screen keyboard, and opening it
+scrolls the page, never its layout, so the highlight or chip sits above it.
+Escape or "Close" closes it and gives the focus back to what opened it.
+
 ### Comments on passages
 
 A comment can be on words of a section rather than the whole of it, as in a
 shared document. Selecting words in a page's body, once the selection keeps
 still, shows a "Comment" pill just above the end of the selection, inside the
-reading column; it never takes focus, and Control+Alt+M (named in its
+reading column (just below it where the primary pointer is coarse, a touch
+screen, whose own menu takes the room above); it never takes focus, and Control+Alt+M (named in its
 `aria-keyshortcuts`) does what pressing it does, so a selection made from the
 keyboard works too. It shows only for 1 to 500 characters of the page's text
 that lie wholly in it and within one section. The page's text, from which a
@@ -709,7 +748,8 @@ or words in two sections may not.
 
 The pill opens a composer quoting the words, which wait under a dashed
 highlight: in the panel, opened if folded, under their section's heading, or,
-in a window without room for the panel, in their section's box. Escape or
+in a window without room for the panel, in a popover under the words or in
+the bottom sheet. Escape or
 "Cancel" takes it away and posts nothing. "Comment" posts the thread with its
 quote (`{page, section, text, quote: {exact, prefix, suffix}, revision}`):
 the selected words without whitespace at their edges, the 32 code points
@@ -731,8 +771,8 @@ overlapping passages stack their tints. Passages found are numbered 1, 2, 3
 in page order, and the panel lists each under its section, by number, before
 the section's § threads, showing its quote and status. Clicking the words or
 the number opens the panel at the thread, and clicking the entry scrolls the
-page to the words; without the panel, the thread is in its section's box,
-headed by its quote, and clicking the words opens the box.
+page to the words; without the panel, clicking the words opens the thread in
+a popover under them, or in the bottom sheet.
 
 A thread whose words are not found draws nothing on the page and keeps a
 numbered entry after its section's passages found (or under "Sections that

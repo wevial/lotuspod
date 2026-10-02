@@ -43,7 +43,7 @@
 
 .artifact-comment :is(a, button, summary, textarea):focus-visible,
 .artifact-comments-changed :is(a, button, textarea):focus-visible,
-.artifact-comments-panel :is(a, button, textarea):focus-visible {
+:is(.artifact-comments-panel, .artifact-comments-held) :is(a, button, textarea):focus-visible {
   outline: 2px solid var(--color-lavender);
   outline-offset: 2px;
 }
@@ -56,13 +56,13 @@
   padding: 0.9em 0 0;
 }
 
-:is(.artifact-body, .artifact-comments-panel) .artifact-comment-section {
+:is(.artifact-body, .artifact-comments-panel, .artifact-comments-held) .artifact-comment-section {
   color: var(--color-muted-lavender);
   font-size: 0.85rem;
   margin: 0 0 0.6em;
 }
 
-:is(.artifact-body, .artifact-comments-panel) .artifact-comment-list {
+:is(.artifact-body, .artifact-comments-panel, .artifact-comments-held) .artifact-comment-list {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
@@ -76,7 +76,7 @@
   padding: 0;
 }
 
-:is(.artifact-body, .artifact-comments-panel) .artifact-comment-list p {
+:is(.artifact-body, .artifact-comments-panel, .artifact-comments-held) .artifact-comment-list p {
   margin: 0;
 }
 
@@ -138,7 +138,7 @@
   align-items: flex-end;
 }
 
-:is(.artifact-body, .artifact-comments-panel) .artifact-comment-by {
+:is(.artifact-body, .artifact-comments-panel, .artifact-comments-held) .artifact-comment-by {
   align-items: center;
   color: var(--color-muted-lavender);
   display: flex;
@@ -148,7 +148,7 @@
   margin: 0 0.3rem 0.2rem;
 }
 
-:is(.artifact-body, .artifact-comments-panel) .artifact-comment-item--reader .artifact-comment-by {
+:is(.artifact-body, .artifact-comments-panel, .artifact-comments-held) .artifact-comment-item--reader .artifact-comment-by {
   justify-content: flex-end;
 }
 
@@ -177,8 +177,8 @@
   padding: 0 0.4em;
 }
 
-:is(.artifact-body, .artifact-comments-panel) .artifact-comment-text,
-:is(.artifact-body, .artifact-comments-panel) .artifact-comment-bubble {
+:is(.artifact-body, .artifact-comments-panel, .artifact-comments-held) .artifact-comment-text,
+:is(.artifact-body, .artifact-comments-panel, .artifact-comments-held) .artifact-comment-bubble {
   background: var(--color-surface);
   border: 1px solid var(--hairline);
   border-radius: var(--radius-card) var(--radius-card) var(--radius-card) var(--radius-chip);
@@ -186,18 +186,18 @@
   padding: 0.5rem 0.8rem;
 }
 
-:is(.artifact-body, .artifact-comments-panel) .artifact-comment-text {
+:is(.artifact-body, .artifact-comments-panel, .artifact-comments-held) .artifact-comment-text {
   overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
 
-:is(.artifact-body, .artifact-comments-panel) .artifact-comment-item--reader .artifact-comment-text {
+:is(.artifact-body, .artifact-comments-panel, .artifact-comments-held) .artifact-comment-item--reader .artifact-comment-text {
   background: var(--reader-tint);
   border-color: var(--reader-line);
   border-radius: var(--radius-card) var(--radius-card) var(--radius-chip) var(--radius-card);
 }
 
-:is(.artifact-body, .artifact-comments-panel) .artifact-comment-bubble--typing {
+:is(.artifact-body, .artifact-comments-panel, .artifact-comments-held) .artifact-comment-bubble--typing {
   align-items: center;
   align-self: flex-start;
   color: var(--color-lavender);
@@ -205,7 +205,7 @@
   padding: 0.7rem 0.9rem;
 }
 
-:is(.artifact-body, .artifact-comments-panel) .artifact-comment-bubble--ghost {
+:is(.artifact-body, .artifact-comments-panel, .artifact-comments-held) .artifact-comment-bubble--ghost {
   align-self: flex-start;
   background: transparent;
   border-style: dashed;
@@ -318,7 +318,7 @@
 }
 
 /* System lines: centred, outside every bubble. */
-:is(.artifact-body, .artifact-comments-panel) .artifact-comment-event {
+:is(.artifact-body, .artifact-comments-panel, .artifact-comments-held) .artifact-comment-event {
   align-items: center;
   color: var(--color-muted-lavender);
   display: flex;
@@ -340,7 +340,7 @@
   overflow-wrap: anywhere;
 }
 
-:is(.artifact-body, .artifact-comments-panel) .artifact-comment-notice {
+:is(.artifact-body, .artifact-comments-panel, .artifact-comments-held) .artifact-comment-notice {
   align-self: center;
   background: var(--code-surface);
   border: 1px solid var(--hairline-strong);
@@ -353,7 +353,7 @@
   text-align: center;
 }
 
-:is(.artifact-body, .artifact-comments-panel) .artifact-comment-notice-title {
+:is(.artifact-body, .artifact-comments-panel, .artifact-comments-held) .artifact-comment-notice-title {
   align-items: center;
   color: var(--color-white);
   display: flex;
@@ -362,24 +362,24 @@
   justify-content: center;
 }
 
-:is(.artifact-body, .artifact-comments-panel) .artifact-comment-notice-text {
+:is(.artifact-body, .artifact-comments-panel, .artifact-comments-held) .artifact-comment-notice-text {
   color: var(--color-pale-lavender);
   margin-top: 0.15rem;
 }
 
-:is(.artifact-body, .artifact-comments-panel) .artifact-comment-notice--unavailable,
-:is(.artifact-body, .artifact-comments-panel) .artifact-comment-notice--paused {
+:is(.artifact-body, .artifact-comments-panel, .artifact-comments-held) .artifact-comment-notice--unavailable,
+:is(.artifact-body, .artifact-comments-panel, .artifact-comments-held) .artifact-comment-notice--paused {
   background: transparent;
   border-style: dashed;
 }
 
-:is(.artifact-body, .artifact-comments-panel) :is(.artifact-comment-notice--unavailable, .artifact-comment-notice--paused)
+:is(.artifact-body, .artifact-comments-panel, .artifact-comments-held) :is(.artifact-comment-notice--unavailable, .artifact-comment-notice--paused)
   .artifact-comment-notice-title {
   color: var(--color-pale-lavender);
   font-weight: 500;
 }
 
-:is(.artifact-body, .artifact-comments-panel) :is(.artifact-comment-notice--unavailable, .artifact-comment-notice--paused)
+:is(.artifact-body, .artifact-comments-panel, .artifact-comments-held) :is(.artifact-comment-notice--unavailable, .artifact-comment-notice--paused)
   .artifact-comment-notice-text {
   color: var(--color-muted-lavender);
 }
@@ -484,7 +484,8 @@
 .artifact-comment .artifact-comment-form textarea:focus-visible,
 .artifact-comment .artifact-comment-reply textarea:focus-visible,
 .artifact-comments-changed .artifact-comment-reply textarea:focus-visible,
-.artifact-comments-panel :is(.artifact-comment-form, .artifact-comment-reply) textarea:focus-visible {
+:is(.artifact-comments-panel, .artifact-comments-held)
+  :is(.artifact-comment-form, .artifact-comment-reply) textarea:focus-visible {
   outline: none;
 }
 
@@ -548,7 +549,7 @@
   opacity: 0.6;
 }
 
-:is(.artifact-body, .artifact-comments-panel) .artifact-comment-status {
+:is(.artifact-body, .artifact-comments-panel, .artifact-comments-held) .artifact-comment-status {
   color: var(--color-muted-lavender);
   font-size: 0.85rem;
   grid-column: 1 / -1;
@@ -556,7 +557,7 @@
   margin: 0 0.95rem;
 }
 
-:is(.artifact-body, .artifact-comments-panel) .artifact-comment-status:not(:empty) {
+:is(.artifact-body, .artifact-comments-panel, .artifact-comments-held) .artifact-comment-status:not(:empty) {
   margin-top: 0.35rem;
 }
 
@@ -929,9 +930,23 @@
 }
 
 .artifact-comments-entry-tools {
+  align-items: center;
   display: flex;
+  gap: 0.5rem;
   justify-content: flex-end;
   margin: 0 0 0.6rem;
+}
+
+/* Where the thread stands, beside Resolve: the panel says it in the head. */
+.artifact-comments-entry-note {
+  color: var(--color-muted-lavender);
+  font-size: 0.9em;
+  margin-right: auto;
+  min-width: 0;
+}
+
+.artifact-comments-panel .artifact-comments-entry-note {
+  display: none;
 }
 
 .artifact-comments-resolve {
@@ -968,7 +983,7 @@
   display: none;
 }
 
-.artifact-comments-panel .artifact-comment-thread {
+:is(.artifact-comments-panel, .artifact-comments-held) .artifact-comment-thread {
   border-top: 0;
   font-size: inherit;
   margin: 0;
@@ -1028,6 +1043,15 @@
 
 .artifact-passage-pill:hover {
   border-color: var(--color-lavender);
+}
+
+/* On a touch screen the pill sits below the selection, its tip at the top. */
+.artifact-passage-pill--below::after {
+  border: 0;
+  border-left: 1px solid color-mix(in srgb, var(--color-lavender) 60%, transparent);
+  border-top: 1px solid color-mix(in srgb, var(--color-lavender) 60%, transparent);
+  bottom: auto;
+  top: -5px;
 }
 
 .artifact-passage-pill-icon {
@@ -1140,7 +1164,7 @@ del.artifact-passage-quoted {
   margin: 0.9em 0 0;
 }
 
-:is(.artifact-body, .artifact-comments-panel) .artifact-passage-quote {
+:is(.artifact-body, .artifact-comments-panel, .artifact-comments-held) .artifact-passage-quote {
   border-left: 2px dashed var(--color-rose);
   color: var(--color-pale-lavender);
   font-family: var(--font-display);
@@ -1178,7 +1202,7 @@ del.artifact-passage-quoted {
   display: none;
 }
 
-/* A box in the panel's company: its summary is a one-line chip saying where
+/* With the page script each box's summary is a one-line chip saying where
    its section's open threads stand, the faces of who wrote and answered
    before it. Every state is the same height, so a reply arriving moves
    nothing below it. */

@@ -2,10 +2,11 @@ import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 
-// At this width the boxes still open inline; panel.spec.ts checks the side
-// panel a wider window gets.
-const INLINE = { width: 1024, height: 768 };
-test.use({ viewport: INLINE });
+// At this width a box never opens: its chip opens the section's threads in
+// a popover over the text. panel.spec.ts checks the side panel a wider
+// window gets, and narrow.spec.ts the popover and a phone's bottom sheet.
+const MEDIUM = { width: 1024, height: 768 };
+test.use({ viewport: MEDIUM });
 
 // The comments page checks for replies while a thread on it waits. One check
 // runs on the real clock against the capture fixture's site, with hermes
@@ -42,13 +43,18 @@ function hermes(action: string, ...args: string[]) {
   return JSON.parse(stdout);
 }
 
+// A section's box: its chip, and the popover it opens, which holds the
+// section's threads and its form for a new one.
 function box(page: Page, section: string) {
   const details = page.locator(`details.artifact-comment[data-section="${section}"]`);
+  const popover = page.locator('.artifact-comments-popover');
   return {
     summary: details.locator('summary'),
-    text: details.locator('form.artifact-comment-form textarea[name="text"]'),
-    comment: details.getByRole('button', { name: 'Comment', exact: true }),
-    threads: details.locator('.artifact-comment-thread'),
+    popover,
+    start: popover.getByRole('button', { name: 'Comment on this section' }),
+    text: popover.locator('form.artifact-comment-form textarea[name="text"]'),
+    comment: popover.getByRole('button', { name: 'Comment', exact: true }),
+    threads: popover.locator('.artifact-comment-thread'),
   };
 }
 
@@ -189,7 +195,11 @@ test.describe('signed in', () => {
     await page.goto(PAGE);
     const steps = box(page, 'next-steps');
     await steps.summary.click();
+    await expect(steps.popover).toBeVisible();
     const before = await steps.threads.count();
+    // With threads already in it, the section's form is folded behind a control.
+    if (before) await steps.start.click();
+    await expect(steps.text).toBeFocused();
     await page.evaluate(() => { (window as any).__stayed = 'this page'; });
     const COMMENT = 'Which heater, and where does it go?';
     await steps.text.fill(COMMENT);
@@ -197,6 +207,7 @@ test.describe('signed in', () => {
     await expect(steps.threads).toHaveCount(before + 1);
     const node = steps.threads.last();
     const id = Number(await node.getAttribute('data-thread'));
+    await expect(node).toBeVisible();
     const mine = thread(page, { id });
     await expect(node.locator('.artifact-comment-typing--pending .artifact-comment-bubble'))
       .toHaveText(`Checking for a reply from ${OWNER}`);
@@ -226,7 +237,8 @@ test.describe('signed in', () => {
     // The reply is in the thread's polite live region; the comment is there once.
     await expect(theirs.locator('xpath=ancestor::*[@aria-live="polite"]')).toHaveCount(1);
     await expect(mine.readers).toHaveCount(1);
-    await expect(page.getByText(COMMENT, { exact: true })).toHaveCount(1);
+    await expect(page.locator('.artifact-comment-text', { hasText: COMMENT })).toHaveCount(1);
+    await expect(theirs).toBeVisible();
     expect(await page.evaluate(() => (window as any).__stayed)).toBe('this page');
     expect(errors).toEqual([]);
   });
@@ -273,6 +285,7 @@ test.describe('signed in', () => {
     expect(await reads.times()).toHaveLength(3);
     await box(page, 'findings').summary.click();
     await expect(thread(page, root).agents).toHaveCount(1);
+    await expect(thread(page, root).agents).toBeVisible();
     await expect(thread(page, root).node.locator('.artifact-comment-typing')).toHaveCount(0);
     expect(reads.errors).toEqual([]);
   });
@@ -307,7 +320,8 @@ test.describe('signed in', () => {
     const findings = box(page, 'findings');
     await findings.summary.click();
     await expect(page.getByText(SIGNED_OUT)).toHaveCount(1);
-    await expect(page.locator('details[data-section="findings"]').getByText(SIGNED_OUT)).toBeVisible();
+    await expect(thread(page, pending).node.getByText(SIGNED_OUT)).toBeVisible();
+    await expect(findings.popover.getByText(SIGNED_OUT)).toBeVisible();
     expect(reads.errors).toEqual([]);
   });
 
@@ -391,8 +405,8 @@ test.describe('signed in', () => {
     }));
     await stopClock(page);
     await load(page);
+    // Only Findings is open: the reply lands in Risks, out of sight.
     await box(page, 'findings').summary.click();
-    await box(page, 'risks').summary.click();
 
     const mine = thread(page, typing);
     await mine.toggle.click();

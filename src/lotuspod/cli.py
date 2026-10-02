@@ -273,6 +273,7 @@ THEME_SOURCES = {
         "css/forms.css",
         "css/decisions.css",
         "css/comments.css",
+        "css/narrow.css",
         "css/prose.css",
         "css/report.css",
         "css/index.css",
@@ -280,6 +281,7 @@ THEME_SOURCES = {
     PAGE_SCRIPT: (
         "js/page-open.js",
         "js/decisions.js",
+        "js/narrow.js",
         "js/comments.js",
         "js/page-close.js",
     ),

@@ -1,9 +1,10 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 
-// At this width the boxes still open inline; panel.spec.ts checks the side
-// panel a wider window gets.
-const INLINE = { width: 1024, height: 768 };
-test.use({ viewport: INLINE });
+// At this width a box never opens: its chip opens the section's threads in
+// a popover over the text. panel.spec.ts checks the side panel a wider
+// window gets, and narrow.spec.ts the popover and a phone's bottom sheet.
+const MEDIUM = { width: 1024, height: 768 };
+test.use({ viewport: MEDIUM });
 
 // The capture fixture's sections page: an intro, then three sections, each
 // folding under its heading and ending in a comment box; the second asks one
@@ -235,7 +236,7 @@ test.describe('signed in', () => {
     await expect(third.button).toHaveAttribute('aria-expanded', 'true');
     await expect(third.drawn).toHaveCount(0);
     await third.summary.click();
-    await expect(page.getByText(REPLY, { exact: true })).toBeVisible();
+    await expect(page.locator('.artifact-comments-popover').getByText(REPLY, { exact: true })).toBeVisible();
 
     await fold(page, 2);
     await expect(third.drawn).toHaveCount(0);

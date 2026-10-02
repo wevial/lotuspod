@@ -1,0 +1,239 @@
+
+/* Without room for the comments panel a thread opens over the text, never in
+   its box (docs/design/margin-comments-mockup.html, "Narrow window: a
+   popover" and "Phone"). From 700px wide it is a popover the page script
+   (js/narrow.js) sets under the chip or highlight that opened it, its tip
+   pointing up at it, inside the window and scrolling on its own. Narrower it
+   is a bottom sheet fixed to the bottom of the window, at most 60% of its
+   height, that slides up; its header steps through the page's threads and
+   says where this one stands. Both (.artifact-comments-held) hold the thread
+   as the panel's open entry does, under a title: "Section HEADING", or a
+   passage's number and words. */
+.artifact-comments-held {
+  background: var(--color-surface);
+  box-sizing: border-box;
+  color: var(--body-ink);
+  display: flex;
+  flex-direction: column;
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.artifact-comments-popover {
+  border: 1px solid color-mix(in srgb, var(--color-lavender) 60%, transparent);
+  border-radius: var(--radius-card);
+  box-shadow: 0 14px 34px rgba(13, 10, 21, 0.55);
+  position: absolute;
+  width: min(24rem, calc(100vw - 1rem));
+  z-index: 2;
+}
+
+.artifact-comments-popover::before {
+  background: var(--color-surface);
+  border-left: 1px solid color-mix(in srgb, var(--color-lavender) 60%, transparent);
+  border-top: 1px solid color-mix(in srgb, var(--color-lavender) 60%, transparent);
+  content: "";
+  height: 12px;
+  left: var(--artifact-comments-tip, 1.5rem);
+  margin-left: -6px;
+  position: absolute;
+  top: -7px;
+  transform: rotate(45deg);
+  width: 12px;
+}
+
+.artifact-comments-bottom-sheet {
+  border-radius: 1.25rem 1.25rem 0 0;
+  border-top: 1px solid var(--hairline-strong);
+  bottom: 0;
+  box-shadow: 0 -12px 32px rgba(13, 10, 21, 0.5);
+  left: 0;
+  max-height: 60vh;
+  position: fixed;
+  right: 0;
+  transform: translateY(100%);
+  transition: transform 0.25s ease-out, visibility 0s linear 0.25s;
+  visibility: hidden;
+  z-index: 4;
+}
+
+.artifact-comments-bottom-sheet--open {
+  transform: none;
+  transition: transform 0.25s ease-out;
+  visibility: visible;
+}
+
+/* Focus moves into either when it opens; its frame already marks it. */
+.artifact-comments-held:focus {
+  outline: none;
+}
+
+.artifact-comments-held-head {
+  align-items: center;
+  display: flex;
+  flex: none;
+  gap: 0.5rem;
+  padding: 0.6rem 0.6rem 0.4rem 0.9rem;
+}
+
+.artifact-comments-bottom-sheet .artifact-comments-held-head {
+  border-bottom: 1px solid var(--hairline);
+  padding: 0.7rem 0.75rem 0.55rem 0.9rem;
+}
+
+.artifact-comments-held-title {
+  color: var(--color-pale-lavender);
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.artifact-comments-popover .artifact-comments-held-title {
+  flex: 1;
+}
+
+.artifact-comments-bottom-sheet .artifact-comments-held-title {
+  margin: 0 0 0.6rem;
+}
+
+.artifact-comments-held-kind {
+  color: var(--color-muted-lavender);
+  font-family: var(--font-mono);
+  font-size: 0.72em;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.artifact-comments-held-title .artifact-comments-entry-mark {
+  display: inline-grid;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  font-weight: 600;
+  margin: 0;
+  vertical-align: 0.1em;
+}
+
+.artifact-comments-close,
+.artifact-comments-step {
+  appearance: none;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius-chip);
+  color: var(--color-muted-lavender);
+  cursor: pointer;
+  flex: none;
+  font: inherit;
+  font-size: 1.15rem;
+  height: 1.8rem;
+  line-height: 1;
+  margin-left: auto;
+  padding: 0;
+  width: 1.8rem;
+}
+
+.artifact-comments-close:hover,
+.artifact-comments-step:hover:not(:disabled) {
+  border-color: var(--hairline-strong);
+  color: var(--color-white);
+}
+
+.artifact-comments-bottom-sheet-nav {
+  align-items: center;
+  color: var(--color-muted-lavender);
+  display: flex;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  gap: 0.35rem;
+  white-space: nowrap;
+}
+
+.artifact-comments-step {
+  border-color: var(--hairline-strong);
+  border-radius: 50%;
+  color: var(--color-pale-lavender);
+  font-size: 0.95rem;
+  margin: 0;
+}
+
+.artifact-comments-step:disabled {
+  cursor: default;
+  opacity: 0.4;
+}
+
+.artifact-comments-held-state {
+  color: var(--color-muted-lavender);
+  font-size: 0.9em;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.artifact-comments-held-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0.2rem 0.9rem 0.9rem;
+  scrollbar-color: var(--hairline-strong) transparent;
+  scrollbar-width: thin;
+}
+
+.artifact-comments-bottom-sheet .artifact-comments-held-body {
+  padding: 0.75rem 0.9rem 1rem;
+}
+
+.artifact-comments-held .artifact-comments-entry,
+.artifact-comments-held .artifact-comments-entry--open {
+  background: none;
+  border: 0;
+  margin: 0;
+}
+
+.artifact-comments-held .artifact-comments-entry + .artifact-comments-entry {
+  border-top: 1px solid var(--hairline);
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+}
+
+.artifact-comments-held .artifact-comments-entry-head {
+  display: none;
+}
+
+.artifact-comments-held .artifact-comments-entry-body {
+  padding: 0;
+}
+
+.artifact-comments-held-extra .artifact-comments-new {
+  margin: 0.75rem 0 0;
+}
+
+.artifact-comments-held-extra .artifact-comments-compose,
+.artifact-comments-held-extra .artifact-passage-composer {
+  margin: 0;
+  padding: 0;
+}
+
+.artifact-comments-held-extra .artifact-comments-compose .artifact-comment-form {
+  margin-top: 0.6rem;
+}
+
+/* The popover shows where its thread stands beside Resolve; the sheet says
+   it in its header. A passage's title already quotes its words. */
+.artifact-comments-bottom-sheet .artifact-comments-entry-note,
+.artifact-comments-held--passage .artifact-passage-head {
+  display: none;
+}
+
+/* Last, so a hidden part stays hidden whatever display its class gives it. */
+.artifact-comments-held[hidden],
+.artifact-comments-held [hidden] {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .artifact-comments-bottom-sheet,
+  .artifact-comments-bottom-sheet--open {
+    transition: none;
+  }
+}

@@ -2,10 +2,11 @@ import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { expect, test, type Locator, type Page } from '@playwright/test';
 
-// At this width the boxes still open inline; panel.spec.ts checks the side
-// panel a wider window gets.
-const INLINE = { width: 1024, height: 768 };
-test.use({ viewport: INLINE });
+// At this width a box never opens: its chip opens the section's threads in
+// a popover over the text. panel.spec.ts checks the side panel a wider
+// window gets, and narrow.spec.ts the popover and a phone's bottom sheet.
+const MEDIUM = { width: 1024, height: 768 };
+test.use({ viewport: MEDIUM });
 
 // The capture fixture's comments page: three sections, each ending in a
 // comment box, owned by hermes. The fixture names an assertion its site
@@ -43,15 +44,36 @@ async function watch(page: Page) {
   };
 }
 
+// A section's box: its chip, and the popover it opens, which holds the
+// section's threads and its form for a new one.
 function box(page: Page, section: string) {
   const details = page.locator(`details.artifact-comment[data-section="${section}"]`);
+  const popover = page.locator('.artifact-comments-popover');
   return {
     details,
     summary: details.locator('summary'),
-    text: details.locator('form.artifact-comment-form textarea[name="text"]'),
-    comment: details.getByRole('button', { name: 'Comment', exact: true }),
-    threads: details.locator('.artifact-comment-thread'),
+    popover,
+    start: popover.getByRole('button', { name: 'Comment on this section' }),
+    text: popover.locator('form.artifact-comment-form textarea[name="text"]'),
+    comment: popover.getByRole('button', { name: 'Comment', exact: true }),
+    threads: popover.locator('.artifact-comment-thread'),
   };
+}
+
+const TITLES: Record<string, string> = { findings: 'Findings', risks: 'Risks', 'next-steps': 'Next steps' };
+
+// Open a section's threads through its chip, in a popover over the text,
+// closing first the popover open over it.
+async function open(page: Page, section: string) {
+  const { summary, popover, details } = box(page, section);
+  if (await popover.isVisible()) {
+    await page.keyboard.press('Escape');
+    await expect(popover).toBeHidden();
+  }
+  await summary.click();
+  await expect(popover).toBeVisible();
+  await expect(popover.locator('.artifact-comments-held-title')).toHaveText(`Section ${TITLES[section]}`);
+  await expect(details).not.toHaveAttribute('open');
 }
 
 function thread(page: Page, root: { id: number }) {
@@ -129,17 +151,18 @@ function everyState() {
   return { roots, replies, threads };
 }
 
+// A system line is centred in its thread.
+async function centred(notice: Locator) {
+  const list = (await notice.locator('xpath=..').boundingBox())!;
+  const line = (await notice.boundingBox())!;
+  expect(Math.abs((line.x + line.width / 2) - (list.x + list.width / 2))).toBeLessThan(2);
+}
+
 async function serve(page: Page, threads: unknown[]) {
   await page.route(THREADS, (route) =>
     route.request().method() === 'GET'
       ? route.fulfill({ json: { page: 'capture-comments', threads } })
       : route.continue());
-}
-
-async function openAll(page: Page) {
-  for (const section of ['findings', 'risks', 'next-steps']) {
-    await box(page, section).summary.click();
-  }
 }
 
 // Tab through the page until the target has the focus, as a keyboard user does.
@@ -208,9 +231,9 @@ test.describe('signed in', () => {
     await page.goto(PAGE);
     await expect(page.locator('details.artifact-comment')).toHaveCount(3);
     const risks = box(page, 'risks');
-    await expect(risks.summary).toHaveText('Comment');
-    await risks.summary.click();
-    await expect(risks.text).toBeVisible();
+    await expect(risks.summary).toHaveText('No comments · Comment');
+    await open(page, 'risks');
+    await expect(risks.text).toBeFocused();
 
     await risks.text.fill('This step is out of order.');
     await risks.comment.click();
@@ -235,12 +258,13 @@ test.describe('signed in', () => {
     };
     await shown();
     await expect(risks.text).toHaveValue('');
-    await expect(risks.summary).toHaveText('Comments (1)');
+    await expect(risks.text).toBeHidden();
+    await expect(risks.summary).toHaveText('1 comment · waiting');
 
     await page.reload();
-    await expect(risks.summary).toHaveText('Comments (1)');
-    await expect(box(page, 'findings').summary).toHaveText('Comment');
-    await risks.summary.click();
+    await expect(risks.summary).toHaveText('1 comment · waiting');
+    await expect(box(page, 'findings').summary).toHaveText('No comments · Comment');
+    await open(page, 'risks');
     await expect(risks.threads).toHaveCount(1);
     await shown();
 
@@ -264,10 +288,11 @@ test.describe('signed in', () => {
     await serve(page, threads);
     await page.goto(PAGE);
 
-    await expect(box(page, 'findings').summary).toHaveText('Comments (4)');
-    await expect(box(page, 'risks').summary).toHaveText('Comments (2)');
-    await expect(box(page, 'next-steps').summary).toHaveText('Comments (3)');
-    await openAll(page);
+    // Each popover holds its section's threads, and only those.
+    for (const [section, count] of [['risks', 2], ['next-steps', 3], ['findings', 4]] as const) {
+      await open(page, section);
+      await expect(box(page, section).threads).toHaveCount(count);
+    }
 
     const pending = thread(page, roots.pending);
     expect(await drawn(pending)).toEqual(['reader', 'typing:pending']);
@@ -276,13 +301,6 @@ test.describe('signed in', () => {
     await expect(waiting.locator('.artifact-comment-bubble')).toHaveText(`Checking for a reply from ${OWNER}`);
     await expect(waiting.locator('.artifact-comment-avatar')).toHaveCSS('border-style', 'dashed');
 
-    const claimed = thread(page, roots.claimed);
-    expect(await drawn(claimed)).toEqual(['reader', 'typing:claimed']);
-    const writing = claimed.locator('.artifact-comment-typing--claimed');
-    await expect(writing.locator('.artifact-comment-by')).toHaveText(`${OWNER} AGENT is writing`);
-    await expect(writing.locator('.artifact-comment-bubble')).toHaveText(`${OWNER} is writing a reply`);
-    await expect(writing.locator('.artifact-comment-bubble .artifact-comment-sr')).toHaveCSS('width', '1px');
-
     const unavailable = thread(page, roots.unavailable);
     expect(await drawn(unavailable)).toEqual(['reader', 'notice:unavailable']);
     const offline = unavailable.locator('.artifact-comment-notice');
@@ -290,7 +308,17 @@ test.describe('signed in', () => {
     await expect(offline.locator('.artifact-comment-notice-text'))
       .toHaveText(`Your comment goes to ${OWNER} when it checks in again.`);
     await expect(offline).toHaveCSS('border-style', 'dashed');
+    await centred(offline);
 
+    await open(page, 'risks');
+    const claimed = thread(page, roots.claimed);
+    expect(await drawn(claimed)).toEqual(['reader', 'typing:claimed']);
+    const writing = claimed.locator('.artifact-comment-typing--claimed');
+    await expect(writing.locator('.artifact-comment-by')).toHaveText(`${OWNER} AGENT is writing`);
+    await expect(writing.locator('.artifact-comment-bubble')).toHaveText(`${OWNER} is writing a reply`);
+    await expect(writing.locator('.artifact-comment-bubble .artifact-comment-sr')).toHaveCSS('width', '1px');
+
+    await open(page, 'next-steps');
     const paused = thread(page, roots.paused);
     expect(await drawn(paused)).toEqual(['reader', 'notice:paused']);
     await expect(paused.locator('.artifact-comment-notice-title')).toHaveText('The responder is paused');
@@ -305,10 +333,8 @@ test.describe('signed in', () => {
       .toHaveText(['No reason given', 'To send it again, write a new comment.']);
 
     // A system line is centred in its thread.
-    for (const notice of [offline, paused.locator('.artifact-comment-notice'), failed.locator('.artifact-comment-notice')]) {
-      const list = (await notice.locator('xpath=..').boundingBox())!;
-      const line = (await notice.boundingBox())!;
-      expect(Math.abs((line.x + line.width / 2) - (list.x + list.width / 2))).toBeLessThan(2);
+    for (const notice of [paused.locator('.artifact-comment-notice'), failed.locator('.artifact-comment-notice')]) {
+      await centred(notice);
     }
 
     // Each reader bubble holds exactly what was written, and no bubble or
@@ -348,7 +374,7 @@ test.describe('signed in', () => {
     const { roots, threads } = everyState();
     await serve(page, threads);
     await page.goto(PAGE);
-    await box(page, 'findings').summary.click();
+    await open(page, 'findings');
 
     const answered = thread(page, roots.answered);
     expect(await drawn(answered)).toEqual(['reader', 'agent', 'revision', 'agent', 'revision', 'agent']);
@@ -395,7 +421,10 @@ test.describe('signed in', () => {
     const { roots, threads } = everyState();
     await serve(page, threads);
     await page.goto(PAGE);
-    await openAll(page);
+    await open(page, 'findings');
+    await expect(box(page, 'findings').popover).toBeFocused();
+    await box(page, 'findings').start.click();
+    await expect(box(page, 'findings').text).toBeFocused();
 
     const send = box(page, 'findings').comment;
     await tabTo(page, send);
@@ -412,25 +441,36 @@ test.describe('signed in', () => {
     expect(await outline(field, '::before')).toEqual({ style: 'solid', width: 2, color: LAVENDER });
 
     const answered = thread(page, roots.answered);
+    // Each section's lines, read in its own popover.
     const texts = {
-      'reader bubble': answered.locator('.artifact-comment-item--reader .artifact-comment-text'),
-      'agent bubble': answered.locator('.artifact-comment-item--agent .artifact-comment-text').first(),
-      'name line': answered.locator('.artifact-comment-item--reader .artifact-comment-by'),
-      'name line time': answered.locator('.artifact-comment-item--agent .artifact-comment-time').first(),
-      'name line address': answered.locator('.artifact-comment-author'),
-      'name line handle': answered.locator('.artifact-comment-handle').first(),
-      'name line tag': answered.locator('.artifact-comment-agent').first(),
-      'revision line': answered.locator('.artifact-comment-event > span').first(),
-      'failed line': thread(page, roots.failed).locator('.artifact-comment-notice-title span').last(),
-      'failed reason': thread(page, roots.failed).locator('.artifact-comment-notice-text').first(),
-      'offline line': thread(page, roots.unavailable).locator('.artifact-comment-notice-title span').last(),
-      'offline text': thread(page, roots.unavailable).locator('.artifact-comment-notice-text'),
-      'paused line': thread(page, roots.paused).locator('.artifact-comment-notice-text'),
-      'waiting bubble': thread(page, roots.pending).locator('.artifact-comment-bubble'),
-      'writing line': thread(page, roots.claimed).locator('.artifact-comment-typing .artifact-comment-by'),
+      findings: {
+        'reader bubble': answered.locator('.artifact-comment-item--reader .artifact-comment-text'),
+        'agent bubble': answered.locator('.artifact-comment-item--agent .artifact-comment-text').first(),
+        'name line': answered.locator('.artifact-comment-item--reader .artifact-comment-by'),
+        'name line time': answered.locator('.artifact-comment-item--agent .artifact-comment-time').first(),
+        'name line address': answered.locator('.artifact-comment-author'),
+        'name line handle': answered.locator('.artifact-comment-handle').first(),
+        'name line tag': answered.locator('.artifact-comment-agent').first(),
+        'revision line': answered.locator('.artifact-comment-event > span').first(),
+        'offline line': thread(page, roots.unavailable).locator('.artifact-comment-notice-title span').last(),
+        'offline text': thread(page, roots.unavailable).locator('.artifact-comment-notice-text'),
+        'waiting bubble': thread(page, roots.pending).locator('.artifact-comment-bubble'),
+      },
+      'next-steps': {
+        'failed line': thread(page, roots.failed).locator('.artifact-comment-notice-title span').last(),
+        'failed reason': thread(page, roots.failed).locator('.artifact-comment-notice-text').first(),
+        'paused line': thread(page, roots.paused).locator('.artifact-comment-notice-text'),
+      },
+      risks: {
+        'writing line': thread(page, roots.claimed).locator('.artifact-comment-typing .artifact-comment-by'),
+      },
     };
-    for (const [name, target] of Object.entries(texts)) {
-      expect(await contrast(target), name).toBeGreaterThanOrEqual(4.5);
+    for (const [section, lines] of Object.entries(texts)) {
+      if (section !== 'findings') await open(page, section);
+      for (const [name, target] of Object.entries(lines)) {
+        await expect(target, name).toBeVisible();
+        expect(await contrast(target), name).toBeGreaterThanOrEqual(4.5);
+      }
     }
     expect(seen.errors).toEqual([]);
     expect(await seen.violations()).toEqual([]);
@@ -445,28 +485,39 @@ test.describe('signed in', () => {
 
     await page.emulateMedia({ reducedMotion: 'no-preference' });
     await page.goto(PAGE);
-    await openAll(page);
+    await open(page, 'risks');
     const dots = thread(page, roots.claimed).locator('.artifact-comment-mark--dots i');
     await expect(dots).toHaveCount(3);
+    await expect(dots.first()).toBeVisible();
     expect(await running(dots)).toBe(3);
 
     await page.emulateMedia({ reducedMotion: 'reduce' });
     await page.reload();
-    await openAll(page);
+    await open(page, 'risks');
     await expect(dots).toHaveCount(3);
+    await expect(dots.first()).toBeVisible();
     expect(await running(dots)).toBe(0);
-    expect(await running(thread(page, roots.pending).locator('.artifact-comment-mark--dots i'))).toBe(0);
+    await open(page, 'findings');
+    const waiting = thread(page, roots.pending).locator('.artifact-comment-mark--dots i');
+    await expect(waiting.first()).toBeVisible();
+    expect(await running(waiting)).toBe(0);
   });
 
   test('a phone-wide page does not scroll sideways', async ({ page }) => {
     const seen = await watch(page);
     await page.setViewportSize({ width: 360, height: 780 });
     const { threads } = everyState();
-    threads.push({ root: row({ text: `A long word: ${'unbroken'.repeat(30)}` }), replies: [] });
+    const long = row({ text: `A long word: ${'unbroken'.repeat(30)}` });
+    threads.push({ root: long, replies: [] });
     await serve(page, threads);
     await page.goto(PAGE);
-    await openAll(page);
-    await expect(box(page, 'findings').threads).toHaveCount(5);
+    // On a phone the chip opens its section's newest thread in the bottom sheet.
+    await box(page, 'findings').summary.click();
+    const sheet = page.locator('.artifact-comments-bottom-sheet');
+    await expect(sheet.locator(`.artifact-comment-thread[data-thread="${long.id}"]`)).toBeVisible();
+    const held = (await sheet.boundingBox())!;
+    expect(held.x).toBeGreaterThanOrEqual(0);
+    expect(held.x + held.width).toBeLessThanOrEqual(360);
     const widths = await page.evaluate(() => ({
       scroll: document.documentElement.scrollWidth, viewport: document.documentElement.clientWidth,
     }));
@@ -493,8 +544,9 @@ test.describe('signed in', () => {
     await page.goto(PAGE);
 
     const proto = box(page, '__proto__');
-    await expect(proto.summary).toHaveText('Comments (1)');
+    await expect(proto.summary).toHaveText('1 comment · waiting');
     await proto.summary.click();
+    await expect(proto.popover.locator('.artifact-comments-held-title')).toHaveText('Section Next steps');
     await expect(proto.threads.locator('.artifact-comment-text')).toHaveText('On the renamed section.');
     const changed = page.locator('.artifact-comments-changed');
     await expect(changed.locator('.artifact-comment-thread')).toHaveCount(1);

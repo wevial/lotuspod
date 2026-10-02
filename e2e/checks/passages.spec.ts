@@ -663,7 +663,7 @@ test.describe('signed in', () => {
     await seen.clean();
   });
 
-  test('a resolved passage loses its highlight until reopened, and a narrow window draws it in its box', async ({ page, request }) => {
+  test('a resolved passage loses its highlight until reopened, and a narrow window opens it in a popover', async ({ page, request }) => {
     const seen = await watch(page);
     await load(page);
     const asked = await postHeater(request, (await revisionOf(page))!, 'Should the heater move?');
@@ -692,13 +692,14 @@ test.describe('signed in', () => {
     await settle(page);
     await expect(side.aside).toBeHidden();
     const findings = page.locator('details.artifact-comment[data-section="findings"]');
-    const inBox = findings.locator(`.artifact-comment-thread[data-thread="${asked.id}"]`);
-    await expect(inBox.locator('.artifact-passage-head')).toHaveText(HEATER);
+    const popover = page.locator('.artifact-comments-popover');
+    const held = popover.locator(`.artifact-comment-thread[data-thread="${asked.id}"]`);
     await expect(findings).not.toHaveAttribute('open');
     await marks(page, asked.id).first().click();
-    await expect(findings).toHaveAttribute('open');
-    await expect(inBox).toBeVisible();
-    await expect(inBox.locator('.artifact-comment-text')).toHaveText('Should the heater move?');
+    await expect(findings).not.toHaveAttribute('open');
+    await expect(held).toBeVisible();
+    await expect(popover.locator('.artifact-comments-held-title')).toHaveText(`1 ${HEATER}`);
+    await expect(held.locator('.artifact-comment-text')).toHaveText('Should the heater move?');
     await seen.clean();
   });
 
@@ -716,7 +717,7 @@ test.describe('signed in', () => {
     expect(offer.x).toBeGreaterThanOrEqual(0);
     expect(offer.x + offer.width).toBeLessThanOrEqual(360);
     await pill(page).click();
-    const open = page.locator('details.artifact-comment[data-section="findings"] .artifact-passage-composer');
+    const open = page.locator('.artifact-comments-bottom-sheet .artifact-passage-composer');
     await expect(open).toBeVisible();
     await expect(open.locator('textarea')).toBeFocused();
     let widths = await fits();

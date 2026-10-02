@@ -4,10 +4,11 @@ import os from 'node:os';
 import path from 'node:path';
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
 
-// At this width the boxes still open inline; panel.spec.ts checks the side
-// panel a wider window gets.
-const INLINE = { width: 1024, height: 768 };
-test.use({ viewport: INLINE });
+// At this width a box never opens: its chip opens the section's threads in
+// a popover over the text. panel.spec.ts checks the side panel a wider
+// window gets, and narrow.spec.ts the popover and a phone's bottom sheet.
+const MEDIUM = { width: 1024, height: 768 };
+test.use({ viewport: MEDIUM });
 
 // The whole chain as the maintainer uses it: the signed-in reader answers a
 // decision and comments on the capture fixture's owned page in Chromium, and
@@ -80,14 +81,17 @@ function decision(page: Page) {
   };
 }
 
+// A section's box: its chip, and the popover it opens, which holds the
+// section's threads and its form for a new one.
 function box(page: Page, section: string) {
   const details = page.locator(`details.artifact-comment[data-section="${section}"]`);
+  const popover = page.locator('.artifact-comments-popover');
   return {
     summary: details.locator('summary'),
-    text: details.locator('form.artifact-comment-form textarea[name="text"]'),
-    comment: details.getByRole('button', { name: 'Comment', exact: true }),
-    status: details.locator('form.artifact-comment-form .artifact-comment-status'),
-    threads: details.locator('.artifact-comment-thread'),
+    text: popover.locator('form.artifact-comment-form textarea[name="text"]'),
+    comment: popover.getByRole('button', { name: 'Comment', exact: true }),
+    status: popover.locator('form.artifact-comment-form .artifact-comment-status'),
+    threads: popover.locator('.artifact-comment-thread'),
   };
 }
 
@@ -131,6 +135,7 @@ test.describe('the chain', () => {
 
       const heater = box(page, 'heater');
       await heater.summary.click();
+      await expect(heater.text).toBeFocused();
       await heater.text.fill(COMMENT);
       await heater.comment.click();
       await expect(heater.threads).toHaveCount(1);
@@ -209,7 +214,7 @@ test.describe('the chain', () => {
     await test.step('5. after a reload the reader sees the reply, its revision link, the edit and the answer', async () => {
       await page.reload();
       const heater = box(page, 'heater');
-      await expect(heater.summary).toHaveText('Comments (1)');
+      await expect(heater.summary).toHaveText('1 reply · ✓ hermes answered');
       await heater.summary.click();
       const thread = heater.threads.first();
       const items = thread.locator('.artifact-comment-item');
@@ -241,7 +246,7 @@ test.describe('the chain', () => {
       const before = await stored(request);
       // A context made in a test takes the project's options: clear the header.
       const context = await browser.newContext({
-        baseURL: ENV.LOTUSPOD_URL, extraHTTPHeaders: {}, viewport: INLINE,
+        baseURL: ENV.LOTUSPOD_URL, extraHTTPHeaders: {}, viewport: MEDIUM,
       });
       try {
         expect((await context.request.get('/api/whoami')).status()).toBe(401);

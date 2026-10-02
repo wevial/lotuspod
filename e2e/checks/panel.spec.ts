@@ -615,7 +615,7 @@ test.describe('signed in', () => {
     await seen.clean();
   });
 
-  test('at 1024 pixels the boxes open inline, and no width scrolls sideways', async ({ page }) => {
+  test('at 1024 pixels a chip opens a popover, never its box, its thread moves with the window, and no width scrolls sideways', async ({ page }) => {
     const seen = await watch(page);
     const { answered, threads } = sample();
     await serve(page, () => threads);
@@ -625,17 +625,24 @@ test.describe('signed in', () => {
     await expect(side.aside).toBeHidden();
     await expect(side.opener).toBeHidden();
     const findings = box(page, 'findings');
-    await expect(findings.chip).toHaveText('Comments (1)');
+    await expect(findings.chip).toHaveText('1 reply · ✓ hermes answered');
     await findings.chip.click();
-    await expect(findings.details).toHaveAttribute('open');
-    await expect(findings.details.locator(`.artifact-comment-thread[data-thread="${answered.id}"]`)).toBeVisible();
+    await expect(findings.details).not.toHaveAttribute('open');
+    const popover = page.locator('.artifact-comments-popover');
+    await expect(popover.locator(`.artifact-comment-thread[data-thread="${answered.id}"]`)).toBeVisible();
+    await expect(page.locator(`.artifact-comment-thread[data-thread="${answered.id}"]`)).toHaveCount(1);
 
     const fits = () => page.evaluate(() => ({
       scroll: document.documentElement.scrollWidth, viewport: document.documentElement.clientWidth,
     }));
+    // The open thread moves to the phone's bottom sheet, drawn once.
     await page.setViewportSize({ width: 360, height: 780 });
     await expect(side.aside).toBeHidden();
-    await expect(findings.details).toHaveAttribute('open');
+    await expect(popover).toBeHidden();
+    await expect(findings.details).not.toHaveAttribute('open');
+    const sheet = page.locator('.artifact-comments-bottom-sheet');
+    await expect(sheet.locator(`.artifact-comment-thread[data-thread="${answered.id}"]`)).toBeVisible();
+    await expect(page.locator(`.artifact-comment-thread[data-thread="${answered.id}"]`)).toHaveCount(1);
     let widths = await fits();
     expect(widths.scroll).toBeLessThanOrEqual(widths.viewport);
 
@@ -643,9 +650,10 @@ test.describe('signed in', () => {
     await expect(side.aside).toBeVisible();
     await expect(findings.details).not.toHaveAttribute('open');
     await expect(findings.chip).toHaveText('1 reply · ✓ hermes answered');
-    await side.opener.click();
+    // The thread open in the sheet opens the panel at its entry.
     await expect(side.fold).toBeVisible();
-    await expect(entry(page, answered).item.locator('.artifact-comment-thread')).toHaveCount(1);
+    await expect(entry(page, answered).head).toHaveAttribute('aria-expanded', 'true');
+    await expect(entry(page, answered).item.locator('.artifact-comment-thread')).toBeVisible();
     widths = await fits();
     expect(widths.scroll).toBeLessThanOrEqual(widths.viewport);
     await seen.clean();

@@ -229,7 +229,10 @@
   .artifact-section-toggle::before,
   .artifact-section-mark,
   .artifact-sections-all,
-  .artifact-comments-panel {
+  .artifact-comments-panel,
+  .artifact-comments-popover,
+  .artifact-comments-bottom-sheet,
+  .artifact-comments-room {
     display: none;
   }
 }

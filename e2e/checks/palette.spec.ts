@@ -2,10 +2,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test, type Locator, type Page } from '@playwright/test';
 
-// At this width the boxes still open inline; panel.spec.ts checks the side
-// panel a wider window gets.
-const INLINE = { width: 1024, height: 768 };
-test.use({ viewport: INLINE });
+// At this width a box never opens: its chip opens the section's threads in
+// a popover over the text. panel.spec.ts checks the side panel a wider
+// window gets, and narrow.spec.ts the popover and a phone's bottom sheet.
+const MEDIUM = { width: 1024, height: 768 };
+test.use({ viewport: MEDIUM });
 
 // The capture fixture's palette page: a link and inline code, a table, a
 // blockquote with a cite and a code block, a comment box ending each section,
@@ -166,6 +167,7 @@ test.describe('signed in', () => {
     await box(page, 'links-and-code').locator('summary').click();
 
     const answered = thread(page, root);
+    await expect(answered).toBeVisible();
     const mine = answered.locator('.artifact-comment-item--reader');
     const theirs = answered.locator('.artifact-comment-item--agent');
     await expect(mine).toHaveCount(1);
@@ -194,15 +196,16 @@ test.describe('signed in', () => {
     const claimed = row({ state: 'claimed', text: 'Who wrote the quote?', section: 'quote', sectionTitle: 'Quote' });
     await serveThreads(page, [{ root: pending, replies: [] }, { root: claimed, replies: [] }]);
     await page.goto(PAGE);
-    await box(page, 'table').locator('summary').click();
-    await box(page, 'quote').locator('summary').click();
 
     const waiting = thread(page, pending).locator('.artifact-comment-typing--pending .artifact-comment-mark--dots i');
     const writing = thread(page, claimed).locator('.artifact-comment-typing--claimed .artifact-comment-mark--dots i');
-    await expect(waiting).toHaveCount(3);
-    await expect(writing).toHaveCount(3);
-    for (const dots of [waiting, writing]) {
+    // Each in its section's popover, opened from its chip.
+    for (const [section, dots] of [['table', waiting], ['quote', writing]] as const) {
+      await page.keyboard.press('Escape');
+      await box(page, section).locator('summary').click();
+      await expect(dots).toHaveCount(3);
       for (const dot of await dots.all()) {
+        await expect(dot).toBeVisible();
         await expect(dot).toHaveCSS('background-color', rgb(COLORS.amber));
       }
     }

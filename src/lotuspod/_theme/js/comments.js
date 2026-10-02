@@ -2,9 +2,10 @@
   // The comment boxes (lotuspod.comments): one per section, or one for the
   // page. Threads come from the comments route; each is shown in the box of
   // its section, or, when the page no longer has that section, in a list at
-  // the end of the body. Where the window has room for it, every thread is
-  // shown in the side panel instead (sidePanel below), and each box is a chip.
-  // A thread on a passage (selectPassages below) is also drawn on its words.
+  // the end of the body. With the page script each box is a chip instead,
+  // and its threads open in the side panel, a popover or a bottom sheet
+  // (sidePanel below), never in the box. A thread on a passage
+  // (selectPassages below) is also drawn on its words.
   function commentBoxes(boxes) {
     var page = boxes[0].dataset.page;
     var tag = document.querySelector('meta[name="lotuspod:owner"]');
@@ -418,19 +419,15 @@
       return found.sort(function (a, b) { return a.root.id - b.root.id; });
     }
 
-    function summary(box) {
-      var count = threadsOf(box).length;
-      box.querySelector("summary").textContent = count ? "Comments (" + count + ")" : "Comment";
-    }
-
     // Comments on passages. Words selected in the body, within one section,
-    // show a pill just above the selection's end, and pressing it (or
-    // Control+Alt+M) opens a composer quoting them, the words under a dashed
-    // mark: in the panel's group of their section, else in their section's
-    // box. A thread whose first comment quotes a passage is found in the
-    // page's text from its quote and drawn on its words: a highlight, then
-    // its number, which is its entry's in the panel. One not found is listed
-    // with its quote struck through; a resolved one is not drawn.
+    // show a pill just above the selection's end (below it on a touch
+    // screen), and pressing it (or Control+Alt+M) opens a composer quoting
+    // them, the words under a dashed mark: in the panel's group of their
+    // section, else in a popover or the bottom sheet. A thread whose first
+    // comment quotes a passage is found in the page's text from its quote
+    // and drawn on its words: a highlight, then its number, which is its
+    // entry's in the panel. One not found is listed with its quote struck
+    // through; a resolved one is not drawn.
     function selectPassages() {
       var api = {};
       // The thread the pointer is on, on the page and in the panel.
@@ -465,10 +462,9 @@
       };
 
       // A thread's words are lit while the pointer is on them or on its
-      // entry, and while its entry is open in the panel.
+      // entry, and while it is open in the panel, a popover or the sheet.
       api.shine = function (thread) {
-        var on = thread === pointed.page || thread === pointed.entry ||
-          (panel.wide && panel.current() === thread);
+        var on = thread === pointed.page || thread === pointed.entry || panel.lit(thread);
         thread.marks.forEach(function (mark) {
           mark.classList.toggle("artifact-passage--lit", on);
         });
@@ -600,9 +596,14 @@
         if (panel.wide) {
           panel.compose(open.box, open.holder);
         } else {
-          var form = forms.get(open.box);
-          open.box.open = true;
-          open.box.insertBefore(open.holder, form.parentNode === open.box ? form : null);
+          panel.passage(open);
+        }
+      };
+
+      // Close a composer if it is still open: its popover or sheet was.
+      api.cancel = function (mine) {
+        if (open === mine) {
+          close(mine);
         }
       };
 
@@ -616,6 +617,7 @@
         if (open === mine) {
           open = null;
         }
+        panel.dropped(mine);
       }
 
       // Whether a boundary point may be part of a passage: in the body, out
@@ -700,7 +702,8 @@
       document.body.appendChild(pill);
 
       // The pill just above the end of the selection, leaning left of it and
-      // inside the reading column.
+      // inside the reading column; on a touch screen, whose own menu takes
+      // the room above, just below it.
       function offer(found) {
         var rects = found.tail.getClientRects();
         var line = rects[rects.length - 1];
@@ -711,8 +714,11 @@
         var width = pill.offsetWidth;
         var column = article.getBoundingClientRect();
         var left = Math.max(column.left, Math.min(line.right - width * 0.75, column.right - width));
+        var below = window.matchMedia(COARSE).matches;
+        pill.classList.toggle("artifact-passage-pill--below", below);
         pill.style.left = Math.round(left + window.scrollX) + "px";
-        pill.style.top = Math.round(line.top + window.scrollY - pill.offsetHeight - 8) + "px";
+        pill.style.top = Math.round(window.scrollY +
+          (below ? line.bottom + 8 : line.top - pill.offsetHeight - 8)) + "px";
         pill.style.setProperty("--artifact-passage-tip",
           Math.round(Math.max(12, Math.min(width - 12, line.right - left))) + "px");
       }
@@ -775,7 +781,7 @@
         open = mine;
         document.getSelection().removeAllRanges();
         api.place();
-        field.focus({ preventScroll: panel.wide });
+        field.focus({ preventScroll: true });
 
         quit.addEventListener("click", function () { close(mine); });
         holder.addEventListener("keydown", function (event) {
@@ -842,7 +848,8 @@
       article.addEventListener("mouseleave", function () {
         api.point(null, "page");
       });
-      // A highlight opens its thread: in the panel, else in its box.
+      // A highlight opens its thread: in the panel, else in a popover under
+      // it or the bottom sheet.
       article.addEventListener("click", function (event) {
         var thread = threadAt(event.target);
         var selection = document.getSelection();
@@ -851,12 +858,9 @@
         }
         if (panel.wide) {
           panel.open(thread);
-          return;
+        } else {
+          panel.show({ thread: thread }, event.target.closest("mark, .artifact-passage-number"));
         }
-        if (thread.box) {
-          thread.box.open = true;
-        }
-        thread.node.scrollIntoView({ block: "nearest" });
       });
       return api;
     }
@@ -867,12 +871,14 @@
     // or open with every thread listed under its section's heading, one
     // entry open at a time. A thread's node is moved into its entry, never
     // drawn twice, so its live reads, composer and live region go on as they
-    // were. Each box's summary is then a chip saying where its section's
-    // open threads stand, which opens them here: a box never opens, and
-    // nothing in the column moves when the panel or a thread changes.
+    // were. Each box's summary is a chip saying where its section's open
+    // threads stand, which opens them here: a box never opens, and nothing
+    // in the column moves when the panel or a thread changes. Without that
+    // room the entries stay in their groups out of sight, and one at a time
+    // is moved into a popover or the bottom sheet (js/narrow.js).
     function sidePanel() {
       var column = document.querySelector(".artifact-body");
-      var api = { wide: false };
+      var api = { wide: false, mode: null };
       var arranged = false;
       var open = false;
       // The thread whose entry is open, if any.
@@ -970,7 +976,11 @@
         made.holder.hidden = !show;
         made.toggle.setAttribute("aria-expanded", show ? "true" : "false");
         if (show) {
-          reveal(made.holder);
+          if (api.wide) {
+            reveal(made.holder);
+          } else {
+            over.uncover(made.holder);
+          }
           forms.get(made.box).elements.text.focus({ preventScroll: true });
         }
       }
@@ -1104,16 +1114,19 @@
         done.append(tick(), " resolved · ", reopen);
         folded.append.apply(folded, lead().concat([done]));
         var tools = element("div", "artifact-comments-entry-tools");
+        // Where the thread stands, beside Resolve: in a popover, which shows
+        // no head.
+        var note = element("span", "artifact-comments-entry-note");
         var resolve = element("button", "artifact-comments-resolve", "Resolve");
         resolve.type = "button";
-        tools.appendChild(resolve);
+        tools.append(note, resolve);
         body.appendChild(tools);
         var status = element("p", "artifact-comments-entry-status");
         status.setAttribute("role", "status");
         item.append(top, folded, body, status);
         var dot = element("li", "artifact-comments-dot");
         thread.entry = {
-          item: item, head: top, state: state, folded: folded, body: body, resolve: resolve,
+          item: item, head: top, state: state, note: note, folded: folded, body: body, resolve: resolve,
           reopen: reopen, status: status, dot: dot, key: "", marks: marks, words: words, leadKey: null,
         };
         // Pointing at a passage's entry lights its words.
@@ -1137,7 +1150,7 @@
       function draw(thread) {
         var made = entry(thread);
         var done = resolved(thread);
-        var opened = !done && current === thread;
+        var opened = !done && (current === thread || over.holds(thread));
         made.item.classList.toggle("artifact-comments-entry--resolved", done);
         made.item.classList.toggle("artifact-comments-entry--open", opened);
         made.head.hidden = done;
@@ -1161,26 +1174,33 @@
             }
           });
         }
-        var kind = standing(thread);
-        var handle = routed(asked(thread));
-        var key = [kind, handle, thread.replies.length].join("\n");
+        var key = [standing(thread), routed(asked(thread)), thread.replies.length].join("\n");
         if (key === made.key) {
           return;
         }
         made.key = key;
-        var said = element("span", "artifact-comments-entry-said artifact-comments-entry-said--" + kind);
+        [made.state, made.note].forEach(function (node) {
+          node.replaceChildren(said(thread), " · ",
+            element("span", "artifact-comments-entry-count",
+              plural(thread.replies.length, "reply", "replies")));
+        });
+      }
+
+      // Where a thread stands, in words: answered, or who it waits for.
+      function said(thread) {
+        var kind = standing(thread);
+        var handle = routed(asked(thread));
+        var node = element("span", "artifact-comments-entry-said artifact-comments-entry-said--" + kind);
         if (kind === "answered") {
-          said.append(tick(), " Answered");
+          node.append(tick(), " Answered");
         } else if (kind === "writing") {
-          said.textContent = handle + " is writing";
+          node.textContent = handle + " is writing";
         } else if (kind === "waiting") {
-          said.textContent = "Waiting for " + handle;
+          node.textContent = "Waiting for " + handle;
         } else {
-          said.textContent = handle + " couldn't answer";
+          node.textContent = handle + " couldn't answer";
         }
-        made.state.replaceChildren(said, " · ",
-          element("span", "artifact-comments-entry-count",
-            plural(thread.replies.length, "reply", "replies")));
+        return node;
       }
 
       function expand(thread) {
@@ -1197,13 +1217,14 @@
         }
       }
 
-      // Bring a thread's highlight, else its chip, into the window, opening
-      // its section first through its heading's button if it is folded.
-      function bring(thread) {
-        var target = thread.marks[0] || (thread.box && thread.box.querySelector("summary"));
-        if (!target) {
-          return;
-        }
+      // A thread's highlight, else its chip.
+      function anchorOf(thread) {
+        return thread.marks[0] || (thread.box && thread.box.querySelector("summary")) || null;
+      }
+
+      // Open the section a node is in through its heading's button, if it is
+      // folded.
+      function unfold(target) {
         var wrapper = target.closest(".artifact-section-body");
         if (wrapper && wrapper.hasAttribute("hidden")) {
           var heading = wrapper.previousElementSibling;
@@ -1212,10 +1233,24 @@
             button.click();
           }
         }
+      }
+
+      // Where the title bar ends, in the window.
+      function barBottom() {
         var bar = document.querySelector(".artifact-topbar");
-        var top = bar ? bar.getBoundingClientRect().bottom : 0;
+        return bar ? Math.max(0, bar.getBoundingClientRect().bottom) : 0;
+      }
+
+      // Bring a thread's highlight, else its chip, into the window, opening
+      // its section first if it is folded.
+      function bring(thread) {
+        var target = anchorOf(thread);
+        if (!target) {
+          return;
+        }
+        unfold(target);
         var rect = target.getBoundingClientRect();
-        if (rect.top < top || rect.bottom > window.innerHeight) {
+        if (rect.top < barBottom() || rect.bottom > window.innerHeight) {
           target.scrollIntoView({ block: "center" });
         }
       }
@@ -1248,7 +1283,8 @@
           }
           refresh();
           if (focused) {
-            (resolve ? made.reopen : made.head).focus({ preventScroll: true });
+            // A popover or the sheet shows no head: Resolve takes the focus.
+            (resolve ? made.reopen : api.wide ? made.head : made.resolve).focus({ preventScroll: true });
           }
         } catch (ignored) {
           made.status.textContent = "Not saved: the site did not answer. Try again.";
@@ -1335,24 +1371,25 @@
         summaryNode.replaceChildren(faces, text);
       }
 
-      // The box's form for a new thread posted one: in the panel, the form
-      // folds and the new thread's entry opens.
+      // The box's form for a new thread posted one: the form folds, and in
+      // the panel the new thread's entry opens; a popover shows it among its
+      // section's threads, and the sheet moves on to it.
       api.posted = function (box, thread) {
-        if (!api.wide || !thread) {
+        if (!thread) {
           return;
         }
         var made = groups.get(box);
         var focused = made.holder.contains(document.activeElement)
           || document.activeElement === document.body;
         compose(made, false);
-        expand(thread);
-        if (focused) {
-          thread.entry.head.focus({ preventScroll: true });
+        if (api.wide) {
+          expand(thread);
+          if (focused) {
+            thread.entry.head.focus({ preventScroll: true });
+          }
+          return;
         }
-      };
-
-      api.current = function () {
-        return current;
+        over.posted(thread, focused);
       };
 
       // A highlight: the panel opens at its thread.
@@ -1371,15 +1408,20 @@
         reveal(holder);
       };
 
-      // A thread was posted from a passage's composer: its entry opens.
+      // A thread was posted from a passage's composer: its entry opens, or
+      // it opens in a popover under its words or in the sheet.
       api.started = function (thread, focused) {
-        if (!api.wide || !thread) {
+        if (!thread) {
           return;
         }
-        expand(thread);
-        if (focused) {
-          thread.entry.head.focus({ preventScroll: true });
+        if (api.wide) {
+          expand(thread);
+          if (focused) {
+            thread.entry.head.focus({ preventScroll: true });
+          }
+          return;
         }
+        over.started(thread, focused);
       };
 
       // A chip: the panel opens at its section's newest open thread, or at
@@ -1395,44 +1437,86 @@
         }
       }
 
+      // A chip opens its section's threads in the panel, a popover or the
+      // sheet, never in its box.
+      function chipped(box) {
+        if (api.wide) {
+          show(box);
+        } else {
+          over.chip(box);
+        }
+      }
+
       boxes.forEach(function (box) {
         var summaryNode = box.querySelector("summary");
         summaryNode.addEventListener("click", function (event) {
-          if (api.wide) {
-            event.preventDefault();
-            show(box);
-          }
+          event.preventDefault();
+          chipped(box);
         });
         summaryNode.addEventListener("keydown", function (event) {
-          if (api.wide && (event.key === "Enter" || event.key === " ")) {
+          if (event.key === "Enter" || event.key === " ") {
             event.preventDefault();
-            show(box);
+            chipped(box);
           }
         });
         summaryNode.addEventListener("keyup", function (event) {
-          if (api.wide && event.key === " ") {
+          if (event.key === " ") {
             event.preventDefault();
           }
         });
         box.addEventListener("toggle", function () {
-          if (api.wide && box.open) {
+          if (box.open) {
             box.open = false;
           }
         });
       });
 
+      // Show a thread where it belongs: its entry in its group, or in the
+      // popover or sheet holding it, with its node in the entry; without
+      // the panel, a thread on a section the page no longer has is in the
+      // list at the end of the body unless it is held.
       api.put = function (thread) {
         var made = entry(thread);
-        if (thread.node.parentNode !== made.body) {
+        var keep = over.holds(thread);
+        if (!api.wide && !thread.box && !keep) {
+          var listed = changed();
+          if (thread.node.parentNode !== listed) {
+            listed.appendChild(thread.node);
+          }
+        } else if (thread.node.parentNode !== made.body) {
           made.body.appendChild(thread.node);
         }
-        var target = thread.box ? groups.get(thread.box) : strays;
-        if (made.item.parentNode !== target.entries) {
-          target.entries.appendChild(made.item);
-          sort(target);
+        if (keep) {
+          if (made.item.parentNode !== over.entries()) {
+            over.entries().appendChild(made.item);
+          }
+        } else {
+          var target = thread.box ? groups.get(thread.box) : strays;
+          if (made.item.parentNode !== target.entries) {
+            target.entries.appendChild(made.item);
+            sort(target);
+          }
         }
         strays.node.hidden = !strays.entries.firstChild;
         draw(thread);
+      };
+
+      // Without room for the panel, one thing at a time opens over the text,
+      // in a popover or the bottom sheet (overText in js/narrow.js).
+      var over = overText({
+        panel: api, groups: groups, passages: passages, mute: mute,
+        compose: compose, threadsOf: threadsOf, unresolvedOf: unresolvedOf, resolved: resolved,
+        ordered: ordered,
+        latest: latest, standing: standing, routed: routed, asked: asked, said: said, tick: tick,
+        title: title, opening: opening, anchorOf: anchorOf, unfold: unfold, barBottom: barBottom,
+      });
+      api.show = over.show;
+      api.passage = over.passage;
+      api.dropped = over.dropped;
+
+      // Whether a thread is open: in the panel, a popover or the sheet.
+      api.lit = function (thread) {
+        return (api.wide && current === thread) || over.holds(thread);
       };
 
       // Where a thread is listed in its group: its passages by number, then
@@ -1484,6 +1568,7 @@
           }
         });
         boxes.forEach(chip);
+        over.sync();
       };
 
       // Whether the window leaves ROOM right of the reading column.
@@ -1495,34 +1580,78 @@
         return document.documentElement.clientWidth - column.getBoundingClientRect().right >= ROOM * rem;
       }
 
-      // Show the threads in the panel or in the boxes, as the window allows.
-      api.arrange = function () {
-        var wide = roomy();
-        if (arranged && wide === api.wide) {
-          return;
+      // What the open panel shows, to open again in a popover or the sheet
+      // (over.restore) when the window narrows: a section's form being
+      // written in, else the open entry's thread. A passage's composer is
+      // placed by its own (passages.place).
+      function opened() {
+        var none = { view: null, opener: null, anchor: null, writing: null };
+        if (!open) {
+          return none;
         }
-        arranged = true;
-        api.wide = wide;
-        aside.hidden = !wide;
-        boxes.forEach(function (box) {
-          var form = forms.get(box);
-          if (wide) {
-            box.open = false;
-            groups.get(box).holder.appendChild(form);
-          } else {
-            box.appendChild(form);
-            var summaryNode = box.querySelector("summary");
-            summaryNode.className = "artifact-comment-summary";
-            summaryNode.lotuspodChip = "";
+        var writing = null;
+        groups.forEach(function (made) {
+          if (made.holder && !made.holder.hidden) {
+            writing = made;
           }
         });
+        if (writing) {
+          var chipNode = writing.box.querySelector("summary");
+          return { view: { box: writing.box }, opener: chipNode, anchor: chipNode, writing: writing };
+        }
+        if (current && !resolved(current)) {
+          var anchor = anchorOf(current);
+          return { view: { thread: current }, opener: anchor, anchor: anchor, writing: null };
+        }
+        return none;
+      }
+
+      // Show the threads in the panel, or else open them in a popover or the
+      // sheet, as the window allows. What is open moves to the new place.
+      api.arrange = function () {
+        var mode = roomy() ? "panel" : window.matchMedia(POPOVER).matches ? "popover" : "sheet";
+        if (arranged && mode === api.mode) {
+          over.refit();
+          return;
+        }
+        if (!arranged) {
+          boxes.forEach(function (box) {
+            box.open = false;
+            groups.get(box).holder.appendChild(forms.get(box));
+          });
+        }
+        arranged = true;
+        // Moving a field takes its focus away: it is given back after.
+        var focused = document.activeElement;
+        var taken = api.wide ? opened() : over.take();
+        var view = taken.view;
+        var writing = taken.writing;
+        api.mode = mode;
+        api.wide = mode === "panel";
+        aside.hidden = !api.wide;
+        over.mode(mode);
         var old = document.querySelector(".artifact-comments-changed");
         if (old) {
-          old.hidden = wide;
+          old.hidden = api.wide;
         }
         shown.forEach(put);
         refresh();
+        if (!api.wide) {
+          over.restore(taken);
+        } else if (view && view.thread) {
+          setOpen(true, false);
+          expand(view.thread);
+        } else if (writing) {
+          setOpen(true, false);
+        }
+        if (writing) {
+          compose(writing, true);
+        }
+        // A passage's composer goes where the window now has room for it.
         passages.place();
+        if (focused && focused !== document.body && focused.isConnected && document.activeElement !== focused) {
+          focused.focus({ preventScroll: true });
+        }
       };
 
       return api;
@@ -1590,27 +1719,16 @@
       return Boolean(thread.resolution && thread.resolution.resolved);
     }
 
-    // Show a thread where the window has room for it: in the panel, else in
-    // its section's box or the list of changed sections.
+    // Show a thread in its entry, where the window has room for it.
     function put(thread) {
-      if (panel.wide) {
-        panel.put(thread);
-      } else if (thread.box) {
-        thread.box.querySelector(".artifact-comment-threads").appendChild(thread.node);
-      } else {
-        changed().appendChild(thread.node);
-      }
+      panel.put(thread);
     }
 
-    // Draw what the threads say outside them: the passages' highlights, and
-    // the boxes' summaries or the panel and its chips.
+    // Draw what the threads say outside them: the passages' highlights, the
+    // panel, the chips and what a popover or the sheet holds.
     function refresh() {
       passages.update();
-      if (panel.wide) {
-        panel.refresh();
-      } else {
-        boxes.forEach(summary);
-      }
+      panel.refresh();
     }
 
     // The checks for replies: while a thread waits and the page is seen,
@@ -1657,10 +1775,8 @@
       timer = null;
       var first = waiting();
       if (first) {
-        // In the panel a box's form may be folded away: the thread says it.
-        var status = first.box && !panel.wide
-          ? forms.get(first.box).querySelector(".artifact-comment-status")
-          : first.node.querySelector(":scope > .artifact-comment-status");
+        // A box's form may be folded away: the thread says it.
+        var status = first.node.querySelector(":scope > .artifact-comment-status");
         if (!status) {
           status = element("p", "artifact-comment-status");
           status.setAttribute("role", "status");

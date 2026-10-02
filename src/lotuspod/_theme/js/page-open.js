@@ -11,11 +11,14 @@
 // state as its own mark outside what anyone wrote), and posts new threads and
 // replies. While a thread waits for an agent and the page is seen, it reads
 // the threads again, less often while nothing changes, and draws what is new
-// in place. Where the window has room right of the reading column, the
-// threads live in a side panel (aside.artifact-comments-panel) folded to a
-// rail of status dots, each box's summary becomes a one-line chip that opens
-// its section's thread there, and a thread can be resolved and reopened.
-// Words selected in the body can be commented on: a pill above the selection
+// in place. Each box's summary becomes a one-line chip that opens its
+// section's thread, and a thread can be resolved and reopened. Where the
+// window has room right of the reading column, the threads live in a side
+// panel (aside.artifact-comments-panel) folded to a rail of status dots;
+// without that room a thread opens over the text, in a popover under what
+// opened it (div.artifact-comments-popover), or on a phone in a bottom sheet
+// (div.artifact-comments-bottom-sheet) that steps through the page's threads.
+// Words selected in the body can be commented on: a pill by the selection
 // opens a composer, and each thread on a passage highlights its words with a
 // number, found again from its quote on every revision of the page. It
 // sends no credential of its own: the reader's Cloudflare Access session is
@@ -34,6 +37,11 @@
   var PANEL = "lotuspod:comments-panel";
   // The room the panel needs right of the reading column, in rem.
   var ROOM = 21;
+  // Without that room, the narrowest window a popover opens in; narrower,
+  // a thread opens in a bottom sheet.
+  var POPOVER = "(min-width: 700px)";
+  // Where the primary pointer is a finger, the pill sits below the selection.
+  var COARSE = "(pointer: coarse)";
   // Each page's folded sections are kept under this and its path.
   var SECTIONS = "lotuspod:folded:";
   // Sent on a comment box when rows are drawn into it, and on the document
@@ -43,7 +51,8 @@
   // What the page's text leaves out and no passage may hold: the comment UI,
   // decision forms, diagrams and the list of changed sections.
   var APART = "details.artifact-comment, .artifact-comments-changed, .artifact-comments-panel, " +
-    ".artifact-passage-composer, form.artifact-decision, pre.mermaid, svg";
+    ".artifact-comments-popover, .artifact-comments-bottom-sheet, .artifact-passage-composer, " +
+    "form.artifact-decision, pre.mermaid, svg";
   // What the page's text leaves out as never read: the marks and numbers the
   // page script draws, and what is not shown at all.
   var UNSEEN = "script, style, template, noscript, .artifact-section-mark, .artifact-passage-number";

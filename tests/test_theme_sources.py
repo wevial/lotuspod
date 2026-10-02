@@ -80,6 +80,17 @@ class DeclaredOrderTests(ThemeCopyTestCase):
         problems = source_problems(cli.THEME_DIR, cli.THEME_SOURCES)
         self.assertEqual(problems, [], "\n".join(problems))
 
+    def test_the_popover_and_bottom_sheet_sources_are_declared_beside_the_comments(self):
+        """LOTUS-37: the narrow script runs before the comments start, so it
+        is joined before js/comments.js; its styles win at equal specificity,
+        so they are joined after css/comments.css."""
+        styles = cli.THEME_SOURCES[STYLESHEET]
+        script = cli.THEME_SOURCES[cli.PAGE_SCRIPT]
+        self.assertIn("css/narrow.css", styles)
+        self.assertIn("js/narrow.js", script)
+        self.assertGreater(styles.index("css/narrow.css"), styles.index("css/comments.css"))
+        self.assertLess(script.index("js/narrow.js"), script.index("js/comments.js"))
+
     def test_a_source_not_in_the_declared_order_is_named(self):
         theme = self.theme_copy()
         (theme / "css" / "stray.css").write_text(".stray {}\n", encoding="utf-8")
