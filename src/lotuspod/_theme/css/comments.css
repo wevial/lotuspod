@@ -177,6 +177,14 @@
   padding: 0 0.4em;
 }
 
+.artifact-comment-model {
+  color: var(--color-muted-lavender);
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 :is(.artifact-body, .artifact-comments-panel, .artifact-comments-held) .artifact-comment-text,
 :is(.artifact-body, .artifact-comments-panel, .artifact-comments-held) .artifact-comment-bubble {
   background: var(--color-surface);

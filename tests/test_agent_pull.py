@@ -555,6 +555,35 @@ class FollowUpPullTests(PullTestCase):
         self.assertLess(out.index("I'll ask the author."), out.index("The author says it is."))
 
 
+class ModelPullTests(PullTestCase):
+    """A reply's model is printed on its line by `pull` and `show`."""
+
+    prepare = FollowUpPullTests.prepare
+    as_hermes = FollowUpPullTests.as_hermes
+
+    def test_pull_and_show_name_the_model_of_a_reply_that_names_one(self):
+        self.pull("hermes", credential=self.hermes)
+        asked = self.comment("Is the heater enough?")
+        claim = self.as_hermes("claim", str(asked["id"]))
+        named = self.as_hermes("reply", str(asked["id"]), f"--claim={claim['claimToken']}",
+                               "--key", "model-1", "--text", "It is.",
+                               "--model", "Claude Opus 5.5")
+        again = self.reply(asked["id"], "And the pump?")
+        claim = self.as_hermes("claim", str(again["id"]))
+        plain = self.as_hermes("reply", str(again["id"]), f"--claim={claim['claimToken']}",
+                               "--key", "model-2", "--text", "It works.")
+        self.reply(asked["id"], "Thanks.")
+        for argv, level in ((("pull", "--owner", "hermes"), "####"), (("show", "plan"), "###")):
+            with self.subTest(command=argv[0]):
+                rc, out, err = self.agent(*argv, credential=self.hermes)
+                self.assertEqual(rc, 0, err)
+                self.assertIn(f"{level} Reply {named['id']}, hermes, {named['createdAt']}, "
+                              "model Claude Opus 5.5\n", out)
+                self.assertIn(f"{level} Reply {plain['id']}, hermes, {plain['createdAt']}\n",
+                              out)
+                self.assertEqual(out.count("model "), 1)
+
+
 class PassageTests(PullTestCase):
     """A comment on a highlighted passage, as the markdown prints it."""
 
@@ -646,14 +675,17 @@ class PassageTests(PullTestCase):
 
 
 class SchemaTests(PullTestCase):
+    # The schema version the database is left at before serve opens it.
+    version = 2
+
     def prepare(self) -> None:
-        # The database again as the previous schema wrote it, with the
+        # The database again as an earlier schema wrote it, with the
         # credentials and a comment in it: serve is the first to open it.
         credentials = db.Database(self.db_path).credentials()
         for path in self.work.glob(db.DEFAULT_NAME + "*"):
             path.unlink()
         conn = sqlite3.connect(str(self.db_path))
-        for step in (1, 2):
+        for step in range(1, self.version + 1):
             for statement in db._SCHEMA[step]:
                 conn.execute(statement)
         for row in credentials:
@@ -669,14 +701,18 @@ class SchemaTests(PullTestCase):
             " 'Kept from before.', NULL, ?, '2026-01-02T03:04:05.000Z', 'pending')",
             (json.dumps(READER),),
         )
-        conn.execute("PRAGMA user_version = 2")
+        self.prepare_rows(conn)
+        conn.execute(f"PRAGMA user_version = {self.version}")
         conn.commit()
         conn.close()
+
+    def prepare_rows(self, conn: sqlite3.Connection) -> None:
+        """Any rows this schema's database holds beside the comment."""
 
     def test_a_previous_database_keeps_its_rows(self):
         conn = sqlite3.connect(str(self.db_path))
         try:
-            self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 2)
+            self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], self.version)
         finally:
             conn.close()
         [thread] = self.threads()
@@ -689,7 +725,29 @@ class SchemaTests(PullTestCase):
                              db.SCHEMA_VERSION)
         finally:
             conn.close()
-        self.assertEqual(db.SCHEMA_VERSION, 6)
+        self.assertEqual(db.SCHEMA_VERSION, 7)
+
+
+class ReplySchemaTests(SchemaTests):
+    """The schema before replies named their model, holding an agent's reply."""
+
+    version = 6
+    AGENT = {"kind": "agent", "handle": "hermes", "credential": "hermes"}
+
+    def prepare_rows(self, conn: sqlite3.Connection) -> None:
+        conn.execute(
+            "INSERT INTO comments (page, section, section_title, revision, parent, text,"
+            " quote, actor, created_at, state, reply_credential, reply_key) VALUES ('plan',"
+            " 'risks', 'Risks', '', 1, 'Answered before.', NULL, ?,"
+            " '2026-01-02T03:05:05.000Z', 'answered', 'hermes', 'old-1')",
+            (json.dumps(self.AGENT),),
+        )
+
+    def test_a_reply_from_before_keeps_its_text_and_actor_and_names_no_model(self):
+        [thread] = self.threads()
+        [reply] = thread["replies"]
+        self.assertEqual((reply["text"], reply["actor"]), ("Answered before.", self.AGENT))
+        self.assertNotIn("model", reply)
 
 
 class OwnerWindowOptionTests(unittest.TestCase):

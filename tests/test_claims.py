@@ -235,6 +235,81 @@ class ReplyTests(ClaimTestCase):
         self.assertEqual((status, payload), (405, {"error": "method_not_allowed"}))
 
 
+class ModelTests(ClaimTestCase):
+    """A reply may name the model that wrote it."""
+
+    def socket_reply(self, comment_id: int, token: str, body: dict) -> tuple[int, dict]:
+        credential = machine.read_token(self.creds["hermes"])
+        return machine.request(self.socket_path, credential, "POST",
+                               f"/v1/comments/{comment_id}/reply",
+                               {"claimToken": token, **body})
+
+    def test_a_reply_through_the_cli_carries_its_model_everywhere_it_is_read(self):
+        self.pull("hermes")
+        comment = self.comment("Is the heater enough?")
+        token = self.claim("hermes", comment["id"])
+        rc, reply = self.send_reply("hermes", comment["id"], token, "model-1", "It is.",
+                                    "--model", "Claude Opus 5.5")
+        self.assertEqual(rc, 0, reply)
+        self.assertEqual(reply["model"], "Claude Opus 5.5")
+        rc, shown = self.act("hermes", "show", "plan")
+        self.assertEqual(rc, 0, shown)
+        [thread] = shown["threads"]
+        [row] = thread["replies"]
+        self.assertEqual((row["id"], row["model"]), (reply["id"], "Claude Opus 5.5"))
+        [row] = self.replies(comment["id"])
+        self.assertEqual((row["id"], row["model"]), (reply["id"], "Claude Opus 5.5"))
+
+    def test_a_reply_without_a_model_has_no_model_key(self):
+        self.pull("hermes")
+        comment = self.comment("Is the heater enough?")
+        token = self.claim("hermes", comment["id"])
+        rc, reply = self.send_reply("hermes", comment["id"], token, "model-1", "It is.")
+        self.assertEqual(rc, 0, reply)
+        self.assertNotIn("model", reply)
+        credential = machine.read_token(self.creds["hermes"])
+        status, payload = machine.request(self.socket_path, credential, "GET",
+                                          "/v1/threads?page=plan")
+        self.assertEqual(status, 200, payload)
+        [thread] = payload["threads"]
+        [row] = thread["replies"]
+        self.assertEqual(row["id"], reply["id"])
+        self.assertNotIn("model", row)
+        [row] = self.replies(comment["id"])
+        self.assertNotIn("model", row)
+        self.assertNotIn("model", self.row(comment["id"]))
+
+    def test_a_model_that_is_not_1_to_40_printable_characters_is_refused(self):
+        self.pull("hermes")
+        comment = self.comment("Is the heater enough?")
+        token = self.claim("hermes", comment["id"])
+        for number, model in enumerate(("", "x" * 41, "Opus\n", " Opus", "Opus ", 5, None)):
+            with self.subTest(model=model):
+                status, payload = self.socket_reply(comment["id"], token, {
+                    "idempotencyKey": f"bad-{number}", "text": "It is.", "model": model})
+                self.assertEqual((status, payload), (400, {"error": "invalid_body"}))
+                self.assertEqual(self.row(comment["id"])["state"], "claimed")
+                self.assertEqual(self.replies(comment["id"]), [])
+        status, reply = self.socket_reply(comment["id"], token, {
+            "idempotencyKey": "good", "text": "It is.", "model": "y" * 40})
+        self.assertEqual(status, 200, reply)
+        self.assertEqual(reply["model"], "y" * 40)
+        self.assertEqual(self.replies(comment["id"]), [reply])
+
+    def test_a_retried_key_returns_the_model_first_stored(self):
+        self.pull("hermes")
+        comment = self.comment("Is the heater enough?")
+        token = self.claim("hermes", comment["id"])
+        status, reply = self.socket_reply(comment["id"], token, {
+            "idempotencyKey": "K", "text": "It is.", "model": "gpt-6-astra"})
+        self.assertEqual(status, 200, reply)
+        status, again = self.socket_reply(comment["id"], token, {
+            "idempotencyKey": "K", "text": "It is.", "model": "other"})
+        self.assertEqual((status, again), (200, reply))
+        self.assertEqual(again["model"], "gpt-6-astra")
+        self.assertEqual(self.replies(comment["id"]), [reply])
+
+
 class SettleTests(ClaimTestCase):
     def test_release_routes_it_again_and_fail_leaves_it_failed(self):
         self.pull("hermes")

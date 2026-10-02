@@ -70,12 +70,17 @@
       return { item: item, column: column };
     }
 
-    // An agent's name line: the handle in the mono voice and its AGENT tag.
-    function agentName(handle) {
+    // An agent's name line: the handle in the mono voice, its AGENT tag,
+    // and the model the reply names as its writer, when it names one.
+    function agentName(handle, model) {
       var by = element("p", "artifact-comment-by");
       by.appendChild(element("span", "artifact-comment-handle", handle));
       by.appendChild(document.createTextNode(" "));
       by.appendChild(element("span", "artifact-comment-agent", "AGENT"));
+      if (model) {
+        by.appendChild(document.createTextNode(" "));
+        by.appendChild(element("span", "artifact-comment-model", String(model)));
+      }
       return by;
     }
 
@@ -89,7 +94,7 @@
           name.slice(0, 2).toUpperCase());
       var by;
       if (handle) {
-        by = agentName(handle);
+        by = agentName(handle, entry.model);
       } else {
         by = element("p", "artifact-comment-by");
         by.appendChild(element("span", "artifact-comment-author", name));

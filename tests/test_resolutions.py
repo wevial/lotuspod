@@ -170,7 +170,9 @@ class SchemaTests(unittest.TestCase):
                     " 'r', ?, ?, NULL, ?, '2026-01-02T03:04:05.000Z', 'pending')",
                     (parent, text, json.dumps(READER)),
                 )
-            before = [tuple(row) for row in conn.execute("SELECT * FROM comments ORDER BY id")]
+            columns = ", ".join(row[1] for row in conn.execute("PRAGMA table_info(comments)"))
+            before = [tuple(row) for row in conn.execute(
+                f"SELECT {columns} FROM comments ORDER BY id")]
             conn.execute("PRAGMA user_version = 5")
             conn.commit()
             conn.close()
@@ -188,7 +190,7 @@ class SchemaTests(unittest.TestCase):
                                  db.SCHEMA_VERSION)
                 self.assertEqual(
                     [tuple(row) for row in conn.execute(
-                        "SELECT * FROM comments ORDER BY id")], before)
+                        f"SELECT {columns} FROM comments ORDER BY id")], before)
                 self.assertEqual(conn.execute("SELECT COUNT(*) FROM resolutions").fetchone()[0],
                                  0)
             finally:

@@ -23,8 +23,8 @@ credential that exists and is not revoked:
                                         seconds (needs claim, and the handle
                                         it is routed to)
     POST /v1/comments/ID/reply          {claimToken, idempotencyKey, text[,
-                                        revision]}: answer it under the claim,
-                                        once per key (needs reply)
+                                        revision, model]}: answer it under the
+                                        claim, once per key (needs reply)
     POST /v1/comments/ID/release        {claimToken}: route it again (needs claim)
     POST /v1/comments/ID/fail           {claimToken, reason}: leave it failed
                                         (needs claim)
@@ -50,7 +50,9 @@ current, 403 not_routed for a comment routed to none of the credential's
 handles, and 409 settled once it is answered or failed; a reply, release or failure without the
 credential's current claim and its token is 409 not_claimed. A reply's key
 names it for good: the same credential sending the same key again gets the
-reply stored the first time.
+reply stored the first time. A reply's model names the model that wrote
+it, as the page shows beside the agent's handle: 1 to 40 printable
+characters with no space at either end.
 
 A resolve or reopen acts as the page's owner when the credential holds it,
 else as the handle the thread's first comment is routed to; it is refused
@@ -117,6 +119,8 @@ ACK_METHODS = ("POST",)
 # Characters of a claim token or an idempotency key, and of a failure's reason.
 MAX_KEY = 200
 MAX_REASON = 200
+# Characters of the model a reply names.
+MAX_MODEL = 40
 CLAIM_BYTES = 32
 # The HTTP status of each refusal a claim, reply, release, failure or resolution meets.
 _REFUSED = {
@@ -164,6 +168,13 @@ def claim_token() -> str:
     if token.startswith("-"):
         token = secrets.choice(string.ascii_letters) + token[1:]
     return token
+
+
+def is_model(value: object) -> bool:
+    """Whether value may name a reply's model: a string of 1 to MAX_MODEL
+    characters, every one printable, with no space at either end."""
+    return (isinstance(value, str) and 1 <= len(value) <= MAX_MODEL and value.isprintable()
+            and value == value.strip(" "))
 
 
 def _unique(values: list[str]) -> list[str]:
@@ -460,7 +471,8 @@ class Routes:
         required = {"reply": {"claimToken", "idempotencyKey", "text"},
                     "release": {"claimToken"},
                     "fail": {"claimToken", "reason"}}[action]
-        api._keys(fields, required, frozenset({"revision"} if action == "reply" else ()))
+        api._keys(fields, required,
+                  frozenset({"revision", "model"} if action == "reply" else ()))
         token = token_hash(api._text(fields["claimToken"], 1, MAX_KEY))
         name = credential["name"]
         if action == "release":
@@ -477,8 +489,11 @@ class Routes:
         revision = fields.get("revision")
         if revision is not None:
             revision = api._text(revision, 1, api.MAX_NAME)
+        model = fields.get("model")
+        if "model" in fields and not is_model(model):
+            raise api.Refusal(HTTPStatus.BAD_REQUEST, "invalid_body")
         row = self.database.reply(comment_id, credential=name, token_hash=token, key=key,
-                                  text=text, revision=revision, clock=self.clock,
+                                  text=text, revision=revision, model=model, clock=self.clock,
                                   page_of=self._current)
         return self._shown(row)
 

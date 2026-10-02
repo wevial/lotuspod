@@ -333,6 +333,18 @@ class RecoveryTests(ResponderCase):
         self.assertEqual(len(kept), len(lines) - 1)
         journal.write_text("".join(kept), encoding="utf-8")
 
+    def test_a_reply_finished_after_a_restart_names_the_model_that_wrote_it(self):
+        row = self.comment("orphan", "greeting", "Please add a line.")
+        crashing = dict(self.env, APPEND="Added by the responder.\n",
+                        LOTUSPOD_RESPONDER_CRASH_AFTER="publish")
+        done = self.respond(command=f"{self.recorder} --model opus", env=crashing)
+        self.assertNotEqual(done.returncode, 0)
+        done = self.respond(command=f"{self.recorder} --model=sonnet")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(len(self.records()), 1)
+        [reply] = self.thread("orphan", row["id"])["replies"]
+        self.assertEqual(reply.get("model"), "opus")
+
     def test_a_lost_audit_row_is_written_again(self):
         row, published = self.crash_then_edit()
         self.forget_audit()
@@ -515,6 +527,23 @@ class CommandTests(ResponderCase):
         self.assertEqual(done.returncode, 0, done.stderr)
         self.assertEqual([r["argv"] for r in self.records()][1:],
                          [["from-config"], ["from-flag"]])
+
+
+class ModelTests(ResponderCase):
+    def test_a_reply_names_the_model_its_command_names(self):
+        for flags, model in ((["--model", "opus"], "opus"), (["--model=sonnet"], "sonnet"),
+                             ([], None), (["--model", "m" * 41], None)):
+            with self.subTest(flags=flags):
+                row = self.comment("orphan", "other", f"Which model, {len(self.records())}?")
+                done = self.respond(command=shlex.join([*shlex.split(self.recorder), *flags]))
+                self.assertEqual(done.returncode, 0, done.stderr)
+                self.assertEqual(self.records()[-1]["argv"], flags)
+                [reply] = self.thread("orphan", row["id"])["replies"]
+                self.assertEqual(reply["text"], "An answer.")
+                self.assertEqual(reply.get("model"), model)
+                self.assertEqual("model" in reply, model is not None)
+        self.assertEqual(responder.command_model(shlex.split(responder.DEFAULT_COMMAND)),
+                         "opus")
 
 
 class LoopTests(ResponderCase):

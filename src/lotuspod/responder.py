@@ -31,6 +31,11 @@ neither the agent nor publish runs again; a failure is sent again with its
 reason; a comment left before its answer was ready is failed. One pass at a
 time holds the journal (a lock beside it): a pass that finds it held does
 nothing, so it never takes another process's live work for a crash's.
+Each reply names the model the agent command names with --model NAME or
+--model=NAME, read once as the responder starts; a command that names none,
+or a name the socket would refuse, sends none. The model is journaled with
+the comment, so a reply sent again after a crash names the model that wrote
+it, whatever command the responder restarted with.
 The prompt always gives the comment to answer in full, whatever of its
 thread the bounded thread leaves out. The test-only fault point
 LOTUSPOD_RESPONDER_CRASH_AFTER=publish exits right after a republish.
@@ -287,6 +292,7 @@ class Responder:
         self.out_dir = out_dir
         self.journal = journal
         self.command = command
+        self.model = command_model(command)
         self.timeout = timeout
         self.credential: dict = {}
 
@@ -347,7 +353,7 @@ class Responder:
         key = f"{routing.RESPONDER}-{comment_id}-{secrets.token_hex(6)}"
         self.journal.write({"key": key, "comment": comment_id, "page": page["name"],
                             "source": page["sourceFile"], "expects": page["revision"],
-                            "claim": token, "at": time.time()})
+                            "claim": token, "at": time.time(), "model": self.model})
         try:
             text, edited = self.consult(item)
             revision = None
@@ -358,7 +364,7 @@ class Responder:
         except _Failed as exc:
             self.fail(comment_id, token, key, exc.reason)
             return
-        self.reply(comment_id, token, key, text, revision)
+        self.reply(comment_id, token, key, text, revision, self.model)
 
     def consult(self, item: dict) -> tuple[str, bytes | None]:
         """(the agent's answer, the source it edited or None)."""
@@ -459,13 +465,16 @@ class Responder:
         self.journal.write({"key": key, "published": revision})
 
     def reply(self, comment_id: int, token: str, key: str, text: str,
-              revision: str | None) -> None:
+              revision: str | None, model: str | None) -> None:
         """Reply with key, naming revision when the page was republished for
-        it; the socket takes a revision this credential published for key
-        even once the page has moved on."""
+        it, and model, the one the agent ran with, when there is one; the
+        socket takes a revision this credential published for key even once
+        the page has moved on."""
         body = {"idempotencyKey": key, "text": text}
         if revision is not None:
             body["revision"] = revision
+        if model is not None:
+            body["model"] = model
         if self._settle(comment_id, token, key, "reply", body):
             revised = f", revising the page to revision {revision}" if revision else ""
             self.log(f"comment {comment_id}: answered{revised}")
@@ -539,7 +548,11 @@ class Responder:
                 self.published(comment_id, key, revision)
             text = entry.get("text")
             if text is not None and (publishing is None or revision is not None):
-                self.reply(comment_id, token, key, text, revision)
+                # The model the agent ran with, whatever this pass's command
+                # names; none from an entry journaled before models were.
+                model = entry.get("model")
+                self.reply(comment_id, token, key, text, revision,
+                           model if machine.is_model(model) else None)
             elif publishing is not None:
                 self.fail(comment_id, token, key, "I stopped while revising the page and "
                           "found no sign my edit was published")
@@ -593,6 +606,19 @@ def agent_command(arg: str | None) -> list[str]:
     if not argv:
         raise cli.ConfigError(f"{label} is empty")
     return argv
+
+
+def command_model(argv: list[str]) -> str | None:
+    """The model the agent command names with --model NAME or --model=NAME,
+    the last when it names several; None when it names none, or one a reply
+    may not name."""
+    model = None
+    for number, arg in enumerate(argv):
+        if arg == "--model" and number + 1 < len(argv):
+            model = argv[number + 1]
+        elif arg.startswith("--model="):
+            model = arg[len("--model="):]
+    return model if machine.is_model(model) else None
 
 
 def cmd_pause(args: argparse.Namespace, paused: bool) -> int:

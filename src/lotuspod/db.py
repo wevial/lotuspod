@@ -24,7 +24,8 @@ owner was listening when it came, whatever pulls follow.
 An agent takes a reader's comment up by claiming it: the comment keeps the
 claim's credential, handle, token hash and expiry, and becomes `claimed`.
 An agent's reply keeps the credential's idempotency key, unique per
-credential, so a retried reply is found again rather than stored twice. An
+credential, so a retried reply is found again rather than stored twice, and
+the model it names as its writer, when it names one. An
 agent may add a follow-up to a thread with no claim, kept the same way, and
 it changes no comment's state. Each claim, reply, follow-up, release and
 failure writes a row to the audit table in the same transaction, and the default responder writes one for each page it
@@ -47,7 +48,7 @@ from pathlib import Path
 from typing import Callable, Iterator, Mapping
 
 DEFAULT_NAME = "lotuspod.sqlite3"
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 # Seconds a connection waits for another writer before giving up.
 BUSY_TIMEOUT = 30
 # The state of a reader's comment until an agent takes it up.
@@ -155,6 +156,9 @@ _SCHEMA = {1: (
         at TEXT NOT NULL
     )""",
     "CREATE INDEX resolutions_by_thread ON resolutions(thread, id)",
+), 7: (
+    # The model an agent's reply names as having written it.
+    "ALTER TABLE comments ADD COLUMN model TEXT",
 )}
 # The settings row that holds whether the responder is paused.
 _PAUSED = "responder_paused"
@@ -233,6 +237,9 @@ def _comment(row: sqlite3.Row) -> dict:
     # Only a failed comment has a reason.
     if row["reason"] is not None:
         found["reason"] = row["reason"]
+    # Only an agent's reply that named its model has one.
+    if row["model"] is not None:
+        found["model"] = row["model"]
     return found
 
 
@@ -491,8 +498,9 @@ class Database:
 
     def reply(self, comment_id: int, *, credential: str, token_hash: str, key: str,
               text: str, revision: str | None, clock: Callable[[], float],
-              page_of: Callable[[str], Mapping | None]) -> dict:
-        """Store credential's reply to comment_id under its claim; the reply.
+              page_of: Callable[[str], Mapping | None], model: str | None = None) -> dict:
+        """Store credential's reply to comment_id under its claim, naming
+        model as its writer when it is not None; the reply.
 
         clock() is the time the claim is checked at and page_of(name) the
         page {revision, sections} as serve answers it now, or None; both are
@@ -528,13 +536,13 @@ class Database:
             root = found["id"] if found["parent"] is None else found["parent"]
             cursor = conn.execute(
                 "INSERT INTO comments (page, section, section_title, revision, parent, text,"
-                " quote, actor, created_at, state, reply_credential, reply_key)"
-                " VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?)",
+                " quote, actor, created_at, state, reply_credential, reply_key, model)"
+                " VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?)",
                 (found["page"], found["section"],
                  page["sections"].get(found["section"], ""),
                  # A reply's revision is the page revision it made, if any.
                  revision or "", root, text, _dump(actor), _now(), ANSWERED,
-                 credential, key),
+                 credential, key, model),
             )
             conn.execute(
                 "UPDATE comments SET state = ?, claim_hash = NULL, claim_expires = NULL"

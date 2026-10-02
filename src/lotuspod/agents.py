@@ -5,7 +5,7 @@
     lotuspod comments show PAGE             GET  /v1/threads?page=PAGE
     lotuspod comments claim ID              POST /v1/comments/ID/claim
     lotuspod comments reply ID --claim TOKEN --key KEY (--text TEXT | --text-file PATH)
-        [--revision R]                      POST /v1/comments/ID/reply
+        [--revision R] [--model NAME]       POST /v1/comments/ID/reply
     lotuspod comments follow-up ID --key KEY (--text TEXT | --text-file PATH)
         [--revision R]                      POST /v1/threads/ID/follow-up
     lotuspod comments release ID --claim TOKEN
@@ -125,9 +125,12 @@ def _resolved(resolution: dict | None) -> list[str]:
 
 
 def _message(row: dict, level: str) -> list[str]:
-    """One comment of a thread: who, when, where it stands, and its text."""
+    """One comment of a thread: who, when, which model wrote it, where it
+    stands, and its text."""
     kind = "Comment" if row.get("parent") is None else "Reply"
     head = f"{level} {kind} {row['id']}, {_by(row)}, {row['createdAt']}"
+    if row.get("model"):
+        head += f", model {row['model']}"
     if row.get("owner"):
         head += f" ({_standing(row)})"
     lines = [head, ""]
@@ -297,6 +300,8 @@ def cmd_reply(args: argparse.Namespace) -> int:
     body = {"claimToken": args.claim, "idempotencyKey": args.key, "text": text}
     if args.revision is not None:
         body["revision"] = args.revision
+    if args.model is not None:
+        body["model"] = args.model
     return _run(args, "POST", f"/v1/comments/{args.id}/reply", reply_text, body)
 
 
@@ -403,7 +408,8 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
         "this credential has used before prints the reply stored with it, and nothing is "
         "stored twice. With --revision, the reply says it revised the page to revision R, "
         "which must be the page's current revision, or one this credential republished it "
-        "at for KEY. The comment becomes answered and the "
+        "at for KEY. With --model, the reply names the model that wrote it, which the page "
+        "shows beside the agent's handle. The comment becomes answered and the "
         "claim ends. Needs a credential with reply.",
     )
     reply.add_argument("id", type=_comment_id, metavar="ID", help="the comment's id")
@@ -416,6 +422,8 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
     text.add_argument("--text-file", metavar="PATH", help="a UTF-8 file holding the reply's text")
     reply.add_argument("--revision", default=None, metavar="R",
                        help="the page's revision after the agent revised it")
+    reply.add_argument("--model", default=None, metavar="NAME",
+                       help="the model that wrote the reply, in 1 to 40 printable characters")
     reply.add_argument("--json", action="store_true", help="print the socket's JSON")
     cli.add_agent_options(reply)
     reply.set_defaults(func=cmd_reply)

@@ -244,6 +244,59 @@ test.describe('signed in', () => {
     expect(errors).toEqual([]);
   });
 
+  test("a reply naming its model shows it after the AGENT tag, on the handle's line", async ({ page }) => {
+    test.setTimeout(120_000);
+    const errors: string[] = [];
+    page.on('pageerror', (error) => errors.push(error.message));
+    hermes('pull', '--owner', OWNER);
+    const posted = await page.request.post('/api/comments', {
+      data: { page: 'capture-comments', section: 'next-steps', text: 'Which model answers this?' },
+    });
+    expect(posted.status()).toBe(201);
+    const { id } = await posted.json();
+
+    await page.goto(PAGE);
+    await box(page, 'next-steps').summary.click();
+    const mine = thread(page, { id });
+    await expect(mine.node).toBeVisible();
+    const claim = hermes('claim', String(id));
+    const MODEL = 'Claude Opus 5.5';
+    const answered = hermes('reply', String(id), `--claim=${claim.claimToken}`,
+      '--key', `model-${id}`, '--text', 'This one does.', '--model', MODEL);
+    expect(answered.model).toBe(MODEL);
+    await expect(mine.agents).toHaveCount(1, { timeout: 15_000 });
+    const by = mine.agents.first().locator('.artifact-comment-by');
+    await expect(by.locator('.artifact-comment-model')).toHaveText(MODEL);
+    // The handle, the AGENT tag and the model, in that order, on one line.
+    const parts = by.locator('.artifact-comment-handle, .artifact-comment-agent, .artifact-comment-model');
+    expect(await parts.evaluateAll((nodes) => nodes.map((node) => node.className)))
+      .toEqual(['artifact-comment-handle', 'artifact-comment-agent', 'artifact-comment-model']);
+    const boxes = await parts.evaluateAll((nodes) => nodes.map((node) => node.getBoundingClientRect().toJSON()));
+    for (let n = 1; n < boxes.length; n++) {
+      expect(boxes[n].left).toBeGreaterThanOrEqual(boxes[n - 1].right);
+      expect(boxes[n].top).toBeLessThan(boxes[n - 1].bottom);
+      expect(boxes[n].bottom).toBeGreaterThan(boxes[n - 1].top);
+    }
+    expect(errors).toEqual([]);
+  });
+
+  test('a reply naming no model shows no label, and a model is drawn as written', async ({ page }) => {
+    const reads = await watchReads(page);
+    const root = row({ state: 'answered' });
+    const plain = reply(root, 'No model named.');
+    const named = { ...reply(root, 'An entity in the name.'), model: 'a&amp;b' };
+    await serve(page, () => ({ threads: [{ root, replies: [plain, named] }] }));
+    await stopClock(page);
+    await load(page);
+    await box(page, 'findings').summary.click();
+    const drawn = thread(page, root);
+    await expect(drawn.agents).toHaveCount(2);
+    await expect(drawn.agents.first().locator('.artifact-comment-model')).toHaveCount(0);
+    await expect(drawn.agents.first().locator('.artifact-comment-by')).toHaveText(/^hermes AGENT /);
+    await expect(drawn.agents.nth(1).locator('.artifact-comment-model')).toHaveText('a&amp;b');
+    expect(reads.errors).toEqual([]);
+  });
+
   test('reads back off from 3 seconds to 30 while a thread stays pending', async ({ page }) => {
     const reads = await watchReads(page);
     const pending = row({ state: 'pending' });

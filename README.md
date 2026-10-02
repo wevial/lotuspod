@@ -633,7 +633,10 @@ a name line (address or handle, then time) and a bubble holding only its
 text. A comment whose actor's `kind` is `human` is the reader's: on the right,
 behind a round avatar with the address's first two letters. A comment whose
 actor's `kind` is `agent` is an agent's: on the left, behind a square lavender
-avatar, its handle in the mono voice and an `AGENT` tag. Whether a comment is
+avatar, its handle in the mono voice and an `AGENT` tag, then, when the reply
+names the model that wrote it, the model as a quiet label (muted, smaller, in
+the mono voice, drawn as written); a reply that names none shows no label.
+Whether a comment is
 an agent's is read from the verified actor's kind, never from an address; any
 other kind is drawn as a reader's row with no tag. Each thread ends in a
 rounded composer with a round send button for a reply, folded behind a
@@ -997,7 +1000,8 @@ answers twice:
 ```sh
 lotuspod comments claim 7 --json
 # {"comment": 7, "handle": "hermes", "claimToken": "…", "expiresAt": "…"}
-lotuspod comments reply 7 --claim TOKEN --key hermes-7-1 --text "Cut it." --json
+lotuspod comments reply 7 --claim TOKEN --key hermes-7-1 --text "Cut it." --json \
+  --model "Claude Opus 5.5"                      # optional: the model that wrote it
 lotuspod comments reply 7 --claim TOKEN --key hermes-7-2 --text-file reply.md \
   --revision 3f2a9c01d4be                        # having revised the page
 lotuspod comments release 7 --claim TOKEN      # back to routing, unanswered
@@ -1014,8 +1018,8 @@ parses when passed as `--claim=TOKEN`.
   expiresAt}` and the comment is `claimed`, leaving every pull, until the
   claim expires (`[comments] claim_sec`), when it lapses and is routed again.
 - `reply ID --claim TOKEN --key KEY (--text TEXT | --text-file PATH)
-  [--revision R]` (`POST /v1/comments/ID/reply` with `{claimToken,
-  idempotencyKey, text[, revision]}`) needs `reply`. A KEY this credential
+  [--revision R] [--model NAME]` (`POST /v1/comments/ID/reply` with
+  `{claimToken, idempotencyKey, text[, revision, model]}`) needs `reply`. A KEY this credential
   has sent before answers the reply stored with it, whatever has happened to
   the claim since. Otherwise the claim must be this credential's, current,
   and the one TOKEN names, else 409 `not_claimed`; a `revision` must be the
@@ -1023,7 +1027,12 @@ parses when passed as `--claim=TOKEN`.
   the page at for this KEY (below), else 409 `revision_mismatch`, and the
   reply then shows as having revised the page. The reply joins the thread with the actor
   `{"kind": "agent", "handle", "credential"}`, the comment is `answered`, and
-  the claim ends.
+  the claim ends. A `model` names the model that wrote the reply: 1 to 40
+  characters, every one printable, with no space at either end (else 400
+  `invalid_body`, and nothing is stored). It is kept with the reply, which
+  then carries `model` on every route that returns it, and `comments pull`
+  and `comments show` print it on the reply's line; a reply sent without one
+  carries no `model` key. A retried KEY answers the model first stored.
 - `release ID --claim TOKEN` ends the claim unanswered: the comment is
   `pending` again and in its route's next pull. `fail ID --claim TOKEN
   --reason TEXT` (up to 200 characters) leaves it `failed`, the reason on the
@@ -1149,6 +1158,11 @@ claimed first is skipped) and runs the agent command once:
 
 - The command is `--command`, else `command` in the config's `[responder]`
   section, else `claude -p --model opus --permission-mode acceptEdits`.
+  Each reply names the model the command names with `--model NAME` or
+  `--model=NAME` (`opus` for the default), read once as the responder starts;
+  a command that names none, or a name a reply may not carry, sends none.
+  The model is journaled with the comment, so a reply sent again after a
+  crash names the model that wrote it, not the restarted command's.
 - It runs in a fresh scratch directory holding only a copy of the page's
   kept source under its own name (`NAME.md` or `NAME.body.html`), named by
   `LOTUSPOD_PAGE_SOURCE`, with the page's name in `LOTUSPOD_PAGE`. Its
