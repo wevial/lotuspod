@@ -204,7 +204,7 @@ class ArtifactNavTests(TempDirTestCase):
 
 
 class ArtifactTopbarTests(TempDirTestCase):
-    """KO-235: a sticky "Lotuspod: TITLE" bar revealed once the header scrolls off."""
+    """KO-235: a sticky "Lotuspod: TITLE" bar, visible from the top since LOTUS-42."""
 
     TOPBAR = re.compile(r'<div class="artifact-topbar">(.*?)</div>', re.DOTALL)
 
@@ -246,7 +246,8 @@ class ArtifactTopbarTests(TempDirTestCase):
     def test_two_renders_are_byte_identical(self):
         self.assertEqual(self.rendered(), self.rendered())
 
-    def test_theme_pins_the_bar_and_guards_the_scroll_driven_reveal(self):
+    def test_theme_pins_the_bar_visible_from_the_top_with_room_reserved(self):
+        """LOTUS-42: no scroll-driven reveal; the page container reserves the bar."""
         css = self.theme_css()
         block = re.search(r"^\.artifact-topbar \{.*?^\}\n", css, re.MULTILINE | re.DOTALL)
         self.assertIsNotNone(block)
@@ -256,24 +257,20 @@ class ArtifactTopbarTests(TempDirTestCase):
         self.assertIn("top: 0;", block.group(0))
         self.assertGreater(css.count("z-index: 3;"), 0)
 
-        supports = re.search(
-            r"@supports \(animation-timeline: scroll\(\)\) \{\n(.*?)\n\}\n", css, re.DOTALL
-        )
-        self.assertIsNotNone(supports)
-        inside = supports.group(1)
-        outside = css.replace(supports.group(0), "")
-        self.assertIn("animation-timeline: scroll(root);", inside)
-        self.assertIn("@keyframes topbar-reveal", inside)
-        self.assertNotIn("animation-timeline", outside)
-        self.assertNotIn("topbar-reveal", outside)
+        self.assertNotIn("topbar-reveal", css)
+        self.assertNotIn("animation-timeline", css)
+        self.assertNotIn("@supports (animation-timeline: scroll())", css)
 
-        reduced = re.search(
-            r"@media \(prefers-reduced-motion: reduce\) \{(.*?)\n  \}$", inside, re.DOTALL
-        )
-        self.assertIsNotNone(reduced)
-        self.assertIn("@keyframes topbar-reveal", reduced.group(1))
-        self.assertNotIn("translateY", reduced.group(1))
-        self.assertIn("transform: none;", reduced.group(1))
+        for selector, padding in (
+            (".artifact", "calc(var(--topbar-height) + 4rem) 1.5rem 3rem"),
+            (".artifact--report", "calc(var(--topbar-height) + 2rem) 2rem 3rem"),
+        ):
+            with self.subTest(selector=selector):
+                rule = re.search(
+                    rf"^{re.escape(selector)} \{{(.*?)^\}}", css, re.MULTILINE | re.DOTALL
+                )
+                self.assertIsNotNone(rule)
+                self.assertIn(f"padding: {padding};", rule.group(1))
 
     def test_hidden_bar_takes_no_flow_space_and_the_rail_clears_it(self):
         """KO-236: the bar takes no flow space; the wide rail's top clears it.

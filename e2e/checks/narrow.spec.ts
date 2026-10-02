@@ -186,6 +186,14 @@ function rect(target: Locator) {
   });
 }
 
+// Where a node is in the page, wherever the window is scrolled to.
+function inPage(target: Locator) {
+  return target.evaluate((node) => {
+    const box = node.getBoundingClientRect();
+    return { top: box.top + window.scrollY, left: box.left + window.scrollX, width: box.width, height: box.height };
+  });
+}
+
 function widths(page: Page) {
   return page.evaluate(() => ({
     scroll: document.documentElement.scrollWidth, viewport: document.documentElement.clientWidth,
@@ -254,7 +262,7 @@ test.describe('signed in', () => {
     const findings = chip(page, 'findings');
     await expect(findings.chip).toHaveText('1 reply · ✓ hermes answered');
     const risks = page.locator('h2#risks');
-    const before = await rect(risks);
+    const before = await inPage(risks);
 
     await findings.chip.click();
     const pop = popover(page);
@@ -275,8 +283,9 @@ test.describe('signed in', () => {
     expect(over.bottom).toBeLessThanOrEqual(MEDIUM.height);
     expect(over.left).toBeGreaterThanOrEqual(0);
     expect(over.right).toBeLessThanOrEqual(MEDIUM.width);
-    // Over the text: it covers the Risks heading, which has not moved.
-    expect(await rect(risks)).toEqual(before);
+    // Over the text: it covers the Risks heading, which has not moved in the
+    // page, though the page may scroll to leave the popover room.
+    expect(await inPage(risks)).toEqual(before);
     expect(await pop.node.evaluate((node) => getComputedStyle(node).position)).toBe('absolute');
     const fit = await widths(page);
     expect(fit.scroll).toBeLessThanOrEqual(fit.viewport);
@@ -285,7 +294,7 @@ test.describe('signed in', () => {
     await expect(pop.node).toBeHidden();
     await expect(findings.chip).toBeFocused();
     await expect(findings.details).not.toHaveAttribute('open');
-    expect(await rect(risks)).toEqual(before);
+    expect(await inPage(risks)).toEqual(before);
     await seen.clean();
   });
 

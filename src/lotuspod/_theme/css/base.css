@@ -82,24 +82,26 @@ body {
   min-height: 100vh;
 }
 
+/* The page container, not body, reserves the title bar's height above its
+   own padding: the bar is part of an artifact page, and body is shared with
+   the index, which has no bar. The nav and the header start below the bar. */
 .artifact {
   container-type: inline-size;
   max-width: 72rem;
   margin: 0;
-  padding: 4rem 1.5rem 3rem;
+  padding: calc(var(--topbar-height) + 4rem) 1.5rem 3rem;
 }
 
-/* Title bar: once the header has scrolled off, a one-line "Lotuspod: TITLE"
-   strip stays pinned to the top of the viewport as a way back to the index
-   and to the top of the page. It is fixed to the viewport, present from the
-   first pixel whatever its place in the document; the scroll-driven reveal
-   below is what keeps it out of the way while the header is still in view. Its z-index sits above the
-   outline rail, whose sticky top clears --topbar-height so the bar never
-   covers "On this page".
+/* Title bar: a one-line "Lotuspod: TITLE" strip pinned to the top of the
+   viewport as a way back to the index and to the top of the page. It is
+   visible from scroll 0 and never moves, so the comments panel, whose top is
+   --topbar-height, meets its bottom edge at every scroll position. Its
+   z-index sits above the outline rail, whose sticky top clears
+   --topbar-height so the bar never covers "On this page".
 
    The bar is fixed to the viewport edges, so it spans the full width
-   whatever the page container measures and reserves no room in flow: at
-   scroll 0 the nav sits exactly where it sat before the bar existed. */
+   whatever the page container measures and takes no room in flow: the page
+   container reserves its height instead. */
 .artifact-topbar {
   align-items: baseline;
   background: var(--color-surface);
@@ -149,43 +151,6 @@ body {
 .artifact-topbar a:hover,
 .artifact-topbar a:focus-visible {
   color: var(--color-pale-lavender);
-}
-
-/* Where the browser can drive an animation from the scroll position, the bar
-   starts hidden and slides in over the first 12rem of scroll - roughly the
-   distance that takes the header off the screen. Without the feature the bar
-   is simply visible from the start, which is a fair fallback. */
-@supports (animation-timeline: scroll()) {
-  @keyframes topbar-reveal {
-    from {
-      opacity: 0;
-      transform: translateY(-100%);
-    }
-    to {
-      opacity: 1;
-      transform: none;
-    }
-  }
-
-  .artifact-topbar {
-    animation: topbar-reveal linear both;
-    animation-timeline: scroll(root);
-    animation-range: 0 12rem;
-  }
-
-  /* Reduced motion: keep the opacity fade, drop the slide. */
-  @media (prefers-reduced-motion: reduce) {
-    @keyframes topbar-reveal {
-      from {
-        opacity: 0;
-        transform: none;
-      }
-      to {
-        opacity: 1;
-        transform: none;
-      }
-    }
-  }
 }
 
 /* A quiet way back to the index: it sits above the header card in the muted

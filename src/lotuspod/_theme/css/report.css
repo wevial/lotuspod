@@ -8,7 +8,7 @@
    width instead of scrolling - a report's tables are read, not glanced at. */
 .artifact--report {
   max-width: 100rem;
-  padding: 2rem 2rem 3rem;
+  padding: calc(var(--topbar-height) + 2rem) 2rem 3rem;
 }
 
 .artifact--report .artifact-header {
