@@ -1,13 +1,18 @@
 """The reader's answers and comments over /api, for the verified reader only.
 
 serve hands a request here only after its Access assertion verifies, with
-the reader as actor. Four routes:
+the reader as actor. Five routes:
 
     POST /api/answers     {page, question, version, choice, note}
     GET  /api/answers?page=NAME
     POST /api/comments    {page, section, text[, quote][, revision]}, {page, parent, text}
                           or {page, thread, resolved}
     GET  /api/comments?page=NAME
+    GET  /api/revision?page=NAME
+
+A read of the comments carries the page's current revision beside its
+threads, and /api/revision answers it alone, {revision}: an open page
+compares it with the revision it was rendered at to notice a republish.
 
 A POST is refused before anything is stored: 403 cross_origin when a browser
 sent it from another site, 415 when it is not JSON, 411 without a length,
@@ -52,8 +57,11 @@ from lotuspod import db, routing
 
 ANSWERS = "/api/answers"
 COMMENTS = "/api/comments"
-ROUTES = (ANSWERS, COMMENTS)
+REVISION = "/api/revision"
+ROUTES = (ANSWERS, COMMENTS, REVISION)
 METHODS = ("GET", "HEAD", "POST")
+# The methods of a route that is only read.
+READ_METHODS = ("GET", "HEAD")
 
 MAX_BODY = 16 << 10
 MAX_NAME = 100
@@ -272,7 +280,7 @@ def shown(value: object) -> object:
 
 
 class Api:
-    """The four routes over one database; pages(name) is the Page serve
+    """The five routes over one database; pages(name) is the Page serve
     would answer for name, or None; window is routing's owner window."""
 
     def __init__(self, database: db.Database, pages: Callable[[str], Page | None],
@@ -291,9 +299,10 @@ class Api:
 
     def _answer(self, method: str, path: str, query: str, headers: Message,
                 body: Body, actor: Mapping) -> Answer:
-        if method not in METHODS:
+        methods = READ_METHODS if path == REVISION else METHODS
+        if method not in methods:
             return (HTTPStatus.METHOD_NOT_ALLOWED, {"error": "method_not_allowed"},
-                    (("Allow", ", ".join(METHODS)),))
+                    (("Allow", ", ".join(methods)),))
         try:
             if method == "POST":
                 if path == ANSWERS:
@@ -305,9 +314,12 @@ class Api:
             page = self._page(self._query_page(query))
             if path == ANSWERS:
                 payload = {"page": page.name, "questions": self.database.answers(page.name)}
+            elif path == REVISION:
+                payload = {"revision": page.revision}
             else:
-                payload = {"page": page.name, "threads": routing.threads(
-                    self.database, page.name, self.window, self.clock())}
+                payload = {"page": page.name, "revision": page.revision,
+                           "threads": routing.threads(
+                               self.database, page.name, self.window, self.clock())}
             return HTTPStatus.OK, payload, ()
         except Refusal as exc:
             return exc.status, {"error": exc.error}, ()

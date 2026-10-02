@@ -457,7 +457,7 @@ three. A `--db` inside the artifacts directory is refused at start (exit 1):
 the artifacts repository commits everything there. serve never answers the
 file either way.
 
-Four routes sit behind the Access check above; each row records the verified
+Five routes sit behind the Access check above; each row records the verified
 reader as `actor`, the page's `lotuspod:revision` when it was written as
 `revision`, and `createdAt` (UTC, ISO 8601). Ids are integers never given out
 twice.
@@ -477,8 +477,30 @@ twice.
   `quote`, and its routing state (`state` and `owner`, below). A reply takes its thread's section, and a
   reply to a reply joins the same thread: `parent` is always the thread's first
   comment.
-- `GET /api/comments?page=NAME` answers `{page, threads}`: each as
-  `{root, replies, resolution}`, threads and replies oldest first.
+- `GET /api/comments?page=NAME` answers `{page, revision, threads}`: the
+  page's current revision, and each thread as `{root, replies, resolution}`,
+  threads and replies oldest first.
+- `GET /api/revision?page=NAME` answers `{revision}`, the page's current
+  revision alone; it is only read (any other method is 405).
+
+An open page notices when it is published again: every published page
+carries a revision, so it loads the page script, `lotuspod-page.js`, even
+with no comments, decisions or sections. It compares the
+`lotuspod:revision` it was rendered at with the revision each read of its
+threads carries, and asks `/api/revision` every 60 seconds and at once when
+its tab is seen again. Once they differ, a banner fixed over the top of the
+window, which moves no text and is announced politely, reads "A newer version
+of this page is available" with a Reload button. Reload brings the new
+revision back at the same scroll position, with the comments thread that was
+open open again and any comment or reply not yet sent back in its composer
+(kept per page in sessionStorage; where the browser keeps nothing, the page
+still reloads, at its top). Text written where the new revision has no
+place for it, on a section renamed or removed or on words that changed,
+opens in a form for a new thread on its section, else on the section in
+the same place, else on the first, saying why. A page that notices while its
+tab is hidden, with no unsent text in a composer, reloads itself the same
+way, so it is current when the reader comes back; with unsent text it waits,
+the banner showing.
 
 A thread is resolved or open, and every change is kept: who made it and
 when. A thread's `resolution` is `{resolved, actor, at}` as its newest

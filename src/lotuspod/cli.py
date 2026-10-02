@@ -260,8 +260,9 @@ def script_warning(name: str, body: str) -> str:
 
 
 # The page script answers decision forms (lotuspod.decisions), shows and
-# posts comments (lotuspod.comments) and folds sections (lotuspod.sections);
-# only a page with any of them loads it.
+# posts comments (lotuspod.comments) and folds sections (lotuspod.sections),
+# and offers a reload once its page is published again; only a page with
+# any of them, or stamped with a revision (every published page), loads it.
 PAGE_SCRIPT = "lotuspod-page.js"
 THEME_FILES = ("lotuspod.css", "favicon.svg", PAGE_SCRIPT)
 # The served files written as one source per feature, relative to THEME_DIR:
@@ -274,6 +275,7 @@ THEME_SOURCES = {
         "css/decisions.css",
         "css/comments.css",
         "css/narrow.css",
+        "css/live-page.css",
         "css/prose.css",
         "css/report.css",
         "css/index.css",
@@ -282,6 +284,7 @@ THEME_SOURCES = {
         "js/page-open.js",
         "js/decisions.js",
         "js/narrow.js",
+        "js/live-page.js",
         "js/comments.js",
         "js/page-close.js",
     ),
@@ -673,7 +676,9 @@ def cmd_render(args: argparse.Namespace) -> int:
         "owner": owner,
         "variant_class": variant_class(args.variant),
         "mermaid": has_mermaid_block(body),
-        "page_script_needed": has_decisions or with_comments or wrapped,
+        # A page stamped with a revision notices when it is published again.
+        "page_script_needed": (has_decisions or with_comments or wrapped
+                               or bool(getattr(args, "revision", ""))),
         "page_script": PAGE_SCRIPT,
         "mermaid_theme_variables": mermaid_theme_variables(tokens),
         "mermaid_dir": MERMAID_DIR,
@@ -1845,8 +1850,8 @@ class _AllowListHandler(SimpleHTTPRequestHandler):
 
     /api paths never reach the file system or method dispatch: whatever the
     method, each is answered only after the request's Access assertion
-    verifies (see parse_request and _serve_api). The answers and comments
-    routes are lotuspod.api's.
+    verifies (see parse_request and _serve_api). The answers, comments
+    and revision routes are lotuspod.api's.
     """
 
     # Whether the response being written is a page's, and the type of the
@@ -2027,7 +2032,7 @@ def _make_server(out_dir: Path, host: str, port: int,
                  db_path: Path | None = None,
                  window: int = routing.DEFAULT_WINDOW) -> ThreadingHTTPServer:
     """The allow-list server; /api answers 503 access_unconfigured without a
-    verifier, and has no answers and comments routes without a database."""
+    verifier, and has no answers, comments and revision routes without a database."""
     routes = None
     if db_path is not None:
         routes = api.Api(db.Database(db_path), partial(api_page, out_dir), window)

@@ -91,6 +91,17 @@ class DeclaredOrderTests(ThemeCopyTestCase):
         self.assertGreater(styles.index("css/narrow.css"), styles.index("css/comments.css"))
         self.assertLess(script.index("js/narrow.js"), script.index("js/comments.js"))
 
+    def test_the_live_page_sources_are_declared_before_the_comments_script(self):
+        """LOTUS-41: the comments' reads hand the live page each revision
+        they carry, so its script is joined before js/comments.js."""
+        styles = cli.THEME_SOURCES[STYLESHEET]
+        script = cli.THEME_SOURCES[cli.PAGE_SCRIPT]
+        self.assertIn("css/live-page.css", styles)
+        self.assertIn("js/live-page.js", script)
+        self.assertLess(script.index("js/live-page.js"), script.index("js/comments.js"))
+        problems = source_problems(cli.THEME_DIR, cli.THEME_SOURCES)
+        self.assertEqual(problems, [], "\n".join(problems))
+
     def test_a_source_not_in_the_declared_order_is_named(self):
         theme = self.theme_copy()
         (theme / "css" / "stray.css").write_text(".stray {}\n", encoding="utf-8")

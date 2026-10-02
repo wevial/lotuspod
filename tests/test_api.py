@@ -1,4 +1,4 @@
-"""`lotuspod serve` keeps the reader's answers and comments: the four /api
+"""`lotuspod serve` keeps the reader's answers and comments: the five /api
 routes over HTTP, signed in with assertions from the test key, their
 refusals, the database across a restart, and where `serve` keeps it.
 
@@ -177,11 +177,15 @@ class ApiTestCase(unittest.TestCase):
     def comment(self, **body):
         return self.ask("POST", "/api/comments", {"page": "plan", **body})
 
+    def page_revision(self, page: str = "plan") -> str:
+        return cli.page_revision(self.out_dir, page)
+
     def assertEmpty(self, page: str = "plan") -> None:
         self.assertEqual(self.ask("GET", f"/api/answers?page={page}"),
                          (200, {"page": page, "questions": {}}))
         self.assertEqual(self.ask("GET", f"/api/comments?page={page}"),
-                         (200, {"page": page, "threads": []}))
+                         (200, {"page": page, "revision": self.page_revision(page),
+                                "threads": []}))
 
 
 class AnswerTests(ApiTestCase):
@@ -329,8 +333,9 @@ class CommentTests(ApiTestCase):
 
         self.assertEqual(
             self.ask("GET", "/api/comments?page=plan"),
-            (200, {"page": "plan", "threads": [{"root": root, "replies": [reply, deeper],
-                                                "resolution": db.UNRESOLVED}]}),
+            (200, {"page": "plan", "revision": self.revision,
+                   "threads": [{"root": root, "replies": [reply, deeper],
+                                "resolution": db.UNRESOLVED}]}),
         )
 
     def test_a_new_thread_names_the_revision_the_reader_read(self):
@@ -489,6 +494,50 @@ class ResolutionTests(ApiTestCase):
         self.assertEqual(len(self.stored()), 2)
 
 
+class RevisionTests(ApiTestCase):
+    """An open page learns the revision its page is now published at: from
+    /api/revision, and beside the threads of every read of the comments."""
+
+    def republish(self) -> str:
+        source = self.work / "plan.md"
+        source.write_text(PLAN + "\nA line added since.\n", encoding="utf-8")
+        run_cli("publish", str(source), "--name", "plan", "--out-dir", str(self.out_dir),
+                "--local")
+        return self.page_revision()
+
+    def test_the_revision_route_and_the_comments_read_name_the_current_revision(self):
+        self.assertEqual(self.ask("GET", "/api/revision?page=plan"),
+                         (200, {"revision": self.revision}))
+        status, got = self.ask("GET", "/api/comments?page=plan")
+        self.assertEqual((status, got["revision"]), (200, self.revision))
+
+        revised = self.republish()
+        self.assertNotEqual(revised, self.revision)
+        self.assertEqual(self.ask("GET", "/api/revision?page=plan"),
+                         (200, {"revision": revised}))
+        status, got = self.ask("GET", "/api/comments?page=plan")
+        self.assertEqual((status, got["revision"]), (200, revised))
+
+    def test_the_revision_route_names_one_page_serve_answers(self):
+        for path, answer in (
+            ("/api/revision?page=missing", (404, {"error": "unknown_page"})),
+            ("/api/revision?page=secret", (404, {"error": "unknown_page"})),
+            ("/api/revision?page=index", (404, {"error": "unknown_page"})),
+            ("/api/revision", (400, {"error": "invalid_query"})),
+        ):
+            with self.subTest(path=path):
+                self.assertEqual(self.ask("GET", path), answer)
+
+    def test_the_revision_route_needs_an_assertion(self):
+        self.assertEqual(self.ask("GET", "/api/revision?page=plan", assertion=None),
+                         (401, {"error": "signed_out"}))
+
+    def test_the_revision_route_is_only_read(self):
+        self.assertEqual(self.ask("POST", "/api/revision", {"page": "plan"}),
+                         (405, {"error": "method_not_allowed"}))
+        self.assertEmpty()
+
+
 class ReaderNameTests(ApiTestCase):
     """A page is shown the reader's name, never their address."""
 
@@ -532,6 +581,7 @@ class SignedOutTests(ApiTestCase):
             ("GET", "/api/answers?page=plan", None),
             ("POST", "/api/comments", comment),
             ("GET", "/api/comments?page=plan", None),
+            ("GET", "/api/revision?page=plan", None),
         ):
             with self.subTest(method=method, path=path):
                 self.assertEqual(self.ask(method, path, body, assertion=None),

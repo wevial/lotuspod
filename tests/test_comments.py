@@ -386,8 +386,9 @@ class SectionCheckTests(CommentsTestCase):
                              {"page": "pond", "section": section, "text": "Hello"}),
                     (400, {"error": "unknown_section"}),
                 )
+        revision = cli.page_revision(self.out_dir, "pond")
         self.assertEqual(self.ask("GET", "/api/comments?page=pond"),
-                         (200, {"page": "pond", "threads": []}))
+                         (200, {"page": "pond", "revision": revision, "threads": []}))
         status, row = self.ask("POST", "/api/comments",
                                {"page": "pond", "section": "risks", "text": "Hello"})
         self.assertEqual(status, 201, row)

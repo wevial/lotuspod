@@ -378,6 +378,7 @@
       form.appendChild(actions);
       thread.toggle = toggle;
       thread.field = text;
+      thread.unfold = unfold;
 
       function unfold(open) {
         form.hidden = !open;
@@ -607,6 +608,34 @@
         }
       };
 
+      // The open composer's words, its section (and where its box is among
+      // the page's) and what is written in it, to open again after a reload
+      // (api.reopen); null when none is open.
+      api.writing = function () {
+        return open ? {
+          quote: open.quote, section: open.box.dataset.section, index: boxes.indexOf(open.box),
+          text: open.field.value,
+        } : null;
+      };
+
+      // Open a composer again on the words kept, where the page still has
+      // them, holding the text kept; false when it has them no more.
+      api.reopen = function (kept) {
+        if (!article || !kept.quote || typeof kept.quote.exact !== "string") {
+          return false;
+        }
+        var model = textModel(article);
+        var spot = locate(model, kept.quote);
+        var runs = spot ? pieces(model, spot.start, spot.end) : [];
+        var box = runs.length ? boxAfter(runs[0].node, runs[0].from) : null;
+        if (!box) {
+          return false;
+        }
+        compose({ box: box, start: spot.start, quote: kept.quote });
+        open.field.value = String(kept.text || "");
+        return true;
+      };
+
       if (!article) {
         return api;
       }
@@ -777,7 +806,7 @@
         var marks = wrap(article, found.start, found.start + found.quote.exact.length, function () {
           return element("mark", "artifact-passage artifact-passage--pending");
         });
-        var mine = { holder: holder, marks: marks, box: found.box };
+        var mine = { holder: holder, marks: marks, box: found.box, quote: found.quote, field: field };
         open = mine;
         document.getSelection().removeAllRanges();
         api.place();
@@ -1654,6 +1683,44 @@
         }
       };
 
+      // What is open, to open again after a reload (api.reopen): a thread by
+      // its first comment's id, or a section and whether its form is being
+      // written in; null for nothing, or a passage's composer.
+      api.held = function () {
+        var taken = api.wide ? opened() : over.peek();
+        var view = taken.view;
+        if (view && view.thread) {
+          return { thread: view.thread.root.id };
+        }
+        if (view && view.box) {
+          return { section: view.box.dataset.section, writing: Boolean(taken.writing) };
+        }
+        return null;
+      };
+
+      // Open again what api.held kept, where the window now has room for it.
+      api.reopen = function (kept) {
+        var thread = shown.get(kept.thread);
+        var box = typeof kept.section === "string" ? sections.get(kept.section) : null;
+        var view = thread && !resolved(thread) ? { thread: thread } : box ? { box: box } : null;
+        if (!view) {
+          return;
+        }
+        var writing = view.box && kept.writing ? groups.get(view.box) : null;
+        if (api.wide) {
+          setOpen(true, false);
+          if (view.thread) {
+            expand(view.thread);
+          }
+        } else {
+          var anchor = view.thread ? anchorOf(view.thread) : view.box.querySelector("summary");
+          over.restore({ view: view, opener: anchor, anchor: anchor, writing: writing });
+        }
+        if (writing) {
+          compose(writing, true);
+        }
+      };
+
       return api;
     }
 
@@ -1825,6 +1892,7 @@
         if (response.status === 401) {
           reading = false;
           signedOut();
+          restore();
           return;
         }
         if (response.status === 200) {
@@ -1834,15 +1902,111 @@
               touched = true;
             }
           });
+          live.seen(payload && payload.revision);
         }
       } catch (ignored) {
         // A failed read keeps the schedule.
       }
       reading = false;
       refresh();
+      restore();
       gap = touched || fresh ? FIRST : Math.min(gap * 1.5, LAST);
       fresh = false;
       plan();
+    }
+
+    // Each composer of a section's form or a thread's reply, with what it
+    // is kept by over a reload: its thread, its section and where the
+    // section's box is among the page's.
+    function composers() {
+      var found = [];
+      forms.forEach(function (form, box) {
+        found.push({ section: box.dataset.section, index: boxes.indexOf(box), field: form.elements.text });
+      });
+      shown.forEach(function (thread) {
+        found.push({
+          thread: thread.root.id, section: thread.root.section, index: boxes.indexOf(thread.box),
+          field: thread.field,
+        });
+      });
+      return found;
+    }
+
+    // Kept over a reload of the page (js/live-page.js): what is open, and
+    // the text not sent in each composer.
+    live.keep({
+      unsent: function () {
+        var passage = passages.writing();
+        return Boolean(passage && passage.text.trim()) || composers().some(function (each) {
+          return each.field.value.trim() !== "";
+        });
+      },
+      save: function () {
+        return {
+          open: panel.held(),
+          passage: passages.writing(),
+          texts: composers().filter(function (each) {
+            return each.field.value.trim() !== "";
+          }).map(function (each) {
+            return {
+              thread: each.thread, section: each.section, index: each.index, text: each.field.value,
+            };
+          }),
+        };
+      },
+    });
+
+    // What was kept before the page reloaded, given back once the threads
+    // are first read: the text in each composer, then what was open, then
+    // the scroll position the reader had (live.place: opening a thread over
+    // the text may scroll the page to it). Text whose place the new
+    // revision no longer has (a section renamed or gone, a passage's words
+    // changed, a thread not read) is never lost: it goes to the form for a
+    // new thread on its section, else on the box where its section was,
+    // else on the page's first, which opens with the reason beside it.
+    var kept = live.kept();
+    function restore() {
+      var was = kept;
+      kept = null;
+      if (!was) {
+        return;
+      }
+      var moved = null;
+      function rehome(each, why) {
+        var box = (typeof each.section === "string" && sections.get(each.section)) ||
+          boxes[Number(each.index)] || boxes[0];
+        var field = forms.get(box).elements.text;
+        field.value = (field.value.trim() ? field.value + "\n\n" : "") + String(each.text);
+        forms.get(box).querySelector(".artifact-comment-status").textContent = why;
+        moved = box;
+      }
+      (Array.isArray(was.texts) ? was.texts : []).forEach(function (each) {
+        if (!each || !String(each.text || "").trim()) {
+          return;
+        }
+        var thread = each.thread ? shown.get(each.thread) : null;
+        var box = !each.thread && typeof each.section === "string" ? sections.get(each.section) : null;
+        if (thread) {
+          thread.field.value = String(each.text);
+          thread.unfold(true);
+        } else if (box) {
+          var field = forms.get(box).elements.text;
+          field.value = field.value.trim() ? field.value + "\n\n" + String(each.text) : String(each.text);
+        } else {
+          rehome(each, PLACE_GONE);
+        }
+      });
+      if (was.open && typeof was.open === "object") {
+        panel.reopen(was.open);
+      }
+      var passage = was.passage && typeof was.passage === "object" ? was.passage : null;
+      if (passage && !passages.reopen(passage) && String(passage.text || "").trim()) {
+        rehome(passage, PASSAGE_GONE);
+      }
+      if (moved) {
+        panel.reopen({ section: moved.dataset.section, writing: true });
+      }
+      live.place();
     }
 
     // The reader posted a comment: check again from the first gap.

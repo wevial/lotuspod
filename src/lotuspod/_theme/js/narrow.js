@@ -472,16 +472,21 @@
       }
     };
 
+    // What is held, as over.take returns it, left open.
+    over.peek = function () {
+      var view = held.view;
+      var group = view && view.box ? groups.get(view.box) : null;
+      return {
+        view: view, opener: held.opener, anchor: held.anchor,
+        writing: group && !group.holder.hidden ? group : null,
+      };
+    };
+
     // The mode is changing: what is held is put back, a passage's composer
     // kept, and returned to open again where it now goes (over.restore). A
     // section's form being written in stays open where it goes.
     over.take = function () {
-      var view = held.view;
-      var group = view && view.box ? groups.get(view.box) : null;
-      var taken = {
-        view: view, opener: held.opener, anchor: held.anchor,
-        writing: group && !group.holder.hidden ? group : null,
-      };
+      var taken = over.peek();
       release(false, true);
       return taken;
     };
@@ -520,13 +525,14 @@
         release(true);
       }
     });
-    // A click outside the popover, its opener and the pill closes it,
+    // A click outside the popover, its opener, the pill and the banner
+    // offering a reload (which keeps it open over the reload) closes it,
     // before whatever the click is for.
     document.addEventListener("click", function (event) {
       var target = event.target;
       if (held.kind !== "popover" || popover.node.contains(target) ||
           (held.opener && held.opener.contains(target)) ||
-          (target.closest && target.closest(".artifact-passage-pill"))) {
+          (target.closest && target.closest(".artifact-passage-pill, .artifact-live-page"))) {
         return;
       }
       release(true);

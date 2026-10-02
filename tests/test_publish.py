@@ -252,6 +252,18 @@ class SourcesAndServeTests(PublishTestCase):
                 conn.close()
 
 
+class PageScriptTests(PublishTestCase):
+    def test_every_published_page_loads_the_page_script_to_notice_a_republish(self):
+        """LOTUS-41: a published page carries a revision, so it loads the
+        page script even with no comments, decisions or sections."""
+        source = self.source("note.md", "# Note\n\nOne line, no sections.\n")
+        done = self.publish(source, "--no-comments")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        page = self.page("note")
+        self.assertIn('<meta name="lotuspod:revision"', page)
+        self.assertIn(f'<script src="{cli.PAGE_SCRIPT}?v=', page)
+
+
 class RacingPublishTests(PublishTestCase):
     def test_two_publishes_expecting_one_revision_land_once(self):
         source = self.source("pond.md", POND)

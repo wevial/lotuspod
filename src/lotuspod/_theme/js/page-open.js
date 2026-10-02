@@ -31,6 +31,8 @@
   var SIGNED_OUT = "You are signed out. Reload the page to sign in.";
   var STALE = "This question has changed since the page loaded. Reload it.";
   var STALE_PAGE = "This page has changed since it loaded. Reload it to comment on this passage.";
+  var PASSAGE_GONE = "The words you selected have changed since. Your comment is kept here, on the section.";
+  var PLACE_GONE = "Where you were writing has changed since. Your text is kept here.";
   var CHANGED = "Comments on sections that have changed";
   var CHANGED_GROUP = "Sections that have changed";
   // Whether the reader left the comments panel open or folded.
