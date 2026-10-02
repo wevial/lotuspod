@@ -481,10 +481,19 @@
         }
         return [
           element("del", "artifact-passage-quoted", exact),
-          element("span", "artifact-passage-why", " · this passage changed" +
-            (revision ? " in revision " + revision : "")),
+          why(),
         ];
       };
+
+      // Why the words are struck through; the revision that changed them is
+      // only in its title.
+      function why() {
+        var node = element("span", "artifact-passage-why", " · this passage has changed since");
+        if (revision) {
+          node.title = "Changed in revision " + revision;
+        }
+        return node;
+      }
 
       // What a thread's entry and head show change only with this.
       api.key = function (thread) {
@@ -992,7 +1001,23 @@
       fold.appendChild(mute(element("span", "", "»")));
       head.append(element("h2", "artifact-comments-title", "Comments"), count, fold);
       var list = element("div", "artifact-comments-groups");
-      sheet.append(head, list);
+      // The one way to start a thread on a section: a button opening a list
+      // of the page's sections, under a word saying when there are no threads.
+      var start = element("div", "artifact-comments-start");
+      var none = element("p", "artifact-comments-none", "No comments yet");
+      var pick = element("button", "artifact-comments-pick", "Comment on a section");
+      pick.type = "button";
+      var choices = element("ul", "artifact-comments-choices");
+      choices.id = "artifact-comments-choices";
+      choices.setAttribute("role", "listbox");
+      choices.setAttribute("aria-label", "Sections");
+      choices.tabIndex = -1;
+      choices.hidden = true;
+      pick.setAttribute("aria-haspopup", "listbox");
+      pick.setAttribute("aria-expanded", "false");
+      pick.setAttribute("aria-controls", choices.id);
+      start.append(none, pick, choices);
+      sheet.append(head, start, list);
       aside.append(rail, sheet);
       document.body.appendChild(aside);
 
@@ -1009,7 +1034,8 @@
       }
 
       // A group: a section's heading, its threads, and for a section the
-      // page has, the control that opens the box's form here.
+      // page has, the control that opens the box's form here. The panel
+      // never draws that control; a popover or the sheet does.
       function group(name, box, index) {
         var node = element("section", "artifact-comments-group");
         var entries = element("ol", "artifact-comments-entries");
@@ -1033,16 +1059,155 @@
       }
 
       boxes.forEach(function (box, index) {
-        groups.set(box, group(title(box), box, index));
+        var name = title(box);
+        var made = group(name, box, index);
+        made.node.hidden = true;
+        groups.set(box, made);
+        var option = element("li", "artifact-comments-choice", name);
+        option.id = "artifact-comments-choice-" + index;
+        option.setAttribute("role", "option");
+        option.setAttribute("aria-selected", "false");
+        option.addEventListener("click", function () { choose(box); });
+        choices.appendChild(option);
       });
       var strays = group(CHANGED_GROUP, null, -1);
       strays.node.hidden = true;
 
+      // The option lit in the list of sections, or -1.
+      var active = -1;
+
+      function light(index) {
+        active = index;
+        all(":scope > li", choices).forEach(function (option, at) {
+          option.setAttribute("aria-selected", at === index ? "true" : "false");
+        });
+        if (index < 0) {
+          choices.removeAttribute("aria-activedescendant");
+          return;
+        }
+        var option = choices.children[index];
+        choices.setAttribute("aria-activedescendant", option.id);
+        if (option.offsetTop < choices.scrollTop) {
+          choices.scrollTop = option.offsetTop;
+        } else if (option.offsetTop + option.offsetHeight > choices.scrollTop + choices.clientHeight) {
+          choices.scrollTop = option.offsetTop + option.offsetHeight - choices.clientHeight;
+        }
+      }
+
+      // Close the list of sections; with focus, the focus goes back to its
+      // button.
+      function unpick(focus) {
+        if (choices.hidden) {
+          return;
+        }
+        choices.hidden = true;
+        pick.setAttribute("aria-expanded", "false");
+        light(-1);
+        if (focus) {
+          pick.focus({ preventScroll: true });
+        }
+      }
+
+      // A section chosen: its group shows with its form open.
+      function choose(box) {
+        unpick(false);
+        compose(groups.get(box), true);
+      }
+
+      pick.addEventListener("click", function () {
+        if (!choices.hidden) {
+          unpick(true);
+          return;
+        }
+        choices.hidden = false;
+        pick.setAttribute("aria-expanded", "true");
+        light(-1);
+        choices.focus({ preventScroll: true });
+      });
+      choices.addEventListener("keydown", function (event) {
+        var last = choices.children.length - 1;
+        if (event.key === "ArrowDown") {
+          light(Math.min(active + 1, last));
+        } else if (event.key === "ArrowUp") {
+          light(active < 0 ? last : Math.max(active - 1, 0));
+        } else if (event.key === "Home") {
+          light(0);
+        } else if (event.key === "End") {
+          light(last);
+        } else if (event.key === "Enter" || event.key === " ") {
+          if (active >= 0) {
+            choose(boxes[active]);
+          }
+        } else if (event.key === "Escape") {
+          // The panel would fold on it too.
+          event.stopPropagation();
+          unpick(true);
+        } else {
+          if (event.key === "Tab") {
+            unpick(false);
+          }
+          return;
+        }
+        event.preventDefault();
+      });
+      // A click outside the list closes it; the focus goes back to its
+      // button unless the click gave it to something else.
+      document.addEventListener("click", function (event) {
+        if (choices.hidden || start.contains(event.target)) {
+          return;
+        }
+        unpick(document.activeElement === document.body || start.contains(document.activeElement));
+      }, true);
+
+      // Whether a group is listed: it holds a thread, or a form open in it.
+      function busy(made) {
+        return Boolean(made.entries.firstChild) ||
+          (!made.holder.hidden && made.node.contains(made.holder)) ||
+          Boolean(made.node.querySelector(".artifact-passage-composer"));
+      }
+
+      // List the groups that are busy, each in its place in the page's
+      // order, keeping the reader's place: the group at the top of the list
+      // stays where it is.
+      function tidy() {
+        none.hidden = shown.size > 0;
+        var changes = [];
+        groups.forEach(function (made) {
+          if (made.node.hidden === busy(made)) {
+            changes.push(made);
+          }
+        });
+        if (!changes.length) {
+          return;
+        }
+        var top = list.getBoundingClientRect().top;
+        var anchor = all(":scope > .artifact-comments-group:not([hidden])", list).filter(function (node) {
+          return node.getBoundingClientRect().bottom > top;
+        })[0];
+        var before = anchor ? anchor.getBoundingClientRect().top : 0;
+        changes.forEach(function (made) {
+          made.node.hidden = !made.node.hidden;
+        });
+        if (anchor) {
+          list.scrollTop += anchor.getBoundingClientRect().top - before;
+        }
+      }
+
       // Unfold or fold a group's form for a new thread; unfolded, its field
-      // has focus.
+      // has focus. In the panel one form is open at a time: another left
+      // empty folds.
       function compose(made, show) {
+        if (show && api.wide) {
+          groups.forEach(function (other) {
+            if (other !== made && !other.holder.hidden && !forms.get(other.box).elements.text.value) {
+              other.holder.hidden = true;
+              other.toggle.setAttribute("aria-expanded", "false");
+            }
+          });
+        }
         made.holder.hidden = !show;
         made.toggle.setAttribute("aria-expanded", show ? "true" : "false");
+        tidy();
         if (show) {
           if (api.wide) {
             reveal(made.holder);
@@ -1473,6 +1638,7 @@
         setOpen(true, true);
         var made = groups.get(box);
         made.node.insertBefore(holder, made.entries);
+        tidy();
         reveal(holder);
       };
 
@@ -1580,7 +1746,10 @@
       });
       api.show = over.show;
       api.passage = over.passage;
-      api.dropped = over.dropped;
+      api.dropped = function (mine) {
+        over.dropped(mine);
+        tidy();
+      };
 
       // Whether a thread is open: in the panel, a popover or the sheet.
       api.lit = function (thread) {
@@ -1624,6 +1793,7 @@
         threads.forEach(draw);
         groups.forEach(sort);
         sort(strays);
+        tidy();
         var key = unresolved.map(function (thread) { return thread.root.id; }).join(" ");
         if (key !== dotsKey) {
           dotsKey = key;

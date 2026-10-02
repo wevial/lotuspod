@@ -209,6 +209,23 @@ COMMENTS_BODY = """\
 <p>Fit a heater before the first frost.</p>
 """
 
+# A plan page with a comment box ending each of its five sections, owned by
+# OWNER, for the panel's list of sections. No diagram, so the page needs no
+# network.
+PANEL_BODY = """\
+<p>A sample plan for captures: five sections, each taking comments.</p>
+<h2>Findings</h2>
+<p>The pond freezes in January, and the pump stops with it.</p>
+<h2>Risks</h2>
+<p>A frozen pump may crack before anyone notices.</p>
+<h2>Heater</h2>
+<p>A floating heater keeps a hole open over the outlet.</p>
+<h2>Costs</h2>
+<p>The heater draws less than the pump does in summer.</p>
+<h2>Next steps</h2>
+<p>Fit a heater before the first frost.</p>
+"""
+
 # The palette page: every element the palette colours, a section each, and a
 # comment box ending each section, owned by OWNER. No diagram, so the page
 # needs no network.
@@ -407,6 +424,8 @@ SAMPLE_PAGES = (
     ("capture-sections", "Capture sections", SECTIONS_BODY,
      ("--comments", "--owner", OWNER)),
     ("capture-comments", "Capture comments", COMMENTS_BODY,
+     ("--comments", "--owner", OWNER)),
+    ("capture-panel", "Capture panel", PANEL_BODY,
      ("--comments", "--owner", OWNER)),
     ("capture-palette", "Capture palette", PALETTE_BODY,
      ("--comments", "--owner", OWNER)),

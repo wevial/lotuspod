@@ -9,12 +9,16 @@ import { expect, test, type APIRequestContext, type Locator, type Page } from '@
 // site, and as the run shares one database they show only the threads they
 // made, found by id. hermes claims and replies through real `lotuspod`
 // commands on the fixture's agent socket. The sections page shows the panel
-// beside folded sections.
+// beside folded sections, and the five-section page the list of sections
+// the panel starts a thread from.
 const PAGE = '/capture-comments.html';
 const SLUG = 'capture-comments';
 const SECTIONS = '/capture-sections.html';
 const SECTIONS_SLUG = 'capture-sections';
 const FOLDED = `lotuspod:folded:${SECTIONS}`;
+const FIVE = '/capture-panel.html';
+const FIVE_SLUG = 'capture-panel';
+const FIVE_TITLES = ['Findings', 'Risks', 'Heater', 'Costs', 'Next steps'];
 const ENV = process.env;
 const ASSERTION = ENV.LOTUSPOD_TEST_ASSERTION ?? '';
 const SIGNED_IN = { 'Cf-Access-Jwt-Assertion': ASSERTION };
@@ -215,6 +219,35 @@ async function ownThreads(page: Page, ids: Set<number>) {
   });
 }
 
+// Threads on the five-section page, by section id, with ids far from those
+// the site gives, so they never meet a thread a check posts.
+function onFive(sections: Record<string, string>, resolution = OPEN) {
+  return Object.entries(sections).map(([section, sectionTitle], index) => ({
+    root: row({
+      id: 900_000 + next++, page: FIVE_SLUG, section, sectionTitle, state: 'pending',
+      text: `On ${sectionTitle}?`, createdAt: `2026-09-30T10:0${index}:00.000Z`,
+    }),
+    replies: [],
+    resolution,
+  }));
+}
+
+// Answer each read with the given threads and the site's threads whose ids
+// posts returned; posts go to the site.
+async function withOwn(page: Page, threads: unknown[], ids: Set<number>) {
+  await page.route((url) => url.pathname === '/api/comments', async (route) => {
+    const request = route.request();
+    const response = await route.fetch();
+    const body = await response.json();
+    if (request.method() === 'GET' && Array.isArray(body.threads)) {
+      body.threads = [...threads, ...body.threads.filter((thread: any) => ids.has(thread.root.id))];
+    } else if (response.status() === 201 && body.parent === null) {
+      ids.add(body.id);
+    }
+    await route.fulfill({ response, json: body });
+  });
+}
+
 async function post(request: APIRequestContext, section: string, text: string) {
   const response = await request.post('/api/comments', { data: { page: SLUG, section, text } });
   expect(response.status()).toBe(201);
@@ -235,6 +268,29 @@ async function load(page: Page, url = PAGE) {
   await page.goto(url);
   await expect(page.locator('details.artifact-comment')).toHaveCount(3);
   await settle(page);
+}
+
+// The five-section page with the panel open.
+async function loadFive(page: Page) {
+  await page.goto(FIVE);
+  await expect(page.locator('details.artifact-comment')).toHaveCount(5);
+  await settle(page);
+  const side = panel(page);
+  await side.opener.click();
+  await expect(side.fold).toBeVisible();
+  return side;
+}
+
+// The panel's one way to start a thread on a section.
+function picker(page: Page) {
+  const aside = page.locator('aside.artifact-comments-panel');
+  return {
+    button: aside.getByRole('button', { name: 'Comment on a section' }),
+    list: aside.getByRole('listbox', { name: 'Sections' }),
+    options: aside.getByRole('option'),
+    none: aside.getByText('No comments yet'),
+    perSection: aside.getByRole('button', { name: 'Comment on this section' }),
+  };
 }
 
 // Focus target from the keyboard: Tab until it has focus.
@@ -613,6 +669,131 @@ test.describe('signed in', () => {
     await expect(side.aside).toHaveCSS('transition-duration', '0s');
     await side.opener.click();
     await expect(side.aside).toHaveCSS('transition-duration', '0s');
+    await seen.clean();
+  });
+
+  test('the panel lists only the sections with threads, and one control starts a thread on any section', async ({ page }) => {
+    const seen = await watch(page);
+    const ids = new Set<number>();
+    await withOwn(page, onFive({ findings: 'Findings', costs: 'Costs' }), ids);
+    const side = await loadFive(page);
+    const pick = picker(page);
+    await expect(side.titles).toHaveText(['Findings', 'Costs']);
+    await expect(pick.perSection).toHaveCount(0);
+    await expect(pick.none).toBeHidden();
+    // Under the heading, above the groups.
+    const head = (await side.aside.locator('.artifact-comments-head').boundingBox())!;
+    const button = (await pick.button.boundingBox())!;
+    const groups = (await side.aside.locator('.artifact-comments-groups').boundingBox())!;
+    expect(button.y).toBeGreaterThanOrEqual(head.y + head.height);
+    expect(button.y + button.height).toBeLessThanOrEqual(groups.y);
+    await expect(pick.button).toHaveAttribute('aria-expanded', 'false');
+
+    await pick.button.click();
+    await expect(pick.button).toHaveAttribute('aria-expanded', 'true');
+    await expect(pick.list).toBeVisible();
+    await expect(pick.options).toHaveText(FIVE_TITLES);
+    await pick.options.nth(2).click();
+    await expect(pick.list).toBeHidden();
+    const heater = side.group('Heater');
+    const field = heater.getByLabel('Comment on Heater');
+    await expect(field).toBeVisible();
+    await expect(field).toBeFocused();
+    await expect(side.titles).toHaveText(['Findings', 'Heater', 'Costs']);
+    const COMMENT = 'Which heater fits the outlet?';
+    await field.fill(COMMENT);
+    await heater.getByRole('button', { name: 'Comment', exact: true }).click();
+    await expect.poll(() => ids.size).toBe(1);
+    const [id] = [...ids];
+    const mine = entry(page, { id });
+    await expect(heater.locator('.artifact-comments-entry')).toHaveCount(1);
+    await expect(mine.readers.locator('.artifact-comment-text')).toHaveText(COMMENT);
+    await expect(field).toBeHidden();
+    await expect(side.titles).toHaveText(['Findings', 'Heater', 'Costs']);
+    await expect(pick.perSection).toHaveCount(0);
+
+    await page.reload();
+    await settle(page);
+    await expect(side.titles).toHaveText(['Findings', 'Heater', 'Costs']);
+    await seen.clean();
+  });
+
+  test('the keyboard picks a section from the list, and Escape or a click outside closes it to its control', async ({ page }) => {
+    const seen = await watch(page);
+    await serve(page, () => onFive({ findings: 'Findings', costs: 'Costs' }), FIVE_SLUG);
+    const side = await loadFive(page);
+    const pick = picker(page);
+    await tabTo(page, pick.button);
+    await outlined(pick.button);
+    await page.keyboard.press('Enter');
+    await expect(pick.list).toBeVisible();
+    await expect(pick.list).toBeFocused();
+    await page.keyboard.press('ArrowDown');
+    await page.keyboard.press('ArrowDown');
+    await expect(pick.options.nth(1)).toHaveAttribute('aria-selected', 'true');
+    await expect(pick.list).toHaveAttribute('aria-activedescendant', (await pick.options.nth(1).getAttribute('id'))!);
+    await page.keyboard.press('Enter');
+    await expect(pick.list).toBeHidden();
+    const field = side.group('Risks').locator('textarea[name="text"]');
+    await expect(field).toBeVisible();
+    await expect(field).toBeFocused();
+    await expect(side.titles).toHaveText(['Findings', 'Risks', 'Costs']);
+
+    await pick.button.focus();
+    await page.keyboard.press('Enter');
+    await expect(pick.list).toBeFocused();
+    await page.keyboard.press('ArrowDown');
+    await page.keyboard.press('Escape');
+    await expect(pick.list).toBeHidden();
+    await expect(pick.button).toBeFocused();
+    await expect(pick.button).toHaveAttribute('aria-expanded', 'false');
+    // Escape closed the list, never the panel.
+    await expect(side.fold).toBeVisible();
+
+    await pick.button.click();
+    await expect(pick.list).toBeVisible();
+    await side.count.click();
+    await expect(pick.list).toBeHidden();
+    await expect(pick.button).toBeFocused();
+    await seen.clean();
+  });
+
+  test('a page with no threads says so above the control', async ({ page }) => {
+    const seen = await watch(page);
+    await serve(page, () => [], FIVE_SLUG);
+    const side = await loadFive(page);
+    const pick = picker(page);
+    await expect(pick.none).toBeVisible();
+    await expect(pick.button).toBeVisible();
+    expect((await pick.none.boundingBox())!.y).toBeLessThan((await pick.button.boundingBox())!.y);
+    await expect(side.titles).toHaveCount(0);
+    await expect(pick.perSection).toHaveCount(0);
+    await seen.clean();
+  });
+
+  test('a section with only a resolved thread is listed', async ({ page }) => {
+    const seen = await watch(page);
+    await serve(page, () => onFive({ heater: 'Heater' }, RESOLVED), FIVE_SLUG);
+    const side = await loadFive(page);
+    await expect(side.count).toHaveText('0 open · 1 resolved');
+    await expect(side.titles).toHaveText(['Heater']);
+    await expect(picker(page).none).toBeHidden();
+    await seen.clean();
+  });
+
+  test("a chip for a section with no threads opens that section's form in the panel", async ({ page }) => {
+    const seen = await watch(page);
+    await serve(page, () => onFive({ findings: 'Findings', costs: 'Costs' }), FIVE_SLUG);
+    const side = await loadFive(page);
+    await expect(side.titles).toHaveText(['Findings', 'Costs']);
+    const risks = box(page, 'risks');
+    await expect(risks.chip).toHaveText('No comments · Comment');
+    await risks.chip.click();
+    await expect(risks.details).not.toHaveAttribute('open');
+    const field = side.group('Risks').locator('textarea[name="text"]');
+    await expect(field).toBeVisible();
+    await expect(field).toBeFocused();
+    await expect(side.titles).toHaveText(['Findings', 'Risks', 'Costs']);
     await seen.clean();
   });
 

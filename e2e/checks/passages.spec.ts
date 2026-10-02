@@ -595,7 +595,9 @@ test.describe('signed in', () => {
       const lost = entry(page, asked.id);
       await expect(side.group('Findings').locator(`.artifact-comments-entry[data-thread="${asked.id}"]`)).toHaveCount(1);
       await expect(lost.words.locator('del')).toHaveText(HEATER);
-      await expect(lost.words).toContainText(`this passage changed in revision ${after}`);
+      await expect(lost.words).toContainText('this passage has changed since');
+      await expect(lost.words).not.toContainText(after);
+      await expect(lost.words.locator('.artifact-passage-why')).toHaveAttribute('title', `Changed in revision ${after}`);
       await expect(lost.mark).toHaveText('1');
       await lost.head.click();
       await expect(lost.readers.locator('.artifact-comment-text')).toHaveText('Is the heater still there?');
@@ -615,7 +617,9 @@ test.describe('signed in', () => {
     if (await side.opener.isVisible()) await side.opener.click();
     const lost = entry(page, root.id);
     await expect(lost.words.locator('del')).toHaveText('pump stops');
-    await expect(lost.words).toContainText(`this passage changed in revision ${before}`);
+    await expect(lost.words).toContainText('this passage has changed since');
+    await expect(lost.words).not.toContainText(before);
+    await expect(lost.words.locator('.artifact-passage-why')).toHaveAttribute('title', `Changed in revision ${before}`);
     await seen.clean();
   });
 
