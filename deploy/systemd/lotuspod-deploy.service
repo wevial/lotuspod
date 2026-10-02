@@ -1,0 +1,13 @@
+[Unit]
+Description=Lotuspod deploy: fast-forward the site checkout to origin/main, restart and check it, roll back on failure
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# Every path comes from the env file (see deploy.env.example); systemd does
+# not expand variables in WorkingDirectory=, so none is set. The script runs
+# under the host's python3, never the site's virtual environment, so a broken
+# install cannot stop a rollback.
+EnvironmentFile=%h/.config/lotuspod/deploy.env
+ExecStart=/usr/bin/python3 ${LOTUSPOD_SITE}/deploy/lotuspod-deploy.py

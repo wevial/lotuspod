@@ -1,0 +1,11 @@
+[Unit]
+Description=Run lotuspod-deploy.service every minute
+
+[Timer]
+# systemd does not start a oneshot service again while a run is still going,
+# so runs never overlap.
+OnCalendar=minutely
+Unit=lotuspod-deploy.service
+
+[Install]
+WantedBy=timers.target

@@ -2038,6 +2038,9 @@ def cmd_serve(args: argparse.Namespace) -> int:
     out_dir = Path(args.out_dir) if args.out_dir else DEFAULT_OUTPUT_DIR
     if not out_dir.is_dir():
         raise FileNotFoundError(f"artifacts directory not found: {out_dir}")
+    # A deploy restarts serve, so a theme change goes live without waiting
+    # for the next publish; that publish commits the rewritten files.
+    sync_theme_css(out_dir)
 
     try:
         db_path = serve_db_path(out_dir, args.db)

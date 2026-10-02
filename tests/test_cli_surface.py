@@ -67,8 +67,10 @@ class RemovedFilesTests(unittest.TestCase):
         self.assertEqual(
             proc.stdout.split(),
             ["deploy/README.md", "deploy/cloudflared.yml", "deploy/lotuspod-backup.service",
-             "deploy/lotuspod-backup.timer", "deploy/lotuspod-respond.service",
-             "deploy/lotuspod.service"],
+             "deploy/lotuspod-backup.timer", "deploy/lotuspod-deploy.py",
+             "deploy/lotuspod-health.py", "deploy/lotuspod-respond.service",
+             "deploy/lotuspod.service", "deploy/systemd/deploy.env.example",
+             "deploy/systemd/lotuspod-deploy.service", "deploy/systemd/lotuspod-deploy.timer"],
         )
 
 

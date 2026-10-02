@@ -1279,6 +1279,95 @@ exposure beyond that allow-list: `manifest.json`, `FINDINGS.md`, hidden
 pages, and everything else 404 through the public hostname too, and the
 ingress catch-all sends any other hostname to a bare 404.
 
+## Deploying from main
+
+The live site runs from its own checkout and follows `main` by itself. A
+systemd user timer runs `deploy/lotuspod-deploy.py` every minute, with the
+host's `python3` and never the site's virtual environment, so a broken
+install cannot stop a rollback. Each run:
+
+1. refuses, with a note, a site checkout with uncommitted changes to tracked
+   files, and discards nothing;
+2. runs `git fetch origin`, and stops without a note if origin cannot be
+   reached; does nothing if `origin/main` is the checkout's commit; refuses,
+   with a note, an `origin/main` the checkout's commit is not an ancestor of
+   (a force-push); and otherwise fast-forwards to it;
+3. reinstalls (`pip install -e`) only when `pyproject.toml` changed;
+4. restarts serve and the responder, then runs `deploy/lotuspod-health.py`;
+5. if the reinstall, the restart or the check fails, resets the checkout to
+   the previous commit, reinstalls again if `pyproject.toml` changed,
+   restarts, and writes a note.
+
+Serve brings the theme files in its output directory up to date when it
+starts (it does not commit them; the next publish does), so a deploy makes a
+theme change live at once.
+
+The health check stops at the first failure and prints its name:
+`loopback` (serve answers 200 for `/` on its loopback port, waiting up to 30
+seconds while it starts), `public` (the public URL, fetched without
+credentials and without following redirects, answers 200, so Access is not
+guarding it; a connection error passes) and `theme` (the served stylesheet
+and page script differ from what the site's `sync_theme_css()` writes).
+
+Set up on the writer host, as the user the serve and responder units run as:
+
+1. **The site checkout.** Clone the repository into a directory of its own,
+   kept on `main` and never edited by hand, and give it its own venv:
+
+   ```sh
+   git clone --branch main <repository URL> <site checkout>
+   cd <site checkout>
+   python3 -m venv .venv && .venv/bin/pip install -e .
+   ```
+
+2. **Point serve and the responder at it.** In the installed
+   `lotuspod.service` and `lotuspod-respond.service`, set
+   `WorkingDirectory=` to the site checkout and start `ExecStart=` with
+   `<site checkout>/.venv/bin/lotuspod`, keeping their options (the
+   artifacts directory, the database and the socket default to the working
+   directory, so pass `--out-dir`, `--db` and `--socket` if the site's data
+   lives elsewhere). Then `systemctl --user daemon-reload` and restart both.
+
+3. **The env file.** Copy `deploy/systemd/deploy.env.example` to
+   `~/.config/lotuspod/deploy.env` and fill it in:
+   - `LOTUSPOD_SITE`: the site checkout;
+   - `LOTUSPOD_PYTHON`: its venv's `python`;
+   - `LOTUSPOD_UNITS`: the serve and responder unit names;
+   - `LOTUSPOD_PORT`: serve's loopback port;
+   - `LOTUSPOD_PUBLIC_URL`: the public URL behind Cloudflare Access;
+   - `LOTUSPOD_NOTES`: the directory a failed deploy writes its note to;
+   - optionally `LOTUSPOD_DEPLOY_REINSTALL`, `LOTUSPOD_DEPLOY_RESTART` and
+     `LOTUSPOD_DEPLOY_CHECK`, shell commands run in the site checkout in
+     place of `$LOTUSPOD_PYTHON -m pip install -e $LOTUSPOD_SITE`,
+     `systemctl --user restart $LOTUSPOD_UNITS` and the health check.
+
+4. **The units.** Copy and enable the timer:
+
+   ```sh
+   mkdir -p ~/.config/systemd/user
+   cp <site checkout>/deploy/systemd/lotuspod-deploy.service \
+      <site checkout>/deploy/systemd/lotuspod-deploy.timer ~/.config/systemd/user/
+   systemctl --user daemon-reload
+   systemctl --user enable --now lotuspod-deploy.timer
+   journalctl --user -u lotuspod-deploy.service -f      # watch the runs
+   ```
+
+   The timer starts the oneshot service every minute; systemd does not start
+   it again while a run is still going, so runs never overlap. To stop
+   deploying, `systemctl --user disable --now lotuspod-deploy.timer`.
+
+**Reading a note.** A note is a new file in the notes directory. Its first
+lines are `Status: open` and `To: claude`; then come what failed (the step,
+the check's name and the step's output) and both commits, the checkout's
+and `origin/main`'s.
+
+**Resuming after one.** The deploy remembers the `origin/main` commit it
+refused or rolled back (in the site checkout's git directory) and leaves it
+alone while `origin/main` is still that commit, so a broken commit yields one
+note, not one a minute. Push a fix to `main`: the next run tries the new
+commit afresh. After a refusal for uncommitted changes, commit or restore the
+changed files in the site checkout and the next run carries on.
+
 ## Tests
 
 A standard-library `unittest` suite (no extra dependencies) pins the manifest
