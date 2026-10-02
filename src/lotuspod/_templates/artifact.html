@@ -5,12 +5,12 @@
   <meta http-equiv="Content-Security-Policy" content="{{policy}}">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{title}} · Lotuspod</title>
-  <meta name="generator" content="lotuspod theme {{theme_name}} v{{theme_version}}">
+  <meta name="generator" content="lotuspod theme {{theme_name}}">
   <meta name="lotuspod:visible" content="{{visible}}">
 {{#revision}}  <meta name="lotuspod:revision" content="{{revision}}">
 {{/revision}}{{#owner}}  <meta name="lotuspod:owner" content="{{owner}}">
 {{/owner}}  <link rel="icon" type="image/svg+xml" href="favicon.svg">
-  <link rel="stylesheet" href="lotuspod.css?v={{theme_version}}">
+  <link rel="stylesheet" href="lotuspod.css?v={{theme_hash}}">
 </head>
 <body>
   <main class="artifact{{variant_class}}" id="top">
@@ -58,6 +58,6 @@
       themeVariables: {{mermaid_theme_variables}}
     });
   </script>
-{{/mermaid}}{{#page_script_needed}}  <script src="{{page_script}}?v={{theme_version}}" defer></script>
+{{/mermaid}}{{#page_script_needed}}  <script src="{{page_script}}?v={{theme_hash}}" defer></script>
 {{/page_script_needed}}</body>
 </html>

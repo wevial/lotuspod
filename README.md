@@ -1353,7 +1353,7 @@ python -m tests.capture_site \
 ## Template
 
 `src/lotuspod/_templates/artifact.html` uses `{{placeholder}}` substitution with the context:
-`title`, `kicker`, `date`, `summary_block`, `body`, `theme_name`, `theme_version`,
+`title`, `kicker`, `date`, `summary_block`, `body`, `theme_name`, `theme_hash`,
 plus the `mermaid` section flag with its `mermaid_theme_variables` and `mermaid_dir`,
 the `page_script_needed` section flag (decision forms, comment boxes or folding
 sections) with
@@ -1369,6 +1369,8 @@ structural hairlines/tints (table rules, code and quote surfaces), and radii;
 `lotuspod.css` mirrors the tokens as CSS custom properties (a `colors` key
 `k` as `--color-k`, a `structure` key `k` as `--k`, underscores as dashes).
 Edit the CSS to restyle all artifacts.
+Pages address the stylesheet and page script by a hash of the theme files, so
+there is no version to raise.
 
 Lavender is the brand: the buttons, the focus outline and the
 agents. Beside it, one colour per job:

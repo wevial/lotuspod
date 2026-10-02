@@ -5,8 +5,9 @@ answers the packaged page script decision forms load.
 The markup is witnessed by parsing it, never by matching strings. A page
 without a task list is held byte for byte to tests/fixtures/
 no_task_list.expected.html, captured from the renderer as it stood before
-forms existed and re-captured with the page policy tag (it names the theme
-version, so a theme bump re-captures it).
+forms existed and re-captured with the page policy tag. The fixture holds
+THEME_HASH where the page names the theme's hash, so a theme edit never
+re-captures it.
 
 Run from the repo root:
 
@@ -21,11 +22,12 @@ from html.parser import HTMLParser
 from pathlib import Path
 from unittest import mock
 
-from tests.test_manifest_v2 import TempDirTestCase
+from tests.test_manifest_v2 import TempDirTestCase, stylesheet_hash
 
 from lotuspod import cli  # after test_manifest_v2, which puts src/ on the path
 
 FIXTURES = Path(__file__).parent / "fixtures"
+GENERATOR_TAG = '<meta name="generator" content="lotuspod theme lotus">'
 
 TWO_ITEMS = (
     "<p>Before the list.</p>\n"
@@ -69,6 +71,13 @@ class _PageReader(HTMLParser):
         if tag == "li" and self._item is not None:
             self._item["text"] = " ".join("".join(self._item["text"]).split())
             self._item = None
+
+
+def normalised_page(test, page: bytes) -> bytes:
+    """The page with its theme hash, read from the stylesheet link, as THEME_HASH."""
+    theme_hash = stylesheet_hash(page.decode("utf-8"))
+    test.assertRegex(theme_hash, r"\A[0-9a-f]{12}\Z")
+    return page.replace(theme_hash.encode("ascii"), b"THEME_HASH")
 
 
 def read_page(page_html: str) -> _PageReader:
@@ -120,8 +129,10 @@ class NoTaskListTests(FormsTestCase):
             "--body", body,
         )
         self.assertEqual(rc, 0, err)
+        page = (self.out_dir / "plain.html").read_bytes()
+        self.assertIn(GENERATOR_TAG.encode("utf-8"), page)
         self.assertEqual(
-            (self.out_dir / "plain.html").read_bytes(),
+            normalised_page(self, page),
             (FIXTURES / "no_task_list.expected.html").read_bytes(),
         )
 
@@ -135,8 +146,10 @@ class PageScriptTests(FormsTestCase):
             "--body", body,
         )
         self.assertEqual(rc, 0, err)
+        page = (self.out_dir / "plain.html").read_bytes()
+        self.assertIn(GENERATOR_TAG.encode("utf-8"), page)
         self.assertEqual(
-            (self.out_dir / "plain.html").read_bytes(),
+            normalised_page(self, page),
             (FIXTURES / "no_task_list.expected.html").read_bytes(),
         )
 

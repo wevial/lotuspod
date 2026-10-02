@@ -287,6 +287,27 @@ def write_atomic(path: Path, data: bytes) -> None:
         raise
 
 
+def theme_files() -> list[tuple[str, bytes]]:
+    """Each served theme file (THEME_FILES, in order) with the bytes serve answers.
+
+    The one source for those bytes: sync_theme_css writes them and theme_hash
+    names them, so the ?v= address always follows what serve answers.
+    THEME_DIR is read at call time, never at import.
+    """
+    return [(filename, (THEME_DIR / filename).read_bytes()) for filename in THEME_FILES]
+
+
+def theme_hash() -> str:
+    """The theme's address: 12 hex digits of a SHA-256 over each served file's
+    name and bytes. A theme edit changes it with nothing to bump."""
+    digest = hashlib.sha256()
+    for filename, data in theme_files():
+        for part in (filename.encode("utf-8"), data):
+            digest.update(len(part).to_bytes(8, "big"))
+            digest.update(part)
+    return digest.hexdigest()[:12]
+
+
 def sync_theme_css(out_dir: Path) -> None:
     """Keep the artifact dir's theme files identical to the packaged theme.
 
@@ -294,11 +315,10 @@ def sync_theme_css(out_dir: Path) -> None:
     Rewriting only on a content difference means a theme upgrade reaches
     already-rendered directories while untouched ones keep their mtime.
     """
-    for filename in THEME_FILES:
-        packaged = THEME_DIR / filename
+    for filename, data in theme_files():
         theme_copy = out_dir / filename
-        if not theme_copy.exists() or theme_copy.read_bytes() != packaged.read_bytes():
-            write_atomic(theme_copy, packaged.read_bytes())
+        if not theme_copy.exists() or theme_copy.read_bytes() != data:
+            write_atomic(theme_copy, data)
 
 
 _OUTLINE_MIN_HEADINGS = 2
@@ -615,7 +635,7 @@ def cmd_render(args: argparse.Namespace) -> int:
         "outline": outline,
         "outline_items": outline_html(outline),
         "theme_name": tokens["name"],
-        "theme_version": tokens["version"],
+        "theme_hash": theme_hash(),
         "visible": "false" if args.hidden else "true",
         "revision": getattr(args, "revision", ""),
         # A handle (check_owner, or a kept one publish checked): no markup.
@@ -791,7 +811,7 @@ def render_index(artifacts: list[dict]) -> str:
         "generated": _dt.date.today().isoformat(),
         "entries_block": index_entries_html(artifacts),
         "theme_name": tokens["name"],
-        "theme_version": tokens["version"],
+        "theme_hash": theme_hash(),
     }
     return render_template(context, INDEX_TEMPLATE_PATH)
 

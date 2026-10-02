@@ -62,6 +62,17 @@ def run_cli(*argv: str) -> tuple[int, str, str]:
     return rc, out.getvalue(), err.getvalue()
 
 
+_STYLESHEET_LINK = re.compile(r'<link rel="stylesheet" href="lotuspod\.css\?v=([^"]*)">')
+
+
+def stylesheet_hash(page: str) -> str:
+    """The theme hash a page's stylesheet link carries after ?v=."""
+    found = _STYLESHEET_LINK.search(page)
+    if found is None:
+        raise AssertionError("no stylesheet link in the page")
+    return found.group(1)
+
+
 class TempDirTestCase(unittest.TestCase):
     def setUp(self) -> None:
         tmp = tempfile.TemporaryDirectory()
@@ -262,7 +273,7 @@ class ArtifactTopbarTests(TempDirTestCase):
     def test_hidden_bar_takes_no_flow_space_and_the_rail_clears_it(self):
         """KO-236: the bar takes no flow space; the wide rail's top clears it.
 
-        Since theme 0.4.9 the bar is fixed to the viewport edges rather than
+        Since KO-236 the bar is fixed to the viewport edges rather than
         sticky inside the page container, so it spans the full width and
         needs no negative margin to stay out of the flow."""
         css = self.theme_css()
@@ -302,22 +313,17 @@ class ArtifactTopbarTests(TempDirTestCase):
         # step needs them present.
         for filename in ("favicon.svg", cli.PAGE_SCRIPT):
             (previous / filename).write_bytes((cli.THEME_DIR / filename).read_bytes())
-        old_version = json.loads(
-            (previous / "tokens.json").read_text(encoding="utf-8")
-        )["version"]
-        new_version = json.loads(
-            (cli.THEME_DIR / "tokens.json").read_text(encoding="utf-8")
-        )["version"]
-        self.assertNotEqual(old_version, new_version)
 
         after = self.rendered()
         with mock.patch.object(cli, "THEME_DIR", previous):
             before = self.rendered()
 
-        self.assertIn(f"lotuspod.css?v={old_version}", before)
-        self.assertIn(f"lotuspod.css?v={new_version}", after)
+        old_hash, new_hash = stylesheet_hash(before), stylesheet_hash(after)
+        self.assertRegex(old_hash, r"\A[0-9a-f]{12}\Z")
+        self.assertRegex(new_hash, r"\A[0-9a-f]{12}\Z")
+        self.assertNotEqual(old_hash, new_hash)
         self.assertNotEqual(before, after)
-        self.assertEqual(before.replace(old_version, new_version), after)
+        self.assertEqual(before.replace(old_hash, new_hash), after)
 
 
 class ThemeCssSyncTests(TempDirTestCase):
@@ -334,13 +340,13 @@ class ThemeCssSyncTests(TempDirTestCase):
         self.assertEqual(self.css_copy().read_bytes(), self.packaged_css())
 
     def test_render_refreshes_a_stale_stylesheet(self):
-        self.css_copy().write_bytes(b"/* theme v0.2.0 */\n")
+        self.css_copy().write_bytes(b"/* an older theme */\n")
         self.render("ep-001")
         self.assertEqual(self.css_copy().read_bytes(), self.packaged_css())
 
     def test_index_refreshes_a_stale_stylesheet(self):
         self.render("ep-001")
-        self.css_copy().write_bytes(b"/* theme v0.2.0 */\n")
+        self.css_copy().write_bytes(b"/* an older theme */\n")
         rc, _, _ = run_cli("index", "--out-dir", str(self.out_dir))
         self.assertEqual(rc, 0)
         self.assertEqual(self.css_copy().read_bytes(), self.packaged_css())
@@ -673,15 +679,12 @@ class IndexTableTests(TempDirTestCase):
         self.assertNotIn(".episode-card", css)
         self.assertNotIn(".episode-list", css)
 
-    def test_two_index_builds_are_byte_identical_and_name_the_theme_version(self):
+    def test_two_index_builds_are_byte_identical_and_name_the_theme_hash(self):
         make_mixed_fixture(self.out_dir)
         first = self.build_index()
         self.assertEqual(first, self.build_index())
-        version = json.loads(
-            (cli.THEME_DIR / "tokens.json").read_text(encoding="utf-8")
-        )["version"]
-        self.assertEqual(version, "0.4.17")
-        self.assertIn(f'href="lotuspod.css?v={version}"', first)
+        self.assertRegex(stylesheet_hash(first), r"\A[0-9a-f]{12}\Z")
+        self.assertIn('<meta name="generator" content="lotuspod theme lotus">', first)
 
 
 class IndexTableWidthTests(unittest.TestCase):
@@ -1251,7 +1254,7 @@ class MermaidTests(TempDirTestCase):
         self.assertNotIn("mermaid", page)
         # The one script is the page script, which folds the two sections.
         self.assertEqual(re.findall(r"<script[^>]*>", page),
-                         [f'<script src="{cli.PAGE_SCRIPT}?v={cli.load_tokens()["version"]}" defer>'])
+                         [f'<script src="{cli.PAGE_SCRIPT}?v={stylesheet_hash(page)}" defer>'])
 
     def test_the_flag_and_palette_reach_the_template_context(self):
         with mock.patch.object(
@@ -1444,22 +1447,17 @@ class OutlineSideRenderTests(TempDirTestCase):
         # step needs them present.
         for filename in ("favicon.svg", cli.PAGE_SCRIPT):
             (previous / filename).write_bytes((cli.THEME_DIR / filename).read_bytes())
-        old_version = json.loads(
-            (previous / "tokens.json").read_text(encoding="utf-8")
-        )["version"]
-        new_version = json.loads(
-            (cli.THEME_DIR / "tokens.json").read_text(encoding="utf-8")
-        )["version"]
-        self.assertNotEqual(old_version, new_version)
 
         after = self.rendered()
         with mock.patch.object(cli, "THEME_DIR", previous):
             before = self.rendered()
 
-        self.assertIn(f"lotuspod.css?v={old_version}", before)
-        self.assertIn(f"lotuspod.css?v={new_version}", after)
+        old_hash, new_hash = stylesheet_hash(before), stylesheet_hash(after)
+        self.assertRegex(old_hash, r"\A[0-9a-f]{12}\Z")
+        self.assertRegex(new_hash, r"\A[0-9a-f]{12}\Z")
+        self.assertNotEqual(old_hash, new_hash)
         self.assertNotEqual(before, after)
-        self.assertEqual(before.replace(old_version, new_version), after)
+        self.assertEqual(before.replace(old_hash, new_hash), after)
 
 
 class OutlineBodyTests(unittest.TestCase):

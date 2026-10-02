@@ -31,6 +31,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from lotuspod import access, cli, comments, db, machine  # noqa: E402
 from tests import access_keys as keys  # noqa: E402
+from tests.test_forms import normalised_page  # noqa: E402
 
 FIXTURES = Path(__file__).parent / "fixtures"
 HOST = "127.0.0.1"
@@ -256,7 +257,7 @@ class WithoutCommentsTests(CommentsTestCase):
                              "--summary", "no questions here", "--body", body,
                              "--out-dir", str(self.out_dir))
         self.assertEqual(rc, 0, err)
-        self.assertEqual((self.out_dir / "plain.html").read_bytes(),
+        self.assertEqual(normalised_page(self, (self.out_dir / "plain.html").read_bytes()),
                          (FIXTURES / "no_task_list.expected.html").read_bytes())
         rc, err = self.render("plan", THREE_SECTIONS)
         self.assertEqual(rc, 0, err)
