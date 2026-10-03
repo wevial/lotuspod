@@ -215,8 +215,12 @@ test.describe('signed in', () => {
     await expect(tray).toHaveCount(0);
     expect(seen.uploads).toEqual(['POST']);
 
-    // The thumbnail's link opens the full-size image in a new page.
-    const [full] = await Promise.all([context.waitForEvent('page'), thumbs.click()]);
+    // The thumbnail's link, clicked with the platform modifier, opens the
+    // full-size image in a new page (a plain click opens the image viewer).
+    const [full] = await Promise.all([
+      context.waitForEvent('page'),
+      thumbs.click({ modifiers: ['ControlOrMeta'] }),
+    ]);
     await full.waitForLoadState();
     expect(new URL(full.url()).pathname).toBe(stored.url);
     expect(await full.evaluate(() => {

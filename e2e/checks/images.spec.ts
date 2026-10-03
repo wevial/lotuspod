@@ -89,7 +89,8 @@ for (const width of [1280, 360]) {
   });
 }
 
-test('clicking an image opens its media URL', async ({ page }) => {
+// A plain click opens the image viewer (image-viewer.spec.ts).
+test('clicking an image with the platform modifier opens its media URL', async ({ page, context }) => {
   const seen = await watch(page);
   await page.goto(PAGE);
   const fish = page.getByRole('img', { name: 'A fish in the pond' });
@@ -97,10 +98,9 @@ test('clicking an image opens its media URL', async ({ page }) => {
   expect(src).toMatch(/^\/media\/[0-9a-f]{64}\.jpg$/);
 
   const [response] = await Promise.all([
-    page.waitForResponse((r) => r.url().endsWith(src!) && r.request().isNavigationRequest()),
-    fish.click(),
+    context.waitForEvent('response', (r) => r.url().endsWith(src!) && r.request().isNavigationRequest()),
+    fish.click({ modifiers: ['ControlOrMeta'] }),
   ]);
-  await expect(page).toHaveURL(new RegExp(`${src!.replace(/\./g, '[.]')}$`));
   expect(response.status()).toBe(200);
   expect(response.headers()['content-type']).toBe('image/jpeg');
   expect(seen.consoleErrors).toEqual([]);

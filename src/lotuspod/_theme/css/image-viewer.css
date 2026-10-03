@@ -1,0 +1,100 @@
+
+/* The image viewer (js/image-viewer.js): a modal dialog that fills the window
+   over a dimmed backdrop, with the image at its natural size, never wider or
+   taller than the room the window leaves beside its caption and controls. A
+   click on the dialog around them closes it. */
+.artifact-image-viewer {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  box-sizing: border-box;
+  color: var(--color-pale-lavender);
+  flex-direction: column;
+  gap: 0.75rem;
+  height: 100%;
+  justify-content: center;
+  margin: 0;
+  max-height: none;
+  max-width: none;
+  padding: 1rem;
+  width: 100%;
+}
+
+.artifact-image-viewer[open] {
+  display: flex;
+}
+
+.artifact-image-viewer::backdrop {
+  background: rgba(13, 10, 21, 0.88);
+}
+
+.artifact-image-viewer-figure {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin: 0;
+  min-height: 0;
+}
+
+.artifact-image-viewer-image {
+  border-radius: var(--radius-block);
+  display: block;
+  height: auto;
+  max-height: calc(100vh - 7rem);
+  max-width: calc(100vw - 2rem);
+  object-fit: contain;
+  width: auto;
+}
+
+.artifact-image-viewer-caption {
+  font-size: 0.875rem;
+  text-align: center;
+}
+
+.artifact-image-viewer-caption[hidden] {
+  display: none;
+}
+
+.artifact-image-viewer-bar {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: center;
+}
+
+.artifact-image-viewer-bar > button,
+.artifact-image-viewer-original {
+  background: var(--color-surface);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-chip);
+  color: var(--color-pale-lavender);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.8125rem;
+  line-height: 1.3;
+  padding: 0.3rem 0.7rem;
+  text-decoration: none;
+}
+
+.artifact-image-viewer-bar > button[hidden] {
+  display: none;
+}
+
+.artifact-image-viewer-bar > button:hover,
+.artifact-image-viewer-original:hover {
+  border-color: var(--color-lavender);
+  color: var(--color-white);
+}
+
+.artifact-image-viewer-bar > button:focus-visible,
+.artifact-image-viewer-original:focus-visible {
+  outline: 2px solid var(--color-lavender);
+  outline-offset: 2px;
+}
+
+/* A page figure's image opens in the viewer. */
+.artifact-body .artifact-figure a {
+  cursor: zoom-in;
+}

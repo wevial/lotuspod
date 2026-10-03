@@ -525,14 +525,14 @@
         release(true);
       }
     });
-    // A click outside the popover, its opener, the pill and the banner
-    // offering a reload (which keeps it open over the reload) closes it,
-    // before whatever the click is for.
+    // A click outside the popover, its opener, the pill, the banner
+    // offering a reload (which keeps it open over the reload) and the image
+    // viewer opened from it closes it, before whatever the click is for.
     document.addEventListener("click", function (event) {
       var target = event.target;
       if (held.kind !== "popover" || popover.node.contains(target) ||
           (held.opener && held.opener.contains(target)) ||
-          (target.closest && target.closest(".artifact-passage-pill, .artifact-live-page"))) {
+          (target.closest && target.closest(".artifact-passage-pill, .artifact-live-page, .artifact-image-viewer"))) {
         return;
       }
       release(true);

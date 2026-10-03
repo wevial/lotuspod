@@ -125,6 +125,17 @@ class DeclaredOrderTests(ThemeCopyTestCase):
         problems = source_problems(cli.THEME_DIR, cli.THEME_SOURCES)
         self.assertEqual(problems, [], "\n".join(problems))
 
+    def test_the_image_viewer_sources_are_declared(self):
+        """LOTUS-56: the image viewer's script is joined before
+        js/page-close.js closes the script, and its styles are declared in
+        the stylesheet's order."""
+        script = cli.THEME_SOURCES[cli.PAGE_SCRIPT]
+        self.assertIn("js/image-viewer.js", script)
+        self.assertEqual(script[-1], "js/page-close.js")
+        self.assertIn("css/image-viewer.css", cli.THEME_SOURCES[STYLESHEET])
+        problems = source_problems(cli.THEME_DIR, cli.THEME_SOURCES)
+        self.assertEqual(problems, [], "\n".join(problems))
+
     def test_a_source_not_in_the_declared_order_is_named(self):
         theme = self.theme_copy()
         (theme / "css" / "stray.css").write_text(".stray {}\n", encoding="utf-8")

@@ -5,8 +5,9 @@
   // comments route reports, is refused in the composer's status line and
   // never sent; any other is uploaded at once and shown as a thumbnail with
   // a Remove button. A comment's images are drawn under its text, each a
-  // link to the full size that opens in a new tab, its box reserved from
-  // the stored width and height. A thumbnail only ever shows the uploaded
+  // link to the full size that opens in the image viewer
+  // (js/image-viewer.js), or with a modifier in a new tab, its box reserved
+  // from the stored width and height. A thumbnail only ever shows the uploaded
   // /media/ URL, never a blob: one, so the page policy's img-src stays
   // 'self' data:.
   var MEDIA = "/api/media";
