@@ -256,9 +256,10 @@ lotuspod comments pull --owner hermes</code></pre>
 # pixels wide at its natural width, with a paragraph after it and the rest of
 # the page below it to scroll through, an eight-column table with long
 # cells, a two-column table whose first column is a long sentence, a
-# three-column table shaped like a Finding, Status and Where table, a table
-# with long code spans and links, a small two-column table and a table inside
-# a list item. No diagram, so the page needs no network.
+# three-column table shaped like a Finding, Status and Where table under a
+# paragraph in the middle of the page, a table with long code spans and
+# links, a small two-column table and a table inside a list item. No diagram,
+# so the page needs no network.
 TABLES_BODY = """\
 <p>A sample page for captures: tables of every shape, each fitting its column or scrolling inside itself.</p>
 <h2>Ledger</h2>
@@ -288,6 +289,7 @@ TABLES_BODY = """\
 </tbody>
 </table>
 <h2>Findings table</h2>
+<p>What the winter's inspections found, and where each finding stands:</p>
 <table>
 <thead><tr><th>Finding</th><th>Status</th><th>Where</th></tr></thead>
 <tbody>

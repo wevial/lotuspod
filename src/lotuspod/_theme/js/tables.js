@@ -5,7 +5,9 @@
   // content edge to the panel's left edge, or the window's when no panel is
   // shown, less a 1rem gutter. It is read again as the window resizes and as
   // the panel's box changes: shown, hidden, opened or folded, and every frame
-  // of its width transition, so the tables follow it.
+  // of its width transition, so the tables follow it. The reading column is
+  // kept inside the same room (css/base.css), so a panel widened into it
+  // (js/panel-resize.js) narrows the column as well as its tables.
   function tableRoom(body) {
     var aside = document.querySelector("aside.artifact-comments-panel");
 
@@ -28,6 +30,6 @@
   }
 
   var tableBody = document.querySelector(".artifact-body");
-  if (tableBody && tableBody.querySelector("table")) {
+  if (tableBody) {
     tableRoom(tableBody);
   }

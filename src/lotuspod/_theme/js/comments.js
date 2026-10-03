@@ -1881,13 +1881,34 @@
         over.sync();
       };
 
-      // Whether the window leaves ROOM right of the reading column.
+      // Whether the window leaves ROOM right of the reading column at its
+      // full measure: a panel widened into the column narrows it
+      // (css/base.css), which must not change where the threads live. The
+      // measure is read from a probe set in the column's font, out of sight
+      // and outside the column, so it is no part of the page's text.
+      var probe = element("div");
+      probe.setAttribute("aria-hidden", "true");
+      probe.style.cssText = "position: absolute; left: 0; top: 0; height: 0; visibility: hidden; pointer-events: none";
       function roomy() {
         if (!column) {
           return false;
         }
         var rem = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
-        return document.documentElement.clientWidth - column.getBoundingClientRect().right >= ROOM * rem;
+        var style = getComputedStyle(column);
+        ["fontFamily", "fontSize", "fontStyle", "fontWeight", "fontStretch"].forEach(function (name) {
+          probe.style[name] = style[name];
+        });
+        probe.style.width = style.getPropertyValue("--measure-prose") || "66ch";
+        document.body.appendChild(probe);
+        var measure = probe.getBoundingClientRect().width;
+        probe.remove();
+        var left = column.getBoundingClientRect().left;
+        var holder = column.parentElement;
+        var edge = holder.getBoundingClientRect().right -
+          (parseFloat(getComputedStyle(holder).paddingRight) || 0) -
+          (parseFloat(getComputedStyle(holder).borderRightWidth) || 0);
+        var right = left + Math.min(measure, edge - left);
+        return document.documentElement.clientWidth - right >= ROOM * rem;
       }
 
       // What the open panel shows, to open again in a popover or the sheet

@@ -585,11 +585,13 @@
    window's right edge under the title bar. Folded, it is a 2.75rem rail: the
    button that opens it, a badge counting the open threads and a dot for each,
    mint once answered, a pulsing lavender while an agent writes, a hollow
-   amber ring while it waits. Open, it is 20rem wide and scrolls its list on
-   its own, grouped under each section's heading; the open entry holds its
+   amber ring while it waits. Open, it is --comments-panel-width wide, 20rem
+   unless the reader has resized it (js/panel-resize.js), and scrolls its list
+   on its own, grouped under each section's heading; the open entry holds its
    thread as the box would, and a resolved one folds to a dashed line. It lies
    over the margin, never the column, so nothing in the column moves. */
 .artifact-comments-panel {
+  --comments-panel-width: 20rem;
   background: var(--color-surface);
   border-left: 1px solid var(--hairline-strong);
   bottom: 0;
@@ -608,7 +610,7 @@
 }
 
 .artifact-comments-panel--open {
-  width: 20rem;
+  width: var(--comments-panel-width);
 }
 
 .artifact-comments-rail {
@@ -729,7 +731,7 @@
   flex: 1;
   flex-direction: column;
   min-height: 0;
-  width: 20rem;
+  width: var(--comments-panel-width);
 }
 
 .artifact-comments-head {

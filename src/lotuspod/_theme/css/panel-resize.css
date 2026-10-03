@@ -1,0 +1,66 @@
+
+/* The handle on the open comments panel's left edge (js/panel-resize.js): a
+   strip straddling the panel's border, centred on it, so the edge follows
+   the pointer that drags it. At rest it is the border and a faint grip; on
+   hover, while dragged and when focused, a lavender line. The open panel
+   clips a little outside its box so the strip's outer half shows; folded,
+   there is no handle. No transition while it is dragged, so the panel keeps
+   up with the pointer. */
+.artifact-comments-panel--open {
+  overflow: clip;
+  overflow-clip-margin: 0.3125rem;
+}
+
+.artifact-comments-panel--resizing {
+  transition: none;
+}
+
+.artifact-comments-resize {
+  bottom: 0;
+  cursor: col-resize;
+  left: -0.3125rem;
+  position: absolute;
+  top: 0;
+  touch-action: none;
+  user-select: none;
+  width: 0.5rem;
+  z-index: 1;
+}
+
+.artifact-comments-panel:not(.artifact-comments-panel--open) .artifact-comments-resize {
+  display: none;
+}
+
+.artifact-comments-resize::before {
+  background: transparent;
+  bottom: 0;
+  content: "";
+  left: calc(50% - 1px);
+  position: absolute;
+  top: 0;
+  width: 2px;
+}
+
+.artifact-comments-resize::after {
+  background: var(--hairline-strong);
+  border-radius: var(--radius-pill);
+  content: "";
+  height: 2rem;
+  left: calc(50% - 2px);
+  position: absolute;
+  top: calc(50% - 1rem);
+  width: 4px;
+}
+
+.artifact-comments-resize:hover::before,
+.artifact-comments-resize:hover::after,
+.artifact-comments-resize:focus-visible::before,
+.artifact-comments-resize:focus-visible::after,
+.artifact-comments-panel--resizing .artifact-comments-resize::before,
+.artifact-comments-panel--resizing .artifact-comments-resize::after {
+  background: var(--color-lavender);
+}
+
+.artifact-comments-resize:focus-visible {
+  outline: none;
+}

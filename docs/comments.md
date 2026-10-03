@@ -219,6 +219,18 @@ which unfolds the box's own form in the panel. The page remembers whether the
 reader left the panel open or folded in `localStorage` (a page whose storage
 throws starts folded), and Escape folds it.
 
+The open panel is resized from a handle on its left edge, a separator named
+"Resize comments": dragged, its edge follows the pointer, and focused, Left
+Arrow widens it and Right Arrow narrows it by 1rem. Its width stays between
+16rem and 40rem, at most a third of the window (30rem at 1440 pixels), and
+never so wide that the reading column keeps less than 32rem: as the panel
+grows into the column's space, the column and its tables narrow to stay left
+of it, and the passage at the top of the window stays where it was. The
+width is kept in `localStorage` for every page on the site, and a window too
+narrow for it shows the panel at its widest without forgetting it.
+Double-clicking the handle goes back to 20rem and forgets the stored width. A
+page whose storage throws opens it at 20rem and still resizes.
+
 At any width, each box never opens: its summary is a one-line chip reading
 where its section's open threads stand. With none, "No comments ·
 Comment"; when the newest reader comment among them is `claimed`, "HANDLE is

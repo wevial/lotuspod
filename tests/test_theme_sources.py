@@ -113,6 +113,21 @@ class DeclaredOrderTests(ThemeCopyTestCase):
         problems = source_problems(cli.THEME_DIR, cli.THEME_SOURCES)
         self.assertEqual(problems, [], "\n".join(problems))
 
+    def test_the_panel_resize_sources_are_declared_after_the_comments(self):
+        """LOTUS-51: the resize handle is added to the panel the comments
+        script makes, so js/panel-resize.js is joined after js/comments.js
+        and before js/page-close.js closes the script; its styles override
+        the panel's, so they are joined after css/comments.css."""
+        styles = cli.THEME_SOURCES[STYLESHEET]
+        script = cli.THEME_SOURCES[cli.PAGE_SCRIPT]
+        self.assertIn("css/panel-resize.css", styles)
+        self.assertIn("js/panel-resize.js", script)
+        self.assertGreater(styles.index("css/panel-resize.css"), styles.index("css/comments.css"))
+        self.assertGreater(script.index("js/panel-resize.js"), script.index("js/comments.js"))
+        self.assertLess(script.index("js/panel-resize.js"), script.index("js/page-close.js"))
+        problems = source_problems(cli.THEME_DIR, cli.THEME_SOURCES)
+        self.assertEqual(problems, [], "\n".join(problems))
+
     def test_the_table_expand_sources_are_declared(self):
         """LOTUS-50: the Expand button reads the room js/tables.js publishes,
         so js/table-expand.js is joined after it and before js/page-close.js;
