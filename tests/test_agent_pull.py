@@ -877,7 +877,7 @@ class OwnerWindowOptionTests(unittest.TestCase):
 
 class ReadmeTests(unittest.TestCase):
     def test_the_agents_section_shows_the_pull_loop_for_each_kind_of_agent(self):
-        readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
+        readme = (REPO_ROOT / "docs" / "agents.md").read_text(encoding="utf-8")
         start = readme.index("## Agents: the pull loop\n")
         end = readme.index("\n## ", start + 1)
         section = readme[start:end]

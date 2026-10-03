@@ -3,7 +3,8 @@
 The Worker, its deploy script, `lotuspod export` (which built its upload) and
 `lotuspod responses pull` (which read its database) are gone. This file
 witnesses that from the outside: git's own file list, the installed command's
-help and usage errors, and the README and .gitignore a reader sees.
+help and usage errors, and the README, docs pages and .gitignore a reader
+sees.
 
 Run from the repo root:
 
@@ -100,26 +101,30 @@ class CommandSurfaceTests(unittest.TestCase):
 
 class DocumentationTests(unittest.TestCase):
     REMOVED_WORDS = ("export", "responses pull", "wrangler", "worker")
+    DOCS = ("README.md", "docs/publishing.md", "docs/comments.md", "docs/agents.md",
+            "docs/operating.md", "docs/development.md")
 
     def read(self, name: str) -> str:
         return (REPO_ROOT / name).read_text(encoding="utf-8")
 
-    def test_readme_and_gitignore_name_nothing_removed(self):
-        for name in ("README.md", ".gitignore"):
+    def test_readme_docs_and_gitignore_name_nothing_removed(self):
+        for name in (*self.DOCS, ".gitignore"):
             text = self.read(name).lower()
             for word in self.REMOVED_WORDS:
                 with self.subTest(file=name, word=word):
                     self.assertNotIn(word, text)
 
-    def test_readme_documents_the_commands_and_the_tunnel(self):
-        readme = self.read("README.md")
+    def test_readme_and_docs_document_the_commands(self):
+        docs = "\n".join(self.read(name) for name in self.DOCS)
         for command in COMMANDS:
             with self.subTest(command=command):
-                self.assertIn(f"lotuspod {command}", readme)
-        self.assertIn("## Publish\n", readme)
-        self.assertIn("Cloudflare Tunnel", readme)
-        self.assertIn("cloudflared tunnel --config deploy/cloudflared.yml run lotuspod", readme)
+                self.assertIn(f"lotuspod {command}", docs)
 
+    def test_operating_page_documents_the_tunnel(self):
+        operating = self.read("docs/operating.md")
+        self.assertIn("## Publish\n", operating)
+        self.assertIn("Cloudflare Tunnel", operating)
+        self.assertIn("cloudflared tunnel --config deploy/cloudflared.yml run lotuspod", operating)
 
 if __name__ == "__main__":
     unittest.main()

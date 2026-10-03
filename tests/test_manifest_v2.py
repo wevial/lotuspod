@@ -1314,7 +1314,8 @@ class MermaidTests(TempDirTestCase):
         self.assertIn(".artifact-body pre.mermaid", css)
 
     def test_the_readme_shows_the_diagram_block_form(self):
-        readme = (Path(__file__).resolve().parent.parent / "README.md").read_text(encoding="utf-8")
+        readme = (Path(__file__).resolve().parent.parent / "docs" / "publishing.md").read_text(
+            encoding="utf-8")
         self.assertIn('pre class="mermaid"', readme)
 
 

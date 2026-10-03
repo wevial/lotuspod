@@ -1,7 +1,7 @@
 """Agents reach `lotuspod serve` through its Unix socket, each with a machine
 credential bound to the handles and operations it may use: `lotuspod
 credential create|list|revoke`, the socket's /v1/ routes and their
-refusals, the socket file's life, and the README's word on the limit.
+refusals, the socket file's life, and the agents page's word on the limit.
 
 Run from the repo root:
 
@@ -425,7 +425,7 @@ class ClientOptionTests(MachineTestCase):
 
 class ReadmeTests(unittest.TestCase):
     def test_the_agent_section_states_the_same_user_limit(self):
-        readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
+        readme = (REPO_ROOT / "docs" / "agents.md").read_text(encoding="utf-8")
         start = readme.index("## Agent credentials\n")
         end = readme.index("\n## ", start + 1)
         section = " ".join(readme[start:end].split())
