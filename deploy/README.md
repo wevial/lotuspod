@@ -14,7 +14,11 @@ same allow-listed `lotuspod serve` you already run on the tailnet; it adds
 ## One-time human setup (copy-paste, placeholders only)
 
 Every `<UUID>` below is printed by your own `tunnel create` — nothing real
-belongs in this repo, and no secret is ever committed.
+belongs in this repo, and no secret is ever committed. `lotuspod.example.com`
+stands in for your public hostname: the real hostname and tunnel id live in
+the operator's local cloudflared config (under `~/.config/cloudflared/`),
+which the live tunnel runs with `cloudflared --config`; the copy here is an
+example.
 
 ```sh
 # 1. install cloudflared (https://developers.cloudflare.com/cloudflare/one-connections/connect-networks/downloads/)
@@ -46,7 +50,7 @@ cloudflared tunnel --config deploy/cloudflared.yml run lotuspod
 Or as a service instead of terminal A:
 
 ```sh
-# from the repo root, with a repo-local venv (as deployed on writer-host):
+# from the repo root, with a repo-local venv (as deployed on the writer host):
 python3 -m venv .venv && .venv/bin/pip install -e .
 mkdir -p ~/.config/systemd/user && cp deploy/lotuspod.service ~/.config/systemd/user/
 systemctl --user daemon-reload
@@ -61,7 +65,7 @@ journalctl --user -u lotuspod.service -f      # watch it
 > `deploy/cloudflared.yml`. On macOS there is no systemd — use launchd or run
 > terminal A/B by hand.
 >
-> Live reference deployment (writer-host): units at
+> Live reference deployment (the writer host): units at
 > `~/.config/systemd/user/cloudflared-lotuspod-serve.service` and
 > `cloudflared-lotuspod.service`.
 

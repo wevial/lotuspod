@@ -808,7 +808,7 @@ _INDEX_EMPTY_BLOCK = (
 def index_entries_html(artifacts: list[dict]) -> str:
     """Render manifest-style metadata into the index page's table.
 
-    Episodes are uniform records, so they are listed as rows: one column per
+    Pages are uniform records, so they are listed as rows: one column per
     field lets a reader scan a single field down the page, and gives the index
     script a grid to sort and filter. The markup is a complete listing on its
     own - the script only adds sorting and the search filter on top.
@@ -836,7 +836,7 @@ def index_entries_html(artifacts: list[dict]) -> str:
         '<table class="index-table">\n'
         "        <thead>\n"
         "          <tr>\n"
-        '            <th scope="col" data-sort-type="number">Episode</th>\n'
+        '            <th scope="col" data-sort-type="number">Page</th>\n'
         '            <th scope="col">Title</th>\n'
         '            <th scope="col">Date</th>\n'
         '            <th scope="col">Summary</th>\n'

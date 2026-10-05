@@ -43,7 +43,7 @@ def git(cwd: Path, *argv: str) -> str:
 
 def identify(repo: Path) -> None:
     git(repo, "config", "user.name", "Lotuspod Test")
-    git(repo, "config", "user.email", "test@lotuspod.invalid")
+    git(repo, "config", "user.email", "test@example.com")
     git(repo, "config", "commit.gpgsign", "false")
 
 

@@ -337,21 +337,21 @@ pages 404 even by direct URL); opening the file on disk still works.
 
 ## Index
 
-Build `artifacts/index.html`, a browsable episode index linking every rendered
-artifact:
+Build `artifacts/index.html`, a browsable index linking every rendered page:
 
 ```sh
 lotuspod index               # scans artifacts/ (or pass --out-dir DIR)
 ```
 
-The listing is a table: one row per artifact, with the episode, title (linking
-to its page), date, and summary parsed from the rendered HTML. Only
-fail-closed-visible artifacts are listed (same rule as `lotuspod manifest`).
+The listing is a table: one row per page, with its number (the `--episode`
+label, in the Page column), title (linking to the page), date, and summary
+parsed from the rendered HTML. Only fail-closed-visible artifacts are listed
+(same rule as `lotuspod manifest`).
 Rows arrive in filename order and are styled by the lotus theme. Re-running is
 safe: `index.html` never lists itself (and is skipped by `lotuspod manifest`
 too).
 
-Click a column header to sort by it (a second click reverses; the episode
+Click a column header to sort by it (a second click reverses; the Page
 column sorts numerically, and rows with a blank value in the sorted column sink
 to the bottom either way), and type in the search box to filter rows down to
 those matching the query in any column. Both are progressive enhancement from a

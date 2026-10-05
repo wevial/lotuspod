@@ -8,7 +8,7 @@ of the reader's routes, publishing through the tunnel, deploying from
 
 ## Serve
 
-Share rendered episodes over your tailnet:
+Share rendered pages over your tailnet:
 
 ```sh
 lotuspod serve               # serves artifacts/ (or pass --out-dir DIR)
@@ -17,7 +17,7 @@ lotuspod serve --host 127.0.0.1  # bind address override for tunnel fronting
 ```
 
 The command detects this node's tailnet IPv4 (`tailscale ip -4`) and listens
-only on that address, so your podcast pages are reachable from the other
+only on that address, so your pages are reachable from the other
 devices in your tailnet — and nothing outside it. Open the printed
 `http://100.x.y.z:8000/` URL on any tailnet device; `/` serves
 `artifacts/index.html` (build it first with `lotuspod index`). Requires a

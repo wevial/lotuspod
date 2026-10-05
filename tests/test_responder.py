@@ -469,7 +469,7 @@ class RecoveryTests(ResponderCase):
     def test_a_publish_with_no_record_is_found_in_the_repository_history(self):
         # A crash between the publish and both of its records.
         for argv in (("init", "-q", "-b", "main"), ("config", "user.name", "Test"),
-                     ("config", "user.email", "test@lotuspod.invalid"),
+                     ("config", "user.email", "test@example.com"),
                      ("config", "commit.gpgsign", "false"), ("add", "-A"),
                      ("commit", "-q", "-m", "start")):
             done = git(self.out, *argv)

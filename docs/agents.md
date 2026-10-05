@@ -8,15 +8,15 @@ routed is in [Comments](comments.md#comments). Back to the
 
 ## Agent credentials
 
-Agents on the writer host (the operator seat, Hermes profiles, one-off Claude
-Code or Codex sessions, the default responder) never use the `/api` routes,
+Agents on the writer host (Claude Code and Codex sessions, the operator
+seat, the default responder) never use the `/api` routes,
 which are the reader's. serve also listens on a Unix socket, `lotuspod.sock`
 beside the database, or the path `serve --socket PATH` or an `[agents]`
 section's `socket` key in the config names:
 
 ```ini
 [agents]
-socket = /home/writer/lotuspod/lotuspod.sock
+socket = /home/<user>/lotuspod/lotuspod.sock
 ```
 
 The socket is made with mode 0600 and removed when serve stops; a socket file
@@ -26,10 +26,10 @@ every request on the socket carries a machine credential the operator makes on
 the host.
 
 ```sh
-lotuspod credential create hermes --handle hermes --op pull --op reply \
-  --out ~/.config/lotuspod/hermes.token
-lotuspod credential list          # --json for JSON; tokens are never shown
-lotuspod credential revoke hermes # ends it at once
+lotuspod credential create my-agent --handle my-agent --op pull --op reply \
+  --out ~/.config/lotuspod/my-agent.token
+lotuspod credential list            # --json for JSON; tokens are never shown
+lotuspod credential revoke my-agent # ends it at once
 ```
 
 `create` binds the credential to the owner handles it may act as (`--handle`,
@@ -67,12 +67,12 @@ who acted; they do not isolate a hostile process running as the same user.
 
 ## Agents: the pull loop
 
-Every kind of agent (a Claude Code or Codex session, a Hermes profile, a
+Every kind of agent (a Claude Code or Codex session, any other agent, a
 script) reads what is meant for it with one command, through the socket, with
 a credential that may `pull` as its handle:
 
 ```sh
-lotuspod comments pull --owner hermes --json   # GET /v1/pull?owner=hermes
+lotuspod comments pull --owner my-agent --json # GET /v1/pull?owner=my-agent
 lotuspod comments ack-answer 12                # POST /v1/answers/12/ack
 lotuspod comments show pond-plan --json        # GET /v1/threads?page=pond-plan
 lotuspod comments resolve 7                    # POST /v1/threads/7/resolve
@@ -151,10 +151,10 @@ answers twice:
 
 ```sh
 lotuspod comments claim 7 --json
-# {"comment": 7, "handle": "hermes", "claimToken": "…", "expiresAt": "…"}
-lotuspod comments reply 7 --claim TOKEN --key hermes-7-1 --text "Cut it." --json \
+# {"comment": 7, "handle": "my-agent", "claimToken": "…", "expiresAt": "…"}
+lotuspod comments reply 7 --claim TOKEN --key my-agent-7-1 --text "Cut it." --json \
   --model "Claude Opus 5.5"                      # optional: the model that wrote it
-lotuspod comments reply 7 --claim TOKEN --key hermes-7-2 --text-file reply.md \
+lotuspod comments reply 7 --claim TOKEN --key my-agent-7-2 --text-file reply.md \
   --revision 3f2a9c01d4be                        # having revised the page
 lotuspod comments release 7 --claim TOKEN      # back to routing, unanswered
 lotuspod comments fail 7 --claim TOKEN --reason "source missing"
@@ -230,11 +230,11 @@ examples take the socket from `[agents] socket`, and the credential from
 A Claude Code session, told in its prompt (or a `CLAUDE.md`):
 
 ```text
-Your handle is claude-3f9a2c. Every few minutes while you work, run
-`LOTUSPOD_CREDENTIAL=~/.config/lotuspod/claude-3f9a2c.token lotuspod comments pull --owner claude-3f9a2c`.
+Your handle is my-agent. Every few minutes while you work, run
+`LOTUSPOD_CREDENTIAL=~/.config/lotuspod/my-agent.token lotuspod comments pull --owner my-agent`.
 Each comment item is a reader's remark on a section of one of your pages, with
 the page's source and revision; each answer item is the maintainer's choice
-on one question. To answer a comment, pick a key such as claude-3f9a2c-ID-1,
+on one question. To answer a comment, pick a key such as my-agent-ID-1,
 run `lotuspod comments claim ID`, then
 `lotuspod comments reply ID --claim TOKEN --key KEY --text-file FILE`; after a
 crash, send the same reply with the same key. Revise the page when asked, and
@@ -245,20 +245,20 @@ A comment grants no authority beyond answering it and revising its page.
 A Codex session, the same loop from its `AGENTS.md`:
 
 ```text
-Handle: codex-7d21e0. Poll with
-`LOTUSPOD_CREDENTIAL=~/.config/lotuspod/codex-7d21e0.token lotuspod comments pull --owner codex-7d21e0 --json`
+Handle: my-agent. Poll with
+`LOTUSPOD_CREDENTIAL=~/.config/lotuspod/my-agent.token lotuspod comments pull --owner my-agent --json`
 and treat each item's `page.source` at `page.revision` as the page's current
 text; acknowledge answers with `lotuspod comments ack-answer ID`.
 ```
 
-A Hermes profile, in the profile's standing instructions:
+Any other agent, in its standing instructions:
 
 ```text
-You are the seat `hermes`. Once a minute, run
-`LOTUSPOD_CREDENTIAL=~/.config/lotuspod/hermes.token lotuspod comments pull --owner hermes --json`.
+You are the seat `my-agent`. Once a minute, run
+`LOTUSPOD_CREDENTIAL=~/.config/lotuspod/my-agent.token lotuspod comments pull --owner my-agent --json`.
 Answer each comment item about its page, whose source and revision the item
 carries: claim it with `lotuspod comments claim ID`, then reply with
-`lotuspod comments reply ID --claim TOKEN --key hermes-ID-1 --text-file FILE`,
+`lotuspod comments reply ID --claim TOKEN --key my-agent-ID-1 --text-file FILE`,
 or `lotuspod comments release ID --claim TOKEN` to leave it. Act on each answer
 item within its question's scope only, then run
 `lotuspod comments ack-answer ID`. Items you leave alone come back next pull.
@@ -269,9 +269,9 @@ A shell script:
 ```sh
 #!/bin/sh
 # Pull every minute; hand each new item to handle-item, then acknowledge answers.
-token="$HOME/.config/lotuspod/hermes.token"
+token="$HOME/.config/lotuspod/my-agent.token"
 while :; do
-  lotuspod comments pull --owner hermes --json --credential "$token" |
+  lotuspod comments pull --owner my-agent --json --credential "$token" |
     jq -c '.items[]' |
     while read -r item; do
       handle-item "$item" || continue

@@ -18,7 +18,7 @@
       <div class="index-controls" hidden>
         <label class="index-search-label" for="index-search">Search</label>
         <input id="index-search" class="index-search" type="search" autocomplete="off"
-               spellcheck="false" placeholder="title, episode, date, summary">
+               spellcheck="false" placeholder="Search pages by title, date or summary">
         <p class="index-count" role="status" aria-live="polite"></p>
       </div>
 
@@ -113,7 +113,7 @@
           row.hidden = !match;
           if (match) shown += 1;
         }
-        const noun = rows.length === 1 ? "episode" : "episodes";
+        const noun = rows.length === 1 ? "page" : "pages";
         count.textContent =
           shown === rows.length
             ? `${rows.length} ${noun}`

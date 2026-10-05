@@ -338,7 +338,7 @@ class ResponderWitness(Site):
             done = git(self.tmp, *argv)
             self.assertEqual(done.returncode, 0, done.stderr)
         for key, value in (("user.name", "Witness"),
-                           ("user.email", "witness@lotuspod.invalid"),
+                           ("user.email", "witness@example.com"),
                            ("commit.gpgsign", "false")):
             git(self.out, "config", key, value)
         self.prompts = self.tmp / "prompts.jsonl"

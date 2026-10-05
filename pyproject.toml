@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "lotuspod"
 version = "0.1.0"
-description = "Lotuspod - podcast artifact scaffold with a shared lotus theme."
+description = "Lotuspod: publish pages people comment on, with decision forms and agents that answer."
 readme = "README.md"
 requires-python = ">=3.9"
 license = { text = "MIT" }

@@ -881,9 +881,20 @@ class ReadmeTests(unittest.TestCase):
         start = readme.index("## Agents: the pull loop\n")
         end = readme.index("\n## ", start + 1)
         section = readme[start:end]
-        for needle in ("lotuspod comments pull --owner", "comments ack-answer",
-                       "comments show", "Claude Code", "Codex", "Hermes", "#!/bin/sh"):
+        for needle in ("lotuspod comments pull --owner my-agent", "comments ack-answer",
+                       "comments show", "Claude Code", "Codex", "#!/bin/sh"):
             self.assertIn(needle, section)
+        self.assertNotIn("Hermes", section)
+        # Each example agent's own block pulls and reads as my-agent.
+        for intro in ("A Claude Code session, told in its prompt",
+                      "A Codex session, the same loop"):
+            with self.subTest(example=intro):
+                at = section.index(intro)
+                opening = section.index("```", at)
+                block = section[opening:section.index("```", opening + 3)]
+                self.assertIn("--owner my-agent", block)
+                self.assertIn("~/.config/lotuspod/my-agent.token", block)
+                self.assertNotRegex(block, r"claude-[0-9a-f]{6}|codex-[0-9a-f]{6}")
 
 
 if __name__ == "__main__":

@@ -650,8 +650,9 @@ class IndexTableTests(TempDirTestCase):
         make_mixed_fixture(self.out_dir)
         index_html = self.build_index()
         self.assertIn(
-            '<th scope="col" data-sort-type="number">Episode</th>', index_html
+            '<th scope="col" data-sort-type="number">Page</th>', index_html
         )
+        self.assertNotIn(">Episode<", index_html)
         for label in ("Title", "Date", "Summary"):
             with self.subTest(label=label):
                 self.assertIn(f'<th scope="col">{label}</th>', index_html)
@@ -669,7 +670,9 @@ class IndexTableTests(TempDirTestCase):
         self.assertIn("&lt;b&gt;bold&lt;/b&gt;", index_html)
 
     def test_search_filter_ships_hidden_for_the_script_to_reveal(self):
-        make_mixed_fixture(self.out_dir)
+        for name in ("pond", "garden"):
+            rc, _, err = self.render(name)
+            self.assertEqual(rc, 0, err)
         index_html = self.build_index()
         self.assertIn('<div class="index-controls" hidden>', index_html)
         self.assertIn('class="index-search" type="search"', index_html)
@@ -677,6 +680,16 @@ class IndexTableTests(TempDirTestCase):
         self.assertIn('id="index-search"', index_html)
         self.assertIn('<p class="index-count"', index_html)
         self.assertIn('class="index-empty index-no-match" hidden', index_html)
+        # The search and the row count name pages, not episodes.
+        self.assertIn('placeholder="Search pages by title, date or summary"', index_html)
+        self.assertNotIn("episodes", index_html.lower())
+        script = index_html[index_html.index("<script>"): index_html.index("</script>")]
+        noun = re.search(r'const noun = rows\.length === 1 \? "(\w+)" : "(\w+)";', script)
+        self.assertIsNotNone(noun)
+        self.assertIn("`${rows.length} ${noun}`", script)
+        body = index_html[index_html.index("<tbody>"): index_html.index("</tbody>")]
+        rows = body.count("<tr>")
+        self.assertEqual(f"{rows} {noun.group(1 if rows == 1 else 2)}", "2 pages")
 
     def test_script_wires_sorting_and_filtering(self):
         make_mixed_fixture(self.out_dir)

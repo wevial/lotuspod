@@ -75,7 +75,7 @@ class PublishTestCase(unittest.TestCase):
         git(self.tmp, "init", "-q", "--bare", "-b", "main", str(self.bare))
         git(self.tmp, "clone", "-q", str(self.bare), str(self.out_dir))
         git(self.out_dir, "config", "user.name", "Lotuspod Test")
-        git(self.out_dir, "config", "user.email", "test@lotuspod.invalid")
+        git(self.out_dir, "config", "user.email", "test@example.com")
         git(self.out_dir, "config", "commit.gpgsign", "false")
 
     def source(self, name: str, text: str) -> Path:

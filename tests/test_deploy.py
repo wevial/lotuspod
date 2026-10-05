@@ -69,7 +69,7 @@ class Deploy(unittest.TestCase):
 
     def identify(self, repo: Path) -> None:
         git(repo, "config", "user.name", "Test")
-        git(repo, "config", "user.email", "test@example.invalid")
+        git(repo, "config", "user.email", "test@example.com")
 
     def head(self) -> str:
         return git(self.site, "rev-parse", "HEAD")

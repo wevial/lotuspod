@@ -62,7 +62,7 @@ class Backups(unittest.TestCase):
                      ("clone", "-q", str(self.bare), str(self.out))):
             done = git(self.tmp, *argv)
             self.assertEqual(done.returncode, 0, done.stderr)
-        for key, value in (("user.name", "Test"), ("user.email", "test@lotuspod.invalid"),
+        for key, value in (("user.name", "Test"), ("user.email", "test@example.com"),
                            ("commit.gpgsign", "false")):
             git(self.out, "config", key, value)
         (self.out / "page.html").write_text("<p>a page</p>\n", encoding="utf-8")

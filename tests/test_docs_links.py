@@ -3,8 +3,9 @@
 The README keeps what Lotuspod is, the layout and a quick start, and links
 five docs pages, each written for one kind of reader. This file witnesses the
 split: the README's size and links, every relative link and anchor between
-the pages, every code block of the README before the split kept exactly once,
-and one "Decisions for the maintainer" heading.
+the pages, every code block of the README before the split kept exactly once
+(as it was, or with the placeholders the public repository uses), and one
+"Decisions for the maintainer" heading.
 
 Run from the repo root:
 
@@ -25,6 +26,16 @@ DOCS_PAGES = ("docs/publishing.md", "docs/comments.md", "docs/agents.md",
 PAGES = ("README.md", *DOCS_PAGES)
 # main before the README was split: its code blocks must all still be there.
 BASE_COMMIT = "0f76e37"
+# What those blocks named before the repository went public, and the
+# placeholder each now names instead, applied in order. The hostname is
+# matched by where it stands, so the live one is named nowhere at HEAD.
+PUBLIC_PLACEHOLDERS = (
+    (r"(route dns lotuspod )\S+", r"\1lotuspod.example.com"),
+    (r"/home/\w+/", "/home/<user>/"),
+    (r"--owner hermes --json   #", "--owner my-agent --json #"),
+    (r"lotuspod credential list          #", "lotuspod credential list            #"),
+    (r"hermes|claude-3f9a2c|codex-7d21e0", "my-agent"),
+)
 
 FENCE = re.compile(r"^(\s*)(`{3,}|~{3,})")
 HEADING = re.compile(r"^(#{1,6})\s+(.*?)\s*#*\s*$")
@@ -142,8 +153,13 @@ class ContentTests(unittest.TestCase):
         self.assertEqual(len(blocks), 37)
         texts = [read(page) for page in PAGES]
         for block in blocks:
+            public = block
+            for old, new in PUBLIC_PLACEHOLDERS:
+                public = re.sub(old, new, public)
+            forms = {block, public}
             with self.subTest(block=block.splitlines()[1] if "\n" in block else block):
-                self.assertEqual(sum(text.count(block) for text in texts), 1)
+                self.assertEqual(
+                    sum(text.count(form) for text in texts for form in forms), 1)
 
     def test_decisions_for_the_maintainer_is_one_heading(self):
         found = [page for page in PAGES for heading in headings(read(page))
