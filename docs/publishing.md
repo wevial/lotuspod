@@ -128,10 +128,18 @@ The converter (`lotuspod.markdown.to_body`) takes a small subset of markdown:
   is reserved before the bytes arrive. One inside a code fence, a paragraph
   line, a list item or a table cell stays text; there are no titles and no
   `srcset`.
+- Links: `[TEXT](TARGET)` becomes a link opening in the same tab when TARGET
+  is an `http://` or `https://` URL, a `#anchor`, or a relative path such as
+  `other.md#part` (one that does not start with `//` and has no `:` before its
+  first `/`, `?` or `#`). Any other target - `javascript:`, `data:`,
+  `mailto:` or any other scheme - stays text, as does a link inside a code
+  span or a fence. `.md` targets are kept as written, not rewritten to page
+  names.
 
-Everything from a `## Concrete commands` heading on is left out of the page,
-which keeps host-only commands off published pages. Links and task lists are
-not converted.
+Images and links are Lotuspod's own, outside the subset its reference
+converter takes. Everything from a `## Concrete commands` heading on is left
+out of the page, which keeps host-only commands off published pages.
+Reference-style links, bare URLs and task lists are not converted.
 
 `render --markdown` draws an image only from a media URL (`/media/NAME`, an
 image `publish` has stored; see [Images](#images)) and refuses any other

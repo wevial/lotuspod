@@ -12,6 +12,11 @@ plus one parity check that it disturbs nothing around it: the images fixture
 matches the reference once each image line in its source is emptied (in its
 blockquote, when it is quoted) and each figure is taken out of the body.
 
+Inline links (`[TEXT](TARGET)`) are Lotuspod's own too, and none of the
+fixtures holds one: they are held by parsed-tree tests, on converted bodies and
+on pages published with the real `lotuspod publish --local`, the repository's
+README and docs among them.
+
 Run from the repo root:
 
     python -m unittest tests.test_markdown -v
@@ -19,6 +24,7 @@ Run from the repo root:
 
 from __future__ import annotations
 
+import html
 import io
 import os
 import re
@@ -35,6 +41,7 @@ from tests.test_manifest_v2 import SRC_DIR, TempDirTestCase, run_cli
 from lotuspod import media
 from lotuspod.markdown import images, to_body, with_sources
 
+ROOT = Path(__file__).resolve().parents[1]
 MARKDOWN_FIXTURES = Path(__file__).parent / "fixtures" / "markdown"
 REFERENCE = MARKDOWN_FIXTURES / "reference_md2body.py"
 FIXTURE_NAMES = ("headings", "lists", "tables", "quotes", "code", "cut")
@@ -98,6 +105,14 @@ def parse(body: str) -> _Node:
     builder.close()
     assert builder.stack == [builder.root], "unclosed elements"
     return builder.root
+
+
+def text_outside_code(node: _Node) -> str:
+    """node's text, leaving out what is inside code and pre elements."""
+    return "".join(
+        c if isinstance(c, str) else "" if c.tag in ("code", "pre") else text_outside_code(c)
+        for c in node.children
+    )
 
 
 def media_url(digit: str, extension: str) -> str:
@@ -321,6 +336,139 @@ class ParsedBodyTests(unittest.TestCase):
         self.assertEqual(mermaid.attrs.get("class"), "mermaid")
         self.assertEqual(mermaid.elements, [])
         self.assertEqual(mermaid.text(), "flowchart LR\n  a --> b")
+
+
+class LinkTests(unittest.TestCase):
+    def body(self, text: str) -> _Node:
+        return parse(to_body(text))
+
+    def assertLink(self, node: _Node, href: str, text: str) -> None:
+        self.assertEqual((node.tag, node.attrs, node.text()), ("a", {"href": href}, text))
+
+    def test_anchor_and_http_targets_are_links_with_the_query_escaped_once(self):
+        source = (
+            "To [the part](#anchor), [the query](https://example.com/a?b=1&c=2) "
+            "and [the site](http://example.com).\n"
+        )
+        body = to_body(source)
+        self.assertIn('href="https://example.com/a?b=1&amp;c=2"', body)
+        (p,) = parse(body).elements
+        anchor, query, site = p.elements
+        self.assertLink(anchor, "#anchor", "the part")
+        self.assertLink(query, "https://example.com/a?b=1&c=2", "the query")
+        self.assertLink(site, "http://example.com", "the site")
+        self.assertEqual(p.text(), "To the part, the query and the site.")
+
+    def test_a_target_with_any_other_scheme_stays_the_escaped_text(self):
+        for target in ("javascript:alert(1)", "JaVaScRiPt:x", "data:text/html,x",
+                       "mailto:a@example.com", "//example.com/x", "vbscript:x"):
+            with self.subTest(target=target):
+                source = f"A <b> & [link]({target}) here."
+                body = to_body(source + "\n")
+                self.assertEqual(body, f"<p>{html.escape(source, quote=False)}</p>\n")
+                (paragraph,) = parse(body).elements
+                self.assertEqual(paragraph.find_all("a"), [])
+                self.assertEqual(paragraph.text(), source)
+
+    def test_links_in_a_code_span_a_fence_an_image_reference_or_after_the_cut_stay_text(self):
+        source = (
+            "A span `[in code](a.md)` here.\n"
+            "\n"
+            "```\n"
+            "[in a fence](a.md)\n"
+            "```\n"
+            "\n"
+            "See ![an inline image](chart.png) inside a paragraph line.\n"
+            "\n"
+            "## Concrete commands\n"
+            "\n"
+            "[after the cut](a.md)\n"
+        )
+        root = self.body(source)
+        self.assertEqual(root.find_all("a"), [])
+        self.assertEqual(root.find_all("img"), [])
+        self.assertEqual([c.text() for c in root.find_all("code")],
+                         ["[in code](a.md)", "[in a fence](a.md)"])
+        paragraphs = [p.text() for p in root.find_all("p")]
+        self.assertIn("See ![an inline image](chart.png) inside a paragraph line.", paragraphs)
+        self.assertNotIn("after the cut", root.text())
+
+    def test_bold_around_a_link_and_inside_one(self):
+        (outer, inner) = self.body("**[bold link](a.md)**\n\n[**bold** text](a.md)\n").elements
+
+        (strong,) = outer.elements
+        self.assertEqual(strong.tag, "strong")
+        (link,) = strong.elements
+        self.assertLink(link, "a.md", "bold link")
+
+        (link,) = inner.elements
+        self.assertLink(link, "a.md", "bold text")
+        self.assertEqual([(e.tag, e.text()) for e in link.elements], [("strong", "bold")])
+
+    def test_link_text_may_hold_a_code_span(self):
+        (p,) = self.body("See [`deploy/README.md`](../deploy/README.md).\n").elements
+        (link,) = p.elements
+        self.assertLink(link, "../deploy/README.md", "deploy/README.md")
+        self.assertEqual([e.tag for e in link.elements], ["code"])
+
+
+class PublishedLinkTests(TempDirTestCase):
+    def publish(self, source: Path) -> str:
+        """The body of the page the real `lotuspod publish --local` makes of
+        source, with no operator config in reach."""
+        out = self.out_dir / "site"
+        proc = subprocess.run(
+            [sys.executable, "-m", "lotuspod", "publish", str(source), "--local",
+             "--out-dir", str(out), "--date", "2026-01-02"],
+            capture_output=True, text=True, timeout=60, cwd=str(self.out_dir),
+            env=dict(os.environ, PYTHONPATH=str(SRC_DIR),
+                     LOTUSPOD_CONFIG=str(self.out_dir / "missing.ini"),
+                     XDG_CONFIG_HOME=str(self.out_dir), HOME=str(self.out_dir)),
+        )
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        name = source.name.split(".")[0]
+        page = (out / f"{name}.html").read_text(encoding="utf-8")
+        found = re.search(r'<section class="artifact-body">(.*?)</section>', page, re.DOTALL)
+        return found.group(1)
+
+    def test_a_relative_link_in_a_paragraph_a_list_item_a_table_cell_and_a_blockquote(self):
+        md = self.out_dir / "page.md"
+        md.write_text(
+            "# Links\n"
+            "\n"
+            "In a [paragraph](other.md#part).\n"
+            "\n"
+            "- In a [list item](other.md#part)\n"
+            "\n"
+            "| Where | Link |\n"
+            "|-------|------|\n"
+            "| cell | [table cell](other.md#part) |\n"
+            "\n"
+            "> In a [blockquote](other.md#part).\n",
+            encoding="utf-8",
+        )
+        root = parse(self.publish(md))
+        links = root.find_all("a")
+        self.assertEqual([(a.attrs, a.text()) for a in links], [
+            ({"href": "other.md#part"}, text)
+            for text in ("paragraph", "list item", "table cell", "blockquote")
+        ])
+        self.assertEqual(root.find_all("p")[0].elements, [links[0]])
+        self.assertEqual(root.find_all("li")[0].elements, [links[1]])
+        self.assertEqual(root.find_all("td")[1].elements, [links[2]])
+        self.assertEqual(root.find_all("blockquote")[0].find_all("a"), [links[3]])
+        self.assertNotIn("](", root.text())
+
+    def test_the_readme_and_docs_leave_no_link_syntax_outside_code(self):
+        sources = [ROOT / "README.md", *sorted((ROOT / "docs").glob("*.md"))]
+        names = {path.name for path in sources}
+        self.assertLessEqual({"README.md", "agents.md", "comments.md", "development.md",
+                              "operating.md", "publishing.md"}, names)
+        for source in sources:
+            with self.subTest(source=source.name):
+                root = parse(self.publish(source))
+                self.assertTrue(root.find_all("a"))
+                self.assertNotIn("](", text_outside_code(root))
 
 
 class RenderMarkdownTests(TempDirTestCase):
