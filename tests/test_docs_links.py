@@ -4,8 +4,10 @@ The README keeps what Lotuspod is, the layout and a quick start, and links
 five docs pages, each written for one kind of reader. This file witnesses the
 split: the README's size and links, every relative link and anchor between
 the pages, every code block of the README before the split kept exactly once
-(as it was, or with the placeholders the public repository uses), and one
-"Decisions for the maintainer" heading.
+(as it was, or with the placeholders the public repository uses), one
+"Decisions for the maintainer" heading, and the README's pictures: three
+PNG screenshots and one GIF under docs/images/, each with alt text, each a
+real image of its kind and small enough to load.
 
 Run from the repo root:
 
@@ -42,6 +44,10 @@ FENCE = re.compile(r"^(\s*)(`{3,}|~{3,})")
 HEADING = re.compile(r"^(#{1,6})\s+(.*?)\s*#*\s*$")
 LINK = re.compile(r"\[(?:[^\[\]]|\[[^\]]*\])*\]\(([^()\s]+)\)")
 CODE_SPAN = re.compile(r"(`+)(.+?)\1", re.S)
+IMAGE = re.compile(r"!\[([^\]]*)\]\(([^()\s]+)\)")
+PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
+PNG_LIMIT = 400 * 1024
+GIF_LIMIT = 3 * 1024 * 1024
 
 
 def read(name: str) -> str:
@@ -101,6 +107,37 @@ def links(text: str) -> list[str]:
     return LINK.findall(CODE_SPAN.sub("", "\n".join(prose)))
 
 
+def images(text: str) -> list[tuple[str, str]]:
+    """Each image's alt text and path, outside code."""
+    prose, _ = split_fences(text)
+    return IMAGE.findall(CODE_SPAN.sub("", "\n".join(prose)))
+
+
+def skip_sub_blocks(data: bytes, at: int) -> int:
+    """Where the GIF data sub-blocks starting at at end, past their terminator."""
+    while data[at]:
+        at += data[at] + 1
+    return at + 1
+
+
+def gif_frames(data: bytes) -> int:
+    """How many image descriptors the GIF holds, walking its blocks."""
+    flags = data[10]
+    at = 13 + (3 << ((flags & 7) + 1) if flags & 0x80 else 0)
+    frames = 0
+    while data[at] != 0x3B:
+        if data[at] == 0x21:
+            at = skip_sub_blocks(data, at + 2)
+        elif data[at] == 0x2C:
+            frames += 1
+            local = data[at + 9]
+            at += 10 + (3 << ((local & 7) + 1) if local & 0x80 else 0)
+            at = skip_sub_blocks(data, at + 1)
+        else:
+            raise ValueError(f"no GIF block at byte {at}")
+    return frames
+
+
 class ReadmeTests(unittest.TestCase):
     def test_the_readme_is_short(self):
         self.assertLessEqual(len(read("README.md").splitlines()), 200)
@@ -113,6 +150,38 @@ class ReadmeTests(unittest.TestCase):
         for page in DOCS_PAGES:
             with self.subTest(page=page):
                 self.assertIn(page, targets)
+
+
+class ReadmeImageTests(unittest.TestCase):
+    def test_the_readme_shows_three_pngs_and_one_gif_from_docs_images(self):
+        found = images(read("README.md"))
+        kinds = sorted(Path(path).suffix for _, path in found)
+        self.assertEqual(kinds, [".gif", ".png", ".png", ".png"])
+        for alt, path in found:
+            with self.subTest(image=path):
+                self.assertTrue(path.startswith("docs/images/"), path)
+                self.assertTrue((REPO_ROOT / path).is_file(), f"{path}: no such file")
+                self.assertTrue(alt.strip(), f"{path} has no alt text")
+
+    def test_each_readme_image_is_its_kind_and_small(self):
+        for _, path in images(read("README.md")):
+            data = (REPO_ROOT / path).read_bytes()
+            with self.subTest(image=path):
+                if path.endswith(".png"):
+                    self.assertTrue(data.startswith(PNG_SIGNATURE))
+                    self.assertLessEqual(len(data), PNG_LIMIT)
+                else:
+                    self.assertTrue(data.startswith(b"GIF89a"))
+                    self.assertGreater(gif_frames(data), 1)
+                    self.assertLessEqual(len(data), GIF_LIMIT)
+
+    def test_gif_frames_are_counted_by_their_descriptors(self):
+        screen = b"GIF89a" + b"\x01\x00\x01\x00" + b"\x80\x00\x00" + b"\x00" * 6
+        control = b"\x21\xf9\x04\x00\x0a\x00\x00\x00"
+        # A descriptor whose image data holds the descriptor's own byte, 0x2C.
+        frame = b"\x2c" + b"\x00" * 4 + b"\x01\x00\x01\x00\x00" + b"\x02\x02\x2c\x2c\x00"
+        self.assertEqual(gif_frames(screen + control + frame + b"\x3b"), 1)
+        self.assertEqual(gif_frames(screen + (control + frame) * 3 + b"\x3b"), 3)
 
 
 class LinkTests(unittest.TestCase):
