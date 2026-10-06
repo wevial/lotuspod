@@ -40,6 +40,7 @@ SRC_DIR = Path(__file__).resolve().parents[1] / "src"
 sys.path.insert(0, str(SRC_DIR))
 
 from lotuspod import cli  # noqa: E402
+from tests import history  # noqa: E402
 
 
 MANIFEST_KEYS = {"file", "title", "episode", "date", "summary", "visible"}
@@ -330,14 +331,9 @@ class ArtifactTopbarTests(TempDirTestCase):
         previous = self.out_dir / "previous-theme"
         previous.mkdir()
         for filename in ("lotuspod.css", "tokens.json"):
-            proc = subprocess.run(
-                ["git", "show", f"d0b2598:src/lotuspod/_theme/{filename}"],
-                cwd=repo, capture_output=True, text=True, encoding="utf-8",
-            )
-            if proc.returncode != 0:
-                self.skipTest(f"previous theme unavailable: {proc.stderr.strip()}")
-            (previous / filename).write_text(proc.stdout, encoding="utf-8")
-        # d0b2598 predates the favicon (KO-244) and the page script; the copy
+            text = history.show("afec6b8", f"src/lotuspod/_theme/{filename}", repo=repo)
+            (previous / filename).write_text(text, encoding="utf-8")
+        # afec6b8 predates the favicon (KO-244) and the page script; the copy
         # step needs them present.
         for filename in ("favicon.svg", cli.PAGE_SCRIPT):
             (previous / filename).write_bytes(cli.theme_file_bytes(filename))
@@ -740,7 +736,7 @@ class IndexTableWidthTests(unittest.TestCase):
     """
 
     BLOCK = re.compile(r"^\.index-table \{.*?^\}\n", re.MULTILINE | re.DOTALL)
-    KO_233_COMMIT = "3adc05d"
+    KO_233_COMMIT = "175406f"
 
     def theme_css(self) -> str:
         return served_css()
@@ -760,14 +756,10 @@ class IndexTableWidthTests(unittest.TestCase):
     def test_the_block_has_not_drifted_since_ko_233(self):
         """Later theme work (KO-234's rail) leaves the listing rule alone."""
         repo = Path(__file__).resolve().parent.parent
-        proc = subprocess.run(
-            ["git", "show", f"{self.KO_233_COMMIT}:src/lotuspod/_theme/lotuspod.css"],
-            cwd=repo, capture_output=True, text=True, encoding="utf-8",
-        )
-        if proc.returncode != 0:
-            self.skipTest(f"previous stylesheet unavailable: {proc.stderr.strip()}")
+        previous = history.show(self.KO_233_COMMIT, "src/lotuspod/_theme/lotuspod.css",
+                                repo=repo)
         self.assertEqual(
-            self.index_table_block(proc.stdout),
+            self.index_table_block(previous),
             self.index_table_block(self.theme_css()),
         )
 
@@ -1467,7 +1459,7 @@ class ReportVariantRailTests(unittest.TestCase):
 class OutlineSideRenderTests(TempDirTestCase):
     """Moving the rail is CSS alone: the page markup is untouched."""
 
-    PREVIOUS_COMMIT = "06b7dc1"
+    PREVIOUS_COMMIT = "175406f"
     BODY = "<h2>Alpha</h2><p>a</p><h2>Beta</h2><p>b</p><h2>Gamma</h2><p>c</p>"
 
     def rendered(self) -> str:
@@ -1480,15 +1472,10 @@ class OutlineSideRenderTests(TempDirTestCase):
         previous = self.out_dir / "previous-theme"
         previous.mkdir()
         for filename in ("lotuspod.css", "tokens.json"):
-            proc = subprocess.run(
-                ["git", "show",
-                 f"{self.PREVIOUS_COMMIT}:src/lotuspod/_theme/{filename}"],
-                cwd=repo, capture_output=True, text=True, encoding="utf-8",
-            )
-            if proc.returncode != 0:
-                self.skipTest(f"previous theme unavailable: {proc.stderr.strip()}")
-            (previous / filename).write_text(proc.stdout, encoding="utf-8")
-        # d0b2598 predates the favicon (KO-244) and the page script; the copy
+            text = history.show(self.PREVIOUS_COMMIT, f"src/lotuspod/_theme/{filename}",
+                                repo=repo)
+            (previous / filename).write_text(text, encoding="utf-8")
+        # 175406f predates the favicon (KO-244) and the page script; the copy
         # step needs them present.
         for filename in ("favicon.svg", cli.PAGE_SCRIPT):
             (previous / filename).write_bytes(cli.theme_file_bytes(filename))

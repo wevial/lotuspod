@@ -15,9 +15,10 @@ Run from the repo root:
 from __future__ import annotations
 
 import re
-import subprocess
 import unittest
 from pathlib import Path
+
+from tests import history
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -25,7 +26,7 @@ DOCS_PAGES = ("docs/publishing.md", "docs/comments.md", "docs/agents.md",
               "docs/operating.md", "docs/development.md")
 PAGES = ("README.md", *DOCS_PAGES)
 # main before the README was split: its code blocks must all still be there.
-BASE_COMMIT = "0f76e37"
+BASE_COMMIT = "ec57885"
 # What those blocks named before the repository went public, and the
 # placeholder each now names instead, applied in order. The hostname is
 # matched by where it stands, so the live one is named nowhere at HEAD.
@@ -140,13 +141,7 @@ class LinkTests(unittest.TestCase):
 
 class ContentTests(unittest.TestCase):
     def base_readme(self) -> str:
-        proc = subprocess.run(
-            ["git", "show", f"{BASE_COMMIT}:README.md"],
-            cwd=REPO_ROOT, capture_output=True, text=True, encoding="utf-8",
-        )
-        if proc.returncode != 0:
-            self.skipTest(f"README at {BASE_COMMIT} unavailable: {proc.stderr.strip()}")
-        return proc.stdout
+        return history.show(BASE_COMMIT, "README.md", repo=REPO_ROOT)
 
     def test_every_code_block_of_the_old_readme_is_kept_exactly_once(self):
         _, blocks = split_fences(self.base_readme())
