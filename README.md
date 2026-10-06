@@ -11,6 +11,23 @@ the thread, and revise the page when asked.
 The site runs on one writer host, behind Cloudflare Access, and is reached
 through a Cloudflare Tunnel or over a tailnet.
 
+## See it
+
+A reader comments on a section of a plan page, the thread waits for the
+page's agent, `hermes`, and its reply appears; then the reader answers the
+page's decisions and comments on a passage:
+
+![A reader comments on the Rollout section of a sample plan page; the comments panel shows the thread checking for a reply from hermes, then hermes writing, then hermes's reply; the reader then answers both decisions and comments on a highlighted passage](docs/images/loop.gif)
+
+![The comments panel open beside a sample plan page at 1280 pixels wide: the reader's comment on the Rollout section and the agent hermes's reply below it](docs/images/thread.png)
+
+![The decisions table of a sample plan page with both questions answered and saved, one with a note, each naming the reader who answered](docs/images/decisions.png)
+
+![A passage of a sample plan page highlighted with its number 1, and its thread open in the comments panel waiting for a reply from hermes](docs/images/passage.png)
+
+The pictures come from a sample page served on loopback by the test fixture;
+[Development](docs/development.md#captures) makes them again.
+
 ## Layout
 
 ```

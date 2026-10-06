@@ -46,7 +46,32 @@ CAPTURE_OUT="$(mktemp -d)" python -m tests.capture_site \
   --config e2e/playwright.config.ts e2e/smoke/CAPTURE-0.capture.ts
 ```
 
-The smoke spec in `e2e/smoke/` captures the index and the article page. A
+The smoke spec in `e2e/smoke/CAPTURE-0.capture.ts` captures the index and
+the article page. `e2e/smoke/readme.capture.ts` makes the README's pictures:
+it publishes the sample plan page `tests/fixtures/readme/plan.md` as
+`hermes`, and at 1280 by 800 pixels comments on a section, which `hermes`
+answers through real `lotuspod comments` commands, answers the page's two
+decisions and comments on a passage. It writes `thread.png`, `decisions.png`
+and `passage.png`, and records the three as `loop.webm`. This makes them
+again in `docs/images/` (`TMPDIR=/tmp` keeps the fixture's socket path short
+enough on macOS):
+
+```sh
+CAPTURE_OUT=docs/images TMPDIR=/tmp python -m tests.capture_site \
+  npm --prefix e2e exec --no -- playwright test \
+  --config e2e/playwright.config.ts e2e/smoke/readme.capture.ts
+```
+
+and `ffmpeg` (a capture-time tool, not a dependency) turns the recording into
+the README's GIF, at 10 frames a second and 960 pixels wide, its palette made
+from the recording; frames that barely differ are made exact copies, which a
+GIF stores almost for free:
+
+```sh
+ffmpeg -loglevel error -y -i docs/images/loop.webm -vf "fps=10,mpdecimate=hi=64*64:lo=64*32:frac=0.5,fps=10,scale=960:-1:flags=lanczos,split[a][b];[a]palettegen=max_colors=128:stats_mode=diff[p];[b][p]paletteuse=dither=none:diff_mode=rectangle" docs/images/loop.gif && rm docs/images/loop.webm
+```
+
+A
 ticket's own spec goes in `e2e/capture`, which stays out of git; it has to
 live under `e2e/` for its `@playwright/test` import to resolve.
 
