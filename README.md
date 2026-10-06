@@ -83,6 +83,8 @@ page itself is served as usual.
   `main`, and backups.
 - [Development](docs/development.md): for people changing Lotuspod. The
   tests and the captures.
+- [Architecture](docs/architecture.md): for reviewers and new contributors.
+  One diagram of how the parts fit together.
 
 ## How it was built
 

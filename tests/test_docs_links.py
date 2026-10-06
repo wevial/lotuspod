@@ -1,8 +1,9 @@
 """Test suite for the README as a short front door to the docs pages.
 
 The README keeps what Lotuspod is, the layout and a quick start, and links
-five docs pages, each written for one kind of reader. This file witnesses the
-split: the README's size and links, every relative link and anchor between
+six docs pages, five each written for one kind of reader and one showing how
+the parts fit together. This file witnesses the split: the README's size and
+links, every relative link and anchor between
 the pages and SECURITY.md, every code block of the README before the split kept exactly once
 (as it was, or with the placeholders the public repository uses), one
 "Decisions for the maintainer" heading, and the README's pictures: three
@@ -10,7 +11,8 @@ PNG screenshots and one GIF under docs/images/, each with alt text, each a
 real image of its kind and small enough to load. It also witnesses what the
 README tells a first-time visitor: how Lotuspod was built, that it is a
 personal project with issues off, and a Security section whose cited
-tests.test_access ids each load.
+tests.test_access ids each load. The architecture page holds one Mermaid
+diagram, whose nodes name the closed list of parts it shows.
 
 Run from the repo root:
 
@@ -28,7 +30,7 @@ from tests import history
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 DOCS_PAGES = ("docs/publishing.md", "docs/comments.md", "docs/agents.md",
-              "docs/operating.md", "docs/development.md")
+              "docs/operating.md", "docs/development.md", "docs/architecture.md")
 PAGES = ("README.md", *DOCS_PAGES, "SECURITY.md")
 # main before the README was split: its code blocks must all still be there.
 BASE_COMMIT = "ec57885"
@@ -53,6 +55,12 @@ PNG_LIMIT = 400 * 1024
 GIF_LIMIT = 3 * 1024 * 1024
 HOLOPHYTE = "https://github.com/wevial/holophyte"
 MERGED_PRS = "https://github.com/wevial/lotuspod/pulls?q=is%3Apr+is%3Amerged"
+# The parts the architecture diagram's node labels must each name.
+ARCHITECTURE_NODES = ("lotuspod serve", "Agent socket", "SQLite", "Cloudflare Access",
+                      "Cloudflare Tunnel", "the default responder", "lotuspod publish")
+NODE_LABEL = re.compile(r"\b\w+\[([^\]]*)\]")
+# Mermaid statements that would style the diagram or make it clickable.
+STYLING = re.compile(r"^\s*(click|style|classDef|class|linkStyle)\b", re.M)
 ACCESS_TEST_ID = re.compile(r"`(tests\.test_access\.\w+\.\w+)`")
 # The Access tests the Security section must cite at least.
 PINNING_TESTS = (
@@ -244,6 +252,30 @@ class ReadmeImageTests(unittest.TestCase):
         frame = b"\x2c" + b"\x00" * 4 + b"\x01\x00\x01\x00\x00" + b"\x02\x02\x2c\x2c\x00"
         self.assertEqual(gif_frames(screen + control + frame + b"\x3b"), 1)
         self.assertEqual(gif_frames(screen + (control + frame) * 3 + b"\x3b"), 3)
+
+
+class ArchitectureDiagramTests(unittest.TestCase):
+    def diagrams(self) -> list[str]:
+        _, blocks = split_fences(read("docs/architecture.md"))
+        return [block for block in blocks
+                if FENCE.sub("", block.split("\n")[0]).strip() == "mermaid"]
+
+    def test_the_page_holds_one_mermaid_block(self):
+        self.assertEqual(len(self.diagrams()), 1)
+
+    def test_the_node_labels_name_each_part(self):
+        labels = NODE_LABEL.findall(self.diagrams()[0])
+        for part in ARCHITECTURE_NODES:
+            with self.subTest(part=part):
+                self.assertTrue(any(part in label for label in labels), labels)
+
+    def test_the_diagram_has_no_click_handlers_or_styling(self):
+        self.assertEqual(STYLING.findall(self.diagrams()[0]), [])
+
+    def test_node_labels_need_no_escaping(self):
+        for label in NODE_LABEL.findall(self.diagrams()[0]):
+            with self.subTest(label=label):
+                self.assertNotRegex(label, r"[()\"'`]")
 
 
 class LinkTests(unittest.TestCase):
