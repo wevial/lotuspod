@@ -1,0 +1,56 @@
+/* The demo banner, at the top of every page of the demo site.
+
+   The build links this file from each page's head as lotuspod-demo.css; the
+   package never ships or serves it. It reads the theme's custom properties
+   from lotuspod.css, which each page links first. */
+
+.demo-banner {
+  align-items: baseline;
+  background: var(--color-deep-night);
+  border-bottom: 1px solid var(--hairline-strong);
+  box-sizing: border-box;
+  color: var(--color-pale-lavender);
+  display: flex;
+  flex-wrap: wrap;
+  font-family: var(--font-body);
+  font-size: 0.875rem;
+  gap: 0.4rem 1rem;
+  line-height: 1.5;
+  padding: 0.6rem 1.5rem;
+}
+
+/* An artifact page's topbar is fixed to the top edge: sit just below it. */
+body:has(.artifact-topbar) > .demo-banner {
+  margin-top: var(--topbar-height);
+}
+
+.demo-banner-text {
+  margin: 0;
+}
+
+.demo-banner-try {
+  color: var(--color-sky);
+}
+
+.demo-banner-commit {
+  color: var(--color-muted-lavender);
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+}
+
+.demo-banner-reset {
+  background: transparent;
+  border: 1px solid var(--hairline-strong);
+  border-radius: 999px;
+  color: var(--color-pale-lavender);
+  cursor: pointer;
+  font: inherit;
+  margin-left: auto;
+  padding: 0.1rem 0.8rem;
+}
+
+.demo-banner-reset:hover,
+.demo-banner-reset:focus-visible {
+  border-color: var(--color-lavender);
+  color: var(--color-white);
+}

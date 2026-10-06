@@ -27,3 +27,6 @@ e2e/test-results/
 
 # the joined stylesheet the capture fixture writes while browser checks run
 src/lotuspod/_theme/lotuspod.css
+
+# the demo site python -m demo.build writes by default
+demo/dist/
