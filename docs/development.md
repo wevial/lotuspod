@@ -71,9 +71,8 @@ GIF stores almost for free:
 ffmpeg -loglevel error -y -i docs/images/loop.webm -vf "fps=10,mpdecimate=hi=64*64:lo=64*32:frac=0.5,fps=10,scale=960:-1:flags=lanczos,split[a][b];[a]palettegen=max_colors=128:stats_mode=diff[p];[b][p]paletteuse=dither=none:diff_mode=rectangle" docs/images/loop.gif && rm docs/images/loop.webm
 ```
 
-A
-ticket's own spec goes in `e2e/capture`, which stays out of git; it has to
-live under `e2e/` for its `@playwright/test` import to resolve.
+A ticket's own spec goes in `e2e/capture`, which stays out of git; it has
+to live under `e2e/` for its `@playwright/test` import to resolve.
 
 Browser checks run the same way, with `e2e/checks.config.ts` and the specs in
 `e2e/checks/` (among them `comments.spec.ts`, which posts and reads back
