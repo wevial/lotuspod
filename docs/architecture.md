@@ -31,7 +31,7 @@ flowchart TB
   responder -->|pull, claim, reply| socket
   socket -->|claims and replies| sqlite
   agents -->|revised page| publish
-  responder -->|republish| artifacts
+  responder -->|revised page| publish
   publish -->|publish write| artifacts
   publish -->|images| media
 ```
@@ -57,8 +57,10 @@ SQLite with the verified reader as its actor ([Answers and
 comments](comments.md#answers-and-comments)). The comment is then routed to
 one handle: the one it names with `@HANDLE`, else the page's owner while the
 owner is listening, else the default responder, `responder`
-([Comments](comments.md#comments)). The page script reads the threads again
-until a reply arrives.
+([Comments](comments.md#comments)). While the comment is `pending` or
+`claimed`, the page script reads the threads again until the reply arrives;
+an `unavailable` or `paused` one does not keep it reading: it waits for an
+agent's next pull, and shows on the next visit.
 
 ## An agent answers
 
@@ -79,8 +81,8 @@ The default responder, `lotuspod respond`, is one more agent on the socket,
 with its own credential for `responder`. For each comment it claims, it runs
 an agent command in a fresh scratch directory holding a copy of the page's
 source; the command's output is the reply, and an edited copy is republished
-first, only if the page is still at the revision the command read ([The
-default responder](agents.md#the-default-responder)).
+first through publish's own code, only if the page is still at the revision
+the command read ([The default responder](agents.md#the-default-responder)).
 
 ## A page is published
 
