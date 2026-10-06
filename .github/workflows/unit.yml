@@ -12,8 +12,27 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+      - name: leak guard
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          PUSH_SHA: ${{ github.sha }}
+          LEAK_PATTERNS: ${{ secrets.LEAK_PATTERNS }}
+        run: |
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            python ci/leak_guard.py "$PR_BASE_SHA" HEAD
+          else
+            base="$PUSH_BEFORE"
+            if [ -z "${base//0/}" ] || ! git cat-file -e "${base}^{commit}" 2>/dev/null; then
+              base="HEAD^"
+            fi
+            python ci/leak_guard.py "$base" "$PUSH_SHA"
+          fi
       - run: pip install -e .
       - run: python -m unittest discover -s tests
