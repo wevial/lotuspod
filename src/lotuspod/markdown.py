@@ -45,11 +45,15 @@ _SEPARATOR_CELL = re.compile(r"-+")
 _IMAGE = re.compile(r"!\[([^\]]*)\]\(([^\s()]+)\)\s*")
 _LINE_END = re.compile(r"(\r\n|\r|\n)")
 # In escaped text, where the only `<` opens or closes a code element: a code
-# element, passed over whole, or a `[TEXT](TARGET)` outside one that is not an
-# image reference (TEXT may hold whole code elements).
+# element or an image reference, each passed over whole, or a
+# `[TEXT](TARGET)` outside both (TEXT may hold whole code elements and image
+# references, and any `[`, but no other `]`).
+_CODE = r"<code>[^<]*</code>"
+_TEXT = rf"(?:{_CODE}|[^\]<])"
+_INLINE_IMAGE = rf"!\[{_TEXT}*\]\([^\s()<]+\)"
 _LINK = re.compile(
-    r"<code>[^<]*</code>"
-    r"|(?<!!)\[((?:<code>[^<]*</code>|[^\[\]<])+)\]\(([^\s()<]+)\)"
+    rf"{_CODE}|{_INLINE_IMAGE}"
+    rf"|(?<!!)\[((?:{_INLINE_IMAGE}|{_TEXT})+?)\]\(([^\s()<]+)\)"
 )
 # A link target drawn as a link: http(s), or a relative path or `#anchor`
 # (no `//` start, no `:` before its first `/`, `?` or `#`).
@@ -119,7 +123,7 @@ def _walk(text: str, figure: Callable[[Image], str]) -> list[str]:
 
 
 def _link(m: re.Match) -> str:
-    if m.group(1) is None:  # a code element, which holds no link
+    if m.group(1) is None:  # a code element or image reference: no link
         return m.group(0)
     target = html.unescape(m.group(2))
     if not _LINK_TARGET.match(target):

@@ -412,6 +412,19 @@ class LinkTests(unittest.TestCase):
         self.assertEqual([e.tag for e in link.elements], ["code"])
 
 
+    def test_link_text_may_hold_an_opening_bracket(self):
+        (p,) = self.body("[Press the [ key](other.md#part) now.\n").elements
+        (link,) = p.elements
+        self.assertLink(link, "other.md#part", "Press the [ key")
+        self.assertEqual(p.text(), "Press the [ key now.")
+
+    def test_an_image_reference_with_a_bracket_in_its_alt_stays_text(self):
+        source = "See ![Press the [ key](chart.png) in prose."
+        body = to_body(source + "\n")
+        self.assertEqual(body, f"<p>{source}</p>\n")
+        (p,) = parse(body).elements
+        self.assertEqual((p.elements, p.text()), ([], source))
+
 class PublishedLinkTests(TempDirTestCase):
     def publish(self, source: Path) -> str:
         """The body of the page the real `lotuspod publish --local` makes of
