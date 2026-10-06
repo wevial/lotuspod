@@ -38,28 +38,19 @@ AUDIENCE = "witness-audience"
 READER = "maintainer@example.com"
 ASSERTION = "Cf-Access-Jwt-Assertion"
 
-# A 2048-bit RSA key made for these tests only. It signs the Access
-# assertions below, and the site is configured to trust its public half.
-N = int(
-    "ae0b28f6dfaf477ace5e4304c113092352c8d5d72ffed0918820b8497c4cb16b"
-    "4a7073047e2ccf4c121fbdaa6b405260322585551c591673e61b7a26f440c09b"
-    "de98beb76cfefa2fccd595be3cfff060966c15dd4fb0173466f39465283bcffe"
-    "0a17586ae966ab29a68764c451c5c4874ef487f5793246b31fca391e8a883bcf"
-    "a0dc731ab6920ad894494f9824266f6b23a589485b5b3db71bd07b5e7fc72be2"
-    "005ba5b89acdf9e469d6c205050ee634196a62017796f5e3e048faa68d738d5f"
-    "dc3e8b02d2877e865eed86578a9adace7f9d35cb441e20d116f0a19b1e24b13d"
-    "51aa2f22e67343eabcb640bbce8cd9f3ce1b1a38f6bd2589aa1dfcd13b2e8237", 16)
-D = int(
-    "a2a1db0d95c7fc4b4d3bd7f44156c05b39a861ea4af7197e646deec6fc57ce12"
-    "2be5181542b22ca330ec68172f5153a880337f7c20993ed9de541eb8f7d4ea26"
-    "bcc28eb4682d7b2bdf845601068f42d77eb851561478bfb63fddacf539bb6a88"
-    "4075c03167188128d26c0245510434b91b9674d57502fdfdb3df0bb0f652874f"
-    "dac0e84e720a4320648a70b941656bbddcb117a81e90520fe586888127ec3894"
-    "19b0e01a2df00213115a0337f9f76bf2e8738b481db8a48c475590ac8b21fbe8"
-    "db3fd2e762fa01e2760415dc0451d05b7aeb4f162311361c4d895dff753575fd"
-    "402f0cf5aea490edf52d588be351ec8df4d1c578a928d6921e3c9350b2a6959", 16)
-E = 65537
-KID = "witness-key"
+# A 2048-bit RSA key made for these tests only (see
+# tests/fixtures/access/README.md). It signs the Access assertions below, and
+# the site is configured to trust its public half.
+WITNESS_KEY = json.loads(
+    (REPO / "tests" / "fixtures" / "access" / "witness-key.json").read_text(encoding="utf-8"))
+
+
+def jwk_int(text: str) -> int:
+    return int.from_bytes(base64.urlsafe_b64decode(text + "=" * (-len(text) % 4)), "big")
+
+
+N, E, D = (jwk_int(WITNESS_KEY[field]) for field in ("n", "e", "d"))
+KID = WITNESS_KEY["kid"]
 DIGEST_INFO = bytes.fromhex("3031300d060960864801650304020105000420")
 
 
