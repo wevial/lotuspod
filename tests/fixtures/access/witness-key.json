@@ -1,0 +1,9 @@
+{
+  "kty": "RSA",
+  "kid": "witness-key",
+  "alg": "RS256",
+  "use": "sig",
+  "n": "rgso9t-vR3rOXkMEwRMJI1LI1dcv_tCRiCC4SXxMsWtKcHMEfizPTBIfvaprQFJgMiWFVRxZFnPmG3om9EDAm96Yvrds_vovzNWVvjz_8GCWbBXdT7AXNGbzlGUoO8_-ChdYaulmqymmh2TEUcXEh070h_V5MkazH8o5HoqIO8-g3HMatpIK2JRJT5gkJm9rI6WJSFtbPbcb0Htef8cr4gBbpbiazfnkadbCBQUO5jQZamIBd5b14-BI-qaNc41f3D6LAtKHfoZe7YZXiprazn-dNctEHiDRFvChmx4ksT1Rqi8i5nND6ry2QLvOjNnzzhsaOPa9JYmqHfzROy6CNw",
+  "e": "AQAB",
+  "d": "CiodsNlcf8S0071_RBVsBbOahh6kr3GX5kbe7G_FfOEivlGBVCsiyjMOxoFy9RU6iAM398IJk-2d5UHrj31OomvMKOtGgteyvfhFYBBo9C1364UVYUeL-2P92s9Tm7aohAdcAxZxiBKNJsAkVRBDS5G5Z01XUC_f2z3wuw9lKHT9rA6E5yCkMgZIpwuUFla73csReoHpBSD-WGiIEn7DiUGbDgGi3wAhMRWgM3-fdr8uhzi0gduKSMR1WQrIsh--jbP9LnYvoB4nYEFdwEUdBbeutPFiMRNhxNiV3_dTV1_UAvDPWupJDt9S1Yi-NR7I300cV4qSjWkh48k1CyppWQ"
+}

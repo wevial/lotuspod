@@ -16,6 +16,48 @@ python -m unittest discover
 The suite always tests this checkout's `src/`, so an ambient `lotuspod`
 install cannot shadow the code under test.
 
+## Leak guard
+
+The repository is public, and so is every pull request as it opens, so the
+required `unit` check scans the lines a change adds before it runs the suite.
+`ci/leak_guard.py` (standard library only) reads
+`git diff --unified=0 BASE HEAD` and checks each added line of each text file;
+binary files are skipped. On a pull request it scans the base commit to
+`HEAD`; on a push to `main`, the commit before the push to the pushed one (or
+`HEAD^` when there is no such commit in the clone).
+
+Each rule has an id:
+
+- `email`: an email address outside `@example.com`, `@example.org` and
+  `@users.noreply.github.com`.
+- `home-macos`: a path under `/Users/` that names a user.
+- `home-linux`: a path under `/home/` that names a user other than the
+  `writer` placeholder. A placeholder that isn't a name, such as `<user>`, or
+  a path from `~/`, passes.
+- `tailnet-ip`: a `100.x.y.z` address other than `100.64.0.0` and
+  `100.64.0.1`.
+- `tailnet-name`: a name ending in `.ts.net`.
+- `private-key`: a PEM private-key header.
+- `private-N`: the Nth private pattern.
+
+The private patterns are literal values that must never be in the repository,
+so they live in the repository secret `LEAK_PATTERNS`, one per line. Lines are
+trimmed and blank lines ignored, and each pattern matches as a case-insensitive
+substring, never a regex. Only the guard step sees the secret. Pull requests
+from forks get no secrets, so only the generic rules run there.
+
+A hit prints `PATH:LINE: RULE`, with the line's number in the new file, and
+nothing from the line or the pattern: the Actions logs are public. The last
+line names the range, the number of private patterns loaded and the number of
+hits, and any hit fails the check.
+
+Run it locally before pushing, with your own patterns file if you keep one:
+
+```sh
+python ci/leak_guard.py "$(git merge-base HEAD main)" HEAD
+LEAK_PATTERNS="$(cat path/to/patterns)" python ci/leak_guard.py "$(git merge-base HEAD main)" HEAD
+```
+
 ## Captures
 
 Screenshots of the rendered pages are taken with Playwright, pinned in
