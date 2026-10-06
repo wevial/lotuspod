@@ -8,7 +8,7 @@ of the reader's routes, publishing through the tunnel, deploying from
 
 ## Serve
 
-Share rendered pages over your tailnet:
+Serve rendered pages from this machine:
 
 ```sh
 lotuspod serve               # serves artifacts/ (or pass --out-dir DIR)
@@ -16,15 +16,19 @@ lotuspod serve --port 8080   # pick a different port (default: 8000)
 lotuspod serve --host 127.0.0.1  # bind address override for tunnel fronting
 ```
 
-The command detects this node's tailnet IPv4 (`tailscale ip -4`) and listens
-only on that address, so your pages are reachable from the other
-devices in your tailnet — and nothing outside it. Open the printed
-`http://100.x.y.z:8000/` URL on any tailnet device; `/` serves
-`artifacts/index.html` (build it first with `lotuspod index`). Requires a
-running `tailscaled`; without a tailnet address it exits with an error.
-Pass `--host` to bind an explicit address instead — e.g. `127.0.0.1` when a
-local Cloudflare Tunnel fronts the server (see Publish below); everything
-else behaves identically.
+The command listens on `127.0.0.1` unless `--host` names another address,
+so by default your pages are reachable from this machine only. Open the
+printed `http://127.0.0.1:8000/` URL; `/` serves `artifacts/index.html`
+(build it first with `lotuspod index`). `--host 127.0.0.1`, the default
+spelled out, stays right when a local Cloudflare Tunnel fronts the server
+(see Publish below). To serve the other devices in your tailnet, and nothing
+outside it, bind this node's tailnet IPv4:
+
+```sh
+lotuspod serve --host "$(tailscale ip -4)"
+```
+
+Everything else behaves identically whatever address serve binds.
 
 Serve v2 enforces an allow-list: the server answers only for `index.html`,
 `lotuspod.css`, `favicon.svg`, the page script `lotuspod-page.js`, and artifact pages whose fail-closed `lotuspod:visible` flag

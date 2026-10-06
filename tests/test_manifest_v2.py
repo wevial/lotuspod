@@ -25,10 +25,12 @@ import io
 import json
 import os
 import re
+import socket
 import subprocess
 import sys
 import tempfile
 import threading
+import time
 import unittest
 import urllib.error
 import urllib.request
@@ -968,28 +970,25 @@ class PublishConfigTests(unittest.TestCase):
 
 
 class ServeHostOverrideTests(TempDirTestCase):
-    """--host lets a local Cloudflare Tunnel front the allow-listed server."""
+    """serve listens on loopback unless --host names another address."""
 
-    def test_parser_defaults_to_tailnet_autodetect(self):
+    def test_parser_defaults_to_loopback_without_a_subprocess(self):
         args = cli.build_parser().parse_args(["serve"])
-        self.assertEqual(args.host, "")
         self.assertEqual(args.port, cli.DEFAULT_SERVE_PORT)
+        with mock.patch.object(
+            subprocess, "run", side_effect=AssertionError("must not run a subprocess")
+        ), mock.patch.object(
+            subprocess, "Popen", side_effect=AssertionError("must not run a subprocess")
+        ):
+            self.assertEqual(cli.resolve_serve_host(args.host), "127.0.0.1")
 
     def test_parser_accepts_host_override(self):
         args = cli.build_parser().parse_args(["serve", "--host", "127.0.0.1"])
         self.assertEqual(args.host, "127.0.0.1")
 
-    def test_explicit_host_wins_without_tailnet_lookup(self):
-        with mock.patch.object(
-            cli, "tailnet_ipv4", side_effect=AssertionError("must not be called")
-        ):
-            self.assertEqual(cli.resolve_serve_host("127.0.0.1"), "127.0.0.1")
-
-    def test_empty_override_falls_back_to_tailnet_detection(self):
-        detector = mock.Mock(return_value="100.64.0.1")
-        with mock.patch.object(cli, "tailnet_ipv4", detector):
-            self.assertEqual(cli.resolve_serve_host(""), "100.64.0.1")
-        detector.assert_called_once_with()
+    def test_explicit_host_is_returned_unchanged(self):
+        args = cli.build_parser().parse_args(["serve", "--host", "192.0.2.10"])
+        self.assertEqual(cli.resolve_serve_host(args.host), "192.0.2.10")
 
     def test_make_server_binds_requested_host(self):
         server = cli._make_server(self.out_dir, "127.0.0.1", 0)
@@ -997,6 +996,61 @@ class ServeHostOverrideTests(TempDirTestCase):
         host, port = server.server_address[:2]
         self.assertEqual(host, "127.0.0.1")
         self.assertGreater(port, 0)
+
+    def serve_env(self) -> dict[str, str]:
+        config = self.out_dir.parent / f"{self.out_dir.name}.ini"
+        config.write_text("", encoding="utf-8")
+        self.addCleanup(config.unlink)
+        return dict(os.environ, PYTHONPATH=str(SRC_DIR), LOTUSPOD_CONFIG=str(config))
+
+    def test_help_names_loopback_as_the_default(self):
+        proc = subprocess.run(
+            [sys.executable, "-m", "lotuspod", "serve", "--help"],
+            env=self.serve_env(), capture_output=True, text=True, encoding="utf-8",
+            timeout=60,
+        )
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        help_text = " ".join(proc.stdout.split())
+        self.assertIn("default: 127.0.0.1", help_text)
+        self.assertNotIn("auto-detected tailnet", help_text)
+
+    def test_serve_without_host_listens_on_loopback_with_no_tailscale(self):
+        make_mixed_fixture(self.out_dir)
+        rc, _, err = run_cli("index", "--out-dir", str(self.out_dir))
+        self.assertEqual(rc, 0, err)
+        with socket.socket() as probe:
+            probe.bind(("127.0.0.1", 0))
+            port = probe.getsockname()[1]
+        empty_path = tempfile.TemporaryDirectory()
+        self.addCleanup(empty_path.cleanup)
+        # A Unix socket path is limited to about 100 bytes on macOS.
+        short = tempfile.TemporaryDirectory(dir="/tmp", prefix="lp")
+        self.addCleanup(short.cleanup)
+        env = dict(self.serve_env(), PATH=empty_path.name)
+        server = subprocess.Popen(
+            [sys.executable, "-m", "lotuspod", "serve", "--out-dir", str(self.out_dir),
+             "--port", str(port), "--socket", str(Path(short.name) / "s.sock")],
+            cwd=str(self.out_dir.parent), env=env, stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE, text=True, encoding="utf-8",
+        )
+        self.addCleanup(lambda: server.poll() is None and server.kill())
+        url = f"http://127.0.0.1:{port}/index.html"
+        status = None
+        deadline = time.monotonic() + 20
+        while status is None and time.monotonic() < deadline and server.poll() is None:
+            try:
+                with urllib.request.urlopen(url, timeout=5) as resp:
+                    status = resp.status
+            except urllib.error.HTTPError as exc:
+                status = exc.code
+            except OSError:
+                time.sleep(0.2)
+        if server.poll() is None:
+            server.terminate()  # SIGTERM
+        out, err = server.communicate(timeout=10)
+        self.assertEqual(status, 200, f"serve exited {server.returncode}: {err}")
+        self.assertIn(f"http://127.0.0.1:{port}/", out)
+        self.assertNotIn("tailscale", err)
 
 
 class PublishHttpRoundTripTests(TempDirTestCase):

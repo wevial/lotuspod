@@ -302,6 +302,11 @@ class Health(unittest.TestCase):
         self.assertRegex(result.stdout, r"(?m)^theme:")
 
 
+# `lotuspod serve` and the options after it, up to the first word that is
+# neither an option nor its value.
+SERVE_COMMAND = re.compile(r"lotuspod serve\b(?!`)((?:\s+-[^\s`]+(?:\s+[^\s`#-][^\s`]*)?)*)")
+
+
 def unit(name: str) -> dict[str, list[str]]:
     keys: dict[str, list[str]] = {}
     for line in (SYSTEMD / name).read_text(encoding="utf-8").splitlines():
@@ -341,6 +346,22 @@ class Units(unittest.TestCase):
         for path in files:
             text = path.read_text(encoding="utf-8")
             self.assertIsNone(re.search(r"/home/|/Users/|/root\b|~|/srv\b", text), path.name)
+
+    def test_every_serve_command_passes_host(self):
+        listed = git(ROOT, "ls-files", "deploy").splitlines()
+        commands: dict[str, list[str]] = {}
+        for name in listed:
+            # Drop comment and blockquote markers so a command wrapped across
+            # lines reads as one; `lotuspod serve` in backticks is prose.
+            lines = (re.sub(r"^\s*[#>]?\s*", "", line)
+                     for line in (ROOT / name).read_text(encoding="utf-8").splitlines())
+            text = " ".join(lines)
+            for found in re.finditer(SERVE_COMMAND, text):
+                commands.setdefault(name, []).append(found.group(1).strip())
+        self.assertIn("deploy/lotuspod.service", commands)
+        for name, options in commands.items():
+            for option in options:
+                self.assertIn("--host", option.split(), f"{name}: lotuspod serve {option}")
 
 
 if __name__ == "__main__":

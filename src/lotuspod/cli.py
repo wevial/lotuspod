@@ -9,7 +9,6 @@ import datetime as _dt
 import fcntl
 import hashlib
 import html
-import ipaddress
 import io
 import json
 import os
@@ -54,7 +53,7 @@ INDEX_FILE = "index.html"
 MANIFEST_FILE = "manifest.json"
 MANIFEST_VERSION = 2
 DEFAULT_SERVE_PORT = 8000
-_TAILNET_V4 = ipaddress.ip_network("100.64.0.0/10")
+DEFAULT_SERVE_HOST = "127.0.0.1"
 
 _PLACEHOLDER = re.compile(r"\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}")
 _SECTION = re.compile(
@@ -1691,49 +1690,6 @@ def cmd_publish(args: argparse.Namespace) -> int:
     return 0
 
 
-def tailnet_ipv4() -> str:
-    """Return this node's tailnet IPv4 (100.64.0.0/10), or raise RuntimeError."""
-    try:
-        proc = subprocess.run(
-            ["tailscale", "ip", "-4"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-            check=False,
-        )
-    except (FileNotFoundError, subprocess.TimeoutExpired, OSError) as exc:
-        raise RuntimeError(f"cannot run 'tailscale' CLI: {exc}") from exc
-    if proc.returncode != 0:
-        raise RuntimeError(
-            f"'tailscale ip -4' failed: {(proc.stderr or '').strip() or 'is tailscaled running?'}"
-        )
-    for line in proc.stdout.splitlines():
-        line = line.strip()
-        try:
-            addr = ipaddress.ip_address(line)
-        except ValueError:
-            continue
-        if addr.version == 4 and addr in _TAILNET_V4:
-            return str(addr)
-    raise RuntimeError("no tailnet IPv4 found; is this node joined to a tailnet?")
-
-
-def _tailnet_dns_name() -> str:
-    """Best-effort MagicDNS name for this node (empty string if unavailable)."""
-    try:
-        proc = subprocess.run(
-            ["tailscale", "status", "--json"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-            check=False,
-        )
-        data = json.loads(proc.stdout)
-        return str(data.get("Self", {}).get("DNSName", "")).rstrip(".")
-    except Exception:
-        return ""
-
-
 _SERVE_CSS_FILE = "lotuspod.css"
 _SERVE_ICON_FILE = "favicon.svg"
 _SERVE_SUPPORT_FILES = (_SERVE_CSS_FILE, _SERVE_ICON_FILE, PAGE_SCRIPT)
@@ -2009,8 +1965,8 @@ class _AllowListHandler(SimpleHTTPRequestHandler):
 
 
 def resolve_serve_host(host_override: str) -> str:
-    """Explicit --host wins; otherwise auto-detect the tailnet IPv4."""
-    return host_override if host_override else tailnet_ipv4()
+    """Explicit --host wins; otherwise loopback, reachable from this machine only."""
+    return host_override if host_override else DEFAULT_SERVE_HOST
 
 
 def serve_db_path(out_dir: Path, db_arg: str) -> Path:
@@ -2121,19 +2077,12 @@ def cmd_serve(args: argparse.Namespace) -> int:
 
     if not (out_dir / INDEX_FILE).exists():
         print(f"note: no {INDEX_FILE} yet; run `lotuspod index` to build one")
-    if args.host:
-        print(f"serving {out_dir} on {args.host} (v2 allow-list):")
-    else:
-        print(f"serving {out_dir} on the tailnet (v2 allow-list):")
+    print(f"serving {out_dir} on {host} (v2 allow-list):")
     print(f"  http://{host}:{args.port}/")
     print(f"answers and comments in {db_path}")
     print(f"agents on {socket_path}")
     if verifier is None:
         print("note: no [access] section in the config; /api answers 503")
-    if not args.host:
-        dns_name = _tailnet_dns_name()
-        if dns_name:
-            print(f"  http://{dns_name}:{args.port}/")
     print("ctrl-c to stop")
     # SIGTERM (systemd's stop) ends serve as ctrl-c does, so the socket is
     # removed either way. Only the main thread may set a handler.
@@ -2432,7 +2381,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     serve = sub.add_parser(
         "serve",
-        help="serve the artifacts directory over the tailnet (v2: allow-list enforced)",
+        help="serve the artifacts directory (v2: allow-list enforced)",
     )
     serve.add_argument("--out-dir", default="", help="artifacts directory (default: artifacts/)")
     serve.add_argument(
@@ -2441,8 +2390,8 @@ def build_parser() -> argparse.ArgumentParser:
     serve.add_argument(
         "--host",
         default="",
-        help="bind address override (default: auto-detected tailnet IPv4); "
-        "use 127.0.0.1 when a local Cloudflare Tunnel fronts the server",
+        help=f"bind address (default: {DEFAULT_SERVE_HOST}); pass a tailnet or LAN "
+        "address to share beyond this machine",
     )
     serve.add_argument(
         "--db",
