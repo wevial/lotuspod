@@ -10,7 +10,7 @@ item), `>` blockquotes converted recursively, pipe tables, code spans,
 title is passed separately, and everything from a `## Concrete commands`
 heading on is left out, which keeps host-only commands off published pages.
 
-One construct is Lotuspod's own and outside the reference's subset: a line
+Two constructs are Lotuspod's own and outside the reference's subset. A line
 that is only `![ALT](SRC)`, at the top level or in a blockquote, is an image
 drawn as a figure (and stops a paragraph). One in a code fence, a list item,
 a table cell or the middle of a paragraph line, or after the cut, stays text.
@@ -19,6 +19,13 @@ that the reference matches a fixture once its image lines are emptied and
 its figures taken out. `images()` names the image lines from the same walk
 `to_body()` draws them in, so publish reads and rewrites exactly the lines
 the page shows as images.
+
+An inline link, `[TEXT](TARGET)` outside a code span or fence and not after
+`!`, is an `a` element whose `href` is TARGET as written, when TARGET is an
+`http:` or `https:` URL, a `#anchor`, or a relative path (no `//` start and
+no `:` before its first `/`, `?` or `#`); any other target, `javascript:`
+and `mailto:` among them, stays text. Links are matched after code spans and
+before bold, so bold works around a link and inside its text.
 """
 
 from __future__ import annotations
@@ -37,6 +44,20 @@ _PARA_BREAK = re.compile(r"^(#|\||- |\d+\. |```)")
 _SEPARATOR_CELL = re.compile(r"-+")
 _IMAGE = re.compile(r"!\[([^\]]*)\]\(([^\s()]+)\)\s*")
 _LINE_END = re.compile(r"(\r\n|\r|\n)")
+# In escaped text, where the only `<` opens or closes a code element: a code
+# element or an image reference, each passed over whole, or a
+# `[TEXT](TARGET)` outside both (TEXT may hold whole code elements and image
+# references, and any `[`, but no other `]`).
+_CODE = r"<code>[^<]*</code>"
+_TEXT = rf"(?:{_CODE}|[^\]<])"
+_INLINE_IMAGE = rf"!\[{_TEXT}*\]\([^\s()<]+\)"
+_LINK = re.compile(
+    rf"{_CODE}|{_INLINE_IMAGE}"
+    rf"|(?<!!)\[((?:{_INLINE_IMAGE}|{_TEXT})+?)\]\(([^\s()<]+)\)"
+)
+# A link target drawn as a link: http(s), or a relative path or `#anchor`
+# (no `//` start, no `:` before its first `/`, `?` or `#`).
+_LINK_TARGET = re.compile(r"https?://|(?!//)[^:/?#]*(?:[/?#]|$)", re.IGNORECASE)
 
 
 @dataclass(frozen=True)
@@ -101,9 +122,21 @@ def _walk(text: str, figure: Callable[[Image], str]) -> list[str]:
     return _convert(lines, list(range(len(lines))), figure)
 
 
+def _link(m: re.Match) -> str:
+    if m.group(1) is None:  # a code element or image reference: no link
+        return m.group(0)
+    target = html.unescape(m.group(2))
+    if not _LINK_TARGET.match(target):
+        return m.group(0)
+    # `*` as a reference, so bold cannot reach into the attribute.
+    href = html.escape(target).replace("*", "&#42;")
+    return f'<a href="{href}">{m.group(1)}</a>'
+
+
 def _inline(text: str) -> str:
     text = html.escape(text, quote=False)
     text = re.sub(r"`([^`]+)`", r"<code>\1</code>", text)
+    text = _LINK.sub(_link, text)
     return re.sub(r"\*\*([^*]+)\*\*", r"<strong>\1</strong>", text)
 
 
