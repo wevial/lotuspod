@@ -11,6 +11,8 @@ the thread, and revise the page when asked.
 The site runs on one writer host, behind Cloudflare Access, and is reached
 through a Cloudflare Tunnel or over a tailnet.
 
+Lotuspod is a personal project, and issues are off.
+
 ## See it
 
 A reader comments on a section of a plan page, the thread waits for the
@@ -81,3 +83,26 @@ page itself is served as usual.
   `main`, and backups.
 - [Development](docs/development.md): for people changing Lotuspod. The
   tests and the captures.
+
+## How it was built
+
+Lotuspod is built by [Holophyte](https://github.com/wevial/holophyte), an
+agent factory. Each change starts as a ticket with acceptance criteria and
+verify commands. An agent implements it in an isolated worktree, the verify
+commands run, and a different agent reviews it. A pull request then runs the
+required `unit` check and merges. The
+[merged pull requests](https://github.com/wevial/lotuspod/pulls?q=is%3Apr+is%3Amerged)
+are the record.
+
+## Security
+
+Report a vulnerability privately ([SECURITY.md](SECURITY.md)). `src/lotuspod/access.py` checks Cloudflare
+Access's RS256 assertions with the standard library: the package has no runtime dependencies, the check only
+verifies (never signs or makes keys), and RS256 is one modular exponentiation plus a comparison of the whole
+re-encoded PKCS#1 v1.5 block, leaving no parser to trick. It refuses any `alg` but RS256, a key id not in
+the team's key set, keys under 2048 bits, and a wrong issuer, audience, time or email; it never reads the
+plain email header. Pinned by `tests.test_access.VerifierTests.test_header_must_name_rs256_and_a_listed_key`,
+`tests.test_access.VerifierTests.test_signature_block_is_compared_whole`,
+`tests.test_access.VerifierTests.test_keys_under_2048_bits_are_not_listed`,
+`tests.test_access.VerifierTests.test_malformed_tokens_are_invalid` and
+`tests.test_access.WhoamiTests.test_email_header_naming_someone_else_is_not_read`.

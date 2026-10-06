@@ -3,11 +3,14 @@
 The README keeps what Lotuspod is, the layout and a quick start, and links
 five docs pages, each written for one kind of reader. This file witnesses the
 split: the README's size and links, every relative link and anchor between
-the pages, every code block of the README before the split kept exactly once
+the pages and SECURITY.md, every code block of the README before the split kept exactly once
 (as it was, or with the placeholders the public repository uses), one
 "Decisions for the maintainer" heading, and the README's pictures: three
 PNG screenshots and one GIF under docs/images/, each with alt text, each a
-real image of its kind and small enough to load.
+real image of its kind and small enough to load. It also witnesses what the
+README tells a first-time visitor: how Lotuspod was built, that it is a
+personal project with issues off, and a Security section whose cited
+tests.test_access ids each load.
 
 Run from the repo root:
 
@@ -26,7 +29,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 
 DOCS_PAGES = ("docs/publishing.md", "docs/comments.md", "docs/agents.md",
               "docs/operating.md", "docs/development.md")
-PAGES = ("README.md", *DOCS_PAGES)
+PAGES = ("README.md", *DOCS_PAGES, "SECURITY.md")
 # main before the README was split: its code blocks must all still be there.
 BASE_COMMIT = "ec57885"
 # What those blocks named before the repository went public, and the
@@ -48,6 +51,17 @@ IMAGE = re.compile(r"!\[([^\]]*)\]\(([^()\s]+)\)")
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 PNG_LIMIT = 400 * 1024
 GIF_LIMIT = 3 * 1024 * 1024
+HOLOPHYTE = "https://github.com/wevial/holophyte"
+MERGED_PRS = "https://github.com/wevial/lotuspod/pulls?q=is%3Apr+is%3Amerged"
+ACCESS_TEST_ID = re.compile(r"`(tests\.test_access\.\w+\.\w+)`")
+# The Access tests the Security section must cite at least.
+PINNING_TESTS = (
+    "tests.test_access.VerifierTests.test_header_must_name_rs256_and_a_listed_key",
+    "tests.test_access.VerifierTests.test_signature_block_is_compared_whole",
+    "tests.test_access.VerifierTests.test_keys_under_2048_bits_are_not_listed",
+    "tests.test_access.VerifierTests.test_malformed_tokens_are_invalid",
+    "tests.test_access.WhoamiTests.test_email_header_naming_someone_else_is_not_read",
+)
 
 
 def read(name: str) -> str:
@@ -102,6 +116,24 @@ def anchors(text: str) -> set[str]:
     return found
 
 
+def section(text: str, title: str) -> str:
+    """The lines under the level-two heading title, up to the next one."""
+    prose, _ = split_fences(text)
+    lines: list[str] | None = None
+    for line in prose:
+        match = HEADING.match(line)
+        if match and len(match.group(1)) <= 2:
+            if lines is not None:
+                break
+            if match.group(1) == "##" and match.group(2) == title:
+                lines = []
+        elif lines is not None:
+            lines.append(line)
+    if lines is None:
+        raise AssertionError(f"no '## {title}' heading")
+    return "\n".join(lines)
+
+
 def links(text: str) -> list[str]:
     prose, _ = split_fences(text)
     return LINK.findall(CODE_SPAN.sub("", "\n".join(prose)))
@@ -150,6 +182,36 @@ class ReadmeTests(unittest.TestCase):
         for page in DOCS_PAGES:
             with self.subTest(page=page):
                 self.assertIn(page, targets)
+
+
+class ReadmeStoryTests(unittest.TestCase):
+    def test_how_it_was_built_links_holophyte_and_the_merged_pull_requests(self):
+        found = links(section(read("README.md"), "How it was built"))
+        self.assertIn(HOLOPHYTE, found)
+        self.assertIn(MERGED_PRS, found)
+
+    def test_one_line_says_a_personal_project_with_issues_off(self):
+        lines = [line for line in read("README.md").splitlines()
+                 if "personal project" in line and "issues are off" in line]
+        self.assertEqual(len(lines), 1, lines)
+
+    def test_security_links_the_security_policy(self):
+        self.assertIn("SECURITY.md", links(section(read("README.md"), "Security")))
+
+    def test_each_access_test_the_security_section_cites_loads(self):
+        cited = ACCESS_TEST_ID.findall(section(read("README.md"), "Security"))
+        self.assertLessEqual(set(PINNING_TESTS), set(cited))
+        for name in cited:
+            with self.subTest(test=name):
+                loader = unittest.TestLoader()
+                suite = loader.loadTestsFromName(name)
+                self.assertEqual(loader.errors, [])
+                self.assertEqual([test.id() for test in suite], [name])
+
+    def test_a_missing_test_id_does_not_load_as_itself(self):
+        name = "tests.test_access.VerifierTests.test_no_such_check"
+        suite = unittest.TestLoader().loadTestsFromName(name)
+        self.assertNotEqual([test.id() for test in suite], [name])
 
 
 class ReadmeImageTests(unittest.TestCase):
