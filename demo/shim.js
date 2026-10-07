@@ -123,6 +123,7 @@
       id: nextId(),
       page: page,
       section: section,
+      sectionTitle: sectionTitle(section),
       revision: fields.revision,
       parent: fields.parent,
       text: fields.text,
