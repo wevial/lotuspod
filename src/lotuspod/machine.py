@@ -469,11 +469,8 @@ class Routes:
                 # Stored before the words were kept: the page's own words are
                 # the answered ones only while its version is the same.
                 text = "" if reworded else asked.text
-                if changed is not None:
-                    label = api.summary(changed)
-                else:
-                    label = answer["choice"] if reworded else asked.labels.get(
-                        answer["choice"], answer["choice"])
+                label = answer["choice"] if reworded else asked.labels.get(
+                    answer["choice"], answer["choice"])
             # The question and choice in the words the reader answered.
             question = {"id": answer["question"], "text": text, "label": label,
                         "reworded": reworded}

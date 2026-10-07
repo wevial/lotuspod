@@ -2198,11 +2198,11 @@ def answers_text(name: str, questions: dict, forms: dict[str, decisions.Form]) -
 
     def entry(row: dict, form: decisions.Form | None, indent: str) -> list[str]:
         if "checked" in row:
-            if form is not None and form.checklist and row["version"] == form.version:
+            if form is not None and row["version"] == form.version:
                 label = api.summary(api.changes(dict(form.options), form.defaults,
                                                 row["checked"]))
             else:
-                label = (row.get("asked") or {}).get("label") or ""
+                label = row["asked"]["label"]
         else:
             label = form.label(row["choice"]) if form else row["choice"]
         head = f"{indent}{label} (answer {row['id']}"
