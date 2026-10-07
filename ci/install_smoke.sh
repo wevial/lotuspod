@@ -2,6 +2,8 @@
 # Install the one wheel in DIST_DIR into a fresh virtual environment and
 # publish a page with it, away from the checkout.
 #
+# Checks the package description holds no relative `](` target and the
+# README's four images at the version's tag, which ci/pypi_readme.py makes.
 # Runs `lotuspod --help`, then publishes a two-section markdown page with
 # `lotuspod publish FILE --local --out-dir OUT --name smoke`, and checks that
 # OUT/smoke.html exists and links a theme stylesheet and script, each of which
@@ -44,6 +46,29 @@ case "$installed" in
   "$work/venv/"*) ;;
   *) fail "lotuspod imports from $installed, not the fresh environment" ;;
 esac
+
+# The description PyPI shows: no relative `](` target outside code, and the
+# README's four images at the version's tag, as ci/pypi_readme.py makes them.
+"$work/venv/bin/python" - <<'EOF' || fail "the package description is not the release's README"
+import importlib.metadata
+import re
+import sys
+
+tag = "v" + importlib.metadata.version("lotuspod")
+text = importlib.metadata.metadata("lotuspod")["Description"] or ""
+prose = re.sub(r"(?ms)^ {0,3}(`{3,}|~{3,}).*?^ {0,3}\1[`~]*[ \t]*$", "", text)
+prose = re.sub(r"(?s)(?<!`)(`+)(?!`).*?(?<!`)\1(?!`)", "", prose)
+relative = [target for target in re.findall(r"\]\(([^\s()]+)", prose)
+            if not re.match(r"[A-Za-z][A-Za-z0-9+.-]*:|#|//", target)]
+for target in relative:
+    print(f"install smoke: the description links {target}, which is relative", file=sys.stderr)
+images = f"https://raw.githubusercontent.com/wevial/lotuspod/{tag}/docs/images/"
+missing = [name for name in ("loop.gif", "thread.png", "decisions.png", "passage.png")
+           if f"]({images}{name})" not in text]
+for name in missing:
+    print(f"install smoke: the description has no image {images}{name}", file=sys.stderr)
+sys.exit(1 if relative or missing else 0)
+EOF
 
 lotuspod="$work/venv/bin/lotuspod"
 "$lotuspod" --help >/dev/null || fail "lotuspod --help failed"
