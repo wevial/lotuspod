@@ -68,6 +68,7 @@ PASSAGE_SECTION = "the-pond-today"
 QUOTE = {"exact": "the first algae", "prefix": "from edge to edge and ",
          "suffix": " are showing"}
 UNKNOWN_SECTION = "no-such-section"
+UNKNOWN_QUESTION = "no-such-question"
 STALE_VERSION = "stale"
 MODEL = "scripted"
 
@@ -235,6 +236,12 @@ def run(api: Api, agent_reply: Callable[[int], None], page_html: str) -> list[di
         {"page": PAGE, "thread": made["id"], "resolved": True})
     ask("8b. POST a resolution, reopened", "POST", comments_path,
         {"page": PAGE, "thread": made["id"], "resolved": False})
+    # Before the answers: the shim adds a thread of its own on an answer.
+    ask("8c. POST a question about a decision", "POST", comments_path,
+        {"page": PAGE, "question": form.question, "text": "Is it warm enough by then?"})
+    ask("8d. POST a question about a decision the page does not ask", "POST", comments_path,
+        {"page": PAGE, "question": UNKNOWN_QUESTION, "text": "What about this one?"})
+    ask("8e. GET comments, with a decision thread", "GET", comments_path + query)
     ask("9. GET answers, none yet", "GET", answers_path + query)
     ask("10. POST an answer", "POST", answers_path, answer(first, form.version))
     ask("11. POST a second answer to the same question", "POST", answers_path,

@@ -173,6 +173,89 @@
       "status": 200
     },
     {
+      "method": "POST",
+      "path": "/api/comments",
+      "request": "8c. POST a question about a decision",
+      "shape": {
+        "actor": {"kind": "string", "name": "string"},
+        "createdAt": "string",
+        "id": "number",
+        "images": [],
+        "owner": "string",
+        "page": "string",
+        "parent": "null",
+        "question": "string",
+        "quote": "null",
+        "revision": "string",
+        "section": "string",
+        "sectionTitle": "string",
+        "state": "string",
+        "text": "string"
+      },
+      "status": 201
+    },
+    {
+      "method": "POST",
+      "path": "/api/comments",
+      "request": "8d. POST a question about a decision the page does not ask",
+      "shape": {"error": "string"},
+      "status": 400
+    },
+    {
+      "method": "GET",
+      "path": "/api/comments",
+      "request": "8e. GET comments, with a decision thread",
+      "shape": {
+        "maxImageBytes": "number",
+        "page": "string",
+        "revision": "string",
+        "threads": [
+          {
+            "replies": [
+              {
+                "actor": {"credential": "string", "handle": "string", "kind": "string", "name": "string"},
+                "createdAt": "string",
+                "id": "number",
+                "images": [],
+                "model": "string",
+                "owner": "null|string",
+                "page": "string",
+                "parent": "number",
+                "quote": "null",
+                "revision": "string",
+                "section": "string",
+                "sectionTitle": "string",
+                "state": "string",
+                "text": "string"
+              }
+            ],
+            "resolution": {
+              "actor": {"oneOf": ["null", {"kind": "string", "name": "string"}]},
+              "at": "null|string",
+              "resolved": "boolean"
+            },
+            "root": {
+              "actor": {"kind": "string", "name": "string"},
+              "createdAt": "string",
+              "id": "number",
+              "images": [],
+              "owner": "string",
+              "page": "string",
+              "parent": "null",
+              "question": "string",
+              "quote": {"oneOf": ["null", {"exact": "string", "prefix": "string", "suffix": "string"}]},
+              "revision": "string",
+              "section": "string",
+              "sectionTitle": "string",
+              "state": "string",
+              "text": "string"
+            }
+          }
+        ]
+      },
+      "status": 200
+    },
+    {
       "method": "GET",
       "path": "/api/answers",
       "request": "9. GET answers, none yet",
