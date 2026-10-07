@@ -34,6 +34,9 @@ LINK_BASE = f"https://github.com/{REPOSITORY}/blob"
 TAG = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 FENCE = re.compile(r"^ {0,3}(`{3,}|~{3,})")
 CODE_SPAN = re.compile(r"(?<!`)(`+)(?!`).*?(?<!`)\1(?!`)", re.S)
+# Stands in for a code span while links are matched; never in a README.
+PLACEHOLDER = "\0"
+HIDDEN = re.compile(r"\0(\d+)\0")
 # `![text](target "title")` or `[text](target)`; the text may hold one level
 # of brackets, as a linked image's does.
 LINK = re.compile(
@@ -58,22 +61,23 @@ def absolute(target: str, tag: str, image: bool) -> str:
 
 def rewrite_links(text: str, tag: str) -> str:
     """text, outside code, with each relative image and link target made
-    absolute."""
+    absolute. Code spans are hidden behind placeholders while the links are
+    matched, so a label may hold one, and are put back unchanged."""
+    spans: list[str] = []
+
+    def hide(match: re.Match) -> str:
+        spans.append(match.group(0))
+        return f"{PLACEHOLDER}{len(spans) - 1}{PLACEHOLDER}"
+
     def replace(match: re.Match) -> str:
         bang, label, target, title = match.groups()
-        label = rewrite_links(label, tag)
-        if is_relative(target):
+        label = LINK.sub(replace, label)
+        if PLACEHOLDER not in target and is_relative(target):
             target = absolute(target, tag, image=bool(bang))
         return f"{bang}[{label}]({target}{title})"
 
-    out: list[str] = []
-    at = 0
-    for span in CODE_SPAN.finditer(text):
-        out.append(LINK.sub(replace, text[at:span.start()]))
-        out.append(span.group(0))
-        at = span.end()
-    out.append(LINK.sub(replace, text[at:]))
-    return "".join(out)
+    masked = LINK.sub(replace, CODE_SPAN.sub(hide, text))
+    return HIDDEN.sub(lambda match: spans[int(match.group(1))], masked)
 
 
 def rewrite(text: str, tag: str) -> str:
