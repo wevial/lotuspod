@@ -259,6 +259,22 @@ Clicking it, or Enter or Space on it, opens the panel at that thread, or at
 the section's form when it has none; without the panel, it opens them in a
 popover or the bottom sheet.
 
+A thread on a decision, which a card's "Ask" starts (see [Decisions for the
+maintainer](publishing.md#decisions-for-the-maintainer)), is an ordinary
+thread in its section's group, listed after the section's passages and
+before its § threads. Its entry is marked "?" and headed "Decision N ·
+QUESTION" (or "Decision · QUESTION" for a question with no number), from the
+card's number and question; a popover or the bottom sheet names it "Decision
+N: QUESTION", and the sheet counts it with its section's own threads. A thread
+on a decision the page no longer asks is listed as one of its section's §
+threads. The section's chip counts it among its section's open threads, and
+the decision has a chip of its own, a button right after its card, which
+reads the same way over the decision's open threads only, or "N resolved"
+once all of them are. Clicking it, or Enter or Space on it, opens the panel
+at the decision's newest open thread, or with its resolved threads shown at
+the newest one; without the panel, it opens that thread in a popover under
+the chip or in the bottom sheet.
+
 "Resolve" resolves a thread as the reader (`{page, thread, resolved: true}`,
 above): its entry folds to a dashed line, its opening words and "✓ resolved ·
 Reopen", and its dot leaves the rail. "Reopen" reopens it and shows its
@@ -277,7 +293,7 @@ reply arriving is drawn in it in place. Both are their own theme sources,
 `js/narrow.js` and `css/narrow.css`.
 
 The popover is a non-modal dialog named by what it holds: "Section HEADING",
-or a passage's number and opening words. It opens under the chip or the
+a passage's number and opening words, or "Decision N: QUESTION". It opens under the chip or the
 highlight that opened it, inside the window and over the text, which never
 moves, and scrolls on its own. One is open at a time. A chip's popover holds
 its section's own threads (and those on passages not found, and resolved

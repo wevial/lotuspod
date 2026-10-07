@@ -22,10 +22,39 @@
     // Each composer's attachments, by its form.
     var attached = new Map();
 
+    // The page's decision forms, in page order, and each by its question.
+    var decisions = all("form.artifact-decision[data-question]");
+    var questions = new Map();
+
     boxes.forEach(function (box) {
       sections.set(box.dataset.section, box);
       forms.set(box, box.querySelector("form.artifact-comment-form"));
     });
+    decisions.forEach(function (form) {
+      questions.set(form.dataset.question, form);
+    });
+
+    // The text of a form's part, its whitespace collapsed.
+    function words(form, selector) {
+      var node = form.querySelector(selector);
+      return node ? node.textContent.replace(/\s+/g, " ").trim() : "";
+    }
+
+    // The decision a thread asks about: its form, its number ("" for none),
+    // its question and what it is called; null for any other thread, and
+    // for one on a decision the page no longer asks.
+    function decisionOf(thread) {
+      var question = thread.root.question;
+      var form = question !== undefined && question !== null ? questions.get(String(question)) : null;
+      if (!form) {
+        return null;
+      }
+      var number = words(form, ".artifact-decision-number");
+      return {
+        form: form, number: number, question: words(form, ".artifact-decision-text"),
+        name: number ? "Decision " + number : "Decision",
+      };
+    }
 
     // An agent's handle when an agent wrote the row; "" for anyone else. Only
     // the verified actor's kind says a row is an agent's, never an address.
@@ -974,6 +1003,8 @@
       // The thread whose entry is open, if any.
       var current = null;
       var groups = new Map();
+      // Each decision's chip, by its form, once it has a thread.
+      var decisionChips = new Map();
       var dotsKey = null;
       // Whether resolved threads are listed: hidden unless the reader shows
       // them, for the page in this session.
@@ -1457,18 +1488,23 @@
         made.folded.hidden = !done;
         made.body.hidden = !opened;
         made.head.setAttribute("aria-expanded", opened ? "true" : "false");
-        var leadKey = passages.key(thread);
+        var decision = decisionOf(thread);
+        var leadKey = (decision ? "decision " : "") + passages.key(thread);
         if (leadKey !== made.leadKey) {
           made.leadKey = leadKey;
           var quoted = Boolean(thread.root.quote);
           made.item.classList.toggle("artifact-comments-entry--passage", quoted);
           made.item.classList.toggle("artifact-comments-entry--detached", passages.detached(thread));
+          made.item.classList.toggle("artifact-comments-entry--decision", Boolean(decision));
           made.marks.forEach(function (mark) {
-            mark.textContent = quoted ? (thread.n ? String(thread.n) : "") : "§";
+            mark.textContent = quoted ? (thread.n ? String(thread.n) : "") : decision ? "?" : "§";
           });
           made.words.forEach(function (words) {
             if (quoted) {
               words.replaceChildren.apply(words, passages.said(thread));
+            } else if (decision) {
+              words.replaceChildren(element("span", "artifact-comments-entry-kind", decision.name),
+                " · " + decision.question);
             } else {
               words.textContent = opening(thread.root.text || imageWords(thread.root));
             }
@@ -1517,9 +1553,11 @@
         }
       }
 
-      // A thread's highlight, else its chip.
+      // A thread's highlight, else its decision's chip, else its section's.
       function anchorOf(thread) {
-        return thread.marks[0] || (thread.box && thread.box.querySelector("summary")) || null;
+        var decision = decisionOf(thread);
+        return thread.marks[0] || (decision && decisionChips.get(decision.form)) ||
+          (thread.box && thread.box.querySelector("summary")) || null;
       }
 
       // Open the section a node is in through its heading's button, if it is
@@ -1620,10 +1658,9 @@
         return node;
       }
 
-      // A box's chip: where its section's open threads stand, in one line.
-      function chip(box) {
-        var summaryNode = box.querySelector("summary");
-        var threads = unresolvedOf(box);
+      // Where some open threads stand, in one line: its kind, the faces of
+      // who wrote and answered, and its words.
+      function line(threads) {
         var newest = latest(threads);
         var kind = newest ? standing(newest) : "none";
         var faces = mute(element("span", "artifact-comment-chip-faces"));
@@ -1666,14 +1703,100 @@
         }
         var text = element("span", "artifact-comment-chip-text");
         text.append.apply(text, parts);
-        var key = kind + "\n" + faces.innerHTML + "\n" + text.textContent;
-        if (summaryNode.lotuspodChip === key) {
+        return { kind: kind, faces: faces, text: text };
+      }
+
+      // Draw a line on a chip, when it says anything new.
+      function paint(node, className, drawn) {
+        var key = drawn.kind + "\n" + drawn.faces.innerHTML + "\n" + drawn.text.textContent;
+        if (node.lotuspodChip === key) {
           return;
         }
-        summaryNode.lotuspodChip = key;
-        summaryNode.className = "artifact-comment-summary artifact-comment-chip artifact-comment-chip--" + kind;
-        summaryNode.replaceChildren(faces, text);
+        node.lotuspodChip = key;
+        node.className = className + " artifact-comment-chip artifact-comment-chip--" + drawn.kind;
+        node.replaceChildren(drawn.faces, drawn.text);
       }
+
+      // A box's chip: where its section's open threads stand, in one line.
+      function chip(box) {
+        paint(box.querySelector("summary"), "artifact-comment-summary", line(unresolvedOf(box)));
+      }
+
+      // A decision's threads, oldest first.
+      function threadsOn(form) {
+        var found = [];
+        shown.forEach(function (thread) {
+          var decision = decisionOf(thread);
+          if (decision && decision.form === form) {
+            found.push(thread);
+          }
+        });
+        return found.sort(function (a, b) { return a.root.id - b.root.id; });
+      }
+
+      // A decision's chip, right after its form (a thread's composer is a
+      // form, and forms do not nest), while it has threads: where its open
+      // threads stand as a section's chip says it, or how many are resolved.
+      function decisionChip(form) {
+        var threads = threadsOn(form);
+        var node = decisionChips.get(form);
+        if (!threads.length) {
+          return;
+        }
+        if (!node) {
+          node = element("button");
+          node.type = "button";
+          node.addEventListener("click", function () { openDecision(form); });
+          form.parentNode.insertBefore(node, form.nextSibling);
+          decisionChips.set(form, node);
+        }
+        var unresolved = threads.filter(function (thread) { return !resolved(thread); });
+        var drawn = line(unresolved);
+        if (!unresolved.length) {
+          var faces = mute(element("span", "artifact-comment-chip-faces"));
+          faces.appendChild(element("span", "artifact-comment-chip-icon"));
+          var text = element("span", "artifact-comment-chip-text");
+          text.textContent = threads.length + " resolved";
+          drawn = { kind: "resolved", faces: faces, text: text };
+        }
+        paint(node, "artifact-decision-chip", drawn);
+      }
+
+      // A decision's chip: its newest open thread, else its newest, in the
+      // panel, a popover under the chip or the sheet.
+      function openDecision(form) {
+        var threads = threadsOn(form);
+        var thread = latest(threads.filter(function (each) { return !resolved(each); })) ||
+          threads[threads.length - 1];
+        if (!thread) {
+          return;
+        }
+        if (!api.wide) {
+          over.show({ thread: thread }, decisionChips.get(form));
+        } else if (resolved(thread)) {
+          // Listed with the resolved threads, its Reopen at hand.
+          setOpen(true, true);
+          setResolvedShown(true, true);
+          api.refresh();
+          reveal(thread.entry.item);
+          thread.entry.reopen.focus({ preventScroll: true });
+        } else {
+          api.open(thread);
+        }
+      }
+
+      // A thread just asked about a decision: its entry opens in the panel,
+      // else it opens in a popover under the decision's chip or in the sheet.
+      api.asked = function (thread) {
+        if (!thread) {
+          return;
+        }
+        if (api.wide) {
+          api.open(thread);
+        } else {
+          over.show({ thread: thread }, anchorOf(thread));
+        }
+      };
 
       // The box's form for a new thread posted one: the form folds, and in
       // the panel the new thread's entry opens; a popover shows it among its
@@ -1814,6 +1937,7 @@
         ordered: ordered,
         latest: latest, standing: standing, routed: routed, asked: asked, said: said, tick: tick,
         title: title, opening: opening, anchorOf: anchorOf, unfold: unfold, barBottom: barBottom,
+        decisionOf: decisionOf,
       });
       api.show = over.show;
       api.passage = over.passage;
@@ -1828,12 +1952,17 @@
       };
 
       // Where a thread is listed in its group: its passages by number, then
-      // its resolved passages, then its § threads, each oldest first.
+      // its resolved passages, then its decisions' threads in the decisions'
+      // order, then its § threads, each oldest first.
       function rank(thread) {
-        if (!thread.root.quote) {
-          return [2, thread.root.id];
+        if (thread.root.quote) {
+          return thread.n ? [0, thread.n, 0] : [1, thread.root.id, 0];
         }
-        return thread.n ? [0, thread.n] : [1, thread.root.id];
+        var decision = decisionOf(thread);
+        if (decision) {
+          return [2, decisions.indexOf(decision.form), thread.root.id];
+        }
+        return [3, 0, thread.root.id];
       }
 
       // Put a group's entries in order, moving only those out of place.
@@ -1844,7 +1973,7 @@
         threads.sort(function (a, b) {
           var left = rank(a);
           var right = rank(b);
-          return left[0] - right[0] || left[1] - right[1];
+          return left[0] - right[0] || left[1] - right[1] || left[2] - right[2];
         });
         threads.forEach(function (thread, index) {
           var at = made.entries.children[index];
@@ -1878,6 +2007,7 @@
           }
         });
         boxes.forEach(chip);
+        decisions.forEach(decisionChip);
         over.sync();
       };
 
@@ -2382,8 +2512,82 @@
       });
     });
 
+    // Why a question about a decision was not sent.
+    function unasked(response, payload) {
+      if (response.status === 401) {
+        return SIGNED_OUT;
+      }
+      if (response.status === 409 && payload && payload.error === "stale_page") {
+        return STALE_QUESTION;
+      }
+      var error = payload && payload.error ? String(payload.error) : "status " + response.status;
+      return "Your question was not sent (" + error + "). Try again.";
+    }
+
+    // Each decision's Ask, beside "Save answer": the note's text posted as
+    // a question thread on the decision, which saves no answer. Sent, the
+    // note is emptied and folded, so it is never saved as the answer's note,
+    // and the thread opens where the window has room for it.
+    function askAbout(form) {
+      var save = form.querySelector('button[type="submit"]');
+      var note = form.elements.note;
+      if (!save || !note) {
+        return;
+      }
+      var button = element("button", "artifact-decision-ask", "Ask");
+      button.type = "button";
+      save.parentNode.insertBefore(button, save.nextSibling);
+      var status = form.querySelector(".artifact-decision-status");
+      function say(text) {
+        if (status) {
+          status.textContent = text;
+        }
+      }
+      button.addEventListener("click", async function () {
+        var text = note.value.trim();
+        if (!text) {
+          say(NO_QUESTION);
+          return;
+        }
+        var body = { page: page, question: form.dataset.question, text: text };
+        if (revision !== null) {
+          body.revision = revision;
+        }
+        button.disabled = true;
+        say("Sending your question...");
+        try {
+          var response = await fetch(COMMENTS, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+          });
+          var payload = await json(response);
+          if (response.status !== 201 || !payload) {
+            say(unasked(response, payload));
+            return;
+          }
+          say("");
+          note.value = "";
+          var fold = note.closest("details");
+          if (fold) {
+            fold.open = false;
+          }
+          // The card marks itself as its note now reads.
+          note.dispatchEvent(new Event("input", { bubbles: true }));
+          add({ root: payload, replies: [] });
+          posted();
+          panel.asked(shown.get(payload.id));
+        } catch (ignored) {
+          say("Your question was not sent: the site did not answer. Try again.");
+        } finally {
+          button.disabled = false;
+        }
+      });
+    }
+
     var passages = selectPassages();
     var panel = sidePanel();
+    decisions.forEach(askAbout);
     panel.arrange();
     window.addEventListener("resize", panel.arrange);
     read();

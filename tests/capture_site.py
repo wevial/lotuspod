@@ -18,7 +18,9 @@ owner, and `claude-3f9a2c` (pull, claim and reply as itself). The owned page,
 capture-owned, is published from markdown, so the site keeps its source
 beside it. So is the passages page, capture-passages, owned by hermes too,
 from capture-passages.md in the directory that holds the site (the parent
-of LOTUSPOD_TEST_OUT), so a check can publish it again. So is the images page, capture-images, from a source with the
+of LOTUSPOD_TEST_OUT), so a check can publish it again, and so is the
+decision threads page, capture-decision-threads, from
+capture-decision-threads.md beside it. So is the images page, capture-images, from a source with the
 fixture images (tests/fixtures/media/) beside it: its images are stored in
 lotuspod-media/ beside the site, as publish stores them for serve. For an
 agent command, the command's environment names:
@@ -377,6 +379,31 @@ Through the winter the pond was checked each morning at first light. The ice for
 | 1 | Which heater? | Floating / Submerged | Floating | The pump shares its outlet. |
 """
 
+# The decision threads page: published from markdown by OWNER with comments,
+# so it carries a revision, for questions asked about its decisions. Two
+# sections, the second asking two questions, numbered 1 and 2.
+DECISION_THREADS_PAGE = "capture-decision-threads"
+DECISION_THREADS_SOURCE = """\
+# Capture decision threads
+
+A sample plan for captures: ask about a decision before answering it.
+
+## Pond
+
+The pond freezes in January, and the pump stops with it.
+
+## Winter
+
+A heater keeps a hole in the ice, and the fish wait under it.
+
+### Decisions for the maintainer
+
+| # | Question | Options | Default | Why it matters |
+|---|---|---|---|---|
+| 1 | Which heater? | Floating / Submerged | Floating | The pump shares its outlet. |
+| 2 | Feed the fish in winter? | Yes / No | No | They eat little in cold water. |
+"""
+
 # The images page: published from markdown, with the fixture images copied
 # beside its source as IMAGES_FILES names them. A wide chart, then photos (a
 # progressive JPEG and one turned by its EXIF orientation among them), then
@@ -473,6 +500,8 @@ def render(out_dir: Path, db_path: Path) -> None:
     source.write_text(OWNED_SOURCE, encoding="utf-8")
     passages_source = db_path.with_name(f"{PASSAGES_PAGE}.md")
     passages_source.write_text(PASSAGES_SOURCE, encoding="utf-8")
+    decision_threads_source = db_path.with_name(f"{DECISION_THREADS_PAGE}.md")
+    decision_threads_source.write_text(DECISION_THREADS_SOURCE, encoding="utf-8")
     images_source = db_path.with_name("images") / f"{IMAGES_PAGE}.md"
     for relative, fixture in IMAGES_FILES.items():
         (images_source.parent / relative).parent.mkdir(parents=True, exist_ok=True)
@@ -502,6 +531,14 @@ def render(out_dir: Path, db_path: Path) -> None:
         [
             "publish", str(passages_source), "--local", "--date", SAMPLE_DATE,
             "--out-dir", str(out_dir), "--owner", OWNER,
+            "--credential", str(token), "--db", str(db_path),
+        ],
+    ))
+    steps.append((
+        f"publish {DECISION_THREADS_PAGE}",
+        [
+            "publish", str(decision_threads_source), "--local", "--date", SAMPLE_DATE,
+            "--out-dir", str(out_dir), "--comments", "--owner", OWNER,
             "--credential", str(token), "--db", str(db_path),
         ],
     ))
