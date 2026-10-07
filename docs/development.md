@@ -217,11 +217,19 @@ the theme files it links are all written. A file missing from the package
 data fails it there. `publish` then creates the GitHub release with the
 notes and both files, and uploads them to PyPI through trusted publishing:
 the job's own short-lived identity is the credential, so no PyPI token is
-stored anywhere. Check a tag before pushing it:
+stored anywhere. The PyPI description is the README with every relative
+image and link pointed at GitHub at the tag: before `python -m build`, the
+`build` job runs `python ci/pypi_readme.py "$GITHUB_REF_NAME"`, which rewrites
+`README.md` in its fresh checkout, and `ci/install_smoke.sh` refuses a wheel
+whose description still has a relative target; the README itself stays
+relative, so it is right on every branch and the demo, whose page policy
+allows only its own images, can show it. Check a tag before pushing it, the
+build in a fresh clone, since the rewrite changes `README.md`:
 
 ```sh
-python ci/release_check.py v0.1.0
-python -m build && bash ci/install_smoke.sh dist
+python ci/release_check.py v0.1.1
+git clone . ../lotuspod-release && cd ../lotuspod-release
+python ci/pypi_readme.py v0.1.1 && python -m build && bash ci/install_smoke.sh dist
 ```
 
 Two settings are made once, by the maintainer, before the first tag:

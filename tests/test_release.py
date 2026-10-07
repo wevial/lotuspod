@@ -1,11 +1,15 @@
 """Test suite for releasing Lotuspod from a pushed `vX.Y.Z` tag.
 
-Witnesses the four pieces: `ci/release_check.py`, run on a temporary copy of
+Witnesses the five pieces: `ci/release_check.py`, run on a temporary copy of
 the checkout, prints the changelog section for a tag that matches the
 version and refuses, naming the problem, every other tag and a changelog
-without the section; `ci/install_smoke.sh`, run on a wheel really built from
-this checkout, passes, and fails naming the file when a wheel is rebuilt
-without one theme script; `.github/workflows/release.yml`, read as text the
+without the section; `ci/pypi_readme.py`, run on a temporary copy of the
+README, points every relative image and link at GitHub at the tag and leaves
+the rest, code included, byte for byte; `ci/install_smoke.sh`, run on a
+wheel really built from this checkout after that rewrite, passes, and fails
+naming the file when a wheel is rebuilt without one theme script, and naming
+the target when it is built without the rewrite;
+`.github/workflows/release.yml`, read as text the
 way `tests.test_ci_workflow` reads the `unit` workflow, holds its triggers,
 jobs, permissions, steps and secrets to the release's; and `CHANGELOG.md`
 and the "Releasing" section of `docs/development.md` say what a release
@@ -34,6 +38,8 @@ from tests.test_docs_links import section
 REPO_ROOT = Path(__file__).resolve().parents[1]
 RELEASE_CHECK = REPO_ROOT / "ci" / "release_check.py"
 INSTALL_SMOKE = REPO_ROOT / "ci" / "install_smoke.sh"
+PYPI_README = REPO_ROOT / "ci" / "pypi_readme.py"
+README = REPO_ROOT / "README.md"
 WORKFLOW = REPO_ROOT / ".github" / "workflows" / "release.yml"
 CHANGELOG = REPO_ROOT / "CHANGELOG.md"
 DEVELOPMENT = REPO_ROOT / "docs" / "development.md"
@@ -42,6 +48,31 @@ VERSION_HEADING = re.compile(r"^## (\d+\.\d+\.\d+) - (\d{4}-\d{2}-\d{2})$", re.M
 FULL_SHA = re.compile(r"^[0-9a-f]{40}$")
 # The theme script the broken wheel leaves out.
 DROPPED_SCRIPT = "narrow.js"
+IMAGES = ("loop.gif", "thread.png", "decisions.png", "passage.png")
+RAW = "https://raw.githubusercontent.com/wevial/lotuspod"
+BLOB = "https://github.com/wevial/lotuspod/blob"
+# A `](` target with no scheme that isn't a bare anchor.
+RELATIVE_TARGET = re.compile(r"\]\((?![A-Za-z][A-Za-z0-9+.-]*:|#|//)[^)]*\)")
+FENCED = re.compile(r"(?ms)^```.*?^```[ \t]*$")
+CODE_SPAN = re.compile(r"`[^`]*`")
+
+
+def outside_code(text: str) -> str:
+    """text without its fenced blocks and code spans."""
+    return CODE_SPAN.sub("", FENCED.sub("", text))
+
+
+def project_version() -> str:
+    with (REPO_ROOT / "pyproject.toml").open("rb") as handle:
+        return tomllib.load(handle)["project"]["version"]
+
+
+def rewrite_readme(root: Path, tag: str) -> subprocess.CompletedProcess:
+    """Run ci/pypi_readme.py as copied into root/ci, on root/README.md."""
+    (root / "ci").mkdir(exist_ok=True)
+    shutil.copy(PYPI_README, root / "ci" / "pypi_readme.py")
+    return subprocess.run([sys.executable, str(root / "ci" / "pypi_readme.py"), tag],
+                          capture_output=True, text=True, cwd=root)
 
 
 def load_release_check():
@@ -176,19 +207,103 @@ class ReleaseCheckParsingTests(unittest.TestCase):
         self.assertTrue(self.module.check(f"v{version}", REPO_ROOT))
 
 
+class PypiReadmeTests(unittest.TestCase):
+    """The rewrite, run on a temporary copy of a README."""
+
+    SAMPLE = (
+        "# Sample\n\n"
+        "![A picture](docs/images/a.png) and ![a titled one](./docs/b.png \"B\")\n\n"
+        "See [the guide](docs/guide.md#setup), [security](SECURITY.md) and\n"
+        "[a linked picture ![c](docs/c.png)](docs/c.md).\n\n"
+        "Read [`guide` and ``a`b``](docs/guide.md#setup), not `[x](docs/y.md)`.\n\n"
+        "Leave [the site](https://example.com/x), [mail](mailto:someone@example.com),\n"
+        "[an anchor](#sample), [a host](//example.com/y) and `[code](docs/span.md)`.\n\n"
+        "```md\n[in a fence](docs/x.md)\n![fenced](docs/x.png)\n```\n\n"
+        "~~~~\n```\n[still fenced](docs/y.md)\n~~~~\n"
+    )
+    EXPECTED = (
+        "# Sample\n\n"
+        f"![A picture]({RAW}/v0.1.1/docs/images/a.png) and "
+        f"![a titled one]({RAW}/v0.1.1/docs/b.png \"B\")\n\n"
+        f"See [the guide]({BLOB}/v0.1.1/docs/guide.md#setup), "
+        f"[security]({BLOB}/v0.1.1/SECURITY.md) and\n"
+        f"[a linked picture ![c]({RAW}/v0.1.1/docs/c.png)]({BLOB}/v0.1.1/docs/c.md).\n\n"
+        f"Read [`guide` and ``a`b``]({BLOB}/v0.1.1/docs/guide.md#setup), "
+        "not `[x](docs/y.md)`.\n\n"
+        "Leave [the site](https://example.com/x), [mail](mailto:someone@example.com),\n"
+        "[an anchor](#sample), [a host](//example.com/y) and `[code](docs/span.md)`.\n\n"
+        "```md\n[in a fence](docs/x.md)\n![fenced](docs/x.png)\n```\n\n"
+        "~~~~\n```\n[still fenced](docs/y.md)\n~~~~\n"
+    )
+
+    def setUp(self) -> None:
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.root = Path(tmp.name)
+
+    def rewrite(self, text: str, tag: str = "v0.1.1") -> str:
+        readme = self.root / "README.md"
+        readme.write_text(text, encoding="utf-8")
+        proc = rewrite_readme(self.root, tag)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        return readme.read_text(encoding="utf-8")
+
+    def test_the_sample_points_relative_targets_at_the_tag_and_keeps_the_rest(self):
+        self.assertEqual(self.rewrite(self.SAMPLE), self.EXPECTED)
+
+    def test_the_readme_points_its_images_and_links_at_the_tag(self):
+        original = README.read_text(encoding="utf-8")
+        self.assertRegex(outside_code(original), RELATIVE_TARGET)
+        text = self.rewrite(original)
+        for name in IMAGES:
+            with self.subTest(image=name):
+                self.assertIn(f"]({RAW}/v0.1.1/docs/images/{name})", text)
+        self.assertIn(f"]({BLOB}/v0.1.1/docs/development.md#captures)", text)
+        self.assertEqual(RELATIVE_TARGET.findall(outside_code(text)), [])
+        # Only the targets changed: taking the prefixes back out restores it.
+        restored = text.replace(f"{RAW}/v0.1.1/", "").replace(f"{BLOB}/v0.1.1/", "")
+        self.assertEqual(restored, original)
+
+    def test_a_second_run_changes_nothing(self):
+        once = self.rewrite(self.SAMPLE)
+        self.assertEqual(self.rewrite(once), once)
+
+    def test_the_tag_is_required_and_must_be_a_tag_name(self):
+        (self.root / "README.md").write_text(self.SAMPLE, encoding="utf-8")
+        proc = rewrite_readme(self.root, "v0.1.1")
+        usage = subprocess.run([sys.executable, str(self.root / "ci" / "pypi_readme.py")],
+                               capture_output=True, text=True, cwd=self.root)
+        self.assertEqual(usage.returncode, 2)
+        self.assertIn("usage:", usage.stderr)
+        before = (self.root / "README.md").read_text(encoding="utf-8")
+        for tag in ("", "v0.1.1/x", "v 1"):
+            with self.subTest(tag=tag):
+                bad = rewrite_readme(self.root, tag)
+                self.assertEqual(bad.returncode, 1)
+                self.assertIn("not a tag name", bad.stderr)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual((self.root / "README.md").read_text(encoding="utf-8"), before)
+
+
 @unittest.skipIf(importlib.util.find_spec("build") is None,
                  "the build module isn't installed (python -m pip install build)")
 class InstallSmokeTests(unittest.TestCase):
     """The real build of a copy of this checkout, and the real smoke script."""
 
     @staticmethod
-    def copy_checkout(root: Path) -> Path:
+    def copy_checkout(root: Path, rewrite: bool = True) -> Path:
+        """A copy of what the build reads, its README rewritten for the
+        version's tag as the release job does, unless rewrite is false."""
         source = root / "source"
         source.mkdir()
         for name in ("pyproject.toml", "README.md", "LICENSE"):
             shutil.copy(REPO_ROOT / name, source / name)
         shutil.copytree(REPO_ROOT / "src", source / "src",
                         ignore=shutil.ignore_patterns("__pycache__", "*.pyc", "*.egg-info"))
+        if rewrite:
+            proc = rewrite_readme(source, f"v{project_version()}")
+            if proc.returncode != 0:
+                raise AssertionError(f"ci/pypi_readme.py failed:\n{proc.stderr}")
         return source
 
     @staticmethod
@@ -237,6 +352,15 @@ class InstallSmokeTests(unittest.TestCase):
         proc = self.smoke(dist)
         self.assertNotEqual(proc.returncode, 0, proc.stdout)
         self.assertIn(f"js/{DROPPED_SCRIPT}", proc.stderr)
+
+    def test_a_wheel_built_without_the_rewrite_fails_naming_a_relative_target(self):
+        dist = self.root / "dist"
+        self.build(self.copy_checkout(self.root, rewrite=False), dist)
+        proc = self.smoke(dist)
+        self.assertNotEqual(proc.returncode, 0, proc.stdout)
+        self.assertIn("the description links docs/images/loop.gif, which is relative",
+                      proc.stderr)
+        self.assertIn("SECURITY.md, which is relative", proc.stderr)
 
     def test_a_dist_without_one_wheel_is_refused(self):
         dist = self.root / "dist"
@@ -303,6 +427,7 @@ class ReleaseWorkflowTests(unittest.TestCase):
             "run: pip install -e .\n",
             "run: python -m unittest discover -s tests\n",
             "run: python -m pip install build\n",
+            "python ci/pypi_readme.py",
             "run: python -m build\n",
             "run: bash ci/install_smoke.sh dist\n",
             "uses: actions/upload-artifact@",
@@ -310,6 +435,14 @@ class ReleaseWorkflowTests(unittest.TestCase):
         at = [steps.index(self.step("build", needle)) for needle in order]
         self.assertEqual(at, sorted(at))
         self.assertIn("fetch-depth: 0", steps[0])
+
+    def test_the_readme_is_rewritten_for_the_tag_after_the_check_before_the_build(self):
+        steps = self.steps("build")
+        rewrite = self.step("build", "ci/pypi_readme.py")
+        self.assertIn('run: python ci/pypi_readme.py "$GITHUB_REF_NAME"\n', rewrite)
+        at = steps.index(rewrite)
+        self.assertLess(steps.index(self.step("build", "ci/release_check.py")), at)
+        self.assertLess(at, steps.index(self.step("build", "run: python -m build\n")))
 
     def test_the_leak_guard_scans_the_tags_parent_to_the_tag(self):
         guard = self.step("build", "ci/leak_guard.py")
@@ -381,6 +514,12 @@ class ChangelogTests(unittest.TestCase):
         self.assertLessEqual(len(notes.splitlines()), 12)
         self.assertIn("first public release", notes)
 
+    def test_0_1_1_says_the_pypi_page_shows_the_readmes_images_and_links(self):
+        self.assertEqual(project_version(), "0.1.1")
+        notes = load_release_check().check("v0.1.1", REPO_ROOT)
+        flat = " ".join(notes.split())
+        self.assertIn("PyPI page now shows the README's images and links", flat)
+
     def test_the_changelog_names_no_host_or_address(self):
         self.assertNotRegex(self.text, r"https?://|@|\b\w+\.(?:com|co|net|org|dev|io)\b")
 
@@ -404,6 +543,13 @@ class ReleasingDocsTests(unittest.TestCase):
             with self.subTest(needle=needle):
                 self.assertIn(needle, flat)
         self.assertIn("create the environment `pypi`", flat)
+
+    def test_says_the_pypi_description_points_at_github_and_the_readme_stays_relative(self):
+        flat = " ".join(self.section.split())
+        self.assertIn("The PyPI description is the README with every relative image and "
+                      "link pointed at GitHub at the tag", flat)
+        self.assertIn('python ci/pypi_readme.py "$GITHUB_REF_NAME"', flat)
+        self.assertIn("the README itself stays relative", flat)
 
     def test_says_a_failed_publish_can_be_re_run(self):
         flat = " ".join(self.section.split())
