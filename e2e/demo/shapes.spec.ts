@@ -24,6 +24,7 @@ const SECTION = 'what-goes-in';
 const PASSAGE_SECTION = 'the-pond-today';
 const QUOTE = { exact: 'the first algae', prefix: 'from edge to edge and ', suffix: ' are showing' };
 const UNKNOWN_SECTION = 'no-such-section';
+const UNKNOWN_QUESTION = 'no-such-question';
 const STALE_VERSION = 'stale';
 
 type Entry = { request: string; method: string; path: string; status: number; shape: unknown };
@@ -86,6 +87,12 @@ test('the shim answers the script in the shapes serve gives', async ({ page }) =
     { page: PAGE, thread: made.id, resolved: true });
   await ask('8b. POST a resolution, reopened', 'POST', comments,
     { page: PAGE, thread: made.id, resolved: false });
+  // Before the answers: the shim adds a thread of its own on an answer.
+  await ask('8c. POST a question about a decision', 'POST', comments,
+    { page: PAGE, question: form.question, text: 'Is it warm enough by then?' });
+  await ask('8d. POST a question about a decision the page does not ask', 'POST', comments,
+    { page: PAGE, question: UNKNOWN_QUESTION, text: 'What about this one?' });
+  await ask('8e. GET comments, with a decision thread', 'GET', comments + query);
   await ask('9. GET answers, none yet', 'GET', answers + query);
   await ask('10. POST an answer', 'POST', answers, answer(first, form.version));
   await ask('11. POST a second answer to the same question', 'POST', answers, answer(second, form.version));

@@ -12,7 +12,10 @@
 // `demo-agent`, and once it has waited REPLY_AFTER ms, the next read of the
 // threads (the page script reads them again while a thread waits) adds
 // demo-agent's scripted reply: the text REPLIES holds for the page and the
-// section, else its "*" text. A saved decision answer adds a scripted line
+// section, else its "*" text. A question asked about a decision is a thread
+// in the section of the first comment box after its form, and gets
+// demo-agent's reply too: the text REPLIES holds for the page and the
+// question, else its "*" text. A saved decision answer adds a scripted line
 // from demo-agent to the thread of its form's section. Image uploads are
 // refused.
 //
@@ -36,7 +39,8 @@
   var MAX_IMAGE_BYTES = 10 * 1024 * 1024;
   var NO_UPLOADS = "image uploading is disabled for the demo";
   var UNRESOLVED = { resolved: false, actor: null, at: null };
-  // demo/replies.json: page names to section ids to a reply, and "*".
+  // demo/replies.json: page names to section and question ids to a reply,
+  // and "*".
   var REPLIES = {/* demo/replies.json, put here by the build */};
 
   var original = window.fetch;
@@ -92,6 +96,16 @@
       function (form) { return form.dataset.question === question; })[0] || null;
   }
 
+  // The section of the first comment box after form in the document, where
+  // a thread on its question is kept; "" when there is none.
+  function formSection(form) {
+    var box = Array.prototype.filter.call(document.querySelectorAll("details.artifact-comment"),
+      function (found) {
+        return form.compareDocumentPosition(found) & Node.DOCUMENT_POSITION_FOLLOWING;
+      })[0];
+    return box ? box.dataset.section : "";
+  }
+
   function text(value, low, high) {
     if (typeof value !== "string" || value.length < low || value.length > high) {
       throw invalid();
@@ -136,6 +150,10 @@
     if (fields.model) {
       made.model = fields.model;
     }
+    // Only a comment in a thread on a decision has one.
+    if (fields.question) {
+      made.question = fields.question;
+    }
     return made;
   }
 
@@ -147,12 +165,12 @@
     return row(page, fields);
   }
 
-  // demo-agent's scripted comment. Like an agent's reply, it names no
-  // revision of its own.
-  function agentRow(page, section, parent, words) {
+  // demo-agent's scripted comment, on question when its thread is on one.
+  // Like an agent's reply, it names no revision of its own.
+  function agentRow(page, section, parent, words, question) {
     return row(page, {
       section: section, parent: parent, text: words, actor: AGENT_ACTOR,
-      revision: "", state: "answered", model: MODEL,
+      revision: "", state: "answered", model: MODEL, question: question,
     });
   }
 
@@ -168,17 +186,20 @@
     return own(stored.resolutions, String(root)) ? stored.resolutions[String(root)] : UNRESOLVED;
   }
 
-  function cannedReply(page, section) {
+  // The reply REPLIES holds for the page and name, a section or a
+  // question id, else its "*" text.
+  function cannedReply(page, name) {
     var forPage = own(REPLIES, page) ? REPLIES[page] : null;
-    if (forPage && typeof forPage === "object" && own(forPage, section)) {
-      return String(forPage[section]);
+    if (forPage && typeof forPage === "object" && own(forPage, name)) {
+      return String(forPage[name]);
     }
     return String(REPLIES["*"] || "This is a scripted demo reply.");
   }
 
   // The scripted responder: each thread whose newest waiting reader comment
   // has waited REPLY_AFTER ms gets one reply, answering every comment in it
-  // that waited.
+  // that waited: its question's reply on a thread on a decision, else its
+  // section's.
   function respond(page, stored) {
     var late = Date.now() - REPLY_AFTER;
     var changed = false;
@@ -191,7 +212,8 @@
         return;
       }
       waiting.forEach(function (entry) { entry.state = "answered"; });
-      stored.rows.push(agentRow(page, root.section, root.id, cannedReply(page, root.section)));
+      var words = cannedReply(page, own(root, "question") ? root.question : root.section);
+      stored.rows.push(agentRow(page, root.section, root.id, words, root.question));
       changed = true;
     });
     if (changed) {
@@ -258,6 +280,11 @@
     if (own(fields, "images")) {
       throw new Refusal(400, "unknown_image");
     }
+    // A thread on a decision is anchored to it, not to a section or a passage.
+    if (own(fields, "question") &&
+        (own(fields, "section") || own(fields, "quote") || own(fields, "parent"))) {
+      throw invalid();
+    }
     var page = text(fields.page, 1, 100);
     var words = text(fields.text, 1, MAX_TEXT);
     var stored = comments(page);
@@ -269,11 +296,29 @@
         throw new Refusal(404, "unknown_parent");
       }
       var root = found.parent === null ? found.id : found.parent;
-      made = readerRow(page, { section: found.section, parent: root, text: words });
+      made = readerRow(page, {
+        section: found.section, parent: root, text: words, question: found.question,
+      });
       // A reader's reply to a resolved thread reopens it.
       if (resolution(stored, root).resolved) {
         stored.resolutions[String(root)] = { resolved: false, actor: READER, at: now() };
       }
+    } else if (own(fields, "question")) {
+      // A reader's question about a decision: a new thread in the section of
+      // the first comment box after its form. It records no answer.
+      var question = text(fields.question, 1, 100);
+      var form = decisionForm(question);
+      if (!form) {
+        throw new Refusal(400, "unknown_question");
+      }
+      var anchored = formSection(form);
+      if (!anchored) {
+        throw new Refusal(400, "unknown_section");
+      }
+      if (own(fields, "revision") && fields.revision !== revision()) {
+        throw new Refusal(409, "stale_page");
+      }
+      made = readerRow(page, { section: anchored, parent: null, text: words, question: question });
     } else {
       var section = text(fields.section, 1, 16384);
       var quoted = quote(fields.quote);

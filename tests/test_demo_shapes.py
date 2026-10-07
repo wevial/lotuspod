@@ -36,7 +36,7 @@ class DemoShapesTests(unittest.TestCase):
         self.assertEqual(done.returncode, 0, f"the recorder failed:\n{done.stderr}")
         fixture_text = demo_shapes.FIXTURE.read_text(encoding="utf-8")
         recorded = json.loads(done.stdout)
-        self.assertEqual(len(recorded["requests"]), 15)
+        self.assertEqual(len(recorded["requests"]), 18)
         found = demo_shapes.compare(json.loads(fixture_text), recorded)
         self.assertEqual(
             found, [],

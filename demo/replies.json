@@ -3,6 +3,8 @@
   "try-it": {
     "the-pond-today": "This is a scripted demo reply about the pond today: algae on the shallow shelf is normal in clear, unplanted water, and it fades once the plants shade the surface. On a real Lotuspod site, an agent would answer your own words.",
     "what-goes-in": "This is a scripted demo reply about what goes in: the lilies stay on the deep shelf and the marginals on the shallow one, and the hornwort goes in loose. On a real Lotuspod site, an agent would answer your own words.",
-    "planting-day": "This is a scripted demo reply about planting day: the baskets go down a little at a time, so the leaves always reach the surface. On a real Lotuspod site, an agent would answer your own words."
+    "planting-day": "This is a scripted demo reply about planting day: the baskets go down a little at a time, so the leaves always reach the surface. On a real Lotuspod site, an agent would answer your own words.",
+    "decision-1": "This is a scripted demo reply about when to plant: the lilies root best in warm water, so the weekend after the last frost is the safe choice. On a real Lotuspod site, an agent would answer your own words.",
+    "decision-2": "This is a scripted demo reply about fish: they go in once the plants have rooted and shade the water, so most ponds wait until next year. On a real Lotuspod site, an agent would answer your own words."
   }
 }

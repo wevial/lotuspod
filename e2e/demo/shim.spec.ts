@@ -140,6 +140,25 @@ async function expectReply(thread: ReturnType<typeof entry>, words: string, coun
   await expect(reply.locator('.artifact-comment-text')).toHaveText(words);
 }
 
+// One request through the page's fetch, which the shim answers: its status
+// and JSON.
+async function api(page: Page, method: string, url: string, body?: object) {
+  return page.evaluate(async ({ method, url, body }) => {
+    const response = await fetch(url, body === undefined ? { method } : {
+      method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    });
+    return { status: response.status, json: await response.json() };
+  }, { method, url, body });
+}
+
+// The thread whose first comment is root, as the shim's read of try-it's
+// threads gives it.
+async function thread(page: Page, root: number) {
+  const read = await api(page, 'GET', '/api/comments?page=try-it');
+  expect(read.status).toBe(200);
+  return read.json.threads.find((each: any) => each.root.id === root);
+}
+
 // Select words of the body's text with the mouse.
 async function drag(page: Page, words: string) {
   const spots = await page.evaluate((wanted) => {
@@ -290,6 +309,91 @@ test('a decision answered, changed and reloaded folds to its answer with its his
   await expect(said.nth(0).locator('.artifact-comment-text')).toContainText('“This weekend”');
   await expect(said.nth(1).locator('.artifact-comment-text')).toContainText('“Next weekend”');
   await expect(said.nth(1).locator('.artifact-comment-text')).toContainText('scripted demo reply');
+  seen.clean();
+});
+
+test('a question about a decision waits for demo-agent, then gets the decision\'s reply and records no answer', async ({ context, page }) => {
+  const seen = watch(context, page);
+  await load(page, TRY_IT);
+  const words = 'Is the soil warm enough by then?';
+  const made = await api(page, 'POST', '/api/comments', { page: 'try-it', question: 'decision-1', text: words });
+  expect(made.status).toBe(201);
+  expect(made.json).toMatchObject({
+    question: 'decision-1', section: 'planting-day', sectionTitle: 'Planting day', parent: null,
+    quote: null, text: words, actor: { kind: 'human', name: READER }, state: 'pending', owner: AGENT,
+  });
+  const root = made.json.id;
+  const waiting = await thread(page, root);
+  expect(waiting.root.state).toBe('pending');
+  expect(waiting.replies).toEqual([]);
+
+  await expect.poll(async () => (await thread(page, root)).replies.length, { timeout: 15_000 }).toBe(1);
+  const answered = await thread(page, root);
+  expect(answered.root.state).toBe('answered');
+  expect(answered.replies[0]).toMatchObject({
+    question: 'decision-1', section: 'planting-day', parent: root, model: MODEL,
+    actor: { kind: 'agent', handle: AGENT }, text: REPLIES['try-it']['decision-1'],
+  });
+  const answers = await api(page, 'GET', '/api/answers?page=try-it');
+  expect(answers.status).toBe(200);
+  expect(answers.json.questions['decision-1']).toBeUndefined();
+  seen.clean();
+});
+
+test('a decision thread\'s reply carries its question, and a reply, a resolution and a reopening each stay over a reload', async ({ context, page }) => {
+  const seen = watch(context, page);
+  await load(page, TRY_IT);
+  const comments = '/api/comments';
+  const made = await api(page, 'POST', comments, { page: 'try-it', question: 'decision-2', text: 'Which fish?' });
+  expect(made.status).toBe(201);
+  const root = made.json.id;
+  await expect.poll(async () => (await thread(page, root)).replies.length, { timeout: 15_000 }).toBe(1);
+  expect((await thread(page, root)).replies[0].text).toBe(REPLIES['try-it']['decision-2']);
+
+  const reply = await api(page, 'POST', comments, { page: 'try-it', parent: root, text: 'And how many?' });
+  expect(reply.status).toBe(201);
+  expect(reply.json).toMatchObject({ question: 'decision-2', parent: root, state: 'pending', owner: AGENT });
+  await page.reload();
+  await settle(page);
+  const again = await thread(page, root);
+  expect(again.replies.map((each: any) => each.question)).toEqual(['decision-2', 'decision-2']);
+  await expect.poll(async () => (await thread(page, root)).replies.length, { timeout: 15_000 }).toBe(3);
+  const replied = (await thread(page, root)).replies;
+  expect(replied[2]).toMatchObject({
+    question: 'decision-2', actor: { kind: 'agent', handle: AGENT }, text: REPLIES['try-it']['decision-2'],
+  });
+
+  const resolved = await api(page, 'POST', comments, { page: 'try-it', thread: root, resolved: true });
+  expect(resolved.json.resolution.resolved).toBe(true);
+  await page.reload();
+  await settle(page);
+  expect((await thread(page, root)).resolution.resolved).toBe(true);
+  await api(page, 'POST', comments, { page: 'try-it', thread: root, resolved: false });
+  await page.reload();
+  await settle(page);
+  const reopened = await thread(page, root);
+  expect(reopened.resolution.resolved).toBe(false);
+  expect(reopened.root.question).toBe('decision-2');
+  expect(reopened.replies).toHaveLength(3);
+  seen.clean();
+});
+
+test('a decision thread on a question the page does not ask, beside a section or on a stale revision is refused, and nothing is stored', async ({ context, page }) => {
+  const seen = watch(context, page);
+  await load(page, TRY_IT);
+  const revision = await page.locator('meta[name="lotuspod:revision"]').getAttribute('content') ?? '';
+  const refused: [object, number, string][] = [
+    [{ question: 'no-such-question' }, 400, 'unknown_question'],
+    [{ question: 'decision-1', section: 'planting-day' }, 400, 'invalid_body'],
+    [{ question: 'decision-1', quote: { exact: 'x', prefix: '', suffix: '' } }, 400, 'invalid_body'],
+    [{ question: 'decision-1', revision: `${revision}-stale` }, 409, 'stale_page'],
+  ];
+  for (const [fields, status, error] of refused) {
+    const sent = await api(page, 'POST', '/api/comments', { page: 'try-it', text: 'Why?', ...fields });
+    expect(sent, JSON.stringify(fields)).toEqual({ status, json: { error } });
+  }
+  expect(await rows(page, 'try-it')).toEqual([]);
+  expect((await api(page, 'GET', '/api/comments?page=try-it')).json.threads).toEqual([]);
   seen.clean();
 });
 
