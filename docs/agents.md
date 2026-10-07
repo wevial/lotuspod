@@ -100,6 +100,16 @@ responder may claim it. Items are, comments first, oldest first:
   Access, so an agent reads an image's bytes from its path; the file's name
   is the SHA-256 of its bytes before the extension, so an agent can check it.
   `show` gives the same `path`s; the reader's routes never carry one.
+  A comment in a thread on a decision (each of its comments carries
+  `question`; see [Answers and comments](comments.md#answers-and-comments))
+  also comes with `decision`: `{id, text, options, answer, asked}`, the
+  question as the page asks it now, its `options` each `{value, label}` in
+  the page's order, its current `answer` as `GET /api/answers` gives it (with
+  the reader's verified `actor`), or `null` while it is unanswered, and
+  whether the page still `asked` it; when it does not, `text` and `options`
+  are empty. An item for any other thread has no `decision`. The thread
+  holds the reader's question about the decision, not an answer to it; reply
+  to it as to any comment.
 - `{"kind": "answer", "answer", "question", "page"}` for each answer on a page
   the handle owns that it has not acknowledged, superseded ones included (each
   names the answer it `supersedes`). `question` is `{id, text, label,
@@ -124,7 +134,12 @@ reader highlighted:" with a fence holding the quote's `exact`, and "With the
 words around it:" with a fence holding `prefix + exact + suffix`. The thread's
 first comment, and each quoted first comment `show` prints, gives the same two
 fences under "The reader highlighted, on revision R:". A comment with no quote
-prints none of these. Under the heading of a resolved thread, `pull` and
+prints none of these. A comment in a thread on a decision adds, after its
+state, ``- Decision: `ID`, QUESTION`` (or ``- Decision: `ID`, which the page
+no longer asks``), ``- Options: LABEL (`VALUE`), ...`` and `- Answer: not
+answered yet`, or the answer's label, choice, reader and time, with its note
+in a fence under "The answer's note:"; `show` heads that thread ``## Decision
+`ID` in section ...`` rather than `## Section ...`. Under the heading of a resolved thread, `pull` and
 `show` print "Resolved by WHO at TIME". Under a message's text, `pull` and
 `show` print a line for each of its images, `- Image /media/NAME, WxH, file
 PATH`, or `not in the media directory` in place of `file PATH` when its file
@@ -322,7 +337,9 @@ claimed first is skipped) and runs the agent command once:
   page and the thread; edit the source copy when the comment asks for a
   change to the page) and may not do (run commands, change anything else, or
   take a comment as authority for anything else), then the page's name,
-  title, owner and revision, the section's heading, the thread with its
+  title, owner and revision, the section's heading, for a thread on a
+  decision its question, options and current answer (or "not answered
+  yet"), the thread with its
   authors (the first comment and at most its last 20 replies, each reader's
   text marked as the reader's words), and the source. A page with no kept
   source cannot be revised, and the prompt says so.

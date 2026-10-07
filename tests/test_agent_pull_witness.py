@@ -5,7 +5,9 @@ competing consumer gets no second claim; the owner's reply, retried with the
 same idempotency key, is stored once and shows in the thread with the
 agent's verified identity. A credential cannot read another handle's queue,
 a mention of an offline handle waits as unavailable, and a reader's
-follow-up reaches the owner with its thread.
+follow-up reaches the owner with its thread. A reader's question on a
+decision reaches the owner with the decision, and the owner answers it in
+its thread, recording no answer to the decision.
 
 The site is served by `lotuspod serve` on loopback with its agent socket;
 the reader's requests carry Access assertions signed with a test key the
@@ -476,6 +478,43 @@ class AgentPullWitness(Site):
         items = self.pull(self.hermes, "hermes")
         self.assertEqual([item["comment"].get("id") for item in items], [follow.get("id")])
         self.assertEqual([c.get("text") for c in items[0]["thread"]], ["Is risk two real?", "Yes.", "Why?"])
+
+    def test_a_question_on_a_decision_reaches_the_owner_with_the_decision(self):
+        self.pull(self.hermes, "hermes")
+        [form] = self.page.forms
+        status, _, root = self.api("POST", "/api/comments", {
+            "page": "pond-review", "question": form["question"],
+            "text": "I need more context pls."})
+        self.assertEqual(status, 201, root)
+        self.assertEqual((root.get("question"), root.get("section"), root.get("state"),
+                          root.get("owner")),
+                         (form["question"], "decisions-for-the-maintainer", "pending",
+                          "hermes"))
+
+        [item] = self.pull(self.hermes, "hermes")
+        self.assertEqual(item["comment"].get("id"), root.get("id"))
+        self.assertEqual(item.get("decision"), {
+            "id": form["question"], "text": "Order a pump now?",
+            "options": [{"value": "yes", "label": "Yes"}, {"value": "no", "label": "No"}],
+            "answer": None, "asked": True})
+
+        code, claimed = self.claim(self.hermes, root.get("id"))
+        self.assertEqual(code, 0, claimed)
+        code, reply = self.agent(self.hermes, "reply", str(root.get("id")), "--claim",
+                                 claimed["claimToken"], "--key", "k-decision",
+                                 "--text", "The pump would refill the pond before May.")
+        self.assertEqual(code, 0, reply)
+
+        thread = self.thread("pond-review", root.get("id"))
+        self.assertEqual(thread["root"].get("state"), "answered")
+        self.assertEqual([(r.get("id"), r.get("text"), r.get("question"),
+                           (r.get("actor") or {}).get("handle")) for r in thread["replies"]],
+                         [(reply.get("id"), "The pump would refill the pond before May.",
+                           form["question"], "hermes")])
+        status, _, answers = self.api("GET", "/api/answers?page=pond-review")
+        self.assertEqual(status, 200, answers)
+        self.assertNotIn(form["question"], answers.get("questions"))
+        self.assertEqual(self.pull(self.hermes, "hermes"), [])
 
 
 if __name__ == "__main__":

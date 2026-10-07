@@ -16,7 +16,9 @@ attaching them to the new words. A table with any row of fewer than two
 options is left exactly as written.
 
 `read_forms()` reads the forms back from a finished page, which is how the
-answers route knows what a page asks and `lotuspod answers` its labels.
+answers route knows what a page asks and `lotuspod answers` its labels. Each
+form's section is that of the first comment box after it, which ends the
+form's own section: the comments route files a thread on the decision there.
 """
 
 from __future__ import annotations
@@ -25,11 +27,11 @@ import hashlib
 import html
 import json
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 from html.parser import HTMLParser
 
 # cli imports this module too: only names used at call time are read from it.
-from lotuspod import cli
+from lotuspod import cli, comments
 
 HEADING = "decisions for the maintainer"
 FORM_CLASS = "artifact-decision"
@@ -55,6 +57,9 @@ class Form:
     version: str
     # (value, label) per option, in the page's order.
     options: tuple[tuple[str, str], ...]
+    # The data-section of the first comment box after the form; "" when
+    # none follows it. Where it is asked is not what it asks: not compared.
+    section: str = field(default="", compare=False)
 
     def label(self, choice: str) -> str:
         """The label of the option valued choice; choice itself when none is."""
@@ -314,6 +319,8 @@ class _FormReader(HTMLParser):
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
         self.forms: dict[str, Form] = {}
+        # The questions of the forms read since the last comment box.
+        self._unboxed: list[str] = []
         self._open: dict | None = None
         # (class being read, span depth inside it, text so far)
         self._reading: tuple[str, int, list[str]] | None = None
@@ -321,7 +328,12 @@ class _FormReader(HTMLParser):
     def handle_starttag(self, tag: str, attrs: list) -> None:
         values = {key: value or "" for key, value in attrs}
         classes = values.get("class", "").split()
-        if tag == "form" and FORM_CLASS in classes:
+        if tag == "details" and comments.BOX_CLASS in classes and self._open is None:
+            section = values.get("data-section", "")
+            for question in self._unboxed:
+                self.forms[question] = replace(self.forms[question], section=section)
+            self._unboxed = []
+        elif tag == "form" and FORM_CLASS in classes:
             self._open = {"question": values.get("data-question", ""),
                           "version": values.get("data-version", ""),
                           "text": "", "options": []}
@@ -364,6 +376,7 @@ class _FormReader(HTMLParser):
                     version=found["version"],
                     options=tuple((value, label) for value, label in found["options"]),
                 )
+                self._unboxed.append(found["question"])
 
 
 def read_forms(page_html: str) -> dict[str, Form]:

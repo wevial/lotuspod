@@ -21,7 +21,9 @@ refusal, printing {"error": CODE} with --json. In the markdown, every text a
 reader wrote sits in a fence longer than its longest run of backticks, so no
 reader's text can end its fence and pass for the output around it. Each
 image a comment carries is a line under its text: its URL, its size, and
-the path of its file on this host, which an agent reads to see it.
+the path of its file on this host, which an agent reads to see it. A thread
+on a decision names it: `pull` gives its question, its options and its
+current answer, and `show` heads the thread with its id.
 """
 
 from __future__ import annotations
@@ -119,6 +121,29 @@ def moved(comment: dict, revision: str) -> str:
             f"the page is now at revision {revision or 'unknown'}")
 
 
+def answered(decision: dict) -> str:
+    """A decision's current answer: its label and choice, who and when;
+    "not answered yet" when it has none."""
+    answer = decision["answer"]
+    if answer is None:
+        return "not answered yet"
+    label = next((option["label"] for option in decision["options"]
+                  if option["value"] == answer["choice"]), answer["choice"])
+    return f"{label} (`{answer['choice']}`), by {_by(answer)} at {answer['createdAt']}"
+
+
+def _decision(decision: dict) -> list[str]:
+    """The lines naming a pulled item's decision, its options and its answer."""
+    if not decision["asked"]:
+        return [f"- Decision: `{decision['id']}`, which the page no longer asks",
+                f"- Answer: {answered(decision)}"]
+    options = ", ".join(f"{option['label']} (`{option['value']}`)"
+                        for option in decision["options"])
+    return [f"- Decision: `{decision['id']}`, {decision['text']}",
+            f"- Options: {options}",
+            f"- Answer: {answered(decision)}"]
+
+
 def _resolved(resolution: dict | None) -> list[str]:
     """The line under a resolved thread's heading; none under another."""
     if not resolution or not resolution["resolved"]:
@@ -184,6 +209,11 @@ def pull_text(payload: dict) -> str:
                 f"against revision {comment['revision'] or 'unknown'}",
                 f"- State: {_standing(comment)}",
             ]
+            decision = item.get("decision")
+            if decision:
+                lines += _decision(decision)
+                if decision["answer"] and decision["answer"]["note"]:
+                    lines += ["", "The answer's note:", "", fence(decision["answer"]["note"])]
             if comment.get("quote"):
                 lines += [f"- Passage: highlighted on {moved(comment, page['revision'])}", "",
                           *passage(comment["quote"], "The reader highlighted:")]
@@ -243,7 +273,9 @@ def show_text(payload: dict) -> str:
         lines.append("No comments yet.")
     for thread in threads:
         root = thread["root"]
-        lines += [f"## Section {_section(root)}", "", *_resolved(thread.get("resolution"))]
+        head = (f"## Decision `{root['question']}` in section {_section(root)}"
+                if root.get("question") else f"## Section {_section(root)}")
+        lines += [head, "", *_resolved(thread.get("resolution"))]
         for row in (root, *thread["replies"]):
             lines += _message(row, "###")
     return "\n".join(lines).rstrip("\n")

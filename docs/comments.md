@@ -41,6 +41,18 @@ twice.
   `quote`, and its routing state (`state` and `owner`, below). A reply takes its thread's section, and a
   reply to a reply joins the same thread: `parent` is always the thread's first
   comment.
+- `POST /api/comments` with `{page, question, text}` (and optionally the
+  `revision` the reader's page was rendered at, and `images`) opens a thread
+  on one of the page's decisions (see [Decisions for the
+  maintainer](publishing.md#decisions-for-the-maintainer)) rather than on a
+  section: a reader's question about the decision, which agents answer as
+  they answer any thread. It is stored in the section whose comment box
+  follows the decision's form, so its `section` and `sectionTitle` are that
+  section's, and it is routed, claimed, replied to and resolved as any thread
+  is. Every comment in it, replies included, carries `question`, the
+  decision's id; no other comment has the key at all. It takes no `quote`,
+  and it records no answer: the decision stays unanswered until the reader
+  saves one.
 - A new thread or reply may name up to 4 uploaded images as `images`, a list
   of their stored names in the order they are shown; a comment with images may
   have empty `text`. Every comment row carries `images`, each `{name, url,
@@ -110,6 +122,12 @@ boxes (below): a `section` the page has no box for is 400 `unknown_section`,
 and a `revision` other than the page's current one is 409 `stale_page`, so a
 quote is never stored against a revision its words were not taken from.
 Without a `revision` (a page rendered with none), a new thread is taken as is.
+A thread on a decision is checked in this order: 404 `unknown_page`, 400
+`unknown_question` for a `question` the page does not ask, 400
+`unknown_section` when the page has no comment box after the decision's form
+(a page rendered without comments), and 409 `stale_page` for a `revision`
+other than the page's. Its body with a `section` or a `quote` beside
+`question` is 400 `invalid_body`.
 
 ## Comments
 

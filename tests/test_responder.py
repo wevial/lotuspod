@@ -30,7 +30,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from lotuspod import cli, media, responder  # noqa: E402
+from lotuspod import cli, decisions, media, responder  # noqa: E402
 from tests.test_responder_witness import (  # noqa: E402
     ASSERTION, REPO, READER, Site, assertion, git)
 
@@ -54,6 +54,20 @@ HTML_PAGE = """\
 <p>Written as HTML.</p>
 <h2>Other</h2>
 <p>Nothing here.</p>
+"""
+
+DECIDED = """\
+# Pond plan
+
+## Heater
+
+A heater keeps a hole open.
+
+## Decisions for the maintainer
+
+| # | Question | Options |
+| --- | --- | --- |
+| 1 | Buy a heater? | Gas / Electric / Neither |
 """
 
 OPS = ["pull", "claim", "reply", "publish"]
@@ -223,6 +237,67 @@ class PromptTests(ResponderCase):
     def page_revision(self) -> str:
         page = (self.out / "orphan.html").read_text(encoding="utf-8")
         return page.split('name="lotuspod:revision" content="', 1)[1].split('"', 1)[0]
+
+
+class DecisionPromptTests(ResponderCase):
+    """A thread on a decision: the prompt names the decision, its options
+    and its current answer."""
+
+    def ask(self, text: str) -> dict:
+        status, _, row = self.api("POST", "/api/comments",
+                                  {"page": "pond", "question": "decision-1", "text": text})
+        self.assertEqual(status, 201, row)
+        self.assertEqual((row["question"], row["owner"]), ("decision-1", "responder"))
+        return row
+
+    def answer_section(self, prompt: str, row: dict) -> str:
+        start = prompt.index(f"## The comment to answer: comment {row['id']}")
+        return prompt[start:prompt.index("### The thread it belongs to")]
+
+    def test_the_prompt_names_the_decision_and_its_answer_or_none(self):
+        self.publish("pond", DECIDED)
+        first = self.ask("Which heater is quieter?")
+        done = self.respond()
+        self.assertEqual(done.returncode, 0, done.stderr)
+        [record] = self.records()
+        section = self.answer_section(record["prompt"], first)
+        self.assertIn("The reader asks about the decision `decision-1`: \"Buy a heater?\"",
+                      section)
+        self.assertIn("Its options: Gas (`gas`), Electric (`electric`), Neither (`neither`).",
+                      section)
+        self.assertIn("Its current answer: not answered yet.", section)
+        self.assertLess(section.index('On the section headed "Decisions for the maintainer"'),
+                        section.index("The reader asks about the decision"))
+        self.assertLess(section.index("Its current answer"),
+                        section.index("Which heater is quieter?"))
+
+        page = (self.out / "pond.html").read_text(encoding="utf-8")
+        version = decisions.read_forms(page)["decision-1"].version
+        status, _, answer = self.api("POST", "/api/answers", {
+            "page": "pond", "question": "decision-1", "version": version,
+            "choice": "electric", "note": "The quiet one."})
+        self.assertEqual(status, 201, answer)
+        second = self.ask("And how much power?")
+        done = self.respond()
+        self.assertEqual(done.returncode, 0, done.stderr)
+        section = self.answer_section(self.records()[-1]["prompt"], second)
+        self.assertIn(f"Its current answer: Electric (`electric`), by {READER} at "
+                      f"{answer['createdAt']}.", section)
+        self.assertIn("The quiet one.", section)
+        self.assertNotIn("not answered yet", section)
+        self.assertEqual(self.replies("pond", second["id"]),
+                         [("An answer.", "responder", "")])
+
+    def test_a_section_thread_names_no_decision(self):
+        self.publish("pond", DECIDED)
+        status, _, row = self.api("POST", "/api/comments",
+                                  {"page": "pond", "section": "heater", "text": "How big?"})
+        self.assertEqual(status, 201, row)
+        done = self.respond()
+        self.assertEqual(done.returncode, 0, done.stderr)
+        [record] = self.records()
+        self.assertNotIn("asks about the decision", record["prompt"])
+        self.assertNotIn("Its current answer", record["prompt"])
 
 
 class ImageTests(ResponderCase):

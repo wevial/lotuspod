@@ -192,6 +192,13 @@ class PullTestCase(unittest.TestCase):
         self.assertEqual(status, 201, row)
         return row
 
+    def decision_thread(self, text: str, question: str = "decision-1",
+                        page: str = "plan") -> dict:
+        status, row = self.reader("POST", "/api/comments",
+                                  {"page": page, "question": question, "text": text})
+        self.assertEqual(status, 201, row)
+        return row
+
     def reply(self, parent: int, text: str, page: str = "plan") -> dict:
         status, row = self.reader("POST", "/api/comments",
                                   {"page": page, "parent": parent, "text": text})
@@ -782,6 +789,97 @@ class PassageTests(PullTestCase):
         self.assertEqual(self.pulled_comments("hermes"), [plain["id"]])
 
 
+class DecisionPullTests(PullTestCase):
+    """A thread on a decision is pulled with the decision as the page asks
+    it now, and its current answer."""
+
+    OPTIONS = [{"value": "yes", "label": "Yes"}, {"value": "no", "label": "No"}]
+
+    def items(self, owner: str = "hermes", credential: Path | None = None) -> dict:
+        return {item["comment"]["id"]: item for item in self.pull(owner, credential)
+                if item["kind"] == "comment"}
+
+    def markdown(self, *argv: str) -> str:
+        rc, out, err = self.agent(*argv)
+        self.assertEqual(rc, 0, err)
+        return out
+
+    def test_the_pull_carries_the_decision_and_its_current_answer(self):
+        self.pull("hermes")
+        asked = self.decision_thread("I need more context pls.")
+        plain = self.comment("On the section.")
+        self.assertEqual(asked["question"], "decision-1")
+        items = self.items()
+        self.assertEqual(items[asked["id"]]["decision"], {
+            "id": "decision-1", "text": "Freeze the pond?", "options": self.OPTIONS,
+            "answer": None, "asked": True})
+        self.assertEqual(items[asked["id"]]["comment"]["question"], "decision-1")
+        self.assertEqual([row["question"] for row in items[asked["id"]]["thread"]],
+                         ["decision-1"])
+        self.assertNotIn("decision", items[plain["id"]])
+        self.assertNotIn("question", items[plain["id"]]["comment"])
+
+        answer = self.answer(choice="no")
+        decision = self.items()[asked["id"]]["decision"]
+        self.assertEqual((decision["answer"]["choice"], decision["answer"]["note"]),
+                         ("no", "Before the frost."))
+        self.assertEqual(decision["answer"]["actor"], READER)
+        self.assertEqual(api.shown(decision["answer"]), answer)
+
+        source = self.work / "plan.md"
+        source.write_text(PLAN.replace("| 1 | Freeze the pond? | Yes / No |\n", ""),
+                          encoding="utf-8")
+        rc, _out, err = run_cli("publish", str(source), "--out-dir", str(self.out_dir),
+                                "--local", "--owner", "hermes", "--credential", str(self.desk))
+        self.assertEqual(rc, 0, err)
+        decision = self.items()[asked["id"]]["decision"]
+        self.assertEqual((decision["id"], decision["text"], decision["options"],
+                          decision["asked"]), ("decision-1", "", [], False))
+
+    def test_a_decision_thread_is_routed_as_any_comment(self):
+        self.pull("hermes")
+        self.pull("claude-3f9a2c", credential=self.claude)
+        named = self.decision_thread("@claude-3f9a2c which are the same buttons?")
+        self.assertEqual(list(self.items("claude-3f9a2c", self.claude)), [named["id"]])
+        self.assertNotIn(named["id"], self.items())
+
+    def test_a_decision_thread_whose_owner_is_not_listening_goes_to_the_responder(self):
+        asked = self.decision_thread("Nobody pulled yet.")
+        self.assertEqual(asked["owner"], "responder")
+        self.assertIn(asked["id"], self.items("responder"))
+        self.assertEqual(self.items("responder")[asked["id"]]["decision"]["id"], "decision-1")
+
+    def test_pull_and_show_print_the_decision(self):
+        self.pull("hermes")
+        asked = self.decision_thread("Which are the same buttons?", question="decision-2")
+        self.comment("On the section.", section="goals")
+        out = self.markdown("pull", "--owner", "hermes")
+        mine, plain = out.split("section Goals")
+        self.assertIn("- Decision: `decision-2`, Skate on it?\n"
+                      "- Options: Yes (`yes`), No (`no`)\n"
+                      "- Answer: not answered yet\n", mine)
+        self.assertNotIn("- Decision:", plain)
+        self.assertNotIn("- Options:", plain)
+
+        page = (self.out_dir / "plan.html").read_text(encoding="utf-8")
+        version = decisions.read_forms(page)["decision-2"].version
+        status, answer = self.reader("POST", "/api/answers", {
+            "page": "plan", "question": "decision-2", "version": version, "choice": "yes",
+            "note": "Only ```if``` it holds."})
+        self.assertEqual(status, 201, answer)
+        out = self.markdown("pull", "--owner", "hermes")
+        self.assertIn(f"- Answer: Yes (`yes`), by {keys.EMAIL} at {answer['createdAt']}\n"
+                      "\nThe answer's note:\n\n````\nOnly ```if``` it holds.\n````\n", out)
+        self.assertNotIn("not answered yet", out)
+
+        out = self.markdown("show", "plan")
+        self.assertIn("## Decision `decision-2` in section "
+                      "Decisions for the maintainer (`decisions-for-the-maintainer`)\n", out)
+        self.assertIn("## Section Goals (`goals`)\n", out)
+        self.assertLess(out.index("Which are the same buttons?"), out.index("## Section Goals"))
+        self.assertEqual(out.count("## Decision"), 1, asked)
+
+
 class SchemaTests(PullTestCase):
     # The schema version the database is left at before serve opens it.
     version = 2
@@ -833,7 +931,7 @@ class SchemaTests(PullTestCase):
                              db.SCHEMA_VERSION)
         finally:
             conn.close()
-        self.assertEqual(db.SCHEMA_VERSION, 8)
+        self.assertEqual(db.SCHEMA_VERSION, 9)
 
 
 class ReplySchemaTests(SchemaTests):
@@ -856,6 +954,17 @@ class ReplySchemaTests(SchemaTests):
         [reply] = thread["replies"]
         self.assertEqual((reply["text"], reply["actor"]), ("Answered before.", self.AGENT))
         self.assertNotIn("model", reply)
+
+
+class DecisionSchemaTests(SchemaTests):
+    """The schema before threads on decisions."""
+
+    version = 8
+
+    def test_a_comment_from_before_names_no_decision(self):
+        [thread] = self.threads()
+        self.assertEqual(thread["root"]["text"], "Kept from before.")
+        self.assertNotIn("question", thread["root"])
 
 
 class OwnerWindowOptionTests(unittest.TestCase):
