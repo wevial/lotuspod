@@ -1,0 +1,279 @@
+{
+  "expected_differences": [],
+  "requests": [
+    {
+      "method": "GET",
+      "path": "/api/comments",
+      "request": "1. GET comments, none yet",
+      "shape": {"maxImageBytes": "number", "page": "string", "revision": "string", "threads": []},
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "path": "/api/comments",
+      "request": "2. POST a section comment",
+      "shape": {
+        "actor": {"kind": "string", "name": "string"},
+        "createdAt": "string",
+        "id": "number",
+        "images": [],
+        "owner": "string",
+        "page": "string",
+        "parent": "null",
+        "quote": "null",
+        "revision": "string",
+        "section": "string",
+        "sectionTitle": "string",
+        "state": "string",
+        "text": "string"
+      },
+      "status": 201
+    },
+    {
+      "method": "POST",
+      "path": "/api/comments",
+      "request": "3. POST a passage comment, with a quote",
+      "shape": {
+        "actor": {"kind": "string", "name": "string"},
+        "createdAt": "string",
+        "id": "number",
+        "images": [],
+        "owner": "string",
+        "page": "string",
+        "parent": "null",
+        "quote": {"exact": "string", "prefix": "string", "suffix": "string"},
+        "revision": "string",
+        "section": "string",
+        "sectionTitle": "string",
+        "state": "string",
+        "text": "string"
+      },
+      "status": 201
+    },
+    {
+      "method": "GET",
+      "path": "/api/comments",
+      "request": "4. GET comments",
+      "shape": {
+        "maxImageBytes": "number",
+        "page": "string",
+        "revision": "string",
+        "threads": [
+          {
+            "replies": [],
+            "resolution": {"actor": "null", "at": "null", "resolved": "boolean"},
+            "root": {
+              "actor": {"kind": "string", "name": "string"},
+              "createdAt": "string",
+              "id": "number",
+              "images": [],
+              "owner": "string",
+              "page": "string",
+              "parent": "null",
+              "quote": {"oneOf": ["null", {"exact": "string", "prefix": "string", "suffix": "string"}]},
+              "revision": "string",
+              "section": "string",
+              "sectionTitle": "string",
+              "state": "string",
+              "text": "string"
+            }
+          }
+        ]
+      },
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/comments",
+      "request": "6. GET comments, after the agent's reply",
+      "shape": {
+        "maxImageBytes": "number",
+        "page": "string",
+        "revision": "string",
+        "threads": [
+          {
+            "replies": [
+              {
+                "actor": {"credential": "string", "handle": "string", "kind": "string"},
+                "createdAt": "string",
+                "id": "number",
+                "images": [],
+                "model": "string",
+                "owner": "null",
+                "page": "string",
+                "parent": "number",
+                "quote": "null",
+                "revision": "string",
+                "section": "string",
+                "sectionTitle": "string",
+                "state": "string",
+                "text": "string"
+              }
+            ],
+            "resolution": {"actor": "null", "at": "null", "resolved": "boolean"},
+            "root": {
+              "actor": {"kind": "string", "name": "string"},
+              "createdAt": "string",
+              "id": "number",
+              "images": [],
+              "owner": "string",
+              "page": "string",
+              "parent": "null",
+              "quote": {"oneOf": ["null", {"exact": "string", "prefix": "string", "suffix": "string"}]},
+              "revision": "string",
+              "section": "string",
+              "sectionTitle": "string",
+              "state": "string",
+              "text": "string"
+            }
+          }
+        ]
+      },
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "path": "/api/comments",
+      "request": "7. POST a reader reply",
+      "shape": {
+        "actor": {"kind": "string", "name": "string"},
+        "createdAt": "string",
+        "id": "number",
+        "images": [],
+        "owner": "string",
+        "page": "string",
+        "parent": "number",
+        "quote": "null",
+        "revision": "string",
+        "section": "string",
+        "sectionTitle": "string",
+        "state": "string",
+        "text": "string"
+      },
+      "status": 201
+    },
+    {
+      "method": "POST",
+      "path": "/api/comments",
+      "request": "8a. POST a resolution, resolved",
+      "shape": {
+        "resolution": {"actor": {"kind": "string", "name": "string"}, "at": "string", "resolved": "boolean"},
+        "thread": "number"
+      },
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "path": "/api/comments",
+      "request": "8b. POST a resolution, reopened",
+      "shape": {
+        "resolution": {"actor": {"kind": "string", "name": "string"}, "at": "string", "resolved": "boolean"},
+        "thread": "number"
+      },
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/answers",
+      "request": "9. GET answers, none yet",
+      "shape": {"page": "string", "questions": {}},
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "path": "/api/answers",
+      "request": "10. POST an answer",
+      "shape": {
+        "actor": {"kind": "string", "name": "string"},
+        "choice": "string",
+        "createdAt": "string",
+        "id": "number",
+        "note": "string",
+        "page": "string",
+        "question": "string",
+        "revision": "string",
+        "supersedes": "null",
+        "version": "string"
+      },
+      "status": 201
+    },
+    {
+      "method": "POST",
+      "path": "/api/answers",
+      "request": "11. POST a second answer to the same question",
+      "shape": {
+        "actor": {"kind": "string", "name": "string"},
+        "choice": "string",
+        "createdAt": "string",
+        "id": "number",
+        "note": "string",
+        "page": "string",
+        "question": "string",
+        "revision": "string",
+        "supersedes": "number",
+        "version": "string"
+      },
+      "status": 201
+    },
+    {
+      "method": "POST",
+      "path": "/api/answers",
+      "request": "12. POST an answer with a stale version",
+      "shape": {"error": "string"},
+      "status": 409
+    },
+    {
+      "method": "GET",
+      "path": "/api/answers",
+      "request": "13. GET answers",
+      "shape": {
+        "page": "string",
+        "questions": {
+          "decision-1": {
+            "current": {
+              "actor": {"kind": "string", "name": "string"},
+              "choice": "string",
+              "createdAt": "string",
+              "id": "number",
+              "note": "string",
+              "page": "string",
+              "question": "string",
+              "revision": "string",
+              "supersedes": "number",
+              "version": "string"
+            },
+            "earlier": [
+              {
+                "actor": {"kind": "string", "name": "string"},
+                "choice": "string",
+                "createdAt": "string",
+                "id": "number",
+                "note": "string",
+                "page": "string",
+                "question": "string",
+                "revision": "string",
+                "supersedes": "null",
+                "version": "string"
+              }
+            ]
+          }
+        }
+      },
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/revision",
+      "request": "14. GET revision",
+      "shape": {"revision": "string"},
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "path": "/api/comments",
+      "request": "15. POST a comment on an unknown section",
+      "shape": {"error": "string"},
+      "status": 400
+    }
+  ]
+}
