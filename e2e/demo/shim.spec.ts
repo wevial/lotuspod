@@ -89,6 +89,10 @@ function decision(page: Page, question: string) {
     change: form.getByRole('button', { name: 'change' }),
     history: form.locator('.artifact-decision-history'),
     hint: form.locator('.artifact-decision-hint'),
+    addNote: form.locator('details.artifact-decision-note > summary'),
+    note: form.locator('textarea[name="note"]'),
+    ask: form.getByRole('button', { name: 'Ask', exact: true }),
+    chip: page.locator(`form.artifact-decision[data-question="${question}"] + .artifact-decision-chip`),
   };
 }
 
@@ -336,6 +340,31 @@ test('a question about a decision waits for demo-agent, then gets the decision\'
   });
   const answers = await api(page, 'GET', '/api/answers?page=try-it');
   expect(answers.status).toBe(200);
+  expect(answers.json.questions['decision-1']).toBeUndefined();
+  seen.clean();
+});
+
+test('Ask posts a decision\'s note as a question, and demo-agent\'s reply for it shows in the thread with the decision still unanswered', async ({ context, page }) => {
+  const seen = watch(context, page);
+  await load(page, TRY_IT);
+  const first = decision(page, 'decision-1');
+  const words = 'Will the water be warm enough this weekend?';
+  await first.addNote.click();
+  await first.note.fill(words);
+  await first.ask.click();
+  await expect(first.note).toHaveValue('');
+  const root = await newestRoot(page, 'try-it');
+  expect(root).toMatchObject({ question: 'decision-1', text: words, parent: null });
+  const thread = entry(page, root.id);
+  await expect(thread.head).toHaveAttribute('aria-expanded', 'true');
+  await expect(thread.readers.locator('.artifact-comment-text')).toHaveText(words);
+  await expect(thread.waiting).toContainText(AGENT);
+  await expect(first.chip).toHaveText('1 comment · waiting');
+  await expectReply(thread, REPLIES['try-it']['decision-1']);
+  await expect(first.chip).toHaveText(`1 reply · ✓ ${AGENT} answered`);
+  await expect(first.hint).toHaveText('Not answered yet');
+  await expect(first.saved).toBeHidden();
+  const answers = await api(page, 'GET', '/api/answers?page=try-it');
   expect(answers.json.questions['decision-1']).toBeUndefined();
   seen.clean();
 });

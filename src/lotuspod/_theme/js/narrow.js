@@ -111,8 +111,8 @@
     }
 
     // Every open thread on the page, in page order: those on passages by
-    // their numbers, then each section's own, oldest first, then those on
-    // sections the page no longer has.
+    // their numbers, then each section's own (its decisions' among them),
+    // oldest first, then those on sections the page no longer has.
     function steps() {
       var marked = [];
       var rest = [];
@@ -126,7 +126,8 @@
     }
 
     // What a view is called, and the title it shows: "Section HEADING", a
-    // passage's number and its opening words, or its composer.
+    // passage's number and its opening words, a decision's number and its
+    // question, or its composer.
     function caption(view) {
       if (view.passage) {
         var asking = "Comment on the selected words";
@@ -141,6 +142,13 @@
           name: (thread.n ? "Passage " + thread.n + ": " : "Passage: ") + words,
           key: thread.n + " " + lost + " " + words,
           parts: [number, " ", element(lost ? "del" : "span", "artifact-passage-quoted", words)],
+        };
+      }
+      var decision = thread && the.decisionOf(thread);
+      if (decision) {
+        return {
+          name: decision.name + ": " + decision.question, key: decision.name + ": " + decision.question,
+          parts: [element("span", "artifact-comments-held-kind", decision.name), ": ", decision.question],
         };
       }
       var box = thread ? thread.box : view.box;

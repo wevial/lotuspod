@@ -6,7 +6,8 @@
    behind "Add a note". The rule turns lavender and "Not saved" shows while the
    picked answer differs from the saved one, and a saved answer folds the card
    to one line with a "change" button, its note, who and when, and the earlier
-   answers in the muted voice of the meta line. */
+   answers in the muted voice of the meta line. On a page that takes comments
+   an outlined Ask sits beside "Save answer" (js/comments.js). */
 .artifact-decisions {
   display: grid;
   gap: 1.25rem;
@@ -218,6 +219,31 @@ label.artifact-decision-note span {
 }
 
 .artifact-decision button[type="submit"]:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+/* Ask, beside "Save answer" on a page that takes comments: the note sent as
+   a question about the decision, in the quieter outlined voice. */
+.artifact-decision-ask {
+  background: none;
+  border: 1px solid var(--color-lavender);
+  border-radius: var(--radius-pill);
+  color: var(--color-lavender);
+  cursor: pointer;
+  font-family: var(--font-body);
+  font-size: 0.95em;
+  font-weight: 600;
+  line-height: 1.3;
+  padding: 0.4em 1.1em;
+}
+
+.artifact-decision-ask:hover {
+  border-color: var(--color-pale-lavender);
+  color: var(--color-pale-lavender);
+}
+
+.artifact-decision-ask:disabled {
   cursor: default;
   opacity: 0.6;
 }

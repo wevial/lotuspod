@@ -1467,6 +1467,43 @@ del.artifact-passage-quoted {
   content: "!";
 }
 
+/* A decision's chip, under its card once it has threads: a section's chip
+   on a button, lined up with the card's text. */
+.artifact-decision-chip {
+  appearance: none;
+  background: none;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-pill);
+  color: var(--color-muted-lavender);
+  cursor: pointer;
+  font-family: var(--font-body);
+  font-size: 0.85rem;
+  justify-self: start;
+  margin: -0.6rem 0 0 calc(1rem + 2px);
+  text-align: left;
+}
+
+.artifact-decision-chip:hover,
+.artifact-decision-chip:focus-visible {
+  border-color: var(--color-lavender);
+  color: var(--color-pale-lavender);
+}
+
+.artifact-decision-chip:focus-visible {
+  outline: 2px solid var(--color-lavender);
+  outline-offset: 2px;
+}
+
+.artifact-decision-chip.artifact-comment-chip--resolved .artifact-comment-chip-icon {
+  color: var(--color-muted-lavender);
+}
+
+/* A decision thread's entry: "Decision N" before its question. */
+.artifact-comments-entry-kind {
+  color: var(--color-white);
+  font-weight: 600;
+}
+
 @keyframes artifact-comments-pulse {
   0%,
   100% {

@@ -417,6 +417,26 @@ one. "change" opens the card again with the saved option picked and the note
 filled. An answer to an earlier wording leaves the card open and unpicked,
 with the line "Answered to an earlier wording by READER, TIME".
 
+On a page that takes comments (one with at least one comment box), each card
+also has "Ask" beside "Save answer", for a question about the decision rather
+than an answer to it. It posts the note's text, trimmed, as a thread on the
+decision (`{page, question, text, revision}`, see [Answers and
+comments](comments.md#answers-and-comments)) and saves no answer, so the
+decision stays unanswered; the note is emptied and folded once the question
+is sent, so it is never saved as the answer's note later. With an empty note
+it sends nothing and says "Write your question in the note, then press Ask."
+A page published again since it loaded keeps the note and says to reload it,
+and a reader who is signed out is told so as an answer would be. The thread
+opens in the comments panel, a popover or the bottom sheet, as the window
+allows, and is answered there as any thread is. While the decision has
+threads, a chip under its card reads where they stand as a section's chip
+does ("1 comment · waiting", "HANDLE is writing…", "1 reply · ✓ HANDLE
+answered"), or "N resolved" once every one is resolved, and opens its newest
+open thread (see [The comments panel](comments.md#the-comments-panel)). Ask
+sits in the card's foot, so a folded card shows it again after "change"; the
+chip stays under a folded card. Both are drawn by the page script, so a page
+published before them gets them without publishing it again.
+
 A page with such forms loads the site's page script, `lotuspod-page.js`,
 which serve answers beside `lotuspod.css`. It reads the page's answers, folds
 each question answered as the page now asks it, and shows a collapsed list of
