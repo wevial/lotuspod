@@ -400,6 +400,79 @@ class CommentTests(ApiTestCase):
                            "resolution": db.UNRESOLVED}])
 
 
+class DecisionThreadTests(ApiTestCase):
+    """{page, question, text}: a thread on a decision, in the section whose
+    comment box follows the decision's form."""
+
+    def decision_thread(self, page: str = "plan", **body):
+        return self.ask("POST", "/api/comments",
+                        {"page": page, "question": "decision-1", **body})
+
+    def test_a_thread_on_a_decision_sits_in_its_form_s_section_and_answers_nothing(self):
+        for page, section, title in (
+                ("plan", "decisions-for-the-maintainer", "Decisions for the maintainer"),
+                ("other", "page", "")):
+            with self.subTest(page=page):
+                status, root = self.decision_thread(page, text="I need more context.")
+                self.assertEqual(status, 201, root)
+                self.assertEqual(
+                    {key: root[key] for key in root if key not in ("id", "createdAt", "revision")},
+                    {"page": page, "section": section, "sectionTitle": title,
+                     "parent": None, "text": "I need more context.", "quote": None,
+                     "images": [], "actor": SHOWN, "question": "decision-1",
+                     "state": "unavailable", "owner": "responder"},
+                )
+                self.assertEqual(root["revision"], self.page_revision(page))
+                _, got = self.ask("GET", f"/api/comments?page={page}")
+                self.assertEqual(got["threads"],
+                                 [{"root": root, "replies": [], "resolution": db.UNRESOLVED}])
+                self.assertEqual(self.ask("GET", f"/api/answers?page={page}"),
+                                 (200, {"page": page, "questions": {}}))
+
+    def test_a_reply_carries_the_decision_and_other_threads_carry_none(self):
+        _, root = self.decision_thread(text="Which are the same buttons?",
+                                       revision=self.revision)
+        status, reply = self.comment(parent=root["id"], text="The ones under the table.")
+        self.assertEqual(status, 201, reply)
+        self.assertEqual((reply["question"], reply["section"], reply["parent"]),
+                         ("decision-1", "decisions-for-the-maintainer", root["id"]))
+        _, section = self.comment(section="risks", text="On the section.")
+        _, passage = self.comment(section="risks", text="On the words.",
+                                  quote={"exact": "may freeze", "prefix": "", "suffix": ""})
+        for row in (section, passage):
+            self.assertNotIn("question", row)
+        _, got = self.ask("GET", "/api/comments?page=plan")
+        self.assertEqual(got["threads"],
+                         [{"root": root, "replies": [reply], "resolution": db.UNRESOLVED},
+                          {"root": section, "replies": [], "resolution": db.UNRESOLVED},
+                          {"root": passage, "replies": [], "resolution": db.UNRESOLVED}])
+        for thread in got["threads"][1:]:
+            self.assertNotIn("question", thread["root"])
+
+    def test_a_decision_thread_not_as_described_stores_nothing(self):
+        run_cli("render", "--name", "bare", "--title", "Bare", "--body", DECISIONS_BODY,
+                "--out-dir", str(self.out_dir))
+        run_cli("index", "--out-dir", str(self.out_dir))
+        self.assertIn("decision-1", decisions.read_forms(
+            (self.out_dir / "bare.html").read_text(encoding="utf-8")))
+        self.assertNotEqual(self.revision, "0000000000ff")
+        quote = {"exact": "Freeze", "prefix": "", "suffix": ""}
+        for label, body, status, error in (
+                ("unasked question", {"question": "decision-9"}, 400, "unknown_question"),
+                ("with a section", {"section": "risks"}, 400, "invalid_body"),
+                ("with a quote", {"quote": quote}, 400, "invalid_body"),
+                ("with a parent", {"parent": 1}, 400, "invalid_body"),
+                ("empty question", {"question": ""}, 400, "invalid_body"),
+                ("stale revision", {"revision": "0000000000ff"}, 409, "stale_page"),
+                ("hidden page", {"page": "secret"}, 404, "unknown_page"),
+                ("no comment boxes", {"page": "bare"}, 400, "unknown_section")):
+            with self.subTest(label):
+                self.assertEqual(self.decision_thread(**{"text": "Why?", **body}),
+                                 (status, {"error": error}))
+        self.assertEmpty()
+        self.assertEmpty("bare")
+
+
 class ResolutionTests(ApiTestCase):
     """{page, thread, resolved}: the reader resolves and reopens a thread."""
 
@@ -911,7 +984,7 @@ class CommentImageTests(MediaTestCase):
 
 
 class SchemaTests(ApiTestCase):
-    def test_a_comment_from_before_images_keeps_its_text(self):
+    def test_a_comment_from_before_decision_threads_keeps_its_text(self):
         self.stop()
         path = self.work / "before.sqlite3"
         conn = sqlite3.connect(str(path))
@@ -933,6 +1006,7 @@ class SchemaTests(ApiTestCase):
         [thread] = got["threads"]
         self.assertEqual((thread["root"]["text"], thread["root"]["images"]),
                          ("Kept from before.", []))
+        self.assertNotIn("question", thread["root"])
         conn = sqlite3.connect(str(path))
         try:
             self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0],

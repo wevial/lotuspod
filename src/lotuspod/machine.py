@@ -48,6 +48,13 @@ In the pull and threads answers, each image of each comment also carries
 the file is no longer there, so an agent on this host reads its bytes there
 (a file's name is the SHA-256 of its bytes). The reader's routes never carry it.
 
+A pulled comment in a thread on a decision also carries `decision`: {id,
+text, options, answer, asked}, the question as the page asks it now (its
+options each {value, label}, in the page's order), its current answer as
+the answers route gives it with the reader's address, or null, and whether
+the page still asks it; when it does not, text and options are empty. An
+item for any other thread has no `decision`.
+
 Each claim, reply, follow-up, release and failure is one database
 transaction, written to the audit trail with the credential and handle that
 acted. A claim is refused 409 claimed while another credential's is
@@ -383,6 +390,7 @@ class Routes:
         now = self.clock()
         pages: dict[str, api.Page | None] = {}
         described: dict[str, dict] = {}
+        answered: dict[str, dict] = {}
 
         def page_of(name: str) -> api.Page | None:
             if name not in pages:
@@ -393,6 +401,17 @@ class Routes:
             if page.name not in described:
                 described[page.name] = self.describe(page)
             return described[page.name]
+
+        def decision(page: api.Page, question: str) -> dict:
+            if page.name not in answered:
+                answered[page.name] = self.database.answers(page.name)
+            current = answered[page.name].get(question, {}).get("current")
+            asked = page.questions.get(question)
+            return {"id": question, "text": "" if asked is None else asked.text,
+                    "options": [] if asked is None else [
+                        {"value": value, "label": label}
+                        for value, label in asked.labels.items()],
+                    "answer": current, "asked": asked is not None}
 
         items = []
         for comment in self.database.open_comments():
@@ -411,7 +430,7 @@ class Routes:
             root = comment["id"] if comment["parent"] is None else comment["parent"]
             found = self.database.thread(root)
             omitted = max(0, len(found["replies"]) - routing.THREAD_TAIL)
-            items.append({
+            item = {
                 "kind": "comment",
                 "comment": self._located(
                     routing.public(comment, pulls, self.window, now, paused)),
@@ -422,7 +441,10 @@ class Routes:
                 # The thread's resolution: a comment in a resolved thread still waits.
                 "resolution": found["resolution"],
                 "page": item_page(page),
-            })
+            }
+            if "question" in found["root"]:
+                item["decision"] = decision(page, found["root"]["question"])
+            items.append(item)
         for found in self.database.unacknowledged_answers(owner):
             answer, kept = found["answer"], found["asked"]
             page = page_of(answer["page"])

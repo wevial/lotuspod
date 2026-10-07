@@ -41,7 +41,8 @@ or a name the socket would refuse, sends none. The model is journaled with
 the comment, so a reply sent again after a crash names the model that wrote
 it, whatever command the responder restarted with.
 The prompt always gives the comment to answer in full, whatever of its
-thread the bounded thread leaves out. The test-only fault point
+thread the bounded thread leaves out, and, for a thread on a decision, the
+decision's question, its options and its current answer. The test-only fault point
 LOTUSPOD_RESPONDER_CRASH_AFTER=publish exits right after a republish.
 
 `pause` and `resume` set a flag in serve's database: while it is set,
@@ -261,6 +262,25 @@ def _message(row: dict, level: str, copied: Collection[str], quoted: bool = True
     return lines + ([*shown, ""] if shown else [])
 
 
+def _decision(decision: dict) -> list[str]:
+    """What a thread on a decision is about: the question, its options and
+    its current answer, its note as the reader wrote it."""
+    if not decision["asked"]:
+        lines = [f"The reader asks about the decision `{decision['id']}`, which the page "
+                 "no longer asks.", ""]
+    else:
+        options = ", ".join(f"{option['label']} (`{option['value']}`)"
+                            for option in decision["options"])
+        lines = [f"The reader asks about the decision `{decision['id']}`: "
+                 f"\"{decision['text']}\"", "", f"Its options: {options}.", ""]
+    lines += [f"Its current answer: {agents.answered(decision)}.", ""]
+    answer = decision["answer"]
+    if answer and answer["note"]:
+        lines += ["The answer's note, as the reader wrote it:", "",
+                  agents.fence(answer["note"], "text"), ""]
+    return lines + ["Answer in the terms of this decision.", ""]
+
+
 def prompt(item: dict, copied: Collection[str] | None = None) -> str:
     """What the agent reads on standard input for one pulled comment item:
     the comment to answer always in full, then its bounded thread. copied
@@ -284,6 +304,8 @@ def prompt(item: dict, copied: Collection[str] | None = None) -> str:
         else f"On the section `{comment['section']}`.",
         "",
     ]
+    if item.get("decision"):
+        lines += _decision(item["decision"])
     if comment.get("quote"):
         lines += [f"The reader highlighted a passage of this section on "
                   f"{agents.moved(comment, page['revision'])}. Answer about that passage.", "",

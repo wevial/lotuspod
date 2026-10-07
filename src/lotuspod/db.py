@@ -40,6 +40,11 @@ A reader's comment may name up to four images in the media store
 (lotuspod.media), each kept by its stored name with its width and height; a
 comment row carries them as `images`, each with its /media/ URL, and an
 empty list when it has none.
+
+A thread may be anchored to a decision rather than a section: each of its
+comments keeps the decision's question id as `question`, beside the section
+whose comment box follows the decision's form. A row carries `question`
+only on such a thread.
 """
 
 from __future__ import annotations
@@ -55,7 +60,7 @@ from typing import Callable, Iterator, Mapping, Sequence
 from lotuspod import media
 
 DEFAULT_NAME = "lotuspod.sqlite3"
-SCHEMA_VERSION = 8
+SCHEMA_VERSION = 9
 # Seconds a connection waits for another writer before giving up.
 BUSY_TIMEOUT = 30
 # The state of a reader's comment until an agent takes it up.
@@ -170,6 +175,10 @@ _SCHEMA = {1: (
     # A reader's comment's images: a JSON list of {name, width, height}, the
     # names stored in lotuspod-media/; NULL when it has none.
     "ALTER TABLE comments ADD COLUMN images TEXT",
+), 9: (
+    # The decision a thread is anchored to, on each of its comments; NULL on
+    # a thread on a section or a passage.
+    "ALTER TABLE comments ADD COLUMN question TEXT",
 )}
 # The settings row that holds whether the responder is paused.
 _PAUSED = "responder_paused"
@@ -252,6 +261,9 @@ def _comment(row: sqlite3.Row) -> dict:
     # Only an agent's reply that named its model has one.
     if row["model"] is not None:
         found["model"] = row["model"]
+    # Only a comment in a thread on a decision has one.
+    if row["question"] is not None:
+        found["question"] = row["question"]
     return found
 
 
@@ -372,22 +384,23 @@ class Database:
 
     def add_comment(self, *, page: str, section: str, section_title: str, revision: str,
                     text: str, quote: Mapping | None, actor: Mapping, owner: str = "",
-                    images: Sequence[Mapping] = ()) -> dict:
+                    images: Sequence[Mapping] = (), question: str | None = None) -> dict:
         """Store a comment opening a new thread on section of a page owned
         by owner ("" when it has none), with its images, each {name, width,
-        height}."""
+        height}; with question, the thread is on that decision, in section."""
         with self._connect() as conn, _write(conn):
             return _insert_comment(
                 conn, page=page, section=section, section_title=section_title,
                 revision=revision, parent=None, text=text,
                 quote=None if quote is None else _dump(quote), actor=actor, owner=owner,
-                images=images,
+                images=images, question=question,
             )
 
     def add_reply(self, *, page: str, parent: int, revision: str,
                   sections: Mapping[str, str], text: str, actor: Mapping,
                   owner: str = "", images: Sequence[Mapping] = ()) -> dict:
-        """Store a reply in the thread of comment parent, on its section.
+        """Store a reply in the thread of comment parent, on its section and
+        its decision, if any.
 
         A reply to a reply joins the same thread: its parent is the thread's
         first comment. sections maps the page's section ids to their titles
@@ -397,7 +410,8 @@ class Database:
         """
         with self._connect() as conn, _write(conn):
             found = conn.execute(
-                "SELECT id, page, section, parent FROM comments WHERE id = ?", (parent,)
+                "SELECT id, page, section, parent, question FROM comments WHERE id = ?",
+                (parent,)
             ).fetchone()
             if found is None or found["page"] != page:
                 raise UnknownParent(parent)
@@ -406,7 +420,7 @@ class Database:
                 conn, page=page, section=found["section"],
                 section_title=sections.get(found["section"], ""), revision=revision,
                 parent=root, text=text, quote=None, actor=actor, owner=owner,
-                images=images,
+                images=images, question=found["question"],
             )
             if _resolution(_newest(conn, root))["resolved"]:
                 _insert_resolution(conn, root, False, actor)
@@ -561,13 +575,13 @@ class Database:
             root = found["id"] if found["parent"] is None else found["parent"]
             cursor = conn.execute(
                 "INSERT INTO comments (page, section, section_title, revision, parent, text,"
-                " quote, actor, created_at, state, reply_credential, reply_key, model)"
-                " VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?)",
+                " quote, actor, created_at, state, reply_credential, reply_key, model,"
+                " question) VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?)",
                 (found["page"], found["section"],
                  page["sections"].get(found["section"], ""),
                  # A reply's revision is the page revision it made, if any.
                  revision or "", root, text, _dump(actor), _now(), ANSWERED,
-                 credential, key, model),
+                 credential, key, model, found.get("question")),
             )
             conn.execute(
                 "UPDATE comments SET state = ?, claim_hash = NULL, claim_expires = NULL"
@@ -609,12 +623,12 @@ class Database:
             actor = {"kind": "agent", "handle": handle, "credential": credential}
             cursor = conn.execute(
                 "INSERT INTO comments (page, section, section_title, revision, parent, text,"
-                " quote, actor, created_at, state, reply_credential, reply_key)"
-                " VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?)",
+                " quote, actor, created_at, state, reply_credential, reply_key, question)"
+                " VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?)",
                 (found["page"], found["section"],
                  page["sections"].get(found["section"], ""),
                  revision or "", root, text, _dump(actor), _now(), ANSWERED,
-                 credential, key),
+                 credential, key, found.get("question")),
             )
             _record(conn, "follow-up", found, credential, handle, key)
             if reopen and _resolution(_newest(conn, root))["resolved"]:
@@ -880,7 +894,7 @@ def _published(conn: sqlite3.Connection, comment_id: int, credential: str, key: 
 def _insert_comment(conn: sqlite3.Connection, *, page: str, section: str,
                     section_title: str, revision: str, parent: int | None, text: str,
                     quote: str | None, actor: Mapping, owner: str,
-                    images: Sequence[Mapping] = ()) -> dict:
+                    images: Sequence[Mapping] = (), question: str | None = None) -> dict:
     # The owner's last pull as the comment arrives, read under the write lock.
     pulled = None
     if owner:
@@ -888,10 +902,10 @@ def _insert_comment(conn: sqlite3.Connection, *, page: str, section: str,
         pulled = None if found is None else found[0]
     cursor = conn.execute(
         "INSERT INTO comments (page, section, section_title, revision, parent, text,"
-        " quote, actor, created_at, state, arrival_owner, arrival_pull, images)"
-        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        " quote, actor, created_at, state, arrival_owner, arrival_pull, images, question)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (page, section, section_title, revision, parent, text, quote,
-         _dump(actor), _now(), PENDING, owner, pulled, _stored_images(images)),
+         _dump(actor), _now(), PENDING, owner, pulled, _stored_images(images), question),
     )
     row = conn.execute("SELECT * FROM comments WHERE id = ?", (cursor.lastrowid,))
     return _comment(row.fetchone())

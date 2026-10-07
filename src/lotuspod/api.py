@@ -6,6 +6,7 @@ the reader as actor. Six routes:
     POST /api/answers     {page, question, version, choice, note}
     GET  /api/answers?page=NAME
     POST /api/comments    {page, section, text[, quote][, revision][, images]},
+                          {page, question, text[, revision][, images]},
                           {page, parent, text[, images]} or {page, thread, resolved}
     GET  /api/comments?page=NAME
     POST /api/media       one image's bytes
@@ -27,6 +28,13 @@ the page does not ask, 409 stale for a version other than the page's, and
 checked against the page's comment boxes: 400 unknown_section for a section
 the page has no box for, and 409 stale_page when it names a revision other
 than the page's, so a quote is never stored against words it was not taken from.
+
+`{page, question, text}` opens a thread on one of the page's decisions
+instead of a section: it is stored in the section whose comment box follows
+the decision's form, and each comment in it carries `question`, the
+decision's id, which no other comment has. It records no answer. It is
+refused as a new thread is, and 400 unknown_question for a question the page
+does not ask, checked before its section; it takes no quote.
 
 Every reader's comment a route answers carries its routing state (see
 lotuspod.routing): `state` is `pending`, `unavailable` or `paused` until an
@@ -118,8 +126,11 @@ class Question:
     version: str
     choices: frozenset[str]
     text: str = ""
-    # Option values to their labels.
+    # Option values to their labels, in the page's order.
     labels: Mapping[str, str] = field(default_factory=dict)
+    # The section of the first comment box after its form, where a thread on
+    # it is filed; "" when the page has none.
+    section: str = ""
 
 
 @dataclass(frozen=True)
@@ -530,6 +541,8 @@ class Api:
                 )
             except db.UnknownParent:
                 raise Refusal(HTTPStatus.NOT_FOUND, "unknown_parent") from None
+        if "question" in fields and "section" not in fields:
+            return self._store_decision_thread(fields, names, least, actor)
         _keys(fields, {"page", "section", "text"}, frozenset({"quote", "revision", "images"}))
         # A heading's id may be any length, and must match one of the page's
         # boxes exactly: the body's own limit is the only one it needs.
@@ -548,4 +561,26 @@ class Api:
             page=page.name, section=section, section_title=page.sections.get(section, ""),
             revision=page.revision, text=text, quote=quote, actor=actor, owner=page.owner,
             images=images,
+        )
+
+    def _store_decision_thread(self, fields: dict, names: list[str] | None, least: int,
+                               actor: Mapping) -> dict:
+        _keys(fields, {"page", "question", "text"}, frozenset({"revision", "images"}))
+        question = _text(fields["question"], 1, MAX_NAME)
+        text = _text(fields["text"], least, MAX_TEXT)
+        read = _text(fields["revision"], 0, MAX_REVISION) if "revision" in fields else None
+        page = self._page(fields["page"])
+        asked = page.questions.get(question)
+        if asked is None:
+            raise Refusal(HTTPStatus.BAD_REQUEST, "unknown_question")
+        if asked.section not in page.comment_sections:
+            raise Refusal(HTTPStatus.BAD_REQUEST, "unknown_section")
+        if read is not None and read != page.revision:
+            raise Refusal(HTTPStatus.CONFLICT, "stale_page")
+        images = self._images(names)
+        return self.database.add_comment(
+            page=page.name, section=asked.section,
+            section_title=page.sections.get(asked.section, ""), revision=page.revision,
+            text=text, quote=None, actor=actor, owner=page.owner, images=images,
+            question=question,
         )
