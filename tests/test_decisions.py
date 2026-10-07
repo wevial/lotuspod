@@ -578,10 +578,17 @@ class AnswersCommandTests(DecisionsTestCase):
 
     def test_json_prints_what_the_route_answers(self):
         first = self.add("sonnet", "")
-        second = self.add("opus", "")
+        second = db.Database(self.db_path).add_answer(
+            page="plan", question="decision-1", version=self.form.version, choice="opus",
+            note="", revision="abc123abc123", actor=READER,
+            question_text=self.form.text, choice_label=self.form.label("opus"),
+        )
         self.assertEqual(json.loads(self.answers("--json")), {
             "page": "plan",
-            "questions": {"decision-1": {"current": second, "earlier": [first]}},
+            "questions": {"decision-1": {
+                "current": {**second, "asked": {"text": "Which model replies?",
+                                                "label": "Opus"}},
+                "earlier": [{**first, "asked": {"text": None, "label": None}}]}},
         })
 
     def test_an_answer_to_an_earlier_wording_says_so(self):

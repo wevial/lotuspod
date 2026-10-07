@@ -2224,7 +2224,7 @@ def cmd_answers(args: argparse.Namespace) -> int:
         print(f"error: not a page name: {name!r}", file=sys.stderr)
         return 1
     try:
-        questions = serve_database(args).answers(name)
+        questions = serve_database(args).answers(name, asked=True)
     except ValueError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1

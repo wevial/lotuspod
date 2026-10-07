@@ -364,22 +364,32 @@ class Database:
             row = conn.execute("SELECT * FROM answers WHERE id = ?", (cursor.lastrowid,))
             return _answer(row.fetchone())
 
-    def answers(self, page: str) -> dict:
+    def answers(self, page: str, *, asked: bool = False) -> dict:
         """The page's answered questions, each as {current, earlier}: the
-        newest answer, and the older ones newest first."""
+        newest answer, and the older ones newest first. With asked, each
+        answer also carries asked, the {text, label} of its question and
+        choice as the page asked them (None in an answer stored before they
+        were kept)."""
         with self._connect() as conn:
             rows = conn.execute(
                 "SELECT * FROM answers WHERE page = ? ORDER BY id DESC", (page,)
             ).fetchall()
+
+        def answer(row: sqlite3.Row) -> dict:
+            found = _answer(row)
+            if asked:
+                found["asked"] = {"text": row["question_text"], "label": row["choice_label"]}
+            return found
+
         questions: dict[str, dict] = {}
         for row in reversed(rows):
             questions.setdefault(row["question"], {"current": None, "earlier": []})
         for row in rows:
             entry = questions[row["question"]]
             if entry["current"] is None:
-                entry["current"] = _answer(row)
+                entry["current"] = answer(row)
             else:
-                entry["earlier"].append(_answer(row))
+                entry["earlier"].append(answer(row))
         return questions
 
     def add_comment(self, *, page: str, section: str, section_title: str, revision: str,

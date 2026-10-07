@@ -344,9 +344,30 @@
   }
 
   // The page's answered questions, each {current, earlier}: the newest
-  // answer and the older ones, newest first.
+  // answer and the older ones, newest first. Each answer is kept with asked,
+  // the {text, label} of its question and choice as the page asked them.
   function answers(page) {
     return load(ANSWERS + page, {});
+  }
+
+  // An answer as the read gives it, asked null where it was not kept.
+  function withAsked(row) {
+    var asked = row.asked || {};
+    var shownRow = Object.assign({}, row);
+    shownRow.asked = { text: own(asked, "text") ? asked.text : null,
+      label: own(asked, "label") ? asked.label : null };
+    return shownRow;
+  }
+
+  // The page's answers as the read gives them.
+  function readAnswers(page) {
+    var stored = answers(page);
+    var read = {};
+    Object.keys(stored).forEach(function (question) {
+      read[question] = { current: withAsked(stored[question].current),
+        earlier: stored[question].earlier.map(withAsked) };
+    });
+    return read;
   }
 
   // The label a form shows for a choice.
@@ -407,10 +428,13 @@
       note: note, revision: revision(), actor: READER, createdAt: now(),
       supersedes: entry.current ? entry.current.id : null,
     };
+    var asked = form.querySelector(".artifact-decision-text");
     if (entry.current) {
       entry.earlier.unshift(entry.current);
     }
-    entry.current = answer;
+    entry.current = Object.assign({}, answer, { asked: {
+      text: asked ? asked.textContent.trim() : null, label: choiceLabel(form, choice),
+    } });
     stored[question] = entry;
     save(ANSWERS + page, stored);
     acknowledge(page, form, answer);
@@ -465,7 +489,7 @@
     }
     var page = queryPage(url);
     if (path === "/api/answers") {
-      return [200, { page: page, questions: answers(page) }];
+      return [200, { page: page, questions: readAnswers(page) }];
     }
     return getComments(page);
   }

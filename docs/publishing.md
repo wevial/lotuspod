@@ -437,6 +437,21 @@ sits in the card's foot, so a folded card shows it again after "change"; the
 chip stays under a folded card. Both are drawn by the page script, so a page
 published before them gets them without publishing it again.
 
+Once any of its decisions is answered, the page ends in a table captioned
+"Answered", after its last section, drawn by the page script from the
+answers serve keeps. It has one row per answered question, newest first, with
+the columns `# | When | Question | Answer | By`: the current answer's label
+with its note under it, the reader and the time as the card shows them. A
+question the page still asks in the same words takes its number, question and
+label from its card, and its row has a "change" that opens the card's section
+if it is folded and opens the card as the card's own "change" does. A
+question the page no longer asks, or asks in other words, keeps its row in
+the words it was answered in, without "change". So a page whose decisions
+table was taken out after it was answered still shows its answers, as long as
+it has a decision form or a comment box to name the page. An author writes no
+answers section: the table is the record. One written by hand on an older
+page stays as written.
+
 A page with such forms loads the site's page script, `lotuspod-page.js`,
 which serve answers beside `lotuspod.css`. It reads the page's answers, folds
 each question answered as the page now asks it, and shows a collapsed list of
