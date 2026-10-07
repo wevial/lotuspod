@@ -192,3 +192,47 @@ The first deploy is made by hand, since creating the Worker and its custom
 domain needs more than the workflow's token may do: build, then run the
 workflow's pinned `npx wrangler@VERSION deploy` in `demo/`, signed in to an
 account that can create Workers and write the zone's Workers routes.
+
+## Releasing
+
+A release takes three steps:
+
+1. Write the version's section in `CHANGELOG.md`, headed
+   `## X.Y.Z - YYYY-MM-DD`; its body becomes the release notes.
+2. Set `version` in `pyproject.toml` to `X.Y.Z`.
+3. Push the tag `vX.Y.Z`, made on that commit once it is on `main`:
+   `git tag vX.Y.Z && git push origin vX.Y.Z`.
+
+The `release` workflow (`.github/workflows/release.yml`) runs on every pushed
+`v*` tag, in two jobs. `build`, which may only read the repository, runs
+`python ci/release_check.py "$GITHUB_REF_NAME"`, which refuses a tag that is
+not `v` plus the `pyproject.toml` version or a changelog with no section for
+it, and otherwise prints that section as the notes. It then runs the leak
+guard from the tag's parent commit to the tag, and the unit suite, as the
+`unit` check does; builds the wheel and sdist with `python -m build`; and runs
+`ci/install_smoke.sh dist`, which installs the wheel into a fresh virtual
+environment in a temporary directory and publishes a two-section page with
+it, with `LOTUSPOD_CONFIG` naming a missing file, then checks the page and
+the theme files it links are all written. A file missing from the package
+data fails it there. `publish` then creates the GitHub release with the
+notes and both files, and uploads them to PyPI through trusted publishing:
+the job's own short-lived identity is the credential, so no PyPI token is
+stored anywhere. Check a tag before pushing it:
+
+```sh
+python ci/release_check.py v0.1.0
+python -m build && bash ci/install_smoke.sh dist
+```
+
+Two settings are made once, by the maintainer, before the first tag:
+
+- On PyPI, add a pending trusted publisher (a trusted publisher once the
+  project exists) for the project `lotuspod`, with owner `wevial`,
+  repository `lotuspod`, workflow `release.yml` and environment `pypi`.
+- In the repository's settings, under Environments, create the environment
+  `pypi`, which the `publish` job runs in; a required reviewer there makes
+  each upload wait for approval.
+
+A failed `publish` job can be re-run from the Actions tab without
+re-tagging: it keeps a GitHub release that already exists, and skips files
+PyPI already has.
