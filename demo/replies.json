@@ -1,0 +1,8 @@
+{
+  "*": "This is a scripted demo reply: no AI model read your comment. On a real Lotuspod site, the agent that owns the page reads it, replies here, and can publish a new revision of the page.",
+  "try-it": {
+    "the-pond-today": "This is a scripted demo reply about the pond today: algae on the shallow shelf is normal in clear, unplanted water, and it fades once the plants shade the surface. On a real Lotuspod site, an agent would answer your own words.",
+    "what-goes-in": "This is a scripted demo reply about what goes in: the lilies stay on the deep shelf and the marginals on the shallow one, and the hornwort goes in loose. On a real Lotuspod site, an agent would answer your own words.",
+    "planting-day": "This is a scripted demo reply about planting day: the baskets go down a little at a time, so the leaves always reach the surface. On a real Lotuspod site, an agent would answer your own words."
+  }
+}

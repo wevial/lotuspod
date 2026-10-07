@@ -6,10 +6,13 @@ files. This file builds it once into a temporary directory and witnesses
 the site: every page there and made by publish, every relative link and
 anchor landing, the page list moved to pages.html with / redirecting to the
 README's page, the demo banner first in every body, the Try it page's forms
-and comment boxes, the static host's headers, no noindex, and scripts only
-from the site or the Mermaid directory. It also witnesses that a link to no
-file fails the build, that a page published outside the build holds none of
-the demo, and that `--serve` answers over HTTP.
+and comment boxes, the static host's headers, no noindex, scripts only from
+the site or the Mermaid directory, and the demo shim (lotuspod-demo.js, with
+demo/replies.json in it) loaded from every head before the page script. It
+also witnesses that a link to no file fails the build, that a page published
+outside the build, the theme's sources and serve's allow-list hold none of
+the demo, that `--serve` answers over HTTP, and that `--serve -- CMD` runs
+CMD against the site with its request log and exits with CMD's code.
 
 Run from the repo root:
 
@@ -20,6 +23,7 @@ from __future__ import annotations
 
 import contextlib
 import io
+import json
 import os
 import re
 import signal
@@ -241,6 +245,36 @@ class BuiltSiteTests(unittest.TestCase):
                 with self.subTest(file=path.name):
                     self.assertNotIn(b"noindex", path.read_bytes().lower())
 
+    def test_every_head_loads_the_shim_before_the_page_script(self):
+        tag = '<script src="lotuspod-demo.js"></script>'
+        for name in (*PAGES, "pages.html"):
+            with self.subTest(page=name):
+                text = (self.out / name).read_text(encoding="utf-8")
+                self.assertEqual(text.count(tag), 1)
+                self.assertLess(text.index(tag), text.index("</head>"))
+                self.assertIn("lotuspod-demo.js", self.pages[name].script_srcs)
+                if "lotuspod-page.js" in text:
+                    self.assertLess(text.index(tag), text.index('<script src="lotuspod-page.js'))
+        self.assertIn("lotuspod-page.js", (self.out / "try-it.html").read_text(encoding="utf-8"))
+
+    def test_the_shim_is_shim_js_with_the_replies_in_it(self):
+        shim = (self.out / "lotuspod-demo.js").read_text(encoding="utf-8")
+        replies = json.loads(build.REPLIES.read_text(encoding="utf-8"))
+        self.assertNotIn(build.REPLIES_SLOT, shim)
+        before, _, after = build.SHIM.read_text(encoding="utf-8").partition(build.REPLIES_SLOT)
+        self.assertTrue(shim.startswith(before))
+        self.assertTrue(shim.endswith(after))
+        self.assertEqual(json.loads(shim[len(before):len(shim) - len(after)]), replies)
+
+    def test_each_canned_reply_says_it_is_scripted(self):
+        replies = json.loads(build.REPLIES.read_text(encoding="utf-8"))
+        texts = [replies["*"]] + [text for page, sections in replies.items() if page != "*"
+                                  for text in sections.values()]
+        self.assertIn("the-pond-today", replies["try-it"])
+        for text in texts:
+            with self.subTest(text=text[:40]):
+                self.assertIn("scripted demo reply", text)
+
     def test_scripts_load_from_the_site_or_the_mermaid_directory_only(self):
         for name, page in self.pages.items():
             allowed = [source for directive in page.policy.split(";")
@@ -302,10 +336,25 @@ class OutsideTheBuildTests(unittest.TestCase):
             text = (out / "try-it.html").read_text(encoding="utf-8")
             self.assertNotIn("demo-banner", text)
             self.assertNotIn("lotuspod-demo.css", text)
+            self.assertNotIn("lotuspod-demo.js", text)
+            self.assertNotIn("lotuspod-demo", (out / cli.PAGE_SCRIPT).read_text(encoding="utf-8"))
             (out / "lotuspod-demo.css").write_bytes(build.STYLESHEET.read_bytes())
+            (out / "lotuspod-demo.js").write_bytes(build.SHIM.read_bytes())
             allowed = cli.serve_allow_list(out)
             self.assertIn("try-it.html", allowed)
             self.assertNotIn("lotuspod-demo.css", allowed)
+            self.assertNotIn("lotuspod-demo.js", allowed)
+
+    def test_no_theme_source_is_under_demo(self):
+        demo = (REPO_ROOT / "demo").resolve()
+        sources = [cli.THEME_DIR / source for files in cli.THEME_SOURCES.values()
+                   for source in files]
+        self.assertIn("js/comments.js", cli.THEME_SOURCES[cli.PAGE_SCRIPT])
+        for source in sources:
+            with self.subTest(source=str(source)):
+                self.assertTrue(source.is_file())
+                self.assertFalse(source.resolve().is_relative_to(demo))
+                self.assertNotIn(source.name, ("shim.js", "replies.json"))
 
 
 class ServeTests(unittest.TestCase):
@@ -339,6 +388,36 @@ class ServeTests(unittest.TestCase):
         self.assertEqual(readme.first[1].get("class"), "demo-banner")
         self.assertIn(b"Planting the new pond", try_it)
         self.assertEqual(code, 0)
+
+    def test_serve_with_a_command_runs_it_against_the_site_and_exits_with_its_code(self):
+        script = (
+            "import os, sys, urllib.error, urllib.request\n"
+            "url = os.environ['LOTUSPOD_URL']\n"
+            "assert url.startswith('http://127.0.0.1:'), url\n"
+            "with urllib.request.urlopen(url + 'lotuspod-demo.js') as answer:\n"
+            "    assert b'demo-agent' in answer.read()\n"
+            "try:\n"
+            "    urllib.request.urlopen(url + 'api/comments?page=try-it')\n"
+            "except urllib.error.HTTPError as exc:\n"
+            "    assert exc.code == 404, exc.code\n"
+            "with open(os.environ['LOTUSPOD_DEMO_LOG'], encoding='utf-8') as log:\n"
+            "    print(log.read(), end='')\n"
+            "sys.exit(7)\n"
+        )
+        done = subprocess.run(
+            [sys.executable, "-m", "demo.build", "--serve", "--", sys.executable, "-c", script],
+            cwd=REPO_ROOT, capture_output=True, text=True, timeout=120,
+        )
+        self.assertEqual(done.returncode, 7, done.stderr)
+        self.assertEqual(done.stdout.splitlines(),
+                         ["GET /lotuspod-demo.js", "GET /api/comments?page=try-it"])
+
+    def test_a_command_without_serve_is_refused(self):
+        stderr = io.StringIO()
+        with contextlib.redirect_stderr(stderr), self.assertRaises(SystemExit) as raised:
+            build.main(["--", "true"])
+        self.assertEqual(raised.exception.code, 2)
+        self.assertIn("--serve", stderr.getvalue())
 
 
 if __name__ == "__main__":
