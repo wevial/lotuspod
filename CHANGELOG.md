@@ -4,6 +4,11 @@ All notable changes to Lotuspod are recorded here, newest first, in the
 Keep a Changelog style. Each version's section, headed
 `## X.Y.Z - YYYY-MM-DD`, becomes the notes of its GitHub release.
 
+## 0.1.1 - 2026-10-07
+
+- The PyPI page now shows the README's images and links: the release points
+  each of them at GitHub, at the release's tag.
+
 ## 0.1.0 - 2026-10-07
 
 The first public release.
