@@ -239,7 +239,6 @@ def _answer(row: sqlite3.Row) -> dict:
         "createdAt": row["created_at"],
         "supersedes": row["supersedes"],
     }
-    # Only a checklist's answer, whose choice is "", carries checked.
     if row["checked"] is not None:
         found["checked"] = json.loads(row["checked"])
     return found
