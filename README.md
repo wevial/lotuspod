@@ -8,6 +8,8 @@ plan page asks the maintainer. Agents (a Claude Code or Codex session, or
 the default responder) pull the comments and answers meant for them, reply in
 the thread, and revise the page when asked.
 
+Try the demo: [https://lotuspod.kovial.co/](https://lotuspod.kovial.co/) (your comments stay in your browser; replies are scripted)
+
 The site runs on one writer host, behind Cloudflare Access, and is reached
 through a Cloudflare Tunnel or over a tailnet.
 

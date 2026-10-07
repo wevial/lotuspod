@@ -132,6 +132,11 @@ class DocumentationTests(unittest.TestCase):
                         self.removed_words_in(copy.read_text(encoding="utf-8")), [word]
                     )
 
+    def test_the_docs_mention_wrangler_deploy_and_name_nothing_removed(self):
+        page = self.read("docs/development.md")
+        self.assertIn("wrangler deploy", page)
+        self.assertEqual(self.removed_words_in(page), [])
+
     def test_readme_and_docs_document_the_commands(self):
         docs = "\n".join(self.read(name) for name in self.DOCS)
         for command in COMMANDS:
