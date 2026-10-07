@@ -140,7 +140,7 @@ def public(comment: Mapping, pulls: Mapping[str, float], window: float, now: flo
     (None for an agent's reply) and its `state` its routing state."""
     row = {key: value for key, value in comment.items() if key not in ("arrival", "claim")}
     routed = route(comment, pulls, window, now, paused)
-    row["owner"] = None if routed is None else routed[0]
+    row["routedTo"] = None if routed is None else routed[0]
     if routed is not None:
         row["state"] = routed[1]
     return row
