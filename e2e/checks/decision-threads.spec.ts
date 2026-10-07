@@ -419,6 +419,61 @@ test.describe('signed in', () => {
     await seen.clean();
   });
 
+  test("with every thread resolved, a decision's chip opens the one with the newest reader comment", async ({ page, request }) => {
+    const seen = await watch(page);
+    const older = await post(request, { question: 'decision-1', text: 'Does it need its own outlet?' });
+    const newer = await post(request, { question: 'decision-1', text: 'How loud is the pump?' });
+    // The older thread's reader writes in it last.
+    await post(request, { parent: older.id, text: 'And may it share the pump\'s?' });
+    for (const thread of [older, newer]) {
+      const response = await request.post('/api/comments', {
+        headers: SIGNED_IN, data: { page: SLUG, thread: thread.id, resolved: true },
+      });
+      expect(response.status()).toBe(200);
+    }
+    await ownThreads(page, new Set([older.id, newer.id]));
+    await unanswered(page);
+    await load(page);
+    const first = decision(page, 'decision-1');
+    await expect(first.chip).toHaveText('2 resolved');
+    await first.chip.click();
+    await expect(entry(page, older.id).reopen).toBeFocused();
+    await seen.clean();
+  });
+
+  test('a note changed while its question is sending is kept, unsent and unsaved', async ({ page }) => {
+    const seen = await watch(page);
+    listen();
+    const ids = new Set<number>();
+    await ownThreads(page, ids);
+    await unanswered(page);
+    let release = () => {};
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    let arrived = () => {};
+    const sending = new Promise<void>((resolve) => { arrived = resolve; });
+    // The question's POST waits until the note has changed.
+    await page.route((url) => url.pathname === '/api/comments', async (route) => {
+      if (route.request().method() === 'POST') {
+        arrived();
+        await gate;
+      }
+      await route.fallback();
+    });
+    await load(page);
+    const first = decision(page, 'decision-1');
+    await ask(page, 'decision-1', 'Can it freeze?');
+    await sending;
+    await first.note.fill('Does it need a fuse?');
+    release();
+    await expect.poll(() => ids.size).toBe(1);
+    await expect(first.chip).toHaveText('1 comment · waiting');
+    await expect(first.note).toHaveValue('Does it need a fuse?');
+    await expect(first.noteBox).toHaveAttribute('open');
+    await expect(first.form).toHaveClass(/artifact-decision--dirty/);
+    await expect(first.hint).toBeHidden();
+    await seen.clean();
+  });
+
   test('at 900 pixels a question opens in a popover under the chip, and at 390 in the bottom sheet among the open threads', async ({ page, request }) => {
     const seen = await watch(page);
     listen();

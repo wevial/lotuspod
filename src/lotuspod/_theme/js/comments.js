@@ -1767,7 +1767,7 @@
       function openDecision(form) {
         var threads = threadsOn(form);
         var thread = latest(threads.filter(function (each) { return !resolved(each); })) ||
-          threads[threads.length - 1];
+          latest(threads);
         if (!thread) {
           return;
         }
@@ -2544,7 +2544,8 @@
         }
       }
       button.addEventListener("click", async function () {
-        var text = note.value.trim();
+        var sent = note.value;
+        var text = sent.trim();
         if (!text) {
           say(NO_QUESTION);
           return;
@@ -2567,13 +2568,17 @@
             return;
           }
           say("");
-          note.value = "";
-          var fold = note.closest("details");
-          if (fold) {
-            fold.open = false;
+          // A note changed while the question was sending holds a question
+          // not yet sent: it stays, open, and the card keeps it unsaved.
+          if (note.value === sent) {
+            note.value = "";
+            var fold = note.closest("details");
+            if (fold) {
+              fold.open = false;
+            }
+            // The card marks itself as its note now reads.
+            note.dispatchEvent(new Event("input", { bubbles: true }));
           }
-          // The card marks itself as its note now reads.
-          note.dispatchEvent(new Event("input", { bubbles: true }));
           add({ root: payload, replies: [] });
           posted();
           panel.asked(shown.get(payload.id));
