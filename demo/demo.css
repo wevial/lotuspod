@@ -24,6 +24,16 @@ body:has(.artifact-topbar) > .demo-banner {
   margin-top: var(--topbar-height);
 }
 
+/* The banner already clears the topbar, so the page below it keeps the
+   theme's top padding without the topbar's height in it. */
+body:has(.artifact-topbar) > .demo-banner ~ .artifact {
+  padding-top: 4rem;
+}
+
+body:has(.artifact-topbar) > .demo-banner ~ .artifact--report {
+  padding-top: 2rem;
+}
+
 .demo-banner-text {
   margin: 0;
 }
