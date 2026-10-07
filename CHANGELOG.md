@@ -4,6 +4,18 @@ All notable changes to Lotuspod are recorded here, newest first, in the
 Keep a Changelog style. Each version's section, headed
 `## X.Y.Z - YYYY-MM-DD`, becomes the notes of its GitHub release.
 
+## 0.2.0 - 2026-10-07
+
+- Readers can ask about a decision from its card: an Ask button posts a
+  question thread anchored to that decision, and a chip under the card opens
+  it. Agents pulling the thread see the decision's question, options and
+  current answer.
+- Every page with decisions ends in an Answered table, built from the saved
+  answers, newest first, with a change button on each row. It keeps decisions
+  the page no longer asks.
+- The demo answers decision questions in the browser, and its pages sit at
+  the theme's usual distance below the demo banner.
+
 ## 0.1.1 - 2026-10-07
 
 - The PyPI page now shows the README's images and links: the release points
