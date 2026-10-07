@@ -2,6 +2,7 @@
 
     python -m demo.build [--out DIR]
     python -m demo.build --serve [--port PORT]
+    python -m demo.build --serve [--port PORT] -- CMD [ARG...]
 
 Each source in SOURCES is copied into a scratch directory with its markdown
 links to another source rewritten to that source's page (`PAGE.html`,
@@ -16,14 +17,23 @@ redirects to the README's page, every page gets the demo banner and its
 stylesheet, and the static host's `_headers` and `_redirects` are written.
 Media is copied to DIR/media/, where the pages name it.
 
+Every page also loads the demo shim (demo/shim.js, with demo/replies.json
+put in it) as lotuspod-demo.js, from its head, so before the page script: it
+answers the page script's /api requests from the visitor's browser, as no
+static host can.
+
 `--serve` builds into a scratch directory and serves it on 127.0.0.1 until
-ctrl-c or SIGTERM, answering `/` with the README's page.
+ctrl-c or SIGTERM, answering `/` with the README's page. With `-- CMD`, it
+runs CMD instead, with the site's URL in LOTUSPOD_URL and the file the
+server logs each request to (`METHOD PATH`, one a line) in
+LOTUSPOD_DEMO_LOG, then stops and exits with CMD's code.
 """
 
 from __future__ import annotations
 
 import argparse
 import html
+import json
 import os
 import posixpath
 import re
@@ -32,6 +42,7 @@ import signal
 import subprocess
 import sys
 import tempfile
+import threading
 from functools import partial
 from html.parser import HTMLParser
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -40,6 +51,10 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_OUT = REPO_ROOT / "demo" / "dist"
 STYLESHEET = Path(__file__).resolve().parent / "demo.css"
+SHIM = Path(__file__).resolve().parent / "shim.js"
+REPLIES = Path(__file__).resolve().parent / "replies.json"
+# Where shim.js holds demo/replies.json, which the build puts there.
+REPLIES_SLOT = "{/* demo/replies.json, put here by the build */}"
 
 # Each source, relative to the repository, and its page name, in build order.
 SOURCES = (
@@ -67,6 +82,7 @@ TRY_IT_PAGE = "try-it"
 PAGES_FILE = "pages.html"
 INDEX_FILE = "index.html"
 DEMO_CSS = "lotuspod-demo.css"
+DEMO_JS = "lotuspod-demo.js"
 MEDIA_DIR = "media"
 GITHUB_BLOB = "https://github.com/wevial/lotuspod/blob/main/"
 # Files publish keeps beside the pages that the site does not show.
@@ -85,6 +101,8 @@ REDIRECTS = f"""\
 / /{LANDING_PAGE}.html 302
 /{INDEX_FILE} /{LANDING_PAGE}.html 302
 """
+URL_ENV = "LOTUSPOD_URL"
+LOG_ENV = "LOTUSPOD_DEMO_LOG"
 
 BRAND_LINK = '<a class="artifact-topbar-brand" href="index.html">'
 FENCE = re.compile(r"^\s*(`{3,}|~{3,})")
@@ -239,18 +257,36 @@ def banner(commit: str) -> str:
 
 
 def dress(page: str, name: str, commit: str) -> str:
-    """page as the demo shows it: its stylesheet linked, the banner first in
-    its body, and its brand link (if any) on the page list."""
+    """page as the demo shows it: its stylesheet linked, the shim loaded from
+    its head, the banner first in its body, and its brand link (if any) on
+    the page list."""
     def once(text: str, old: str, new: str) -> str:
         if text.count(old) != 1:
             raise BuildError(f"{name}: expected one {old!r}, found {text.count(old)}")
         return text.replace(old, new)
 
-    page = once(page, "</head>", f'  <link rel="stylesheet" href="{DEMO_CSS}">\n</head>')
+    page = once(page, "</head>", f'  <link rel="stylesheet" href="{DEMO_CSS}">\n'
+                f'  <script src="{DEMO_JS}"></script>\n</head>')
     page = once(page, "<body>", f"<body>\n{banner(commit)}")
     if name != PAGES_FILE:
         page = once(page, BRAND_LINK, BRAND_LINK.replace(INDEX_FILE, PAGES_FILE))
     return page
+
+
+def shim() -> str:
+    """lotuspod-demo.js: shim.js with demo/replies.json in its slot."""
+    try:
+        replies = json.loads(REPLIES.read_text(encoding="utf-8"))
+    except ValueError as exc:
+        raise BuildError(f"{REPLIES.name} is not JSON: {exc}") from None
+    if not isinstance(replies, dict) or not isinstance(replies.get("*"), str) or not all(
+            isinstance(texts, dict) and all(isinstance(text, str) for text in texts.values())
+            for page, texts in replies.items() if page != "*"):
+        raise BuildError(f'{REPLIES.name}: expected "*" and each page\'s section texts')
+    script = SHIM.read_text(encoding="utf-8")
+    if script.count(REPLIES_SLOT) != 1:
+        raise BuildError(f"{SHIM.name}: expected one {REPLIES_SLOT!r}")
+    return script.replace(REPLIES_SLOT, json.dumps(replies, ensure_ascii=True, indent=2))
 
 
 def prepare_out(out: Path) -> None:
@@ -270,6 +306,7 @@ def build(out: Path, root: Path | None = None,
     root = REPO_ROOT if root is None else root
     sources = SOURCES if sources is None else sources
     pages = dict(sources)
+    script = shim()
     for source, _ in sources:
         if not (root / source).is_file():
             raise BuildError(f"{source}: no such source in the checkout")
@@ -306,13 +343,19 @@ def build(out: Path, root: Path | None = None,
             shutil.copytree(media, out / MEDIA_DIR)
 
     shutil.copyfile(STYLESHEET, out / DEMO_CSS)
+    (out / DEMO_JS).write_text(script, encoding="utf-8")
     (out / "_headers").write_text(HEADERS, encoding="utf-8")
     (out / "_redirects").write_text(REDIRECTS, encoding="utf-8")
     return shown
 
 
 class _Handler(SimpleHTTPRequestHandler):
-    """A static file server that answers / as the host's _redirects would."""
+    """A static file server that answers / as the host's _redirects would.
+    With a log, each request is written there as `METHOD PATH`, not to stderr."""
+
+    def __init__(self, *args, log=None, **kwargs) -> None:
+        self.log = log
+        super().__init__(*args, **kwargs)
 
     def _landing(self) -> None:
         if self.path.split("?")[0] in ("/", f"/{INDEX_FILE}"):
@@ -326,9 +369,22 @@ class _Handler(SimpleHTTPRequestHandler):
         self._landing()
         super().do_HEAD()
 
+    def log_request(self, code="-", size="-") -> None:
+        if self.log is None:
+            super().log_request(code, size)
+            return
+        with self.log["lock"]:
+            self.log["file"].write(f"{self.command} {self.path}\n")
+            self.log["file"].flush()
 
-def serve(port: int) -> None:
-    """Build into a scratch directory and serve it on 127.0.0.1 until stopped."""
+    def log_message(self, format: str, *args) -> None:
+        if self.log is None:
+            super().log_message(format, *args)
+
+
+def serve(port: int, command: list[str] | None = None) -> int:
+    """Build into a scratch directory and serve it on 127.0.0.1 until stopped,
+    or, given command, while command runs; command's exit code, else 0."""
     def stop(signum, frame):
         raise KeyboardInterrupt
 
@@ -336,22 +392,45 @@ def serve(port: int) -> None:
     with tempfile.TemporaryDirectory(prefix="lotuspod-demo-site-") as tmp:
         out = Path(tmp) / "site"
         build(out)
-        server = ThreadingHTTPServer(("127.0.0.1", port),
-                                     partial(_Handler, directory=str(out)))
-        try:
-            print(f"serving the demo at http://127.0.0.1:{server.server_address[1]}/ "
-                  "(ctrl-c stops)", flush=True)
-            server.serve_forever()
-        except KeyboardInterrupt:
-            pass
-        finally:
-            server.server_close()
+        if command is None:
+            server = ThreadingHTTPServer(("127.0.0.1", port),
+                                         partial(_Handler, directory=str(out)))
+            try:
+                print(f"serving the demo at http://127.0.0.1:{server.server_address[1]}/ "
+                      "(ctrl-c stops)", flush=True)
+                server.serve_forever()
+            except KeyboardInterrupt:
+                pass
+            finally:
+                server.server_close()
+            return 0
+
+        log_path = Path(tmp) / "requests.log"
+        with open(log_path, "w", encoding="utf-8") as log_file:
+            log = {"file": log_file, "lock": threading.Lock()}
+            server = ThreadingHTTPServer(("127.0.0.1", port),
+                                         partial(_Handler, directory=str(out), log=log))
+            worker = threading.Thread(target=server.serve_forever, daemon=True)
+            worker.start()
+            env = {**os.environ, URL_ENV: f"http://127.0.0.1:{server.server_address[1]}/",
+                   LOG_ENV: str(log_path)}
+            try:
+                return subprocess.run(command, env=env, check=False).returncode
+            except OSError as exc:
+                raise BuildError(f"cannot run {command[0]}: {exc}") from None
+            except KeyboardInterrupt:
+                return 130
+            finally:
+                server.shutdown()
+                server.server_close()
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="python -m demo.build",
         description="Build the demo site from README.md, the docs pages and the Try it page.",
+        epilog="With --serve, `-- CMD [ARG...]` runs CMD against the served site "
+               f"({URL_ENV} names its URL, {LOG_ENV} its request log), then stops.",
     )
     parser.add_argument("--out", default=str(DEFAULT_OUT),
                         help="output directory (default: demo/dist)")
@@ -359,11 +438,15 @@ def main(argv: list[str] | None = None) -> int:
                         help="build into a scratch directory and serve it on 127.0.0.1")
     parser.add_argument("--port", type=int, default=0,
                         help="the port --serve listens on (default: a free one)")
-    args = parser.parse_args(argv)
+    argv = sys.argv[1:] if argv is None else list(argv)
+    # Everything after the first `--` is the command --serve runs.
+    command = argv[argv.index("--") + 1:] if "--" in argv else None
+    args = parser.parse_args(argv[:argv.index("--")] if command is not None else argv)
+    if command is not None and (not args.serve or not command):
+        parser.error("`-- CMD` takes --serve and a command")
     try:
         if args.serve:
-            serve(args.port)
-            return 0
+            return serve(args.port, command)
         out = Path(args.out).resolve()
         shown = build(out)
     except BuildError as exc:
