@@ -81,25 +81,34 @@ async function gap(page: Page, above: string) {
   }, above);
 }
 
-for (const width of [1280, 400]) {
-  test(`at ${width} px the title sits the theme's distance below the banner`, async ({ page }) => {
-    await page.setViewportSize({ width, height: 800 });
+// Both measured at one width: the demo's banner-to-title gap is within
+// TOLERANCE of the plain page's topbar-to-title gap, and the demo page
+// doesn't scroll horizontally.
+async function checkGap(page: Page, width: number) {
+  await page.setViewportSize({ width, height: 800 });
 
-    await page.goto(reference);
-    await expect(page.locator('.demo-banner')).toHaveCount(0);
-    const plain = await gap(page, '.artifact-topbar');
+  await page.goto(reference);
+  await expect(page.locator('.demo-banner')).toHaveCount(0);
+  const plain = await gap(page, '.artifact-topbar');
 
-    await page.goto(`/${PAGE}.html`);
-    await expect(page.locator('body > .demo-banner')).toBeVisible();
-    const demo = await gap(page, 'body > .demo-banner');
+  await page.goto(`/${PAGE}.html`);
+  await expect(page.locator('body > .demo-banner')).toBeVisible();
+  const demo = await gap(page, 'body > .demo-banner');
 
-    expect(demo.main, 'the same variant on both pages').toBe(plain.main);
-    expect(plain.gap, 'the theme leaves a gap above the title').toBeGreaterThan(0);
-    expect(Math.abs(demo.gap - plain.gap),
-      `banner-to-title ${demo.gap}px, topbar-to-title ${plain.gap}px`).toBeLessThanOrEqual(TOLERANCE);
+  expect(demo.main, 'the same variant on both pages').toBe(plain.main);
+  expect(plain.gap, 'the theme leaves a gap above the title').toBeGreaterThan(0);
+  expect(Math.abs(demo.gap - plain.gap),
+    `banner-to-title ${demo.gap}px, topbar-to-title ${plain.gap}px`).toBeLessThanOrEqual(TOLERANCE);
 
-    const overflow = await page.evaluate(() =>
-      document.documentElement.scrollWidth - document.documentElement.clientWidth);
-    expect(overflow, 'the document does not scroll horizontally').toBeLessThanOrEqual(0);
-  });
+  const overflow = await page.evaluate(() =>
+    document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  expect(overflow, 'the document does not scroll horizontally').toBeLessThanOrEqual(0);
 }
+
+test("at 1280 px the title sits the theme's distance below the banner", async ({ page }) => {
+  await checkGap(page, 1280);
+});
+
+test("at 400 px the title sits the theme's distance below the banner", async ({ page }) => {
+  await checkGap(page, 400);
+});
