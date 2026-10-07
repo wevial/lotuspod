@@ -404,15 +404,14 @@ def render_decisions(body: str, page: str) -> tuple[str, bool]:
             if checklist is None:
                 continue
             checklists += 1
-            form = _checklist_form(page, checklist)
-            blocks.append((table, f'<div class="artifact-decisions">\n{form}\n</div>'))
-            continue
-        ids = set(taken)
-        questions = _questions(table["rows"], ids)
-        if not questions:
-            continue
-        taken = ids
-        forms = "\n".join(_form(page, question) for question in questions)
+            forms = _checklist_form(page, checklist)
+        else:
+            ids = set(taken)
+            questions = _questions(table["rows"], ids)
+            if not questions:
+                continue
+            taken = ids
+            forms = "\n".join(_form(page, question) for question in questions)
         blocks.append((table, f'<div class="artifact-decisions">\n{forms}\n</div>'))
     # Last first, so the spans before each replacement still hold.
     for table, block in reversed(blocks):
