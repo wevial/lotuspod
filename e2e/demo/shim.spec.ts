@@ -378,7 +378,7 @@ test('a decision thread\'s reply carries its question, and a reply, a resolution
   seen.clean();
 });
 
-test('a decision thread on a question the page does not ask, beside a section or on a stale revision is refused, and nothing is stored', async ({ context, page }) => {
+test('a decision thread on a question the page does not ask, with a key serve does not take or on a stale revision is refused, and nothing is stored', async ({ context, page }) => {
   const seen = watch(context, page);
   await load(page, TRY_IT);
   const revision = await page.locator('meta[name="lotuspod:revision"]').getAttribute('content') ?? '';
@@ -386,6 +386,10 @@ test('a decision thread on a question the page does not ask, beside a section or
     [{ question: 'no-such-question' }, 400, 'unknown_question'],
     [{ question: 'decision-1', section: 'planting-day' }, 400, 'invalid_body'],
     [{ question: 'decision-1', quote: { exact: 'x', prefix: '', suffix: '' } }, 400, 'invalid_body'],
+    [{ question: 'decision-1', parent: 1 }, 400, 'invalid_body'],
+    [{ question: 'decision-1', version: 'unexpected' }, 400, 'invalid_body'],
+    [{ question: 'decision-1', revision: null }, 400, 'invalid_body'],
+    [{ question: 'no-such-question', revision: 7 }, 400, 'invalid_body'],
     [{ question: 'decision-1', revision: `${revision}-stale` }, 409, 'stale_page'],
   ];
   for (const [fields, status, error] of refused) {

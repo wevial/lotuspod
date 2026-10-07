@@ -38,6 +38,8 @@
   // The largest image the comments route says it takes; none is ever taken.
   var MAX_IMAGE_BYTES = 10 * 1024 * 1024;
   var NO_UPLOADS = "image uploading is disabled for the demo";
+  // The keys a thread on a decision may have.
+  var DECISION_THREAD = ["page", "question", "text", "revision"];
   var UNRESOLVED = { resolved: false, actor: null, at: null };
   // demo/replies.json: page names to section and question ids to a reply,
   // and "*".
@@ -280,10 +282,15 @@
     if (own(fields, "images")) {
       throw new Refusal(400, "unknown_image");
     }
-    // A thread on a decision is anchored to it, not to a section or a passage.
-    if (own(fields, "question") &&
-        (own(fields, "section") || own(fields, "quote") || own(fields, "parent"))) {
-      throw invalid();
+    // A thread on a decision takes only its own keys: it is anchored to the
+    // decision, not to a section or a passage.
+    if (own(fields, "question")) {
+      var extra = Object.keys(fields).filter(function (name) {
+        return DECISION_THREAD.indexOf(name) < 0;
+      });
+      if (extra.length) {
+        throw invalid();
+      }
     }
     var page = text(fields.page, 1, 100);
     var words = text(fields.text, 1, MAX_TEXT);
@@ -307,6 +314,7 @@
       // A reader's question about a decision: a new thread in the section of
       // the first comment box after its form. It records no answer.
       var question = text(fields.question, 1, 100);
+      var read = own(fields, "revision") ? text(fields.revision, 0, 100) : null;
       var form = decisionForm(question);
       if (!form) {
         throw new Refusal(400, "unknown_question");
@@ -315,7 +323,7 @@
       if (!anchored) {
         throw new Refusal(400, "unknown_section");
       }
-      if (own(fields, "revision") && fields.revision !== revision()) {
+      if (read !== null && read !== revision()) {
         throw new Refusal(409, "stale_page");
       }
       made = readerRow(page, { section: anchored, parent: null, text: words, question: question });
