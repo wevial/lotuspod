@@ -177,6 +177,33 @@ SECTION_QUESTIONS_BODY = """\
 </table>
 """
 
+# A plan page whose answers end it in an "Answered" table: two sections,
+# Pump asking question 1 and Heater asking questions 2 and 3, each with a
+# comment box naming the page. Owned by OWNER. No diagram, so the page needs
+# no network.
+ANSWERED_BODY = """\
+<p>A sample plan for captures: its answered decisions end the page in a table.</p>
+<h2>Pump</h2>
+<p>The pond pump stops when the water freezes.</p>
+<h3>Decisions for the maintainer</h3>
+<table>
+<thead><tr><th>#</th><th>Question</th><th>Options</th><th>Default</th></tr></thead>
+<tbody>
+<tr><td>1</td><td>Which pump?</td><td>Floating / Submerged</td><td>Floating</td></tr>
+</tbody>
+</table>
+<h2>Heater</h2>
+<p>A heater keeps a hole in the ice for the fish.</p>
+<h3>Decisions for the maintainer</h3>
+<table>
+<thead><tr><th>#</th><th>Question</th><th>Options</th><th>Default</th></tr></thead>
+<tbody>
+<tr><td>2</td><td>Which heater?</td><td>Electric / Solar</td><td>Electric</td></tr>
+<tr><td>3</td><td>Feed the fish in winter?</td><td>Yes / No</td><td>No</td></tr>
+</tbody>
+</table>
+"""
+
 # A long page whose three sections each fold under their heading: the first
 # holds a word no other section does and a code block, the second asks one
 # question, and each ends with a comment box. Owned by OWNER. No diagram, so
@@ -463,6 +490,8 @@ SAMPLE_PAGES = (
     ("capture-decisions", "Capture decisions", DECISIONS_BODY, ()),
     ("capture-section-questions", "Capture section questions", SECTION_QUESTIONS_BODY, ()),
     ("capture-sections", "Capture sections", SECTIONS_BODY,
+     ("--comments", "--owner", OWNER)),
+    ("capture-answered", "Capture answered", ANSWERED_BODY,
      ("--comments", "--owner", OWNER)),
     ("capture-comments", "Capture comments", COMMENTS_BODY,
      ("--comments", "--owner", OWNER)),

@@ -1,5 +1,13 @@
 
-  function answerForms(forms) {
+  // The page's decision forms, and the "Answered" table that ends its body:
+  // one row per answered question, newest first, read from the answers route
+  // for the page every form and comment box names. forms may be empty, on a
+  // page whose decisions are no longer asked.
+  function answerForms(forms, page) {
+    // Each question the read found answered, to its current answer.
+    var stored = new Map();
+    var answered = null;
+
     function radios(form) {
       return all('input[type="radio"][name="choice"]', form);
     }
@@ -149,6 +157,117 @@
       form.elements.note.value = answer.note || "";
     }
 
+    // The words of a form's part, its whitespace collapsed.
+    function words(form, selector) {
+      var node = form.querySelector(selector);
+      return node ? node.textContent.replace(/\s+/g, " ").trim() : "";
+    }
+
+    // The form asking question, if the page asks it.
+    function formOf(question) {
+      return forms.filter(function (form) { return form.dataset.question === question; })[0] || null;
+    }
+
+    // The current answer to each answered question, newest first: what the
+    // read found, and what a form has saved since.
+    function currents() {
+      var found = new Map(stored);
+      forms.forEach(function (form) {
+        if (form.lotuspodAnswers.current) {
+          found.set(form.dataset.question, form.lotuspodAnswers.current);
+        }
+      });
+      return Array.from(found.values()).sort(function (a, b) { return b.id - a.id; });
+    }
+
+    // A row of the table. A question the page asks at the answer's version
+    // takes its number, question and label from its card, and has "change";
+    // any other takes the words it was answered in, or else its id and the
+    // choice.
+    function row(answer) {
+      var question = String(answer.question);
+      var form = formOf(question);
+      var asks = Boolean(form) && form.dataset.version === answer.version;
+      var asked = answer.asked || {};
+      var id = question.replace(/^decision-/, "");
+      var number = asks ? words(form, ".artifact-decision-number") || id : id;
+      var text = asks ? words(form, ".artifact-decision-text") :
+        asked.text ? String(asked.text) : question;
+      var chosen = asks ? label(form, answer.choice) :
+        asked.label ? String(asked.label) : String(answer.choice);
+      var line = element("p", "artifact-answered-choice");
+      line.appendChild(element("strong", "", chosen));
+      if (asks) {
+        var change = element("button", "artifact-decision-change", "change");
+        change.type = "button";
+        change.addEventListener("click", function () { reopen(form); });
+        line.append(" \u00b7 ", change);
+      }
+      var cell = element("td", "artifact-answered-answer");
+      cell.appendChild(line);
+      if (answer.note) {
+        cell.appendChild(element("p", "artifact-answered-note", answer.note));
+      }
+      var tr = element("tr");
+      tr.dataset.question = question;
+      tr.append(element("td", "artifact-answered-number", number),
+        element("td", "artifact-answered-when", when(answer.createdAt)),
+        element("td", "artifact-answered-question", text), cell,
+        element("td", "artifact-answered-by", reader(answer)));
+      return tr;
+    }
+
+    // Draw the table from the current answers, after the body's last
+    // section, so folding a section never hides it; none while nothing is
+    // answered.
+    function table() {
+      var rows = currents();
+      if (!rows.length) {
+        if (answered) {
+          answered.remove();
+          answered = null;
+        }
+        return;
+      }
+      var body = document.querySelector("section.artifact-body");
+      if (!body) {
+        return;
+      }
+      if (!answered) {
+        answered = element("div", "artifact-answered");
+        var grid = element("table");
+        grid.appendChild(element("caption", "", "Answered"));
+        var head = element("tr");
+        ["#", "When", "Question", "Answer", "By"].forEach(function (name) {
+          var th = element("th", "", name);
+          th.scope = "col";
+          head.appendChild(th);
+        });
+        grid.appendChild(element("thead")).appendChild(head);
+        grid.appendChild(element("tbody"));
+        answered.appendChild(grid);
+        var last = all(":scope > .artifact-section-body", body).pop();
+        if (last) {
+          last.after(answered);
+        } else {
+          body.appendChild(answered);
+        }
+      }
+      var tbody = answered.querySelector("tbody");
+      tbody.replaceChildren.apply(tbody, rows.map(row));
+    }
+
+    // A row's "change": the card's section opened if it is folded, as find
+    // in page opens it, then the card scrolled to and opened again.
+    function reopen(form) {
+      var wrapper = form.closest("div.artifact-section-body");
+      if (wrapper && wrapper.hasAttribute("hidden")) {
+        wrapper.dispatchEvent(new Event("beforematch"));
+      }
+      form.scrollIntoView({ block: "center" });
+      unfold(form);
+    }
+
     // "change": the card open again with its answer picked and its note.
     function unfold(form) {
       fill(form);
@@ -213,6 +332,7 @@
         form.lotuspodEditing = dirty(form);
         status(form, "");
         var change = draw(form);
+        table();
         if (change) {
           change.focus();
         }
@@ -224,12 +344,17 @@
     }
 
     async function load() {
-      var page = forms[0].dataset.page;
       var response = await fetch(ANSWERS + "?page=" + encodeURIComponent(page));
       if (!response.ok) {
         return;
       }
       var questions = (await response.json()).questions || {};
+      Object.keys(questions).forEach(function (question) {
+        var entry = questions[question];
+        if (entry && entry.current) {
+          stored.set(question, entry.current);
+        }
+      });
       forms.forEach(function (form) {
         var entry = Object.prototype.hasOwnProperty.call(questions, form.dataset.question)
           ? questions[form.dataset.question] : null;
@@ -247,6 +372,7 @@
           draw(form);
         }
       });
+      table();
     }
 
     forms.forEach(function (form) {
@@ -262,7 +388,9 @@
     });
   }
 
+  // A page with no form names itself on its comment boxes.
   var forms = all("form.artifact-decision");
-  if (forms.length) {
-    answerForms(forms);
+  var named = forms[0] || document.querySelector("details.artifact-comment[data-page]");
+  if (named) {
+    answerForms(forms, named.dataset.page);
   }

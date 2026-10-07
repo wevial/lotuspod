@@ -5,7 +5,10 @@
 // For decisions it reads the page's answers, folds each question answered as
 // the page now asks it to one saved line with a "change" button, marks a
 // choice or note not yet saved, and posts the reader's answer when a form is
-// submitted. On a page that takes comments each form also has an Ask, which
+// submitted. Once any question is answered, the page ends in an "Answered"
+// table (div.artifact-answered), one row per answered question, newest first,
+// each with a "change" that opens its card while the page asks it as it was
+// answered. On a page that takes comments each form also has an Ask, which
 // posts its note as a question thread on the decision, and once the decision
 // has threads a chip under it opens them as a section's chip does. For
 // comments it reads the page's threads, draws each in its section's box as a
@@ -61,10 +64,11 @@
   var DRAWN = "lotuspod:drawn";
   var ANSWERED = "lotuspod:answered";
   // What the page's text leaves out and no passage may hold: the comment UI,
-  // decision forms and their chips, diagrams and the list of changed sections.
+  // decision forms and their chips, the Answered table, diagrams and the list
+  // of changed sections.
   var APART = "details.artifact-comment, .artifact-comments-changed, .artifact-comments-panel, " +
     ".artifact-comments-popover, .artifact-comments-bottom-sheet, .artifact-passage-composer, " +
-    "form.artifact-decision, .artifact-decision-chip, pre.mermaid, svg";
+    "form.artifact-decision, .artifact-decision-chip, .artifact-answered, pre.mermaid, svg";
   // What the page's text leaves out as never read: the marks and numbers the
   // page script draws, and what is not shown at all.
   var UNSEEN = "script, style, template, noscript, .artifact-section-mark, .artifact-passage-number, " +

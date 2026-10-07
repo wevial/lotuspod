@@ -215,8 +215,29 @@ class AnswerTests(ApiTestCase):
         self.assertEqual(
             self.ask("GET", "/api/answers?page=plan"),
             (200, {"page": "plan",
-                   "questions": {"decision-1": {"current": second, "earlier": [first]}}}),
+                   "questions": {"decision-1": {
+                       "current": {**second, "asked": {"text": "Freeze the pond?",
+                                                       "label": "No"}},
+                       "earlier": [{**first, "asked": {"text": "Freeze the pond?",
+                                                       "label": "Yes"}}]}}}),
         )
+
+    def test_neither_201_body_says_how_the_page_asked(self):
+        for choice in ("yes", "no"):
+            with self.subTest(choice=choice):
+                status, body = self.answer(choice=choice)
+                self.assertEqual(status, 201)
+                self.assertNotIn("asked", body)
+
+    def test_an_answer_stored_without_its_words_reads_them_as_null(self):
+        stored = db.Database(self.db_path).add_answer(
+            page="plan", question="decision-2", version=self.version("decision-2"),
+            choice="no", note="", revision=self.revision, actor=SHOWN,
+        )
+        _, got = self.ask("GET", "/api/answers?page=plan")
+        current = got["questions"]["decision-2"]["current"]
+        self.assertEqual(current["id"], stored["id"])
+        self.assertEqual(current["asked"], {"text": None, "label": None})
 
     def test_questions_are_kept_apart(self):
         _, one = self.answer(question="decision-1")
@@ -226,8 +247,11 @@ class AnswerTests(ApiTestCase):
         self.assertIsNone(other["supersedes"])
         self.assertEqual(other["revision"], "")
         _, got = self.ask("GET", "/api/answers?page=plan")
-        self.assertEqual(got["questions"], {"decision-1": {"current": one, "earlier": []},
-                                            "decision-2": {"current": two, "earlier": []}})
+        self.assertEqual(got["questions"], {
+            "decision-1": {"current": {**one, "asked": {"text": "Freeze the pond?",
+                                                        "label": "Yes"}}, "earlier": []},
+            "decision-2": {"current": {**two, "asked": {"text": "Skate on it?",
+                                                        "label": "Yes"}}, "earlier": []}})
 
     def test_a_same_origin_browser_post_is_taken(self):
         status, _row = self.ask(
@@ -786,7 +810,8 @@ class RestartTests(ApiTestCase):
         self.start()
         self.assertEqual(self.ask("GET", "/api/answers?page=plan"), answers)
         self.assertEqual(self.ask("GET", "/api/comments?page=plan"), threads)
-        self.assertEqual(answers[1]["questions"]["decision-1"]["current"], answer)
+        self.assertEqual(answers[1]["questions"]["decision-1"]["current"],
+                         {**answer, "asked": {"text": "Freeze the pond?", "label": "Yes"}})
         self.assertEqual(threads[1]["threads"][0]["root"], comment)
         _, later = self.answer()
         self.assertEqual(later["supersedes"], answer["id"])

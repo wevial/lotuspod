@@ -448,8 +448,8 @@ class LeftAsWrittenTests(DecisionsTestCase):
         self.assertNotIn(cli.PAGE_SCRIPT, page_html)
 
 
-class MovedQuestionTests(DecisionsTestCase):
-    """A question moved into another section's table keeps its answers."""
+class ServedTestCase(DecisionsTestCase):
+    """A test case with serve running over self.out_dir and its database."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -497,6 +497,10 @@ class MovedQuestionTests(DecisionsTestCase):
         finally:
             conn.close()
 
+
+class MovedQuestionTests(ServedTestCase):
+    """A question moved into another section's table keeps its answers."""
+
     def test_an_answer_follows_its_question_into_another_section(self):
         one_table = """\
 # Pond plan
@@ -541,6 +545,46 @@ A heater keeps a hole in the ice.
         self.assertEqual(after["decision-d2"].label(current["choice"]), "Solar")
 
 
+class AnswersJsonTests(ServedTestCase):
+    """lotuspod answers --json prints what GET /api/answers answers, asked
+    included, but for each reader's address."""
+
+    def test_json_prints_what_the_route_answers(self):
+        forms = self.publish(SECTIONS)
+        version = forms["decision-d2"].version
+        db.Database(self.work / "lotuspod.sqlite3").add_answer(
+            page="pond", question="decision-d2", version=version, choice="electric",
+            note="", revision="abc123abc123", actor=READER,
+        )
+        for choice in ("solar", "electric"):
+            status, saved = self.ask("POST", "/api/answers", {
+                "page": "pond", "question": "decision-d2", "version": version,
+                "choice": choice, "note": "",
+            })
+            self.assertEqual(status, 201, saved)
+        status, got = self.ask("GET", "/api/answers?page=pond")
+        self.assertEqual(status, 200, got)
+        answered = got["questions"]["decision-d2"]
+        self.assertEqual(answered["current"]["asked"], {"text": "Which heater?", "label": "Electric"})
+        self.assertEqual([row["asked"] for row in answered["earlier"]], [
+            {"text": "Which heater?", "label": "Solar"}, {"text": None, "label": None}])
+
+        rc, out, err = run_cli("answers", "pond", "--json",
+                               "--db", str(self.work / "lotuspod.sqlite3"))
+        self.assertEqual(rc, 0, err)
+        printed = json.loads(out)
+        # The host's command shows each reader's whole address; the route,
+        # only the part before the @.
+        for printed_row, row in zip(
+                [printed["questions"]["decision-d2"]["current"],
+                 *printed["questions"]["decision-d2"]["earlier"]],
+                [answered["current"], *answered["earlier"]]):
+            self.assertEqual(printed_row["actor"], READER)
+            self.assertEqual(row["actor"], {"kind": "human", "name": "maintainer"})
+            printed_row["actor"] = row["actor"]
+        self.assertEqual(printed, got)
+
+
 class AnswersCommandTests(DecisionsTestCase):
     def setUp(self) -> None:
         super().setUp()
@@ -575,14 +619,6 @@ class AnswersCommandTests(DecisionsTestCase):
             f"      by maintainer@example.com at {first['createdAt']}",
             "      note: Cheaper for now",
         ])
-
-    def test_json_prints_what_the_route_answers(self):
-        first = self.add("sonnet", "")
-        second = self.add("opus", "")
-        self.assertEqual(json.loads(self.answers("--json")), {
-            "page": "plan",
-            "questions": {"decision-1": {"current": second, "earlier": [first]}},
-        })
 
     def test_an_answer_to_an_earlier_wording_says_so(self):
         db.Database(self.db_path).add_answer(

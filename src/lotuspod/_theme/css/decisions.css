@@ -7,7 +7,9 @@
    picked answer differs from the saved one, and a saved answer folds the card
    to one line with a "change" button, its note, who and when, and the earlier
    answers in the muted voice of the meta line. On a page that takes comments
-   an outlined Ask sits beside "Save answer" (js/comments.js). */
+   an outlined Ask sits beside "Save answer" (js/comments.js). The answered
+   questions end the page in an "Answered" table, kept to the reading column
+   and wrapping its cells rather than scrolling. */
 .artifact-decisions {
   display: grid;
   gap: 1.25rem;
@@ -367,4 +369,75 @@ label.artifact-decision-note span {
 
 .artifact-decision-history-by::before {
   content: "\2014\00a0";
+}
+
+/* The Answered table: in its own container, so the rules for a top-level
+   table that steps out of the reading column leave it be. Its cells wrap at
+   words, its type and gutters narrowing with the window, and a note may
+   break anywhere, so a long note grows the row instead of widening the
+   page. */
+.artifact-answered {
+  margin: 2rem 0 1.5em;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.artifact-body .artifact-answered table {
+  display: table;
+  font-size: clamp(0.85rem, 0.7rem + 0.6vw, 0.95rem);
+  margin: 0;
+  max-width: none;
+  overflow: visible;
+  width: 100%;
+}
+
+.artifact-body .artifact-answered caption {
+  caption-side: top;
+  color: var(--color-white);
+  font-size: 1rem;
+  font-weight: 600;
+  padding: 0 0 0.6rem;
+  text-align: left;
+}
+
+.artifact-body .artifact-answered :is(th, td) {
+  min-width: 0;
+  overflow-wrap: break-word;
+  padding: 0.5rem clamp(0.25rem, 1vw, 0.6rem);
+}
+
+.artifact-answered-number {
+  color: var(--color-lavender);
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  white-space: nowrap;
+}
+
+.artifact-answered-when,
+.artifact-answered-by {
+  color: var(--color-muted-lavender);
+  font-size: 0.9em;
+}
+
+.artifact-body .artifact-answered-answer p {
+  margin: 0;
+}
+
+.artifact-answered-choice {
+  color: var(--color-pale-lavender);
+}
+
+.artifact-body .artifact-answered-note {
+  border-left: 1px solid var(--hairline-strong);
+  color: var(--color-pale-lavender);
+  font-size: 0.9em;
+  margin-top: 0.35em;
+  overflow-wrap: anywhere;
+  padding-left: 0.6rem;
+  white-space: pre-wrap;
+}
+
+.artifact-answered .artifact-decision-change:focus-visible {
+  outline: 2px solid var(--color-lavender);
+  outline-offset: 2px;
 }

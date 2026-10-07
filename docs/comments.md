@@ -31,7 +31,9 @@ twice.
   same page and question it replaces, or null.
 - `GET /api/answers?page=NAME` answers `{page, questions}`: each answered
   question as `{current, earlier}`, the newest answer and the older ones newest
-  first.
+  first. Each answer here also carries `asked`, `{text, label}`: the question's
+  text and the chosen option's label as the page asked them when the answer
+  was given, both null in an answer stored before they were kept.
 - `POST /api/comments` with `{page, section, text}` (and optionally a `quote`,
   `{exact, prefix, suffix}`, and the `revision` the reader's page was rendered
   at) opens a thread on a section; with

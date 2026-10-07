@@ -379,7 +379,7 @@ class Api:
                 return HTTPStatus.CREATED, self._post_comment(fields, actor), ()
             page = self._page(self._query_page(query))
             if path == ANSWERS:
-                payload = {"page": page.name, "questions": self.database.answers(page.name)}
+                payload = {"page": page.name, "questions": self.database.answers(page.name, asked=True)}
             elif path == REVISION:
                 payload = {"revision": page.revision}
             else:

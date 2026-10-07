@@ -315,6 +315,7 @@
           "decision-1": {
             "current": {
               "actor": {"kind": "string", "name": "string"},
+              "asked": {"label": "string", "text": "string"},
               "choice": "string",
               "createdAt": "string",
               "id": "number",
@@ -328,6 +329,7 @@
             "earlier": [
               {
                 "actor": {"kind": "string", "name": "string"},
+                "asked": {"label": "string", "text": "string"},
                 "choice": "string",
                 "createdAt": "string",
                 "id": "number",
