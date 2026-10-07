@@ -546,23 +546,20 @@ class Api:
             raise _invalid()
         if version != asked.version:
             raise Refusal(HTTPStatus.CONFLICT, "stale")
-        if not checklist:
+        if checklist:
+            if not set(checked) <= asked.choices:
+                raise Refusal(HTTPStatus.BAD_REQUEST, "invalid_choice")
+            # In the page's order, whatever order the reader sent.
+            checked = [item for item in asked.labels if item in set(checked)]
+            choice, label = "", summary(changes(asked.labels, asked.defaults, checked))
+        else:
             if choice not in asked.choices:
                 raise Refusal(HTTPStatus.BAD_REQUEST, "invalid_choice")
-            return self.database.add_answer(
-                page=page.name, question=question, version=version, choice=choice,
-                note=note, revision=page.revision, actor=actor,
-                question_text=asked.text, choice_label=asked.labels.get(choice, choice),
-            )
-        if not set(checked) <= asked.choices:
-            raise Refusal(HTTPStatus.BAD_REQUEST, "invalid_choice")
-        # In the page's order, whatever order the reader sent.
-        checked = [item for item in asked.labels if item in set(checked)]
+            checked, label = None, asked.labels.get(choice, choice)
         return self.database.add_answer(
-            page=page.name, question=question, version=version, choice="",
-            note=note, revision=page.revision, actor=actor, question_text=asked.text,
-            choice_label=summary(changes(asked.labels, asked.defaults, checked)),
-            checked=checked,
+            page=page.name, question=question, version=version, choice=choice,
+            note=note, revision=page.revision, actor=actor,
+            question_text=asked.text, choice_label=label, checked=checked,
         )
 
     def _post_resolution(self, fields: dict, actor: Mapping) -> dict:
