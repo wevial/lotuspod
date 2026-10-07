@@ -236,13 +236,22 @@ def pull_text(payload: dict) -> str:
             asked = question["text"] or "(its words were not kept)"
             if question["reworded"]:
                 asked += " (the page now asks it in other words, or not at all)"
+            if "checked" in answer:
+                # A checklist: its change summary, then each item changed.
+                chosen = [f"- Chosen: {question['label']}"]
+                if question.get("changed") is not None:
+                    chosen += [f"- Changed: {item['label']} (`{item['id']}`) "
+                               f"{'on' if item['checked'] else 'off'}"
+                               for item in question["changed"]] or ["- Changed: nothing"]
+            else:
+                chosen = [f"- Chosen: {question['label']} (`{answer['choice']}`)"]
             lines += [
                 f"## {number}. Answer {answer['id']} on `{page['name']}`, "
                 f"question `{question['id']}`",
                 "",
                 *_page_lines(page),
                 f"- Question: {asked}",
-                f"- Chosen: {question['label']} (`{answer['choice']}`)",
+                *chosen,
                 f"- From: {_by(answer)} at {answer['createdAt']}, "
                 f"against revision {answer['revision'] or 'unknown'}",
                 f"- Acknowledge: `lotuspod comments ack-answer {answer['id']}`",

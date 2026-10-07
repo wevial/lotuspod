@@ -55,6 +55,12 @@ the answers route gives it with the reader's address, or null, and whether
 the page still asks it; when it does not, text and options are empty. An
 item for any other thread has no `decision`.
 
+A pulled answer to a checklist also carries, in its `question`, `changed`:
+{id, label, checked} for each item whose state differs from its default, in
+the page's order, read against the page's form while it asks the checklist
+at the answer's version, and null when `reworded` is true. Its `label` is the
+change summary kept with the answer.
+
 Each claim, reply, follow-up, release and failure is one database
 transaction, written to the audit trail with the credential and handle that
 acted. A claim is refused 409 claimed while another credential's is
@@ -454,18 +460,29 @@ class Routes:
             # Whether the page now asks it in other words, or not at all.
             reworded = asked is None or asked.version != answer["version"]
             text, label = kept["text"], kept["label"]
+            # A checklist's items changed from their defaults, read against
+            # the page's form only while it asks at the answer's version.
+            changed = None
+            if "checked" in answer and not reworded:
+                changed = api.changes(asked.labels, asked.defaults, answer["checked"])
             if text is None:
                 # Stored before the words were kept: the page's own words are
                 # the answered ones only while its version is the same.
                 text = "" if reworded else asked.text
-                label = answer["choice"] if reworded else asked.labels.get(
-                    answer["choice"], answer["choice"])
+                if changed is not None:
+                    label = api.summary(changed)
+                else:
+                    label = answer["choice"] if reworded else asked.labels.get(
+                        answer["choice"], answer["choice"])
+            # The question and choice in the words the reader answered.
+            question = {"id": answer["question"], "text": text, "label": label,
+                        "reworded": reworded}
+            if "checked" in answer:
+                question["changed"] = changed
             items.append({
                 "kind": "answer",
                 "answer": answer,
-                # The question and choice in the words the reader answered.
-                "question": {"id": answer["question"], "text": text, "label": label,
-                             "reworded": reworded},
+                "question": question,
                 "page": item_page(page),
             })
         return {"owner": owner, "pulledAt": pulled_at, "items": items}

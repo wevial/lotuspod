@@ -28,12 +28,18 @@ twice.
 
 - `POST /api/answers` with `{page, question, version, choice, note}` stores an
   answer and answers 201 with it, its `supersedes` the id of the answer to the
-  same page and question it replaces, or null.
+  same page and question it replaces, or null. A checklist (see [Checklist for
+  the maintainer](publishing.md#checklist-for-the-maintainer)) takes
+  `{page, question, version, checked, note}`, `checked` the item ids the
+  reader checked, in any order; its answer carries `checked`, those ids in the
+  page's order, and `choice` "". Only a checklist's answer has `checked`.
 - `GET /api/answers?page=NAME` answers `{page, questions}`: each answered
   question as `{current, earlier}`, the newest answer and the older ones newest
   first. Each answer here also carries `asked`, `{text, label}`: the question's
   text and the chosen option's label as the page asked them when the answer
-  was given, both null in an answer stored before they were kept.
+  was given, both null in an answer stored before they were kept. A
+  checklist's `label` is the items changed from their defaults, "On: LABEL,
+  LABEL · Off: LABEL" or "No change from the defaults".
 - `POST /api/comments` with `{page, section, text}` (and optionally a `quote`,
   `{exact, prefix, suffix}`, and the `revision` the reader's page was rendered
   at) opens a thread on a section; with
@@ -119,7 +125,10 @@ page 404 `unknown_parent`. A read without exactly one `page` is 400
 `invalid_query`. An answer is checked against the page's own decision forms
 (see [Decisions for the maintainer](publishing.md#decisions-for-the-maintainer)): a question the page does not ask is 400 `unknown_question`, a
 `version` other than the form's 409 `stale`, and a `choice` the form does not
-offer 400 `invalid_choice`. A new thread is checked against the page's comment
+offer 400 `invalid_choice`. A `checked` that is not a list of distinct
+strings, a `checked` sent for a decision and a `choice` sent for a checklist
+are 400 `invalid_body`, and an item the checklist does not offer 400
+`invalid_choice`. A new thread is checked against the page's comment
 boxes (below): a `section` the page has no box for is 400 `unknown_section`,
 and a `revision` other than the page's current one is 409 `stale_page`, so a
 quote is never stored against a revision its words were not taken from.

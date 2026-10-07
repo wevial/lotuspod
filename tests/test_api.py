@@ -64,6 +64,29 @@ DECISIONS_BODY = (
     "<tr><td>Skate on it?</td><td>Yes / No</td></tr></tbody></table>\n"
 )
 
+# A page asking a checklist, under the h2 Emails, and a decision.
+CHECKLIST = """\
+# Mail
+
+## Emails
+
+What each new reader is sent.
+
+### Checklist for the maintainer
+
+| # | Item | Default |
+| --- | --- | --- |
+| w | Welcome | on |
+| d | Digest | off |
+| r | Reminder | ON |
+
+## Decisions for the maintainer
+
+| # | Question | Options |
+| --- | --- | --- |
+| 1 | Send them at all? | Yes / No |
+"""
+
 
 def run_cli(*argv: str) -> None:
     with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()) as err:
@@ -330,6 +353,81 @@ class AnswerCheckTests(ApiTestCase):
         self.assertEqual(self.ask("POST", "/api/answers", body), (409, {"error": "stale"}))
         _, fresh = self.answer()
         self.assertEqual(fresh["version"], self.version())
+
+
+class ChecklistAnswerTests(ApiTestCase):
+    """A checklist's answer is the set of items checked, stored and
+    superseded as a decision's answer is."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.publish_mail(CHECKLIST)
+
+    def publish_mail(self, text: str) -> None:
+        source = self.work / "mail.md"
+        source.write_text(text, encoding="utf-8")
+        run_cli("publish", str(source), "--name", "mail", "--out-dir", str(self.out_dir),
+                "--local")
+
+    def checklist_body(self, checked: object, **extra) -> dict:
+        return {"page": "mail", "question": "checklist-1",
+                "version": self.version("checklist-1", "mail"), "checked": checked,
+                "note": "", **extra}
+
+    def test_a_second_answer_supersedes_the_first(self):
+        status, first = self.ask("POST", "/api/answers", self.checklist_body(
+            ["r", "d"], note="Skip the welcome"))
+        self.assertEqual(status, 201, first)
+        self.assertEqual(
+            {key: first[key] for key in first if key not in ("id", "createdAt")},
+            {"page": "mail", "question": "checklist-1",
+             "version": self.version("checklist-1", "mail"), "choice": "",
+             "checked": ["d", "r"], "note": "Skip the welcome",
+             "revision": self.page_revision("mail"), "actor": SHOWN, "supersedes": None})
+        status, second = self.ask("POST", "/api/answers", self.checklist_body([]))
+        self.assertEqual(status, 201, second)
+        self.assertEqual((second["checked"], second["supersedes"]), ([], first["id"]))
+        status, decision = self.answer(question="decision-1", page="mail")
+        self.assertEqual(status, 201, decision)
+        self.assertNotIn("checked", decision)
+
+        status, got = self.ask("GET", "/api/answers?page=mail")
+        self.assertEqual(status, 200, got)
+        self.assertEqual(got["questions"]["checklist-1"], {
+            "current": {**second, "asked": {"text": "Emails",
+                                            "label": "Off: Welcome, Reminder"}},
+            "earlier": [{**first, "asked": {"text": "Emails",
+                                            "label": "On: Digest · Off: Welcome"}}]})
+        self.assertNotIn("checked", got["questions"]["decision-1"]["current"])
+
+    def test_checking_the_defaults_changes_nothing(self):
+        status, row = self.ask("POST", "/api/answers", self.checklist_body(["w", "r"]))
+        self.assertEqual(status, 201, row)
+        _, got = self.ask("GET", "/api/answers?page=mail")
+        self.assertEqual(got["questions"]["checklist-1"]["current"]["asked"]["label"],
+                         "No change from the defaults")
+
+    def test_answers_the_checklist_does_not_take_store_nothing(self):
+        stale = self.checklist_body(["d"])
+        self.publish_mail(CHECKLIST.replace("| d | Digest | off |", "| d | Digest | on |"))
+        self.assertNotEqual(stale["version"], self.version("checklist-1", "mail"))
+        choice = {**self.checklist_body(["d"]), "choice": "d"}
+        del choice["checked"]
+        to_decision = {**self.answer_body("decision-1", page="mail"), "checked": ["yes"]}
+        del to_decision["choice"]
+        for label, body, status, error in (
+            ("item not offered", self.checklist_body(["x"]), 400, "invalid_choice"),
+            ("an item twice", self.checklist_body(["d", "d"]), 400, "invalid_body"),
+            ("choice in place of checked", choice, 400, "invalid_body"),
+            ("checked to a decision", to_decision, 400, "invalid_body"),
+            ("checked beside choice", self.checklist_body(["d"], choice="d"), 400, "invalid_body"),
+            ("checked not a list", self.checklist_body("d"), 400, "invalid_body"),
+            ("an item not a string", self.checklist_body([1]), 400, "invalid_body"),
+            ("an earlier version", stale, 409, "stale"),
+        ):
+            with self.subTest(label):
+                self.assertEqual(self.ask("POST", "/api/answers", body), (status, {"error": error}))
+        self.assertEmpty("mail")
 
 
 class CommentTests(ApiTestCase):
@@ -1032,6 +1130,40 @@ class SchemaTests(ApiTestCase):
         self.assertEqual((thread["root"]["text"], thread["root"]["images"]),
                          ("Kept from before.", []))
         self.assertNotIn("question", thread["root"])
+        conn = sqlite3.connect(str(path))
+        try:
+            self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0],
+                             db.SCHEMA_VERSION)
+        finally:
+            conn.close()
+
+    def test_an_answer_from_before_checklists_reads_as_before(self):
+        self.stop()
+        path = self.work / "before.sqlite3"
+        conn = sqlite3.connect(str(path))
+        for step in range(1, db.SCHEMA_VERSION):
+            for statement in db._SCHEMA[step]:
+                conn.execute(statement)
+        conn.execute(
+            "INSERT INTO answers (page, question, version, choice, note, revision, actor,"
+            " created_at, supersedes, question_text, choice_label) VALUES ('plan',"
+            " 'decision-1', ?, 'no', 'Kept from before.', ?, ?, '2026-01-02T03:04:05.000Z',"
+            " NULL, 'Freeze the pond?', 'No')",
+            (self.version(), self.revision, json.dumps(ACTOR)),
+        )
+        conn.execute(f"PRAGMA user_version = {db.SCHEMA_VERSION - 1}")
+        conn.commit()
+        conn.close()
+        self.start(path)
+        status, got = self.ask("GET", "/api/answers?page=plan")
+        self.assertEqual(status, 200, got)
+        current = got["questions"]["decision-1"]["current"]
+        self.assertEqual(
+            {key: current[key] for key in current if key != "id"},
+            {"page": "plan", "question": "decision-1", "version": self.version(),
+             "choice": "no", "note": "Kept from before.", "revision": self.revision,
+             "actor": SHOWN, "createdAt": "2026-01-02T03:04:05.000Z", "supersedes": None,
+             "asked": {"text": "Freeze the pond?", "label": "No"}})
         conn = sqlite3.connect(str(path))
         try:
             self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0],

@@ -15,7 +15,8 @@ name, handles, operations and the SHA-256 of their token, never the token,
 with each handle's last pull and the answers each owner has acknowledged.
 An answer also keeps its question's text and its choice's label as the page
 asked them, so an agent reads what the reader answered even after the page
-is reworded.
+is reworded. A checklist's answer keeps the items checked as `checked`, its
+choice "" and its label the change summary; only it carries `checked`.
 
 A reader's comment also keeps, as it arrives, its page's owner and that
 owner's last pull then, so routing (lotuspod.routing) can tell whether the
@@ -60,7 +61,7 @@ from typing import Callable, Iterator, Mapping, Sequence
 from lotuspod import media
 
 DEFAULT_NAME = "lotuspod.sqlite3"
-SCHEMA_VERSION = 9
+SCHEMA_VERSION = 10
 # Seconds a connection waits for another writer before giving up.
 BUSY_TIMEOUT = 30
 # The state of a reader's comment until an agent takes it up.
@@ -179,6 +180,10 @@ _SCHEMA = {1: (
     # The decision a thread is anchored to, on each of its comments; NULL on
     # a thread on a section or a passage.
     "ALTER TABLE comments ADD COLUMN question TEXT",
+), 10: (
+    # A checklist's answer: a JSON list of the item ids checked, in the
+    # page's order; NULL on a decision's answer.
+    "ALTER TABLE answers ADD COLUMN checked TEXT",
 )}
 # The settings row that holds whether the responder is paused.
 _PAUSED = "responder_paused"
@@ -222,7 +227,7 @@ def _actor(text: str) -> dict:
 
 
 def _answer(row: sqlite3.Row) -> dict:
-    return {
+    found = {
         "id": row["id"],
         "page": row["page"],
         "question": row["question"],
@@ -234,6 +239,10 @@ def _answer(row: sqlite3.Row) -> dict:
         "createdAt": row["created_at"],
         "supersedes": row["supersedes"],
     }
+    # Only a checklist's answer, whose choice is "", carries checked.
+    if row["checked"] is not None:
+        found["checked"] = json.loads(row["checked"])
+    return found
 
 
 def _comment(row: sqlite3.Row) -> dict:
@@ -346,9 +355,12 @@ class Database:
 
     def add_answer(self, *, page: str, question: str, version: str, choice: str,
                    note: str, revision: str, actor: Mapping,
-                   question_text: str | None = None, choice_label: str | None = None) -> dict:
+                   question_text: str | None = None, choice_label: str | None = None,
+                   checked: Sequence[str] | None = None) -> dict:
         """Store an answer; it supersedes the newest one to the same question.
-        question_text and choice_label are the words the page asked it in."""
+        question_text and choice_label are the words the page asked it in;
+        checked, a checklist's items checked, in the page's order (None on a
+        decision's answer)."""
         with self._connect() as conn, _write(conn):
             last = conn.execute(
                 "SELECT MAX(id) FROM answers WHERE page = ? AND question = ?",
@@ -356,10 +368,11 @@ class Database:
             ).fetchone()[0]
             cursor = conn.execute(
                 "INSERT INTO answers (page, question, version, choice, note, revision,"
-                " actor, created_at, supersedes, question_text, choice_label)"
-                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                " actor, created_at, supersedes, question_text, choice_label, checked)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (page, question, version, choice, note, revision,
-                 _dump(actor), _now(), last, question_text, choice_label),
+                 _dump(actor), _now(), last, question_text, choice_label,
+                 None if checked is None else json.dumps(list(checked))),
             )
             row = conn.execute("SELECT * FROM answers WHERE id = ?", (cursor.lastrowid,))
             return _answer(row.fetchone())
