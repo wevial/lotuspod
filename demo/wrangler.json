@@ -1,0 +1,16 @@
+{
+  "name": "lotuspod-demo",
+  "compatibility_date": "2026-10-01",
+  "assets": {
+    "directory": "./dist",
+    "html_handling": "none"
+  },
+  "workers_dev": false,
+  "preview_urls": false,
+  "routes": [
+    {
+      "pattern": "lotuspod.kovial.co",
+      "custom_domain": true
+    }
+  ]
+}

@@ -1,7 +1,7 @@
 # Development
 
-For people working on Lotuspod itself: the unit tests, and the Playwright
-captures and browser checks. Back to the [README](../README.md).
+For people working on Lotuspod itself: the unit tests, the Playwright
+captures and browser checks, and the demo site. Back to the [README](../README.md).
 
 ## Tests
 
@@ -142,3 +142,53 @@ and skips when `e2e/node_modules` is not installed:
 python -m tests.capture_site \
   npm --prefix e2e exec --no -- playwright test --config e2e/checks.config.ts
 ```
+
+## Demo
+
+The demo site at https://lotuspod.kovial.co/ is this README and the docs
+pages, plus a "Try it" page, each published with the real
+`lotuspod publish --local` and turned into static files. It runs entirely in
+the visitor's browser: a demo-only shim answers the page script's `/api`
+requests there, so comments and answers stay in that browser, and a scripted
+`demo-agent` replies from `demo/replies.json`. No server code runs.
+
+Build it into `demo/dist/` (git ignores it), or build it into a scratch
+directory and serve it on 127.0.0.1, with `/` answered by the README's page:
+
+```sh
+python -m demo.build --out demo/dist
+python -m demo.build --serve
+```
+
+The demo's browser checks are the specs in `e2e/demo/`, with
+`e2e/demo.config.ts`, run in Chromium against the served site;
+`python -m unittest tests.test_demo_checks` runs them, and skips when
+`e2e/node_modules` is not installed:
+
+```sh
+python -m demo.build --serve -- \
+  npm --prefix e2e exec --no -- playwright test --config e2e/demo.config.ts
+```
+
+`demo/wrangler.json` describes the site as a Cloudflare Workers static-assets
+deploy with no script: the files in `demo/dist/`, URLs kept with their `.html`
+as `serve`'s are, the custom domain lotuspod.kovial.co, and no `workers.dev`
+or preview URLs. It holds no account or zone id.
+
+The `demo` workflow (`.github/workflows/demo.yml`) deploys it on every push to
+`main` that touches `README.md`, `docs/`, `src/lotuspod/` or `demo/`, and when
+run by hand from the Actions tab; never on a pull request, so no branch's code
+can reach the token before review. It builds with
+`python -m demo.build --out demo/dist`, then runs `wrangler deploy` in
+`demo/`, at the exact Wrangler version the workflow pins. Two deploys never
+run at once, and a new one waits for the one in progress. Two repository
+secrets reach the deploy step only:
+
+- `CLOUDFLARE_API_TOKEN`: an account-owned API token that can edit this
+  Worker, and its route on the zone if that might change.
+- `CLOUDFLARE_ACCOUNT_ID`: the Cloudflare account the Worker lives in.
+
+The first deploy is made by hand, since creating the Worker and its custom
+domain needs more than the workflow's token may do: build, then run the
+workflow's pinned `npx wrangler@VERSION deploy` in `demo/`, signed in to an
+account that can create Workers and write the zone's Workers routes.

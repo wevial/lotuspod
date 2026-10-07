@@ -17,6 +17,7 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -100,19 +101,41 @@ class CommandSurfaceTests(unittest.TestCase):
 
 
 class DocumentationTests(unittest.TestCase):
-    REMOVED_WORDS = ("export", "responses pull", "wrangler", "worker")
+    # The removed things themselves, so the docs can still describe the demo's
+    # `wrangler deploy` to Cloudflare Workers.
+    REMOVED_WORDS = ("lotuspod export", "responses pull", "worker/")
     DOCS = ("README.md", "docs/publishing.md", "docs/comments.md", "docs/agents.md",
             "docs/operating.md", "docs/development.md")
 
     def read(self, name: str) -> str:
         return (REPO_ROOT / name).read_text(encoding="utf-8")
 
+    def removed_words_in(self, text: str) -> list[str]:
+        text = text.lower()
+        return [word for word in self.REMOVED_WORDS if word in text]
+
     def test_readme_docs_and_gitignore_name_nothing_removed(self):
         for name in (*self.DOCS, ".gitignore"):
-            text = self.read(name).lower()
+            named = self.removed_words_in(self.read(name))
             for word in self.REMOVED_WORDS:
                 with self.subTest(file=name, word=word):
-                    self.assertNotIn(word, text)
+                    self.assertNotIn(word, named)
+
+    def test_the_check_finds_each_removed_word_in_a_scratch_copy_of_a_docs_page(self):
+        page = self.read("docs/development.md")
+        with tempfile.TemporaryDirectory() as tmp:
+            for word in self.REMOVED_WORDS:
+                with self.subTest(word=word):
+                    copy = Path(tmp) / "development.md"
+                    copy.write_text(f"{page}\nRun `{word}`.\n", encoding="utf-8")
+                    self.assertEqual(
+                        self.removed_words_in(copy.read_text(encoding="utf-8")), [word]
+                    )
+
+    def test_the_docs_mention_wrangler_deploy_and_name_nothing_removed(self):
+        page = self.read("docs/development.md")
+        self.assertIn("wrangler deploy", page)
+        self.assertEqual(self.removed_words_in(page), [])
 
     def test_readme_and_docs_document_the_commands(self):
         docs = "\n".join(self.read(name) for name in self.DOCS)
