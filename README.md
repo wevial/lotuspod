@@ -17,6 +17,25 @@ through a Cloudflare Tunnel or over a tailnet.
 
 Lotuspod is a personal project, and issues are off.
 
+## Why Lotuspod
+
+- **Yours.** Pages, comments, answers and every published version live in
+  your own artifacts directory (committed on each publish when it is a git
+  repository) and SQLite database, which you can back up, diff and move. No
+  hosted service holds them.
+- **Any agent.** Comments route to an owner handle. A Claude Code or Codex
+  session, another agent or a script claims a thread and replies through
+  `lotuspod comments` or the local socket API; the default responder is one
+  of them.
+- **Structured answers.** Decision tables, checklists and their context
+  columns come back as data. Agents read them with `lotuspod answers` and in
+  their pull, not as free text in a thread.
+- **Self-hosted and open source.** It runs on your own writer host behind
+  your own access control, under the [MIT license](LICENSE).
+- **Built for a factory.** It is the review surface
+  [Holophyte](https://github.com/wevial/holophyte) publishes its reports and
+  plans to.
+
 ## See it
 
 A reader comments on a section of a plan page, the thread waits for the
