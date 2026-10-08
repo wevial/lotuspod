@@ -528,6 +528,25 @@ part left out when empty) or "No change from the defaults". `lotuspod answers
 PAGE` prints each answer by those words, read against the page's form while
 it asks the checklist at the answer's version, else as they were kept.
 
+The page script draws a checklist as it draws a decision's card, its items
+one under another as checkbox rows, each preset to its default (or to the
+saved answer), with one "Save answer" for the whole list. The reader toggles
+any items and saves once; saving the list untouched is an answer too, that
+nothing changes. An unanswered checklist at its defaults reads "Not answered
+yet", and "Not saved" shows while the items checked differ from the saved
+answer's (from the defaults while there is none) or the note differs from
+its note. A saved answer folds the card to "✓ Saved · SUMMARY · change", where
+SUMMARY is the answer's label above: the items changed from their defaults,
+by their labels in the page's order. "change" opens the card again with the
+saved items checked, the first of them focused, and the note filled. The
+earlier answers list each by the same summary, and an answer to an earlier
+wording leaves the card open at its defaults with the line "Answered to an
+earlier wording by READER, TIME", as a decision's does.
+
+In the "Answered" table a saved checklist is one row, with an empty `#`, the
+legend as its Question and the summary as its Answer, the note under it. Its
+"change" opens the card as the card's own does.
+
 ## What a page may run
 
 Every artifact page carries a Content-Security-Policy meta tag at the top of

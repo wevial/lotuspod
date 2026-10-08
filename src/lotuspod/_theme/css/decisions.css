@@ -7,7 +7,8 @@
    picked answer differs from the saved one, and a saved answer folds the card
    to one line with a "change" button, its note, who and when, and the earlier
    answers in the muted voice of the meta line. On a page that takes comments
-   an outlined Ask sits beside "Save answer" (js/comments.js). The answered
+   an outlined Ask sits beside "Save answer" (js/comments.js). A checklist is
+   the same card, its option rows each holding a square checkbox. The answered
    questions end the page in an "Answered" table under a section's folding
    heading, kept to the reading column and wrapping its cells rather than
    scrolling. */
@@ -33,7 +34,9 @@
   border-left-color: var(--color-amber);
 }
 
-/* A floated legend sits inside the card instead of on its border. */
+/* A floated legend sits inside the card instead of on its border. Everything
+   after it clears it, the hidden folded block included, so the options grid
+   of a reopened card never sits beside it. */
 .artifact-decision legend {
   color: var(--color-white);
   float: left;
@@ -43,7 +46,7 @@
   width: 100%;
 }
 
-.artifact-decision legend + * {
+.artifact-decision legend ~ * {
   clear: both;
 }
 
@@ -97,7 +100,7 @@
   color: var(--color-white);
 }
 
-.artifact-decision input[type="radio"] {
+.artifact-decision :is(input[type="radio"], input[type="checkbox"]) {
   appearance: none;
   border: 1.5px solid var(--color-muted-lavender);
   border-radius: 50%;
@@ -110,6 +113,16 @@
 
 .artifact-decision input[type="radio"]:checked {
   background: radial-gradient(circle, var(--color-lavender) 0 36%, transparent 42%);
+  border-color: var(--color-lavender);
+}
+
+/* A checklist's item: the option row with a square box, filled when on. */
+.artifact-decision input[type="checkbox"] {
+  border-radius: 3px;
+}
+
+.artifact-decision input[type="checkbox"]:checked {
+  background: linear-gradient(var(--color-lavender), var(--color-lavender)) center / 56% 56% no-repeat;
   border-color: var(--color-lavender);
 }
 
