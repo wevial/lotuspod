@@ -1,6 +1,7 @@
 
   // Images on a comment (lotuspod.api's /api/media). A composer takes up to
-  // MAX_IMAGES, pasted into its field or picked with its "Add image" button.
+  // MAX_IMAGES, pasted into its field, dropped on it or picked with its "Add
+  // image" button.
   // A file that is not a PNG, JPEG, WebP or GIF, or is over the cap the
   // comments route reports, is refused in the composer's status line and
   // never sent; any other is uploaded at once and shown as a thumbnail with
@@ -290,6 +291,25 @@
         event.preventDefault();
         take(files);
       }
+    });
+    // A drag that carries files is the composer's: the browser does not
+    // open them. One of text alone is left to the browser.
+    function carriesFiles(event) {
+      var types = event.dataTransfer ? event.dataTransfer.types : null;
+      return Boolean(types) && Array.prototype.indexOf.call(types, "Files") >= 0;
+    }
+    form.addEventListener("dragover", function (event) {
+      if (carriesFiles(event)) {
+        event.preventDefault();
+        event.dataTransfer.dropEffect = "copy";
+      }
+    });
+    form.addEventListener("drop", function (event) {
+      if (!carriesFiles(event)) {
+        return;
+      }
+      event.preventDefault();
+      take(Array.prototype.slice.call(event.dataTransfer.files || []));
     });
     add.addEventListener("click", function () {
       picker.click();
