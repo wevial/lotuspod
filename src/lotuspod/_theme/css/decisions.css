@@ -8,8 +8,9 @@
    to one line with a "change" button, its note, who and when, and the earlier
    answers in the muted voice of the meta line. On a page that takes comments
    an outlined Ask sits beside "Save answer" (js/comments.js). The answered
-   questions end the page in an "Answered" table, kept to the reading column
-   and wrapping its cells rather than scrolling. */
+   questions end the page in an "Answered" table under a section's folding
+   heading, kept to the reading column and wrapping its cells rather than
+   scrolling. */
 .artifact-decisions {
   display: grid;
   gap: 1.25rem;
@@ -378,6 +379,27 @@ label.artifact-decision-note span {
    page. */
 .artifact-answered {
   margin: 2rem 0 1.5em;
+}
+
+/* Its heading looks and folds as a section title does. */
+.artifact-answered-heading {
+  color: var(--color-lavender);
+  font-family: var(--font-display);
+  font-size: var(--size-h2);
+  font-weight: 600;
+  line-height: var(--leading-heading);
+  margin: 3rem 0 0.85rem;
+  text-wrap: balance;
+}
+
+.artifact--report .artifact-answered-heading {
+  font-size: 1.3rem;
+  margin-top: 2.2em;
+}
+
+/* The scroll is the body's, not the whole block's, so the heading's caret
+   still hangs in the gutter. */
+.artifact-answered-body {
   max-width: 100%;
   overflow-x: auto;
 }
@@ -389,15 +411,6 @@ label.artifact-decision-note span {
   max-width: none;
   overflow: visible;
   width: 100%;
-}
-
-.artifact-body .artifact-answered caption {
-  caption-side: top;
-  color: var(--color-white);
-  font-size: 1rem;
-  font-weight: 600;
-  padding: 0 0 0.6rem;
-  text-align: left;
 }
 
 .artifact-body .artifact-answered :is(th, td) {
@@ -440,4 +453,12 @@ label.artifact-decision-note span {
 .artifact-answered .artifact-decision-change:focus-visible {
   outline: 2px solid var(--color-lavender);
   outline-offset: 2px;
+}
+
+/* On paper the table is open, whatever the reader folded, as a section is. */
+@media print {
+  .artifact-answered-body[hidden] {
+    content-visibility: visible;
+    display: block;
+  }
 }

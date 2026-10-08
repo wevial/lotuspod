@@ -256,6 +256,54 @@ test.describe('signed in', () => {
     expect(box.scroll).toBeLessThanOrEqual(box.client);
     expect(errors).toEqual([]);
   });
+
+  test('the Answered table folds under its heading, stays folded after a reload, and counts a new answer while folded', async ({ page }) => {
+    const errors = await watch(page);
+    await page.goto(PAGE);
+    // A folded table is out of the accessibility tree, so its rows are found
+    // by class.
+    const rows = page.locator('.artifact-answered tbody tr');
+    const toggle = page.getByRole('heading', { level: 2, name: /^Answered/ }).getByRole('button');
+    await expect(rows).toHaveCount(2);
+    await expect(toggle).toHaveAccessibleName('Answered (2)');
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    await expect(rows.first()).toBeVisible();
+
+    await toggle.click();
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    for (const tr of await rows.all()) await expect(tr).toBeHidden();
+
+    await page.reload();
+    await expect(rows).toHaveCount(2);
+    await expect(toggle).toHaveAccessibleName('Answered (2)');
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    for (const tr of await rows.all()) await expect(tr).toBeHidden();
+    await toggle.focus();
+    await page.keyboard.press('Enter');
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    for (const tr of await rows.all()) await expect(tr).toBeVisible();
+    await page.keyboard.press('Space');
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    for (const tr of await rows.all()) await expect(tr).toBeHidden();
+
+    const pump = decision(page, 'decision-1');
+    await pump.change.click();
+    await expect(pump.option('Submerged')).toBeChecked();
+    await expect(pump.option('Submerged')).toBeFocused();
+    await expect(pump.saved).toBeHidden();
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+
+    const feed = decision(page, 'decision-3');
+    await feed.option(/^Yes/).check();
+    await feed.save.click();
+    await expect(feed.saved).toContainText('Saved · Yes · change');
+    await expect(toggle).toHaveAccessibleName('Answered (3)');
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    await expect(rows).toHaveCount(3);
+    for (const tr of await rows.all()) await expect(tr).toBeHidden();
+    await expect(page.locator('.artifact-answered-body')).toHaveAttribute('hidden', 'until-found');
+    expect(errors).toEqual([]);
+  });
 });
 
 test.describe('signed out', () => {
