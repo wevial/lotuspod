@@ -787,7 +787,7 @@ def is_repository_top(out_dir: Path) -> bool:
 
 # How git log marks each commit's line among the file names it lists: a
 # file name never holds a NUL.
-_COMMIT_FORMAT = "%x00%ct"
+_COMMIT_FORMAT = "%x00%cI"
 _COMMIT_MARK = "\x00"
 
 
@@ -808,8 +808,12 @@ def committed_times(out_dir: Path) -> dict[str, str]:
     when = ""
     for line in done.stdout.splitlines():
         if line.startswith(_COMMIT_MARK):
-            seconds = int(line[len(_COMMIT_MARK):])
-            when = _utc_stamp(_dt.datetime.fromtimestamp(seconds, _dt.timezone.utc))
+            # git prints the committer's offset (+00:00, or a local one):
+            # parse it and store the time as UTC Z, as publish stamps it.
+            try:
+                when = _utc_stamp(_dt.datetime.fromisoformat(line[len(_COMMIT_MARK):]))
+            except ValueError:
+                when = ""
         elif line and when:
             # Newest first: the first commit that names a page is its last.
             times.setdefault(line, when)

@@ -24,6 +24,11 @@ REPO = Path(__file__).resolve().parents[1]
 SRC = REPO / "src"
 TIMEOUT = 120
 
+# A runner's zone is not UTC: a POSIX TZ for UTC+9, which needs no tzdata. Every
+# subprocess runs in it, and the commits below carry its offset, so git prints
+# +09:00 and the stored times must still come out UTC with a trailing Z.
+TZ = "JST-9"
+
 FIRST = """\
 # Pond plan
 
@@ -39,7 +44,8 @@ SECOND = FIRST.replace("1. Order a pump", "1. The pump was replaced")
 
 def git(cwd: Path, *argv: str, env: dict | None = None) -> subprocess.CompletedProcess:
     return subprocess.run(["git", "-C", str(cwd), *argv], capture_output=True,
-                          text=True, env=env, timeout=TIMEOUT)
+                          text=True, env=env or dict(os.environ, TZ=TZ),
+                          timeout=TIMEOUT)
 
 
 def utc_now() -> str:
@@ -58,7 +64,7 @@ class PageDatesWitness(unittest.TestCase):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.tmp = Path(tmp.name).resolve()
-        self.env = dict(os.environ, PYTHONPATH=str(SRC))
+        self.env = dict(os.environ, PYTHONPATH=str(SRC), TZ=TZ)
 
     def lotuspod(self, *argv: str, env: dict | None = None) -> subprocess.CompletedProcess:
         done = subprocess.run(
@@ -128,9 +134,10 @@ class PageDatesWitness(unittest.TestCase):
 
     def render_twice(self, out: Path) -> None:
         """Render one page on 2026-09-01, then again changed on 2026-09-20,
-        committing each where out is a repository's top; no stamp either time."""
+        committing each where out is a repository's top; no stamp either time.
+        Each commit is 10:00 UTC, written in the runner's local offset."""
         for day, body in (("2026-09-01", "<p>First.</p>"), ("2026-09-20", "<p>Second.</p>")):
-            moment = f"{day}T10:00:00+00:00"
+            moment = f"{day}T19:00:00+09:00"
             env = dict(self.env, GIT_COMMITTER_DATE=moment, GIT_AUTHOR_DATE=moment)
             self.lotuspod("render", "--name", "notes", "--title", "Notes",
                           "--date", "2026-09-01", "--body", body,
@@ -142,11 +149,11 @@ class PageDatesWitness(unittest.TestCase):
         self.render_twice(out)
         log = git(out, "log", "--format=%cI", "--", "notes.html")
         self.assertEqual(log.stdout.split(),
-                         ["2026-09-20T10:00:00+00:00", "2026-09-01T10:00:00+00:00"])
+                         ["2026-09-20T19:00:00+09:00", "2026-09-01T19:00:00+09:00"])
 
         entry = self.manifest(out)["notes.html"]
         self.assertEqual(entry["created"], "2026-09-01")
-        self.assertTrue(entry["updated"].startswith("2026-09-20"), entry["updated"])
+        self.assertEqual(entry["updated"], "2026-09-20T10:00:00Z")
 
     def test_an_unstamped_page_outside_a_repository_was_updated_when_created(self):
         out = self.tmp / "plain"
