@@ -59,9 +59,10 @@
   // Where the primary pointer is a finger, the pill sits below the selection.
   var COARSE = "(pointer: coarse)";
   // Each page's folded sections are kept under this and its path, the
-  // Answered table among them as FOLDED_ANSWERED, which no heading's id is.
+  // Answered table among them as FOLDED_ANSWERED: a number, where a section is
+  // kept as its id, a string, so no authored heading's id can be taken for it.
   var SECTIONS = "lotuspod:folded:";
-  var FOLDED_ANSWERED = ":answered";
+  var FOLDED_ANSWERED = 0;
   // Sent on a comment box when rows are drawn into it, and on the document
   // once the page's read of answers has finished.
   var DRAWN = "lotuspod:drawn";
@@ -336,7 +337,7 @@
     // when its heading holds a link.
     function add(heading, wrapper, id) {
       if (!wrapper.id) {
-        wrapper.id = freeId("section-body-" + id);
+        wrapper.id = freeId(id === FOLDED_ANSWERED ? "artifact-answered-body" : "section-body-" + id);
       }
       // A button may not hold a link: such a section stays open.
       if (heading.querySelector("a")) {
@@ -386,6 +387,10 @@
       return section.wrapper.hasAttribute("hidden");
     }
 
+    function drawn(id) {
+      return sections.some(function (section) { return section.id === id; });
+    }
+
     function set(section, fold) {
       if (fold) {
         section.wrapper.setAttribute("hidden", "until-found");
@@ -430,8 +435,7 @@
         var ids = sections.filter(folded).map(function (section) { return section.id; });
         // The Answered table is drawn once the answers are read: until then
         // its kept fold stays kept.
-        var drawn = sections.some(function (section) { return section.id === FOLDED_ANSWERED; });
-        if (!drawn && kept.indexOf(FOLDED_ANSWERED) >= 0) {
+        if (!drawn(FOLDED_ANSWERED) && kept.indexOf(FOLDED_ANSWERED) >= 0) {
           ids.push(FOLDED_ANSWERED);
         }
         if (ids.length) {
@@ -476,7 +480,16 @@
         every.type = "button";
         outline.appendChild(every);
         every.addEventListener("click", function () {
-          change(sections, sections.some(function (section) { return !folded(section); }));
+          var fold = sections.some(function (section) { return !folded(section); });
+          // While the answers are being read, the Answered table still to be
+          // drawn is drawn as this leaves the rest.
+          if (!answered && !drawn(FOLDED_ANSWERED)) {
+            kept = kept.filter(function (id) { return id !== FOLDED_ANSWERED; });
+            if (fold) {
+              kept.push(FOLDED_ANSWERED);
+            }
+          }
+          change(sections, fold);
         });
       }
       if (every) {
@@ -512,7 +525,8 @@
       }
     });
 
-    // A later section, folded if the reader left it folded.
+    // A later section, folded if the reader left it folded or folded all
+    // before it was drawn.
     return function (heading, wrapper, id) {
       var section = add(heading, wrapper, id);
       if (section && kept.indexOf(id) >= 0) {

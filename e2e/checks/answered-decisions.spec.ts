@@ -302,6 +302,59 @@ test.describe('signed in', () => {
     await expect(page.locator('.artifact-answered-body')).toHaveAttribute('hidden', 'until-found');
     expect(errors).toEqual([]);
   });
+
+  test('Collapse all before the answers are read folds the Answered table, kept apart from a heading whose id could stand for it', async ({ page }) => {
+    const errors = await watch(page);
+    // Pump's heading takes the id a careless store would give the table, and
+    // a paragraph takes the id the table's body would be given.
+    await page.route((url) => url.pathname === PAGE, async (route) => {
+      const response = await route.fetch();
+      const html = (await response.text())
+        .replace('<h2 id="pump">', '<h2 id=":answered">')
+        .replace('data-section="pump"', 'data-section=":answered"')
+        .replace('<h2 id="heater">', '<p id="artifact-answered-body">Heater notes</p>\n<h2 id="heater">');
+      await route.fulfill({ response, body: html });
+    });
+    // The first read of the answers waits until it is let go.
+    let release = () => {};
+    const held = new Promise<void>((resolve) => { release = resolve; });
+    await page.route((url) => url.pathname === '/api/answers', async (route) => {
+      if (route.request().method() === 'GET') await held;
+      await route.continue();
+    });
+    await page.goto(PAGE);
+    const control = page.locator('nav.artifact-outline button.artifact-sections-all');
+    const pump = page.locator('h2[id=":answered"] button.artifact-section-toggle');
+    const toggle = page.getByRole('heading', { level: 2, name: /^Answered/ }).getByRole('button');
+    const rows = page.locator('.artifact-answered tbody tr');
+    await expect(control).toHaveText('Collapse all');
+    await control.click();
+    await expect(control).toHaveText('Expand all');
+    release();
+    await expect(rows).toHaveCount(3);
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    for (const tr of await rows.all()) await expect(tr).toBeHidden();
+    await expect(control).toHaveText('Expand all');
+    // Its button names the table's body alone.
+    const controls = await toggle.getAttribute('aria-controls');
+    expect(await page.evaluate((id) => [...document.querySelectorAll(`[id="${id}"]`)]
+      .map((node) => node.className), controls)).toEqual(['artifact-answered-body']);
+
+    // Each folds on its own, and a reload keeps each as the reader left it.
+    await toggle.click();
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    await page.reload();
+    await expect(rows).toHaveCount(3);
+    await expect(pump).toHaveAttribute('aria-expanded', 'false');
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    await pump.click();
+    await toggle.click();
+    await page.reload();
+    await expect(rows).toHaveCount(3);
+    await expect(pump).toHaveAttribute('aria-expanded', 'true');
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(errors).toEqual([]);
+  });
 });
 
 test.describe('signed out', () => {

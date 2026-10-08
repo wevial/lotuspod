@@ -242,7 +242,6 @@
         heading.setAttribute("aria-level", "2");
         heading.appendChild(element("span", "artifact-answered-title"));
         var wrapper = element("div", "artifact-answered-body");
-        wrapper.id = "artifact-answered-body";
         var grid = element("table");
         grid.setAttribute("aria-label", "Answered");
         var head = element("tr");
