@@ -23,25 +23,16 @@
       return all('input[type="checkbox"][name="item"]', form);
     }
 
-    // The ids of a checklist's items checked now, or by default, in page order.
-    function ticked(form) {
-      return boxes(form).filter(function (box) { return box.checked; })
-        .map(function (box) { return box.value; });
-    }
-
-    function defaults(form) {
-      return boxes(form).filter(function (box) { return box.defaultChecked; })
+    // The ids of a checklist's items checked now ("checked"), or by default
+    // ("defaultChecked"), in page order.
+    function ticked(form, state) {
+      return boxes(form).filter(function (box) { return box[state]; })
         .map(function (box) { return box.value; });
     }
 
     // Whether two lists of item ids hold the same items.
     function same(a, b) {
       return a.length === b.length && a.every(function (item) { return b.indexOf(item) !== -1; });
-    }
-
-    function optionText(input) {
-      var text = input.parentNode.querySelector(".artifact-decision-label");
-      return text ? text.textContent.replace(/\s+/g, " ").trim() : input.value;
     }
 
     // The items whose state in checked differs from their defaults, by label
@@ -53,7 +44,7 @@
       boxes(form).forEach(function (box) {
         var now = checked.indexOf(box.value) !== -1;
         if (now !== box.defaultChecked) {
-          (now ? on : off).push(optionText(box));
+          (now ? on : off).push(words(box.parentNode, ".artifact-decision-label") || box.value);
         }
       });
       var parts = [];
@@ -106,7 +97,7 @@
     function dirty(form) {
       var answer = saved(form);
       if (isChecklist(form)) {
-        if (!same(ticked(form), answer ? answer.checked || [] : defaults(form))) {
+        if (!same(ticked(form, "checked"), answer ? answer.checked || [] : ticked(form, "defaultChecked"))) {
           return true;
         }
       } else {
@@ -394,7 +385,7 @@
         version: form.dataset.version,
       };
       if (checklist) {
-        body.checked = ticked(form);
+        body.checked = ticked(form, "checked");
       } else {
         body.choice = picked.value;
       }
@@ -452,7 +443,7 @@
         // and one picked or written in (or restored by the browser) other
         // than its answer stays open as the reader left it.
         if (entry && !form.lotuspodAnswers.current) {
-          var touched = (isChecklist(form) ? !same(ticked(form), defaults(form)) :
+          var touched = (isChecklist(form) ? !same(ticked(form, "checked"), ticked(form, "defaultChecked")) :
             form.querySelector('input[name="choice"]:checked')) || form.elements.note.value;
           form.lotuspodAnswers = { current: entry.current, earlier: entry.earlier.slice() };
           if (touched && dirty(form)) {
