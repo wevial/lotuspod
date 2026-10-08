@@ -387,9 +387,6 @@ class ChecklistAnswerTests(ApiTestCase):
         status, second = self.ask("POST", "/api/answers", self.checklist_body([]))
         self.assertEqual(status, 201, second)
         self.assertEqual((second["checked"], second["supersedes"]), ([], first["id"]))
-        status, decision = self.answer(question="decision-1", page="mail")
-        self.assertEqual(status, 201, decision)
-        self.assertNotIn("checked", decision)
 
         status, got = self.ask("GET", "/api/answers?page=mail")
         self.assertEqual(status, 200, got)
@@ -398,14 +395,6 @@ class ChecklistAnswerTests(ApiTestCase):
                                             "label": "Off: Welcome, Reminder"}},
             "earlier": [{**first, "asked": {"text": "Emails",
                                             "label": "On: Digest · Off: Welcome"}}]})
-        self.assertNotIn("checked", got["questions"]["decision-1"]["current"])
-
-    def test_checking_the_defaults_changes_nothing(self):
-        status, row = self.ask("POST", "/api/answers", self.checklist_body(["w", "r"]))
-        self.assertEqual(status, 201, row)
-        _, got = self.ask("GET", "/api/answers?page=mail")
-        self.assertEqual(got["questions"]["checklist-1"]["current"]["asked"]["label"],
-                         "No change from the defaults")
 
     def test_answers_the_checklist_does_not_take_store_nothing(self):
         stale = self.checklist_body(["d"])

@@ -558,18 +558,12 @@ class ChecklistTests(DecisionsTestCase):
                 "| # | Item | Default | Why |\n| --- | --- | --- | --- |\n"
                 "| w | Welcome | on | First mail |\n| d | Digest | off | Weekly |\n"),
             "an empty Item cell": CHECKLIST_TABLE.replace("| Digest |", "|  |"),
+            "no body rows": "| # | Item | Default |\n| --- | --- | --- |\n",
         }
         for name, table in tables.items():
             with self.subTest(name):
                 page_html = self.render_markdown("mail", CHECKLIST.replace(CHECKLIST_TABLE, table))
                 self.assertLeftAsWritten(page_html, markdown.to_body(table).strip())
-
-    def test_a_table_of_no_rows_is_left_as_written(self):
-        body = ("<h2>Checklist for the maintainer</h2>\n"
-                "<table><tr><th>Item</th><th>Default</th></tr></table>\n")
-        page_html = self.render_body("mail", body)
-        self.assertIn(body.split("\n", 1)[1].strip(), page_html)
-        self.assertNotIn("artifact-decision", page_html)
 
 
 class ServedTestCase(DecisionsTestCase):

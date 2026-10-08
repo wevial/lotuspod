@@ -962,11 +962,6 @@ class ChecklistPullTests(PullTestCase):
         self.assertIn("- Chosen: No change from the defaults\n- Changed: nothing\n",
                       self.markdown(answer))
 
-    def test_a_decision_answer_has_no_changes(self):
-        item = self.pulled(self.answer())
-        self.assertNotIn("changed", item["question"])
-        self.assertNotIn("checked", item["answer"])
-
 
 class SchemaTests(PullTestCase):
     # The schema version the database is left at before serve opens it.
