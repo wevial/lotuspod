@@ -519,7 +519,8 @@ against the defaults it was given against.
 
 The table is left exactly as written, and makes no form, when it has no body
 rows, a row with an empty `Item` cell, a `Default` other than `on` or `off`,
-or any column other than `#`, `Item` and `Default`.
+any column other than `#`, `Item` and `Default`, a column named twice, or a
+row with more cells than the header.
 
 An answer's words are kept with it: its question is the legend, and its label
 the items changed from their defaults, "On: LABEL, LABEL · Off: LABEL" (either

@@ -565,6 +565,20 @@ class ChecklistTests(DecisionsTestCase):
                 page_html = self.render_markdown("mail", CHECKLIST.replace(CHECKLIST_TABLE, table))
                 self.assertLeftAsWritten(page_html, markdown.to_body(table).strip())
 
+    def test_a_table_with_a_cell_no_field_keeps_is_left_as_written(self):
+        tables = {
+            "a cell past the header": (
+                "<table><tr><th>Item</th><th>Default</th></tr>"
+                "<tr><td>Welcome</td><td>on</td><td>Only for new readers</td></tr></table>"),
+            "a repeated Item column": (
+                "<table><tr><th>Item</th><th>Item</th><th>Default</th></tr>"
+                "<tr><td>Welcome</td><td>Hello</td><td>on</td></tr></table>"),
+        }
+        for name, table in tables.items():
+            with self.subTest(name):
+                body = "<h2>Emails</h2>\n<h3>Checklist for the maintainer</h3>\n" + table + "\n"
+                self.assertLeftAsWritten(self.render_body("mail", body), table)
+
 
 class ServedTestCase(DecisionsTestCase):
     """A test case with serve running over self.out_dir and its database."""

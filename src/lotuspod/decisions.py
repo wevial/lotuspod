@@ -289,7 +289,11 @@ def _checklist(rows: list[list[dict]], number: int, legend: str) -> dict | None:
     """The checklist the table asks, as checklist-number; None when the
     table does not make one."""
     header, body = rows[0], rows[1:]
-    if not body or any(cell["text"].casefold() not in _CHECKLIST_COLUMNS for cell in header):
+    names = [cell["text"].casefold() for cell in header]
+    # A cell no field keeps, whether under an unknown or repeated column or
+    # past the header's last, leaves the table as written.
+    if (not body or not set(names) <= _CHECKLIST_COLUMNS or len(set(names)) < len(names)
+            or any(len(row) > len(header) for row in body)):
         return None
     columns = {name: _column(header, name) for name in _CHECKLIST_COLUMNS}
     taken: set[str] = set()
