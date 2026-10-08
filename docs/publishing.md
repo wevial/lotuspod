@@ -476,6 +476,58 @@ lotuspod answers pond-plan
 lotuspod answers pond-plan --json
 ```
 
+## Checklist for the maintainer
+
+When the maintainer has a list to go through, each item on or off, a
+checklist asks it as one decision about the list rather than one question
+per item:
+
+```markdown
+## Emails
+
+### Checklist for the maintainer
+
+| # | Item | Default |
+| --- | --- | --- |
+| w | Welcome | on |
+| d | Digest | off |
+| r | Reminder | on |
+```
+
+The table taken is the first one after an h2 or h3 whose text is "Checklist
+for the maintainer" (any case), before the next h2 or the next decisions or
+checklist heading, whose header row has an `Item` column. A page may hold
+several, each under its own heading, beside its decisions tables.
+
+Each such table becomes one `form.artifact-decision.artifact-decision--checklist`
+inside `div.artifact-decisions`, with a checkbox per row, checked when its
+`Default` is `on` (any case), the row's `Item` as its label, and the
+decision form's foot: "Add a note", "Save answer" and where it stands. Its
+question id is `checklist-N`, by the checklist's order on the page, and its
+legend the text of the nearest h2 above its heading (the heading's own text
+when it is an h2). Each item's id is the slug of its `#` cell, or its row
+number without a `#` column, made unique within the table. Its answer is
+the set of items checked, stored, kept as history and superseded as a
+decision's answer is (see [Answers and
+comments](comments.md#answers-and-comments)).
+
+Its `data-version` is a short hash of the legend's text and each item's id,
+label and default. Rewording an item, adding or removing one, changing a
+default or renaming the h2 changes it, so earlier answers are stranded as a
+reworded decision's are, and the items an answer changed are always read
+against the defaults it was given against.
+
+The table is left exactly as written, and makes no form, when it has no body
+rows, a row with an empty `Item` cell, a `Default` other than `on` or `off`,
+any column other than `#`, `Item` and `Default`, a column named twice, or a
+row with more cells than the header.
+
+An answer's words are kept with it: its question is the legend, and its label
+the items changed from their defaults, "On: LABEL, LABEL · Off: LABEL" (either
+part left out when empty) or "No change from the defaults". `lotuspod answers
+PAGE` prints each answer by those words, read against the page's form while
+it asks the checklist at the answer's version, else as they were kept.
+
 ## What a page may run
 
 Every artifact page carries a Content-Security-Policy meta tag at the top of

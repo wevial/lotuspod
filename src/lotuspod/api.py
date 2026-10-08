@@ -3,7 +3,8 @@
 serve hands a request here only after its Access assertion verifies, with
 the reader as actor. Six routes:
 
-    POST /api/answers     {page, question, version, choice, note}
+    POST /api/answers     {page, question, version, choice, note} or
+                          {page, question, version, checked, note}
     GET  /api/answers?page=NAME
     POST /api/comments    {page, section, text[, quote][, revision][, images]},
                           {page, question, text[, revision][, images]},
@@ -24,8 +25,14 @@ unknown_parent for a reply to no comment on its page, and 404 unknown_thread
 for a resolution naming no thread's first comment on its page. An answer is checked
 against the page's own decision forms: 400 unknown_question for a question
 the page does not ask, 409 stale for a version other than the page's, and
-400 invalid_choice for a choice its form does not offer. A new thread is
-checked against the page's comment boxes: 400 unknown_section for a section
+400 invalid_choice for a choice its form does not offer.
+
+A checklist's answer sends `checked`, the item ids the reader checked, in
+place of `choice`: 400 invalid_body for a list that is not of distinct
+strings, for `checked` to a decision and `choice` to a checklist, and 400
+invalid_choice for an item the form does not offer. It is stored with the
+items in the page's order and `choice` "", its kept label the change summary
+(`summary()`). A new thread is checked against the page's comment boxes: 400 unknown_section for a section
 the page has no box for, and 409 stale_page when it names a revision other
 than the page's, so a quote is never stored against words it was not taken from.
 
@@ -79,7 +86,7 @@ from dataclasses import dataclass, field
 from email.message import Message
 from http import HTTPStatus
 from pathlib import Path
-from typing import BinaryIO, Callable, Mapping
+from typing import BinaryIO, Callable, Mapping, Sequence
 
 from lotuspod import db, media, routing
 
@@ -131,6 +138,30 @@ class Question:
     # The section of the first comment box after its form, where a thread on
     # it is filed; "" when the page has none.
     section: str = ""
+    # A checklist's items checked by default, in the page's order; its
+    # items are its choices and labels.
+    defaults: tuple[str, ...] = ()
+    checklist: bool = False
+
+
+def changes(labels: Mapping[str, str], defaults: Sequence[str],
+            checked: Sequence[str]) -> list[dict]:
+    """{id, label, checked} for each of a checklist's items (labels, ids to
+    labels in the page's order) whose state in checked differs from its
+    default, in the page's order."""
+    on, was = set(checked), set(defaults)
+    return [{"id": item, "label": label, "checked": item in on}
+            for item, label in labels.items() if (item in on) != (item in was)]
+
+
+def summary(changed: Sequence[Mapping]) -> str:
+    """A checklist answer's changes as words: "On: LABEL, LABEL · Off:
+    LABEL", either part left out when empty, or "No change from the
+    defaults". The page script builds the same words."""
+    on = [item["label"] for item in changed if item["checked"]]
+    off = [item["label"] for item in changed if not item["checked"]]
+    parts = ([f"On: {', '.join(on)}"] if on else []) + ([f"Off: {', '.join(off)}"] if off else [])
+    return " · ".join(parts) or "No change from the defaults"
 
 
 @dataclass(frozen=True)
@@ -264,6 +295,18 @@ def _quote(value: object) -> dict | None:
         "prefix": _text(value["prefix"], 0, MAX_CONTEXT),
         "suffix": _text(value["suffix"], 0, MAX_CONTEXT),
     }
+
+
+def _checked(value: object) -> list[str]:
+    """value as a list of distinct strings; Refusal for anything else. An
+    item's id is as long as its `#` cell's slug, so only the body's own limit
+    holds it; whether the form offers each is checked against the form."""
+    if not isinstance(value, list):
+        raise _invalid()
+    items = [_text(item, 0, MAX_BODY) for item in value]
+    if len(set(items)) != len(items):
+        raise _invalid()
+    return items
 
 
 def _image_names(value: object) -> list[str]:
@@ -485,23 +528,40 @@ class Api:
 
     def _post_answer(self, headers: Message, body: Body, actor: Mapping) -> dict:
         fields = self._json_body(headers, body)
-        _keys(fields, {"page", "question", "version", "choice", "note"})
+        # A checklist's answer sends checked in place of choice; which the
+        # question takes is known only once it is found.
+        checklist = "checked" in fields
+        _keys(fields, {"page", "question", "version", "checked" if checklist else "choice",
+                       "note"})
         question = _text(fields["question"], 1, MAX_NAME)
         version = _text(fields["version"], 1, MAX_NAME)
-        choice = _text(fields["choice"], 1, MAX_NAME)
+        if checklist:
+            checked = _checked(fields["checked"])
+        else:
+            choice = _text(fields["choice"], 1, MAX_NAME)
         note = _text(fields["note"], 0, MAX_TEXT)
         page = self._page(fields["page"])
         asked = page.questions.get(question)
         if asked is None:
             raise Refusal(HTTPStatus.BAD_REQUEST, "unknown_question")
+        if checklist != asked.checklist:
+            raise _invalid()
         if version != asked.version:
             raise Refusal(HTTPStatus.CONFLICT, "stale")
-        if choice not in asked.choices:
-            raise Refusal(HTTPStatus.BAD_REQUEST, "invalid_choice")
+        if checklist:
+            if not set(checked) <= asked.choices:
+                raise Refusal(HTTPStatus.BAD_REQUEST, "invalid_choice")
+            # In the page's order, whatever order the reader sent.
+            checked = [item for item in asked.labels if item in set(checked)]
+            choice, label = "", summary(changes(asked.labels, asked.defaults, checked))
+        else:
+            if choice not in asked.choices:
+                raise Refusal(HTTPStatus.BAD_REQUEST, "invalid_choice")
+            checked, label = None, asked.labels.get(choice, choice)
         return self.database.add_answer(
             page=page.name, question=question, version=version, choice=choice,
             note=note, revision=page.revision, actor=actor,
-            question_text=asked.text, choice_label=asked.labels.get(choice, choice),
+            question_text=asked.text, choice_label=label, checked=checked,
         )
 
     def _post_resolution(self, fields: dict, actor: Mapping) -> dict:

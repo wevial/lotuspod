@@ -62,6 +62,23 @@ The pond may freeze.
 | 2 | Skate on it? | Yes / No |
 """
 
+# A page asking a checklist under the h2 Emails.
+MAIL = """\
+# Mail
+
+## Emails
+
+What each new reader is sent.
+
+### Checklist for the maintainer
+
+| # | Item | Default |
+| --- | --- | --- |
+| w | Welcome | on |
+| d | Digest | off |
+| r | Reminder | ON |
+"""
+
 LOOSE = "# Loose\n\nA page nobody owns.\n\n## One\n\nFirst.\n\n## Two\n\nSecond.\n"
 
 MEDIA_FIXTURES = Path(__file__).resolve().parent / "fixtures" / "media"
@@ -880,6 +897,72 @@ class DecisionPullTests(PullTestCase):
         self.assertEqual(out.count("## Decision"), 1, asked)
 
 
+class ChecklistPullTests(PullTestCase):
+    """A checklist's answer is pulled with the items the reader changed from
+    their defaults."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.publish_mail(MAIL)
+        self.pull("hermes")
+
+    def publish_mail(self, text: str) -> None:
+        source = self.work / "mail.md"
+        source.write_text(text, encoding="utf-8")
+        rc, _out, err = run_cli("publish", str(source), "--out-dir", str(self.out_dir),
+                                "--local", "--owner", "hermes", "--credential", str(self.desk))
+        self.assertEqual(rc, 0, err)
+
+    def answer_checklist(self, checked: list[str]) -> dict:
+        page = (self.out_dir / "mail.html").read_text(encoding="utf-8")
+        version = decisions.read_forms(page)["checklist-1"].version
+        status, row = self.reader("POST", "/api/answers", {
+            "page": "mail", "question": "checklist-1", "version": version,
+            "checked": checked, "note": ""})
+        self.assertEqual(status, 201, row)
+        return row
+
+    def pulled(self, answer: dict) -> dict:
+        [item] = [item for item in self.pull("hermes")
+                  if item["kind"] == "answer" and item["answer"]["id"] == answer["id"]]
+        return item
+
+    def markdown(self, answer: dict) -> str:
+        rc, out, err = self.agent("pull", "--owner", "hermes")
+        self.assertEqual(rc, 0, err)
+        start = out.index(f"Answer {answer['id']} on `mail`")
+        return out[start:out.index("- Acknowledge:", start)]
+
+    def test_the_pull_gives_the_items_changed_from_their_defaults(self):
+        answer = self.answer_checklist(["d", "r"])
+        item = self.pulled(answer)
+        self.assertEqual(item["answer"]["checked"], ["d", "r"])
+        self.assertEqual(item["question"], {
+            "id": "checklist-1", "text": "Emails", "label": "On: Digest · Off: Welcome",
+            "reworded": False,
+            "changed": [{"id": "w", "label": "Welcome", "checked": False},
+                        {"id": "d", "label": "Digest", "checked": True}]})
+        self.assertIn("- Chosen: On: Digest · Off: Welcome\n"
+                      "- Changed: Welcome (`w`) off\n"
+                      "- Changed: Digest (`d`) on\n", self.markdown(answer))
+
+        self.publish_mail(MAIL.replace("| r | Reminder | ON |", "| r | Reminder | off |"))
+        question = self.pulled(answer)["question"]
+        self.assertEqual((question["changed"], question["reworded"], question["label"]),
+                         (None, True, "On: Digest · Off: Welcome"))
+        text = self.markdown(answer)
+        self.assertIn("- Chosen: On: Digest · Off: Welcome\n", text)
+        self.assertNotIn("- Changed:", text)
+
+    def test_checking_the_defaults_changes_nothing(self):
+        answer = self.answer_checklist(["w", "r"])
+        question = self.pulled(answer)["question"]
+        self.assertEqual((question["label"], question["changed"]),
+                         ("No change from the defaults", []))
+        self.assertIn("- Chosen: No change from the defaults\n- Changed: nothing\n",
+                      self.markdown(answer))
+
+
 class SchemaTests(PullTestCase):
     # The schema version the database is left at before serve opens it.
     version = 2
@@ -931,7 +1014,7 @@ class SchemaTests(PullTestCase):
                              db.SCHEMA_VERSION)
         finally:
             conn.close()
-        self.assertEqual(db.SCHEMA_VERSION, 9)
+        self.assertEqual(db.SCHEMA_VERSION, 10)
 
 
 class ReplySchemaTests(SchemaTests):

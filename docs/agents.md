@@ -116,7 +116,13 @@ responder may claim it. Items are, comments first, oldest first:
   reworded}`: the question and the chosen option's label in the words the
   reader answered, kept with the answer, and whether the page now asks it in
   other words, or not at all. An answer is
-  evidence of the reader's choice on that one question only.
+  evidence of the reader's choice on that one question only. A checklist's
+  answer (its `answer` carries `checked`; see [Checklist for the
+  maintainer](publishing.md#checklist-for-the-maintainer)) has as `label` the
+  items changed, "On: LABEL, LABEL · Off: LABEL" or "No change from the
+  defaults", and its `question` also carries `changed`: `{id, label,
+  checked}` for each item whose state differs from its default, in the page's
+  order, read against the page's form, or `null` when `reworded` is true.
 - `page` is `{name, title, owner, revision, sourceFile, source}`: `source`
   is the page's kept `NAME.md` or `NAME.body.html`, exactly as kept, and
   `revision` the revision of those very bytes, which is the page's
@@ -143,7 +149,9 @@ in a fence under "The answer's note:"; `show` heads that thread ``## Decision
 `show` print "Resolved by WHO at TIME". Under a message's text, `pull` and
 `show` print a line for each of its images, `- Image /media/NAME, WxH, file
 PATH`, or `not in the media directory` in place of `file PATH` when its file
-is gone; a message with no images prints none.
+is gone; a message with no images prints none. A checklist's answer prints
+`- Chosen: SUMMARY`, then a line for each item changed, ``- Changed: LABEL
+(`ID`) on`` or `off`, or `- Changed: nothing`; none while it is reworded.
 
 `ack-answer ID` needs `pull` for the page's owner; the owner's pulls leave an
 acknowledged answer out from then on. `show PAGE` needs `pull` for any handle

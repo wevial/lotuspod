@@ -84,6 +84,26 @@ A heater keeps a hole in the ice.
 """
 
 
+# An h2 holding a checklist under its own h3.
+CHECKLIST = """\
+# Mail plan
+
+## Emails
+
+What each new reader is sent.
+
+### Checklist for the maintainer
+
+| # | Item | Default |
+| --- | --- | --- |
+| w | Welcome | on |
+| d | Digest | off |
+| r | Reminder | ON |
+"""
+
+CHECKLIST_TABLE = CHECKLIST.split("### Checklist for the maintainer\n\n", 1)[1]
+
+
 class _Page(HTMLParser):
     """A page's decision forms, with their inputs, plus its tables and scripts."""
 
@@ -108,7 +128,8 @@ class _Page(HTMLParser):
         elif tag == "script":
             self.scripts.append(attrs.get("src", ""))
         elif tag == "form":
-            self._form = {"attrs": attrs, "radios": [], "labels": [], "notes": 0,
+            self._form = {"attrs": attrs, "radios": [], "checkboxes": [], "labels": [],
+                          "notes": 0,
                           "folded_notes": 0, "summaries": [], "buttons": [], "context": []}
             self.forms.append(self._form)
         elif self._form is None:
@@ -126,6 +147,8 @@ class _Page(HTMLParser):
             self._summary = []
         elif tag == "input" and attrs.get("type") == "radio":
             self._form["radios"].append(attrs)
+        elif tag == "input" and attrs.get("type") == "checkbox":
+            self._form["checkboxes"].append(attrs)
         elif tag == "textarea":
             self._form["notes"] += attrs.get("name") == "note"
             self._form["folded_notes"] += bool(self._details and attrs.get("name") == "note")
@@ -448,6 +471,115 @@ class LeftAsWrittenTests(DecisionsTestCase):
         self.assertNotIn(cli.PAGE_SCRIPT, page_html)
 
 
+class ChecklistTests(DecisionsTestCase):
+    """A "Checklist for the maintainer" table renders as one form of
+    checkboxes preset to their defaults."""
+
+    def test_the_table_becomes_one_form_of_checkboxes(self):
+        page_html = self.render_markdown("mail", CHECKLIST)
+        page = read(page_html)
+        self.assertEqual(page.tables, 0)
+        [form] = page.forms
+        self.assertEqual(form["attrs"]["class"].split(),
+                         ["artifact-decision", "artifact-decision--checklist"])
+        self.assertEqual(form["attrs"]["data-question"], "checklist-1")
+        self.assertEqual(form["attrs"]["data-page"], "mail")
+        self.assertRegex(form["attrs"]["data-version"], r"^[0-9a-f]{12}$")
+        self.assertEqual(form["radios"], [])
+        self.assertEqual([(box["name"], box["value"], "checked" in box)
+                          for box in form["checkboxes"]],
+                         [("item", "w", True), ("item", "d", False), ("item", "r", True)])
+        self.assertEqual([label["text"] for label in form["labels"]],
+                         ["Welcome", "Digest", "Reminder"])
+        self.assertEqual(form["buttons"], [{"type": "submit", "text": "Save answer"}])
+        self.assertEqual(form["summaries"], ["Add a note"])
+        self.assertEqual(form["folded_notes"], 1)
+        # Inside the decisions block, as a decision's forms are.
+        self.assertLess(page_html.index('<div class="artifact-decisions">'),
+                        page_html.index('data-question="checklist-1"'))
+        self.assertEqual([src.split("?")[0] for src in page.scripts], [cli.PAGE_SCRIPT])
+
+        [read_back] = decisions.read_forms(page_html).values()
+        self.assertEqual(read_back.question, "checklist-1")
+        self.assertEqual(read_back.text, "Emails")
+        self.assertTrue(read_back.checklist)
+        self.assertEqual(read_back.options,
+                         (("w", "Welcome"), ("d", "Digest"), ("r", "Reminder")))
+        self.assertEqual(read_back.defaults, ("w", "r"))
+        self.assertEqual(read_back.version, form["attrs"]["data-version"])
+        self.assertEqual(read_back.version, decisions.checklist_version(
+            "Emails", [("w", "Welcome", True), ("d", "Digest", False),
+                       ("r", "Reminder", True)]))
+
+    def test_a_checklist_under_an_h2_takes_its_own_text_and_rows_their_numbers(self):
+        body = (
+            "<h2>Checklist for the maintainer</h2>\n"
+            "<table><tr><th>Item</th><th>Default</th></tr>"
+            "<tr><td>One <em>more</em></td><td>off</td></tr>"
+            "<tr><td>Two</td><td>Off</td></tr></table>\n"
+        )
+        [form] = decisions.read_forms(self.render_body("mail", body)).values()
+        self.assertEqual(form.text, "Checklist for the maintainer")
+        self.assertEqual(form.options, (("1", "One more"), ("2", "Two")))
+        self.assertEqual(form.defaults, ())
+
+    def test_checklists_and_decisions_end_each_others_sections(self):
+        text = CHECKLIST + "\n### Decisions for the maintainer\n\n" + TABLE + (
+            "\n## Digests\n\n### Checklist for the maintainer\n\n"
+            "| Item | Default |\n| --- | --- |\n| Weekly | on |\n| Weekly | off |\n")
+        forms = decisions.read_forms(self.render_markdown("mail", text))
+        self.assertEqual(list(forms), ["checklist-1", "decision-1", "decision-2", "checklist-2"])
+        self.assertFalse(forms["decision-1"].checklist)
+        self.assertEqual((forms["checklist-2"].text, forms["checklist-2"].options),
+                         ("Digests", (("1", "Weekly"), ("2", "Weekly"))))
+
+    def test_its_version_follows_each_label_default_and_the_h2(self):
+        def version(text: str) -> str:
+            [form] = decisions.read_forms(self.render_markdown("mail", text)).values()
+            return form.version
+
+        first = version(CHECKLIST)
+        self.assertEqual(version(CHECKLIST), first)
+        changed = {
+            "label": CHECKLIST.replace("| Digest |", "| Weekly digest |"),
+            "default": CHECKLIST.replace("| d | Digest | off |", "| d | Digest | on |"),
+            "h2": CHECKLIST.replace("## Emails", "## Mail"),
+        }
+        versions = {name: version(text) for name, text in changed.items()}
+        for name, got in versions.items():
+            with self.subTest(name):
+                self.assertNotEqual(got, first)
+        self.assertEqual(len(set(versions.values())), 3)
+
+    def test_a_table_that_makes_no_checklist_is_left_as_written(self):
+        tables = {
+            "a default of maybe": CHECKLIST_TABLE.replace("| off |", "| maybe |"),
+            "a Why column": (
+                "| # | Item | Default | Why |\n| --- | --- | --- | --- |\n"
+                "| w | Welcome | on | First mail |\n| d | Digest | off | Weekly |\n"),
+            "an empty Item cell": CHECKLIST_TABLE.replace("| Digest |", "|  |"),
+            "no body rows": "| # | Item | Default |\n| --- | --- | --- |\n",
+        }
+        for name, table in tables.items():
+            with self.subTest(name):
+                page_html = self.render_markdown("mail", CHECKLIST.replace(CHECKLIST_TABLE, table))
+                self.assertLeftAsWritten(page_html, markdown.to_body(table).strip())
+
+    def test_a_table_with_a_cell_no_field_keeps_is_left_as_written(self):
+        tables = {
+            "a cell past the header": (
+                "<table><tr><th>Item</th><th>Default</th></tr>"
+                "<tr><td>Welcome</td><td>on</td><td>Only for new readers</td></tr></table>"),
+            "a repeated Item column": (
+                "<table><tr><th>Item</th><th>Item</th><th>Default</th></tr>"
+                "<tr><td>Welcome</td><td>Hello</td><td>on</td></tr></table>"),
+        }
+        for name, table in tables.items():
+            with self.subTest(name):
+                body = "<h2>Emails</h2>\n<h3>Checklist for the maintainer</h3>\n" + table + "\n"
+                self.assertLeftAsWritten(self.render_body("mail", body), table)
+
+
 class ServedTestCase(DecisionsTestCase):
     """A test case with serve running over self.out_dir and its database."""
 
@@ -629,6 +761,45 @@ class AnswersCommandTests(DecisionsTestCase):
 
     def test_no_answers(self):
         self.assertEqual(self.answers(), "no answers to plan\n")
+
+
+class ChecklistAnswersCommandTests(DecisionsTestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.render_markdown("mail", CHECKLIST)
+        self.db_path = self.work / "lotuspod.sqlite3"
+        self.form = decisions.read_forms(
+            (self.out_dir / "mail.html").read_text(encoding="utf-8"))["checklist-1"]
+
+    def add(self, checked: list[str], label: str, version: str | None = None) -> dict:
+        return db.Database(self.db_path).add_answer(
+            page="mail", question="checklist-1", version=version or self.form.version,
+            choice="", note="", revision="abc123abc123", actor=READER,
+            question_text="Emails", choice_label=label, checked=checked,
+        )
+
+    def answers(self) -> list[str]:
+        rc, out, err = run_cli("answers", "mail", "--db", str(self.db_path),
+                               "--out-dir", str(self.out_dir))
+        self.assertEqual(rc, 0, err)
+        return out.splitlines()
+
+    def test_prints_each_answer_by_its_change_summary(self):
+        first = self.add(["w", "r"], "No change from the defaults")
+        second = self.add(["d", "r"], "On: Digest · Off: Welcome")
+        self.assertEqual(self.answers(), [
+            "checklist-1: Emails",
+            f"  On: Digest · Off: Welcome (answer {second['id']}, replaces answer {first['id']})",
+            f"    by maintainer@example.com at {second['createdAt']}",
+            "  earlier:",
+            f"    No change from the defaults (answer {first['id']})",
+            f"      by maintainer@example.com at {first['createdAt']}",
+        ])
+
+    def test_an_answer_to_another_version_prints_its_kept_summary(self):
+        self.add(["d"], "Kept words", version="000000000000")
+        self.assertEqual(self.answers()[1].split(" (")[0], "  Kept words")
+        self.assertIn(", to an earlier wording", self.answers()[1])
 
 
 if __name__ == "__main__":
