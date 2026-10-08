@@ -43,26 +43,30 @@
 
       const body = table.tBodies[0];
       const headers = Array.from(table.tHead.rows[0].cells);
-      // Document order is filename order - the listing's stable base. Sorts run
-      // from it rather than from the current DOM order, so a sort is repeatable
-      // and equal keys keep falling back to filename order.
+      // Document order is newest update first, filename breaking ties - the
+      // listing's stable base. Sorts run from it rather than from the current
+      // DOM order, so a sort is repeatable and equal keys keep falling back to
+      // that order.
       const rows = Array.from(body.rows);
 
-      const cell = (row, column) => row.cells[column].textContent.trim();
+      // A date cell sorts by its time element's full datetime, not the day it
+      // shows, so two pages updated on one day keep their order.
+      const cell = (row, column) => {
+        const time = row.cells[column].querySelector("time[datetime]");
+        return time ? time.dateTime : row.cells[column].textContent.trim();
+      };
 
       const sorted = (column, ascending) => {
-        const numeric = headers[column].dataset.sortType === "number";
+        const dated = rows.some((row) => row.cells[column].querySelector("time[datetime]"));
         const direction = ascending ? 1 : -1;
         return rows.slice().sort((a, b) => {
           const left = cell(a, column);
           const right = cell(b, column);
-          // Blanks (no episode number, no date) sink in both directions, so the
-          // rows that carry the field stay together at the top either way.
+          // Blanks (no date, no summary) sink in both directions, so the rows
+          // that carry the field stay together at the top either way.
           if (!left || !right) return left ? -1 : right ? 1 : 0;
-          if (numeric) {
-            const [x, y] = [Number(left), Number(right)];
-            if (!Number.isNaN(x) && !Number.isNaN(y)) return (x - y) * direction;
-          }
+          // ISO 8601 in UTC orders as text.
+          if (dated) return (left < right ? -1 : left > right ? 1 : 0) * direction;
           return left.localeCompare(right, undefined, {
             numeric: true,
             sensitivity: "base",
@@ -70,8 +74,10 @@
         });
       };
 
-      let sortColumn = -1;
-      let ascending = true;
+      // The rows arrive in the order a header may already name: its next click
+      // reverses it.
+      let sortColumn = headers.findIndex((header) => header.hasAttribute("aria-sort"));
+      let ascending = sortColumn >= 0 && headers[sortColumn].getAttribute("aria-sort") === "ascending";
 
       const sortBy = (column) => {
         ascending = column === sortColumn ? !ascending : true;
@@ -95,7 +101,7 @@
         button.addEventListener("click", () => sortBy(index));
         header.textContent = "";
         header.append(button);
-        header.setAttribute("aria-sort", "none");
+        if (index !== sortColumn) header.setAttribute("aria-sort", "none");
       });
 
       const controls = document.querySelector(".index-controls");

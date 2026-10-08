@@ -83,20 +83,34 @@ OTHER = "claude-3f9a2c"
 OTHER_OPERATIONS = ("pull", "claim", "reply")
 
 
+# The time publish stamps a page updated: later on SAMPLE_DATE, so a published
+# page's header still names one day and the index's Updated column two times.
+SAMPLE_UPDATED = f"{SAMPLE_DATE}T12:00:00+00:00"
+
+
 class _SampleDay(datetime.date):
     @classmethod
     def today(cls) -> datetime.date:
         return cls.fromisoformat(SAMPLE_DATE)
 
 
-def _sample_clock() -> types.ModuleType:
-    """The datetime module as cli.py reads it, with today() held at SAMPLE_DATE.
+class _SampleTime(datetime.datetime):
+    @classmethod
+    def now(cls, tz: datetime.tzinfo | None = None) -> datetime.datetime:
+        return cls.fromisoformat(SAMPLE_UPDATED).astimezone(tz)
 
-    `index` has no --date: it stamps the page with date.today().
+
+def _sample_clock() -> types.ModuleType:
+    """The datetime module as cli.py reads it, with today() held at SAMPLE_DATE
+    and now() at SAMPLE_UPDATED.
+
+    `index` has no --date: it stamps the page with date.today(). `publish`
+    stamps the page with datetime.now().
     """
     clock = types.ModuleType("datetime")
     clock.__dict__.update(vars(datetime))
     clock.date = _SampleDay
+    clock.datetime = _SampleTime
     return clock
 
 
