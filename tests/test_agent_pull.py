@@ -932,11 +932,6 @@ class ContextPullTests(PullTestCase):
                   and item[kind]["id"] == key]
         return item
 
-    def markdown(self) -> str:
-        rc, out, err = self.agent("pull", "--owner", "hermes")
-        self.assertEqual(rc, 0, err)
-        return out
-
     def test_a_decision_thread_carries_the_context_while_the_page_asks_it(self):
         asked = self.decision_thread("Which pump fits?")
         self.assertEqual(self.item("comment", asked["id"])["decision"]["context"], self.CONTEXT)
@@ -958,7 +953,8 @@ class ContextPullTests(PullTestCase):
         asked = self.decision_thread("Which pump fits?")
         bare = self.decision_thread("Skating where?", question="decision-2")
         answer = self.answer()
-        out = self.markdown()
+        rc, out, err = self.agent("pull", "--owner", "hermes")
+        self.assertEqual(rc, 0, err)
         thread = out[out.index(f"Comment {asked['id']} on"):out.index(f"Comment {bare['id']} on")]
         self.assertIn("- Decision: `decision-1`, Freeze the pond?\n"
                       "- Context: A floating pump rides the ice.\n"
