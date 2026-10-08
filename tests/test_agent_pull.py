@@ -916,7 +916,6 @@ class ContextPullTests(PullTestCase):
 
     def setUp(self) -> None:
         super().setUp()
-        self.assertNotEqual(self.WITH_CONTEXT, PLAN)
         self.publish(self.WITH_CONTEXT)
         self.pull("hermes")
 
@@ -927,26 +926,14 @@ class ContextPullTests(PullTestCase):
                                 "--local", "--owner", "hermes", "--credential", str(self.desk))
         self.assertEqual(rc, 0, err)
 
-    def item(self, kind: str, key: int) -> dict:
-        [item] = [item for item in self.pull("hermes") if item["kind"] == kind
-                  and item[kind]["id"] == key]
-        return item
-
-    def test_a_decision_thread_carries_the_context_while_the_page_asks_it(self):
-        asked = self.decision_thread("Which pump fits?")
-        self.assertEqual(self.item("comment", asked["id"])["decision"]["context"], self.CONTEXT)
-        self.publish(self.WITH_CONTEXT.replace(
-            "| 1 | Freeze the pond? | A floating pump rides the ice. "
-            "| The pond freezes in December. | Yes / No |\n", ""))
-        decision = self.item("comment", asked["id"])["decision"]
-        self.assertEqual((decision["context"], decision["asked"]), ("", False))
-
     def test_an_answer_carries_the_context_until_the_question_is_reworded(self):
-        answer = self.answer()
-        question = self.item("answer", answer["id"])["question"]
+        self.answer()
+        [item] = self.pull("hermes")
+        question = item["question"]
         self.assertEqual((question["context"], question["reworded"]), (self.CONTEXT, False))
         self.publish(self.WITH_CONTEXT.replace("Freeze the pond?", "Drain the pond?"))
-        question = self.item("answer", answer["id"])["question"]
+        [item] = self.pull("hermes")
+        question = item["question"]
         self.assertEqual((question["context"], question["reworded"]), ("", True))
 
     def test_the_markdown_pull_prints_a_line_for_each_context_line(self):

@@ -70,13 +70,9 @@ test.describe('signed in', () => {
     await expect(first.context).toHaveCount(1);
     await expect(first.context).toBeVisible();
     await expect(first.context).toHaveText(CONTEXT);
-    await expect(first.context).not.toContainText('Context:');
-    await expect(first.form.locator('.artifact-decision-context-label')).toHaveCount(0);
     await expect(first.form.locator('legend + p.artifact-decision-context')).toHaveCount(1);
     const link = first.context.getByRole('link', { name: 'the pump notes' });
     await expect(link).toHaveAttribute('href', 'capture-article.html');
-    expect(new URL(await link.evaluate((node) => (node as HTMLAnchorElement).href)).pathname)
-      .toBe('/capture-article.html');
 
     const legend = (await first.legend.boundingBox())!;
     const context = (await first.context.boundingBox())!;

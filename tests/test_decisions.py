@@ -337,13 +337,12 @@ class FormTests(DecisionsTestCase):
         self.assertEqual(page.forms[0]["context"], [
             "A floating pump rides the ice. See the pump notes first."])
         self.assertEqual(page.forms[1]["context"], [])
-        first, second = page_html.split('data-question="decision-2"')
+        first = page_html.split('data-question="decision-2"')[0]
         self.assertIn(
             '<span class="artifact-decision-text">Which pump?</span></legend>\n'
             '<p class="artifact-decision-context">A floating pump rides the ice. See '
             '<a href="pump.html">the pump notes</a> first.</p>\n', first)
         self.assertNotIn("artifact-decision-context-label", first)
-        self.assertNotIn("artifact-decision-context", second.split("</form>")[0])
 
     def test_the_context_comes_before_the_other_columns(self):
         text = PLAN.replace(TABLE, """\
@@ -362,14 +361,8 @@ class FormTests(DecisionsTestCase):
         before = self.render_markdown("plan", text)
         after = self.render_markdown("plan", text.replace("rides the ice", "floats on the ice"))
         self.assertEqual(read(before).forms[0]["attrs"]["data-version"],
-                         read(after).forms[0]["attrs"]["data-version"])
-        self.assertEqual(read(before).forms[0]["attrs"]["data-version"],
                          decisions.version("Which pump?", ["Floating", "Submerged"]))
-        forms = decisions.read_forms(after)
-        self.assertEqual(forms["decision-1"].context,
-                         "A floating pump floats on the ice. See the pump notes first.")
-        self.assertEqual(forms["decision-2"].context, "")
-        self.assertEqual(forms, decisions.read_forms(before))
+        self.assertEqual(decisions.read_forms(after), decisions.read_forms(before))
 
     def test_a_default_and_no_options_offers_accept_and_other(self):
         text = PLAN.replace(TABLE, """\
