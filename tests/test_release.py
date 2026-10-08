@@ -515,8 +515,8 @@ class ChangelogTests(unittest.TestCase):
         self.assertIn("first public release", notes)
 
     def test_0_1_1_says_the_pypi_page_shows_the_readmes_images_and_links(self):
-        self.assertEqual(project_version(), "0.1.1")
-        notes = load_release_check().check("v0.1.1", REPO_ROOT)
+        notes = load_release_check().changelog_section(self.text, "0.1.1")
+        self.assertIsNotNone(notes)
         flat = " ".join(notes.split())
         self.assertIn("PyPI page now shows the README's images and links", flat)
 
