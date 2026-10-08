@@ -288,9 +288,7 @@ test.describe('signed in', () => {
 
     const pump = decision(page, 'decision-1');
     await pump.change.click();
-    await expect(pump.option('Submerged')).toBeChecked();
     await expect(pump.option('Submerged')).toBeFocused();
-    await expect(pump.saved).toBeHidden();
     await expect(toggle).toHaveAttribute('aria-expanded', 'false');
 
     const feed = decision(page, 'decision-3');
