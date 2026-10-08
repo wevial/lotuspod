@@ -387,6 +387,9 @@ class ChecklistAnswerTests(ApiTestCase):
         status, second = self.ask("POST", "/api/answers", self.checklist_body([]))
         self.assertEqual(status, 201, second)
         self.assertEqual((second["checked"], second["supersedes"]), ([], first["id"]))
+        status, decision = self.answer(question="decision-1", page="mail")
+        self.assertEqual(status, 201, decision)
+        self.assertNotIn("checked", decision)
 
         status, got = self.ask("GET", "/api/answers?page=mail")
         self.assertEqual(status, 200, got)
@@ -395,6 +398,17 @@ class ChecklistAnswerTests(ApiTestCase):
                                             "label": "Off: Welcome, Reminder"}},
             "earlier": [{**first, "asked": {"text": "Emails",
                                             "label": "On: Digest · Off: Welcome"}}]})
+        self.assertNotIn("checked", got["questions"]["decision-1"]["current"])
+
+    def test_an_item_id_of_any_length_the_page_offers_is_taken(self):
+        long_id = "a" * (api.MAX_NAME + 1)
+        self.publish_mail(CHECKLIST.replace("| d | Digest | off |",
+                                            f"| {long_id} | Digest | off |"))
+        status, row = self.ask("POST", "/api/answers", self.checklist_body([long_id]))
+        self.assertEqual(status, 201, row)
+        self.assertEqual(row["checked"], [long_id])
+        self.assertEqual(self.ask("POST", "/api/answers", self.checklist_body([long_id + "b"])),
+                         (400, {"error": "invalid_choice"}))
 
     def test_answers_the_checklist_does_not_take_store_nothing(self):
         stale = self.checklist_body(["d"])

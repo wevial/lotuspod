@@ -298,10 +298,12 @@ def _quote(value: object) -> dict | None:
 
 
 def _checked(value: object) -> list[str]:
-    """value as a list of distinct item ids; Refusal for anything else."""
+    """value as a list of distinct strings; Refusal for anything else. An
+    item's id is as long as its `#` cell's slug, so only the body's own limit
+    holds it; whether the form offers each is checked against the form."""
     if not isinstance(value, list):
         raise _invalid()
-    items = [_text(item, 1, MAX_NAME) for item in value]
+    items = [_text(item, 0, MAX_BODY) for item in value]
     if len(set(items)) != len(items):
         raise _invalid()
     return items
