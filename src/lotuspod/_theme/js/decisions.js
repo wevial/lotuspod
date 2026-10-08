@@ -12,12 +12,82 @@
       return all('input[type="radio"][name="choice"]', form);
     }
 
-    // The label the form shows for a choice; the choice itself when it offers
-    // no such option (an answer to an earlier wording).
-    function label(form, choice) {
-      var found = radios(form).filter(function (radio) { return radio.value === choice; })[0];
+    // A checklist (lotuspod.decisions) asks one question about a list of
+    // items: its inputs are checkboxes, each preset to its default, and its
+    // answer is the set of items checked.
+    function isChecklist(form) {
+      return form.classList.contains("artifact-decision--checklist");
+    }
+
+    function boxes(form) {
+      return all('input[type="checkbox"][name="item"]', form);
+    }
+
+    // The ids of a checklist's items checked now, or by default, in page order.
+    function ticked(form) {
+      return boxes(form).filter(function (box) { return box.checked; })
+        .map(function (box) { return box.value; });
+    }
+
+    function defaults(form) {
+      return boxes(form).filter(function (box) { return box.defaultChecked; })
+        .map(function (box) { return box.value; });
+    }
+
+    // Whether two lists of item ids hold the same items.
+    function same(a, b) {
+      return a.length === b.length && a.every(function (item) { return b.indexOf(item) !== -1; });
+    }
+
+    function optionText(input) {
+      var text = input.parentNode.querySelector(".artifact-decision-label");
+      return text ? text.textContent.replace(/\s+/g, " ").trim() : input.value;
+    }
+
+    // The items whose state in checked differs from their defaults, by label
+    // in page order, as the server words a checklist's answer: "On: LABEL, LABEL · Off: LABEL", either part left
+    // out when empty, or "No change from the defaults".
+    function summary(form, checked) {
+      var on = [];
+      var off = [];
+      boxes(form).forEach(function (box) {
+        var now = checked.indexOf(box.value) !== -1;
+        if (now !== box.defaultChecked) {
+          (now ? on : off).push(optionText(box));
+        }
+      });
+      var parts = [];
+      if (on.length) {
+        parts.push("On: " + on.join(", "));
+      }
+      if (off.length) {
+        parts.push("Off: " + off.join(", "));
+      }
+      return parts.join(" \u00b7 ") || "No change from the defaults";
+    }
+
+    // An answer in the words it was given in: its kept label, else its items
+    // or its choice.
+    function kept(answer) {
+      var asked = answer.asked || {};
+      if (asked.label) {
+        return String(asked.label);
+      }
+      return Array.isArray(answer.checked) ? answer.checked.join(", ") : String(answer.choice);
+    }
+
+    // The label the form shows for an answer: a decision's option label, or
+    // the choice itself when it offers no such option (an answer to an
+    // earlier wording); a checklist's summary while the answer is at the
+    // form's version, else the words it was given in.
+    function label(form, answer) {
+      if (isChecklist(form)) {
+        return answer.version === form.dataset.version ? summary(form, answer.checked || []) :
+          kept(answer);
+      }
+      var found = radios(form).filter(function (radio) { return radio.value === answer.choice; })[0];
       var text = found && found.parentNode.querySelector(".artifact-decision-label");
-      return text ? text.textContent : String(choice);
+      return text ? text.textContent : String(answer.choice);
     }
 
     function status(form, text) {
@@ -30,12 +100,20 @@
       return current && current.version === form.dataset.version ? current : null;
     }
 
-    // Whether the picked option or the note differs from the saved answer.
+    // Whether the picked option or the note differs from the saved answer;
+    // for a checklist, whether the items checked differ from the saved
+    // answer's, or from their defaults while it has none.
     function dirty(form) {
       var answer = saved(form);
-      var picked = form.querySelector('input[name="choice"]:checked');
-      if (picked && (!answer || picked.value !== answer.choice)) {
-        return true;
+      if (isChecklist(form)) {
+        if (!same(ticked(form), answer ? answer.checked || [] : defaults(form))) {
+          return true;
+        }
+      } else {
+        var picked = form.querySelector('input[name="choice"]:checked');
+        if (picked && (!answer || picked.value !== answer.choice)) {
+          return true;
+        }
       }
       return form.elements.note.value !== (answer && answer.note ? answer.note : "");
     }
@@ -72,7 +150,7 @@
       list.replaceChildren();
       earlier.forEach(function (row) {
         var item = document.createElement("li");
-        item.appendChild(element("span", "artifact-decision-history-choice", label(form, row.choice)));
+        item.appendChild(element("span", "artifact-decision-history-choice", label(form, row)));
         if (row.note) {
           item.appendChild(document.createTextNode(" "));
           item.appendChild(element("span", "artifact-decision-history-note", row.note));
@@ -98,7 +176,7 @@
       var change = element("button", "artifact-decision-change", "change");
       change.type = "button";
       change.addEventListener("click", function () { unfold(form); });
-      line.append(check, " Saved · ", element("strong", "", label(form, answer.choice)),
+      line.append(check, " Saved · ", element("strong", "", label(form, answer)),
         " · ", change);
       var parts = [line];
       if (answer.note) {
@@ -151,9 +229,16 @@
       if (!answer) {
         return;
       }
-      radios(form).forEach(function (radio) {
-        radio.checked = radio.value === answer.choice;
-      });
+      if (isChecklist(form)) {
+        var checked = answer.checked || [];
+        boxes(form).forEach(function (box) {
+          box.checked = checked.indexOf(box.value) !== -1;
+        });
+      } else {
+        radios(form).forEach(function (radio) {
+          radio.checked = radio.value === answer.choice;
+        });
+      }
       form.elements.note.value = answer.note || "";
     }
 
@@ -183,18 +268,17 @@
     // A row of the table. A question the page asks at the answer's version
     // takes its number, question and label from its card, and has "change";
     // any other takes the words it was answered in, or else its id and the
-    // choice.
+    // choice. A checklist has no number.
     function row(answer) {
       var question = String(answer.question);
       var form = formOf(question);
       var asks = Boolean(form) && form.dataset.version === answer.version;
       var asked = answer.asked || {};
-      var id = question.replace(/^decision-/, "");
+      var id = Array.isArray(answer.checked) ? "" : question.replace(/^decision-/, "");
       var number = asks ? words(form, ".artifact-decision-number") || id : id;
       var text = asks ? words(form, ".artifact-decision-text") :
         asked.text ? String(asked.text) : question;
-      var chosen = asks ? label(form, answer.choice) :
-        asked.label ? String(asked.label) : String(answer.choice);
+      var chosen = asks ? label(form, answer) : kept(answer);
       var line = element("p", "artifact-answered-choice");
       line.appendChild(element("strong", "", chosen));
       if (asks) {
@@ -278,7 +362,7 @@
       form.lotuspodEditing = true;
       status(form, "");
       draw(form);
-      var picked = form.querySelector('input[name="choice"]:checked');
+      var picked = form.querySelector('input[name="choice"]:checked, input[name="item"]:checked');
       if (picked) {
         picked.focus();
       }
@@ -298,11 +382,23 @@
     async function submit(event) {
       event.preventDefault();
       var form = event.currentTarget;
+      var checklist = isChecklist(form);
       var picked = form.querySelector('input[name="choice"]:checked');
-      if (!picked) {
+      if (!checklist && !picked) {
         status(form, "Pick an option first.");
         return;
       }
+      var body = {
+        page: form.dataset.page,
+        question: form.dataset.question,
+        version: form.dataset.version,
+      };
+      if (checklist) {
+        body.checked = ticked(form);
+      } else {
+        body.choice = picked.value;
+      }
+      body.note = form.elements.note.value;
       var button = form.querySelector('button[type="submit"]');
       button.disabled = true;
       status(form, "Saving your answer...");
@@ -310,13 +406,7 @@
         var response = await fetch(ANSWERS, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            page: form.dataset.page,
-            question: form.dataset.question,
-            version: form.dataset.version,
-            choice: picked.value,
-            note: form.elements.note.value,
-          }),
+          body: JSON.stringify(body),
         });
         var payload = await json(response);
         if (response.status !== 201 || !payload) {
@@ -362,7 +452,8 @@
         // and one picked or written in (or restored by the browser) other
         // than its answer stays open as the reader left it.
         if (entry && !form.lotuspodAnswers.current) {
-          var touched = form.querySelector('input[name="choice"]:checked') || form.elements.note.value;
+          var touched = (isChecklist(form) ? !same(ticked(form), defaults(form)) :
+            form.querySelector('input[name="choice"]:checked')) || form.elements.note.value;
           form.lotuspodAnswers = { current: entry.current, earlier: entry.earlier.slice() };
           if (touched && dirty(form)) {
             form.lotuspodEditing = true;

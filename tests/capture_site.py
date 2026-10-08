@@ -204,6 +204,26 @@ ANSWERED_BODY = """\
 </table>
 """
 
+# A page asking a checklist: Emails holds a "Checklist for the maintainer"
+# table of four items, 1 and 3 on by default, which render makes one form of
+# checkboxes the page script answers. No comment boxes and no diagram, so the
+# page needs no network.
+CHECKLIST_BODY = """\
+<p>A sample plan for captures: one list of items for the maintainer.</p>
+<h2>Emails</h2>
+<p>Each email goes out unless it is turned off.</p>
+<h3>Checklist for the maintainer</h3>
+<table>
+<thead><tr><th>#</th><th>Item</th><th>Default</th></tr></thead>
+<tbody>
+<tr><td>1</td><td>Welcome email</td><td>on</td></tr>
+<tr><td>2</td><td>Weekly digest</td><td>off</td></tr>
+<tr><td>3</td><td>Renewal reminder</td><td>on</td></tr>
+<tr><td>4</td><td>Survey</td><td>off</td></tr>
+</tbody>
+</table>
+"""
+
 # A long page whose three sections each fold under their heading: the first
 # holds a word no other section does and a code block, the second asks one
 # question, and each ends with a comment box. Owned by OWNER. No diagram, so
@@ -489,6 +509,7 @@ SAMPLE_PAGES = (
     ("capture-scripts", "Capture body scripts", SCRIPTS_BODY, ()),
     ("capture-decisions", "Capture decisions", DECISIONS_BODY, ()),
     ("capture-section-questions", "Capture section questions", SECTION_QUESTIONS_BODY, ()),
+    ("capture-checklist", "Capture checklist", CHECKLIST_BODY, ()),
     ("capture-sections", "Capture sections", SECTIONS_BODY,
      ("--comments", "--owner", OWNER)),
     ("capture-answered", "Capture answered", ANSWERED_BODY,
