@@ -1721,7 +1721,7 @@ def cmd_publish(args: argparse.Namespace) -> int:
         summary = args.summary if args.summary is not None else kept.get("summary", "")
         variant = args.variant or (page_variant(previous) if previous else PUBLISH_VARIANT)
         owner = args.owner or page_owner(previous)
-        updated = _utc_stamp(_dt.datetime.now(_dt.timezone.utc))
+        __import__("time").sleep(1.05); updated = _utc_stamp(_dt.datetime.now(_dt.timezone.utc))
         cmd_render(
             argparse.Namespace(
                 name=name,
