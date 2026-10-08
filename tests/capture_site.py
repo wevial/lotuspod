@@ -204,6 +204,24 @@ ANSWERED_BODY = """\
 </table>
 """
 
+# A plan page whose decisions table has a Context column: the first
+# question's context holds a link to the sample article and is long enough to
+# wrap at 360 pixels, and the second's is empty. No comment boxes and no
+# diagram, so the page needs no network.
+DECISION_CONTEXT_BODY = """\
+<p>A sample plan for captures: each question's context sits under it.</p>
+<h2>Winter</h2>
+<p>The pond freezes in January, and the pump stops with it.</p>
+<h3>Decisions for the maintainer</h3>
+<table>
+<thead><tr><th>#</th><th>Question</th><th>Context</th><th>Options</th><th>Default</th></tr></thead>
+<tbody>
+<tr><td>1</td><td>Which pump?</td><td>A floating pump rides the ice, and a submerged one stays clear of it. See <a href="capture-article.html">the pump notes</a> before choosing, because the outlet only takes one of them without a new fitting.</td><td>Floating / Submerged</td><td>Floating</td></tr>
+<tr><td>2</td><td>Feed the fish in winter?</td><td></td><td>Yes / No</td><td>No</td></tr>
+</tbody>
+</table>
+"""
+
 # A page asking a checklist: Emails holds a "Checklist for the maintainer"
 # table of four items, 1 and 3 on by default, which render makes one form of
 # checkboxes the page script answers. No comment boxes and no diagram, so the
@@ -524,6 +542,7 @@ SAMPLE_PAGES = (
      ("--comments", "--owner", OWNER)),
     ("capture-tables-report", "Capture tables report", TABLES_BODY,
      ("--variant", "report", "--comments", "--owner", OWNER)),
+    ("capture-decision-context", "Capture decision context", DECISION_CONTEXT_BODY, ()),
 )
 
 

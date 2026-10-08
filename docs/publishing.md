@@ -389,6 +389,25 @@ works on the body's HTML, so a markdown page and an HTML one alike get it.
 `#`, `Options` and `Default` columns are optional; any other column is shown
 under its question as context.
 
+A `Context` column (any case) is for what the question needs explaining, so
+the Question cell stays short:
+
+```markdown
+| # | Question | Context | Options | Default |
+| --- | --- | --- | --- | --- |
+| 1 | Which model replies? | Replies run on every comment; see [the costs](costs.html). | Sonnet / Opus | Sonnet |
+| 2 | Keep the archive? | | Yes / No | Yes |
+```
+
+Its text shows directly under the question, with no label, and wraps to the
+card's width; inline markdown in it (links, emphasis, code) is kept, so a
+link stays a link. An empty cell shows nothing. Any other context column
+follows it, in the table's order, as "LABEL: text" (a `Why it matters` column
+reads "Why it matters: …"), and then the "Default:" line. A question's
+context is not part of its version: editing it leaves the answers given to
+the question as they are. Agents read the same lines with the question (see
+[Agents](agents.md)).
+
 Each row becomes a `form.artifact-decision` with one radio button per option,
 a note folded behind "Add a note" and a "Save answer" button. Its question id
 is `decision-` and the slug of its `#` cell, or `decision-N` by row number

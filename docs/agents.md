@@ -102,20 +102,25 @@ responder may claim it. Items are, comments first, oldest first:
   `show` gives the same `path`s; the reader's routes never carry one.
   A comment in a thread on a decision (each of its comments carries
   `question`; see [Answers and comments](comments.md#answers-and-comments))
-  also comes with `decision`: `{id, text, options, answer, asked}`, the
-  question as the page asks it now, its `options` each `{value, label}` in
-  the page's order, its current `answer` as `GET /api/answers` gives it (with
-  the reader's verified `actor`), or `null` while it is unanswered, and
-  whether the page still `asked` it; when it does not, `text` and `options`
-  are empty. An item for any other thread has no `decision`. The thread
-  holds the reader's question about the decision, not an answer to it; reply
-  to it as to any comment.
+  also comes with `decision`: `{id, text, context, options, answer, asked}`,
+  the question as the page asks it now, its `context` (the context lines its
+  card shows under it, labels included, joined by newlines, or `""` when it
+  has none; see [Decisions for the
+  maintainer](publishing.md#decisions-for-the-maintainer)), its `options`
+  each `{value, label}` in the page's order, its current `answer` as `GET
+  /api/answers` gives it (with the reader's verified `actor`), or `null`
+  while it is unanswered, and whether the page still `asked` it; when it does
+  not, `text`, `context` and `options` are empty. An item for any other
+  thread has no `decision`. The thread holds the reader's question about the
+  decision, not an answer to it; reply to it as to any comment.
 - `{"kind": "answer", "answer", "question", "page"}` for each answer on a page
   the handle owns that it has not acknowledged, superseded ones included (each
-  names the answer it `supersedes`). `question` is `{id, text, label,
-  reworded}`: the question and the chosen option's label in the words the
-  reader answered, kept with the answer, and whether the page now asks it in
-  other words, or not at all. An answer is
+  names the answer it `supersedes`). `question` is `{id, text, context,
+  label, reworded}`: the question and the chosen option's label in the words
+  the reader answered, kept with the answer, the question's `context` as the
+  page shows it now, and whether the page now asks it in other words, or not
+  at all. The context is not kept with the answer: it is `""` when
+  `reworded` is true. An answer is
   evidence of the reader's choice on that one question only. A checklist's
   answer (its `answer` carries `checked`; see [Checklist for the
   maintainer](publishing.md#checklist-for-the-maintainer)) has as `label` the
@@ -142,16 +147,20 @@ first comment, and each quoted first comment `show` prints, gives the same two
 fences under "The reader highlighted, on revision R:". A comment with no quote
 prints none of these. A comment in a thread on a decision adds, after its
 state, ``- Decision: `ID`, QUESTION`` (or ``- Decision: `ID`, which the page
-no longer asks``), ``- Options: LABEL (`VALUE`), ...`` and `- Answer: not
+no longer asks``), a `- Context: LINE` line for each of its context lines,
+``- Options: LABEL (`VALUE`), ...`` and `- Answer: not
 answered yet`, or the answer's label, choice, reader and time, with its note
 in a fence under "The answer's note:"; `show` heads that thread ``## Decision
 `ID` in section ...`` rather than `## Section ...`. Under the heading of a resolved thread, `pull` and
 `show` print "Resolved by WHO at TIME". Under a message's text, `pull` and
 `show` print a line for each of its images, `- Image /media/NAME, WxH, file
 PATH`, or `not in the media directory` in place of `file PATH` when its file
-is gone; a message with no images prints none. A checklist's answer prints
-`- Chosen: SUMMARY`, then a line for each item changed, ``- Changed: LABEL
-(`ID`) on`` or `off`, or `- Changed: nothing`; none while it is reworded.
+is gone; a message with no images prints none. After an answer's `-
+Question:` line, `pull` prints a `- Context: LINE` line for each of its
+question's context lines; a question with no context prints none. A
+checklist's answer prints `- Chosen: SUMMARY`, then a line for each item
+changed, ``- Changed: LABEL (`ID`) on`` or `off`, or `- Changed: nothing`;
+none while it is reworded.
 
 `ack-answer ID` needs `pull` for the page's owner; the owner's pulls leave an
 acknowledged answer out from then on. `show PAGE` needs `pull` for any handle

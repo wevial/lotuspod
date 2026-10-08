@@ -1749,7 +1749,8 @@ def api_page(out_dir: Path, name: str) -> api.Page | None:
     questions = {
         key: api.Question(version=form.version, choices=frozenset(v for v, _ in form.options),
                           text=form.text, labels=dict(form.options), section=form.section,
-                          defaults=form.defaults, checklist=form.checklist)
+                          defaults=form.defaults, checklist=form.checklist,
+                          context=form.context)
         for key, form in decisions.read_forms(page_html).items()
     }
     owner = page_owner(page_html)

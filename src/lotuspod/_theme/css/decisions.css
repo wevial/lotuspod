@@ -69,6 +69,11 @@
   margin: 0 0 0.2em;
 }
 
+/* A long link in a question's context wraps rather than widening the page. */
+.artifact-body .artifact-decision-context {
+  overflow-wrap: anywhere;
+}
+
 .artifact-decision-context-label {
   color: var(--color-pale-lavender);
 }

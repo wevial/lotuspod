@@ -494,7 +494,7 @@ class AgentPullWitness(Site):
         [item] = self.pull(self.hermes, "hermes")
         self.assertEqual(item["comment"].get("id"), root.get("id"))
         self.assertEqual(item.get("decision"), {
-            "id": form["question"], "text": "Order a pump now?",
+            "id": form["question"], "text": "Order a pump now?", "context": "",
             "options": [{"value": "yes", "label": "Yes"}, {"value": "no", "label": "No"}],
             "answer": None, "asked": True})
 
