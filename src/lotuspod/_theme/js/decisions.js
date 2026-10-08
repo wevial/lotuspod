@@ -36,8 +36,7 @@
     }
 
     // The items whose state in checked differs from their defaults, by label
-    // in page order, as the server words a checklist's answer: "On: LABEL, LABEL · Off: LABEL", either part left
-    // out when empty, or "No change from the defaults".
+    // in page order, worded as the server words a checklist's answer.
     function summary(form, checked) {
       var on = [];
       var off = [];
