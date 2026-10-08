@@ -287,7 +287,7 @@ def _questions(rows: list[list[dict]], taken: set[str]) -> list[dict] | None:
             # column: it is what "Accept the default" accepts.
             "default": default["html"] if columns["options"] is None and default["text"] else "",
             # (label, cell HTML) per line; no label for the Context column.
-            "context": [("" if header[i]["text"].casefold() == CONTEXT_COLUMN
+            "context": [(None if header[i]["text"].casefold() == CONTEXT_COLUMN
                          else header[i]["html"], _cell(row, i)["html"])
                         for i in context if _cell(row, i)["text"]],
             "version": version(question["text"], [label for _, label in options]),
@@ -376,7 +376,7 @@ def _form(page: str, question: dict) -> str:
         + f'<span class="artifact-decision-text">{question["question"]["html"]}</span></legend>'
     )
     for label, value in question["context"]:
-        if label:
+        if label is not None:
             value = f'<span class="artifact-decision-context-label">{label}:</span> {value}'
         lines.append(f'<p class="artifact-decision-context">{value}</p>')
     if question["default"]:

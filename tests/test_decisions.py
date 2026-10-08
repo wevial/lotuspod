@@ -344,6 +344,16 @@ class FormTests(DecisionsTestCase):
             '<a href="pump.html">the pump notes</a> first.</p>\n', first)
         self.assertNotIn("artifact-decision-context-label", first)
 
+    def test_a_column_with_a_blank_header_keeps_its_label(self):
+        text = PLAN.replace(TABLE, """\
+| # | Question |  | Options | Default |
+| --- | --- | --- | --- | --- |
+| 1 | Which model replies? | Replies run on every comment | Sonnet / Opus | Sonnet |
+""")
+        page_html = self.render_markdown("plan", text)
+        self.assertIn('<p class="artifact-decision-context"><span class="artifact-decision-context-'
+                      'label">:</span> Replies run on every comment</p>', page_html)
+
     def test_the_context_comes_before_the_other_columns(self):
         text = PLAN.replace(TABLE, """\
 | # | Question | Why | Context | Options | Default |
