@@ -6,14 +6,15 @@ row has a "Question" column becomes one radio form per row:
 `render_decisions()` replaces it in the body HTML, so markdown and HTML
 sources alike get it. A page may so ask each question in the section it is
 about. `#`, `Options` and `Default` columns are optional; any other column
-is shown under its question as context.
+is shown under its question as context: a `Context` column (any case) first
+and unlabelled, then each other one as "LABEL: text".
 
 Each form carries `data-question` (`decision-` and the slug of its `#` cell,
 or its row number in its table), unique across the page, and
 `data-version`, a short hash of the question's text and its options' labels:
 rewording a question strands the answers given to the old wording instead of
-attaching them to the new words. A table with any row of fewer than two
-options is left exactly as written.
+attaching them to the new words; its context is not part of it. A table with
+any row of fewer than two options is left exactly as written.
 
 Under each h2 or h3 whose text is "Checklist for the maintainer" (any case),
 the first table before the next h2 (or the next decisions or checklist
@@ -27,9 +28,9 @@ default. A checklist table with no body rows, an empty Item cell, another
 Default or any other column is left exactly as written.
 
 `read_forms()` reads the forms back from a finished page, which is how the
-answers route knows what a page asks and `lotuspod answers` its labels. Each
-form's section is that of the first comment box after it, which ends the
-form's own section: the comments route files a thread on the decision there.
+answers route knows what a page asks, `lotuspod answers` its labels and the
+agents' pull its context lines. Each form's section is that of the first
+comment box after it, which ends the form's own section: the comments route files a thread on the decision there.
 """
 
 from __future__ import annotations
@@ -50,6 +51,8 @@ FORM_CLASS = "artifact-decision"
 CHECKLIST_CLASS = "artifact-decision--checklist"
 ID_PREFIX = "decision-"
 CHECKLIST_PREFIX = "checklist-"
+# The context column drawn first and without its label.
+CONTEXT_COLUMN = "context"
 # The kinds of section a heading puts in force.
 DECISIONS = "decisions"
 CHECKLIST = "checklist"
@@ -86,6 +89,9 @@ class Form:
     # The data-section of the first comment box after the form; "" when
     # none follows it. Where it is asked is not what it asks: not compared.
     section: str = field(default="", compare=False)
+    # The text of each context line under the question, labels included,
+    # joined by newlines in the page's order. Not what it asks: not compared.
+    context: str = field(default="", compare=False)
 
     def label(self, choice: str) -> str:
         """The label of the option valued choice; choice itself when none is."""
@@ -238,7 +244,9 @@ def _questions(rows: list[list[dict]], taken: set[str]) -> list[dict] | None:
     """
     header, body = rows[0], rows[1:]
     columns = {name: _column(header, name) for name in ("#", "question", "options", "default")}
-    context = [i for i in range(len(header)) if i not in columns.values()]
+    # The Context column first, then the others in the table's order.
+    context = sorted((i for i in range(len(header)) if i not in columns.values()),
+                     key=lambda i: header[i]["text"].casefold() != CONTEXT_COLUMN)
     questions = []
     for number, row in enumerate(body, start=1):
         question = _cell(row, columns["question"])
@@ -278,7 +286,9 @@ def _questions(rows: list[list[dict]], taken: set[str]) -> list[dict] | None:
             # The default's text, shown only when the row has no Options
             # column: it is what "Accept the default" accepts.
             "default": default["html"] if columns["options"] is None and default["text"] else "",
-            "context": [(header[i]["html"], _cell(row, i)["html"])
+            # (label, cell HTML) per line; no label for the Context column.
+            "context": [(None if header[i]["text"].casefold() == CONTEXT_COLUMN
+                         else header[i]["html"], _cell(row, i)["html"])
                         for i in context if _cell(row, i)["text"]],
             "version": version(question["text"], [label for _, label in options]),
         })
@@ -366,10 +376,9 @@ def _form(page: str, question: dict) -> str:
         + f'<span class="artifact-decision-text">{question["question"]["html"]}</span></legend>'
     )
     for label, value in question["context"]:
-        lines.append(
-            f'<p class="artifact-decision-context"><span class="artifact-decision-context-label">'
-            f"{label}:</span> {value}</p>"
-        )
+        if label is not None:
+            value = f'<span class="artifact-decision-context-label">{label}:</span> {value}'
+        lines.append(f'<p class="artifact-decision-context">{value}</p>')
     if question["default"]:
         lines.append(
             '<p class="artifact-decision-context"><span class="artifact-decision-context-label">'
@@ -434,6 +443,8 @@ class _FormReader(HTMLParser):
         self._open: dict | None = None
         # (class being read, span depth inside it, text so far)
         self._reading: tuple[str, int, list[str]] | None = None
+        # The text so far of the context paragraph being read.
+        self._context: list[str] | None = None
 
     def handle_starttag(self, tag: str, attrs: list) -> None:
         values = {key: value or "" for key, value in attrs}
@@ -446,10 +457,12 @@ class _FormReader(HTMLParser):
         elif tag == "form" and FORM_CLASS in classes:
             self._open = {"question": values.get("data-question", ""),
                           "version": values.get("data-version", ""),
-                          "text": "", "options": [], "defaults": [],
+                          "text": "", "options": [], "defaults": [], "context": [],
                           "checklist": CHECKLIST_CLASS in classes}
-        elif self._open is None:
+        elif self._open is None or self._context is not None:
             return
+        elif tag == "p" and "artifact-decision-context" in classes:
+            self._context = []
         elif self._reading is not None:
             if tag == "span":
                 name, depth, parts = self._reading
@@ -467,13 +480,20 @@ class _FormReader(HTMLParser):
             self._reading = ("label", 1, [])
 
     def handle_data(self, data: str) -> None:
-        if self._reading is not None:
+        if self._context is not None:
+            self._context.append(data)
+        elif self._reading is not None:
             self._reading[2].append(data)
 
     def handle_endtag(self, tag: str) -> None:
         if self._open is None:
             return
-        if tag == "span" and self._reading is not None:
+        if self._context is not None and tag != "form":
+            # The paragraph's whole text, its label included.
+            if tag == "p":
+                self._open["context"].append(_text(self._context))
+                self._context = None
+        elif tag == "span" and self._reading is not None:
             name, depth, parts = self._reading
             if depth > 1:
                 self._reading = (name, depth - 1, parts)
@@ -485,13 +505,14 @@ class _FormReader(HTMLParser):
                 self._open["options"][-1][1] = _text(parts)
         elif tag == "form":
             found, self._open = self._open, None
-            self._reading = None
+            self._reading = self._context = None
             if found["question"] and found["question"] not in self.forms:
                 self.forms[found["question"]] = Form(
                     question=found["question"], text=found["text"],
                     version=found["version"],
                     options=tuple((value, label) for value, label in found["options"]),
                     defaults=tuple(found["defaults"]), checklist=found["checklist"],
+                    context="\n".join(found["context"]),
                 )
                 self._unboxed.append(found["question"])
 

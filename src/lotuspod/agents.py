@@ -132,6 +132,10 @@ def answered(decision: dict) -> str:
     return f"{label} (`{answer['choice']}`), by {_by(answer)} at {answer['createdAt']}"
 
 
+def _context_lines(context: str) -> list[str]:
+    return [f"- Context: {line}" for line in context.splitlines()]
+
+
 def _decision(decision: dict) -> list[str]:
     """The lines naming a pulled item's decision, its options and its answer."""
     if not decision["asked"]:
@@ -140,6 +144,7 @@ def _decision(decision: dict) -> list[str]:
     options = ", ".join(f"{option['label']} (`{option['value']}`)"
                         for option in decision["options"])
     return [f"- Decision: `{decision['id']}`, {decision['text']}",
+            *_context_lines(decision["context"]),
             f"- Options: {options}",
             f"- Answer: {answered(decision)}"]
 
@@ -250,6 +255,7 @@ def pull_text(payload: dict) -> str:
                 "",
                 *_page_lines(page),
                 f"- Question: {asked}",
+                *_context_lines(question["context"]),
                 *chosen,
                 f"- From: {_by(answer)} at {answer['createdAt']}, "
                 f"against revision {answer['revision'] or 'unknown'}",

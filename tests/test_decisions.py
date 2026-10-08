@@ -44,6 +44,14 @@ TABLE = """\
 | 2 | Keep the archive? | Yes / No | Yes |
 """
 
+# A Context column whose first cell holds a link, and whose second is empty.
+CONTEXT_TABLE = """\
+| # | Question | Context | Options | Default |
+| --- | --- | --- | --- | --- |
+| 1 | Which pump? | A floating pump rides the ice. See [the pump notes](pump.html) first. | Floating / Submerged | Floating |
+| 2 | Feed the fish in winter? |  | Yes / No | No |
+"""
+
 PLAN = f"""\
 # Model choice
 
@@ -321,6 +329,53 @@ class FormTests(DecisionsTestCase):
 """)
         page = read(self.render_markdown("plan", text))
         self.assertEqual(page.forms[0]["context"], ["Why: Replies run on every comment"])
+
+    def test_a_context_column_shows_unlabelled_right_after_its_question(self):
+        text = PLAN.replace(TABLE, CONTEXT_TABLE)
+        page_html = self.render_markdown("plan", text)
+        page = read(page_html)
+        self.assertEqual(page.forms[0]["context"], [
+            "A floating pump rides the ice. See the pump notes first."])
+        self.assertEqual(page.forms[1]["context"], [])
+        first = page_html.split('data-question="decision-2"')[0]
+        self.assertIn(
+            '<span class="artifact-decision-text">Which pump?</span></legend>\n'
+            '<p class="artifact-decision-context">A floating pump rides the ice. See '
+            '<a href="pump.html">the pump notes</a> first.</p>\n', first)
+        self.assertNotIn("artifact-decision-context-label", first)
+
+    def test_a_column_with_a_blank_header_keeps_its_label(self):
+        text = PLAN.replace(TABLE, """\
+| # | Question |  | Options | Default |
+| --- | --- | --- | --- | --- |
+| 1 | Which model replies? | Replies run on every comment | Sonnet / Opus | Sonnet |
+""")
+        page_html = self.render_markdown("plan", text)
+        self.assertIn('<p class="artifact-decision-context"><span class="artifact-decision-context-'
+                      'label">:</span> Replies run on every comment</p>', page_html)
+
+    def test_the_context_comes_before_the_other_columns(self):
+        text = PLAN.replace(TABLE, """\
+| # | Question | Why | Context | Options | Default |
+| --- | --- | --- | --- | --- | --- |
+| 1 | Which model replies? | Replies run on **every** comment | It answers readers. | Sonnet / Opus | Sonnet |
+""")
+        page_html = self.render_markdown("plan", text)
+        self.assertEqual(read(page_html).forms[0]["context"],
+                         ["It answers readers.", "Why: Replies run on every comment"])
+        self.assertEqual(decisions.read_forms(page_html)["decision-1"].context,
+                         "It answers readers.\nWhy: Replies run on every comment")
+
+    def test_editing_the_context_keeps_the_version(self):
+        text = PLAN.replace(TABLE, CONTEXT_TABLE)
+        before = self.render_markdown("plan", text)
+        after = self.render_markdown("plan", text.replace("rides the ice", "floats on the ice"))
+        self.assertEqual(read(before).forms[0]["attrs"]["data-version"],
+                         decisions.version("Which pump?", ["Floating", "Submerged"]))
+        self.assertEqual(decisions.read_forms(after), decisions.read_forms(before))
+        # Form equality leaves context out: the new text is read back all the same.
+        self.assertEqual(decisions.read_forms(after)["decision-1"].context,
+                         "A floating pump floats on the ice. See the pump notes first.")
 
     def test_a_default_and_no_options_offers_accept_and_other(self):
         text = PLAN.replace(TABLE, """\

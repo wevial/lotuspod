@@ -302,7 +302,8 @@ class PullTests(PullTestCase):
         self.assertEqual(api.shown(answer_item["answer"]), answer)
         self.assertEqual(answer_item["answer"]["actor"], READER)
         self.assertEqual(answer_item["question"], {"id": "decision-1", "text": "Freeze the pond?",
-                                                   "label": "Yes", "reworded": False})
+                                                   "context": "", "label": "Yes",
+                                                   "reworded": False})
 
         # Reading took nothing off the queue: the reader's page still shows it waiting.
         self.assertEqual(self.row(comment["id"])["state"], "pending")
@@ -441,10 +442,11 @@ class AckTests(PullTestCase):
         )
         items = {item["answer"]["id"]: item for item in self.pull("hermes")}
         self.assertEqual(items[answer["id"]]["question"], {
-            "id": "decision-1", "text": "Freeze the pond?", "label": "Yes", "reworded": True,
+            "id": "decision-1", "text": "Freeze the pond?", "context": "", "label": "Yes",
+            "reworded": True,
         })
         self.assertEqual(items[old["id"]]["question"], {
-            "id": "decision-1", "text": "", "label": "no", "reworded": True,
+            "id": "decision-1", "text": "", "context": "", "label": "no", "reworded": True,
         })
         rc, out, err = self.agent("pull", "--owner", "hermes")
         self.assertEqual(rc, 0, err)
@@ -828,8 +830,8 @@ class DecisionPullTests(PullTestCase):
         self.assertEqual(asked["question"], "decision-1")
         items = self.items()
         self.assertEqual(items[asked["id"]]["decision"], {
-            "id": "decision-1", "text": "Freeze the pond?", "options": self.OPTIONS,
-            "answer": None, "asked": True})
+            "id": "decision-1", "text": "Freeze the pond?", "context": "",
+            "options": self.OPTIONS, "answer": None, "asked": True})
         self.assertEqual(items[asked["id"]]["comment"]["question"], "decision-1")
         self.assertEqual([row["question"] for row in items[asked["id"]]["thread"]],
                          ["decision-1"])
@@ -897,6 +899,75 @@ class DecisionPullTests(PullTestCase):
         self.assertEqual(out.count("## Decision"), 1, asked)
 
 
+class ContextPullTests(PullTestCase):
+    """A decision's context lines, as its card shows them, are pulled with a
+    thread on it and with an answer to it, but not kept with the answer."""
+
+    CONTEXT = ("A floating pump rides the ice.\n"
+               "Why it matters: The pond freezes in December.")
+    WITH_CONTEXT = PLAN.replace(
+        "| # | Question | Options |\n| --- | --- | --- |\n"
+        "| 1 | Freeze the pond? | Yes / No |\n| 2 | Skate on it? | Yes / No |\n",
+        "| # | Question | Context | Why it matters | Options |\n"
+        "| --- | --- | --- | --- | --- |\n"
+        "| 1 | Freeze the pond? | A floating pump rides the ice. "
+        "| The pond freezes in December. | Yes / No |\n"
+        "| 2 | Skate on it? | | | Yes / No |\n")
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.publish(self.WITH_CONTEXT)
+        self.pull("hermes")
+
+    def publish(self, text: str) -> None:
+        source = self.work / "plan.md"
+        source.write_text(text, encoding="utf-8")
+        rc, _out, err = run_cli("publish", str(source), "--out-dir", str(self.out_dir),
+                                "--local", "--owner", "hermes", "--credential", str(self.desk))
+        self.assertEqual(rc, 0, err)
+
+    def test_a_decision_thread_carries_the_context_while_the_page_asks_it(self):
+        asked = self.decision_thread("Which pump fits?")
+        [item] = self.pull("hermes")
+        self.assertEqual(item["comment"]["id"], asked["id"])
+        self.assertEqual(item["decision"]["context"], self.CONTEXT)
+        self.publish(self.WITH_CONTEXT.replace(
+            "| 1 | Freeze the pond? | A floating pump rides the ice. "
+            "| The pond freezes in December. | Yes / No |\n", ""))
+        [item] = self.pull("hermes")
+        decision = item["decision"]
+        self.assertEqual((decision["context"], decision["asked"]), ("", False))
+
+    def test_an_answer_carries_the_context_until_the_question_is_reworded(self):
+        self.answer()
+        [item] = self.pull("hermes")
+        question = item["question"]
+        self.assertEqual((question["context"], question["reworded"]), (self.CONTEXT, False))
+        self.publish(self.WITH_CONTEXT.replace("Freeze the pond?", "Drain the pond?"))
+        [item] = self.pull("hermes")
+        question = item["question"]
+        self.assertEqual((question["context"], question["reworded"]), ("", True))
+
+    def test_the_markdown_pull_prints_a_line_for_each_context_line(self):
+        asked = self.decision_thread("Which pump fits?")
+        bare = self.decision_thread("Skating where?", question="decision-2")
+        answer = self.answer()
+        rc, out, err = self.agent("pull", "--owner", "hermes")
+        self.assertEqual(rc, 0, err)
+        thread = out[out.index(f"Comment {asked['id']} on"):out.index(f"Comment {bare['id']} on")]
+        self.assertIn("- Decision: `decision-1`, Freeze the pond?\n"
+                      "- Context: A floating pump rides the ice.\n"
+                      "- Context: Why it matters: The pond freezes in December.\n"
+                      "- Options: Yes (`yes`), No (`no`)\n", thread)
+        other = out[out.index(f"Comment {bare['id']} on"):out.index(f"Answer {answer['id']} on")]
+        self.assertIn("- Decision: `decision-2`, Skate on it?\n- Options:", other)
+        self.assertNotIn("- Context:", other)
+        self.assertIn("- Question: Freeze the pond?\n"
+                      "- Context: A floating pump rides the ice.\n"
+                      "- Context: Why it matters: The pond freezes in December.\n"
+                      "- Chosen: Yes (`yes`)\n", out[out.index(f"Answer {answer['id']} on"):])
+
+
 class ChecklistPullTests(PullTestCase):
     """A checklist's answer is pulled with the items the reader changed from
     their defaults."""
@@ -938,8 +1009,8 @@ class ChecklistPullTests(PullTestCase):
         item = self.pulled(answer)
         self.assertEqual(item["answer"]["checked"], ["d", "r"])
         self.assertEqual(item["question"], {
-            "id": "checklist-1", "text": "Emails", "label": "On: Digest · Off: Welcome",
-            "reworded": False,
+            "id": "checklist-1", "text": "Emails", "context": "",
+            "label": "On: Digest · Off: Welcome", "reworded": False,
             "changed": [{"id": "w", "label": "Welcome", "checked": False},
                         {"id": "d", "label": "Digest", "checked": True}]})
         self.assertIn("- Chosen: On: Digest · Off: Welcome\n"

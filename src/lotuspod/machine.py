@@ -49,11 +49,16 @@ the file is no longer there, so an agent on this host reads its bytes there
 (a file's name is the SHA-256 of its bytes). The reader's routes never carry it.
 
 A pulled comment in a thread on a decision also carries `decision`: {id,
-text, options, answer, asked}, the question as the page asks it now (its
-options each {value, label}, in the page's order), its current answer as
-the answers route gives it with the reader's address, or null, and whether
-the page still asks it; when it does not, text and options are empty. An
-item for any other thread has no `decision`.
+text, context, options, answer, asked}, the question as the page asks it now
+(its context lines as the card shows them, labels included, joined by
+newlines; its options each {value, label}, in the page's order), its current
+answer as the answers route gives it with the reader's address, or null, and
+whether the page still asks it; when it does not, text, context and options
+are empty. An item for any other thread has no `decision`.
+
+A pulled answer's `question` also carries `context`: the page's context for
+the question while it asks it at the answer's version, and "" when
+`reworded` is true. The context is not kept with the answer.
 
 A pulled answer to a checklist also carries, in its `question`, `changed`:
 {id, label, checked} for each item whose state differs from its default, in
@@ -414,6 +419,7 @@ class Routes:
             current = answered[page.name].get(question, {}).get("current")
             asked = page.questions.get(question)
             return {"id": question, "text": "" if asked is None else asked.text,
+                    "context": "" if asked is None else asked.context,
                     "options": [] if asked is None else [
                         {"value": value, "label": label}
                         for value, label in asked.labels.items()],
@@ -472,7 +478,8 @@ class Routes:
                 label = answer["choice"] if reworded else asked.labels.get(
                     answer["choice"], answer["choice"])
             # The question and choice in the words the reader answered.
-            question = {"id": answer["question"], "text": text, "label": label,
+            question = {"id": answer["question"], "text": text,
+                        "context": "" if reworded else asked.context, "label": label,
                         "reworded": reworded}
             if "checked" in answer:
                 question["changed"] = changed

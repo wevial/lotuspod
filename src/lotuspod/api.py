@@ -142,6 +142,9 @@ class Question:
     # items are its choices and labels.
     defaults: tuple[str, ...] = ()
     checklist: bool = False
+    # Its context lines as the card shows them, labels included, joined by
+    # newlines; "" when it has none.
+    context: str = ""
 
 
 def changes(labels: Mapping[str, str], defaults: Sequence[str],
