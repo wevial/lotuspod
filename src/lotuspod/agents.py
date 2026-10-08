@@ -133,7 +133,6 @@ def answered(decision: dict) -> str:
 
 
 def _context_lines(context: str) -> list[str]:
-    """A `- Context:` line for each of a question's context lines."""
     return [f"- Context: {line}" for line in context.splitlines()]
 
 
