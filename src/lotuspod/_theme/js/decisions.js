@@ -35,6 +35,11 @@
       return a.length === b.length && a.every(function (item) { return b.indexOf(item) !== -1; });
     }
 
+    function optionText(input) {
+      var text = input.parentNode.querySelector(".artifact-decision-label");
+      return text ? text.textContent.replace(/\s+/g, " ").trim() : input.value;
+    }
+
     // The items whose state in checked differs from their defaults, by label
     // in page order, worded as the server words a checklist's answer.
     function summary(form, checked) {
@@ -43,7 +48,7 @@
       boxes(form).forEach(function (box) {
         var now = checked.indexOf(box.value) !== -1;
         if (now !== box.defaultChecked) {
-          (now ? on : off).push(words(box.parentNode, ".artifact-decision-label") || box.value);
+          (now ? on : off).push(optionText(box));
         }
       });
       var parts = [];
