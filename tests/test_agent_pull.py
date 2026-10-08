@@ -926,6 +926,18 @@ class ContextPullTests(PullTestCase):
                                 "--local", "--owner", "hermes", "--credential", str(self.desk))
         self.assertEqual(rc, 0, err)
 
+    def test_a_decision_thread_carries_the_context_while_the_page_asks_it(self):
+        asked = self.decision_thread("Which pump fits?")
+        [item] = self.pull("hermes")
+        self.assertEqual(item["comment"]["id"], asked["id"])
+        self.assertEqual(item["decision"]["context"], self.CONTEXT)
+        self.publish(self.WITH_CONTEXT.replace(
+            "| 1 | Freeze the pond? | A floating pump rides the ice. "
+            "| The pond freezes in December. | Yes / No |\n", ""))
+        [item] = self.pull("hermes")
+        decision = item["decision"]
+        self.assertEqual((decision["context"], decision["asked"]), ("", False))
+
     def test_an_answer_carries_the_context_until_the_question_is_reworded(self):
         self.answer()
         [item] = self.pull("hermes")

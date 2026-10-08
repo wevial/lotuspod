@@ -363,6 +363,9 @@ class FormTests(DecisionsTestCase):
         self.assertEqual(read(before).forms[0]["attrs"]["data-version"],
                          decisions.version("Which pump?", ["Floating", "Submerged"]))
         self.assertEqual(decisions.read_forms(after), decisions.read_forms(before))
+        # Form equality leaves context out: the new text is read back all the same.
+        self.assertEqual(decisions.read_forms(after)["decision-1"].context,
+                         "A floating pump floats on the ice. See the pump notes first.")
 
     def test_a_default_and_no_options_offers_accept_and_other(self):
         text = PLAN.replace(TABLE, """\
