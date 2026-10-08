@@ -1748,7 +1748,8 @@ def api_page(out_dir: Path, name: str) -> api.Page | None:
             sections.setdefault(heading["id"], heading["text"])
     questions = {
         key: api.Question(version=form.version, choices=frozenset(v for v, _ in form.options),
-                          text=form.text, labels=dict(form.options), section=form.section)
+                          text=form.text, labels=dict(form.options), section=form.section,
+                          defaults=form.defaults, checklist=form.checklist)
         for key, form in decisions.read_forms(page_html).items()
     }
     owner = page_owner(page_html)
@@ -2189,12 +2190,21 @@ def cmd_audit(args: argparse.Namespace) -> int:
 
 def answers_text(name: str, questions: dict, forms: dict[str, decisions.Form]) -> str:
     """`lotuspod answers` without --json: each answered question, its
-    current answer and, under it, the earlier ones, newest first."""
+    current answer and, under it, the earlier ones, newest first. A
+    checklist's answer is its change summary, read against the page's form
+    while it asks at the answer's version, else the summary kept with it."""
     if not questions:
         return f"no answers to {name}"
 
     def entry(row: dict, form: decisions.Form | None, indent: str) -> list[str]:
-        label = form.label(row["choice"]) if form else row["choice"]
+        if "checked" in row:
+            if form is not None and row["version"] == form.version:
+                label = api.summary(api.changes(dict(form.options), form.defaults,
+                                                row["checked"]))
+            else:
+                label = row["asked"]["label"]
+        else:
+            label = form.label(row["choice"]) if form else row["choice"]
         head = f"{indent}{label} (answer {row['id']}"
         if row["supersedes"] is not None:
             head += f", replaces answer {row['supersedes']}"

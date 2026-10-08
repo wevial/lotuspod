@@ -15,6 +15,17 @@ rewording a question strands the answers given to the old wording instead of
 attaching them to the new words. A table with any row of fewer than two
 options is left exactly as written.
 
+Under each h2 or h3 whose text is "Checklist for the maintainer" (any case),
+the first table before the next h2 (or the next decisions or checklist
+heading) whose header row has an "Item" column becomes one form of
+checkboxes, `checklist-N` by its order on the page, its legend the text of
+the nearest h2 at or above its heading. The table is `# | Item | Default`, `#`
+optional, each Default `on` or `off` (any case), which presets its checkbox;
+each item's id is the slug of its `#` cell, or its row number, unique in its
+table. Its version hashes the legend's text and each item's id, label and
+default. A checklist table with no body rows, an empty Item cell, another
+Default or any other column is left exactly as written.
+
 `read_forms()` reads the forms back from a finished page, which is how the
 answers route knows what a page asks and `lotuspod answers` its labels. Each
 form's section is that of the first comment box after it, which ends the
@@ -34,8 +45,19 @@ from html.parser import HTMLParser
 from lotuspod import cli, comments
 
 HEADING = "decisions for the maintainer"
+CHECKLIST_HEADING = "checklist for the maintainer"
 FORM_CLASS = "artifact-decision"
+CHECKLIST_CLASS = "artifact-decision--checklist"
 ID_PREFIX = "decision-"
+CHECKLIST_PREFIX = "checklist-"
+# The kinds of section a heading puts in force.
+DECISIONS = "decisions"
+CHECKLIST = "checklist"
+_KINDS = {HEADING: DECISIONS, CHECKLIST_HEADING: CHECKLIST}
+# The column each kind's table is taken by, and a checklist's only columns.
+_KEY_COLUMN = {DECISIONS: "question", CHECKLIST: "item"}
+_CHECKLIST_COLUMNS = frozenset({"#", "item", "default"})
+_CHECKLIST_DEFAULTS = {"on": True, "off": False}
 VERSION_LENGTH = 12
 # The options a row with a Default and no Options column offers.
 ACCEPT = ("accept", "Accept the default")
@@ -50,13 +72,17 @@ _SLUGGABLE = re.compile(r"[a-z0-9]")
 
 @dataclass(frozen=True)
 class Form:
-    """One question as its page's form asks it."""
+    """One question as its page's form asks it: a decision, or a checklist
+    whose options are its items."""
 
     question: str
     text: str
     version: str
     # (value, label) per option, in the page's order.
     options: tuple[tuple[str, str], ...]
+    # A checklist's items checked by default, in the page's order.
+    defaults: tuple[str, ...] = ()
+    checklist: bool = False
     # The data-section of the first comment box after the form; "" when
     # none follows it. Where it is asked is not what it asks: not compared.
     section: str = field(default="", compare=False)
@@ -87,9 +113,14 @@ class _TableFinder(HTMLParser):
                 self._line_starts.append(index + 1)
         self._mermaid_depth = 0
         self._heading: list[str] | None = None
-        # Whether a decisions heading is in force: until the next h2, or
-        # until it has yielded its table.
-        self._armed = False
+        # The kind of the decisions or checklist heading in force, None when
+        # none is: until the next h2 or such heading, or until it has
+        # yielded its table.
+        self._armed: str | None = None
+        # The text of the nearest h2 closed so far, and the one in force
+        # when the armed heading closed.
+        self._h2 = ""
+        self._legend = ""
         self._depth = 0
         self._candidate: dict | None = None
         self._cell: dict | None = None
@@ -122,12 +153,13 @@ class _TableFinder(HTMLParser):
             return
         if tag in ("h2", "h3") and not self._depth:
             if tag == "h2":
-                self._armed = False
+                self._armed = None
             self._heading = []
         elif tag == "table":
             self._depth += 1
             if self._depth == 1 and self._armed:
-                self._candidate = {"start": self._offset(), "rows": []}
+                self._candidate = {"start": self._offset(), "rows": [], "kind": self._armed,
+                                   "legend": self._legend}
         elif self._depth == 1 and self._candidate is not None and tag in _CELL_ENDS:
             self._close_cell()
             if tag == "tr":
@@ -151,8 +183,13 @@ class _TableFinder(HTMLParser):
             return
         if tag in ("h2", "h3") and self._heading is not None:
             # An h2 opening has already ended any section in force.
-            if _text(self._heading).casefold() == HEADING:
-                self._armed = True
+            text = _text(self._heading)
+            if tag == "h2":
+                self._h2 = text
+            kind = _KINDS.get(text.casefold())
+            if kind is not None:
+                self._armed = kind
+                self._legend = self._h2 or text
             self._heading = None
         elif tag == "table" and self._depth:
             if self._depth == 1 and self._candidate is not None:
@@ -160,9 +197,10 @@ class _TableFinder(HTMLParser):
                 candidate, self._candidate = self._candidate, None
                 candidate["end"] = self._after_tag()
                 candidate["rows"] = [row for row in candidate["rows"] if row]
-                if candidate["rows"] and _column(candidate["rows"][0], "question") is not None:
+                key = _KEY_COLUMN[candidate["kind"]]
+                if candidate["rows"] and _column(candidate["rows"][0], key) is not None:
                     self.tables.append(candidate)
-                    self._armed = False
+                    self._armed = None
             self._depth -= 1
         elif self._depth == 1 and self._candidate is not None and tag in _CELL_ENDS:
             self._close_cell()
@@ -176,6 +214,14 @@ def version(text: str, labels: list[str]) -> str:
     """The version of a question: a short hash of its text and option labels."""
     data = json.dumps([text, labels], ensure_ascii=False).encode("utf-8")
     return hashlib.sha256(data).hexdigest()[:VERSION_LENGTH]
+
+
+def checklist_version(text: str, items: list[tuple[str, str, bool]]) -> str:
+    """The version of a checklist: its legend's text and each item's (id,
+    label, whether it is checked by default), in the page's order."""
+    return version(text, [json.dumps([item, label, "on" if checked else "off"],
+                                     ensure_ascii=False)
+                          for item, label, checked in items])
 
 
 def _cell(row: list[dict], index: int | None) -> dict:
@@ -239,6 +285,73 @@ def _questions(rows: list[list[dict]], taken: set[str]) -> list[dict] | None:
     return questions
 
 
+def _checklist(rows: list[list[dict]], number: int, legend: str) -> dict | None:
+    """The checklist the table asks, as checklist-number; None when the
+    table does not make one."""
+    header, body = rows[0], rows[1:]
+    names = [cell["text"].casefold() for cell in header]
+    # A cell no field keeps, whether under an unknown or repeated column or
+    # past the header's last, leaves the table as written.
+    if (not body or not set(names) <= _CHECKLIST_COLUMNS or len(set(names)) < len(names)
+            or any(len(row) > len(header) for row in body)):
+        return None
+    columns = {name: _column(header, name) for name in _CHECKLIST_COLUMNS}
+    taken: set[str] = set()
+    items = []
+    for row_number, row in enumerate(body, start=1):
+        item = _cell(row, columns["item"])
+        checked = _CHECKLIST_DEFAULTS.get(_cell(row, columns["default"])["text"].casefold())
+        if not item["text"] or checked is None:
+            return None
+        mark = _cell(row, columns["#"])["text"]
+        key = cli.slugify(mark) if _SLUGGABLE.search(mark.lower()) else str(row_number)
+        item_id = cli._unique_id(key, taken)
+        taken.add(item_id)
+        items.append({"id": item_id, "html": item["html"], "text": item["text"],
+                      "checked": checked})
+    return {
+        "id": f"{CHECKLIST_PREFIX}{number}",
+        "legend": legend,
+        "items": items,
+        "version": checklist_version(
+            legend, [(item["id"], item["text"], item["checked"]) for item in items]),
+    }
+
+
+# The foot of every form: its note, its button, and where it stands.
+_FOOT = (
+    '<div class="artifact-decision-foot">',
+    '<details class="artifact-decision-note"><summary>Add a note</summary>'
+    '<textarea name="note" rows="2" maxlength="4000" aria-label="Note"></textarea></details>',
+    '<button type="submit">Save answer</button>',
+    '<span class="artifact-decision-unsaved" hidden>Not saved</span>',
+    '<span class="artifact-decision-hint">Not answered yet</span>',
+    '<p class="artifact-decision-status" role="status"></p>',
+    "</div>",
+)
+
+
+def _checklist_form(page: str, checklist: dict) -> str:
+    esc = html.escape
+    lines = [
+        f'<form class="{FORM_CLASS} {CHECKLIST_CLASS}" data-page="{esc(page)}" '
+        f'data-question="{esc(checklist["id"])}" data-version="{esc(checklist["version"])}">',
+        "<fieldset>",
+        '<legend class="artifact-decision-question"><span class="artifact-decision-text">'
+        f'{esc(checklist["legend"], quote=False)}</span></legend>',
+        '<div class="artifact-decision-options">',
+    ]
+    for item in checklist["items"]:
+        checked = " checked" if item["checked"] else ""
+        lines.append(
+            f'<label class="artifact-decision-option"><input type="checkbox" name="item" '
+            f'value="{esc(item["id"])}"{checked}> <span class="artifact-decision-label">'
+            f'{item["html"]}</span></label>'
+        )
+    lines += ["</div>", *_FOOT, "</fieldset>", "</form>"]
+    return "\n".join(lines)
+
+
 def _form(page: str, question: dict) -> str:
     esc = html.escape
     lines = [
@@ -271,41 +384,38 @@ def _form(page: str, question: dict) -> str:
             f'value="{esc(value)}" required> <span class="artifact-decision-label">'
             f"{esc(label, quote=False)}</span>{mark}</label>"
         )
-    lines += [
-        "</div>",
-        '<div class="artifact-decision-foot">',
-        '<details class="artifact-decision-note"><summary>Add a note</summary>'
-        '<textarea name="note" rows="2" maxlength="4000" aria-label="Note"></textarea></details>',
-        '<button type="submit">Save answer</button>',
-        '<span class="artifact-decision-unsaved" hidden>Not saved</span>',
-        '<span class="artifact-decision-hint">Not answered yet</span>',
-        '<p class="artifact-decision-status" role="status"></p>',
-        "</div>",
-        "</fieldset>",
-        "</form>",
-    ]
+    lines += ["</div>", *_FOOT, "</fieldset>", "</form>"]
     return "\n".join(lines)
 
 
 def render_decisions(body: str, page: str) -> tuple[str, bool]:
-    """(body with its decisions tables as forms, whether it has any forms).
+    """(body with its decisions and checklist tables as forms, whether it
+    has any forms).
 
-    A decisions table with a row of fewer than two options is left exactly
-    as written, so a body without a table that makes forms comes back as
-    written.
+    A decisions table with a row of fewer than two options, and a checklist
+    table that does not make a checklist, are left exactly as written, so a
+    body without a table that makes forms comes back as written.
     """
     finder = _TableFinder(body)
     finder.feed(body)
     finder.close()
     taken: set[str] = set()
+    checklists = 0
     blocks = []
     for table in finder.tables:
-        ids = set(taken)
-        questions = _questions(table["rows"], ids)
-        if not questions:
-            continue
-        taken = ids
-        forms = "\n".join(_form(page, question) for question in questions)
+        if table["kind"] == CHECKLIST:
+            checklist = _checklist(table["rows"], checklists + 1, table["legend"])
+            if checklist is None:
+                continue
+            checklists += 1
+            forms = _checklist_form(page, checklist)
+        else:
+            ids = set(taken)
+            questions = _questions(table["rows"], ids)
+            if not questions:
+                continue
+            taken = ids
+            forms = "\n".join(_form(page, question) for question in questions)
         blocks.append((table, f'<div class="artifact-decisions">\n{forms}\n</div>'))
     # Last first, so the spans before each replacement still hold.
     for table, block in reversed(blocks):
@@ -314,7 +424,7 @@ def render_decisions(body: str, page: str) -> tuple[str, bool]:
 
 
 class _FormReader(HTMLParser):
-    """Read a finished page's decision forms back."""
+    """Read a finished page's decision and checklist forms back."""
 
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
@@ -336,13 +446,19 @@ class _FormReader(HTMLParser):
         elif tag == "form" and FORM_CLASS in classes:
             self._open = {"question": values.get("data-question", ""),
                           "version": values.get("data-version", ""),
-                          "text": "", "options": []}
+                          "text": "", "options": [], "defaults": [],
+                          "checklist": CHECKLIST_CLASS in classes}
         elif self._open is None:
             return
         elif self._reading is not None:
             if tag == "span":
                 name, depth, parts = self._reading
                 self._reading = (name, depth + 1, parts)
+        elif tag == "input" and self._open["checklist"]:
+            if values.get("type") == "checkbox" and values.get("name") == "item":
+                self._open["options"].append([values.get("value", ""), ""])
+                if "checked" in values:
+                    self._open["defaults"].append(values.get("value", ""))
         elif tag == "input" and values.get("type") == "radio" and values.get("name") == "choice":
             self._open["options"].append([values.get("value", ""), ""])
         elif tag == "span" and "artifact-decision-text" in classes:
@@ -375,12 +491,13 @@ class _FormReader(HTMLParser):
                     question=found["question"], text=found["text"],
                     version=found["version"],
                     options=tuple((value, label) for value, label in found["options"]),
+                    defaults=tuple(found["defaults"]), checklist=found["checklist"],
                 )
                 self._unboxed.append(found["question"])
 
 
 def read_forms(page_html: str) -> dict[str, Form]:
-    """The page's decision forms by question id, in page order."""
+    """The page's decision and checklist forms by question id, in page order."""
     reader = _FormReader()
     reader.feed(page_html)
     reader.close()
