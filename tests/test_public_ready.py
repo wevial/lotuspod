@@ -4,8 +4,8 @@ The public copy is built from this HEAD, so what is here goes public. This
 file witnesses that it is ready: an MIT LICENSE matching the package
 metadata, no email address outside the reserved example domains and no home
 directory path naming a user in any text file git tracks, a package that
-describes Lotuspod as it is today, and a README quick start that publishes on
-this machine.
+describes Lotuspod as it is today, and a README quick start that installs
+from PyPI and publishes on this machine.
 
 Run from the repo root:
 
@@ -118,14 +118,22 @@ class DescriptionTests(unittest.TestCase):
 
 
 class QuickStartTests(unittest.TestCase):
-    def test_the_quick_start_publishes_on_this_machine(self):
+    def section(self) -> str:
         readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
         start = readme.index("## Quick start\n")
-        section = readme[start:readme.index("\n## ", start + 1)]
-        commands = [line for line in section.splitlines()
+        return readme[start:readme.index("\n## ", start + 1)]
+
+    def test_the_quick_start_publishes_on_this_machine(self):
+        commands = [line for line in self.section().splitlines()
                     if line.startswith("lotuspod publish ")]
         self.assertEqual(len(commands), 1, commands)
         self.assertIn(" --local", commands[0])
+
+    def test_the_quick_start_installs_from_pypi(self):
+        block = self.section().split("```sh\n", 1)[1].split("\n```", 1)[0]
+        installs = [line for line in block.splitlines()
+                    if line.split()[:3] == ["pip", "install", "lotuspod"]]
+        self.assertEqual(len(installs), 1, block)
 
 
 if __name__ == "__main__":
