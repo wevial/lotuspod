@@ -519,7 +519,6 @@
         set(section, true);
       }
       label();
-      return section;
     };
   }
 
