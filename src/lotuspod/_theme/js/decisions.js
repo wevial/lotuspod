@@ -219,7 +219,8 @@
 
     // Draw the table from the current answers, after the body's last
     // section, so folding a section never hides it; none while nothing is
-    // answered.
+    // answered. It folds under its heading, "Answered (N)", as a section
+    // does, and is kept folded as one is.
     function table() {
       var rows = currents();
       if (!rows.length) {
@@ -235,8 +236,14 @@
       }
       if (!answered) {
         answered = element("div", "artifact-answered");
+        // A heading of the section's level, though not one of the page's h2s.
+        var heading = element("div", "artifact-answered-heading");
+        heading.setAttribute("role", "heading");
+        heading.setAttribute("aria-level", "2");
+        heading.appendChild(element("span", "artifact-answered-title"));
+        var wrapper = element("div", "artifact-answered-body");
         var grid = element("table");
-        grid.appendChild(element("caption", "", "Answered"));
+        grid.setAttribute("aria-label", "Answered");
         var head = element("tr");
         ["#", "When", "Question", "Answer", "By"].forEach(function (name) {
           var th = element("th", "", name);
@@ -245,14 +252,18 @@
         });
         grid.appendChild(element("thead")).appendChild(head);
         grid.appendChild(element("tbody"));
-        answered.appendChild(grid);
+        wrapper.appendChild(grid);
+        answered.append(heading, wrapper);
         var last = all(":scope > .artifact-section-body", body).pop();
         if (last) {
           last.after(answered);
         } else {
           body.appendChild(answered);
         }
+        foldSection(heading, wrapper, FOLDED_ANSWERED);
       }
+      answered.querySelector(".artifact-answered-title").textContent =
+        "Answered (" + rows.length + ")";
       var tbody = answered.querySelector("tbody");
       tbody.replaceChildren.apply(tbody, rows.map(row));
     }
