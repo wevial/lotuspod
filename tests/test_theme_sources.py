@@ -151,6 +151,14 @@ class DeclaredOrderTests(ThemeCopyTestCase):
         problems = source_problems(cli.THEME_DIR, cli.THEME_SOURCES)
         self.assertEqual(problems, [], "\n".join(problems))
 
+    def test_the_comment_markdown_script_is_declared_before_the_comments_script(self):
+        """LOTUS-92: a bubble's text is drawn by js/comment-markdown.js, so it
+        is joined before js/comments.js, which calls it."""
+        script = cli.THEME_SOURCES[cli.PAGE_SCRIPT]
+        self.assertIn("js/comment-markdown.js", script)
+        self.assertLess(script.index("js/comment-markdown.js"), script.index("js/comments.js"))
+        self.assertGreater(script.index("js/comment-markdown.js"), script.index("js/page-open.js"))
+
     def test_a_source_not_in_the_declared_order_is_named(self):
         theme = self.theme_copy()
         (theme / "css" / "stray.css").write_text(".stray {}\n", encoding="utf-8")
