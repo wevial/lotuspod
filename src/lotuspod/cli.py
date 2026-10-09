@@ -1063,12 +1063,15 @@ def page_revision(out_dir: Path, name: str) -> str:
     return ""
 
 
-def version_stamp(page_html: str) -> tuple[str, bool]:
-    """A page's lotuspod:revision ("" when none) and whether it is visible,
-    read from its HTML alone: what lotuspod.versions keeps of each version."""
+def version_stamp(page_html: str) -> tuple[str, bool, str]:
+    """A page's lotuspod:revision ("" when none), whether it is visible and
+    the handle its lotuspod:owner names ("" when none does), read from its
+    HTML alone: what lotuspod.versions keeps of each version."""
     tag = _REVISION_TAG_RE.search(page_html)
     content = _META_CONTENT_RE.search(tag.group(0)) if tag else None
-    return (content.group(1).strip() if content else ""), extract_visibility(page_html)
+    owner = page_owner(page_html)
+    return ((content.group(1).strip() if content else ""), extract_visibility(page_html),
+            owner if machine.is_handle(owner) else "")
 
 
 def page_variant(page_html: str) -> str:

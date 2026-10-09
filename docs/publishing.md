@@ -402,8 +402,10 @@ directory that is not the top of its own repository has none.
 
 A published page's header ends its date line in a "Versions · N" link to
 `#versions`, which shows the page's versions in place of its body: each with
-its date and time, the current one marked "current", and every other with a
-"View" link. The list shows 20, and "Show older versions" shows 20 more. A
+its date and time, a note under it saying which sections it changed from the
+version before ("Beta changed; Delta added", or "new version" when none did;
+"First version" on the first), the current one marked "current", and every
+other with a "View" link. The list shows 20, and "Show older versions" shows 20 more. A
 page with one version says "This is the only version.", and one in a
 directory that is not a repository shows "Versions · 0" and says "This page
 has no versions yet." The page asks

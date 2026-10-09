@@ -9,11 +9,23 @@ version of the page. They are read at request time, with nothing stored:
                                    MAX_VERSIONS of them
     git cat-file --batch           the blobs not read before, in one process
 
-From each blob only its lotuspod:revision and lotuspod:visible are kept, in
-memory by blob id: a blob never changes. A list runs at most two git
-processes, and one once its blobs are known; an old version's HTML runs at
-most two. A version is listed only when its own page was visible, and a
-directory that is not the top of its own repository has none.
+From each blob only its lotuspod:revision, lotuspod:visible and
+lotuspod:owner are kept, in memory by blob id: a blob never changes. A list
+runs at most two git processes, and one once its blobs are known; an old
+version's HTML runs at most two. A version is listed only when its own page
+was visible, and a directory that is not the top of its own repository has
+none.
+
+Each listed version carries a one-line summary of what it changed from the
+page as the commit found it, the old blob git log names beside the new one:
+compare()'s sections in words (summary()), kept in memory by the pair of
+blobs. It is "" on a version whose page had no visible version before it.
+
+recent() lists the versions of every page in a window of time, for the
+activity route, in at most two git processes too: one git log over the
+history up to the window's end, at most MAX_RECENT_COMMITS commits, each
+naming the old and new blob of every page it changed, and one git cat-file
+--batch for the blobs and texts not known yet.
 
 old_page() is a version's HTML as serve answers it: marked as old, with a
 banner linking back to the current page, and its decision forms disabled.
@@ -44,6 +56,10 @@ from typing import Callable
 MAX_VERSIONS = 200
 # Seconds one git process may take.
 GIT_TIMEOUT = 10
+# The commits one recent() reads, newest first.
+MAX_RECENT_COMMITS = 1000
+# The sections each part of a summary names before "and N more".
+SUMMARY_NAMES = 3
 # A version's commit as a URL names it: the full object id.
 COMMIT = re.compile(r"[0-9a-f]{40}")
 # The lines of a source diff compare() keeps.
@@ -75,6 +91,42 @@ class Version:
     date: str
     revision: str
     visible: bool
+    # The handle its lotuspod:owner names; "" when none does.
+    owner: str = ""
+    # What it changed from the page before it, in words (summary()).
+    summary: str = ""
+
+
+@dataclass(frozen=True)
+class Change:
+    """One version of a page in a window, as recent() lists it."""
+
+    name: str
+    commit: str
+    date: str
+    revision: str
+    owner: str
+    # Whether the page had no visible version before it.
+    first: bool
+    summary: str
+
+
+@dataclass(frozen=True)
+class Recent:
+    """What recent() found: its changes newest first; whether a page served
+    now was visible as the window began; whether commits were left unread."""
+
+    changes: list[Change]
+    older: bool
+    truncated: bool
+
+
+def _moment(stamp: str) -> _dt.datetime | None:
+    """A UTC stamp as _utc() writes it, as a time; None for ""."""
+    try:
+        return _dt.datetime.fromisoformat(stamp)
+    except ValueError:
+        return None
 
 
 def _utc(stamp: str) -> str:
@@ -223,6 +275,24 @@ def source_diff(old: str, new: str) -> tuple[list[dict], bool]:
     return lines, False
 
 
+def _names(titles: list[str]) -> str:
+    """Titles as words: "A", "A and B", "A, B and C", "A, B, C and 2 more"."""
+    shown, rest = titles[:SUMMARY_NAMES], len(titles) - SUMMARY_NAMES
+    if rest > 0:
+        return f"{', '.join(shown)} and {rest} more"
+    return " and ".join([", ".join(shown[:-1]), shown[-1]]) if len(shown) > 1 else shown[0]
+
+
+def summary(compared: dict) -> str:
+    """compare()'s sections in one line: "Alpha and Beta changed; Delta
+    added; Gamma removed", a part left out when it has none, or "new
+    version" when no section changed."""
+    sections = compared["sections"]
+    parts = [f"{_names([section['title'] for section in sections[kind]])} {kind}"
+             for kind in ("changed", "added", "removed") if sections[kind]]
+    return "; ".join(parts) or "new version"
+
+
 def compare(old_html: str, new_html: str, old_source: str | None = None,
             new_source: str | None = None) -> dict:
     """What changed from one version of a page to another: {sections:
@@ -248,23 +318,27 @@ def compare(old_html: str, new_html: str, old_source: str | None = None,
 
 class History:
     """The versions of the pages in out_dir. stamp(page_html) is a page's
-    (lotuspod:revision, lotuspod:visible), read from its HTML."""
+    (lotuspod:revision, lotuspod:visible, lotuspod:owner), read from its HTML."""
 
-    def __init__(self, out_dir: Path, stamp: Callable[[str], tuple[str, bool]]) -> None:
+    def __init__(self, out_dir: Path, stamp: Callable[[str], tuple[str, bool, str]]) -> None:
         self.out_dir = Path(out_dir)
         self.stamp = stamp
         # Blob ids to what stamp read from them.
-        self._stamps: dict[str, tuple[str, bool]] = {}
+        self._stamps: dict[str, tuple[str, bool, str]] = {}
+        # (old blob, new blob) to the summary of the version the new one is.
+        self._summaries: dict[tuple[str, str], str] = {}
         self._lock = threading.Lock()
 
-    def _git(self, *argv: str, data: bytes | None = None) -> bytes | None:
-        """git's output in out_dir; None when it failed or took too long."""
+    def _git(self, *argv: str, data: bytes | None = None, glob: bool = False) -> bytes | None:
+        """git's output in out_dir; None when it failed or took too long.
+        Pathspecs are literal unless glob."""
         # The top of a repository holds its .git; below the parent no
         # repository is looked for, so a directory inside another's has none.
         if not (self.out_dir / ".git").exists():
             return None
-        env = {**git_environment(), "GIT_CEILING_DIRECTORIES": str(self.out_dir.resolve().parent),
-               "GIT_LITERAL_PATHSPECS": "1"}
+        env = {**git_environment(), "GIT_CEILING_DIRECTORIES": str(self.out_dir.resolve().parent)}
+        if not glob:
+            env["GIT_LITERAL_PATHSPECS"] = "1"
         try:
             done = subprocess.run(["git", "-C", str(self.out_dir), *argv], input=data,
                                   capture_output=True, env=env, timeout=GIT_TIMEOUT)
@@ -272,41 +346,50 @@ class History:
             return None
         return done.stdout if done.returncode == 0 else None
 
-    def _commits(self, name: str) -> list[tuple[str, str, str]]:
-        """(commit, date, blob) for each commit that left NAME.html in place,
-        newest first."""
-        out = self._git("log", "--format=%H%x09%cI", "--raw", "--no-abbrev", "--no-renames",
-                        f"--max-count={MAX_VERSIONS}", "--", f"{name}.html")
-        if out is None:
-            return []
-        found: list[tuple[str, str, str]] = []
+    @staticmethod
+    def _log(out: bytes) -> tuple[list[tuple[str, str, str, str, str]], int]:
+        """(commit, date, path, old blob, new blob) for each file each commit
+        in git log --raw's output left in place, newest first, old zeros for
+        a file the commit added; and how many commits it named."""
+        found: list[tuple[str, str, str, str, str]] = []
         commit = date = ""
+        count = 0
         for line in out.decode("utf-8", "replace").splitlines():
             head, _, rest = line.partition("\t")
             if COMMIT.fullmatch(head):
                 commit, date = head, _utc(rest.strip())
+                count += 1
             elif line.startswith(":") and commit:
                 fields = head.split()
-                # :OLDMODE NEWMODE OLD NEW STATUS; a deleted page's NEW is zeros.
-                if len(fields) == 5 and COMMIT.fullmatch(fields[3]) and fields[3] != _NO_BLOB:
-                    found.append((commit, date, fields[3]))
-                commit = ""
-        return found
+                # :OLDMODE NEWMODE OLD NEW STATUS; a deleted file's NEW is zeros.
+                if (len(fields) == 5 and COMMIT.fullmatch(fields[2])
+                        and COMMIT.fullmatch(fields[3]) and fields[3] != _NO_BLOB):
+                    found.append((commit, date, rest, fields[2], fields[3]))
+        return found, count
 
-    def _read(self, blobs: list[str], keep: str = "") -> str | None:
-        """Read the blobs whose stamps are not known yet, and keep too, in
-        one process; keep's text (None when it was not read)."""
+    def _commits(self, name: str) -> list[tuple[str, str, str, str]]:
+        """(commit, date, old blob, blob) for each commit that left NAME.html
+        in place, newest first."""
+        out = self._git("log", "--format=%H%x09%cI", "--raw", "--no-abbrev", "--no-renames",
+                        f"--max-count={MAX_VERSIONS}", "--", f"{name}.html")
+        if out is None:
+            return []
+        return [(commit, date, old, new) for commit, date, _, old, new in self._log(out)[0]]
+
+    def _read(self, blobs: list[str], keep: list[str] = ()) -> dict[str, str] | None:
+        """Read the blobs whose stamps are not known yet, and those in keep
+        too, in one process; the texts of those in keep that were read (None
+        when nothing was, or git failed)."""
         with self._lock:
             wanted = [blob for blob in dict.fromkeys(blobs) if blob not in self._stamps]
-        if keep and keep not in wanted:
-            wanted.append(keep)
+        wanted += [blob for blob in dict.fromkeys(keep) if blob not in wanted]
         if not wanted:
             return None
         asked = "".join(f"{blob}\n" for blob in wanted).encode("ascii")
         out = self._git("cat-file", "--batch", data=asked)
         if out is None:
             return None
-        kept = None
+        kept: dict[str, str] = {}
         at = 0
         while at < len(out):
             end = out.find(b"\n", at)
@@ -323,23 +406,112 @@ class History:
             stamp = self.stamp(text)
             with self._lock:
                 self._stamps[blob] = stamp
-            if blob == keep:
-                kept = text
+            if blob in keep:
+                kept[blob] = text
         return kept
 
-    def _versions(self, commits: list[tuple[str, str, str]],
+    def _versions(self, commits: list[tuple[str, str, str, str]],
                   keep: str = "") -> tuple[list[Version], str | None]:
         """The visible versions among commits, and keep's text."""
-        kept = self._read([blob for _, _, blob in commits], keep)
+        kept = self._read([blob for _, _, _, blob in commits], [keep] if keep else [])
         with self._lock:
             stamps = dict(self._stamps)
         listed = [Version(commit, date, *stamps[blob])
-                  for commit, date, blob in commits if blob in stamps]
-        return [version for version in listed if version.visible], kept
+                  for commit, date, _, blob in commits if blob in stamps]
+        return [version for version in listed if version.visible], (kept or {}).get(keep)
+
+    def _summarized(self, pairs: list[tuple[str, str]],
+                    also: list[str] = ()) -> dict[tuple[str, str], str]:
+        """The summary of each (old blob, new blob) whose new blob is a
+        visible version, reading in one process what is not known yet: the
+        stamps of both and of the blobs in also, and the texts of a pair not
+        summarized before. "" when old is zeros or was not visible."""
+        with self._lock:
+            unknown = [pair for pair in dict.fromkeys(pairs) if pair not in self._summaries]
+        named = [blob for pair in pairs for blob in pair if blob != _NO_BLOB]
+        texts = self._read([*named, *also],
+                           [blob for pair in unknown for blob in pair if blob != _NO_BLOB]) or {}
+        with self._lock:
+            stamps = dict(self._stamps)
+        for old, new in unknown:
+            if new not in stamps:
+                continue
+            if not stamps[new][1] or old == _NO_BLOB or (old in stamps and not stamps[old][1]):
+                # A hidden version is never summarized; its "" is not shown.
+                words = ""
+            elif old in texts and new in texts:
+                words = summary(compare(texts[old], texts[new]))
+            else:
+                continue
+            with self._lock:
+                self._summaries[(old, new)] = words
+        with self._lock:
+            return {pair: self._summaries[pair] for pair in pairs if pair in self._summaries}
 
     def listed(self, name: str) -> list[Version]:
-        """NAME's visible versions, newest first."""
-        return self._versions(self._commits(name))[0]
+        """NAME's visible versions, newest first, each with its summary."""
+        commits = self._commits(name)
+        said = self._summarized([(old, blob) for _, _, old, blob in commits])
+        with self._lock:
+            stamps = dict(self._stamps)
+        return [Version(commit, date, *stamps[blob], summary=said.get((old, blob), ""))
+                for commit, date, old, blob in commits
+                if blob in stamps and stamps[blob][1]]
+
+    def recent(self, start: _dt.datetime, end: _dt.datetime,
+               served: Callable[[str], bool]) -> Recent:
+        """The versions of the pages served(name) says serve answers, whose
+        commits fall after start and up to end, newest first.
+
+        A commit is a version of a page only when the page is visible in it
+        and its lotuspod:revision is not that of the page before it; one
+        whose page was not visible before it is the page's first. `older` is
+        whether a page served now was visible as start was, and `truncated`
+        whether MAX_RECENT_COMMITS commits were read, none before start.
+        """
+        until = end.astimezone(_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S+00:00")
+        # A name git would quote, as one outside ASCII, is read as it is.
+        out = self._git("-c", "core.quotePath=false", "log", f"--until={until}",
+                        "--format=%H%x09%cI", "--raw", "--no-abbrev", "--no-renames",
+                        f"--max-count={MAX_RECENT_COMMITS}", "--", "*.html", glob=True)
+        if out is None:
+            return Recent([], False, False)
+        files, count = self._log(out)
+        during: list[tuple[str, str, str, str, str]] = []
+        # Each served page's blob as start was: its newest commit up to it.
+        before: dict[str, str] = {}
+        shown: dict[str, bool] = {}
+        for commit, date, path, old, new in files:
+            if "/" in path or not path.endswith(".html"):
+                continue
+            name = path[:-len(".html")]
+            if name not in shown:
+                shown[name] = served(name)
+            moment = _moment(date)
+            if not shown[name] or moment is None or moment > end:
+                continue
+            if moment > start:
+                during.append((commit, date, name, old, new))
+            else:
+                before.setdefault(name, new)
+        said = self._summarized([(old, new) for _, _, _, old, new in during],
+                                list(before.values()))
+        with self._lock:
+            stamps = dict(self._stamps)
+        changes = []
+        for commit, date, name, old, new in during:
+            if (old, new) not in said or not stamps[new][1]:
+                continue
+            first = said[(old, new)] == ""
+            if not first and stamps[old][0] == stamps[new][0]:
+                continue
+            revision, _, owner = stamps[new]
+            changes.append(Change(name, commit, date, revision, owner, first, said[(old, new)]))
+        # The last file read is the oldest one.
+        reached = files and (_moment(files[-1][1]) or end) <= start
+        truncated = count >= MAX_RECENT_COMMITS and not reached
+        older = truncated or any(stamps.get(blob, ("", False))[1] for blob in before.values())
+        return Recent(changes, older, truncated)
 
     def version(self, name: str, commit: str) -> tuple[Version, int, str] | None:
         """NAME's version at commit, how many listed versions are newer, and
@@ -347,7 +519,7 @@ class History:
         if not COMMIT.fullmatch(commit):
             return None
         commits = self._commits(name)
-        blob = next((blob for found, _, blob in commits if found == commit), "")
+        blob = next((blob for found, _, _, blob in commits if found == commit), "")
         if not blob:
             return None
         listed, text = self._versions(commits, keep=blob)
@@ -397,7 +569,7 @@ class History:
         behind, version = found
         if behind == 0:
             return version, 0, None
-        blobs = {commit: blob for commit, _, blob in commits}
+        blobs = {commit: blob for commit, _, _, blob in commits}
         current = listed[0]
         texts = self._objects([blobs[version.commit], blobs[current.commit],
                                f"{version.commit}:{name}.md", f"{current.commit}:{name}.md"])

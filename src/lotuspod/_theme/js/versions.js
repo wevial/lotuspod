@@ -6,8 +6,10 @@
   // "Versions · N" link to #versions, and while the hash is #versions the
   // page shows its versions view in place of its header and body: a
   // breadcrumb back to the page, the heading, and the versions newest first,
-  // each with its date and time, the current one marked and every other with
-  // a "View" link to its read-only old version (NAME.html?version=COMMIT).
+  // each with its date and time, a note under it saying what it changed (its
+  // summary, "First version" when it has none), the current one marked and
+  // every other with a "View" link to its read-only old version
+  // (NAME.html?version=COMMIT).
   // The list shows SHOWN entries, and "Show older versions" shows SHOWN more
   // each time. Any other answer leaves the page as it is: no link, no view.
   //
@@ -230,7 +232,10 @@
       function entry(version) {
         var item = element("li", "artifact-versions-entry");
         var time = stamped(version.date, "artifact-versions-date");
-        item.appendChild(time);
+        var dated = element("div", "artifact-versions-when");
+        dated.append(time, element("p", "artifact-versions-note",
+          String(version.summary || "") || "First version"));
+        item.appendChild(dated);
         if (found && version.commit === found.since.commit) {
           item.classList.add("artifact-versions-entry--seen");
           item.appendChild(element("span", "artifact-versions-seen", "you last looked"));

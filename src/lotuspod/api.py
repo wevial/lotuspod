@@ -16,6 +16,7 @@ the reader as actor. Nine routes:
     GET  /api/seen
     GET  /api/versions?page=NAME
     GET  /api/changes?page=NAME&since=REV
+    GET  /api/activity[?before=TIME]
 
 A read of the comments carries the page's current revision beside its
 threads, and /api/revision answers it alone, {revision}: an open page
@@ -39,11 +40,25 @@ newest comment: 404 unknown_thread when
 `unread`, the ids of the reader's unread comments among its threads, oldest
 first.
 
-/api/versions answers {page, versions: [{commit, date, revision, current}]}:
-each commit of the artifacts repository that changed the page while it was
-visible, newest first (lotuspod.versions), `date` its committer time and
-`current` true on the newest only. It is empty when the output directory is
-not the top of its own repository.
+/api/versions answers {page, versions: [{commit, date, revision, current,
+summary}]}: each commit of the artifacts repository that changed the page
+while it was visible, newest first (lotuspod.versions), `date` its committer
+time, `current` true on the newest only and `summary` what it changed from
+the page before it in one line (versions.summary()), "" on a first version.
+It is empty when the output directory is not the top of its own repository.
+
+/api/activity answers the reader's recent activity on every page serve
+answers: the ACTIVITY_DAYS days up to `before`, an ISO 8601 UTC time, else
+now. It answers {from, to, older, truncated, pages: [{page, title, latest,
+events}]}, `from` and `to` the window's bounds as the database writes times,
+a page for each one with an event after `from` and up to `to`, by its newest
+event (`latest`), newest first, and its events newest first. Events are
+versions (History.recent()), {kind: version, at, commit, revision, actor,
+first, summary}, `actor` the handle the version's lotuspod:owner names or
+null, and the comments, replies and answers of Database.activity(). At most
+MAX_EVENTS are kept, the newest, and `truncated` says when any were left
+out; `older` says whether anything on those pages happened up to `from`. Any
+query but one `before` that parses is 400 invalid_query.
 
 /api/changes compares the newest listed version of NAME whose revision is
 REV, the revision the reader last opened it at, with the current one
@@ -115,6 +130,7 @@ page. The agents' socket (lotuspod.machine) still sees the address.
 
 from __future__ import annotations
 
+import datetime
 import json
 import socket
 import sqlite3
@@ -137,7 +153,8 @@ REVISION = "/api/revision"
 SEEN = "/api/seen"
 VERSIONS = "/api/versions"
 CHANGES = "/api/changes"
-ROUTES = (ANSWERS, COMMENTS, MEDIA, REVISION, SEEN, VERSIONS, CHANGES)
+ACTIVITY = "/api/activity"
+ROUTES = (ANSWERS, COMMENTS, MEDIA, REVISION, SEEN, VERSIONS, CHANGES, ACTIVITY)
 METHODS = ("GET", "HEAD", "POST")
 # The methods of a route that is only read.
 READ_METHODS = ("GET", "HEAD")
@@ -162,6 +179,10 @@ BODY_TIMEOUT = 10
 # A refused body up to this size is still read, and dropped: closing a
 # connection with unread data resets it, and the reset can overtake the answer.
 DRAIN_LIMIT = 64 << 10
+# The days of activity one read of the activity route covers.
+ACTIVITY_DAYS = 7
+# The events one read of the activity route answers at most.
+MAX_EVENTS = 500
 # SQLite's largest integer.
 _MAX_ID = (1 << 63) - 1
 
@@ -421,7 +442,7 @@ def shown(value: object) -> object:
 
 
 class Api:
-    """The nine routes over one database; pages(name) is the Page serve
+    """The routes over one database; pages(name) is the Page serve
     would answer for name, or None; window is routing's owner window.
     media_dir is the media store and max_image_bytes its cap; without a
     store, uploads and comments naming images answer 503. history reads the
@@ -452,7 +473,7 @@ class Api:
 
     def _answer(self, method: str, path: str, query: str, headers: Message,
                 body: Body, actor: Mapping) -> Answer:
-        methods = READ_METHODS if path in (REVISION, VERSIONS, CHANGES) else METHODS
+        methods = READ_METHODS if path in (REVISION, VERSIONS, CHANGES, ACTIVITY) else METHODS
         if method not in methods:
             return (HTTPStatus.METHOD_NOT_ALLOWED, {"error": "method_not_allowed"},
                     (("Allow", ", ".join(methods)),))
@@ -475,6 +496,8 @@ class Api:
                 return HTTPStatus.OK, self._seen(query, actor), ()
             if path == CHANGES:
                 return HTTPStatus.OK, self._changes(query), ()
+            if path == ACTIVITY:
+                return HTTPStatus.OK, self._activity(query, actor), ()
             page = self._page(self._query(query, ("page",))["page"])
             if path == ANSWERS:
                 payload = {"page": page.name, "questions": self.database.answers(page.name, asked=True)}
@@ -496,7 +519,61 @@ class Api:
     def _versions(self, name: str) -> list[dict]:
         listed = self.history.listed(name) if self.history is not None else []
         return [{"commit": version.commit, "date": version.date, "revision": version.revision,
-                 "current": at == 0} for at, version in enumerate(listed)]
+                 "current": at == 0, "summary": version.summary}
+                for at, version in enumerate(listed)]
+
+    def _window(self, query: str) -> tuple[str, str]:
+        """The activity route's window, (from, to) as the database writes
+        times: the ACTIVITY_DAYS days up to the query's `before`, else now."""
+        fields = self._query(query, ("before",) if query else ())
+        try:
+            if fields:
+                moment = datetime.datetime.fromisoformat(fields["before"])
+                if moment.utcoffset() != datetime.timedelta(0):
+                    raise ValueError("not UTC")
+                end = moment.timestamp()
+            else:
+                end = self.clock()
+            return db.stamp(end - ACTIVITY_DAYS * 86400), db.stamp(end)
+        except (ValueError, OverflowError, OSError):
+            raise Refusal(HTTPStatus.BAD_REQUEST, "invalid_query") from None
+
+    def _activity(self, query: str, actor: Mapping) -> dict:
+        start, end = self._window(query)
+        found: dict[str, Page | None] = {}
+
+        def served(name: str) -> Page | None:
+            if name not in found:
+                found[name] = self.pages(name)
+            return found[name]
+
+        events, older = self.database.activity(
+            str(actor.get("email") or ""), start, end, lambda name: served(name) is not None,
+            MAX_EVENTS + 1)
+        truncated = False
+        if self.history is not None:
+            recent = self.history.recent(datetime.datetime.fromisoformat(start),
+                                         datetime.datetime.fromisoformat(end),
+                                         lambda name: served(name) is not None)
+            older = older or recent.older
+            truncated = recent.truncated
+            for change in recent.changes:
+                events.append({"page": change.name, "kind": "version",
+                               # As the database writes times, so all sort as text.
+                               "at": change.date[:-1] + ".000Z", "commit": change.commit,
+                               "revision": change.revision, "actor": change.owner or None,
+                               "first": change.first, "summary": change.summary})
+            events.sort(key=lambda event: event["at"], reverse=True)
+        truncated = truncated or len(events) > MAX_EVENTS
+        pages: dict[str, dict] = {}
+        for event in events[:MAX_EVENTS]:
+            name = event.pop("page")
+            page = served(name)
+            entry = pages.setdefault(name, {"page": name, "title": page.title if page else name,
+                                            "latest": event["at"], "events": []})
+            entry["events"].append(event)
+        return {"from": start, "to": end, "older": older, "truncated": truncated,
+                "pages": list(pages.values())}
 
     def _changes(self, query: str) -> dict:
         fields = self._query(query, ("page", "since"))
