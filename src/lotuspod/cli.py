@@ -99,6 +99,15 @@ def load_tokens() -> dict:
 _MERMAID_BLOCK = re.compile(r'<pre\b[^>]*\bclass="[^"]*\bmermaid\b')
 
 
+# An anchor to an absolute http(s) URL, which may be off the site: the page
+# script (js/link-tab.js) opens such a link in a new tab.
+_ABSOLUTE_LINK = re.compile(r"""<a\s[^>]*\bhref\s*=\s*["']?\s*https?:""", re.IGNORECASE)
+
+
+def has_absolute_link(body: str) -> bool:
+    return _ABSOLUTE_LINK.search(body) is not None
+
+
 def has_mermaid_block(body: str) -> bool:
     return _MERMAID_BLOCK.search(body) is not None
 
@@ -709,9 +718,11 @@ def cmd_render(args: argparse.Namespace) -> int:
         "owner": owner,
         "variant_class": variant_class(args.variant),
         "mermaid": has_mermaid_block(body),
-        # A page stamped with a revision notices when it is published again.
+        # A page stamped with a revision notices when it is published again,
+        # and a link that may be off the site opens in a new tab.
         "page_script_needed": (has_decisions or with_comments or wrapped
-                               or bool(getattr(args, "revision", ""))),
+                               or bool(getattr(args, "revision", ""))
+                               or has_absolute_link(body)),
         "page_script": PAGE_SCRIPT,
         "mermaid_theme_variables": mermaid_theme_variables(tokens),
         "mermaid_dir": MERMAID_DIR,

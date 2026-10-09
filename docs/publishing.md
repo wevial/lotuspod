@@ -136,11 +136,13 @@ The converter (`lotuspod.markdown.to_body`) takes a small subset of markdown:
   `.md` targets are kept as written, not rewritten to page names.
 - Bare URLs: an `http://` or `https://` URL (any case) written as plain text,
   not after a letter, digit or `/`, becomes a link to itself. It runs to the
-  next space, `<`, `>`, `"` or backtick; a trailing `.`, `,`, `;`, `:` or `*`
-  is left out of it, and so is a trailing `)` or `]` without its partner in
-  the URL, so `(see https://example.com/a).` links `https://example.com/a`
-  while `https://en.wikipedia.org/wiki/Pond_(water)` keeps its `)`. One in a
-  code span, a fence, a link or an image reference is not linked again.
+  next space, `<`, `>`, `"`, backtick or two stars in a row (so bold around
+  a URL closes outside it); a trailing `.`, `,`, `;` or `:` is left out of
+  it, and so is a trailing `)` or `]` without its partner in the URL, so
+  `(see https://example.com/a).` links `https://example.com/a` while
+  `https://en.wikipedia.org/wiki/Pond_(water)` keeps its `)`. One in a
+  code span, a fence, a link (a refused one included) or an image reference
+  is not linked again.
 
 Images, links and bare URLs are Lotuspod's own, outside the subset its
 reference converter takes. Everything from a `## Concrete commands` heading
@@ -152,7 +154,9 @@ and not naming a `target` of its own - opens in the same tab when it points
 at the page's own site (a relative path, an `#anchor` or an absolute URL on
 the same origin), and in a new tab, with `rel="noopener noreferrer"`, when
 it points anywhere else. The site's address is only known in the browser,
-so this is set as the page loads, not written into the HTML.
+so this is set as the page loads, not written into the HTML; a page whose
+body holds an absolute `http:` or `https:` link always loads the page script
+for it.
 
 `render --markdown` draws an image only from a media URL (`/media/NAME`, an
 image `publish` has stored; see [Images](#images)) and refuses any other

@@ -19,14 +19,14 @@
   // URL, bold or italic. Italic opens on a `*` before a non-space and closes
   // on one after a non-space, so a lone `2 * 3` is text. A bare URL, as
   // lotuspod.markdown's: `http://` or `https://` (any case) not after a
-  // letter, digit or `/`, up to the next space, `<`, `>`, `"` or backtick
-  // (mdUrl trims its end). The ones before it are matched first, so a URL in
+  // letter, digit or `/`, up to the next space, `<`, `>`, `"`, backtick or
+  // `**` (mdUrl trims its end). The ones before it are matched first, so a URL in
   // a code span, an image or a link, refused or not, is never linked again.
   var MD_INLINE = new RegExp([
     "`([^`\\n]+)`",
     "(!)\\[[^\\]\\n]*\\]\\(" + MD_TARGET + "\\)",
     "\\[([^\\]\\n]+)\\]\\(" + MD_TARGET + "\\)",
-    "(?<![\\p{L}\\p{N}/])(https?:\\/\\/[^\\s<>\"`]+)",
+    "(?<![\\p{L}\\p{N}/])(https?:\\/\\/(?:(?!\\*\\*)[^\\s<>\"`])+)",
     "\\*\\*(?=\\S)([\\s\\S]*?\\S)\\*\\*",
     "\\*(?=[^\\s*])([\\s\\S]*?[^\\s*])\\*(?!\\*)",
   ].join("|"), "iu");
@@ -36,7 +36,7 @@
   var MD_LINK_TARGET = /^(?:https?:\/\/|(?!\/\/)[^:\/?#]*(?:[\/?#]|$))/i;
   // What a bare URL never ends with, and the brackets it ends with only in
   // pairs.
-  var MD_URL_TRAIL = ".,;:*";
+  var MD_URL_TRAIL = ".,;:";
   var MD_URL_PAIRS = { ")": "(", "]": "[" };
 
   // A bare URL's link: url less its trailing punctuation and unpaired

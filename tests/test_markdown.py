@@ -39,7 +39,7 @@ from unittest import mock
 
 from tests.test_manifest_v2 import SRC_DIR, TempDirTestCase, run_cli
 
-from lotuspod import media
+from lotuspod import cli, media
 from lotuspod.markdown import images, to_body, with_sources
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -492,6 +492,22 @@ class BareUrlTests(unittest.TestCase):
                 body = to_body(f"See {text} here.\n")
                 self.assertEqual(body, f"<p>See {text} here.</p>\n")
 
+    def test_a_star_at_the_end_stays_in_the_url(self):
+        (p,) = self.body("Search https://example.com/find* now.\n").elements
+        (link,) = p.elements
+        self.assertLink(link, "https://example.com/find*", "https://example.com/find*")
+        self.assertEqual(p.text(), "Search https://example.com/find* now.")
+
+    def test_a_refused_link_and_an_image_reference_with_parentheses_stay_text_whole(self):
+        for source in ("[https://example.com/refused](mailto:a@x)",
+                       "[https://example.com/refused](javascript:alert(1))",
+                       "See ![chart](https://example.com/chart_(pond).png) now."):
+            with self.subTest(source=source):
+                body = to_body(source + "\n")
+                self.assertEqual(body, f"<p>{source}</p>\n")
+                (p,) = parse(body).elements
+                self.assertEqual((p.elements, p.text()), ([], source))
+
 
 class PublishedLinkTests(TempDirTestCase):
     def publish(self, source: Path) -> str:
@@ -609,6 +625,25 @@ class RenderMarkdownTests(TempDirTestCase):
             )
         self.assertEqual(rc, 0, err)
         self.assertEqual(self.page("n"), expected)
+
+    def test_a_page_with_an_absolute_link_loads_the_page_script_and_one_without_does_not(self):
+        """A page with no headings, comments, decisions or revision still
+        loads the page script when its body may link off the site, so such
+        a link opens in a new tab."""
+        for name, source, loads in (
+            ("bare", "See https://example.com/x for more.\n", True),
+            ("linked", "See [the site](http://example.com/) for more.\n", True),
+            ("relative", "See [the part](other.md#part) or [the top](#top).\n", False),
+        ):
+            with self.subTest(name=name):
+                with mock.patch("sys.stdin", io.StringIO(source)):
+                    rc, _, err = run_cli(
+                        "render", "--markdown", "-", "--name", name, "--title", "T",
+                        "--out-dir", str(self.out_dir), *self.COMMON,
+                    )
+                self.assertEqual(rc, 0, err)
+                page = self.page(name).decode("utf-8")
+                self.assertEqual(f'<script src="{cli.PAGE_SCRIPT}?v=' in page, loads)
 
     def test_a_body_larger_than_the_command_line_renders_in_a_subprocess(self):
         paragraph = "A line of prose that repeats to make the page large & long. " * 4

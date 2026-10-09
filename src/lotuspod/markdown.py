@@ -30,11 +30,12 @@ before bold, so bold works around a link and inside its text.
 A bare URL is Lotuspod's own too: `http://` or `https://` (any case), not
 after a letter, digit or `/`, with at least one character after `//`, up to
 the next whitespace, `<`, `>`, `"` or backtick, is an `a` element whose
-`href` and text are that URL. Trailing `.`, `,`, `;`, `:` and `*` are taken
-off it one at a time, and so is a trailing `)` or `]` without its opening
-partner in the URL, so `(see https://example.com/a).` links the URL alone.
-Bare URLs are matched after links, so none inside a code span, a link (its
-target or its text) or an image reference is linked, and before bold.
+`href` and text are that URL; it also stops before `**`, so bold closes
+around it. Trailing `.`, `,`, `;` and `:` are taken off it one at a time,
+and so is a trailing `)` or `]` without its opening partner in the URL, so
+`(see https://example.com/a).` links the URL alone. Bare URLs are matched
+after links, so none inside a code span, a link (its target or its text, a
+refused link's included) or an image reference is linked, and before bold.
 """
 
 from __future__ import annotations
@@ -71,13 +72,19 @@ _LINK_TARGET = re.compile(r"https?://|(?!//)[^:/?#]*(?:[/?#]|$)", re.IGNORECASE)
 # image reference, each passed over whole, or a bare http(s) URL outside them,
 # not after a letter, digit or `/`, running to whitespace, a `<`, `>`, `"` or
 # backtick (`&lt;` and `&gt;` once escaped).
+# A refused link or an image reference is passed over whole too, its target
+# allowed parentheses in pairs, so that neither `javascript:alert(1)` nor
+# `chart_(pond).png` is read in part. A bare URL stops before `**`, so bold
+# around it closes outside it.
+_PAIRED_TARGET = r"[^\s()<]*(?:\([^\s()<]*\)[^\s()<]*)*"
 _BARE_URL = re.compile(
-    rf"{_CODE}|<a [^>]*>.*?</a>|{_INLINE_IMAGE}"
-    r"|(?<![^\W_])(?<!/)(https?://(?:(?!&lt;|&gt;)[^\s<>\"`])+)",
+    rf"{_CODE}|<a [^>]*>.*?</a>"
+    rf"|!?\[(?:{_INLINE_IMAGE}|{_TEXT})*\]\({_PAIRED_TARGET}\)"
+    r"|(?<![^\W_])(?<!/)(https?://(?:(?!&lt;|&gt;|\*\*)[^\s<>\"`])+)",
     re.IGNORECASE,
 )
 # What a bare URL never ends with, as against what it may hold in pairs.
-_URL_TRAIL = ".,;:*"
+_URL_TRAIL = ".,;:"
 _URL_PAIRS = {")": "(", "]": "["}
 
 

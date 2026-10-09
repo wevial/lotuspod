@@ -20,6 +20,8 @@ const NAME = 'check-comment-markdown';
 const PAGE = `/${NAME}.html`;
 // The page a same-site link in a bubble goes to.
 const TARGET = 'check-comment-markdown-target';
+// A page with no comments and no sections, whose links still take their tab.
+const PLAIN = 'check-comment-markdown-plain';
 const ENV = process.env;
 // The site's own origin, the checks' baseURL.
 const SITE = ENV.LOTUSPOD_URL ?? '';
@@ -74,6 +76,11 @@ test.beforeAll(() => {
       '--owner', OWNER, '--credential', HERMES, '--body', body, '--out-dir', OUT,
     ], { env: { ...ENV, PYTHONPATH: SRC }, stdio: ['ignore', 'pipe', 'pipe'], timeout: 60_000 });
   }
+  execFileSync(PYTHON, [
+    '-m', 'lotuspod', 'render', '--name', PLAIN, '--title', 'Check comment markdown plain',
+    '--body', `<p>See <a href="https://example.com/plain">elsewhere</a> or <a href="#top">the top</a>.</p>\n`,
+    '--out-dir', OUT,
+  ], { env: { ...ENV, PYTHONPATH: SRC }, stdio: ['ignore', 'pipe', 'pipe'], timeout: 60_000 });
 });
 
 // `lotuspod comments ACTION ... --json` as hermes; what it printed.
@@ -247,8 +254,11 @@ test.describe('signed in', () => {
     const here = `${SITE}/${TARGET}.html`;
     const said = `The target is ${here} and the pond is at https://example.com/pond.`;
     const root = await post(request, 'frogs', said);
+    const starred = await post(request, 'frogs', 'Search https://example.com/find* now.');
     await page.goto(PAGE);
     await open(page, 'frogs');
+    // A star at the end stays in the URL.
+    await expect(bubble(page, starred).locator('a')).toHaveAttribute('href', 'https://example.com/find*');
     const links = bubble(page, root).locator('a');
     await expect(links).toHaveCount(2);
     const [same, away] = [links.nth(0), links.nth(1)];
@@ -303,6 +313,18 @@ test.describe('signed in', () => {
       await expect(link).toHaveCount(1);
       await expect(link).not.toHaveAttribute('target');
     }
+    await seen.clean();
+  });
+
+  test('a page with no comments and no sections opens its links off the site in a new tab', async ({ page }) => {
+    const seen = await watch(page);
+    await page.goto(`/${PLAIN}.html`);
+    const body = page.locator('.artifact-body');
+    const away = body.locator('a[href="https://example.com/plain"]');
+    await expect(away).toHaveAttribute('target', '_blank');
+    await expect(away).toHaveAttribute('rel', 'noopener noreferrer');
+    await expect(body.locator('a[href="#top"]')).not.toHaveAttribute('target');
+    await page.waitForLoadState('networkidle');
     await seen.clean();
   });
 
