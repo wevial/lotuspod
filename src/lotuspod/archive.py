@@ -152,7 +152,9 @@ def over_ssh(args: argparse.Namespace, config: dict[str, str], action: str) -> i
     argv = [action, "--local", f"--out-dir={out_dir}"]
     if getattr(args, "superseded_by", None) is not None:
         argv.append(f"--superseded-by={args.superseded_by}")
-    argv.append(args.name)
+    # A NAME beginning with '-' (render takes one) would be read as an option
+    # on the far side; after '--' it is NAME.
+    argv += ["--", args.name] if args.name.startswith("-") else [args.name]
     command = config.get("command") or cli.DEFAULT_REMOTE_COMMAND
     remote = " ".join([command, *(shlex.quote(arg) for arg in argv)])
     # Nothing rides on standard input, so the far side never waits for it.
@@ -166,10 +168,6 @@ def over_ssh(args: argparse.Namespace, config: dict[str, str], action: str) -> i
 def _run(args: argparse.Namespace, archived: bool) -> int:
     action = "archive" if archived else "unarchive"
     superseded_by = getattr(args, "superseded_by", None)
-    # NAME rides to the far side as a bare argument: one beginning with '-'
-    # would be taken for an option there, and names no page here either.
-    if args.name.startswith("-"):
-        raise RuntimeError(f"not a page name: {args.name!r}; nothing written")
     if not args.local:
         try:
             config = cli.publish_config()

@@ -198,6 +198,18 @@ class ArchiveCommandTests(LocalSite):
         self.assertEqual(self.unarchive("dotted.name").returncode, 0)
         self.assertFalse((self.out / "dotted.name.archived.json").exists())
 
+    def test_a_page_render_named_with_a_leading_dash_is_archived_and_unarchived(self):
+        done = self.cli("render", "--name=-dash", "--title", "Dash", "--body", "<p>Visible.</p>",
+                        "--out-dir", str(self.out))
+        self.assertEqual(done.returncode, 0, done.stderr)
+
+        done = self.cli("archive", "--local", "--out-dir", str(self.out), "--", "-dash")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertTrue((self.out / "-dash.archived.json").is_file())
+        done = self.cli("unarchive", "--local", "--out-dir", str(self.out), "--", "-dash")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertFalse((self.out / "-dash.archived.json").exists())
+
     def test_a_rebuild_that_fails_puts_back_what_it_wrote(self):
         (self.out / "new.archived.json").write_text("{broken", encoding="utf-8")
         before = subjects(self.out)
@@ -265,6 +277,18 @@ class RemoteArchiveTests(publish_remote.RemotePublishTestCase):
         self.assertEqual(self.remote_argv(self.calls()[-1]),
                          ["unarchive", "--local", f"--out-dir={self.out_dir}", "old"])
         self.assertFalse((self.out_dir / "old.archived.json").exists())
+
+    def test_a_name_with_a_leading_dash_rides_after_double_dash(self):
+        done = self.lotuspod("render", "--name=-dash", "--title", "Dash",
+                             "--body", "<p>Visible.</p>", "--out-dir", str(self.out_dir))
+        self.assertEqual(done.returncode, 0, done.stderr)
+
+        done = self.lotuspod("archive", "--superseded-by", "new", "--", "-dash")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        (call,) = self.calls()
+        self.assertEqual(self.remote_argv(call), ["archive", "--local", f"--out-dir={self.out_dir}",
+                                                  "--superseded-by=new", "--", "-dash"])
+        self.assertTrue((self.out_dir / "-dash.archived.json").is_file())
 
     def test_the_far_sides_refusal_comes_back_as_its_exit_status(self):
         done = self.lotuspod("archive", "missing")
