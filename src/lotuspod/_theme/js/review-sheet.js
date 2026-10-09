@@ -143,7 +143,9 @@
     var next = element("a", "artifact-review-next");
     next.href = "#";
     var nextQuestion = element("span", "artifact-review-next-question");
-    next.append("Next open", nextQuestion, " ", mute(element("span", "", "↓")));
+    var nextText = element("span", "artifact-review-next-text");
+    nextText.append("Next open", nextQuestion);
+    next.append(nextText, mute(element("span", "artifact-review-next-arrow", "↓")));
     var count = element("button", "artifact-review-count");
     count.type = "button";
     count.setAttribute("aria-expanded", "false");

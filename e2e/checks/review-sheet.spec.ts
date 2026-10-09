@@ -71,6 +71,13 @@ async function stored(request: APIRequestContext) {
   return (await response.json()).questions;
 }
 
+// The site keeps every answer saved, so a check that saves, or counts on the
+// answers the earlier ones saved, can only run once per site: with
+// --repeat-each it runs in the first repeat, and the repeats rerun the rest.
+function firstRepeatOnly() {
+  test.skip(test.info().repeatEachIndex > 0, 'builds on the answers the first repeat saved');
+}
+
 async function quiet(target: ReturnType<Page['locator']>) {
   return target.evaluate((node) => {
     const style = getComputedStyle(node);
@@ -82,6 +89,7 @@ test.describe('signed in', () => {
   test.use({ extraHTTPHeaders: SIGNED_IN, viewport: { width: 1280, height: 800 } });
 
   test('the title bar counts the open questions, and the outline and headings mark them', async ({ page }) => {
+    firstRepeatOnly();
     expect(ASSERTION, 'LOTUSPOD_TEST_ASSERTION names an assertion the site accepts').toBeTruthy();
     const seen = await watch(page);
     await page.goto(PAGE);
@@ -111,6 +119,7 @@ test.describe('signed in', () => {
   });
 
   test('Next open steps through the open questions and wraps round', async ({ page }) => {
+    firstRepeatOnly();
     await page.goto(PAGE);
     const the = sheet(page);
     await expect(the.count).toHaveText('3 to answer · Respond');
@@ -134,6 +143,7 @@ test.describe('signed in', () => {
   });
 
   test('the panel lists every question under its section with its state', async ({ page }) => {
+    firstRepeatOnly();
     await page.goto(PAGE);
     const the = sheet(page);
     await the.count.click();
@@ -158,6 +168,7 @@ test.describe('signed in', () => {
   });
 
   test('a pick in the panel or on the page moves both, and one Save stores every answer', async ({ page, request }) => {
+    firstRepeatOnly();
     const seen = await watch(page);
     await page.goto(PAGE);
     const the = sheet(page);
@@ -218,6 +229,7 @@ test.describe('signed in', () => {
   });
 
   test('a refused answer stays not saved while the others save', async ({ page, request }) => {
+    firstRepeatOnly();
     // The page reads nothing answered; the answer to D3 is refused as stale.
     await page.route((url) => url.pathname === '/api/answers', async (route) => {
       const request = route.request();
@@ -247,6 +259,7 @@ test.describe('signed in', () => {
   });
 
   test('a form posts one answer at a time, so its form Save never lands after a panel Save', async ({ page, request }) => {
+    firstRepeatOnly();
     // The page reads nothing answered; the form's own post of D3 is held.
     let release = () => {};
     const held = new Promise<void>((resolve) => { release = resolve; });
@@ -279,6 +292,7 @@ test.describe('signed in', () => {
   });
 
   test('a pick in the panel stays picked when its saved form is opened with "change"', async ({ page, request }) => {
+    firstRepeatOnly();
     const before = (await stored(request))['decision-d1'].current.choice;
     const other = before === 'codex' ? 'Claude Opus' : 'Codex';
     await page.goto(PAGE);
@@ -299,6 +313,7 @@ test.describe('signed in', () => {
   });
 
   test('a changed note is not saved until the panel saves it', async ({ page, request }) => {
+    firstRepeatOnly();
     await page.goto(PAGE);
     const the = sheet(page);
     const form = the.form('decision-d1');
@@ -315,6 +330,7 @@ test.describe('signed in', () => {
   });
 
   test('a form answered only to an earlier wording gets its default picked on the form and in the panel', async ({ page }) => {
+    firstRepeatOnly();
     await page.route((url) => url.pathname === '/api/answers', (route) =>
       route.request().method() === 'GET'
         ? route.fulfill({ json: { page: 'capture-review-sheet', questions: {
@@ -339,6 +355,7 @@ test.describe('signed in', () => {
   });
 
   test('a refused change to a saved form opens it to say why', async ({ page, request }) => {
+    firstRepeatOnly();
     const before = (await stored(request))['decision-d1'].current.choice;
     const other = before === 'codex' ? 'Claude Opus' : 'Codex';
     await page.route((url) => url.pathname === '/api/answers', (route) =>
@@ -362,6 +379,7 @@ test.describe('signed in', () => {
   });
 
   test('a failed read of the answers draws no sheet and picks no default', async ({ page, request }) => {
+    firstRepeatOnly();
     const before = (await stored(request))['decision-d1'].current;
     await page.route((url) => url.pathname === '/api/answers', (route) =>
       route.request().method() === 'GET' ? route.fulfill({ status: 503, body: '' }) : route.continue());
@@ -423,6 +441,68 @@ test.describe('signed in', () => {
       });
     });
   }
+
+  test.describe('at 280 wide, then 1280', () => {
+    test.use({ viewport: { width: 280, height: 640 } });
+
+    test('Next open ends in an ellipsis when narrow and shows whole when wide', async ({ page }) => {
+      await page.route((url) => url.pathname === '/api/answers', (route) =>
+        route.request().method() === 'GET'
+          ? route.fulfill({ json: { page: 'capture-review-sheet', questions: {} } })
+          : route.continue());
+      await page.goto(PAGE);
+      const the = sheet(page);
+      await expect(the.count).toHaveText('3 to answer · Respond');
+      // The words truncate in their own span; the arrow after them lies
+      // wholly inside the link and the window, so it shows whole.
+      const fit = () => the.next.evaluate((link) => {
+        const words = link.querySelector('.artifact-review-next-text') as HTMLElement;
+        const arrow = (link.querySelector('.artifact-review-next-arrow') as HTMLElement).getBoundingClientRect();
+        const box = link.getBoundingClientRect();
+        return {
+          overflow: getComputedStyle(words).textOverflow,
+          scroll: words.scrollWidth,
+          client: words.clientWidth,
+          arrow: arrow.width > 0 && arrow.height > 0
+            && arrow.left >= box.left && arrow.right <= box.right
+            && arrow.top >= box.top && arrow.bottom <= box.bottom
+            && arrow.left >= 0 && arrow.right <= document.documentElement.clientWidth
+            && arrow.top >= 0 && arrow.bottom <= document.documentElement.clientHeight,
+        };
+      });
+      const narrow = await fit();
+      expect(narrow.overflow).toBe('ellipsis');
+      expect(narrow.scroll).toBeGreaterThan(narrow.client);
+      expect(narrow.client).toBeGreaterThan(0);
+      expect(narrow.arrow).toBe(true);
+
+      await page.setViewportSize({ width: 1280, height: 800 });
+      await expect(the.next).toContainText('Next open');
+      const wide = await fit();
+      expect(wide.scroll).toBeLessThanOrEqual(wide.client);
+      expect(wide.arrow).toBe(true);
+    });
+
+    test('with no question open the title stays and the count fits', async ({ page }) => {
+      await page.route((url) => url.pathname === '/api/answers', (route) =>
+        route.request().method() === 'GET'
+          ? route.fulfill({ json: { page: 'capture-review-sheet', questions: {} } })
+          : route.continue());
+      await page.goto(PAGE);
+      const the = sheet(page);
+      await expect(the.count).toHaveText('3 to answer · Respond');
+      await expect(page.locator('.artifact-topbar-title')).toBeHidden();
+      // A pick on each form with no default leaves no question open, unsaved.
+      for (const question of ['decision-d2', 'decision-d3', 'decision-d6']) {
+        await the.form(question).locator('input[name="choice"]').first().check();
+      }
+      await expect(the.next).toBeHidden();
+      expect(await page.locator('.artifact-topbar-title').evaluate((title) => getComputedStyle(title).display))
+        .not.toBe('none');
+      const box = await the.count.boundingBox();
+      expect(box!.x + box!.width).toBeLessThanOrEqual(280);
+    });
+  });
 });
 
 test.describe('without JavaScript', () => {
