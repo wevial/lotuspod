@@ -443,9 +443,12 @@
       };
 
       // What happened, in one line; questions maps a decision's id to its
-      // text, as the page's answers in the feed name it.
+      // text, as the page's answers in the feed or the page itself name it.
+      // Until the page is read, or when it cannot be, a comment on a
+      // decision names its section's title, never the decision's id.
       const whatOf = (event, questions) => {
-        const section = event.sectionTitle || event.section;
+        // A section's title; its id is internal.
+        const section = event.sectionTitle;
         if (event.kind === "version") {
           if (event.first) return "published the page";
           return event.summary && event.summary !== "new version"
@@ -455,7 +458,8 @@
         if (event.kind === "comment") {
           if (event.question !== undefined && event.question !== null) {
             const text = questions.get(String(event.question));
-            return `commented on ${text ? quoted(text) : `question ${event.question}`}`;
+            if (text) return `commented on ${quoted(text)}`;
+            return section ? `commented on ${quoted(section)}` : "commented on a decision";
           }
           return section ? `commented on ${quoted(section)}` : "commented on the page";
         }
@@ -478,29 +482,90 @@
         return node;
       };
 
+      const linkOf = (name) => {
+        const row = rowOf.get(name);
+        return row ? row.cells[0].querySelector("a") : null;
+      };
+
+      const hrefOf = (name) => {
+        const link = linkOf(name);
+        return link ? link.getAttribute("href") : `${encodeURIComponent(name)}.html`;
+      };
+
+      // Each page's decision questions by id, as the page asks them: the
+      // activity route gives a comment on a decision only the decision's id.
+      // A page is read once, when a comment in the feed is on a question no
+      // answer in the feed names; null while it is being read.
+      const pageQuestions = new Map();
+
+      const questionsOf = (entry) => {
+        const questions = new Map();
+        for (const event of entry.events) {
+          if (event && event.kind === "answer" && event.questionText) {
+            questions.set(String(event.question), String(event.questionText));
+          }
+        }
+        for (const [id, text] of pageQuestions.get(entry.page) || []) {
+          if (!questions.has(id)) questions.set(id, text);
+        }
+        return questions;
+      };
+
+      // The page's questions, parsed inert - no script in it runs - and only
+      // their text read; none when the page cannot be read.
+      const readQuestions = async (name) => {
+        const found = new Map();
+        try {
+          const response = await fetch(hrefOf(name), { cache: "no-store" });
+          if (!response.ok) return found;
+          const page = new DOMParser().parseFromString(await response.text(), "text/html");
+          for (const form of page.querySelectorAll("form[data-question]")) {
+            const text = form.querySelector(".artifact-decision-text");
+            const words = text ? text.textContent.trim() : "";
+            if (words) found.set(form.dataset.question, words);
+          }
+        } catch (ignored) {
+          // Named by their section, as if the page had none.
+        }
+        return found;
+      };
+
+      // Read each page whose decision comments the feed leaves unnamed, then
+      // build the groups again.
+      const askQuestions = () => {
+        for (const entry of feed ? feed.pages : []) {
+          if (pageQuestions.has(entry.page)) continue;
+          const questions = questionsOf(entry);
+          const unnamed = entry.events.some((event) => event && event.kind === "comment" &&
+            event.question !== undefined && event.question !== null &&
+            !questions.has(String(event.question)));
+          if (!unnamed) continue;
+          pageQuestions.set(entry.page, null);
+          readQuestions(entry.page).then((found) => {
+            pageQuestions.set(entry.page, found);
+            if (found.size) showActivity();
+          });
+        }
+      };
+
       // One page's group: its header row - title, labels, unread badge and
       // event count - then its events.
       const buildGroup = (entry) => {
         const name = entry.page;
         const row = rowOf.get(name);
         const labels = row ? labelsOf.get(row) : [];
-        const rowLink = row ? row.cells[0].querySelector("a") : null;
+        const rowLink = linkOf(name);
         const title = String(entry.title || (rowLink && rowLink.textContent) || name);
         const events = entry.events.filter((event) =>
           event && KINDS.includes(event.kind) && typeof event.at === "string");
-        const questions = new Map();
-        for (const event of events) {
-          if (event.kind === "answer" && event.questionText) {
-            questions.set(String(event.question), String(event.questionText));
-          }
-        }
+        const questions = questionsOf(entry);
 
         const section = element("section", "index-activity-page");
         section.dataset.page = name;
         const head = element("div", "index-activity-head");
         const titled = element("h2", "index-activity-title");
         const link = element("a", "", title);
-        link.href = rowLink ? rowLink.getAttribute("href") : `${encodeURIComponent(name)}.html`;
+        link.href = hrefOf(name);
         titled.append(link);
         head.append(titled);
         if (labels.length) {
@@ -538,12 +603,13 @@
         return { node: section, name, labels, text: [title, ...labels, ...lines].join("\n").toLowerCase() };
       };
 
-      // Build the groups again from the feed, as the seen route's counts or
-      // a Show older answer change them, and filter.
+      // Build the groups again from the feed, as the seen route's counts, a
+      // page's questions or a Show older answer change them, and filter.
       const showActivity = () => {
         activityList.replaceChildren();
         groups = feed ? feed.pages.map(buildGroup) : [];
         filter();
+        askQuestions();
       };
 
       // The activity route's answer for the 7 days before `before`, or the

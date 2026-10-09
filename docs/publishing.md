@@ -556,7 +556,10 @@ for its kind, who did it ("you" for the reader, a version with no owner
 
 - "published the page", or "published a new version: SUMMARY" ("published a
   new version" when nothing named changed);
-- "commented on “SECTION”", or on the decision's question;
+- "commented on “SECTION”", or on the decision's question when it is on one:
+  the route names a comment's decision by its id only, so the question's text
+  is taken from an answer to it in the feed, else read once from the page
+  itself (its section's title, or "a decision", if the page cannot be read);
 - "replied to your comment on “SECTION”" in the reader's own thread, else
   "replied in “SECTION”", followed by "· new, to you" while the reply is
   unread, its dot ringed;

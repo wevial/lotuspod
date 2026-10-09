@@ -358,6 +358,35 @@ test.describe('signed in', () => {
     expect(errors).toEqual([]);
   });
 
+  test('a comment on a decision names its question, read from the page, else its section', async ({ page, request }) => {
+    test.setTimeout(120_000);
+    const errors = watchErrors(page);
+    const name = 'activity-check-decision';
+    publish(name, ['# Activity check decision', '', 'Before the frost.', '',
+      '## Decisions for the maintainer', '',
+      '| # | Question | Options |', '|---|---|---|',
+      '| 1 | Freeze the pond? | Yes / No |', ''].join('\n'));
+    const posted = await request.post(COMMENTS, {
+      headers: SIGNED_IN, data: { page: name, question: 'decision-1', text: 'What about the fish?' },
+    });
+    expect(posted.status()).toBe(201);
+    const line = group(page, name).locator('li.index-activity-event').first();
+
+    // No answer in the feed names the question: the index reads it from the page.
+    await openIndex(page);
+    await expect(line).toContainText('you commented on “Freeze the pond?”');
+
+    // A page that cannot be read leaves its section's title, here none (the
+    // thread sits in the page's own box), and never an id.
+    await page.route((url) => url.pathname === `/${name}.html`, (route) =>
+      route.fulfill({ status: 404, body: 'gone' }));
+    await openIndex(page, true);
+    await expect(line).toContainText('you commented on a decision');
+    await expect(group(page, name)).not.toContainText('decision-1');
+    await expect(group(page, name)).not.toContainText('“page”');
+    expect(errors).toEqual([]);
+  });
+
   test('answered 404, as the demo answers, the index is the Pages view with no switch', async ({ page }) => {
     const errors = watchErrors(page);
     await page.route((url) => url.pathname === ACTIVITY, (route) =>
