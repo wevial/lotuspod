@@ -5,9 +5,12 @@
     lotuspod comments show PAGE             GET  /v1/threads?page=PAGE
     lotuspod comments claim ID              POST /v1/comments/ID/claim
     lotuspod comments reply ID --claim TOKEN --key KEY (--text TEXT | --text-file PATH)
-        [--revision R] [--model NAME]       POST /v1/comments/ID/reply
+        [--revision R] [--model NAME] [--image PATH]...
+                                            POST /v1/media for each image, then
+                                            POST /v1/comments/ID/reply
     lotuspod comments follow-up ID --key KEY (--text TEXT | --text-file PATH)
-        [--revision R]                      POST /v1/threads/ID/follow-up
+        [--revision R] [--image PATH]...    POST /v1/media for each image, then
+                                            POST /v1/threads/ID/follow-up
     lotuspod comments release ID --claim TOKEN
                                             POST /v1/comments/ID/release
     lotuspod comments fail ID --claim TOKEN --reason TEXT
@@ -24,6 +27,11 @@ image a comment carries is a line under its text: its URL, its size, and
 the path of its file on this host, which an agent reads to see it. A thread
 on a decision names it: `pull` gives its question, its options and its
 current answer, and `show` heads the thread with its id.
+
+A reply or follow-up attaches each --image file, in order: each is read and
+uploaded first, its type named by its extension, and the message names them.
+More than api.MAX_IMAGES images, a file that cannot be read, and an
+extension of no accepted type are refused before anything is uploaded.
 """
 
 from __future__ import annotations
@@ -33,9 +41,10 @@ import json
 import re
 import sys
 import urllib.parse
+from pathlib import Path
 
 # cli imports this module too: only names used at call time are read from it.
-from lotuspod import cli, machine
+from lotuspod import api, cli, machine, media
 
 _BACKTICKS = re.compile(r"`+")
 
@@ -55,7 +64,8 @@ class _Failed(Exception):
         self.message = message
 
 
-def _ask(args: argparse.Namespace, method: str, target: str, body: object = None) -> dict:
+def _ask(args: argparse.Namespace, method: str, target: str, body: object = None,
+         content_type: str | None = None) -> dict:
     """The socket's JSON for one request; _Failed naming the refusal."""
     try:
         token = cli.agent_token(args)
@@ -63,7 +73,8 @@ def _ask(args: argparse.Namespace, method: str, target: str, body: object = None
         raise _Failed("no_credential", str(exc)) from None
     socket_path = cli.agent_socket(args)
     try:
-        status, payload = machine.request(socket_path, token, method, target, body)
+        status, payload = machine.request(socket_path, token, method, target, body,
+                                          content_type)
     except OSError as exc:
         raise _Failed("socket_unavailable", f"cannot reach serve on {socket_path}: {exc}") from None
     except ValueError:
@@ -73,17 +84,21 @@ def _ask(args: argparse.Namespace, method: str, target: str, body: object = None
     return payload
 
 
+def _refused(args: argparse.Namespace, exc: _Failed) -> int:
+    if exc.message:
+        print(f"error: {exc.message}", file=sys.stderr)
+    if args.json:
+        print(json.dumps({"error": exc.error}))
+    elif not exc.message:
+        print(f"error: {exc.error}", file=sys.stderr)
+    return 1
+
+
 def _run(args: argparse.Namespace, method: str, target: str, text, body: object = None) -> int:
     try:
         payload = _ask(args, method, target, body)
     except _Failed as exc:
-        if exc.message:
-            print(f"error: {exc.message}", file=sys.stderr)
-        if args.json:
-            print(json.dumps({"error": exc.error}))
-        elif not exc.message:
-            print(f"error: {exc.error}", file=sys.stderr)
-        return 1
+        return _refused(args, exc)
     print(json.dumps(payload, indent=2) if args.json else text(payload))
     return 0
 
@@ -352,6 +367,45 @@ def _text(args: argparse.Namespace) -> str | None:
         return None
 
 
+# The Content-Type an upload declares, by the extension its type is stored under.
+_CONTENT_TYPES = {extension: media_type for media_type, extension in api.UPLOAD_TYPES.items()}
+
+
+def _read_images(paths: list[str]) -> list[tuple[bytes, str]]:
+    """Each --image file's bytes and Content-Type, in order; _Failed when
+    there are too many, one cannot be read or its extension names no
+    accepted type."""
+    if len(paths) > api.MAX_IMAGES:
+        raise _Failed("too_many_images",
+                      f"{len(paths)} images; a message takes at most {api.MAX_IMAGES}")
+    read = []
+    for path in paths:
+        kind = media.named_type(path)
+        content_type = None if kind is None else _CONTENT_TYPES.get(media.EXTENSIONS[kind])
+        if content_type is None:
+            raise _Failed("unsupported_media_type",
+                          f"{path} is not a .png, .jpg, .jpeg, .webp or .gif file")
+        try:
+            data = Path(path).read_bytes()
+        except OSError as exc:
+            raise _Failed("unreadable_image", f"cannot read {path}: {exc}") from None
+        read.append((data, content_type))
+    return read
+
+
+def _send(args: argparse.Namespace, target: str, body: dict) -> int:
+    """Upload each --image file, then send the message naming them."""
+    try:
+        images = _read_images(args.image)
+        names = [_ask(args, "POST", machine.MEDIA, data, content_type)["name"]
+                 for data, content_type in images]
+    except _Failed as exc:
+        return _refused(args, exc)
+    if names:
+        body["images"] = names
+    return _run(args, "POST", target, reply_text, body)
+
+
 def cmd_reply(args: argparse.Namespace) -> int:
     text = _text(args)
     if text is None:
@@ -361,7 +415,7 @@ def cmd_reply(args: argparse.Namespace) -> int:
         body["revision"] = args.revision
     if args.model is not None:
         body["model"] = args.model
-    return _run(args, "POST", f"/v1/comments/{args.id}/reply", reply_text, body)
+    return _send(args, f"/v1/comments/{args.id}/reply", body)
 
 
 def cmd_follow_up(args: argparse.Namespace) -> int:
@@ -371,7 +425,7 @@ def cmd_follow_up(args: argparse.Namespace) -> int:
     body = {"idempotencyKey": args.key, "text": text}
     if args.revision is not None:
         body["revision"] = args.revision
-    return _run(args, "POST", f"/v1/threads/{args.id}/follow-up", reply_text, body)
+    return _send(args, f"/v1/threads/{args.id}/follow-up", body)
 
 
 def cmd_release(args: argparse.Namespace) -> int:
@@ -468,8 +522,9 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
         "stored twice. With --revision, the reply says it revised the page to revision R, "
         "which must be the page's current revision, or one this credential republished it "
         "at for KEY. With --model, the reply names the model that wrote it, which the page "
-        "shows beside the agent's handle. The comment becomes answered and the "
-        "claim ends. Needs a credential with reply.",
+        "shows beside the agent's handle. Each --image PATH (up to four) is uploaded "
+        "first and shown in the reply's bubble, in order. The comment becomes answered "
+        "and the claim ends. Needs a credential with reply.",
     )
     reply.add_argument("id", type=_comment_id, metavar="ID", help="the comment's id")
     reply.add_argument("--claim", required=True, metavar="TOKEN",
@@ -483,6 +538,8 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
                        help="the page's revision after the agent revised it")
     reply.add_argument("--model", default=None, metavar="NAME",
                        help="the model that wrote the reply, in 1 to 40 printable characters")
+    reply.add_argument("--image", action="append", default=[], metavar="PATH",
+                       help="a PNG, JPEG, WebP or GIF file to attach; repeat for up to four")
     reply.add_argument("--json", action="store_true", help="print the socket's JSON")
     cli.add_agent_options(reply)
     reply.set_defaults(func=cmd_reply)
@@ -496,8 +553,8 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
         "to (the one that answered it): a result promised in an earlier reply reaches the "
         "reader in the same thread. Needs no claim and changes no comment's state; a "
         "resolved thread stays resolved. KEY works as a reply's does: the same KEY again "
-        "prints the message stored with it, and nothing is stored twice. --revision works "
-        "as a reply's does. Needs a credential with reply.",
+        "prints the message stored with it, and nothing is stored twice. --revision and "
+        "--image work as a reply's do. Needs a credential with reply.",
     )
     follow.add_argument("id", type=_comment_id, metavar="ID",
                         help="the id of the thread's first comment")
@@ -509,6 +566,8 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
                       help="a UTF-8 file holding the message's text")
     follow.add_argument("--revision", default=None, metavar="R",
                         help="the page's revision after the agent revised it")
+    follow.add_argument("--image", action="append", default=[], metavar="PATH",
+                        help="a PNG, JPEG, WebP or GIF file to attach; repeat for up to four")
     follow.add_argument("--json", action="store_true", help="print the socket's JSON")
     cli.add_agent_options(follow)
     follow.set_defaults(func=cmd_follow_up)

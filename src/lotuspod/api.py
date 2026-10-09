@@ -356,6 +356,22 @@ def _image_names(value: object) -> list[str]:
     return value
 
 
+def stored_images(media_dir: Path | None, names: list[str] | None) -> list[dict]:
+    """Each stored image names names, as {name, width, height}; Refusal
+    unknown_image when one is not in the media store media_dir."""
+    if not names:
+        return []
+    if media_dir is None:
+        raise Refusal(HTTPStatus.SERVICE_UNAVAILABLE, "storage_unavailable")
+    found = []
+    for name in names:
+        image = media.load_stored(media_dir, name)
+        if image is None:
+            raise Refusal(HTTPStatus.BAD_REQUEST, "unknown_image")
+        found.append({"name": name, "width": image.width, "height": image.height})
+    return found
+
+
 def _id(value: object) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= _MAX_ID:
         raise _invalid()
@@ -584,19 +600,7 @@ class Api:
                 times.remove(at)
 
     def _images(self, names: list[str] | None) -> list[dict]:
-        """Each stored image names names, as {name, width, height}; Refusal
-        unknown_image when one is not in the media store."""
-        if not names:
-            return []
-        if self.media_dir is None:
-            raise Refusal(HTTPStatus.SERVICE_UNAVAILABLE, "storage_unavailable")
-        found = []
-        for name in names:
-            image = media.load_stored(self.media_dir, name)
-            if image is None:
-                raise Refusal(HTTPStatus.BAD_REQUEST, "unknown_image")
-            found.append({"name": name, "width": image.width, "height": image.height})
-        return found
+        return stored_images(self.media_dir, names)
 
     def _post_answer(self, headers: Message, body: Body, actor: Mapping) -> dict:
         fields = self._json_body(headers, body)

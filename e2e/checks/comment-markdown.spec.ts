@@ -8,7 +8,8 @@ import { expect, test, type APIRequestContext, type Locator, type Page } from '@
 // links to anything but http(s), an anchor or a relative path stay as typed.
 // The checks render their own page into the capture fixture's site and find
 // the threads they post by id; hermes replies through real `lotuspod`
-// commands on the fixture's agent socket. At this width a chip opens its
+// commands on the fixture's agent socket, an image attached with --image
+// drawn in its bubble as a reader's is. At this width a chip opens its
 // section's threads in a popover.
 const MEDIUM = { width: 1024, height: 768 };
 test.use({ viewport: MEDIUM });
@@ -24,6 +25,8 @@ const OUT = ENV.LOTUSPOD_TEST_OUT ?? '';
 const PYTHON = ENV.LOTUSPOD_TEST_PYTHON ?? '';
 // This checkout's package, whatever lotuspod is installed.
 const SRC = path.resolve(__dirname, '..', '..', 'src');
+const FIXTURES = path.resolve(__dirname, '..', '..', 'tests', 'fixtures', 'media');
+const FISH = path.join(FIXTURES, 'fish-320x240.jpg');
 const OWNER = 'hermes';
 const BODY = `<p>A page for the comment markdown checks.</p>
 <h2>Pond</h2>
@@ -129,6 +132,14 @@ async function post(request: APIRequestContext, section: string, text: string): 
 // A thread's first bubble: its root comment's text.
 function bubble(page: Page, root: { id: number }) {
   return page.locator(`.artifact-comment-thread[data-thread="${root.id}"] .artifact-comment-item--reader .artifact-comment-text`).first();
+}
+
+// An image's natural width and height, once its bytes have arrived.
+async function natural(image: Locator) {
+  await expect.poll(() => image.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0), {
+    timeout: 10_000,
+  }).toBe(true);
+  return image.evaluate((img: HTMLImageElement) => [img.naturalWidth, img.naturalHeight]);
 }
 
 // Exactly the characters a node holds, whitespace and all.
@@ -341,6 +352,33 @@ test.describe('signed in', () => {
     await expect(theirs.locator('strong')).toHaveText('Done.');
     await expect(theirs.locator('ul')).toHaveCount(1);
     await expect(theirs.locator('ul > li')).toHaveText(['drained the filter', 'moved the heater']);
+    await seen.clean();
+  });
+
+  test("hermes's reply with --image draws its image in the reply's bubble", async ({ page, request }) => {
+    test.setTimeout(120_000);
+    const seen = await watch(page);
+    hermes('pull', '--owner', OWNER);
+    const root = await post(request, 'pond', 'What does the pond look like now?');
+    await page.goto(PAGE);
+    await open(page, 'pond');
+    const node = page.locator(`.artifact-comment-thread[data-thread="${root.id}"]`);
+    await expect(node).toBeVisible();
+
+    const claim = hermes('claim', String(root.id));
+    expect(claim.handle).toBe(OWNER);
+    const reply = hermes('reply', String(root.id), `--claim=${claim.claimToken}`, '--key', `image-${root.id}`,
+      '--text', 'Here is the fish.', '--image', FISH);
+    expect(reply.images).toHaveLength(1);
+    const url = reply.images[0].url;
+    expect(url).toMatch(/^\/media\/[0-9a-f]{64}\.jpg$/);
+    const theirs = node.locator('.artifact-comment-item--agent');
+    await expect(theirs).toHaveCount(1, { timeout: 15_000 });
+    await expect(theirs.locator('.artifact-comment-text')).toHaveText('Here is the fish.');
+    const thumbs = theirs.locator('.artifact-comment-images img');
+    await expect(thumbs).toHaveCount(1);
+    await expect(thumbs).toHaveAttribute('src', url);
+    expect(await natural(thumbs)).toEqual([320, 240]);
     await seen.clean();
   });
 });

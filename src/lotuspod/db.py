@@ -37,10 +37,10 @@ resolves or reopens it, one row in resolutions names who did and when, and
 the thread's resolution is its newest row. A reader's reply to a resolved
 thread reopens it. A resolution never changes a comment's state.
 
-A reader's comment may name up to four images in the media store
-(lotuspod.media), each kept by its stored name with its width and height; a
-comment row carries them as `images`, each with its /media/ URL, and an
-empty list when it has none.
+A reader's comment, and an agent's reply or follow-up, may name up to four
+images in the media store (lotuspod.media), each kept by its stored name with
+its width and height; a comment row carries them as `images`, each with its
+/media/ URL, and an empty list when it has none.
 
 A thread may be anchored to a decision rather than a section: each of its
 comments keeps the decision's question id as `question`, beside the section
@@ -573,9 +573,11 @@ class Database:
 
     def reply(self, comment_id: int, *, credential: str, token_hash: str, key: str,
               text: str, revision: str | None, clock: Callable[[], float],
-              page_of: Callable[[str], Mapping | None], model: str | None = None) -> dict:
+              page_of: Callable[[str], Mapping | None], model: str | None = None,
+              images: Sequence[Mapping] = ()) -> dict:
         """Store credential's reply to comment_id under its claim, naming
-        model as its writer when it is not None; the reply.
+        model as its writer when it is not None, with its images, each
+        {name, width, height}, as a reader's comment keeps them; the reply.
 
         clock() is the time the claim is checked at and page_of(name) the
         page {revision, sections} as serve answers it now, or None; both are
@@ -612,12 +614,12 @@ class Database:
             cursor = conn.execute(
                 "INSERT INTO comments (page, section, section_title, revision, parent, text,"
                 " quote, actor, created_at, state, reply_credential, reply_key, model,"
-                " question) VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?)",
+                " question, images) VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (found["page"], found["section"],
                  page["sections"].get(found["section"], ""),
                  # A reply's revision is the page revision it made, if any.
                  revision or "", root, text, _dump(actor), _now(), ANSWERED,
-                 credential, key, model, found.get("question")),
+                 credential, key, model, found.get("question"), _stored_images(images)),
             )
             conn.execute(
                 "UPDATE comments SET state = ?, claim_hash = NULL, claim_expires = NULL"
@@ -628,9 +630,11 @@ class Database:
 
     def follow_up(self, root: int, *, credential: str, handle: str, key: str, text: str,
                   revision: str | None, reopen: bool,
-                  page_of: Callable[[str], Mapping | None]) -> dict:
+                  page_of: Callable[[str], Mapping | None],
+                  images: Sequence[Mapping] = ()) -> dict:
         """Store credential's message, as handle, in the thread whose first
-        comment is root, with no claim; the message.
+        comment is root, with no claim and with images as reply keeps them;
+        the message.
 
         A key credential has used before answers the message stored with
         it. Otherwise refused unknown_thread when root is not a reader's
@@ -659,12 +663,12 @@ class Database:
             actor = {"kind": "agent", "handle": handle, "credential": credential}
             cursor = conn.execute(
                 "INSERT INTO comments (page, section, section_title, revision, parent, text,"
-                " quote, actor, created_at, state, reply_credential, reply_key, question)"
-                " VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?)",
+                " quote, actor, created_at, state, reply_credential, reply_key, question,"
+                " images) VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?)",
                 (found["page"], found["section"],
                  page["sections"].get(found["section"], ""),
                  revision or "", root, text, _dump(actor), _now(), ANSWERED,
-                 credential, key, found.get("question")),
+                 credential, key, found.get("question"), _stored_images(images)),
             )
             _record(conn, "follow-up", found, credential, handle, key)
             if reopen and _resolution(_newest(conn, root))["resolved"]:
