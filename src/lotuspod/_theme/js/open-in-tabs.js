@@ -3,12 +3,14 @@
 // standalone query, and listed on the index (lotuspod:visible), replaces its
 // location with the index its brand link names (index.html is its directory;
 // the demo names pages.html), that pod its one tab and the active one, at the
-// fragment the page was asked with: #tabs=NAME&on=NAME&at=FRAGMENT, which the
+// fragment the page holds then: #tabs=NAME&on=NAME&at=FRAGMENT, which the
 // index script (js/pod-tabs.js) reads. So a pod opened from a link or a
 // bookmark has the tabs and the finder too, and the bare page leaves no
-// history entry. It goes only once that index answers a HEAD itself, 2xx and
-// not redirected: a page rendered with no index beside it, or one whose index
-// sends it back to a page (the demo's / and /index.html), stays, as does a
+// history entry. It goes only once that index answers itself, 2xx and not
+// redirected, within WAIT, with a row for this pod in its listing, as
+// pod-tabs.js reads it: a page rendered with no index beside it, one the
+// index does not list yet, one whose index sends it back to a page (the
+// demo's / and /index.html) or does not answer in time, stays, as does a
 // file opened from disk.
 //
 // This source opens the page script's one statement: it is a function handed
@@ -19,8 +21,12 @@
 (function () {
   "use strict";
 
-  // The address this page opens in tabs at, or null when it stays.
-  function destination() {
+  // How long the index may take to answer before the page stays, in ms.
+  var WAIT = 3000;
+
+  // The index this page may open in, its name and its file, or null when
+  // it stays.
+  function candidate() {
     if (window.top !== window) {
       return null;
     }
@@ -53,29 +59,52 @@
     if (!match) {
       return null;
     }
-    var name = encodeURIComponent(match[1]);
-    var fragment = "#tabs=" + name + "&on=" + name;
-    if (location.hash.length > 1) {
-      fragment += "&at=" + encodeURIComponent(location.hash.slice(1));
-    }
-    return index.pathname.replace(/\/index\.html$/, "/") + fragment;
+    return { index: index.pathname.replace(/\/index\.html$/, "/"), name: match[1] };
+  }
+
+  // Whether the index's listing has a row for the pod, with its link.
+  function lists(html, name) {
+    var listing = new DOMParser().parseFromString(html, "text/html");
+    return Array.prototype.some.call(listing.querySelectorAll(".index-table tbody tr[data-page]"),
+      function (row) {
+        return row.dataset.page === name && Boolean(row.cells[0] && row.cells[0].querySelector("a[href]"));
+      });
   }
 
   return function (page) {
     return function () {
-      var there = destination();
+      var there = candidate();
       if (there === null) {
         page();
         return;
       }
-      fetch(there.split("#")[0], { method: "HEAD", credentials: "same-origin", cache: "no-store" })
+      var stopped = new AbortController();
+      var timer = setTimeout(function () { stopped.abort(); }, WAIT);
+      fetch(there.index, { credentials: "same-origin", cache: "no-store", signal: stopped.signal })
         .then(function (response) {
-          if (response.ok && !response.redirected) {
-            location.replace(there);
-          } else {
-            page();
+          if (!response.ok || response.redirected) {
+            return false;
           }
-        }, page);
+          return response.text().then(function (html) { return lists(html, there.name); });
+        })
+        .then(function (go) {
+          clearTimeout(timer);
+          if (!go) {
+            page();
+            return;
+          }
+          // The fragment the page holds now, a link followed while the index
+          // answered included.
+          var name = encodeURIComponent(there.name);
+          var fragment = "#tabs=" + name + "&on=" + name;
+          if (location.hash.length > 1) {
+            fragment += "&at=" + encodeURIComponent(location.hash.slice(1));
+          }
+          location.replace(there.index + fragment);
+        }, function () {
+          clearTimeout(timer);
+          page();
+        });
     };
   };
 })()

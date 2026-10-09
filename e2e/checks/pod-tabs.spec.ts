@@ -608,6 +608,67 @@ test.describe('signed in', () => {
     }
   });
 
+  test('a pod the index does not list yet, or whose index does not answer in time, stays on its own', async ({ page }) => {
+    const errors = await watch(page);
+    // The page script has run, and stayed: it folds each section under a button.
+    const stayed = async (address: RegExp) => {
+      await expect(page.locator('button.artifact-section-toggle').first()).toBeAttached();
+      await expect(page).toHaveURL(address);
+      await expect(page.locator('.pod-tabs-bar')).toHaveCount(0);
+    };
+
+    // Rendered listed, with no index built after it.
+    const fresh = { name: 'pod-tabs-unindexed', title: 'Pod tabs unindexed' };
+    run('render', '--name', fresh.name, '--title', fresh.title, '--date', '2026-01-02',
+      '--body', '<h2 id="a-section">A section</h2><p>Plain text.</p><h2 id="b-section">B section</h2><p>More.</p>',
+      '--out-dir', OUT);
+    await page.goto(`/${fresh.name}.html#a-section`);
+    await stayed(new RegExp(`/${fresh.name}\\.html#a-section$`));
+    await page.waitForTimeout(500);
+    await expect(page).toHaveURL(new RegExp(`/${fresh.name}\\.html#a-section$`));
+
+    // An index held past the wait: the page stays, and its script runs.
+    let release = () => {};
+    const held = new Promise<void>((resolve) => { release = resolve; });
+    await page.route((url) => url.pathname === '/', async (route) => {
+      await held;
+      await route.continue().catch(() => {});
+    });
+    await page.goto('about:blank');
+    await page.goto(`/${ARTICLE.name}.html#second-section`);
+    await expect(page.locator('button.artifact-section-toggle')).toHaveCount(0);
+    await stayed(new RegExp(`/${ARTICLE.name}\\.html#second-section$`));
+    release();
+    await page.unrouteAll({ behavior: 'ignoreErrors' });
+    expect(errors).toEqual([]);
+  });
+
+  test('a pod whose fragment changes while the index answers opens at the fragment it holds then', async ({ page }) => {
+    const errors = await watch(page);
+    let release = () => {};
+    const held = new Promise<void>((resolve) => { release = resolve; });
+    let asked = false;
+    await page.route((url) => url.pathname === '/', async (route) => {
+      if (route.request().resourceType() === 'fetch') {
+        asked = true;
+        await held;
+      }
+      await route.continue();
+    });
+    await page.goto('about:blank');
+    await page.goto(`/${ARTICLE.name}.html#first-section`);
+    await expect.poll(() => asked).toBe(true);
+    await page.evaluate(() => { location.hash = 'second-section'; });
+    release();
+
+    await expect(strip(page)).toHaveCount(1);
+    await expectActive(page, ARTICLE);
+    await expect(framed(page, ARTICLE).locator('h1')).toHaveText(ARTICLE.title);
+    expect((await shownIn(page, ARTICLE)).hash).toBe('#second-section');
+    await page.unrouteAll({ behavior: 'ignoreErrors' });
+    expect(errors).toEqual([]);
+  });
+
   test('closing a tab activates its right neighbour, else its left, else the listing; the address reopens tabs', async ({ page }) => {
     const errors = await watch(page);
     // The activity route answers once a tab is open: the tabs' fragment then

@@ -824,8 +824,10 @@ with `&at=FRAGMENT` after it when the address had a fragment (encoded as with
 read on load only and never written again. The replace leaves no history
 entry, so Back leaves the site, and nothing else on the bare page runs, so its
 opening is posted to `/api/seen` once, by its frame. It goes only once that
-index answers a `HEAD` itself (2xx, not redirected), so a page rendered with
-no index beside it stays. A page in a frame, an old version (`?version=`,
+index answers itself (2xx, not redirected) within three seconds with a row
+for that page in its listing, so a page rendered with no index beside it, or
+not yet listed on the index, stays. The fragment carried is the one the page
+holds when the index answers. A page in a frame, an old version (`?version=`,
 which runs no script), a page the index does not list, a file opened from
 disk (`file://`), and a page loaded with `?standalone` (for example
 `NAME.html?standalone#a-section`) stay where they are, alone in the window.
