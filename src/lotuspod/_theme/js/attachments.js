@@ -295,8 +295,7 @@
     // A drag that carries files is the composer's: the browser does not
     // open them. One of text alone is left to the browser.
     function carriesFiles(event) {
-      var types = event.dataTransfer ? event.dataTransfer.types : null;
-      return Boolean(types) && Array.prototype.indexOf.call(types, "Files") >= 0;
+      return Boolean(event.dataTransfer) && Array.prototype.indexOf.call(event.dataTransfer.types, "Files") >= 0;
     }
     form.addEventListener("dragover", function (event) {
       if (carriesFiles(event)) {
