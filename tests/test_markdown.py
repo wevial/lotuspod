@@ -557,7 +557,7 @@ class PublishedLinkTests(TempDirTestCase):
         self.assertNotIn("](", root.text())
 
     def test_a_bare_url_in_a_paragraph_a_list_item_a_table_cell_and_a_blockquote(self):
-        url = "https://pages.example.org/lotuspod-product.html"
+        url = "https://example.com/plans/product.html"
         md = self.out_dir / "page.md"
         md.write_text(
             "# Bare URLs\n"
