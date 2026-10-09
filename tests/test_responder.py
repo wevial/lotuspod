@@ -808,22 +808,16 @@ class StartupWaitTests(ResponderCase):
         self.assertEqual(process.wait(30), 0, self.output())
         self.assertTrue(self.replies("orphan", self.row["id"]))
 
-    def assert_gives_up(self, *extra):
-        started = time.monotonic()
-        process = self.launch(*extra, "--wait", "2", stderr=subprocess.PIPE)
-        _, stderr = process.communicate(timeout=10)
-        self.assertLess(time.monotonic() - started, 10)
-        self.assertEqual(process.returncode, 1, stderr)
-        lines = stderr.splitlines()
-        self.assertEqual(len(lines), 1, lines)
-        self.assertIn(str(self.sock), lines[0])
-        self.assertIn("2 seconds", lines[0])
-
-    def test_once_gives_up_after_wait_seconds(self):
-        self.assert_gives_up("--once")
-
-    def test_the_loop_gives_up_after_wait_seconds(self):
-        self.assert_gives_up("--interval", "60")
+    def test_gives_up_after_wait_seconds(self):
+        for mode in (["--once"], ["--interval", "60"]):
+            with self.subTest(mode=mode):
+                process = self.launch(*mode, "--wait", "2", stderr=subprocess.PIPE)
+                _, stderr = process.communicate(timeout=10)
+                self.assertEqual(process.returncode, 1, stderr)
+                lines = stderr.splitlines()
+                self.assertEqual(len(lines), 1, lines)
+                self.assertIn(str(self.sock), lines[0])
+                self.assertIn("2 seconds", lines[0])
 
     def test_sigterm_while_waiting_exits_0(self):
         process = self.launch("--wait", "60")
