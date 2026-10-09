@@ -19,15 +19,30 @@
   padding-left: 0.5rem;
 }
 
+/* Next open's words give way to an ellipsis, its arrow never. */
 .artifact-topbar a.artifact-review-next {
+  column-gap: 0.3em;
+  display: flex;
   min-width: 0;
+}
+
+.artifact-review-next-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.artifact-review-next-arrow {
+  flex: none;
 }
 
 .artifact-review-count {
   flex: none;
 }
 
-.artifact-review-bar [hidden] {
+.artifact-review-bar [hidden],
+.artifact-topbar a.artifact-review-next[hidden] {
   display: none;
 }
 
@@ -357,15 +372,26 @@
   }
 }
 
-/* Narrower than the title bar holds both controls whole: the title gives
-   way first, then Next open to an ellipsis, and the count stays whole. */
+/* Narrower than the title bar holds both controls whole: the title and its
+   separator give way first, then Next open's words to an ellipsis, then
+   those words whole, its arrow kept; the count stays whole. */
 @media (max-width: 22rem) {
+  .artifact-topbar:has(.artifact-review-bar) .artifact-topbar-sep,
   .artifact-topbar:has(.artifact-review-bar) .artifact-topbar-title {
-    flex-shrink: 1000;
+    display: none;
+  }
+
+  .artifact-topbar:has(.artifact-review-bar) {
+    padding-inline: 0.5rem;
   }
 
   .artifact-review-bar {
     flex: 0 1 auto;
     min-width: 0;
+  }
+
+  .artifact-topbar a.artifact-review-next,
+  .artifact-review-count {
+    padding-inline: 0.4rem;
   }
 }

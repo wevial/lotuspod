@@ -435,19 +435,30 @@ test.describe('signed in', () => {
       await page.goto(PAGE);
       const the = sheet(page);
       await expect(the.count).toHaveText('3 to answer · Respond');
-      const fit = () => the.next.evaluate((link) => ({
-        overflow: getComputedStyle(link).textOverflow,
-        scroll: link.scrollWidth,
-        client: link.clientWidth,
-      }));
+      // The words truncate in their own span; the arrow beside them, inside
+      // the link's padding box, shows whole.
+      const fit = () => the.next.evaluate((link) => {
+        const words = link.querySelector('.artifact-review-next-text') as HTMLElement;
+        const arrow = (link.querySelector('.artifact-review-next-arrow') as HTMLElement).getBoundingClientRect();
+        const box = link.getBoundingClientRect();
+        return {
+          overflow: getComputedStyle(words).textOverflow,
+          scroll: words.scrollWidth,
+          client: words.clientWidth,
+          arrow: arrow.width > 0 && arrow.left >= box.left && arrow.right <= box.right - link.clientLeft,
+        };
+      });
       const narrow = await fit();
       expect(narrow.overflow).toBe('ellipsis');
       expect(narrow.scroll).toBeGreaterThan(narrow.client);
+      expect(narrow.client).toBeGreaterThan(0);
+      expect(narrow.arrow).toBe(true);
 
       await page.setViewportSize({ width: 1280, height: 800 });
       await expect(the.next).toContainText('Next open');
       const wide = await fit();
       expect(wide.scroll).toBeLessThanOrEqual(wide.client);
+      expect(wide.arrow).toBe(true);
     });
   });
 });
