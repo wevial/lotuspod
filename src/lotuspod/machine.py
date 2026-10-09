@@ -118,8 +118,9 @@ already. The same option recorded again from the same source, at the same
 version, is not stored again: it answers {answer, created: false} with the
 answer stored first, and {answer, created: true} otherwise, the answer
 carrying `asked` as the pull's do. It is refused, with nothing stored, in
-this order: 400 invalid_body (a missing or extra key, page included), 404
+this order: 400 invalid_body when page is missing or not a string, 404
 unknown_page, 403 handle_not_allowed or operation_not_allowed, 400
+invalid_body for any other missing or extra key or length, 400
 unknown_question, 400 not_a_decision for a checklist, and
 400 invalid_choice for an option the form does not offer. A reader's later
 answer replaces it, as it replaces any.
@@ -606,17 +607,19 @@ class Routes:
     def _record(self, credential: Mapping, headers: Message, body: api.Body | None) -> dict:
         """Store a decision's answer given elsewhere, as the page's owner."""
         fields = _json_body(headers, body)
-        api._keys(fields, {"page", "question", "choice", "source"}, frozenset({"note"}))
-        name = api._text(fields["page"], 1, api.MAX_NAME)
-        question = api._text(fields["question"], 1, api.MAX_NAME)
-        choice = api._text(fields["choice"], 1, api.MAX_NAME)
-        source = api._text(fields["source"], 1, MAX_SOURCE)
-        note = api._text(fields.get("note", ""), 0, api.MAX_TEXT)
-        page = self._page(name)
+        # With no page named, there is none to look up: the body is wrong.
+        if not isinstance(fields.get("page"), str):
+            raise api.Refusal(HTTPStatus.BAD_REQUEST, "invalid_body")
+        page = self._page(fields["page"])
         if page is None:
             raise api.Refusal(HTTPStatus.NOT_FOUND, "unknown_page")
         # A page with no owner is no handle's to answer for.
         _allow(credential, "publish", page.owner)
+        api._keys(fields, {"page", "question", "choice", "source"}, frozenset({"note"}))
+        question = api._text(fields["question"], 1, api.MAX_NAME)
+        choice = api._text(fields["choice"], 1, api.MAX_NAME)
+        source = api._text(fields["source"], 1, MAX_SOURCE)
+        note = api._text(fields.get("note", ""), 0, api.MAX_TEXT)
         asked = api.asked_question(page, question)
         if asked.checklist:
             raise api.Refusal(HTTPStatus.BAD_REQUEST, "not_a_decision")

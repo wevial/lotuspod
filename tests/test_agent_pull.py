@@ -956,6 +956,10 @@ class RecordAnswerTests(PullTestCase):
             ("no page", {key: value for key, value in record.items() if key != "page"},
              None, 400, "invalid_body"),
             ("a null page", {**record, "page": None}, None, 400, "invalid_body"),
+            ("an unknown page and no source", {**no_source, "page": "nowhere"}, None, 404,
+             "unknown_page"),
+            ("an unknown page and a long source",
+             {**record, "page": "nowhere", "source": "s" * 201}, None, 404, "unknown_page"),
         )
         for name, body, credential, status, error in cases:
             with self.subTest(name):
@@ -965,6 +969,18 @@ class RecordAnswerTests(PullTestCase):
 
         status, payload = self.record({**record, "source": "s" * 200})
         self.assertEqual(status, 200, payload)
+
+    def test_a_page_with_a_long_name_takes_a_recorded_answer(self):
+        name = "p" * 101
+        source = self.work / f"{name}.md"
+        source.write_text(PLAN, encoding="utf-8")
+        rc, _out, err = run_cli("publish", str(source), "--out-dir", str(self.out_dir),
+                                "--local", "--owner", "hermes", "--credential", str(self.desk))
+        self.assertEqual(rc, 0, err)
+        status, payload = self.record({"page": name, "question": "decision-1", "choice": "no",
+                                       "source": self.SOURCE})
+        self.assertEqual(status, 200, payload)
+        self.assertEqual(payload["answer"]["page"], name)
 
     def test_the_pull_names_where_the_current_answer_was_given(self):
         self.pull("hermes")

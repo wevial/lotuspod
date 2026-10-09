@@ -200,9 +200,10 @@ was given, in 1 to 200 characters. It needs a credential that may `publish`
 as the page's owner: a page with no owner, or one owned by a handle the
 credential lacks, is 403 `handle_not_allowed`, and a credential without
 `publish` is 403 `operation_not_allowed`. It is refused, with nothing
-stored, in this order: 400 `invalid_body` for a missing or extra key (`page`
-included), a `source` that is not 1 to 200 characters or a `note` over 4000,
-404 `unknown_page`, the 403s above, 400 `unknown_question`, 400 `not_a_decision` for a checklist, and 400
+stored, in this order: 400 `invalid_body` when `page` is missing or not a
+string, 404 `unknown_page`, the 403s above, 400 `invalid_body` for any other
+missing or extra key, a `source` that is not 1 to 200 characters or a `note`
+over 4000, 400 `unknown_question`, 400 `not_a_decision` for a checklist, and 400
 `invalid_choice` for an option the form does not offer. The answer is an
 ordinary answer (see [Answers and
 comments](comments.md#answers-and-comments)) at the version, in the words
