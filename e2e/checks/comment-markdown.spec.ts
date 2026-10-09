@@ -511,6 +511,8 @@ test.describe('signed in', () => {
     const thumbs = theirs.locator('.artifact-comment-images img');
     await expect(thumbs).toHaveCount(1);
     await expect(thumbs).toHaveAttribute('src', url);
+    // A thumbnail loads lazily: this thread may sit below the dialog's fold.
+    await thumbs.scrollIntoViewIfNeeded();
     expect(await natural(thumbs)).toEqual([320, 240]);
     await seen.clean();
   });
