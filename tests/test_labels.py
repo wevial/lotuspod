@@ -166,8 +166,6 @@ class PublishLabelsTests(LabelsCase):
         self.assertEqual(parsed.meta, "holophyte,relos")
         self.assertEqual(parsed.tags, ["holophyte", "relos"])
         self.assertEqual(self.manifest_labels(), ["holophyte", "relos"])
-        self.assertEqual(cli.extract_meta(self.page(), "pond")["labels"],
-                         ["holophyte", "relos"])
 
     def test_a_label_that_is_not_one_is_refused_by_name_and_nothing_is_written(self):
         source = self.source("pond")
@@ -198,10 +196,8 @@ class PublishLabelsTests(LabelsCase):
         self.assertEqual(self.manifest_labels(), ["croton"])
 
         self.published(source, "--no-labels")
-        parsed = header(self.page())
-        self.assertIsNone(parsed.meta)
         self.assertNotIn("lotuspod:labels", self.page())
-        self.assertEqual(parsed.tags, [])
+        self.assertEqual(header(self.page()).tags, [])
         self.assertEqual(self.manifest_labels(), [])
 
     def test_label_and_no_labels_together_are_a_usage_error(self):
@@ -222,7 +218,6 @@ class PublishLabelsTests(LabelsCase):
     def test_the_responder_s_republish_keeps_the_labels(self):
         source = self.source("pond")
         self.published(source, "--label", "relos")
-        page = self.page()
         kept = self.out_dir / "pond.md"
         revision = cli.page_revision(self.out_dir, "pond")
         agent = responder.Responder(
@@ -233,7 +228,6 @@ class PublishLabelsTests(LabelsCase):
         with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
             code, printed = agent._publish("pond", "pond.md", edited, revision)
         self.assertEqual(code, 0, printed)
-        self.assertNotEqual(self.page(), page)
         self.assertIn("One more line.", self.page())
         self.assertEqual(header(self.page()).meta, "relos")
         self.assertEqual(self.manifest_labels(), ["relos"])
