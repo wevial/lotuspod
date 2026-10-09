@@ -29,7 +29,12 @@
       var count = versions.length;
       var link = element("a", "artifact-versions-link", "Versions · " + count);
       link.href = HASH;
-      line.append(" · ", link);
+      // The link takes the slot the theme kept for it at the end of the
+      // line, so the header does not move when it arrives.
+      var slot = element("span", "artifact-versions-slot", "· ");
+      slot.appendChild(link);
+      line.appendChild(slot);
+      line.classList.add("artifact-meta--versions");
 
       // The view, made the first time it is shown.
       var view = null;

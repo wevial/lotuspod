@@ -3,6 +3,28 @@
    date line, and the versions view, shown in place of the header and the
    body while the hash is #versions. The view is a breadcrumb, the heading and
    the versions newest first, one row each, the current one marked. */
+
+/* The link arrives after the page is drawn, so a page with a revision keeps
+   its slot at the end of the date line from the start, as wide as the
+   widest link ("· Versions · 200"). The link fills the slot without moving
+   the header, even where the line wraps. */
+html:has(meta[name="lotuspod:revision"]) .artifact-meta::after,
+.artifact-versions-slot {
+  display: inline-block;
+  margin-left: 0.3em;
+  min-width: 7.5em;
+  white-space: nowrap;
+}
+
+html:has(meta[name="lotuspod:revision"]) .artifact-meta::after {
+  content: "\a0";
+  visibility: hidden;
+}
+
+html:has(meta[name="lotuspod:revision"]) .artifact-meta--versions::after {
+  content: none;
+}
+
 .artifact-versions-link {
   color: var(--color-sky);
   text-decoration-color: var(--link-line);
