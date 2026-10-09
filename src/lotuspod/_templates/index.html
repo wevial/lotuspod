@@ -54,17 +54,20 @@
     // route answers 200, a "Pages | Recent activity" switch appears and the
     // index opens on Recent activity, the last 7 days grouped by page, unless
     // the URL ends #pages. The filters keep one state across both views.
+    // An index with no page has no table: there the controls stay hidden
+    // unless the activity route answers, and its switch is all that is added.
     (() => {
       const table = document.querySelector(".index-table");
-      if (!table) return;
+      // What stands in for the table on an index with no page.
+      const nothing = table ? null : document.querySelector(".index-empty:not(.index-no-match)");
 
-      const body = table.tBodies[0];
-      const headers = Array.from(table.tHead.rows[0].cells);
+      const body = table ? table.tBodies[0] : null;
+      const headers = table ? Array.from(table.tHead.rows[0].cells) : [];
       // Document order is newest update first, filename breaking ties - the
       // listing's stable base. Sorts run from it rather than from the current
       // DOM order, so a sort is repeatable and equal keys keep falling back to
       // that order.
-      const rows = Array.from(body.rows);
+      const rows = body ? Array.from(body.rows) : [];
 
       // A date cell sorts by its time element's full datetime, not the day it
       // shows, so two pages updated on one day keep their order. A title
@@ -289,8 +292,9 @@
           ? `Labels (${checked.length}) \u25BE`
           : "Labels \u25BE";
         showTokens(checked, pressed, unreadPressed);
-        table.hidden = view !== "pages" || shown === 0;
-        noMatch.hidden = view !== "pages" || shown > 0;
+        if (table) table.hidden = view !== "pages" || shown === 0;
+        if (nothing) nothing.hidden = view !== "pages";
+        noMatch.hidden = view !== "pages" || !table || shown > 0;
         activityView.hidden = view !== "activity";
         activityNoMatch.hidden = groups.length === 0 || kept > 0;
         older.hidden = !(feed && feed.older);
@@ -317,7 +321,9 @@
       // tab's title. Without an answer of 200 there are no marks, no counts
       // and no toggles.
       const showSeen = (pages) => {
-        for (const mark of body.querySelectorAll(".index-mark, .index-unread")) mark.remove();
+        for (const mark of document.querySelectorAll(".index-table .index-mark, .index-table .index-unread")) {
+          mark.remove();
+        }
         marked.clear();
         unread.clear();
         if (!pages) {
@@ -596,7 +602,7 @@
           if (fresh) said.append(" · ", element("span", "index-activity-new", "new, to you"));
           item.append(time, dot, said);
           list.append(item);
-          lines.push(`${actor} ${what}`);
+          lines.push(`${actor} ${what}${fresh ? " \u00B7 new, to you" : ""}`);
         }
         section.append(head, list);
         activityList.append(section);
@@ -692,6 +698,7 @@
         const answer = await askActivity(null);
         if (!answer) return;
         feed = answer;
+        controls.hidden = false;
         makeSwitch();
         window.addEventListener("hashchange", showView);
         window.addEventListener("popstate", showView);
@@ -701,7 +708,7 @@
 
       search.addEventListener("input", filter);
       menu.hidden = boxes.length === 0;
-      controls.hidden = false;
+      controls.hidden = !table;
       filter();
       askSeen();
       startActivity();

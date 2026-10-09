@@ -140,6 +140,21 @@ function option(page: Page, label: string) {
     .locator('input[type="checkbox"]');
 }
 
+// An index this checkout's CLI builds over a directory with no page,
+// served in place of the fixture's at the site's root so the theme still
+// loads.
+async function serveEmptyIndex(page: Page) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lotuspod-activity-empty-'));
+  try {
+    run('index', '--out-dir', dir);
+    const body = fs.readFileSync(path.join(dir, 'index.html'), 'utf-8');
+    await page.route((url) => url.pathname === '/', (route) =>
+      route.fulfill({ body, contentType: 'text/html; charset=utf-8' }));
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}
+
 // An activity route answer of one page with one event, `ago` before now.
 function oneEvent(name: string, title: string, event: object, ago: number, older: boolean, to: number) {
   return {
@@ -267,6 +282,9 @@ test.describe('signed in', () => {
       // The search reads a group's events too.
       await page.getByRole('button', { name: `Remove filter ${LABEL}` }).click();
       await expect.poll(() => shownGroups(page)).toEqual([B]);
+      // The unread reply's flag is event text too.
+      await page.getByLabel('Search').fill('new, to you');
+      await expect.poll(() => shownGroups(page)).toEqual([B]);
       await page.getByLabel('Search').fill('by the steps');
       await expect.poll(() => shownGroups(page)).toEqual([]);
       await page.getByLabel('Search').fill('your comment on “heater”');
@@ -384,6 +402,43 @@ test.describe('signed in', () => {
     await expect(line).toContainText('you commented on a decision');
     await expect(group(page, name)).not.toContainText('decision-1');
     await expect(group(page, name)).not.toContainText('“page”');
+    expect(errors).toEqual([]);
+  });
+
+  test('an index with no page opens on Recent activity too, and says there was none', async ({ page }) => {
+    const errors = watchErrors(page);
+    await serveEmptyIndex(page);
+    const now = Date.now();
+    await page.route((url) => url.pathname === ACTIVITY, (route) => route.fulfill({
+      json: { from: new Date(now - 7 * DAY).toISOString(), to: new Date(now).toISOString(),
+        older: false, truncated: false, pages: [] },
+    }));
+    await page.goto('/');
+    const { pages, activity } = views(page);
+    await expect(activity).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('.index-count')).toHaveText('No activity in the last 7 days.');
+    await expect(page.getByText('Nothing in the pond yet.')).toBeHidden();
+    await expect(page.getByText('No activity matches these filters.')).toBeHidden();
+
+    await pages.click();
+    await expect(page.getByText('Nothing in the pond yet.')).toBeVisible();
+    await expect(page.getByText('No pages match these filters.')).toBeHidden();
+    await expect(page.locator('.index-count')).toHaveText('0 pages');
+    expect(errors).toEqual([]);
+  });
+
+  test('an index with no page and no activity answer is as it was', async ({ page }) => {
+    const errors = watchErrors(page);
+    await serveEmptyIndex(page);
+    await page.route((url) => url.pathname === ACTIVITY, (route) =>
+      route.fulfill({ status: 404, contentType: 'application/json', body: '{"error":"not_found"}' }));
+    const read = activityRead(page);
+    await page.goto('/');
+    expect((await read).status()).toBe(404);
+    await expect(page.getByText('Nothing in the pond yet.')).toBeVisible();
+    await expect(page.getByRole('group', { name: 'View' })).toHaveCount(0);
+    await expect(page.locator('.index-controls')).toBeHidden();
+    await expect(page.getByText('No pages match these filters.')).toBeHidden();
     expect(errors).toEqual([]);
   });
 

@@ -544,7 +544,9 @@ each button `aria-pressed`) appears after the title, and the index opens on
 Recent activity unless the URL ends `#pages`: no hash is Recent activity, so
 either view can be linked and the back button moves between them. On any other
 answer (signed out, or the demo site, whose stand-in answers 404) there is no
-switch, and the index is the Pages view, whatever the hash says.
+switch, and the index is the Pages view, whatever the hash says. An index with
+no page gets the switch too, and its controls, only when the route answers; its
+Pages view is the "Nothing in the pond yet." line.
 
 Recent activity is the route's pages in its order, by their latest event,
 newest first. Each page's header row holds its title, linking to it, its labels
@@ -572,7 +574,7 @@ older events at the end of its group, and new pages follow the listed ones.
 The search, the Labels menu and the Updated and Unread toggles keep one state,
 and one "Showing" line, across both views: a page's group is kept when its page
 passes the label and toggle tests its row does, and the search matches its
-title, labels and events. When the filters leave no group, the view reads "No
+title, labels and events, an unread reply's "new, to you" included. When the filters leave no group, the view reads "No
 activity matches these filters." Nothing updates while the index is open; a
 reload or "Show older" asks again.
 
