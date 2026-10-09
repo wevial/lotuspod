@@ -433,14 +433,7 @@
 
   // Without the page's answers there is no telling what is answered: no
   // sheet, so no default is picked or saved over an answer.
-  if (answering && forms.length) {
-    document.addEventListener(ANSWERED, function () {
-      if (answering.read) {
-        reviewSheet(answering);
-      }
-    }, { once: true });
-  }
-
+  //
   // #question=ID, a link from the index's Recent activity: once the answers
   // are drawn, an answered form folded to its saved line, and again on each
   // hashchange, the form asking ID has its section opened if it is folded
@@ -462,6 +455,9 @@
       window.scrollBy({ top: form.getBoundingClientRect().top - under - 16, left: 0, behavior: "instant" });
     };
     document.addEventListener(ANSWERED, function () {
+      if (answering.read) {
+        reviewSheet(answering);
+      }
       toQuestion(true);
       window.addEventListener("hashchange", function () { toQuestion(false); });
     }, { once: true });
