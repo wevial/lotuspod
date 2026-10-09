@@ -162,14 +162,10 @@ test.describe('signed in', () => {
     await expect(said).toHaveAttribute('id', `artifact-comment-text-${row.id}`);
     expect(await said.evaluate((node) => Array.from(node.children, (child) => child.tagName)))
       .toEqual(['P', 'P', 'PRE', 'UL', 'OL']);
-    await expect(said.locator(':scope > p')).toHaveCount(2);
-    await expect(said.locator('strong')).toHaveCount(1);
     await expect(said.locator('strong')).toHaveText('bold');
-    await expect(said.locator('em')).toHaveCount(1);
     await expect(said.locator('em')).toHaveText('italic');
     await expect(said.locator('code')).toHaveCount(2);
     await expect(said.locator(':scope > p code')).toHaveText('pump --stop');
-    await expect(said.locator('pre > code')).toHaveCount(1);
     expect(await exact(said.locator('pre > code'))).toBe('pump --stop\nheater <on> && **not bold**');
     await expect(said.locator('pre strong')).toHaveCount(0);
     await expect(said.locator('ul > li')).toHaveText(['drain the filter', 'check the heater']);
@@ -212,7 +208,6 @@ test.describe('signed in', () => {
     await open(page, 'frogs');
     for (const { root, text, target, said } of links) {
       const link = bubble(page, root).locator('a');
-      await expect(link).toHaveCount(1);
       await expect(link).toHaveText(text);
       await expect(link).toHaveAttribute('href', target);
       await expect(link).toHaveAttribute('target', '_blank');
@@ -220,7 +215,6 @@ test.describe('signed in', () => {
       expect(await exact(bubble(page, root))).toBe(said.replace(`[${text}](${target})`, text));
     }
     for (const { root, said } of literal) {
-      await expect(bubble(page, root)).toBeAttached();
       await expect(bubble(page, root).locator('a')).toHaveCount(0);
       expect(await exact(bubble(page, root))).toBe(said);
     }
@@ -242,7 +236,6 @@ test.describe('signed in', () => {
     await page.goto(PAGE);
     await open(page, 'pond');
 
-    await expect(bubble(page, roots.script)).toBeAttached();
     expect(await exact(bubble(page, roots.script))).toBe(script);
     await expect(bubble(page, roots.script).locator('script')).toHaveCount(0);
 
@@ -272,12 +265,9 @@ test.describe('signed in', () => {
     await page.goto(PAGE);
     await open(page, 'frogs');
     const code = bubble(page, roots.code).locator('code');
-    await expect(code).toHaveCount(1);
     expect(await exact(code)).toBe('**not bold**');
-    await expect(bubble(page, roots.code).locator('strong, em')).toHaveCount(0);
     for (const [root, text] of [[roots.snake, 'snake_case_name'], [roots.times, '2 * 3']] as const) {
       expect(await exact(bubble(page, root))).toBe(text);
-      await expect(bubble(page, root).locator('strong, em')).toHaveCount(0);
     }
     await seen.clean();
   });

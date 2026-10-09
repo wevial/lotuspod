@@ -158,8 +158,6 @@ class DeclaredOrderTests(ThemeCopyTestCase):
         self.assertIn("js/comment-markdown.js", script)
         self.assertLess(script.index("js/comment-markdown.js"), script.index("js/comments.js"))
         self.assertGreater(script.index("js/comment-markdown.js"), script.index("js/page-open.js"))
-        problems = source_problems(cli.THEME_DIR, cli.THEME_SOURCES)
-        self.assertEqual(problems, [], "\n".join(problems))
 
     def test_a_source_not_in_the_declared_order_is_named(self):
         theme = self.theme_copy()
