@@ -175,6 +175,12 @@ Republishing a page keeps its date, summary and treatment unless `--date`,
 `--summary` or `--variant` is given; a new page gets today's date and the
 `report` treatment.
 
+That date is the page's created date. Every publish also stamps the page with
+the time it ran, in UTC to the second (`2026-10-08T17:04:05Z`), in a
+`lotuspod:updated` meta tag. The page's header reads "Created 2026-09-01 ·
+Updated 2026-10-08", or "Created 2026-09-01" alone while the update falls on
+the created day; both show the UTC day. A bare `render` stamps nothing.
+
 A published page takes comments on every section (see [Comments](comments.md#comments));
 `--no-comments` leaves the boxes out. `--owner HANDLE --credential FILE`
 names the agent or seat that published it, and a republish without `--owner`
@@ -333,8 +339,15 @@ The manifest is a versioned document:
 ```
 
 The schema is uniform: every entry carries exactly `file`, `title`, `episode`,
-`date`, `summary`, and `visible`; fields with no value are empty strings, never
-`null`. Entries are sorted by filename.
+`date`, `created`, `updated`, `summary`, and `visible`; fields with no value
+are empty strings, never `null`. Beside the keys shown above, an entry
+carries `created`, the same value as `date` (the page's first date), and
+`updated`, for example `"2026-10-08T17:04:05Z"`: the time its last publish
+stamped (see [Publish a page](#publish-a-page)). A page published before publish stamped it takes,
+when the directory is the top of its own git repository, the time of the
+newest commit that touched it, read from one `git log`; anywhere else, or with
+no such commit, its created date. Entries are sorted by `updated`, newest
+first, with the file name breaking ties.
 
 Visibility is fail-closed: an artifact is listed only when its
 `lotuspod:visible` meta flag is present and exactly `true`. Artifacts rendered
@@ -351,16 +364,19 @@ Build `artifacts/index.html`, a browsable index linking every rendered page:
 lotuspod index               # scans artifacts/ (or pass --out-dir DIR)
 ```
 
-The listing is a table: one row per page, with its number (the `--episode`
-label, in the Page column), title (linking to the page), date, and summary
-parsed from the rendered HTML. Only fail-closed-visible artifacts are listed
+The listing is a table: one row per page, with its title (linking to the
+page), created and updated dates, and summary, as `lotuspod manifest` records
+them. Only fail-closed-visible artifacts are listed
 (same rule as `lotuspod manifest`).
-Rows arrive in filename order and are styled by the lotus theme. Re-running is
+Rows arrive newest update first, the file name breaking ties, and are styled
+by the lotus theme. Re-running is
 safe: `index.html` never lists itself (and is skipped by `lotuspod manifest`
 too).
 
-Click a column header to sort by it (a second click reverses; the Page
-column sorts numerically, and rows with a blank value in the sorted column sink
+Click a column header to sort by it (a second click reverses; the Updated
+column starts sorted newest first, so its first click shows the oldest first.
+A date column sorts by its full time, not the day it shows, and rows with a
+blank value in the sorted column sink
 to the bottom either way), and type in the search box to filter rows down to
 those matching the query in any column. Both are progressive enhancement from a
 script inlined in `index.html` — no extra file to serve — so with scripting off
