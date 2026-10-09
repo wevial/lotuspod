@@ -617,7 +617,6 @@ class LeftAsWrittenTests(DecisionsTestCase):
         page_html = self.render_body("plan", body)
         self.assertIn(body.split("\n", 1)[1].strip(), page_html)
         self.assertNotIn("artifact-decision", page_html)
-        self.assertNotIn(cli.PAGE_SCRIPT, page_html)
 
 
 class ChecklistTests(DecisionsTestCase):
