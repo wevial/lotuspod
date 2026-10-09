@@ -236,12 +236,6 @@
       }
     }
 
-    function words(node) {
-      var copy = node.cloneNode(true);
-      all(UNSEEN, copy).forEach(function (unseen) { unseen.remove(); });
-      return copy.textContent.replace(/\s+/g, " ").trim();
-    }
-
     // The nearest shown heading before the diagram, else the page's title.
     function heading(pre) {
       var found = null;
@@ -252,7 +246,12 @@
         }
       });
       found = found || document.querySelector("h1.artifact-title");
-      return found ? words(found) : "Diagram";
+      if (!found) {
+        return "Diagram";
+      }
+      var copy = found.cloneNode(true);
+      all(UNSEEN, copy).forEach(function (unseen) { unseen.remove(); });
+      return copy.textContent.replace(/\s+/g, " ").trim();
     }
 
     function open(pre, svg, expand) {
