@@ -661,6 +661,34 @@ class ImageReplyTests(ImageTestCase):
         self.expect_image(image, CHART, (1600, 600))
         self.assertEqual(self.replies(comment["id"]), [reply])
 
+    def test_a_retried_key_answers_its_message_though_its_image_has_left_the_store(self):
+        self.pull("hermes")
+        comment = self.comment("Is the heater enough?")
+        token = self.claim("hermes", comment["id"])
+        status, uploaded = self.socket("hermes", "POST", machine.MEDIA, CHART.read_bytes(),
+                                       "image/png")
+        self.assertEqual(status, 200, uploaded)
+        reply_body = {"claimToken": token, "idempotencyKey": "gone-1", "text": "See it.",
+                      "images": [uploaded["name"]]}
+        follow_body = {"idempotencyKey": "gone-2", "text": "And again.",
+                       "images": [uploaded["name"]]}
+        sent = []
+        for target, body in ((f"/v1/comments/{comment['id']}/reply", reply_body),
+                             (f"/v1/threads/{comment['id']}/follow-up", follow_body)):
+            status, row = self.socket("hermes", "POST", target, body)
+            self.assertEqual(status, 200, row)
+            sent.append((target, body, row))
+        (media.media_dir(self.out_dir) / uploaded["name"]).unlink()
+        for target, body, row in sent:
+            with self.subTest(target=target):
+                self.assertEqual(self.socket("hermes", "POST", target, body), (200, row))
+        self.assertEqual(self.replies(comment["id"]), [row for _t, _b, row in sent])
+        # A new key naming it is refused, with nothing stored.
+        status, refused = self.socket("hermes", "POST", f"/v1/threads/{comment['id']}/follow-up",
+                                      {**follow_body, "idempotencyKey": "gone-3"})
+        self.assertEqual((status, refused), (400, {"error": "unknown_image"}))
+        self.assertEqual(len(self.replies(comment["id"])), 2)
+
     def test_too_many_images_or_an_unreadable_file_uploads_nothing(self):
         self.pull("hermes")
         comment = self.comment("Is the heater enough?")

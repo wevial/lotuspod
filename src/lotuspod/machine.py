@@ -554,12 +554,12 @@ class Routes:
         return {"name": image.name, "url": image.url, "width": image.width,
                 "height": image.height}
 
-    def _images(self, fields: dict) -> list[dict]:
-        """The stored images a message's fields name, as a reader's comment
-        names them; none without `images`."""
-        if "images" not in fields:
-            return []
-        return api.stored_images(self.media_dir, api._image_names(fields["images"]))
+    def _images(self, fields: dict) -> Callable[[], list[dict]]:
+        """What looks up the stored images a message's fields name, as a
+        reader's comment names them, once the database knows its key is new;
+        none without `images`. The names' form is checked now."""
+        names = api._image_names(fields["images"]) if "images" in fields else None
+        return lambda: api.stored_images(self.media_dir, names)
 
     def _ack(self, credential: Mapping, answer_id: int) -> dict:
         answer = self.database.answer(answer_id)
@@ -608,7 +608,7 @@ class Routes:
         images = self._images(fields)
         row = self.database.reply(comment_id, credential=name, token_hash=token, key=key,
                                   text=text, revision=revision, model=model, clock=self.clock,
-                                  page_of=self._current, images=images)
+                                  page_of=self._current, images_of=images)
         return self._shown(row)
 
     def _thread_handle(self, credential: Mapping, root: int) -> tuple[api.Page, str]:
@@ -655,7 +655,7 @@ class Routes:
         images = self._images(fields)
         row = self.database.follow_up(root, credential=credential["name"], handle=handle,
                                       key=key, text=text, revision=revision, reopen=reopen,
-                                      page_of=self._current, images=images)
+                                      page_of=self._current, images_of=images)
         return self._shown(row)
 
     def _current(self, name: str) -> dict | None:

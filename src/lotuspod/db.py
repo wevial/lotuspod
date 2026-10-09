@@ -574,10 +574,12 @@ class Database:
     def reply(self, comment_id: int, *, credential: str, token_hash: str, key: str,
               text: str, revision: str | None, clock: Callable[[], float],
               page_of: Callable[[str], Mapping | None], model: str | None = None,
-              images: Sequence[Mapping] = ()) -> dict:
+              images_of: Callable[[], Sequence[Mapping]] | None = None) -> dict:
         """Store credential's reply to comment_id under its claim, naming
-        model as its writer when it is not None, with its images, each
-        {name, width, height}, as a reader's comment keeps them; the reply.
+        model as its writer when it is not None, with the images images_of()
+        gives, each {name, width, height}, as a reader's comment keeps them;
+        the reply. images_of is called only once the key is new, so a
+        retried key answers what it stored whatever has left the media store.
 
         clock() is the time the claim is checked at and page_of(name) the
         page {revision, sections} as serve answers it now, or None; both are
@@ -605,6 +607,7 @@ class Database:
             page = page_of(found["page"])
             if page is None:
                 raise Refused("unknown_page")
+            images = () if images_of is None else images_of()
             if revision is not None and revision != page["revision"] and not _published(
                     conn, comment_id, credential, key, revision):
                 raise Refused("revision_mismatch")
@@ -631,10 +634,10 @@ class Database:
     def follow_up(self, root: int, *, credential: str, handle: str, key: str, text: str,
                   revision: str | None, reopen: bool,
                   page_of: Callable[[str], Mapping | None],
-                  images: Sequence[Mapping] = ()) -> dict:
+                  images_of: Callable[[], Sequence[Mapping]] | None = None) -> dict:
         """Store credential's message, as handle, in the thread whose first
-        comment is root, with no claim and with images as reply keeps them;
-        the message.
+        comment is root, with no claim and with images_of()'s images as reply
+        keeps them; the message.
 
         A key credential has used before answers the message stored with
         it. Otherwise refused unknown_thread when root is not a reader's
@@ -657,6 +660,7 @@ class Database:
             page = page_of(found["page"])
             if page is None:
                 raise Refused("unknown_page")
+            images = () if images_of is None else images_of()
             if revision is not None and revision != page["revision"] and not _published(
                     conn, root, credential, key, revision):
                 raise Refused("revision_mismatch")
