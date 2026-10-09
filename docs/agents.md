@@ -188,10 +188,15 @@ lotuspod comments reply 7 --claim TOKEN --key my-agent-7-1 --text "Cut it." --js
   --model "Claude Opus 5.5"                      # optional: the model that wrote it
 lotuspod comments reply 7 --claim TOKEN --key my-agent-7-2 --text-file reply.md \
   --revision 3f2a9c01d4be                        # having revised the page
-lotuspod comments reply 7 --claim TOKEN --key my-agent-7-3 --text "Like this." \
-  --image chart.png --image after.jpg            # optional: up to four images
 lotuspod comments release 7 --claim TOKEN      # back to routing, unanswered
 lotuspod comments fail 7 --claim TOKEN --reason "source missing"
+```
+
+A reply or follow-up can attach up to four images:
+
+```sh
+lotuspod comments reply 7 --claim TOKEN --key my-agent-7-3 --text "Like this." \
+  --image chart.png --image after.jpg
 ```
 
 A claim token never starts with `-`; one issued by an older serve may, and
