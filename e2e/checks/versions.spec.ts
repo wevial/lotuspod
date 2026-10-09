@@ -151,6 +151,33 @@ test.describe('signed in', () => {
     expect(errors).toEqual([]);
   });
 
+  test('each entry notes what it changed, as the activity route says it', async ({ page }) => {
+    const errors = watchErrors(page);
+    const name = 'versions-note-check';
+    publish(name, changesSource('Versions note check', 'The pump stops in January.'));
+    publish(name, changesSource('Versions note check', 'The pump runs all winter.'));
+
+    const answered = await page.request.get('/api/activity');
+    expect(answered.status()).toBe(200);
+    const activity = await answered.json();
+    const entry = activity.pages.find((found: { page: string }) => found.page === name);
+    expect(entry, `the activity lists ${name}`).toBeTruthy();
+    const newest = entry.events.find((event: { kind: string }) => event.kind === 'version');
+    expect(newest.summary).toBe('Pump changed');
+
+    await page.goto(`/${name}.html#versions`);
+    const versions = view(page);
+    await expect(versions.heading).toBeVisible();
+    await expect(versions.entries).toHaveCount(2);
+    await expect(versions.entries.nth(0).locator('.artifact-versions-note')).toHaveText(newest.summary);
+    await expect(versions.entries.nth(1).locator('.artifact-versions-note')).toHaveText('First version');
+    // The note sits under the entry's date.
+    const [date, note] = await Promise.all(['.artifact-versions-date', '.artifact-versions-note']
+      .map((selector) => versions.entries.nth(0).locator(selector).boundingBox()));
+    expect(note!.y).toBeGreaterThanOrEqual(date!.y + date!.height - 1);
+    expect(errors).toEqual([]);
+  });
+
   test('a page published once is its only version', async ({ page }) => {
     const errors = watchErrors(page);
     await page.goto('/capture-versions-once.html');
