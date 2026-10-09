@@ -24,6 +24,7 @@ import socket
 import sqlite3
 import subprocess
 import sys
+import threading
 import time
 import unittest
 import urllib.request
@@ -843,6 +844,49 @@ class StartupWaitTests(ResponderCase):
     def test_a_socket_that_never_answers_does_not_hold_off_sigterm(self):
         self.silent_socket()
         self.test_sigterm_while_waiting_exits_0()
+
+    def trickling_socket(self):
+        """A socket at serve's path that, on each connection, promises a long
+        answer and sends it a byte every 0.1 seconds; sets self.connected."""
+        listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        listener.bind(str(self.sock))
+        listener.listen(16)
+        self.connected = threading.Event()
+        done = threading.Event()
+
+        def trickle(conn):
+            with conn:
+                try:
+                    conn.recv(65536)
+                    conn.sendall(b"HTTP/1.1 200 OK\r\nContent-Length: 10000\r\n\r\n")
+                    while not done.wait(0.1):
+                        conn.sendall(b" ")
+                except OSError:
+                    pass
+
+        def serve():
+            while not done.is_set():
+                try:
+                    conn, _ = listener.accept()
+                except OSError:
+                    return
+                self.connected.set()
+                threading.Thread(target=trickle, args=(conn,), daemon=True).start()
+
+        threading.Thread(target=serve, daemon=True).start()
+        self.addCleanup(listener.close)
+        self.addCleanup(done.set)
+
+    def test_a_socket_that_answers_a_byte_at_a_time_does_not_outlast_wait(self):
+        self.trickling_socket()
+        self.test_gives_up_after_wait_seconds()
+
+    def test_sigterm_during_the_last_try_exits_0(self):
+        self.trickling_socket()
+        process = self.launch("--interval", "60", "--wait", "2")
+        self.assertTrue(self.connected.wait(10), self.output())
+        process.send_signal(signal.SIGTERM)
+        self.assertEqual(process.wait(5), 0, self.output())
 
 
 class PermissionTests(ResponderCase):

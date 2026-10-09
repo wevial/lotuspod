@@ -762,6 +762,31 @@ def cmd_respond(args: argparse.Namespace) -> int:
             signal.signal(signal.SIGTERM, previous)
 
 
+def _probe(responder: Responder, timeout: float) -> str | None:
+    """None when serve answers WHOAMI within timeout seconds (a refusal is an
+    answer), else why not. The request runs on a daemon thread left behind
+    at the timeout, so a peer that answers a byte at a time cannot hold it."""
+    outcome: list[str | None] = []
+
+    def ask() -> None:
+        try:
+            responder.ask("GET", machine.WHOAMI, timeout=timeout)
+            outcome.append(None)
+        except Refused:
+            outcome.append(None)
+        except Unreachable as exc:
+            outcome.append(str(exc))
+        except Exception as exc:  # a malformed answer: serve is not answering yet
+            outcome.append(f"cannot reach serve on {responder.socket_path}: {exc!r}")
+
+    thread = threading.Thread(target=ask, daemon=True)
+    thread.start()
+    thread.join(timeout)
+    if outcome:
+        return outcome[0]
+    return f"no answer to {machine.WHOAMI} within {timeout:.1f} seconds"
+
+
 def wait_for_serve(responder: Responder, stop: threading.Event, bound: int) -> int | None:
     """None once serve answers on the socket (a refusal is an answer); else
     the exit code: 0 when stopped while waiting, 1 when serve has not
@@ -772,14 +797,11 @@ def wait_for_serve(responder: Responder, stop: threading.Event, bound: int) -> i
     delay = WAIT_FIRST
     waiting = False
     while True:
-        probe = max(WAIT_FIRST, min(WAIT_MOST, deadline - time.monotonic()))
-        try:
-            responder.ask("GET", machine.WHOAMI, timeout=probe)
+        reason = _probe(responder, max(WAIT_FIRST, min(WAIT_MOST, deadline - time.monotonic())))
+        if reason is None:
             return None
-        except Refused:
-            return None
-        except Unreachable as exc:
-            reason = str(exc)
+        if stop.is_set():
+            return 0
         if not waiting:
             responder.log(f"waiting for serve on {responder.socket_path}")
             waiting = True
