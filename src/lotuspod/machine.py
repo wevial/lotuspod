@@ -804,8 +804,9 @@ class UnixConnection(http.client.HTTPConnection):
 
 
 def request(path: Path | str, token: str | None, method: str, target: str,
-            body: object = None) -> tuple[int, dict]:
-    """(status, JSON payload) of one request on the socket at path."""
+            body: object = None, timeout: float = REQUEST_TIMEOUT) -> tuple[int, dict]:
+    """(status, JSON payload) of one request on the socket at path, each
+    socket operation bounded by timeout seconds."""
     headers = {}
     if token is not None:
         headers["Authorization"] = f"Bearer {token}"
@@ -813,7 +814,7 @@ def request(path: Path | str, token: str | None, method: str, target: str,
     if body is not None:
         data = json.dumps(body).encode("utf-8")
         headers["Content-Type"] = "application/json"
-    conn = UnixConnection(path)
+    conn = UnixConnection(path, timeout)
     try:
         conn.request(method, target, body=data, headers=headers)
         response = conn.getresponse()

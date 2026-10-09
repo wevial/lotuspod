@@ -333,10 +333,13 @@ lotuspod credential create responder --handle responder \
 lotuspod respond --credential ~/.config/lotuspod/responder.token
 ```
 
-`respond [--once] [--interval SEC] [--command CMD] [--timeout SEC]
---credential FILE [--socket PATH] [--journal PATH] [--out-dir DIR] [--db
-PATH]` runs a pass every `--interval` seconds (default 30) until it is
-stopped (SIGTERM exits 0), or one pass with `--once`. Each pass pulls as
+`respond [--once] [--interval SEC] [--wait SEC] [--command CMD] [--timeout
+SEC] --credential FILE [--socket PATH] [--journal PATH] [--out-dir DIR]
+[--db PATH]` runs a pass every `--interval` seconds (default 30) until it is
+stopped (SIGTERM exits 0), or one pass with `--once`. Before its first pass
+it waits for serve to answer on the socket, printing `waiting for serve on
+PATH` once, and exits 1 naming the socket when serve has not answered within
+`--wait` seconds (default 60). Each pass pulls as
 `responder` and, for each comment, claims it (a comment another agent
 claimed first is skipped) and runs the agent command once:
 
