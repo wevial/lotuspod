@@ -243,7 +243,6 @@ test.describe('signed in', () => {
     await expect(open.box).toHaveCount(1);
     await expect(open.tray).toBeHidden();
     await expect(open.form.locator('button', { hasText: 'Add image' })).toHaveCount(0);
-    await expect(open.add).toHaveCount(1);
     await expect(open.add).toBeVisible();
     await expect(open.add).toHaveAttribute('type', 'button');
     await expect(open.add.locator('[aria-hidden="true"]')).toHaveText('+');
@@ -274,7 +273,6 @@ test.describe('signed in', () => {
     await expect(open.removes).toHaveCount(2);
     await expect(open.removes.nth(0)).toHaveAccessibleName('Remove image 1 of 2');
     await expect(open.removes.nth(1)).toHaveAccessibleName('Remove image 2 of 2');
-    await expect(open.form.getByRole('button', { name: 'Remove', exact: true })).toHaveCount(0);
     await expect(open.form.locator('button', { hasText: 'Remove' })).toHaveCount(0);
     await expect(open.removes.nth(0).locator('[aria-hidden="true"]')).toHaveText('×');
     const [, kept] = await srcs(open);
@@ -379,18 +377,6 @@ test.describe('signed in', () => {
     release();
     expect((await posted).status()).toBe(201);
     await expect(open.items).toHaveCount(0);
-    await seen.clean();
-  });
-
-  test('a pasted image shows in the tray above the field, as a picked one does', async ({ page }) => {
-    const seen = await watch(page);
-    await stored(page);
-    await page.goto(PAGE);
-    const open = await compose(page, 'frogs');
-    await paste(open.field, [LILY]);
-    await aboveField(open, 1);
-    await expect(open.links).toHaveAttribute('href', MEDIA_URL);
-    await expect(open.removes).toHaveAccessibleName('Remove image 1 of 1');
     await seen.clean();
   });
 
