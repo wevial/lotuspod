@@ -513,6 +513,42 @@ test.describe('signed in', () => {
     await expect(page.locator('.pod-tabs-bar :focus-visible')).toHaveCount(0);
   });
 
+  test('a tab focused after a click on ✕ shows no ring until a key moves focus; one picked in the finder with Enter is outlined whole', async ({ page }) => {
+    await openIndex(page);
+    await openFromListing(page, ARTICLE);
+    await openFromListing(page, CONTEXT);
+    await openFromListing(page, CHECKLIST);
+    await tabTitle(page, CONTEXT).click();
+    await expectActive(page, CONTEXT);
+
+    // The middle tab's ✕ clicked: its neighbour takes focus with no ring.
+    await close(page, CONTEXT).click();
+    await expectActive(page, CHECKLIST);
+    await expect(tabTitle(page, CHECKLIST)).toBeFocused();
+    await expect(page.locator('.pod-tabs-bar :focus-visible')).toHaveCount(0);
+    expect.soft((await ringOf(page, CHECKLIST)).tab).toMatch(/^none /);
+
+    // The Tab key next: the ✕ it reaches is ringed.
+    await page.keyboard.press('Tab');
+    await expect(close(page, CHECKLIST)).toBeFocused();
+    await expect(page.locator('.pod-tabs-bar :focus-visible')).toHaveCount(1);
+    expect.soft(await close(page, CHECKLIST).evaluate((node) => {
+      const style = getComputedStyle(node);
+      return `${style.outlineStyle} ${style.outlineWidth} ${style.outlineColor} ${style.outlineOffset}`;
+    })).toBe(`solid 2px ${rgb(COLORS.lavender)} -2px`);
+
+    // A pod picked in the finder with Enter: its tab focused, ringed whole.
+    await page.keyboard.press('ControlOrMeta+K');
+    const finder = page.getByRole('dialog', { name: 'Find a pod' });
+    await finder.getByRole('combobox').fill(CONTEXT.title);
+    await expect(finder.locator(`[role="option"][data-page="${CONTEXT.name}"]`)).toHaveAttribute('aria-selected', 'true');
+    await page.keyboard.press('Enter');
+    await expectActive(page, CONTEXT);
+    await expect(tabTitle(page, CONTEXT)).toBeFocused();
+    expect.soft(await ringOf(page, CONTEXT))
+      .toEqual({ tab: `solid 2px ${rgb(COLORS.lavender)} -2px`, title: 'none', encloses: true });
+  });
+
   test('a pod published again shows an amber "new version" dot until its tab is activated', async ({ page }) => {
     const errors = await watch(page);
     const pod = { name: 'pod-tabs-version', title: 'Pod tabs version' };
