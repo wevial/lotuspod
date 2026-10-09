@@ -17,11 +17,14 @@
 //
 // The open tabs and the active one are kept in the address, #tabs=NAME,NAME
 // &on=NAME, written with history.replaceState, and a load with that fragment
-// opens them again, a name the listing does not have dropped. The fragment
-// names the Pages view of the index's own script, or ends &view=activity
-// for Recent activity, and is written again each time that script shows a
-// view ("lotuspod:view"), whose buttons would otherwise drop it. Once no tab
-// is open, the fragment is the view's own again: #pages, or none.
+// opens them again, a name the listing does not have dropped. On a load,
+// &at=FRAGMENT after &on=NAME (encoded, as a pod loaded on its own asks it,
+// js/open-in-tabs.js) opens the active tab at that fragment; it is never
+// written again. The fragment names the Pages view of the index's own
+// script, or ends &view=activity for Recent activity, and is written again
+// each time that script shows a view ("lotuspod:view"), whose buttons would
+// otherwise drop it. Once no tab is open, the fragment is the view's own
+// again: #pages, or none.
 //
 // Each time the listing shows again, the index's own script is told
 // ("lotuspod:listing"), so it reads its marks and counts again, as when the
@@ -54,7 +57,7 @@
 
   const SEEN = "/api/seen";
   const MAC = /^Mac/.test(navigator.platform);
-  const FRAGMENT = /^#tabs=([^&]*)(?:&on=([^&]*))?(?:&view=activity)?$/;
+  const FRAGMENT = /^#tabs=([^&]*)(?:&on=([^&]*)(?:&at=([^&]*))?)?(?:&view=activity)?$/;
 
   // Each pod the listing has: its title and its link, by name.
   const pods = new Map();
@@ -490,10 +493,11 @@
         return "";
       }
     };
-    for (const name of named[1].split(",").map(decode)) {
-      if (pods.has(name) && !find(name)) add(name, "");
-    }
     const on = named[2] === undefined ? null : decode(named[2]);
+    const at = named[3] === undefined ? "" : decode(named[3]);
+    for (const name of named[1].split(",").map(decode)) {
+      if (pods.has(name) && !find(name)) add(name, name === on && at ? `#${at}` : "");
+    }
     if (on !== null && find(on)) {
       activate(on);
       return;

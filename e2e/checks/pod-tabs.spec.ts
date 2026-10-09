@@ -227,14 +227,14 @@ test.describe('signed in', () => {
     await expect(framed(page, ARTICLE).locator('h1')).toHaveText(ARTICLE.title);
     await expect(page).toHaveURL(/#tabs=capture-decision-context,capture-article&on=capture-article$/);
 
-    // Cmd-click or Ctrl-click is the browser's.
+    // Cmd-click or Ctrl-click is the browser's: its tab, a pod loaded on
+    // its own, opens it in the index's tabs there.
     await tabTitle(page, CONTEXT).click();
     await expectActive(page, CONTEXT);
     const opened = context.waitForEvent('page');
     await link.click({ modifiers: ['ControlOrMeta'] });
     const other = await opened;
-    await other.waitForLoadState();
-    expect(new URL(other.url()).pathname).toBe('/capture-article.html');
+    await expect(other).toHaveURL(/\/#tabs=capture-article&on=capture-article$/);
     await other.close();
     await expect(tabs(page)).toHaveCount(2);
     await expectActive(page, CONTEXT);
@@ -348,7 +348,7 @@ test.describe('signed in', () => {
     const pod = { name: 'pod-tabs-marks', title: 'Pod tabs marks' };
     publish(pod.name, source(pod.title, 'first'));
     const first = seenPost(page, pod.name);
-    await page.goto(`/${pod.name}.html`);
+    await page.goto(`/${pod.name}.html?standalone`);
     await first;
     await page.waitForTimeout(1100);
     publish(pod.name, source(pod.title, 'second'));
@@ -407,6 +407,17 @@ test.describe('signed in', () => {
 
   test('a pod loaded directly at its own address opens in the index as the active tab, at its fragment, with the finder', async ({ page }) => {
     const errors = await watch(page);
+    // Each POST to the seen route, and whether the window still showed the
+    // bare page when it was sent.
+    const posted: { bare: boolean; page: string }[] = [];
+    page.on('request', (request) => {
+      if (new URL(request.url()).pathname !== SEEN || request.method() !== 'POST') return;
+      const sender = request.frame();
+      posted.push({
+        bare: sender === page.mainFrame() && new URL(sender.url()).pathname === `/${ARTICLE.name}.html`,
+        page: request.postDataJSON()?.page ?? '',
+      });
+    });
     await page.goto('about:blank');
     await page.goto(`/${ARTICLE.name}.html#second-section`);
 
@@ -421,7 +432,41 @@ test.describe('signed in', () => {
 
     await page.keyboard.press('ControlOrMeta+K');
     await expect(page.getByRole('dialog', { name: 'Find a pod' })).toBeVisible();
+
+    // The framed page's opening is posted once; the page loaded on its own,
+    // which went before anything else ran, posted nothing.
+    await expect.poll(() => posted.length).toBeGreaterThan(0);
+    await page.waitForTimeout(500);
+    expect(posted).toEqual([{ bare: false, page: ARTICLE.name }]);
+
+    // The bare page left no history entry: Back leaves the site.
+    await page.goBack();
+    await expect(page).toHaveURL('about:blank');
     expect(errors).toEqual([]);
+  });
+
+  test('a pod loaded with ?standalone, or an old version of it, stays on its own at the top level', async ({ page }) => {
+    const errors = await watch(page);
+    await page.goto(`/${ARTICLE.name}.html?standalone#second-section`);
+    await expect(page.locator('main.artifact h1')).toHaveText(ARTICLE.title);
+    // Its deferred page script has run by now, and has not left.
+    await expect.poll(() => page.evaluate(() => document.readyState)).toBe('complete');
+    await page.waitForTimeout(500);
+    expect(new URL(page.url()).pathname).toBe(`/${ARTICLE.name}.html`);
+    expect(new URL(page.url()).hash).toBe('#second-section');
+    await expect(page.locator('.pod-tabs-bar')).toHaveCount(0);
+    expect(errors).toEqual([]);
+
+    // An old version runs no script: its page script is refused by its policy.
+    const commit = execFileSync('git', ['-C', OUT, 'log', '-1', '--format=%H', '--', `${ARTICLE.name}.html`],
+      { encoding: 'utf-8' }).trim();
+    expect(commit).toMatch(/^[0-9a-f]{40}$/);
+    await page.goto(`/${ARTICLE.name}.html?version=${commit}`);
+    await expect(page.locator('main.artifact--old-version h1')).toHaveText(ARTICLE.title);
+    await page.waitForTimeout(500);
+    expect(new URL(page.url()).pathname).toBe(`/${ARTICLE.name}.html`);
+    expect(new URL(page.url()).searchParams.get('version')).toBe(commit);
+    await expect(page.locator('.pod-tabs-bar')).toHaveCount(0);
   });
 
   test('closing a tab activates its right neighbour, else its left, else the listing; the address reopens tabs', async ({ page }) => {

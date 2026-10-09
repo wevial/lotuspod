@@ -119,11 +119,12 @@ function threadsRead(page: Page) {
     new URL(response.url()).pathname === COMMENTS && response.request().method() === 'GET');
 }
 
-// Open the comments page, or load it again, and let its first read of the
-// threads come back.
+// Open the comments page on its own (?standalone, so it does not open in the
+// index's tabs), or load it again, and let its first read of the threads come
+// back.
 async function openPage(page: Page, again = false) {
   const read = threadsRead(page);
-  await (again ? page.reload() : page.goto(PAGE));
+  await (again ? page.reload() : page.goto(`${PAGE}?standalone`));
   await read;
 }
 

@@ -296,6 +296,8 @@ def script_warning(name: str, body: str) -> str:
 # posts comments (lotuspod.comments) and folds sections (lotuspod.sections),
 # and offers a reload once its page is published again; only a page with
 # any of them, or stamped with a revision (every published page), loads it.
+# Loaded on its own at the top level, a listed page first goes to the index,
+# opened there in a tab (js/open-in-tabs.js), and runs none of the rest.
 PAGE_SCRIPT = "lotuspod-page.js"
 # The index script opens pods in tabs over the index's listing; the index
 # loads it deferred, beside its own inline script.
@@ -327,6 +329,7 @@ THEME_SOURCES = {
         "css/versions.css",
     ),
     PAGE_SCRIPT: (
+        "js/open-in-tabs.js",
         "js/page-open.js",
         "js/link-tab.js",
         "js/decisions.js",

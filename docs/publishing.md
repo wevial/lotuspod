@@ -745,6 +745,19 @@ the last tab closes, the address is the view's own again: `#pages`, or none
 for Recent activity (with no views to switch, the fragment it had before the
 first tab).
 
+A listed page loaded on its own at the top level of the window (from a link
+in chat, an email or another page, a bookmark, a new browser tab) opens in a
+tab too: the first thing its page script does is replace its address with the
+index's, `#tabs=NAME&on=NAME`, that page its one tab and the active one, with
+`&at=FRAGMENT` after it when the address had a fragment (encoded as with
+`encodeURIComponent`), so the framed page opens at that section. `&at=` is
+read on load only and never written again. The replace leaves no history
+entry, so Back leaves the site, and nothing else on the bare page runs, so its
+opening is posted to `/api/seen` once, by its frame. A page in a frame, an old
+version (`?version=`, which runs no script), a page the index does not list,
+and a page loaded with `?standalone` (for example
+`NAME.html?standalone#a-section`) stay where they are, alone in the window.
+
 A tab that is not active shows a dot from `/api/seen`: amber, "new version"
 for a screen reader, when its page was published again since this reader last
 opened it, else orchid, "new replies", when someone else has commented on it
