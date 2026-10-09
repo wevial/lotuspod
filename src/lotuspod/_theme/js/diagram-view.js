@@ -240,7 +240,8 @@
       var found = null;
       all("h1, h2, h3, h4, h5, h6", pre.closest("main") || document).forEach(function (node) {
         if ((node.compareDocumentPosition(pre) & Node.DOCUMENT_POSITION_FOLLOWING) &&
-            !node.classList.contains("artifact-node-heading") && node.getClientRects().length) {
+            !node.classList.contains("artifact-node-heading") && node.getClientRects().length &&
+            getComputedStyle(node).visibility === "visible") {
           found = node;
         }
       });
@@ -263,7 +264,7 @@
         ? { x: natural.x, y: natural.y, width: natural.width, height: natural.height }
         : { x: 0, y: 0, width: drawn.width || 1, height: drawn.height || 1 };
       shown = {
-        pre: pre, svg: svg, expand: expand, next: svg.nextSibling, box: box,
+        pre: pre, svg: svg, expand: expand, next: svg.nextSibling, box: box, scrolled: pre.scrollLeft,
         saved: [[svg, "viewBox"], [svg, "width"], [svg, "height"], [svg, "style"], [pre, "style"]].map(function (at) {
           return [at[0], at[1], at[0].getAttribute(at[1])];
         }),
@@ -294,6 +295,7 @@
           at[0].setAttribute(at[1], at[2]);
         }
       });
+      was.pre.scrollLeft = was.scrolled;
       document.documentElement.classList.remove(OPEN);
       if (was.expand.isConnected) {
         was.expand.focus({ preventScroll: true });

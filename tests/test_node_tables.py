@@ -180,7 +180,7 @@ class RenderTests(TempDirTestCase):
         sequence = "```mermaid\nsequenceDiagram\n  A->>B: hi\n```\n"
         for diagram in (sequence, DIAGRAM):
             with self.subTest(diagram.splitlines()[1]):
-                page = self.rendered(f"Intro.\n\n{diagram}")
+                page = self.rendered(diagram)
                 self.assertIn('class="mermaid"', page)
                 self.assertEqual(page.count(f'<script src="{cli.PAGE_SCRIPT}?v='), 1)
 

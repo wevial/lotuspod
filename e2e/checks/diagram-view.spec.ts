@@ -437,6 +437,38 @@ test('the page holds still behind the view, and Esc or ✕ puts the diagram back
   await seen.clean();
 });
 
+test('the title skips an invisible heading before the diagram', async ({ page }) => {
+  const seen = await drawn(page);
+  await diagram(page).evaluate((pre) => {
+    const hidden = document.createElement('h2');
+    hidden.textContent = 'Invisible heading';
+    hidden.style.visibility = 'hidden';
+    pre.before(hidden);
+  });
+  await open(page);
+  await expect(view(page).title).toHaveText('Release plan');
+  await page.keyboard.press('Escape');
+  await seen.clean();
+});
+
+test('a diagram scrolled sideways in its block comes back scrolled as it was', async ({ page }) => {
+  const seen = await drawn(page);
+  // Wider than its block, as a diagram drawn without useMaxWidth would be.
+  await drawing(page).evaluate((svg) => {
+    svg.setAttribute('width', '3000');
+    svg.setAttribute('style', 'max-width: none;');
+  });
+  await diagram(page).evaluate((pre) => { pre.scrollLeft = 350; });
+  expect(await diagram(page).evaluate((pre) => pre.scrollLeft)).toBe(350);
+  await diagram(page).hover();
+  await expand(page).click();
+  await expect(view(page).dialog).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(view(page).dialog).toBeHidden();
+  expect(await diagram(page).evaluate((pre) => pre.scrollLeft)).toBe(350);
+  await seen.clean();
+});
+
 test("a node card closes when its diagram's view opens and opens again after", async ({ page }) => {
   const seen = await watch(page);
   await page.goto(CARDS_PAGE);
