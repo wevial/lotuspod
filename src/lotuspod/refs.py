@@ -66,19 +66,31 @@ _VOID = frozenset({
     "br", "img", "input", "hr", "wbr", "source", "col", "area", "embed", "track", "meta",
     "link", "param", "base",
 })
-# Inline elements: a word may run on through their tags.
+# Inline elements: a word may run on through their tags, the skipped ones
+# among them, whose text is never marked but still joins the words beside
+# it (<code>X</code>HOLO-175 reads XHOLO-175).
 _INLINE = frozenset({
-    "abbr", "b", "bdi", "bdo", "cite", "data", "del", "dfn", "em", "i", "ins", "kbd", "mark",
-    "q", "s", "samp", "small", "span", "strong", "sub", "sup", "time", "u", "var",
+    "a", "abbr", "b", "bdi", "bdo", "button", "cite", "code", "data", "del", "dfn", "em",
+    "i", "ins", "kbd", "label", "mark", "output", "q", "s", "samp", "select", "small",
+    "span", "strong", "sub", "sup", "textarea", "time", "u", "var", "wbr",
 })
+# Elements whose text is never shown: it neither joins nor ends a word.
+_UNSHOWN = frozenset({"script", "style", "template"})
 
 
 def is_key(key: str) -> bool:
     return bool(TICKET.fullmatch(key) or PULL.fullmatch(key))
 
 
+def shown(text: str) -> str:
+    """text for a one-line message: each character that is not printable,
+    a newline among them, written as its \\u escape."""
+    return "".join(char if char.isprintable() else f"\\u{ord(char):04x}" for char in text)
+
+
 def _refused(key: str, field: str, why: str) -> RuntimeError:
-    where = f"refs {key}" + (f" {field}" if field else "")
+    # Keys and fields come from the file: one may hold a newline.
+    where = f"refs {shown(key)}" + (f" {shown(field)}" if field else "")
     return RuntimeError(f"{where}: {why}; nothing written")
 
 
@@ -163,7 +175,8 @@ def parse_refs(raw: bytes, label: str) -> dict[str, dict]:
     try:
         data = json.loads(raw.decode("utf-8"))
     except (UnicodeDecodeError, ValueError) as exc:
-        raise RuntimeError(f"refs {label}: not JSON ({exc}); nothing written") from None
+        raise RuntimeError(f"refs {shown(label)}: not JSON ({exc}); nothing written") \
+            from None
     return check_refs(data)
 
 
@@ -199,7 +212,7 @@ class _TextFinder(HTMLParser):
         return self._line_starts[line - 1] + column
 
     def _tag(self, tag: str) -> None:
-        if tag not in _INLINE:
+        if tag not in _INLINE and tag not in _UNSHOWN:
             self._joined = False
 
     def handle_starttag(self, tag: str, attrs: list) -> None:
@@ -237,6 +250,8 @@ class _TextFinder(HTMLParser):
                     break
 
     def _text(self, text: str, start: int, end: int, open_: bool) -> None:
+        if any(tag in _UNSHOWN for tag in self._stack):
+            return
         if self._heading is not None:
             self._heading.append(text)
         run = {"start": start, "end": end, "text": text, "open": open_ and not self._skip,
