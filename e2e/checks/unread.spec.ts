@@ -24,6 +24,8 @@ const PYTHON = ENV.LOTUSPOD_TEST_PYTHON ?? '';
 // This checkout's package, whatever lotuspod is installed.
 const SRC = path.resolve(__dirname, '..', '..', 'src');
 const OWNER = 'hermes';
+// Where the page keeps that the reader shows resolved threads.
+const RESOLVED_SHOWN = `lotuspod:resolved-shown:${PAGE}`;
 
 type Row = { id: number };
 type Thread = { root: Row; replies: Row[] };
@@ -81,6 +83,21 @@ async function answered(request: APIRequestContext, text: string) {
     '--key', `unread-${id}`, '--text', 'A submerged heater, clear of the pump outlet.');
   expect(reply.parent).toBe(id);
   return { thread: id, reply: reply.id as number };
+}
+
+// Resolve a thread as the reader, through the comments route.
+async function resolve(request: APIRequestContext, thread: number) {
+  const resolved = await request.post(COMMENTS, {
+    headers: SIGNED_IN, data: { page: NAME, thread, resolved: true },
+  });
+  expect(resolved.status()).toBe(200);
+}
+
+// The page's post of a thread as seen, once answered.
+function seenPost(page: Page, thread: number) {
+  return page.waitForResponse((response) =>
+    new URL(response.url()).pathname === SEEN && response.request().method() === 'POST' &&
+    (response.request().postDataJSON() ?? {}).thread === thread);
 }
 
 function watchErrors(page: Page) {
@@ -319,6 +336,109 @@ test.describe('signed in', () => {
     await expect(theirs).toHaveClass(/\bartifact-comment--unread\b/);
     await expect(theirs.locator('.artifact-comment-new')).toHaveText('New');
     await expect(popover.locator('.artifact-comment-divider')).toHaveText('New since you last looked');
+    await expect(page.locator('.artifact-unread')).toHaveCount(0);
+    expect(errors).toEqual([]);
+  });
+
+  test('a resolved thread opens from its line to read its reply, which is then seen, and it stays resolved', async ({ page, request }) => {
+    test.setTimeout(120_000);
+    const errors = watchErrors(page);
+    const { thread, reply: id } = await answered(request, 'Should the heater stay in all winter?');
+    await resolve(request, thread);
+    const resolving: unknown[] = [];
+    page.on('request', (sent) => {
+      if (new URL(sent.url()).pathname === COMMENTS && sent.method() === 'POST' &&
+        'resolved' in (sent.postDataJSON() ?? {})) resolving.push(sent.postDataJSON());
+    });
+
+    await openPage(page);
+    const title = await page.evaluate(() => document.title.replace(/^\(\d+\) /, ''));
+    await expect(page.locator('header.artifact-header .artifact-meta .artifact-unread'))
+      .toHaveText('1 new reply to you');
+    await expect(page).toHaveTitle(`(1) ${title}`);
+    await page.locator('.artifact-comments-rail').click();
+    await page.locator('.artifact-comments-show-resolved', { hasText: /^Show resolved/ }).click();
+    const item = page.locator(`.artifact-comments-panel .artifact-comments-entry[data-thread="${thread}"]`);
+    const line = item.locator('.artifact-comments-entry-resolved');
+    const read = line.locator('.artifact-comments-entry-read');
+    await expect(line).toBeVisible();
+    await expect(line.getByRole('button', { name: 'Reopen' })).toBeVisible();
+    await expect(item.locator('.artifact-comments-entry-head')).toBeHidden();
+    await expect(read).toHaveAttribute('aria-expanded', 'false');
+    await expect(reply(page, id)).toBeHidden();
+
+    // Its line opens it: the reply shows marked New, and is posted as seen.
+    const seen = seenPost(page, thread);
+    await read.click();
+    const answer = await seen;
+    expect(answer.request().postDataJSON()).toEqual({ page: NAME, thread, comment: id });
+    expect(answer.status()).toBe(200);
+    const theirs = reply(page, id);
+    await expect(theirs).toBeVisible();
+    await expect(theirs).toHaveClass(/\bartifact-comment--unread\b/);
+    await expect(theirs.locator('.artifact-comment-by .artifact-comment-new')).toHaveText('New');
+    const divider = item.locator('.artifact-comment-divider');
+    await expect(divider).toHaveText('New since you last looked');
+    expect(await divider.evaluate((node, replyId) =>
+      node.nextElementSibling?.querySelector(`#artifact-comment-text-${replyId}`) !== null, id)).toBe(true);
+    // Still resolved: its line stays, with Reopen and no Resolve.
+    await expect(read).toHaveAttribute('aria-expanded', 'true');
+    await expect(line.getByRole('button', { name: 'Reopen' })).toBeVisible();
+    await expect(item.locator('.artifact-comments-resolve')).toBeHidden();
+    await expect(page.locator('.artifact-unread')).toHaveCount(0);
+    await expect(page).toHaveTitle(title);
+
+    // Its line again: folded back to the line.
+    await read.click();
+    await expect(read).toHaveAttribute('aria-expanded', 'false');
+    await expect(theirs).toBeHidden();
+    await expect(line).toBeVisible();
+    expect(resolving).toEqual([]);
+
+    await openPage(page, true);
+    await expect(page.locator(`.artifact-comments-entry[data-thread="${thread}"]`))
+      .toHaveClass(/\bartifact-comments-entry--resolved\b/);
+    await expect(reply(page, id)).toHaveCount(1);
+    await expect(page.locator('.artifact-comment--unread')).toHaveCount(0);
+    await expect(page.locator('.artifact-comment-new')).toHaveCount(0);
+    await expect(page.locator('.artifact-unread')).toHaveCount(0);
+    await expect(page).toHaveTitle(title);
+    const stored = await request.get(`${COMMENTS}?page=${NAME}`, { headers: SIGNED_IN });
+    const { threads } = (await stored.json()) as { threads: (Thread & { resolution: { resolved: boolean } })[] };
+    expect(threads.find((each) => each.root.id === thread)?.resolution.resolved).toBe(true);
+    expect(resolving).toEqual([]);
+    expect(errors).toEqual([]);
+  });
+
+  test('a resolved thread opens from its line in its section\'s popover, and its reply is seen', async ({ page, request }) => {
+    test.setTimeout(120_000);
+    const errors = watchErrors(page);
+    await page.setViewportSize({ width: 1024, height: 900 });
+    const { thread, reply: id } = await answered(request, 'Does the heater need a guard?');
+    await resolve(request, thread);
+    // Resolved threads shown, as the panel's control would leave them.
+    await page.addInitScript((key) => sessionStorage.setItem(key, '1'), RESOLVED_SHOWN);
+
+    await openPage(page);
+    await expect(page.locator('.artifact-unread')).toHaveText('1 new reply to you');
+    await chip(page).click();
+    const popover = page.locator('.artifact-comments-popover');
+    const item = popover.locator(`.artifact-comments-entry[data-thread="${thread}"]`);
+    const read = item.locator('.artifact-comments-entry-resolved .artifact-comments-entry-read');
+    await expect(read).toBeVisible();
+    await expect(item.getByRole('button', { name: 'Reopen' })).toBeVisible();
+    const theirs = popover.locator(`.artifact-comment-item:has(#artifact-comment-text-${id})`);
+    await expect(theirs).toBeHidden();
+
+    const seen = seenPost(page, thread);
+    await read.click();
+    const answer = await seen;
+    expect(answer.request().postDataJSON()).toEqual({ page: NAME, thread, comment: id });
+    expect(answer.status()).toBe(200);
+    await expect(theirs).toBeVisible();
+    await expect(theirs).toHaveClass(/\bartifact-comment--unread\b/);
+    await expect(theirs.locator('.artifact-comment-new')).toHaveText('New');
+    await expect(item.locator('.artifact-comments-resolve')).toBeHidden();
     await expect(page.locator('.artifact-unread')).toHaveCount(0);
     expect(errors).toEqual([]);
   });
