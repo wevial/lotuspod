@@ -23,7 +23,8 @@ threads, and /api/revision answers it alone, {revision}: an open page
 compares it with the revision it was rendered at to notice a republish.
 
 POST /api/seen records that the reader opened `page` at `revision`, the
-revision it was rendered at, keyed by their verified address, and answers
+revision it was rendered at ("" for a page with no revision, and only for
+one), keyed by their verified address, and answers
 200 {page, revision, previous}: `previous` is the revision recorded for them
 before, null the first time. GET /api/seen, which takes no query (400
 invalid_query for any), answers {pages: {NAME: {revision, seen, seenAt,
@@ -752,8 +753,13 @@ class Api:
         if "thread" in fields:
             return self._post_thread_seen(fields, actor)
         _keys(fields, {"page", "revision"})
-        revision = _text(fields["revision"], 1, MAX_REVISION)
+        revision = _text(fields["revision"], 0, MAX_REVISION)
         page = self._page(fields["page"])
+        # A page with no revision (rendered, never published) is opened at
+        # its own, "": the index's tabs record it so. Any other page is
+        # opened at a revision named.
+        if not revision and page.revision:
+            raise _invalid()
         previous = self.database.record_view(reader=str(actor.get("email") or ""),
                                              page=page.name, revision=revision)
         return {"page": page.name, "revision": revision, "previous": previous}

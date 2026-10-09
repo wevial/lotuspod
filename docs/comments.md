@@ -74,8 +74,11 @@ twice.
   revision alone; it is only read (any other method is 405).
 - `POST /api/seen` with `{page, revision}` records that the reader opened
   `page` at `revision`, the revision it was rendered at, and answers 200
-  `{page, revision, previous}`: `previous` is the revision recorded for this
-  reader before, or null the first time. One row is kept per reader and page,
+  `{page, revision, previous}`. A page with no revision (rendered, never
+  published), whose `revision` in the GET below is `""`, is opened at `""`, as
+  the index's tabs record it; any other page refuses `""`. `previous` is the
+  revision recorded for this reader before, or null the first time. One row
+  is kept per reader and page,
   keyed by the address Access verified (never the shown name), so it holds on
   every device the reader uses.
 - `POST /api/seen` with `{page, thread, comment}` records that the reader has
@@ -211,7 +214,8 @@ heading id's length is taken, since it must name one of the page's boxes),
 `text` outside 1 to 4000, `note` over 4000, a quote whose `exact` is outside 1 to 500 or
 whose `prefix` or `suffix` is over 32 (code points, as Python counts them), a new
 thread's `revision` that is not a string of at most 100 characters, a seen
-`revision` that is not a string of 1 to 100, a seen `thread` or `comment`
+`revision` that is not a string of 1 to 100 (or `""` on a page with no
+revision), a seen `thread` or `comment`
 that is not a positive integer, and any
 `revision` on a reply, and `images` that is not a list of 1 to 4 distinct
 stored names (an empty list, five, or a path among them). A name not in the

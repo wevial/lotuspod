@@ -32,13 +32,23 @@
 // it, else orchid ("new replies") when someone else has commented since. The
 // route is read on load, when a tab is activated or closed and when the window
 // is seen again; activating a tab first posts the framed page's revision, so
-// what it shows counts as read. Any answer but 200 (signed out, or the demo)
-// shows no dot. Without this script the index is its listing alone.
+// what it shows counts as read. A page with no revision (rendered, never
+// published) has no script of its own to record its opening, so each time it
+// loads in a tab, it is posted at "", its own. Any answer but 200 (signed out,
+// or the demo) shows no dot.
+//
+// The pod finder (js/pod-finder.js) opens from a "+" after the last tab, a
+// "Find a pod" button at the strip's end, and Cmd+K on a Mac or Ctrl+K
+// elsewhere, in the index or in a framed page; the key closes it again. Each
+// asks it with "lotuspod:find", and it hands back the pod chosen with
+// "lotuspod:open", which opens it as a link would and focuses its tab.
+// Without this script the index is its listing alone.
 (() => {
   const main = document.querySelector("main.index");
   if (!main) return;
 
   const SEEN = "/api/seen";
+  const MAC = /^Mac/.test(navigator.platform);
   const FRAGMENT = /^#tabs=([^&]*)(?:&on=([^&]*))?(?:&view=activity)?$/;
 
   // Each pod the listing has: its title and its link, by name.
@@ -64,7 +74,16 @@
   const strip = element("div", "pod-tabs");
   strip.setAttribute("role", "group");
   strip.setAttribute("aria-label", "Open pods");
-  bar.append(home, strip);
+  const plus = element("button", "pod-tabs-new", "+");
+  plus.type = "button";
+  plus.setAttribute("aria-label", "Open a pod in a new tab");
+  strip.append(plus);
+  const findButton = element("button", "pod-tabs-find");
+  findButton.type = "button";
+  findButton.setAttribute("aria-keyshortcuts", MAC ? "Meta+K" : "Control+K");
+  findButton.append(element("span", "pod-tabs-find-text", "Find a pod"),
+    element("kbd", "pod-tabs-find-key", MAC ? "⌘K" : "Ctrl K"));
+  bar.append(home, strip, findButton);
   const frames = element("div", "pod-tabs-frames");
   document.body.prepend(bar);
   main.after(frames);
@@ -164,20 +183,23 @@
     showDots();
   };
 
-  // The revision the framed page was rendered at; "" until it has loaded.
+  // The revision the framed page was rendered at: "" once a page with no
+  // stamp has loaded, null before.
   const revisionOf = (pod) => {
     try {
-      const stamp = pod.frame.contentDocument.querySelector('meta[name="lotuspod:revision"]');
-      return stamp ? stamp.content.trim() : "";
+      const framed = pod.frame.contentDocument;
+      const stamp = framed.querySelector('meta[name="lotuspod:revision"]');
+      if (stamp) return stamp.content.trim();
+      return framed.URL !== "about:blank" && framed.readyState === "complete" ? "" : null;
     } catch (ignored) {
-      return "";
+      return null;
     }
   };
 
   // Mark the pod read at the revision its frame shows, then read the route.
   const markSeen = async (pod) => {
     const revision = revisionOf(pod);
-    if (revision) {
+    if (revision !== null) {
       try {
         await fetch(SEEN, {
           method: "POST",
@@ -272,6 +294,7 @@
       if (!view) return false;
       watched.add(framed);
       view.addEventListener("click", (event) => follow(event, framed));
+      view.addEventListener("keydown", findKey, true);
       view.addEventListener("pagehide", soon);
       return true;
     };
@@ -308,7 +331,7 @@
     const at = active === null ? -1 : open.findIndex((other) => other.name === active);
     if (at < 0) {
       open.push(pod);
-      strip.append(tab);
+      plus.before(tab);
     } else {
       open.splice(at + 1, 0, pod);
       open[at].tab.after(tab);
@@ -317,6 +340,10 @@
       if (active !== name) activate(name);
     });
     cross.addEventListener("click", () => close(name));
+    // A page with no stamp records nothing itself: its opening is posted here.
+    frame.addEventListener("load", () => {
+      if (revisionOf(pod) === "") markSeen(pod);
+    });
     const soon = watch(frame);
     frame.src = href + hash;
     frames.append(frame);
@@ -379,8 +406,31 @@
     }
   };
 
+  // Ask the finder to open, or with the key to close again.
+  const ask = (toggle) => document.dispatchEvent(new CustomEvent("lotuspod:find", { detail: { toggle } }));
+
+  // Cmd+K on a Mac, Ctrl+K elsewhere, taken in the capture phase so the
+  // browser keeps none of it (Chromium's own search box).
+  function findKey(event) {
+    if (typeof event.key !== "string" || event.key.toLowerCase() !== "k" ||
+        event.shiftKey || event.altKey ||
+        (MAC ? !event.metaKey || event.ctrlKey : !event.ctrlKey || event.metaKey)) return;
+    event.preventDefault();
+    if (!event.repeat) ask(true);
+  }
+
   home.addEventListener("click", () => {
     if (active !== null) showListing();
+  });
+  plus.addEventListener("click", () => ask(false));
+  findButton.addEventListener("click", () => ask(false));
+  window.addEventListener("keydown", findKey, true);
+  // The finder's choice, opened as a link to it would be, its tab focused.
+  document.addEventListener("lotuspod:open", (event) => {
+    const name = event.detail ? event.detail.name : null;
+    if (!pods.has(name)) return;
+    openPod(name, "");
+    find(name).title.focus();
   });
   document.addEventListener("click", (event) => follow(event, null));
   document.addEventListener("lotuspod:view", () => {
