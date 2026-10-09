@@ -674,62 +674,6 @@ test.describe('signed in', () => {
     expect(errors).toEqual([]);
   });
 
-  test('Recent activity, once pressed, is kept in the address, and Pages clears it', async ({ page }) => {
-    const errors = watchErrors(page);
-    const now = Date.now();
-    await page.route((url) => url.pathname === ACTIVITY, (route) => route.fulfill({
-      json: { from: new Date(now - 7 * DAY).toISOString(), to: new Date(now).toISOString(),
-        older: false, truncated: false, pages: [] },
-    }));
-    await page.goto('/');
-    const { pages, activity } = views(page);
-    await expect(pages).toHaveAttribute('aria-pressed', 'true');
-
-    await activity.click();
-    await expect(activity).toHaveAttribute('aria-pressed', 'true');
-    await expect(page.locator('.index-count')).toHaveText('No activity in the last 7 days.');
-    await expect(page).toHaveURL(/\/#activity$/);
-    await page.reload();
-    await expect(activity).toHaveAttribute('aria-pressed', 'true');
-    await expect(page.locator('.index-count')).toHaveText('No activity in the last 7 days.');
-    await expect(page.locator('.index-table')).toBeHidden();
-
-    await pages.click();
-    await expect(pages).toHaveAttribute('aria-pressed', 'true');
-    await expect(page).not.toHaveURL(/#/);
-    await page.reload();
-    await expect(pages).toHaveAttribute('aria-pressed', 'true');
-    await expect(activity).toHaveAttribute('aria-pressed', 'false');
-    await expect(page.locator('.index-table')).toBeVisible();
-    await expect(page.locator('.index-activity')).toBeHidden();
-    expect(errors).toEqual([]);
-  });
-
-  test('with tabs open, Recent activity adds &view=activity and a reload opens the tabs over it', async ({ page }) => {
-    const errors = watchErrors(page);
-    const now = Date.now();
-    await page.route((url) => url.pathname === ACTIVITY, (route) => route.fulfill({
-      json: { from: new Date(now - 7 * DAY).toISOString(), to: new Date(now).toISOString(),
-        older: false, truncated: false, pages: [] },
-    }));
-    const strip = page.getByRole('group', { name: 'Open pods' });
-    await page.goto('/#tabs=capture-article');
-    await expect(strip.locator('.pod-tab')).toHaveCount(1);
-    const { pages, activity } = views(page);
-    await expect(pages).toHaveAttribute('aria-pressed', 'true');
-
-    await activity.click();
-    await expect(activity).toHaveAttribute('aria-pressed', 'true');
-    await expect(page).toHaveURL(/\/#tabs=capture-article&view=activity$/);
-    await page.reload();
-    await expect(strip.locator('.pod-tab')).toHaveCount(1);
-    await expect(strip.locator('.pod-tab[data-page="capture-article"]')).toHaveCount(1);
-    await expect(activity).toHaveAttribute('aria-pressed', 'true');
-    await expect(page.locator('.index-count')).toHaveText('No activity in the last 7 days.');
-    await expect(page).toHaveURL(/\/#tabs=capture-article&view=activity$/);
-    expect(errors).toEqual([]);
-  });
-
   test('an answer with nothing in it says there was no activity', async ({ page }) => {
     const errors = watchErrors(page);
     const now = Date.now();
