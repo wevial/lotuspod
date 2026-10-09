@@ -17,7 +17,6 @@
   // the menu, to be put side by side in a positioned box, and close(), which
   // closes the menu.
   function versionMenu(versions, page, seen) {
-    var HASH = "#versions";
     var button = element("button", "artifact-versions-menu-button", "▾");
     button.type = "button";
     button.id = "artifact-versions-menu-button";
@@ -61,7 +60,7 @@
         String(version.summary || "") || "First version"));
       list.appendChild(link);
     });
-    var seeAll = item(HASH, "artifact-versions-menu-all");
+    var seeAll = item("#versions", "artifact-versions-menu-all");
     seeAll.textContent = "See all versions";
     menu.append(list, seeAll);
 

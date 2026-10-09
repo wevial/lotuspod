@@ -72,15 +72,6 @@ function watchErrors(page: Page) {
   return errors;
 }
 
-// The commit of the page's older version, as the versions route lists it.
-async function olderCommit(page: Page, name: string) {
-  const answered = await page.request.get(`/api/versions?page=${name}`);
-  expect(answered.status()).toBe(200);
-  const { versions } = await answered.json();
-  expect(versions[1].current).toBe(false);
-  return versions[1].commit as string;
-}
-
 // A click on part of a versions row that is not its link. The link's
 // stretched box covers the row, so the click lands on the link, as a
 // reader's would; force skips the check that would refuse a covered element.
@@ -134,8 +125,11 @@ test.describe('signed in', () => {
     await expect(versions.more).toBeHidden();
 
     // A click anywhere on a row follows its link, as the link itself would.
-    const older = await olderCommit(page, name);
-    const oldUrl = new RegExp(`/${name}\\.html\\?version=${older}$`);
+    const answered = await page.request.get(`/api/versions?page=${name}`);
+    expect(answered.status()).toBe(200);
+    const older = (await answered.json()).versions[1];
+    expect(older.current).toBe(false);
+    const oldUrl = new RegExp(`/${name}\\.html\\?version=${older.commit}$`);
     const banner = page.locator('main.artifact--old-version > div.artifact-version-banner');
     await onRow(versions.entries.nth(1).locator('.artifact-versions-note'));
     await expect(page).toHaveURL(oldUrl);
