@@ -91,6 +91,10 @@
   var CONTEXT = 32;
   // How long the selection must keep still before the pill shows, in ms.
   var STILL = 200;
+  // An archived page, as serve marks it (lotuspod.archive): its threads and
+  // answers are read, but it takes no new comment, reply or answer.
+  var ARCHIVED = Boolean(document.querySelector('meta[name="lotuspod:archived"]'));
+  var CLOSED = "Comments are closed: this page is archived.";
 
   function when(stamp) {
     var date = new Date(stamp);

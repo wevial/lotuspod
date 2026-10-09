@@ -15,22 +15,33 @@ index and commits once, under the output directory's publish lock: the
 commands call it, and so does serve's /api/archive route (lotuspod.api).
 Without --local, when the config's [publish] section names a host, a command
 runs there over ssh, as publish does.
+
+archived_page() is an archived page's HTML as serve answers it: marked
+archived for the page script, with a banner under its title bar saying when
+and what replaced it, and its decision forms disabled. The file on disk is
+left as published.
 """
 
 from __future__ import annotations
 
 import argparse
 import datetime as _dt
+import html
 import json
 import shlex
 import subprocess
 import sys
+import urllib.parse
 from pathlib import Path
 
 from http import HTTPStatus
 
 # cli imports this module too: only names used at call time are read from it.
-from lotuspod import api, cli
+from lotuspod import api, cli, versions
+
+# What an archived page's decision forms say under their disabled fieldsets.
+CLOSED_NOTE = "Answering is closed: this page is archived."
+_TOPBAR = '<div class="artifact-topbar">'
 
 class Refused(api.Refusal, RuntimeError):
     """An archive or unarchive that wrote nothing, saying why: a RuntimeError
@@ -75,6 +86,56 @@ def visible_page(out_dir: Path, name: str) -> bool:
     no name reaches past it."""
     file = f"{name}.html"
     return cli.is_page_name(file) and file in cli.serve_allow_list(out_dir)
+
+
+def archived_page(page_html: str, record: dict, successor_title: str | None) -> str:
+    """page_html as serve answers it while record archives it: the
+    lotuspod:archived meta in its head, main marked artifact--archived, a
+    banner right after its title bar, and each decision form's fieldset
+    disabled with CLOSED_NOTE after it. successor_title is the title of the
+    page record's successor when serve answers that page, else None, and the
+    banner names no successor."""
+    stamp = html.escape(record["archivedAt"])
+    page_html = page_html.replace(
+        "</head>", f'  <meta name="lotuspod:archived" content="{stamp}">\n</head>', 1)
+    page_html = versions._disable_forms(
+        page_html, f'<p class="artifact-archived-note">{CLOSED_NOTE}</p>')
+    successor = record.get("supersededBy")
+    replaced = ""
+    if successor and successor_title is not None:
+        link = html.escape(urllib.parse.quote(f"{successor}.html"))
+        replaced = f' · superseded by <a href="{link}">{html.escape(successor_title)}</a>'
+    banner = (
+        '\n    <div class="artifact-archived-banner" role="note">'
+        f'<p class="artifact-archived-banner-text">Archived <time datetime="{stamp}">'
+        f'{html.escape(record["archivedAt"][:10])}</time>{replaced}</p></div>'
+    )
+    # Right after the title bar, which holds no div of its own; at the top of
+    # main on a page without one.
+    bar = page_html.find(_TOPBAR)
+    closed = page_html.find("</div>", bar) if bar >= 0 else -1
+
+    def opened(match) -> str:
+        tail = match.group(2) + ">" + (banner if closed < 0 else "")
+        return f'<main class="{match.group(1)} artifact--archived"{tail}'
+
+    if closed >= 0:
+        closed += len("</div>")
+        page_html = page_html[:closed] + banner + page_html[closed:]
+    return versions._MAIN_OPEN_RE.sub(opened, page_html, count=1)
+
+
+def successor_title(out_dir: Path, record: dict) -> str | None:
+    """The title of record's successor when it is a page serve answers;
+    None when there is none, or it cannot be read."""
+    successor = record.get("supersededBy")
+    if not successor or not visible_page(out_dir, successor):
+        return None
+    try:
+        page_html = (out_dir / f"{successor}.html").read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return None
+    return cli.extract_meta(page_html, successor)["title"]
 
 
 def set_archived(out_dir: Path, name: str, archived: bool,

@@ -11,14 +11,15 @@
   // panel: every question under its section's heading, its options as
   // pressed buttons (a checklist's as checkboxes), its state, and one Save
   // that posts each answer whose shown choice or note is not stored, in page
-  // order. A page whose answers could not be read gets no sheet.
+  // order. A page whose answers could not be read gets no sheet, and nor
+  // does an archived one, which takes no answer.
   // Each h2 whose section asks open questions, and its outline link, is
   // marked "N open". The panel and the forms are one state: a pick in
   // either moves the other.
   function reviewSheet(the) {
     var bar = document.querySelector(".artifact-topbar");
     var body = document.querySelector("section.artifact-body");
-    if (!bar || !body) {
+    if (!bar || !body || ARCHIVED) {
       return;
     }
     var outline = document.querySelector("ol.artifact-outline-list");

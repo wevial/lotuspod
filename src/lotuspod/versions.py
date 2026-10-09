@@ -633,11 +633,9 @@ def _shown_date(stamp: str) -> str:
     return f"{stamp[:10]} {stamp[11:16]} UTC" if len(stamp) >= 16 else stamp
 
 
-def _disable_forms(page_html: str, current: str) -> str:
-    """Each decision form's fieldset disabled, and a note after it saying
-    where to answer."""
-    note = ('<p class="artifact-version-note">Answering is off on old versions. '
-            f'<a href="{current}">Answer on the current page.</a></p>')
+def _disable_forms(page_html: str, note: str) -> str:
+    """Each decision form's fieldset disabled, and note, HTML, after it
+    saying why."""
     parts: list[str] = []
     at = 0
     for start in [match.start() for match in _DECISION_FORM_RE.finditer(page_html)]:
@@ -662,7 +660,9 @@ def _disable_forms(page_html: str, current: str) -> str:
 def old_page(page_html: str, name: str, version: Version, behind: int) -> str:
     """An earlier version's HTML as serve answers it."""
     current = html.escape(urllib.parse.quote(f"{name}.html"))
-    page_html = _disable_forms(page_html, current)
+    page_html = _disable_forms(page_html, (
+        '<p class="artifact-version-note">Answering is off on old versions. '
+        f'<a href="{current}">Answer on the current page.</a></p>'))
     count = "1 version" if behind == 1 else f"{behind} versions"
     stamp = html.escape(version.date)
     banner = (

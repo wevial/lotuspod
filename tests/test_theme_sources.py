@@ -171,10 +171,11 @@ class DeclaredOrderTests(ThemeCopyTestCase):
     def test_the_ref_cards_sources_are_declared(self):
         """LOTUS-100: the cards' script uses when() and linkTab(), so it is
         joined after js/page-open.js and js/link-tab.js, just before
-        js/page-close.js; its styles just after css/prose.css."""
+        js/page-close.js but for js/archive.js; its styles just after
+        css/prose.css."""
         styles = cli.THEME_SOURCES[STYLESHEET]
         script = cli.THEME_SOURCES[cli.PAGE_SCRIPT]
-        self.assertEqual(script[-2:], ("js/ref-cards.js", "js/page-close.js"))
+        self.assertEqual(script[-3:], ("js/ref-cards.js", "js/archive.js", "js/page-close.js"))
         self.assertGreater(script.index("js/ref-cards.js"), script.index("js/link-tab.js"))
         self.assertEqual(styles.index("css/ref-cards.css"), styles.index("css/prose.css") + 1)
         problems = source_problems(cli.THEME_DIR, cli.THEME_SOURCES)
@@ -190,6 +191,18 @@ class DeclaredOrderTests(ThemeCopyTestCase):
         self.assertEqual(styles.index("css/pod-tabs.css"), styles.index("css/index.css") + 1)
         self.assertIn(cli.INDEX_SCRIPT, cli.THEME_FILES)
         self.assertIn(cli.INDEX_SCRIPT, cli.serve_allow_list(self.out_dir))
+        problems = source_problems(cli.THEME_DIR, cli.THEME_SOURCES)
+        self.assertEqual(problems, [], "\n".join(problems))
+
+    def test_the_archive_sources_are_declared(self):
+        """LOTUS-118: the header's Archive button uses element(), json() and
+        SIGNED_OUT, so js/archive.js is joined after js/page-open.js, just
+        before js/page-close.js; its styles, the archived banner's among
+        them, follow css/versions.css, whose old-version banner they match."""
+        styles = cli.THEME_SOURCES[STYLESHEET]
+        script = cli.THEME_SOURCES[cli.PAGE_SCRIPT]
+        self.assertEqual(script[-2:], ("js/archive.js", "js/page-close.js"))
+        self.assertEqual(styles.index("css/archive.css"), styles.index("css/versions.css") + 1)
         problems = source_problems(cli.THEME_DIR, cli.THEME_SOURCES)
         self.assertEqual(problems, [], "\n".join(problems))
 

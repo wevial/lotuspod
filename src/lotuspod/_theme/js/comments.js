@@ -584,6 +584,8 @@
         toggle.setAttribute("aria-expanded", open ? "true" : "false");
       }
       unfold(false);
+      // An archived page takes no reply.
+      toggle.disabled = ARCHIVED;
       toggle.addEventListener("click", function () {
         unfold(form.hidden);
         if (!form.hidden) {
@@ -888,10 +890,10 @@
 
       // The passage the reader has selected, or null when it is not one a
       // comment can be on: 1 to MAX_EXACT characters of the page's text, all
-      // in it and in one section.
+      // in it and in one section, on a page that is not archived.
       function selected() {
         var selection = document.getSelection();
-        if (!selection || !selection.rangeCount || selection.isCollapsed) {
+        if (ARCHIVED || !selection || !selection.rangeCount || selection.isCollapsed) {
           return null;
         }
         var range = selection.getRangeAt(0);
@@ -1224,6 +1226,12 @@
       pick.setAttribute("aria-expanded", "false");
       pick.setAttribute("aria-controls", choices.id);
       start.append(none, pick, choices);
+      // An archived page takes no new thread: the panel says so above its
+      // threads, and its controls for one are disabled.
+      if (ARCHIVED) {
+        pick.disabled = true;
+        start.insertBefore(element("p", "artifact-comments-closed", CLOSED), none);
+      }
       sheet.append(head, start, list);
       aside.append(rail, sheet);
       document.body.appendChild(aside);
@@ -1257,6 +1265,7 @@
           holder.hidden = true;
           toggle.setAttribute("aria-controls", holder.id);
           toggle.setAttribute("aria-expanded", "false");
+          toggle.disabled = ARCHIVED;
           toggle.addEventListener("click", function () { compose(made, holder.hidden); });
           node.append(toggle, holder);
           made.toggle = toggle;
@@ -2061,14 +2070,14 @@
       };
 
       // A chip: the panel opens at its section's newest open thread, or at
-      // its form for a new one.
+      // its form for a new one, which an archived page has none of.
       function show(box) {
         setOpen(true, true);
         var newest = latest(unresolvedOf(box));
         if (newest) {
           expand(newest);
           newest.entry.head.focus({ preventScroll: true });
-        } else {
+        } else if (!ARCHIVED) {
           compose(groups.get(box), true);
         }
       }
