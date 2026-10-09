@@ -386,21 +386,22 @@
   }
 }
 
-/* Narrower still the title has shrunk to nothing, yet it, its separator and
-   their gaps still take the room the arrow needs: they leave, and the title
-   bar and both controls take less padding. */
+/* Narrower still, while Next open shows, the title has shrunk to nothing,
+   yet it, its separator and their gaps still take the room the arrow
+   needs: they leave, and the title bar and both controls take less
+   padding. With no question open the title stays. */
 @media (max-width: 19.5rem) {
-  .artifact-topbar:has(.artifact-review-bar) .artifact-topbar-sep,
-  .artifact-topbar:has(.artifact-review-bar) .artifact-topbar-title {
+  .artifact-topbar:has(.artifact-review-next:not([hidden])) .artifact-topbar-sep,
+  .artifact-topbar:has(.artifact-review-next:not([hidden])) .artifact-topbar-title {
     display: none;
   }
 
-  .artifact-topbar:has(.artifact-review-bar) {
+  .artifact-topbar:has(.artifact-review-next:not([hidden])) {
     padding-inline: 0.5rem;
   }
 
-  .artifact-topbar a.artifact-review-next,
-  .artifact-review-count {
+  .artifact-topbar:has(.artifact-review-next:not([hidden])) a.artifact-review-next,
+  .artifact-topbar:has(.artifact-review-next:not([hidden])) .artifact-review-count {
     padding-inline: 0.4rem;
   }
 }

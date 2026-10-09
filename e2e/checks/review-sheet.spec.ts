@@ -482,6 +482,26 @@ test.describe('signed in', () => {
       expect(wide.scroll).toBeLessThanOrEqual(wide.client);
       expect(wide.arrow).toBe(true);
     });
+
+    test('with no question open the title stays and the count fits', async ({ page }) => {
+      await page.route((url) => url.pathname === '/api/answers', (route) =>
+        route.request().method() === 'GET'
+          ? route.fulfill({ json: { page: 'capture-review-sheet', questions: {} } })
+          : route.continue());
+      await page.goto(PAGE);
+      const the = sheet(page);
+      await expect(the.count).toHaveText('3 to answer · Respond');
+      await expect(page.locator('.artifact-topbar-title')).toBeHidden();
+      // A pick on each form with no default leaves no question open, unsaved.
+      for (const question of ['decision-d2', 'decision-d3', 'decision-d6']) {
+        await the.form(question).locator('input[name="choice"]').first().check();
+      }
+      await expect(the.next).toBeHidden();
+      expect(await page.locator('.artifact-topbar-title').evaluate((title) => getComputedStyle(title).display))
+        .not.toBe('none');
+      const box = await the.count.boundingBox();
+      expect(box!.x + box!.width).toBeLessThanOrEqual(280);
+    });
   });
 });
 
