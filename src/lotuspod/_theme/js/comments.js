@@ -584,6 +584,7 @@
         toggle.setAttribute("aria-expanded", open ? "true" : "false");
       }
       unfold(false);
+      toggle.disabled = ARCHIVED;
       toggle.addEventListener("click", function () {
         unfold(form.hidden);
         if (!form.hidden) {
@@ -840,7 +841,7 @@
       // them, holding the text and images kept; false when it has them no
       // more.
       api.reopen = function (kept) {
-        if (!article || !kept.quote || typeof kept.quote.exact !== "string") {
+        if (ARCHIVED || !article || !kept.quote || typeof kept.quote.exact !== "string") {
           return false;
         }
         var model = textModel(article);
@@ -888,10 +889,10 @@
 
       // The passage the reader has selected, or null when it is not one a
       // comment can be on: 1 to MAX_EXACT characters of the page's text, all
-      // in it and in one section.
+      // in it and in one section, on a page that is not archived.
       function selected() {
         var selection = document.getSelection();
-        if (!selection || !selection.rangeCount || selection.isCollapsed) {
+        if (ARCHIVED || !selection || !selection.rangeCount || selection.isCollapsed) {
           return null;
         }
         var range = selection.getRangeAt(0);
@@ -1224,6 +1225,12 @@
       pick.setAttribute("aria-expanded", "false");
       pick.setAttribute("aria-controls", choices.id);
       start.append(none, pick, choices);
+      // An archived page takes no new thread: the panel says so above its
+      // threads, and its controls for one are disabled.
+      if (ARCHIVED) {
+        pick.disabled = true;
+        start.insertBefore(element("p", "artifact-comments-closed", CLOSED), none);
+      }
       sheet.append(head, start, list);
       aside.append(rail, sheet);
       document.body.appendChild(aside);
@@ -1257,6 +1264,7 @@
           holder.hidden = true;
           toggle.setAttribute("aria-controls", holder.id);
           toggle.setAttribute("aria-expanded", "false");
+          toggle.disabled = ARCHIVED;
           toggle.addEventListener("click", function () { compose(made, holder.hidden); });
           node.append(toggle, holder);
           made.toggle = toggle;
@@ -1411,8 +1419,11 @@
 
       // Unfold or fold a group's form for a new thread; unfolded, its field
       // has focus. In the panel one form is open at a time: another left
-      // empty folds.
+      // empty folds. An archived page unfolds none.
       function compose(made, show) {
+        if (show && ARCHIVED) {
+          return;
+        }
         if (show && api.wide) {
           groups.forEach(function (other) {
             if (other !== made && !other.holder.hidden && !forms.get(other.box).elements.text.value) {
@@ -2092,14 +2103,14 @@
       };
 
       // A chip: the panel opens at its section's newest open thread, or at
-      // its form for a new one.
+      // its form for a new one, which an archived page has none of.
       function show(box) {
         setOpen(true, true);
         var newest = latest(unresolvedOf(box));
         if (newest) {
           expand(newest);
           newest.entry.head.focus({ preventScroll: true });
-        } else {
+        } else if (!ARCHIVED) {
           compose(groups.get(box), true);
         }
       }
@@ -2381,7 +2392,7 @@
         if (!view) {
           return;
         }
-        var writing = view.box && kept.writing ? groups.get(view.box) : null;
+        var writing = view.box && kept.writing && !ARCHIVED ? groups.get(view.box) : null;
         if (api.wide) {
           setOpen(true, false);
           if (view.thread) {
@@ -2708,7 +2719,11 @@
         if (thread) {
           thread.field.value = String(each.text || "");
           told(thread.field.form, attached.get(thread.field.form).restore(each.images));
-          thread.unfold(true);
+          // On an archived page the text is kept, folded away, for a reload
+          // once it takes replies again.
+          if (!ARCHIVED) {
+            thread.unfold(true);
+          }
         } else if (box) {
           told(forms.get(box), join(forms.get(box), each));
         } else {

@@ -487,6 +487,35 @@ NAME` (or `unarchive`), each argument quoted, and exits with ssh's status;
 archive a page from the browser, through `/api/archive` (see [Answers and
 comments](comments.md#answers-and-comments)).
 
+`lotuspod serve` answers an archived page marked as archived, from memory, so
+the page file and its versions stay as published. Its head gains `<meta
+name="lotuspod:archived" content="STAMP">`, its `main` the class
+`artifact--archived`, and right under the title bar a banner (`role="note"`)
+reads "Archived 2026-10-09", the day in UTC, and " · superseded by" a link to
+the successor's title while serve answers that page; a successor rendered
+`--hidden` since is left out. Each decision form's fieldset is disabled, with
+the note "Answering is closed: this page is archived." under it. The answer
+is always a 200 with `Cache-Control: no-cache`, whatever `If-Modified-Since`
+says, so a reload after archiving or unarchiving shows the page as it now is.
+
+Its threads, replies and answers stay readable, but the page takes no new
+ones: the comments and answers routes refuse them with 409 `archived` (see
+[Answers and comments](comments.md#answers-and-comments)). The page script
+shows no "Comment" pill on selected words, disables "Comment on a section",
+each "Comment on this section" and each thread's reply toggle, says "Comments
+are closed: this page is archived." above the panel's threads, and draws no
+review sheet; each decision's Ask is disabled with its fieldset. Resolving and
+reopening a thread still work.
+
+A reader in the `[access]` `owners` list gets a button in the page header,
+after the date line: "Archive" on a page that is not archived, "Unarchive" on
+one that is. Pressing it posts to `/api/archive` and reloads the page; on any
+other answer the page stays, and a line beside the button says why. The
+button archives with no successor: only `lotuspod archive --superseded-by`
+sets one. Signed out, or as any other reader, there is no button, and a page
+with no page script (a bare `lotuspod render` with no revision, decisions or
+comments) has none either.
+
 ## Manifest
 
 Generate `artifacts/manifest.json`, an index of every rendered artifact in a
@@ -550,14 +579,24 @@ A published page's header ends its date line in a "Versions · N" link to
 `#versions`, which shows the page's versions in place of its body: each with
 its date and time, a note under it saying which sections it changed from the
 version before ("Beta changed; Delta added", or "new version" when none did;
-"First version" on the first), the current one marked "current", and every
-other with a "View" link. The list shows 20, and "Show older versions" shows 20 more. A
+"First version" on the first), the current one marked "current", and each
+with a "View" link: the current one's to the page, every other's to that
+version. A click anywhere on a row follows its link, a middle or
+Cmd/Ctrl-click opening it in a new tab, and the link stays the row's one stop
+for Tab. The list shows 20, and "Show older versions" shows 20 more. A
 page with one version says "This is the only version.", and one in a
 directory that is not a repository shows "Versions · 0" and says "This page
 has no versions yet." The page asks
 `GET /api/versions?page=NAME` (see [Reading and answering
 pages](comments.md#answers-and-comments)) once as it loads; when it answers
 anything but 200, as on the demo, there is no link and no view.
+
+Beside the link a ▾ button, "Choose a version", opens a menu of the versions
+without leaving the page: newest first, each with its date and time, its
+summary on one line, and "current" or "you last looked" where those apply,
+then "See all versions" to `#versions`. Choosing one opens it in the same
+tab. The arrow keys, Home and End move through the menu, and Escape, Tab or
+a click outside closes it.
 
 "View" opens `NAME.html?version=COMMIT`, that version read-only, for a
 reader whose Access assertion verifies as on `/api`. It answers 404 unless
@@ -667,8 +706,10 @@ Signed in to `lotuspod serve`, the index also asks `/api/activity` (see
 [Answers and comments](comments.md#answers-and-comments)) for the last 7 days.
 When it answers 200, a "Pages | Recent activity" switch (a group named View,
 each button `aria-pressed`) appears after the title, and the index opens on
-Recent activity unless the URL ends `#pages`: no hash is Recent activity, so
-either view can be linked and the back button moves between them. The open
+Pages unless the URL ends `#activity`: no hash (or `#pages`) is Pages, and
+pressing Recent activity writes `#activity` (pressing Pages, no hash), in
+place without a history entry, so either view can be linked and reloading
+keeps it. The open
 tabs' fragment (see [Pods in tabs](#pods-in-tabs)) names Pages, or Recent
 activity when it ends `&view=activity`; either button rewrites it so, keeping
 the tabs. On any other
@@ -768,9 +809,9 @@ search. The open tabs and the active one are kept in the address as
 in place without a history entry, and loading the index with that fragment
 opens them again; a name the listing does not have is dropped. Pressing Pages
 or Recent activity writes it again, so the view buttons keep the tabs. Once
-the last tab closes, the address is the view's own again: `#pages`, or none
-for Recent activity (with no views to switch, the fragment it had before the
-first tab).
+the last tab closes, the address is the view's own again: none for Pages, or
+`#activity` for Recent activity (with no views to switch, the fragment it had
+before the first tab).
 
 A tab that is not active shows a dot from `/api/seen`: amber, "new version"
 for a screen reader, when its page was published again since this reader last

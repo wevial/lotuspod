@@ -24,7 +24,7 @@
 // names the Pages view of the index's own script, or ends &view=activity
 // for Recent activity, and is written again each time that script shows a
 // view ("lotuspod:view"), whose buttons would otherwise drop it. Once no tab
-// is open, the fragment is the view's own again: #pages, or none.
+// is open, the fragment is the view's own again: none, or #activity.
 //
 // Each time the listing shows again, the index's own script is told
 // ("lotuspod:listing"), so it reads its marks and counts again, as when the
@@ -104,8 +104,8 @@
   let seen = null;
   // The fragment the address had before any tab was open, for an index
   // with no views to switch. Under the tabs' fragment it was loaded with,
-  // that is #pages.
-  let before = FRAGMENT.test(location.hash) ? "#pages" : location.hash;
+  // that is none.
+  let before = FRAGMENT.test(location.hash) ? "" : location.hash;
 
   const find = (name) => open.find((pod) => pod.name === name) || null;
 
@@ -173,7 +173,7 @@
     // Until the views can be switched, the view the address names stays.
     const view = viewShown() ||
       (FRAGMENT.test(location.hash) && location.hash.endsWith("&view=activity") ? "activity" : null);
-    let fragment = view === null ? before : view === "activity" ? "" : "#pages";
+    let fragment = view === null ? before : view === "activity" ? "#activity" : "";
     if (open.length) {
       fragment = `#tabs=${open.map((pod) => encodeURIComponent(pod.name)).join(",")}`;
       if (active !== null) fragment += `&on=${encodeURIComponent(active)}`;

@@ -264,6 +264,10 @@ A thread on a decision is checked in this order: 404 `unknown_page`, 400
 (a page rendered without comments), and 409 `stale_page` for a `revision`
 other than the page's. Its body with a `section` or a `quote` beside
 `question` is 400 `invalid_body`.
+A page that is archived (see [Archive a page](publishing.md#archive-a-page))
+takes no new thread, reply, thread on a decision or answer: once the page is
+found, each is 409 `archived`, and nothing is stored. Resolving and reopening
+its threads, seen marks and every read answer as on any page.
 
 ### Replies to you
 

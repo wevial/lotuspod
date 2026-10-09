@@ -105,12 +105,12 @@ function activityRead(page: Page) {
   return page.waitForResponse((response) => new URL(response.url()).pathname === ACTIVITY);
 }
 
-// Open the index, or load it again, and let its read of the activity route
-// and the seen route come back.
+// Open the index on Recent activity, or load it again, and let its read of
+// the activity route and the seen route come back.
 async function openIndex(page: Page, again = false) {
   const reads = [activityRead(page), page.waitForResponse((response) =>
     new URL(response.url()).pathname === SEEN)];
-  await (again ? page.reload() : page.goto('/'));
+  await (again ? page.reload() : page.goto('/#activity'));
   return Promise.all(reads);
 }
 
@@ -276,23 +276,20 @@ test.describe('signed in', () => {
       await expect(replied.locator('.index-activity-new')).toHaveText('new, to you');
       await expect(replied.locator('.index-dot')).toHaveClass('index-dot index-dot--reply index-dot--unread');
 
-      // Pages, then back.
+      // Pages, then Recent activity again, each written in place.
+      const entries = await page.evaluate(() => history.length);
       await pages.click();
-      await expect(page).toHaveURL(/#pages$/);
+      await expect(page).not.toHaveURL(/#/);
       await expect(pages).toHaveAttribute('aria-pressed', 'true');
       await expect(page.locator('.index-table')).toBeVisible();
       await expect(page.locator('.index-activity')).toBeHidden();
       await expect(page.locator('.index-count')).toHaveText(/^\d+ pages, newest update first$/);
-      await page.goBack();
-      await expect(page).not.toHaveURL(/#/);
+      await activity.click();
+      await expect(page).toHaveURL(/\/#activity$/);
       await expect(activity).toHaveAttribute('aria-pressed', 'true');
       await expect(page.locator('.index-activity')).toBeVisible();
       await expect(page.locator('.index-table')).toBeHidden();
-      await page.goForward();
-      await expect(pages).toHaveAttribute('aria-pressed', 'true');
-      await activity.click();
-      await expect(page).not.toHaveURL(/#/);
-      await expect(activity).toHaveAttribute('aria-pressed', 'true');
+      expect(await page.evaluate(() => history.length)).toBe(entries);
 
       // A label only A carries keeps only A's group, then only its row.
       await page.getByRole('button', { name: /^Labels/ }).click();
@@ -513,7 +510,7 @@ test.describe('signed in', () => {
         truncated: false, pages: [{ page: 'capture-comments', title: 'Capture comments', latest: at(0), events }] },
     }));
 
-    await page.goto('/');
+    await page.goto('/#activity');
     const comments = group(page, 'capture-comments');
     const items = comments.locator('li.index-activity-event');
     await expect(items).toHaveCount(events.length);
@@ -593,7 +590,7 @@ test.describe('signed in', () => {
       return route.fulfill({ json: before ? earlier : first });
     });
 
-    await page.goto('/');
+    await page.goto('/#activity');
     const older = page.getByRole('button', { name: 'Show older' });
     await expect(older).toBeVisible();
     expect(await shownGroups(page)).toEqual(['capture-comments']);
@@ -636,7 +633,7 @@ test.describe('signed in', () => {
         Date.now()) });
     });
 
-    await page.goto('/');
+    await page.goto('/#activity');
     const comments = group(page, 'capture-comments');
     await expect(comments.locator('.index-activity-new')).toHaveText('new, to you');
     await page.getByRole('button', { name: 'Show older' }).click();
@@ -657,7 +654,24 @@ test.describe('signed in', () => {
     expect(errors).toEqual([]);
   });
 
-  test('an answer with nothing in it says there was no activity', async ({ page }) => {
+  test('with no fragment, the index opens on Pages and the switch marks Pages as current', async ({ page }) => {
+    const errors = watchErrors(page);
+    const now = Date.now();
+    await page.route((url) => url.pathname === ACTIVITY, (route) => route.fulfill({
+      json: { from: new Date(now - 7 * DAY).toISOString(), to: new Date(now).toISOString(),
+        older: false, truncated: false, pages: [] },
+    }));
+    const read = activityRead(page);
+    await page.goto('/');
+    expect((await read).status()).toBe(200);
+    const { pages, activity } = views(page);
+    await expect(pages).toHaveAttribute('aria-pressed', 'true');
+    await expect(activity).toHaveAttribute('aria-pressed', 'false');
+    await expect(page.locator('.index-table')).toBeVisible();
+    expect(errors).toEqual([]);
+  });
+
+  test('Recent activity, once pressed, is kept in the address, and Pages clears it', async ({ page }) => {
     const errors = watchErrors(page);
     const now = Date.now();
     await page.route((url) => url.pathname === ACTIVITY, (route) => route.fulfill({
@@ -665,6 +679,65 @@ test.describe('signed in', () => {
         older: false, truncated: false, pages: [] },
     }));
     await page.goto('/');
+    const { pages, activity } = views(page);
+    await expect(pages).toHaveAttribute('aria-pressed', 'true');
+    const entries = await page.evaluate(() => history.length);
+
+    await activity.click();
+    await expect(activity).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('.index-count')).toHaveText('No activity in the last 7 days.');
+    await expect(page).toHaveURL(/\/#activity$/);
+    await page.reload();
+    await expect(activity).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('.index-count')).toHaveText('No activity in the last 7 days.');
+    await expect(page.locator('.index-table')).toBeHidden();
+
+    await pages.click();
+    await expect(pages).toHaveAttribute('aria-pressed', 'true');
+    await expect(page).not.toHaveURL(/#/);
+    // Each press wrote the address in place.
+    expect(await page.evaluate(() => history.length)).toBe(entries);
+    await page.reload();
+    await expect(pages).toHaveAttribute('aria-pressed', 'true');
+    await expect(activity).toHaveAttribute('aria-pressed', 'false');
+    await expect(page.locator('.index-table')).toBeVisible();
+    await expect(page.locator('.index-activity')).toBeHidden();
+    expect(errors).toEqual([]);
+  });
+
+  test('with tabs open, Recent activity adds &view=activity and a reload opens the tabs over it', async ({ page }) => {
+    const errors = watchErrors(page);
+    const now = Date.now();
+    await page.route((url) => url.pathname === ACTIVITY, (route) => route.fulfill({
+      json: { from: new Date(now - 7 * DAY).toISOString(), to: new Date(now).toISOString(),
+        older: false, truncated: false, pages: [] },
+    }));
+    const strip = page.getByRole('group', { name: 'Open pods' });
+    await page.goto('/#tabs=capture-article');
+    await expect(strip.locator('.pod-tab')).toHaveCount(1);
+    const { pages, activity } = views(page);
+    await expect(pages).toHaveAttribute('aria-pressed', 'true');
+
+    await activity.click();
+    await expect(activity).toHaveAttribute('aria-pressed', 'true');
+    await expect(page).toHaveURL(/\/#tabs=capture-article&view=activity$/);
+    await page.reload();
+    await expect(strip.locator('.pod-tab')).toHaveCount(1);
+    await expect(strip.locator('.pod-tab[data-page="capture-article"]')).toHaveCount(1);
+    await expect(activity).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('.index-count')).toHaveText('No activity in the last 7 days.');
+    await expect(page).toHaveURL(/\/#tabs=capture-article&view=activity$/);
+    expect(errors).toEqual([]);
+  });
+
+  test('an answer with nothing in it says there was no activity', async ({ page }) => {
+    const errors = watchErrors(page);
+    const now = Date.now();
+    await page.route((url) => url.pathname === ACTIVITY, (route) => route.fulfill({
+      json: { from: new Date(now - 7 * DAY).toISOString(), to: new Date(now).toISOString(),
+        older: false, truncated: false, pages: [] },
+    }));
+    await page.goto('/#activity');
     await expect(views(page).activity).toHaveAttribute('aria-pressed', 'true');
     await expect(page.locator('.index-count')).toHaveText('No activity in the last 7 days.');
     await expect(page.getByText('No activity matches these filters.')).toBeHidden();
@@ -715,7 +788,7 @@ test.describe('signed in', () => {
     expect(errors).toEqual([]);
   });
 
-  test('an index with no page opens on Recent activity too, and says there was none', async ({ page }) => {
+  test('an index with no page gets the switch too, and its Recent activity says there was none', async ({ page }) => {
     const errors = watchErrors(page);
     await serveEmptyIndex(page);
     const now = Date.now();
@@ -723,7 +796,7 @@ test.describe('signed in', () => {
       json: { from: new Date(now - 7 * DAY).toISOString(), to: new Date(now).toISOString(),
         older: false, truncated: false, pages: [] },
     }));
-    await page.goto('/');
+    await page.goto('/#activity');
     const { pages, activity } = views(page);
     await expect(activity).toHaveAttribute('aria-pressed', 'true');
     await expect(page.locator('.index-count')).toHaveText('No activity in the last 7 days.');
