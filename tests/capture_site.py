@@ -193,6 +193,21 @@ SECTION_QUESTIONS_BODY = """\
 </table>
 """
 
+# A plan page whose one question offers an option whose label slugifies to
+# far more than the answers route takes as a choice, and a short one. No
+# comment boxes and no diagram, so the page needs no network.
+LONG_OPTION_BODY = """\
+<p>A sample plan for captures: one option is a long sentence.</p>
+<h2>Reviews</h2>
+<h3>Decisions for the maintainer</h3>
+<table>
+<thead><tr><th>#</th><th>Question</th><th>Options</th></tr></thead>
+<tbody>
+<tr><td>D1</td><td>How do reviews weigh evidence?</td><td>Evidence levels: reproduced or traced can block; a concern is answered but never blocks, at most 3 per round, high-tier ones also go to the operator / No</td></tr>
+</tbody>
+</table>
+"""
+
 # A plan page whose answers end it in an "Answered" table: two sections,
 # Pump asking question 1 and Heater asking questions 2 and 3, each with a
 # comment box naming the page. Owned by OWNER. No diagram, so the page needs
@@ -544,6 +559,7 @@ SAMPLE_PAGES = (
     ("capture-decisions", "Capture decisions", DECISIONS_BODY, ()),
     ("capture-section-questions", "Capture section questions", SECTION_QUESTIONS_BODY, ()),
     ("capture-checklist", "Capture checklist", CHECKLIST_BODY, ()),
+    ("capture-long-option", "Capture long option", LONG_OPTION_BODY, ()),
     ("capture-sections", "Capture sections", SECTIONS_BODY,
      ("--comments", "--owner", OWNER)),
     ("capture-answered", "Capture answered", ANSWERED_BODY,
