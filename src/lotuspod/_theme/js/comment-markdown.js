@@ -62,7 +62,7 @@
   // text's blocks, appended to parent: a blank line ends a paragraph, and a
   // single newline in one stays a line break.
   function commentMarkdown(parent, text) {
-    var lines = String(text).split(/\r\n|\r|\n/);
+    var lines = text.split(/\r\n|\r|\n/);
     var paragraph = [];
     var list = null;
     var item = null;
