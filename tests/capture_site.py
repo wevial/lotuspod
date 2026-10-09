@@ -623,11 +623,13 @@ thead.</p>
 <tr><td>S</td><td>Note what the check found</td><td>ready</td></tr>
 <tr><td>T</td><td>""" + "A long write-up of the check. " * 200 + """</td><td>waiting</td></tr>
 </table>
-<p>A fourth plan: boxes styled in Mermaid itself keep their look.</p>
+<p>A fourth plan: boxes styled in Mermaid itself keep their look, and a box's label breaks its
+lines.</p>
 <pre class="mermaid">flowchart LR
   F[Styled] --&gt; G[Classed]
   G --&gt; H[Plain]
   J[Short]:::pink --&gt; H
+  M[one&lt;br&gt;two&lt;br&gt;three] --&gt; H
   style F fill:#ffe0e0,stroke:#cc0000
   classDef pink fill:#e0ffe0,stroke:#00aa00
   class G pink</pre>
@@ -639,6 +641,7 @@ thead.</p>
 <tr><td>G</td><td>A box with a class</td><td>open</td></tr>
 <tr><td>J</td><td>A box with a class, the short way</td><td>merged</td></tr>
 <tr><td>H</td><td>A box with no style of its own</td><td>ready</td></tr>
+<tr><td>M</td><td>A box whose label breaks its lines</td><td>open</td></tr>
 </tbody>
 </table>
 """
