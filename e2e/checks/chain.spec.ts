@@ -216,7 +216,8 @@ test.describe('the chain', () => {
     await test.step('5. after a reload the reader sees the reply, its revision link, the edit and the answer', async () => {
       await page.reload();
       const heater = box(page, 'heater');
-      await expect(heater.summary).toHaveText('1 reply · ✓ hermes answered');
+      // The reply is the reader's to read: counted until its thread opens.
+      await expect(heater.summary).toHaveText('1 reply · ✓ hermes answered · 1 new');
       await heater.summary.click();
       const thread = heater.threads.first();
       const items = thread.locator('.artifact-comment-item');

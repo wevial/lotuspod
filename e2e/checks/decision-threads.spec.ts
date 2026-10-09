@@ -256,9 +256,13 @@ test.describe('signed in', () => {
     const id = [...ids].find((each) => each !== own.id)!;
     await settle(page);
     const posts = sent.filter((each) => each.method === 'POST');
-    expect(posts).toEqual([{
+    // Opened in the panel, the thread is posted as seen too (unread.spec.ts).
+    expect(posts.filter((each) => each.path !== '/api/seen')).toEqual([{
       method: 'POST', path: '/api/comments',
       body: { page: SLUG, question: 'decision-1', text: words, revision },
+    }]);
+    expect(posts.filter((each) => each.path === '/api/seen')).toEqual([{
+      method: 'POST', path: '/api/seen', body: { page: SLUG, thread: id, comment: id },
     }]);
     expect(sent.filter((each) => each.path === '/api/answers')).toEqual([]);
 
@@ -346,7 +350,8 @@ test.describe('signed in', () => {
     await expect(mine.agents).toHaveCount(1, { timeout: 15_000 });
     await expect(mine.agents.locator('.artifact-comment-text')).toHaveText(REPLY);
     await expect(mine.head).toHaveAttribute('aria-expanded', 'true');
-    await expect(first.chip).toHaveText(`1 reply · ✓ ${OWNER} answered`);
+    // The reply is the reader's to read: counted until the thread next opens.
+    await expect(first.chip).toHaveText(`1 reply · ✓ ${OWNER} answered · 1 new`);
     await expect(first.hint).toHaveText('Not answered yet');
 
     // The reader replies from the thread's composer: it waits for hermes again.

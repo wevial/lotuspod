@@ -68,11 +68,12 @@
   var DRAWN = "lotuspod:drawn";
   var ANSWERED = "lotuspod:answered";
   // What the page's text leaves out and no passage may hold: the comment UI,
-  // decision forms and their chips, the Answered table, diagrams and the list
-  // of changed sections.
+  // decision forms and their chips, the Answered table, diagrams and their
+  // node cards, and the list of changed sections.
   var APART = "details.artifact-comment, .artifact-comments-changed, .artifact-comments-panel, " +
     ".artifact-comments-popover, .artifact-comments-bottom-sheet, .artifact-passage-composer, " +
-    "form.artifact-decision, .artifact-decision-chip, .artifact-answered, pre.mermaid, svg";
+    "form.artifact-decision, .artifact-decision-chip, .artifact-answered, pre.mermaid, svg, " +
+    ".artifact-node-card";
   // What the page's text leaves out as never read: the marks and numbers the
   // page script draws, and what is not shown at all.
   var UNSEEN = "script, style, template, noscript, .artifact-section-mark, .artifact-passage-number, " +

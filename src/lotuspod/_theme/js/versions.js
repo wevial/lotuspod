@@ -216,10 +216,11 @@
       var link = element("a", "artifact-versions-link", "Versions · " + count);
       link.href = HASH;
       // The link takes the slot the theme kept for it at the end of the
-      // line, so the header does not move when it arrives.
+      // line, so the header does not move when it arrives; only the badge
+      // of replies to the reader (js/comments.js) comes after it.
       var slot = element("span", "artifact-versions-slot", "· ");
       slot.appendChild(link);
-      line.appendChild(slot);
+      line.insertBefore(slot, line.querySelector(".artifact-unread"));
       line.classList.add("artifact-meta--versions");
 
       // The view, made the first time it is shown.

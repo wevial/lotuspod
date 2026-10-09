@@ -561,7 +561,8 @@ test.describe('signed in', () => {
     const bubble = (await theirs.locator('.artifact-comment-text').boundingBox())!;
     expect(left.x).toBeLessThan(right.x);
     expect(bubble.x).toBeGreaterThan(left.x);
-    await expect(findings.chip).toHaveText(`1 reply · ✓ ${OWNER} answered`);
+    // The reply is the reader's to read: counted until the thread next opens.
+    await expect(findings.chip).toHaveText(`1 reply · ✓ ${OWNER} answered · 1 new`);
     await side.fold.click();
     expect(await dotKinds(side.dots)).toEqual(['answered']);
     expect(await spot(paragraph)).toEqual(before);

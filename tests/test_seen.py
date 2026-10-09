@@ -66,7 +66,8 @@ class SeenTests(SeenTestCase):
         self.assertEqual(self.seen(revision=R2),
                          (200, {"page": "plan", "revision": R2, "previous": R1}))
         self.assertEqual(self.views(),
-                         (200, {"pages": {"plan": {"revision": self.revision, "seen": R2}}}))
+                         (200, {"pages": {"plan": {"revision": self.revision, "seen": R2,
+                                                   "unread": 0}}}))
         self.assertEqual(self.views(OTHER), (200, {"pages": {}}))
         # Keyed by the address, never the shown name.
         self.assertEqual(self.rows(), [(keys.EMAIL, "plan", R2)])
@@ -77,7 +78,7 @@ class SeenTests(SeenTestCase):
                          (200, {"page": "plan", "revision": self.revision, "previous": R2}))
         self.assertEqual(self.views(),
                          (200, {"pages": {"plan": {"revision": self.revision,
-                                                   "seen": self.revision}}}))
+                                                   "seen": self.revision, "unread": 0}}}))
 
     def test_a_republish_shows_beside_the_revision_seen_and_a_hidden_page_is_left_out(self):
         other = self.page_revision("other")
@@ -86,14 +87,14 @@ class SeenTests(SeenTestCase):
         revised = self.republish()
         self.assertNotEqual(revised, self.revision)
         self.assertEqual(self.views(), (200, {"pages": {
-            "plan": {"revision": revised, "seen": self.revision},
-            "other": {"revision": other, "seen": R1},
+            "plan": {"revision": revised, "seen": self.revision, "unread": 0},
+            "other": {"revision": other, "seen": R1, "unread": 0},
         }}))
 
         run_cli("render", "--name", "plan", "--title", "Plan", "--comments", "--body",
                 DECISIONS_BODY, "--out-dir", str(self.out_dir), "--hidden")
         self.assertEqual(self.views(), (200, {"pages": {
-            "other": {"revision": other, "seen": R1},
+            "other": {"revision": other, "seen": R1, "unread": 0},
         }}))
 
     def test_a_refused_post_stores_nothing(self):
@@ -174,7 +175,8 @@ class SeenSchemaTests(SeenTestCase):
         self.assertEqual(self.seen(revision=R1),
                          (200, {"page": "plan", "revision": R1, "previous": None}))
         self.assertEqual(self.views(),
-                         (200, {"pages": {"plan": {"revision": self.revision, "seen": R1}}}))
+                         (200, {"pages": {"plan": {"revision": self.revision, "seen": R1,
+                                                   "unread": 0}}}))
         conn = sqlite3.connect(str(path))
         try:
             self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0],
