@@ -769,12 +769,12 @@ class StartupWaitTests(ResponderCase):
         self.log = open(self.tmp / "respond.log", "w+", encoding="utf-8")
         self.addCleanup(self.log.close)
 
-    def launch(self, *extra, stdout=None, stderr=None):
+    def launch(self, *extra, stderr=None):
         process = subprocess.Popen(
             [sys.executable, "-m", "lotuspod", "respond", *extra,
              "--command", self.recorder, "--credential", str(self.responder),
              "--socket", str(self.sock), "--out-dir", str(self.out), "--db", str(self.db)],
-            cwd=str(self.tmp), env=self.env, stdout=stdout or self.log,
+            cwd=str(self.tmp), env=self.env, stdout=self.log,
             stderr=stderr or self.log, text=True)
         self.addCleanup(process.wait, 10)
         self.addCleanup(lambda: process.poll() is None and process.kill())
