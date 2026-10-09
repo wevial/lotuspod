@@ -186,6 +186,31 @@ class ArchiveCommandTests(LocalSite):
                 self.assertEqual(subjects(self.out), before)
                 self.assertEqual((self.out / "index.html").read_bytes(), index)
 
+    def test_a_page_render_named_with_a_dot_is_archived_and_unarchived(self):
+        done = self.cli("render", "--name", "dotted.name", "--title", "Dotted",
+                        "--body", "<p>Visible.</p>", "--out-dir", str(self.out))
+        self.assertEqual(done.returncode, 0, done.stderr)
+
+        done = self.archive("dotted.name", "--superseded-by", "new")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertTrue((self.out / "dotted.name.archived.json").is_file())
+        self.assertIn("hidden", index_rows(self.out)["dotted.name"])
+        self.assertEqual(self.unarchive("dotted.name").returncode, 0)
+        self.assertFalse((self.out / "dotted.name.archived.json").exists())
+
+    def test_a_rebuild_that_fails_puts_back_what_it_wrote(self):
+        (self.out / "new.archived.json").write_text("{broken", encoding="utf-8")
+        before = subjects(self.out)
+        kept = {name: (self.out / name).read_bytes() for name in ("index.html", "manifest.json")}
+
+        done = self.archive("old", "--superseded-by", "other")
+        self.assertEqual(done.returncode, 1, done.stdout)
+        self.assertIn("nothing written", done.stderr)
+        self.assertIsNone(archive_record(self.out))
+        for name, data in kept.items():
+            self.assertEqual((self.out / name).read_bytes(), data, name)
+        self.assertEqual(subjects(self.out), before)
+
     def test_archiving_again_keeps_the_time_and_a_republish_keeps_the_record(self):
         self.assertEqual(self.archive("old", "--superseded-by", "new").returncode, 0)
         first = archive_record(self.out)
@@ -339,6 +364,42 @@ class ArchiveRouteTests(ServedArchive):
                                      headers={"Origin": "https://elsewhere.example"})
         self.assertEqual((status, answer), (403, {"error": "cross_origin"}))
         self.assertIsNone(archive_record(self.out))
+
+
+class RouteBodyTests(ServedArchive):
+    def test_a_null_successor_is_refused_writing_nothing(self):
+        self.serve()
+        status, _, state = self.api("POST", "/api/archive",
+                                    {"page": "old", "archived": True, "supersededBy": "new"})
+        self.assertEqual(status, 200, state)
+        record, before = archive_record(self.out), subjects(self.out)
+        for archived in (False, True):
+            with self.subTest(archived=archived):
+                status, _, answer = self.api("POST", "/api/archive", {
+                    "page": "old", "archived": archived, "supersededBy": None})
+                self.assertEqual((status, answer), (400, {"error": "invalid_body"}))
+                self.assertEqual(archive_record(self.out), record)
+                self.assertEqual(subjects(self.out), before)
+
+    def test_a_successor_with_a_name_over_100_characters_is_taken(self):
+        long = "p" * 101
+        self.publish_at(long, activity_witness.page("Long", ("Alpha", "A long name.")))
+        self.serve()
+        status, _, state = self.api("POST", "/api/archive",
+                                    {"page": "old", "archived": True, "supersededBy": long})
+        self.assertEqual((status, state["supersededBy"]), (200, long), state)
+        self.assertEqual(archive_record(self.out)["supersededBy"], long)
+
+    def test_a_rebuild_that_fails_answers_503_and_writes_nothing(self):
+        (self.out / "new.archived.json").write_text("{broken", encoding="utf-8")
+        before = subjects(self.out)
+        index = (self.out / "index.html").read_bytes()
+        self.serve()
+        status, _, answer = self.api("POST", "/api/archive", {"page": "old", "archived": True})
+        self.assertEqual((status, answer), (503, {"error": "storage_unavailable"}))
+        self.assertIsNone(archive_record(self.out))
+        self.assertEqual((self.out / "index.html").read_bytes(), index)
+        self.assertEqual(subjects(self.out), before)
 
 
 class NoOwnersTests(ServedArchive):

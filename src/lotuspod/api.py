@@ -650,18 +650,27 @@ class Api:
         archived = fields["archived"]
         if not isinstance(archived, bool):
             raise _invalid()
-        successor = fields.get("supersededBy")
-        if successor is not None:
-            successor = _text(successor, 1, MAX_NAME)
+        # Present at all, null included, it must name a page, and only an
+        # archived page has one. A page name has no length of its own but
+        # the body's, as `page` has.
+        successor = None
+        if "supersededBy" in fields:
             if not archived:
                 raise _invalid()
+            successor = _text(fields["supersededBy"], 1, MAX_BODY)
         page = self._page(fields["page"])
         if successor is not None and (successor == page.name or self.pages(successor) is None):
             raise Refusal(HTTPStatus.BAD_REQUEST, "unknown_successor")
         if self.archive is None:
             raise Refusal(HTTPStatus.SERVICE_UNAVAILABLE, "storage_unavailable")
-        # A Refusal when the page or the successor has gone since.
-        record, _ = self.archive(page.name, archived, successor)
+        # A Refusal when the page or the successor has gone since; any other
+        # failure has put back what it wrote.
+        try:
+            record, _ = self.archive(page.name, archived, successor)
+        except Refusal:
+            raise
+        except RuntimeError:
+            raise Refusal(HTTPStatus.SERVICE_UNAVAILABLE, "storage_unavailable") from None
         return {"page": page.name, "archived": record["archivedAt"] if record else None,
                 "supersededBy": record["supersededBy"] if record else None,
                 "mayArchive": True}

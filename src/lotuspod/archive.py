@@ -70,10 +70,11 @@ def is_archived(out_dir: Path, name: str) -> bool:
 
 
 def visible_page(out_dir: Path, name: str) -> bool:
-    """Whether NAME is a page serve answers: a visible page of out_dir."""
+    """Whether NAME is a page serve answers: a visible page of out_dir,
+    however render named it. The allow-list holds bare file names only, so
+    no name reaches past it."""
     file = f"{name}.html"
-    return (bool(cli._PAGE_NAME.fullmatch(name)) and cli.is_page_name(file)
-            and file in cli.serve_allow_list(out_dir))
+    return cli.is_page_name(file) and file in cli.serve_allow_list(out_dir)
 
 
 def set_archived(out_dir: Path, name: str, archived: bool,
@@ -106,22 +107,33 @@ def set_archived(out_dir: Path, name: str, archived: bool,
                               f"{out_dir}; nothing written")
         current = read_record(out_dir, name)
         path = record_path(out_dir, name)
-        if not archived:
-            if current is None:
-                return None, False
-            path.unlink()
-            record = None
-        else:
-            record = {
-                "archivedAt": current["archivedAt"] if current else
-                cli._utc_stamp(_dt.datetime.now(_dt.timezone.utc)),
-                "supersededBy": superseded_by if superseded_by is not None else
-                (current["supersededBy"] if current else None),
-            }
-            cli.write_atomic(path, (json.dumps(record, indent=2) + "\n").encode("utf-8"))
-        steps = argparse.Namespace(out_dir=str(out_dir), commit=False)
-        cli.cmd_manifest(steps)
-        cli.cmd_index(steps)
+        if not archived and current is None:
+            return None, False
+        # What a failed rebuild puts back, so a refusal leaves nothing written.
+        kept = {file: file.read_bytes() if file.is_file() else None
+                for file in (path, out_dir / cli.MANIFEST_FILE, out_dir / cli.INDEX_FILE)}
+        try:
+            if not archived:
+                path.unlink()
+                record = None
+            else:
+                record = {
+                    "archivedAt": current["archivedAt"] if current else
+                    cli._utc_stamp(_dt.datetime.now(_dt.timezone.utc)),
+                    "supersededBy": superseded_by if superseded_by is not None else
+                    (current["supersededBy"] if current else None),
+                }
+                cli.write_atomic(path, (json.dumps(record, indent=2) + "\n").encode("utf-8"))
+            steps = argparse.Namespace(out_dir=str(out_dir), commit=False)
+            cli.cmd_manifest(steps)
+            cli.cmd_index(steps)
+        except Exception as exc:
+            for file, data in kept.items():
+                if data is None:
+                    file.unlink(missing_ok=True)
+                else:
+                    cli.write_atomic(file, data)
+            raise RuntimeError(f"{exc}; nothing written") from None
         cli.commit_output(out_dir, f"{'archive' if archived else 'unarchive'} {name}")
     return record, True
 
@@ -154,11 +166,10 @@ def over_ssh(args: argparse.Namespace, config: dict[str, str], action: str) -> i
 def _run(args: argparse.Namespace, archived: bool) -> int:
     action = "archive" if archived else "unarchive"
     superseded_by = getattr(args, "superseded_by", None)
-    # A name that is no page name is refused here, so none rides to the far
-    # side where it could be taken for an option.
-    for given in (args.name, superseded_by):
-        if given is not None and not cli._PAGE_NAME.fullmatch(given):
-            raise RuntimeError(f"not a page name: {given!r}; nothing written")
+    # NAME rides to the far side as a bare argument: one beginning with '-'
+    # would be taken for an option there, and names no page here either.
+    if args.name.startswith("-"):
+        raise RuntimeError(f"not a page name: {args.name!r}; nothing written")
     if not args.local:
         try:
             config = cli.publish_config()
