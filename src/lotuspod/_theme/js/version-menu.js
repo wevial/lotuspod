@@ -4,19 +4,19 @@
   // with its date and time, its summary on one line ("First version" when it
   // has none), and "current" or "you last looked" where those apply, then a
   // last item "See all versions" linking to #versions. An older version's
-  // item links to NAME.html?version=COMMIT, the current one's to NAME.html;
-  // the one shown carries aria-current="page". It follows the menu-button
+  // item links to NAME.html?version=COMMIT, the current one's to NAME.html,
+  // which carries aria-current="page". It follows the menu-button
   // pattern: Enter, Space or ArrowDown on the button opens it on the newest
   // version, ArrowUp on "See all versions"; in it the arrows, Home and End
   // move between the items, Escape closes it and returns focus to the
   // button, and Tab or a click outside closes it.
   //
   // It reads nothing and posts nothing: its inputs are the versions, the
-  // page's name, the commit shown and the commit the reader last looked at
-  // (null when none), so a script of its own can join it as it is. It
-  // returns the button and the menu, to be put side by side in a positioned
-  // box, and close(), which closes the menu.
-  function versionMenu(versions, page, shown, seen) {
+  // page's name and the commit the reader last looked at (null when none),
+  // so a script of its own can join it as it is. It returns the button and
+  // the menu, to be put side by side in a positioned box, and close(), which
+  // closes the menu.
+  function versionMenu(versions, page, seen) {
     var HASH = "#versions";
     var button = element("button", "artifact-versions-menu-button", "▾");
     button.type = "button";
@@ -44,7 +44,7 @@
     versions.forEach(function (version) {
       var link = item(encodeURIComponent(page) + ".html" + (version.current ? "" :
         "?version=" + encodeURIComponent(version.commit)));
-      if (version.commit === shown) {
+      if (version.current) {
         link.setAttribute("aria-current", "page");
       }
       var top = element("span", "artifact-versions-menu-top");
@@ -54,7 +54,7 @@
       if (version.current) {
         top.appendChild(element("span", "artifact-versions-current", "current"));
       }
-      if (seen && version.commit === seen) {
+      if (version.commit === seen) {
         top.appendChild(element("span", "artifact-versions-seen", "you last looked"));
       }
       link.append(top, element("span", "artifact-versions-menu-note",
@@ -86,16 +86,11 @@
       fit();
       var choices = items();
       var target = choices[index < 0 ? choices.length + index : index];
-      if (target) {
-        target.focus({ preventScroll: true });
-        target.scrollIntoView({ block: "nearest" });
-      }
+      target.focus({ preventScroll: true });
+      target.scrollIntoView({ block: "nearest" });
     }
 
     function close(focus) {
-      if (menu.hidden) {
-        return;
-      }
       menu.hidden = true;
       button.setAttribute("aria-expanded", "false");
       if (focus) {
