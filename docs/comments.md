@@ -92,7 +92,8 @@ twice.
   `unread` the count of their unread replies on it. A page since hidden or
   removed drops out. It never names a reader.
 - `GET /api/versions?page=NAME` answers `{page, versions}`: each commit of
-  the artifacts repository that changed the page while it was visible, as
+  the artifacts repository that changed the page while it was visible (a
+  merge by what it changed), as
   `{commit, date, revision, current, summary}`, newest first and at most
   200, `date` its committer time in UTC, `current` true on the newest only
   and `summary` what it changed from the page before it in one line (as
@@ -123,8 +124,10 @@ twice.
   with an event after `from` and up to `to`, ordered by `latest`, its newest
   event's time, newest first, and its `events` newest first. At most 500
   events are kept, the newest, and `truncated` is true when any were left
-  out; `older` is true when anything the reader may see happened up to
-  `from`, so asking again with `before` set to `from` reads the 7 days
+  out, or when serve read too little of a page's history to know the
+  version before one (that version then has `first: false` and `summary`
+  ""); `older` is true when what was read shows anything the reader may see
+  happened up to `from`, so asking again with `before` set to `from` reads the 7 days
   before. A hidden or removed page never appears. Each event is one of:
   - `{kind: "version", at, commit, revision, actor, first, summary}`, a
     commit of the artifacts repository that changed the page while it was

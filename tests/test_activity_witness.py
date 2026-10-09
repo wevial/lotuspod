@@ -88,11 +88,11 @@ class ActivityWitness(VersionsWitness):
                         "--db", str(self.db), *extra, env=env)
         self.assertEqual(done.returncode, 0, done.stderr)
 
-    def hide(self, name: str, at: str | None = None) -> None:
-        """Render name hidden, committed at `at` when given."""
+    def hide(self, name: str, at: str | None = None, draft: str = "A hidden draft.") -> None:
+        """Render name hidden, saying draft, committed at `at` when given."""
         env = dict(self.env, GIT_COMMITTER_DATE=at, GIT_AUTHOR_DATE=at) if at else None
         done = self.cli("render", "--name", name, "--title", name.title(), "--hidden",
-                        "--body", "<p>A hidden draft.</p>", "--out-dir", str(self.out), env=env)
+                        "--body", f"<p>{draft}</p>", "--out-dir", str(self.out), env=env)
         self.assertEqual(done.returncode, 0, done.stderr)
 
     def site(self) -> None:
@@ -413,7 +413,8 @@ class HistoryTests(ActivityWitness):
             past = self.activity()
         self.assertEqual(len(exact["pages"]), 3)
         self.assertEqual((exact["older"], exact["truncated"]), (False, False))
-        self.assertEqual((past["older"], past["truncated"]), (True, True))
+        # Nothing came before the window: truncation says nothing of that.
+        self.assertEqual((past["older"], past["truncated"]), (False, True))
 
     def test_a_merge_that_resolves_a_conflict_is_a_version(self):
         self.repository(self.out)
@@ -435,6 +436,73 @@ class HistoryTests(ActivityWitness):
         self.assertEqual(events[0]["commit"], merge)
         self.assertEqual(events[0]["at"], "2026-10-04T12:00:00.000Z")
         self.assertEqual(len(events), 4)
+        # The versions list and the old-version route know the merge too.
+        status, _, listed = self.api("GET", "/api/versions?page=a")
+        self.assertEqual(status, 200, listed)
+        self.assertEqual([(entry["commit"], entry["current"]) for entry in listed["versions"]][0],
+                         (merge, True))
+        self.assertEqual({entry["commit"]: entry["summary"] for entry in listed["versions"]},
+                         {event["commit"]: event["summary"] for event in events})
+        self.assertEqual(self.get(f"/a.html?version={merge}")[0], 200)
+
+    def test_what_came_before_the_cap_is_still_found_or_said_to_be_unread(self):
+        self.repository(self.out)
+        self.publish_at("a", A_FIRST, "2026-10-01T12:00:00+00:00")
+        for n in range(4):
+            self.hide("a", f"2026-10-0{n + 2}T12:00:00+00:00", f"Draft {n}.")
+        self.publish_at("a", A_SECOND, "2026-10-06T12:00:00+00:00")
+        self.serve(now="2026-10-12T12:00:00+00:00")
+
+        # Five commits read: the hidden ones and, as the oldest one's old
+        # blob, the visible version before them.
+        with mock.patch.object(versions, "MAX_RECENT_COMMITS", 4):
+            found = self.activity()
+        (newest,) = self.versions_of(found, "a")
+        self.assertEqual((newest["first"], newest["summary"]),
+                         (False, "Beta changed; Delta added"))
+        self.assertEqual((found["older"], found["truncated"]), (True, False))
+        # Four read: what came before is not known, and the answer says so.
+        with mock.patch.object(versions, "MAX_RECENT_COMMITS", 3):
+            cut = self.activity()
+        (newest,) = self.versions_of(cut, "a")
+        self.assertEqual((newest["first"], newest["summary"]), (False, ""))
+        self.assertIs(cut["truncated"], True)
+
+    def test_edits_that_keep_a_revision_past_the_cap_are_no_versions(self):
+        self.repository(self.out)
+        owned = ("--owner", "hermes", "--credential", str(self.hermes))
+        self.publish_at("a", A_FIRST, "2026-10-01T12:00:00+00:00", *owned)
+        self.publish_at("b", B_FIRST, "2026-10-02T12:00:00+00:00")
+        page_b = (self.out / "b.html").read_text(encoding="utf-8")
+        for n in range(3):
+            self.commit_file("b.html", page_b + f"<!-- {n} -->\n", f"2026-10-03T12:0{n}:00+00:00")
+        self.publish_at("a", A_SECOND, "2026-10-06T12:00:00+00:00", *owned)
+        self.serve(now="2026-10-07T12:00:00+00:00")
+
+        with mock.patch.object(versions, "MAX_RECENT_COMMITS", 3):
+            answer = self.activity()
+        self.assertEqual([entry["page"] for entry in answer["pages"]], ["a"])
+        (newest,) = self.versions_of(answer, "a")
+        self.assertEqual((newest["first"], newest["summary"]),
+                         (False, "Beta changed; Delta added"))
+        self.assertEqual((answer["older"], answer["truncated"]), (False, True))
+
+    def test_the_oldest_listed_version_past_the_lists_cap_keeps_its_summary(self):
+        self.repository(self.out)
+        self.publish_at("a", A_FIRST, "2026-10-01T12:00:00+00:00")
+        self.publish_at("a", A_SECOND, "2026-10-02T12:00:00+00:00")
+        self.publish_at("a", A_SPACED, "2026-10-03T12:00:00+00:00")
+        self.serve(now="2026-10-07T12:00:00+00:00")
+
+        said = {event["commit"]: event["summary"]
+                for event in self.versions_of(self.activity(), "a")}
+        with mock.patch.object(versions, "MAX_VERSIONS", 2):
+            status, _, listed = self.api("GET", "/api/versions?page=a")
+        self.assertEqual(status, 200, listed)
+        self.assertEqual([entry["summary"] for entry in listed["versions"]],
+                         ["new version", "Beta changed; Delta added"])
+        self.assertTrue(all(said[entry["commit"]] == entry["summary"]
+                            for entry in listed["versions"]))
 
 
 class ParseTests(unittest.TestCase):
