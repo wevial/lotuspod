@@ -31,7 +31,7 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from lotuspod import cli, db, machine  # noqa: E402
+from lotuspod import cli, db, machine, media  # noqa: E402
 from tests import access_keys as keys  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -321,6 +321,16 @@ class SocketTests(ServeTestCase):
         status, payload = self.ask(token, "/v1/whoami", "POST", {})
         self.assertEqual((status, payload), (405, {"error": "method_not_allowed"}))
         self.assertEqual(self.ask(None, "/v1/whoami", "DELETE")[0], 401)
+
+    def test_an_upload_over_the_cap_is_answered_though_its_body_is_not_read(self):
+        token = self.hermes()
+        # More than the socket's buffer holds: serve answers and closes
+        # before the client has sent it all, and the client still reads why.
+        data = b"\x89PNG\r\n\x1a\n" + b"\0" * media.DEFAULT_MAX_BYTES
+        self.assertEqual(machine.request(self.socket_path, token, "POST", machine.MEDIA, data,
+                                         "image/png"),
+                         (413, {"error": "body_too_large"}))
+        self.assertFalse(media.media_dir(self.out_dir).exists())
 
     def test_the_socket_is_the_owners_alone_and_goes_when_serve_stops(self):
         self.assertTrue(stat.S_ISSOCK(os.lstat(self.socket_path).st_mode))

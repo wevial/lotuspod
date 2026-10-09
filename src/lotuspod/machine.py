@@ -22,9 +22,13 @@ credential that exists and is not revoked:
     POST /v1/comments/ID/claim          take comment ID up, for claim_sec
                                         seconds (needs claim, and the handle
                                         it is routed to)
+    POST /v1/media                      one image's bytes, stored as the
+                                        reader's POST /api/media stores them
+                                        (needs reply)
     POST /v1/comments/ID/reply          {claimToken, idempotencyKey, text[,
-                                        revision, model]}: answer it under the
-                                        claim, once per key (needs reply)
+                                        revision, model, images]}: answer it
+                                        under the claim, once per key (needs
+                                        reply)
     POST /v1/comments/ID/release        {claimToken}: route it again (needs claim)
     POST /v1/comments/ID/fail           {claimToken, reason}: leave it failed
                                         (needs claim)
@@ -33,7 +37,7 @@ credential that exists and is not revoked:
                                         the page's owner or the handle its
                                         first comment is routed to)
     POST /v1/threads/ID/follow-up       {idempotencyKey, text[, revision,
-                                        reopen]}: add a message to that
+                                        reopen, images]}: add a message to that
                                         thread with no claim, once per key
                                         (needs reply, as resolve does)
 
@@ -42,6 +46,17 @@ same items come back until they are claimed or acknowledged. A page's owner
 also reads the comments routed to it as they arrived that have since passed
 to the responder, until an agent takes them up; only the responder may claim
 them. The pull is the only way a page's kept source leaves the host's files.
+
+POST /v1/media takes one image as its body, with Content-Type image/png,
+image/jpeg, image/webp or image/gif, and answers {name, url, width, height}
+once it is in the media store. It is refused, with nothing stored, as the
+reader's route refuses one: 415 unsupported_media_type, 411 length_required,
+413 body_too_large over the store's cap, 400 invalid_image, and 503
+storage_unavailable with no media store; it has no rate limit. A reply's or
+follow-up's `images` names 1 to api.MAX_IMAGES uploaded images by their
+stored names, in the order they are shown, as a reader's comment names them:
+400 invalid_body for anything else and 400 unknown_image for a name not in
+the media store. Its text is still required.
 
 In the pull and threads answers, each image of each comment also carries
 `path`: the absolute path of its file in the media directory, or null when
@@ -73,9 +88,9 @@ current, 403 not_routed for a comment routed to none of the credential's
 handles, and 409 settled once it is answered or failed; a reply, release or failure without the
 credential's current claim and its token is 409 not_claimed. A reply's key
 names it for good: the same credential sending the same key again gets the
-reply stored the first time. A reply's model names the model that wrote
-it, as the page shows beside the agent's handle: 1 to 40 printable
-characters with no space at either end.
+reply stored the first time, its images included. A reply's model names the
+model that wrote it, as the page shows beside the agent's handle: 1 to 40
+printable characters with no space at either end.
 
 A resolve or reopen acts as the page's owner when the credential holds it,
 else as the handle the thread's first comment is routed to; it is refused
@@ -130,6 +145,7 @@ WHOAMI = "/v1/whoami"
 CHECK = "/v1/check"
 PULL = "/v1/pull"
 THREADS = "/v1/threads"
+MEDIA = "/v1/media"
 ROUTES = (WHOAMI, CHECK, PULL, THREADS)
 METHODS = ("GET", "HEAD")
 # POST /v1/answers/ID/ack
@@ -321,7 +337,8 @@ class Routes:
     describe(page) the page as a pulled item shows it, its kept source
     included; window is routing's owner window, and claim_sec how long a
     claim lasts. media_dir is the media store comments' images are found
-    in; without one, no image has a path.
+    in, and max_image_bytes the largest image it takes; without one, no
+    image has a path and none is taken.
     """
 
     def __init__(self, database: db.Database,
@@ -330,9 +347,11 @@ class Routes:
                  window: float = routing.DEFAULT_WINDOW,
                  clock: Callable[[], float] = time.time,
                  claim_sec: float = routing.DEFAULT_CLAIM,
-                 media_dir: Path | None = None) -> None:
+                 media_dir: Path | None = None,
+                 max_image_bytes: int = media.DEFAULT_MAX_BYTES) -> None:
         self.database = database
         self.media_dir = media_dir
+        self.max_image_bytes = max_image_bytes
         self.pages = pages
         self.describe = describe or _describe
         self.window = window
@@ -342,7 +361,7 @@ class Routes:
     def answer(self, method: str, target: str, headers: Message,
                body: api.Body | None = None) -> api.Answer:
         """The answer to one request for target, a path and query; body is
-        the request's, which only the comment routes read."""
+        the request's, which only the comment and media routes read."""
         token = bearer(headers)
         try:
             credential = None if token is None else find(self.database, token)
@@ -354,7 +373,8 @@ class Routes:
         ack = _ACK.fullmatch(path)
         acting = _COMMENT.fullmatch(path)
         resolving = _THREAD.fullmatch(path)
-        if path not in ROUTES and ack is None and acting is None and resolving is None:
+        if (path not in ROUTES and path != MEDIA and ack is None and acting is None
+                and resolving is None):
             return HTTPStatus.NOT_FOUND, {"error": "not_found"}, ()
         allowed = METHODS if path in ROUTES else ACK_METHODS
         if method not in allowed:
@@ -373,6 +393,8 @@ class Routes:
                 return HTTPStatus.OK, self._pull(credential, _query(query, ("owner",))["owner"]), ()
             if path == THREADS:
                 return HTTPStatus.OK, self._threads(credential, _query(query, ("page",))["page"]), ()
+            if path == MEDIA:
+                return HTTPStatus.OK, self._media(credential, headers, body), ()
             if acting is not None:
                 return HTTPStatus.OK, self._act(credential, int(acting.group(1)),
                                                 acting.group(2), headers, body), ()
@@ -519,6 +541,32 @@ class Routes:
             images.append({**image, "path": None if stored is None else str(stored)})
         return {**row, "images": images}
 
+    def _media(self, credential: Mapping, headers: Message, body: api.Body | None) -> dict:
+        """Check and store one image, as the reader's media route does."""
+        _allow_op(credential, "reply")
+        extension = api.UPLOAD_TYPES.get(api._media_type(headers))
+        if extension is None:
+            raise api.Refusal(HTTPStatus.UNSUPPORTED_MEDIA_TYPE, "unsupported_media_type")
+        if self.media_dir is None:
+            raise api.Refusal(HTTPStatus.SERVICE_UNAVAILABLE, "storage_unavailable")
+        if body is None:
+            raise api.Refusal(HTTPStatus.LENGTH_REQUIRED, "length_required")
+        data = body.read(self.max_image_bytes)
+        try:
+            image = media.check(data, f"upload.{extension}", self.max_image_bytes)
+        except media.MediaError:
+            raise api.Refusal(HTTPStatus.BAD_REQUEST, "invalid_image") from None
+        media.store(self.media_dir, image)
+        return {"name": image.name, "url": image.url, "width": image.width,
+                "height": image.height}
+
+    def _images(self, fields: dict) -> Callable[[], list[dict]]:
+        """What looks up the stored images a message's fields name, as a
+        reader's comment names them, once the database knows its key is new;
+        none without `images`. The names' form is checked now."""
+        names = api._image_names(fields["images"]) if "images" in fields else None
+        return lambda: api.stored_images(self.media_dir, names)
+
     def _ack(self, credential: Mapping, answer_id: int) -> dict:
         answer = self.database.answer(answer_id)
         if answer is None:
@@ -543,7 +591,7 @@ class Routes:
                     "release": {"claimToken"},
                     "fail": {"claimToken", "reason"}}[action]
         api._keys(fields, required,
-                  frozenset({"revision", "model"} if action == "reply" else ()))
+                  frozenset({"revision", "model", "images"} if action == "reply" else ()))
         token = token_hash(api._text(fields["claimToken"], 1, MAX_KEY))
         name = credential["name"]
         if action == "release":
@@ -563,9 +611,10 @@ class Routes:
         model = fields.get("model")
         if "model" in fields and not is_model(model):
             raise api.Refusal(HTTPStatus.BAD_REQUEST, "invalid_body")
+        images = self._images(fields)
         row = self.database.reply(comment_id, credential=name, token_hash=token, key=key,
                                   text=text, revision=revision, model=model, clock=self.clock,
-                                  page_of=self._current)
+                                  page_of=self._current, images_of=images)
         return self._shown(row)
 
     def _thread_handle(self, credential: Mapping, root: int) -> tuple[api.Page, str]:
@@ -599,7 +648,8 @@ class Routes:
         """Add credential's message to the thread whose first comment is root."""
         _page, handle = self._thread_handle(credential, root)
         fields = _json_body(headers, body)
-        api._keys(fields, {"idempotencyKey", "text"}, frozenset({"revision", "reopen"}))
+        api._keys(fields, {"idempotencyKey", "text"},
+                  frozenset({"revision", "reopen", "images"}))
         key = api._text(fields["idempotencyKey"], 1, MAX_KEY)
         text = api._text(fields["text"], 1, api.MAX_TEXT)
         revision = fields.get("revision")
@@ -608,9 +658,10 @@ class Routes:
         reopen = fields.get("reopen", False)
         if not isinstance(reopen, bool):
             raise api.Refusal(HTTPStatus.BAD_REQUEST, "invalid_body")
+        images = self._images(fields)
         row = self.database.follow_up(root, credential=credential["name"], handle=handle,
                                       key=key, text=text, revision=revision, reopen=reopen,
-                                      page_of=self._current)
+                                      page_of=self._current, images_of=images)
         return self._shown(row)
 
     def _current(self, name: str) -> dict | None:
@@ -751,10 +802,11 @@ class SocketServer(socketserver.ThreadingMixIn, socketserver.UnixStreamServer):
                  describe: Callable[[api.Page], dict] | None = None,
                  window: float = routing.DEFAULT_WINDOW,
                  claim_sec: float = routing.DEFAULT_CLAIM,
-                 media_dir: Path | None = None) -> None:
+                 media_dir: Path | None = None,
+                 max_image_bytes: int = media.DEFAULT_MAX_BYTES) -> None:
         self.path = Path(path)
         self.routes = Routes(database, pages, describe, window, claim_sec=claim_sec,
-                             media_dir=media_dir)
+                             media_dir=media_dir, max_image_bytes=max_image_bytes)
         self._inode: int | None = None
         clear_stale(self.path)
         # Never, even briefly, readable or writable by anyone else.
@@ -810,19 +862,30 @@ class UnixConnection(http.client.HTTPConnection):
 
 
 def request(path: Path | str, token: str | None, method: str, target: str,
-            body: object = None, timeout: float = REQUEST_TIMEOUT) -> tuple[int, dict]:
+            body: object = None, content_type: str | None = None,
+            timeout: float = REQUEST_TIMEOUT) -> tuple[int, dict]:
     """(status, JSON payload) of one request on the socket at path, each
-    socket operation bounded by timeout seconds."""
+    socket operation bounded by timeout seconds. body is sent as JSON, or,
+    with content_type, as its own bytes of that type."""
     headers = {}
     if token is not None:
         headers["Authorization"] = f"Bearer {token}"
     data = None
-    if body is not None:
+    if content_type is not None:
+        data = body
+        headers["Content-Type"] = content_type
+    elif body is not None:
         data = json.dumps(body).encode("utf-8")
         headers["Content-Type"] = "application/json"
     conn = UnixConnection(path, timeout)
     try:
-        conn.request(method, target, body=data, headers=headers)
+        try:
+            conn.request(method, target, body=data, headers=headers)
+        except (BrokenPipeError, ConnectionResetError):
+            # serve refused the body before reading all of it (one over the
+            # media cap): its answer may still be there to read.
+            if conn.sock is None:
+                raise
         response = conn.getresponse()
         payload = response.read()
     finally:

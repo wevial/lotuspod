@@ -66,7 +66,7 @@ from unittest import mock
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
-from lotuspod import access, cli, db, machine, routing  # noqa: E402
+from lotuspod import access, cli, db, machine, media, routing  # noqa: E402
 from tests import access_keys  # noqa: E402
 
 
@@ -901,7 +901,8 @@ def main(argv: list[str] | None = None) -> int:
         sockets = machine.SocketServer(
             socket_path, db.Database(db_path), pages=partial(cli.api_page, site),
             describe=partial(cli.agent_page, site), window=routing.DEFAULT_WINDOW,
-            claim_sec=routing.DEFAULT_CLAIM,
+            claim_sec=routing.DEFAULT_CLAIM, media_dir=media.media_dir(site),
+            max_image_bytes=media.DEFAULT_MAX_BYTES,
         )
         socket_thread = threading.Thread(target=sockets.serve_forever, daemon=True)
         socket_thread.start()
