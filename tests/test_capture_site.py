@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -240,6 +241,20 @@ class ServedSiteTests(CaptureSiteTestCase):
         self.assertIn("<th>Month</th>", page)
         self.assertIn("<cite>The pond keeper's notebook</cite>", page)
         self.assertIn("<pre><code>", page)
+        self.assertIn('<script src="lotuspod-page.js?v=', page)
+
+    def test_refs_page_marks_the_keys_its_refs_file_holds(self):
+        seen = self.fetch("/capture-refs.html", "/capture-refs.refs.json")
+        status, page = seen["/capture-refs.html"]
+        self.assertEqual(status, 200)
+        self.assertEqual(seen["/capture-refs.refs.json"][0], 404)
+        self.assertEqual(
+            re.findall(r'<button type="button" class="artifact-ref" data-ref="([^"]+)"', page),
+            ["HOLO-175", "HOLO-171", "LOTUS-97", "relos#2266"])
+        self.assertEqual(page.count('<div class="artifact-ref-card" '), 4)
+        self.assertIn("LOTUS-95 is still only an idea", page)
+        self.assertNotIn("HOLO-160", page)
+        self.assertIn("<code>HOLO-175</code>", page)
         self.assertIn('<script src="lotuspod-page.js?v=', page)
 
     def test_passages_page_is_owned_and_its_source_is_beside_the_site(self):

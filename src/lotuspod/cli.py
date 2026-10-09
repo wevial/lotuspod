@@ -34,7 +34,8 @@ from typing import Callable
 import importlib.resources as _res
 
 from lotuspod import (access, agents, api, backup, comments, db, decisions, machine,
-                      markdown, media, node_tables, responder, routing, sections, versions)
+                      markdown, media, node_tables, refs, responder, routing, sections,
+                      versions)
 
 _PKG = "lotuspod"
 
@@ -193,7 +194,7 @@ MERMAID_DIR = "https://cdn.jsdelivr.net/npm/mermaid@11.4.1/"
 # template writes, so a page rendered with them blank holds exactly the
 # template's own inline scripts.
 _AUTHORED_KEYS = ("title", "kicker", "date", "summary_block", "body", "outline_items", "revision",
-                  "labels", "label_tags")
+                  "labels", "label_tags", "refs_block")
 
 
 class _ScriptCollector(HTMLParser):
@@ -312,6 +313,7 @@ THEME_SOURCES = {
         "css/narrow.css",
         "css/live-page.css",
         "css/prose.css",
+        "css/ref-cards.css",
         "css/diagram-cards.css",
         "css/report.css",
         "css/table-expand.css",
@@ -335,6 +337,7 @@ THEME_SOURCES = {
         "js/image-viewer.js",
         "js/versions.js",
         "js/diagram-cards.js",
+        "js/ref-cards.js",
         "js/page-close.js",
     ),
 }
@@ -708,6 +711,11 @@ def cmd_render(args: argparse.Namespace) -> int:
     body, has_node_tables = node_tables.mark_node_tables(body)
     # Before the outline, so the forms sit inside their section.
     body, has_decisions = decisions.render_decisions(body, args.name)
+    # After the forms, so no reference lands in a question or changes its
+    # version; before the outline, so no heading's id is a card's.
+    page_refs = getattr(args, "refs", None)
+    body, refs_block, named = refs.mark_refs(body, page_refs or {},
+                                             getattr(args, "refs_as_of", ""))
     body, outline = (body, []) if args.no_outline else outline_body(body)
     # After the outline, so each box names its heading's id.
     if with_comments:
@@ -729,6 +737,7 @@ def cmd_render(args: argparse.Namespace) -> int:
         "summary_block": summary_block,
         **label_context(labels),
         "body": body,
+        "refs_block": refs_block,
         "outline": outline,
         "outline_items": outline_html(outline),
         "theme_name": tokens["name"],
@@ -742,7 +751,7 @@ def cmd_render(args: argparse.Namespace) -> int:
         # A page stamped with a revision notices when it is published again,
         # and a link off the site opens in a new tab.
         "page_script_needed": (has_decisions or with_comments or wrapped or has_node_tables
-                               or bool(getattr(args, "revision", ""))
+                               or bool(refs_block) or bool(getattr(args, "revision", ""))
                                or has_link(body)),
         "page_script": PAGE_SCRIPT,
         "mermaid_theme_variables": mermaid_theme_variables(tokens),
@@ -756,6 +765,16 @@ def cmd_render(args: argparse.Namespace) -> int:
     sync_theme_css(out_dir)
 
     write_atomic(out_path, html.encode("utf-8"))
+    # Publish keeps the entries the page used beside it; a page that uses
+    # none keeps no file.
+    if page_refs is not None:
+        refs_path = out_dir / f"{args.name}{REFS_SUFFIX}"
+        if named:
+            kept = {"asOf": args.refs_as_of, "refs": {key: page_refs[key] for key in named}}
+            write_atomic(refs_path, (json.dumps(kept, indent=2, ensure_ascii=False) + "\n")
+                         .encode("utf-8"))
+        else:
+            refs_path.unlink(missing_ok=True)
     warning = script_warning(args.name, body)
     if warning:
         print(warning, file=sys.stderr)
@@ -825,6 +844,11 @@ def extract_meta(page_html: str, stem: str) -> dict:
 # A page's kept HTML source, NAME.body.html, sits beside NAME.html as NAME.md
 # does for a markdown page: a source, never a page.
 BODY_SOURCE_SUFFIX = ".body.html"
+# The references a published page's cards were drawn from, and when they
+# were taken: kept beside it, never served.
+REFS_SUFFIX = ".refs.json"
+# The largest refs file publish reads, in bytes.
+REFS_MAX = 1 << 20
 
 
 def is_page_name(name: str) -> bool:
@@ -1313,6 +1337,39 @@ def read_source(args: argparse.Namespace, label: str) -> bytes:
         raise RuntimeError(f"cannot read {label}: {exc.strerror}") from None
 
 
+def read_refs_file(path: str) -> tuple[bytes, dict[str, dict]]:
+    """A refs file's bytes as read and its checked entries; RuntimeError
+    when it cannot be read or breaks a rule (lotuspod.refs)."""
+    try:
+        with open(path, "rb") as fh:
+            data = fh.read(REFS_MAX + 1)
+    except FileNotFoundError:
+        raise RuntimeError(f"refs file not found: {path}; nothing written") from None
+    except OSError as exc:
+        raise RuntimeError(f"cannot read refs file {path}: {exc.strerror}; "
+                           "nothing written") from None
+    if len(data) > REFS_MAX:
+        raise RuntimeError(f"refs file {path}: over {REFS_MAX} bytes; nothing written")
+    return data, refs.parse_refs(data, path)
+
+
+def kept_refs(out_dir: Path, name: str) -> tuple[dict[str, dict], str]:
+    """The entries NAME's cards were drawn from and when they were taken,
+    from NAME.refs.json beside it; ({}, "") when there is none."""
+    path = out_dir / f"{name}{REFS_SUFFIX}"
+    if not path.is_file():
+        return {}, ""
+    try:
+        kept = json.loads(path.read_text(encoding="utf-8"))
+        as_of = kept["asOf"]
+        entries = refs.check_refs({"refs": kept["refs"]})
+        if not isinstance(as_of, str):
+            raise TypeError("asOf is not text")
+    except (OSError, UnicodeDecodeError, ValueError, KeyError, TypeError, RuntimeError) as exc:
+        raise RuntimeError(f"cannot read the kept refs {path}: {exc}") from None
+    return entries, as_of
+
+
 def remote_publish_command(command: str, out_dir: str, fmt: str, name: str,
                            args: argparse.Namespace, archive: bool = False) -> str:
     """The command line ssh hands the writer host's shell.
@@ -1345,6 +1402,9 @@ def remote_publish_command(command: str, out_dir: str, fmt: str, name: str,
         argv.append(f"--label={label}")
     if not args.comments:
         argv.append("--no-comments")
+    # --refs travels in the archive, as refs.json.
+    if getattr(args, "no_refs", False):
+        argv.append("--no-refs")
     if archive:
         argv.append("--source-archive")
     return " ".join([command, *(shlex.quote(arg) for arg in argv)])
@@ -1356,9 +1416,11 @@ def publish_over_ssh(args: argparse.Namespace, config: dict[str, str]) -> int:
     The images the source names are read and checked here, and its local
     references rewritten to their media URLs; when there is at least one,
     standard input is a source archive of the rewritten source and the
-    images, else the source's bytes as read. The far side's output passes
-    through and its exit status is returned as it is, so a revision
-    conflict still exits 3.
+    images, else the source's bytes as read. A refs file (--refs) is read
+    and checked here too, and goes in the archive as refs.json, so a page
+    with one is sent as an archive even with no image. The far side's
+    output passes through and its exit status is returned as it is, so a
+    revision conflict still exits 3.
     """
     host = config["host"]
     out_dir = config.get("out_dir", "")
@@ -1373,12 +1435,14 @@ def publish_over_ssh(args: argparse.Namespace, config: dict[str, str]) -> int:
         raise RuntimeError("--source-archive is what the writer host reads; pass --local")
     label, fmt, name = publish_target(args)
     publish_labels(args)
+    refs_data = read_refs_file(args.refs)[0] if args.refs else None
     data = read_source(args, label)
     raw, images = send_images(fmt, decoded(data, label), label, source_base(args), media_cap)
-    if images:
-        data = source_archive(raw.encode("utf-8"), images)
+    archive = bool(images) or refs_data is not None
+    if archive:
+        data = source_archive(raw.encode("utf-8"), images, refs_data)
     command = config.get("command") or DEFAULT_REMOTE_COMMAND
-    remote = remote_publish_command(command, out_dir, fmt, name, args, archive=bool(images))
+    remote = remote_publish_command(command, out_dir, fmt, name, args, archive=archive)
     try:
         done = subprocess.run(["ssh", host, remote], input=data)
     except OSError as exc:
@@ -1407,17 +1471,23 @@ def source_base(args: argparse.Namespace) -> Path | None:
     return None if args.source == "-" else Path(args.source).parent
 
 
-# A source archive: an uncompressed POSIX tar of the member `source` and one
-# member `media/NAME` per image, NAME being its stored name.
+# A source archive: an uncompressed POSIX tar of the member `source`, the
+# member `refs.json` when publish was given a refs file, and one member
+# `media/NAME` per image, NAME being its stored name.
 SOURCE_MEMBER = "source"
+REFS_MEMBER = "refs.json"
 MEDIA_MEMBER = "media/"
 
 
-def source_archive(data: bytes, images: dict[str, media.Image]) -> bytes:
-    """The source archive of source bytes data and images."""
+def source_archive(data: bytes, images: dict[str, media.Image],
+                   refs_data: bytes | None = None) -> bytes:
+    """The source archive of source bytes data, images and a refs file's
+    bytes (none when refs_data is None)."""
     out = io.BytesIO()
     with tarfile.open(fileobj=out, mode="w", format=tarfile.USTAR_FORMAT) as archive:
         members = [(SOURCE_MEMBER, data)]
+        if refs_data is not None:
+            members.append((REFS_MEMBER, refs_data))
         members += [(MEDIA_MEMBER + name, image.data) for name, image in images.items()]
         for member, content in members:
             info = tarfile.TarInfo(member)
@@ -1463,13 +1533,15 @@ class _KeptTail:
 _END_OF_ARCHIVE = bytes(2 * tarfile.BLOCKSIZE)
 
 
-def read_source_archive(stream, cap: int) -> tuple[bytes, dict[str, media.Image]]:
-    """The source and the images of the source archive on stream, each image
-    checked again within cap; RuntimeError naming the first refused member.
+def read_source_archive(stream, cap: int) -> tuple[bytes, dict[str, media.Image], object]:
+    """The source, the images and the refs of the source archive on stream,
+    each image checked again within cap and the refs parsed as JSON (None
+    when it has no refs.json); RuntimeError naming the first refused member.
 
     The archive is read as a stream and nothing is extracted by its member
-    names: only regular files named `source` (once) or `media/` and a stored
-    name are taken, and an image's size is checked before its bytes are read.
+    names: only regular files named `source` (once), `refs.json` (once) or
+    `media/` and a stored name are taken, and an image's or the refs' size
+    is checked before its bytes are read.
     A stream tarfile stops reading at a header cut short or malformed, as
     at the end, so the archive must end with its end-of-archive marker
     where tarfile stopped. It also takes PAX and GNU extension headers in
@@ -1478,6 +1550,7 @@ def read_source_archive(stream, cap: int) -> tuple[bytes, dict[str, media.Image]
     """
     source: bytes | None = None
     images: dict[str, media.Image] = {}
+    found_refs: object = None
     seen: set[str] = set()
     member: tarfile.TarInfo | None = None
     tail = _KeptTail(stream)
@@ -1503,13 +1576,23 @@ def read_source_archive(stream, cap: int) -> tuple[bytes, dict[str, media.Image]
                     raise refused("named twice")
                 seen.add(name)
                 stored = name[len(MEDIA_MEMBER):] if name.startswith(MEDIA_MEMBER) else ""
-                if name != SOURCE_MEMBER and not media.STORED_NAME.fullmatch(stored):
-                    raise refused(f"neither {SOURCE_MEMBER} nor {MEDIA_MEMBER} and a "
-                                  "stored image name")
+                if name not in (SOURCE_MEMBER, REFS_MEMBER) \
+                        and not media.STORED_NAME.fullmatch(stored):
+                    raise refused(f"neither {SOURCE_MEMBER}, {REFS_MEMBER} nor {MEDIA_MEMBER} "
+                                  "and a stored image name")
                 if member.type not in (tarfile.REGTYPE, tarfile.AREGTYPE):
                     raise refused("not a regular file")
                 if name == SOURCE_MEMBER:
                     source = archive.extractfile(member).read()
+                    continue
+                if name == REFS_MEMBER:
+                    if member.size > REFS_MAX:
+                        raise refused(f"over {REFS_MAX} bytes")
+                    try:
+                        found_refs = json.loads(archive.extractfile(member).read()
+                                                .decode("utf-8"))
+                    except (UnicodeDecodeError, ValueError) as exc:
+                        raise refused(f"not JSON ({exc})") from None
                     continue
                 try:
                     media.check_size(member.size, cap)
@@ -1531,7 +1614,7 @@ def read_source_archive(stream, cap: int) -> tuple[bytes, dict[str, media.Image]
     if source is None:
         raise RuntimeError(f"the source archive has no {SOURCE_MEMBER} member; "
                            "nothing published")
-    return source, images
+    return source, images, found_refs
 
 
 # A reference with a scheme (https:, data:) or a host (//host) is remote or
@@ -1789,11 +1872,19 @@ def cmd_publish(args: argparse.Namespace) -> int:
         check_owner(args, out_dir)
     if args.source_archive and args.source != "-":
         raise RuntimeError("--source-archive reads standard input: pass - as SOURCE")
+    refs_path = getattr(args, "refs", None)
+    if args.source_archive and refs_path:
+        raise RuntimeError(f"--source-archive takes the refs from its {REFS_MEMBER} member, "
+                           "not --refs; nothing written")
+    # The refs this publish was given; None keeps the page's own.
+    given_refs = read_refs_file(refs_path)[1] if refs_path else None
     store_dir = media.media_dir(out_dir)
     try:
         sent: dict[str, media.Image] = {}
         if args.source_archive:
-            data, sent = read_source_archive(sys.stdin.buffer, media_cap())
+            data, sent, archived_refs = read_source_archive(sys.stdin.buffer, media_cap())
+            if archived_refs is not None:
+                given_refs = refs.check_refs(archived_refs)
         else:
             data = read_source(args, label)
         raw, found = send_images(fmt, decoded(data, label), label, source_base(args),
@@ -1829,6 +1920,16 @@ def cmd_publish(args: argparse.Namespace) -> int:
             )
             return EXIT_REVISION_CONFLICT
 
+        # A republish keeps the page's cards and when their refs were taken,
+        # as it keeps its labels; --no-refs drops them.
+        updated = _utc_stamp(_dt.datetime.now(_dt.timezone.utc))
+        if getattr(args, "no_refs", False):
+            page_refs, refs_as_of = {}, ""
+        elif given_refs is not None:
+            page_refs, refs_as_of = given_refs, updated
+        else:
+            page_refs, refs_as_of = kept_refs(out_dir, name)
+
         for image in images.values():
             media.store(store_dir, image)
 
@@ -1840,7 +1941,6 @@ def cmd_publish(args: argparse.Namespace) -> int:
         labels = labels if labels is not None else kept.get("labels", [])
         variant = args.variant or (page_variant(previous) if previous else PUBLISH_VARIANT)
         owner = args.owner or page_owner(previous)
-        updated = _utc_stamp(_dt.datetime.now(_dt.timezone.utc))
         cmd_render(
             argparse.Namespace(
                 name=name,
@@ -1861,6 +1961,8 @@ def cmd_publish(args: argparse.Namespace) -> int:
                 variant=variant,
                 out_dir=str(out_dir),
                 revision=revision,
+                refs=page_refs,
+                refs_as_of=refs_as_of,
                 commit=False,
             )
         )
@@ -1894,7 +1996,8 @@ def serve_allow_list(out_dir: Path) -> frozenset[str]:
     the manifest lists private artifact ids, so it must stay unreachable
     over HTTP even though it lives in the served directory. Sources
     (NAME.body.html, like NAME.md), dotfiles and symbolic links are never
-    pages, so they are never listed.
+    pages, so they are never listed, and neither is a page's kept refs
+    (NAME.refs.json), which is no page either.
     """
     allowed = {INDEX_FILE, *_SERVE_SUPPORT_FILES}
     try:
@@ -2632,6 +2735,15 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="REV",
         help=f"refuse, exit {EXIT_REVISION_CONFLICT}, unless the page is at REV "
         f"('{NO_REVISION}': the page must not exist yet)",
+    )
+    referenced = publish.add_mutually_exclusive_group()
+    referenced.add_argument(
+        "--refs", default=None, metavar="FILE",
+        help='a JSON file {"refs": {KEY: ENTRY}} of the tickets and pull requests the page '
+        "names, drawn as cards (default: the page's current cards)",
+    )
+    referenced.add_argument(
+        "--no-refs", action="store_true", help="drop the page's reference cards",
     )
     publish.add_argument("--out-dir", default="", help="output directory (default: artifacts/)")
     owner_options(publish, comments_default=True)

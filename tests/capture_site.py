@@ -24,7 +24,9 @@ capture-decision-threads.md beside it. So is the images page, capture-images, fr
 fixture images (tests/fixtures/media/) beside it: its images are stored in
 lotuspod-media/ beside the site, as publish stores them for serve. The
 published pages above carry labels (PAGE_LABELS) for the index's Labels menu;
-the rendered ones, and the versions pages below, carry none.
+the rendered ones, and the refs and versions pages below, carry none. The
+refs page, capture-refs, is published with a refs file (REFS_FILE), so the
+tickets and pull requests it names open cards.
 
 The site is the top of its own git repository, with a local identity and no
 origin, so each render and publish commits there as on the writer host, and
@@ -51,6 +53,7 @@ can never shadow the code under capture.
 from __future__ import annotations
 
 import datetime
+import json
 import os
 import shutil
 import subprocess
@@ -616,6 +619,54 @@ thead.</p>
 </table>
 """
 
+# The refs page: published from markdown with REFS_FILE, so the tickets and
+# pull requests it names open cards. Its first paragraph names three of
+# them, its second relos#2266 and LOTUS-95, which the refs file lacks. No
+# diagram and no comments, so the page needs no network.
+REFS_PAGE = "capture-refs"
+REFS_SOURCE = """\
+# Capture refs
+
+A sample plan for captures: the tickets and pull requests it names open cards.
+
+## Where things stand
+
+The proposal work in HOLO-175 builds on HOLO-171, which merged last week, and the cards in LOTUS-97 follow from both.
+
+The relay fix is relos#2266, and LOTUS-95 is still only an idea.
+
+## Next
+
+Ship `HOLO-175` once its review is answered.
+"""
+REFS_FILE = {"refs": {
+    "HOLO-175": {
+        "title": "Story follow-ups become proposals", "project": "Holophyte",
+        "status": "In review", "tone": "review",
+        "summary": "A story's follow-ups are filed as proposals for the maintainer to accept.",
+        "updated": "2025-12-31T16:20:00Z",
+        "pr": {"text": "PR #475 on GitHub", "href": "https://example.com/pr/475"},
+        "board": {"text": "HOLO-175 on the board", "href": "https://example.com/board/HOLO-175"},
+    },
+    "HOLO-171": {
+        "title": "Stories keep their follow-ups", "project": "Holophyte", "status": "Merged",
+        "tone": "merged",
+        "pr": {"text": "PR #468 on GitHub", "href": "https://example.com/pr/468"},
+        "board": {"text": "HOLO-171 on the board", "href": "https://example.com/board/HOLO-171"},
+    },
+    "LOTUS-97": {
+        "title": "Reference cards on a page", "project": "Lotuspod", "status": "In progress",
+        "tone": "progress",
+        "board": {"text": "LOTUS-97 on the board", "href": "https://example.com/board/LOTUS-97"},
+    },
+    "relos#2266": {
+        "title": "Relay retries a dropped socket once", "project": "Relos", "status": "Waiting",
+        "summary": "Waits on a reviewer.",
+        "pr": {"text": "relos#2266 on GitHub", "href": "https://example.com/relos/pull/2266"},
+    },
+    "HOLO-160": {"title": "Named nowhere on the page", "project": "Holophyte"},
+}}
+
 # The versions pages: one published once, and one published VERSIONS_MANY
 # times, each edition naming its number.
 VERSIONS_ONCE_PAGE = "capture-versions-once"
@@ -761,6 +812,10 @@ def render(out_dir: Path, db_path: Path) -> None:
         (images_source.parent / relative).parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(MEDIA_FIXTURES / fixture, images_source.parent / relative)
     images_source.write_text(IMAGES_SOURCE, encoding="utf-8")
+    refs_source = db_path.with_name(f"{REFS_PAGE}.md")
+    refs_source.write_text(REFS_SOURCE, encoding="utf-8")
+    refs_file = db_path.with_name(f"{REFS_PAGE}-refs.json")
+    refs_file.write_text(json.dumps(REFS_FILE, indent=2), encoding="utf-8")
     steps = [
         (
             f"render {name}",
@@ -805,6 +860,13 @@ def render(out_dir: Path, db_path: Path) -> None:
             "publish", str(images_source), "--local", "--date", SAMPLE_DATE,
             *label_options(IMAGES_PAGE),
             "--out-dir", str(out_dir), "--variant", "article", "--no-comments",
+        ],
+    ))
+    steps.append((
+        f"publish {REFS_PAGE}",
+        [
+            "publish", str(refs_source), "--local", "--date", SAMPLE_DATE,
+            "--out-dir", str(out_dir), "--no-comments", "--refs", str(refs_file),
         ],
     ))
     versions_dir = db_path.with_name("versions")

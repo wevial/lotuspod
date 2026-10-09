@@ -278,8 +278,9 @@ OUT_DIR --format FORMAT --name NAME ...` with the source on standard input
 worked out here from the file name, and every
 argument after `command` is shell-quoted (`command`, default `lotuspod`, is
 used as written); `--owner`, `--credential`, `--db`, each `--label` (as
-`--label=NAME`, in order), `--no-labels` and `--no-comments` go
-along when given, so the credential file and the database named are the writer
+`--label=NAME`, in order), `--no-labels`, `--no-comments` and `--no-refs` go
+along when given (a refs file goes in a source archive; see
+[References](#references)), so the credential file and the database named are the writer
 host's. `out_dir` is required when `host` is set. The far side's
 output passes through and its exit status is `publish`'s, so a revision
 conflict still exits 3. `--local` publishes on this machine regardless of the
@@ -339,7 +340,7 @@ send - none at all, or only media URLs - goes as its bytes with no
 `--source-archive`, as before. `--base` is read on the sending machine and
 never sent. The writer host trusts nothing in the archive: it reads it as a
 stream and extracts nothing by name, takes only regular files named `source`
-(once) or `media/` and a stored name, and checks each image again - its
+(once), `refs.json` (once) or `media/` and a stored name, and checks each image again - its
 SHA-256 must be its name, its type the one its extension names, its size
 within the writer host's own `max_image_bytes` (read from its header before
 its bytes), and the source must refer to it; and every media URL in the
@@ -375,6 +376,76 @@ source, no media file, no commit:
 Over ssh, a reference refused on the sending machine is refused before ssh
 runs. Media in `backup` and `restore`, CSS `url()` in an HTML source and
 `picture` without `srcset` are not handled yet.
+
+### References
+
+A page that names tickets and pull requests can show a card for each:
+
+```sh
+lotuspod publish plan.md --refs refs.json
+```
+
+`--refs FILE` reads the details of the tickets and pull requests the page
+names from a JSON file the publisher writes, however it can - from a board
+and `gh`, say. Lotuspod looks nothing up itself and makes no network call:
+
+```json
+{"refs": {
+  "HOLO-175": {
+    "title": "Story follow-ups become proposals",
+    "project": "Holophyte",
+    "status": "In review",
+    "tone": "review",
+    "pr": {"text": "PR #475 on GitHub", "href": "https://example.com/pr/475"},
+    "board": {"text": "HOLO-175 on the board", "href": "https://example.com/board/HOLO-175"}
+  }
+}}
+```
+
+The file is one object with one field, `refs`, mapping each KEY to an ENTRY:
+
+- A KEY is a ticket key, `[A-Z][A-Z0-9]*-[0-9]+` (`HOLO-175`), or a pull
+  request, `#N` or `REPO#N` with REPO matching `[a-z0-9][a-z0-9._-]*`
+  (`#2266`, `relos#2266`). Which repository a bare `#N` names is the
+  publisher's to decide.
+- An ENTRY has `title` (required, at most 200 characters), and may have
+  `project`, `status` and `summary` (text of at most 60, 40 and 400
+  characters), `tone` (`merged`, `review`, `progress` or `waiting`, the
+  default, which colours the status chip mint, amber, orchid or a hairline),
+  `updated` (an ISO 8601 time), and `pr` and `board`, each `{"text", "href"}`
+  with an `http` or `https` href.
+
+A file that is not JSON, or breaks any of these rules - a key or field that
+is not one of these included - makes `publish` exit 1 with one line naming the
+key and the field, writing nothing.
+
+Each whole-word mention of a key the file holds in the page's text becomes a
+button: not one after a letter, digit, `_`, `-`, `/` or `#`, or before a
+letter, digit or `_`, and none inside a link, code, a heading, a summary, a
+button or a form (a decision's text included). The rest of the body stays
+byte for byte as written. One card per key the page names is written after
+the body, holding the project and key, the title, the status, when it was
+updated, the summary, the PR link (or "No PR yet" for a ticket without one),
+the board link, and "As of publish" with the time of this publish. A key the
+file has no entry for stays plain text, and an entry the page never names
+makes no card. `lotuspod render` takes no refs.
+
+On the page, hovering or focusing a reference shows its card under it; a
+click, Enter or Space pins it (with a ✕), a second click unpins it, and Esc,
+the ✕ or a click outside closes it. Without the page script a reference reads
+as plain text and no card shows.
+
+Publish keeps the entries the page used, and when they were taken, in
+`NAME.refs.json` beside the page, and commits it with the page. A republish
+without `--refs` draws the same cards with their as-of time again, as it
+keeps the labels; `--no-refs` removes the cards and the file. `--refs` and
+`--no-refs` together are a usage error (exit 2). Serve never answers
+`NAME.refs.json`.
+
+Over ssh, the refs file is read and checked on the sending machine, and goes
+as a member `refs.json` of the source archive, after `source`, so a page with
+a refs file is sent as an archive even with no image. The writer host takes
+that member at most once, as JSON within 1 MiB, and checks it again.
 
 ## Manifest
 
