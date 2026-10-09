@@ -458,6 +458,33 @@ test.describe('signed in', () => {
     expect(errors).toEqual([]);
   });
 
+  test('a listed page rendered with one heading and plain text, loaded directly, opens in the index as the active tab', async ({ page }) => {
+    const errors = await watch(page);
+    // Nothing on the page asks for the page script but being listed: no
+    // sections to fold, no comments, decisions, links or revision.
+    const plain = { name: 'pod-tabs-plain', title: 'Pod tabs plain' };
+    run('render', '--name', plain.name, '--title', plain.title, '--date', '2026-01-02',
+      '--body', '<h2 id="a-section">A section</h2><p>Plain text.</p>', '--out-dir', OUT);
+    run('index', '--out-dir', OUT);
+
+    await page.goto('about:blank');
+    await page.goto(`/${plain.name}.html#a-section`);
+    await expect(strip(page)).toHaveCount(1);
+    expect(new URL(page.url()).pathname).toBe('/');
+    await expectActive(page, plain);
+    await expect(framed(page, plain).locator('h1')).toHaveText(plain.title);
+    const shown = await frame(page, plain).evaluate((node) =>
+      (node as HTMLIFrameElement).contentWindow?.location.href ?? '');
+    expect(new URL(shown).pathname).toBe(`/${plain.name}.html`);
+    expect(new URL(shown).hash).toBe('#a-section');
+
+    await page.keyboard.press('ControlOrMeta+K');
+    await expect(page.getByRole('dialog', { name: 'Find a pod' })).toBeVisible();
+    await page.goBack();
+    await expect(page).toHaveURL('about:blank');
+    expect(errors).toEqual([]);
+  });
+
   test('a pod loaded with ?standalone, or an old version of it, stays on its own at the top level', async ({ page }) => {
     const errors = await watch(page);
     await page.goto(`/${ARTICLE.name}.html?standalone#second-section`);

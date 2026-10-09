@@ -747,8 +747,9 @@ first tab).
 
 A listed page loaded on its own at the top level of the window (from a link
 in chat, an email or another page, a bookmark, a new browser tab) opens in a
-tab too: the first thing its page script does is replace its address with the
-index's, `#tabs=NAME&on=NAME`, that page its one tab and the active one, with
+tab too: every listed page loads the page script, whatever its body, and the
+first thing that script does is replace its address with the index's,
+`#tabs=NAME&on=NAME`, that page its one tab and the active one, with
 `&at=FRAGMENT` after it when the address had a fragment (encoded as with
 `encodeURIComponent`), so the framed page opens at that section. `&at=` is
 read on load only and never written again. The replace leaves no history

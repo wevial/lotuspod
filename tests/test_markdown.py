@@ -678,14 +678,17 @@ class RenderMarkdownTests(TempDirTestCase):
         self.assertEqual(self.page("n"), expected)
 
     def test_a_page_with_a_link_loads_the_page_script_and_one_without_does_not(self):
-        """A page with no headings, comments, decisions or revision still
-        loads the page script when its body holds a link, however written,
-        so the script can open one off the site in a new tab."""
+        """A page not listed, with no sections, comments, decisions or
+        revision, still loads the page script when its body holds a link,
+        however written, so the script can open one off the site in a new
+        tab. A listed page loads it whatever its body, so it opens in the
+        index's tabs when loaded on its own."""
         markdown = (
             ("bare", "See https://example.com/x for more.\n", True),
             ("linked", "See [the site](http://example.com/) for more.\n", True),
             ("relative", "See [the part](other.md#part) or [the top](#top).\n", True),
             ("none", "No links at all, only https: as a word.\n", False),
+            ("heading", "## A section\n\nPlain text.\n", False),
         )
         html_bodies = (
             ("protocol", '<p><a href="//example.com/body">elsewhere</a></p>\n', True),
@@ -696,15 +699,17 @@ class RenderMarkdownTests(TempDirTestCase):
         cases = [(name, ("--markdown", "-"), source, loads) for name, source, loads in markdown]
         cases += [(name, ("--body", body), "", loads) for name, body, loads in html_bodies]
         for name, given, stdin, loads in cases:
-            with self.subTest(name=name):
-                with mock.patch("sys.stdin", io.StringIO(stdin)):
-                    rc, _, err = run_cli(
-                        "render", *given, "--name", name, "--title", "T",
-                        "--out-dir", str(self.out_dir), *self.COMMON,
-                    )
-                self.assertEqual(rc, 0, err)
-                page = self.page(name).decode("utf-8")
-                self.assertEqual(f'<script src="{cli.PAGE_SCRIPT}?v=' in page, loads)
+            for listed in (False, True):
+                with self.subTest(name=name, listed=listed):
+                    with mock.patch("sys.stdin", io.StringIO(stdin)):
+                        rc, _, err = run_cli(
+                            "render", *given, "--name", name, "--title", "T",
+                            "--out-dir", str(self.out_dir), *self.COMMON,
+                            *(() if listed else ("--hidden",)),
+                        )
+                    self.assertEqual(rc, 0, err)
+                    page = self.page(name).decode("utf-8")
+                    self.assertEqual(f'<script src="{cli.PAGE_SCRIPT}?v=' in page, listed or loads)
 
     def test_a_body_larger_than_the_command_line_renders_in_a_subprocess(self):
         paragraph = "A line of prose that repeats to make the page large & long. " * 4
