@@ -688,7 +688,7 @@ def cmd_render(args: argparse.Namespace) -> int:
     # names the updated day only when it is not the created one.
     updated = getattr(args, "updated", "")
     # Publish checks each label (publish_labels): no markup in any.
-    labels = getattr(args, "labels", None) or []
+    labels = getattr(args, "labels", [])
     context = {
         "title": args.title,
         "kicker": kicker,
@@ -925,7 +925,7 @@ def index_entries_html(artifacts: list[dict]) -> str:
         href = esc(str(meta["file"]))
         title = esc(str(meta["title"]))
         summary = esc(str(meta["summary"]))
-        labels = [esc(str(label)) for label in meta.get("labels", [])]
+        labels = [esc(str(label)) for label in meta["labels"]]
         # The labels ride under the title as tags, and on the row for the
         # index script's Labels filter.
         row = f'<tr data-labels="{",".join(labels)}">' if labels else "<tr>"
@@ -1241,13 +1241,12 @@ def publish_labels(args: argparse.Namespace) -> list[str] | None:
     """The labels --label names, lower-cased, each once in the order given;
     [] for --no-labels and None when neither is given. RuntimeError names
     the first label that is not one."""
-    if getattr(args, "no_labels", False):
+    if args.no_labels:
         return []
-    given = getattr(args, "labels", None)
-    if given is None:
+    if args.labels is None:
         return None
     labels: list[str] = []
-    for value in given:
+    for value in args.labels:
         label = value.lower()
         if not _LABEL_RE.fullmatch(label) or len(label) > LABEL_MAX:
             raise RuntimeError(
