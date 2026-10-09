@@ -285,9 +285,6 @@
     }
 
     function restore() {
-      if (!shown) {
-        return;
-      }
       var was = shown;
       shown = null;
       dragging = null;
