@@ -124,14 +124,14 @@ twice.
   with an event after `from` and up to `to`, ordered by `latest`, its newest
   event's time, newest first, and its `events` newest first. At most 500
   events are kept, the newest, and `truncated` is true when any were left
-  out, or when serve read too little of a page's history to know the
-  version before one (that version then has `first: false` and `summary`
-  ""); `older` is true when what was read shows anything the reader may see
-  happened up to `from`, so asking again with `before` set to `from` reads the 7 days
+  out, or when the repository lacks the version before one, as a shallow
+  clone does (that version then has `first: false` and `summary` "");
+  `older` is true when anything the reader may see happened up to `from`, so asking again with `before` set to `from` reads the 7 days
   before. A hidden or removed page never appears. Each event is one of:
   - `{kind: "version", at, commit, revision, actor, first, summary}`, a
     commit of the artifacts repository that changed the page while it was
-    visible, read from git in at most two processes: `actor` the handle the
+    visible, read from git in at most two processes, the served pages'
+    whole history up to `to` read so the version before each is known: `actor` the handle the
     version's `lotuspod:owner` names, or null, and `first` true when the page
     had no visible version before it. `summary` compares its sections with
     the visible version before it, as `/api/changes` does: "Alpha and Beta changed;

@@ -386,35 +386,50 @@ class HistoryTests(ActivityWitness):
                                   env=env)
             self.assertEqual(done.returncode, 0, done.stderr)
 
-    def test_other_files_and_hidden_pages_do_not_count_toward_the_cap(self):
+    def edits(self, path: str, text: str, count: int, first: str) -> None:
+        """count commits, a minute apart from first, each adding a comment to
+        path's text, written in one git fast-import; the files checked out."""
+        at = int(moment(first))
+        stream = []
+        for n in range(count):
+            data = f"{text}<!-- {n} -->\n".encode("utf-8")
+            stream += [b"commit refs/heads/main\n",
+                       f"committer Witness <witness@example.com> {at + 60 * n} +0000\n".encode(),
+                       b"data 4\nedit\n", b"from refs/heads/main^0\n" if n == 0 else b"",
+                       f"M 100644 inline {path}\ndata {len(data)}\n".encode(), data, b"\n"]
+        done = subprocess.run(["git", "-C", str(self.out), "fast-import", "--quiet"],
+                              input=b"".join(stream), capture_output=True)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(git(self.out, "reset", "-q", "--hard").returncode, 0)
+
+    def test_other_files_and_hidden_pages_are_no_activity(self):
         self.repository(self.out)
         self.publish_at("a", A_FIRST, "2026-10-02T12:00:00+00:00")
         for n in range(4):
             self.commit_file("docs/source.html", f"<p>{n}</p>", f"2026-10-03T12:0{n}:00+00:00")
-            self.hide("secret", f"2026-10-04T12:0{n}:00+00:00")
-            self.commit_file("secret.html", f"<p>{n}</p>", f"2026-10-04T13:0{n}:00+00:00")
-        routes = self.serve(now="2026-10-07T12:00:00+00:00")
+            self.hide("secret", f"2026-10-04T12:0{n}:00+00:00", f"Draft {n}.")
+        self.serve(now="2026-10-07T12:00:00+00:00")
 
-        with mock.patch.object(versions, "MAX_RECENT_COMMITS", 3):
-            answer = self.activity()
-        self.assertIsNotNone(routes)
+        answer = self.activity()
         self.assertEqual([entry["page"] for entry in answer["pages"]], ["a"])
         self.assertEqual((answer["older"], answer["truncated"]), (False, False))
 
-    def test_the_cap_reached_exactly_is_no_truncation_and_past_it_is(self):
+    def test_many_edits_that_keep_a_revision_hide_no_version_and_no_older_one(self):
+        # A published September 1, B October 6, then 1,002 edits of B that
+        # keep its revision: B's version is the window's one event.
         self.repository(self.out)
-        for n in range(3):
-            self.publish_at(f"p{n}", B_FIRST, f"2026-10-0{n + 2}T12:00:00+00:00")
+        self.publish_at("a", A_FIRST, "2026-09-01T12:00:00+00:00")
+        self.publish_at("b", B_FIRST, "2026-10-06T12:00:00+00:00")
+        b_commit = self.commits(self.out, "b")[0]
+        self.edits("b.html", (self.out / "b.html").read_text(encoding="utf-8"), 1002,
+                   "2026-10-06T13:00:00+00:00")
         self.serve(now="2026-10-07T12:00:00+00:00")
 
-        with mock.patch.object(versions, "MAX_RECENT_COMMITS", 3):
-            exact = self.activity()
-        with mock.patch.object(versions, "MAX_RECENT_COMMITS", 2):
-            past = self.activity()
-        self.assertEqual(len(exact["pages"]), 3)
-        self.assertEqual((exact["older"], exact["truncated"]), (False, False))
-        # Nothing came before the window: truncation says nothing of that.
-        self.assertEqual((past["older"], past["truncated"]), (False, True))
+        answer = self.activity()
+        self.assertEqual([entry["page"] for entry in answer["pages"]], ["b"])
+        self.assertEqual([(event["commit"], event["first"]) for event in self.events(answer, "b")],
+                         [(b_commit, True)])
+        self.assertEqual((answer["older"], answer["truncated"]), (True, False))
 
     def test_a_merge_that_resolves_a_conflict_is_a_version(self):
         self.repository(self.out)
@@ -445,47 +460,26 @@ class HistoryTests(ActivityWitness):
                          {event["commit"]: event["summary"] for event in events})
         self.assertEqual(self.get(f"/a.html?version={merge}")[0], 200)
 
-    def test_what_came_before_the_cap_is_still_found_or_said_to_be_unread(self):
+    def test_a_version_after_a_long_hidden_stretch_compares_with_the_one_before_it(self):
         self.repository(self.out)
         self.publish_at("a", A_FIRST, "2026-10-01T12:00:00+00:00")
         for n in range(4):
             self.hide("a", f"2026-10-0{n + 2}T12:00:00+00:00", f"Draft {n}.")
+        self.edits("a.html", (self.out / "a.html").read_text(encoding="utf-8"), 1002,
+                   "2026-10-04T13:00:00+00:00")
         self.publish_at("a", A_SECOND, "2026-10-06T12:00:00+00:00")
         self.serve(now="2026-10-12T12:00:00+00:00")
 
-        # Five commits read: the hidden ones and, as the oldest one's old
-        # blob, the visible version before them.
-        with mock.patch.object(versions, "MAX_RECENT_COMMITS", 4):
-            found = self.activity()
-        (newest,) = self.versions_of(found, "a")
-        self.assertEqual((newest["first"], newest["summary"]),
-                         (False, "Beta changed; Delta added"))
-        self.assertEqual((found["older"], found["truncated"]), (True, False))
-        # Four read: what came before is not known, and the answer says so.
-        with mock.patch.object(versions, "MAX_RECENT_COMMITS", 3):
-            cut = self.activity()
-        (newest,) = self.versions_of(cut, "a")
-        self.assertEqual((newest["first"], newest["summary"]), (False, ""))
-        self.assertIs(cut["truncated"], True)
-
-    def test_edits_that_keep_a_revision_past_the_cap_are_no_versions(self):
-        self.repository(self.out)
-        owned = ("--owner", "hermes", "--credential", str(self.hermes))
-        self.publish_at("a", A_FIRST, "2026-10-01T12:00:00+00:00", *owned)
-        self.publish_at("b", B_FIRST, "2026-10-02T12:00:00+00:00")
-        page_b = (self.out / "b.html").read_text(encoding="utf-8")
-        for n in range(3):
-            self.commit_file("b.html", page_b + f"<!-- {n} -->\n", f"2026-10-03T12:0{n}:00+00:00")
-        self.publish_at("a", A_SECOND, "2026-10-06T12:00:00+00:00", *owned)
-        self.serve(now="2026-10-07T12:00:00+00:00")
-
-        with mock.patch.object(versions, "MAX_RECENT_COMMITS", 3):
-            answer = self.activity()
-        self.assertEqual([entry["page"] for entry in answer["pages"]], ["a"])
+        answer = self.activity()
         (newest,) = self.versions_of(answer, "a")
         self.assertEqual((newest["first"], newest["summary"]),
                          (False, "Beta changed; Delta added"))
-        self.assertEqual((answer["older"], answer["truncated"]), (False, True))
+        self.assertEqual((answer["older"], answer["truncated"]), (True, False))
+        status, _, listed = self.api("GET", "/api/versions?page=a")
+        self.assertEqual(status, 200, listed)
+        self.assertEqual([(entry["commit"], entry["summary"]) for entry in listed["versions"]],
+                         [(newest["commit"], newest["summary"]),
+                          (self.commits(self.out, "a")[-1], "")])
 
     def test_the_oldest_listed_version_past_the_lists_cap_keeps_its_summary(self):
         self.repository(self.out)
