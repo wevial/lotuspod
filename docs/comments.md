@@ -201,15 +201,23 @@ as typed):
 
 A passage's opening words in a list stay plain text.
 
-Every composer takes up to 4 images, pasted into its field, dropped on it
-(a drag of text alone is left to the browser) or picked with its "Add image"
-button. The page refuses a file that is not a PNG, JPEG, WebP or
-GIF, or is over the `maxImageBytes` the threads route reports, in the
-composer's status line, and never sends it (a file attached before the page's
-first read of the threads waits for it); any other is uploaded to
-`POST /api/media` at once and shown as a small thumbnail with a Remove button,
-and sending the comment names the uploaded images. While it saves, the
-composer takes no other image and its images cannot be removed. An image
+With the page script every composer is one rounded box: the images
+attached sit above the field as square thumbnails, and under the field a +
+(named "Add image") opens the file picker; the round send button sits in the
+box's bottom-right corner and the status line below it. Each thumbnail has an
+X in its corner (named "Remove image N of M") that removes it and gives the
+focus back to the field, and, once uploaded, is a link to its `/media/` URL
+that opens it in the image viewer, with Previous and Next between the
+composer's images; Escape closes only the viewer, leaving the composer as it
+was. A composer takes up to 4 images, pasted into its field, dropped on it
+(a drag of text alone is left to the browser) or picked with its +, which is
+disabled once 4 are attached. The page refuses a file that is not a PNG,
+JPEG, WebP or GIF, or is over the `maxImageBytes` the threads route reports,
+in the composer's status line, and never sends it (a file attached before
+the page's first read of the threads waits for it); any other is uploaded to
+`POST /api/media` at once and shown as a thumbnail, and sending the comment
+names the uploaded images. While it saves, the composer takes no other image,
+its + and each X are disabled and its images cannot be removed. An image
 attached twice is attached once. A thumbnail shows the uploaded `/media/`
 URL, never a `blob:` one, so the page policy's `img-src 'self' data:` holds. A comment's images are drawn under its text as
 thumbnails, each a link that opens the full-size image in a new tab; each

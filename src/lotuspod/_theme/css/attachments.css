@@ -1,26 +1,41 @@
-/* Images on a comment (attachments.js). In a composer the images attached
-   sit under the field's frame, each a thumbnail with its Remove button,
-   beside the "Add image" button, and the status line moves below them.
-   Under a comment its images are a row of thumbnails, each a link to the
-   full size. A thumbnail's width and height attributes are its drawn size,
-   so its box is there before its bytes. Every rule here is one class more
-   specific than the composer's button rules in comments.css, which come
+/* Images on a comment (attachments.js). With the page script a composer is
+   one box (docs/comments.md, "Comments"): the images attached sit above the
+   field as square thumbnails, each with its X in its corner and a link that
+   opens it in the image viewer, and the + sits in a row under the field.
+   The box draws the frame and the focus ring the form draws for a plain
+   field; the send button sits over its bottom-right corner and the status
+   line below it. Under a comment its images are a row of thumbnails, each a
+   link to the full size. A thumbnail's width and height attributes are its
+   drawn size, so its box is there before its bytes. Every rule here is one
+   class more specific than the composer's rules in comments.css, which come
    later. */
-:is(.artifact-comment-form, .artifact-comment-reply) .artifact-attach {
-  align-items: center;
+:is(.artifact-comment-form, .artifact-comment-reply):has(> .artifact-composer-box)::before {
+  content: none;
+}
+
+:is(.artifact-comment-form, .artifact-comment-reply) .artifact-composer-box {
+  background: var(--color-surface);
+  border: 1px solid var(--color-muted-lavender);
+  border-radius: var(--radius-card);
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
+  flex-direction: column;
   grid-column: 1 / -1;
-  grid-row: 2;
-  margin: 0.45rem 0.6rem 0;
+  grid-row: 1;
+  min-width: 0;
 }
 
-:is(.artifact-comment-form, .artifact-comment-reply) .artifact-comment-actions .artifact-comment-status {
-  grid-row: 3;
+:is(.artifact-comment-form, .artifact-comment-reply) .artifact-composer-box:has(textarea:focus-visible) {
+  border-color: var(--color-lavender);
+  outline: 2px solid var(--color-lavender);
+  outline-offset: 2px;
 }
 
-.artifact-attach .artifact-attach-tray,
+:is(.artifact-comment-form, .artifact-comment-reply) .artifact-composer-box textarea {
+  min-height: 2.4em;
+  padding: 0.6rem 0.95rem 0.2rem;
+}
+
+.artifact-composer-box .artifact-attach-tray,
 .artifact-comment-col .artifact-comment-images {
   display: flex;
   flex-wrap: wrap;
@@ -30,21 +45,24 @@
   padding: 0;
 }
 
-.artifact-attach .artifact-attach-tray[hidden] {
+.artifact-composer-box .artifact-attach-tray {
+  padding: 0.6rem 0.6rem 0.2rem;
+}
+
+.artifact-composer-box .artifact-attach-tray[hidden] {
   display: none;
 }
 
-.artifact-attach .artifact-attach-item,
+.artifact-composer-box .artifact-attach-item,
 .artifact-comment-images > li {
   margin: 0;
   padding: 0;
 }
 
-.artifact-attach .artifact-attach-item {
-  align-items: flex-start;
-  display: flex;
-  flex-direction: column;
-  gap: 0.2rem;
+.artifact-composer-box .artifact-attach-item {
+  height: 120px;
+  position: relative;
+  width: 120px;
 }
 
 .artifact-attach-thumb {
@@ -55,56 +73,96 @@
   object-fit: cover;
 }
 
-.artifact-attach .artifact-attach-holder {
+.artifact-composer-box .artifact-attach-link {
+  border-radius: var(--radius-block);
+  display: block;
+  height: 100%;
+}
+
+.artifact-composer-box .artifact-attach-thumb {
+  box-sizing: border-box;
+  height: 100%;
+  width: 100%;
+}
+
+.artifact-composer-box .artifact-attach-holder {
   align-items: center;
   background: var(--color-glow);
   border: 1px dashed var(--hairline-strong);
   border-radius: var(--radius-block);
+  box-sizing: border-box;
   color: var(--color-muted-lavender);
   display: flex;
   font-size: 0.78rem;
-  height: 4.5rem;
+  height: 100%;
   justify-content: center;
-  width: 4.5rem;
+  width: 100%;
 }
 
-:is(.artifact-comment-form, .artifact-comment-reply) .artifact-attach :is(.artifact-attach-add, .artifact-attach-remove) {
+.artifact-composer-box .artifact-attach {
+  display: flex;
+  padding: 0 0.3rem 0.2rem;
+}
+
+:is(.artifact-comment-form, .artifact-comment-reply) .artifact-composer-box :is(.artifact-attach-add, .artifact-attach-remove) {
+  align-items: center;
   appearance: none;
-  background: none;
-  border: 1px solid var(--hairline-strong);
-  border-radius: var(--radius-pill);
-  color: var(--color-lavender);
+  border: 0;
+  border-radius: 50%;
   cursor: pointer;
+  display: flex;
   font-family: var(--font-body);
-  font-size: 0.8rem;
-  height: auto;
-  line-height: 1.4;
+  font-size: 1rem;
+  justify-content: center;
+  line-height: 1;
   margin: 0;
   overflow: visible;
-  padding: 0.15rem 0.65rem;
+  padding: 0;
+}
+
+:is(.artifact-comment-form, .artifact-comment-reply) .artifact-composer-box .artifact-attach-add {
+  background: none;
+  color: var(--color-pale-lavender);
+  font-size: 1.6rem;
+  font-weight: 300;
+  height: 2.25rem;
   position: static;
-  width: auto;
+  width: 2.25rem;
 }
 
-:is(.artifact-comment-form, .artifact-comment-reply) .artifact-attach .artifact-attach-remove {
-  border-color: transparent;
-  color: var(--color-muted-lavender);
-  padding: 0 0.3rem;
+:is(.artifact-comment-form, .artifact-comment-reply) .artifact-composer-box .artifact-attach-remove {
+  background: var(--color-night);
+  border: 1px solid var(--hairline-strong);
+  color: var(--color-white);
+  height: 1.6rem;
+  position: absolute;
+  right: 0.35rem;
+  top: 0.35rem;
+  width: 1.6rem;
 }
 
-:is(.artifact-comment-form, .artifact-comment-reply) .artifact-attach :is(.artifact-attach-add, .artifact-attach-remove)::before,
-:is(.artifact-comment-form, .artifact-comment-reply) .artifact-attach :is(.artifact-attach-add, .artifact-attach-remove)::after {
+:is(.artifact-comment-form, .artifact-comment-reply) .artifact-composer-box :is(.artifact-attach-add, .artifact-attach-remove)::before,
+:is(.artifact-comment-form, .artifact-comment-reply) .artifact-composer-box :is(.artifact-attach-add, .artifact-attach-remove)::after {
   content: none;
 }
 
-:is(.artifact-comment-form, .artifact-comment-reply) .artifact-attach :is(.artifact-attach-add, .artifact-attach-remove):hover {
-  background: none;
-  color: var(--color-pale-lavender);
+:is(.artifact-comment-form, .artifact-comment-reply) .artifact-composer-box .artifact-attach-add:is(:hover, :active):not(:disabled) {
+  background: var(--color-glow);
 }
 
-:is(.artifact-comment-form, .artifact-comment-reply) .artifact-attach :is(.artifact-attach-add, .artifact-attach-remove):disabled {
+:is(.artifact-comment-form, .artifact-comment-reply) .artifact-composer-box .artifact-attach-remove:is(:hover, :active):not(:disabled) {
+  background: var(--color-glow);
+  border-color: var(--color-pale-lavender);
+}
+
+:is(.artifact-comment-form, .artifact-comment-reply) .artifact-composer-box :is(.artifact-attach-add, .artifact-attach-remove):disabled {
   cursor: default;
   opacity: 0.6;
+}
+
+:is(.artifact-comment-form, .artifact-comment-reply) .artifact-composer-box :is(.artifact-attach-add, .artifact-attach-remove, .artifact-attach-link):focus-visible {
+  outline: 2px solid var(--color-lavender);
+  outline-offset: 2px;
 }
 
 .artifact-comment-col .artifact-comment-images {

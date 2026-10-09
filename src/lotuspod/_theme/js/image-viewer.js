@@ -1,16 +1,19 @@
 
   // The image viewer: a plain click on a page figure's image
-  // (.artifact-figure a) or on a comment's thumbnail (a.artifact-comment-image)
-  // opens the image over the page, in a modal dialog, instead of leaving it.
+  // (.artifact-figure a), on a comment's thumbnail (a.artifact-comment-image)
+  // or on one attached in a composer (a.artifact-attach-link) opens the image
+  // over the page, in a modal dialog, instead of leaving it.
   // The image is drawn at its natural size, scaled down to fit the window,
-  // captioned with its alt text; a comment's images have Previous and Next
-  // between them. The dialog's own Escape, its Close button or a click beside
-  // the image closes it, and the focus goes back to the link that opened it.
+  // captioned with its alt text; a comment's images, and a composer's, have
+  // Previous and Next between them. The dialog's own Escape, its Close button
+  // or a click beside the image closes it, and the focus goes back to the
+  // link that opened it.
   // A click with a modifier, or the dialog's "Open original" link, opens the
   // image's /media/ URL itself in a new page. The viewer only ever shows a URL
   // the page links to already, so the page policy's img-src stays as it is.
   function imageViewer() {
-    var OPENERS = ".artifact-body .artifact-figure a[href], a.artifact-comment-image[href]";
+    var OPENERS = ".artifact-body .artifact-figure a[href], a.artifact-comment-image[href], " +
+      "ul.artifact-attach-tray a.artifact-attach-link[href]";
     var dialog = null;
     var parts = null;
     // What the viewer shows: the links it steps between, the one shown, and
@@ -119,7 +122,9 @@
         make();
       }
       var list = link.closest("ul.artifact-comment-images");
-      group = list ? all("a.artifact-comment-image[href]", list) : [link];
+      var tray = link.closest("ul.artifact-attach-tray");
+      group = list ? all("a.artifact-comment-image[href]", list)
+        : tray ? all("a.artifact-attach-link[href]", tray) : [link];
       opener = link;
       show(group.indexOf(link));
       if (!dialog.open) {
