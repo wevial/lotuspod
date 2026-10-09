@@ -28,7 +28,7 @@ INK = TOKENS["type"]["ink"]
 AA = 4.5
 
 TEXT_COLORS = (
-    "sky", "pale_sky", "rose", "pale_rose", "mint", "amber",
+    "sky", "pale_sky", "rose", "pale_rose", "mint", "amber", "orchid",
     "lavender", "pale_lavender", "muted_lavender",
 )
 

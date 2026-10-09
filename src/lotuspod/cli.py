@@ -305,6 +305,7 @@ THEME_SOURCES = {
         "css/base.css",
         "css/forms.css",
         "css/decisions.css",
+        "css/review-sheet.css",
         "css/attachments.css",
         "css/comments.css",
         "css/panel-resize.css",
@@ -322,6 +323,7 @@ THEME_SOURCES = {
         "js/page-open.js",
         "js/link-tab.js",
         "js/decisions.js",
+        "js/review-sheet.js",
         "js/narrow.js",
         "js/attachments.js",
         "js/live-page.js",
@@ -1936,7 +1938,7 @@ def api_page(out_dir: Path, name: str) -> api.Page | None:
         key: api.Question(version=form.version, choices=frozenset(v for v, _ in form.options),
                           text=form.text, labels=dict(form.options), section=form.section,
                           defaults=form.defaults, checklist=form.checklist,
-                          context=form.context)
+                          context=form.context, default=form.default)
         for key, form in decisions.read_forms(page_html).items()
     }
     owner = page_owner(page_html)
@@ -2442,7 +2444,9 @@ def answers_text(name: str, questions: dict, forms: dict[str, decisions.Form]) -
     """`lotuspod answers` without --json: each answered question, its
     current answer and, under it, the earlier ones, newest first. A
     checklist's answer is its change summary, read against the page's form
-    while it asks at the answer's version, else the summary kept with it."""
+    while it asks at the answer's version, else the summary kept with it. A
+    decision answered at its form's version with another option than the
+    form's default says so: "LABEL, was: DEFAULT-LABEL"."""
     if not questions:
         return f"no answers to {name}"
 
@@ -2455,6 +2459,9 @@ def answers_text(name: str, questions: dict, forms: dict[str, decisions.Form]) -
                 label = row["asked"]["label"]
         else:
             label = form.label(row["choice"]) if form else row["choice"]
+            if (form is not None and row["version"] == form.version and form.default
+                    and row["choice"] != form.default):
+                label += f", was: {form.label(form.default)}"
         head = f"{indent}{label} (answer {row['id']}"
         if row["supersedes"] is not None:
             head += f", replaces answer {row['supersedes']}"

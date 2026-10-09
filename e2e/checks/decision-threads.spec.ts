@@ -163,6 +163,7 @@ function decision(page: Page, question: string) {
     save: form.getByRole('button', { name: 'Save answer' }),
     ask: form.getByRole('button', { name: 'Ask', exact: true }),
     hint: form.locator('.artifact-decision-hint'),
+    unsaved: form.locator('.artifact-decision-unsaved'),
     status: form.locator('.artifact-decision-status'),
     saved: form.locator('.artifact-decision-saved-line'),
     // The chip is the form's next sibling, outside it.
@@ -269,7 +270,9 @@ test.describe('signed in', () => {
     await expect(first.note).toHaveValue('');
     await expect(first.noteBox).not.toHaveAttribute('open');
     await expect(first.hint).toHaveText('Not answered yet');
-    await expect(first.hint).toBeVisible();
+    // Still unanswered: only its default is picked, not saved.
+    await expect(first.saved).toHaveCount(0);
+    await expect(first.unsaved).toBeVisible();
     await expect(first.status).toHaveText('');
 
     const side = panel(page);

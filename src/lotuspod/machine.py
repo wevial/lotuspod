@@ -499,10 +499,16 @@ class Routes:
                 text = "" if reworded else asked.text
                 label = answer["choice"] if reworded else asked.labels.get(
                     answer["choice"], answer["choice"])
+            # The question's default while the page asks it at the answer's
+            # version; a checklist's defaults are in changed.
+            default = None
+            if not reworded and asked.default and "checked" not in answer:
+                default = {"value": asked.default,
+                           "label": asked.labels.get(asked.default, asked.default)}
             # The question and choice in the words the reader answered.
             question = {"id": answer["question"], "text": text,
                         "context": "" if reworded else asked.context, "label": label,
-                        "reworded": reworded}
+                        "reworded": reworded, "default": default}
             if "checked" in answer:
                 question["changed"] = changed
             items.append({

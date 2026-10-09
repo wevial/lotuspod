@@ -487,6 +487,100 @@ class FormTests(DecisionsTestCase):
         self.assertEqual(first.label("maybe"), "maybe")
 
 
+# Row 1 has a default among its options, row 2 none, and row 3, in a table
+# with no Options column, a default its "Accept the default" accepts.
+DEFAULTS = """\
+# Defaults
+
+## Model
+
+### Decisions for the maintainer
+
+| # | Question | Options | Default |
+| --- | --- | --- | --- |
+| 1 | Which model replies? | Sonnet / Opus | Sonnet |
+| 2 | Keep the archive? | Yes / No | |
+
+## Layout
+
+### Decisions for the maintainer
+
+| # | Question | Default |
+| --- | --- | --- |
+| 3 | Keep the layout? | Keep it |
+"""
+
+
+class DefaultTests(DecisionsTestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.page_html = self.render_markdown("defaults", DEFAULTS)
+        self.forms = decisions.read_forms(self.page_html)
+        self.db_path = self.work / "lotuspod.sqlite3"
+
+    def test_each_decision_form_names_its_default(self):
+        attrs = {form["attrs"]["data-question"]: form["attrs"]
+                 for form in read(self.page_html).forms}
+        self.assertEqual(list(attrs), ["decision-1", "decision-2", "decision-3"])
+        self.assertEqual(attrs["decision-1"]["data-default"], "sonnet")
+        self.assertNotIn("data-default", attrs["decision-2"])
+        self.assertEqual(attrs["decision-3"]["data-default"], "accept")
+        self.assertEqual([form.default for form in self.forms.values()],
+                         ["sonnet", "", "accept"])
+
+    def test_the_default_is_the_option_its_words_name_before_its_slug(self):
+        text = DEFAULTS.replace("| Sonnet / Opus | Sonnet |", "| C++ / C# | C# |").replace(
+            "| Yes / No | |", "| Rust / Go | go |")
+        page_html = self.render_markdown("slugs", text)
+        forms = decisions.read_forms(page_html)
+        self.assertEqual(forms["decision-1"].options, (("c", "C++"), ("c-2", "C#")))
+        self.assertEqual(forms["decision-1"].default, "c-2")
+        self.assertEqual(forms["decision-2"].default, "go")
+        labels = read(page_html).forms[0]["labels"]
+        self.assertEqual([label["marks"] for label in labels], [[], ["default"]])
+
+    def test_a_checklist_names_no_default(self):
+        page_html = self.render_markdown("mail", CHECKLIST)
+        [attrs] = [form["attrs"] for form in read(page_html).forms]
+        self.assertNotIn("data-default", attrs)
+        self.assertEqual(decisions.read_forms(page_html)["checklist-1"].default, "")
+
+    def test_the_default_leaves_the_version_as_it_was(self):
+        from tests import capture_site
+
+        rendered, _ = decisions.render_decisions(capture_site.DECISIONS_BODY,
+                                                 "capture-decisions")
+        first = next(form for form in read(rendered).forms
+                     if form["attrs"]["data-question"] == "decision-1")
+        # As e2e/checks/decisions.spec.ts recorded it before forms had defaults.
+        self.assertEqual(first["attrs"]["data-version"], "87f71d1b09cb")
+        self.assertEqual(first["attrs"]["data-default"], "sonnet")
+
+    def text(self, question: str, choice: str, version: str | None = None) -> str:
+        """The first answer line answers_text prints for one answer."""
+        self.db_path.unlink(missing_ok=True)
+        database = db.Database(self.db_path)
+        row = database.add_answer(
+            page="defaults", question=question,
+            version=version or self.forms[question].version, choice=choice, note="",
+            revision="abc123abc123", actor=READER,
+        )
+        lines = cli.answers_text("defaults", database.answers("defaults", asked=True),
+                                 self.forms).splitlines()
+        return lines[1].replace(f"(answer {row['id']}", "(answer N")
+
+    def test_an_answer_off_its_default_says_what_it_was(self):
+        self.assertEqual(self.text("decision-1", "opus"), "  Opus, was: Sonnet (answer N)")
+        self.assertEqual(self.text("decision-1", "sonnet"), "  Sonnet (answer N)")
+        self.assertEqual(self.text("decision-3", "other"),
+                         "  Something else, was: Accept the default (answer N)")
+
+    def test_no_default_or_an_earlier_wording_says_nothing_of_one(self):
+        self.assertEqual(self.text("decision-2", "no"), "  No (answer N)")
+        self.assertEqual(self.text("decision-1", "opus", version="000000000000"),
+                         "  Opus (answer N), to an earlier wording")
+
+
 class LeftAsWrittenTests(DecisionsTestCase):
     def test_a_table_under_another_heading(self):
         text = PLAN.replace("## Decisions for the maintainer", "## Open questions")
@@ -868,7 +962,7 @@ class AnswersCommandTests(DecisionsTestCase):
         lines = self.answers().splitlines()
         self.assertEqual(lines, [
             "decision-1: Which model replies?",
-            f"  Opus (answer {second['id']}, replaces answer {first['id']})",
+            f"  Opus, was: Sonnet (answer {second['id']}, replaces answer {first['id']})",
             f"    by maintainer@example.com at {second['createdAt']}",
             "    note: Opus for page edits",
             "  earlier:",

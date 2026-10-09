@@ -1233,7 +1233,7 @@
           return "This page";
         }
         var copy = heading.cloneNode(true);
-        all(".artifact-section-mark, .artifact-changed-tag", copy).forEach(function (mark) { mark.remove(); });
+        all(".artifact-section-mark, .artifact-changed-tag, .artifact-review-open", copy).forEach(function (mark) { mark.remove(); });
         return copy.textContent.replace(/\s+/g, " ").trim() || "This page";
       }
 
