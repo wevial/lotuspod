@@ -657,6 +657,23 @@ test.describe('signed in', () => {
     expect(errors).toEqual([]);
   });
 
+  test('with no fragment, the index opens on Pages and the switch marks Pages as current', async ({ page }) => {
+    const errors = watchErrors(page);
+    const now = Date.now();
+    await page.route((url) => url.pathname === ACTIVITY, (route) => route.fulfill({
+      json: { from: new Date(now - 7 * DAY).toISOString(), to: new Date(now).toISOString(),
+        older: false, truncated: false, pages: [] },
+    }));
+    const read = activityRead(page);
+    await page.goto('/');
+    expect((await read).status()).toBe(200);
+    const { pages, activity } = views(page);
+    await expect(pages).toHaveAttribute('aria-pressed', 'true');
+    await expect(activity).toHaveAttribute('aria-pressed', 'false');
+    await expect(page.locator('.index-table')).toBeVisible();
+    expect(errors).toEqual([]);
+  });
+
   test('an answer with nothing in it says there was no activity', async ({ page }) => {
     const errors = watchErrors(page);
     const now = Date.now();
