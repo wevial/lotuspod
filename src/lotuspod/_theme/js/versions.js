@@ -94,7 +94,7 @@
     // The words of a heading, without the marks the page script adds.
     function headingText(heading) {
       var copy = heading.cloneNode(true);
-      Array.prototype.forEach.call(copy.querySelectorAll(".artifact-section-mark, .artifact-changed-tag"),
+      Array.prototype.forEach.call(copy.querySelectorAll(".artifact-section-mark, .artifact-changed-tag, .artifact-review-open"),
         function (mark) { mark.remove(); });
       return copy.textContent.replace(/\s+/g, " ").trim();
     }

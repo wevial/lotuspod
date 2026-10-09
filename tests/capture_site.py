@@ -623,6 +623,57 @@ VERSIONS_MANY_PAGE = "capture-versions-many"
 VERSIONS_MANY = 25
 
 
+# A plan page for the review sheet: four sections, three asking two
+# questions each, one with a default and one without (D3, with none, before
+# D4), and one a three-item checklist. Answered by
+# e2e/checks/review-sheet.spec.ts alone. No diagram, so the page needs no
+# network.
+REVIEW_SHEET_BODY = """\
+<p>A sample plan for captures: who reviews a ticket, and how.</p>
+<h2>Who reviews</h2>
+<p>Every ticket gets a second reader before it merges.</p>
+<h3>Decisions for the maintainer</h3>
+<table>
+<thead><tr><th>#</th><th>Question</th><th>Options</th><th>Default</th></tr></thead>
+<tbody>
+<tr><td>D1</td><td>Which agent reviews?</td><td>Codex / Claude Opus</td><td>Codex</td></tr>
+<tr><td>D2</td><td>Which tickets get a review?</td><td>Every ticket / Major UI changes only</td><td></td></tr>
+</tbody>
+</table>
+<h2>When a review blocks</h2>
+<p>A review may hold a ticket back until its findings are answered.</p>
+<h3>Decisions for the maintainer</h3>
+<table>
+<thead><tr><th>#</th><th>Question</th><th>Options</th><th>Default</th></tr></thead>
+<tbody>
+<tr><td>D3</td><td>What may block a merge?</td><td>Reproduced findings / Any finding</td><td></td></tr>
+<tr><td>D4</td><td>How many rounds before it goes to the operator?</td><td>2 rounds / 3 rounds</td><td>3 rounds</td></tr>
+</tbody>
+</table>
+<h2>Prompt rules</h2>
+<p>What the reviewer's prompt holds it to.</p>
+<h3>Checklist for the maintainer</h3>
+<table>
+<thead><tr><th>#</th><th>Item</th><th>Default</th></tr></thead>
+<tbody>
+<tr><td>1</td><td>Cite the line a finding is about</td><td>on</td></tr>
+<tr><td>2</td><td>Say how the finding was reproduced</td><td>on</td></tr>
+<tr><td>3</td><td>Suggest a fix</td><td>off</td></tr>
+</tbody>
+</table>
+<h2>Rollout</h2>
+<p>Reviews start on one repository first.</p>
+<h3>Decisions for the maintainer</h3>
+<table>
+<thead><tr><th>#</th><th>Question</th><th>Options</th><th>Default</th></tr></thead>
+<tbody>
+<tr><td>D5</td><td>Where do reviews start?</td><td>Holophyte only / Every repository</td><td>Holophyte only</td></tr>
+<tr><td>D6</td><td>Who reads a review first?</td><td>The maintainer / The ticket's agent</td><td></td></tr>
+</tbody>
+</table>
+"""
+
+
 def versions_source(title: str, edition: int) -> str:
     return f"""\
 # {title}
@@ -661,6 +712,7 @@ SAMPLE_PAGES = (
      ("--variant", "report", "--comments", "--owner", OWNER)),
     ("capture-decision-context", "Capture decision context", DECISION_CONTEXT_BODY, ()),
     ("capture-node-cards", "Capture node cards", NODE_CARDS_BODY, ()),
+    ("capture-review-sheet", "Capture review sheet", REVIEW_SHEET_BODY, ()),
 )
 
 

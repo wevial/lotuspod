@@ -584,10 +584,16 @@ a note folded behind "Add a note" and a "Save answer" button. Its question id
 is `decision-` and the slug of its `#` cell, or `decision-N` by row number
 without a `#` column. Options are the `Options` cell split on ` / `, each
 keyed by its slug; the one matching the `Default` cell carries a quiet
-"· default" mark, and none is pre-selected. With a `Default` but no `Options`
+"· default" mark. With a `Default` but no `Options`
 column, a row offers "Accept the default" (`accept`) and "Something else"
 (`other`) and shows the default's text as "Default:", which is what "Accept
-the default" accepts. A table with any row of fewer than two options is left
+the default" accepts. A form with a default names it in `data-default`: the
+default option's value, or `accept`. The page as written picks no option;
+once the page script has read the answers, it picks the default of each
+question that has one and no answer as the page now asks it, which shows
+"Not saved" until it is
+saved. A Default cell names the option whose label it matches, in any case,
+before one whose slug alone matches. A table with any row of fewer than two options is left
 exactly as written, and the page then loads no script.
 
 Each form carries `data-version`, a short hash of its question's text and its
@@ -604,8 +610,9 @@ answer"; a failed save keeps both and says why. A saved answer folds the card
 under its question to "✓ Saved · LABEL · change", then the note, then the
 reader and the time, with "replaced an earlier answer" when it superseded
 one. "change" opens the card again with the saved option picked and the note
-filled. An answer to an earlier wording leaves the card open and unpicked,
-with the line "Answered to an earlier wording by READER, TIME".
+filled. An answer to an earlier wording leaves the card open, not filled
+from it, with the line "Answered to an earlier wording by READER, TIME" (the
+page script picks its default, as for a question not answered).
 
 On a page that takes comments (one with at least one comment box), each card
 also has "Ask" beside "Save answer", for a question about the decision rather
@@ -651,6 +658,42 @@ saves and folds. The script sends no credential of its own: the reader's Access
 session is the only identity, so a reader who is signed out is told to reload
 the page to sign in. Reader text is set as text, never as markup.
 
+### The review sheet
+
+On a page with decision or checklist forms, the page script ends the title
+bar in "N to answer · Respond" (an orchid dot), or "All answered · Respond"
+(a mint dot) once no question is open, and "Next open: QUESTION ↓" while one
+is. A question's shown choice is its picked option, else its saved answer,
+else its default; a decision with none is open. Next open jumps to the open
+question after the one it jumped to last, wrapping round: it opens the
+question's section if it is folded, scrolls the form just below the title
+bar and focuses its first option. Each section heading whose section asks
+open questions reads "N open" in orchid, and its link in "On this page"
+shows an orchid dot and N.
+
+The count opens the Respond panel at the window's right edge (the full
+width of a narrow window), over the comments panel. Its head reads "N to
+answer · M changed · T in all", and it lists every question under its
+section's heading, in page order (under the page's title on a page with no
+h2). Each shows its options as buttons (a checklist's items as checkboxes),
+its state, Default, Changed or Open, and for a changed question "was:" the
+default's label, "was: open" when it has none, or a checklist's changes
+("Off: LABEL"). "not saved" marks a question whose shown choice, or its
+form's note, differs from its saved answer, and "Show on page" closes the panel and jumps to the form
+as Next open does. A pick in the panel picks the same option in the form,
+and a pick in the form shows in the panel. ✕, Esc or the count closes it.
+
+"Save N answers" at the panel's foot posts each question marked "not saved",
+defaults included, in page order, one answer each with its
+form's note, as the form's own Save would; open questions are left out, and
+each saved form folds. Its line then reads "Saved at TIME. K questions stay
+open." An answer refused keeps "not saved", with why in its form, and the
+others still save. With nothing to save the button reads "Nothing new to
+save". A form posts one answer at a time, so its own Save and the panel's
+never land out of order. A page whose answers could not be read gets no
+review sheet, and no default is picked. A page published before forms
+carried `data-default` has no defaults until it is published again.
+
 An answer is the reader's choice on that one question, recorded with the page
 revision it was given against. It is evidence for that question's scope only
 and authorizes nothing beyond what the question describes.
@@ -658,7 +701,9 @@ and authorizes nothing beyond what the question describes.
 `lotuspod answers PAGE` prints the same on the writer host, from the database
 serve keeps (`--db` and `--out-dir` as serve takes them): each answered
 question, its current choice's label with its note, reader and time, the
-answer it replaces, and the earlier answers under it. `--json` prints what
+answer it replaces, and the earlier answers under it. A decision answered
+as the page now asks it, with an option other than its default, reads
+"LABEL, was: DEFAULT-LABEL". `--json` prints what
 `GET /api/answers?page=PAGE` answers.
 
 ```sh
