@@ -554,8 +554,25 @@
         }
       };
 
+      // Where an event happened, from its page's href: the page itself for
+      // its current version, the read-only old version for an earlier one,
+      // the page with the thread open (js/comments.js) for a comment or a
+      // reply, and scrolled to the decision's form for an answer; the page
+      // itself for an event missing its commit, thread or question.
+      const whereOf = (href, event) => {
+        if (event.kind === "version") {
+          return event.current === true || typeof event.commit !== "string" || !event.commit ? href :
+            `${href}?version=${encodeURIComponent(event.commit)}`;
+        }
+        if (event.kind === "answer") {
+          return typeof event.question !== "string" || !event.question ? href :
+            `${href}#question=${encodeURIComponent(event.question)}`;
+        }
+        return Number.isInteger(event.thread) && event.thread > 0 ? `${href}#thread=${event.thread}` : href;
+      };
+
       // One page's group: its header row - title, labels, unread badge and
-      // event count - then its events.
+      // event count - then its events, each line a link to where it happened.
       const buildGroup = (entry) => {
         const name = entry.page;
         const row = rowOf.get(name);
@@ -597,7 +614,8 @@
           dot.setAttribute("aria-hidden", "true");
           const actor = actorOf(event);
           const what = whatOf(event, questions);
-          const said = element("span", "index-activity-said");
+          const said = element("a", "index-activity-said");
+          said.href = whereOf(link.getAttribute("href"), event);
           said.append(element("span", "index-activity-actor", actor), ` ${what}`);
           if (fresh) said.append(" · ", element("span", "index-activity-new", "new, to you"));
           item.append(time, dot, said);

@@ -188,15 +188,34 @@ class WindowTests(ActivityWitness):
         self.assertEqual((b["title"], b["latest"]), ("Page B", "2026-10-05T12:00:00.000Z"))
         self.assertEqual(a["events"], [
             {"kind": "version", "at": "2026-10-06T12:00:00.000Z", "commit": a_commits[0],
-             "revision": a["events"][0]["revision"], "actor": "hermes", "first": False,
-             "summary": "Beta changed; Delta added"},
+             "revision": a["events"][0]["revision"], "current": True, "actor": "hermes",
+             "first": False, "summary": "Beta changed; Delta added"},
             {"kind": "version", "at": "2026-10-01T12:00:00.000Z", "commit": a_commits[1],
-             "revision": a["events"][1]["revision"], "actor": "hermes", "first": True,
-             "summary": ""},
+             "revision": a["events"][1]["revision"], "current": False, "actor": "hermes",
+             "first": True, "summary": ""},
         ])
         self.assertNotEqual(a["events"][0]["revision"], a["events"][1]["revision"])
         self.assertEqual([(event["actor"], event["first"]) for event in b["events"]],
                          [(None, True)])
+
+    def test_only_the_version_serve_answers_now_is_current(self):
+        self.site()
+        a_commits = self.commits(self.out, "a")
+        self.serve(now="2026-10-07T12:00:00+00:00")
+
+        answer = self.activity()
+        self.assertEqual([(event["commit"], event["current"])
+                          for event in self.versions_of(answer, "a")],
+                         [(a_commits[0], True), (a_commits[1], False)])
+        self.assertEqual([event["current"] for event in self.versions_of(answer, "b")], [True])
+        revision = (self.out / "a.html").read_text(encoding="utf-8")
+        self.assertIn(self.versions_of(answer, "a")[0]["revision"], revision)
+
+        # Published again, the version that was current no longer is.
+        owned = ("--owner", "hermes", "--credential", str(self.hermes))
+        self.publish_at("a", A_SPACED, "2026-10-07T09:00:00+00:00", *owned)
+        self.assertEqual([event["current"] for event in self.versions_of(self.activity(), "a")],
+                         [True, False, False])
 
     def test_a_later_clock_leaves_the_rest_older_and_before_reads_them(self):
         self.site()

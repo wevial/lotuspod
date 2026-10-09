@@ -58,9 +58,10 @@ now. It answers {from, to, older, truncated, pages: [{page, title, latest,
 events}]}, `from` and `to` the window's bounds as the database writes times,
 a page for each one with an event after `from` and up to `to`, by its newest
 event (`latest`), newest first, and its events newest first. Events are
-versions (History.recent()), {kind: version, at, commit, revision, actor,
-first, summary}, `actor` the handle the version's lotuspod:owner names or
-null, and the comments, replies and answers of Database.activity(). At most
+versions (History.recent()), {kind: version, at, commit, revision, current,
+actor, first, summary}, `current` true when its revision is the page's as
+serve answers it now, `actor` the handle the version's lotuspod:owner names
+or null, and the comments, replies and answers of Database.activity(). At most
 MAX_EVENTS are kept, the newest, and `truncated` says when any were left
 out; `older` says whether anything on those pages happened up to `from`. Any
 query but one `before` that parses is 400 invalid_query.
@@ -591,10 +592,13 @@ class Api:
             older = older or recent.older
             truncated = recent.truncated
             for change in recent.changes:
+                page = served(change.name)
                 events.append({"page": change.name, "kind": "version",
                                # As the database writes times, so all sort as text.
                                "at": change.date[:-1] + ".000Z", "commit": change.commit,
-                               "revision": change.revision, "actor": change.owner or None,
+                               "revision": change.revision,
+                               "current": page is not None and change.revision == page.revision,
+                               "actor": change.owner or None,
                                "first": change.first, "summary": change.summary})
             events.sort(key=lambda event: event["at"], reverse=True)
         truncated = truncated or len(events) > MAX_EVENTS

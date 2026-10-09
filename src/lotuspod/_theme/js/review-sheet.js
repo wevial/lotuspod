@@ -440,3 +440,29 @@
       }
     }, { once: true });
   }
+
+  // #question=ID, a link from the index's Recent activity: once the answers
+  // are drawn, an answered form folded to its saved line, and again on each
+  // hashchange, the form asking ID has its section opened if it is folded
+  // and lands just under the title bar, as jump() places it, with or without
+  // the sheet. A question the page does not ask leaves the page where it is.
+  if (answering && forms.length) {
+    var toQuestion = function (first) {
+      var id = linkedTo("question", first);
+      var form = forms.filter(function (each) { return each.dataset.question === id; })[0];
+      if (!form) {
+        return;
+      }
+      var wrapper = form.closest("div.artifact-section-body");
+      if (wrapper && wrapper.hasAttribute("hidden")) {
+        wrapper.dispatchEvent(new Event("beforematch"));
+      }
+      var bar = document.querySelector(".artifact-topbar");
+      var under = bar ? Math.max(0, bar.getBoundingClientRect().bottom) : 0;
+      window.scrollBy({ top: form.getBoundingClientRect().top - under - 16, left: 0, behavior: "instant" });
+    };
+    document.addEventListener(ANSWERED, function () {
+      toQuestion(true);
+      window.addEventListener("hashchange", function () { toQuestion(false); });
+    }, { once: true });
+  }

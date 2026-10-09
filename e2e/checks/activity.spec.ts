@@ -9,7 +9,9 @@ import { expect, test, type APIRequestContext, type Page } from '@playwright/tes
 // fixture's site with a real `lotuspod publish`, comments on one, publishes
 // the other again with one section changed, and has hermes reply to the
 // comment through real `lotuspod comments` commands on the fixture's agent
-// socket. The others answer the activity route with page.route.
+// socket. A later one publishes page C twice, comments on it, answers its
+// decision and has hermes reply, then follows each row's link to where it
+// happened. The others answer the activity route with page.route.
 const ENV = process.env;
 const ASSERTION = ENV.LOTUSPOD_TEST_ASSERTION ?? '';
 const SIGNED_IN = { 'Cf-Access-Jwt-Assertion': ASSERTION };
@@ -29,6 +31,7 @@ const DAY = 86_400_000;
 const LABEL = 'activity-check';
 const A = 'activity-check-a';
 const B = 'activity-check-b';
+const C = 'activity-check-links';
 
 function run(...args: string[]) {
   return execFileSync(PYTHON, ['-m', 'lotuspod', ...args], {
@@ -165,6 +168,38 @@ function oneEvent(name: string, title: string, event: object, ago: number, older
   };
 }
 
+// Page C's markdown: a Heater section, the heater's line as given, and a
+// decision `pump`, whose form asks decision-pump.
+function linksSource(heater: string) {
+  return ['# Activity check links', '', 'The pond in winter.', '',
+    '## Heater', '', heater, '',
+    '## Decisions for the maintainer', '',
+    '| # | Question | Options | Default |', '|---|---|---|---|',
+    '| pump | Which pump? | Floating / Submerged | Floating |', ''].join('\n');
+}
+
+// The framed page of the active pod tab, and its address once it has one.
+function framed(page: Page) {
+  return page.frameLocator('iframe.pod-frame--active');
+}
+
+function framedAddress(page: Page): Promise<string> {
+  return page.locator('iframe.pod-frame--active').evaluate((frame) =>
+    (frame as HTMLIFrameElement).contentWindow?.location.href ?? '');
+}
+
+// The theme's pale lavender as the browser computes a color.
+function paleLavender(page: Page): Promise<string> {
+  return page.evaluate(() => {
+    const probe = document.createElement('span');
+    probe.style.color = 'var(--color-pale-lavender)';
+    document.body.append(probe);
+    const color = getComputedStyle(probe).color;
+    probe.remove();
+    return color;
+  });
+}
+
 test.describe('signed in', () => {
   test.use({ extraHTTPHeaders: SIGNED_IN });
 
@@ -296,6 +331,206 @@ test.describe('signed in', () => {
         '--no-labels');
       await catchUp(request);
     }
+  });
+
+  test('each row links to its version, its thread or its decision, and the link opens it there', async ({ page, request }) => {
+    test.setTimeout(240_000);
+    const errors = watchErrors(page);
+    await catchUp(request);
+    publish(C, linksSource('A floating heater keeps a hole in the ice.'));
+    // A version is dated to the second: the second must come after the first.
+    await page.waitForTimeout(1100);
+    publish(C, linksSource('A submerged heater keeps the pond from freezing.'));
+    const listed = await request.get(`/api/versions?page=${C}`, { headers: SIGNED_IN });
+    expect(listed.status()).toBe(200);
+    const { versions } = (await listed.json()) as { versions: { commit: string }[] };
+    expect(versions.length).toBe(2);
+    const older = versions[1].commit;
+
+    // hermes listens, so the comment waits for it.
+    hermes('pull', '--owner', OWNER);
+    const posted = await request.post(COMMENTS, {
+      headers: SIGNED_IN, data: { page: C, section: 'heater', text: 'How deep does it sit?' },
+    });
+    expect(posted.status()).toBe(201);
+    const { id: thread } = (await posted.json()) as Row;
+    const html = await (await request.get(`/${C}.html`, { headers: SIGNED_IN })).text();
+    const asked = /data-question="decision-pump" data-version="([^"]+)"[\s\S]*?name="choice" value="([^"]+)"/.exec(html);
+    expect(asked, 'the page asks decision-pump').not.toBeNull();
+    const answered = await request.post('/api/answers', {
+      headers: SIGNED_IN,
+      data: { page: C, question: 'decision-pump', version: asked![1], choice: asked![2], note: '' },
+    });
+    expect(answered.status()).toBe(201);
+
+    try {
+      await openIndex(page);
+      const c = group(page, C);
+      const row = (text: string) => c.locator('li.index-activity-event', { hasText: text })
+        .locator('a.index-activity-said');
+      const home = page.getByRole('button', { name: 'Lotuspod', exact: true });
+      const tabs = page.locator('.pod-tabs .pod-tab');
+
+      // The earlier version loads its read-only old version in the window.
+      await expect(row('published the page')).toHaveAttribute('href', `${C}.html?version=${older}`);
+      await row('published the page').click();
+      await expect(page).toHaveURL(new RegExp(`/${C}\\.html\\?version=${older}$`));
+      await expect(page.locator('main.artifact--old-version > div.artifact-version-banner')).toBeVisible();
+
+      // The current version opens the page itself in a tab.
+      await page.goBack();
+      await expect(row('published a new version')).toHaveAttribute('href', `${C}.html`);
+      await row('published a new version').click();
+      await expect(tabs).toHaveCount(1);
+      await expect.poll(() => framedAddress(page)).toMatch(new RegExp(`/${C}\\.html$`));
+
+      // The comment opens the page with its thread open in the panel.
+      await home.click();
+      await row('you commented on “Heater”').click();
+      await expect.poll(() => framedAddress(page)).toMatch(new RegExp(`/${C}\\.html#thread=${thread}$`));
+      const entry = framed(page).locator(`li.artifact-comments-entry[data-thread="${thread}"]`);
+      await expect(entry).toHaveClass(/\bartifact-comments-entry--open\b/);
+      await expect(entry).toBeInViewport();
+
+      // hermes replies; the listing shows it unread, and the reply's link,
+      // pressed from the keyboard, opens the thread again and reads it.
+      const claim = hermes('claim', String(thread));
+      const reply = hermes('reply', String(thread), `--claim=${claim.claimToken}`,
+        '--key', `activity-links-${thread}`, '--text', 'Half a metre down.');
+      expect(reply.parent).toBe(thread);
+      await home.click();
+      const replied = c.locator('li.index-activity-event', { hasText: 'hermes replied to your comment on “Heater”' });
+      await expect(replied.locator('.index-activity-new')).toHaveText('new, to you');
+      await expect(c.locator('.index-activity-unread')).toHaveText('1 new reply to you');
+      await replied.locator('a.index-activity-said').focus();
+      await page.keyboard.press('Enter');
+      await expect(entry).toHaveClass(/\bartifact-comments-entry--open\b/);
+      await expect(entry).toContainText('Half a metre down.');
+      await expect.poll(async () => {
+        const seen = await request.get(SEEN, { headers: SIGNED_IN });
+        const { pages } = (await seen.json()) as { pages: Record<string, { unread: number }> };
+        return pages[C]?.unread;
+      }).toBe(0);
+      await home.click();
+      await expect(c.locator('.index-activity-unread')).toHaveCount(0);
+      await expect(replied).toBeVisible();
+      await expect(replied.locator('.index-activity-new')).toHaveCount(0);
+
+      // The answer scrolls C's open tab to the decision's form.
+      await row('you answered “Which pump?”').click();
+      await expect(tabs).toHaveCount(1);
+      await expect.poll(() => framedAddress(page)).toMatch(/#question=decision-pump$/);
+      const form = framed(page).locator('form[data-question="decision-pump"]');
+      await expect(form).toBeInViewport();
+      await expect.poll(async () => {
+        const bar = await framed(page).locator('.artifact-topbar').boundingBox();
+        const box = await form.boundingBox();
+        return bar && box ? box.y >= bar.y + bar.height : false;
+      }).toBe(true);
+
+      // A phone opens the thread in the bottom sheet.
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.goto(`/${C}.html#thread=${thread}`);
+      const sheet = page.locator('.artifact-comments-bottom-sheet--open');
+      await expect(sheet.locator(`li.artifact-comments-entry[data-thread="${thread}"]`))
+        .toHaveClass(/\bartifact-comments-entry--open\b/);
+
+      // Resolved, it opens listed with the resolved threads in the panel.
+      const resolved = await request.post(COMMENTS, {
+        headers: SIGNED_IN, data: { page: C, thread, resolved: true },
+      });
+      expect(resolved.status()).toBe(200);
+      await page.setViewportSize({ width: 1280, height: 800 });
+      // A load of its own, not a move within the page already open.
+      await page.goto('about:blank');
+      await page.goto(`/${C}.html#thread=${thread}`);
+      const listed = page.locator(`.artifact-comments-panel li.artifact-comments-entry--resolved[data-thread="${thread}"]`);
+      await expect(listed).toBeInViewport();
+      await expect(page.locator('.artifact-comments-panel')).toHaveClass(/\bartifact-comments-panel--resolved-shown\b/);
+      expect(errors).toEqual([]);
+    } finally {
+      await catchUp(request);
+    }
+  });
+
+  test('every event line is a link, plain until pointed at or focused, its time and dot outside it', async ({ page }) => {
+    const errors = watchErrors(page);
+    const now = Date.now();
+    const at = (n: number) => new Date(now - (n + 1) * 60_000).toISOString();
+    const maintainer = { kind: 'human', name: 'maintainer' };
+    const agent = { kind: 'agent', handle: 'hermes' };
+    const events = [
+      { kind: 'version', commit: 'c0ffee', revision: 'r2', current: true, actor: 'hermes', first: false,
+        summary: 'Heater changed' },
+      { kind: 'version', commit: '0123456789abcdef0123456789abcdef01234567', revision: 'r1', current: false,
+        actor: 'hermes', first: true, summary: '' },
+      { kind: 'comment', id: 7, thread: 7, section: 'heater', sectionTitle: 'Heater', actor: maintainer, mine: true },
+      { kind: 'reply', id: 8, thread: 7, sectionTitle: 'Heater', actor: agent, mine: false, yours: true, unread: true },
+      { kind: 'answer', question: 'decision-pump', questionText: 'Which pump?', label: 'Floating',
+        actor: maintainer, mine: true },
+      { kind: 'version', revision: 'r0', actor: null, first: false, summary: 'new version' },
+      { kind: 'comment', id: 9, section: 'pump', sectionTitle: 'Pump', actor: maintainer, mine: true },
+      { kind: 'reply', id: 10, sectionTitle: 'Pump', actor: agent, mine: false, yours: true, unread: false },
+      { kind: 'answer', questionText: 'Which heater?', label: 'Submerged', actor: maintainer, mine: true },
+    ].map((event, n) => ({ ...event, at: at(n) }));
+    await page.route((url) => url.pathname === ACTIVITY, (route) => route.fulfill({
+      json: { from: new Date(now - 7 * DAY).toISOString(), to: new Date(now).toISOString(), older: false,
+        truncated: false, pages: [{ page: 'capture-comments', title: 'Capture comments', latest: at(0), events }] },
+    }));
+
+    await page.goto('/');
+    const comments = group(page, 'capture-comments');
+    const items = comments.locator('li.index-activity-event');
+    await expect(items).toHaveCount(events.length);
+    const links = comments.locator('li.index-activity-event > a.index-activity-said');
+    await expect(links).toHaveCount(events.length);
+    const page_ = 'capture-comments.html';
+    expect(await links.evaluateAll((nodes) => nodes.map((node) => node.getAttribute('href')))).toEqual([
+      page_, `${page_}?version=0123456789abcdef0123456789abcdef01234567`, `${page_}#thread=7`,
+      `${page_}#thread=7`, `${page_}#question=decision-pump`, page_, page_, page_, page_,
+    ]);
+    for (let n = 0; n < events.length; n++) {
+      const link = links.nth(n);
+      const line = (await link.textContent()) ?? '';
+      expect(line).not.toBe('');
+      await expect(link).toHaveAccessibleName(line.replace(/\s+/g, ' ').trim());
+      await expect(link.locator('time, .index-dot')).toHaveCount(0);
+      await expect(items.nth(n).locator(':scope > time.index-activity-time')).toHaveCount(1);
+      await expect(items.nth(n).locator(':scope > .index-dot')).toHaveCount(1);
+    }
+    await expect(links.nth(3)).toHaveAccessibleName('hermes replied to your comment on “Heater” · new, to you');
+    await expect(links.nth(4)).toHaveAccessibleName('you answered “Which pump?”: Floating');
+
+    const lavender = await paleLavender(page);
+    for (let n = 0; n < events.length; n++) {
+      await expect(links.nth(n)).toHaveCSS('text-decoration-line', 'none');
+      await expect(links.nth(n)).toHaveCSS('color', lavender);
+    }
+    await comments.locator('.index-activity-title a').focus();
+    await page.keyboard.press('Tab');
+    await expect(links.nth(0)).toBeFocused();
+    await expect(links.nth(0)).toHaveCSS('text-decoration-line', 'underline');
+    await expect(links.nth(1)).toHaveCSS('text-decoration-line', 'none');
+    expect(errors).toEqual([]);
+  });
+
+  test('a page opened at a thread or a decision it does not have stays at its top with nothing open', async ({ page }) => {
+    const errors = watchErrors(page);
+    for (const hash of ['#thread=999999', '#thread=abc', '#question=gone']) {
+      await test.step(hash, async () => {
+        const reads = [COMMENTS, '/api/answers'].map((route) =>
+          page.waitForResponse((response) => new URL(response.url()).pathname === route));
+        // A load of its own, not a move within the page already open.
+        await page.goto('about:blank');
+        await page.goto(`/capture-comments.html${hash}`);
+        await Promise.all(reads);
+        // What the reads draw, drawn.
+        await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => setTimeout(done, 200))));
+        await expect(page.locator('.artifact-comments-entry--open')).toHaveCount(0);
+        expect(await page.evaluate(() => window.scrollY)).toBe(0);
+      });
+    }
+    expect(errors).toEqual([]);
   });
 
   test('Show older loads the 7 days before and merges them in', async ({ page }) => {
