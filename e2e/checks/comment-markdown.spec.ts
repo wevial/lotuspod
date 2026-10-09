@@ -272,6 +272,27 @@ test.describe('signed in', () => {
     await seen.clean();
   });
 
+  test('an image, a refused link around markup and a four-backtick line stay as typed', async ({ page, request }) => {
+    const seen = await watch(page);
+    const image = '![fish](https://example.com/fish.jpg)';
+    const refused = '[**bad**](javascript:alert(1))';
+    const fence = '````\nnot code\n````';
+    const roots = {
+      image: await post(request, 'pond', image),
+      refused: await post(request, 'pond', refused),
+      fence: await post(request, 'pond', fence),
+    };
+    await page.goto(PAGE);
+    await open(page, 'pond');
+    expect(await exact(bubble(page, roots.image))).toBe(image);
+    await expect(bubble(page, roots.image).locator('a, img')).toHaveCount(0);
+    expect(await exact(bubble(page, roots.refused))).toBe(refused);
+    await expect(bubble(page, roots.refused).locator('a, strong')).toHaveCount(0);
+    expect(await exact(bubble(page, roots.fence))).toBe(fence);
+    await expect(bubble(page, roots.fence).locator('pre, code')).toHaveCount(0);
+    await seen.clean();
+  });
+
   test('a plain two-line comment is one paragraph of two lines, its text unchanged', async ({ page, request }) => {
     const seen = await watch(page);
     const text = 'first line\nsecond line';

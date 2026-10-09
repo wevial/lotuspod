@@ -5,17 +5,23 @@
   // createElement and every text set with textContent, so raw HTML and
   // entities in a comment are text by construction. Anything outside the
   // subset (headings, quotes, tables, images, `_`) stays as typed.
-  var MD_FENCE = /^\s*```/;
+  // A fence is a line of three backticks (a word after them is allowed);
+  // a line of four or more is text.
+  var MD_FENCE = /^\s*```[^`]*$/;
   var MD_FENCE_END = /^\s*```\s*$/;
   var MD_BULLET = /^\s*[-*] (.*)$/;
   var MD_NUMBER = /^\s*(\d+)\. (.*)$/;
   var MD_BLANK = /^\s*$/;
-  // The earliest of a code span, a link, bold or italic. Italic opens on a
-  // `*` before a non-space and closes on one after a non-space, so a lone
-  // `2 * 3` is text.
+  // A link's target: no space, and any parentheses in pairs, so that
+  // `javascript:alert(1)` is read whole and refused whole.
+  var MD_TARGET = "([^\\s()]*(?:\\([^\\s()]*\\)[^\\s()]*)*)";
+  // The earliest of a code span, an image (kept as typed), a link, bold or
+  // italic. Italic opens on a `*` before a non-space and closes on one after
+  // a non-space, so a lone `2 * 3` is text.
   var MD_INLINE = new RegExp([
     "`([^`\\n]+)`",
-    "\\[([^\\]\\n]+)\\]\\(([^\\s()]+)\\)",
+    "(!)\\[[^\\]\\n]*\\]\\(" + MD_TARGET + "\\)",
+    "\\[([^\\]\\n]+)\\]\\(" + MD_TARGET + "\\)",
     "\\*\\*(?=\\S)([\\s\\S]*?\\S)\\*\\*",
     "\\*(?=[^\\s*])([\\s\\S]*?[^\\s*])\\*(?!\\*)",
   ].join("|"));
@@ -35,18 +41,16 @@
       var node = null;
       if (found[1] !== undefined) {
         node = element("code", "", found[1]);
-      } else if (found[2] !== undefined) {
-        if (MD_LINK_TARGET.test(found[3])) {
-          node = element("a", "", found[2]);
-          node.setAttribute("href", found[3]);
-          node.target = "_blank";
-          node.rel = "noopener";
-        }
-      } else {
-        node = element(found[4] !== undefined ? "strong" : "em");
-        markdownInline(node, found[4] !== undefined ? found[4] : found[5]);
+      } else if (found[4] !== undefined && MD_LINK_TARGET.test(found[5])) {
+        node = element("a", "", found[4]);
+        node.setAttribute("href", found[5]);
+        node.target = "_blank";
+        node.rel = "noopener";
+      } else if (found[6] !== undefined || found[7] !== undefined) {
+        node = element(found[6] !== undefined ? "strong" : "em");
+        markdownInline(node, found[6] !== undefined ? found[6] : found[7]);
       }
-      // A link whose target is refused stays as typed, whole.
+      // An image, and a link whose target is refused, stay as typed, whole.
       var end = found.index + found[0].length;
       parent.appendChild(document.createTextNode(rest.slice(0, node ? found.index : end)));
       if (node) {

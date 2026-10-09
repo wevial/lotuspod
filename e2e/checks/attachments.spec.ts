@@ -359,12 +359,19 @@ test.describe('signed in', () => {
     await seen.clean();
   });
 
-  test('a drop of five images attaches four', async ({ page }) => {
+  test('a dropped file of another type is refused, and a drop of five attaches four', async ({ page }) => {
     const seen = await watch(page);
     await page.goto(PAGE);
     const pond = box(page, 'pond');
     await compose(page, 'pond');
     const tray = pond.form.locator('.artifact-attach-item');
+
+    expect(await drop(pond.form, [LOGO])).toEqual({ over: true, drop: true });
+    await expect(pond.status).toHaveText('logo.svg is not a PNG, JPEG, WebP or GIF image.');
+    await expect(tray).toHaveCount(0);
+    await page.waitForTimeout(300);
+    expect(seen.uploads).toEqual([]);
+
     await drop(pond.form, [FISH, FROG, POND, CHART, LILY]);
     await expect(pond.status).toContainText('A comment takes up to 4 images.');
     await expect(tray).toHaveCount(4);
