@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { expect, test, type Locator, type Page } from '@playwright/test';
+import { expect, test, type ConsoleMessage, type Locator, type Page } from '@playwright/test';
 
 test.use({ viewport: { width: 1280, height: 800 } });
 
@@ -20,10 +20,18 @@ const MERMAID_COPY = path.join(__dirname, '..', 'node_modules', 'mermaid');
 
 type Violation = { blockedURI: string; effectiveDirective: string };
 
+// The page asks the archive route whether its reader may archive it; signed
+// out, as here, the route answers 401, which the browser logs as the
+// network's line. Only that line, for that route, is not an error.
+function signedOutArchive(message: ConsoleMessage) {
+  return message.text() === 'Failed to load resource: the server responded with a status of 401 (Unauthorized)' &&
+    new URL(message.location().url).pathname === '/api/archive';
+}
+
 async function watch(page: Page) {
   const errors: string[] = [];
   page.on('console', (message) => {
-    if (message.type() === 'error') errors.push(message.text());
+    if (message.type() === 'error' && !signedOutArchive(message)) errors.push(message.text());
   });
   page.on('pageerror', (error) => errors.push(error.message));
   await page.addInitScript(() => {
