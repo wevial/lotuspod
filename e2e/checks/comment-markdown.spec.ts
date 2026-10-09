@@ -6,6 +6,9 @@ import { expect, test, type APIRequestContext, type Locator, type Page } from '@
 // paragraphs, bold, italic, code, code blocks, links and one level of lists,
 // a reader's comment and an agent's reply alike. Raw HTML, entities and
 // links to anything but http(s), an anchor or a relative path stay as typed.
+// A bare http(s) URL is a link too. A link to the site itself opens in the
+// same tab and any other in a new one, in a bubble and in the page body
+// alike (js/link-tab.js).
 // The checks render their own page into the capture fixture's site and find
 // the threads they post by id; hermes replies through real `lotuspod`
 // commands on the fixture's agent socket. At this width a chip opens its
@@ -15,7 +18,13 @@ test.use({ viewport: MEDIUM });
 
 const NAME = 'check-comment-markdown';
 const PAGE = `/${NAME}.html`;
+// The page a same-site link in a bubble goes to.
+const TARGET = 'check-comment-markdown-target';
+// A page with no comments and no sections, whose links still take their tab.
+const PLAIN = 'check-comment-markdown-plain';
 const ENV = process.env;
+// The site's own origin, the checks' baseURL.
+const SITE = ENV.LOTUSPOD_URL ?? '';
 const ASSERTION = ENV.LOTUSPOD_TEST_ASSERTION ?? '';
 const SIGNED_IN = { 'Cf-Access-Jwt-Assertion': ASSERTION };
 const SOCKET = ENV.LOTUSPOD_TEST_SOCKET ?? '';
@@ -26,6 +35,9 @@ const PYTHON = ENV.LOTUSPOD_TEST_PYTHON ?? '';
 const SRC = path.resolve(__dirname, '..', '..', 'src');
 const OWNER = 'hermes';
 const BODY = `<p>A page for the comment markdown checks.</p>
+<p>See <a href="https://example.com/body">elsewhere</a>, <a href="${SITE}/${TARGET}.html">this site</a>
+and <a href="#top">the top</a>.</p>
+<p><svg width="40" height="20"><a href="https://example.com/svg"><text x="0" y="15">SVG</text></a></svg></p>
 <h2>Pond</h2>
 <p>The pond freezes in January.</p>
 <h2>Frogs</h2>
@@ -52,12 +64,24 @@ const RICH = [
 type Violation = { blockedURI: string; effectiveDirective: string };
 
 test.beforeAll(() => {
-  for (const [name, value] of Object.entries({ ASSERTION, SOCKET, HERMES, OUT, PYTHON })) {
+  for (const [name, value] of Object.entries({ ASSERTION, SOCKET, HERMES, OUT, PYTHON, SITE })) {
     expect(value, `the capture fixture names ${name}`).toBeTruthy();
   }
+  const pages = [
+    [NAME, 'Check comment markdown', BODY],
+    [TARGET, 'Check comment markdown target', '<p>Where a same-site link goes.</p>\n'],
+  ];
+  for (const [name, title, body] of pages) {
+    execFileSync(PYTHON, [
+      '-m', 'lotuspod', 'render', '--name', name, '--title', title, '--comments',
+      '--owner', OWNER, '--credential', HERMES, '--body', body, '--out-dir', OUT,
+    ], { env: { ...ENV, PYTHONPATH: SRC }, stdio: ['ignore', 'pipe', 'pipe'], timeout: 60_000 });
+  }
   execFileSync(PYTHON, [
-    '-m', 'lotuspod', 'render', '--name', NAME, '--title', 'Check comment markdown', '--comments',
-    '--owner', OWNER, '--credential', HERMES, '--body', BODY, '--out-dir', OUT,
+    '-m', 'lotuspod', 'render', '--name', PLAIN, '--title', 'Check comment markdown plain',
+    '--body', `<p>See <a href="https://example.com/plain">elsewhere</a>, <a href="//example.com/protocol">a
+protocol-relative one</a> or <a href="#top">the top</a>.</p>\n`,
+    '--out-dir', OUT,
   ], { env: { ...ENV, PYTHONPATH: SRC }, stdio: ['ignore', 'pipe', 'pipe'], timeout: 60_000 });
 });
 
@@ -182,11 +206,12 @@ test.describe('signed in', () => {
 
   test('a link is drawn only to http(s), an anchor or a relative path', async ({ page, request }) => {
     const seen = await watch(page);
+    // Only a link off the site opens in a new tab.
     const drawn = [
-      ['docs', 'https://example.com/a'],
-      ['page', 'other.html#x'],
-      ['top', '#top'],
-    ];
+      ['docs', 'https://example.com/a', true],
+      ['page', 'other.html#x', false],
+      ['top', '#top', false],
+    ] as const;
     const refused = [
       'javascript:alert(1)',
       'JAVASCRIPT:alert(1)',
@@ -195,9 +220,9 @@ test.describe('signed in', () => {
       'mailto:a@example.com',
     ];
     const links = [];
-    for (const [text, target] of drawn) {
+    for (const [text, target, away] of drawn) {
       const said = `See [${text}](${target}) for more.`;
-      links.push({ root: await post(request, 'frogs', said), text, target, said });
+      links.push({ root: await post(request, 'frogs', said), text, target, away, said });
     }
     const literal = [];
     for (const target of refused) {
@@ -206,18 +231,126 @@ test.describe('signed in', () => {
     }
     await page.goto(PAGE);
     await open(page, 'frogs');
-    for (const { root, text, target, said } of links) {
+    for (const { root, text, target, away, said } of links) {
       const link = bubble(page, root).locator('a');
       await expect(link).toHaveText(text);
       await expect(link).toHaveAttribute('href', target);
-      await expect(link).toHaveAttribute('target', '_blank');
-      await expect(link).toHaveAttribute('rel', 'noopener');
+      if (away) {
+        await expect(link).toHaveAttribute('target', '_blank');
+        await expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+      } else {
+        await expect(link).not.toHaveAttribute('target');
+        await expect(link).not.toHaveAttribute('rel');
+      }
       expect(await exact(bubble(page, root))).toBe(said.replace(`[${text}](${target})`, text));
     }
     for (const { root, said } of literal) {
       await expect(bubble(page, root).locator('a')).toHaveCount(0);
       expect(await exact(bubble(page, root))).toBe(said);
     }
+    await seen.clean();
+  });
+
+  test('a bare URL is a link, one to the site opening in the same tab', async ({ page, request }) => {
+    const seen = await watch(page);
+    const here = `${SITE}/${TARGET}.html`;
+    const said = `The target is ${here} and the pond is at https://example.com/pond.`;
+    const root = await post(request, 'frogs', said);
+    const starred = await post(request, 'frogs', 'Search https://example.com/find* now.');
+    const stars = await post(request, 'frogs', 'Search https://example.com/a**b now.');
+    const bold = await post(request, 'frogs', '**See https://example.com/bold**.');
+    const bang = await post(request, 'frogs', '**https://example.com/bang**!');
+    const after = await post(request, 'frogs',
+      '[bad](javascript:alert(f(1)))[good](https://example.com/good) https://example.com/next');
+    await page.goto(PAGE);
+    await open(page, 'frogs');
+    // A star at the end, or two inside, stay in the URL; bold closes around it.
+    await expect(bubble(page, starred).locator('a')).toHaveAttribute('href', 'https://example.com/find*');
+    await expect(bubble(page, stars).locator('a')).toHaveAttribute('href', 'https://example.com/a**b');
+    await expect(bubble(page, bold).locator('strong > a')).toHaveAttribute('href', 'https://example.com/bold');
+    await expect(bubble(page, bang).locator('strong > a')).toHaveAttribute('href', 'https://example.com/bang');
+    expect(await exact(bubble(page, bang))).toBe('https://example.com/bang!');
+    // A nested refused link stays text, and the links after it are drawn.
+    const later = bubble(page, after).locator('a');
+    await expect(later).toHaveCount(2);
+    await expect(later.nth(0)).toHaveAttribute('href', 'https://example.com/good');
+    await expect(later.nth(1)).toHaveAttribute('href', 'https://example.com/next');
+    const links = bubble(page, root).locator('a');
+    await expect(links).toHaveCount(2);
+    const [same, away] = [links.nth(0), links.nth(1)];
+    await expect(same).toHaveText(here);
+    await expect(same).toHaveAttribute('href', here);
+    await expect(same).not.toHaveAttribute('target');
+    await expect(away).toHaveText('https://example.com/pond');
+    await expect(away).toHaveAttribute('href', 'https://example.com/pond');
+    await expect(away).toHaveAttribute('target', '_blank');
+    await expect(away).toHaveAttribute('rel', 'noopener noreferrer');
+    // The full stop is text after the link.
+    expect(await away.evaluate((node) => node.nextSibling?.textContent)).toBe('.');
+    expect(await exact(bubble(page, root))).toBe(said);
+    await seen.clean();
+
+    // Only the same-site link is followed, so nothing is asked of the outside.
+    await same.click();
+    await page.waitForURL(`**/${TARGET}.html`);
+    expect(new URL(page.url()).pathname).toBe(`/${TARGET}.html`);
+    expect(page.context().pages()).toHaveLength(1);
+  });
+
+  test('a bare URL in a code span, a code block, an image or a refused link, or after a look-alike scheme, draws no link', async ({ page, request }) => {
+    const seen = await watch(page);
+    const texts = [
+      'Run `curl https://example.com/code` first.',
+      '```\ncurl https://example.com/fence\n```',
+      '![chart](https://example.com/chart.png)',
+      '[https://example.com/refused](javascript:alert(1))',
+      '[https://example.com/nested](javascript:alert(f(1)))',
+      'See ![chart](https://example.com/c_(a_(b)).png) mid-line.',
+      'Search httpſ://example.com/long-s now.',
+    ];
+    const roots = [];
+    for (const text of texts) roots.push({ root: await post(request, 'pond', text), text });
+    await page.goto(PAGE);
+    await open(page, 'pond');
+    for (const { root, text } of roots) {
+      await expect(bubble(page, root)).toBeVisible();
+      await expect(bubble(page, root).locator('a')).toHaveCount(0);
+      expect(await exact(bubble(page, root))).toBe(text.replace(/`|\n/g, ''));
+    }
+    await seen.clean();
+  });
+
+  test("the page body's links open off the site in a new tab and on it in the same one", async ({ page }) => {
+    const seen = await watch(page);
+    await page.goto(PAGE);
+    const body = page.locator('.artifact-body');
+    const away = body.locator('a[href="https://example.com/body"]');
+    await expect(away).toHaveAttribute('target', '_blank');
+    await expect(away).toHaveAttribute('rel', 'noopener noreferrer');
+    // An SVG link's tab is set too, and the page script runs on past it.
+    const svg = body.locator('svg a');
+    await expect(svg).toHaveAttribute('target', '_blank');
+    await expect(svg).toHaveAttribute('rel', 'noopener noreferrer');
+    for (const href of [`${SITE}/${TARGET}.html`, '#top']) {
+      const link = body.locator(`a[href="${href}"]`);
+      await expect(link).toHaveCount(1);
+      await expect(link).not.toHaveAttribute('target');
+    }
+    await seen.clean();
+  });
+
+  test('a page with no comments and no sections opens its links off the site in a new tab', async ({ page }) => {
+    const seen = await watch(page);
+    await page.goto(`/${PLAIN}.html`);
+    const body = page.locator('.artifact-body');
+    const away = body.locator('a[href="https://example.com/plain"]');
+    await expect(away).toHaveAttribute('target', '_blank');
+    await expect(away).toHaveAttribute('rel', 'noopener noreferrer');
+    const protocol = body.locator('a[href="//example.com/protocol"]');
+    await expect(protocol).toHaveAttribute('target', '_blank');
+    await expect(protocol).toHaveAttribute('rel', 'noopener noreferrer');
+    await expect(body.locator('a[href="#top"]')).not.toHaveAttribute('target');
+    await page.waitForLoadState('networkidle');
     await seen.clean();
   });
 

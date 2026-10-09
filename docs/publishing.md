@@ -128,18 +128,34 @@ The converter (`lotuspod.markdown.to_body`) takes a small subset of markdown:
   is reserved before the bytes arrive. One inside a code fence, a paragraph
   line, a list item or a table cell stays text; there are no titles and no
   `srcset`.
-- Links: `[TEXT](TARGET)` becomes a link opening in the same tab when TARGET
-  is an `http://` or `https://` URL, a `#anchor`, or a relative path such as
-  `other.md#part` (one that does not start with `//` and has no `:` before its
-  first `/`, `?` or `#`). Any other target - `javascript:`, `data:`,
-  `mailto:` or any other scheme - stays text, as does a link inside a code
-  span or a fence. `.md` targets are kept as written, not rewritten to page
-  names.
+- Links: `[TEXT](TARGET)` becomes a link when TARGET is an `http://` or
+  `https://` URL, a `#anchor`, or a relative path such as `other.md#part`
+  (one that does not start with `//` and has no `:` before its first `/`,
+  `?` or `#`). Any other target - `javascript:`, `data:`, `mailto:` or any
+  other scheme - stays text, as does a link inside a code span or a fence.
+  `.md` targets are kept as written, not rewritten to page names.
+- Bare URLs: an `http://` or `https://` URL (any case) written as plain text,
+  not after a letter, digit or `/`, becomes a link to itself. It runs to the
+  next space, `<`, `>`, `"` or backtick; a trailing `.`, `,`, `;` or `:` is
+  left out of it, and so is a trailing `)` or `]` without its partner in the
+  URL, so `(see https://example.com/a).` links `https://example.com/a` while
+  `https://en.wikipedia.org/wiki/Pond_(water)` keeps its `)`. Stars stay in
+  it, but inside bold opened before it, it ends at its first `**`, so bold
+  around a URL closes outside it. One in a code span, a fence, a link (a
+  refused one included) or an image reference is not linked again.
 
-Images and links are Lotuspod's own, outside the subset its reference
-converter takes. Everything from a `## Concrete commands` heading on is left
-out of the page, which keeps host-only commands off published pages.
-Reference-style links, bare URLs and task lists are not converted.
+Images, links and bare URLs are Lotuspod's own, outside the subset its
+reference converter takes. Everything from a `## Concrete commands` heading
+on is left out of the page, which keeps host-only commands off published
+pages. Reference-style links and task lists are not converted.
+
+With the page script, a link in the page body - from markdown or HTML alike,
+and not naming a `target` of its own - opens in the same tab when it points
+at the page's own site (a relative path, an `#anchor` or an absolute URL on
+the same origin), and in a new tab, with `rel="noopener noreferrer"`, when
+it points anywhere else. The site's address is only known in the browser,
+so this is set as the page loads, not written into the HTML; a page whose
+body holds any link always loads the page script for it.
 
 `render --markdown` draws an image only from a media URL (`/media/NAME`, an
 image `publish` has stored; see [Images](#images)) and refuses any other
