@@ -303,7 +303,7 @@ test.describe('signed in', () => {
     let release = () => {};
     const held = new Promise<void>((resolve) => { release = resolve; });
     let asked = false;
-    await page.route(`**/${name}.html`, async (route) => {
+    await page.route((url) => url.pathname === `/${name}.html`, async (route) => {
       if (route.request().resourceType() === 'fetch') {
         asked = true;
         await held;

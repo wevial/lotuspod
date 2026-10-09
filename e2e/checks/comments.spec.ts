@@ -412,9 +412,11 @@ test.describe('signed in', () => {
     await expect(answered.locator('.artifact-comment-item a')).toHaveCount(0);
     await expect(items.nth(3).locator('.artifact-comment-text')).toHaveText('No change needed.');
 
+    // The page, loaded on its own at the top level, opens in the index's
+    // tabs (js/open-in-tabs.js).
     await link.click();
-    await expect(page).toHaveURL(new RegExp(`${PAGE}$`));
-    await expect(page.locator('details.artifact-comment')).toHaveCount(3);
+    await expect(page).toHaveURL(/\/#tabs=capture-comments&on=capture-comments$/);
+    await expect(page.frameLocator('iframe.pod-frame--active').locator('details.artifact-comment')).toHaveCount(3);
     expect(seen.errors).toEqual([]);
     expect(await seen.violations()).toEqual([]);
   });

@@ -302,9 +302,12 @@ test.describe('signed in', () => {
     await seen.clean();
 
     // Only the same-site link is followed, so nothing is asked of the outside.
+    // The page it names, loaded on its own, goes on to the index's tabs
+    // (js/open-in-tabs.js), so its request witnesses the follow.
+    const followed = page.waitForRequest((sent) => sent.isNavigationRequest() &&
+      sent.frame() === page.mainFrame() && new URL(sent.url()).pathname === `/${TARGET}.html`);
     await same.click();
-    await page.waitForURL(`**/${TARGET}.html`);
-    expect(new URL(page.url()).pathname).toBe(`/${TARGET}.html`);
+    await followed;
     expect(page.context().pages()).toHaveLength(1);
   });
 

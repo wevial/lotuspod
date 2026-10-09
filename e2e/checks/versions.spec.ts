@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { expect, test, type Frame, type Locator, type Page } from '@playwright/test';
+import { expect, test, type Frame, type FrameLocator, type Locator, type Page } from '@playwright/test';
 
 // A page lists its earlier versions from the artifacts repository, and opens
 // each one read-only. The capture fixture's site is the top of its own git
@@ -79,7 +79,7 @@ function onRow(part: Locator, modifiers: ('ControlOrMeta')[] = []) {
   return part.click({ force: true, modifiers });
 }
 
-function view(page: Page) {
+function view(page: Page | FrameLocator) {
   const node = page.locator('section.artifact-versions');
   return {
     node,
@@ -87,6 +87,14 @@ function view(page: Page) {
     entries: node.locator('li.artifact-versions-entry'),
     more: node.getByRole('button', { name: 'Show older versions' }),
   };
+}
+
+// The current page, loaded on its own at the top level by a link to it,
+// opens in the index's tabs (js/open-in-tabs.js): the index, that page its
+// active tab, and the page in its frame.
+async function inTab(page: Page, name: string) {
+  await expect(page).toHaveURL(new RegExp(`/#tabs=${name}&on=${name}$`));
+  return page.frameLocator('iframe.pod-frame--active');
 }
 
 test.describe('signed in', () => {
@@ -108,7 +116,7 @@ test.describe('signed in', () => {
     const link = page.locator('.artifact-header .artifact-meta a.artifact-versions-link');
     await expect(link).toHaveText('Versions · 2');
     await link.click();
-    await expect(page).toHaveURL(new RegExp(`/${name}\\.html#versions$`));
+    await expect(page).toHaveURL(new RegExp(`/${name}\\.html\\?standalone#versions$`));
     const versions = view(page);
     await expect(versions.heading).toBeVisible();
     await expect(versions.node).toContainText('2, newest first');
@@ -137,8 +145,7 @@ test.describe('signed in', () => {
     await expect(versions.heading).toBeVisible();
 
     await onRow(versions.entries.nth(0).locator('.artifact-versions-date'));
-    await expect(page).toHaveURL(new RegExp(`/${name}\\.html$`));
-    await expect(page.locator('.artifact-body')).toContainText('Edition: second.');
+    await expect((await inTab(page, name)).locator('.artifact-body')).toContainText('Edition: second.');
     await page.goBack();
     await expect(versions.heading).toBeVisible();
 
@@ -159,7 +166,7 @@ test.describe('signed in', () => {
       onRow(versions.entries.nth(1).locator('.artifact-versions-note'), ['ControlOrMeta']),
     ]);
     expect(opened.method()).toBe('GET');
-    await expect(page).toHaveURL(new RegExp(`/${name}\\.html#versions$`));
+    await expect(page).toHaveURL(new RegExp(`/${name}\\.html\\?standalone#versions$`));
     await expect(versions.heading).toBeVisible();
     page.off('framenavigated', onMove);
     expect(moved).toEqual([]);
@@ -206,21 +213,21 @@ test.describe('signed in', () => {
     await expect(page.locator('.artifact-versions-link')).toHaveCount(0);
 
     await banner.getByRole('link', { name: 'Back to current' }).click();
-    await expect(page).toHaveURL(new RegExp(`/${name}\\.html$`));
-    await expect(page.locator('.artifact-body')).toContainText('Edition: second.');
-    await expect(page.locator('.artifact-version-banner')).toHaveCount(0);
+    const current = await inTab(page, name);
+    await expect(current.locator('.artifact-body')).toContainText('Edition: second.');
+    await expect(current.locator('.artifact-version-banner')).toHaveCount(0);
 
     await page.goBack();
     await expect(banner).toBeVisible();
     await banner.getByRole('link', { name: 'All versions' }).click();
-    await expect(page).toHaveURL(new RegExp(`/${name}\\.html#versions$`));
-    await expect(view(page).heading).toBeVisible();
-    await expect(view(page).entries).toHaveCount(2);
+    const all = await inTab(page, name);
+    await expect(view(all).heading).toBeVisible();
+    await expect(view(all).entries).toHaveCount(2);
 
     // Leaving the view shows the page again.
-    await view(page).node.getByRole('link', { name: 'Versions check' }).click();
-    await expect(page.locator('.artifact-body')).toBeVisible();
-    await expect(view(page).node).toBeHidden();
+    await view(all).node.getByRole('link', { name: 'Versions check' }).click();
+    await expect(all.locator('.artifact-body')).toBeVisible();
+    await expect(view(all).node).toBeHidden();
     expect(errors).toEqual([]);
   });
 
@@ -319,11 +326,11 @@ test.describe('signed in', () => {
     await page.goBack();
     await button.click();
     await items.nth(0).click();
-    await expect(page).toHaveURL(new RegExp(`/${name}\\.html$`));
-    await expect(page.locator('.artifact-body')).toContainText('Edition: second.');
+    await expect((await inTab(page, name)).locator('.artifact-body')).toContainText('Edition: second.');
+    await page.goto(`/${name}.html?standalone`);
     await button.click();
     await items.nth(2).click();
-    await expect(page).toHaveURL(new RegExp(`/${name}\\.html#versions$`));
+    await expect(page).toHaveURL(new RegExp(`/${name}\\.html\\?standalone#versions$`));
     await expect(view(page).heading).toBeVisible();
     await expect(menu).toBeHidden();
 
@@ -483,7 +490,7 @@ test.describe('signed in, what changed', () => {
     await page.setViewportSize(size);
 
     await box.getByRole('link', { name: 'See the full diff' }).click();
-    await expect(page).toHaveURL(new RegExp(`/${name}\\.html#versions$`));
+    await expect(page).toHaveURL(new RegExp(`/${name}\\.html\\?standalone#versions$`));
     const versions = view(page);
     await expect(versions.heading).toBeVisible();
     await expect(box).toBeHidden();
@@ -524,7 +531,7 @@ test.describe('signed in, what changed', () => {
     await expect(box.locator('.artifact-changes-item--added')).toHaveCount(0);
     await expect(page.locator('.artifact-body h2#pump .artifact-changed-tag')).toHaveText('changed');
     await box.getByRole('link', { name: 'Pump' }).click();
-    await expect(page).toHaveURL(new RegExp(`/${name}\\.html#pump$`));
+    await expect(page).toHaveURL(new RegExp(`/${name}\\.html\\?standalone#pump$`));
     expect(errors).toEqual([]);
   });
 
@@ -541,7 +548,7 @@ test.describe('signed in, what changed', () => {
     await expect(link).toHaveAttribute('href', '#page-text');
     await expect(page.locator('section.artifact-body#page-text')).toHaveCount(1);
     await link.click();
-    await expect(page).toHaveURL(new RegExp(`/${name}\\.html#page-text$`));
+    await expect(page).toHaveURL(new RegExp(`/${name}\\.html\\?standalone#page-text$`));
     expect(errors).toEqual([]);
   });
 

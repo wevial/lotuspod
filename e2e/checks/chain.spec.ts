@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
+import { expect, test, type APIRequestContext, type FrameLocator, type Page } from '@playwright/test';
 
 // At this width a box never opens: its chip opens the section's threads in
 // a popover over the text. panel.spec.ts checks the side panel a wider
@@ -69,7 +69,7 @@ function pull(credential: string, owner: string) {
   return agent(credential, 'pull', '--owner', owner);
 }
 
-function decision(page: Page) {
+function decision(page: Page | FrameLocator) {
   const form = page.locator(`form.artifact-decision[data-question="decision-1"]`);
   return {
     option: (name: string | RegExp) => form.getByRole('radio', { name }),
@@ -235,11 +235,14 @@ test.describe('the chain', () => {
       const link = line.getByRole('link');
       await expect(link).toHaveAttribute('href', `${NAME}.html`);
 
+      // The page, loaded on its own at the top level, opens in the index's
+      // tabs (js/open-in-tabs.js).
       await link.click();
-      await expect(page).toHaveURL(new RegExp(`${PAGE}$`));
-      await expect(page.getByText(REVISED)).toBeVisible();
-      await expect(page.getByText(`Published by ${OWNER}`)).toBeVisible();
-      const question = decision(page);
+      await expect(page).toHaveURL(new RegExp(`/#tabs=${NAME}&on=${NAME}$`));
+      const framed = page.frameLocator('iframe.pod-frame--active');
+      await expect(framed.getByText(REVISED)).toBeVisible();
+      await expect(framed.getByText(`Published by ${OWNER}`)).toBeVisible();
+      const question = decision(framed);
       await expect(question.saved).toContainText('Saved \u00b7 Submerged \u00b7 change');
       await expect(question.savedNote).toHaveText(NOTE);
       await expect(question.savedBy).toContainText(NAME_SHOWN);
