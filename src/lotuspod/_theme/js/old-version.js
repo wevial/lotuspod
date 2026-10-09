@@ -8,7 +8,6 @@
   // leaves the banner as it is. The seen route is never asked: an old
   // version records no visit, so the menu has no "you last looked".
   function oldVersionMenu() {
-    var VERSIONS = "/api/versions";
     var links = document.querySelector(".artifact-version-banner .artifact-version-banner-links");
     var every = links && links.querySelector('a[href$="#versions"]');
     if (!every) {
@@ -20,7 +19,7 @@
     var shown = new URLSearchParams(location.search).get("version");
 
     (async function () {
-      var response = await fetch(VERSIONS + "?page=" + encodeURIComponent(page));
+      var response = await fetch("/api/versions?page=" + encodeURIComponent(page));
       if (response.status !== 200) {
         return;
       }
