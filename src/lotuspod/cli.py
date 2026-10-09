@@ -289,6 +289,7 @@ THEME_SOURCES = {
         "js/narrow.js",
         "js/attachments.js",
         "js/live-page.js",
+        "js/comment-markdown.js",
         "js/comments.js",
         "js/panel-resize.js",
         "js/tables.js",
