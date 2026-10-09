@@ -384,12 +384,13 @@ class Responder:
     def log(self, line: str) -> None:
         print(line, flush=True)
 
-    def ask(self, method: str, target: str, body: object = None) -> dict:
+    def ask(self, method: str, target: str, body: object = None,
+            timeout: float = machine.REQUEST_TIMEOUT) -> dict:
         """The socket's JSON; Refused naming a refusal, Unreachable when
-        serve cannot be reached."""
+        serve cannot be reached or does not answer within timeout seconds."""
         try:
             status, payload = machine.request(self.socket_path, self.token, method, target,
-                                              body)
+                                              body, timeout)
         except OSError as exc:
             raise Unreachable(f"cannot reach serve on {self.socket_path}: {exc}") from None
         except ValueError:
@@ -764,13 +765,16 @@ def cmd_respond(args: argparse.Namespace) -> int:
 def wait_for_serve(responder: Responder, stop: threading.Event, bound: int) -> int | None:
     """None once serve answers on the socket (a refusal is an answer); else
     the exit code: 0 when stopped while waiting, 1 when serve has not
-    answered within bound seconds."""
+    answered within bound seconds. Each try gives up after WAIT_MOST seconds
+    or at the bound, so a socket that never answers cannot outlast the bound
+    or hold off a stop."""
     deadline = time.monotonic() + bound
     delay = WAIT_FIRST
     waiting = False
     while True:
+        probe = max(WAIT_FIRST, min(WAIT_MOST, deadline - time.monotonic()))
         try:
-            responder.ask("GET", machine.WHOAMI)
+            responder.ask("GET", machine.WHOAMI, timeout=probe)
             return None
         except Refused:
             return None

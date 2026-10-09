@@ -20,6 +20,7 @@ import os
 import re
 import shlex
 import signal
+import socket
 import sqlite3
 import subprocess
 import sys
@@ -827,6 +828,21 @@ class StartupWaitTests(ResponderCase):
             time.sleep(0.1)
         process.send_signal(signal.SIGTERM)
         self.assertEqual(process.wait(5), 0, self.output())
+
+    def silent_socket(self):
+        """A socket at serve's path that takes requests and never answers."""
+        listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        self.addCleanup(listener.close)
+        listener.bind(str(self.sock))
+        listener.listen(16)
+
+    def test_a_socket_that_never_answers_does_not_outlast_wait(self):
+        self.silent_socket()
+        self.test_gives_up_after_wait_seconds()
+
+    def test_a_socket_that_never_answers_does_not_hold_off_sigterm(self):
+        self.silent_socket()
+        self.test_sigterm_while_waiting_exits_0()
 
 
 class PermissionTests(ResponderCase):
