@@ -2,11 +2,9 @@
   // An earlier version's banner gains the page's version menu
   // (js/version-menu.js) before its "All versions" link: a "Choose a
   // version ▾" button whose menu marks the version shown "viewing". The
-  // page's name is read as js/versions.js reads it, the version shown from
-  // the address's version query. It asks the versions route once; only a 200
-  // with a list draws the menu, and any other answer, or a failed request,
-  // leaves the banner as it is. The seen route is never asked: an old
-  // version records no visit, so the menu has no "you last looked".
+  // page's name is read as js/versions.js reads it. The seen route is never
+  // asked: an old version records no visit, so the menu has no "you last
+  // looked".
   function oldVersionMenu() {
     var links = document.querySelector(".artifact-version-banner .artifact-version-banner-links");
     var every = links && links.querySelector('a[href$="#versions"]');

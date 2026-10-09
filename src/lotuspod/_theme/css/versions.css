@@ -571,7 +571,6 @@ a.artifact-changes-section:focus-visible,
   background: color-mix(in srgb, var(--color-sky) 7%, transparent);
 }
 
-/* "you last looked", and in an old version's menu "viewing". */
 .artifact-versions-seen,
 .artifact-versions-viewing {
   border: 1px solid color-mix(in srgb, var(--color-sky) 60%, transparent);
