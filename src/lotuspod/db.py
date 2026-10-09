@@ -46,6 +46,10 @@ A thread may be anchored to a decision rather than a section: each of its
 comments keeps the decision's question id as `question`, beside the section
 whose comment box follows the decision's form. A row carries `question`
 only on such a thread.
+
+Each reader's last visit to each page is kept too: one row per reader, by
+the address Access verified, and page, holding the revision they last
+opened the page at, so it holds on any device they read from.
 """
 
 from __future__ import annotations
@@ -61,7 +65,7 @@ from typing import Callable, Iterator, Mapping, Sequence
 from lotuspod import media
 
 DEFAULT_NAME = "lotuspod.sqlite3"
-SCHEMA_VERSION = 10
+SCHEMA_VERSION = 11
 # Seconds a connection waits for another writer before giving up.
 BUSY_TIMEOUT = 30
 # The state of a reader's comment until an agent takes it up.
@@ -184,6 +188,16 @@ _SCHEMA = {1: (
     # A checklist's answer: a JSON list of the item ids checked, in the
     # page's order; NULL on a decision's answer.
     "ALTER TABLE answers ADD COLUMN checked TEXT",
+), 11: (
+    # The revision each reader, by their verified address, last opened each
+    # page at.
+    """CREATE TABLE page_views (
+        reader TEXT NOT NULL,
+        page TEXT NOT NULL,
+        revision TEXT NOT NULL,
+        seen_at TEXT NOT NULL,
+        PRIMARY KEY (reader, page)
+    )""",
 )}
 # The settings row that holds whether the responder is paused.
 _PAUSED = "responder_paused"
@@ -765,6 +779,29 @@ class Database:
         with self._connect() as conn:
             rows = conn.execute("SELECT handle, pulled_at FROM pulls").fetchall()
         return {row["handle"]: row["pulled_at"] for row in rows}
+
+    def record_view(self, *, reader: str, page: str, revision: str) -> str | None:
+        """Record that reader opened page at revision; the revision recorded
+        for them before, None the first time."""
+        with self._connect() as conn, _write(conn):
+            row = conn.execute(
+                "SELECT revision FROM page_views WHERE reader = ? AND page = ?", (reader, page)
+            ).fetchone()
+            conn.execute(
+                "INSERT INTO page_views (reader, page, revision, seen_at) VALUES (?, ?, ?, ?)"
+                " ON CONFLICT (reader, page) DO UPDATE SET revision = excluded.revision,"
+                " seen_at = excluded.seen_at",
+                (reader, page, revision, _now()),
+            )
+        return None if row is None else row[0]
+
+    def views(self, reader: str) -> dict[str, str]:
+        """Each page reader has opened, to the revision they last opened it at."""
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT page, revision FROM page_views WHERE reader = ?", (reader,)
+            ).fetchall()
+        return {row["page"]: row["revision"] for row in rows}
 
     def answer(self, answer_id: int) -> dict | None:
         """The answer answer_id; None when there is none."""

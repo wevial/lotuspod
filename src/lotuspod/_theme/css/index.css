@@ -83,7 +83,8 @@
   position: relative;
 }
 
-.index-labels {
+.index-labels,
+.index-toggle {
   background: var(--color-surface);
   border: 1px solid var(--hairline);
   border-radius: var(--radius-pill);
@@ -96,7 +97,10 @@
 
 .index-labels:hover,
 .index-labels:focus-visible,
-.index-labels[aria-expanded="true"] {
+.index-labels[aria-expanded="true"],
+.index-toggle:hover,
+.index-toggle:focus-visible,
+.index-toggle[aria-pressed="true"] {
   border-color: var(--color-lavender);
   color: var(--color-white);
   outline: none;
@@ -297,6 +301,20 @@
 .episode-title a:focus-visible {
   color: var(--color-pale-lavender);
   text-decoration: underline;
+}
+
+/* A page republished since this reader last opened it: a small mark beside
+   its title, drawn by the index script. */
+.index-mark {
+  border: 1px solid var(--color-lavender);
+  border-radius: var(--radius-pill);
+  color: var(--color-lavender);
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  line-height: 1.4;
+  margin-left: 0.4rem;
+  padding: 0 0.45rem;
+  white-space: nowrap;
 }
 
 /* A page's labels, small tags on their own line under its title. */
