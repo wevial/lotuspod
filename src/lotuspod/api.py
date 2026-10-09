@@ -60,9 +60,10 @@ now. It answers {from, to, older, truncated, pages: [{page, title, latest,
 events}]}, `from` and `to` the window's bounds as the database writes times,
 a page for each one with an event after `from` and up to `to`, by its newest
 event (`latest`), newest first, and its events newest first. Events are
-versions (History.recent()), {kind: version, at, commit, revision, actor,
-first, summary}, `actor` the handle the version's lotuspod:owner names or
-null, and the comments, replies and answers of Database.activity(). At most
+versions (History.recent()), {kind: version, at, commit, revision, current,
+actor, first, summary}, `current` true when its revision is the page's as
+serve answers it now, `actor` the handle the version's lotuspod:owner names
+or null, and the comments, replies and answers of Database.activity(). At most
 MAX_EVENTS are kept, the newest, and `truncated` says when any were left
 out; `older` says whether anything on those pages happened up to `from`. Any
 query but one `before` that parses is 400 invalid_query. An archived page has
@@ -252,6 +253,23 @@ def summary(changed: Sequence[Mapping]) -> str:
     off = [item["label"] for item in changed if not item["checked"]]
     parts = ([f"On: {', '.join(on)}"] if on else []) + ([f"Off: {', '.join(off)}"] if off else [])
     return " · ".join(parts) or "No change from the defaults"
+
+
+def asked_question(page: Page, question: str) -> Question:
+    """The question page asks by that id; Refusal unknown_question when it
+    asks none."""
+    asked = page.questions.get(question)
+    if asked is None:
+        raise Refusal(HTTPStatus.BAD_REQUEST, "unknown_question")
+    return asked
+
+
+def chosen(asked: Question, choice: str) -> str:
+    """The label of a decision's option choice; Refusal invalid_choice when
+    its form offers none."""
+    if choice not in asked.choices:
+        raise Refusal(HTTPStatus.BAD_REQUEST, "invalid_choice")
+    return asked.labels.get(choice, choice)
 
 
 @dataclass(frozen=True)
@@ -639,6 +657,9 @@ class Api:
         for event in events[:MAX_EVENTS]:
             name = event.pop("page")
             page = served(name)
+            # Only for the events kept, so no page is read for one left out.
+            if event["kind"] == "version":
+                event["current"] = page is not None and event["revision"] == page.revision
             entry = pages.setdefault(name, {"page": name, "title": page.title if page else name,
                                             "latest": event["at"], "events": []})
             entry["events"].append(event)
@@ -790,9 +811,7 @@ class Api:
             choice = _text(fields["choice"], 1, MAX_NAME)
         note = _text(fields["note"], 0, MAX_TEXT)
         page = self._page(fields["page"])
-        asked = page.questions.get(question)
-        if asked is None:
-            raise Refusal(HTTPStatus.BAD_REQUEST, "unknown_question")
+        asked = asked_question(page, question)
         if checklist != asked.checklist:
             raise _invalid()
         if version != asked.version:
@@ -804,9 +823,7 @@ class Api:
             checked = [item for item in asked.labels if item in set(checked)]
             choice, label = "", summary(changes(asked.labels, asked.defaults, checked))
         else:
-            if choice not in asked.choices:
-                raise Refusal(HTTPStatus.BAD_REQUEST, "invalid_choice")
-            checked, label = None, asked.labels.get(choice, choice)
+            checked, label = None, chosen(asked, choice)
         return self.database.add_answer(
             page=page.name, question=question, version=version, choice=choice,
             note=note, revision=page.revision, actor=actor,

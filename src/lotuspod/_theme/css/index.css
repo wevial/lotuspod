@@ -310,6 +310,14 @@
 .index-activity-said {
   color: var(--color-pale-lavender);
   font-size: 0.92rem;
+  text-decoration: none;
+}
+
+/* Each line links to where its event happened, underlined only when pointed
+   at or focused, as a group's title is. */
+.index-activity-said:hover,
+.index-activity-said:focus-visible {
+  text-decoration: underline;
 }
 
 .index-activity-actor {

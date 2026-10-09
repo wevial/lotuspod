@@ -13,7 +13,10 @@
 // when it is not open, else by activating its tab. In a framed page, a plain
 // click on a link to the index shows the listing, and one on any other link
 // loads it in the whole window, as it would outside the strip. Any other click
-// is the browser's, so Cmd-click and Ctrl-click still open a browser tab.
+// is the browser's, so Cmd-click and Ctrl-click still open a browser tab. A
+// link to an open pod moves its framed page to the link's fragment, which
+// reaches the page as a hashchange, the fragment it already holds included;
+// a link marked data-pod-exact with no fragment drops the page's.
 //
 // The open tabs and the active one are kept in the address, #tabs=NAME,NAME
 // &on=NAME, written with history.replaceState, and a load with that fragment
@@ -390,10 +393,27 @@
     return pod;
   };
 
-  const openPod = (name, hash) => {
+  // exact (a link marked data-pod-exact, a Recent activity row's): an open
+  // pod's page moves to the link's fragment even when that is none, leaving
+  // any view a fragment shows, such as its versions.
+  const openPod = (name, hash, exact = false) => {
     const pod = find(name);
     if (!pod) {
       add(name, hash);
+    } else if (!hash && exact) {
+      try {
+        const view = pod.frame.contentWindow;
+        const framed = view.location;
+        if (framed.hash && framed.pathname === new URL(pods.get(name).href, location.href).pathname) {
+          // Dropped in place, so the page keeps its state; it is told as a
+          // fragment it left.
+          const was = framed.href;
+          view.history.replaceState(view.history.state, "", `${framed.pathname}${framed.search}`);
+          view.dispatchEvent(new view.HashChangeEvent("hashchange", { oldURL: was, newURL: framed.href }));
+        }
+      } catch (ignored) {
+        // The frame stays where it is.
+      }
     } else if (hash) {
       // To the fragment within the pod's page once it is there; until then
       // (the frame still blank, its page on the way) the pod's page anew,
@@ -402,7 +422,14 @@
       try {
         const framed = pod.frame.contentWindow.location;
         if (framed.origin === target.origin && framed.pathname === target.pathname) {
-          framed.replace(`${framed.pathname}${framed.search}${hash}`);
+          if (framed.hash === hash) {
+            // The fragment it already holds fires no hashchange: the page is
+            // told as if it had, so a link to a thread opens it again.
+            const view = pod.frame.contentWindow;
+            view.dispatchEvent(new view.HashChangeEvent("hashchange", { oldURL: framed.href, newURL: framed.href }));
+          } else {
+            framed.replace(`${framed.pathname}${framed.search}${hash}`);
+          }
         } else {
           target.hash = hash;
           framed.replace(target.href);
@@ -435,7 +462,7 @@
     const name = podOf(url);
     if (name !== null) {
       event.preventDefault();
-      openPod(name, url.hash);
+      openPod(name, url.hash, link.hasAttribute("data-pod-exact"));
     } else if (framed && isIndex(url)) {
       event.preventDefault();
       showListing();
