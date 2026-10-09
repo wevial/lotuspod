@@ -329,7 +329,7 @@ test.describe('signed in', () => {
     await expect(page.locator('b')).toHaveCount(0);
   });
 
-  test('an answer to an earlier wording leaves the card open and unpicked', async ({ page }) => {
+  test('an answer to an earlier wording leaves the card open, not filled from it, with its default picked', async ({ page }) => {
     await serve(page, () => ({
       'decision-1': { current: row('decision-1', '000000000000', 'opus', 'Old words'), earlier: [] },
     }));
@@ -337,12 +337,12 @@ test.describe('signed in', () => {
     const first = decision(page, 'decision-1');
     await expect(first.earlier).toContainText(`Answered to an earlier wording by ${READER}`);
     await expect(first.saved).toHaveCount(0);
-    for (const radio of await first.radios.all()) {
-      await expect(radio).toBeVisible();
-      await expect(radio).not.toBeChecked();
-    }
+    for (const radio of await first.radios.all()) await expect(radio).toBeVisible();
+    // Not filled from the old answer: the page's default is picked, not saved.
+    await expect(first.option('Opus')).not.toBeChecked();
+    await expect(first.option(/^Sonnet/)).toBeChecked();
     await expect(first.save).toBeVisible();
-    await expect(first.unsaved).toBeHidden();
+    await expect(first.unsaved).toBeVisible();
   });
 
   test('a form published before the cards still saves and folds', async ({ page, request }) => {

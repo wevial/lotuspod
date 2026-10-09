@@ -388,6 +388,16 @@
       return "Your answer was not saved (" + error + "). Try again.";
     }
 
+    // Why a form's answer was not saved, in its status: a form folded to
+    // its answer (saved from the review sheet) opens to show it.
+    function refused(form, text) {
+      if (form.classList.contains("artifact-decision--saved")) {
+        form.lotuspodEditing = true;
+        draw(form);
+      }
+      status(form, text);
+    }
+
     // Post a form's answer, as picked when its turn comes, with its note:
     // true once it is saved and the form drawn from it, false when it is
     // not, with why in the form's status. A form posts one answer at a
@@ -427,7 +437,7 @@
         });
         var payload = await json(response);
         if (response.status !== 201 || !payload) {
-          status(form, failure(response, payload));
+          refused(form, failure(response, payload));
           return false;
         }
         var answers = form.lotuspodAnswers;
@@ -443,7 +453,7 @@
         form.dispatchEvent(new CustomEvent(SAVED));
         return true;
       } catch (ignored) {
-        status(form, "Your answer was not saved: the site did not answer. Try again.");
+        refused(form, "Your answer was not saved: the site did not answer. Try again.");
         return false;
       } finally {
         button.disabled = false;

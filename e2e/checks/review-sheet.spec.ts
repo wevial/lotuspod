@@ -314,6 +314,53 @@ test.describe('signed in', () => {
     expect((await stored(request))['decision-d1'].current).toMatchObject({ note: 'Only the note changed' });
   });
 
+  test('a form answered only to an earlier wording gets its default picked on the form and in the panel', async ({ page }) => {
+    await page.route((url) => url.pathname === '/api/answers', (route) =>
+      route.request().method() === 'GET'
+        ? route.fulfill({ json: { page: 'capture-review-sheet', questions: {
+          'decision-d1': { current: {
+            id: 1, page: 'capture-review-sheet', question: 'decision-d1', version: '000000000000',
+            choice: 'claude-opus', note: '', revision: 'abc123abc123',
+            actor: { kind: 'human', name: 'maintainer' }, createdAt: '2026-10-01T09:30:00Z',
+            supersedes: null,
+          }, earlier: [] },
+        } } })
+        : route.continue());
+    await page.goto(PAGE);
+    const the = sheet(page);
+    const form = the.form('decision-d1');
+    await expect(form.locator('.artifact-decision-earlier')).toContainText('Answered to an earlier wording');
+    await expect(form.getByRole('radio', { name: 'Codex' })).toBeChecked();
+    await expect(form.locator('.artifact-decision-unsaved')).toBeVisible();
+    await the.count.click();
+    await expect(the.entry('decision-d1').option('Codex')).toHaveAttribute('aria-pressed', 'true');
+    await expect(the.entry('decision-d1').state).toHaveText('Default');
+    await expect(the.entry('decision-d1').unsaved).toBeVisible();
+  });
+
+  test('a refused change to a saved form opens it to say why', async ({ page, request }) => {
+    const before = (await stored(request))['decision-d1'].current.choice;
+    const other = before === 'codex' ? 'Claude Opus' : 'Codex';
+    await page.route((url) => url.pathname === '/api/answers', (route) =>
+      route.request().method() === 'POST' && route.request().postDataJSON().question === 'decision-d1'
+        ? route.fulfill({ status: 409, json: { error: 'stale_version' } })
+        : route.continue());
+    await page.goto(PAGE);
+    const the = sheet(page);
+    const form = the.form('decision-d1');
+    await expect(form.locator('.artifact-decision-saved-line')).toBeVisible();
+    await the.count.click();
+    await the.entry('decision-d1').option(other).click();
+    await the.save.click();
+    await expect(the.outcome).toContainText('Nothing was saved');
+    await expect(form.locator('.artifact-decision-status')).toBeVisible();
+    await expect(form.locator('.artifact-decision-status')).toHaveText(STALE);
+    await expect(form.getByRole('radio', { name: other })).toBeVisible();
+    await expect(form.getByRole('radio', { name: other })).toBeChecked();
+    await expect(the.entry('decision-d1').unsaved).toBeVisible();
+    expect((await stored(request))['decision-d1'].current.choice).toBe(before);
+  });
+
   test('a failed read of the answers draws no sheet and picks no default', async ({ page, request }) => {
     const before = (await stored(request))['decision-d1'].current;
     await page.route((url) => url.pathname === '/api/answers', (route) =>

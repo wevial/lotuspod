@@ -590,7 +590,8 @@ column, a row offers "Accept the default" (`accept`) and "Something else"
 the default" accepts. A form with a default names it in `data-default`: the
 default option's value, or `accept`. The page as written picks no option;
 once the page script has read the answers, it picks the default of each
-question that has one and no answer, which shows "Not saved" until it is
+question that has one and no answer as the page now asks it, which shows
+"Not saved" until it is
 saved. A Default cell names the option whose label it matches, in any case,
 before one whose slug alone matches. A table with any row of fewer than two options is left
 exactly as written, and the page then loads no script.
@@ -609,8 +610,9 @@ answer"; a failed save keeps both and says why. A saved answer folds the card
 under its question to "✓ Saved · LABEL · change", then the note, then the
 reader and the time, with "replaced an earlier answer" when it superseded
 one. "change" opens the card again with the saved option picked and the note
-filled. An answer to an earlier wording leaves the card open and unpicked,
-with the line "Answered to an earlier wording by READER, TIME".
+filled. An answer to an earlier wording leaves the card open, not filled
+from it, with the line "Answered to an earlier wording by READER, TIME" (the
+page script picks its default, as for a question not answered).
 
 On a page that takes comments (one with at least one comment box), each card
 also has "Ask" beside "Save answer", for a question about the decision rather

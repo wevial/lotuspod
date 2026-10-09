@@ -412,11 +412,11 @@
     });
 
     // A default picked once the answers are read, so the read never takes
-    // the form for one the reader touched; a form answered to an earlier
-    // wording stays unpicked.
+    // the form for one the reader touched: for each form with no answer to
+    // the question as the page now asks it, one to an earlier wording too.
     questions.forEach(function (question) {
       var form = question.form;
-      if (question.fallback && !form.lotuspodAnswers.current &&
+      if (question.fallback && !the.saved(form) &&
           !form.querySelector('input[name="choice"]:checked')) {
         var radio = radioOf(question, question.fallback);
         radio.checked = true;
