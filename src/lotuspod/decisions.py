@@ -292,8 +292,9 @@ def _questions(rows: list[list[dict]], taken: set[str]) -> list[dict] | None:
             return None
         marked = ""
         if columns["options"] is not None and default["text"]:
-            wanted = cli.slugify(default["text"])
-            marked = next((value for value, label in options if cli.slugify(label) == wanted), "")
+            wanted = option_value(default["text"])
+            marked = next((value for value, label in options if option_value(label) == wanted),
+                          "")
         questions.append({
             "id": question_id,
             "number": _cell(row, columns["#"])["html"],
