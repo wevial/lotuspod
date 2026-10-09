@@ -265,6 +265,89 @@ test.describe('signed in', () => {
     expect(errors).toEqual([]);
   });
 
+  test('a framed page keeps the clicks its own script takes: its image opens in the viewer', async ({ page }) => {
+    const errors = await watch(page);
+    const images = { name: 'capture-images', title: 'Capture images' };
+    await openIndex(page);
+    await openFromListing(page, images);
+    const chart = framed(page, images).locator('.artifact-body figure.artifact-figure a').first();
+    await chart.click();
+    await expect(framed(page, images).locator('dialog.artifact-image-viewer')).toBeVisible();
+    expect(new URL(page.url()).pathname).toBe('/');
+    await expect(tabs(page)).toHaveCount(1);
+    await expectActive(page, images);
+    // The frame is still the page: nothing navigated.
+    expect(page.frames().map((each) => new URL(each.url()).pathname)).toContain('/capture-images.html');
+    expect(errors).toEqual([]);
+  });
+
+  test('the listing\'s view buttons keep the tabs in the address, Recent activity named in it', async ({ page }) => {
+    const errors = await watch(page);
+    await openIndex(page);
+    await expect(page.locator('.index-views')).toHaveCount(1);
+    await openFromListing(page, ARTICLE);
+    await home(page).click();
+    await expect(page).toHaveURL(/\/#tabs=capture-article$/);
+
+    const pages = page.getByRole('button', { name: 'Pages', exact: true });
+    const activity = page.getByRole('button', { name: 'Recent activity', exact: true });
+    await activity.click();
+    await expect(activity).toHaveAttribute('aria-pressed', 'true');
+    await expect(page).toHaveURL(/\/#tabs=capture-article&view=activity$/);
+
+    // A load of that address opens the tab again, on Recent activity.
+    await page.reload();
+    await expect(tabs(page)).toHaveCount(1);
+    await expectListing(page);
+    await expect(activity).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('.index-activity')).toBeVisible();
+    await expect(page).toHaveURL(/\/#tabs=capture-article&view=activity$/);
+
+    await pages.click();
+    await expect(pages).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('.index-table')).toBeVisible();
+    await expect(page).toHaveURL(/\/#tabs=capture-article$/);
+    // The back button still moves between the views, the tab kept.
+    await page.goBack();
+    await expect(activity).toHaveAttribute('aria-pressed', 'true');
+    await expect(page).toHaveURL(/\/#tabs=capture-article&view=activity$/);
+    await expect(tabs(page)).toHaveCount(1);
+
+    // With a tab active too.
+    await activity.click();
+    await tabTitle(page, ARTICLE).click();
+    await expect(page).toHaveURL(/\/#tabs=capture-article&on=capture-article&view=activity$/);
+    expect(errors).toEqual([]);
+  });
+
+  test('back on the listing from a tab, a page just read there loses its updated mark', async ({ page }) => {
+    const errors = await watch(page);
+    const pod = { name: 'pod-tabs-marks', title: 'Pod tabs marks' };
+    publish(pod.name, source(pod.title, 'first'));
+    const first = seenPost(page, pod.name);
+    await page.goto(`/${pod.name}.html`);
+    await first;
+    await page.waitForTimeout(1100);
+    publish(pod.name, source(pod.title, 'second'));
+
+    await openIndex(page);
+    const row = page.locator(`.index-table tbody tr[data-page="${pod.name}"]`);
+    const toggle = page.locator('button.index-toggle', { hasText: /^Updated/ });
+    await expect(row.locator('.index-mark')).toHaveText('updated');
+    const before = Number(/(\d+)$/.exec(await toggle.innerText())?.[1]);
+    expect(before).toBeGreaterThan(0);
+
+    const read = seenPost(page, pod.name);
+    await listingLink(page, pod).click();
+    await read;
+    await expectActive(page, pod);
+    await home(page).click();
+    await expectListing(page);
+    await expect(row.locator('.index-mark')).toHaveCount(0);
+    await expect(toggle).toHaveText(`Updated · ${before - 1}`);
+    expect(errors).toEqual([]);
+  });
+
   test('closing a tab activates its right neighbour, else its left, else the listing; the address reopens tabs', async ({ page }) => {
     const errors = await watch(page);
     // The activity route answers once a tab is open: the tabs' fragment then

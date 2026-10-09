@@ -614,8 +614,9 @@ When it answers 200, a "Pages | Recent activity" switch (a group named View,
 each button `aria-pressed`) appears after the title, and the index opens on
 Recent activity unless the URL ends `#pages`: no hash is Recent activity, so
 either view can be linked and the back button moves between them. The open
-tabs' fragment (see [Pods in tabs](#pods-in-tabs)) names no view: the index
-stays on the view it shows, and one loaded with it opens on Pages. On any other
+tabs' fragment (see [Pods in tabs](#pods-in-tabs)) names Pages, or Recent
+activity when it ends `&view=activity`; either button rewrites it so, keeping
+the tabs. On any other
 answer (signed out, or the demo site, whose stand-in answers 404) there is no
 switch, and the index is the Pages view, whatever the hash says. An index with
 no page gets the switch too, and its controls, only when the route answers; its
@@ -680,11 +681,14 @@ which opens a browser tab.
 Closing the active tab activates its right neighbour, else its left one, else
 shows the listing, and focus moves to the newly active tab, else to the
 search. The open tabs and the active one are kept in the address as
-`#tabs=NAME,NAME&on=NAME` (`#tabs=NAME,NAME` while the listing shows), written
+`#tabs=NAME,NAME&on=NAME` (`#tabs=NAME,NAME` while the listing shows), with
+`&view=activity` after it while the listing's view is Recent activity, written
 in place without a history entry, and loading the index with that fragment
-opens them again; a name the listing does not have is dropped. Once the last
-tab closes, the address gets back the fragment it had before the first, or
-`#pages` after a load that opened tabs.
+opens them again; a name the listing does not have is dropped. Pressing Pages
+or Recent activity writes it again, so the view buttons keep the tabs. Once
+the last tab closes, the address is the view's own again: `#pages`, or none
+for Recent activity (with no views to switch, the fragment it had before the
+first tab).
 
 A tab that is not active shows a dot from `/api/seen`: amber, "new version"
 for a screen reader, when its page was published again since this reader last
@@ -693,7 +697,13 @@ since. The new-version dot wins, since the pod needs a reload first. The index
 script reads the route on load, when a tab is activated or closed, and when the
 window gets focus again; activating a tab first posts the framed page's
 revision to it, so what the reader sees there counts as read. When the route
-answers anything but 200 (signed out, or the demo), there are no dots.
+answers anything but 200 (signed out, or the demo), there are no dots. Each
+time the listing shows again over the tabs, it reads `/api/seen` and the
+activity route again, as when the browser brings the index back from its
+back-forward cache, so a page just read in a tab loses its "updated" mark.
+
+A framed page's own scripts take its clicks first: a link one of them handles,
+such as an image the image viewer opens, is left to it.
 
 Sorting, the search, the Labels menu, the marks and Recent activity are
 progressive enhancement from a script inlined in `index.html`, and the tabs

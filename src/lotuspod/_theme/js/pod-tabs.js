@@ -17,10 +17,15 @@
 //
 // The open tabs and the active one are kept in the address, #tabs=NAME,NAME
 // &on=NAME, written with history.replaceState, and a load with that fragment
-// opens them again, a name the listing does not have dropped. Once no tab is
-// open, the fragment goes back to what it was before the first. The tabs'
-// fragment names no view of the index's own script, Pages or Recent
-// activity, so the view stays as it was.
+// opens them again, a name the listing does not have dropped. The fragment
+// names the Pages view of the index's own script, or ends &view=activity
+// for Recent activity, and is written again each time that script shows a
+// view ("lotuspod:view"), whose buttons would otherwise drop it. Once no tab
+// is open, the fragment is the view's own again: #pages, or none.
+//
+// Each time the listing shows again, the index's own script is told
+// ("lotuspod:listing"), so it reads its marks and counts again, as when the
+// browser brings the index back from its back-forward cache.
 //
 // A tab that is not active shows a dot from the seen route: amber ("new
 // version") when its pod was published again since this reader last opened
@@ -34,7 +39,7 @@
   if (!main) return;
 
   const SEEN = "/api/seen";
-  const FRAGMENT = /^#tabs=([^&]*)(?:&on=(.*))?$/;
+  const FRAGMENT = /^#tabs=([^&]*)(?:&on=([^&]*))?(?:&view=activity)?$/;
 
   // Each pod the listing has: its title and its link, by name.
   const pods = new Map();
@@ -70,9 +75,9 @@
   let active = null;
   // The seen route's pages as last answered 200, else null.
   let seen = null;
-  // The fragment the address had before any tab was open. The index shows
-  // its Pages view under the tabs' fragment it was loaded with, so that is
-  // #pages.
+  // The fragment the address had before any tab was open, for an index
+  // with no views to switch. Under the tabs' fragment it was loaded with,
+  // that is #pages.
   let before = FRAGMENT.test(location.hash) ? "#pages" : location.hash;
 
   const find = (name) => open.find((pod) => pod.name === name) || null;
@@ -95,12 +100,23 @@
   const isIndex = (url) => url.origin === location.origin &&
     (url.pathname === root || url.pathname === `${root}index.html`);
 
+  // The view the index's own script shows, "pages" or "activity"; null
+  // while it has no views to switch.
+  const viewShown = () => {
+    const pressed = document.querySelector('.index-views button[aria-pressed="true"]');
+    return pressed ? pressed.dataset.view : null;
+  };
+
   const write = () => {
     if (!FRAGMENT.test(location.hash)) before = location.hash;
-    let fragment = before;
+    // Until the views can be switched, the view the address names stays.
+    const view = viewShown() ||
+      (FRAGMENT.test(location.hash) && location.hash.endsWith("&view=activity") ? "activity" : null);
+    let fragment = view === null ? before : view === "activity" ? "" : "#pages";
     if (open.length) {
       fragment = `#tabs=${open.map((pod) => encodeURIComponent(pod.name)).join(",")}`;
       if (active !== null) fragment += `&on=${encodeURIComponent(active)}`;
+      if (view === "activity") fragment += "&view=activity";
     }
     history.replaceState(history.state, "", location.pathname + location.search + fragment);
   };
@@ -205,6 +221,7 @@
     show();
     write();
     askSeen();
+    document.dispatchEvent(new CustomEvent("lotuspod:listing"));
   };
 
   const close = (name) => {
@@ -229,12 +246,14 @@
     }
   };
 
-  // Each document a frame loads handles its links, on this origin, after the
-  // page's own handlers. A document is taken as soon as it exists, before it
-  // has loaded: a new frame's first, and the next one whenever its page goes
-  // (a reload, such as the reload banner's), asked for until it is there.
-  // The frame's window cannot key this: it is the same object across loads,
-  // each of which brings a new document with no handler.
+  // Each document a frame loads handles its links, on this origin, from its
+  // window: a click reaches it last, after every handler of the page's own,
+  // which may take the click first (the image viewer's, on the document). A
+  // document is taken as soon as it exists, before it has loaded: a new
+  // frame's first, and the next one whenever its page goes (a reload, such as
+  // the reload banner's), asked for until it is there. The frame's window
+  // cannot key this: it is the same object across loads, each of which brings
+  // a new document and a new window behind it with no handler.
   const watched = new WeakSet();
   const WAIT = 50;
   const TRIES = 200;
@@ -249,9 +268,11 @@
     const listen = () => {
       const framed = current();
       if (!framed || framed.URL === "about:blank" || watched.has(framed)) return false;
+      const view = framed.defaultView;
+      if (!view) return false;
       watched.add(framed);
-      framed.addEventListener("click", (event) => follow(event, framed));
-      if (framed.defaultView) framed.defaultView.addEventListener("pagehide", soon);
+      view.addEventListener("click", (event) => follow(event, framed));
+      view.addEventListener("pagehide", soon);
       return true;
     };
     // Ask for the next document until it is there, the frame is gone, or
@@ -353,6 +374,9 @@
     if (active !== null) showListing();
   });
   document.addEventListener("click", (event) => follow(event, null));
+  document.addEventListener("lotuspod:view", () => {
+    if (open.length) write();
+  });
   window.addEventListener("focus", askSeen);
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible") askSeen();

@@ -638,15 +638,19 @@
 
       // The view the URL names: #pages the Pages view, no hash Recent
       // activity; with no switch, always Pages. The open tabs' fragment
-      // (#tabs=..., lotuspod-index.js) names no view, so the view stays.
+      // (#tabs=..., lotuspod-index.js) names Pages unless it ends
+      // &view=activity. The tabs are told the view shown ("lotuspod:view"),
+      // to write their fragment again over the one a view button leaves.
       const showView = () => {
-        if (!location.hash.startsWith("#tabs=")) {
-          view = feed && location.hash !== "#pages" ? "activity" : "pages";
-        }
+        const asked = location.hash.startsWith("#tabs=")
+          ? location.hash.endsWith("&view=activity")
+          : location.hash !== "#pages";
+        view = feed && asked ? "activity" : "pages";
         for (const button of viewButtons) {
           button.setAttribute("aria-pressed", String(button.dataset.view === view));
         }
         filter();
+        document.dispatchEvent(new CustomEvent("lotuspod:view"));
       };
 
       // Each press is a history entry, so the back button moves between the
@@ -741,6 +745,12 @@
       // its replies' "new, to you".
       window.addEventListener("pageshow", (event) => {
         if (!event.persisted) return;
+        askSeen();
+        askAgain();
+      });
+      // So does showing the listing again over the open tabs
+      // (lotuspod-index.js): a page just read there loses its mark too.
+      document.addEventListener("lotuspod:listing", () => {
         askSeen();
         askAgain();
       });
