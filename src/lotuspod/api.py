@@ -1,7 +1,7 @@
 """The reader's answers and comments over /api, for the verified reader only.
 
 serve hands a request here only after its Access assertion verifies, with
-the reader as actor. Seven routes:
+the reader as actor. Eight routes:
 
     POST /api/answers     {page, question, version, choice, note} or
                           {page, question, version, checked, note}
@@ -14,6 +14,7 @@ the reader as actor. Seven routes:
     GET  /api/revision?page=NAME
     POST /api/seen        {page, revision}
     GET  /api/seen
+    GET  /api/versions?page=NAME
 
 A read of the comments carries the page's current revision beside its
 threads, and /api/revision answers it alone, {revision}: an open page
@@ -26,6 +27,12 @@ before, null the first time. GET /api/seen, which takes no query (400
 invalid_query for any), answers {pages: {NAME: {revision, seen}}}, one entry
 for each page the reader has opened that serve still answers: `revision` the
 page's current one and `seen` the one recorded. It never names the reader.
+
+/api/versions answers {page, versions: [{commit, date, revision, current}]}:
+each commit of the artifacts repository that changed the page while it was
+visible, newest first (lotuspod.versions), `date` its committer time and
+`current` true on the newest only. It is empty when the output directory is
+not the top of its own repository.
 
 A POST is refused before anything is stored: 403 cross_origin when a browser
 sent it from another site, 415 when it is not JSON, 411 without a length,
@@ -98,14 +105,15 @@ from http import HTTPStatus
 from pathlib import Path
 from typing import BinaryIO, Callable, Mapping, Sequence
 
-from lotuspod import db, media, routing
+from lotuspod import db, media, routing, versions
 
 ANSWERS = "/api/answers"
 COMMENTS = "/api/comments"
 MEDIA = "/api/media"
 REVISION = "/api/revision"
 SEEN = "/api/seen"
-ROUTES = (ANSWERS, COMMENTS, MEDIA, REVISION, SEEN)
+VERSIONS = "/api/versions"
+ROUTES = (ANSWERS, COMMENTS, MEDIA, REVISION, SEEN, VERSIONS)
 METHODS = ("GET", "HEAD", "POST")
 # The methods of a route that is only read.
 READ_METHODS = ("GET", "HEAD")
@@ -389,22 +397,25 @@ def shown(value: object) -> object:
 
 
 class Api:
-    """The seven routes over one database; pages(name) is the Page serve
+    """The eight routes over one database; pages(name) is the Page serve
     would answer for name, or None; window is routing's owner window.
     media_dir is the media store and max_image_bytes its cap; without a
-    store, uploads and comments naming images answer 503."""
+    store, uploads and comments naming images answer 503. history reads the
+    pages' versions; without it every page has none."""
 
     def __init__(self, database: db.Database, pages: Callable[[str], Page | None],
                  window: float = routing.DEFAULT_WINDOW,
                  clock: Callable[[], float] = time.time,
                  media_dir: Path | None = None,
-                 max_image_bytes: int = media.DEFAULT_MAX_BYTES) -> None:
+                 max_image_bytes: int = media.DEFAULT_MAX_BYTES,
+                 history: versions.History | None = None) -> None:
         self.database = database
         self.pages = pages
         self.window = window
         self.clock = clock
         self.media_dir = media_dir
         self.max_image_bytes = max_image_bytes
+        self.history = history
         # Each reader's accepted uploads, oldest first, kept in memory only.
         self._uploads: dict[str, deque[float]] = {}
         self._uploads_lock = threading.Lock()
@@ -417,7 +428,7 @@ class Api:
 
     def _answer(self, method: str, path: str, query: str, headers: Message,
                 body: Body, actor: Mapping) -> Answer:
-        methods = READ_METHODS if path == REVISION else METHODS
+        methods = READ_METHODS if path in (REVISION, VERSIONS) else METHODS
         if method not in methods:
             return (HTTPStatus.METHOD_NOT_ALLOWED, {"error": "method_not_allowed"},
                     (("Allow", ", ".join(methods)),))
@@ -443,6 +454,8 @@ class Api:
                 payload = {"page": page.name, "questions": self.database.answers(page.name, asked=True)}
             elif path == REVISION:
                 payload = {"revision": page.revision}
+            elif path == VERSIONS:
+                payload = {"page": page.name, "versions": self._versions(page.name)}
             else:
                 payload = {"page": page.name, "revision": page.revision,
                            "threads": routing.threads(
@@ -453,6 +466,11 @@ class Api:
             return exc.status, {"error": exc.error}, ()
         except (sqlite3.Error, OSError):
             return HTTPStatus.SERVICE_UNAVAILABLE, {"error": "storage_unavailable"}, ()
+
+    def _versions(self, name: str) -> list[dict]:
+        listed = self.history.listed(name) if self.history is not None else []
+        return [{"commit": version.commit, "date": version.date, "revision": version.revision,
+                 "current": at == 0} for at, version in enumerate(listed)]
 
     @staticmethod
     def _query_page(query: str) -> str:

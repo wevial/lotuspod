@@ -19,7 +19,7 @@ three. A `--db` inside the artifacts directory is refused at start (exit 1):
 the artifacts repository commits everything there. serve never answers the
 file either way.
 
-Seven routes sit behind the Access check of [Who is reading: Cloudflare
+Eight routes sit behind the Access check of [Who is reading: Cloudflare
 Access](operating.md#who-is-reading-cloudflare-access) (with `POST /api/media`, under
 [Serve](operating.md#serve)); each row records the verified
 reader as `actor`, the page's `lotuspod:revision` when it was written as
@@ -81,6 +81,13 @@ twice.
   seen}}}`: one entry for each page this reader has a row for that serve
   still answers, `revision` the page's current one and `seen` the one last
   recorded. A page since hidden or removed drops out. It never names a reader.
+- `GET /api/versions?page=NAME` answers `{page, versions}`: each commit of
+  the artifacts repository that changed the page while it was visible, as
+  `{commit, date, revision, current}`, newest first and at most 200, `date`
+  its committer time in UTC and `current` true on the newest only (see
+  [Versions](publishing.md#versions)). It is empty when the output directory
+  is not the top of its own repository, and only read (any other method is
+  405).
 
 An open page notices when it is published again: every published page
 carries a revision, so it loads the page script, `lotuspod-page.js`, even
