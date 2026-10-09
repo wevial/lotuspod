@@ -608,7 +608,7 @@ test.describe('signed in', () => {
     }
   });
 
-  test('a pod the index does not list yet, or whose index does not answer in time, stays on its own', async ({ page }) => {
+  test('a pod the index does not list yet stays on its own, and one whose index answers slowly still opens there', async ({ page }) => {
     const errors = await watch(page);
     // The page script has run, and stayed: it folds each section under a button.
     const stayed = async (address: RegExp) => {
@@ -627,18 +627,45 @@ test.describe('signed in', () => {
     await page.waitForTimeout(500);
     await expect(page).toHaveURL(new RegExp(`/${fresh.name}\\.html#a-section$`));
 
-    // An index held past the wait: the page stays, and its script runs.
+    // The page's read of its index held past three seconds: the bare page
+    // runs nothing meanwhile, posts no opening, and goes once it answers.
     let release = () => {};
     const held = new Promise<void>((resolve) => { release = resolve; });
+    let asked = false;
     await page.route((url) => url.pathname === '/', async (route) => {
-      await held;
-      await route.continue().catch(() => {});
+      if (route.request().resourceType() === 'fetch') {
+        asked = true;
+        await held;
+      }
+      await route.continue();
+    });
+    // Each POST to the seen route, and whether the bare page sent it.
+    const posted: { bare: boolean; page: string }[] = [];
+    page.on('request', (request) => {
+      if (new URL(request.url()).pathname !== SEEN || request.method() !== 'POST') return;
+      const sender = request.frame();
+      posted.push({
+        bare: sender === page.mainFrame() && new URL(sender.url()).pathname === `/${ARTICLE.name}.html`,
+        page: request.postDataJSON()?.page ?? '',
+      });
     });
     await page.goto('about:blank');
     await page.goto(`/${ARTICLE.name}.html#second-section`);
+    await expect.poll(() => asked).toBe(true);
+    await page.waitForTimeout(3500);
+    await expect(page).toHaveURL(new RegExp(`/${ARTICLE.name}\\.html#second-section$`));
     await expect(page.locator('button.artifact-section-toggle')).toHaveCount(0);
-    await stayed(new RegExp(`/${ARTICLE.name}\\.html#second-section$`));
+    expect(posted).toEqual([]);
     release();
+
+    await expect(strip(page)).toHaveCount(1);
+    await expect(page).toHaveURL(new RegExp(`/#tabs=${ARTICLE.name}&on=${ARTICLE.name}$`));
+    await expectActive(page, ARTICLE);
+    await expect(framed(page, ARTICLE).locator('h1')).toHaveText(ARTICLE.title);
+    expect((await shownIn(page, ARTICLE)).hash).toBe('#second-section');
+    await expect.poll(() => posted.length).toBeGreaterThan(0);
+    await page.waitForTimeout(500);
+    expect(posted).toEqual([{ bare: false, page: ARTICLE.name }]);
     await page.unrouteAll({ behavior: 'ignoreErrors' });
     expect(errors).toEqual([]);
   });

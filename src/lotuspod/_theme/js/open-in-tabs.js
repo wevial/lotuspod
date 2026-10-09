@@ -7,10 +7,10 @@
 // index script (js/pod-tabs.js) reads. So a pod opened from a link or a
 // bookmark has the tabs and the finder too, and the bare page leaves no
 // history entry. It goes only once that index answers itself, 2xx and not
-// redirected, within WAIT, with a row for this pod in its listing, as
-// pod-tabs.js reads it: a page rendered with no index beside it, one the
-// index does not list yet, one whose index sends it back to a page (the
-// demo's / and /index.html) or does not answer in time, stays, as does a
+// redirected, however long it takes, with a row for this pod in its
+// listing, as pod-tabs.js reads it: a page rendered with no index beside
+// it, one the index does not list yet, one whose index sends it back to a
+// page (the demo's / and /index.html) or cannot be read, stays, as does a
 // file opened from disk.
 //
 // This source opens the page script's one statement: it is a function handed
@@ -20,9 +20,6 @@
 // The rest waits for the index's answer only on a load that may go.
 (function () {
   "use strict";
-
-  // How long the index may take to answer before the page stays, in ms.
-  var WAIT = 3000;
 
   // The index this page may open in, its name and its file, or null when
   // it stays.
@@ -78,9 +75,7 @@
         page();
         return;
       }
-      var stopped = new AbortController();
-      var timer = setTimeout(function () { stopped.abort(); }, WAIT);
-      fetch(there.index, { credentials: "same-origin", cache: "no-store", signal: stopped.signal })
+      fetch(there.index, { credentials: "same-origin", cache: "no-store" })
         .then(function (response) {
           if (!response.ok || response.redirected) {
             return false;
@@ -88,7 +83,6 @@
           return response.text().then(function (html) { return lists(html, there.name); });
         })
         .then(function (go) {
-          clearTimeout(timer);
           if (!go) {
             page();
             return;
@@ -102,7 +96,6 @@
           }
           location.replace(there.index + fragment);
         }, function () {
-          clearTimeout(timer);
           page();
         });
     };
