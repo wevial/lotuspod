@@ -229,21 +229,43 @@
     }
   };
 
-  // A framed page's clicks reach its window last, after the page's own
-  // handlers: it is on this origin. The window a new frame starts with is
-  // kept for its first page, so its links are handled before that page has
-  // loaded; each later load (a reload) brings a window of its own.
+  // Each document a frame loads handles its links, on this origin, after the
+  // page's own handlers. A document is taken as soon as it exists, before it
+  // has loaded: a new frame's first, and the next one whenever its page goes
+  // (a reload, such as the reload banner's), asked for until it is there.
+  // The frame's window cannot key this: it is the same object across loads,
+  // each of which brings a new document with no handler.
   const watched = new WeakSet();
+  const WAIT = 50;
+  const TRIES = 200;
   const watch = (frame) => {
-    let framed = null;
-    try {
-      framed = frame.contentWindow;
-    } catch (ignored) {
-      return;
+    const current = () => {
+      try {
+        return frame.contentDocument;
+      } catch (ignored) {
+        return null;
+      }
+    };
+    const listen = () => {
+      const framed = current();
+      if (!framed || framed.URL === "about:blank" || watched.has(framed)) return false;
+      watched.add(framed);
+      framed.addEventListener("click", (event) => follow(event, framed));
+      if (framed.defaultView) framed.defaultView.addEventListener("pagehide", soon);
+      return true;
+    };
+    // Ask for the next document until it is there, the frame is gone, or
+    // its load takes it anyway.
+    function soon() {
+      let tries = 0;
+      const ask = () => {
+        if (!frame.isConnected || listen() || ++tries > TRIES) return;
+        setTimeout(ask, WAIT);
+      };
+      setTimeout(ask, 0);
     }
-    if (!framed || watched.has(framed)) return;
-    watched.add(framed);
-    framed.addEventListener("click", (event) => follow(event, framed.document));
+    frame.addEventListener("load", listen);
+    return soon;
   };
 
   // Add the pod's tab just after the active one, its frame at the address
@@ -274,10 +296,10 @@
       if (active !== name) activate(name);
     });
     cross.addEventListener("click", () => close(name));
-    frame.addEventListener("load", () => watch(frame));
+    const soon = watch(frame);
     frame.src = href + hash;
     frames.append(frame);
-    watch(frame);
+    soon();
     return pod;
   };
 

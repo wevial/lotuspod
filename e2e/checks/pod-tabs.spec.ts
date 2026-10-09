@@ -230,6 +230,41 @@ test.describe('signed in', () => {
     expect(errors).toEqual([]);
   });
 
+  test('a framed pod reloaded still opens its links in tabs, before and after it has loaded again', async ({ page }) => {
+    const errors = await watch(page);
+    const readyState = () => frame(page, CONTEXT).evaluate((node) =>
+      (node as HTMLIFrameElement).contentDocument?.readyState);
+    await openIndex(page);
+    await openFromListing(page, CONTEXT);
+    await expect.poll(readyState).toBe('complete');
+
+    // A reload, as the reload banner's: the old page is marked, so the
+    // reloaded one is told apart from it.
+    await frame(page, CONTEXT).evaluate((node) => {
+      const framed = (node as HTMLIFrameElement).contentWindow as Window;
+      framed.document.body.dataset.before = 'reload';
+      framed.location.reload();
+    });
+    await expect(framed(page, CONTEXT).locator('body:not([data-before])')).toHaveCount(1);
+    await expect(framed(page, CONTEXT).locator('h1')).toHaveText(CONTEXT.title);
+    // Straight away, loaded or not.
+    const link = framed(page, CONTEXT).getByRole('link', { name: 'the pump notes' }).first();
+    await link.click();
+    await expect.poll(() => openNames(page)).toEqual([CONTEXT.name, ARTICLE.name]);
+    await expectActive(page, ARTICLE);
+    await expect(page).toHaveURL(/#tabs=capture-decision-context,capture-article&on=capture-article$/);
+
+    // Once it has loaded, too.
+    await close(page, ARTICLE).click();
+    await expectActive(page, CONTEXT);
+    await expect.poll(readyState).toBe('complete');
+    await link.click();
+    await expect.poll(() => openNames(page)).toEqual([CONTEXT.name, ARTICLE.name]);
+    await expectActive(page, ARTICLE);
+    await expect(framed(page, CONTEXT).locator('h1')).toHaveText(CONTEXT.title);
+    expect(errors).toEqual([]);
+  });
+
   test('closing a tab activates its right neighbour, else its left, else the listing; the address reopens tabs', async ({ page }) => {
     const errors = await watch(page);
     // The activity route answers once a tab is open: the tabs' fragment then
