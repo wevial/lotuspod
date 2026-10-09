@@ -131,12 +131,13 @@ twice.
     visible, read from git in at most two processes: `actor` the handle the
     version's `lotuspod:owner` names, or null, and `first` true when the page
     had no visible version before it. `summary` compares its sections with
-    the page before it, as `/api/changes` does: "Alpha and Beta changed;
+    the visible version before it, as `/api/changes` does: "Alpha and Beta changed;
     Delta added; Gamma removed", each part naming at most three sections and
     then "and N more", a part left out when empty, "new version" when no
     section changed, and "" on a first version. A commit whose
-    `lotuspod:revision` is the page's before it is not an event, and outside
-    a repository there are none;
+    `lotuspod:revision` is that of the visible version before it, as a page
+    hidden and shown again unchanged, is not an event; a merge is one when
+    it changed the page; outside a repository there are none;
   - `{kind: "comment", at, id, thread, section, sectionTitle, question?,
     actor, mine}`, a thread's first comment, with `question` on a thread on
     a decision;

@@ -1913,6 +1913,12 @@ def serve_allow_list(out_dir: Path) -> frozenset[str]:
     return frozenset(allowed)
 
 
+def served_page_names(out_dir: Path) -> list[str]:
+    """The names of the pages serve answers, in order."""
+    return sorted(file[:-len(".html")] for file in serve_allow_list(out_dir)
+                  if file.endswith(".html") and is_page_name(file))
+
+
 def api_page(out_dir: Path, name: str) -> api.Page | None:
     """The page serve answers as NAME.html, as /api records it; None when
     serve would not answer it."""
@@ -2254,7 +2260,7 @@ def _make_server(out_dir: Path, host: str, port: int,
     if db_path is not None:
         routes = api.Api(db.Database(db_path), partial(api_page, out_dir), window,
                          media_dir=media.media_dir(out_dir), max_image_bytes=max_image_bytes,
-                         history=history)
+                         history=history, names=partial(served_page_names, out_dir))
     handler = partial(
         _AllowListHandler, directory=str(out_dir), root=out_dir, verifier=verifier,
         api=routes, history=history,

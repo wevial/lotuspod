@@ -431,6 +431,14 @@ def named(actor: object) -> object:
     return {"kind": "human", "name": email.rsplit("@", 1)[0]}
 
 
+def utc_time(text: str) -> datetime.datetime:
+    """An ISO 8601 time, ending in Z or an offset; ValueError for anything
+    else. Before Python 3.11, fromisoformat() takes no Z."""
+    if text[-1:] in ("Z", "z"):
+        text = text[:-1] + "+00:00"
+    return datetime.datetime.fromisoformat(text)
+
+
 def shown(value: object) -> object:
     """value, a route's payload, with every actor in it named."""
     if isinstance(value, Mapping):
@@ -446,14 +454,16 @@ class Api:
     would answer for name, or None; window is routing's owner window.
     media_dir is the media store and max_image_bytes its cap; without a
     store, uploads and comments naming images answer 503. history reads the
-    pages' versions; without it every page has none."""
+    pages' versions; without it every page has none. names() is the names
+    of the pages serve answers, whose versions the activity route reads."""
 
     def __init__(self, database: db.Database, pages: Callable[[str], Page | None],
                  window: float = routing.DEFAULT_WINDOW,
                  clock: Callable[[], float] = time.time,
                  media_dir: Path | None = None,
                  max_image_bytes: int = media.DEFAULT_MAX_BYTES,
-                 history: versions.History | None = None) -> None:
+                 history: versions.History | None = None,
+                 names: Callable[[], Sequence[str]] = tuple) -> None:
         self.database = database
         self.pages = pages
         self.window = window
@@ -461,6 +471,7 @@ class Api:
         self.media_dir = media_dir
         self.max_image_bytes = max_image_bytes
         self.history = history
+        self.names = names
         # Each reader's accepted uploads, oldest first, kept in memory only.
         self._uploads: dict[str, deque[float]] = {}
         self._uploads_lock = threading.Lock()
@@ -528,7 +539,7 @@ class Api:
         fields = self._query(query, ("before",) if query else ())
         try:
             if fields:
-                moment = datetime.datetime.fromisoformat(fields["before"])
+                moment = utc_time(fields["before"])
                 if moment.utcoffset() != datetime.timedelta(0):
                     raise ValueError("not UTC")
                 end = moment.timestamp()
@@ -552,9 +563,7 @@ class Api:
             MAX_EVENTS + 1)
         truncated = False
         if self.history is not None:
-            recent = self.history.recent(datetime.datetime.fromisoformat(start),
-                                         datetime.datetime.fromisoformat(end),
-                                         lambda name: served(name) is not None)
+            recent = self.history.recent(utc_time(start), utc_time(end), list(self.names()))
             older = older or recent.older
             truncated = recent.truncated
             for change in recent.changes:

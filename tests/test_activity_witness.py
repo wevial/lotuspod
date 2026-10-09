@@ -343,6 +343,119 @@ class VersionRuleTests(ActivityWitness):
         self.assertEqual(said(), "new version")
 
 
+class HistoryTests(ActivityWitness):
+    """What comes before a version is the page's visible version before it,
+    however many hidden ones or other files' commits come between."""
+
+    def test_a_page_hidden_between_two_versions_keeps_its_earlier_one(self):
+        self.repository(self.out)
+        owned = ("--owner", "hermes", "--credential", str(self.hermes))
+        self.publish_at("a", A_FIRST, "2026-10-01T12:00:00+00:00", *owned)
+        self.hide("a", "2026-10-02T12:00:00+00:00")
+        self.publish_at("a", A_SECOND, "2026-10-06T12:00:00+00:00", *owned)
+        self.serve(now="2026-10-12T12:00:00+00:00")
+
+        answer = self.activity()
+        (newest,) = self.versions_of(answer, "a")
+        self.assertEqual((newest["first"], newest["summary"]),
+                         (False, "Beta changed; Delta added"))
+        self.assertIs(answer["older"], True)
+        status, _, listed = self.api("GET", "/api/versions?page=a")
+        self.assertEqual(status, 200, listed)
+        self.assertEqual([entry["summary"] for entry in listed["versions"]],
+                         ["Beta changed; Delta added", ""])
+
+    def test_a_page_reopened_at_its_earlier_revision_is_no_new_version(self):
+        self.repository(self.out)
+        self.publish_at("a", A_FIRST, "2026-10-01T12:00:00+00:00")
+        self.hide("a", "2026-10-02T12:00:00+00:00")
+        self.publish_at("a", A_FIRST, "2026-10-06T12:00:00+00:00")
+        self.serve(now="2026-10-12T12:00:00+00:00")
+
+        answer = self.activity()
+        self.assertEqual(answer["pages"], [])
+        self.assertIs(answer["older"], True)
+
+    def commit_file(self, path: str, text: str, at: str) -> None:
+        file = self.out / path
+        file.parent.mkdir(parents=True, exist_ok=True)
+        file.write_text(text, encoding="utf-8")
+        env = dict(os.environ, GIT_COMMITTER_DATE=at, GIT_AUTHOR_DATE=at)
+        for argv in (["add", "-A"], ["commit", "-q", "-m", path]):
+            done = subprocess.run(["git", "-C", str(self.out), *argv], capture_output=True,
+                                  env=env)
+            self.assertEqual(done.returncode, 0, done.stderr)
+
+    def test_other_files_and_hidden_pages_do_not_count_toward_the_cap(self):
+        self.repository(self.out)
+        self.publish_at("a", A_FIRST, "2026-10-02T12:00:00+00:00")
+        for n in range(4):
+            self.commit_file("docs/source.html", f"<p>{n}</p>", f"2026-10-03T12:0{n}:00+00:00")
+            self.hide("secret", f"2026-10-04T12:0{n}:00+00:00")
+            self.commit_file("secret.html", f"<p>{n}</p>", f"2026-10-04T13:0{n}:00+00:00")
+        routes = self.serve(now="2026-10-07T12:00:00+00:00")
+
+        with mock.patch.object(versions, "MAX_RECENT_COMMITS", 3):
+            answer = self.activity()
+        self.assertIsNotNone(routes)
+        self.assertEqual([entry["page"] for entry in answer["pages"]], ["a"])
+        self.assertEqual((answer["older"], answer["truncated"]), (False, False))
+
+    def test_the_cap_reached_exactly_is_no_truncation_and_past_it_is(self):
+        self.repository(self.out)
+        for n in range(3):
+            self.publish_at(f"p{n}", B_FIRST, f"2026-10-0{n + 2}T12:00:00+00:00")
+        self.serve(now="2026-10-07T12:00:00+00:00")
+
+        with mock.patch.object(versions, "MAX_RECENT_COMMITS", 3):
+            exact = self.activity()
+        with mock.patch.object(versions, "MAX_RECENT_COMMITS", 2):
+            past = self.activity()
+        self.assertEqual(len(exact["pages"]), 3)
+        self.assertEqual((exact["older"], exact["truncated"]), (False, False))
+        self.assertEqual((past["older"], past["truncated"]), (True, True))
+
+    def test_a_merge_that_resolves_a_conflict_is_a_version(self):
+        self.repository(self.out)
+        self.publish_at("a", A_FIRST, "2026-10-01T12:00:00+00:00")
+        self.assertEqual(git(self.out, "checkout", "-q", "-b", "side").returncode, 0)
+        self.publish_at("a", A_SECOND, "2026-10-02T12:00:00+00:00")
+        self.assertEqual(git(self.out, "checkout", "-q", "main").returncode, 0)
+        self.publish_at("a", A_FIRST.replace("The pond freezes.", "The pond thaws."),
+                        "2026-10-03T12:00:00+00:00")
+        self.assertNotEqual(git(self.out, "merge", "-q", "side").returncode, 0)
+        merged = A_SECOND.replace("The pond freezes.", "The pond thaws.")
+        self.publish_at("a", merged, "2026-10-04T12:00:00+00:00")
+        self.assertEqual(git(self.out, "rev-list", "--count", "--merges", "HEAD").stdout.strip(),
+                         b"1")
+        merge = git(self.out, "rev-parse", "HEAD").stdout.decode().strip()
+        self.serve(now="2026-10-07T12:00:00+00:00")
+
+        events = self.versions_of(self.activity(), "a")
+        self.assertEqual(events[0]["commit"], merge)
+        self.assertEqual(events[0]["at"], "2026-10-04T12:00:00.000Z")
+        self.assertEqual(len(events), 4)
+
+
+class ParseTests(unittest.TestCase):
+    def test_a_z_time_parses_where_fromisoformat_takes_none(self):
+        real = datetime.datetime
+
+        class Strict(real):
+            @classmethod
+            def fromisoformat(cls, text):
+                if text.endswith(("Z", "z")):
+                    raise ValueError("Invalid isoformat string")
+                return real.fromisoformat(text)
+
+        # The datetime of Python 3.9 and 3.10, for api and versions alike.
+        with mock.patch.object(datetime, "datetime", Strict):
+            self.assertEqual(api.utc_time("2026-10-07T12:00:00.000Z").timestamp(),
+                             moment("2026-10-07T12:00:00+00:00"))
+            self.assertEqual(versions._moment("2026-10-07T12:00:00Z").timestamp(),
+                             moment("2026-10-07T12:00:00+00:00"))
+
+
 class RefusalTests(ActivityWitness):
     def test_a_bad_before_an_extra_key_and_no_assertion_are_refused(self):
         self.site()
