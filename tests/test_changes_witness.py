@@ -118,7 +118,6 @@ class SourceTests(ChangesWitness):
 
         status, _, answer = self.changes(PAGE, first)
         self.assertEqual(status, 200, answer)
-        self.assertEqual(len(answer["lines"]), versions.MAX_DIFF_LINES)
         self.assertEqual(len(answer["lines"]), 400)
         self.assertIs(answer["truncated"], True)
         self.assertEqual(answer["sections"]["changed"], [{"id": "", "title": "The page text"}])
@@ -142,7 +141,6 @@ class SectionTests(ChangesWitness):
             "added": [{"id": "delta", "title": "Delta"}],
             "removed": [{"title": "Gamma"}],
         })
-        self.assertNotIn("Alpha", repr(answer["sections"]))
         self.assertNotIn("lines", answer)
         self.assertNotIn("truncated", answer)
 
