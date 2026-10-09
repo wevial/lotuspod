@@ -372,10 +372,24 @@
   }
 }
 
-/* Narrower than the title bar holds both controls whole: the title and its
-   separator give way first, then Next open's words to an ellipsis, its
-   arrow kept, and the count stays whole. */
+/* Narrower than the title bar holds both controls whole: the title gives
+   way first, then Next open's words to an ellipsis, its arrow kept, and the
+   count stays whole. */
 @media (max-width: 22rem) {
+  .artifact-topbar:has(.artifact-review-bar) .artifact-topbar-title {
+    flex-shrink: 1000;
+  }
+
+  .artifact-review-bar {
+    flex: 0 1 auto;
+    min-width: 0;
+  }
+}
+
+/* Narrower still the title has shrunk to nothing, yet it, its separator and
+   their gaps still take the room the arrow needs: they leave, and the title
+   bar and both controls take less padding. */
+@media (max-width: 19.5rem) {
   .artifact-topbar:has(.artifact-review-bar) .artifact-topbar-sep,
   .artifact-topbar:has(.artifact-review-bar) .artifact-topbar-title {
     display: none;
@@ -383,11 +397,6 @@
 
   .artifact-topbar:has(.artifact-review-bar) {
     padding-inline: 0.5rem;
-  }
-
-  .artifact-review-bar {
-    flex: 0 1 auto;
-    min-width: 0;
   }
 
   .artifact-topbar a.artifact-review-next,
