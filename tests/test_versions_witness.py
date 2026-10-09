@@ -11,10 +11,8 @@ process, each still run through the real subprocess.
 from __future__ import annotations
 
 import io
-import os
 import subprocess
 import sys
-import tempfile
 import threading
 import unittest
 import urllib.error
@@ -210,39 +208,22 @@ class ViewTests(VersionsWitness):
                     self.assertEqual((status, data), (200, current))
 
 
-class GitProcessTests(unittest.TestCase):
+class GitProcessTests(VersionsWitness):
     """The git processes one list, its repeat and one view start, counted in
     a server run in this process."""
 
-    def setUp(self):
-        tmp = tempfile.TemporaryDirectory()
-        self.addCleanup(tmp.cleanup)
-        self.tmp = Path(tmp.name).resolve()
-        self.out = self.tmp / "site"
-
     def test_a_list_starts_two_a_repeat_one_and_a_view_two(self):
-        subprocess.run(["git", "init", "-q", "-b", "main", str(self.out)], check=True)
-        for key, value in (("user.name", "Witness"), ("user.email", "witness@example.com"),
-                           ("commit.gpgsign", "false")):
-            subprocess.run(["git", "-C", str(self.out), "config", key, value], check=True)
-        env = dict(os.environ, PYTHONPATH=str(REPO / "src"))
-        for text in TEXTS:
-            path = self.tmp / f"{PAGE}.md"
-            path.write_text(source(text), encoding="utf-8")
-            subprocess.run([sys.executable, "-m", "lotuspod", "publish", str(path), "--local",
-                            "--out-dir", str(self.out)], env=env, check=True,
-                           capture_output=True)
-        commits = subprocess.run(["git", "-C", str(self.out), "log", "--format=%H"],
-                                 capture_output=True, text=True, check=True).stdout.split()
+        self.three_publishes()
+        commits = self.commits(self.out, PAGE)
 
         verifier = access.Verifier(access.parse_config(access_keys.config_section()))
         server = cli._make_server(self.out, "127.0.0.1", 0, verifier=verifier,
-                                  db_path=self.tmp / "lotuspod.sqlite3")
+                                  db_path=self.db)
         self.addCleanup(server.server_close)
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         self.addCleanup(server.shutdown)
-        port = server.server_address[1]
+        self.port = server.server_address[1]
 
         started = []
         real = subprocess.run
@@ -252,20 +233,12 @@ class GitProcessTests(unittest.TestCase):
                 started.append(argv)
             return real(argv, *args, **kwargs)
 
-        def get(path):
-            request = urllib.request.Request(
-                f"http://127.0.0.1:{port}{path}",
-                headers={"Cf-Access-Jwt-Assertion": access_keys.assertion()})
-            with urllib.request.urlopen(request, timeout=30) as response:
-                self.assertEqual(response.status, 200)
-                return response.read()
-
         counts = []
         with mock.patch.object(subprocess, "run", spy), redirect_stderr(io.StringIO()):
             for path in (f"/api/versions?page={PAGE}", f"/api/versions?page={PAGE}",
                          f"/{PAGE}.html?version={commits[1]}"):
                 before = len(started)
-                get(path)
+                self.assertEqual(self.get(path, token=access_keys.assertion())[0], 200)
                 counts.append(len(started) - before)
         self.assertTrue(all(argv[0] == "git" for argv in started), started)
         self.assertLessEqual(counts[0], 2, started)

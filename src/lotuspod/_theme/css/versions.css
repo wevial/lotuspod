@@ -38,13 +38,16 @@
   margin: 0 0 1rem;
 }
 
-.artifact-versions-back {
+.artifact-versions-back,
+.artifact-versions-view {
   color: var(--color-sky);
   text-decoration: none;
 }
 
 .artifact-versions-back:hover,
-.artifact-versions-back:focus-visible {
+.artifact-versions-back:focus-visible,
+.artifact-versions-view:hover,
+.artifact-versions-view:focus-visible {
   color: var(--color-pale-sky);
   text-decoration: underline;
 }
@@ -107,15 +110,7 @@
 }
 
 .artifact-versions-view {
-  color: var(--color-sky);
   font-size: 0.9rem;
-  text-decoration: none;
-}
-
-.artifact-versions-view:hover,
-.artifact-versions-view:focus-visible {
-  color: var(--color-pale-sky);
-  text-decoration: underline;
 }
 
 .artifact-versions-more {
