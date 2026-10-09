@@ -173,13 +173,6 @@
   content: "\2193";
 }
 
-.episode-number {
-  color: var(--color-lavender);
-  font-family: var(--font-mono);
-  font-size: 0.85rem;
-  white-space: nowrap;
-}
-
 .episode-title a {
   color: var(--color-white);
   font-family: var(--font-display);

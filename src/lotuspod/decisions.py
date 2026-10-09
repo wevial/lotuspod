@@ -43,7 +43,7 @@ from dataclasses import dataclass, field, replace
 from html.parser import HTMLParser
 
 # cli imports this module too: only names used at call time are read from it.
-from lotuspod import cli, comments
+from lotuspod import api, cli, comments
 
 HEADING = "decisions for the maintainer"
 CHECKLIST_HEADING = "checklist for the maintainer"
@@ -62,6 +62,11 @@ _KEY_COLUMN = {DECISIONS: "question", CHECKLIST: "item"}
 _CHECKLIST_COLUMNS = frozenset({"#", "item", "default"})
 _CHECKLIST_DEFAULTS = {"on": True, "off": False}
 VERSION_LENGTH = 12
+# An option's value past OPTION_BOUND characters is cut to them, back to a
+# hyphen, and ends in "-" and OPTION_HASH hex digits of its full slug: with
+# room left for _unique_id's "-N", it is a choice the answers route takes.
+OPTION_BOUND = api.MAX_NAME - 20
+OPTION_HASH = 8
 # The options a row with a Default and no Options column offers.
 ACCEPT = ("accept", "Accept the default")
 OTHER = ("other", "Something else")
@@ -236,6 +241,18 @@ def _cell(row: list[dict], index: int | None) -> dict:
     return row[index]
 
 
+def option_value(label: str) -> str:
+    """The value of the option labelled label: its slug, bounded."""
+    slug = cli.slugify(label)
+    if len(slug) <= OPTION_BOUND:
+        return slug
+    cut = slug[:OPTION_BOUND]
+    if slug[OPTION_BOUND] != "-" and "-" in cut:
+        cut = cut[:cut.rindex("-")]
+    digest = hashlib.sha256(slug.encode("utf-8")).hexdigest()[:OPTION_HASH]
+    return f"{cut.rstrip('-')}-{digest}"
+
+
 def _questions(rows: list[list[dict]], taken: set[str]) -> list[dict] | None:
     """Each row's question; None when a row does not make one.
 
@@ -264,7 +281,7 @@ def _questions(rows: list[list[dict]], taken: set[str]) -> list[dict] | None:
             values: set[str] = set()
             options = []
             for label in labels:
-                value = cli._unique_id(cli.slugify(label), values)
+                value = cli._unique_id(option_value(label), values)
                 values.add(value)
                 options.append((value, label))
         elif columns["default"] is not None and default["text"]:
@@ -275,8 +292,9 @@ def _questions(rows: list[list[dict]], taken: set[str]) -> list[dict] | None:
             return None
         marked = ""
         if columns["options"] is not None and default["text"]:
-            wanted = cli.slugify(default["text"])
-            marked = next((value for value, label in options if cli.slugify(label) == wanted), "")
+            wanted = option_value(default["text"])
+            marked = next((value for value, label in options if option_value(label) == wanted),
+                          "")
         questions.append({
             "id": question_id,
             "number": _cell(row, columns["#"])["html"],

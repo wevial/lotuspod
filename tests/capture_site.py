@@ -83,20 +83,34 @@ OTHER = "claude-3f9a2c"
 OTHER_OPERATIONS = ("pull", "claim", "reply")
 
 
+# The time publish stamps a page updated: later on SAMPLE_DATE, so a published
+# page's header still names one day and the index's Updated column two times.
+SAMPLE_UPDATED = f"{SAMPLE_DATE}T12:00:00+00:00"
+
+
 class _SampleDay(datetime.date):
     @classmethod
     def today(cls) -> datetime.date:
         return cls.fromisoformat(SAMPLE_DATE)
 
 
-def _sample_clock() -> types.ModuleType:
-    """The datetime module as cli.py reads it, with today() held at SAMPLE_DATE.
+class _SampleTime(datetime.datetime):
+    @classmethod
+    def now(cls, tz: datetime.tzinfo | None = None) -> datetime.datetime:
+        return cls.fromisoformat(SAMPLE_UPDATED).astimezone(tz)
 
-    `index` has no --date: it stamps the page with date.today().
+
+def _sample_clock() -> types.ModuleType:
+    """The datetime module as cli.py reads it, with today() held at SAMPLE_DATE
+    and now() at SAMPLE_UPDATED.
+
+    `index` has no --date: it stamps the page with date.today(). `publish`
+    stamps the page with datetime.now().
     """
     clock = types.ModuleType("datetime")
     clock.__dict__.update(vars(datetime))
     clock.date = _SampleDay
+    clock.datetime = _SampleTime
     return clock
 
 
@@ -173,6 +187,21 @@ SECTION_QUESTIONS_BODY = """\
 <thead><tr><th>#</th><th>Question</th><th>Options</th><th>Default</th><th>Why it matters</th></tr></thead>
 <tbody>
 <tr><td>D2</td><td>Which heater?</td><td>Electric / Solar</td><td>Electric</td><td>The pump shares its outlet.</td></tr>
+</tbody>
+</table>
+"""
+
+# A plan page whose one question offers an option whose label slugifies to
+# far more than the answers route takes as a choice, and a short one. No
+# comment boxes and no diagram, so the page needs no network.
+LONG_OPTION_BODY = """\
+<p>A sample plan for captures: one option is a long sentence.</p>
+<h2>Reviews</h2>
+<h3>Decisions for the maintainer</h3>
+<table>
+<thead><tr><th>#</th><th>Question</th><th>Options</th></tr></thead>
+<tbody>
+<tr><td>D1</td><td>How do reviews weigh evidence?</td><td>Evidence levels: reproduced or traced can block; a concern is answered but never blocks, at most 3 per round, high-tier ones also go to the operator / No</td></tr>
 </tbody>
 </table>
 """
@@ -528,6 +557,7 @@ SAMPLE_PAGES = (
     ("capture-decisions", "Capture decisions", DECISIONS_BODY, ()),
     ("capture-section-questions", "Capture section questions", SECTION_QUESTIONS_BODY, ()),
     ("capture-checklist", "Capture checklist", CHECKLIST_BODY, ()),
+    ("capture-long-option", "Capture long option", LONG_OPTION_BODY, ()),
     ("capture-sections", "Capture sections", SECTIONS_BODY,
      ("--comments", "--owner", OWNER)),
     ("capture-answered", "Capture answered", ANSWERED_BODY,

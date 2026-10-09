@@ -732,6 +732,76 @@ A heater keeps a hole in the ice.
         self.assertEqual(after["decision-d2"].label(current["choice"]), "Solar")
 
 
+# Two 200-character labels that share their first 150 characters.
+SHARED = ("Evidence levels: reproduced or traced can block; a concern is answered but "
+          "never blocks, at most three per round, and the high-tier ones also go to the "
+          "operator")[:150]
+LONG_LABEL = SHARED + "y" * 50
+OTHER_LONG_LABEL = SHARED + "x" * 50
+
+
+def long_options(options: str, default: str = "") -> str:
+    return f"""\
+# Pond plan
+
+## Decisions for the maintainer
+
+| # | Question | Options | Default |
+| --- | --- | --- | --- |
+| D1 | How do reviews weigh evidence? | {options} | {default} |
+"""
+
+
+class LongOptionValueTests(DecisionsTestCase):
+    """An option's value is bounded to what the answers route accepts; its
+    label is shown in full."""
+
+    def test_a_long_label_gets_a_bounded_hashed_value_and_shows_in_full(self):
+        form = read(self.render_markdown("pond", long_options(f"{LONG_LABEL} / No"))).forms[0]
+        values = [radio["value"] for radio in form["radios"]]
+        self.assertLessEqual(len(values[0]), 100)
+        self.assertRegex(values[0], r"-[0-9a-f]{8}$")
+        self.assertTrue(cli.slugify(LONG_LABEL).startswith(values[0][:-9]))
+        self.assertEqual(values[1], "no")
+        self.assertEqual([label["text"] for label in form["labels"]], [LONG_LABEL, "No"])
+
+    def test_long_labels_sharing_a_prefix_get_distinct_values(self):
+        form = read(self.render_markdown(
+            "pond", long_options(f"{LONG_LABEL} / {OTHER_LONG_LABEL}"))).forms[0]
+        values = [radio["value"] for radio in form["radios"]]
+        self.assertNotEqual(values[0], values[1])
+        for value in values:
+            self.assertLessEqual(len(value), 100)
+            self.assertRegex(value, r"-[0-9a-f]{8}$")
+
+    def test_short_labels_keep_their_slug(self):
+        labels = ["Sonnet", "A" * 40 + " " + "b" * 39]
+        form = read(self.render_markdown("pond", long_options(" / ".join(labels)))).forms[0]
+        self.assertEqual([radio["value"] for radio in form["radios"]],
+                         [cli.slugify(label) for label in labels])
+
+    def test_a_default_naming_a_long_option_marks_it(self):
+        form = read(self.render_markdown(
+            "pond", long_options(f"No / {LONG_LABEL}", default=LONG_LABEL))).forms[0]
+        self.assertEqual([label["marks"] for label in form["labels"]], [[], ["default"]])
+
+
+class LongOptionTests(ServedTestCase):
+    """An option offered on the page, however long its label, can be saved."""
+
+    def test_a_long_option_the_page_offers_saves(self):
+        label = ("Evidence levels: reproduced or traced can block; a concern is answered "
+                 "but never blocks, at most 3 per round, high-tier ones also go to the operator")
+        forms = self.publish(long_options(f"{label} / No"))
+        asked = forms["decision-d1"]
+        value = next(value for value, shown in asked.options if shown == label)
+        status, saved = self.ask("POST", "/api/answers", {
+            "page": "pond", "question": "decision-d1", "version": asked.version,
+            "choice": value, "note": "",
+        })
+        self.assertEqual(status, 201, saved)
+
+
 class AnswersJsonTests(ServedTestCase):
     """lotuspod answers --json prints what GET /api/answers answers, asked
     included, but for each reader's address."""
