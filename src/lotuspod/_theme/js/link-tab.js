@@ -17,8 +17,15 @@
     if (url.origin === location.origin || !/^https?:$/.test(url.protocol)) {
       return;
     }
-    link.target = "_blank";
-    link.relList.add("noopener", "noreferrer");
+    // Attributes, not properties: an SVG link's `target` cannot be set.
+    var rel = (link.getAttribute("rel") || "").split(/\s+/).filter(Boolean);
+    ["noopener", "noreferrer"].forEach(function (token) {
+      if (rel.indexOf(token) < 0) {
+        rel.push(token);
+      }
+    });
+    link.setAttribute("target", "_blank");
+    link.setAttribute("rel", rel.join(" "));
   }
 
   all(".artifact-body a[href]:not([target])").forEach(linkTab);

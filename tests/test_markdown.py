@@ -32,6 +32,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from html.parser import HTMLParser
 from pathlib import Path
@@ -487,7 +488,8 @@ class BareUrlTests(unittest.TestCase):
         (link,) = strong.elements
         self.assertLink(link, "https://example.com/bold", "https://example.com/bold")
         for text in ("javascript:alert(1)", "ftp://example.com/x", "https://",
-                     "xhttps://example.com/x", "/https://example.com/x", "https://."):
+                     "xhttps://example.com/x", "/https://example.com/x", "https://.",
+                     "http\u017f://example.com/x"):
             with self.subTest(text=text):
                 body = to_body(f"See {text} here.\n")
                 self.assertEqual(body, f"<p>See {text} here.</p>\n")
@@ -498,15 +500,34 @@ class BareUrlTests(unittest.TestCase):
         self.assertLink(link, "https://example.com/find*", "https://example.com/find*")
         self.assertEqual(p.text(), "Search https://example.com/find* now.")
 
+    def test_stars_inside_stay_in_the_url_and_bold_around_it_closes_outside_it(self):
+        (p,) = self.body("Search https://example.com/a**b now.\n").elements
+        (link,) = p.elements
+        self.assertLink(link, "https://example.com/a**b", "https://example.com/a**b")
+        self.assertEqual(p.text(), "Search https://example.com/a**b now.")
+        (p,) = self.body("**See https://example.com/bold**.\n").elements
+        (strong,) = p.elements
+        self.assertEqual((strong.tag, p.children[1:]), ("strong", ["."]))
+        (link,) = strong.elements
+        self.assertLink(link, "https://example.com/bold", "https://example.com/bold")
+
     def test_a_refused_link_and_an_image_reference_with_parentheses_stay_text_whole(self):
         for source in ("[https://example.com/refused](mailto:a@x)",
                        "[https://example.com/refused](javascript:alert(1))",
-                       "See ![chart](https://example.com/chart_(pond).png) now."):
+                       "See ![chart](https://example.com/chart_(pond).png) now.",
+                       "[https://example.com/g](javascript:alert(f(1)))",
+                       "See ![chart](https://example.com/c_(a_(b)).png) now."):
             with self.subTest(source=source):
                 body = to_body(source + "\n")
                 self.assertEqual(body, f"<p>{source}</p>\n")
                 (p,) = parse(body).elements
                 self.assertEqual((p.elements, p.text()), ([], source))
+
+    def test_an_unclosed_image_reference_repeated_converts_quickly(self):
+        source = "![a" * 1000
+        started = time.monotonic()
+        self.assertEqual(to_body(source), f"<p>{source}</p>\n")
+        self.assertLess(time.monotonic() - started, 2)
 
 
 class PublishedLinkTests(TempDirTestCase):

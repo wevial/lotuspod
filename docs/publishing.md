@@ -136,13 +136,13 @@ The converter (`lotuspod.markdown.to_body`) takes a small subset of markdown:
   `.md` targets are kept as written, not rewritten to page names.
 - Bare URLs: an `http://` or `https://` URL (any case) written as plain text,
   not after a letter, digit or `/`, becomes a link to itself. It runs to the
-  next space, `<`, `>`, `"`, backtick or two stars in a row (so bold around
-  a URL closes outside it); a trailing `.`, `,`, `;` or `:` is left out of
-  it, and so is a trailing `)` or `]` without its partner in the URL, so
-  `(see https://example.com/a).` links `https://example.com/a` while
-  `https://en.wikipedia.org/wiki/Pond_(water)` keeps its `)`. One in a
-  code span, a fence, a link (a refused one included) or an image reference
-  is not linked again.
+  next space, `<`, `>`, `"` or backtick; a trailing `.`, `,`, `;` or `:` is
+  left out of it, and so is a trailing `)` or `]` without its partner in the
+  URL, so `(see https://example.com/a).` links `https://example.com/a` while
+  `https://en.wikipedia.org/wiki/Pond_(water)` keeps its `)`. Stars stay in
+  it, except a trailing `**` that closes bold opened before it, so bold
+  around a URL closes outside it. One in a code span, a fence, a link (a
+  refused one included) or an image reference is not linked again.
 
 Images, links and bare URLs are Lotuspod's own, outside the subset its
 reference converter takes. Everything from a `## Concrete commands` heading

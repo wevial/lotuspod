@@ -37,6 +37,7 @@ const OWNER = 'hermes';
 const BODY = `<p>A page for the comment markdown checks.</p>
 <p>See <a href="https://example.com/body">elsewhere</a>, <a href="${SITE}/${TARGET}.html">this site</a>
 and <a href="#top">the top</a>.</p>
+<p><svg width="40" height="20"><a href="https://example.com/svg"><text x="0" y="15">SVG</text></a></svg></p>
 <h2>Pond</h2>
 <p>The pond freezes in January.</p>
 <h2>Frogs</h2>
@@ -256,10 +257,14 @@ test.describe('signed in', () => {
     const said = `The target is ${here} and the pond is at https://example.com/pond.`;
     const root = await post(request, 'frogs', said);
     const starred = await post(request, 'frogs', 'Search https://example.com/find* now.');
+    const stars = await post(request, 'frogs', 'Search https://example.com/a**b now.');
+    const bold = await post(request, 'frogs', '**See https://example.com/bold**.');
     await page.goto(PAGE);
     await open(page, 'frogs');
-    // A star at the end stays in the URL.
+    // A star at the end, or two inside, stay in the URL; bold closes around it.
     await expect(bubble(page, starred).locator('a')).toHaveAttribute('href', 'https://example.com/find*');
+    await expect(bubble(page, stars).locator('a')).toHaveAttribute('href', 'https://example.com/a**b');
+    await expect(bubble(page, bold).locator('strong > a')).toHaveAttribute('href', 'https://example.com/bold');
     const links = bubble(page, root).locator('a');
     await expect(links).toHaveCount(2);
     const [same, away] = [links.nth(0), links.nth(1)];
@@ -282,13 +287,16 @@ test.describe('signed in', () => {
     expect(page.context().pages()).toHaveLength(1);
   });
 
-  test('a bare URL in a code span, a code block, an image or a refused link draws no link', async ({ page, request }) => {
+  test('a bare URL in a code span, a code block, an image or a refused link, or after a look-alike scheme, draws no link', async ({ page, request }) => {
     const seen = await watch(page);
     const texts = [
       'Run `curl https://example.com/code` first.',
       '```\ncurl https://example.com/fence\n```',
       '![chart](https://example.com/chart.png)',
       '[https://example.com/refused](javascript:alert(1))',
+      '[https://example.com/nested](javascript:alert(f(1)))',
+      'See ![chart](https://example.com/c_(a_(b)).png) mid-line.',
+      'Search httpſ://example.com/long-s now.',
     ];
     const roots = [];
     for (const text of texts) roots.push({ root: await post(request, 'pond', text), text });
@@ -309,6 +317,10 @@ test.describe('signed in', () => {
     const away = body.locator('a[href="https://example.com/body"]');
     await expect(away).toHaveAttribute('target', '_blank');
     await expect(away).toHaveAttribute('rel', 'noopener noreferrer');
+    // An SVG link's tab is set too, and the page script runs on past it.
+    const svg = body.locator('svg a');
+    await expect(svg).toHaveAttribute('target', '_blank');
+    await expect(svg).toHaveAttribute('rel', 'noopener noreferrer');
     for (const href of [`${SITE}/${TARGET}.html`, '#top']) {
       const link = body.locator(`a[href="${href}"]`);
       await expect(link).toHaveCount(1);

@@ -15,21 +15,26 @@
   // A link's target: no space, and any parentheses in pairs, so that
   // `javascript:alert(1)` is read whole and refused whole.
   var MD_TARGET = "([^\\s()]*(?:\\([^\\s()]*\\)[^\\s()]*)*)";
-  // The earliest of a code span, an image (kept as typed), a link, a bare
-  // URL, bold or italic. Italic opens on a `*` before a non-space and closes
-  // on one after a non-space, so a lone `2 * 3` is text. A bare URL, as
-  // lotuspod.markdown's: `http://` or `https://` (any case) not after a
-  // letter, digit or `/`, up to the next space, `<`, `>`, `"`, backtick or
-  // `**` (mdUrl trims its end). The ones before it are matched first, so a URL in
-  // a code span, an image or a link, refused or not, is never linked again.
+  // The earliest of a code span, an image (kept as typed), a link, an image
+  // or link whose target nests its parentheses (kept as typed, to its last
+  // `)` before a space), a bare URL, bold or italic. Italic opens on a `*`
+  // before a non-space and closes on one after a non-space, so a lone `2 * 3`
+  // is text. A bare URL, as lotuspod.markdown's: `http://` or `https://` (any
+  // case, letter by letter, since a case-blind `s` would also match `ſ`) not
+  // after a letter, digit or `/`, up to the next space, `<`, `>`, `"` or
+  // backtick (mdUrl trims its end). The ones before it are matched first, so
+  // a URL in a code span, an image or a link, refused or not, is never linked
+  // again; bold and italic come after it, but open before it, so they close
+  // around it.
   var MD_INLINE = new RegExp([
     "`([^`\\n]+)`",
     "(!)\\[[^\\]\\n]*\\]\\(" + MD_TARGET + "\\)",
     "\\[([^\\]\\n]+)\\]\\(" + MD_TARGET + "\\)",
-    "(?<![\\p{L}\\p{N}/])(https?:\\/\\/(?:(?!\\*\\*)[^\\s<>\"`])+)",
+    "!?\\[[^\\]\\n]*\\]\\(\\S*\\)",
+    "(?<![\\p{L}\\p{N}/])([Hh][Tt][Tt][Pp][Ss]?:\\/\\/[^\\s<>\"`]+)",
     "\\*\\*(?=\\S)([\\s\\S]*?\\S)\\*\\*",
     "\\*(?=[^\\s*])([\\s\\S]*?[^\\s*])\\*(?!\\*)",
-  ].join("|"), "iu");
+  ].join("|"), "u");
   // A link target drawn as a link, as lotuspod.markdown's _LINK_TARGET:
   // http(s), or a relative path or `#anchor` (no `//` start, no `:` before
   // its first `/`, `?` or `#`).
@@ -87,7 +92,8 @@
         node = element(found[7] !== undefined ? "strong" : "em");
         markdownInline(node, found[7] !== undefined ? found[7] : found[8]);
       }
-      // An image, and a link whose target is refused, stay as typed, whole.
+      // An image, and a link whose target is refused or nests its
+      // parentheses, stay as typed, whole.
       parent.appendChild(document.createTextNode(rest.slice(0, node ? found.index : end)));
       if (node) {
         parent.appendChild(node);
