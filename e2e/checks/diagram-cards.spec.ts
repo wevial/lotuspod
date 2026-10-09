@@ -9,8 +9,9 @@ test.use({ viewport: { width: 1280, height: 800 } });
 // D and not E, then a second flowchart that repeats node id A, holds a
 // subgraph (P --> Q), and whose table has a row Z naming no box, and a third
 // (K <--> R, R --> S, S --> T styled opaque) whose table has no thead and a
-// row too long for the window, and a fourth (F --> G, G --> H, J --> H)
-// that styles F with a style line, G with a class line and J with :::.
+// row too long for the window, and a fourth (F --> G, G --> H, J --> H,
+// M --> H) that styles F with a style line, G with a class line and J with
+// :::, and labels M "one", "two" and "three" split by <br> tags.
 const PAGE = '/capture-node-cards.html';
 // The pinned Mermaid (e2e/package.json) answers jsDelivr's requests for it,
 // as in policy.spec.ts.
@@ -439,6 +440,15 @@ test('a box with its own Mermaid style keeps it, and only an unstyled box takes 
   await expect(card(page).locator('dl.artifact-node-card-fields dt')).toHaveText(['Title', 'Status']);
   await expect(card(page).locator('dl.artifact-node-card-fields dd'))
     .toHaveText(['A box with its own style', 'ready']);
+  await seen.clean();
+});
+
+test("a box's label that breaks its lines reads as words split by spaces", async ({ page }) => {
+  const seen = await drawn(page);
+  await expect(box(page, 'M', 3)).toHaveAttribute('role', 'button');
+  await box(page, 'M', 3).click();
+  await expect(card(page)).toBeVisible();
+  await expect(card(page).locator('h3')).toHaveText('one two three');
   await seen.clean();
 });
 
