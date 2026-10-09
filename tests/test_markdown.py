@@ -15,7 +15,8 @@ blockquote, when it is quoted) and each figure is taken out of the body.
 Inline links (`[TEXT](TARGET)`) are Lotuspod's own too, and none of the
 fixtures holds one: they are held by parsed-tree tests, on converted bodies and
 on pages published with the real `lotuspod publish --local`, the repository's
-README and docs among them.
+README and docs among them. So are bare http(s) URLs, which no fixture holds
+either.
 
 Run from the repo root:
 
@@ -425,6 +426,73 @@ class LinkTests(unittest.TestCase):
         (p,) = parse(body).elements
         self.assertEqual((p.elements, p.text()), ([], source))
 
+class BareUrlTests(unittest.TestCase):
+    def body(self, text: str) -> _Node:
+        return parse(to_body(text))
+
+    def assertLink(self, node: _Node, href: str, text: str) -> None:
+        self.assertEqual((node.tag, node.attrs, node.text()), ("a", {"href": href}, text))
+
+    def test_trailing_punctuation_and_unpaired_brackets_stay_text_after_the_link(self):
+        cases = [
+            ("See https://example.com/a.", "https://example.com/a", "See ", "."),
+            ("(see https://example.com/b)", "https://example.com/b", "(see ", ")"),
+            ("https://example.com/c, then", "https://example.com/c", "", ", then"),
+            ("https://example.com/d;", "https://example.com/d", "", ";"),
+            ("https://example.com/e:", "https://example.com/e", "", ":"),
+            ("https://en.wikipedia.org/wiki/Pond_(water)",
+             "https://en.wikipedia.org/wiki/Pond_(water)", "", ""),
+            ("<https://example.com/f>", "https://example.com/f", "<", ">"),
+        ]
+        for source, href, before, after in cases:
+            with self.subTest(source=source):
+                (p,) = self.body(source + "\n").elements
+                (link,) = p.elements
+                self.assertLink(link, href, href)
+                self.assertEqual(p.children, [c for c in (before, link, after) if c])
+
+    def test_urls_in_code_a_fence_a_link_or_an_image_reference_are_not_linked_again(self):
+        source = (
+            "A span `https://example.com/code` here.\n"
+            "\n"
+            "```\n"
+            "https://example.com/fence\n"
+            "```\n"
+            "\n"
+            "See [https://example.com/g](https://example.com/g) now.\n"
+            "\n"
+            "See ![chart](https://example.com/chart.png) inside a paragraph line.\n"
+        )
+        span, fence, linked, image = self.body(source).elements
+        self.assertEqual(span.find_all("a"), [])
+        self.assertEqual([c.text() for c in span.elements], ["https://example.com/code"])
+        self.assertEqual(fence.find_all("a"), [])
+        self.assertEqual(fence.text(), "https://example.com/fence")
+        (link,) = linked.find_all("a")
+        self.assertLink(link, "https://example.com/g", "https://example.com/g")
+        self.assertEqual(link.elements, [])
+        self.assertEqual(image.find_all("a"), [])
+        self.assertEqual(image.text(),
+                         "See ![chart](https://example.com/chart.png) inside a paragraph line.")
+
+    def test_a_query_upper_case_and_bold_link_and_other_schemes_stay_text(self):
+        source = "https://example.com/q?a=1&b=2 HTTPS://EXAMPLE.COM/U **https://example.com/bold**"
+        body = to_body(source + "\n")
+        self.assertIn('href="https://example.com/q?a=1&amp;b=2"', body)
+        (p,) = parse(body).elements
+        query, upper, strong = p.elements
+        self.assertLink(query, "https://example.com/q?a=1&b=2", "https://example.com/q?a=1&b=2")
+        self.assertLink(upper, "HTTPS://EXAMPLE.COM/U", "HTTPS://EXAMPLE.COM/U")
+        self.assertEqual(strong.tag, "strong")
+        (link,) = strong.elements
+        self.assertLink(link, "https://example.com/bold", "https://example.com/bold")
+        for text in ("javascript:alert(1)", "ftp://example.com/x", "https://",
+                     "xhttps://example.com/x", "/https://example.com/x", "https://."):
+            with self.subTest(text=text):
+                body = to_body(f"See {text} here.\n")
+                self.assertEqual(body, f"<p>See {text} here.</p>\n")
+
+
 class PublishedLinkTests(TempDirTestCase):
     def publish(self, source: Path) -> str:
         """The body of the page the real `lotuspod publish --local` makes of
@@ -471,6 +539,31 @@ class PublishedLinkTests(TempDirTestCase):
         self.assertEqual(root.find_all("td")[1].elements, [links[2]])
         self.assertEqual(root.find_all("blockquote")[0].find_all("a"), [links[3]])
         self.assertNotIn("](", root.text())
+
+    def test_a_bare_url_in_a_paragraph_a_list_item_a_table_cell_and_a_blockquote(self):
+        url = "https://lotuspod.weevil.sh/lotuspod-product.html"
+        md = self.out_dir / "page.md"
+        md.write_text(
+            "# Bare URLs\n"
+            "\n"
+            f"In a paragraph {url}\n"
+            "\n"
+            f"- {url}\n"
+            "\n"
+            "| Where | Link |\n"
+            "|-------|------|\n"
+            f"| cell | {url} |\n"
+            "\n"
+            f"> {url}\n",
+            encoding="utf-8",
+        )
+        root = parse(self.publish(md))
+        links = root.find_all("a")
+        self.assertEqual([(a.attrs, a.text()) for a in links], [({"href": url}, url)] * 4)
+        self.assertEqual(root.find_all("p")[0].elements, [links[0]])
+        self.assertEqual(root.find_all("li")[0].elements, [links[1]])
+        self.assertEqual(root.find_all("td")[1].elements, [links[2]])
+        self.assertEqual(root.find_all("blockquote")[0].find_all("a"), [links[3]])
 
     def test_the_readme_and_docs_leave_no_link_syntax_outside_code(self):
         sources = [ROOT / "README.md", *sorted((ROOT / "docs").glob("*.md"))]

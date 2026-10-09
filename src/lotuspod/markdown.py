@@ -26,6 +26,15 @@ An inline link, `[TEXT](TARGET)` outside a code span or fence and not after
 no `:` before its first `/`, `?` or `#`); any other target, `javascript:`
 and `mailto:` among them, stays text. Links are matched after code spans and
 before bold, so bold works around a link and inside its text.
+
+A bare URL is Lotuspod's own too: `http://` or `https://` (any case), not
+after a letter, digit or `/`, with at least one character after `//`, up to
+the next whitespace, `<`, `>`, `"` or backtick, is an `a` element whose
+`href` and text are that URL. Trailing `.`, `,`, `;`, `:` and `*` are taken
+off it one at a time, and so is a trailing `)` or `]` without its opening
+partner in the URL, so `(see https://example.com/a).` links the URL alone.
+Bare URLs are matched after links, so none inside a code span, a link (its
+target or its text) or an image reference is linked, and before bold.
 """
 
 from __future__ import annotations
@@ -58,6 +67,18 @@ _LINK = re.compile(
 # A link target drawn as a link: http(s), or a relative path or `#anchor`
 # (no `//` start, no `:` before its first `/`, `?` or `#`).
 _LINK_TARGET = re.compile(r"https?://|(?!//)[^:/?#]*(?:[/?#]|$)", re.IGNORECASE)
+# In the same escaped text once links are drawn: a code element, a link or an
+# image reference, each passed over whole, or a bare http(s) URL outside them,
+# not after a letter, digit or `/`, running to whitespace, a `<`, `>`, `"` or
+# backtick (`&lt;` and `&gt;` once escaped).
+_BARE_URL = re.compile(
+    rf"{_CODE}|<a [^>]*>.*?</a>|{_INLINE_IMAGE}"
+    r"|(?<![^\W_])(?<!/)(https?://(?:(?!&lt;|&gt;)[^\s<>\"`])+)",
+    re.IGNORECASE,
+)
+# What a bare URL never ends with, as against what it may hold in pairs.
+_URL_TRAIL = ".,;:*"
+_URL_PAIRS = {")": "(", "]": "["}
 
 
 @dataclass(frozen=True)
@@ -133,10 +154,34 @@ def _link(m: re.Match) -> str:
     return f'<a href="{href}">{m.group(1)}</a>'
 
 
+def _bare_url(m: re.Match) -> str:
+    if m.group(1) is None:  # a code element, a link or an image reference
+        return m.group(0)
+    url = html.unescape(m.group(1))
+    end = len(url)
+    while end:
+        last = url[end - 1]
+        opening = _URL_PAIRS.get(last)
+        if last in _URL_TRAIL or (
+            opening and url.count(opening, 0, end) < url.count(last, 0, end)
+        ):
+            end -= 1
+        else:
+            break
+    url, tail = url[:end], url[end:]
+    if len(url) <= url.index("//") + 2:  # nothing after `//`
+        return m.group(0)
+    # `*` as a reference, so bold cannot reach into the attribute.
+    href = html.escape(url).replace("*", "&#42;")
+    return (f'<a href="{href}">{html.escape(url, quote=False)}</a>'
+            f"{html.escape(tail, quote=False)}")
+
+
 def _inline(text: str) -> str:
     text = html.escape(text, quote=False)
     text = re.sub(r"`([^`]+)`", r"<code>\1</code>", text)
     text = _LINK.sub(_link, text)
+    text = _BARE_URL.sub(_bare_url, text)
     return re.sub(r"\*\*([^*]+)\*\*", r"<strong>\1</strong>", text)
 
 

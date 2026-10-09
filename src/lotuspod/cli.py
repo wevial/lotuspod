@@ -295,6 +295,7 @@ THEME_SOURCES = {
     ),
     PAGE_SCRIPT: (
         "js/page-open.js",
+        "js/link-tab.js",
         "js/decisions.js",
         "js/narrow.js",
         "js/attachments.js",
