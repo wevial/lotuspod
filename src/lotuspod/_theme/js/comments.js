@@ -28,6 +28,8 @@
     // id. A route that names none (signed out, the demo) marks nothing.
     var SEEN = "/api/seen";
     var unread = new Set();
+    // Whether the route named any: only then is a thread opened posted.
+    var tracked = false;
     var seenTo = new Map();
     var opening = new Map();
     var tabTitle = document.title;
@@ -334,9 +336,9 @@
     }
 
     // A thread opened or closed, in the panel, a popover or the sheet, all
-    // of which draw it (sidePanel's draw). Opened with comments unread, it
-    // keeps them marked while it stays open and posts its newest comment's
-    // id as seen; closed, it marks only what is still unread.
+    // of which draw it (sidePanel's draw). Opened, it posts its newest
+    // comment's id as seen, and keeps any comments unread marked while it
+    // stays open; closed, it marks only what is still unread.
     function looked(thread, open) {
       if (!open) {
         if (opening.delete(thread.root.id)) {
@@ -344,12 +346,14 @@
         }
         return;
       }
-      var fresh = rows(thread).filter(function (entry) { return counted(thread, entry); });
-      if (!fresh.length) {
+      if (!tracked) {
         return;
       }
-      opening.set(thread.root.id, new Set(fresh.map(function (entry) { return entry.id; })));
-      markUnread(thread);
+      var fresh = rows(thread).filter(function (entry) { return counted(thread, entry); });
+      if (fresh.length) {
+        opening.set(thread.root.id, new Set(fresh.map(function (entry) { return entry.id; })));
+        markUnread(thread);
+      }
       seeThread(thread);
     }
 
@@ -2512,7 +2516,8 @@
           settleImageCap(null, NO_CAP);
         }
         if (payload) {
-          unread = new Set(Array.isArray(payload.unread) ? payload.unread : []);
+          tracked = Array.isArray(payload.unread);
+          unread = new Set(tracked ? payload.unread : []);
           (payload.threads || []).forEach(function (entry) {
             if (add(entry)) {
               touched = true;

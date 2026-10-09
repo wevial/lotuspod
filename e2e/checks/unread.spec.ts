@@ -233,6 +233,28 @@ test.describe('signed in', () => {
     expect(errors).toEqual([]);
   });
 
+  test('a thread opened with nothing unread is posted as seen too', async ({ page, request }) => {
+    const errors = watchErrors(page);
+    await catchUp(request);
+    const posted = await request.post(COMMENTS, {
+      headers: SIGNED_IN, data: { page: NAME, section: SECTION, text: 'Is the overflow clear?' },
+    });
+    expect(posted.status()).toBe(201);
+    const { id: thread } = (await posted.json()) as Row;
+
+    await openPage(page);
+    const seen = page.waitForResponse((response) =>
+      new URL(response.url()).pathname === SEEN && response.request().method() === 'POST' &&
+      'thread' in (response.request().postDataJSON() ?? {}));
+    await chip(page).click();
+    const answer = await seen;
+    expect(answer.request().postDataJSON()).toEqual({ page: NAME, thread, comment: thread });
+    expect(await answer.json()).toEqual({ thread, comment: thread });
+    await expect(page.locator('.artifact-comment--unread')).toHaveCount(0);
+    await expect(page.locator('.artifact-unread')).toHaveCount(0);
+    expect(errors).toEqual([]);
+  });
+
   test('a thread opened from a folded panel is the only one seen', async ({ page, request }) => {
     test.setTimeout(120_000);
     const errors = watchErrors(page);
@@ -260,16 +282,17 @@ test.describe('signed in', () => {
     await answer;
     await expect(page.locator('.artifact-unread')).toHaveText('1 new reply to you');
 
-    // Another section's chip opens the panel at its own thread: the one
-    // selected before is not looked at, so nothing is posted as seen.
+    // Another section's chip opens the panel at its own thread: that one is
+    // posted as seen, and the one selected before is not looked at.
     const posts: unknown[] = [];
     page.on('request', (sent) => {
       if (new URL(sent.url()).pathname === SEEN && sent.method() === 'POST') posts.push(sent.postDataJSON());
     });
     await page.locator('details.artifact-comment[data-section="findings"] summary').click();
     await expect(page.locator(`.artifact-comment-thread[data-thread="${other}"]`)).toBeVisible();
+    await expect.poll(() => posts.length).toBe(1);
     await page.waitForTimeout(500);
-    expect(posts).toEqual([]);
+    expect(posts).toEqual([{ page: NAME, thread: other, comment: other }]);
     await expect(page.locator('.artifact-unread')).toHaveText('1 new reply to you');
     const read = await request.get(`${COMMENTS}?page=${NAME}`, { headers: SIGNED_IN });
     expect(((await read.json()) as { unread: number[] }).unread).toEqual([id]);

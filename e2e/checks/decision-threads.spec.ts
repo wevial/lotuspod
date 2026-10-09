@@ -256,9 +256,13 @@ test.describe('signed in', () => {
     const id = [...ids].find((each) => each !== own.id)!;
     await settle(page);
     const posts = sent.filter((each) => each.method === 'POST');
-    expect(posts).toEqual([{
+    // Opened in the panel, the thread is posted as seen too (unread.spec.ts).
+    expect(posts.filter((each) => each.path !== '/api/seen')).toEqual([{
       method: 'POST', path: '/api/comments',
       body: { page: SLUG, question: 'decision-1', text: words, revision },
+    }]);
+    expect(posts.filter((each) => each.path === '/api/seen')).toEqual([{
+      method: 'POST', path: '/api/seen', body: { page: SLUG, thread: id, comment: id },
     }]);
     expect(sent.filter((each) => each.path === '/api/answers')).toEqual([]);
 

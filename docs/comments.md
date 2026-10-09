@@ -196,10 +196,10 @@ the first in its thread. A section's chip, and a decision's, ends in how many
 of its threads' replies are unread ("1 new"); the header's date line ends in
 a badge, "N new replies to you" ("1 new reply to you"); and the tab's title
 reads "(N) TITLE · Lotuspod". When a thread opens, in the side panel, a
-popover or the bottom sheet, with replies unread, the page posts the
-thread's newest comment id to `/api/seen`: its replies stay marked while it
-stays open and are no longer marked the next time it opens. The counts are
-drawn again after each read of the threads and each post. On the index,
+popover or the bottom sheet, the page posts the thread's newest comment id
+to `/api/seen`: any replies unread as it opened stay marked while it stays
+open and are no longer marked the next time it opens. The counts are drawn
+again after each read of the threads and each post. On the index,
 each page with unread replies gets a count beside its title ("2 new
 replies"), the index's tab title reads "(T) Lotuspod" for their total T, and
 an "Unread · N" toggle, after the Updated one (see
