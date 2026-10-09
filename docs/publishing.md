@@ -706,8 +706,10 @@ Signed in to `lotuspod serve`, the index also asks `/api/activity` (see
 [Answers and comments](comments.md#answers-and-comments)) for the last 7 days.
 When it answers 200, a "Pages | Recent activity" switch (a group named View,
 each button `aria-pressed`) appears after the title, and the index opens on
-Recent activity unless the URL ends `#pages`: no hash is Recent activity, so
-either view can be linked and the back button moves between them. The open
+Pages unless the URL ends `#activity`: no hash (or `#pages`) is Pages, and
+pressing Recent activity writes `#activity` (pressing Pages, no hash), in
+place without a history entry, so either view can be linked and reloading
+keeps it. The open
 tabs' fragment (see [Pods in tabs](#pods-in-tabs)) names Pages, or Recent
 activity when it ends `&view=activity`; either button rewrites it so, keeping
 the tabs. On any other
@@ -807,9 +809,9 @@ search. The open tabs and the active one are kept in the address as
 in place without a history entry, and loading the index with that fragment
 opens them again; a name the listing does not have is dropped. Pressing Pages
 or Recent activity writes it again, so the view buttons keep the tabs. Once
-the last tab closes, the address is the view's own again: `#pages`, or none
-for Recent activity (with no views to switch, the fragment it had before the
-first tab).
+the last tab closes, the address is the view's own again: none for Pages, or
+`#activity` for Recent activity (with no views to switch, the fragment it had
+before the first tab).
 
 A tab that is not active shows a dot from `/api/seen`: amber, "new version"
 for a screen reader, when its page was published again since this reader last
