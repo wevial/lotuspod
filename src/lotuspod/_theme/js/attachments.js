@@ -1,11 +1,13 @@
 
-  // Images on a comment (lotuspod.api's /api/media). A composer takes up to
-  // MAX_IMAGES, pasted into its field, dropped on it or picked with its "Add
-  // image" button.
+  // Images on a comment (lotuspod.api's /api/media). A composer is one box:
+  // the images attached above its field, then a row with its + ("Add image").
+  // It takes up to MAX_IMAGES, pasted into its field, dropped on it or picked
+  // with its +.
   // A file that is not a PNG, JPEG, WebP or GIF, or is over the cap the
   // comments route reports, is refused in the composer's status line and
   // never sent; any other is uploaded at once and shown as a thumbnail with
-  // a Remove button. A comment's images are drawn under its text, each a
+  // an X that removes it, a link that opens it in the image viewer once it
+  // is uploaded. A comment's images are drawn under its text, each a
   // link to the full size that opens in the image viewer
   // (js/image-viewer.js), or with a modifier in a new tab, its box reserved
   // from the stored width and height. A thumbnail only ever shows the uploaded
@@ -17,9 +19,9 @@
   var IMAGE_TYPES = ["image/png", "image/jpeg", "image/webp", "image/gif"];
   var STORED_IMAGE = /^[0-9a-f]{64}\.(png|jpg|webp|gif)$/;
   // The longest side a thumbnail is drawn at, in CSS pixels: under a
-  // comment, and smaller in a composer.
+  // comment, and in a composer (where the stylesheet crops it square).
   var THUMB = 112;
-  var THUMB_ATTACHED = 72;
+  var THUMB_ATTACHED = 120;
   // The largest upload the site takes, as the comments route last reported
   // it; null until it has. A file attached before then waits for it.
   var imageCap = null;
@@ -93,6 +95,13 @@
     return list;
   }
 
+  // A control's drawn sign, its name given by its aria-label.
+  function glyph(sign) {
+    var mark = element("span", "artifact-attach-glyph", sign);
+    mark.setAttribute("aria-hidden", "true");
+    return mark;
+  }
+
   function byteSize(bytes) {
     if (bytes >= 1024 * 1024) {
       return Math.round(bytes / (1024 * 1024) * 10) / 10 + " MB";
@@ -126,8 +135,9 @@
       "). Try again.";
   }
 
-  // The attachments of a composer: form, whose text field is field. Its
-  // images go between the field and its status line; kept() are those
+  // The attachments of a composer: form, whose text field is field. The
+  // field goes into the composer's box, its images above it and its + below;
+  // the send button and the status line stay after the box. kept() are those
   // uploaded with their sizes, in order (to keep over a reload), busy()
   // whether any is still uploading, held() whether any is attached or on
   // its way, and restore() attaches images kept before a reload again.
@@ -137,18 +147,22 @@
   // back when it is not.
   function attachments(form, field) {
     var status = form.querySelector(".artifact-comment-status");
-    var bar = element("div", "artifact-attach");
+    var box = element("div", "artifact-composer-box");
     var tray = element("ul", "artifact-attach-tray");
-    var add = element("button", "artifact-attach-add", "Add image");
+    var bar = element("div", "artifact-attach");
+    var add = element("button", "artifact-attach-add");
     add.type = "button";
+    add.setAttribute("aria-label", "Add image");
+    add.appendChild(glyph("+"));
     var picker = element("input");
     picker.type = "file";
     picker.accept = IMAGE_TYPES.join(",");
     picker.multiple = true;
     picker.hidden = true;
     picker.tabIndex = -1;
-    bar.append(tray, add, picker);
-    form.insertBefore(bar, field.nextSibling);
+    bar.append(add, picker);
+    form.insertBefore(box, field);
+    box.append(tray, field, bar);
     var items = [];
     // Files attached before the cap was known, in order.
     var queued = [];
@@ -160,6 +174,14 @@
       add.disabled = saving !== null || items.length >= MAX_IMAGES;
       // A comment of images alone may say nothing more.
       field.required = !items.length;
+      items.forEach(function (item, index) {
+        var place = (index + 1) + " of " + items.length;
+        item.remove.setAttribute("aria-label", "Remove image " + place);
+        item.remove.disabled = saving !== null;
+        if (item.thumb) {
+          item.thumb.alt = "Attached image " + place;
+        }
+      });
     }
 
     function drop(item) {
@@ -186,10 +208,13 @@
     function slot() {
       var node = element("li", "artifact-attach-item artifact-attach-item--loading");
       var holder = element("span", "artifact-attach-holder", "Uploading");
-      var remove = element("button", "artifact-attach-remove", "Remove");
+      var remove = element("button", "artifact-attach-remove");
       remove.type = "button";
+      remove.appendChild(glyph("\u00d7"));
       node.append(holder, remove);
-      var item = { node: node, holder: holder, name: null, image: null, gone: false };
+      var item = {
+        node: node, holder: holder, remove: remove, thumb: null, name: null, image: null, gone: false,
+      };
       remove.addEventListener("click", function () {
         if (saving !== null) {
           return;
@@ -207,8 +232,16 @@
     function shown(item, image) {
       item.name = image.name;
       item.image = { name: image.name, width: image.width, height: image.height };
-      item.holder.replaceWith(thumbnail(image, "Attached image", THUMB_ATTACHED));
+      // A link to the uploaded /media/ URL, which the image viewer opens.
+      var link = element("a", "artifact-attach-link");
+      link.href = imageUrl(image);
+      link.target = "_blank";
+      link.rel = "noopener";
+      item.thumb = thumbnail(image, "Attached image", THUMB_ATTACHED);
+      link.appendChild(item.thumb);
+      item.holder.replaceWith(link);
       item.node.classList.remove("artifact-attach-item--loading");
+      update();
     }
 
     async function upload(file) {
@@ -350,18 +383,12 @@
       // whether the comment naming them was saved.
       sending: function () {
         saving = items.filter(function (item) { return item.name; });
-        tray.querySelectorAll(".artifact-attach-remove").forEach(function (button) {
-          button.disabled = true;
-        });
         update();
         return saving.map(function (item) { return item.name; });
       },
       sent: function (saved) {
         var held = saving || [];
         saving = null;
-        tray.querySelectorAll(".artifact-attach-remove").forEach(function (button) {
-          button.disabled = false;
-        });
         if (saved) {
           held.forEach(drop);
         }
