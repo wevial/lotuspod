@@ -423,6 +423,33 @@ test.describe('signed in', () => {
       });
     });
   }
+
+  test.describe('at 280 wide, then 1280', () => {
+    test.use({ viewport: { width: 280, height: 640 } });
+
+    test('Next open ends in an ellipsis when narrow and shows whole when wide', async ({ page }) => {
+      await page.route((url) => url.pathname === '/api/answers', (route) =>
+        route.request().method() === 'GET'
+          ? route.fulfill({ json: { page: 'capture-review-sheet', questions: {} } })
+          : route.continue());
+      await page.goto(PAGE);
+      const the = sheet(page);
+      await expect(the.count).toHaveText('3 to answer · Respond');
+      const fit = () => the.next.evaluate((link) => ({
+        overflow: getComputedStyle(link).textOverflow,
+        scroll: link.scrollWidth,
+        client: link.clientWidth,
+      }));
+      const narrow = await fit();
+      expect(narrow.overflow).toBe('ellipsis');
+      expect(narrow.scroll).toBeGreaterThan(narrow.client);
+
+      await page.setViewportSize({ width: 1280, height: 800 });
+      await expect(the.next).toContainText('Next open');
+      const wide = await fit();
+      expect(wide.scroll).toBeLessThanOrEqual(wide.client);
+    });
+  });
 });
 
 test.describe('without JavaScript', () => {
