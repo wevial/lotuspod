@@ -277,11 +277,19 @@ as typed):
   unclosed block runs to the end.
 - Lines starting `- ` or `* ` make a bullet list, and lines starting `1. ` a
   numbered one. Lists are one level deep: an indented item is an item.
-- `[TEXT](TARGET)` is a link that opens in a new tab, its text plain, only
-  when TARGET is `http:` or `https:` (any case), a `#anchor`, or a relative
-  path (no `//` start, no `:` before its first `/`, `?` or `#`), as for a
-  page's own links. Any other target (`javascript:`, `data:`, `mailto:`,
-  `//host/`) leaves the whole link as typed.
+- `[TEXT](TARGET)` is a link, its text plain, only when TARGET is `http:` or
+  `https:` (any case), a `#anchor`, or a relative path (no `//` start, no
+  `:` before its first `/`, `?` or `#`), as for a page's own links. Any other
+  target (`javascript:`, `data:`, `mailto:`, `//host/`) leaves the whole link
+  as typed.
+- A bare `http://` or `https://` URL is a link to itself, by the same rules
+  as a page's bare URLs (see "From markdown" in
+  [publishing.md](publishing.md#from-markdown)): trailing punctuation and an
+  unpaired closing bracket stay text after it. One in a code span, a code
+  block, an image or a link, refused or not, is not linked again.
+- A link to the page's own site (a relative path, an `#anchor` or an
+  absolute URL on the same origin) opens in the same tab; any other opens in
+  a new tab with `rel="noopener noreferrer"`.
 - Anything else (headings, quotes, tables, images, HTML) is literal text.
 
 A passage's opening words in a list stay plain text.
