@@ -20,9 +20,11 @@ import os
 import re
 import shlex
 import signal
+import socket
 import sqlite3
 import subprocess
 import sys
+import threading
 import time
 import unittest
 import urllib.request
@@ -116,7 +118,7 @@ class ResponderCase(Site):
         self.env.update(RECORD=str(self.record))
         self.responder = self.credential("responder", ["responder"], OPS)
         self.publish("orphan", ORPHAN)
-        self.start_server()
+        self.server = self.start_server()
 
     def publish(self, name, text, suffix=".md"):
         source = self.tmp / f"{name}{suffix}"
@@ -751,6 +753,140 @@ class LoopTests(ResponderCase):
             time.sleep(0.2)
         process.send_signal(signal.SIGTERM)
         self.assertEqual(process.wait(15), 0)
+        log.seek(0)
+        self.assertNotIn("waiting for serve", log.read())
+
+
+class StartupWaitTests(ResponderCase):
+    """serve restarted with the responder: a comment waits for it, serve is
+    stopped (its socket goes), the responder starts, and serve starts again
+    one second later."""
+
+    def setUp(self):
+        super().setUp()
+        self.row = self.comment("orphan", "other", "Anyone there?")
+        self.server.terminate()
+        self.server.wait(10)
+        self.assertFalse(self.sock.exists())
+        self.log = open(self.tmp / "respond.log", "w+", encoding="utf-8")
+        self.addCleanup(self.log.close)
+
+    def launch(self, *extra, stderr=None):
+        process = subprocess.Popen(
+            [sys.executable, "-m", "lotuspod", "respond", *extra,
+             "--command", self.recorder, "--credential", str(self.responder),
+             "--socket", str(self.sock), "--out-dir", str(self.out), "--db", str(self.db)],
+            cwd=str(self.tmp), env=self.env, stdout=self.log,
+            stderr=stderr or self.log, text=True)
+        self.addCleanup(process.wait, 10)
+        self.addCleanup(lambda: process.poll() is None and process.kill())
+        return process
+
+    def start_responder(self, *extra):
+        process = self.launch(*extra)
+        time.sleep(1)
+        self.start_server()
+        return process
+
+    def output(self):
+        self.log.seek(0)
+        return self.log.read()
+
+    def test_the_loop_waits_for_serve_and_answers_on_its_first_pass(self):
+        started = time.monotonic()
+        process = self.start_responder("--interval", "60")
+        while not self.replies("orphan", self.row["id"]):
+            self.assertLess(time.monotonic() - started, 15,
+                            f"no reply within 15 seconds; output:\n{self.output()}")
+            time.sleep(0.2)
+        self.assertIsNone(process.poll())
+        lines = self.output().splitlines()
+        self.assertEqual([line for line in lines if line.startswith("error:")], [])
+        self.assertEqual(len([line for line in lines
+                              if "waiting" in line and str(self.sock) in line]), 1, lines)
+
+    def test_once_waits_for_serve_and_answers(self):
+        process = self.start_responder("--once")
+        self.assertEqual(process.wait(30), 0, self.output())
+        self.assertTrue(self.replies("orphan", self.row["id"]))
+
+    def test_gives_up_after_wait_seconds(self):
+        for mode in (["--once"], ["--interval", "60"]):
+            with self.subTest(mode=mode):
+                process = self.launch(*mode, "--wait", "2", stderr=subprocess.PIPE)
+                _, stderr = process.communicate(timeout=10)
+                self.assertEqual(process.returncode, 1, stderr)
+                lines = stderr.splitlines()
+                self.assertEqual(len(lines), 1, lines)
+                self.assertIn(str(self.sock), lines[0])
+                self.assertIn("2 seconds", lines[0])
+
+    def test_sigterm_while_waiting_exits_0(self):
+        process = self.launch("--wait", "60")
+        deadline = time.monotonic() + 10
+        while "waiting for serve" not in self.output():
+            self.assertLess(time.monotonic(), deadline, self.output())
+            time.sleep(0.1)
+        process.send_signal(signal.SIGTERM)
+        self.assertEqual(process.wait(5), 0, self.output())
+
+    def silent_socket(self):
+        """A socket at serve's path that takes requests and never answers."""
+        listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        self.addCleanup(listener.close)
+        listener.bind(str(self.sock))
+        listener.listen(16)
+
+    def test_a_socket_that_never_answers_does_not_outlast_wait(self):
+        self.silent_socket()
+        self.test_gives_up_after_wait_seconds()
+
+    def test_a_socket_that_never_answers_does_not_hold_off_sigterm(self):
+        self.silent_socket()
+        self.test_sigterm_while_waiting_exits_0()
+
+    def trickling_socket(self):
+        """A socket at serve's path that, on each connection, promises a long
+        answer and sends it a byte every 0.1 seconds; sets self.connected."""
+        listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        listener.bind(str(self.sock))
+        listener.listen(16)
+        self.connected = threading.Event()
+        done = threading.Event()
+
+        def trickle(conn):
+            with conn:
+                try:
+                    conn.recv(65536)
+                    conn.sendall(b"HTTP/1.1 200 OK\r\nContent-Length: 10000\r\n\r\n")
+                    while not done.wait(0.1):
+                        conn.sendall(b" ")
+                except OSError:
+                    pass
+
+        def serve():
+            while not done.is_set():
+                try:
+                    conn, _ = listener.accept()
+                except OSError:
+                    return
+                self.connected.set()
+                threading.Thread(target=trickle, args=(conn,), daemon=True).start()
+
+        threading.Thread(target=serve, daemon=True).start()
+        self.addCleanup(listener.close)
+        self.addCleanup(done.set)
+
+    def test_a_socket_that_answers_a_byte_at_a_time_does_not_outlast_wait(self):
+        self.trickling_socket()
+        self.test_gives_up_after_wait_seconds()
+
+    def test_sigterm_during_the_last_try_exits_0(self):
+        self.trickling_socket()
+        process = self.launch("--interval", "60", "--wait", "2")
+        self.assertTrue(self.connected.wait(10), self.output())
+        process.send_signal(signal.SIGTERM)
+        self.assertEqual(process.wait(5), 0, self.output())
 
 
 class PermissionTests(ResponderCase):
