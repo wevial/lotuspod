@@ -110,11 +110,19 @@ class Section:
 
 class _Sections(HTMLParser):
     """The sections of a page's section.artifact-body, by text alone: an
-    attribute, such as a form's version hash, is never part of it, and every
-    tag counts as whitespace, so a line break between two blocks is no
-    change."""
+    attribute, such as a form's version hash, is never part of it. A block
+    element's tags count as whitespace, so a line break between two blocks is
+    no change, and an inline element's as nothing, so neither is wrapping
+    words in one."""
 
     _SKIPPED = frozenset({"script", "style", "template"})
+    # The elements that start a new line of text, as the page script reads
+    # the text (js/page-open.js BLOCK).
+    _BLOCKS = frozenset({
+        "address", "article", "aside", "blockquote", "br", "caption", "dd", "details", "div",
+        "dl", "dt", "fieldset", "figcaption", "figure", "footer", "form", "h1", "h2", "h3",
+        "h4", "h5", "h6", "header", "hr", "legend", "li", "main", "nav", "ol", "p", "pre",
+        "section", "summary", "table", "tbody", "td", "tfoot", "th", "thead", "tr", "ul"})
 
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
@@ -127,8 +135,8 @@ class _Sections(HTMLParser):
         self._current = {"id": "", "title": PAGE_TEXT, "text": [], "headed": False}
         self.found: list[dict] = []
 
-    def _gap(self) -> None:
-        if self._depth and not self._skipped:
+    def _gap(self, tag: str) -> None:
+        if self._depth and not self._skipped and tag in self._BLOCKS:
             self._current["text"].append(" ")
 
     def handle_starttag(self, tag: str, attrs: list) -> None:
@@ -139,7 +147,7 @@ class _Sections(HTMLParser):
             return
         if not self._depth:
             return
-        self._gap()
+        self._gap(tag)
         if tag in self._SKIPPED:
             self._skipped += 1
         elif tag == "pre" and (self._mermaid or "mermaid" in (values.get("class") or "").split()):
@@ -153,7 +161,7 @@ class _Sections(HTMLParser):
     def handle_endtag(self, tag: str) -> None:
         if not self._depth:
             return
-        self._gap()
+        self._gap(tag)
         if tag == "section":
             self._depth -= 1
         elif tag in self._SKIPPED and self._skipped:

@@ -485,3 +485,8 @@ a.artifact-changes-section:focus-visible,
 .artifact-diff-line--same .artifact-diff-text {
   color: var(--color-muted-lavender);
 }
+
+/* The body, when the box links to the text before its first heading. */
+.artifact-body[id] {
+  scroll-margin-top: 1.5rem;
+}

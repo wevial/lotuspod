@@ -273,6 +273,23 @@ test.describe('signed in, what changed', () => {
     expect(errors).toEqual([]);
   });
 
+  test('a page with no headings links its text', async ({ page }) => {
+    const errors = watchErrors(page);
+    const name = 'changes-no-heading';
+    publish(name, ['# Changes no heading', '', 'The pump stops in January.', ''].join('\n'));
+    await open(page, name);
+    await expect(page.locator(BOX)).toHaveCount(0);
+    await page.waitForTimeout(1100);
+    publish(name, ['# Changes no heading', '', 'The pump runs all winter.', ''].join('\n'));
+    await open(page, name);
+    const link = page.locator(BOX).getByRole('link', { name: 'The page text' });
+    await expect(link).toHaveAttribute('href', '#page-text');
+    await expect(page.locator('section.artifact-body#page-text')).toHaveCount(1);
+    await link.click();
+    await expect(page).toHaveURL(new RegExp(`/${name}\\.html#page-text$`));
+    expect(errors).toEqual([]);
+  });
+
   test('Dismiss removes the box', async ({ page }) => {
     const errors = watchErrors(page);
     await republish(page, 'changes-dismiss', 'Changes dismiss');

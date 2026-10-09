@@ -201,6 +201,18 @@ class SectionTests(ChangesWitness):
         self.assertEqual(answer["sections"], {"changed": [{"id": "", "title": "Alpha"}],
                                               "added": [], "removed": [{"title": "Beta"}]})
 
+    def test_words_wrapped_in_an_inline_element_change_no_section(self):
+        self.repository(self.out)
+        self.render(PAGE, body(("Alpha", "The pump runs."), ("Beta", "The pond freezes.")),
+                    "r1hhhhhhhhhh")
+        self.render(PAGE, body(("Alpha", "The pump <strong>runs</strong>."),
+                               ("Beta", "The pond<br>freezes.")), "r2iiiiiiiiii")
+        self.start_server()
+
+        status, _, answer = self.changes(PAGE, "r1hhhhhhhhhh")
+        self.assertEqual(status, 200, answer)
+        self.assertEqual(answer["sections"], {"changed": [], "added": [], "removed": []})
+
 
 class CompareTests(unittest.TestCase):
     def test_compare_takes_no_sources_and_an_empty_since_reads_nothing(self):

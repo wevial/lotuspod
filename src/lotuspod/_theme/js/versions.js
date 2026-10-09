@@ -26,6 +26,9 @@
     var HASH = "#versions";
     var SHOWN = 20;
     var NO_SOURCE = "This page has no kept source for that version, so it compares by section.";
+    // What the comparison calls the text before the first h2, the whole
+    // text of a body without one (lotuspod.versions.PAGE_TEXT).
+    var PAGE_TEXT = "The page text";
     var stamp = document.querySelector('meta[name="lotuspod:revision"]');
     var line = document.querySelector("header.artifact-header .artifact-meta");
     var main = document.querySelector("main.artifact");
@@ -96,9 +99,20 @@
       return copy.textContent.replace(/\s+/g, " ").trim();
     }
 
+    // A free id from base, as the outline makes them.
+    function freeId(base) {
+      var id = base;
+      for (var n = 2; document.getElementById(id); n += 1) {
+        id = base + "-" + n;
+      }
+      return id;
+    }
+
     // The body's h2 for a changed or added section: by its id, else, as a
     // page left with one heading gives it none, by its words, given an id
-    // here (as the outline would make it) so the box can link to it.
+    // here (as the outline would make it) so the box can link to it. The
+    // text before the first h2 has no heading: its link goes to the start of
+    // the body, given an id for it.
     function sectionHeading(section) {
       if (section.id) {
         var named = document.getElementById(section.id);
@@ -112,13 +126,15 @@
         }
       });
       if (found) {
-        var base = title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "section";
-        var id = base;
-        for (var n = 2; document.getElementById(id); n += 1) {
-          id = base + "-" + n;
+        found.id = freeId(title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") ||
+          "section");
+        section.id = found.id;
+      } else if (title === PAGE_TEXT) {
+        var body = main.querySelector("section.artifact-body");
+        if (body) {
+          body.id = body.id || freeId("page-text");
+          section.id = body.id;
         }
-        found.id = id;
-        section.id = id;
       }
       return found;
     }

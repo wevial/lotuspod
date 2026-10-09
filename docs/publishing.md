@@ -416,11 +416,11 @@ version carrying that revision with the current one in at most three git
 processes. Each version's body is split into sections at its `h2` headings,
 known by id, or by the id the outline would give its words when it has none
 (a page left with one heading), and their text compared with whitespace
-collapsed and every tag taken as a space, so a change to markup alone, such
-as a line break between two blocks or a decision form's version hash, does
-not count; text
-before the first heading, or a body with none, is one section, "The page
-text". A renamed heading reads as one section removed and one added.
+collapsed, a block's tags taken as a space and an inline element's as
+nothing, so a change to markup alone, such as a line break between two
+blocks, words wrapped in `<strong>` or a decision form's version hash, does
+not count; text before the first heading, or a body with none, is one
+section, "The page text", whose link goes to the start of the body. A renamed heading reads as one section removed and one added.
 
 The page then opens with a "What changed since you last looked" box under
 its header: "You last opened this on DATE · K versions ago", DATE being when
