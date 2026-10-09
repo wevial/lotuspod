@@ -88,6 +88,38 @@ the block is left exactly as written, since Mermaid reads it verbatim; before
 the script runs, or without scripting, it reads as a code block. A body with no
 diagram block ships no script and no CDN reference at all.
 
+A flowchart (source starting `flowchart` or `graph`) can be followed by a
+Nodes table, which the page script turns into a card for each box. Put an
+`h3` or `h4` whose text is exactly `Nodes` straight after the diagram, and a
+table straight after that, with only whitespace between them; in markdown,
+that is a `mermaid` fence, a `### Nodes` line and a pipe table (a `####`
+line is drawn as a paragraph, so it does not count). The table's first
+column holds Mermaid node ids (`[A-Za-z0-9_-]+`); the other columns are
+free, except that a column headed `Status` (any case) also colors its box:
+`merged` (mint), `open` (amber, in review), `ready` (dashed lavender, can
+start now) or `waiting` (a faint border). For example:
+
+```markdown
+### Nodes
+
+| Node | Title | Status | PR |
+|---|---|---|---|
+| A | Mark the table at render | merged | [#11](https://example.com/pull/11) |
+| B | Open a card for each box | open | |
+```
+
+Render only marks the diagram, heading, table and rows with attributes. Once
+Mermaid has drawn the diagram, each listed box is a button: a click, Enter or
+Space opens one card beside it with the box's label, its row's other columns,
+the row's first link, and what it waits for and unblocks, read from the
+diagram's own arrows. ✕, Esc or a click outside closes it. The open card's
+box, or a hovered or focused one, has its arrows drawn in cyan above the
+boxes while the rest dim. The heading and table are hidden only when every
+row names a box the diagram draws; otherwise they stay, and the boxes that
+matched still get cards. Without scripting the page shows the heading and
+table as written. Mermaid's `click` directive is not used: it needs the
+`loose` security level, and the page keeps Mermaid's default, `strict`.
+
 Pass `--variant report` for a long technical report. The page keeps the same
 markup with one class more, `artifact--report` on the `main` element, and the
 theme switches on a denser reading surface behind it: 14px body on a wider
