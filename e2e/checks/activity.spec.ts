@@ -384,6 +384,17 @@ test.describe('signed in', () => {
       await expect(tabs).toHaveCount(1);
       await expect.poll(() => framedAddress(page)).toMatch(new RegExp(`/${C}\\.html$`));
 
+      // So does it in C's tab left on its versions view.
+      await framed(page).locator('a.artifact-versions-link').click();
+      await expect.poll(() => framedAddress(page)).toMatch(/#versions$/);
+      await expect(framed(page).locator('section.artifact-versions')).toBeVisible();
+      await home.click();
+      await row('published a new version').click();
+      await expect(tabs).toHaveCount(1);
+      await expect.poll(() => framedAddress(page)).toMatch(new RegExp(`/${C}\\.html$`));
+      await expect(framed(page).locator('section.artifact-versions')).toBeHidden();
+      await expect(framed(page).locator('h1')).toBeVisible();
+
       // The comment opens the page with its thread open in the panel.
       await home.click();
       await row('you commented on “Heater”').click();

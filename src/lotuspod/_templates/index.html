@@ -616,6 +616,9 @@
           const what = whatOf(event, questions);
           const said = element("a", "index-activity-said");
           said.href = whereOf(link.getAttribute("href"), event);
+          // An open pod moves to exactly this place, no fragment included
+          // (lotuspod-index.js).
+          said.dataset.podExact = "";
           said.append(element("span", "index-activity-actor", actor), ` ${what}`);
           if (fresh) said.append(" · ", element("span", "index-activity-new", "new, to you"));
           item.append(time, dot, said);

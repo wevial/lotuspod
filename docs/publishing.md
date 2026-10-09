@@ -695,7 +695,9 @@ with no `version` query, opens that page in a tab with the link's fragment,
 whether the link is in the listing or in a pod already open: just after the
 active tab, which it then becomes, or by activating its tab when it is open,
 its page moved to the link's fragment, which the page hears as a change of
-fragment even when it already holds that one.
+fragment even when it already holds that one. A Recent activity row's link
+(`data-pod-exact`) with no fragment drops the open page's own, so a pod left
+on its versions view shows its page again.
 Each tab is the page as serve answers it, in an iframe titled with its title:
 the active tab's fills the window under the strip and hides the listing, and
 the others stay loaded but hidden, so switching tabs keeps a pod's scroll
