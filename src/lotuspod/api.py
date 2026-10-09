@@ -32,7 +32,8 @@ reader's unread replies on it (lotuspod.db). It never names the reader.
 
 `{page, thread, comment}` records that the reader has seen the thread whose
 first comment is `thread` up to `comment`, and answers 200 {thread, comment}
-with the mark as stored, which never goes down: 404 unknown_thread when
+with the mark as stored, which never goes down nor passes the thread's
+newest comment: 404 unknown_thread when
 `thread` is no first comment on `page`. A read of the comments also answers
 `unread`, the ids of the reader's unread comments among its threads, oldest
 first.

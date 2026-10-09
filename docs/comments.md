@@ -82,7 +82,8 @@ twice.
   seen the thread whose first comment is `thread` up to the comment id
   `comment`, and answers 200 `{thread, comment}` with the mark as stored: one
   row per reader and thread, whose mark never goes down, so a lower `comment`
-  leaves it as it was. A `thread` that is not the id of a thread's first
+  leaves it as it was, and never passes the thread's newest comment, so a
+  higher one is stored as that. A `thread` that is not the id of a thread's first
   comment on `page` is 404 `unknown_thread`.
 - `GET /api/seen`, with no query, answers `{pages: {NAME: {revision, seen,
   unread}}}`: one entry for each page this reader has a row for, or has

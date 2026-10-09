@@ -183,6 +183,56 @@ test.describe('signed in', () => {
     expect(errors).toEqual([]);
   });
 
+  test('folding the panel closes its thread, and unfolding it opens the thread again', async ({ page, request }) => {
+    test.setTimeout(120_000);
+    const errors = watchErrors(page);
+    await catchUp(request);
+    // hermes listens, so the comment waits for it, and the page keeps
+    // reading the threads while the panel is folded.
+    hermes('pull', '--owner', OWNER);
+    const posted = await request.post(COMMENTS, {
+      headers: SIGNED_IN, data: { page: NAME, section: SECTION, text: 'Does the pump need a cover?' },
+    });
+    expect(posted.status()).toBe(201);
+    const { id: thread } = (await posted.json()) as Row;
+
+    await openPage(page);
+    await chip(page).click();
+    const entry = page.locator(`.artifact-comment-thread[data-thread="${thread}"]`);
+    await expect(entry).toBeVisible();
+    await page.locator('.artifact-comments-fold').click();
+    await expect(entry).toBeHidden();
+
+    // hermes answers while the panel is folded: the reply is counted.
+    const answer = page.waitForResponse(async (response) =>
+      new URL(response.url()).pathname === COMMENTS && response.request().method() === 'GET' &&
+      ((await response.json()) as { unread?: number[] }).unread?.length === 1, { timeout: 60_000 });
+    const claim = hermes('claim', String(thread));
+    const { id } = hermes('reply', String(thread), `--claim=${claim.claimToken}`,
+      '--key', `unread-fold-${thread}`, '--text', 'A board over it, weighted at the corners.');
+    expect(((await (await answer).json()) as { unread: number[] }).unread).toEqual([id]);
+    await expect(page.locator('.artifact-unread')).toHaveText('1 new reply to you');
+
+    // Unfolded, the thread is open again: it posts the reply as seen and
+    // marks it New while it stays open.
+    const seen = page.waitForResponse((response) =>
+      new URL(response.url()).pathname === SEEN && response.request().method() === 'POST' &&
+      'thread' in (response.request().postDataJSON() ?? {}));
+    await page.locator('.artifact-comments-rail').click();
+    expect((await seen).request().postDataJSON()).toEqual({ page: NAME, thread, comment: id });
+    await expect(reply(page, id)).toHaveClass(/\bartifact-comment--unread\b/);
+    await expect(reply(page, id).locator('.artifact-comment-new')).toHaveText('New');
+    await expect(page.locator('.artifact-unread')).toHaveCount(0);
+
+    // Folded and unfolded again, the reply is read: no longer marked.
+    await page.locator('.artifact-comments-fold').click();
+    await page.locator('.artifact-comments-rail').click();
+    await expect(reply(page, id)).toBeVisible();
+    await expect(page.locator('.artifact-comment--unread')).toHaveCount(0);
+    await expect(page.locator('.artifact-comment-divider')).toHaveCount(0);
+    expect(errors).toEqual([]);
+  });
+
   test('the index counts the reply on its row and in its title, and Unread keeps only that row', async ({ page, request }) => {
     test.setTimeout(120_000);
     const errors = watchErrors(page);

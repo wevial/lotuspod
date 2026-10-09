@@ -177,6 +177,15 @@ class UnreadTests(UnreadTestCase):
         later = self.follow_up(root, "Down to minus ten.")
         self.assertEqual(self.unread(A), [later["id"]])
 
+        # A mark past the thread's newest comment stops there, so a reply
+        # still to come is unread when it arrives.
+        ahead = {**body, "comment": 2 ** 63 - 1}
+        self.assertEqual(self.seen(ahead), (200, {"thread": root["id"], "comment": later["id"]}))
+        self.assertEqual(self.unread(A), [])
+        latest = self.follow_up(root, "And the pump with it.")
+        self.assertEqual(self.unread(A), [latest["id"]])
+        self.assertEqual(self.marks(), [(A, root["id"], later["id"])])
+
         elsewhere = self.open_thread(A, "On the other page.", page="other", section="page")
         self.assertEqual(
             self.seen({"page": "plan", "thread": elsewhere["id"], "comment": elsewhere["id"]}),
@@ -185,7 +194,7 @@ class UnreadTests(UnreadTestCase):
         self.assertEqual(
             self.seen({"page": "plan", "thread": first["id"], "comment": first["id"]}),
             (404, {"error": "unknown_thread"}))
-        self.assertEqual(self.marks(), [(A, root["id"], first["id"])])
+        self.assertEqual(self.marks(), [(A, root["id"], later["id"])])
 
     def test_a_refused_thread_post_stores_nothing(self):
         root = self.open_thread(A, "Is the heater enough?")

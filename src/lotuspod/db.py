@@ -834,13 +834,18 @@ class Database:
     def record_thread_view(self, *, reader: str, page: str, thread: int,
                            comment: int) -> int:
         """Record that reader has seen the thread of first comment thread on
-        page up to comment; the mark as stored, never lower than before.
-        Refused unknown_thread when thread is not the first comment of a
-        thread on page."""
+        page up to comment; the mark as stored, never lower than before and
+        never above the thread's newest comment, so no reply yet to come is
+        read before it arrives. Refused unknown_thread when thread is not
+        the first comment of a thread on page."""
         with self._connect() as conn, _write(conn):
             found = _row(conn, thread)
             if found is None or found["page"] != page or found["parent"] is not None:
                 raise Refused("unknown_thread")
+            newest = conn.execute(
+                "SELECT MAX(id) FROM comments WHERE id = ? OR parent = ?", (thread, thread),
+            ).fetchone()[0]
+            comment = min(comment, newest)
             conn.execute(
                 "INSERT INTO thread_views (reader, thread, comment, seen_at) VALUES (?, ?, ?, ?)"
                 " ON CONFLICT (reader, thread) DO UPDATE SET"

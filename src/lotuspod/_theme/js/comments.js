@@ -1434,7 +1434,13 @@
       }
 
       function setOpen(show, remember) {
+        var was = open;
         open = show;
+        // The thread open in it goes out of view or comes back into it.
+        if (current && show !== was) {
+          draw(current);
+          showUnread();
+        }
         aside.classList.toggle("artifact-comments-panel--open", show);
         rail.hidden = show;
         sheet.hidden = !show;
@@ -1620,9 +1626,12 @@
         var made = entry(thread);
         var done = resolved(thread);
         var opened = !done && (current === thread || over.holds(thread));
-        if (opened !== thread.lit) {
-          thread.lit = opened;
-          looked(thread, opened);
+        // Open in a folded panel, it is not in view: folding closes it, and
+        // unfolding opens it again.
+        var viewed = opened && (over.holds(thread) || (api.wide && open));
+        if (viewed !== thread.lit) {
+          thread.lit = viewed;
+          looked(thread, viewed);
         }
         made.item.classList.toggle("artifact-comments-entry--resolved", done);
         made.item.classList.toggle("artifact-comments-entry--open", opened);
