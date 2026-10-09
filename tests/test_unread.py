@@ -243,9 +243,7 @@ class UnreadTests(UnreadTestCase):
         root = self.open_thread(A, "Is the heater enough?")
         reply = self.follow_up(root, "It is.")
         self.assertEqual(self.unread(A), [reply["id"]])
-        run_cli("publish", str(self.work / "plan.md"), "--name", "plan", "--out-dir",
-                str(self.out_dir), "--local", "--owner", OWNER, "--credential",
-                str(self.token), "--db", str(self.db_path), "--no-comments")
+        self.republish("--no-comments")
 
         self.assertEqual(self.unread(A), [])
         # Reader a never opened plan: it was listed only for its unread reply.
