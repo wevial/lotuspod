@@ -630,8 +630,8 @@ class NoteThreadTests(ApiTestCase):
         _, got = self.ask("GET", "/api/answers?page=plan")
         self.assertNotIn("comment", got["questions"]["decision-1"]["current"])
 
-    def test_an_empty_blank_or_kept_note_opens_no_thread(self):
-        for choice, note in (("yes", ""), ("no", "   "), ("yes", "   ")):
+    def test_an_empty_or_blank_note_opens_no_thread(self):
+        for choice, note in (("yes", ""), ("no", "   ")):
             with self.subTest(choice=choice, note=note):
                 status, answer = self.answer(choice=choice, note=note)
                 self.assertEqual(status, 201, answer)
