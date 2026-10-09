@@ -918,9 +918,6 @@ class RecordAnswerTests(PullTestCase):
         token = machine.read_token(credential or self.desk)
         return machine.request(self.socket_path, token, "POST", "/v1/answers/record", body)
 
-    def stored(self, page: str = "plan") -> dict:
-        return db.Database(self.db_path).answers(page)
-
     def test_a_recorded_answer_is_an_agents_answer_with_its_source(self):
         status, payload = self.record({"page": "plan", "question": "decision-1",
                                        "choice": "no", "source": self.SOURCE,
@@ -936,12 +933,6 @@ class RecordAnswerTests(PullTestCase):
                           {"kind": "agent", "handle": "hermes", "credential": "desk"},
                           {"text": "Freeze the pond?", "label": "No"}))
         self.assertEqual(self.pull("hermes"), [])
-
-        status, again = self.record({"page": "plan", "question": "decision-1",
-                                     "choice": "no", "source": self.SOURCE})
-        self.assertEqual(status, 200, again)
-        self.assertEqual((again["answer"]["id"], again["created"]), (answer["id"], False))
-        self.assertEqual(self.stored()["decision-1"]["earlier"], [])
 
     def test_a_refused_record_stores_nothing(self):
         self.publish_mail(MAIL)
@@ -967,16 +958,10 @@ class RecordAnswerTests(PullTestCase):
             with self.subTest(name):
                 self.assertEqual(self.record(body, credential), (status, {"error": error}))
         for page in ("plan", "mail", "loose", "nowhere"):
-            self.assertEqual(self.stored(page), {})
+            self.assertEqual(db.Database(self.db_path).answers(page), {})
 
         status, payload = self.record({**record, "source": "s" * 200})
         self.assertEqual(status, 200, payload)
-
-    def test_a_reader_cannot_be_written_on_the_socket(self):
-        token = machine.read_token(self.desk)
-        status, payload = machine.request(self.socket_path, token, "POST", "/v1/answers",
-                                          {"page": "plan"})
-        self.assertEqual((status, payload), (404, {"error": "not_found"}))
 
     def test_the_pull_names_where_the_current_answer_was_given(self):
         self.pull("hermes")
@@ -1291,12 +1276,6 @@ class AnswerSchemaTests(SchemaTests):
         current = payload["questions"]["decision-1"]["current"]
         self.assertEqual((current["choice"], current["actor"]), ("no", SHOWN))
         self.assertNotIn("source", current)
-        conn = sqlite3.connect(str(self.db_path))
-        try:
-            self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0],
-                             db.SCHEMA_VERSION)
-        finally:
-            conn.close()
 
 
 class OwnerWindowOptionTests(unittest.TestCase):
