@@ -82,6 +82,9 @@ async function focusInside(page: Page) {
 }
 
 test.describe('a page figure', () => {
+  // Signed in, as every reader is: the page asks for its versions as it loads.
+  test.use({ extraHTTPHeaders: SIGNED_IN });
+
   test('a click opens the image in a modal dialog, captioned and fit to the window, and the page stays', async ({ page }) => {
     const seen = await watch(page);
     await page.setViewportSize({ width: 1280, height: 720 });
