@@ -405,6 +405,25 @@ test.describe('signed in', () => {
     expect(errors).toEqual([]);
   });
 
+  test('a pod loaded directly at its own address opens in the index as the active tab, at its fragment, with the finder', async ({ page }) => {
+    const errors = await watch(page);
+    await page.goto('about:blank');
+    await page.goto(`/${ARTICLE.name}.html#second-section`);
+
+    await expect(strip(page)).toHaveCount(1);
+    expect(new URL(page.url()).pathname).toBe('/');
+    await expectActive(page, ARTICLE);
+    await expect(framed(page, ARTICLE).locator('h1')).toHaveText(ARTICLE.title);
+    const shown = await frame(page, ARTICLE).evaluate((node) =>
+      (node as HTMLIFrameElement).contentWindow?.location.href ?? '');
+    expect(new URL(shown).pathname).toBe(`/${ARTICLE.name}.html`);
+    expect(new URL(shown).hash).toBe('#second-section');
+
+    await page.keyboard.press('ControlOrMeta+K');
+    await expect(page.getByRole('dialog', { name: 'Find a pod' })).toBeVisible();
+    expect(errors).toEqual([]);
+  });
+
   test('closing a tab activates its right neighbour, else its left, else the listing; the address reopens tabs', async ({ page }) => {
     const errors = await watch(page);
     // The activity route answers once a tab is open: the tabs' fragment then
