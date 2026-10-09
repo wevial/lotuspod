@@ -1,7 +1,7 @@
 """The reader's answers and comments over /api, for the verified reader only.
 
 serve hands a request here only after its Access assertion verifies, with
-the reader as actor. Eight routes:
+the reader as actor. Nine routes:
 
     POST /api/answers     {page, question, version, choice, note} or
                           {page, question, version, checked, note}
@@ -15,6 +15,7 @@ the reader as actor. Eight routes:
     POST /api/seen        {page, revision} or {page, thread, comment}
     GET  /api/seen
     GET  /api/versions?page=NAME
+    GET  /api/changes?page=NAME&since=REV
 
 A read of the comments carries the page's current revision beside its
 threads, and /api/revision answers it alone, {revision}: an open page
@@ -43,6 +44,18 @@ each commit of the artifacts repository that changed the page while it was
 visible, newest first (lotuspod.versions), `date` its committer time and
 `current` true on the newest only. It is empty when the output directory is
 not the top of its own repository.
+
+/api/changes compares the newest listed version of NAME whose revision is
+REV, the revision the reader last opened it at, with the current one
+(lotuspod.versions.compare), and answers {page, since: {commit, date,
+revision}, behind, changed, sections, lines, truncated}: `behind` the listed
+versions newer than it, and `changed` false, with nothing compared, when REV
+is the current revision. `sections` is {changed: [{id, title}], added: [{id,
+title}], removed: [{title}]}; `lines` and `truncated` are there only when
+both versions kept NAME.md, a unified diff of the two as [{op, text}]. It
+answers 404 unknown_revision when no listed version carries REV, as for
+every page outside a repository, and is refused otherwise as the versions
+route is.
 
 A POST is refused before anything is stored: 403 cross_origin when a browser
 sent it from another site, 415 when it is not JSON, 411 without a length,
@@ -123,7 +136,8 @@ MEDIA = "/api/media"
 REVISION = "/api/revision"
 SEEN = "/api/seen"
 VERSIONS = "/api/versions"
-ROUTES = (ANSWERS, COMMENTS, MEDIA, REVISION, SEEN, VERSIONS)
+CHANGES = "/api/changes"
+ROUTES = (ANSWERS, COMMENTS, MEDIA, REVISION, SEEN, VERSIONS, CHANGES)
 METHODS = ("GET", "HEAD", "POST")
 # The methods of a route that is only read.
 READ_METHODS = ("GET", "HEAD")
@@ -407,7 +421,7 @@ def shown(value: object) -> object:
 
 
 class Api:
-    """The eight routes over one database; pages(name) is the Page serve
+    """The nine routes over one database; pages(name) is the Page serve
     would answer for name, or None; window is routing's owner window.
     media_dir is the media store and max_image_bytes its cap; without a
     store, uploads and comments naming images answer 503. history reads the
@@ -438,7 +452,7 @@ class Api:
 
     def _answer(self, method: str, path: str, query: str, headers: Message,
                 body: Body, actor: Mapping) -> Answer:
-        methods = READ_METHODS if path in (REVISION, VERSIONS) else METHODS
+        methods = READ_METHODS if path in (REVISION, VERSIONS, CHANGES) else METHODS
         if method not in methods:
             return (HTTPStatus.METHOD_NOT_ALLOWED, {"error": "method_not_allowed"},
                     (("Allow", ", ".join(methods)),))
@@ -459,7 +473,9 @@ class Api:
                 return HTTPStatus.CREATED, self._post_comment(fields, actor), ()
             if path == SEEN:
                 return HTTPStatus.OK, self._seen(query, actor), ()
-            page = self._page(self._query_page(query))
+            if path == CHANGES:
+                return HTTPStatus.OK, self._changes(query), ()
+            page = self._page(self._query(query, ("page",))["page"])
             if path == ANSWERS:
                 payload = {"page": page.name, "questions": self.database.answers(page.name, asked=True)}
             elif path == REVISION:
@@ -482,16 +498,36 @@ class Api:
         return [{"commit": version.commit, "date": version.date, "revision": version.revision,
                  "current": at == 0} for at, version in enumerate(listed)]
 
+    def _changes(self, query: str) -> dict:
+        fields = self._query(query, ("page", "since"))
+        since = fields["since"]
+        if not 1 <= len(since) <= MAX_REVISION:
+            raise Refusal(HTTPStatus.BAD_REQUEST, "invalid_query")
+        page = self._page(fields["page"])
+        found = self.history.changes(page.name, since) if self.history is not None else None
+        if found is None:
+            raise Refusal(HTTPStatus.NOT_FOUND, "unknown_revision")
+        version, behind, compared = found
+        payload = {"page": page.name,
+                   "since": {"commit": version.commit, "date": version.date,
+                             "revision": version.revision},
+                   "behind": behind,
+                   "changed": compared is not None and since != page.revision}
+        if payload["changed"]:
+            payload.update(compared)
+        return payload
+
     @staticmethod
-    def _query_page(query: str) -> str:
+    def _query(query: str, names: tuple[str, ...]) -> dict[str, str]:
+        """The query's fields, exactly names and one value each."""
         try:
             fields = urllib.parse.parse_qs(query, keep_blank_values=True,
                                            strict_parsing=bool(query), errors="strict")
         except (ValueError, UnicodeDecodeError):
             fields = {}
-        if list(fields) != ["page"] or len(fields["page"]) != 1:
+        if sorted(fields) != sorted(names) or any(len(fields[name]) != 1 for name in names):
             raise Refusal(HTTPStatus.BAD_REQUEST, "invalid_query")
-        return fields["page"][0]
+        return {name: fields[name][0] for name in names}
 
     def _page(self, name: object) -> Page:
         if not isinstance(name, str):

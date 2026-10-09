@@ -1226,14 +1226,14 @@
       document.body.appendChild(aside);
 
       // The text of a box's section heading, without the mark a folded
-      // heading ends in.
+      // heading ends in or the tag saying it changed.
       function title(box) {
         var heading = document.getElementById(box.dataset.section);
         if (!heading || heading.tagName !== "H2") {
           return "This page";
         }
         var copy = heading.cloneNode(true);
-        all(".artifact-section-mark", copy).forEach(function (mark) { mark.remove(); });
+        all(".artifact-section-mark, .artifact-changed-tag", copy).forEach(function (mark) { mark.remove(); });
         return copy.textContent.replace(/\s+/g, " ").trim() || "This page";
       }
 
