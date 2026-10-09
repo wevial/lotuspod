@@ -47,7 +47,10 @@
     // does the Labels menu, built from the labels the rows carry. Signed in,
     // the seen route says which pages were republished since this reader last
     // opened them: each gets an "updated" mark, and an Updated toggle keeps
-    // only those. Any other answer (signed out, the demo) leaves neither.
+    // only those. It also counts the replies in the reader's own threads not
+    // yet read: each page with any gets a count, the tab's title the total,
+    // and an Unread toggle keeps only those. Any other answer (signed out,
+    // the demo) leaves no mark, no count and no toggle.
     (() => {
       const table = document.querySelector(".index-table");
       if (!table) return;
@@ -186,20 +189,30 @@
       });
 
       // The rows republished since this reader last opened them, and the
-      // Updated toggle, made once the seen route first answers 200.
+      // Updated toggle; each row's count of unread replies to the reader,
+      // and the Unread toggle; all made once the seen route first answers 200.
       const marked = new Set();
       let updated = null;
+      const unread = new Map();
+      let unreadToggle = null;
+      const indexTitle = document.title;
 
-      // A token per active filter, each checked label then the Updated
-      // toggle: pressing it releases that filter, and focus moves to the
-      // token that takes its place, else the filter's own button.
-      const showTokens = (checked, pressed) => {
+      const isPressed = (button) => button !== null && button.getAttribute("aria-pressed") === "true";
+
+      // A token per active filter, each checked label then the Updated and
+      // Unread toggles: pressing it releases that filter, and focus moves to
+      // the token that takes its place, else the filter's own button.
+      const showTokens = (checked, pressed, unreadPressed) => {
         active.replaceChildren("Showing");
         const releases = checked.map((label) => [label, toggle, () => {
           boxes.find((box) => box.value === label).checked = false;
         }]);
         if (pressed) {
           releases.push(["updated", updated, () => updated.setAttribute("aria-pressed", "false")]);
+        }
+        if (unreadPressed) {
+          releases.push(["unread", unreadToggle,
+            () => unreadToggle.setAttribute("aria-pressed", "false")]);
         }
         releases.forEach(([label, button, release], index) => {
           const token = document.createElement("button");
@@ -220,19 +233,22 @@
 
       // Every test in one pass over the rows: a row is kept when no label is
       // checked or it carries a checked one, when Updated is not pressed or
-      // it is marked, and when the search - one case-insensitive substring
-      // test against the whole row as written, labels included - matches it.
+      // it is marked, when Unread is not pressed or it has a count, and when
+      // the search - one case-insensitive substring test against the whole
+      // row as written, labels included - matches it.
       const filter = () => {
         const query = search.value.trim().toLowerCase();
         const checked = boxes.filter((box) => box.checked).map((box) => box.value);
-        const pressed = updated !== null && updated.getAttribute("aria-pressed") === "true";
+        const pressed = isPressed(updated);
+        const unreadPressed = isPressed(unreadToggle);
         let shown = 0;
         for (const row of rows) {
           const labelled = checked.length === 0 ||
             labelsOf.get(row).some((label) => checked.includes(label));
           const fresh = !pressed || marked.has(row);
+          const waiting = !unreadPressed || unread.has(row);
           const found = !query || textOf.get(row).includes(query);
-          const match = labelled && fresh && found;
+          const match = labelled && fresh && waiting && found;
           row.hidden = !match;
           if (match) shown += 1;
         }
@@ -240,7 +256,7 @@
         const arrived = sortColumn === arrival.column && ascending === arrival.ascending;
         // Any active filter counts against the whole listing, even when every
         // row passes it.
-        const filtered = checked.length > 0 || pressed || query !== "";
+        const filtered = checked.length > 0 || pressed || unreadPressed || query !== "";
         count.textContent =
           !filtered
             ? arrived && sortColumn >= 0
@@ -250,48 +266,72 @@
         toggle.textContent = checked.length
           ? `Labels (${checked.length}) \u25BE`
           : "Labels \u25BE";
-        showTokens(checked, pressed);
+        showTokens(checked, pressed, unreadPressed);
         table.hidden = shown === 0;
         noMatch.hidden = shown > 0;
       };
 
-      // Mark each row whose page was republished since this reader last
-      // opened it, from the seen route's {pages: {NAME: {revision, seen}}}; a
-      // page never opened is not marked. Without an answer of 200 there are
-      // no marks and no toggle.
+      // A toggle of the filter row, unpressed, placed after the node given.
+      const makeToggle = (after) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "index-toggle";
+        button.setAttribute("aria-pressed", "false");
+        button.addEventListener("click", () => {
+          button.setAttribute("aria-pressed", String(!isPressed(button)));
+          filter();
+        });
+        after.after(button);
+        return button;
+      };
+
+      // From the seen route's {pages: {NAME: {revision, seen, unread}}},
+      // mark each row whose page was republished since this reader last
+      // opened it (a page never opened is not marked), and count the unread
+      // replies to them on each page beside its title, their total in the
+      // tab's title. Without an answer of 200 there are no marks, no counts
+      // and no toggles.
       const showSeen = (pages) => {
-        for (const mark of body.querySelectorAll(".index-mark")) mark.remove();
+        for (const mark of body.querySelectorAll(".index-mark, .index-unread")) mark.remove();
         marked.clear();
+        unread.clear();
         if (!pages) {
           if (updated) updated.remove();
+          if (unreadToggle) unreadToggle.remove();
           updated = null;
+          unreadToggle = null;
+          document.title = indexTitle;
           filter();
           return;
         }
+        let total = 0;
         for (const row of rows) {
           const entry = Object.prototype.hasOwnProperty.call(pages, row.dataset.page || "")
             ? pages[row.dataset.page] : null;
-          if (!entry || typeof entry.seen !== "string" || entry.seen === entry.revision) continue;
-          marked.add(row);
-          const mark = document.createElement("span");
-          mark.className = "index-mark";
-          mark.textContent = "updated";
+          if (!entry) continue;
           const link = row.cells[0].querySelector("a");
-          if (link) link.after(mark);
+          if (typeof entry.seen === "string" && entry.seen !== entry.revision) {
+            marked.add(row);
+            const mark = document.createElement("span");
+            mark.className = "index-mark";
+            mark.textContent = "updated";
+            if (link) link.after(mark);
+          }
+          const n = Number.isInteger(entry.unread) && entry.unread > 0 ? entry.unread : 0;
+          if (n === 0) continue;
+          unread.set(row, n);
+          total += n;
+          const badge = document.createElement("span");
+          badge.className = "index-unread";
+          badge.textContent = n === 1 ? "1 new reply" : `${n} new replies`;
+          const beside = row.cells[0].querySelector(".index-mark") || link;
+          if (beside) beside.after(badge);
         }
-        if (!updated) {
-          updated = document.createElement("button");
-          updated.type = "button";
-          updated.className = "index-toggle";
-          updated.setAttribute("aria-pressed", "false");
-          updated.addEventListener("click", () => {
-            const pressed = updated.getAttribute("aria-pressed") === "true";
-            updated.setAttribute("aria-pressed", String(!pressed));
-            filter();
-          });
-          menu.after(updated);
-        }
+        document.title = total > 0 ? `(${total}) ${indexTitle}` : indexTitle;
+        if (!updated) updated = makeToggle(menu);
         updated.textContent = `Updated \u00B7 ${marked.size}`;
+        if (!unreadToggle) unreadToggle = makeToggle(updated);
+        unreadToggle.textContent = `Unread \u00B7 ${unread.size}`;
         filter();
       };
 
@@ -315,7 +355,7 @@
       filter();
       askSeen();
       // Back from a page through the back-forward cache, the index is the one
-      // it was: ask again, so a page just read loses its mark.
+      // it was: ask again, so a page just read loses its mark and its count.
       window.addEventListener("pageshow", (event) => {
         if (event.persisted) askSeen();
       });

@@ -419,6 +419,44 @@
   overflow-wrap: anywhere;
 }
 
+/* A reply to the reader not yet read (js/comments.js): a lavender edge on its
+   bubble and a "New" tag before its byline, under a line saying so above the
+   first in its thread. */
+:is(.artifact-body, .artifact-comments-panel, .artifact-comments-held) .artifact-comment--unread .artifact-comment-text {
+  border-color: var(--color-lavender);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-lavender) 35%, transparent);
+}
+
+.artifact-comment-new {
+  background: var(--color-lavender);
+  border-radius: var(--radius-chip);
+  color: var(--color-night);
+  font-family: var(--font-mono);
+  font-size: 0.72em;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  line-height: 1.5;
+  padding: 0 0.4em;
+  text-transform: uppercase;
+}
+
+:is(.artifact-body, .artifact-comments-panel, .artifact-comments-held) .artifact-comment-divider {
+  align-items: center;
+  color: var(--color-lavender);
+  display: flex;
+  font-size: 0.78em;
+  gap: 0.6rem;
+  text-align: center;
+}
+
+.artifact-comment-divider::before,
+.artifact-comment-divider::after {
+  border-top: 1px solid color-mix(in srgb, var(--color-lavender) 55%, transparent);
+  content: "";
+  flex: 1;
+  min-width: 1rem;
+}
+
 :is(.artifact-body, .artifact-comments-panel, .artifact-comments-held) .artifact-comment-notice {
   align-self: center;
   background: var(--code-surface);
@@ -1486,6 +1524,28 @@ del.artifact-passage-quoted {
 
 .artifact-comment-chip-act {
   color: var(--color-lavender);
+}
+
+/* How many replies to the reader its threads hold unread. */
+.artifact-comment-chip-unread {
+  background: var(--color-lavender);
+  border-radius: var(--radius-pill);
+  color: var(--color-night);
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0 0.45rem;
+}
+
+/* The badge ending the header's date line while replies to the reader are
+   unread. */
+.artifact-unread {
+  border: 1px solid var(--color-lavender);
+  border-radius: var(--radius-pill);
+  color: var(--color-lavender);
+  font-size: 0.75rem;
+  margin-left: 0.4rem;
+  padding: 0 0.5rem;
+  white-space: nowrap;
 }
 
 .artifact-comment-chip--writing {

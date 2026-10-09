@@ -1,11 +1,22 @@
 {
-  "expected_differences": [],
+  "expected_differences": [
+    {"key": "unread", "request": "1. GET comments, none yet"},
+    {"key": "unread", "request": "4. GET comments"},
+    {"key": "unread", "request": "6. GET comments, after the agent's reply"},
+    {"key": "unread", "request": "8e. GET comments, with a decision thread"}
+  ],
   "requests": [
     {
       "method": "GET",
       "path": "/api/comments",
       "request": "1. GET comments, none yet",
-      "shape": {"maxImageBytes": "number", "page": "string", "revision": "string", "threads": []},
+      "shape": {
+        "maxImageBytes": "number",
+        "page": "string",
+        "revision": "string",
+        "threads": [],
+        "unread": []
+      },
       "status": 200
     },
     {
@@ -78,7 +89,8 @@
               "text": "string"
             }
           }
-        ]
+        ],
+        "unread": []
       },
       "status": 200
     },
@@ -127,7 +139,8 @@
               "text": "string"
             }
           }
-        ]
+        ],
+        "unread": ["number"]
       },
       "status": 200
     },
@@ -251,7 +264,8 @@
               "text": "string"
             }
           }
-        ]
+        ],
+        "unread": []
       },
       "status": 200
     },

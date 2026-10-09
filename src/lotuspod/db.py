@@ -49,7 +49,14 @@ only on such a thread.
 
 Each reader's last visit to each page is kept too: one row per reader, by
 the address Access verified, and page, holding the revision they last
-opened the page at, so it holds on any device they read from.
+opened the page at, so it holds on any device they read from. So is how far
+each reader has seen each thread they opened: one row per reader and thread
+(its first comment's id), holding the highest comment id seen, which never
+goes down. A comment is unread for a reader when it is in a thread they
+started or replied in, as a human by that address, someone else wrote it,
+and its id is above both their own newest comment in the thread and their
+mark for it (unread). The step that keeps the marks marks every thread seen
+up to its newest comment then, for each reader in it.
 """
 
 from __future__ import annotations
@@ -65,7 +72,7 @@ from typing import Callable, Iterator, Mapping, Sequence
 from lotuspod import media
 
 DEFAULT_NAME = "lotuspod.sqlite3"
-SCHEMA_VERSION = 11
+SCHEMA_VERSION = 12
 # Seconds a connection waits for another writer before giving up.
 BUSY_TIMEOUT = 30
 # The state of a reader's comment until an agent takes it up.
@@ -198,6 +205,27 @@ _SCHEMA = {1: (
         seen_at TEXT NOT NULL,
         PRIMARY KEY (reader, page)
     )""",
+), 12: (
+    # How far each reader, by their verified address, has seen each thread
+    # (its first comment's id): the highest comment id seen.
+    """CREATE TABLE thread_views (
+        reader TEXT NOT NULL,
+        thread INTEGER NOT NULL REFERENCES comments(id),
+        comment INTEGER NOT NULL,
+        seen_at TEXT NOT NULL,
+        PRIMARY KEY (reader, thread)
+    )""",
+    # Every thread a reader is in is seen up to its newest comment as the
+    # step runs, so a reply stored before it is never counted unread.
+    """INSERT INTO thread_views (reader, thread, comment, seen_at)
+    SELECT DISTINCT json_extract(mine.actor, '$.email'), COALESCE(mine.parent, mine.id),
+        (SELECT MAX(id) FROM comments AS other
+         WHERE other.id = COALESCE(mine.parent, mine.id)
+            OR other.parent = COALESCE(mine.parent, mine.id)),
+        strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+    FROM comments AS mine
+    WHERE json_extract(mine.actor, '$.kind') = 'human'
+        AND json_extract(mine.actor, '$.email') IS NOT NULL""",
 )}
 # The settings row that holds whether the responder is paused.
 _PAUSED = "responder_paused"
@@ -802,6 +830,58 @@ class Database:
                 "SELECT page, revision FROM page_views WHERE reader = ?", (reader,)
             ).fetchall()
         return {row["page"]: row["revision"] for row in rows}
+
+    def record_thread_view(self, *, reader: str, page: str, thread: int,
+                           comment: int) -> int:
+        """Record that reader has seen the thread of first comment thread on
+        page up to comment; the mark as stored, never lower than before.
+        Refused unknown_thread when thread is not the first comment of a
+        thread on page."""
+        with self._connect() as conn, _write(conn):
+            found = _row(conn, thread)
+            if found is None or found["page"] != page or found["parent"] is not None:
+                raise Refused("unknown_thread")
+            conn.execute(
+                "INSERT INTO thread_views (reader, thread, comment, seen_at) VALUES (?, ?, ?, ?)"
+                " ON CONFLICT (reader, thread) DO UPDATE SET"
+                " comment = MAX(comment, excluded.comment), seen_at = excluded.seen_at",
+                (reader, thread, comment, _now()),
+            )
+            return conn.execute(
+                "SELECT comment FROM thread_views WHERE reader = ? AND thread = ?",
+                (reader, thread),
+            ).fetchone()[0]
+
+    def unread(self, reader: str, page: str | None = None) -> dict[str, list[int]]:
+        """The ids of reader's unread comments on page, or on every page, by
+        page, oldest first; a page with none is left out."""
+        with self._connect() as conn:
+            if page is None:
+                rows = conn.execute(
+                    "SELECT id, page, parent, actor FROM comments ORDER BY id").fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT id, page, parent, actor FROM comments WHERE page = ? ORDER BY id",
+                    (page,)).fetchall()
+            marks = dict(conn.execute(
+                "SELECT thread, comment FROM thread_views WHERE reader = ?", (reader,)
+            ).fetchall())
+        threads: dict[int, list[tuple[int, str, bool]]] = {}
+        for row in rows:
+            actor = _actor(row["actor"])
+            mine = actor.get("kind") == "human" and actor.get("email") == reader
+            threads.setdefault(row["parent"] or row["id"], []).append(
+                (row["id"], row["page"], mine))
+        found: dict[str, list[int]] = {}
+        for root, comments in threads.items():
+            own = max((at for at, _page, mine in comments if mine), default=None)
+            if own is None:
+                continue
+            seen = max(own, marks.get(root, 0))
+            for at, name, mine in comments:
+                if not mine and at > seen:
+                    found.setdefault(name, []).append(at)
+        return {name: sorted(ids) for name, ids in found.items()}
 
     def answer(self, answer_id: int) -> dict | None:
         """The answer answer_id; None when there is none."""

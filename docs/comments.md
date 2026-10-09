@@ -65,10 +65,11 @@ twice.
   of their stored names in the order they are shown; a comment with images may
   have empty `text`. Every comment row carries `images`, each `{name, url,
   width, height}`, and `[]` when it has none.
-- `GET /api/comments?page=NAME` answers `{page, revision, threads,
+- `GET /api/comments?page=NAME` answers `{page, revision, threads, unread,
   maxImageBytes}`: the page's current revision, each thread as `{root,
-  replies, resolution}`, threads and replies oldest first, and the largest
-  image `POST /api/media` takes.
+  replies, resolution}`, threads and replies oldest first, the ids of this
+  reader's unread replies among them, oldest first (see [Replies to
+  you](#replies-to-you)), and the largest image `POST /api/media` takes.
 - `GET /api/revision?page=NAME` answers `{revision}`, the page's current
   revision alone; it is only read (any other method is 405).
 - `POST /api/seen` with `{page, revision}` records that the reader opened
@@ -77,10 +78,18 @@ twice.
   reader before, or null the first time. One row is kept per reader and page,
   keyed by the address Access verified (never the shown name), so it holds on
   every device the reader uses.
-- `GET /api/seen`, with no query, answers `{pages: {NAME: {revision,
-  seen}}}`: one entry for each page this reader has a row for that serve
-  still answers, `revision` the page's current one and `seen` the one last
-  recorded. A page since hidden or removed drops out. It never names a reader.
+- `POST /api/seen` with `{page, thread, comment}` records that the reader has
+  seen the thread whose first comment is `thread` up to the comment id
+  `comment`, and answers 200 `{thread, comment}` with the mark as stored: one
+  row per reader and thread, whose mark never goes down, so a lower `comment`
+  leaves it as it was. A `thread` that is not the id of a thread's first
+  comment on `page` is 404 `unknown_thread`.
+- `GET /api/seen`, with no query, answers `{pages: {NAME: {revision, seen,
+  unread}}}`: one entry for each page this reader has a row for, or has
+  unread replies on, that serve still answers, `revision` the page's current
+  one, `seen` the one last recorded (null for a page never opened) and
+  `unread` the count of their unread replies on it. A page since hidden or
+  removed drops out. It never names a reader.
 - `GET /api/versions?page=NAME` answers `{page, versions}`: each commit of
   the artifacts repository that changed the page while it was visible, as
   `{commit, date, revision, current}`, newest first and at most 200, `date`
@@ -141,7 +150,8 @@ heading id's length is taken, since it must name one of the page's boxes),
 `text` outside 1 to 4000, `note` over 4000, a quote whose `exact` is outside 1 to 500 or
 whose `prefix` or `suffix` is over 32 (code points, as Python counts them), a new
 thread's `revision` that is not a string of at most 100 characters, a seen
-`revision` that is not a string of 1 to 100, and any
+`revision` that is not a string of 1 to 100, a seen `thread` or `comment`
+that is not a positive integer, and any
 `revision` on a reply, and `images` that is not a list of 1 to 4 distinct
 stored names (an empty list, five, or a path among them). A name not in the
 media store is 400 `unknown_image`. A page serve would not answer (hidden,
@@ -164,6 +174,40 @@ A thread on a decision is checked in this order: 404 `unknown_page`, 400
 (a page rendered without comments), and 409 `stale_page` for a `revision`
 other than the page's. Its body with a `section` or a `quote` beside
 `question` is 400 `invalid_body`.
+
+### Replies to you
+
+A thread is the reader's when they wrote its first comment or any reply in
+it, as the reader Access verified. In such a thread, a comment is unread for
+them when someone else wrote it, an agent or another reader, and its id is
+greater than both their own newest comment in the thread and their seen
+mark for it: their own reply reads everything before it, and a resolved
+thread still counts. Each reader has their own marks, kept by address, so
+they hold on every device. Unread new threads the reader is not part of, and
+unread answers, are not counted. Agents have no marks; the agents' socket,
+its pulls and its threads are unchanged. When the schema step that keeps the
+marks runs, every thread is marked seen up to its newest comment for each
+reader in it, so no reply stored before it counts.
+
+On the page, each unread reply is marked: a "New" tag before its byline, a
+lavender edge on its bubble, and the line "New since you last looked" above
+the first in its thread. A section's chip, and a decision's, ends in how many
+of its threads' replies are unread ("1 new"); the header's date line ends in
+a badge, "N new replies to you" ("1 new reply to you"); and the tab's title
+reads "(N) TITLE · Lotuspod". When a thread opens, in the side panel, a
+popover or the bottom sheet, with replies unread, the page posts the
+thread's newest comment id to `/api/seen`: its replies stay marked while it
+stays open and are no longer marked the next time it opens. The counts are
+drawn again after each read of the threads and each post. On the index,
+each page with unread replies gets a count beside its title ("2 new
+replies"), the index's tab title reads "(T) Lotuspod" for their total T, and
+an "Unread · N" toggle, after the Updated one (see
+[Index](publishing.md#index)), keeps only those pages, with the token
+"unread ✕" on the "Showing" line; the Labels menu, Updated and the search
+still apply on top. When the routes answer no `unread`, or
+`/api/seen` anything but 200 (signed out, or the demo site, whose stand-in
+keeps every reader's data in one browser), nothing is marked or counted and
+there is no Unread toggle.
 
 ## Comments
 

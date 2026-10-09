@@ -21,6 +21,18 @@
     var forms = new Map();
     // Each composer's attachments, by its form.
     var attached = new Map();
+    // Replies to the reader: the ids the comments route last named
+    // `unread`, each thread's mark as this page last knew it, and the
+    // comments of each open thread that were unread as it opened, which
+    // stay marked while it stays open; threads by their first comment's
+    // id. A route that names none (signed out, the demo) marks nothing.
+    var SEEN = "/api/seen";
+    var unread = new Set();
+    var seenTo = new Map();
+    var opening = new Map();
+    var tabTitle = document.title;
+    var dateLine = document.querySelector("header.artifact-header .artifact-meta");
+    var newBadge = null;
 
     // The page's decision forms, in page order, and each by its question.
     var decisions = all("form.artifact-decision[data-question]");
@@ -234,6 +246,131 @@
 
     function rows(thread) {
       return [thread.root].concat(thread.replies);
+    }
+
+    // Whether a comment counts as unread: the route named it, and neither
+    // a mark this page posted nor the reader's own reply since has read it.
+    function counted(thread, entry) {
+      return unread.has(entry.id) && entry.id > (seenTo.get(thread.root.id) || 0);
+    }
+
+    // How many comments in some threads count as unread.
+    function unreadIn(threads) {
+      return threads.reduce(function (n, thread) {
+        return n + rows(thread).filter(function (entry) { return counted(thread, entry); }).length;
+      }, 0);
+    }
+
+    // The thread is read up to comment id: by a mark posted, or the
+    // reader's own reply.
+    function readTo(thread, id) {
+      seenTo.set(thread.root.id, Math.max(seenTo.get(thread.root.id) || 0, id));
+    }
+
+    // Mark a thread's unread comments, each with a "New" tag before its
+    // byline, and put the divider above the first.
+    function markUnread(thread) {
+      var held = opening.get(thread.root.id);
+      var first = null;
+      rows(thread).forEach(function (entry) {
+        var drawn = thread.drawn.get(entry.id);
+        if (!drawn) {
+          return;
+        }
+        var marked = counted(thread, entry) || Boolean(held && held.has(entry.id));
+        if (marked && !first) {
+          first = drawn.item;
+        }
+        if (drawn.item.classList.contains("artifact-comment--unread") === marked) {
+          return;
+        }
+        drawn.item.classList.toggle("artifact-comment--unread", marked);
+        var by = drawn.item.querySelector(".artifact-comment-by");
+        if (marked) {
+          by.insertBefore(element("span", "artifact-comment-new", "New"), by.firstChild);
+        } else {
+          by.querySelector(".artifact-comment-new").remove();
+        }
+      });
+      if (!first) {
+        if (thread.divider) {
+          thread.divider.remove();
+        }
+        return;
+      }
+      if (!thread.divider) {
+        // The tags say it to assistive technology; the line only shows it.
+        thread.divider = element("li", "artifact-comment-divider");
+        thread.divider.setAttribute("aria-hidden", "true");
+        thread.divider.appendChild(element("span", "", "New since you last looked"));
+      }
+      if (thread.divider.nextSibling !== first) {
+        thread.list.insertBefore(thread.divider, first);
+      }
+    }
+
+    // Draw the replies to the reader outside the chips: each thread's
+    // marks, the badge ending the header's date line and the tab's title.
+    function showUnread() {
+      var threads = [];
+      shown.forEach(function (thread) {
+        markUnread(thread);
+        threads.push(thread);
+      });
+      var n = unreadIn(threads);
+      document.title = n > 0 ? "(" + n + ") " + tabTitle : tabTitle;
+      if (!dateLine) {
+        return;
+      }
+      if (n > 0) {
+        newBadge = newBadge || element("span", "artifact-unread");
+        newBadge.textContent = (n === 1 ? "1 new reply" : n + " new replies") + " to you";
+        if (dateLine.lastChild !== newBadge) {
+          dateLine.appendChild(newBadge);
+        }
+      } else if (newBadge) {
+        newBadge.remove();
+      }
+    }
+
+    // A thread opened or closed, in the panel, a popover or the sheet, all
+    // of which draw it (sidePanel's draw). Opened with comments unread, it
+    // keeps them marked while it stays open and posts its newest comment's
+    // id as seen; closed, it marks only what is still unread.
+    function looked(thread, open) {
+      if (!open) {
+        if (opening.delete(thread.root.id)) {
+          markUnread(thread);
+        }
+        return;
+      }
+      var fresh = rows(thread).filter(function (entry) { return counted(thread, entry); });
+      if (!fresh.length) {
+        return;
+      }
+      opening.set(thread.root.id, new Set(fresh.map(function (entry) { return entry.id; })));
+      markUnread(thread);
+      seeThread(thread);
+    }
+
+    // Post that the reader has seen a thread up to its newest comment; the
+    // counts drop once it is stored. A failure leaves them as they were.
+    async function seeThread(thread) {
+      var newest = rows(thread).reduce(function (n, entry) { return Math.max(n, entry.id); }, 0);
+      try {
+        var response = await fetch(SEEN, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ page: page, thread: thread.root.id, comment: newest }),
+        });
+        var payload = await json(response);
+        if (response.status === 200 && payload && typeof payload.comment === "number") {
+          readTo(thread, payload.comment);
+          refresh();
+        }
+      } catch (ignored) {
+        // Still unread, as if never opened.
+      }
     }
 
     // A thread waits while any reader comment in it has no answer yet.
@@ -459,6 +596,7 @@
           if (focused) {
             toggle.focus();
           }
+          readTo(thread, row.id);
           merge(thread, [row]);
           posted();
         }
@@ -1482,6 +1620,10 @@
         var made = entry(thread);
         var done = resolved(thread);
         var opened = !done && (current === thread || over.holds(thread));
+        if (opened !== thread.lit) {
+          thread.lit = opened;
+          looked(thread, opened);
+        }
         made.item.classList.toggle("artifact-comments-entry--resolved", done);
         made.item.classList.toggle("artifact-comments-entry--open", opened);
         made.head.hidden = done;
@@ -1659,8 +1801,9 @@
       }
 
       // Where some open threads stand, in one line: its kind, the faces of
-      // who wrote and answered, and its words.
-      function line(threads) {
+      // who wrote and answered, and its words, ending in how many replies
+      // to the reader are unread when any are.
+      function line(threads, fresh) {
         var newest = latest(threads);
         var kind = newest ? standing(newest) : "none";
         var faces = mute(element("span", "artifact-comment-chip-faces"));
@@ -1701,6 +1844,9 @@
           faces.appendChild(element("span", "artifact-comment-chip-icon"));
           parts.push("No comments", " · ", element("span", "artifact-comment-chip-act", "Comment"));
         }
+        if (fresh > 0) {
+          parts.push(" · ", element("span", "artifact-comment-chip-unread", fresh + " new"));
+        }
         var text = element("span", "artifact-comment-chip-text");
         text.append.apply(text, parts);
         return { kind: kind, faces: faces, text: text };
@@ -1719,7 +1865,8 @@
 
       // A box's chip: where its section's open threads stand, in one line.
       function chip(box) {
-        paint(box.querySelector("summary"), "artifact-comment-summary", line(unresolvedOf(box)));
+        paint(box.querySelector("summary"), "artifact-comment-summary",
+          line(unresolvedOf(box), unreadIn(threadsOf(box))));
       }
 
       // A decision's threads, oldest first.
@@ -1751,12 +1898,16 @@
           decisionChips.set(form, node);
         }
         var unresolved = threads.filter(function (thread) { return !resolved(thread); });
-        var drawn = line(unresolved);
+        var fresh = unreadIn(threads);
+        var drawn = line(unresolved, fresh);
         if (!unresolved.length) {
           var faces = mute(element("span", "artifact-comment-chip-faces"));
           faces.appendChild(element("span", "artifact-comment-chip-icon"));
           var text = element("span", "artifact-comment-chip-text");
           text.textContent = threads.length + " resolved";
+          if (fresh > 0) {
+            text.append(" · ", element("span", "artifact-comment-chip-unread", fresh + " new"));
+          }
           drawn = { kind: "resolved", faces: faces, text: text };
         }
         paint(node, "artifact-decision-chip", drawn);
@@ -2188,6 +2339,8 @@
       var thread = {
         root: root, replies: [], list: list, drawn: new Map(), typing: null, waitKey: null,
         resolution: entry.resolution || null, entry: null,
+        // Whether it is open, and the line above its first unread comment.
+        lit: false, divider: null,
         // A passage thread's words: undefined until looked for, null when
         // not found; its highlights, its number node and its number.
         spot: undefined, marks: [], number: null, n: 0, head: null, headKey: null,
@@ -2225,10 +2378,12 @@
     }
 
     // Draw what the threads say outside them: the passages' highlights, the
-    // panel, the chips and what a popover or the sheet holds.
+    // panel, the chips, what a popover or the sheet holds and the replies
+    // to the reader.
     function refresh() {
       passages.update();
       panel.refresh();
+      showUnread();
     }
 
     // The checks for replies: while a thread waits, or the reader has a
@@ -2335,6 +2490,7 @@
           settleImageCap(null, NO_CAP);
         }
         if (payload) {
+          unread = new Set(Array.isArray(payload.unread) ? payload.unread : []);
           (payload.threads || []).forEach(function (entry) {
             if (add(entry)) {
               touched = true;
