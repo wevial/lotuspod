@@ -163,7 +163,8 @@
       };
 
       toggle.addEventListener("click", () => open(list.hidden));
-      menu.addEventListener("keydown", (event) => {
+      // Escape closes the open menu wherever focus has gone, the search too.
+      document.addEventListener("keydown", (event) => {
         if (event.key === "Escape" && !list.hidden) {
           event.preventDefault();
           open(false);

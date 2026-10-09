@@ -210,6 +210,16 @@ test('Escape or a click outside closes the menu with focus on its button', async
   await expect(button).toHaveAttribute('aria-expanded', 'false');
   await expect(button).toBeFocused();
 
+  // Escape still closes it once focus has left it for the search.
+  await button.click();
+  await expect(page.locator('.index-labels-list')).toBeVisible();
+  await page.keyboard.press('Shift+Tab');
+  await expect(page.getByLabel('Search')).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.index-labels-list')).toBeHidden();
+  await expect(button).toHaveAttribute('aria-expanded', 'false');
+  await expect(button).toBeFocused();
+
   // A click on a control of its own, the search, returns focus all the same.
   await button.click();
   await expect(page.locator('.index-labels-list')).toBeVisible();
