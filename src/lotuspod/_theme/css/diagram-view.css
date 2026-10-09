@@ -28,16 +28,6 @@ pre.mermaid:hover > .artifact-diagram-expand,
   opacity: 1;
 }
 
-.artifact-diagram-expand:hover {
-  border-color: var(--color-lavender);
-  color: var(--color-white);
-}
-
-.artifact-diagram-expand:focus-visible {
-  outline: 2px solid var(--color-lavender);
-  outline-offset: 2px;
-}
-
 /* The icon, four corners pointing out, in the button's own color. */
 .artifact-diagram-expand::before {
   background-color: currentColor;
@@ -123,11 +113,13 @@ html.artifact-diagram-view-open {
   padding: 0.3rem 0.7rem;
 }
 
+.artifact-diagram-expand:hover,
 .artifact-diagram-view-tools > button:hover {
   border-color: var(--color-lavender);
   color: var(--color-white);
 }
 
+.artifact-diagram-expand:focus-visible,
 .artifact-diagram-view-tools > button:focus-visible {
   outline: 2px solid var(--color-lavender);
   outline-offset: 2px;

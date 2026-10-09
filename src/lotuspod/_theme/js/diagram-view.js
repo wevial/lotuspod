@@ -266,10 +266,9 @@
         : { x: 0, y: 0, width: drawn.width || 1, height: drawn.height || 1 };
       shown = {
         pre: pre, svg: svg, expand: expand, next: svg.nextSibling, box: box,
-        saved: ["viewBox", "width", "height", "style"].map(function (name) {
-          return [name, svg.getAttribute(name)];
+        saved: [[svg, "viewBox"], [svg, "width"], [svg, "height"], [svg, "style"], [pre, "style"]].map(function (at) {
+          return [at[0], at[1], at[0].getAttribute(at[1])];
         }),
-        preStyle: pre.getAttribute("style"),
       };
       pre.style.boxSizing = "border-box";
       pre.style.height = pre.getBoundingClientRect().height + "px";
@@ -290,18 +289,13 @@
       dragging = null;
       parts.stage.classList.remove("artifact-diagram-view-stage--dragging");
       was.pre.insertBefore(was.svg, was.next && was.next.parentNode === was.pre ? was.next : was.expand);
-      was.saved.forEach(function (pair) {
-        if (pair[1] === null) {
-          was.svg.removeAttribute(pair[0]);
+      was.saved.forEach(function (at) {
+        if (at[2] === null) {
+          at[0].removeAttribute(at[1]);
         } else {
-          was.svg.setAttribute(pair[0], pair[1]);
+          at[0].setAttribute(at[1], at[2]);
         }
       });
-      if (was.preStyle === null) {
-        was.pre.removeAttribute("style");
-      } else {
-        was.pre.setAttribute("style", was.preStyle);
-      }
       document.documentElement.classList.remove(OPEN);
       if (was.expand.isConnected) {
         was.expand.focus({ preventScroll: true });
