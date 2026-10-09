@@ -147,7 +147,6 @@
       return Math.max(LEAST, Math.min(value, MOST));
     }
 
-    // Set the svg's viewBox to the view, and the readout to its zoom.
     function draw() {
       var room = size();
       shown.svg.setAttribute("viewBox", [left, top, room.width / zoom, room.height / zoom].join(" "));
