@@ -732,6 +732,30 @@ A heater keeps a hole in the ice.
         self.assertEqual(after["decision-d2"].label(current["choice"]), "Solar")
 
 
+class LongOptionTests(ServedTestCase):
+    """An option offered on the page, however long its label, can be saved."""
+
+    def test_a_long_option_the_page_offers_saves(self):
+        label = ("Evidence levels: reproduced or traced can block; a concern is answered "
+                 "but never blocks, at most 3 per round, high-tier ones also go to the operator")
+        forms = self.publish(f"""\
+# Pond plan
+
+## Decisions for the maintainer
+
+| # | Question | Options |
+| --- | --- | --- |
+| D1 | How do reviews weigh evidence? | {label} / No |
+""")
+        asked = forms["decision-d1"]
+        value = next(value for value, shown in asked.options if shown == label)
+        status, saved = self.ask("POST", "/api/answers", {
+            "page": "pond", "question": "decision-d1", "version": asked.version,
+            "choice": value, "note": "",
+        })
+        self.assertEqual(status, 201, saved)
+
+
 class AnswersJsonTests(ServedTestCase):
     """lotuspod answers --json prints what GET /api/answers answers, asked
     included, but for each reader's address."""
