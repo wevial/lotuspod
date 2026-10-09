@@ -1,6 +1,8 @@
 
 /* A flowchart's node cards (js/diagram-cards.js). Each box the Nodes table
-   lists is a button that opens its card, and takes its row's status color.
+   lists is a button that opens its card, and takes its row's status color
+   unless it has an authored Mermaid style (style, class or :::), which wins:
+   the script then adds no status class, so no rule here reaches it.
    Mermaid's own rules inside the svg are scoped by the svg's id, which no
    rule here can name, so the colors that replace them are !important. */
 .artifact-body pre.mermaid g.artifact-node {
