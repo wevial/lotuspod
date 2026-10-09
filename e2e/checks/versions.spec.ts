@@ -169,6 +169,31 @@ test.describe('signed in', () => {
   });
 });
 
+test.describe('signed in, outside a repository', () => {
+  test.use({ extraHTTPHeaders: SIGNED_IN });
+
+  // The fixture's site is a repository, so the route's answer for a
+  // directory that is not one is stood in for: 200 with no versions.
+  test('an empty list still shows "Versions · 0" and its view', async ({ page }) => {
+    const errors = watchErrors(page);
+    await page.route('**/api/versions?*', (route) => route.fulfill({
+      status: 200, contentType: 'application/json',
+      body: JSON.stringify({ page: 'capture-versions-once', versions: [] }),
+    }));
+    await page.goto('/capture-versions-once.html');
+    const link = page.locator('.artifact-header .artifact-meta a.artifact-versions-link');
+    await expect(link).toHaveText('Versions · 0');
+    await link.click();
+    const versions = view(page);
+    await expect(versions.heading).toBeVisible();
+    await expect(versions.node).toContainText('This page has no versions yet.');
+    await expect(versions.entries).toHaveCount(0);
+    await expect(versions.more).toBeHidden();
+    await expect(page.locator('.artifact-body')).toBeHidden();
+    expect(errors).toEqual([]);
+  });
+});
+
 test('signed out, a page shows no versions', async ({ page }) => {
   const errors = watchErrors(page);
   const answered = page.waitForResponse((response) =>

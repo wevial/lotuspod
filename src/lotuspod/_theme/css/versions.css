@@ -83,6 +83,10 @@
   padding: 0;
 }
 
+.artifact-versions-list:empty {
+  display: none;
+}
+
 .artifact-versions-entry {
   align-items: baseline;
   border-top: 1px solid var(--hairline);

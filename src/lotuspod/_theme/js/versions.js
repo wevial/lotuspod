@@ -1,6 +1,8 @@
 
   // The page's versions (lotuspod.versions): a page with a revision asks the
-  // versions route once. When it answers, the header's date line gains a
+  // versions route once. When it answers 200, even with no versions (a
+  // directory that is not the top of its own repository has none), the
+  // header's date line gains a
   // "Versions · N" link to #versions, and while the hash is #versions the
   // page shows its versions view in place of its header and body: a
   // breadcrumb back to the page, the heading, and the versions newest first,
@@ -67,7 +69,8 @@
         heading.id = "artifact-versions-heading";
         heading.tabIndex = -1;
         var said = element("p", "artifact-versions-count",
-          count === 1 ? "This is the only version." : count + ", newest first");
+          count === 0 ? "This page has no versions yet." :
+            count === 1 ? "This is the only version." : count + ", newest first");
         var list = element("ol", "artifact-versions-list");
         var more = element("button", "artifact-versions-more", "Show older versions");
         more.type = "button";
@@ -120,7 +123,7 @@
           return;
         }
         var payload = await json(response);
-        if (payload && Array.isArray(payload.versions) && payload.versions.length) {
+        if (payload && Array.isArray(payload.versions)) {
           draw(payload.versions);
         }
       } catch (ignored) {

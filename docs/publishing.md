@@ -370,7 +370,9 @@ A published page's header ends its date line in a "Versions · N" link to
 `#versions`, which shows the page's versions in place of its body: each with
 its date and time, the current one marked "current", and every other with a
 "View" link. The list shows 20, and "Show older versions" shows 20 more. A
-page with one version says "This is the only version." The page asks
+page with one version says "This is the only version.", and one in a
+directory that is not a repository shows "Versions · 0" and says "This page
+has no versions yet." The page asks
 `GET /api/versions?page=NAME` (see [Reading and answering
 pages](comments.md#answers-and-comments)) once as it loads; when it answers
 anything but 200, as on the demo, there is no link and no view.
