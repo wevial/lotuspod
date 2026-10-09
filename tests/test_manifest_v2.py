@@ -732,11 +732,11 @@ class IndexTableTests(TempDirTestCase):
         )
         self.assertNotIn("episode-card", index_html)
 
-    def test_columns_are_title_created_updated_summary_with_no_page_column(self):
+    def test_columns_are_title_updated_created_summary_with_no_page_column(self):
         make_mixed_fixture(self.out_dir)
         self.render("note")
         table = _IndexTable(self.build_index())
-        self.assertEqual(table.headers, ["Title", "Created", "Updated", "Summary"])
+        self.assertEqual(table.headers, ["Title", "Updated", "Created", "Summary"])
         rows = table.body_rows()
         self.assertEqual(len(rows), 2)
         for row in rows:
@@ -768,12 +768,13 @@ class IndexTableTests(TempDirTestCase):
             render_updated(self.out_dir, name, "2026-09-01", updated)
         rows = _IndexTable(self.build_index()).body_rows()
         self.assertEqual(
-            [(row[0]["text"], row[2]["datetime"], row[2]["text"]) for row in rows],
-            [("B-Page", "2026-10-01T08:00:00Z", "2026-10-01"),
-             ("C-Page", "2026-09-15T08:00:00Z", "2026-09-15"),
-             ("A-Page", "2026-09-02T08:00:00Z", "2026-09-02")],
+            [(row[0]["text"], row[1]["datetime"], row[1]["text"]) for row in rows],
+            [("B-Page", "2026-10-01T08:00:00Z", "2026-10-01 08:00"),
+             ("C-Page", "2026-09-15T08:00:00Z", "2026-09-15 08:00"),
+             ("A-Page", "2026-09-02T08:00:00Z", "2026-09-02 08:00")],
         )
-        self.assertEqual({row[1]["datetime"] for row in rows}, {"2026-09-01"})
+        self.assertEqual({(row[2]["datetime"], row[2]["text"]) for row in rows},
+                         {("2026-09-01", "2026-09-01")})
         rc, _, err = run_cli("manifest", "--out-dir", str(self.out_dir))
         self.assertEqual(rc, 0, err)
         data = json.loads((self.out_dir / "manifest.json").read_text(encoding="utf-8"))

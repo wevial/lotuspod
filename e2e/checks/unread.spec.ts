@@ -330,7 +330,8 @@ test.describe('signed in', () => {
 
     const read = page.waitForResponse((response) =>
       new URL(response.url()).pathname === SEEN && response.request().method() === 'GET');
-    await page.goto('/');
+    // The Pages view: signed in, the index opens on Recent activity.
+    await page.goto('/#pages');
     await read;
     const all = await shownPages(page);
     expect(all.length).toBeGreaterThan(1);
@@ -402,7 +403,7 @@ test.describe('signed in', () => {
       .toEqual([]);
 
     const read = page.waitForResponse((response) => new URL(response.url()).pathname === SEEN);
-    await page.goto('/');
+    await page.goto('/#pages');
     await read;
     await expect(page.locator('.index-count')).toBeVisible();
     await expect(page.locator('.index-toggle')).toHaveCount(0);

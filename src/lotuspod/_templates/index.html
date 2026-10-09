@@ -50,18 +50,24 @@
     // only those. It also counts the replies in the reader's own threads not
     // yet read: each page with any gets a count, the tab's title the total,
     // and an Unread toggle keeps only those. Any other answer (signed out,
-    // the demo) leaves no mark, no count and no toggle.
+    // the demo) leaves no mark, no count and no toggle. When the activity
+    // route answers 200, a "Pages | Recent activity" switch appears and the
+    // index opens on Recent activity, the last 7 days grouped by page, unless
+    // the URL ends #pages. The filters keep one state across both views.
+    // An index with no page has no table: there the controls stay hidden
+    // unless the activity route answers, and its switch is all that is added.
     (() => {
       const table = document.querySelector(".index-table");
-      if (!table) return;
+      // What stands in for the table on an index with no page.
+      const nothing = table ? null : document.querySelector(".index-empty:not(.index-no-match)");
 
-      const body = table.tBodies[0];
-      const headers = Array.from(table.tHead.rows[0].cells);
+      const body = table ? table.tBodies[0] : null;
+      const headers = table ? Array.from(table.tHead.rows[0].cells) : [];
       // Document order is newest update first, filename breaking ties - the
       // listing's stable base. Sorts run from it rather than from the current
       // DOM order, so a sort is repeatable and equal keys keep falling back to
       // that order.
-      const rows = Array.from(body.rows);
+      const rows = body ? Array.from(body.rows) : [];
 
       // A date cell sorts by its time element's full datetime, not the day it
       // shows, so two pages updated on one day keep their order. A title
@@ -143,6 +149,9 @@
         (row.dataset.labels || "").split(",").filter(Boolean),
       ]));
 
+      // Each page's row, by the name it carries in data-page.
+      const rowOf = new Map(rows.map((row) => [row.dataset.page || "", row]));
+
       // One checkbox per label any row carries, A to Z, with its page count.
       const counts = new Map();
       for (const labels of labelsOf.values()) {
@@ -188,9 +197,10 @@
         toggle.focus();
       });
 
-      // The rows republished since this reader last opened them, and the
-      // Updated toggle; each row's count of unread replies to the reader,
+      // The pages republished since this reader last opened them, and the
+      // Updated toggle; each page's count of unread replies to the reader,
       // and the Unread toggle; all made once the seen route first answers 200.
+      // Both are kept by page name, so the activity view's groups share them.
       const marked = new Set();
       let updated = null;
       const unread = new Map();
@@ -231,11 +241,20 @@
         active.hidden = releases.length === 0;
       };
 
-      // Every test in one pass over the rows: a row is kept when no label is
-      // checked or it carries a checked one, when Updated is not pressed or
-      // it is marked, when Unread is not pressed or it has a count, and when
-      // the search - one case-insensitive substring test against the whole
-      // row as written, labels included - matches it.
+      // The tests a page passes whatever the search, asked of the rows and
+      // of the activity groups alike: no label is checked or it carries a
+      // checked one, Updated is not pressed or it is marked, and Unread is
+      // not pressed or it has a count.
+      const passes = (name, labels, checked, pressed, unreadPressed) =>
+        (checked.length === 0 || labels.some((label) => checked.includes(label))) &&
+        (!pressed || marked.has(name)) &&
+        (!unreadPressed || unread.has(name));
+
+      // Every test in one pass over the rows and the activity groups: a row
+      // is kept when its page passes and the search - one case-insensitive
+      // substring test against the whole row as written, labels included -
+      // matches it; a group when its page passes and the search matches its
+      // title, labels or events.
       const filter = () => {
         const query = search.value.trim().toLowerCase();
         const checked = boxes.filter((box) => box.checked).map((box) => box.value);
@@ -243,14 +262,18 @@
         const unreadPressed = isPressed(unreadToggle);
         let shown = 0;
         for (const row of rows) {
-          const labelled = checked.length === 0 ||
-            labelsOf.get(row).some((label) => checked.includes(label));
-          const fresh = !pressed || marked.has(row);
-          const waiting = !unreadPressed || unread.has(row);
           const found = !query || textOf.get(row).includes(query);
-          const match = labelled && fresh && waiting && found;
+          const match = found &&
+            passes(row.dataset.page || "", labelsOf.get(row), checked, pressed, unreadPressed);
           row.hidden = !match;
           if (match) shown += 1;
+        }
+        let kept = 0;
+        for (const group of groups) {
+          const found = !query || group.text.includes(query);
+          const match = found && passes(group.name, group.labels, checked, pressed, unreadPressed);
+          group.node.hidden = !match;
+          if (match) kept += 1;
         }
         const noun = rows.length === 1 ? "page" : "pages";
         const arrived = sortColumn === arrival.column && ascending === arrival.ascending;
@@ -258,17 +281,23 @@
         // row passes it.
         const filtered = checked.length > 0 || pressed || unreadPressed || query !== "";
         count.textContent =
-          !filtered
-            ? arrived && sortColumn >= 0
-              ? `${rows.length} ${noun}, newest update first`
-              : `${rows.length} ${noun}`
-            : `${shown} of ${rows.length} ${noun}`;
+          view === "activity"
+            ? activityCount(kept, filtered)
+            : !filtered
+              ? arrived && sortColumn >= 0
+                ? `${rows.length} ${noun}, newest update first`
+                : `${rows.length} ${noun}`
+              : `${shown} of ${rows.length} ${noun}`;
         toggle.textContent = checked.length
           ? `Labels (${checked.length}) \u25BE`
           : "Labels \u25BE";
         showTokens(checked, pressed, unreadPressed);
-        table.hidden = shown === 0;
-        noMatch.hidden = shown > 0;
+        if (table) table.hidden = view !== "pages" || shown === 0;
+        if (nothing) nothing.hidden = view !== "pages";
+        noMatch.hidden = view !== "pages" || !table || shown > 0;
+        activityView.hidden = view !== "activity";
+        activityNoMatch.hidden = groups.length === 0 || kept > 0;
+        older.hidden = !(feed && feed.older);
       };
 
       // A toggle of the filter row, unpressed, placed after the node given.
@@ -292,7 +321,9 @@
       // tab's title. Without an answer of 200 there are no marks, no counts
       // and no toggles.
       const showSeen = (pages) => {
-        for (const mark of body.querySelectorAll(".index-mark, .index-unread")) mark.remove();
+        for (const mark of document.querySelectorAll(".index-table .index-mark, .index-table .index-unread")) {
+          mark.remove();
+        }
         marked.clear();
         unread.clear();
         if (!pages) {
@@ -301,7 +332,7 @@
           updated = null;
           unreadToggle = null;
           document.title = indexTitle;
-          filter();
+          showActivity();
           return;
         }
         let total = 0;
@@ -311,7 +342,7 @@
           if (!entry) continue;
           const link = row.cells[0].querySelector("a");
           if (typeof entry.seen === "string" && entry.seen !== entry.revision) {
-            marked.add(row);
+            marked.add(row.dataset.page);
             const mark = document.createElement("span");
             mark.className = "index-mark";
             mark.textContent = "updated";
@@ -319,7 +350,7 @@
           }
           const n = Number.isInteger(entry.unread) && entry.unread > 0 ? entry.unread : 0;
           if (n === 0) continue;
-          unread.set(row, n);
+          unread.set(row.dataset.page, n);
           total += n;
           const badge = document.createElement("span");
           badge.className = "index-unread";
@@ -332,7 +363,7 @@
         updated.textContent = `Updated \u00B7 ${marked.size}`;
         if (!unreadToggle) unreadToggle = makeToggle(updated);
         unreadToggle.textContent = `Unread \u00B7 ${unread.size}`;
-        filter();
+        showActivity();
       };
 
       const askSeen = async () => {
@@ -349,15 +380,366 @@
         showSeen(pages);
       };
 
+      // The Recent activity view: the activity route's pages, each a group
+      // with a header row and its events, newest first. It is built with
+      // textContent only, since the events carry what readers wrote, and
+      // only once the route answers 200: until then, and for good on any
+      // other answer, the index is the Pages view alone.
+      const DAY = 86400000;
+      const header = document.querySelector(".index-header");
+      const heading = document.querySelector(".index-title");
+      // "pages" or "activity", the view shown.
+      let view = "pages";
+      // The route's answers merged so far: {from, to, older, pages}.
+      let feed = null;
+      // Each group as last built: {node, name, labels, text}.
+      let groups = [];
+      let viewButtons = [];
+
+      const activityView = document.createElement("div");
+      activityView.className = "index-activity";
+      activityView.hidden = true;
+      const activityList = document.createElement("div");
+      activityList.className = "index-activity-list";
+      const activityNoMatch = document.createElement("p");
+      activityNoMatch.className = "index-empty index-activity-no-match";
+      activityNoMatch.textContent = "No activity matches these filters.";
+      activityNoMatch.hidden = true;
+      const older = document.createElement("button");
+      older.type = "button";
+      older.className = "index-older";
+      older.textContent = "Show older";
+      older.hidden = true;
+      activityView.append(activityList, activityNoMatch, older);
+      active.after(activityView);
+
+      const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+
+      // The days the merged answers cover.
+      const days = () => Math.max(1, Math.round((Date.parse(feed.to) - Date.parse(feed.from)) / DAY));
+
+      const activityCount = (kept, filtered) => {
+        const span = `in the last ${days()} days`;
+        if (groups.length === 0) return `No activity ${span}.`;
+        const noun = groups.length === 1 ? "page" : "pages";
+        return filtered
+          ? `${kept} of ${groups.length} ${noun} with activity ${span}`
+          : `${groups.length} ${noun} with activity ${span}`;
+      };
+
+      // An event's time in the browser's time zone: the time of day for
+      // today, else the day and the time.
+      const when = (at) => {
+        const moment = new Date(at);
+        const time = moment.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+        if (moment.toDateString() === new Date().toDateString()) return time;
+        return `${moment.toLocaleDateString([], { month: "short", day: "numeric" })}, ${time}`;
+      };
+
+      const quoted = (text) => `“${text}”`;
+
+      // Who did it: "you" for the reader, else a reader's name or an agent's
+      // handle; a version with no owner is the site's own.
+      const actorOf = (event) => {
+        if (event.mine === true) return "you";
+        const actor = event.actor;
+        if (event.kind === "version") return typeof actor === "string" && actor ? actor : "Lotuspod";
+        if (actor && typeof actor === "object") return String(actor.name || actor.handle || "someone");
+        return "someone";
+      };
+
+      // What happened, in one line; questions maps a decision's id to its
+      // text, as the page's answers in the feed or the page itself name it.
+      // Until the page is read, or when it cannot be, a comment on a
+      // decision names its section's title, never the decision's id.
+      const whatOf = (event, questions) => {
+        // A section's title; its id is internal.
+        const section = event.sectionTitle;
+        if (event.kind === "version") {
+          if (event.first) return "published the page";
+          return event.summary && event.summary !== "new version"
+            ? `published a new version: ${event.summary}`
+            : "published a new version";
+        }
+        if (event.kind === "comment") {
+          if (event.question !== undefined && event.question !== null) {
+            const text = questions.get(String(event.question));
+            if (text) return `commented on ${quoted(text)}`;
+            return section ? `commented on ${quoted(section)}` : "commented on a decision";
+          }
+          return section ? `commented on ${quoted(section)}` : "commented on the page";
+        }
+        if (event.kind === "reply") {
+          if (event.yours) {
+            return section ? `replied to your comment on ${quoted(section)}` : "replied to your comment";
+          }
+          return section ? `replied in ${quoted(section)}` : "replied";
+        }
+        const question = event.questionText || event.question;
+        return `answered ${quoted(question)}${event.label ? `: ${event.label}` : ""}`;
+      };
+
+      const KINDS = ["version", "comment", "reply", "answer"];
+
+      const element = (tag, className, text) => {
+        const node = document.createElement(tag);
+        if (className) node.className = className;
+        if (text !== undefined) node.textContent = text;
+        return node;
+      };
+
+      const linkOf = (name) => {
+        const row = rowOf.get(name);
+        return row ? row.cells[0].querySelector("a") : null;
+      };
+
+      const hrefOf = (name) => {
+        const link = linkOf(name);
+        return link ? link.getAttribute("href") : `${encodeURIComponent(name)}.html`;
+      };
+
+      // Each page's decision questions by id, as the page asks them: the
+      // activity route gives a comment on a decision only the decision's id.
+      // A page is read once, when a comment in the feed is on a question no
+      // answer in the feed names; null while it is being read.
+      const pageQuestions = new Map();
+
+      const questionsOf = (entry) => {
+        const questions = new Map();
+        for (const event of entry.events) {
+          if (event && event.kind === "answer" && event.questionText) {
+            questions.set(String(event.question), String(event.questionText));
+          }
+        }
+        for (const [id, text] of pageQuestions.get(entry.page) || []) {
+          if (!questions.has(id)) questions.set(id, text);
+        }
+        return questions;
+      };
+
+      // The page's questions, parsed inert - no script in it runs - and only
+      // their text read; none when the page cannot be read.
+      const readQuestions = async (name) => {
+        const found = new Map();
+        try {
+          const response = await fetch(hrefOf(name), { cache: "no-store" });
+          if (!response.ok) return found;
+          const page = new DOMParser().parseFromString(await response.text(), "text/html");
+          for (const form of page.querySelectorAll("form[data-question]")) {
+            const text = form.querySelector(".artifact-decision-text");
+            const words = text ? text.textContent.trim() : "";
+            if (words) found.set(form.dataset.question, words);
+          }
+        } catch (ignored) {
+          // Named by their section, as if the page had none.
+        }
+        return found;
+      };
+
+      // Read each page whose decision comments the feed leaves unnamed, then
+      // build the groups again.
+      const askQuestions = () => {
+        for (const entry of feed ? feed.pages : []) {
+          if (pageQuestions.has(entry.page)) continue;
+          const questions = questionsOf(entry);
+          const unnamed = entry.events.some((event) => event && event.kind === "comment" &&
+            event.question !== undefined && event.question !== null &&
+            !questions.has(String(event.question)));
+          if (!unnamed) continue;
+          pageQuestions.set(entry.page, null);
+          readQuestions(entry.page).then((found) => {
+            pageQuestions.set(entry.page, found);
+            if (found.size) showActivity();
+          });
+        }
+      };
+
+      // One page's group: its header row - title, labels, unread badge and
+      // event count - then its events.
+      const buildGroup = (entry) => {
+        const name = entry.page;
+        const row = rowOf.get(name);
+        const labels = row ? labelsOf.get(row) : [];
+        const rowLink = linkOf(name);
+        const title = String(entry.title || (rowLink && rowLink.textContent) || name);
+        const events = entry.events.filter((event) =>
+          event && KINDS.includes(event.kind) && typeof event.at === "string");
+        const questions = questionsOf(entry);
+
+        const section = element("section", "index-activity-page");
+        section.dataset.page = name;
+        const head = element("div", "index-activity-head");
+        const titled = element("h2", "index-activity-title");
+        const link = element("a", "", title);
+        link.href = hrefOf(name);
+        titled.append(link);
+        head.append(titled);
+        if (labels.length) {
+          const tags = element("span", "index-tags");
+          for (const label of labels) tags.append(element("span", "index-tag", label));
+          head.append(tags);
+        }
+        const n = unread.get(name) || 0;
+        if (n > 0) {
+          head.append(element("span", "index-activity-unread",
+            n === 1 ? "1 new reply to you" : `${n} new replies to you`));
+        }
+        head.append(element("span", "index-activity-count", plural(events.length, "event", "events")));
+
+        const list = element("ul", "index-activity-events");
+        const lines = [];
+        for (const event of events) {
+          const item = element("li", "index-activity-event");
+          const time = element("time", "index-activity-time", when(event.at));
+          time.dateTime = event.at;
+          const fresh = event.kind === "reply" && event.unread === true;
+          const dot = element("span", `index-dot index-dot--${event.kind}${fresh ? " index-dot--unread" : ""}`);
+          dot.setAttribute("aria-hidden", "true");
+          const actor = actorOf(event);
+          const what = whatOf(event, questions);
+          const said = element("span", "index-activity-said");
+          said.append(element("span", "index-activity-actor", actor), ` ${what}`);
+          if (fresh) said.append(" · ", element("span", "index-activity-new", "new, to you"));
+          item.append(time, dot, said);
+          list.append(item);
+          lines.push(`${actor} ${what}${fresh ? " \u00B7 new, to you" : ""}`);
+        }
+        section.append(head, list);
+        activityList.append(section);
+        return { node: section, name, labels, text: [title, ...labels, ...lines].join("\n").toLowerCase() };
+      };
+
+      // Build the groups again from the feed, as the seen route's counts, a
+      // page's questions or a Show older answer change them, and filter.
+      const showActivity = () => {
+        activityList.replaceChildren();
+        groups = feed ? feed.pages.map(buildGroup) : [];
+        filter();
+        askQuestions();
+      };
+
+      // The activity route's answer for the 7 days before `before`, or the
+      // last 7; null for any answer but a 200 of the expected shape.
+      const askActivity = async (before) => {
+        try {
+          const query = before ? `?before=${encodeURIComponent(before)}` : "";
+          const response = await fetch(`/api/activity${query}`, { cache: "no-store" });
+          if (response.status !== 200) return null;
+          const payload = await response.json();
+          if (!payload || typeof payload.from !== "string" || typeof payload.to !== "string" ||
+              !Array.isArray(payload.pages)) return null;
+          const pages = payload.pages.filter((entry) =>
+            entry && typeof entry.page === "string" && Array.isArray(entry.events));
+          return { from: payload.from, to: payload.to, older: payload.older === true, pages };
+        } catch (ignored) {
+          return null;
+        }
+      };
+
+      // The view the URL names: #pages the Pages view, no hash Recent
+      // activity; with no switch, always Pages.
+      const showView = () => {
+        view = feed && location.hash !== "#pages" ? "activity" : "pages";
+        for (const button of viewButtons) {
+          button.setAttribute("aria-pressed", String(button.dataset.view === view));
+        }
+        filter();
+      };
+
+      // Each press is a history entry, so the back button moves between the
+      // views.
+      const choose = (chosen) => {
+        if (chosen === view) return;
+        if (chosen === "pages") {
+          location.hash = "pages";
+        } else {
+          history.pushState(null, "", location.pathname + location.search);
+          showView();
+        }
+      };
+
+      const makeSwitch = () => {
+        const group = element("div", "index-views");
+        group.setAttribute("role", "group");
+        group.setAttribute("aria-label", "View");
+        viewButtons = [["pages", "Pages"], ["activity", "Recent activity"]].map(([key, label]) => {
+          const button = element("button", "index-view", label);
+          button.type = "button";
+          button.dataset.view = key;
+          button.setAttribute("aria-pressed", "false");
+          button.addEventListener("click", () => choose(key));
+          return button;
+        });
+        group.append(...viewButtons);
+        (heading || header).after(group);
+      };
+
+      // Show older: the 7 days before the earliest asked, merged in. A
+      // page already listed takes its older events at the end of its group;
+      // a new one is listed after the others.
+      const merge = (into, earlier) => {
+        for (const entry of earlier.pages) {
+          const listed = into.pages.find((page) => page.page === entry.page);
+          if (listed) listed.events.push(...entry.events);
+          else into.pages.push(entry);
+        }
+        into.from = earlier.from;
+        into.older = earlier.older;
+      };
+
+      older.addEventListener("click", async () => {
+        older.disabled = true;
+        const earlier = await askActivity(feed.from);
+        older.disabled = false;
+        if (!earlier) return;
+        merge(feed, earlier);
+        showActivity();
+        if (older.hidden) activityView.focus();
+      });
+      activityView.tabIndex = -1;
+
+      const startActivity = async () => {
+        const answer = await askActivity(null);
+        if (!answer) return;
+        feed = answer;
+        controls.hidden = false;
+        makeSwitch();
+        window.addEventListener("hashchange", showView);
+        window.addEventListener("popstate", showView);
+        showActivity();
+        showView();
+      };
+
       search.addEventListener("input", filter);
       menu.hidden = boxes.length === 0;
-      controls.hidden = false;
+      controls.hidden = !table;
       filter();
       askSeen();
+      startActivity();
+      // The days the view already shows, asked again from the newest, so
+      // each reply's unread flag is the route's word now; kept as they were
+      // when the route does not answer.
+      const askAgain = async () => {
+        if (!feed) return;
+        const until = feed.from;
+        const fresh = await askActivity(null);
+        while (fresh && fresh.older && fresh.from > until) {
+          const earlier = await askActivity(fresh.from);
+          if (!earlier) return;
+          merge(fresh, earlier);
+        }
+        if (!fresh) return;
+        feed = fresh;
+        showActivity();
+      };
+
       // Back from a page through the back-forward cache, the index is the one
-      // it was: ask again, so a page just read loses its mark and its count.
+      // it was: ask again, so a page just read loses its mark, its count and
+      // its replies' "new, to you".
       window.addEventListener("pageshow", (event) => {
-        if (event.persisted) askSeen();
+        if (!event.persisted) return;
+        askSeen();
+        askAgain();
       });
     })();
   </script>
