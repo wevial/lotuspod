@@ -6,14 +6,18 @@
   // its own, a banner fixed over the top of the window offers a reload; a
   // hidden page with no unsent text in a composer reloads itself, so it is
   // current when the reader comes back. Before a reload the page keeps where
-  // the reader was, per page in sessionStorage: the scroll position and what
+  // the reader was, per page in sessionStorage: the scroll position, kept
+  // from the top of the page's text (div.artifact-main) so a box drawn above
+  // it after the load moves nothing, and what
   // the comments page keeps (live.keep: the thread open, the text not sent),
   // which it gets back after the load (live.kept); once that is open again,
   // live.place scrolls to where the reader was once more, as opening a thread
   // over the text may scroll, and the page may only now be long enough. The
   // banner still shows and the reload still happens when the browser lets
   // the page keep nothing. Once per load the page also posts its own revision
-  // to the seen route, which keeps the reader's last visit for the index.
+  // to the seen route, which keeps the reader's last visit for the index;
+  // live.previous() is a promise of the revision that route answers the
+  // reader last opened the page at, null the first time or on any failure.
   function livePage() {
     var REVISION = "/api/revision";
     var SEEN = "/api/seen";
@@ -25,6 +29,7 @@
       keep: function () {},
       kept: function () { return null; },
       place: function () {},
+      previous: function () { return Promise.resolve(null); },
     };
     var stamp = document.querySelector('meta[name="lotuspod:revision"]');
     var own = stamp ? stamp.content.trim() : "";
@@ -36,14 +41,29 @@
       decodeURIComponent(location.pathname.split("/").pop()).replace(/\.html$/, "");
     var key = KEPT + page;
 
+    // Where the page's text starts in the document.
+    function origin() {
+      var text = document.querySelector(".artifact-main");
+      return text ? text.getBoundingClientRect().top + window.scrollY : 0;
+    }
+
     // Once per load, record that the reader opened the page at its own
-    // revision, so the index can mark it once it is republished. A reader
-    // signed out, or a failure, is shown nothing.
-    fetch(SEEN, {
+    // revision, so the index can mark it once it is republished, and keep
+    // the revision they opened it at before. A reader signed out, or a
+    // failure, is shown nothing.
+    var previous = fetch(SEEN, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ page: page, revision: own }),
-    }).catch(function () {});
+    }).then(async function (response) {
+      var payload = response.status === 200 ? await json(response) : null;
+      return payload && typeof payload.previous === "string" ? payload.previous : null;
+    }).catch(function () {
+      return null;
+    });
+    live.previous = function () {
+      return previous;
+    };
 
     // What the comments page keeps: save() is what to keep, and unsent()
     // says whether a composer holds text not sent.
@@ -64,7 +84,7 @@
     // Where the reader was, until live.place has scrolled there again.
     var at = kept && typeof kept.y === "number" ? { x: Number(kept.x) || 0, y: kept.y } : null;
     if (at) {
-      window.scrollTo(at.x, at.y);
+      window.scrollTo(at.x, origin() + at.y);
     }
 
     // The banner's live region is there from the start, so what it is given
@@ -88,7 +108,7 @@
     function save() {
       try {
         sessionStorage.setItem(key, JSON.stringify({
-          x: window.scrollX, y: window.scrollY, comments: keeper ? keeper.save() : null,
+          x: window.scrollX, y: window.scrollY - origin(), comments: keeper ? keeper.save() : null,
         }));
       } catch (ignored) {
         // Storage refused: the page reloads at its top, nothing kept.
@@ -141,7 +161,7 @@
 
     live.place = function () {
       if (at) {
-        window.scrollTo(at.x, at.y);
+        window.scrollTo(at.x, origin() + at.y);
         at = null;
       }
     };

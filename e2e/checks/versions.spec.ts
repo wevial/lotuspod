@@ -8,7 +8,10 @@ import { expect, test, type Page } from '@playwright/test';
 // each one read-only. The capture fixture's site is the top of its own git
 // repository, so each publish is a version: the first check publishes a page
 // of its own twice with a real `lotuspod publish`; the fixture published
-// capture-versions-once once and capture-versions-many 25 times.
+// capture-versions-once once and capture-versions-many 25 times. A page the
+// reader opened before it was published again says what changed since: the
+// changes checks publish pages of their own, open them, publish them again
+// with one line changed and open them once more.
 const ENV = process.env;
 const ASSERTION = ENV.LOTUSPOD_TEST_ASSERTION ?? '';
 const SIGNED_IN = { 'Cf-Access-Jwt-Assertion': ASSERTION };
@@ -37,6 +40,15 @@ function source(title: string, edition: string) {
     '## Decisions for the maintainer', '',
     '| # | Question | Options | Default |', '|---|---|---|---|',
     '| 1 | Which heater? | Floating / Submerged | Floating |', '',
+  ].join('\n');
+}
+
+// A page of two sections, with the pump's line as given.
+function changesSource(title: string, pump: string) {
+  return [
+    `# ${title}`, '', 'The plan for the pond this winter.', '',
+    '## Pond', '', 'The pond freezes in January.', '',
+    '## Pump', '', 'The pump sits by the steps.', pump, 'The fish sleep under the ice.', '',
   ].join('\n');
 }
 
@@ -165,6 +177,90 @@ test.describe('signed in', () => {
     await expect(versions.more).toBeHidden();
     await expect(versions.entries.locator('.artifact-versions-current')).toHaveCount(1);
     await expect(versions.entries.locator('a.artifact-versions-view')).toHaveCount(24);
+    expect(errors).toEqual([]);
+  });
+});
+
+test.describe('signed in, what changed', () => {
+  test.use({ extraHTTPHeaders: SIGNED_IN });
+
+  const BOX = 'section.artifact-changes';
+
+  // Opens the page and waits until its versions link is drawn: by then the
+  // page has heard what changed, so a box it would show is there.
+  async function open(page: Page, name: string) {
+    const seen = page.waitForResponse((response) =>
+      new URL(response.url()).pathname === '/api/seen' && response.request().method() === 'POST');
+    await page.goto(`/${name}.html`);
+    expect((await seen).status()).toBe(200);
+    await expect(page.locator('.artifact-versions-link')).toBeVisible();
+  }
+
+  test('a page republished since the reader opened it says what changed', async ({ page }) => {
+    const errors = watchErrors(page);
+    const name = 'changes-check';
+    publish(name, changesSource('Changes check', 'The pump stops in January.'));
+    await open(page, name);
+    await expect(page.locator(BOX)).toHaveCount(0);
+    await expect(page.locator('.artifact-changed-tag')).toHaveCount(0);
+
+    // serve dates a page to the second: a publish in the second the page was
+    // served would leave the browser's cached copy current.
+    await page.waitForTimeout(1100);
+    publish(name, changesSource('Changes check', 'The pump runs all winter.'));
+    await open(page, name);
+    const box = page.locator(BOX);
+    await expect(box.getByRole('heading', { name: 'What changed since you last looked' })).toBeVisible();
+    await expect(box).toContainText('You last opened this on');
+    await expect(box).toContainText('1 version ago');
+    await expect(box.getByRole('link', { name: 'Pump' })).toHaveAttribute('href', '#pump');
+    await expect(box.getByRole('link', { name: 'Pond' })).toHaveCount(0);
+    await expect(page.locator('h2#pump .artifact-changed-tag')).toHaveText('changed');
+    await expect(page.locator('.artifact-changed-tag')).toHaveCount(1);
+    // The box sits between the header and the body.
+    expect(await box.evaluate((node) =>
+      node.previousElementSibling?.matches('header.artifact-header'))).toBe(true);
+
+    await box.getByRole('link', { name: 'See the full diff' }).click();
+    await expect(page).toHaveURL(new RegExp(`/${name}\\.html#versions$`));
+    const versions = view(page);
+    await expect(versions.heading).toBeVisible();
+    await expect(box).toBeHidden();
+    const pane = versions.node.locator('aside.artifact-versions-diff');
+    await expect(pane).toBeVisible();
+    await expect(pane.getByRole('heading')).toContainText('→ current');
+    await expect(pane.locator('del.artifact-diff-line--removed')).toHaveText(/The pump stops in January\./);
+    await expect(pane.locator('ins.artifact-diff-line--added')).toHaveText(/The pump runs all winter\./);
+    await expect(pane.locator('.artifact-diff-line--removed, .artifact-diff-line--added')).toHaveCount(2);
+    await expect(versions.entries).toHaveCount(2);
+    await expect(versions.entries.nth(1).locator('.artifact-versions-seen')).toHaveText('you last looked');
+    await expect(versions.entries.nth(0).locator('.artifact-versions-seen')).toHaveCount(0);
+
+    // The next load was seen at the page's own revision: nothing to say.
+    await open(page, name);
+    await expect(page.locator(BOX)).toHaveCount(0);
+    await expect(page.locator('.artifact-changed-tag')).toHaveCount(0);
+    await page.locator('.artifact-versions-link').click();
+    await expect(view(page).heading).toBeVisible();
+    await expect(page.locator('aside.artifact-versions-diff')).toHaveCount(0);
+    await expect(page.locator('.artifact-versions-seen')).toHaveCount(0);
+    expect(errors).toEqual([]);
+  });
+
+  test('Dismiss removes the box', async ({ page }) => {
+    const errors = watchErrors(page);
+    const name = 'changes-dismiss';
+    publish(name, changesSource('Changes dismiss', 'The pump stops in January.'));
+    await open(page, name);
+    await expect(page.locator(BOX)).toHaveCount(0);
+    await page.waitForTimeout(1100);
+    publish(name, changesSource('Changes dismiss', 'The pump runs all winter.'));
+    await open(page, name);
+    const box = page.locator(BOX);
+    await expect(box).toBeVisible();
+    await box.getByRole('button', { name: 'Dismiss' }).click();
+    await expect(page.locator(BOX)).toHaveCount(0);
+    await expect(page.locator('.artifact-body')).toBeVisible();
     expect(errors).toEqual([]);
   });
 });

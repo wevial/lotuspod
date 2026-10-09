@@ -10,10 +10,22 @@
   // a "View" link to its read-only old version (NAME.html?version=COMMIT).
   // The list shows SHOWN entries, and "Show older versions" shows SHOWN more
   // each time. Any other answer leaves the page as it is: no link, no view.
+  //
+  // When the reader last opened the page at another revision (live.previous,
+  // from the seen route), the page asks the changes route what changed since.
+  // Unless it answers changed: false or fails, a box under the header says
+  // when that version was published, how many versions ago, and which
+  // sections changed, were added or were removed, with "See the full diff"
+  // and "Dismiss"; each changed or added section's heading gains a "changed"
+  // or "new" tag. The versions view then shows a pane beside the list
+  // comparing that version with the current one, a line diff of the source
+  // or else the sections, and marks its entry "you last looked".
   function pageVersions() {
     var VERSIONS = "/api/versions";
+    var CHANGES = "/api/changes";
     var HASH = "#versions";
     var SHOWN = 20;
+    var NO_SOURCE = "This page has no kept source for that version, so it compares by section.";
     var stamp = document.querySelector('meta[name="lotuspod:revision"]');
     var line = document.querySelector("header.artifact-header .artifact-meta");
     var main = document.querySelector("main.artifact");
@@ -24,8 +36,129 @@
     var page = named ? named.dataset.page :
       decodeURIComponent(location.pathname.split("/").pop()).replace(/\.html$/, "");
     var title = document.querySelector(".artifact-title");
+    var own = stamp.content.trim();
 
-    function draw(versions) {
+    // The changes route's answer since the revision the reader last opened
+    // the page at, when anything changed; else null.
+    var changes = live.previous().then(async function (previous) {
+      if (!previous || previous === own) {
+        return null;
+      }
+      var response = await fetch(CHANGES + "?page=" + encodeURIComponent(page) +
+        "&since=" + encodeURIComponent(previous));
+      var payload = response.status === 200 ? await json(response) : null;
+      return payload && payload.changed === true && payload.since && payload.sections ?
+        payload : null;
+    }).catch(function () {
+      return null;
+    });
+
+    function plural(count, noun) {
+      return count + " " + noun + (count === 1 ? "" : "s");
+    }
+
+    function stamped(date) {
+      var time = element("time", "", when(date));
+      time.setAttribute("datetime", date);
+      return time;
+    }
+
+    // One item per changed, added or removed section, each changed or added
+    // one a link to its section.
+    function sectionList(sections) {
+      var list = element("ul", "artifact-changes-list");
+      [["changed", "Changed"], ["added", "New"], ["removed", "Removed"]].forEach(function (kind) {
+        (Array.isArray(sections[kind[0]]) ? sections[kind[0]] : []).forEach(function (section) {
+          var item = element("li", "artifact-changes-item artifact-changes-item--" + kind[0]);
+          item.append(element("span", "artifact-changes-kind", kind[1]), " ");
+          var name = String(section.title || "");
+          if (section.id && kind[0] !== "removed") {
+            var link = element("a", "artifact-changes-section", name);
+            link.href = "#" + encodeURIComponent(section.id);
+            item.appendChild(link);
+          } else {
+            item.appendChild(element("span", "artifact-changes-section", name));
+          }
+          list.appendChild(item);
+        });
+      });
+      if (!list.children.length) {
+        list.appendChild(element("li", "artifact-changes-item", "No section's text changed."));
+      }
+      return list;
+    }
+
+    // The box under the header, and the tags on the sections' headings.
+    function box(found) {
+      var header = main.querySelector("header.artifact-header");
+      if (!header) {
+        return;
+      }
+      var node = element("section", "artifact-changes");
+      node.setAttribute("aria-labelledby", "artifact-changes-heading");
+      var heading = element("h2", "artifact-changes-heading", "What changed since you last looked");
+      heading.id = "artifact-changes-heading";
+      var said = element("p", "artifact-changes-when", "You last opened this on ");
+      said.append(stamped(found.since.date), " \u00b7 " +
+        plural(Number(found.behind) || 0, "version") + " ago");
+      var actions = element("p", "artifact-changes-actions");
+      var diff = element("a", "artifact-changes-diff", "See the full diff");
+      diff.href = HASH;
+      var dismiss = element("button", "artifact-changes-dismiss", "Dismiss");
+      dismiss.type = "button";
+      dismiss.addEventListener("click", function () {
+        node.remove();
+      });
+      actions.append(diff, dismiss);
+      node.append(heading, said, sectionList(found.sections), actions);
+      main.insertBefore(node, header.nextSibling);
+
+      [["changed", "changed"], ["added", "new"]].forEach(function (kind) {
+        (Array.isArray(found.sections[kind[0]]) ? found.sections[kind[0]] : []).forEach(function (section) {
+          var target = section.id ? document.getElementById(section.id) : null;
+          if (target && target.tagName === "H2" && target.closest(".artifact-body") &&
+              !target.querySelector(".artifact-changed-tag")) {
+            target.appendChild(element("span", "artifact-changed-tag", kind[1]));
+          }
+        });
+      });
+    }
+
+    // The pane beside the versions list: that version against the current one.
+    function pane(found) {
+      var node = element("aside", "artifact-versions-diff");
+      node.setAttribute("aria-labelledby", "artifact-versions-diff-heading");
+      var heading = element("h3", "artifact-versions-diff-heading");
+      heading.id = "artifact-versions-diff-heading";
+      heading.append(stamped(found.since.date), " \u2192 current");
+      node.appendChild(heading);
+      if (!Array.isArray(found.lines)) {
+        node.append(element("p", "artifact-versions-diff-note", NO_SOURCE),
+          sectionList(found.sections));
+        return node;
+      }
+      var lines = element("div", "artifact-diff");
+      found.lines.forEach(function (line) {
+        var op = String(line.op);
+        var row = element(op === "+" ? "ins" : op === "-" ? "del" : "div",
+          "artifact-diff-line artifact-diff-line--" +
+          (op === "+" ? "added" : op === "-" ? "removed" : op === "@" ? "hunk" : "same"));
+        if (op !== "@") {
+          var mark = element("span", "artifact-diff-op", op === " " ? "" : op);
+          mark.setAttribute("aria-hidden", "true");
+          row.appendChild(mark);
+        }
+        row.appendChild(element("span", "artifact-diff-text", String(line.text)));
+        lines.appendChild(row);
+      });
+      node.appendChild(lines);
+      if (found.truncated === true) {
+        node.appendChild(element("p", "artifact-versions-diff-more", "More changes not shown."));
+      }
+      return node;
+    }
+
+    function draw(versions, found) {
       var count = versions.length;
       var link = element("a", "artifact-versions-link", "Versions · " + count);
       link.href = HASH;
@@ -45,6 +178,10 @@
         var time = element("time", "artifact-versions-date", when(version.date));
         time.setAttribute("datetime", version.date);
         item.appendChild(time);
+        if (found && version.commit === found.since.commit) {
+          item.classList.add("artifact-versions-entry--seen");
+          item.appendChild(element("span", "artifact-versions-seen", "you last looked"));
+        }
         if (version.current) {
           item.classList.add("artifact-versions-entry--current");
           item.appendChild(element("span", "artifact-versions-current", "current"));
@@ -80,6 +217,10 @@
         var more = element("button", "artifact-versions-more", "Show older versions");
         more.type = "button";
         view.append(crumbs, heading, said, list, more);
+        if (found) {
+          view.classList.add("artifact-versions--diff");
+          view.appendChild(pane(found));
+        }
         main.insertBefore(view, main.querySelector(".artifact-footer"));
 
         function showMore() {
@@ -121,6 +262,12 @@
       show();
     }
 
+    changes.then(function (found) {
+      if (found) {
+        box(found);
+      }
+    });
+
     (async function () {
       try {
         var response = await fetch(VERSIONS + "?page=" + encodeURIComponent(page));
@@ -129,7 +276,7 @@
         }
         var payload = await json(response);
         if (payload && Array.isArray(payload.versions)) {
-          draw(payload.versions);
+          draw(payload.versions, await changes);
         }
       } catch (ignored) {
         // No list: the page shows no versions.
