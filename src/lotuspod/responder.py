@@ -1,8 +1,9 @@
 """`lotuspod respond`: the default responder, which answers the comments no
 listening owner will.
 
-    lotuspod respond [--once] [--interval SEC] [--command CMD] [--timeout SEC]
-        --credential FILE [--socket PATH] [--journal PATH] [--out-dir DIR] [--db PATH]
+    lotuspod respond [--once] [--interval SEC] [--wait SEC] [--command CMD]
+        [--timeout SEC] --credential FILE [--socket PATH] [--journal PATH]
+        [--out-dir DIR] [--db PATH]
     lotuspod respond pause | resume
 
 The responder is an ordinary agent on serve's socket, acting as the handle
@@ -45,6 +46,10 @@ thread the bounded thread leaves out, and, for a thread on a decision, the
 decision's question, its options and its current answer. The test-only fault point
 LOTUSPOD_RESPONDER_CRASH_AFTER=publish exits right after a republish.
 
+Before its first pass the responder waits for serve to answer on the socket,
+printing one line as it starts waiting; when serve has not answered within
+--wait seconds it exits 1, naming the socket and the bound.
+
 `pause` and `resume` set a flag in serve's database: while it is set,
 comments routed to the responder show as `paused`, and passes do nothing.
 """
@@ -76,6 +81,9 @@ from lotuspod import agents, api, cli, comments, db, machine, media, routing
 DEFAULT_COMMAND = "claude -p --model opus --permission-mode acceptEdits"
 DEFAULT_INTERVAL = 30
 DEFAULT_TIMEOUT = 600
+DEFAULT_WAIT = 60
+WAIT_FIRST = 0.1
+WAIT_MOST = 2.0
 JOURNAL_NAME = "lotuspod-responder.journal"
 SOURCE_ENV = "LOTUSPOD_PAGE_SOURCE"
 PAGE_ENV = "LOTUSPOD_PAGE"
@@ -376,12 +384,13 @@ class Responder:
     def log(self, line: str) -> None:
         print(line, flush=True)
 
-    def ask(self, method: str, target: str, body: object = None) -> dict:
+    def ask(self, method: str, target: str, body: object = None,
+            timeout: float = machine.REQUEST_TIMEOUT) -> dict:
         """The socket's JSON; Refused naming a refusal, Unreachable when
-        serve cannot be reached."""
+        serve cannot be reached or does not answer within timeout seconds."""
         try:
             status, payload = machine.request(self.socket_path, self.token, method, target,
-                                              body)
+                                              body, timeout)
         except OSError as exc:
             raise Unreachable(f"cannot reach serve on {self.socket_path}: {exc}") from None
         except ValueError:
@@ -733,6 +742,9 @@ def cmd_respond(args: argparse.Namespace) -> int:
     if on_main:
         previous = signal.signal(signal.SIGTERM, lambda signum, frame: stop.set())
     try:
+        waited = wait_for_serve(responder, stop, args.wait)
+        if waited is not None:
+            return waited
         while True:
             try:
                 responder.run_pass(stop)
@@ -748,6 +760,59 @@ def cmd_respond(args: argparse.Namespace) -> int:
     finally:
         if on_main:
             signal.signal(signal.SIGTERM, previous)
+
+
+def _probe(responder: Responder, timeout: float) -> str | None:
+    """None when serve answers WHOAMI within timeout seconds (a refusal is an
+    answer), else why not. The request runs on a daemon thread left behind
+    at the timeout, so a peer that answers a byte at a time cannot hold it."""
+    outcome: list[str | None] = []
+
+    def ask() -> None:
+        try:
+            responder.ask("GET", machine.WHOAMI, timeout=timeout)
+            outcome.append(None)
+        except Refused:
+            outcome.append(None)
+        except Unreachable as exc:
+            outcome.append(str(exc))
+        except Exception as exc:  # a malformed answer: serve is not answering yet
+            outcome.append(f"cannot reach serve on {responder.socket_path}: {exc!r}")
+
+    thread = threading.Thread(target=ask, daemon=True)
+    thread.start()
+    thread.join(timeout)
+    if outcome:
+        return outcome[0]
+    return f"no answer to {machine.WHOAMI} within {timeout:.1f} seconds"
+
+
+def wait_for_serve(responder: Responder, stop: threading.Event, bound: int) -> int | None:
+    """None once serve answers on the socket (a refusal is an answer); else
+    the exit code: 0 when stopped while waiting, 1 when serve has not
+    answered within bound seconds. Each try gives up after WAIT_MOST seconds
+    or at the bound, so a socket that never answers cannot outlast the bound
+    or hold off a stop."""
+    deadline = time.monotonic() + bound
+    delay = WAIT_FIRST
+    waiting = False
+    while True:
+        reason = _probe(responder, max(WAIT_FIRST, min(WAIT_MOST, deadline - time.monotonic())))
+        if reason is None:
+            return None
+        if stop.is_set():
+            return 0
+        if not waiting:
+            responder.log(f"waiting for serve on {responder.socket_path}")
+            waiting = True
+        left = deadline - time.monotonic()
+        if left <= 0:
+            print(f"error: serve did not answer on {responder.socket_path} within {bound} "
+                  f"seconds: {reason}", file=sys.stderr, flush=True)
+            return 1
+        if stop.wait(min(delay, left)):
+            return 0
+        delay = min(delay * 2, WAIT_MOST)
 
 
 def _seconds(value: str) -> int:
@@ -773,6 +838,11 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
     parser.add_argument(
         "--interval", type=_seconds, default=DEFAULT_INTERVAL, metavar="SEC",
         help=f"seconds between passes (default: {DEFAULT_INTERVAL})",
+    )
+    parser.add_argument(
+        "--wait", type=_seconds, default=DEFAULT_WAIT, metavar="SEC",
+        help="seconds to wait for serve to answer on the socket before the first pass, "
+        f"then exit 1 (default: {DEFAULT_WAIT})",
     )
     parser.add_argument(
         "--command", default=None, metavar="CMD",
