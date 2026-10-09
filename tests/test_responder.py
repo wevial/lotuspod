@@ -116,7 +116,7 @@ class ResponderCase(Site):
         self.env.update(RECORD=str(self.record))
         self.responder = self.credential("responder", ["responder"], OPS)
         self.publish("orphan", ORPHAN)
-        self.start_server()
+        self.server = self.start_server()
 
     def publish(self, name, text, suffix=".md"):
         source = self.tmp / f"{name}{suffix}"
@@ -751,6 +751,54 @@ class LoopTests(ResponderCase):
             time.sleep(0.2)
         process.send_signal(signal.SIGTERM)
         self.assertEqual(process.wait(15), 0)
+
+
+class StartupWaitTests(ResponderCase):
+    """serve restarted with the responder: a comment waits for it, serve is
+    stopped (its socket goes), the responder starts, and serve starts again
+    one second later."""
+
+    def setUp(self):
+        super().setUp()
+        self.row = self.comment("orphan", "other", "Anyone there?")
+        self.server.terminate()
+        self.server.wait(10)
+        self.assertFalse(self.sock.exists())
+        self.log = open(self.tmp / "respond.log", "w+", encoding="utf-8")
+        self.addCleanup(self.log.close)
+
+    def start_responder(self, *extra):
+        process = subprocess.Popen(
+            [sys.executable, "-m", "lotuspod", "respond", *extra,
+             "--command", self.recorder, "--credential", str(self.responder),
+             "--socket", str(self.sock), "--out-dir", str(self.out), "--db", str(self.db)],
+            cwd=str(self.tmp), env=self.env, stdout=self.log, stderr=self.log)
+        self.addCleanup(lambda: process.poll() is None and process.kill())
+        time.sleep(1)
+        self.start_server()
+        return process
+
+    def output(self):
+        self.log.seek(0)
+        return self.log.read()
+
+    def test_the_loop_waits_for_serve_and_answers_on_its_first_pass(self):
+        started = time.monotonic()
+        process = self.start_responder("--interval", "60")
+        while not self.replies("orphan", self.row["id"]):
+            self.assertLess(time.monotonic() - started, 15,
+                            f"no reply within 15 seconds; output:\n{self.output()}")
+            time.sleep(0.2)
+        self.assertIsNone(process.poll())
+        lines = self.output().splitlines()
+        self.assertEqual([line for line in lines if line.startswith("error:")], [])
+        self.assertEqual(len([line for line in lines
+                              if "waiting" in line and str(self.sock) in line]), 1, lines)
+
+    def test_once_waits_for_serve_and_answers(self):
+        process = self.start_responder("--once")
+        self.assertEqual(process.wait(30), 0, self.output())
+        self.assertTrue(self.replies("orphan", self.row["id"]))
 
 
 class PermissionTests(ResponderCase):
