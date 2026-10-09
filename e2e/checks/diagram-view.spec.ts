@@ -465,7 +465,11 @@ test('a diagram scrolled sideways in its block comes back scrolled as it was', a
   await expect(view(page).dialog).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(view(page).dialog).toBeHidden();
-  expect(await diagram(page).evaluate((pre) => pre.scrollLeft)).toBe(350);
+  // The dialog's close event, a task after it hides, puts the diagram back
+  // and the focus on its button last.
+  await expect(expand(page)).toBeFocused();
+  await expect(drawing(page)).toHaveCount(1);
+  await expect.poll(() => diagram(page).evaluate((pre) => pre.scrollLeft)).toBe(350);
   await seen.clean();
 });
 
