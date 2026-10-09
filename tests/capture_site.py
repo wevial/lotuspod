@@ -978,8 +978,10 @@ def main(argv: list[str] | None = None) -> int:
         except Exception as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 1
-        verifier = access.Verifier(access.parse_config(access_keys.config_section(
-            allowed_emails=f"{access_keys.EMAIL} {SECOND_READER}")))
+        # The maintainer may archive a page from the browser; SECOND_READER may not.
+        verifier = access.Verifier(access.parse_config({
+            **access_keys.config_section(allowed_emails=f"{access_keys.EMAIL} {SECOND_READER}"),
+            "owners": access_keys.EMAIL}))
         server = cli._make_server(site, HOST, 0, verifier=verifier, db_path=db_path)
         port = server.server_address[1]
         thread = threading.Thread(target=server.serve_forever, daemon=True)

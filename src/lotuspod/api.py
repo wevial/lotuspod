@@ -1,7 +1,7 @@
 """The reader's answers and comments over /api, for the verified reader only.
 
 serve hands a request here only after its Access assertion verifies, with
-the reader as actor. Nine routes:
+the reader as actor. Ten routes:
 
     POST /api/answers     {page, question, version, choice, note} or
                           {page, question, version, checked, note}
@@ -17,6 +17,8 @@ the reader as actor. Nine routes:
     GET  /api/versions?page=NAME
     GET  /api/changes?page=NAME&since=REV
     GET  /api/activity[?before=TIME]
+    POST /api/archive     {page, archived[, supersededBy]}
+    GET  /api/archive?page=NAME
 
 A read of the comments carries the page's current revision beside its
 threads, and /api/revision answers it alone, {revision}: an open page
@@ -63,7 +65,19 @@ first, summary}, `actor` the handle the version's lotuspod:owner names or
 null, and the comments, replies and answers of Database.activity(). At most
 MAX_EVENTS are kept, the newest, and `truncated` says when any were left
 out; `older` says whether anything on those pages happened up to `from`. Any
-query but one `before` that parses is 400 invalid_query.
+query but one `before` that parses is 400 invalid_query. An archived page has
+no event there, its versions included.
+
+GET /api/archive?page=NAME answers {page, archived, supersededBy,
+mayArchive}: `archived` the time the page was archived or null,
+`supersededBy` the page that replaces it or null, and `mayArchive` whether
+the reader is one of the owners. POST /api/archive with {page, archived:
+true|false[, supersededBy]} archives or unarchives the page as `lotuspod
+archive` does (lotuspod.archive), and answers 200 in the same shape. It is
+refused, with nothing written, as any POST, and 403 not_owner for a reader
+who is not an owner, 400 invalid_body for a body not of that shape (a
+`supersededBy` with `archived` false included), 404 unknown_page, and 400
+unknown_successor for a successor serve does not answer, or the page itself.
 
 /api/changes compares the newest listed version of NAME whose revision is
 REV, the revision the reader last opened it at, with the current one
@@ -159,7 +173,8 @@ SEEN = "/api/seen"
 VERSIONS = "/api/versions"
 CHANGES = "/api/changes"
 ACTIVITY = "/api/activity"
-ROUTES = (ANSWERS, COMMENTS, MEDIA, REVISION, SEEN, VERSIONS, CHANGES, ACTIVITY)
+ARCHIVE = "/api/archive"
+ROUTES = (ANSWERS, COMMENTS, MEDIA, REVISION, SEEN, VERSIONS, CHANGES, ACTIVITY, ARCHIVE)
 METHODS = ("GET", "HEAD", "POST")
 # The methods of a route that is only read.
 READ_METHODS = ("GET", "HEAD")
@@ -271,6 +286,9 @@ class Page:
     # The handle its lotuspod:owner names; "" when none does.
     owner: str = ""
     title: str = ""
+    # When it was archived, and the page that replaces it; "" when not.
+    archived: str = ""
+    superseded_by: str = ""
 
 
 class Refusal(Exception):
@@ -496,7 +514,10 @@ class Api:
     media_dir is the media store and max_image_bytes its cap; without a
     store, uploads and comments naming images answer 503. history reads the
     pages' versions; without it every page has none. names() is the names
-    of the pages serve answers, whose versions the activity route reads."""
+    of the pages serve answers, archived ones left out, whose versions the
+    activity route reads. archive(name, archived, superseded_by) archives or
+    unarchives a page (lotuspod.archive.set_archived), and owners are the
+    readers who may; without it the archive route's POST answers 503."""
 
     def __init__(self, database: db.Database, pages: Callable[[str], Page | None],
                  window: float = routing.DEFAULT_WINDOW,
@@ -504,7 +525,9 @@ class Api:
                  media_dir: Path | None = None,
                  max_image_bytes: int = media.DEFAULT_MAX_BYTES,
                  history: versions.History | None = None,
-                 names: Callable[[], Sequence[str]] = tuple) -> None:
+                 names: Callable[[], Sequence[str]] = tuple,
+                 archive: Callable[[str, bool, str | None], tuple] | None = None,
+                 owners: frozenset[str] = frozenset()) -> None:
         self.database = database
         self.pages = pages
         self.window = window
@@ -513,6 +536,8 @@ class Api:
         self.max_image_bytes = max_image_bytes
         self.history = history
         self.names = names
+        self.archive = archive
+        self.owners = owners
         # Each reader's accepted uploads, oldest first, kept in memory only.
         self._uploads: dict[str, deque[float]] = {}
         self._uploads_lock = threading.Lock()
@@ -539,6 +564,8 @@ class Api:
                 if path == ANSWERS:
                     return HTTPStatus.CREATED, self._post_answer(headers, body, actor), ()
                 fields = self._json_body(headers, body)
+                if path == ARCHIVE:
+                    return HTTPStatus.OK, self._post_archive(fields, actor), ()
                 if path == SEEN:
                     return HTTPStatus.OK, self._post_seen(fields, actor), ()
                 if "thread" in fields:
@@ -553,6 +580,10 @@ class Api:
             page = self._page(self._query(query, ("page",))["page"])
             if path == ANSWERS:
                 payload = {"page": page.name, "questions": self.database.answers(page.name, asked=True)}
+            elif path == ARCHIVE:
+                payload = {"page": page.name, "archived": page.archived or None,
+                           "supersededBy": page.superseded_by or None,
+                           "mayArchive": str(actor.get("email") or "") in self.owners}
             elif path == REVISION:
                 payload = {"revision": page.revision}
             elif path == VERSIONS:
@@ -599,15 +630,21 @@ class Api:
                 found[name] = self.pages(name)
             return found[name]
 
+        # An archived page is left out, every event of it.
+        def listed(name: str) -> bool:
+            page = served(name)
+            return page is not None and not page.archived
+
         events, older = self.database.activity(
-            str(actor.get("email") or ""), start, end, lambda name: served(name) is not None,
-            MAX_EVENTS + 1)
+            str(actor.get("email") or ""), start, end, listed, MAX_EVENTS + 1)
         truncated = False
         if self.history is not None:
             recent = self.history.recent(utc_time(start), utc_time(end), list(self.names()))
             older = older or recent.older
             truncated = recent.truncated
             for change in recent.changes:
+                if not listed(change.name):
+                    continue
                 events.append({"page": change.name, "kind": "version",
                                # As the database writes times, so all sort as text.
                                "at": change.date[:-1] + ".000Z", "commit": change.commit,
@@ -624,6 +661,38 @@ class Api:
             entry["events"].append(event)
         return {"from": start, "to": end, "older": older, "truncated": truncated,
                 "pages": list(pages.values())}
+
+    def _post_archive(self, fields: dict, actor: Mapping) -> dict:
+        if str(actor.get("email") or "") not in self.owners:
+            raise Refusal(HTTPStatus.FORBIDDEN, "not_owner")
+        _keys(fields, {"page", "archived"}, frozenset({"supersededBy"}))
+        archived = fields["archived"]
+        if not isinstance(archived, bool):
+            raise _invalid()
+        # Present at all, null included, it must name a page, and only an
+        # archived page has one. A page name has no length of its own but
+        # the body's, as `page` has.
+        successor = None
+        if "supersededBy" in fields:
+            if not archived:
+                raise _invalid()
+            successor = _text(fields["supersededBy"], 1, MAX_BODY)
+        page = self._page(fields["page"])
+        if successor is not None and (successor == page.name or self.pages(successor) is None):
+            raise Refusal(HTTPStatus.BAD_REQUEST, "unknown_successor")
+        if self.archive is None:
+            raise Refusal(HTTPStatus.SERVICE_UNAVAILABLE, "storage_unavailable")
+        # A Refusal when the page or the successor has gone since; any other
+        # failure has put back what it wrote.
+        try:
+            record, _ = self.archive(page.name, archived, successor)
+        except Refusal:
+            raise
+        except RuntimeError:
+            raise Refusal(HTTPStatus.SERVICE_UNAVAILABLE, "storage_unavailable") from None
+        return {"page": page.name, "archived": record["archivedAt"] if record else None,
+                "supersededBy": record["supersededBy"] if record else None,
+                "mayArchive": True}
 
     def _changes(self, query: str) -> dict:
         fields = self._query(query, ("page", "since"))
