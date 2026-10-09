@@ -2837,7 +2837,7 @@
     // read already in flight may have missed it, and is followed by another.
     var again = false;
     function noted(event) {
-      if (!event.detail || !event.detail.comment) {
+      if (!event.detail.comment) {
         return;
       }
       if (reading) {
