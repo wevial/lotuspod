@@ -47,7 +47,7 @@ from tests import history  # noqa: E402
 
 
 MANIFEST_KEYS = {"file", "title", "episode", "date", "created", "updated", "summary", "visible",
-                 "labels"}
+                 "labels", "archived", "supersededBy"}
 
 VISIBLE_PAGE = (
     "<!DOCTYPE html><html><head>"
@@ -289,6 +289,9 @@ class ArtifactHeaderTests(TempDirTestCase):
                 "visible": True,
                 # A bare render files the page under no label.
                 "labels": [],
+                # collect_artifacts fills these from an archive record.
+                "archived": "",
+                "supersededBy": "",
             },
         )
 
@@ -571,7 +574,8 @@ class ManifestV2Tests(TempDirTestCase):
         self.assertEqual(len(artifacts), 1)
         entry = artifacts[0]
         self.assertEqual(set(entry.keys()), MANIFEST_KEYS)
-        for field in ("file", "title", "episode", "date", "created", "updated", "summary"):
+        for field in ("file", "title", "episode", "date", "created", "updated", "summary",
+                      "archived", "supersededBy"):
             self.assertIsInstance(entry[field], str, field)
         self.assertIsInstance(entry["visible"], bool)
         stack = [data]
@@ -817,9 +821,10 @@ class IndexTableTests(TempDirTestCase):
         self.assertIn('placeholder="Search pages by title, date or summary"', index_html)
         self.assertNotIn("episodes", index_html.lower())
         script = index_html[index_html.index("<script>"): index_html.index("</script>")]
-        noun = re.search(r'const noun = rows\.length === 1 \? "(\w+)" : "(\w+)";', script)
+        # Archived rows are counted apart, behind their toggle.
+        noun = re.search(r'total === 1 \? "(\w+)" : "(\w+)"', script)
         self.assertIsNotNone(noun)
-        self.assertIn("`${rows.length} ${noun}`", script)
+        self.assertIn("`${total} ${noun}`", script)
         body = index_html[index_html.index("<tbody>"): index_html.index("</tbody>")]
         # Each row names its page, for the index script's updated marks.
         pages = re.findall(r'<tr data-page="([^"]*)"', body)

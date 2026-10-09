@@ -159,7 +159,23 @@ twice.
   `mine` is true on what the reader wrote, and every actor is shown as on
   the other routes, never with an address. A `before` that is not such a
   time, or any other query key, is 400 `invalid_query`; it is only read
-  (any other method is 405).
+  (any other method is 405). An archived page (see [Archive a
+  page](publishing.md#archive-a-page)) has no event here, its versions
+  included.
+- `GET /api/archive?page=NAME` answers `{page, archived, supersededBy,
+  mayArchive}`: `archived` the time the page was archived or null,
+  `supersededBy` the page that replaces it or null, and `mayArchive` whether
+  the reader is one of the `owners` of the `[access]` section (see [Who is
+  reading](operating.md#who-is-reading-cloudflare-access)). `POST
+  /api/archive` with `{page, archived: true|false[, supersededBy]}` archives
+  or unarchives the page as `lotuspod archive` does, record, manifest, index
+  and commit included, and answers 200 in the same shape. Beside every POST's
+  refusals, it is 403 `not_owner` for a reader who is not an owner, 400
+  `invalid_body` for a body not of that shape (a `supersededBy` with
+  `archived` false included), 404 `unknown_page`, and 400
+  `unknown_successor` for a `supersededBy` serve does not answer, or the
+  page itself; none writes anything. When the push fails, the commit is
+  still made and the route still answers 200; the next publish pushes it.
 
 An open page notices when it is published again: every published page
 carries a revision, so it loads the page script, `lotuspod-page.js`, even

@@ -57,7 +57,7 @@ The pictures come from a sample page served on loopback by the test fixture;
 
 ```
 lotuspod/
-├── src/lotuspod/          # package + CLI (`lotuspod render|publish|manifest|index|serve|credential|answers|audit|comments|respond|backup|restore`)
+├── src/lotuspod/          # package + CLI (`lotuspod render|publish|manifest|index|serve|credential|answers|audit|comments|respond|backup|restore|archive|unarchive`)
 │   ├── _templates/artifact.html   # artifact template ({{placeholder}} substitution)
 │   ├── _templates/index.html      # index-page template
 │   └── _theme/            # tokens.json (colors, fonts, radii), css/, js/, favicon.svg; the served lotuspod.css is css/ joined in order

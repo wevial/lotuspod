@@ -33,9 +33,9 @@ from typing import Callable
 
 import importlib.resources as _res
 
-from lotuspod import (access, agents, api, backup, comments, db, decisions, machine,
-                      markdown, media, node_tables, refs, responder, routing, sections,
-                      versions)
+from lotuspod import (access, agents, api, archive, backup, comments, db, decisions,
+                      machine, markdown, media, node_tables, refs, responder, routing,
+                      sections, versions)
 
 _PKG = "lotuspod"
 
@@ -848,6 +848,9 @@ def extract_meta(page_html: str, stem: str) -> dict:
         "summary": html.unescape(summary.group(1)) if summary else "",
         "visible": extract_visibility(page_html),
         "labels": extract_labels(page_html),
+        # The page's archive record, beside it; collect_artifacts fills them.
+        "archived": "",
+        "supersededBy": "",
     }
 
 
@@ -934,6 +937,11 @@ def collect_artifacts(out_dir: Path) -> tuple[list[dict], int]:
     committed = committed_times(out_dir) if unstamped else {}
     for meta in unstamped:
         meta["updated"] = committed.get(meta["file"], meta["created"])
+    for meta in visible:
+        record = archive.read_record(out_dir, meta["file"].removesuffix(".html"))
+        if record is not None:
+            meta["archived"] = record["archivedAt"]
+            meta["supersededBy"] = record["supersededBy"] or ""
     visible.sort(key=lambda m: m["updated"], reverse=True)
     return visible, len(metas) - len(visible)
 
@@ -1002,7 +1010,11 @@ def index_entries_html(artifacts: list[dict]) -> str:
         # script's Labels filter.
         name = esc(str(meta["file"]).removesuffix(".html"))
         labelled = f' data-labels="{",".join(labels)}"' if labels else ""
-        row = f'<tr data-page="{name}"{labelled}>'
+        # An archived page's row is left out of the default list, with or
+        # without the index script, which shows it behind its Archived toggle.
+        stamp = esc(str(meta.get("archived") or ""))
+        archived = f' data-archived="{stamp}" hidden' if stamp else ""
+        row = f'<tr data-page="{name}"{labelled}{archived}>'
         tags = (
             ' <span class="index-tags">'
             + " ".join(f'<span class="index-tag">{label}</span>' for label in labels)
@@ -2038,10 +2050,12 @@ def serve_allow_list(out_dir: Path) -> frozenset[str]:
     return frozenset(allowed)
 
 
-def served_page_names(out_dir: Path) -> list[str]:
-    """The names of the pages serve answers, in order."""
+def served_page_names(out_dir: Path, archived: bool = True) -> list[str]:
+    """The names of the pages serve answers, in order; without archived,
+    leaving out the archived ones."""
     return sorted(file[:-len(".html")] for file in serve_allow_list(out_dir)
-                  if file.endswith(".html") and is_page_name(file))
+                  if file.endswith(".html") and is_page_name(file)
+                  and (archived or not archive.is_archived(out_dir, file[:-len(".html")])))
 
 
 def api_page(out_dir: Path, name: str) -> api.Page | None:
@@ -2054,7 +2068,8 @@ def api_page(out_dir: Path, name: str) -> api.Page | None:
     try:
         page_html = (out_dir / file).read_text(encoding="utf-8")
         revision = page_revision(out_dir, name)
-    except (OSError, UnicodeDecodeError):
+        record = archive.read_record(out_dir, name) or {}
+    except (OSError, UnicodeDecodeError, RuntimeError):
         return None
     parser = _H2Collector(page_html)
     parser.feed(page_html)
@@ -2074,7 +2089,9 @@ def api_page(out_dir: Path, name: str) -> api.Page | None:
     return api.Page(name=name, revision=revision, sections=sections, questions=questions,
                     comment_sections=frozenset(comments.read_boxes(page_html)),
                     owner=owner if machine.is_handle(owner) else "",
-                    title=extract_meta(page_html, name)["title"])
+                    title=extract_meta(page_html, name)["title"],
+                    archived=record.get("archivedAt", ""),
+                    superseded_by=record.get("supersededBy") or "")
 
 
 def agent_page(out_dir: Path, page: api.Page) -> dict:
@@ -2378,15 +2395,20 @@ def _make_server(out_dir: Path, host: str, port: int,
                  window: int = routing.DEFAULT_WINDOW,
                  max_image_bytes: int = media.DEFAULT_MAX_BYTES) -> ThreadingHTTPServer:
     """The allow-list server; /api answers 503 access_unconfigured without a
-    verifier, and has no answers, comments, media, revision, seen and versions
-    routes without a database. Uploads go to the media store beside out_dir, within
-    max_image_bytes. The pages' versions are read from out_dir's repository."""
+    verifier, and has no answers, comments, media, revision, seen, versions and
+    archive routes without a database. Uploads go to the media store beside out_dir,
+    within max_image_bytes. The pages' versions are read from out_dir's repository.
+    The verifier's owners may archive a page, which the route writes as
+    `lotuspod archive` does."""
     history = versions.History(out_dir, version_stamp)
     routes = None
     if db_path is not None:
         routes = api.Api(db.Database(db_path), partial(api_page, out_dir), window,
                          media_dir=media.media_dir(out_dir), max_image_bytes=max_image_bytes,
-                         history=history, names=partial(served_page_names, out_dir))
+                         history=history,
+                         names=partial(served_page_names, out_dir, archived=False),
+                         archive=partial(archive.set_archived, out_dir),
+                         owners=verifier.config.owners if verifier is not None else frozenset())
     handler = partial(
         _AllowListHandler, directory=str(out_dir), root=out_dir, verifier=verifier,
         api=routes, history=history,
@@ -2902,6 +2924,7 @@ def build_parser() -> argparse.ArgumentParser:
     agents.add_parser(sub)
     responder.add_parser(sub)
     backup.add_parser(sub)
+    archive.add_parser(sub)
 
     return parser
 

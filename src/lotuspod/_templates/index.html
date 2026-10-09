@@ -54,6 +54,9 @@
     // route answers 200, a "Pages | Recent activity" switch appears and the
     // index opens on Recent activity, the last 7 days grouped by page, unless
     // the URL ends #pages. The filters keep one state across both views.
+    // An archived page's row (data-archived) arrives hidden and never shows
+    // unless an "Archived · N" toggle, made when any row is archived, is
+    // pressed: then only archived rows show, and the count counts them alone.
     // An index with no page has no table: there the controls stay hidden
     // unless the activity route answers, and its switch is all that is added.
     (() => {
@@ -152,6 +155,11 @@
       // Each page's row, by the name it carries in data-page.
       const rowOf = new Map(rows.map((row) => [row.dataset.page || "", row]));
 
+      // The archived pages, by the data-archived their rows carry.
+      const archived = new Set(rows.filter((row) => row.hasAttribute("data-archived"))
+        .map((row) => row.dataset.page || ""));
+      const listed = rows.filter((row) => !archived.has(row.dataset.page || "")).length;
+
       // One checkbox per label any row carries, A to Z, with its page count.
       const counts = new Map();
       for (const labels of labelsOf.values()) {
@@ -205,14 +213,17 @@
       let updated = null;
       const unread = new Map();
       let unreadToggle = null;
+      // The Archived toggle, made once at load when any row is archived.
+      let archivedToggle = null;
       const indexTitle = document.title;
 
       const isPressed = (button) => button !== null && button.getAttribute("aria-pressed") === "true";
 
-      // A token per active filter, each checked label then the Updated and
-      // Unread toggles: pressing it releases that filter, and focus moves to
-      // the token that takes its place, else the filter's own button.
-      const showTokens = (checked, pressed, unreadPressed) => {
+      // A token per active filter, each checked label then the Updated,
+      // Unread and Archived toggles: pressing it releases that filter, and
+      // focus moves to the token that takes its place, else the filter's own
+      // button.
+      const showTokens = (checked, pressed, unreadPressed, archivedPressed) => {
         active.replaceChildren("Showing");
         const releases = checked.map((label) => [label, toggle, () => {
           boxes.find((box) => box.value === label).checked = false;
@@ -223,6 +234,10 @@
         if (unreadPressed) {
           releases.push(["unread", unreadToggle,
             () => unreadToggle.setAttribute("aria-pressed", "false")]);
+        }
+        if (archivedPressed) {
+          releases.push(["archived", archivedToggle,
+            () => archivedToggle.setAttribute("aria-pressed", "false")]);
         }
         releases.forEach(([label, button, release], index) => {
           const token = document.createElement("button");
@@ -243,12 +258,14 @@
 
       // The tests a page passes whatever the search, asked of the rows and
       // of the activity groups alike: no label is checked or it carries a
-      // checked one, Updated is not pressed or it is marked, and Unread is
-      // not pressed or it has a count.
-      const passes = (name, labels, checked, pressed, unreadPressed) =>
+      // checked one, Updated is not pressed or it is marked, Unread is not
+      // pressed or it has a count, and it is archived exactly when Archived
+      // is pressed.
+      const passes = (name, labels, checked, pressed, unreadPressed, archivedPressed) =>
         (checked.length === 0 || labels.some((label) => checked.includes(label))) &&
         (!pressed || marked.has(name)) &&
-        (!unreadPressed || unread.has(name));
+        (!unreadPressed || unread.has(name)) &&
+        archived.has(name) === archivedPressed;
 
       // Every test in one pass over the rows and the activity groups: a row
       // is kept when its page passes and the search - one case-insensitive
@@ -260,38 +277,43 @@
         const checked = boxes.filter((box) => box.checked).map((box) => box.value);
         const pressed = isPressed(updated);
         const unreadPressed = isPressed(unreadToggle);
+        const archivedPressed = isPressed(archivedToggle);
         let shown = 0;
         for (const row of rows) {
           const found = !query || textOf.get(row).includes(query);
-          const match = found &&
-            passes(row.dataset.page || "", labelsOf.get(row), checked, pressed, unreadPressed);
+          const match = found && passes(row.dataset.page || "", labelsOf.get(row), checked,
+            pressed, unreadPressed, archivedPressed);
           row.hidden = !match;
           if (match) shown += 1;
         }
         let kept = 0;
         for (const group of groups) {
           const found = !query || group.text.includes(query);
-          const match = found && passes(group.name, group.labels, checked, pressed, unreadPressed);
+          const match = found &&
+            passes(group.name, group.labels, checked, pressed, unreadPressed, archivedPressed);
           group.node.hidden = !match;
           if (match) kept += 1;
         }
-        const noun = rows.length === 1 ? "page" : "pages";
+        // The listing counted: the archived pages while Archived is pressed,
+        // else the others.
+        const total = archivedPressed ? archived.size : listed;
+        const noun = `${archivedPressed ? "archived " : ""}${total === 1 ? "page" : "pages"}`;
         const arrived = sortColumn === arrival.column && ascending === arrival.ascending;
         // Any active filter counts against the whole listing, even when every
         // row passes it.
         const filtered = checked.length > 0 || pressed || unreadPressed || query !== "";
         count.textContent =
           view === "activity"
-            ? activityCount(kept, filtered)
+            ? activityCount(kept, filtered || archivedPressed)
             : !filtered
-              ? arrived && sortColumn >= 0
-                ? `${rows.length} ${noun}, newest update first`
-                : `${rows.length} ${noun}`
-              : `${shown} of ${rows.length} ${noun}`;
+              ? arrived && sortColumn >= 0 && !archivedPressed
+                ? `${total} ${noun}, newest update first`
+                : `${total} ${noun}`
+              : `${shown} of ${total} ${noun}`;
         toggle.textContent = checked.length
           ? `Labels (${checked.length}) \u25BE`
           : "Labels \u25BE";
-        showTokens(checked, pressed, unreadPressed);
+        showTokens(checked, pressed, unreadPressed, archivedPressed);
         if (table) table.hidden = view !== "pages" || shown === 0;
         if (nothing) nothing.hidden = view !== "pages";
         noMatch.hidden = view !== "pages" || !table || shown > 0;
@@ -719,6 +741,12 @@
 
       search.addEventListener("input", filter);
       menu.hidden = boxes.length === 0;
+      // Right after the menu: the Updated and Unread toggles, made once the
+      // seen route answers, land before it.
+      if (archived.size > 0) {
+        archivedToggle = makeToggle(menu);
+        archivedToggle.textContent = `Archived \u00B7 ${archived.size}`;
+      }
       controls.hidden = !table;
       filter();
       askSeen();
