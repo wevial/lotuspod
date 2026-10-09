@@ -102,10 +102,13 @@ class Section:
     def key(self) -> str:
         """What the section is known by in another version: its id, else the
         id the outline gives its heading text (cli.slugify), as a page left
-        with one h2 has none; "" for the text before the first h2."""
+        with one h2 has none, with its heading text, so a renamed heading
+        is one section removed and one added even where it keeps an id the
+        author gave it; "" for the text before the first h2."""
         if not self.headed:
             return ""
-        return self.id or _SLUG_STRIP.sub("-", self.title.lower()).strip("-") or "section"
+        anchor = self.id or _SLUG_STRIP.sub("-", self.title.lower()).strip("-") or "section"
+        return f"{anchor}\n{self.title}"
 
 
 class _Sections(HTMLParser):
@@ -142,6 +145,8 @@ class _Sections(HTMLParser):
     def handle_starttag(self, tag: str, attrs: list) -> None:
         values = dict(attrs)
         if tag == "section":
+            # A section inside the body is a block too.
+            self._gap(tag)
             if self._depth or "artifact-body" in (values.get("class") or "").split():
                 self._depth += 1
             return

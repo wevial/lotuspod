@@ -415,7 +415,7 @@ The page's post to `/api/seen` answers the revision they opened it at before
 version carrying that revision with the current one in at most three git
 processes. Each version's body is split into sections at its `h2` headings,
 known by id, or by the id the outline would give its words when it has none
-(a page left with one heading), and their text compared with whitespace
+(a page left with one heading), together with those words, and their text compared with whitespace
 collapsed, a block's tags taken as a space and an inline element's as
 nothing, so a change to markup alone, such as a line break between two
 blocks, words wrapped in `<strong>` or a decision form's version hash, does

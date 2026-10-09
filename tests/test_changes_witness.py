@@ -213,6 +213,35 @@ class SectionTests(ChangesWitness):
         self.assertEqual(status, 200, answer)
         self.assertEqual(answer["sections"], {"changed": [], "added": [], "removed": []})
 
+    def test_a_line_break_before_a_nested_section_and_a_forms_version_hash_change_no_section(self):
+        self.repository(self.out)
+        form = ('<form class="artifact-decision" data-question="q1" data-version="{}">'
+                '<fieldset><legend>Which heater?</legend></fieldset></form>')
+        self.render(PAGE, '<h2>Alpha</h2>one<section>two</section><h2>Beta</h2><p>same</p>'
+                    + form.format("aaaaaaaaaaaa"), "r1jjjjjjjjjj")
+        self.render(PAGE, '<h2>Alpha</h2>one\n<section>two</section><h2>Beta</h2><p>same</p>'
+                    + form.format("bbbbbbbbbbbb"), "r2kkkkkkkkkk")
+        self.start_server()
+
+        status, _, answer = self.changes(PAGE, "r1jjjjjjjjjj")
+        self.assertEqual(status, 200, answer)
+        self.assertEqual(answer["sections"], {"changed": [], "added": [], "removed": []})
+
+    def test_a_renamed_heading_that_keeps_its_id_is_removed_and_added(self):
+        # render keeps an id the author gave a heading.
+        self.repository(self.out)
+        self.render(PAGE, '<h2 id="topic">Alpha</h2><p>The pond freezes.</p>'
+                    '<h2>Beta</h2><p>The pump stops.</p>', "r1llllllllll")
+        self.render(PAGE, '<h2 id="topic">Gamma</h2><p>The pond freezes.</p>'
+                    '<h2>Beta</h2><p>The pump stops.</p>', "r2mmmmmmmmmm")
+        self.start_server()
+
+        status, _, answer = self.changes(PAGE, "r1llllllllll")
+        self.assertEqual(status, 200, answer)
+        self.assertEqual(answer["sections"], {"changed": [],
+                                              "added": [{"id": "topic", "title": "Gamma"}],
+                                              "removed": [{"title": "Alpha"}]})
+
 
 class CompareTests(unittest.TestCase):
     def test_compare_takes_no_sources_and_an_empty_since_reads_nothing(self):
