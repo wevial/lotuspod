@@ -22,10 +22,11 @@ the page shows as images.
 
 An inline link, `[TEXT](TARGET)` outside a code span or fence and not after
 `!`, is an `a` element whose `href` is TARGET as written, when TARGET is an
-`http:` or `https:` URL, a `#anchor`, or a relative path (no `//` start and
-no `:` before its first `/`, `?` or `#`); any other target, `javascript:`
-and `mailto:` among them, stays text. Links are matched after code spans and
-before bold, so bold works around a link and inside its text.
+`http:` or `https:` URL (its scheme in ASCII letters, any case), a
+`#anchor`, or a relative path (no `//` start and no `:` before its first
+`/`, `?` or `#`); any other target, `javascript:` and `mailto:` among them,
+stays text. Links are matched after code spans and before bold, so bold
+works around a link and inside its text.
 
 A bare URL is Lotuspod's own too: `http://` or `https://` (any case), not
 after a letter, digit or `/`, with at least one character after `//`, up to
@@ -66,9 +67,10 @@ _LINK = re.compile(
     rf"{_CODE}|{_INLINE_IMAGE}"
     rf"|(?<!!)\[((?:{_INLINE_IMAGE}|{_TEXT})+?)\]\(([^\s()<]+)\)"
 )
-# A link target drawn as a link: http(s), or a relative path or `#anchor`
+# A link target drawn as a link: http(s) in ASCII letters of any case (as in
+# _BARE_URL below), or a relative path or `#anchor`
 # (no `//` start, no `:` before its first `/`, `?` or `#`).
-_LINK_TARGET = re.compile(r"https?://|(?!//)[^:/?#]*(?:[/?#]|$)", re.IGNORECASE)
+_LINK_TARGET = re.compile(r"[Hh][Tt][Tt][Pp][Ss]?://|(?!//)[^:/?#]*(?:[/?#]|$)")
 # In the same escaped text once links are drawn: a code element, a link or an
 # image reference, each passed over whole, or a bare http(s) URL outside them,
 # not after a letter, digit or `/`, running to whitespace, a `<`, `>`, `"` or
