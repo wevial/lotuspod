@@ -39,10 +39,6 @@ from http import HTTPStatus
 # cli imports this module too: only names used at call time are read from it.
 from lotuspod import api, cli, versions
 
-# What an archived page's decision forms say under their disabled fieldsets.
-CLOSED_NOTE = "Answering is closed: this page is archived."
-_TOPBAR = '<div class="artifact-topbar">'
-
 class Refused(api.Refusal, RuntimeError):
     """An archive or unarchive that wrote nothing, saying why: a RuntimeError
     for the commands, and the refusal /api/archive answers with."""
@@ -92,14 +88,14 @@ def archived_page(page_html: str, record: dict, successor_title: str | None) -> 
     """page_html as serve answers it while record archives it: the
     lotuspod:archived meta in its head, main marked artifact--archived, a
     banner right after its title bar, and each decision form's fieldset
-    disabled with CLOSED_NOTE after it. successor_title is the title of the
+    disabled with a note after it. successor_title is the title of the
     page record's successor when serve answers that page, else None, and the
     banner names no successor."""
     stamp = html.escape(record["archivedAt"])
     page_html = page_html.replace(
         "</head>", f'  <meta name="lotuspod:archived" content="{stamp}">\n</head>', 1)
-    page_html = versions._disable_forms(
-        page_html, f'<p class="artifact-archived-note">{CLOSED_NOTE}</p>')
+    page_html = versions._disable_forms(page_html, (
+        '<p class="artifact-archived-note">Answering is closed: this page is archived.</p>'))
     replaced = ""
     if successor_title is not None:
         link = html.escape(urllib.parse.quote(f"{record['supersededBy']}.html"))
@@ -111,7 +107,7 @@ def archived_page(page_html: str, record: dict, successor_title: str | None) -> 
     )
     # Right after the title bar, which holds no div of its own; at the top of
     # main on a page without one.
-    bar = page_html.find(_TOPBAR)
+    bar = page_html.find('<div class="artifact-topbar">')
     closed = page_html.find("</div>", bar) if bar >= 0 else -1
 
     def opened(match) -> str:

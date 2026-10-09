@@ -17,15 +17,6 @@
     var page = named ? named.dataset.page :
       decodeURIComponent(location.pathname.split("/").pop()).replace(/\.html$/, "");
 
-    function refused(response, payload, archived) {
-      if (response.status === 401) {
-        return SIGNED_OUT;
-      }
-      var error = payload && payload.error ? String(payload.error) : "status " + response.status;
-      return "The page was not " + (archived ? "archived" : "unarchived") + " (" + error +
-        "). Try again.";
-    }
-
     function draw(archived) {
       var button = element("button", "artifact-archive", archived ? "Unarchive" : "Archive");
       button.type = "button";
@@ -46,7 +37,10 @@
             location.reload();
             return;
           }
-          status.textContent = refused(response, await json(response), !archived);
+          var payload = await json(response);
+          var error = payload && payload.error ? String(payload.error) : "status " + response.status;
+          status.textContent = response.status === 401 ? SIGNED_OUT : "The page was not " +
+            (archived ? "unarchived" : "archived") + " (" + error + "). Try again.";
         } catch (ignored) {
           status.textContent = "Not saved: the site did not answer. Try again.";
         }
