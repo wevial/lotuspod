@@ -145,6 +145,29 @@ class MarkRefsTests(unittest.TestCase):
             self.assertEqual(card["attrs"]["role"], "dialog")
             self.assertIn("hidden", card["attrs"])
 
+    def test_a_letter_or_digit_of_any_script_or_across_a_comment_joins_a_word(self):
+        body = ("<p>\u00e9HOLO-175 HOLO-175\u00e9 \u0661HOLO-175 HOLO-175\u0661 "
+                "HOLO-175<!--c-->x x<!-- c -->HOLO-175 HOLO-175<!--c-->, "
+                "\u00e9 HOLO-175.</p>")
+        marked, _, _ = refs.mark_refs(body, self.entries, STAMP)
+        self.assertEqual(parsed(marked).buttons, ["HOLO-175", "HOLO-175"])
+        self.assertIn('HOLO-175</button><!--c-->, ', marked)
+        self.assertIn('\u00e9 <button type="button"', marked)
+        self.assertEqual(_BUTTON.sub(r"\1", marked), body)
+
+    def test_an_updated_time_is_taken_only_in_iso_8601_form(self):
+        for good in ("2026-10-09", "2026-10-09T12:00", "2026-10-09T12:00:00Z",
+                     "2026-10-09T12:00:00.5+02:00"):
+            with self.subTest(updated=good):
+                checked = refs.check_refs({"refs": {"HOLO-175": {"title": "t", "updated": good}}})
+                self.assertEqual(checked["HOLO-175"]["updated"], good)
+        for bad in ("2026-10-09X12:00:00", "2026-10-09 12:00:00", "20261009", "2026-W41",
+                    "2026-13-01", "2026-10-09T25:00", "\u0662026-10-09"):
+            with self.subTest(updated=bad):
+                with self.assertRaises(RuntimeError) as caught:
+                    refs.check_refs({"refs": {"HOLO-175": {"title": "t", "updated": bad}}})
+                self.assertIn("HOLO-175 updated", str(caught.exception))
+
     def test_a_body_naming_none_is_left_as_written_with_no_cards(self):
         self.assertEqual(refs.mark_refs("<p>LOTUS-95 only.</p>", self.entries, STAMP),
                          ("<p>LOTUS-95 only.</p>", "", []))
@@ -257,6 +280,8 @@ class RefusedFileTests(PublishTestCase):
             ("a long title", {"refs": {"HOLO-175": {"title": "t" * 201}}}, ("HOLO-175", "title")),
             ("a bad time", {"refs": {"HOLO-175": {**good, "updated": "yesterday"}}},
              ("HOLO-175", "updated")),
+            ("a time with another separator", {"refs": {"HOLO-175": {
+                **good, "updated": "2026-10-09X12:00:00"}}}, ("HOLO-175", "updated")),
             ("an href urlsplit cannot read", {"refs": {"HOLO-175": {
                 **good, "board": {"text": "Board", "href": "https://["}}}},
              ("HOLO-175", "board.href")),

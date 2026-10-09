@@ -35,10 +35,18 @@ ID_PREFIX = "ref-"
 TICKET = re.compile(r"[A-Z][A-Z0-9]*-[0-9]+")
 PULL = re.compile(r"(?:[a-z0-9][a-z0-9._-]*)?#[0-9]+")
 # A key in text: whole, so not after a letter, digit, "_", "-", "/" or "#",
-# and not before a letter, digit or "_". A repository goes before its "#".
+# and not before a letter, digit or "_", in any script (\w, as str patterns
+# match it). A repository goes before its "#".
 _MENTION = re.compile(
-    r"(?<![A-Za-z0-9_/#-])(?:[A-Z][A-Z0-9]*-[0-9]+|(?:[a-z0-9][a-z0-9._-]*)?#[0-9]+)"
-    r"(?![A-Za-z0-9_])"
+    r"(?<![\w/#-])(?:[A-Z][A-Z0-9]*-[0-9]+|(?:[a-z0-9][a-z0-9._-]*)?#[0-9]+)"
+    r"(?!\w)"
+)
+# An ISO 8601 date, or date and time with a "T", seconds, fraction and
+# offset optional; fromisoformat then checks each part's range, but takes
+# any separator and other forms, so it is not the check alone.
+_ISO_TIME = re.compile(
+    r"\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,6})?)?(?:Z|[+-]\d{2}:\d{2})?)?",
+    re.ASCII,
 )
 TONES = ("merged", "review", "progress", "waiting")
 DEFAULT_TONE = "waiting"
@@ -123,7 +131,7 @@ def _entry(key: str, value: object) -> dict:
     if "updated" in value:
         updated = value["updated"]
         try:
-            if not isinstance(updated, str):
+            if not isinstance(updated, str) or not _ISO_TIME.fullmatch(updated):
                 raise ValueError
             datetime.datetime.fromisoformat(updated.replace("Z", "+00:00"))
         except ValueError:
@@ -251,7 +259,8 @@ class _TextFinder(HTMLParser):
         self._text(html.unescape(f"&#{name};"), self._offset(), self._offset(), False)
 
     def handle_comment(self, data: str) -> None:
-        self._joined = False
+        """A comment is never shown: the words either side of it run on,
+        as the reader sees them, so it ends no word."""
 
 
 def card_id(key: str, taken: set[str]) -> str:

@@ -75,6 +75,8 @@
       all(".artifact-ref-card-close, .artifact-ref-card-pinned", card).forEach(function (node) {
         node.hidden = !pin;
       });
+      // The ✕ and the note change the card's height: set it again.
+      place();
     }
 
     function show(ref) {

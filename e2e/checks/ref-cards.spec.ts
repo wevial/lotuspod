@@ -212,6 +212,36 @@ test.describe('in a narrow window', () => {
   });
 });
 
+test.describe('in a window only as tall as the hovered card needs', () => {
+  test.use({ viewport: { width: 360, height: 740 } });
+
+  test('pinning, which makes the card taller, sets it again inside the window', async ({ page }) => {
+    const seen = await opened(page);
+    const holo = ref(page, 'HOLO-175');
+    await holo.hover();
+    const holoCard = card(page, 'ref-holo-175');
+    await expect(holoCard).toBeVisible();
+    const under = (await holo.boundingBox())!;
+    const hovered = (await holoCard.boundingBox())!;
+    // Just room under the reference for the card as hovered: 6px gap, 8px edge.
+    const height = Math.ceil(under.y + under.height + 6 + hovered.height + 8);
+    await page.mouse.move(4, 4);
+    await expect(holoCard).toBeHidden();
+    await page.setViewportSize({ width: 360, height });
+    await holo.hover();
+    const fitted = (await holoCard.boundingBox())!;
+    expect(fitted.y).toBeGreaterThanOrEqual(under.y + under.height);
+
+    await holo.click();
+    await expect(holoCard.locator('.artifact-ref-card-pinned')).toBeVisible();
+    const pinned = (await holoCard.boundingBox())!;
+    expect(pinned.height).toBeGreaterThan(fitted.height);
+    expect(pinned.y).toBeGreaterThanOrEqual(0);
+    expect(pinned.y + pinned.height).toBeLessThanOrEqual(height);
+    await seen.clean();
+  });
+});
+
 test.describe('without the script', () => {
   test.use({ javaScriptEnabled: false });
 
