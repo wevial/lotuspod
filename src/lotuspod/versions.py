@@ -193,8 +193,8 @@ def source_diff(old: str, new: str) -> tuple[list[dict], bool]:
     return lines, False
 
 
-def compare(old_html: str, new_html: str, old_source: str | None = None,
-            new_source: str | None = None) -> dict:
+def compare(old_html: str, new_html: str, old_source: str | None,
+            new_source: str | None) -> dict:
     """What changed from one version of a page to another: {sections:
     {changed, added, removed}}, the first two as {id, title} in the new
     page's order and removed ones as {title} in the old page's, and, when
@@ -355,8 +355,6 @@ class History:
         one (compare(), with the sources when both versions kept NAME.md);
         None for what changed when it is the current one. None unless a
         listed version carries since."""
-        if not since:
-            return None
         commits = self._commits(name)
         listed = self._versions(commits)[0]
         found = next(((behind, version) for behind, version in enumerate(listed)

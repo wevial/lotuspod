@@ -465,7 +465,7 @@ class Api:
                 return HTTPStatus.OK, self._seen(query, actor), ()
             if path == CHANGES:
                 return HTTPStatus.OK, self._changes(query), ()
-            page = self._page(self._query_page(query))
+            page = self._page(self._query(query, ("page",))["page"])
             if path == ANSWERS:
                 payload = {"page": page.name, "questions": self.database.answers(page.name, asked=True)}
             elif path == REVISION:
@@ -518,10 +518,6 @@ class Api:
         if sorted(fields) != sorted(names) or any(len(fields[name]) != 1 for name in names):
             raise Refusal(HTTPStatus.BAD_REQUEST, "invalid_query")
         return {name: fields[name][0] for name in names}
-
-    @classmethod
-    def _query_page(cls, query: str) -> str:
-        return cls._query(query, ("page",))["page"]
 
     def _page(self, name: object) -> Page:
         if not isinstance(name, str):
