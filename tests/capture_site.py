@@ -560,9 +560,11 @@ The frog that sits on them.
 ![A frog](frog.gif)
 """
 
-# Two flowcharts, each followed by a Nodes table the page script makes
+# Three flowcharts, each followed by a Nodes table the page script makes
 # cards of. The first table names every box but E; the second repeats node
-# id A, holds a subgraph, and has a row Z naming no box, so it stays shown.
+# id A, holds a subgraph, and has a row Z naming no box, so it stays shown;
+# the third has an arrow both ways, an arrow its linkStyle makes opaque, a
+# row too long for the window, and no thead.
 NODE_CARDS_BODY = """\
 <p>A sample plan for captures: click a box for its card.</p>
 <pre class="mermaid">flowchart LR
@@ -596,6 +598,21 @@ NODE_CARDS_BODY = """\
 <tr><td>P</td><td>Tidy the docs once it ships</td><td>ready</td></tr>
 <tr><td>Z</td><td>A box the diagram does not draw</td><td>waiting</td></tr>
 </tbody>
+</table>
+<p>A third plan: an arrow both ways, an arrow styled opaque, a long row, and a table with no
+thead.</p>
+<pre class="mermaid">flowchart LR
+  K[Keep the copy] &lt;--&gt; R[Check the copy]
+  R --&gt; S[Note it]
+  S --&gt; T[Write it up]
+  linkStyle 2 opacity:1</pre>
+<h3>Nodes</h3>
+<table>
+<tr><th>Node</th><th>Title</th><th>Status</th></tr>
+<tr><td>K</td><td>Keep a copy of the pond's log</td><td>merged</td></tr>
+<tr><td>R</td><td>Check the copy against the log</td><td>open</td></tr>
+<tr><td>S</td><td>Note what the check found</td><td>ready</td></tr>
+<tr><td>T</td><td>""" + "A long write-up of the check. " * 200 + """</td><td>waiting</td></tr>
 </table>
 """
 

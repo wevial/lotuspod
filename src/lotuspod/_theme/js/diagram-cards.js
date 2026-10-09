@@ -68,21 +68,32 @@
           boxes.set(match[1], group);
         }
       });
+      // Each arrow's ends, and which way it points: an arrowhead at its end
+      // points into `to`, one at its start into `from` (both for A <--> B,
+      // neither for a plain line).
       var arrows = [];
       all("path.flowchart-link", svg).forEach(function (path) {
         var pair = ends(path, boxes);
         if (pair) {
-          arrows.push({ path: path, from: pair[0], to: pair[1] });
+          arrows.push({
+            path: path, from: pair[0], to: pair[1],
+            forward: path.hasAttribute("marker-end"), back: path.hasAttribute("marker-start"),
+          });
         }
       });
-      var headers = [];
-      var head = table.tHead ? table.tHead.rows[0] : null;
-      if (head) {
-        headers = Array.prototype.map.call(head.cells, text);
-      }
-      var rows = [];
-      Array.prototype.forEach.call(table.tBodies, function (body) {
-        rows = rows.concat(Array.prototype.slice.call(body.rows));
+      // The header and body rows, as render reads them: the header is the
+      // first row of the thead, else the first row that starts with a th; a
+      // body row is any other outside the thead that starts with a td.
+      var every = Array.prototype.slice.call(table.rows);
+      var starts = function (row, tag) {
+        return row.cells.length > 0 && row.cells[0].tagName === tag;
+      };
+      var head = table.tHead && table.tHead.rows[0] || every.filter(function (row) {
+        return starts(row, "TH");
+      })[0];
+      var headers = head ? Array.prototype.map.call(head.cells, text) : [];
+      var rows = every.filter(function (row) {
+        return row !== head && row.parentNode !== table.tHead && starts(row, "TD");
       });
       var diagram = { svg: svg, arrows: arrows, statuses: new Map(), overlays: [] };
       diagrams.push(diagram);
@@ -292,12 +303,24 @@
       var diagram = box.diagram;
       var waits = [];
       var unblocks = [];
-      diagram.arrows.forEach(function (arrow) {
-        if (arrow.to === box.id && waits.indexOf(arrow.from) < 0) {
-          waits.push(arrow.from);
+      var add = function (list, id) {
+        if (list.indexOf(id) < 0) {
+          list.push(id);
         }
-        if (arrow.from === box.id && unblocks.indexOf(arrow.to) < 0) {
-          unblocks.push(arrow.to);
+      };
+      // An arrowhead at a box means the box waits for the other end.
+      diagram.arrows.forEach(function (arrow) {
+        if (arrow.forward && arrow.to === box.id) {
+          add(waits, arrow.from);
+        }
+        if (arrow.forward && arrow.from === box.id) {
+          add(unblocks, arrow.to);
+        }
+        if (arrow.back && arrow.from === box.id) {
+          add(waits, arrow.to);
+        }
+        if (arrow.back && arrow.to === box.id) {
+          add(unblocks, arrow.from);
         }
       });
       graph.textContent = "";

@@ -196,8 +196,7 @@ def _with_class(source: str, name: str) -> str:
     """A start tag's source with name added to its class list."""
     match = _CLASS_ATTRIBUTE.search(source)
     if match is None:
-        tag = len(source) - len(source[1:].lstrip("abcdefghijklmnopqrstuvwxyz0123456789"))
-        return f'{source[:tag]} class="{name}"{source[tag:]}'
+        return _with_attributes(source, {"class": name})
     group = next(index for index in (1, 2, 3) if match.group(index) is not None)
     if group == 3:
         return (f'{source[:match.start(3)]}"{match.group(3)} {name}"'

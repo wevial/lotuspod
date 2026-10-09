@@ -7,7 +7,9 @@ test.use({ viewport: { width: 1280, height: 800 } });
 // The capture fixture's node cards page: an opening paragraph, then a
 // flowchart (A --> B, E --> B, B --> C, A --> D) whose Nodes table lists A to
 // D and not E, then a second flowchart that repeats node id A, holds a
-// subgraph (P --> Q), and whose table has a row Z naming no box.
+// subgraph (P --> Q), and whose table has a row Z naming no box, and a third
+// (K <--> R, R --> S, S --> T styled opaque) whose table has no thead and a
+// row too long for the window.
 const PAGE = '/capture-node-cards.html';
 // The pinned Mermaid (e2e/package.json) answers jsDelivr's requests for it,
 // as in policy.spec.ts.
@@ -343,13 +345,48 @@ test("a table naming a box the diagram lacks stays shown, and its boxes keep the
   await seen.clean();
 });
 
+test('arrows point the way their heads do, a long card scrolls inside the window, and a table without a thead reads its header', async ({ page }) => {
+  const seen = await drawn(page);
+  await expect(box(page, 'K', 2)).toHaveAttribute('role', 'button');
+  // Every row names a box, the header row being no body row.
+  await expect(page.locator('#nodes-table-3')).toBeHidden();
+  await expect(page.locator('h3.artifact-node-heading').nth(2)).toBeHidden();
+
+  await box(page, 'K', 2).click();
+  await expect(card(page).locator('dl.artifact-node-card-fields dt')).toHaveText(['Title', 'Status']);
+  expect(await graph(page)).toEqual([['Waits for', 'R (open)'], ['Unblocks', 'R (open)']]);
+  // The arrow its linkStyle makes opaque still dims.
+  await away(page);
+  const dimmed = await diagram(page, 2).locator('svg').evaluate((svg) =>
+    Number(getComputedStyle(svg.querySelector('path.flowchart-link[id="L_S_T_2"]')!).opacity));
+  expect(dimmed).toBeLessThan(1);
+
+  // The card covers the boxes beside K, so these open from the keyboard.
+  await box(page, 'R', 2).focus();
+  await page.keyboard.press('Enter');
+  expect(await graph(page)).toEqual([['Waits for', 'K (merged)'], ['Unblocks', 'K (merged), S (ready)']]);
+  await box(page, 'S', 2).focus();
+  await page.keyboard.press('Enter');
+  expect(await graph(page)).toEqual([['Waits for', 'R (open)'], ['Unblocks', 'T (waiting)']]);
+
+  await box(page, 'T', 2).focus();
+  await page.keyboard.press('Enter');
+  await expect(card(page).locator('h3')).toHaveText('Write it up');
+  const where = (await card(page).boundingBox())!;
+  expect(where.y).toBeGreaterThanOrEqual(0);
+  expect(where.y + where.height).toBeLessThanOrEqual(800);
+  expect(where.x + where.width).toBeLessThanOrEqual(1280);
+  expect(await card(page).evaluate((node) => node.scrollHeight > node.clientHeight)).toBe(true);
+  await seen.clean();
+});
+
 test.describe('without scripts', () => {
   test.use({ javaScriptEnabled: false });
 
-  test('both Nodes headings and tables show and no box is focusable', async ({ page }) => {
+  test('every Nodes heading and table shows and no box is focusable', async ({ page }) => {
     await page.goto(PAGE);
     const headings = page.locator('.artifact-body > h3', { hasText: 'Nodes' });
-    await expect(headings).toHaveCount(2);
+    await expect(headings).toHaveCount(3);
     await expect(headings.nth(0)).toBeVisible();
     await expect(headings.nth(1)).toBeVisible();
     await expect(page.locator('#nodes-table')).toBeVisible();

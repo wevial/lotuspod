@@ -86,6 +86,16 @@ class MarkTests(TempDirTestCase):
         original = body(SOURCE).replace("<h3>Nodes</h3>", "<h4>Nodes</h4>")
         self.assert_marked(original, "h4")
 
+    def test_uppercase_tags_are_marked(self):
+        original = ('<pre class="mermaid">flowchart LR\n  A</pre>\n<H3>Nodes</H3>\n'
+                    '<TABLE><TR><TH>Node</TH></TR><TR><TD>A</TD></TR></TABLE>\n')
+        marked, found = mark_node_tables(original)
+        self.assertTrue(found)
+        self.assertIn('<H3 class="artifact-node-heading">', marked)
+        self.assertIn('<TABLE id="nodes-table" class="artifact-node-table">', marked)
+        self.assertIn('<TR data-node="A">', marked)
+        self.assertEqual(unmarked(marked), original)
+
     def test_a_graph_after_a_directive_is_a_flowchart(self):
         source = SOURCE.replace("flowchart LR", "%%{init: {}}%%\ngraph TD")
         marked, found = mark_node_tables(body(source))

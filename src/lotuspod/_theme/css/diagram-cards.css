@@ -56,8 +56,9 @@
 
 /* While a box is highlighted, every arrow of its diagram is dimmed and its
    own are drawn again above the boxes, cyan over a night halo. */
+/* !important, as an authored linkStyle sets an arrow's opacity inline. */
 .artifact-body pre.mermaid svg.artifact-diagram--lit path.flowchart-link {
-  opacity: 0.25;
+  opacity: 0.25 !important;
 }
 
 .artifact-body pre.mermaid g.artifact-node-arrows {
@@ -99,7 +100,10 @@
   font-family: var(--font-body);
   font-size: 0.875rem;
   line-height: 1.5;
+  /* The window less the room kept at its edges: a longer card scrolls. */
+  max-height: calc(100vh - 1rem);
   max-width: calc(100vw - 2rem);
+  overflow-y: auto;
   padding: 0.875rem 1rem 1rem;
   position: absolute;
   width: 20rem;
