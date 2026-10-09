@@ -82,7 +82,9 @@ async function focusInside(page: Page) {
 }
 
 test.describe('a page figure', () => {
-  // Signed in, as every reader is: the page asks for its versions as it loads.
+  // Signed in, as every reader behind Access is: a page posts the revision it
+  // was opened at, which a signed-out request has refused with a 401, and asks
+  // for its versions as it loads.
   test.use({ extraHTTPHeaders: SIGNED_IN });
 
   test('a click opens the image in a modal dialog, captioned and fit to the window, and the page stays', async ({ page }) => {

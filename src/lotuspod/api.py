@@ -1,7 +1,7 @@
 """The reader's answers and comments over /api, for the verified reader only.
 
 serve hands a request here only after its Access assertion verifies, with
-the reader as actor. Seven routes:
+the reader as actor. Eight routes:
 
     POST /api/answers     {page, question, version, choice, note} or
                           {page, question, version, checked, note}
@@ -12,11 +12,21 @@ the reader as actor. Seven routes:
     GET  /api/comments?page=NAME
     POST /api/media       one image's bytes
     GET  /api/revision?page=NAME
+    POST /api/seen        {page, revision}
+    GET  /api/seen
     GET  /api/versions?page=NAME
 
 A read of the comments carries the page's current revision beside its
 threads, and /api/revision answers it alone, {revision}: an open page
 compares it with the revision it was rendered at to notice a republish.
+
+POST /api/seen records that the reader opened `page` at `revision`, the
+revision it was rendered at, keyed by their verified address, and answers
+200 {page, revision, previous}: `previous` is the revision recorded for them
+before, null the first time. GET /api/seen, which takes no query (400
+invalid_query for any), answers {pages: {NAME: {revision, seen}}}, one entry
+for each page the reader has opened that serve still answers: `revision` the
+page's current one and `seen` the one recorded. It never names the reader.
 
 /api/versions answers {page, versions: [{commit, date, revision, current}]}:
 each commit of the artifacts repository that changed the page while it was
@@ -101,8 +111,9 @@ ANSWERS = "/api/answers"
 COMMENTS = "/api/comments"
 MEDIA = "/api/media"
 REVISION = "/api/revision"
+SEEN = "/api/seen"
 VERSIONS = "/api/versions"
-ROUTES = (ANSWERS, COMMENTS, MEDIA, REVISION, VERSIONS)
+ROUTES = (ANSWERS, COMMENTS, MEDIA, REVISION, SEEN, VERSIONS)
 METHODS = ("GET", "HEAD", "POST")
 # The methods of a route that is only read.
 READ_METHODS = ("GET", "HEAD")
@@ -386,7 +397,7 @@ def shown(value: object) -> object:
 
 
 class Api:
-    """The seven routes over one database; pages(name) is the Page serve
+    """The eight routes over one database; pages(name) is the Page serve
     would answer for name, or None; window is routing's owner window.
     media_dir is the media store and max_image_bytes its cap; without a
     store, uploads and comments naming images answer 503. history reads the
@@ -431,9 +442,13 @@ class Api:
                 if path == ANSWERS:
                     return HTTPStatus.CREATED, self._post_answer(headers, body, actor), ()
                 fields = self._json_body(headers, body)
+                if path == SEEN:
+                    return HTTPStatus.OK, self._post_seen(fields, actor), ()
                 if "thread" in fields:
                     return HTTPStatus.OK, self._post_resolution(fields, actor), ()
                 return HTTPStatus.CREATED, self._post_comment(fields, actor), ()
+            if path == SEEN:
+                return HTTPStatus.OK, self._seen(query, actor), ()
             page = self._page(self._query_page(query))
             if path == ANSWERS:
                 payload = {"page": page.name, "questions": self.database.answers(page.name, asked=True)}
@@ -584,6 +599,25 @@ class Api:
             note=note, revision=page.revision, actor=actor,
             question_text=asked.text, choice_label=label, checked=checked,
         )
+
+    def _post_seen(self, fields: dict, actor: Mapping) -> dict:
+        _keys(fields, {"page", "revision"})
+        revision = _text(fields["revision"], 1, MAX_REVISION)
+        page = self._page(fields["page"])
+        previous = self.database.record_view(reader=str(actor.get("email") or ""),
+                                             page=page.name, revision=revision)
+        return {"page": page.name, "revision": revision, "previous": previous}
+
+    def _seen(self, query: str, actor: Mapping) -> dict:
+        if query:
+            raise Refusal(HTTPStatus.BAD_REQUEST, "invalid_query")
+        pages = {}
+        for name, seen in sorted(self.database.views(str(actor.get("email") or "")).items()):
+            # A page serve no longer answers, hidden or gone, is left out.
+            page = self.pages(name)
+            if page is not None:
+                pages[name] = {"revision": page.revision, "seen": seen}
+        return {"pages": pages}
 
     def _post_resolution(self, fields: dict, actor: Mapping) -> dict:
         _keys(fields, {"page", "thread", "resolved"})

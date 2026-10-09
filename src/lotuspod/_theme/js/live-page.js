@@ -12,9 +12,11 @@
   // live.place scrolls to where the reader was once more, as opening a thread
   // over the text may scroll, and the page may only now be long enough. The
   // banner still shows and the reload still happens when the browser lets
-  // the page keep nothing.
+  // the page keep nothing. Once per load the page also posts its own revision
+  // to the seen route, which keeps the reader's last visit for the index.
   function livePage() {
     var REVISION = "/api/revision";
+    var SEEN = "/api/seen";
     var KEPT = "lotuspod:reload:";
     var CHECK = 60000;
     var NEWER = "A newer version of this page is available";
@@ -33,6 +35,16 @@
     var page = named ? named.dataset.page :
       decodeURIComponent(location.pathname.split("/").pop()).replace(/\.html$/, "");
     var key = KEPT + page;
+
+    // Once per load, record that the reader opened the page at its own
+    // revision, so the index can mark it once it is republished. A reader
+    // signed out, or a failure, is shown nothing.
+    fetch(SEEN, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ page: page, revision: own }),
+    }).catch(function () {});
+
     // What the comments page keeps: save() is what to keep, and unsent()
     // says whether a composer holds text not sent.
     var keeper = null;

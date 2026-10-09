@@ -418,8 +418,9 @@ lotuspod index               # scans artifacts/ (or pass --out-dir DIR)
 
 The listing is a table: one row per page, with its title (linking to the
 page) and its labels as small tags under it, created and updated dates, and
-summary, as `lotuspod manifest` records them. A labelled row carries its labels
-in `data-labels`, joined by commas. Only fail-closed-visible artifacts are listed
+summary, as `lotuspod manifest` records them. Each row names its page in
+`data-page`, and a labelled row carries its labels in `data-labels`, joined by
+commas. Only fail-closed-visible artifacts are listed
 (same rule as `lotuspod manifest`).
 Rows arrive newest update first, the file name breaking ties, and are styled
 by the lotus theme. Re-running is
@@ -443,7 +444,19 @@ The count reads "M pages, newest update first" in the arrival order, and "N of
 M pages" while filtered; when no row is left, the table gives way to "No pages
 match these filters." The table stays one flat list in its sort order.
 
-Sorting, the search and the Labels menu are progressive enhancement from a
+Signed in to `lotuspod serve`, the index asks `/api/seen` (see [Answers and
+comments](comments.md#answers-and-comments)) which pages this reader has
+opened, and at what revision, once on load and again when the browser brings
+the index back from its back-forward cache. A page republished since this
+reader last opened it, on any device, gets a small "updated" mark beside its
+title; a page they have never opened gets none. An "Updated · N" toggle, N
+the marked pages, sits after the Labels menu: pressed (`aria-pressed`), it
+keeps only the marked rows and adds the token "updated ✕" to the "Showing"
+line, which releases it; the Labels menu and the search still apply on top.
+When the route answers anything but 200 (signed out, or the demo site, whose
+stand-in answers 404), there are no marks and no toggle.
+
+Sorting, the search, the Labels menu and the marks are progressive enhancement from a
 script inlined in `index.html` — no extra file to serve — so with scripting off
 the page is still the complete listing, just unsorted and unfiltered (the search
 box and the menu stay hidden rather than offering a control that cannot

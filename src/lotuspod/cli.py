@@ -928,9 +928,12 @@ def index_entries_html(artifacts: list[dict]) -> str:
         title = esc(str(meta["title"]))
         summary = esc(str(meta["summary"]))
         labels = [esc(str(label)) for label in meta["labels"]]
-        # The labels ride under the title as tags, and on the row for the
-        # index script's Labels filter.
-        row = f'<tr data-labels="{",".join(labels)}">' if labels else "<tr>"
+        # The row names its page, for the index script's updated marks. The
+        # labels ride under the title as tags, and on the row for the index
+        # script's Labels filter.
+        name = esc(str(meta["file"]).removesuffix(".html"))
+        labelled = f' data-labels="{",".join(labels)}"' if labels else ""
+        row = f'<tr data-page="{name}"{labelled}>'
         tags = (
             ' <span class="index-tags">'
             + " ".join(f'<span class="index-tag">{label}</span>' for label in labels)
@@ -1983,7 +1986,7 @@ class _AllowListHandler(SimpleHTTPRequestHandler):
     /api paths never reach the file system or method dispatch: whatever the
     method, each is answered only after the request's Access assertion
     verifies (see parse_request and _serve_api). The answers, comments,
-    media, revision and versions routes are lotuspod.api's.
+    media, revision, seen and versions routes are lotuspod.api's.
 
     NAME.html?version=COMMIT answers an earlier version of an allow-listed
     page, read-only (see _serve_version), after the same Access check; any
@@ -2214,7 +2217,7 @@ def _make_server(out_dir: Path, host: str, port: int,
                  window: int = routing.DEFAULT_WINDOW,
                  max_image_bytes: int = media.DEFAULT_MAX_BYTES) -> ThreadingHTTPServer:
     """The allow-list server; /api answers 503 access_unconfigured without a
-    verifier, and has no answers, comments, media, revision and versions
+    verifier, and has no answers, comments, media, revision, seen and versions
     routes without a database. Uploads go to the media store beside out_dir, within
     max_image_bytes. The pages' versions are read from out_dir's repository."""
     history = versions.History(out_dir, version_stamp)
