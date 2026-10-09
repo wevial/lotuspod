@@ -187,12 +187,22 @@ test.describe('in a narrow window', () => {
         probe.remove();
         return color;
       };
-      const chip = (id: string) =>
-        getComputedStyle(document.querySelector(`#${id} .artifact-ref-chip`)!).borderTopColor;
+      const style = (id: string) =>
+        getComputedStyle(document.querySelector(`#${id} .artifact-ref-chip`)!);
+      const chip = (id: string) => style(id).borderTopColor;
+      const surface = document.createElement('span');
+      surface.style.backgroundColor = 'var(--color-surface)';
+      document.body.appendChild(surface);
+      const surfaceColor = getComputedStyle(surface).backgroundColor;
+      surface.remove();
       return {
         review: [chip('ref-holo-175'), resolve('--color-amber')],
         merged: [chip('ref-holo-171'), resolve('--color-mint')],
         progress: [chip('ref-lotus-97'), resolve('--color-orchid')],
+        // Waiting: border and text a hairline, on the surface.
+        waitingBorder: [chip('ref-relos-2266'), resolve('--hairline-strong')],
+        waitingText: [style('ref-relos-2266').color, resolve('--hairline-strong')],
+        waitingGround: [style('ref-relos-2266').backgroundColor, surfaceColor],
       };
     });
     for (const [tone, [chip, token]] of Object.entries(colors)) {

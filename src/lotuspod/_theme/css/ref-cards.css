@@ -142,7 +142,6 @@
 
 .artifact-ref-card[data-tone="waiting"] .artifact-ref-chip {
   background: var(--color-surface);
-  color: var(--color-muted-lavender);
 }
 
 .artifact-ref-card-updated,

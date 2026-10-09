@@ -46,8 +46,6 @@ DEFAULT_TONE = "waiting"
 TEXTS = {"title": 200, "project": 60, "status": 40, "summary": 400}
 LINKS = ("pr", "board")
 FIELDS = frozenset({*TEXTS, "tone", "updated", *LINKS})
-# A link's text, at most this long.
-LINK_TEXT = 200
 # A mention in text inside one of these is left as written: a button may not
 # sit in a link, a button or a form's controls, and code, headings and
 # summaries are read as they are.
@@ -83,10 +81,15 @@ def _link(key: str, field: str, value: object) -> dict:
         if name not in ("text", "href"):
             raise _refused(key, f"{field}.{name}", "not a field of a link")
     text, href = value.get("text"), value.get("href")
-    if not isinstance(text, str) or not text.strip() or len(text) > LINK_TEXT:
-        raise _refused(key, f"{field}.text", f"not text of 1 to {LINK_TEXT} characters")
-    if not isinstance(href, str) or urlsplit(href).scheme not in ("http", "https") \
-            or not urlsplit(href).netloc or any(c.isspace() or ord(c) < 32 for c in href):
+    if not isinstance(text, str):
+        raise _refused(key, f"{field}.text", "not text")
+    try:
+        # A URL urlsplit cannot read, such as https://[, is no URL either.
+        parts = urlsplit(href) if isinstance(href, str) else None
+    except ValueError:
+        parts = None
+    if parts is None or parts.scheme not in ("http", "https") or not parts.netloc \
+            or any(c.isspace() or ord(c) < 32 for c in href):
         raise _refused(key, f"{field}.href", "not an http or https URL")
     return {"text": text, "href": href}
 
@@ -107,8 +110,11 @@ def _entry(key: str, value: object) -> dict:
                 raise _refused(key, field, "missing")
             continue
         text = value[field]
-        if not isinstance(text, str) or not text.strip() or len(text) > most:
+        # The title is required, so it may not be empty; the others may.
+        if field == "title" and (not isinstance(text, str) or not text.strip()):
             raise _refused(key, field, f"not text of 1 to {most} characters")
+        if not isinstance(text, str) or len(text) > most:
+            raise _refused(key, field, f"not text of at most {most} characters")
         entry[field] = text
     tone = value.get("tone", DEFAULT_TONE)
     if tone not in TONES:
@@ -174,9 +180,10 @@ class _TextFinder(HTMLParser):
         # False after a tag that ends a word: a block, or a skipped element.
         self._joined = False
         self.runs: list[dict] = []
-        # Every element's id, and the slug of each h2 without one, which
-        # the outline may give it: a card's id is none of them.
+        # Every element's id, and the slug of each h2 without one, in page
+        # order: the outline gives such headings ids from those slugs.
         self.ids: set[str] = set()
+        self.slugs: list[str] = []
         self._heading: list[str] | None = None
 
     def _offset(self) -> int:
@@ -209,7 +216,7 @@ class _TextFinder(HTMLParser):
     def handle_endtag(self, tag: str) -> None:
         self._tag(tag)
         if tag == "h2" and self._heading is not None:
-            self.ids.add(cli.slugify(" ".join("".join(self._heading).split())))
+            self.slugs.append(cli.slugify(" ".join("".join(self._heading).split())))
             self._heading = None
         # An end tag closes its element and any left open inside it; one
         # with nothing to close is ignored, as a browser ignores it.
@@ -305,6 +312,10 @@ def mark_refs(body: str, refs: dict[str, dict], as_of: str = "") -> tuple[str, s
     finder.feed(body)
     finder.close()
     taken = set(finder.ids)
+    # Every id the outline could give a heading, as outline_body gives them:
+    # repeated headings take base, base-2, base-3, ... in page order.
+    for slug in finder.slugs:
+        taken.add(cli._unique_id(slug, taken))
     ids: dict[str, str] = {}
     pieces: list[str] = []
     cursor = 0

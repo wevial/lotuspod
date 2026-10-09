@@ -181,6 +181,29 @@ class MarkRefsTests(unittest.TestCase):
         _, block, _ = refs.mark_refs(body, self.entries, STAMP)
         self.assertEqual(list(parsed(block).cards), ["ref-holo-175-3"])
 
+    def test_a_card_id_is_none_that_repeated_headings_take_in_the_outline(self):
+        body = ("<h2>Ref HOLO-175</h2>\n<p>One.</p>\n<h2>Ref HOLO-175</h2>\n"
+                "<p>HOLO-175 again.</p>\n")
+        marked, block, _ = refs.mark_refs(body, self.entries, STAMP)
+        _, outline = cli.outline_body(marked)
+        headings = [entry["id"] for entry in outline]
+        self.assertEqual(headings, ["ref-holo-175", "ref-holo-175-2"])
+        cards = list(parsed(block).cards)
+        self.assertEqual(cards, ["ref-holo-175-3"])
+        self.assertIn('aria-controls="ref-holo-175-3"', marked)
+
+    def test_empty_optional_texts_and_long_link_texts_are_taken(self):
+        entry = {"title": "Kept", "project": "", "status": "", "summary": "",
+                 "pr": {"text": "p" * 500, "href": "https://example.com/pr/1"}}
+        checked = refs.check_refs({"refs": {"HOLO-175": entry}})
+        self.assertEqual(checked["HOLO-175"]["project"], "")
+        _, block, _ = refs.mark_refs("<p>HOLO-175</p>", checked, STAMP)
+        card = parsed(block).cards["ref-holo-175"]
+        self.assertEqual(card["text"]["artifact-ref-card-key"], "HOLO-175")
+        self.assertNotIn("artifact-ref-chip", card["text"])
+        self.assertNotIn("artifact-ref-card-summary", card["text"])
+        self.assertEqual(card["text"]["artifact-ref-card-pr"], "p" * 500)
+
 
 class PublishTestCase(unittest.TestCase):
     def setUp(self) -> None:
@@ -234,12 +257,20 @@ class RefusedFileTests(PublishTestCase):
             ("a long title", {"refs": {"HOLO-175": {"title": "t" * 201}}}, ("HOLO-175", "title")),
             ("a bad time", {"refs": {"HOLO-175": {**good, "updated": "yesterday"}}},
              ("HOLO-175", "updated")),
+            ("an href urlsplit cannot read", {"refs": {"HOLO-175": {
+                **good, "board": {"text": "Board", "href": "https://["}}}},
+             ("HOLO-175", "board.href")),
+            ("an empty title", {"refs": {"HOLO-175": {**good, "title": ""}}},
+             ("HOLO-175", "title")),
+            ("a long status", {"refs": {"HOLO-175": {**good, "status": "s" * 41}}},
+             ("HOLO-175", "status")),
         )
         for case, data, named in cases:
             with self.subTest(case=case):
                 rc, out, err = self.publish("--refs", str(self.refs_file(data)))
                 self.assertEqual(rc, 1, err)
                 (line,) = err.splitlines()
+                self.assertTrue(line.startswith("error: "), line)
                 for part in named:
                     self.assertIn(part, line)
                 self.assertEqual(sorted(p.name for p in self.out_dir.iterdir()), [".git"])
