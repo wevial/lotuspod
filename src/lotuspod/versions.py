@@ -58,7 +58,6 @@ class Version:
     commit: str
     # The commit's committer time, UTC, as publish stamps a page.
     date: str
-    blob: str
     revision: str
     visible: bool
 
@@ -155,10 +154,10 @@ class History:
     def _versions(self, commits: list[tuple[str, str, str]],
                   keep: str = "") -> tuple[list[Version], str | None]:
         """The visible versions among commits, and keep's text."""
-        kept = self._read([blob for _, _, blob in commits], keep) if commits else None
+        kept = self._read([blob for _, _, blob in commits], keep)
         with self._lock:
             stamps = dict(self._stamps)
-        listed = [Version(commit, date, blob, *stamps[blob])
+        listed = [Version(commit, date, *stamps[blob])
                   for commit, date, blob in commits if blob in stamps]
         return [version for version in listed if version.visible], kept
 
