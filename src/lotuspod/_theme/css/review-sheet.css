@@ -22,7 +22,7 @@
 /* Next open's words give way to an ellipsis, its arrow never. */
 .artifact-topbar a.artifact-review-next {
   column-gap: 0.3em;
-  display: flex;
+  display: inline-flex;
   min-width: 0;
 }
 
