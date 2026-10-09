@@ -356,6 +356,38 @@ pages) are excluded — re-render them with this version to publish. The flag
 governs listings, and `lotuspod serve` v2 enforces it over HTTP too (hidden
 pages 404 even by direct URL); opening the file on disk still works.
 
+## Versions
+
+When the output directory is the top of its own git repository, every
+publish is a commit there, so every commit that changed `NAME.html` is a
+version of the page. `lotuspod serve` reads them at request time, from one
+`git log` over the page and one `git cat-file --batch` for the versions it
+has not read before; nothing new is stored. Only versions whose own
+`lotuspod:visible` was true are listed, newest first, at most 200. A
+directory that is not the top of its own repository has none.
+
+A published page's header ends its date line in a "Versions · N" link to
+`#versions`, which shows the page's versions in place of its body: each with
+its date and time, the current one marked "current", and every other with a
+"View" link. The list shows 20, and "Show older versions" shows 20 more. A
+page with one version says "This is the only version." The page asks
+`GET /api/versions?page=NAME` (see [Reading and answering
+pages](comments.md#answers-and-comments)) once as it loads; when it answers
+anything but 200, as on the demo, there is no link and no view.
+
+"View" opens `NAME.html?version=COMMIT`, that version read-only, for a
+reader whose Access assertion verifies as on `/api`. It answers 404 unless
+the page is served now and COMMIT, its 40 hex characters, is one of the
+page's listed versions, so it never reads another file. The version is
+served as it was published, under a banner saying it is an earlier version,
+from when, and how many versions behind the current one it is, with links
+"All versions" and "Back to current". Its decision forms are disabled, its
+comment boxes hidden, and a `Content-Security-Policy` header of
+`script-src 'none'; form-action 'none'` keeps any of its scripts, a Mermaid
+diagram's included, and its forms from running: comments and answers stay
+on the current page. It is sent with `Cache-Control: private, no-store`. Any
+other query on a page is served as the page.
+
 ## Index
 
 Build `artifacts/index.html`, a browsable index linking every rendered page:

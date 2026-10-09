@@ -1,8 +1,8 @@
 import { expect, test, type Page } from '@playwright/test';
 
-// The index from the capture fixture: rendered pages, never stamped and not
-// in a repository, were updated on their created date; published pages carry
-// publish's later stamp on the same day. The rows arrive newest update first,
+// The index from the capture fixture: rendered pages, never stamped, were
+// updated when the fixture committed them, at the start of their created
+// day; published pages carry publish's later stamp on the same day. The rows arrive newest update first,
 // the Updated header says so, and its first click reverses that order. Times
 // are read from each date cell's time element, never from the day it shows.
 const COLUMNS = ['Title', 'Created', 'Updated', 'Summary'];

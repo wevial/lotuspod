@@ -71,6 +71,13 @@ twice.
   image `POST /api/media` takes.
 - `GET /api/revision?page=NAME` answers `{revision}`, the page's current
   revision alone; it is only read (any other method is 405).
+- `GET /api/versions?page=NAME` answers `{page, versions}`: each commit of
+  the artifacts repository that changed the page while it was visible, as
+  `{commit, date, revision, current}`, newest first and at most 200, `date`
+  its committer time in UTC and `current` true on the newest only (see
+  [Versions](publishing.md#versions)). It is empty when the output directory
+  is not the top of its own repository, and only read (any other method is
+  405).
 
 An open page notices when it is published again: every published page
 carries a revision, so it loads the page script, `lotuspod-page.js`, even

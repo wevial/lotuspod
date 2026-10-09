@@ -7,6 +7,10 @@ import { expect, test, type Page } from '@playwright/test';
 // of the sizes lotuspod.media reads from each header.
 const PAGE = '/capture-images.html';
 const HOLD_MS = 500;
+const SIGNED_IN = { 'Cf-Access-Jwt-Assertion': process.env.LOTUSPOD_TEST_ASSERTION ?? '' };
+
+// Signed in, as every reader is: the page asks for its versions as it loads.
+test.use({ extraHTTPHeaders: SIGNED_IN });
 
 type Violation = { blockedURI: string; effectiveDirective: string };
 
