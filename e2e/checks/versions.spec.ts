@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { expect, test, type Frame, type Locator, type Page } from '@playwright/test';
+import { expect, test, type Frame, type Locator, type Page, type Request } from '@playwright/test';
 
 // A page lists its earlier versions from the artifacts repository, and opens
 // each one read-only. The capture fixture's site is the top of its own git
@@ -221,6 +221,111 @@ test.describe('signed in', () => {
     await view(page).node.getByRole('link', { name: 'Versions check' }).click();
     await expect(page.locator('.artifact-body')).toBeVisible();
     await expect(view(page).node).toBeHidden();
+
+    // The old version's banner carries the header's version menu, drawn by
+    // the one script it runs, which asks the versions route once and posts
+    // nothing; the page script never runs there.
+    const requests: string[] = [];
+    const onRequest = (request: Request) => {
+      const url = new URL(request.url());
+      requests.push(`${request.method()} ${url.pathname}${url.search}`);
+    };
+    page.on('request', onRequest);
+    await page.goto(`/${name}.html?version=${older.commit}`);
+    const choose = banner.getByRole('button', { name: 'Choose a version' });
+    const menu = page.getByRole('menu');
+    const items = menu.getByRole('menuitem');
+    await expect(choose).toBeVisible();
+    await expect(choose).toHaveText('Choose a version ▾');
+    await page.waitForLoadState('networkidle');
+    page.off('request', onRequest);
+    expect(requests.filter((said) => / \/api(\/|\?|$)/.test(said)))
+      .toEqual([`GET /api/versions?page=${name}`]);
+    expect(requests.filter((said) => !said.startsWith('GET '))).toEqual([]);
+    await expect(page.locator('.artifact-versions-link')).toHaveCount(0);
+    await expect(page.locator('aside.artifact-comments-panel')).toHaveCount(0);
+    // The button sits before the banner's "All versions" link.
+    expect(await choose.evaluate((node) => {
+      const links = node.closest('.artifact-version-banner-links');
+      const every = Array.from(links?.querySelectorAll('a') ?? [])
+        .find((link) => link.textContent === 'All versions');
+      return Boolean(every && node.compareDocumentPosition(every) & Node.DOCUMENT_POSITION_FOLLOWING);
+    })).toBe(true);
+
+    await expect(menu).toBeHidden();
+    await choose.click();
+    await expect(menu).toBeVisible();
+    await expect(choose).toHaveAttribute('aria-expanded', 'true');
+    await expect(items).toHaveCount(3);
+    const menuTimes = await items.locator('time').evaluateAll((nodes) =>
+      nodes.map((node) => node.getAttribute('datetime') ?? ''));
+    expect(menuTimes).toHaveLength(2);
+    expect(menuTimes[0] >= menuTimes[1]).toBe(true);
+    await expect(items.nth(0).locator('.artifact-versions-current')).toHaveText('current');
+    await expect(items.nth(0)).toHaveAttribute('href', `${name}.html`);
+    await expect(items.nth(0)).not.toHaveAttribute('aria-current', /.*/);
+    await expect(items.nth(0).locator('.artifact-versions-viewing')).toHaveCount(0);
+    await expect(items.nth(1)).toHaveAttribute('aria-current', 'page');
+    await expect(items.nth(1).locator('.artifact-versions-viewing')).toHaveText('viewing');
+    await expect(items.nth(1).locator('.artifact-versions-current')).toHaveCount(0);
+    await expect(items.nth(1)).toHaveAttribute('href', `${name}.html?version=${older.commit}`);
+    await expect(menu.locator('.artifact-versions-seen')).toHaveCount(0);
+    await expect(items.nth(2)).toHaveText('See all versions');
+    await expect(items.nth(2)).toHaveAttribute('href', `${name}.html#versions`);
+
+    // The current item opens the page; "See all versions" its versions view.
+    await items.nth(0).click();
+    await expect(page).toHaveURL(new RegExp(`/${name}\\.html$`));
+    await expect(page.locator('.artifact-version-banner')).toHaveCount(0);
+    await expect(page.locator('.artifact-body')).toContainText('Edition: second.');
+    await page.goBack();
+    await expect(page).toHaveURL(oldUrl);
+    await choose.click();
+    await items.nth(2).click();
+    await expect(page).toHaveURL(new RegExp(`/${name}\\.html#versions$`));
+    await expect(view(page).heading).toBeVisible();
+
+    // The keyboard, as the header's menu takes it, and a click on the
+    // banner's text closes it.
+    await page.goto(`/${name}.html?version=${older.commit}`);
+    await choose.focus();
+    await page.keyboard.press('ArrowDown');
+    await expect(menu).toBeVisible();
+    await expect(items.nth(0)).toBeFocused();
+    await page.keyboard.press('Escape');
+    await expect(menu).toBeHidden();
+    await expect(choose).toBeFocused();
+    await expect(choose).toHaveAttribute('aria-expanded', 'false');
+    await choose.click();
+    await expect(menu).toBeVisible();
+    await banner.locator('.artifact-version-banner-text').click({ position: { x: 4, y: 4 } });
+    await expect(menu).toBeHidden();
+    await expect(choose).toHaveAttribute('aria-expanded', 'false');
+    expect(errors).toEqual([]);
+  });
+
+  test("an old version's banner keeps its links when the versions route fails", async ({ page }) => {
+    const errors = watchErrors(page);
+    const answered = await page.request.get('/api/versions?page=capture-versions-many');
+    expect(answered.status()).toBe(200);
+    const older = (await answered.json()).versions[1];
+    expect(older.current).toBe(false);
+    let asked = 0;
+    await page.route((url) => url.pathname === '/api/versions', (route) => {
+      asked += 1;
+      return route.fulfill({ status: 500, contentType: 'application/json', body: '{"error":"x"}' });
+    });
+
+    await page.goto(`/capture-versions-many.html?version=${older.commit}`);
+    const banner = page.locator('main.artifact--old-version > div.artifact-version-banner');
+    await expect(banner).toBeVisible();
+    await expect.poll(() => asked).toBe(1);
+    await page.waitForLoadState('networkidle');
+    await page.evaluate(() => new Promise((done) => setTimeout(done, 100)));
+    await expect(banner.getByRole('button')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Choose a version' })).toHaveCount(0);
+    await expect(banner.getByRole('link', { name: 'All versions' })).toBeVisible();
+    await expect(banner.getByRole('link', { name: 'Back to current' })).toBeVisible();
     expect(errors).toEqual([]);
   });
 

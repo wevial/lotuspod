@@ -11,6 +11,7 @@ process, each still run through the real subprocess.
 from __future__ import annotations
 
 import io
+import re
 import subprocess
 import sys
 import threading
@@ -171,10 +172,48 @@ class ViewTests(VersionsWitness):
             self.assertIn("artifact-version-note", note.classes())
             self.assertEqual(" ".join(note.text().split()),
                              "Answering is off on old versions. Answer on the current page.")
-        policy = "; ".join(headers.get_all("Content-Security-Policy"))
-        self.assertIn("script-src 'none'", policy)
-        self.assertIn("form-action 'none'", policy)
+        self.assert_one_nonce_allowed_script(headers, root)
         self.assertIn("no-store", headers["Cache-Control"])
+
+    def assert_one_nonce_allowed_script(self, headers, root) -> str:
+        """The answer's policy allows scripts by one nonce only, and the body
+        holds exactly one script carrying it, the old-version script; the
+        nonce."""
+        policy = "; ".join(headers.get_all("Content-Security-Policy"))
+        self.assertIn("form-action 'none'", policy)
+        self.assertIn("frame-ancestors 'none'", policy)
+        self.assertIn("base-uri 'none'", policy)
+        directives = [part.split() for part in policy.split(";") if part.strip()]
+        (script_src,) = [part[1:] for part in directives if part[0] == "script-src"]
+        self.assertEqual(len(script_src), 1, policy)
+        found = re.fullmatch(r"'nonce-([A-Za-z0-9+/_=-]+)'", script_src[0])
+        self.assertIsNotNone(found, policy)
+        nonce = found.group(1)
+        carrying = [node for node in root.find("script") if "nonce" in node.attrs]
+        self.assertEqual(len(carrying), 1)
+        self.assertEqual(carrying[0].attrs["nonce"], nonce)
+        self.assertEqual(carrying[0].attrs["src"],
+                         f"{cli.OLD_VERSION_SCRIPT}?v={cli.theme_hash()}")
+        return nonce
+
+    def test_each_answer_allows_the_old_version_script_by_a_nonce_of_its_own(self):
+        self.repository(self.out)
+        for text, day in zip(TEXTS[:2], DATES[:2]):
+            self.publish(PAGE, text, day)
+        older = self.commits(self.out, PAGE)[1]
+        self.start_server()
+
+        nonces = []
+        for _ in range(2):
+            status, headers, data = self.get(f"/{PAGE}.html?version={older}")
+            self.assertEqual(status, 200)
+            root = parse(data.decode("utf-8"))
+            nonces.append(self.assert_one_nonce_allowed_script(headers, root))
+        self.assertNotEqual(nonces[0], nonces[1])
+
+        status, _, data = self.get(f"/{cli.OLD_VERSION_SCRIPT}?v={cli.theme_hash()}")
+        self.assertEqual(status, 200)
+        self.assertEqual(data, cli.theme_file_bytes(cli.OLD_VERSION_SCRIPT))
 
     def test_no_version_but_one_of_the_pages_listed_ones_is_served(self):
         self.repository(self.out)

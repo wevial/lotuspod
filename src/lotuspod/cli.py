@@ -13,6 +13,7 @@ import io
 import json
 import os
 import re
+import secrets
 import shlex
 import shutil
 import signal
@@ -300,7 +301,11 @@ PAGE_SCRIPT = "lotuspod-page.js"
 # The index script opens pods in tabs over the index's listing; the index
 # loads it deferred, beside its own inline script.
 INDEX_SCRIPT = "lotuspod-index.js"
-THEME_FILES = ("lotuspod.css", "favicon.svg", PAGE_SCRIPT, INDEX_SCRIPT)
+# The old-version script draws the version menu in an earlier version's
+# banner (lotuspod.versions.old_page); serve allows it there, and only it, by
+# a nonce of its own answer (_OLD_VERSION_HEADERS).
+OLD_VERSION_SCRIPT = "lotuspod-old-version.js"
+THEME_FILES = ("lotuspod.css", "favicon.svg", PAGE_SCRIPT, INDEX_SCRIPT, OLD_VERSION_SCRIPT)
 # The served files written as one source per feature, relative to THEME_DIR:
 # each is its sources joined in this order, byte for byte. A theme file not
 # named here is served as it is. A new feature's file takes one line here.
@@ -329,6 +334,7 @@ THEME_SOURCES = {
     ),
     PAGE_SCRIPT: (
         "js/page-open.js",
+        "js/shared.js",
         "js/link-tab.js",
         "js/decisions.js",
         "js/review-sheet.js",
@@ -351,6 +357,13 @@ THEME_SOURCES = {
     INDEX_SCRIPT: (
         "js/pod-tabs.js",
         "js/pod-finder.js",
+    ),
+    OLD_VERSION_SCRIPT: (
+        "js/old-version-open.js",
+        "js/shared.js",
+        "js/version-menu.js",
+        "js/old-version.js",
+        "js/page-close.js",
     ),
 }
 
@@ -409,8 +422,8 @@ def theme_hash() -> str:
 def sync_theme_css(out_dir: Path) -> None:
     """Keep the artifact dir's theme files identical to the packaged theme.
 
-    Covers the stylesheet, the favicon, the page script and the index script
-    (THEME_FILES).
+    Covers the stylesheet, the favicon, the page script, the index script
+    and the old-version script (THEME_FILES).
     Rewriting only on a content difference means a theme upgrade reaches
     already-rendered directories while untouched ones keep their mtime.
     """
@@ -2017,7 +2030,8 @@ def cmd_publish(args: argparse.Namespace) -> int:
 
 _SERVE_CSS_FILE = "lotuspod.css"
 _SERVE_ICON_FILE = "favicon.svg"
-_SERVE_SUPPORT_FILES = (_SERVE_CSS_FILE, _SERVE_ICON_FILE, PAGE_SCRIPT, INDEX_SCRIPT)
+_SERVE_SUPPORT_FILES = (_SERVE_CSS_FILE, _SERVE_ICON_FILE, PAGE_SCRIPT, INDEX_SCRIPT,
+                        OLD_VERSION_SCRIPT)
 _SERVE_NEVER_FILES = frozenset({MANIFEST_FILE, "FINDINGS.md"})
 _DENY_PATH_NAME = ".lotuspod-not-found"
 
@@ -2131,11 +2145,15 @@ _PAGE_HEADERS = (
 
 
 # Headers on an earlier version of a page, in place of _PAGE_HEADERS: its
-# policy adds to the page's own meta policy, so none of its scripts and no
-# form runs, no page frames it, and it is never kept.
+# policy adds to the page's own meta policy, so no form runs, no page frames
+# it, and it is never kept. _serve_version adds the policy's script source:
+# a nonce made for each answer, which allows the one script old_page() adds,
+# the old-version script. None of the page's own scripts carries it, so none
+# of them runs; and no base element in the page may move that script's
+# address to another site, as a page published before its own meta policy
+# (page_policy) could.
 _OLD_VERSION_HEADERS = (
-    ("Content-Security-Policy",
-     "frame-ancestors 'none'; script-src 'none'; form-action 'none'"),
+    ("Content-Security-Policy", "frame-ancestors 'none'; form-action 'none'; base-uri 'none'"),
     ("X-Content-Type-Options", "nosniff"),
     ("Cache-Control", "private, no-store"),
 )
@@ -2316,12 +2334,16 @@ class _AllowListHandler(SimpleHTTPRequestHandler):
             self.send_error(HTTPStatus.NOT_FOUND, "File not found")
             return None
         version, behind, page_html = found
-        data = versions.old_page(page_html, stem, version, behind).encode("utf-8")
+        nonce = secrets.token_urlsafe(18)
+        script = f"{OLD_VERSION_SCRIPT}?v={theme_hash()}"
+        data = versions.old_page(page_html, stem, version, behind, nonce, script).encode("utf-8")
         self._page_response, self._media_type = False, ""
         self.send_response(HTTPStatus.OK)
         self.send_header("Content-Type", "text/html; charset=utf-8")
         self.send_header("Content-Length", str(len(data)))
         for header, value in _OLD_VERSION_HEADERS:
+            if header == "Content-Security-Policy":
+                value += f"; script-src 'nonce-{nonce}'"
             self.send_header(header, value)
         self.end_headers()
         return io.BytesIO(data)
