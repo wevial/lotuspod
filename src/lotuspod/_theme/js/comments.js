@@ -841,7 +841,7 @@
       // them, holding the text and images kept; false when it has them no
       // more.
       api.reopen = function (kept) {
-        if (!article || !kept.quote || typeof kept.quote.exact !== "string") {
+        if (ARCHIVED || !article || !kept.quote || typeof kept.quote.exact !== "string") {
           return false;
         }
         var model = textModel(article);
@@ -1419,8 +1419,11 @@
 
       // Unfold or fold a group's form for a new thread; unfolded, its field
       // has focus. In the panel one form is open at a time: another left
-      // empty folds.
+      // empty folds. An archived page unfolds none.
       function compose(made, show) {
+        if (show && ARCHIVED) {
+          return;
+        }
         if (show && api.wide) {
           groups.forEach(function (other) {
             if (other !== made && !other.holder.hidden && !forms.get(other.box).elements.text.value) {
@@ -2358,7 +2361,7 @@
         if (!view) {
           return;
         }
-        var writing = view.box && kept.writing ? groups.get(view.box) : null;
+        var writing = view.box && kept.writing && !ARCHIVED ? groups.get(view.box) : null;
         if (api.wide) {
           setOpen(true, false);
           if (view.thread) {
@@ -2679,7 +2682,11 @@
         if (thread) {
           thread.field.value = String(each.text || "");
           told(thread.field.form, attached.get(thread.field.form).restore(each.images));
-          thread.unfold(true);
+          // On an archived page the text is kept, folded away, for a reload
+          // once it takes replies again.
+          if (!ARCHIVED) {
+            thread.unfold(true);
+          }
         } else if (box) {
           told(forms.get(box), join(forms.get(box), each));
         } else {

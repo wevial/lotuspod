@@ -22,6 +22,8 @@ const SRC = path.resolve(__dirname, '..', '..', 'src');
 const NAME = 'archived-page-check';
 const NEXT = 'archived-page-check-next';
 const NEXT_TITLE = 'Pond plan, the second';
+// A page whose body names NEXT in an authored data-page, before its own forms.
+const LINKED = 'archived-page-check-linked';
 const CLOSED = 'Comments are closed: this page is archived.';
 const CLOSED_NOTE = 'Answering is closed: this page is archived.';
 const PARAGRAPH = 'The pond froze in January, and the pump stopped with it.';
@@ -210,7 +212,11 @@ test.describe.serial('an archived page', () => {
   });
 
   test.afterAll(() => {
-    if (OUT && PYTHON) run('unarchive', NAME, '--local', '--out-dir', OUT);
+    if (!OUT || !PYTHON) return;
+    // LINKED is there only once its check has rendered it.
+    for (const name of [NAME, LINKED]) {
+      if (fs.existsSync(path.join(OUT, `${name}.html`))) run('unarchive', name, '--local', '--out-dir', OUT);
+    }
   });
 
   test.describe('signed in as its owner', () => {
@@ -253,6 +259,53 @@ test.describe.serial('an archived page', () => {
       await expect(side.save).toBeDisabled();
       await expect(side.note).toHaveText(CLOSED_NOTE);
       await expect(page.locator('.artifact-review-count')).toHaveCount(0);
+      expect(errors).toEqual([]);
+    });
+
+    test('a reply draft kept over a reload stays folded away, its toggle disabled', async ({ page }) => {
+      const errors = await watch(page);
+      await open(page);
+      const draft = 'A reply written before the page was archived.';
+      await page.evaluate(([key, root, text]) => {
+        sessionStorage.setItem(key as string, JSON.stringify({ x: 0, y: 0, comments: {
+          open: null, passage: null,
+          texts: [{ thread: root, section: 'findings', index: 0, text, images: [] }],
+        } }));
+      }, [`lotuspod:reload:${NAME}`, thread, draft] as const);
+      await page.reload();
+      await settle(page);
+      const shown = await openThread(page, thread);
+      await expect(shown.toggle).toBeDisabled();
+      const field = shown.item.locator('form.artifact-comment-reply textarea');
+      await expect(field).toBeHidden();
+      // Kept, for a reload once the page takes replies again.
+      await expect(field).toHaveValue(draft);
+      await expect(shown.item.locator('form.artifact-comment-reply button[type="submit"]')).toBeHidden();
+      expect(errors).toEqual([]);
+    });
+
+    test('the button archives the page its URL names, whatever its body names', async ({ page }) => {
+      const errors = await watch(page);
+      run('render', '--name', LINKED, '--title', 'Linked plan', '--out-dir', OUT, '--body',
+        `<p><a data-page="${NEXT}" href="${NEXT}.html">The next plan</a></p>` +
+        '<h2 id="decisions">Decisions for the maintainer</h2><table><thead><tr><th>#</th>' +
+        '<th>Question</th><th>Options</th><th>Default</th></tr></thead><tbody><tr><td>1</td>' +
+        '<td>Which pump?</td><td>Small / Large</td><td>Small</td></tr></tbody></table>');
+      const asked = page.waitForRequest((request) =>
+        new URL(request.url()).pathname === '/api/archive' && request.method() === 'GET');
+      await page.goto(`/${LINKED}.html`);
+      expect(new URL((await asked).url()).searchParams.get('page')).toBe(LINKED);
+      const button = parts(page).button;
+      await expect(button).toHaveText('Archive');
+      const posted = page.waitForRequest((request) =>
+        new URL(request.url()).pathname === '/api/archive' && request.method() === 'POST');
+      const loaded = page.waitForEvent('load');
+      await button.click();
+      expect((await posted).postDataJSON()).toEqual({ page: LINKED, archived: true });
+      await loaded;
+      await expect(parts(page).banner).toBeVisible();
+      expect(fs.existsSync(path.join(OUT, `${LINKED}.archived.json`))).toBe(true);
+      expect(fs.existsSync(path.join(OUT, `${NEXT}.archived.json`))).toBe(false);
       expect(errors).toEqual([]);
     });
 

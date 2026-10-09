@@ -162,6 +162,37 @@ class BannerTests(ArchivedSite):
         self.assertNotIn(b"artifact-archived-banner", data)
 
 
+    def test_tags_spelled_in_comments_in_the_title_or_a_question_move_nothing(self):
+        # render takes a title and a body as markup: a comment in either may
+        # spell the end tags the banner and the forms are placed by.
+        body = ('<h2 id="decisions">Decisions for the maintainer</h2><table><thead><tr>'
+                '<th>#</th><th>Question</th><th>Options</th><th>Default</th></tr></thead>'
+                '<tbody><tr><td>1</td><td>Which heater? <!-- </form> --></td>'
+                '<td>Floating / Submerged</td><td>Floating</td></tr></tbody></table>')
+        done = self.cli("render", "--name", "old", "--title", "Old <!-- </div> </head> --> plan",
+                        "--body", body, "--out-dir", str(self.out))
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.run_cli("archive", "old")
+        stamp = self.record()["archivedAt"]
+        self.serve()
+
+        status, _, data = self.page("/old.html")
+        self.assertEqual(status, 200)
+        self.assertEqual(words(self.banner(data)), f"Archived {stamp[:10]}")
+        root = parse(data.decode("utf-8"))
+        (meta,) = [meta for meta in root.find("meta")
+                   if meta.attrs.get("name") == "lotuspod:archived"]
+        self.assertEqual((meta.parent.tag, meta.attrs.get("content")), ("head", stamp))
+        (main,) = root.find("main")
+        self.assertIn("artifact--archived", main.classes())
+        (form,) = root.find("form", "artifact-decision")
+        (fieldset,) = [node for node in form.children
+                       if isinstance(node, Node) and node.tag == "fieldset"]
+        self.assertIn("disabled", fieldset.attrs)
+        note = sibling(fieldset, 1)
+        self.assertEqual((note.tag, words(note)), ("p", CLOSED))
+
+
 class RefusalTests(ArchivedSite):
     def rows(self) -> dict[str, int]:
         """Each table of serve's database, and how many rows it holds."""

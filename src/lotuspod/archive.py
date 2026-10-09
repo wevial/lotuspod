@@ -92,8 +92,6 @@ def archived_page(page_html: str, record: dict, successor_title: str | None) -> 
     page record's successor when serve answers that page, else None, and the
     banner names no successor."""
     stamp = html.escape(record["archivedAt"])
-    page_html = page_html.replace(
-        "</head>", f'  <meta name="lotuspod:archived" content="{stamp}">\n</head>', 1)
     page_html = versions._disable_forms(page_html, (
         '<p class="artifact-archived-note">Answering is closed: this page is archived.</p>'))
     replaced = ""
@@ -105,19 +103,25 @@ def archived_page(page_html: str, record: dict, successor_title: str | None) -> 
         f'<p class="artifact-archived-banner-text">Archived <time datetime="{stamp}">'
         f'{html.escape(record["archivedAt"][:10])}</time>{replaced}</p></div>'
     )
-    # Right after the title bar, which holds no div of its own; at the top of
-    # main on a page without one.
-    bar = page_html.find('<div class="artifact-topbar">')
-    closed = page_html.find("</div>", bar) if bar >= 0 else -1
-
-    def opened(match) -> str:
-        tail = match.group(2) + ">" + (banner if closed < 0 else "")
-        return f'<main class="{match.group(1)} artifact--archived"{tail}'
-
-    if closed >= 0:
-        closed += len("</div>")
-        page_html = page_html[:closed] + banner + page_html[closed:]
-    return versions._MAIN_OPEN_RE.sub(opened, page_html, count=1)
+    # Found as a browser finds them, so no tag spelled in a comment or the
+    # title moves them.
+    places = versions.Places(page_html)
+    edits = []
+    if places.head_end is not None:
+        edits.append((places.head_end, places.head_end,
+                      f'  <meta name="lotuspod:archived" content="{stamp}">\n'))
+    if places.main is not None:
+        start, end = places.main
+        tag = versions._MAIN_OPEN_RE.sub(
+            lambda match: f'<main class="{match.group(1)} artifact--archived"{match.group(2)}>',
+            page_html[start:end], count=1)
+        edits.append((start, end, tag))
+    # Right after the title bar; at the top of main on a page without one.
+    at = places.topbar_end if places.topbar_end is not None else (
+        places.main[1] if places.main is not None else None)
+    if at is not None:
+        edits.append((at, at, banner))
+    return versions.edited(page_html, edits)
 
 
 def successor_title(out_dir: Path, record: dict) -> str | None:

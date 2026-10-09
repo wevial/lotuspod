@@ -13,9 +13,9 @@
     if (!line) {
       return;
     }
-    var named = document.querySelector("[data-page]");
-    var page = named ? named.dataset.page :
-      decodeURIComponent(location.pathname.split("/").pop()).replace(/\.html$/, "");
+    // The page as its URL names it, never as anything in its body does: an
+    // authored data-page could name another page.
+    var page = decodeURIComponent(location.pathname.split("/").pop()).replace(/\.html$/, "");
 
     function draw(archived) {
       var button = element("button", "artifact-archive", archived ? "Unarchive" : "Archive");
