@@ -11,6 +11,12 @@ const ANSWERS = '/api/answers?page=capture-decisions';
 // The fixture's sections page asks one question in each of two sections.
 const SECTIONS = '/capture-section-questions.html';
 const SECTIONS_ANSWERS = '/api/answers?page=capture-section-questions';
+// The fixture's long option page asks one question whose first option's
+// label slugifies to more than the answers route takes as a choice.
+const LONG_OPTION = '/capture-long-option.html';
+const LONG_OPTION_ANSWERS = '/api/answers?page=capture-long-option';
+const LONG_LABEL = 'Evidence levels: reproduced or traced can block; a concern is answered '
+  + 'but never blocks, at most 3 per round, high-tier ones also go to the operator';
 const ASSERTION = process.env.LOTUSPOD_TEST_ASSERTION ?? '';
 const SIGNED_IN = { 'Cf-Access-Jwt-Assertion': ASSERTION };
 // The reader as a page names them: their address's part before the @.
@@ -437,6 +443,23 @@ test.describe('signed in', () => {
 
     await page.reload();
     await folded();
+    expect(seen.errors).toEqual([]);
+  });
+
+  test('an option with a long label saves and folds', async ({ page, request }) => {
+    const seen = await watch(page);
+    await page.goto(LONG_OPTION);
+    const card = decision(page, 'decision-d1');
+    await expect(card.form.locator('.artifact-decision-label').first()).toHaveText(LONG_LABEL);
+    const value = await card.radios.first().getAttribute('value');
+
+    await card.option(LONG_LABEL).check();
+    await card.save.click();
+    await expect(card.saved).toContainText(`Saved · ${LONG_LABEL} · change`);
+    for (const radio of await card.radios.all()) await expect(radio).toBeHidden();
+    expect(value!.length).toBeLessThanOrEqual(100);
+    const response = await request.get(LONG_OPTION_ANSWERS, { headers: SIGNED_IN });
+    expect((await response.json()).questions['decision-d1'].current).toMatchObject({ choice: value });
     expect(seen.errors).toEqual([]);
   });
 
