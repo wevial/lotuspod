@@ -144,6 +144,20 @@ async function openFromListing(page: Page, pod: Pod) {
   await expect(framed(page, pod).locator('h1')).toHaveText(pod.title);
 }
 
+// The address the pod's frame shows.
+async function shownIn(page: Page, pod: Pod) {
+  return new URL(await frame(page, pod).evaluate((node) =>
+    (node as HTMLIFrameElement).contentWindow?.location.href ?? ''));
+}
+
+// Where the article's second section sits in its frame's window.
+function placed(page: Page) {
+  return framed(page, ARTICLE).locator('#second-section').evaluate((node) => {
+    const top = node.getBoundingClientRect().top;
+    return { scrolled: window.scrollY, top, from: top + window.scrollY, fold: window.innerHeight };
+  });
+}
+
 function seenPost(page: Page, name: string) {
   return page.waitForResponse((response: Response) =>
     new URL(response.url()).pathname === SEEN && response.request().method() === 'POST' &&
@@ -399,10 +413,9 @@ test.describe('signed in', () => {
     release();
     await expectActive(page, ARTICLE);
     await expect(framed(page, ARTICLE).locator('h1')).toHaveText(ARTICLE.title);
-    const shown = await frame(page, ARTICLE).evaluate((node) =>
-      (node as HTMLIFrameElement).contentWindow?.location.href ?? '');
-    expect(new URL(shown).pathname).toBe('/capture-article.html');
-    expect(new URL(shown).hash).toBe('#second-section');
+    const shown = await shownIn(page, ARTICLE);
+    expect(shown.pathname).toBe('/capture-article.html');
+    expect(shown.hash).toBe('#second-section');
     expect(await openNames(page)).toEqual([ARTICLE.name, pod.name]);
     expect(errors).toEqual([]);
   });
@@ -417,31 +430,25 @@ test.describe('signed in', () => {
     await openIndex(page);
     await openFromListing(page, pod);
     const link = framed(page, pod).getByRole('link', { name: 'second section' });
-    const placed = () => framed(page, ARTICLE).locator('#second-section').evaluate((node) => {
-      const top = node.getBoundingClientRect().top;
-      return { scrolled: window.scrollY, top, fold: window.innerHeight };
-    });
 
     await link.click();
     await expectActive(page, ARTICLE);
     await expect(framed(page, ARTICLE).locator('h1')).toHaveText(ARTICLE.title);
-    await expect.poll(async () => (await placed()).scrolled).toBeGreaterThan(0);
+    await expect.poll(async () => (await placed(page)).scrolled).toBeGreaterThan(0);
     // Scrolled away, back to the pod with the link, and the link again.
     await frame(page, ARTICLE).evaluate((node) =>
       (node as HTMLIFrameElement).contentWindow?.scrollTo({ top: 0, behavior: 'instant' }));
-    expect((await placed()).scrolled).toBe(0);
+    expect((await placed(page)).scrolled).toBe(0);
     await tabTitle(page, pod).click();
     await expectActive(page, pod);
     await link.click();
 
     await expectActive(page, ARTICLE);
-    await expect.poll(async () => (await placed()).scrolled).toBeGreaterThan(0);
-    const where = await placed();
+    await expect.poll(async () => (await placed(page)).scrolled).toBeGreaterThan(0);
+    const where = await placed(page);
     expect(where.top).toBeGreaterThanOrEqual(0);
     expect(where.top).toBeLessThan(where.fold / 2);
-    const shown = await frame(page, ARTICLE).evaluate((node) =>
-      (node as HTMLIFrameElement).contentWindow?.location.href ?? '');
-    expect(new URL(shown).hash).toBe('#second-section');
+    expect((await shownIn(page, ARTICLE)).hash).toBe('#second-section');
     expect(errors).toEqual([]);
   });
 
@@ -468,17 +475,12 @@ test.describe('signed in', () => {
     expect(new URL(page.url()).pathname).toBe('/');
     await expectActive(page, ARTICLE);
     await expect(framed(page, ARTICLE).locator('h1')).toHaveText(ARTICLE.title);
-    const shown = await frame(page, ARTICLE).evaluate((node) =>
-      (node as HTMLIFrameElement).contentWindow?.location.href ?? '');
-    expect(new URL(shown).pathname).toBe(`/${ARTICLE.name}.html`);
-    expect(new URL(shown).hash).toBe('#second-section');
+    const shown = await shownIn(page, ARTICLE);
+    expect(shown.pathname).toBe(`/${ARTICLE.name}.html`);
+    expect(shown.hash).toBe('#second-section');
     // The framed page has scrolled to the section, which sits below its fold.
-    const placed = () => framed(page, ARTICLE).locator('#second-section').evaluate((node) => {
-      const top = node.getBoundingClientRect().top;
-      return { scrolled: window.scrollY, top, from: top + window.scrollY, fold: window.innerHeight };
-    });
-    await expect.poll(async () => (await placed()).scrolled).toBeGreaterThan(0);
-    const where = await placed();
+    await expect.poll(async () => (await placed(page)).scrolled).toBeGreaterThan(0);
+    const where = await placed(page);
     expect(where.from).toBeGreaterThan(where.fold);
     expect(where.top).toBeGreaterThanOrEqual(0);
     expect(where.top).toBeLessThan(where.fold / 2);
@@ -513,10 +515,9 @@ test.describe('signed in', () => {
     expect(new URL(page.url()).pathname).toBe('/');
     await expectActive(page, plain);
     await expect(framed(page, plain).locator('h1')).toHaveText(plain.title);
-    const shown = await frame(page, plain).evaluate((node) =>
-      (node as HTMLIFrameElement).contentWindow?.location.href ?? '');
-    expect(new URL(shown).pathname).toBe(`/${plain.name}.html`);
-    expect(new URL(shown).hash).toBe('#a-section');
+    const shown = await shownIn(page, plain);
+    expect(shown.pathname).toBe(`/${plain.name}.html`);
+    expect(shown.hash).toBe('#a-section');
 
     await page.keyboard.press('ControlOrMeta+K');
     await expect(page.getByRole('dialog', { name: 'Find a pod' })).toBeVisible();
