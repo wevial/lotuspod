@@ -389,7 +389,7 @@ class SectionCheckTests(CommentsTestCase):
         revision = cli.page_revision(self.out_dir, "pond")
         self.assertEqual(self.ask("GET", "/api/comments?page=pond"),
                          (200, {"page": "pond", "revision": revision, "threads": [],
-                                "maxImageBytes": media.DEFAULT_MAX_BYTES}))
+                                "unread": [], "maxImageBytes": media.DEFAULT_MAX_BYTES}))
         status, row = self.ask("POST", "/api/comments",
                                {"page": "pond", "section": "risks", "text": "Hello"})
         self.assertEqual(status, 201, row)

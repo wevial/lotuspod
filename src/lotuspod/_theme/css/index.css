@@ -317,6 +317,20 @@
   white-space: nowrap;
 }
 
+/* How many replies to this reader wait unread on a page: a filled count
+   beside its title, after any "updated" mark, drawn by the index script. */
+.index-unread {
+  background: var(--color-lavender);
+  border-radius: var(--radius-pill);
+  color: var(--color-night);
+  font-size: 0.72rem;
+  font-weight: 600;
+  line-height: 1.4;
+  margin-left: 0.4rem;
+  padding: 0 0.45rem;
+  white-space: nowrap;
+}
+
 /* A page's labels, small tags on their own line under its title. */
 .index-tags {
   display: flex;

@@ -212,7 +212,7 @@ class ApiTestCase(unittest.TestCase):
                          (200, {"page": page, "questions": {}}))
         self.assertEqual(self.ask("GET", f"/api/comments?page={page}"),
                          (200, {"page": page, "revision": self.page_revision(page),
-                                "threads": [],
+                                "threads": [], "unread": [],
                                 "maxImageBytes": media.DEFAULT_MAX_BYTES}))
 
 
@@ -466,7 +466,7 @@ class CommentTests(ApiTestCase):
             (200, {"page": "plan", "revision": self.revision,
                    "threads": [{"root": root, "replies": [reply, deeper],
                                 "resolution": db.UNRESOLVED}],
-                   "maxImageBytes": media.DEFAULT_MAX_BYTES}),
+                   "unread": [], "maxImageBytes": media.DEFAULT_MAX_BYTES}),
         )
 
     def test_a_new_thread_names_the_revision_the_reader_read(self):
