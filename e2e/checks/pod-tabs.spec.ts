@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { expect, request as requests, test, type Page, type Response } from '@playwright/test';
 
 // The index opens pods in tabs (lotuspod-index.js): a plain click on a link
@@ -548,6 +549,43 @@ test.describe('signed in', () => {
     expect(new URL(page.url()).pathname).toBe(`/${ARTICLE.name}.html`);
     expect(new URL(page.url()).searchParams.get('version')).toBe(commit);
     await expect(page.locator('.pod-tabs-bar')).toHaveCount(0);
+  });
+
+  test('a listed pod whose brand link names another index, or opened from a file, stays on its own', async ({ page }) => {
+    const html = await (await page.request.get(`/${ARTICLE.name}.html`)).text();
+    const script = await (await page.request.get('/lotuspod-page.js')).text();
+    const brand = '<a class="artifact-topbar-brand" href="index.html">';
+    expect(html.split(brand)).toHaveLength(2);
+    // The page script has run, and stayed: it folds each section under a button.
+    const stayed = async (address: RegExp) => {
+      await expect(page.locator('button.artifact-section-toggle').first()).toBeAttached();
+      await page.waitForTimeout(500);
+      await expect(page).toHaveURL(address);
+      await expect(page.locator('.pod-tabs-bar')).toHaveCount(0);
+    };
+
+    // As the demo dresses a page: its index is pages.html, and the demo's /
+    // comes back to a page, so going to / would never settle.
+    const dressed = '/pod-tabs-own-index.html';
+    await page.route(`**${dressed}`, (route) => route.fulfill({
+      contentType: 'text/html',
+      body: html.replace(brand, brand.replace('index.html', 'pages.html')),
+    }));
+    await page.goto(`${dressed}#second-section`);
+    await stayed(/\/pod-tabs-own-index\.html#second-section$/);
+
+    // Opened from disk, as render writes it: no index beside it to go to.
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lotuspod-pod-tabs-file-'));
+    try {
+      fs.writeFileSync(path.join(dir, `${ARTICLE.name}.html`), html, 'utf-8');
+      fs.writeFileSync(path.join(dir, 'lotuspod-page.js'), script, 'utf-8');
+      const file = pathToFileURL(path.join(dir, `${ARTICLE.name}.html`)).href;
+      await page.goto(`${file}#second-section`);
+      await stayed(new RegExp(`/${ARTICLE.name}\\.html#second-section$`));
+      expect(new URL(page.url()).protocol).toBe('file:');
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   test('closing a tab activates its right neighbour, else its left, else the listing; the address reopens tabs', async ({ page }) => {
