@@ -164,6 +164,13 @@ class ViewTests(VersionsWitness):
         fieldsets = root.find("fieldset")
         self.assertTrue(fieldsets)
         self.assertTrue(all("disabled" in fieldset.attrs for fieldset in fieldsets))
+        # Each followed by its note, which says where to answer.
+        for fieldset in fieldsets:
+            siblings = [node for node in fieldset.parent.children if not isinstance(node, str)]
+            note = siblings[siblings.index(fieldset) + 1]
+            self.assertIn("artifact-version-note", note.classes())
+            self.assertEqual(" ".join(note.text().split()),
+                             "Answering is off on old versions. Answer on the current page.")
         policy = "; ".join(headers.get_all("Content-Security-Policy"))
         self.assertIn("script-src 'none'", policy)
         self.assertIn("form-action 'none'", policy)

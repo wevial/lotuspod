@@ -72,8 +72,7 @@ _SLUG_STRIP = re.compile(r"[^a-z0-9]+")
 
 _NO_BLOB = "0" * 40
 _MAIN_OPEN_RE = re.compile(r'<main class="([^"]*)"([^>]*)>')
-_DECISION_FORM_RE = re.compile(r'<form class="artifact-decision[\s"]')
-_FIELDSET_RE = re.compile(r"<fieldset(?=[\s>])")
+_TITLE_END_RE = re.compile(r"</title\s*>", re.IGNORECASE)
 
 
 def git_environment() -> dict[str, str]:
@@ -633,36 +632,98 @@ def _shown_date(stamp: str) -> str:
     return f"{stamp[:10]} {stamp[11:16]} UTC" if len(stamp) >= 16 else stamp
 
 
-def _disable_forms(page_html: str, current: str) -> str:
-    """Each decision form's fieldset disabled, and a note after it saying
-    where to answer."""
-    note = ('<p class="artifact-version-note">Answering is off on old versions. '
-            f'<a href="{current}">Answer on the current page.</a></p>')
-    parts: list[str] = []
-    at = 0
-    for start in [match.start() for match in _DECISION_FORM_RE.finditer(page_html)]:
-        if start < at:
-            continue
-        end = page_html.find("</form>", start)
-        if end < 0:
-            break
-        form = page_html[start:end]
-        opened = _FIELDSET_RE.search(form)
-        closed = form.rfind("</fieldset>")
-        if opened is None or closed < opened.end():
-            continue
-        closed += len("</fieldset>")
-        parts += [page_html[at:start], form[:opened.end()], " disabled",
-                  form[opened.end():closed], "\n", note, form[closed:]]
-        at = end
-    parts.append(page_html[at:])
-    return "".join(parts)
+class Places(HTMLParser):
+    """Where a page's own elements are, as offsets into its HTML, read from
+    the end of the head's title on as a browser reads them: a tag spelled in
+    a comment or in script text is no element. The title itself is text to
+    a browser, whatever it spells, so it is never read.
+
+    head_end is where the head's end tag starts; main the start and end of
+    main's start tag; topbar_end just after the title bar's end tag; and
+    fieldsets, one per decision form, just after its first fieldset's
+    "<fieldset" and just after that fieldset's end tag. Each is None, or
+    empty, when the page has none."""
+
+    def __init__(self, page_html: str) -> None:
+        super().__init__(convert_charrefs=True)
+        title = _TITLE_END_RE.search(page_html)
+        self._base = title.end() if title else 0
+        self._html = page_html
+        read = page_html[self._base:]
+        self._lines = [0] + [match.end() for match in re.finditer("\n", read)]
+        self.head_end: int | None = None
+        self.main: tuple[int, int] | None = None
+        self.topbar_end: int | None = None
+        self.fieldsets: list[tuple[int, int]] = []
+        # The title bar's divs open; whether a decision form is open, its
+        # fieldsets open and where its first one's tag name ends.
+        self._bar = 0
+        self._form = False
+        self._depth = 0
+        self._start: int | None = None
+        self.feed(read)
+        self.close()
+
+    def _at(self) -> int:
+        line, column = self.getpos()
+        return self._base + self._lines[line - 1] + column
+
+    def handle_starttag(self, tag, attrs):
+        at = self._at()
+        classes = (dict(attrs).get("class") or "").split()
+        if tag == "main" and self.main is None:
+            self.main = (at, at + len(self.get_starttag_text() or ""))
+        elif tag == "div":
+            if self._bar:
+                self._bar += 1
+            elif self.topbar_end is None and "artifact-topbar" in classes:
+                self._bar = 1
+        elif tag == "form" and "artifact-decision" in classes:
+            self._form, self._depth, self._start = True, 0, None
+        elif tag == "fieldset" and self._form:
+            if self._depth == 0 and self._start is None:
+                self._start = at + len("<fieldset")
+            self._depth += 1
+
+    def handle_endtag(self, tag):
+        at = self._at()
+        end = self._html.find(">", at) + 1
+        if tag == "head" and self.head_end is None:
+            self.head_end = at
+        elif tag == "div" and self._bar:
+            self._bar -= 1
+            if not self._bar:
+                self.topbar_end = end
+        elif tag == "fieldset" and self._form and self._depth:
+            self._depth -= 1
+            if not self._depth and self._start is not None:
+                self.fieldsets.append((self._start, end))
+                self._form = False
+        elif tag == "form":
+            self._form = False
+
+
+def edited(page_html: str, edits: list[tuple[int, int, str]]) -> str:
+    """page_html with each (start, end, text) of edits put in place of what
+    lies between start and end; no two edits overlap."""
+    for start, end, text in sorted(edits, reverse=True):
+        page_html = page_html[:start] + text + page_html[end:]
+    return page_html
+
+
+def _disable_forms(page_html: str, note: str) -> str:
+    """Each decision form's fieldset disabled, and note, HTML, after it
+    saying why."""
+    return edited(page_html, [edit for start, end in Places(page_html).fieldsets
+                              for edit in ((start, start, " disabled"), (end, end, "\n" + note))])
 
 
 def old_page(page_html: str, name: str, version: Version, behind: int) -> str:
     """An earlier version's HTML as serve answers it."""
     current = html.escape(urllib.parse.quote(f"{name}.html"))
-    page_html = _disable_forms(page_html, current)
+    page_html = _disable_forms(page_html, (
+        '<p class="artifact-version-note">Answering is off on old versions. '
+        f'<a href="{current}">Answer on the current page.</a></p>'))
     count = "1 version" if behind == 1 else f"{behind} versions"
     stamp = html.escape(version.date)
     banner = (
