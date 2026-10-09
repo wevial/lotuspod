@@ -13,8 +13,11 @@ Each form carries `data-question` (`decision-` and the slug of its `#` cell,
 or its row number in its table), unique across the page, and
 `data-version`, a short hash of the question's text and its options' labels:
 rewording a question strands the answers given to the old wording instead of
-attaching them to the new words; its context is not part of it. A table with
-any row of fewer than two options is left exactly as written.
+attaching them to the new words; its context is not part of it. A question
+with a default also carries `data-default`, the value of the option its
+Default cell names, or `accept` for a row with no Options column; it is not
+part of the version. A table with any row of fewer than two options is left
+exactly as written.
 
 Under each h2 or h3 whose text is "Checklist for the maintainer" (any case),
 the first table before the next h2 (or the next decisions or checklist
@@ -91,6 +94,9 @@ class Form:
     # A checklist's items checked by default, in the page's order.
     defaults: tuple[str, ...] = ()
     checklist: bool = False
+    # A decision's default option's value, from its data-default; "" when it
+    # has none, and for a checklist, whose defaults are its checked items.
+    default: str = ""
     # The data-section of the first comment box after the form; "" when
     # none follows it. Where it is asked is not what it asks: not compared.
     section: str = field(default="", compare=False)
@@ -301,6 +307,9 @@ def _questions(rows: list[list[dict]], taken: set[str]) -> list[dict] | None:
             "question": question,
             "options": options,
             "marked": marked,
+            # The option the row's Default cell picks: its marked option, or
+            # "Accept the default" for a row with no Options column.
+            "picked": ACCEPT[0] if columns["options"] is None else marked,
             # The default's text, shown only when the row has no Options
             # column: it is what "Accept the default" accepts.
             "default": default["html"] if columns["options"] is None and default["text"] else "",
@@ -382,9 +391,11 @@ def _checklist_form(page: str, checklist: dict) -> str:
 
 def _form(page: str, question: dict) -> str:
     esc = html.escape
+    default = f' data-default="{esc(question["picked"])}"' if question["picked"] else ""
     lines = [
         f'<form class="{FORM_CLASS}" data-page="{esc(page)}" '
-        f'data-question="{esc(question["id"])}" data-version="{esc(question["version"])}">',
+        f'data-question="{esc(question["id"])}" data-version="{esc(question["version"])}"'
+        f'{default}>',
         "<fieldset>",
     ]
     number = question["number"]
@@ -475,6 +486,7 @@ class _FormReader(HTMLParser):
         elif tag == "form" and FORM_CLASS in classes:
             self._open = {"question": values.get("data-question", ""),
                           "version": values.get("data-version", ""),
+                          "default": values.get("data-default", ""),
                           "text": "", "options": [], "defaults": [], "context": [],
                           "checklist": CHECKLIST_CLASS in classes}
         elif self._open is None or self._context is not None:
@@ -530,6 +542,7 @@ class _FormReader(HTMLParser):
                     version=found["version"],
                     options=tuple((value, label) for value, label in found["options"]),
                     defaults=tuple(found["defaults"]), checklist=found["checklist"],
+                    default="" if found["checklist"] else found["default"],
                     context="\n".join(found["context"]),
                 )
                 self._unboxed.append(found["question"])

@@ -208,6 +208,17 @@ class ServedSiteTests(CaptureSiteTestCase):
         # The article has no forms, but folds its two sections.
         self.assertIn('<script src="lotuspod-page.js?v=', seen["/capture-article.html"][1])
 
+    def test_review_sheet_page_asks_six_decisions_and_a_checklist_in_four_sections(self):
+        seen = self.fetch("/capture-review-sheet.html")
+        status, page = seen["/capture-review-sheet.html"]
+        self.assertEqual(status, 200)
+        self.assertEqual(page.count('<div class="artifact-section-body"'), 4)
+        self.assertEqual(page.count('<form class="artifact-decision"'), 6)
+        self.assertEqual(page.count('<form class="artifact-decision artifact-decision--checklist"'), 1)
+        for default in ("codex", "3-rounds", "holophyte-only"):
+            self.assertIn(f'data-default="{default}"', page)
+        self.assertEqual(page.count("data-default="), 3)
+
     def test_sections_page_wraps_each_section_with_its_box_and_form(self):
         seen = self.fetch("/capture-sections.html")
         status, page = seen["/capture-sections.html"]

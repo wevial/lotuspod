@@ -192,7 +192,7 @@ async function fits(page: Page) {
 test.describe('signed in', () => {
   test.use({ extraHTTPHeaders: SIGNED_IN });
 
-  test('an unanswered question is radio rows, a quiet default mark and a folded note', async ({ page }) => {
+  test('an unanswered question is radio rows, its default picked and not saved, and a folded note', async ({ page }) => {
     expect(ASSERTION, 'LOTUSPOD_TEST_ASSERTION names an assertion the site accepts').toBeTruthy();
     const seen = await watch(page);
     await page.goto(PAGE);
@@ -202,13 +202,14 @@ test.describe('signed in', () => {
       const [top, bottom] = [await card.radios.nth(0).boundingBox(), await card.radios.nth(1).boundingBox()];
       expect(bottom!.y).toBeGreaterThan(top!.y + top!.height);
       expect(Math.abs(bottom!.x - top!.x)).toBeLessThan(1);
-      for (const radio of await card.radios.all()) await expect(radio).not.toBeChecked();
+      // Once the answers are read, the default is picked, not yet saved.
+      await expect(card.radios.nth(0)).toBeChecked();
+      await expect(card.radios.nth(1)).not.toBeChecked();
       await expect(card.addNote).toHaveText('Add a note');
       await expect(card.noteBox).not.toHaveAttribute('open');
       await expect(card.note).toBeHidden();
-      await expect(card.hint).toHaveText('Not answered yet');
-      await expect(card.hint).toBeVisible();
-      await expect(card.unsaved).toBeHidden();
+      await expect(card.hint).toBeHidden();
+      await expect(card.unsaved).toBeVisible();
       await expect(card.saved).toHaveCount(0);
       await expect(card.save).toBeVisible();
     }
@@ -399,7 +400,7 @@ test.describe('signed in', () => {
 
     await page.mouse.move(0, 0);
     for (const target of [
-      second.form.locator('.artifact-decision-default'), second.hint, first.saved, first.savedBy,
+      second.form.locator('.artifact-decision-default'), second.unsaved, first.saved, first.savedBy,
     ]) {
       await expect(target).toBeVisible();
       expect(await contrast(target)).toBeGreaterThanOrEqual(4.5);
@@ -427,13 +428,13 @@ test.describe('signed in', () => {
       for (const radio of await heater.radios.all()) await expect(radio).toBeHidden();
       await expect(heater.save).toBeHidden();
       await expect(pump.saved).toHaveCount(0);
-      await expect(pump.hint).toHaveText('Not answered yet');
-      await expect(pump.unsaved).toBeHidden();
+      // Its default is picked once the answers are read, not yet saved.
+      await expect(pump.hint).toBeHidden();
+      await expect(pump.unsaved).toBeVisible();
       await expect(pump.save).toBeVisible();
-      for (const radio of await pump.radios.all()) {
-        await expect(radio).toBeVisible();
-        await expect(radio).not.toBeChecked();
-      }
+      for (const radio of await pump.radios.all()) await expect(radio).toBeVisible();
+      await expect(pump.option('Floating')).toBeChecked();
+      await expect(pump.option('Submerged')).not.toBeChecked();
     };
     await folded();
     const response = await request.get(SECTIONS_ANSWERS, { headers: SIGNED_IN });
@@ -471,7 +472,7 @@ test.describe('signed in', () => {
     await serve(page, () => questions);
     await page.reload();
     const first = decision(page, 'decision-1');
-    await expect(first.hint).toBeVisible();
+    await expect(first.unsaved).toBeVisible();
     await fits(page);
 
     await first.option('Opus').check();

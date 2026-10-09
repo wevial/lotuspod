@@ -249,6 +249,9 @@ def pull_text(payload: dict) -> str:
                                for item in question["changed"]] or ["- Changed: nothing"]
             else:
                 chosen = [f"- Chosen: {question['label']} (`{answer['choice']}`)"]
+                default = question.get("default")
+                if default and default["value"] != answer["choice"]:
+                    chosen.append(f"- Was: {default['label']} (`{default['value']}`), the default")
             lines += [
                 f"## {number}. Answer {answer['id']} on `{page['name']}`, "
                 f"question `{question['id']}`",

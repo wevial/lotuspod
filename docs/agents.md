@@ -116,10 +116,12 @@ responder may claim it. Items are, comments first, oldest first:
 - `{"kind": "answer", "answer", "question", "page"}` for each answer on a page
   the handle owns that it has not acknowledged, superseded ones included (each
   names the answer it `supersedes`). `question` is `{id, text, context,
-  label, reworded}`: the question and the chosen option's label in the words
-  the reader answered, kept with the answer, the question's `context` as the
-  page shows it now, and whether the page now asks it in other words, or not
-  at all. The context is not kept with the answer: it is `""` when
+  label, reworded, default}`: the question and the chosen option's label in
+  the words the reader answered, kept with the answer, the question's
+  `context` as the page shows it now, whether the page now asks it in other
+  words, or not at all, and its `default`, `{value, label}` of the option
+  its Default cell names while the page asks it at the answer's version, or
+  `null` when it is reworded, has no default, or is a checklist. The context is not kept with the answer: it is `""` when
   `reworded` is true. An answer is
   evidence of the reader's choice on that one question only. A checklist's
   answer (its `answer` carries `checked`; see [Checklist for the
@@ -158,6 +160,8 @@ PATH`, or `not in the media directory` in place of `file PATH` when its file
 is gone; a message with no images prints none. After an answer's `-
 Question:` line, `pull` prints a `- Context: LINE` line for each of its
 question's context lines; a question with no context prints none. A
+decision's answer prints ``- Chosen: LABEL (`VALUE`)``, then, when its
+`default` is another option, ``- Was: LABEL (`VALUE`), the default``. A
 checklist's answer prints `- Chosen: SUMMARY`, then a line for each item
 changed, ``- Changed: LABEL (`ID`) on`` or `off`, or `- Changed: nothing`;
 none while it is reworded.

@@ -303,7 +303,7 @@ class PullTests(PullTestCase):
         self.assertEqual(answer_item["answer"]["actor"], READER)
         self.assertEqual(answer_item["question"], {"id": "decision-1", "text": "Freeze the pond?",
                                                    "context": "", "label": "Yes",
-                                                   "reworded": False})
+                                                   "reworded": False, "default": None})
 
         # Reading took nothing off the queue: the reader's page still shows it waiting.
         self.assertEqual(self.row(comment["id"])["state"], "pending")
@@ -443,10 +443,11 @@ class AckTests(PullTestCase):
         items = {item["answer"]["id"]: item for item in self.pull("hermes")}
         self.assertEqual(items[answer["id"]]["question"], {
             "id": "decision-1", "text": "Freeze the pond?", "context": "", "label": "Yes",
-            "reworded": True,
+            "reworded": True, "default": None,
         })
         self.assertEqual(items[old["id"]]["question"], {
             "id": "decision-1", "text": "", "context": "", "label": "no", "reworded": True,
+            "default": None,
         })
         rc, out, err = self.agent("pull", "--owner", "hermes")
         self.assertEqual(rc, 0, err)
@@ -968,6 +969,60 @@ class ContextPullTests(PullTestCase):
                       "- Chosen: Yes (`yes`)\n", out[out.index(f"Answer {answer['id']} on"):])
 
 
+class DefaultPullTests(PullTestCase):
+    """A decision's answer is pulled with the question's default while the
+    page asks it at the answer's version, and says when it moved off it."""
+
+    DEFAULTS = PLAN.replace(
+        "| # | Question | Options |\n| --- | --- | --- |\n"
+        "| 1 | Freeze the pond? | Yes / No |\n| 2 | Skate on it? | Yes / No |\n",
+        "| # | Question | Options | Default |\n| --- | --- | --- | --- |\n"
+        "| 1 | Which model replies? | Sonnet / Opus | Sonnet |\n"
+        "| 2 | Keep the archive? | Yes / No | |\n")
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.publish(self.DEFAULTS)
+        self.pull("hermes")
+
+    def publish(self, text: str) -> None:
+        source = self.work / "plan.md"
+        source.write_text(text, encoding="utf-8")
+        rc, _out, err = run_cli("publish", str(source), "--out-dir", str(self.out_dir),
+                                "--local", "--owner", "hermes", "--credential", str(self.desk))
+        self.assertEqual(rc, 0, err)
+
+    def pulled(self, answer: dict) -> tuple[dict, str]:
+        """The answer's pulled question, and its part of the markdown pull."""
+        [item] = [item for item in self.pull("hermes")
+                  if item["kind"] == "answer" and item["answer"]["id"] == answer["id"]]
+        rc, out, err = self.agent("pull", "--owner", "hermes")
+        self.assertEqual(rc, 0, err)
+        start = out.index(f"Answer {answer['id']} on `plan`")
+        return item["question"], out[start:out.index("- Acknowledge:", start)]
+
+    def test_an_answer_off_its_default_says_what_it_was(self):
+        question, text = self.pulled(self.answer(choice="opus"))
+        self.assertEqual(question["default"], {"value": "sonnet", "label": "Sonnet"})
+        self.assertIn("- Chosen: Opus (`opus`)\n- Was: Sonnet (`sonnet`), the default\n", text)
+
+    def test_an_answer_at_its_default_says_nothing_more(self):
+        question, text = self.pulled(self.answer(choice="sonnet"))
+        self.assertEqual(question["default"], {"value": "sonnet", "label": "Sonnet"})
+        self.assertIn("- Chosen: Sonnet (`sonnet`)\n", text)
+        self.assertNotIn("- Was:", text)
+
+    def test_no_default_or_a_reworded_question_has_none(self):
+        question, text = self.pulled(self.answer(question="decision-2", choice="no"))
+        self.assertIsNone(question["default"])
+        self.assertNotIn("- Was:", text)
+        answer = self.answer(choice="opus")
+        self.publish(self.DEFAULTS.replace("Which model replies?", "Which model writes?"))
+        question, text = self.pulled(answer)
+        self.assertEqual((question["reworded"], question["default"]), (True, None))
+        self.assertNotIn("- Was:", text)
+
+
 class ChecklistPullTests(PullTestCase):
     """A checklist's answer is pulled with the items the reader changed from
     their defaults."""
@@ -1010,7 +1065,7 @@ class ChecklistPullTests(PullTestCase):
         self.assertEqual(item["answer"]["checked"], ["d", "r"])
         self.assertEqual(item["question"], {
             "id": "checklist-1", "text": "Emails", "context": "",
-            "label": "On: Digest · Off: Welcome", "reworded": False,
+            "label": "On: Digest · Off: Welcome", "reworded": False, "default": None,
             "changed": [{"id": "w", "label": "Welcome", "checked": False},
                         {"id": "d", "label": "Digest", "checked": True}]})
         self.assertIn("- Chosen: On: Digest · Off: Welcome\n"

@@ -385,14 +385,15 @@
       return "Your answer was not saved (" + error + "). Try again.";
     }
 
-    async function submit(event) {
-      event.preventDefault();
-      var form = event.currentTarget;
+    // Post a form's answer, as picked, with its note: true once it is
+    // saved and the form drawn from it, false when it is not, with why in
+    // the form's status.
+    async function save(form) {
       var checklist = isChecklist(form);
       var picked = form.querySelector('input[name="choice"]:checked');
       if (!checklist && !picked) {
         status(form, "Pick an option first.");
-        return;
+        return false;
       }
       var body = {
         page: form.dataset.page,
@@ -417,7 +418,7 @@
         var payload = await json(response);
         if (response.status !== 201 || !payload) {
           status(form, failure(response, payload));
-          return;
+          return false;
         }
         var answers = form.lotuspodAnswers;
         if (answers.current) {
@@ -427,15 +428,24 @@
         // A pick or note changed while this was saving stays open, not saved.
         form.lotuspodEditing = dirty(form);
         status(form, "");
-        var change = draw(form);
+        draw(form);
         table();
-        if (change) {
-          change.focus();
-        }
+        form.dispatchEvent(new CustomEvent(SAVED));
+        return true;
       } catch (ignored) {
         status(form, "Your answer was not saved: the site did not answer. Try again.");
+        return false;
       } finally {
         button.disabled = false;
+      }
+    }
+
+    async function submit(event) {
+      event.preventDefault();
+      var form = event.currentTarget;
+      // A form saved and folded hands the focus to its "change".
+      if (await save(form) && form.classList.contains("artifact-decision--saved")) {
+        form.querySelector(".artifact-decision-saved .artifact-decision-change").focus();
       }
     }
 
@@ -483,11 +493,14 @@
     load().catch(function () {}).then(function () {
       document.dispatchEvent(new CustomEvent(ANSWERED));
     });
+    // What the review sheet (js/review-sheet.js) reads the forms by.
+    return {
+      saved: saved, ticked: ticked, same: same, summary: summary, optionText: optionText,
+      isChecklist: isChecklist, save: save,
+    };
   }
 
   // A page with no form names itself on its comment boxes.
   var forms = all("form.artifact-decision");
   var named = forms[0] || document.querySelector("details.artifact-comment[data-page]");
-  if (named) {
-    answerForms(forms, named.dataset.page);
-  }
+  var answering = named ? answerForms(forms, named.dataset.page) : null;
