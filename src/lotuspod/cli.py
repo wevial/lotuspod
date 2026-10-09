@@ -34,7 +34,7 @@ from typing import Callable
 import importlib.resources as _res
 
 from lotuspod import (access, agents, api, backup, comments, db, decisions, machine,
-                      markdown, media, responder, routing, sections, versions)
+                      markdown, media, node_tables, responder, routing, sections, versions)
 
 _PKG = "lotuspod"
 
@@ -305,12 +305,14 @@ THEME_SOURCES = {
         "css/base.css",
         "css/forms.css",
         "css/decisions.css",
+        "css/review-sheet.css",
         "css/attachments.css",
         "css/comments.css",
         "css/panel-resize.css",
         "css/narrow.css",
         "css/live-page.css",
         "css/prose.css",
+        "css/diagram-cards.css",
         "css/report.css",
         "css/table-expand.css",
         "css/image-viewer.css",
@@ -321,6 +323,7 @@ THEME_SOURCES = {
         "js/page-open.js",
         "js/link-tab.js",
         "js/decisions.js",
+        "js/review-sheet.js",
         "js/narrow.js",
         "js/attachments.js",
         "js/live-page.js",
@@ -331,6 +334,7 @@ THEME_SOURCES = {
         "js/table-expand.js",
         "js/image-viewer.js",
         "js/versions.js",
+        "js/diagram-cards.js",
         "js/page-close.js",
     ),
 }
@@ -701,6 +705,7 @@ def cmd_render(args: argparse.Namespace) -> int:
                 why = f"names no image stored in {store_dir}"
             raise RuntimeError(f"image {line.src} in {label}: {why}; nothing written")
         body = markdown.to_body(text, sizes)
+    body, has_node_tables = node_tables.mark_node_tables(body)
     # Before the outline, so the forms sit inside their section.
     body, has_decisions = decisions.render_decisions(body, args.name)
     body, outline = (body, []) if args.no_outline else outline_body(body)
@@ -736,7 +741,7 @@ def cmd_render(args: argparse.Namespace) -> int:
         "mermaid": has_mermaid_block(body),
         # A page stamped with a revision notices when it is published again,
         # and a link off the site opens in a new tab.
-        "page_script_needed": (has_decisions or with_comments or wrapped
+        "page_script_needed": (has_decisions or with_comments or wrapped or has_node_tables
                                or bool(getattr(args, "revision", ""))
                                or has_link(body)),
         "page_script": PAGE_SCRIPT,
@@ -1942,7 +1947,7 @@ def api_page(out_dir: Path, name: str) -> api.Page | None:
         key: api.Question(version=form.version, choices=frozenset(v for v, _ in form.options),
                           text=form.text, labels=dict(form.options), section=form.section,
                           defaults=form.defaults, checklist=form.checklist,
-                          context=form.context)
+                          context=form.context, default=form.default)
         for key, form in decisions.read_forms(page_html).items()
     }
     owner = page_owner(page_html)
@@ -2448,7 +2453,9 @@ def answers_text(name: str, questions: dict, forms: dict[str, decisions.Form]) -
     """`lotuspod answers` without --json: each answered question, its
     current answer and, under it, the earlier ones, newest first. A
     checklist's answer is its change summary, read against the page's form
-    while it asks at the answer's version, else the summary kept with it."""
+    while it asks at the answer's version, else the summary kept with it. A
+    decision answered at its form's version with another option than the
+    form's default says so: "LABEL, was: DEFAULT-LABEL"."""
     if not questions:
         return f"no answers to {name}"
 
@@ -2461,6 +2468,9 @@ def answers_text(name: str, questions: dict, forms: dict[str, decisions.Form]) -
                 label = row["asked"]["label"]
         else:
             label = form.label(row["choice"]) if form else row["choice"]
+            if (form is not None and row["version"] == form.version and form.default
+                    and row["choice"] != form.default):
+                label += f", was: {form.label(form.default)}"
         head = f"{indent}{label} (answer {row['id']}"
         if row["supersedes"] is not None:
             head += f", replaces answer {row['supersedes']}"

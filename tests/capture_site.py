@@ -126,7 +126,7 @@ def _sample_clock() -> types.ModuleType:
     return clock
 
 
-# Only the diagram page has a mermaid block: its page loads Mermaid from
+# Only the diagram and node cards pages have mermaid blocks: each loads Mermaid from
 # jsDelivr, which a browser check answers from the copy pinned in e2e/.
 ARTICLE_BODY = """\
 <p>A sample article for captures: two sections.</p>
@@ -560,11 +560,118 @@ The frog that sits on them.
 ![A frog](frog.gif)
 """
 
+# Three flowcharts, each followed by a Nodes table the page script makes
+# cards of. The first table names every box but E; the second repeats node
+# id A, holds a subgraph, and has a row Z naming no box, so it stays shown;
+# the third has an arrow both ways, an arrow its linkStyle makes opaque, a
+# row too long for the window, and no thead.
+NODE_CARDS_BODY = """\
+<p>A sample plan for captures: click a box for its card.</p>
+<pre class="mermaid">flowchart LR
+  A[Write the parser] --&gt; B[Draw the cards]
+  E[Pin Mermaid] --&gt; B
+  B --&gt; C[Light the arrows]
+  A --&gt; D[Color the boxes]</pre>
+<h3>Nodes</h3>
+<table>
+<thead><tr><th>Node</th><th>Title</th><th>Status</th><th>PR</th></tr></thead>
+<tbody>
+<tr><td>A</td><td>Mark the Nodes table at render</td><td>merged</td><td><a href="https://example.com/pull/11">#11</a></td></tr>
+<tr><td>B</td><td>Open a card for each box</td><td>Open</td><td><a href="https://example.com/pull/12">#12</a></td></tr>
+<tr><td>C</td><td>Draw a box's arrows above the boxes</td><td>ready</td><td></td></tr>
+<tr><td>D</td><td>Color each box by its status</td><td>waiting</td><td></td></tr>
+</tbody>
+</table>
+<p>A second plan repeats a node id, and its table names a box it does not draw.</p>
+<pre class="mermaid">flowchart LR
+  X[Read the plan] --&gt; A[Answer the questions]
+  A --&gt; Y[Ship it]
+  subgraph later [Later]
+    P[Tidy the docs] --&gt; Q[Tag a release]
+  end</pre>
+<h3>Nodes</h3>
+<table>
+<thead><tr><th>Node</th><th>Title</th><th>Status</th></tr></thead>
+<tbody>
+<tr><td>A</td><td>Answer the plan's questions</td><td>open</td></tr>
+<tr><td>Y</td><td>Ship what was answered</td><td>waiting</td></tr>
+<tr><td>P</td><td>Tidy the docs once it ships</td><td>ready</td></tr>
+<tr><td>Z</td><td>A box the diagram does not draw</td><td>waiting</td></tr>
+</tbody>
+</table>
+<p>A third plan: an arrow both ways, an arrow styled opaque, a long row, and a table with no
+thead.</p>
+<pre class="mermaid">flowchart LR
+  K[Keep the copy] &lt;--&gt; R[Check the copy]
+  R --&gt; S[Note it]
+  S --&gt; T[Write it up]
+  linkStyle 2 opacity:1</pre>
+<h3>Nodes</h3>
+<table>
+<tr><th>Node</th><th>Title</th><th>Status</th></tr>
+<tr><td>K</td><td>Keep a copy of the pond's log</td><td>merged</td></tr>
+<tr><td>R</td><td>Check the copy against the log</td><td>open</td></tr>
+<tr><td>S</td><td>Note what the check found</td><td>ready</td></tr>
+<tr><td>T</td><td>""" + "A long write-up of the check. " * 200 + """</td><td>waiting</td></tr>
+</table>
+"""
+
 # The versions pages: one published once, and one published VERSIONS_MANY
 # times, each edition naming its number.
 VERSIONS_ONCE_PAGE = "capture-versions-once"
 VERSIONS_MANY_PAGE = "capture-versions-many"
 VERSIONS_MANY = 25
+
+
+# A plan page for the review sheet: four sections, three asking two
+# questions each, one with a default and one without (D3, with none, before
+# D4), and one a three-item checklist. Answered by
+# e2e/checks/review-sheet.spec.ts alone. No diagram, so the page needs no
+# network.
+REVIEW_SHEET_BODY = """\
+<p>A sample plan for captures: who reviews a ticket, and how.</p>
+<h2>Who reviews</h2>
+<p>Every ticket gets a second reader before it merges.</p>
+<h3>Decisions for the maintainer</h3>
+<table>
+<thead><tr><th>#</th><th>Question</th><th>Options</th><th>Default</th></tr></thead>
+<tbody>
+<tr><td>D1</td><td>Which agent reviews?</td><td>Codex / Claude Opus</td><td>Codex</td></tr>
+<tr><td>D2</td><td>Which tickets get a review?</td><td>Every ticket / Major UI changes only</td><td></td></tr>
+</tbody>
+</table>
+<h2>When a review blocks</h2>
+<p>A review may hold a ticket back until its findings are answered.</p>
+<h3>Decisions for the maintainer</h3>
+<table>
+<thead><tr><th>#</th><th>Question</th><th>Options</th><th>Default</th></tr></thead>
+<tbody>
+<tr><td>D3</td><td>What may block a merge?</td><td>Reproduced findings / Any finding</td><td></td></tr>
+<tr><td>D4</td><td>How many rounds before it goes to the operator?</td><td>2 rounds / 3 rounds</td><td>3 rounds</td></tr>
+</tbody>
+</table>
+<h2>Prompt rules</h2>
+<p>What the reviewer's prompt holds it to.</p>
+<h3>Checklist for the maintainer</h3>
+<table>
+<thead><tr><th>#</th><th>Item</th><th>Default</th></tr></thead>
+<tbody>
+<tr><td>1</td><td>Cite the line a finding is about</td><td>on</td></tr>
+<tr><td>2</td><td>Say how the finding was reproduced</td><td>on</td></tr>
+<tr><td>3</td><td>Suggest a fix</td><td>off</td></tr>
+</tbody>
+</table>
+<h2>Rollout</h2>
+<p>Reviews start on one repository first.</p>
+<h3>Decisions for the maintainer</h3>
+<table>
+<thead><tr><th>#</th><th>Question</th><th>Options</th><th>Default</th></tr></thead>
+<tbody>
+<tr><td>D5</td><td>Where do reviews start?</td><td>Holophyte only / Every repository</td><td>Holophyte only</td></tr>
+<tr><td>D6</td><td>Who reads a review first?</td><td>The maintainer / The ticket's agent</td><td></td></tr>
+</tbody>
+</table>
+"""
 
 
 def versions_source(title: str, edition: int) -> str:
@@ -604,6 +711,8 @@ SAMPLE_PAGES = (
     ("capture-tables-report", "Capture tables report", TABLES_BODY,
      ("--variant", "report", "--comments", "--owner", OWNER)),
     ("capture-decision-context", "Capture decision context", DECISION_CONTEXT_BODY, ()),
+    ("capture-node-cards", "Capture node cards", NODE_CARDS_BODY, ()),
+    ("capture-review-sheet", "Capture review sheet", REVIEW_SHEET_BODY, ()),
 )
 
 

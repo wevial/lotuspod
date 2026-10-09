@@ -209,6 +209,9 @@ class Question:
     # Its context lines as the card shows them, labels included, joined by
     # newlines; "" when it has none.
     context: str = ""
+    # A decision's default option's value; "" when it has none, and for a
+    # checklist.
+    default: str = ""
 
 
 def changes(labels: Mapping[str, str], defaults: Sequence[str],

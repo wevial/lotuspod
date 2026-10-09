@@ -358,9 +358,12 @@
       unfold(form);
     }
 
-    // "change": the card open again with its answer picked and its note.
+    // "change": the card open again with its answer picked and its note; a
+    // pick made since in the review sheet (js/review-sheet.js) stays picked.
     function unfold(form) {
-      fill(form);
+      if (!dirty(form)) {
+        fill(form);
+      }
       var note = form.querySelector("details.artifact-decision-note");
       if (note) {
         note.open = Boolean(form.elements.note.value);
@@ -385,14 +388,32 @@
       return "Your answer was not saved (" + error + "). Try again.";
     }
 
-    async function submit(event) {
-      event.preventDefault();
-      var form = event.currentTarget;
+    // Why a form's answer was not saved, in its status: a form folded to
+    // its answer (saved from the review sheet) opens to show it.
+    function refused(form, text) {
+      if (form.classList.contains("artifact-decision--saved")) {
+        form.lotuspodEditing = true;
+        draw(form);
+      }
+      status(form, text);
+    }
+
+    // Post a form's answer, as picked when its turn comes, with its note:
+    // true once it is saved and the form drawn from it, false when it is
+    // not, with why in the form's status. A form posts one answer at a
+    // time, so an older post never lands after a newer one.
+    function save(form) {
+      var turn = (form.lotuspodSaving || Promise.resolve()).then(function () { return post(form); });
+      form.lotuspodSaving = turn;
+      return turn;
+    }
+
+    async function post(form) {
       var checklist = isChecklist(form);
       var picked = form.querySelector('input[name="choice"]:checked');
       if (!checklist && !picked) {
         status(form, "Pick an option first.");
-        return;
+        return false;
       }
       var body = {
         page: form.dataset.page,
@@ -416,8 +437,8 @@
         });
         var payload = await json(response);
         if (response.status !== 201 || !payload) {
-          status(form, failure(response, payload));
-          return;
+          refused(form, failure(response, payload));
+          return false;
         }
         var answers = form.lotuspodAnswers;
         if (answers.current) {
@@ -427,22 +448,32 @@
         // A pick or note changed while this was saving stays open, not saved.
         form.lotuspodEditing = dirty(form);
         status(form, "");
-        var change = draw(form);
+        draw(form);
         table();
-        if (change) {
-          change.focus();
-        }
+        form.dispatchEvent(new CustomEvent(SAVED));
+        return true;
       } catch (ignored) {
-        status(form, "Your answer was not saved: the site did not answer. Try again.");
+        refused(form, "Your answer was not saved: the site did not answer. Try again.");
+        return false;
       } finally {
         button.disabled = false;
       }
     }
 
+    async function submit(event) {
+      event.preventDefault();
+      var form = event.currentTarget;
+      // A form saved and folded hands the focus to its "change".
+      if (await save(form) && form.classList.contains("artifact-decision--saved")) {
+        form.querySelector(".artifact-decision-saved .artifact-decision-change").focus();
+      }
+    }
+
+    // True once the page's answers are read.
     async function load() {
       var response = await fetch(ANSWERS + "?page=" + encodeURIComponent(page));
       if (!response.ok) {
-        return;
+        return false;
       }
       var questions = (await response.json()).questions || {};
       Object.keys(questions).forEach(function (question) {
@@ -470,6 +501,7 @@
         }
       });
       table();
+      return true;
     }
 
     forms.forEach(function (form) {
@@ -480,14 +512,21 @@
       form.addEventListener("change", function () { mark(form); });
       mark(form);
     });
-    load().catch(function () {}).then(function () {
+    // What the review sheet (js/review-sheet.js) reads the forms by; read
+    // is true once the answers are read, so a failed read is never taken
+    // for a page with nothing answered.
+    var reading = {
+      saved: saved, ticked: ticked, same: same, summary: summary, optionText: optionText,
+      isChecklist: isChecklist, dirty: dirty, save: save, read: false,
+    };
+    load().catch(function () { return false; }).then(function (read) {
+      reading.read = read === true;
       document.dispatchEvent(new CustomEvent(ANSWERED));
     });
+    return reading;
   }
 
   // A page with no form names itself on its comment boxes.
   var forms = all("form.artifact-decision");
   var named = forms[0] || document.querySelector("details.artifact-comment[data-page]");
-  if (named) {
-    answerForms(forms, named.dataset.page);
-  }
+  var answering = named ? answerForms(forms, named.dataset.page) : null;
