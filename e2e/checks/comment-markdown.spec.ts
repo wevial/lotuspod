@@ -78,7 +78,8 @@ test.beforeAll(() => {
   }
   execFileSync(PYTHON, [
     '-m', 'lotuspod', 'render', '--name', PLAIN, '--title', 'Check comment markdown plain',
-    '--body', `<p>See <a href="https://example.com/plain">elsewhere</a> or <a href="#top">the top</a>.</p>\n`,
+    '--body', `<p>See <a href="https://example.com/plain">elsewhere</a>, <a href="//example.com/protocol">a
+protocol-relative one</a> or <a href="#top">the top</a>.</p>\n`,
     '--out-dir', OUT,
   ], { env: { ...ENV, PYTHONPATH: SRC }, stdio: ['ignore', 'pipe', 'pipe'], timeout: 60_000 });
 });
@@ -323,6 +324,9 @@ test.describe('signed in', () => {
     const away = body.locator('a[href="https://example.com/plain"]');
     await expect(away).toHaveAttribute('target', '_blank');
     await expect(away).toHaveAttribute('rel', 'noopener noreferrer');
+    const protocol = body.locator('a[href="//example.com/protocol"]');
+    await expect(protocol).toHaveAttribute('target', '_blank');
+    await expect(protocol).toHaveAttribute('rel', 'noopener noreferrer');
     await expect(body.locator('a[href="#top"]')).not.toHaveAttribute('target');
     await page.waitForLoadState('networkidle');
     await seen.clean();

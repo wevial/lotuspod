@@ -155,8 +155,7 @@ at the page's own site (a relative path, an `#anchor` or an absolute URL on
 the same origin), and in a new tab, with `rel="noopener noreferrer"`, when
 it points anywhere else. The site's address is only known in the browser,
 so this is set as the page loads, not written into the HTML; a page whose
-body holds an absolute `http:` or `https:` link always loads the page script
-for it.
+body holds any link always loads the page script for it.
 
 `render --markdown` draws an image only from a media URL (`/media/NAME`, an
 image `publish` has stored; see [Images](#images)) and refuses any other

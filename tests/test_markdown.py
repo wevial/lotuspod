@@ -626,19 +626,29 @@ class RenderMarkdownTests(TempDirTestCase):
         self.assertEqual(rc, 0, err)
         self.assertEqual(self.page("n"), expected)
 
-    def test_a_page_with_an_absolute_link_loads_the_page_script_and_one_without_does_not(self):
+    def test_a_page_with_a_link_loads_the_page_script_and_one_without_does_not(self):
         """A page with no headings, comments, decisions or revision still
-        loads the page script when its body may link off the site, so such
-        a link opens in a new tab."""
-        for name, source, loads in (
+        loads the page script when its body holds a link, however written,
+        so the script can open one off the site in a new tab."""
+        markdown = (
             ("bare", "See https://example.com/x for more.\n", True),
             ("linked", "See [the site](http://example.com/) for more.\n", True),
-            ("relative", "See [the part](other.md#part) or [the top](#top).\n", False),
-        ):
+            ("relative", "See [the part](other.md#part) or [the top](#top).\n", True),
+            ("none", "No links at all, only https: as a word.\n", False),
+        )
+        html_bodies = (
+            ("protocol", '<p><a href="//example.com/body">elsewhere</a></p>\n', True),
+            ("entity", '<p><a href="https&#58;//example.com/body">elsewhere</a></p>\n', True),
+            ("upper", "<p><A HREF='/\\example.com/body'>elsewhere</A></p>\n", True),
+            ("anchorless", '<p><a name="x">no href</a></p>\n', False),
+        )
+        cases = [(name, ("--markdown", "-"), source, loads) for name, source, loads in markdown]
+        cases += [(name, ("--body", body), "", loads) for name, body, loads in html_bodies]
+        for name, given, stdin, loads in cases:
             with self.subTest(name=name):
-                with mock.patch("sys.stdin", io.StringIO(source)):
+                with mock.patch("sys.stdin", io.StringIO(stdin)):
                     rc, _, err = run_cli(
-                        "render", "--markdown", "-", "--name", name, "--title", "T",
+                        "render", *given, "--name", name, "--title", "T",
                         "--out-dir", str(self.out_dir), *self.COMMON,
                     )
                 self.assertEqual(rc, 0, err)
