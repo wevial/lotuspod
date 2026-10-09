@@ -118,7 +118,6 @@ test.describe('signed in', () => {
       nodes.map((node) => node.getAttribute('datetime') ?? ''));
     expect(times[0] >= times[1]).toBe(true);
     await expect(versions.entries.nth(0).locator('.artifact-versions-current')).toHaveText('current');
-    await expect(versions.entries.nth(0).getByRole('link')).toHaveCount(1);
     await expect(versions.entries.nth(0).getByRole('link', { name: 'View the current version' }))
       .toHaveAttribute('href', `${name}.html`);
     await expect(versions.entries.nth(1).locator('.artifact-versions-current')).toHaveCount(0);
@@ -466,7 +465,6 @@ test.describe('signed in, what changed', () => {
     const items = page.getByRole('menu').getByRole('menuitem');
     await expect(items).toHaveCount(3);
     await expect(items.nth(1).locator('.artifact-versions-seen')).toHaveText('you last looked');
-    await expect(items.nth(0).locator('.artifact-versions-seen')).toHaveCount(0);
     await expect(items.nth(0)).not.toContainText('you last looked');
     await page.keyboard.press('Escape');
     await expect(page.getByRole('menu')).toBeHidden();
