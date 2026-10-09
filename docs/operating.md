@@ -92,7 +92,10 @@ Every `/api` request must carry an assertion whose RS256 signature verifies
 against a key in the team's key set (keys under 2048 bits are ignored), whose
 `iss` is `issuer`, whose `aud` holds `audience` exactly, which is unexpired and
 not issued in the future (60 seconds of leeway), and whose `email`, compared
-lower-cased, is in `allowed_emails`. `certs_url` may be `https:`, `http:` or
+lower-cased, is in `allowed_emails`. `owners`, optional and in the same list
+form (`owners = reader@example.com`), names the readers who may archive and unarchive a page from the browser
+(`/api/archive`; see [Archive a page](publishing.md#archive-a-page)); without
+it no reader may. `certs_url` may be `https:`, `http:` or
 (for tests) `file:`. The key set is fetched on first need and kept for an
 hour; an unknown key id refetches it at most once a minute, and after a fetch
 fails every `/api` request answers 503 until it is tried again a minute later.

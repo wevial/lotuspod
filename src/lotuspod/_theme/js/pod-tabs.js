@@ -45,6 +45,11 @@
 // elsewhere, in the index or in a framed page; the key closes it again. Each
 // asks it with "lotuspod:find", and it hands back the pod chosen with
 // "lotuspod:open", which opens it as a link would and focuses its tab.
+//
+// Focus moved to a tab after a pointer press (a click on ✕, a mouse pick in
+// the finder) draws no ring: with focus({ focusVisible: false }) where the
+// browser honours it, else a class the stylesheet reads, gone at the next
+// key. After a key, the move keeps its ring.
 // Without this script the index is its listing alone.
 (() => {
   const main = document.querySelector("main.index");
@@ -103,6 +108,40 @@
   let before = FRAGMENT.test(location.hash) ? "#pages" : location.hash;
 
   const find = (name) => open.find((pod) => pod.name === name) || null;
+
+  // Whether the last press was the pointer's rather than a key's, and
+  // whether the browser reads focusVisible when asked to focus.
+  let pointed = false;
+  let honoured = false;
+  try {
+    element("button").focus({
+      get focusVisible() {
+        honoured = true;
+        return false;
+      },
+    });
+  } catch (ignored) {
+    // Not read: the class stands in.
+  }
+  window.addEventListener("pointerdown", () => {
+    pointed = true;
+  }, true);
+  window.addEventListener("keydown", () => {
+    pointed = false;
+    for (const quiet of bar.querySelectorAll(".pod-tab-title--quiet")) quiet.classList.remove("pod-tab-title--quiet");
+  }, true);
+
+  // Focus a tab's title, with no ring after a pointer press.
+  const focusTab = (pod) => {
+    if (!pointed) {
+      pod.title.focus();
+    } else if (honoured) {
+      pod.title.focus({ focusVisible: false });
+    } else {
+      pod.title.classList.add("pod-tab-title--quiet");
+      pod.title.focus();
+    }
+  };
 
   // The pod a link names, else null: NAME.html beside the index on this
   // origin, a NAME the listing has, asked with no version.
@@ -264,7 +303,7 @@
       askSeen();
     }
     const now = active === null ? null : find(active);
-    if (now) now.title.focus();
+    if (now) focusTab(now);
     else {
       const search = document.getElementById("index-search");
       if (search) search.focus();
@@ -457,7 +496,7 @@
     const name = event.detail ? event.detail.name : null;
     if (!pods.has(name)) return;
     openPod(name, "");
-    find(name).title.focus();
+    focusTab(find(name));
   });
   document.addEventListener("click", (event) => follow(event, null));
   document.addEventListener("lotuspod:view", () => {

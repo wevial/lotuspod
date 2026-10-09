@@ -17,6 +17,9 @@ An answer also keeps its question's text and its choice's label as the page
 asked them, so an agent reads what the reader answered even after the page
 is reworded. A checklist's answer keeps the items checked as `checked`, its
 choice "" and its label the change summary; only it carries `checked`.
+An agent may record a decision's answer given elsewhere, as the page's
+owner: it keeps where as `source`, which only such an answer carries, and
+the owner has it acknowledged as it is stored.
 
 A reader's comment also keeps, as it arrives, its page's owner and that
 owner's last pull then, so routing (lotuspod.routing) can tell whether the
@@ -72,7 +75,7 @@ from typing import Callable, Iterator, Mapping, Sequence
 from lotuspod import media
 
 DEFAULT_NAME = "lotuspod.sqlite3"
-SCHEMA_VERSION = 12
+SCHEMA_VERSION = 13
 # Seconds a connection waits for another writer before giving up.
 BUSY_TIMEOUT = 30
 # The state of a reader's comment until an agent takes it up.
@@ -226,6 +229,9 @@ _SCHEMA = {1: (
     FROM comments AS mine
     WHERE json_extract(mine.actor, '$.kind') = 'human'
         AND json_extract(mine.actor, '$.email') IS NOT NULL""",
+), 13: (
+    # Where an answer an agent recorded was given; NULL on a reader's answer.
+    "ALTER TABLE answers ADD COLUMN source TEXT",
 )}
 # The settings row that holds whether the responder is paused.
 _PAUSED = "responder_paused"
@@ -283,6 +289,8 @@ def _answer(row: sqlite3.Row) -> dict:
     }
     if row["checked"] is not None:
         found["checked"] = json.loads(row["checked"])
+    if row["source"] is not None:
+        found["source"] = row["source"]
     return found
 
 
@@ -417,6 +425,48 @@ class Database:
             )
             row = conn.execute("SELECT * FROM answers WHERE id = ?", (cursor.lastrowid,))
             return _answer(row.fetchone())
+
+    def record_answer(self, *, page: str, question: str, version: str, choice: str,
+                      note: str, revision: str, owner: str, credential: str,
+                      source: str, question_text: str, choice_label: str) -> tuple[dict, bool]:
+        """Store a decision's answer given elsewhere, at source, as the
+        agent credential acting as the page's owner; the answer, with asked
+        as answers(asked=True) gives it, and whether it is new.
+
+        An answer to the same question with the same version, choice and
+        source already stored is the one given back, and nothing is
+        stored. A new one supersedes the newest answer to the question, and
+        owner has it already, so its pulls leave it out."""
+        with self._connect() as conn, _write(conn):
+            row = conn.execute(
+                "SELECT * FROM answers WHERE page = ? AND question = ? AND version = ?"
+                " AND choice = ? AND source = ? ORDER BY id LIMIT 1",
+                (page, question, version, choice, source),
+            ).fetchone()
+            created = row is None
+            if created:
+                last = conn.execute(
+                    "SELECT MAX(id) FROM answers WHERE page = ? AND question = ?",
+                    (page, question),
+                ).fetchone()[0]
+                actor = {"kind": "agent", "handle": owner, "credential": credential}
+                now = _now()
+                cursor = conn.execute(
+                    "INSERT INTO answers (page, question, version, choice, note, revision,"
+                    " actor, created_at, supersedes, question_text, choice_label, source)"
+                    " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (page, question, version, choice, note, revision, _dump(actor), now,
+                     last, question_text, choice_label, source),
+                )
+                conn.execute(
+                    "INSERT OR IGNORE INTO answer_acks (answer, handle, acked_at)"
+                    " VALUES (?, ?, ?)", (cursor.lastrowid, owner, now),
+                )
+                row = conn.execute("SELECT * FROM answers WHERE id = ?",
+                                   (cursor.lastrowid,)).fetchone()
+        found = _answer(row)
+        found["asked"] = {"text": row["question_text"], "label": row["choice_label"]}
+        return found, created
 
     def answers(self, page: str, *, asked: bool = False) -> dict:
         """The page's answered questions, each as {current, earlier}: the

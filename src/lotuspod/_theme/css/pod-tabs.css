@@ -139,13 +139,21 @@
   padding: 0 0.35rem;
 }
 
+/* A focused title rings its whole tab, ✕ included; the ✕ focused alone
+   rings itself, inside the tab. A title focused after a pointer press, in a
+   browser that cannot be asked for no ring, carries --quiet (js/pod-tabs.js)
+   and rings nothing. */
 .pod-tabs-home:focus-visible,
 .pod-tabs-new:focus-visible,
 .pod-tabs-find:focus-visible,
-.pod-tab-title:focus-visible,
+.pod-tab:has(.pod-tab-title:focus-visible:not(.pod-tab-title--quiet)),
 .pod-tab-close:focus-visible {
   outline: 2px solid var(--color-lavender);
   outline-offset: -2px;
+}
+
+.pod-tab-title:focus-visible {
+  outline: none;
 }
 
 .pod-tab-dot {
