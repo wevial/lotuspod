@@ -558,10 +558,9 @@ class Api:
                 return HTTPStatus.OK, self._changes(query), ()
             if path == ACTIVITY:
                 return HTTPStatus.OK, self._activity(query, actor), ()
-            if path == ARCHIVE:
-                page = self._page(self._query(query, ("page",))["page"])
-                return HTTPStatus.OK, self._archive_state(page, actor), ()
             page = self._page(self._query(query, ("page",))["page"])
+            if path == ARCHIVE:
+                return HTTPStatus.OK, self._archive_state(page, actor), ()
             if path == ANSWERS:
                 payload = {"page": page.name, "questions": self.database.answers(page.name, asked=True)}
             elif path == REVISION:

@@ -44,6 +44,16 @@ def git(cwd: Path, *argv: str) -> str:
                           check=True).stdout
 
 
+def subjects(out: Path) -> list[str]:
+    return git(out, "log", "--format=%s").splitlines()
+
+
+def archive_record(out: Path) -> dict | None:
+    """old's archive record; None when there is none."""
+    path = out / "old.archived.json"
+    return json.loads(path.read_text(encoding="utf-8")) if path.exists() else None
+
+
 def page_source(title: str) -> str:
     return f"# {title}\n\nA page of the pond.\n\n## Alpha\n\nThe pond freezes.\n"
 
@@ -110,24 +120,17 @@ class LocalSite(unittest.TestCase):
     def unarchive(self, *argv: str) -> subprocess.CompletedProcess:
         return self.cli("unarchive", *argv, "--local", "--out-dir", str(self.out))
 
-    def record(self, name: str = "old") -> dict | None:
-        path = self.out / f"{name}.archived.json"
-        return json.loads(path.read_text(encoding="utf-8")) if path.exists() else None
-
-    def subjects(self) -> list[str]:
-        return git(self.out, "log", "--format=%s").splitlines()
-
 
 class ArchiveCommandTests(LocalSite):
     def test_archive_writes_the_record_the_manifest_and_the_index_in_one_commit(self):
         page = (self.out / "old.html").read_bytes()
-        before = self.subjects()
+        before = subjects(self.out)
 
         done = self.archive("old", "--superseded-by", "new")
         self.assertEqual(done.returncode, 0, done.stderr)
         self.assertEqual(done.stdout.strip().splitlines()[-1], "archived old")
 
-        record = self.record()
+        record = archive_record(self.out)
         self.assertEqual(set(record), {"archivedAt", "supersededBy"})
         self.assertRegex(record["archivedAt"], STAMP)
         self.assertTrue(record["archivedAt"].endswith("Z"))
@@ -145,31 +148,31 @@ class ArchiveCommandTests(LocalSite):
         self.assertNotIn("hidden", rows["new"])
 
         self.assertEqual((self.out / "old.html").read_bytes(), page)
-        self.assertEqual(self.subjects(), ["archive old", *before])
+        self.assertEqual(subjects(self.out), ["archive old", *before])
         self.assertEqual(git(self.out, "status", "--porcelain"), "")
 
     def test_unarchive_removes_the_record_and_a_second_run_writes_nothing(self):
         self.assertEqual(self.archive("old", "--superseded-by", "new").returncode, 0)
-        before = self.subjects()
+        before = subjects(self.out)
 
         done = self.unarchive("old")
         self.assertEqual(done.returncode, 0, done.stderr)
         self.assertEqual(done.stdout.strip().splitlines()[-1], "unarchived old")
-        self.assertIsNone(self.record())
+        self.assertIsNone(archive_record(self.out))
         entries = manifest_entries(self.out)
         self.assertEqual((entries["old"]["archived"], entries["old"]["supersededBy"]), ("", ""))
         row = index_rows(self.out)["old"]
         self.assertNotIn("data-archived", row)
         self.assertNotIn("hidden", row)
-        self.assertEqual(self.subjects(), ["unarchive old", *before])
+        self.assertEqual(subjects(self.out), ["unarchive old", *before])
 
         again = self.unarchive("old")
         self.assertEqual(again.returncode, 0, again.stderr)
         self.assertEqual(again.stdout.strip(), "old is not archived")
-        self.assertEqual(self.subjects(), ["unarchive old", *before])
+        self.assertEqual(subjects(self.out), ["unarchive old", *before])
 
     def test_names_that_are_not_visible_pages_are_refused_writing_nothing(self):
-        before = self.subjects()
+        before = subjects(self.out)
         index = (self.out / "index.html").read_bytes()
         for label, argv in (("no such page", ("missing",)),
                             ("a hidden page", ("draft",)),
@@ -180,24 +183,24 @@ class ArchiveCommandTests(LocalSite):
                 self.assertEqual(done.returncode, 1, done.stdout)
                 self.assertIn("nothing written", done.stderr)
                 self.assertEqual(sorted(p.name for p in self.out.glob("*.archived.json")), [])
-                self.assertEqual(self.subjects(), before)
+                self.assertEqual(subjects(self.out), before)
                 self.assertEqual((self.out / "index.html").read_bytes(), index)
 
     def test_archiving_again_keeps_the_time_and_a_republish_keeps_the_record(self):
         self.assertEqual(self.archive("old", "--superseded-by", "new").returncode, 0)
-        first = self.record()
+        first = archive_record(self.out)
 
         done = self.archive("old")
         self.assertEqual(done.returncode, 0, done.stderr)
-        self.assertEqual(self.record(), first)
+        self.assertEqual(archive_record(self.out), first)
 
         done = self.archive("old", "--superseded-by", "other")
         self.assertEqual(done.returncode, 0, done.stderr)
-        self.assertEqual(self.record(), {"archivedAt": first["archivedAt"],
+        self.assertEqual(archive_record(self.out), {"archivedAt": first["archivedAt"],
                                          "supersededBy": "other"})
 
         self.publish("old", "Old plan, again")
-        self.assertEqual(self.record(), {"archivedAt": first["archivedAt"],
+        self.assertEqual(archive_record(self.out), {"archivedAt": first["archivedAt"],
                                          "supersededBy": "other"})
         self.assertEqual(manifest_entries(self.out)["old"]["archived"], first["archivedAt"])
         self.assertIn("hidden", index_rows(self.out)["old"])
@@ -229,9 +232,8 @@ class RemoteArchiveTests(publish_remote.RemotePublishTestCase):
         command = f"{sys.executable} -m lotuspod"
         self.assertEqual(call[-1], " ".join([command, *(shlex.quote(arg) for arg in argv)]))
         self.assertEqual(self.remote_argv(call), argv)
-        record = json.loads((self.out_dir / "old.archived.json").read_text(encoding="utf-8"))
-        self.assertEqual(record["supersededBy"], "new")
-        self.assertEqual(git(self.out_dir, "log", "-1", "--format=%s").strip(), "archive old")
+        self.assertEqual(archive_record(self.out_dir)["supersededBy"], "new")
+        self.assertEqual(subjects(self.out_dir)[0], "archive old")
 
         done = self.lotuspod("unarchive", "old")
         self.assertEqual(done.returncode, 0, done.stderr)
@@ -271,13 +273,6 @@ class ServedArchive(activity_witness.ActivityWitness):
         self.publish_at("old", activity_witness.page("Old plan", *sections))
         self.publish_at("new", activity_witness.page("New plan", *sections))
 
-    def subjects(self) -> list[str]:
-        return git(self.out, "log", "--format=%s").splitlines()
-
-    def record(self) -> dict | None:
-        path = self.out / "old.archived.json"
-        return json.loads(path.read_text(encoding="utf-8")) if path.exists() else None
-
 
 class ArchiveRouteTests(ServedArchive):
     def test_an_owner_archives_and_unarchives_as_the_command_does(self):
@@ -288,15 +283,16 @@ class ArchiveRouteTests(ServedArchive):
         self.assertEqual((status, state), (200, {"page": "old", "archived": None,
                                                  "supersededBy": None, "mayArchive": True}))
 
-        before = self.subjects()
+        before = subjects(self.out)
         status, _, state = self.api("POST", "/api/archive",
                                     {"page": "old", "archived": True, "supersededBy": "new"})
         self.assertEqual(status, 200, state)
         self.assertRegex(state["archived"], STAMP)
         self.assertEqual((state["page"], state["supersededBy"], state["mayArchive"]),
                          ("old", "new", True))
-        self.assertEqual(self.record(), {"archivedAt": state["archived"], "supersededBy": "new"})
-        self.assertEqual(self.subjects(), ["archive old", *before])
+        self.assertEqual(archive_record(self.out),
+                         {"archivedAt": state["archived"], "supersededBy": "new"})
+        self.assertEqual(subjects(self.out), ["archive old", *before])
         self.assertEqual((self.out / "old.html").read_bytes(), page)
         self.assertEqual(manifest_entries(self.out)["old"]["archived"], state["archived"])
         self.assertIn("hidden", index_rows(self.out)["old"])
@@ -310,12 +306,12 @@ class ArchiveRouteTests(ServedArchive):
         status, _, state = self.api("POST", "/api/archive", {"page": "old", "archived": False})
         self.assertEqual((status, state), (200, {"page": "old", "archived": None,
                                                  "supersededBy": None, "mayArchive": True}))
-        self.assertIsNone(self.record())
-        self.assertEqual(self.subjects(), ["unarchive old", "archive old", *before])
+        self.assertIsNone(archive_record(self.out))
+        self.assertEqual(subjects(self.out), ["unarchive old", "archive old", *before])
 
     def test_a_reader_who_is_not_an_owner_and_bad_names_are_refused_writing_nothing(self):
         self.serve()
-        before = self.subjects()
+        before = subjects(self.out)
         other = assertion(email=OTHER_READER)
 
         status, _, state = self.api("GET", "/api/archive?page=old", token=other)
@@ -336,13 +332,13 @@ class ArchiveRouteTests(ServedArchive):
             with self.subTest(label):
                 status, _, answer = self.api("POST", "/api/archive", body, token=token)
                 self.assertEqual((status, answer), (expected[0], {"error": expected[1]}))
-                self.assertIsNone(self.record())
-                self.assertEqual(self.subjects(), before)
+                self.assertIsNone(archive_record(self.out))
+                self.assertEqual(subjects(self.out), before)
 
         status, _, answer = self.api("POST", "/api/archive", {"page": "old", "archived": True},
                                      headers={"Origin": "https://elsewhere.example"})
         self.assertEqual((status, answer), (403, {"error": "cross_origin"}))
-        self.assertIsNone(self.record())
+        self.assertIsNone(archive_record(self.out))
 
 
 class NoOwnersTests(ServedArchive):
@@ -354,7 +350,7 @@ class NoOwnersTests(ServedArchive):
         self.assertEqual((status, state["mayArchive"]), (200, False))
         status, _, answer = self.api("POST", "/api/archive", {"page": "old", "archived": True})
         self.assertEqual((status, answer), (403, {"error": "not_owner"}))
-        self.assertIsNone(self.record())
+        self.assertIsNone(archive_record(self.out))
 
 
 class ActivityTests(ServedArchive):
