@@ -33,7 +33,9 @@ NODE_ID = re.compile(r"[A-Za-z0-9_-]+")
 # The first word of a flowchart's source, as Mermaid detects one.
 _FLOWCHART = re.compile(r"(flowchart|graph)\b")
 _TAG_NAME = re.compile(r"<[A-Za-z][A-Za-z0-9]*")
-_CLASS_ATTRIBUTE = re.compile(r"""\sclass\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+))""", re.I)
+# One attribute of a start tag, from just after the one before it: its name,
+# then its value double-quoted, single-quoted or unquoted, if it has one.
+_ATTRIBUTE = re.compile(r"""[\s/]*([^\s/>][^\s/>=]*)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]*)))?""")
 
 
 def is_flowchart(source: str) -> bool:
@@ -192,15 +194,32 @@ class _NodeTableFinder(HTMLParser):
             self._reset()
 
 
+def _class_attribute(source: str) -> re.Match | None:
+    """A start tag's first class attribute, as the browser reads it: found
+    among the tag's attributes, never inside another one's value."""
+    at = _TAG_NAME.match(source).end()
+    while True:
+        match = _ATTRIBUTE.match(source, at)
+        if match is None:
+            return None
+        if match.group(1).lower() == "class":
+            return match
+        at = match.end()
+
+
 def _with_class(source: str, name: str) -> str:
     """A start tag's source with name added to its class list."""
-    match = _CLASS_ATTRIBUTE.search(source)
+    match = _class_attribute(source)
     if match is None:
         return _with_attributes(source, {"class": name})
-    group = next(index for index in (1, 2, 3) if match.group(index) is not None)
-    if group == 3:
-        return (f'{source[:match.start(3)]}"{match.group(3)} {name}"'
-                f'{source[match.end(3):]}')
+    if match.lastindex == 1:
+        # A bare `class`: give it the value.
+        return f'{source[:match.end()]}="{name}"{source[match.end():]}'
+    if match.lastindex == 4:
+        value = match.group(4).replace('"', "&quot;")
+        joined = f"{value} {name}" if value else name
+        return f'{source[:match.start(4)]}"{joined}"{source[match.end(4):]}'
+    group = match.lastindex
     return f"{source[:match.end(group)]} {name}{source[match.end(group):]}"
 
 

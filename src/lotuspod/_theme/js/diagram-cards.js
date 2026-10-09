@@ -293,11 +293,12 @@
       }
       fields.textContent = "";
       cells.slice(1).forEach(function (cell, index) {
-        var value = text(cell);
-        if (cell === linked || !value) {
+        // Every column after the id, an empty one too; the link's cell is the
+        // card's link instead.
+        if (cell === linked) {
           return;
         }
-        fields.append(element("dt", "", box.headers[index + 1] || ""), element("dd", "", value));
+        fields.append(element("dt", "", box.headers[index + 1] || ""), element("dd", "", text(cell)));
       });
       fields.hidden = !fields.firstChild;
       var diagram = box.diagram;

@@ -96,6 +96,17 @@ class MarkTests(TempDirTestCase):
         self.assertIn('<TR data-node="A">', marked)
         self.assertEqual(unmarked(marked), original)
 
+    def test_a_class_spelled_in_another_attribute_is_not_the_class(self):
+        original = body(SOURCE).replace(
+            "<h3>Nodes</h3>", """<h3 title="uses class='demo'">Nodes</h3>""").replace(
+            "<table>", """<table data-note='class="wide"'>""")
+        marked, found = mark_node_tables(original)
+        self.assertTrue(found)
+        self.assertIn("""<h3 class="artifact-node-heading" title="uses class='demo'">""", marked)
+        self.assertIn("""<table id="nodes-table" class="artifact-node-table" """
+                      """data-note='class="wide"'>""", marked)
+        self.assertEqual(unmarked(marked), original)
+
     def test_a_graph_after_a_directive_is_a_flowchart(self):
         source = SOURCE.replace("flowchart LR", "%%{init: {}}%%\ngraph TD")
         marked, found = mark_node_tables(body(source))

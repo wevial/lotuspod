@@ -166,6 +166,15 @@ test("a box's card sits beside it with its row and its arrows", async ({ page })
   await expect(page.locator('.artifact-node-card')).toHaveCount(1);
   await expect(page.locator('.artifact-node-card:visible')).toHaveCount(1);
   expect(await graph(page)).toEqual([['Waits for', 'nothing'], ['Unblocks', 'B (open), D (waiting)']]);
+
+  // C's row has no link: its empty PR cell is still a field, in its place.
+  await box(page, 'C').focus();
+  await page.keyboard.press('Enter');
+  await expect(card(page).locator('h3')).toHaveText('Light the arrows');
+  await expect(card(page).locator('dl.artifact-node-card-fields dt')).toHaveText(['Title', 'Status', 'PR']);
+  await expect(card(page).locator('dl.artifact-node-card-fields dd'))
+    .toHaveText(["Draw a box's arrows above the boxes", 'ready', '']);
+  await expect(card(page).locator('.artifact-node-card-link')).toBeHidden();
   await expect(box(page, 'B')).toHaveAttribute('aria-expanded', 'false');
   await seen.clean();
 });
