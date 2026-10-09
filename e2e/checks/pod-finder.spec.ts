@@ -7,9 +7,8 @@ import { expect, test, type Page } from '@playwright/test';
 // pod in a tab, and Cmd/Ctrl+Enter or a Cmd/Ctrl-click a browser tab.
 // Signed in, the checks read as the fixture's second reader, who opens no
 // page in any check before these, so "Recent" holds only what they open.
-// The fixture's rendered pages, the article and the checklist among them,
-// carry no revision stamp, so no script records their opening: the checks
-// record it through the seen route, as a stamped page's own script does.
+// Only a published page, stamped with its revision, records its own opening
+// on load, so "Recent" is witnessed with the fixture's published pods.
 const WIDE = { width: 1280, height: 800 };
 test.use({ viewport: WIDE });
 
@@ -22,6 +21,9 @@ const LINUX_AGENT = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 ' +
 
 const ARTICLE = { name: 'capture-article', title: 'Capture article' };
 const CHECKLIST = { name: 'capture-checklist', title: 'Capture checklist' };
+// Published, each with its revision stamp.
+const OWNED = { name: 'capture-owned', title: 'Capture owned page' };
+const PASSAGES = { name: 'capture-passages', title: 'Capture passages' };
 type Pod = { name: string; title: string };
 
 type Violation = { blockedURI: string; effectiveDirective: string };
@@ -103,11 +105,18 @@ async function openFromListing(page: Page, pod: Pod) {
   await expect(framed(page, pod).locator('h1')).toHaveText(pod.title);
 }
 
-// Record that the reader opened an unstamped pod, as a stamped page's
-// script records itself on load.
-async function recordOpened(page: Page, pod: Pod) {
-  const response = await page.request.post(SEEN, { data: { page: pod.name, revision: 'unstamped' } });
-  expect(response.status(), await response.text()).toBe(200);
+// The framed page's own record of its opening, posted once it has loaded.
+function seenPost(page: Page, pod: Pod) {
+  return page.waitForResponse((response) =>
+    new URL(response.url()).pathname === SEEN && response.request().method() === 'POST' &&
+    response.request().postDataJSON()?.page === pod.name);
+}
+
+// Open a published pod in a tab, and wait for its page to record the opening.
+async function openRecorded(page: Page, pod: Pod) {
+  const recorded = seenPost(page, pod);
+  await openFromListing(page, pod);
+  expect((await recorded).status()).toBe(200);
 }
 
 // Open the finder with the key, from wherever focus is, once it has drawn
@@ -151,12 +160,10 @@ test.describe('signed in', () => {
     const errors = await watch(page);
     await recordKeys(page);
     await openIndex(page);
-    await openFromListing(page, CHECKLIST);
-    await recordOpened(page, CHECKLIST);
-    await openFromListing(page, ARTICLE);
-    await recordOpened(page, ARTICLE);
+    await openRecorded(page, PASSAGES);
+    await openRecorded(page, OWNED);
     const pods = await listed(page);
-    const others = pods.filter((pod) => pod.name !== ARTICLE.name && pod.name !== CHECKLIST.name);
+    const others = pods.filter((pod) => pod.name !== OWNED.name && pod.name !== PASSAGES.name);
     expect(others.length).toBeGreaterThan(2);
 
     await find(page);
@@ -165,18 +172,18 @@ test.describe('signed in', () => {
     await expect(headings(page)).toHaveText(['Recent', 'Other pods']);
     const groups = finder(page).getByRole('group');
     await expect(groups).toHaveCount(2);
-    await expect(groups.nth(0).locator('.pod-finder-title')).toHaveText([ARTICLE.title, CHECKLIST.title]);
+    await expect(groups.nth(0).locator('.pod-finder-title')).toHaveText([OWNED.title, PASSAGES.title]);
     await expect(groups.nth(1).locator('.pod-finder-title')).toHaveText(others.map((pod) => pod.title));
     // The headings come before their options.
     const order = await listbox(page).locator('.pod-finder-heading, .pod-finder-title').allTextContents();
-    expect(order).toEqual(['Recent', ARTICLE.title, CHECKLIST.title, 'Other pods',
+    expect(order).toEqual(['Recent', OWNED.title, PASSAGES.title, 'Other pods',
       ...others.map((pod) => pod.title)]);
     await expect(input(page)).toHaveAttribute('aria-controls', (await listbox(page).getAttribute('id')) ?? '');
-    expect(await selectedName(page)).toBe(ARTICLE.name);
-    await expect(optionFor(page, ARTICLE).locator('.pod-finder-open')).toHaveText('in a tab');
-    await expect(optionFor(page, CHECKLIST).locator('.pod-finder-open')).toHaveText('in a tab');
+    expect(await selectedName(page)).toBe(OWNED.name);
+    await expect(optionFor(page, OWNED).locator('.pod-finder-open')).toHaveText('in a tab');
+    await expect(optionFor(page, PASSAGES).locator('.pod-finder-open')).toHaveText('in a tab');
     await expect(optionFor(page, others[0]).locator('.pod-finder-open')).toHaveCount(0);
-    await expect(optionFor(page, ARTICLE).locator('.pod-finder-updated')).toHaveText(/^updated \d{4}-\d{2}-\d{2}$/);
+    await expect(optionFor(page, OWNED).locator('.pod-finder-updated')).toHaveText(/^updated \d{4}-\d{2}-\d{2}$/);
 
     // Tab stays in the input; the key again closes the finder.
     await page.keyboard.press('Tab');
@@ -185,7 +192,7 @@ test.describe('signed in', () => {
     await expect(finder(page)).toBeHidden();
 
     expect(await violations(page)).toEqual([]);
-    expect(await violations(page, ARTICLE.name)).toEqual([]);
+    expect(await violations(page, OWNED.name)).toEqual([]);
     expect(errors).toEqual([]);
   });
 
@@ -235,6 +242,9 @@ test.describe('signed in', () => {
     await input(page).fill('capture tables');
     expect((await optionTitles(page)).sort()).toEqual(['Capture tables', 'Capture tables report']);
     expect(await selectedName(page)).toBe((await optionNames(page))[0]);
+    // Neither has been opened: the route answered 200, so they are still
+    // under their heading.
+    await expect(headings(page)).toHaveText(['Other pods']);
 
     // By label alone: neither title says relos.
     await input(page).fill('');

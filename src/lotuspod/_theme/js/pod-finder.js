@@ -92,8 +92,9 @@
   backdrop.append(dialog);
   document.body.append(backdrop);
 
-  // The seen route's pages as last answered 200, else null; until it has
-  // answered once, no option is drawn, so none moves under the reader.
+  // The seen route's pages as last answered 200, else null. Each opening
+  // asks again and draws no option until it has the answer, so none moves
+  // under the reader.
   let seen = null;
   let answered = false;
   // The options shown, each {pod, node}, and the selected one's place.
@@ -108,18 +109,18 @@
     return entry && typeof entry.seenAt === "string" ? entry.seenAt : null;
   };
 
-  // The pods matching the query, as groups {heading, pods}: Recent then
-  // Other pods while the seen route has answered 200 and names any, else the
-  // listing's order under no heading.
+  // The pods matching the query, as groups {heading, pods}: while the seen
+  // route has answered 200, Recent then Other pods, a heading only over a
+  // group with a pod in it; else the listing's order under no heading.
   const groups = () => {
     const words = input.value.toLowerCase().split(/\s+/).filter(Boolean);
     const matching = pods.filter((pod) => words.every((word) => pod.text.includes(word)));
+    if (seen === null) return [{ heading: null, pods: matching }];
     const recent = matching.filter(seenAt).sort((a, b) => {
       const left = seenAt(a);
       const right = seenAt(b);
       return left < right ? 1 : left > right ? -1 : 0;
     });
-    if (!recent.length) return [{ heading: null, pods: matching }];
     const other = matching.filter((pod) => !seenAt(pod));
     return [{ heading: "Recent", pods: recent }, { heading: "Other pods", pods: other }]
       .filter((group) => group.pods.length);
@@ -236,7 +237,7 @@
     backdrop.hidden = false;
     list.hidden = true;
     empty.hidden = true;
-    if (answered) render(false);
+    answered = false;
     input.focus();
     askSeen();
   };
