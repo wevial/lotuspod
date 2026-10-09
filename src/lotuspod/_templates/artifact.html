@@ -10,7 +10,8 @@
 {{#revision}}  <meta name="lotuspod:revision" content="{{revision}}">
 {{/revision}}{{#owner}}  <meta name="lotuspod:owner" content="{{owner}}">
 {{/owner}}{{#updated}}  <meta name="lotuspod:updated" content="{{updated}}">
-{{/updated}}  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+{{/updated}}{{#labels}}  <meta name="lotuspod:labels" content="{{labels}}">
+{{/labels}}  <link rel="icon" type="image/svg+xml" href="favicon.svg">
   <link rel="stylesheet" href="lotuspod.css?v={{theme_hash}}">
 </head>
 <body>
@@ -23,7 +24,7 @@
     <header class="artifact-header">
 {{#kicker}}      <p class="artifact-kicker">{{kicker}}</p>
 {{/kicker}}      <h1 class="artifact-title">{{title}}</h1>
-      <p class="artifact-meta">Created <time datetime="{{date}}">{{date}}</time>{{#updated_day}} · Updated <time datetime="{{updated}}">{{updated_day}}</time>{{/updated_day}}</p>
+      <p class="artifact-meta">Created <time datetime="{{date}}">{{date}}</time>{{#updated_day}} · Updated <time datetime="{{updated}}">{{updated_day}}</time>{{/updated_day}}{{label_tags}}</p>
 {{#owner}}      <p class="artifact-owner">Published by {{owner}}</p>
 {{/owner}}      {{summary_block}}
     </header>

@@ -76,6 +76,117 @@
   margin: 0;
 }
 
+/* The Labels menu: a pill like the search beside it, opening a list of
+   checkboxes over the listing. The script reveals it only when some page
+   carries a label. */
+.index-labels-menu {
+  position: relative;
+}
+
+.index-labels {
+  background: var(--color-surface);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-pill);
+  color: var(--color-pale-lavender);
+  cursor: pointer;
+  font-family: var(--font-body);
+  font-size: 0.95rem;
+  padding: 0.45rem 0.95rem;
+}
+
+.index-labels:hover,
+.index-labels:focus-visible,
+.index-labels[aria-expanded="true"] {
+  border-color: var(--color-lavender);
+  color: var(--color-white);
+  outline: none;
+}
+
+.index-labels-list {
+  background: var(--color-glow);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-block);
+  display: flex;
+  flex-direction: column;
+  left: 0;
+  margin-top: 0.35rem;
+  min-width: 13rem;
+  padding: 0.35rem;
+  position: absolute;
+  top: 100%;
+  z-index: 10;
+}
+
+.index-labels-list[hidden] {
+  display: none;
+}
+
+.index-labels-option {
+  align-items: center;
+  border-radius: var(--radius-chip);
+  color: var(--color-pale-lavender);
+  cursor: pointer;
+  display: flex;
+  gap: 0.55rem;
+  font-size: 0.92rem;
+  padding: 0.35rem 0.5rem;
+}
+
+.index-labels-option:hover,
+.index-labels-option:focus-within {
+  background: var(--row-tint);
+  color: var(--color-white);
+}
+
+.index-labels-option input {
+  accent-color: var(--color-lavender);
+  margin: 0;
+}
+
+.index-labels-name {
+  flex: 1;
+}
+
+.index-labels-count {
+  color: var(--color-muted-lavender);
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The active filters, one removable token each, on their own line under the
+   filter row. */
+.index-active {
+  align-items: center;
+  color: var(--color-muted-lavender);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 0.85rem;
+  gap: 0.4rem;
+  margin: 0.75rem 0 0;
+}
+
+.index-active[hidden] {
+  display: none;
+}
+
+.index-token {
+  background: var(--quote-tint);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-pill);
+  color: var(--color-pale-lavender);
+  cursor: pointer;
+  font-family: var(--font-body);
+  font-size: 0.85rem;
+  padding: 0.15rem 0.65rem;
+}
+
+.index-token:hover,
+.index-token:focus-visible {
+  border-color: var(--color-lavender);
+  color: var(--color-white);
+  outline: none;
+}
+
 /* Episodes are uniform records, so the listing is a table rather than a stack
    of cards: columns let one field be scanned down the page. It borrows the body
    table's language - hairline rules, a single tinted header band, and its own
@@ -121,8 +232,10 @@
   border-bottom: 0;
 }
 
-/* Table display roles outrank [hidden] too, so filtered-out rows say it here. */
-.index-table tbody tr[hidden] {
+/* Table display roles outrank [hidden] too, so filtered-out rows say it here,
+   and so does the table itself when the filters leave no row. */
+.index-table tbody tr[hidden],
+.index-table[hidden] {
   display: none;
 }
 
@@ -184,6 +297,23 @@
 .episode-title a:focus-visible {
   color: var(--color-pale-lavender);
   text-decoration: underline;
+}
+
+/* A page's labels, small tags on their own line under its title. */
+.index-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin-top: 0.3rem;
+}
+
+.index-tag {
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-chip);
+  color: var(--color-muted-lavender);
+  font-size: 0.75rem;
+  line-height: 1.4;
+  padding: 0 0.4rem;
 }
 
 .episode-date {

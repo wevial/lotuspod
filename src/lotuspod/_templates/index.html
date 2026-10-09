@@ -19,12 +19,19 @@
         <label class="index-search-label" for="index-search">Search</label>
         <input id="index-search" class="index-search" type="search" autocomplete="off"
                spellcheck="false" placeholder="Search pages by title, date or summary">
+        <div class="index-labels-menu" hidden>
+          <button type="button" class="index-labels" aria-haspopup="true" aria-expanded="false"
+                  aria-controls="index-labels-list">Labels &#9662;</button>
+          <div class="index-labels-list" id="index-labels-list" role="group"
+               aria-label="Labels" hidden></div>
+        </div>
         <p class="index-count" role="status" aria-live="polite"></p>
       </div>
+      <p class="index-active" hidden>Showing</p>
 
       {{entries_block}}
 
-      <p class="index-empty index-no-match" hidden>Nothing matches that search.</p>
+      <p class="index-empty index-no-match" hidden>No pages match these filters.</p>
     </section>
 
     <footer class="artifact-footer">
@@ -36,7 +43,8 @@
     // Progressive enhancement over a listing that is already complete: the table
     // above stands on its own, and this adds sorting and the search filter on
     // top. The search field ships hidden and is revealed here, so a reader
-    // without scripting never sees a control that cannot filter anything.
+    // without scripting never sees a control that cannot filter anything. So
+    // does the Labels menu, built from the labels the rows carry.
     (() => {
       const table = document.querySelector(".index-table");
       if (!table) return;
@@ -50,10 +58,13 @@
       const rows = Array.from(body.rows);
 
       // A date cell sorts by its time element's full datetime, not the day it
-      // shows, so two pages updated on one day keep their order.
+      // shows, so two pages updated on one day keep their order. A title
+      // sorts by its link, not the tags under it.
       const cell = (row, column) => {
         const time = row.cells[column].querySelector("time[datetime]");
-        return time ? time.dateTime : row.cells[column].textContent.trim();
+        if (time) return time.dateTime;
+        const link = row.cells[column].querySelector("a");
+        return (link || row.cells[column]).textContent.trim();
       };
 
       const sorted = (column, ascending) => {
@@ -79,6 +90,9 @@
       let sortColumn = headers.findIndex((header) => header.hasAttribute("aria-sort"));
       let ascending = sortColumn >= 0 && headers[sortColumn].getAttribute("aria-sort") === "ascending";
 
+      // The order the rows arrive in, which the count names while it holds.
+      const arrival = { column: sortColumn, ascending };
+
       const sortBy = (column) => {
         ascending = column === sortColumn ? !ascending : true;
         sortColumn = column;
@@ -89,6 +103,7 @@
             index !== column ? "none" : ascending ? "ascending" : "descending"
           );
         });
+        filter();
       };
 
       // The header label becomes a button so the sort is reachable by keyboard;
@@ -108,26 +123,122 @@
       const search = document.querySelector(".index-search");
       const count = document.querySelector(".index-count");
       const noMatch = document.querySelector(".index-no-match");
+      const menu = document.querySelector(".index-labels-menu");
+      const toggle = document.querySelector(".index-labels");
+      const list = document.querySelector(".index-labels-list");
+      const active = document.querySelector(".index-active");
 
-      // One case-insensitive substring test against the whole row, so a query
-      // matches any column without the reader having to pick one.
+      // Each row's labels, from the data-labels the index writes.
+      const labelsOf = new Map(rows.map((row) => [
+        row,
+        (row.dataset.labels || "").split(",").filter(Boolean),
+      ]));
+
+      // One checkbox per label any row carries, A to Z, with its page count.
+      const counts = new Map();
+      for (const labels of labelsOf.values()) {
+        for (const label of labels) counts.set(label, (counts.get(label) || 0) + 1);
+      }
+      const boxes = Array.from(counts.keys()).sort().map((label) => {
+        const option = document.createElement("label");
+        option.className = "index-labels-option";
+        const box = document.createElement("input");
+        box.type = "checkbox";
+        box.value = label;
+        const name = document.createElement("span");
+        name.className = "index-labels-name";
+        name.textContent = label;
+        const number = document.createElement("span");
+        number.className = "index-labels-count";
+        number.textContent = counts.get(label);
+        option.append(box, name, number);
+        list.append(option);
+        box.addEventListener("change", () => filter());
+        return box;
+      });
+
+      const open = (shown) => {
+        list.hidden = !shown;
+        toggle.setAttribute("aria-expanded", String(shown));
+      };
+
+      const close = () => {
+        if (list.hidden) return;
+        open(false);
+        toggle.focus();
+      };
+
+      toggle.addEventListener("click", () => open(list.hidden));
+      menu.addEventListener("keydown", (event) => {
+        if (event.key === "Escape" && !list.hidden) {
+          event.preventDefault();
+          close();
+        }
+      });
+      // A click elsewhere closes the menu. Focus returns to the button unless
+      // the click put it on something of its own, like the search.
+      document.addEventListener("click", (event) => {
+        if (list.hidden || menu.contains(event.target)) return;
+        open(false);
+        const focused = document.activeElement;
+        if (!focused || focused === document.body || menu.contains(focused)) toggle.focus();
+      });
+
+      // A token per checked label: pressing it unchecks the label, and focus
+      // moves to the token that takes its place, else the Labels button.
+      const showTokens = (checked) => {
+        active.replaceChildren("Showing");
+        checked.forEach((label, index) => {
+          const token = document.createElement("button");
+          token.type = "button";
+          token.className = "index-token";
+          token.textContent = `${label} \u2715`;
+          token.setAttribute("aria-label", `Remove filter ${label}`);
+          token.addEventListener("click", () => {
+            boxes.find((box) => box.value === label).checked = false;
+            filter();
+            const tokens = active.querySelectorAll(".index-token");
+            (tokens[index] || tokens[index - 1] || toggle).focus();
+          });
+          active.append(" ", token);
+        });
+        active.hidden = checked.length === 0;
+      };
+
+      // Every test in one pass over the rows: a row is kept when no label is
+      // checked or it carries a checked one, and when the search - one
+      // case-insensitive substring test against the whole row, labels
+      // included - matches it.
       const filter = () => {
         const query = search.value.trim().toLowerCase();
+        const checked = boxes.filter((box) => box.checked).map((box) => box.value);
         let shown = 0;
         for (const row of rows) {
-          const match = !query || row.textContent.toLowerCase().includes(query);
+          const labelled = checked.length === 0 ||
+            labelsOf.get(row).some((label) => checked.includes(label));
+          const found = !query || row.textContent.toLowerCase().includes(query);
+          const match = labelled && found;
           row.hidden = !match;
           if (match) shown += 1;
         }
         const noun = rows.length === 1 ? "page" : "pages";
+        const arrived = sortColumn === arrival.column && ascending === arrival.ascending;
         count.textContent =
           shown === rows.length
-            ? `${rows.length} ${noun}`
+            ? arrived && sortColumn >= 0
+              ? `${rows.length} ${noun}, newest update first`
+              : `${rows.length} ${noun}`
             : `${shown} of ${rows.length} ${noun}`;
+        toggle.textContent = checked.length
+          ? `Labels (${checked.length}) \u25BE`
+          : "Labels \u25BE";
+        showTokens(checked);
+        table.hidden = shown === 0;
         noMatch.hidden = shown > 0;
       };
 
       search.addEventListener("input", filter);
+      menu.hidden = boxes.length === 0;
       controls.hidden = false;
       filter();
     })();

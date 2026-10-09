@@ -72,6 +72,12 @@ _META_CONTENT_RE = re.compile(r"content=[\"']([^\"']*)[\"']", re.IGNORECASE)
 _UPDATED_TAG_RE = re.compile(
     r"<meta\s[^>]*name=[\"']lotuspod:updated[\"'][^>]*>", re.IGNORECASE
 )
+_LABELS_TAG_RE = re.compile(
+    r"<meta\s[^>]*name=[\"']lotuspod:labels[\"'][^>]*>", re.IGNORECASE
+)
+# A label once lower-cased: a letter or digit, then letters, digits and '-'.
+_LABEL_RE = re.compile(r"[a-z0-9][a-z0-9-]*")
+LABEL_MAX = 40
 
 # Render variants. Each is one ruleset in lotuspod.css keyed off a class on
 # the main element, never a second stylesheet: the one file serve allow-lists
@@ -163,7 +169,8 @@ MERMAID_DIR = "https://cdn.jsdelivr.net/npm/mermaid@11.4.1/"
 # Context values an author supplies. None of them is part of a script the
 # template writes, so a page rendered with them blank holds exactly the
 # template's own inline scripts.
-_AUTHORED_KEYS = ("title", "kicker", "date", "summary_block", "body", "outline_items", "revision")
+_AUTHORED_KEYS = ("title", "kicker", "date", "summary_block", "body", "outline_items", "revision",
+                  "labels", "label_tags")
 
 
 class _ScriptCollector(HTMLParser):
@@ -620,6 +627,17 @@ def check_owner(args: argparse.Namespace, out_dir: Path) -> None:
         raise RuntimeError(f"--owner {handle}: {exc}; nothing written") from None
 
 
+def label_context(labels: list[str]) -> dict:
+    """The page template's labels: the meta tag's content, and the tags that
+    end the header's date line."""
+    return {
+        "labels": html.escape(",".join(labels)),
+        "label_tags": "".join(
+            f' <span class="artifact-label">{html.escape(label)}</span>' for label in labels
+        ),
+    }
+
+
 def cmd_render(args: argparse.Namespace) -> int:
     with_comments = getattr(args, "comments", False)
     if with_comments and args.no_outline:
@@ -669,6 +687,8 @@ def cmd_render(args: argparse.Namespace) -> int:
     # Publish stamps the time it ran; a bare render stamps nothing. The header
     # names the updated day only when it is not the created one.
     updated = getattr(args, "updated", "")
+    # Publish checks each label (publish_labels): no markup in any.
+    labels = getattr(args, "labels", None) or []
     context = {
         "title": args.title,
         "kicker": kicker,
@@ -676,6 +696,7 @@ def cmd_render(args: argparse.Namespace) -> int:
         "updated": updated,
         "updated_day": updated[:10] if updated[:10] != date else "",
         "summary_block": summary_block,
+        **label_context(labels),
         "body": body,
         "outline": outline,
         "outline_items": outline_html(outline),
@@ -726,6 +747,16 @@ def extract_visibility(page_html: str) -> bool:
     return content is not None and content.group(1).strip().lower() == "true"
 
 
+def extract_labels(page_html: str) -> list[str]:
+    """The names a page's lotuspod:labels meta tag lists, in its order
+    ([] when it has none)."""
+    tag = _LABELS_TAG_RE.search(page_html)
+    content = _META_CONTENT_RE.search(tag.group(0)) if tag else None
+    if not content:
+        return []
+    return [label for label in (part.strip() for part in content.group(1).split(",")) if label]
+
+
 def extract_meta(page_html: str, stem: str) -> dict:
     title = _TITLE_RE.search(page_html)
     kicker = _KICKER_RE.search(page_html)
@@ -754,6 +785,7 @@ def extract_meta(page_html: str, stem: str) -> dict:
         "updated": updated.group(1).strip() if updated else "",
         "summary": html.unescape(summary.group(1)) if summary else "",
         "visible": extract_visibility(page_html),
+        "labels": extract_labels(page_html),
     }
 
 
@@ -893,9 +925,18 @@ def index_entries_html(artifacts: list[dict]) -> str:
         href = esc(str(meta["file"]))
         title = esc(str(meta["title"]))
         summary = esc(str(meta["summary"]))
+        labels = [esc(str(label)) for label in meta.get("labels", [])]
+        # The labels ride under the title as tags, and on the row for the
+        # index script's Labels filter.
+        row = f'<tr data-labels="{",".join(labels)}">' if labels else "<tr>"
+        tags = (
+            ' <span class="index-tags">'
+            + " ".join(f'<span class="index-tag">{label}</span>' for label in labels)
+            + "</span>"
+        ) if labels else ""
         rows.append(
-            "          <tr>\n"
-            f'            <td class="episode-title"><a href="{href}">{title}</a></td>\n'
+            f"          {row}\n"
+            f'            <td class="episode-title"><a href="{href}">{title}</a>{tags}</td>\n'
             f'            <td class="episode-date">{date_cell(str(meta["created"]))}</td>\n'
             f'            <td class="episode-date">{date_cell(str(meta["updated"]))}</td>\n'
             f'            <td class="episode-summary">{summary}</td>\n'
@@ -1196,6 +1237,28 @@ def publish_target(args: argparse.Namespace) -> tuple[str, str, str]:
     return label, fmt, name
 
 
+def publish_labels(args: argparse.Namespace) -> list[str] | None:
+    """The labels --label names, lower-cased, each once in the order given;
+    [] for --no-labels and None when neither is given. RuntimeError names
+    the first label that is not one."""
+    if getattr(args, "no_labels", False):
+        return []
+    given = getattr(args, "labels", None)
+    if given is None:
+        return None
+    labels: list[str] = []
+    for value in given:
+        label = value.lower()
+        if not _LABEL_RE.fullmatch(label) or len(label) > LABEL_MAX:
+            raise RuntimeError(
+                f"--label {value!r} is not a label: 1 to {LABEL_MAX} letters, digits "
+                "and hyphens, starting with a letter or digit; nothing written"
+            )
+        if label not in labels:
+            labels.append(label)
+    return labels
+
+
 def read_source(args: argparse.Namespace, label: str) -> bytes:
     if args.source == "-":
         return sys.stdin.buffer.read()
@@ -1232,6 +1295,11 @@ def remote_publish_command(command: str, out_dir: str, fmt: str, name: str,
     ):
         if value is not None:
             argv.append(f"{option}={value}")
+    labels = publish_labels(args)
+    if labels == []:
+        argv.append("--no-labels")
+    for label in labels or ():
+        argv.append(f"--label={label}")
     if not args.comments:
         argv.append("--no-comments")
     if archive:
@@ -1261,6 +1329,7 @@ def publish_over_ssh(args: argparse.Namespace, config: dict[str, str]) -> int:
     if args.source_archive:
         raise RuntimeError("--source-archive is what the writer host reads; pass --local")
     label, fmt, name = publish_target(args)
+    publish_labels(args)
     data = read_source(args, label)
     raw, images = send_images(fmt, decoded(data, label), label, source_base(args), media_cap)
     if images:
@@ -1672,6 +1741,7 @@ def cmd_publish(args: argparse.Namespace) -> int:
 
     out_dir = (Path(args.out_dir) if args.out_dir else DEFAULT_OUTPUT_DIR).resolve()
     label, fmt, name = publish_target(args)
+    labels = publish_labels(args)
     if args.owner:
         check_owner(args, out_dir)
     if args.source_archive and args.source != "-":
@@ -1724,6 +1794,7 @@ def cmd_publish(args: argparse.Namespace) -> int:
         previous = page.read_text(encoding="utf-8") if page.exists() else ""
         kept = extract_meta(previous, name) if previous else {}
         summary = args.summary if args.summary is not None else kept.get("summary", "")
+        labels = labels if labels is not None else kept.get("labels", [])
         variant = args.variant or (page_variant(previous) if previous else PUBLISH_VARIANT)
         owner = args.owner or page_owner(previous)
         updated = _utc_stamp(_dt.datetime.now(_dt.timezone.utc))
@@ -1736,6 +1807,7 @@ def cmd_publish(args: argparse.Namespace) -> int:
                 date=args.date or kept.get("date") or updated[:10],
                 updated=updated,
                 summary=html.escape(summary, quote=False),
+                labels=labels,
                 body=body,
                 hidden=False,
                 no_outline=False,
@@ -2418,6 +2490,15 @@ def build_parser() -> argparse.ArgumentParser:
     )
     publish.add_argument(
         "--summary", default=None, help="short summary line (default: the page's current one)"
+    )
+    labelled = publish.add_mutually_exclusive_group()
+    labelled.add_argument(
+        "--label", dest="labels", action="append", default=None, metavar="NAME",
+        help=f"file the page under NAME, lower-cased: letters, digits and '-', at most "
+        f"{LABEL_MAX}; repeat for more (default: the page's current labels)",
+    )
+    labelled.add_argument(
+        "--no-labels", action="store_true", help="clear the page's labels",
     )
     publish.add_argument(
         "--variant",

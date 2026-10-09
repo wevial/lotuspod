@@ -507,8 +507,8 @@ class Responder:
     def _publish(self, name: str, source_file: str, data: bytes,
                  expect: str) -> tuple[int, str]:
         """publish's own code on data, expecting revision expect and keeping
-        the page's date, summary, variant, owner, comment boxes and, when the
-        source has none, title: (its exit status, what it printed)."""
+        the page's date, summary, labels, variant, owner, comment boxes and,
+        when the source has none, title: (its exit status, what it printed)."""
         previous = (self.out_dir / f"{name}.html").read_text(encoding="utf-8")
         with tempfile.TemporaryDirectory(prefix="lotuspod-republish-") as scratch:
             source = Path(scratch) / source_file
@@ -521,7 +521,8 @@ class Responder:
             args = argparse.Namespace(
                 source=str(source), name=name, format="", date="",
                 title=None if titled else cli.extract_meta(previous, name)["title"],
-                summary=None, variant=None, expect_revision=expect,
+                summary=None, labels=None, no_labels=False, variant=None,
+                expect_revision=expect,
                 out_dir=str(self.out_dir), owner="", credential="", db="",
                 comments=bool(comments.read_boxes(previous)), local=True,
                 base="", source_archive=False,
