@@ -121,10 +121,8 @@
       if (!dialog) {
         make();
       }
-      var list = link.closest("ul.artifact-comment-images");
-      var tray = link.closest("ul.artifact-attach-tray");
-      group = list ? all("a.artifact-comment-image[href]", list)
-        : tray ? all("a.artifact-attach-link[href]", tray) : [link];
+      var list = link.closest("ul.artifact-comment-images, ul.artifact-attach-tray");
+      group = list ? all("a.artifact-comment-image[href], a.artifact-attach-link[href]", list) : [link];
       opener = link;
       show(group.indexOf(link));
       if (!dialog.open) {
