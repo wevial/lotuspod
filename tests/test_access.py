@@ -662,6 +662,12 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(config.allowed_emails,
                          frozenset({"a@example.com", "b@example.com", "c@example.com"}))
 
+    def test_owners_are_optional_lower_cased_and_split(self):
+        self.assertEqual(access.parse_config(keys.config_section()).owners, frozenset())
+        config = access.parse_config(
+            {**keys.config_section(), "owners": "A@Example.com, b@example.com\n"})
+        self.assertEqual(config.owners, frozenset({"a@example.com", "b@example.com"}))
+
     def test_certs_url_scheme_is_checked(self):
         for url in ("ftp://example.com/certs", "data:,{}", "/etc/certs.json"):
             with self.subTest(url), self.assertRaises(ValueError):

@@ -83,13 +83,15 @@ class AccessConfig:
     audience: str
     certs_url: str
     allowed_emails: frozenset[str]
+    # The readers who may archive a page from the browser; none by default.
+    owners: frozenset[str] = frozenset()
 
 
 def parse_config(section: Mapping[str, str]) -> AccessConfig:
     """An [access] config section as AccessConfig; ValueError naming what is wrong.
 
     allowed_emails is a list separated by commas or white space; emails are
-    compared lower-cased.
+    compared lower-cased. owners, optional, is such a list too.
     """
     values = {key: (section.get(key) or "").strip()
               for key in ("issuer", "audience", "certs_url", "allowed_emails")}
@@ -99,15 +101,18 @@ def parse_config(section: Mapping[str, str]) -> AccessConfig:
     scheme = urllib.parse.urlsplit(values["certs_url"]).scheme.lower()
     if scheme not in _CERTS_SCHEMES:
         raise ValueError("[access] certs_url must be an https:, http: or file: URL")
-    emails = frozenset(
-        email.lower() for email in re.split(r"[\s,]+", values["allowed_emails"]) if email
-    )
     return AccessConfig(
         issuer=values["issuer"],
         audience=values["audience"],
         certs_url=values["certs_url"],
-        allowed_emails=emails,
+        allowed_emails=_emails(values["allowed_emails"]),
+        owners=_emails((section.get("owners") or "").strip()),
     )
+
+
+def _emails(text: str) -> frozenset[str]:
+    """A list separated by commas or white space, lower-cased."""
+    return frozenset(email.lower() for email in re.split(r"[\s,]+", text) if email)
 
 
 def _b64url(text: str) -> bytes:
