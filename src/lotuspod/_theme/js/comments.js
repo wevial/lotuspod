@@ -1144,6 +1144,9 @@
       var open = false;
       // The thread whose entry is open, if any.
       var current = null;
+      // The resolved thread the reader opened to read, if any: a thread
+      // resolved while open closes, unless it is this one.
+      var toRead = null;
       // While the threads move to another layout (api.arrange), none opens
       // or closes: one open in the old place is open in the new.
       var moving = false;
@@ -1495,6 +1498,10 @@
 
       showResolved.addEventListener("click", function () {
         setResolvedShown(!resolvedShown, true);
+        // A resolved thread open to read is hidden with the rest: it closes.
+        if (!resolvedShown && current && current === toRead && resolved(current)) {
+          expand(null);
+        }
         api.refresh();
       });
 
@@ -1595,12 +1602,18 @@
         top.setAttribute("aria-controls", body.id);
         var state = element("span", "artifact-comments-entry-state");
         top.append.apply(top, lead().concat([state]));
+        // Resolved, the line's words open the thread to read and close it
+        // again, as the head does; it stays resolved. Reopen is beside them.
         var folded = element("div", "artifact-comments-entry-resolved");
+        var read = element("button", "artifact-comments-entry-read");
+        read.type = "button";
+        read.setAttribute("aria-controls", body.id);
+        read.append.apply(read, lead());
         var reopen = element("button", "artifact-comments-reopen", "Reopen");
         reopen.type = "button";
         var done = element("span", "artifact-comments-entry-done");
         done.append(tick(), " resolved · ", reopen);
-        folded.append.apply(folded, lead().concat([done]));
+        folded.append(read, done);
         var tools = element("div", "artifact-comments-entry-tools");
         // Where the thread stands, beside Resolve: in a popover, which shows
         // no head.
@@ -1614,8 +1627,9 @@
         item.append(top, folded, body, status);
         var dot = element("li", "artifact-comments-dot");
         thread.entry = {
-          item: item, head: top, state: state, note: note, folded: folded, body: body, resolve: resolve,
-          reopen: reopen, status: status, dot: dot, key: "", marks: marks, words: words, leadKey: null,
+          item: item, head: top, state: state, note: note, folded: folded, read: read, body: body,
+          resolve: resolve, reopen: reopen, status: status, dot: dot, key: "", marks: marks, words: words,
+          leadKey: null,
         };
         // Pointing at a passage's entry lights its words.
         item.addEventListener("mouseenter", function () { passages.point(thread, "entry"); });
@@ -1628,17 +1642,36 @@
             bring(thread);
           }
         });
+        // Open to read only while drawn so: a thread resolved elsewhere while
+        // open may still be current.
+        read.addEventListener("click", function () {
+          var was = current === thread && toRead === thread;
+          toRead = was ? null : thread;
+          if (was) {
+            expand(null);
+          } else {
+            expand(thread);
+            bring(thread);
+          }
+        });
         resolve.addEventListener("click", function () { settle(thread, true); });
         reopen.addEventListener("click", function () { settle(thread, false); });
         return thread.entry;
       }
 
       // Draw an entry as its thread now stands: open, folded to its head, or
-      // resolved to one dashed line.
+      // resolved to one dashed line, under which it opens only when the
+      // reader opens it to read.
       function draw(thread) {
         var made = entry(thread);
         var done = resolved(thread);
-        var opened = !done && (current === thread || over.holds(thread));
+        // Reopened, here or elsewhere, it is no longer open to read: resolved
+        // again, it folds as any thread does.
+        if (!done && toRead === thread) {
+          toRead = null;
+        }
+        var opened = done ? current === thread && toRead === thread :
+          current === thread || over.holds(thread);
         // Open in a folded panel, it is not in view: folding closes it, and
         // unfolding opens it again.
         var viewed = opened && (over.holds(thread) || (api.wide && open));
@@ -1651,7 +1684,9 @@
         made.head.hidden = done;
         made.folded.hidden = !done;
         made.body.hidden = !opened;
+        made.resolve.hidden = done;
         made.head.setAttribute("aria-expanded", opened ? "true" : "false");
+        made.read.setAttribute("aria-expanded", opened ? "true" : "false");
         var decision = decisionOf(thread);
         var leadKey = (decision ? "decision " : "") + passages.key(thread);
         if (leadKey !== made.leadKey) {
@@ -2233,7 +2268,7 @@
           var chipNode = writing.box.querySelector("summary");
           return { view: { box: writing.box }, opener: chipNode, anchor: chipNode, writing: writing };
         }
-        if (current && !resolved(current)) {
+        if (current && (!resolved(current) || current === toRead)) {
           var anchor = anchorOf(current);
           return { view: { thread: current }, opener: anchor, anchor: anchor, writing: null };
         }
