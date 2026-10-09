@@ -186,10 +186,21 @@ class DeclaredOrderTests(ThemeCopyTestCase):
         styles follow css/index.css, which they draw over."""
         styles = cli.THEME_SOURCES[STYLESHEET]
         self.assertEqual(cli.INDEX_SCRIPT, "lotuspod-index.js")
-        self.assertEqual(cli.THEME_SOURCES[cli.INDEX_SCRIPT], ("js/pod-tabs.js",))
+        self.assertEqual(cli.THEME_SOURCES[cli.INDEX_SCRIPT][0], "js/pod-tabs.js")
         self.assertEqual(styles.index("css/pod-tabs.css"), styles.index("css/index.css") + 1)
         self.assertIn(cli.INDEX_SCRIPT, cli.THEME_FILES)
         self.assertIn(cli.INDEX_SCRIPT, cli.serve_allow_list(self.out_dir))
+        problems = source_problems(cli.THEME_DIR, cli.THEME_SOURCES)
+        self.assertEqual(problems, [], "\n".join(problems))
+
+    def test_the_pod_finder_sources_follow_the_pod_tabs_sources(self):
+        """LOTUS-102: the finder hands its choice to the tabs and opens from
+        their strip, so js/pod-finder.js is joined just after js/pod-tabs.js
+        in the index script, and its styles just after css/pod-tabs.css."""
+        styles = cli.THEME_SOURCES[STYLESHEET]
+        self.assertEqual(cli.THEME_SOURCES[cli.INDEX_SCRIPT],
+                         ("js/pod-tabs.js", "js/pod-finder.js"))
+        self.assertEqual(styles.index("css/pod-finder.css"), styles.index("css/pod-tabs.css") + 1)
         problems = source_problems(cli.THEME_DIR, cli.THEME_SOURCES)
         self.assertEqual(problems, [], "\n".join(problems))
 

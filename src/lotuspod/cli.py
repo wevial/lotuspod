@@ -323,6 +323,7 @@ THEME_SOURCES = {
         "css/image-viewer.css",
         "css/index.css",
         "css/pod-tabs.css",
+        "css/pod-finder.css",
         "css/versions.css",
     ),
     PAGE_SCRIPT: (
@@ -346,6 +347,7 @@ THEME_SOURCES = {
     ),
     INDEX_SCRIPT: (
         "js/pod-tabs.js",
+        "js/pod-finder.js",
     ),
 }
 

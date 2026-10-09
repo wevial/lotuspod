@@ -705,10 +705,40 @@ back-forward cache, so a page just read in a tab loses its "updated" mark.
 A framed page's own scripts take its clicks first: a link one of them handles,
 such as an image the image viewer opens, is left to it.
 
+### Find a pod
+
+Cmd+K on a Mac (read from `navigator.platform`), or Ctrl+K elsewhere, opens
+the pod finder over the index, whether focus is in the index or in a pod open
+in a tab; the browser keeps none of the key. So do a "+" after the last tab,
+named "Open a pod in a new tab", and a "Find a pod" button at the strip's
+right end, which shows the key ("⌘K" on a Mac, "Ctrl K" elsewhere). The
+finder is a dialog named "Find a pod" over a dimmed backdrop: an input (a
+combobox whose `aria-activedescendant` names the selected option) over a
+listbox of every pod the listing shows. Each option is the pod's title, "in a
+tab" when it is open in one, its summary on one line, its labels as the
+listing's tags, and "updated" with its Updated day; all of it is read from the
+listing's rows, with no route of its own.
+
+Typing filters the options: the query is split on whitespace, and a pod is
+kept when every word appears, ignoring case, in its title, labels and summary.
+With none left, the finder reads "No pod matches “QUERY”." Signed in, the pods
+this reader has opened (those with a `seenAt` in `/api/seen`, asked each time
+the finder opens) come first under "Recent", the latest opened first, and the
+rest follow under "Other pods" in the listing's order, newest update first.
+When the route answers anything but 200 (signed out, or the demo), there are
+no headings, and the options are in the listing's order.
+
+↑ and ↓ move the selection, wrapping at either end, and Tab stays in the
+input. Enter, or a click on an option, opens the pod in a tab as a link to it
+would, and focus goes to its tab; Cmd+Enter or a Cmd-click on a Mac (Ctrl
+elsewhere) opens its page in a new browser tab instead, leaving the strip as
+it was. Esc, the key again or a click on the backdrop closes the finder, and
+focus goes back where it was, into a framed pod's page too.
+
 Sorting, the search, the Labels menu, the marks and Recent activity are
-progressive enhancement from a script inlined in `index.html`, and the tabs
-from the index script, so with scripting off the page is still the complete
-listing, just unsorted and unfiltered, with no strip and its title links
+progressive enhancement from a script inlined in `index.html`, and the tabs and
+the finder from the index script, so with scripting off the page is still the
+complete listing, just unsorted and unfiltered, with no strip and its title links
 loading their pages in the window (the search box and the menu stay hidden
 rather than offering a control that cannot filter).
 
