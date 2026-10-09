@@ -162,17 +162,12 @@
         toggle.setAttribute("aria-expanded", String(shown));
       };
 
-      const close = () => {
-        if (list.hidden) return;
-        open(false);
-        toggle.focus();
-      };
-
       toggle.addEventListener("click", () => open(list.hidden));
       menu.addEventListener("keydown", (event) => {
         if (event.key === "Escape" && !list.hidden) {
           event.preventDefault();
-          close();
+          open(false);
+          toggle.focus();
         }
       });
       // A click elsewhere closes the menu. Focus returns to the button unless
