@@ -36,7 +36,7 @@
       function entry(version) {
         var item = element("li", "artifact-versions-entry");
         var time = element("time", "artifact-versions-date", when(version.date));
-        time.setAttribute("datetime", String(version.date));
+        time.setAttribute("datetime", version.date);
         item.appendChild(time);
         if (version.current) {
           item.classList.add("artifact-versions-entry--current");
@@ -44,7 +44,7 @@
         } else {
           var open = element("a", "artifact-versions-view", "View");
           open.href = encodeURIComponent(page) + ".html?version=" +
-            encodeURIComponent(String(version.commit));
+            encodeURIComponent(version.commit);
           open.setAttribute("aria-label", "View the version of " + time.textContent);
           item.appendChild(open);
         }

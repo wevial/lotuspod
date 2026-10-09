@@ -38,7 +38,6 @@ MAX_VERSIONS = 200
 GIT_TIMEOUT = 10
 # A version's commit as a URL names it: the full object id.
 COMMIT = re.compile(r"[0-9a-f]{40}")
-OLD_CLASS = "artifact--old-version"
 
 _NO_BLOB = "0" * 40
 _MAIN_OPEN_RE = re.compile(r'<main class="([^"]*)"([^>]*)>')
@@ -229,6 +228,6 @@ def old_page(page_html: str, name: str, version: Version, behind: int) -> str:
     )
 
     def opened(match: re.Match) -> str:
-        return f'<main class="{match.group(1)} {OLD_CLASS}"{match.group(2)}>{banner}'
+        return f'<main class="{match.group(1)} artifact--old-version"{match.group(2)}>{banner}'
 
     return _MAIN_OPEN_RE.sub(opened, page_html, count=1)
