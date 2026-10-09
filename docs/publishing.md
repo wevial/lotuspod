@@ -390,6 +390,40 @@ pages) are excluded — re-render them with this version to publish. The flag
 governs listings, and `lotuspod serve` v2 enforces it over HTTP too (hidden
 pages 404 even by direct URL); opening the file on disk still works.
 
+## Versions
+
+When the output directory is the top of its own git repository, every
+publish is a commit there, so every commit that changed `NAME.html` is a
+version of the page. `lotuspod serve` reads them at request time, from one
+`git log` over the page and one `git cat-file --batch` for the versions it
+has not read before; nothing new is stored. Only versions whose own
+`lotuspod:visible` was true are listed, newest first, at most 200. A
+directory that is not the top of its own repository has none.
+
+A published page's header ends its date line in a "Versions · N" link to
+`#versions`, which shows the page's versions in place of its body: each with
+its date and time, the current one marked "current", and every other with a
+"View" link. The list shows 20, and "Show older versions" shows 20 more. A
+page with one version says "This is the only version.", and one in a
+directory that is not a repository shows "Versions · 0" and says "This page
+has no versions yet." The page asks
+`GET /api/versions?page=NAME` (see [Reading and answering
+pages](comments.md#answers-and-comments)) once as it loads; when it answers
+anything but 200, as on the demo, there is no link and no view.
+
+"View" opens `NAME.html?version=COMMIT`, that version read-only, for a
+reader whose Access assertion verifies as on `/api`. It answers 404 unless
+the page is served now and COMMIT, its 40 hex characters, is one of the
+page's listed versions, so it never reads another file. The version is
+served as it was published, under a banner saying it is an earlier version,
+from when, and how many versions behind the current one it is, with links
+"All versions" and "Back to current". Its decision forms are disabled, its
+comment boxes hidden, and a `Content-Security-Policy` header of
+`script-src 'none'; form-action 'none'` keeps any of its scripts, a Mermaid
+diagram's included, and its forms from running: comments and answers stay
+on the current page. It is sent with `Cache-Control: private, no-store`. Any
+other query on a page is served as the page.
+
 ## Index
 
 Build `artifacts/index.html`, a browsable index linking every rendered page:
@@ -400,8 +434,9 @@ lotuspod index               # scans artifacts/ (or pass --out-dir DIR)
 
 The listing is a table: one row per page, with its title (linking to the
 page) and its labels as small tags under it, created and updated dates, and
-summary, as `lotuspod manifest` records them. A labelled row carries its labels
-in `data-labels`, joined by commas. Only fail-closed-visible artifacts are listed
+summary, as `lotuspod manifest` records them. Each row names its page in
+`data-page`, and a labelled row carries its labels in `data-labels`, joined by
+commas. Only fail-closed-visible artifacts are listed
 (same rule as `lotuspod manifest`).
 Rows arrive newest update first, the file name breaking ties, and are styled
 by the lotus theme. Re-running is
@@ -425,7 +460,19 @@ The count reads "M pages, newest update first" in the arrival order, and "N of
 M pages" while filtered; when no row is left, the table gives way to "No pages
 match these filters." The table stays one flat list in its sort order.
 
-Sorting, the search and the Labels menu are progressive enhancement from a
+Signed in to `lotuspod serve`, the index asks `/api/seen` (see [Answers and
+comments](comments.md#answers-and-comments)) which pages this reader has
+opened, and at what revision, once on load and again when the browser brings
+the index back from its back-forward cache. A page republished since this
+reader last opened it, on any device, gets a small "updated" mark beside its
+title; a page they have never opened gets none. An "Updated · N" toggle, N
+the marked pages, sits after the Labels menu: pressed (`aria-pressed`), it
+keeps only the marked rows and adds the token "updated ✕" to the "Showing"
+line, which releases it; the Labels menu and the search still apply on top.
+When the route answers anything but 200 (signed out, or the demo site, whose
+stand-in answers 404), there are no marks and no toggle.
+
+Sorting, the search, the Labels menu and the marks are progressive enhancement from a
 script inlined in `index.html` — no extra file to serve — so with scripting off
 the page is still the complete listing, just unsorted and unfiltered (the search
 box and the menu stay hidden rather than offering a control that cannot

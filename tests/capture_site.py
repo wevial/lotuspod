@@ -23,9 +23,15 @@ decision threads page, capture-decision-threads, from
 capture-decision-threads.md beside it. So is the images page, capture-images, from a source with the
 fixture images (tests/fixtures/media/) beside it: its images are stored in
 lotuspod-media/ beside the site, as publish stores them for serve. The
-published pages carry labels (PAGE_LABELS) for the index's Labels menu; the
-rendered ones carry none. For an
-agent command, the command's environment names:
+published pages above carry labels (PAGE_LABELS) for the index's Labels menu;
+the rendered ones, and the versions pages below, carry none.
+
+The site is the top of its own git repository, with a local identity and no
+origin, so each render and publish commits there as on the writer host, and
+each page lists its versions. The fixture's own commits are dated
+SAMPLE_COMMITTED. Two pages are kept for the versions: capture-versions-once,
+published once, and capture-versions-many, published VERSIONS_MANY times.
+For an agent command, the command's environment names:
 
     LOTUSPOD_TEST_SOCKET             the agent socket
     LOTUSPOD_TEST_CREDENTIAL_HERMES  hermes's credential file
@@ -88,6 +94,10 @@ OTHER_OPERATIONS = ("pull", "claim", "reply")
 # The time publish stamps a page updated: later on SAMPLE_DATE, so a published
 # page's header still names one day and the index's Updated column two times.
 SAMPLE_UPDATED = f"{SAMPLE_DATE}T12:00:00+00:00"
+# The time of the fixture's own commits: a rendered page, which publish never
+# stamps, takes its updated time from its newest commit, still before every
+# published page's.
+SAMPLE_COMMITTED = f"{SAMPLE_DATE}T00:00:00+00:00"
 
 
 class _SampleDay(datetime.date):
@@ -550,6 +560,25 @@ The frog that sits on them.
 ![A frog](frog.gif)
 """
 
+# The versions pages: one published once, and one published VERSIONS_MANY
+# times, each edition naming its number.
+VERSIONS_ONCE_PAGE = "capture-versions-once"
+VERSIONS_MANY_PAGE = "capture-versions-many"
+VERSIONS_MANY = 25
+
+
+def versions_source(title: str, edition: int) -> str:
+    return f"""\
+# {title}
+
+A sample page for captures, edition {edition}: each publish is a version.
+
+## Pond
+
+The pond freezes in January, and the pump stops with it.
+"""
+
+
 SAMPLE_PAGES = (
     ("capture-article", "Capture article", ARTICLE_BODY, ()),
     ("capture-report", "Capture report", REPORT_BODY, ("--variant", "report")),
@@ -607,6 +636,7 @@ def render(out_dir: Path, db_path: Path) -> None:
     step that failed.
     """
     database = db.Database(db_path)
+    repository(out_dir)
     token = credential_path(db_path, OWNER)
     machine.create_credential(database, OWNER, [OWNER], list(OWNER_OPERATIONS), token)
     machine.create_credential(database, OTHER, [OTHER], list(OTHER_OPERATIONS),
@@ -668,16 +698,50 @@ def render(out_dir: Path, db_path: Path) -> None:
             "--out-dir", str(out_dir), "--variant", "article", "--no-comments",
         ],
     ))
+    versions_dir = db_path.with_name("versions")
+    versions_dir.mkdir(exist_ok=True)
+    for name, title, editions in ((VERSIONS_ONCE_PAGE, "Capture versions once", 1),
+                                  (VERSIONS_MANY_PAGE, "Capture versions many", VERSIONS_MANY)):
+        for edition in range(1, editions + 1):
+            versions_file = versions_dir / f"{name}.md"
+            steps.append((
+                f"publish {name} edition {edition}",
+                [
+                    "publish", str(versions_file), "--local", "--date", SAMPLE_DATE,
+                    "--out-dir", str(out_dir),
+                ],
+                partial(versions_file.write_text, versions_source(title, edition),
+                        encoding="utf-8"),
+                # A minute apart, so each version shows its own time.
+                f"{SAMPLE_DATE}T00:{edition:02d}:00+00:00",
+            ))
     steps.append(("index", ["index", "--out-dir", str(out_dir)]))
-    for step, argv in steps:
+    for step, argv, *more in steps:
+        prepare, moment = more or (None, SAMPLE_COMMITTED)
+        if prepare is not None:
+            prepare()
+        committed = {"GIT_AUTHOR_DATE": moment, "GIT_COMMITTER_DATE": moment}
         # The CLI reports on stdout; keep that stream for COMMAND alone.
-        with redirect_stdout(sys.stderr), mock.patch.object(cli, "_dt", _sample_clock()):
+        with redirect_stdout(sys.stderr), mock.patch.object(cli, "_dt", _sample_clock()), \
+                mock.patch.dict(os.environ, committed):
             try:
                 rc = cli.main(argv)
             except SystemExit as exc:
                 rc = exc.code if isinstance(exc.code, int) else 1
         if rc != 0:
             raise RuntimeError(f"{step} failed with exit code {rc}")
+
+
+def repository(out_dir: Path) -> None:
+    """Make out_dir the top of its own git repository, with a local identity
+    and no origin. Raises RuntimeError when git fails."""
+    for argv in (["init", "-q", "-b", "main"], ["config", "user.name", "Capture fixture"],
+                 ["config", "user.email", "capture@example.com"],
+                 ["config", "commit.gpgsign", "false"]):
+        done = subprocess.run(["git", "-C", str(out_dir), *argv], capture_output=True,
+                              text=True, check=False)
+        if done.returncode != 0:
+            raise RuntimeError(f"git {argv[0]} failed: {done.stderr.strip()}")
 
 
 # The browser checks read the packaged stylesheet from here, as the bytes a

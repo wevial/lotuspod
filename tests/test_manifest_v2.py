@@ -820,7 +820,10 @@ class IndexTableTests(TempDirTestCase):
         self.assertIsNotNone(noun)
         self.assertIn("`${rows.length} ${noun}`", script)
         body = index_html[index_html.index("<tbody>"): index_html.index("</tbody>")]
-        rows = body.count("<tr>")
+        # Each row names its page, for the index script's updated marks.
+        pages = re.findall(r'<tr data-page="([^"]*)"', body)
+        self.assertEqual(sorted(pages), ["garden", "pond"])
+        rows = len(re.findall(r"<tr[ >]", body))
         self.assertEqual(f"{rows} {noun.group(1 if rows == 1 else 2)}", "2 pages")
 
     def test_script_wires_sorting_and_filtering(self):

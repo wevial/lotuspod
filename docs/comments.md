@@ -19,7 +19,7 @@ three. A `--db` inside the artifacts directory is refused at start (exit 1):
 the artifacts repository commits everything there. serve never answers the
 file either way.
 
-Five routes sit behind the Access check of [Who is reading: Cloudflare
+Eight routes sit behind the Access check of [Who is reading: Cloudflare
 Access](operating.md#who-is-reading-cloudflare-access) (with `POST /api/media`, under
 [Serve](operating.md#serve)); each row records the verified
 reader as `actor`, the page's `lotuspod:revision` when it was written as
@@ -71,6 +71,23 @@ twice.
   image `POST /api/media` takes.
 - `GET /api/revision?page=NAME` answers `{revision}`, the page's current
   revision alone; it is only read (any other method is 405).
+- `POST /api/seen` with `{page, revision}` records that the reader opened
+  `page` at `revision`, the revision it was rendered at, and answers 200
+  `{page, revision, previous}`: `previous` is the revision recorded for this
+  reader before, or null the first time. One row is kept per reader and page,
+  keyed by the address Access verified (never the shown name), so it holds on
+  every device the reader uses.
+- `GET /api/seen`, with no query, answers `{pages: {NAME: {revision,
+  seen}}}`: one entry for each page this reader has a row for that serve
+  still answers, `revision` the page's current one and `seen` the one last
+  recorded. A page since hidden or removed drops out. It never names a reader.
+- `GET /api/versions?page=NAME` answers `{page, versions}`: each commit of
+  the artifacts repository that changed the page while it was visible, as
+  `{commit, date, revision, current}`, newest first and at most 200, `date`
+  its committer time in UTC and `current` true on the newest only (see
+  [Versions](publishing.md#versions)). It is empty when the output directory
+  is not the top of its own repository, and only read (any other method is
+  405).
 
 An open page notices when it is published again: every published page
 carries a revision, so it loads the page script, `lotuspod-page.js`, even
@@ -91,6 +108,13 @@ why. A page that notices while its tab is hidden, with no unsent text or
 image in a composer, reloads itself the same way, so it is current when the
 reader comes back; with one, or an image still uploading, it waits, the
 banner showing.
+
+Once per load, an open page with a `lotuspod:revision` posts it to
+`/api/seen`; a signed-out reader's 401, or any failure, shows nothing. The
+index reads `/api/seen` to mark the pages republished since the reader last
+opened them (see [Index](publishing.md#index)). Agents are not readers: the
+agents' socket records nothing here, and an agent's or the responder's
+republish is an update like any other.
 
 A thread is resolved or open, and every change is kept: who made it and
 when. A thread's `resolution` is `{resolved, actor, at}` as its newest
@@ -116,13 +140,14 @@ missing, extra or mistyped field is 400 `invalid_body`, as are `question`,
 heading id's length is taken, since it must name one of the page's boxes),
 `text` outside 1 to 4000, `note` over 4000, a quote whose `exact` is outside 1 to 500 or
 whose `prefix` or `suffix` is over 32 (code points, as Python counts them), a new
-thread's `revision` that is not a string of at most 100 characters, and any
+thread's `revision` that is not a string of at most 100 characters, a seen
+`revision` that is not a string of 1 to 100, and any
 `revision` on a reply, and `images` that is not a list of 1 to 4 distinct
 stored names (an empty list, five, or a path among them). A name not in the
 media store is 400 `unknown_image`. A page serve would not answer (hidden,
 missing, not a page) is 404 `unknown_page`, and a reply to no comment on its
 page 404 `unknown_parent`. A read without exactly one `page` is 400
-`invalid_query`. An answer is checked against the page's own decision forms
+`invalid_query`, as is a read of `/api/seen` with any query. An answer is checked against the page's own decision forms
 (see [Decisions for the maintainer](publishing.md#decisions-for-the-maintainer)): a question the page does not ask is 400 `unknown_question`, a
 `version` other than the form's 409 `stale`, and a `choice` the form does not
 offer 400 `invalid_choice`. A `checked` that is not a list of distinct

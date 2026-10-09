@@ -576,8 +576,11 @@ test.describe('signed in', () => {
     const ids = new Set<number>();
     await ownThreads(page, ids);
     const posts: string[] = [];
+    // Every post but the page's own of the revision it was opened at.
     page.on('request', (request) => {
-      if (request.method() === 'POST') posts.push(request.url());
+      if (request.method() === 'POST' && new URL(request.url()).pathname !== '/api/seen') {
+        posts.push(request.url());
+      }
     });
     await load(page);
     await choose(page, '.artifact-body p', 'pump stops when', 'pump stops when');

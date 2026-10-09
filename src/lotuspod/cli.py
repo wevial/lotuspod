@@ -34,7 +34,7 @@ from typing import Callable
 import importlib.resources as _res
 
 from lotuspod import (access, agents, api, backup, comments, db, decisions, machine,
-                      markdown, media, responder, routing, sections)
+                      markdown, media, responder, routing, sections, versions)
 
 _PKG = "lotuspod"
 
@@ -315,6 +315,7 @@ THEME_SOURCES = {
         "css/table-expand.css",
         "css/image-viewer.css",
         "css/index.css",
+        "css/versions.css",
     ),
     PAGE_SCRIPT: (
         "js/page-open.js",
@@ -329,6 +330,7 @@ THEME_SOURCES = {
         "js/tables.js",
         "js/table-expand.js",
         "js/image-viewer.js",
+        "js/versions.js",
         "js/page-close.js",
     ),
 }
@@ -562,7 +564,7 @@ def _git(out_dir: Path, *argv: str) -> subprocess.CompletedProcess:
         ["git", "-C", str(out_dir), *argv],
         capture_output=True,
         text=True,
-        env={**os.environ, "GIT_TERMINAL_PROMPT": "0"},
+        env=versions.git_environment(),
     )
 
 
@@ -952,9 +954,12 @@ def index_entries_html(artifacts: list[dict]) -> str:
         title = esc(str(meta["title"]))
         summary = esc(str(meta["summary"]))
         labels = [esc(str(label)) for label in meta["labels"]]
-        # The labels ride under the title as tags, and on the row for the
-        # index script's Labels filter.
-        row = f'<tr data-labels="{",".join(labels)}">' if labels else "<tr>"
+        # The row names its page, for the index script's updated marks. The
+        # labels ride under the title as tags, and on the row for the index
+        # script's Labels filter.
+        name = esc(str(meta["file"]).removesuffix(".html"))
+        labelled = f' data-labels="{",".join(labels)}"' if labels else ""
+        row = f'<tr data-page="{name}"{labelled}>'
         tags = (
             ' <span class="index-tags">'
             + " ".join(f'<span class="index-tag">{label}</span>' for label in labels)
@@ -1056,6 +1061,14 @@ def page_revision(out_dir: Path, name: str) -> str:
         if kept.is_file():
             return source_revision(kept.read_bytes())
     return ""
+
+
+def version_stamp(page_html: str) -> tuple[str, bool]:
+    """A page's lotuspod:revision ("" when none) and whether it is visible,
+    read from its HTML alone: what lotuspod.versions keeps of each version."""
+    tag = _REVISION_TAG_RE.search(page_html)
+    content = _META_CONTENT_RE.search(tag.group(0)) if tag else None
+    return (content.group(1).strip() if content else ""), extract_visibility(page_html)
 
 
 def page_variant(page_html: str) -> str:
@@ -1963,6 +1976,18 @@ _PAGE_HEADERS = (
 )
 
 
+# Headers on an earlier version of a page, in place of _PAGE_HEADERS: its
+# policy adds to the page's own meta policy, so none of its scripts and no
+# form runs, and it is never kept.
+_OLD_VERSION_HEADERS = (
+    ("Content-Security-Policy",
+     "frame-ancestors 'none'; script-src 'none'; form-action 'none'"),
+    ("X-Content-Type-Options", "nosniff"),
+    ("Cache-Control", "private, no-store"),
+)
+_VERSION_QUERY = "version"
+
+
 # Headers on every /api answer.
 _API_HEADERS = (
     ("Content-Type", "application/json"),
@@ -1987,7 +2012,11 @@ class _AllowListHandler(SimpleHTTPRequestHandler):
     /api paths never reach the file system or method dispatch: whatever the
     method, each is answered only after the request's Access assertion
     verifies (see parse_request and _serve_api). The answers, comments,
-    media and revision routes are lotuspod.api's.
+    media, revision, seen and versions routes are lotuspod.api's.
+
+    NAME.html?version=COMMIT answers an earlier version of an allow-listed
+    page, read-only (see _serve_version), after the same Access check; any
+    other query on a page is served as the page.
     """
 
     # Whether the response being written is a page's, and the type of the
@@ -1996,10 +2025,12 @@ class _AllowListHandler(SimpleHTTPRequestHandler):
     _media_type = ""
 
     def __init__(self, *args, root: Path, verifier: access.Verifier | None = None,
-                 api: api.Api | None = None, **kwargs):
+                 api: api.Api | None = None, history: versions.History | None = None,
+                 **kwargs):
         self.root = Path(root)
         self.verifier = verifier
         self.api = api
+        self.history = history
         super().__init__(*args, **kwargs)
 
     def _api_path(self) -> str | None:
@@ -2018,19 +2049,26 @@ class _AllowListHandler(SimpleHTTPRequestHandler):
         if self.command != "HEAD":
             self.wfile.write(body)
 
-    def _serve_api(self, path: str, body: api.Body) -> None:
+    def _reader(self) -> str | None:
+        """The reader's address from the request's verified Access assertion;
+        None once the refusal is answered."""
         # The reader is known only from a verified assertion; the plain
         # Cf-Access-Authenticated-User-Email header is never read.
         if self.verifier is None:
             self._api_answer(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "access_unconfigured"})
-            return
+            return None
         assertions = self.headers.get_all(access.ASSERTION_HEADER) or []
         try:
             if len(assertions) > 1:
                 raise access.InvalidAssertion("more than one assertion")
-            email = self.verifier.reader(assertions[0] if assertions else None)
+            return self.verifier.reader(assertions[0] if assertions else None)
         except access.AccessError as exc:
             self._api_answer(exc.status, {"error": exc.error})
+            return None
+
+    def _serve_api(self, path: str, body: api.Body) -> None:
+        email = self._reader()
+        if email is None:
             return
         actor = {"kind": "human", "email": email}
         if self.api is not None and path in api.ROUTES:
@@ -2098,6 +2136,38 @@ class _AllowListHandler(SimpleHTTPRequestHandler):
             return deny
         return str(candidate)
 
+    def _version_asked(self, name: str) -> str | None:
+        """The commit a request for the allow-listed file name asks for as
+        ?version=COMMIT, checked later; None when it asks for none."""
+        query = self.path.split("#", 1)[0].partition("?")[2]
+        if not query or not name.endswith(".html") or not is_page_name(name):
+            return None
+        fields = urllib.parse.parse_qs(query, keep_blank_values=True)
+        if list(fields) != [_VERSION_QUERY] or len(fields[_VERSION_QUERY]) != 1:
+            return None
+        return fields[_VERSION_QUERY][0]
+
+    def _serve_version(self, name: str, commit: str):
+        """The page NAME.html as it was at commit, read-only; 404 unless it
+        is one of the page's listed versions."""
+        if self._reader() is None:
+            return None
+        stem = name[:-len(".html")]
+        found = self.history.version(stem, commit) if self.history is not None else None
+        if found is None:
+            self.send_error(HTTPStatus.NOT_FOUND, "File not found")
+            return None
+        version, behind, page_html = found
+        data = versions.old_page(page_html, stem, version, behind).encode("utf-8")
+        self._page_response, self._media_type = False, ""
+        self.send_response(HTTPStatus.OK)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(data)))
+        for header, value in _OLD_VERSION_HEADERS:
+            self.send_header(header, value)
+        self.end_headers()
+        return io.BytesIO(data)
+
     def send_head(self):
         # Denial never reaches the file system: were a file ever to sit at
         # the sentinel's name, it would still not be served.
@@ -2106,6 +2176,10 @@ class _AllowListHandler(SimpleHTTPRequestHandler):
             self.send_error(HTTPStatus.NOT_FOUND, "File not found")
             return None
         stored = Path(target)
+        if stored.parent == self.root:
+            commit = self._version_asked(stored.name)
+            if commit is not None:
+                return self._serve_version(stored.name, commit)
         if stored.parent == media.media_dir(self.root):
             self._page_response = False
             self._media_type = media.CONTENT_TYPES[stored.suffix[1:]]
@@ -2169,16 +2243,18 @@ def _make_server(out_dir: Path, host: str, port: int,
                  window: int = routing.DEFAULT_WINDOW,
                  max_image_bytes: int = media.DEFAULT_MAX_BYTES) -> ThreadingHTTPServer:
     """The allow-list server; /api answers 503 access_unconfigured without a
-    verifier, and has no answers, comments, media and revision routes without
-    a database. Uploads go to the media store beside out_dir, within
-    max_image_bytes."""
+    verifier, and has no answers, comments, media, revision, seen and versions
+    routes without a database. Uploads go to the media store beside out_dir, within
+    max_image_bytes. The pages' versions are read from out_dir's repository."""
+    history = versions.History(out_dir, version_stamp)
     routes = None
     if db_path is not None:
         routes = api.Api(db.Database(db_path), partial(api_page, out_dir), window,
-                         media_dir=media.media_dir(out_dir), max_image_bytes=max_image_bytes)
+                         media_dir=media.media_dir(out_dir), max_image_bytes=max_image_bytes,
+                         history=history)
     handler = partial(
         _AllowListHandler, directory=str(out_dir), root=out_dir, verifier=verifier,
-        api=routes,
+        api=routes, history=history,
     )
     return ThreadingHTTPServer((host, port), handler)
 

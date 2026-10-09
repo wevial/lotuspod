@@ -1,0 +1,216 @@
+
+/* A page's versions (js/versions.js): a "Versions · N" link in the header's
+   date line, and the versions view, shown in place of the header and the
+   body while the hash is #versions. The view is a breadcrumb, the heading and
+   the versions newest first, one row each, the current one marked. */
+
+/* The link arrives after the page is drawn, so a page with a revision keeps
+   its slot at the end of the date line from the start, as wide as the
+   widest link ("· Versions · 200"). The link fills the slot without moving
+   the header, even where the line wraps. */
+html:has(meta[name="lotuspod:revision"]) .artifact-meta::after,
+.artifact-versions-slot {
+  display: inline-block;
+  margin-left: 0.3em;
+  min-width: 7.5em;
+  white-space: nowrap;
+}
+
+html:has(meta[name="lotuspod:revision"]) .artifact-meta::after {
+  content: "\a0";
+  visibility: hidden;
+}
+
+html:has(meta[name="lotuspod:revision"]) .artifact-meta--versions::after {
+  content: none;
+}
+
+.artifact-versions-link {
+  color: var(--color-sky);
+  text-decoration-color: var(--link-line);
+  text-underline-offset: 0.18em;
+}
+
+.artifact-versions-link:hover,
+.artifact-versions-link:focus-visible {
+  color: var(--color-pale-sky);
+  text-decoration-color: currentColor;
+}
+
+.artifact--versions .artifact-header,
+.artifact--versions .artifact-main,
+.artifact-versions-shown .artifact-comments-panel,
+.artifact-versions-shown .artifact-comments-popover,
+.artifact-versions-shown .artifact-comments-bottom-sheet,
+.artifact-versions-shown .artifact-passage-pill {
+  display: none;
+}
+
+.artifact-versions {
+  max-width: var(--measure-prose, 42rem);
+}
+
+.artifact-versions[hidden] {
+  display: none;
+}
+
+.artifact-versions-crumbs {
+  color: var(--color-muted-lavender);
+  font-size: 0.9rem;
+  margin: 0 0 1rem;
+}
+
+.artifact-versions-back,
+.artifact-versions-view {
+  color: var(--color-sky);
+  text-decoration: none;
+}
+
+.artifact-versions-back:hover,
+.artifact-versions-back:focus-visible,
+.artifact-versions-view:hover,
+.artifact-versions-view:focus-visible {
+  color: var(--color-pale-sky);
+  text-decoration: underline;
+}
+
+.artifact-versions-sep {
+  color: var(--color-muted-lavender);
+}
+
+.artifact-versions-heading {
+  color: var(--color-white);
+  font-family: var(--font-display);
+  font-size: clamp(1.5rem, 3vw, 2rem);
+  line-height: 1.2;
+  margin: 0;
+}
+
+.artifact-versions-heading:focus {
+  outline: none;
+}
+
+.artifact-versions-count {
+  color: var(--color-muted-lavender);
+  font-size: 0.9rem;
+  margin: 0.25rem 0 1.25rem;
+}
+
+.artifact-versions-list {
+  background: var(--color-surface);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-card);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.artifact-versions-list:empty {
+  display: none;
+}
+
+.artifact-versions-entry {
+  align-items: baseline;
+  border-top: 1px solid var(--hairline);
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  padding: 0.75rem 1.25rem;
+}
+
+.artifact-versions-entry:first-child {
+  border-top: 0;
+}
+
+.artifact-versions-date {
+  color: var(--color-pale-lavender);
+  font-variant-numeric: tabular-nums;
+}
+
+.artifact-versions-current {
+  border: 1px solid color-mix(in srgb, var(--color-mint) 60%, transparent);
+  border-radius: var(--radius-pill);
+  color: var(--color-mint);
+  font-size: 0.8rem;
+  padding: 0 0.6rem;
+}
+
+.artifact-versions-view {
+  font-size: 0.9rem;
+}
+
+.artifact-versions-more {
+  appearance: none;
+  background: none;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-pill);
+  color: var(--color-pale-lavender);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.875rem;
+  margin: 1rem 0 0;
+  padding: 0.3rem 1rem;
+}
+
+.artifact-versions-more:hover,
+.artifact-versions-more:focus-visible {
+  border-color: var(--color-lavender);
+  color: var(--color-white);
+}
+
+.artifact-versions-more[hidden] {
+  display: none;
+}
+
+/* An earlier version, served read-only (lotuspod.versions): a banner over
+   the header saying so, its comment boxes hidden and its decision forms
+   dimmed, each with a note on where to answer. */
+.artifact-version-banner {
+  align-items: center;
+  background: color-mix(in srgb, var(--color-amber) 10%, var(--color-surface));
+  border: 1px solid color-mix(in srgb, var(--color-amber) 55%, transparent);
+  border-radius: var(--radius-card);
+  color: var(--color-white);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 0.925rem;
+  gap: 0.5rem 1.25rem;
+  justify-content: space-between;
+  line-height: 1.45;
+  margin: 0 0 1.5rem;
+  padding: 0.85rem 1.25rem;
+}
+
+.artifact-version-banner p {
+  margin: 0;
+}
+
+.artifact-version-banner-links {
+  display: flex;
+  gap: 1rem;
+}
+
+.artifact-version-banner a {
+  color: var(--color-amber);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.artifact-version-banner a:hover,
+.artifact-version-banner a:focus-visible {
+  text-decoration: underline;
+}
+
+.artifact--old-version .artifact-comment {
+  display: none;
+}
+
+.artifact--old-version .artifact-decision fieldset:disabled {
+  opacity: 0.55;
+}
+
+.artifact--old-version .artifact-version-note {
+  color: var(--color-muted-lavender);
+  font-size: 0.875rem;
+  margin: 0.5rem 0 0 1rem;
+}
