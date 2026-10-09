@@ -9,7 +9,8 @@ test.use({ viewport: { width: 1280, height: 800 } });
 // D and not E, then a second flowchart that repeats node id A, holds a
 // subgraph (P --> Q), and whose table has a row Z naming no box, and a third
 // (K <--> R, R --> S, S --> T styled opaque) whose table has no thead and a
-// row too long for the window.
+// row too long for the window, and a fourth (F --> G, G --> H, J --> H)
+// that styles F with a style line, G with a class line and J with :::.
 const PAGE = '/capture-node-cards.html';
 // The pinned Mermaid (e2e/package.json) answers jsDelivr's requests for it,
 // as in policy.spec.ts.
@@ -409,13 +410,44 @@ test('arrows point the way their heads do, a long card scrolls inside the window
   await seen.clean();
 });
 
+test('a box with its own Mermaid style keeps it, and only an unstyled box takes its status color', async ({ page }) => {
+  const seen = await drawn(page);
+  await expect(box(page, 'F', 3)).toHaveAttribute('role', 'button');
+  const shapes = await diagram(page, 3).locator('svg').evaluate((svg) => {
+    const probe = document.createElement('span');
+    document.body.appendChild(probe);
+    probe.style.color = 'var(--color-lavender)';
+    const lavender = getComputedStyle(probe).color;
+    probe.remove();
+    const shape = (id: string) => {
+      const style = getComputedStyle(svg.querySelector(`g.node[id^="flowchart-${id}-"] > .label-container`)!);
+      return { fill: style.fill, stroke: style.stroke, dash: style.strokeDasharray };
+    };
+    return { lavender, F: shape('F'), G: shape('G'), J: shape('J'), H: shape('H') };
+  });
+  expect(shapes.F).toEqual({ fill: 'rgb(255, 224, 224)', stroke: 'rgb(204, 0, 0)', dash: 'none' });
+  const pink = { fill: 'rgb(224, 255, 224)', stroke: 'rgb(0, 170, 0)', dash: 'none' };
+  expect(shapes.G).toEqual(pink);
+  expect(shapes.J).toEqual(pink);
+  expect(shapes.H.stroke).toBe(shapes.lavender);
+  expect(shapes.H.dash).not.toBe('none');
+
+  await expect(box(page, 'F', 3)).toHaveAttribute('aria-label', 'Styled, ready');
+  await box(page, 'F', 3).click();
+  await expect(card(page).locator('h3')).toHaveText('Styled');
+  await expect(card(page).locator('dl.artifact-node-card-fields dt')).toHaveText(['Title', 'Status']);
+  await expect(card(page).locator('dl.artifact-node-card-fields dd'))
+    .toHaveText(['A box with its own style', 'ready']);
+  await seen.clean();
+});
+
 test.describe('without scripts', () => {
   test.use({ javaScriptEnabled: false });
 
   test('every Nodes heading and table shows and no box is focusable', async ({ page }) => {
     await page.goto(PAGE);
     const headings = page.locator('.artifact-body > h3', { hasText: 'Nodes' });
-    await expect(headings).toHaveCount(3);
+    await expect(headings).toHaveCount(4);
     await expect(headings.nth(0)).toBeVisible();
     await expect(headings.nth(1)).toBeVisible();
     await expect(page.locator('#nodes-table')).toBeVisible();
