@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Frame, type Locator, type Page } from '@playwright/test';
 
 // A page lists its earlier versions from the artifacts repository, and opens
 // each one read-only. The capture fixture's site is the top of its own git
@@ -72,6 +72,22 @@ function watchErrors(page: Page) {
   return errors;
 }
 
+// The commit of the page's older version, as the versions route lists it.
+async function olderCommit(page: Page, name: string) {
+  const answered = await page.request.get(`/api/versions?page=${name}`);
+  expect(answered.status()).toBe(200);
+  const { versions } = await answered.json();
+  expect(versions[1].current).toBe(false);
+  return versions[1].commit as string;
+}
+
+// A click on part of a versions row that is not its link. The link's
+// stretched box covers the row, so the click lands on the link, as a
+// reader's would; force skips the check that would refuse a covered element.
+function onRow(part: Locator, modifiers: ('ControlOrMeta')[] = []) {
+  return part.click({ force: true, modifiers });
+}
+
 function view(page: Page) {
   const node = page.locator('section.artifact-versions');
   return {
@@ -111,13 +127,77 @@ test.describe('signed in', () => {
       nodes.map((node) => node.getAttribute('datetime') ?? ''));
     expect(times[0] >= times[1]).toBe(true);
     await expect(versions.entries.nth(0).locator('.artifact-versions-current')).toHaveText('current');
-    await expect(versions.entries.nth(0).getByRole('link')).toHaveCount(0);
+    await expect(versions.entries.nth(0).getByRole('link')).toHaveCount(1);
+    await expect(versions.entries.nth(0).getByRole('link', { name: 'View the current version' }))
+      .toHaveAttribute('href', `${name}.html`);
     await expect(versions.entries.nth(1).locator('.artifact-versions-current')).toHaveCount(0);
     await expect(versions.more).toBeHidden();
 
+    // A click anywhere on a row follows its link, as the link itself would.
+    const older = await olderCommit(page, name);
+    const oldUrl = new RegExp(`/${name}\\.html\\?version=${older}$`);
+    const banner = page.locator('main.artifact--old-version > div.artifact-version-banner');
+    await onRow(versions.entries.nth(1).locator('.artifact-versions-note'));
+    await expect(page).toHaveURL(oldUrl);
+    await expect(banner).toBeVisible();
+    await page.goBack();
+    await expect(versions.heading).toBeVisible();
+
+    await onRow(versions.entries.nth(0).locator('.artifact-versions-date'));
+    await expect(page).toHaveURL(new RegExp(`/${name}\\.html$`));
+    await expect(page.locator('.artifact-body')).toContainText('Edition: second.');
+    await page.goBack();
+    await expect(versions.heading).toBeVisible();
+
+    // A modified click opens the row's version in a new tab, and the first
+    // tab stays. Playwright at times never reports, or never sees load, a tab
+    // opened in the background on a page whose policy forbids every script,
+    // as an old version's does, so the new tab is witnessed by its
+    // navigation: one to the version that is not the first tab's.
+    const moved: string[] = [];
+    const onMove = (frame: Frame) => {
+      if (frame === page.mainFrame()) moved.push(frame.url());
+    };
+    page.on('framenavigated', onMove);
+    const [opened] = await Promise.all([
+      page.context().waitForEvent('request', {
+        predicate: (request) => request.isNavigationRequest() && oldUrl.test(request.url()),
+      }),
+      onRow(versions.entries.nth(1).locator('.artifact-versions-note'), ['ControlOrMeta']),
+    ]);
+    expect(opened.method()).toBe('GET');
+    await expect(page).toHaveURL(new RegExp(`/${name}\\.html#versions$`));
+    await expect(versions.heading).toBeVisible();
+    page.off('framenavigated', onMove);
+    expect(moved).toEqual([]);
+    for (const other of page.context().pages()) {
+      if (other !== page) await other.close();
+    }
+
+    // Each row's one link is its only tab stop.
+    await versions.heading.focus();
+    const focused = () => page.evaluate(() => {
+      const node = document.activeElement;
+      const row = node?.closest('li.artifact-versions-entry');
+      const rows = Array.from(document.querySelectorAll('li.artifact-versions-entry'));
+      return row ? `${rows.indexOf(row)}:${node!.tagName}` : 'outside';
+    });
+    await page.keyboard.press('Tab');
+    expect(await focused()).toBe('0:A');
+    await page.keyboard.press('Tab');
+    expect(await focused()).toBe('1:A');
+    await page.keyboard.press('Tab');
+    expect(await focused()).toBe('outside');
+    await page.keyboard.press('Shift+Tab');
+    expect(await focused()).toBe('1:A');
+    await page.keyboard.press('Enter');
+    await expect(page).toHaveURL(oldUrl);
+    await expect(banner).toBeVisible();
+    await page.goBack();
+    await expect(versions.heading).toBeVisible();
+
     await versions.entries.nth(1).getByRole('link', { name: /^View/ }).click();
     await expect(page).toHaveURL(new RegExp(`/${name}\\.html\\?version=[0-9a-f]{40}$`));
-    const banner = page.locator('main.artifact--old-version > div.artifact-version-banner');
     await expect(banner).toBeVisible();
     await expect(banner).toContainText('1 version behind');
     await expect(page.locator('.artifact-body')).toContainText('Edition: first.');
@@ -191,6 +271,138 @@ test.describe('signed in', () => {
     expect(errors).toEqual([]);
   });
 
+  test("the header's menu picks a version without leaving the page", async ({ page }) => {
+    const errors = watchErrors(page);
+    const name = 'versions-menu-check';
+    publish(name, source('Versions menu check', 'first'));
+    publish(name, source('Versions menu check', 'second'));
+    const answered = await page.request.get(`/api/versions?page=${name}`);
+    expect(answered.status()).toBe(200);
+    const listed = (await answered.json()).versions;
+    expect(listed).toHaveLength(2);
+    const oldUrl = new RegExp(`/${name}\\.html\\?version=${listed[1].commit}$`);
+    const banner = page.locator('main.artifact--old-version > div.artifact-version-banner');
+
+    await page.goto(`/${name}.html`);
+    const button = page.getByRole('button', { name: 'Choose a version' });
+    const menu = page.getByRole('menu');
+    const items = menu.getByRole('menuitem');
+    await expect(button).toHaveText('▾');
+    await expect(button).toHaveAttribute('aria-expanded', 'false');
+    await expect(menu).toBeHidden();
+    // The button follows the link in its slot, before any unread badge.
+    expect(await button.evaluate((node) => {
+      const line = node.closest('.artifact-header .artifact-meta');
+      const link = node.previousElementSibling;
+      return Boolean(line && node.parentElement!.matches('.artifact-versions-slot') &&
+        link?.matches('a.artifact-versions-link') &&
+        Array.from(line.querySelectorAll('.artifact-unread')).every((badge) =>
+          node.compareDocumentPosition(badge) & Node.DOCUMENT_POSITION_FOLLOWING));
+    })).toBe(true);
+    const hit = await button.boundingBox();
+    expect(hit!.width).toBeGreaterThanOrEqual(24);
+    expect(hit!.height).toBeGreaterThanOrEqual(24);
+
+    await button.click();
+    await expect(button).toHaveAttribute('aria-expanded', 'true');
+    await expect(menu).toBeVisible();
+    await expect(items).toHaveCount(3);
+    for (const index of [0, 1]) {
+      await expect(items.nth(index).locator('time')).toHaveAttribute('datetime', listed[index].date);
+    }
+    await expect(items.nth(0)).toContainText(listed[0].summary);
+    await expect(items.nth(1).locator('.artifact-versions-menu-note')).toHaveText('First version');
+    await expect(items.nth(0).locator('.artifact-versions-current')).toHaveText('current');
+    await expect(items.nth(1).locator('.artifact-versions-current')).toHaveCount(0);
+    await expect(items.nth(0)).toHaveAttribute('aria-current', 'page');
+    await expect(items.nth(0)).toHaveAttribute('href', `${name}.html`);
+    await expect(items.nth(2)).toHaveText('See all versions');
+    await expect(items.nth(2)).toHaveAttribute('href', /#versions$/);
+
+    // The older item opens the old version; the first, the page itself.
+    await items.nth(1).click();
+    await expect(page).toHaveURL(oldUrl);
+    await expect(banner).toBeVisible();
+    await page.goBack();
+    await button.click();
+    await items.nth(0).click();
+    await expect(page).toHaveURL(new RegExp(`/${name}\\.html$`));
+    await expect(page.locator('.artifact-body')).toContainText('Edition: second.');
+    await button.click();
+    await items.nth(2).click();
+    await expect(page).toHaveURL(new RegExp(`/${name}\\.html#versions$`));
+    await expect(view(page).heading).toBeVisible();
+    await expect(menu).toBeHidden();
+
+    // The keyboard, as a menu button takes it.
+    await page.goto(`/${name}.html`);
+    await button.focus();
+    await page.keyboard.press('ArrowDown');
+    await expect(menu).toBeVisible();
+    await expect(items.nth(0)).toBeFocused();
+    await page.keyboard.press('ArrowDown');
+    await expect(items.nth(1)).toBeFocused();
+    await page.keyboard.press('End');
+    await expect(items.nth(2)).toBeFocused();
+    await page.keyboard.press('Home');
+    await expect(items.nth(0)).toBeFocused();
+    await page.keyboard.press('Escape');
+    await expect(button).toHaveAttribute('aria-expanded', 'false');
+    await expect(menu).toBeHidden();
+    await expect(button).toBeFocused();
+    await page.keyboard.press('ArrowUp');
+    await expect(items.nth(2)).toBeFocused();
+    await page.keyboard.press('Escape');
+    await expect(button).toBeFocused();
+    await page.keyboard.press('Enter');
+    await expect(menu).toBeVisible();
+    await expect(items.nth(0)).toBeFocused();
+    await page.keyboard.press('ArrowDown');
+    await page.keyboard.press('Enter');
+    await expect(page).toHaveURL(oldUrl);
+    await expect(banner).toBeVisible();
+
+    // A click outside closes it, and so does Tab.
+    await page.goBack();
+    await button.click();
+    await expect(menu).toBeVisible();
+    await page.locator('.artifact-title').click();
+    await expect(menu).toBeHidden();
+    await expect(button).toHaveAttribute('aria-expanded', 'false');
+    await button.click();
+    await expect(menu).toBeVisible();
+    await page.keyboard.press('Tab');
+    await expect(menu).toBeHidden();
+    await expect(button).toHaveAttribute('aria-expanded', 'false');
+    expect(errors).toEqual([]);
+  });
+
+  test('the menu of 25 versions scrolls them above "See all versions", and fits a phone', async ({ page }) => {
+    const errors = watchErrors(page);
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto('/capture-versions-many.html');
+    const button = page.getByRole('button', { name: 'Choose a version' });
+    const menu = page.getByRole('menu');
+    await button.click();
+    await expect(menu).toBeVisible();
+    const list = menu.locator('.artifact-versions-menu-list');
+    await expect(list.getByRole('menuitem')).toHaveCount(25);
+    expect(await list.evaluate((node) => node.scrollHeight > node.clientHeight)).toBe(true);
+    const all = menu.getByRole('menuitem', { name: 'See all versions' });
+    await expect(all).toBeInViewport({ ratio: 1 });
+    const [listBox, allBox] = await Promise.all([list.boundingBox(), all.boundingBox()]);
+    expect(allBox!.y).toBeGreaterThanOrEqual(listBox!.y + listBox!.height - 1);
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.reload();
+    await button.click();
+    await expect(menu).toBeVisible();
+    const box = await menu.boundingBox();
+    expect(box!.x).toBeGreaterThanOrEqual(0);
+    expect(box!.x + box!.width).toBeLessThanOrEqual(390);
+    expect(errors).toEqual([]);
+  });
+
   test('a page with 25 versions lists 20, then the other 5', async ({ page }) => {
     const errors = watchErrors(page);
     await page.goto('/capture-versions-many.html#versions');
@@ -203,7 +415,7 @@ test.describe('signed in', () => {
     await expect(versions.entries).toHaveCount(25);
     await expect(versions.more).toBeHidden();
     await expect(versions.entries.locator('.artifact-versions-current')).toHaveCount(1);
-    await expect(versions.entries.locator('a.artifact-versions-view')).toHaveCount(24);
+    await expect(versions.entries.locator('a.artifact-versions-view')).toHaveCount(25);
     expect(errors).toEqual([]);
   });
 });
@@ -253,6 +465,17 @@ test.describe('signed in, what changed', () => {
     // The box sits between the header and the body.
     expect(await box.evaluate((node) =>
       node.previousElementSibling?.matches('header.artifact-header'))).toBe(true);
+
+    // The header's menu marks the version the reader last looked at.
+    const button = page.getByRole('button', { name: 'Choose a version' });
+    await button.click();
+    const items = page.getByRole('menu').getByRole('menuitem');
+    await expect(items).toHaveCount(3);
+    await expect(items.nth(1).locator('.artifact-versions-seen')).toHaveText('you last looked');
+    await expect(items.nth(0).locator('.artifact-versions-seen')).toHaveCount(0);
+    await expect(items.nth(0)).not.toContainText('you last looked');
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('menu')).toBeHidden();
 
     await box.getByRole('link', { name: 'See the full diff' }).click();
     await expect(page).toHaveURL(new RegExp(`/${name}\\.html#versions$`));
