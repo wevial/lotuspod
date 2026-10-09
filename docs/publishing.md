@@ -487,6 +487,35 @@ NAME` (or `unarchive`), each argument quoted, and exits with ssh's status;
 archive a page from the browser, through `/api/archive` (see [Answers and
 comments](comments.md#answers-and-comments)).
 
+`lotuspod serve` answers an archived page marked as archived, from memory, so
+the page file and its versions stay as published. Its head gains `<meta
+name="lotuspod:archived" content="STAMP">`, its `main` the class
+`artifact--archived`, and right under the title bar a banner (`role="note"`)
+reads "Archived 2026-10-09", the day in UTC, and " · superseded by" a link to
+the successor's title while serve answers that page; a successor rendered
+`--hidden` since is left out. Each decision form's fieldset is disabled, with
+the note "Answering is closed: this page is archived." under it. The answer
+is always a 200 with `Cache-Control: no-cache`, whatever `If-Modified-Since`
+says, so a reload after archiving or unarchiving shows the page as it now is.
+
+Its threads, replies and answers stay readable, but the page takes no new
+ones: the comments and answers routes refuse them with 409 `archived` (see
+[Answers and comments](comments.md#answers-and-comments)). The page script
+shows no "Comment" pill on selected words, disables "Comment on a section",
+each "Comment on this section" and each thread's reply toggle, says "Comments
+are closed: this page is archived." above the panel's threads, and draws no
+review sheet; each decision's Ask is disabled with its fieldset. Resolving and
+reopening a thread still work.
+
+A reader in the `[access]` `owners` list gets a button in the page header,
+after the date line: "Archive" on a page that is not archived, "Unarchive" on
+one that is. Pressing it posts to `/api/archive` and reloads the page; on any
+other answer the page stays, and a line beside the button says why. The
+button archives with no successor: only `lotuspod archive --superseded-by`
+sets one. Signed out, or as any other reader, there is no button, and a page
+with no page script (a bare `lotuspod render` with no revision, decisions or
+comments) has none either.
+
 ## Manifest
 
 Generate `artifacts/manifest.json`, an index of every rendered artifact in a

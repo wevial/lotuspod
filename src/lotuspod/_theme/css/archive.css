@@ -1,0 +1,89 @@
+
+/* An archived page (lotuspod.archive): a banner under the title bar saying
+   when it was archived and what superseded it, styled as an old version's
+   banner is (versions.css); its decision forms and comment controls
+   disabled; and for an owner, an Archive or Unarchive button in the header
+   (js/archive.js). */
+.artifact-archived-banner {
+  align-items: center;
+  background: color-mix(in srgb, var(--color-amber) 10%, var(--color-surface));
+  border: 1px solid color-mix(in srgb, var(--color-amber) 55%, transparent);
+  border-radius: var(--radius-card);
+  color: var(--color-white);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 0.925rem;
+  gap: 0.5rem 1.25rem;
+  line-height: 1.45;
+  margin: 0 0 1.5rem;
+  padding: 0.85rem 1.25rem;
+}
+
+.artifact-archived-banner p {
+  margin: 0;
+}
+
+.artifact-archived-banner a {
+  color: var(--color-amber);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.artifact-archived-banner a:hover,
+.artifact-archived-banner a:focus-visible {
+  text-decoration: underline;
+}
+
+.artifact--archived .artifact-decision fieldset:disabled {
+  opacity: 0.55;
+}
+
+.artifact--archived .artifact-archived-note {
+  color: var(--color-muted-lavender);
+  font-size: 0.875rem;
+  margin: 0.5rem 0 0 1rem;
+}
+
+.artifact-comments-closed {
+  color: var(--color-muted-lavender);
+  font-size: 0.9em;
+  margin: 0 0 0.35rem;
+}
+
+.artifact-comments-pick:disabled,
+.artifact-comments-new:disabled,
+.artifact-comment-toggle:disabled {
+  cursor: default;
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.artifact-archive {
+  appearance: none;
+  background: none;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-pill);
+  color: var(--color-pale-lavender);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.85rem;
+  margin: 0.5rem 0 0;
+  padding: 0.15rem 0.85rem;
+}
+
+.artifact-archive:hover,
+.artifact-archive:focus-visible {
+  border-color: var(--color-lavender);
+  color: var(--color-white);
+}
+
+.artifact-archive:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.artifact-archive-status {
+  color: var(--color-muted-lavender);
+  font-size: 0.85rem;
+  margin-left: 0.75rem;
+}

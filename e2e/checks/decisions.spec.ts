@@ -289,7 +289,14 @@ test.describe('signed in', () => {
       if (route.request().method() === 'POST') await held;
       await route.continue();
     });
+    // Only once the answers are read and drawn is it known whether the form
+    // is folded to a saved answer: read later, they would fold it under the
+    // picks below.
+    await page.addInitScript(() => {
+      document.addEventListener('lotuspod:answered', () => { (window as any).__answered = true; });
+    });
     await page.goto(PAGE);
+    await page.waitForFunction(() => (window as any).__answered === true);
     const first = decision(page, 'decision-1');
     if (await first.change.isVisible()) await first.change.click();
     await first.option('Opus').check();
