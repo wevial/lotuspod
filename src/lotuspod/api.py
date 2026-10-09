@@ -35,7 +35,9 @@ unread replies on, that serve still answers: `revision` the page's current
 one, `seen` the one recorded and `seenAt` when (both null for a page never
 opened), `replies` the count of the page's comments stored since then by
 anyone but the reader (0 for a page never opened) and `unread` the count of
-the reader's unread replies on it (lotuspod.db). It never names the reader.
+the reader's unread replies on it (lotuspod.db), 0 while the page has no
+comment boxes. A page never opened is listed only while that count is not
+0. It never names the reader.
 
 `{page, thread, comment}` records that the reader has seen the thread whose
 first comment is `thread` up to `comment`, and answers 200 {thread, comment}
@@ -43,7 +45,7 @@ with the mark as stored, which never goes down nor passes the thread's
 newest comment: 404 unknown_thread when
 `thread` is no first comment on `page`. A read of the comments also answers
 `unread`, the ids of the reader's unread comments among its threads, oldest
-first.
+first, none while the page has no comment boxes.
 
 /api/versions answers {page, versions: [{commit, date, revision, current,
 summary}]}: each commit of the artifacts repository that changed the page
@@ -572,7 +574,7 @@ class Api:
             else:
                 threads = routing.threads(self.database, page.name, self.window, self.clock())
                 payload = {"page": page.name, "revision": page.revision,
-                           "threads": threads, "unread": self._unread(page.name, threads, actor),
+                           "threads": threads, "unread": self._unread(page, threads, actor),
                            "maxImageBytes": self.max_image_bytes}
             return HTTPStatus.OK, payload, ()
         except Refusal as exc:
@@ -811,11 +813,14 @@ class Api:
             question_text=asked.text, choice_label=label, checked=checked,
         )
 
-    def _unread(self, name: str, threads: list[dict], actor: Mapping) -> list[int]:
-        """The ids of the reader's unread comments on page name, among the
-        threads just read, so it never names a comment they do not hold."""
+    def _unread(self, page: Page, threads: list[dict], actor: Mapping) -> list[int]:
+        """The ids of the reader's unread comments on page, among the threads
+        just read, so it never names a comment they do not hold: none on a
+        page without comment boxes, whose threads the reader cannot open."""
+        if not page.comment_sections:
+            return []
         held = {row["id"] for thread in threads for row in (thread["root"], *thread["replies"])}
-        unread = self.database.unread(str(actor.get("email") or ""), name).get(name, [])
+        unread = self.database.unread(str(actor.get("email") or ""), page.name).get(page.name, [])
         return [comment for comment in unread if comment in held]
 
     def _post_seen(self, fields: dict, actor: Mapping) -> dict:
@@ -843,11 +848,14 @@ class Api:
         for name in sorted(views.keys() | unread.keys()):
             # A page serve no longer answers, hidden or gone, is left out.
             page = self.pages(name)
-            if page is not None:
+            # A page without comment boxes counts no unread replies, and is
+            # left out when the reader never opened it.
+            count = len(unread.get(name, [])) if page is not None and page.comment_sections else 0
+            if page is not None and (name in views or count):
                 view = views.get(name, {})
                 pages[name] = {"revision": page.revision, "seen": view.get("revision"),
                                "seenAt": view.get("seenAt"), "replies": view.get("replies", 0),
-                               "unread": len(unread.get(name, []))}
+                               "unread": count}
         return {"pages": pages}
 
     def _post_thread_seen(self, fields: dict, actor: Mapping) -> dict:

@@ -568,11 +568,12 @@ The frog that sits on them.
 ![A frog](frog.gif)
 """
 
-# Three flowcharts, each followed by a Nodes table the page script makes
+# Four flowcharts, each followed by a Nodes table the page script makes
 # cards of. The first table names every box but E; the second repeats node
 # id A, holds a subgraph, and has a row Z naming no box, so it stays shown;
 # the third has an arrow both ways, an arrow its linkStyle makes opaque, a
-# row too long for the window, and no thead.
+# row too long for the window, and no thead; the fourth styles F with a
+# style line, G with a class line and J with :::, and leaves H unstyled.
 NODE_CARDS_BODY = """\
 <p>A sample plan for captures: click a box for its card.</p>
 <pre class="mermaid">flowchart LR
@@ -621,6 +622,24 @@ thead.</p>
 <tr><td>R</td><td>Check the copy against the log</td><td>open</td></tr>
 <tr><td>S</td><td>Note what the check found</td><td>ready</td></tr>
 <tr><td>T</td><td>""" + "A long write-up of the check. " * 200 + """</td><td>waiting</td></tr>
+</table>
+<p>A fourth plan: boxes styled in Mermaid itself keep their look.</p>
+<pre class="mermaid">flowchart LR
+  F[Styled] --&gt; G[Classed]
+  G --&gt; H[Plain]
+  J[Short]:::pink --&gt; H
+  style F fill:#ffe0e0,stroke:#cc0000
+  classDef pink fill:#e0ffe0,stroke:#00aa00
+  class G pink</pre>
+<h3>Nodes</h3>
+<table>
+<thead><tr><th>Node</th><th>Title</th><th>Status</th></tr></thead>
+<tbody>
+<tr><td>F</td><td>A box with its own style</td><td>ready</td></tr>
+<tr><td>G</td><td>A box with a class</td><td>open</td></tr>
+<tr><td>J</td><td>A box with a class, the short way</td><td>merged</td></tr>
+<tr><td>H</td><td>A box with no style of its own</td><td>ready</td></tr>
+</tbody>
 </table>
 """
 

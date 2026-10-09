@@ -6,9 +6,10 @@
   // what it waits for and what it unblocks read from the diagram's arrows.
   // The hovered or keyboard-focused box, else the one whose card is open,
   // has its arrows drawn again above the boxes in cyan while every other
-  // arrow is dimmed. Each box takes its row's status color. The heading and
-  // table are hidden only when every row names a box the diagram draws, so
-  // nothing the author wrote disappears.
+  // arrow is dimmed. Each box takes its row's status color, unless the
+  // author styled it in Mermaid. The heading and table are hidden only when
+  // every row names a box the diagram draws, so nothing the author wrote
+  // disappears.
   function diagramCards(pres) {
     // Mermaid 11.4.1's ids: a box's group is flowchart-ID-N and an arrow's
     // path L_START_END_N. Neither carries the diagram's id, so every lookup
@@ -130,7 +131,10 @@
       var status = box.row.dataset.status;
       box.label = text(group.querySelector(".nodeLabel")) || text(group) || box.id;
       group.classList.add("artifact-node");
-      if (status) {
+      // A box styled in Mermaid itself (style, class or :::) keeps that look:
+      // Mermaid 11.4.1 writes it on the shape's style, empty otherwise.
+      var shape = group.querySelector(":scope > .label-container");
+      if (status && !(shape && shape.getAttribute("style"))) {
         group.classList.add("artifact-node--" + status);
       }
       group.setAttribute("tabindex", "0");

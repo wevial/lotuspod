@@ -97,7 +97,9 @@ line is drawn as a paragraph, so it does not count). The table's first
 column holds Mermaid node ids (`[A-Za-z0-9_-]+`); the other columns are
 free, except that a column headed `Status` (any case) also colors its box:
 `merged` (mint), `open` (amber, in review), `ready` (dashed lavender, can
-start now) or `waiting` (a faint border). For example:
+start now) or `waiting` (a faint border). A box styled in Mermaid itself,
+with `style ID ...`, `class ID NAME` or `ID:::NAME`, keeps that look and takes
+no status color; it is still a button with its card. For example:
 
 ```markdown
 ### Nodes
