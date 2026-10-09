@@ -253,6 +253,26 @@ test.describe('signed in, what changed', () => {
     expect(errors).toEqual([]);
   });
 
+  test('a page left with one heading links and tags it', async ({ page }) => {
+    const errors = watchErrors(page);
+    const name = 'changes-one-heading';
+    publish(name, changesSource('Changes one heading', 'The pump stops in January.'));
+    await open(page, name);
+    await expect(page.locator(BOX)).toHaveCount(0);
+    await page.waitForTimeout(1100);
+    // The outline gives no id to a page's only h2.
+    publish(name, ['# Changes one heading', '', 'The plan for the pond this winter.', '', '## Pump', '', 'The pump runs all winter.', ''].join('\n'));
+    await open(page, name);
+    const box = page.locator(BOX);
+    await expect(box.getByRole('link', { name: 'Pump' })).toHaveAttribute('href', '#pump');
+    await expect(box.locator('.artifact-changes-item--removed')).toHaveText(/Pond/);
+    await expect(box.locator('.artifact-changes-item--added')).toHaveCount(0);
+    await expect(page.locator('.artifact-body h2#pump .artifact-changed-tag')).toHaveText('changed');
+    await box.getByRole('link', { name: 'Pump' }).click();
+    await expect(page).toHaveURL(new RegExp(`/${name}\\.html#pump$`));
+    expect(errors).toEqual([]);
+  });
+
   test('Dismiss removes the box', async ({ page }) => {
     const errors = watchErrors(page);
     await republish(page, 'changes-dismiss', 'Changes dismiss');

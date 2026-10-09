@@ -414,8 +414,11 @@ The page's post to `/api/seen` answers the revision they opened it at before
 `GET /api/changes?page=NAME&since=REV`, which compares the newest listed
 version carrying that revision with the current one in at most three git
 processes. Each version's body is split into sections at its `h2` headings,
-by id, and their text compared with whitespace collapsed, so a change to
-markup alone, such as a decision form's version hash, does not count; text
+known by id, or by the id the outline would give its words when it has none
+(a page left with one heading), and their text compared with whitespace
+collapsed and every tag taken as a space, so a change to markup alone, such
+as a line break between two blocks or a decision form's version hash, does
+not count; text
 before the first heading, or a body with none, is one section, "The page
 text". A renamed heading reads as one section removed and one added.
 

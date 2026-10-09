@@ -171,6 +171,48 @@ class SectionTests(ChangesWitness):
         self.assertEqual(answer["behind"], 1)
         self.assertEqual(answer["sections"], {"changed": [], "added": [], "removed": []})
 
+    def test_a_line_break_between_blocks_and_a_forms_version_hash_change_no_section(self):
+        self.repository(self.out)
+        form = ('<form class="artifact-decision" data-question="q1" data-version="{}">'
+                '<fieldset><legend>Which heater?</legend></fieldset></form>')
+        self.render(PAGE, '<h2>Alpha</h2><p>The pond freezes.</p><h2>Beta</h2><p>same</p>'
+                    + form.format("aaaaaaaaaaaa"), "r1dddddddddd")
+        self.render(PAGE, '<h2>Alpha</h2>\n<p>The pond freezes.</p>\n<h2>Beta</h2>\n'
+                    '<p>same</p>\n' + form.format("bbbbbbbbbbbb"), "r2eeeeeeeeee")
+        self.start_server()
+
+        status, _, answer = self.changes(PAGE, "r1dddddddddd")
+        self.assertEqual(status, 200, answer)
+        self.assertEqual(answer["behind"], 1)
+        self.assertEqual(answer["sections"], {"changed": [], "added": [], "removed": []})
+
+    def test_a_page_left_with_one_heading_keeps_that_section(self):
+        # The outline gives ids only to a page with two h2s or more, so the
+        # Alpha left alone has none.
+        self.repository(self.out)
+        self.render(PAGE, body(("Alpha", "The pond freezes."), ("Beta", "The pump stops.")),
+                    "r1ffffffffff")
+        self.render(PAGE, body(("Alpha", "The pond thaws.")), "r2gggggggggg")
+        self.assertNotIn('id="alpha"', (self.out / f"{PAGE}.html").read_text(encoding="utf-8"))
+        self.start_server()
+
+        status, _, answer = self.changes(PAGE, "r1ffffffffff")
+        self.assertEqual(status, 200, answer)
+        self.assertEqual(answer["sections"], {"changed": [{"id": "", "title": "Alpha"}],
+                                              "added": [], "removed": [{"title": "Beta"}]})
+
+
+class CompareTests(unittest.TestCase):
+    def test_compare_takes_no_sources_and_an_empty_since_reads_nothing(self):
+        page = '<section class="artifact-body"><h2 id="a">A</h2><p>{}</p></section>'
+        self.assertEqual(versions.compare(page.format("x"), page.format("y")),
+                         {"sections": {"changed": [{"id": "a", "title": "A"}],
+                                       "added": [], "removed": []}})
+        history = versions.History(Path("."), lambda text: ("", True))
+        with mock.patch.object(subprocess, "run") as run:
+            self.assertIsNone(history.changes(PAGE, ""))
+        run.assert_not_called()
+
 
 class RefusalTests(ChangesWitness):
     def test_the_current_revision_an_unknown_one_and_a_hidden_page(self):

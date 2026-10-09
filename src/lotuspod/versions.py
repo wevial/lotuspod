@@ -53,6 +53,7 @@ DIFF_CONTEXT = 3
 # What a body's text before its first h2 is called, the whole text of a body
 # without one.
 PAGE_TEXT = "The page text"
+_SLUG_STRIP = re.compile(r"[^a-z0-9]+")
 
 _NO_BLOB = "0" * 40
 _MAIN_OPEN_RE = re.compile(r'<main class="([^"]*)"([^>]*)>')
@@ -94,16 +95,24 @@ class Section:
     # Its text, the heading's included, with whitespace collapsed.
     text: str
 
+    # Whether it starts at an h2; the text before the first one does not.
+    headed: bool = True
+
     @property
     def key(self) -> str:
-        """What the section is known by in another version: its id, else its
-        heading text."""
-        return self.id or f"\n{self.title}"
+        """What the section is known by in another version: its id, else the
+        id the outline gives its heading text (cli.slugify), as a page left
+        with one h2 has none; "" for the text before the first h2."""
+        if not self.headed:
+            return ""
+        return self.id or _SLUG_STRIP.sub("-", self.title.lower()).strip("-") or "section"
 
 
 class _Sections(HTMLParser):
     """The sections of a page's section.artifact-body, by text alone: an
-    attribute, such as a form's version hash, is never part of it."""
+    attribute, such as a form's version hash, is never part of it, and every
+    tag counts as whitespace, so a line break between two blocks is no
+    change."""
 
     _SKIPPED = frozenset({"script", "style", "template"})
 
@@ -115,8 +124,12 @@ class _Sections(HTMLParser):
         # pre elements open inside a pre.mermaid: an h2 there is diagram source.
         self._mermaid = 0
         self._heading: list[str] | None = None
-        self._current = {"id": "", "title": PAGE_TEXT, "text": []}
+        self._current = {"id": "", "title": PAGE_TEXT, "text": [], "headed": False}
         self.found: list[dict] = []
+
+    def _gap(self) -> None:
+        if self._depth and not self._skipped:
+            self._current["text"].append(" ")
 
     def handle_starttag(self, tag: str, attrs: list) -> None:
         values = dict(attrs)
@@ -126,18 +139,21 @@ class _Sections(HTMLParser):
             return
         if not self._depth:
             return
+        self._gap()
         if tag in self._SKIPPED:
             self._skipped += 1
         elif tag == "pre" and (self._mermaid or "mermaid" in (values.get("class") or "").split()):
             self._mermaid += 1
         elif tag == "h2" and not self._mermaid and self._heading is None:
             self.found.append(self._current)
-            self._current = {"id": values.get("id") or "", "title": "", "text": []}
+            self._current = {"id": values.get("id") or "", "title": "", "text": [],
+                             "headed": True}
             self._heading = []
 
     def handle_endtag(self, tag: str) -> None:
         if not self._depth:
             return
+        self._gap()
         if tag == "section":
             self._depth -= 1
         elif tag in self._SKIPPED and self._skipped:
@@ -163,8 +179,9 @@ class _Sections(HTMLParser):
         for found in [*self.found, self._current]:
             text = " ".join("".join(found["text"]).split())
             # The text before the first h2 counts only when there is some.
-            if found["id"] or found["title"] != PAGE_TEXT or text:
-                made.append(Section(found["id"], found["title"] or found["id"], text))
+            if found["headed"] or text:
+                made.append(Section(found["id"], found["title"] or found["id"], text,
+                                    found["headed"]))
         return made
 
 
@@ -193,11 +210,12 @@ def source_diff(old: str, new: str) -> tuple[list[dict], bool]:
     return lines, False
 
 
-def compare(old_html: str, new_html: str, old_source: str | None,
-            new_source: str | None) -> dict:
+def compare(old_html: str, new_html: str, old_source: str | None = None,
+            new_source: str | None = None) -> dict:
     """What changed from one version of a page to another: {sections:
     {changed, added, removed}}, the first two as {id, title} in the new
-    page's order and removed ones as {title} in the old page's, and, when
+    page's order and removed ones as {title} in the old page's (id "" for
+    a heading the page gives none, and for the text before the first), and, when
     both sources are given, {lines, truncated} from source_diff()."""
     before = {section.key: section for section in sections(old_html)}
     after = sections(new_html)
@@ -355,6 +373,8 @@ class History:
         one (compare(), with the sources when both versions kept NAME.md);
         None for what changed when it is the current one. None unless a
         listed version carries since."""
+        if not since:
+            return None
         commits = self._commits(name)
         listed = self._versions(commits)[0]
         found = next(((behind, version) for behind, version in enumerate(listed)

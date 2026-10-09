@@ -88,12 +88,56 @@
       return list;
     }
 
+    // The words of a heading, without the marks the page script adds.
+    function headingText(heading) {
+      var copy = heading.cloneNode(true);
+      Array.prototype.forEach.call(copy.querySelectorAll(".artifact-section-mark, .artifact-changed-tag"),
+        function (mark) { mark.remove(); });
+      return copy.textContent.replace(/\s+/g, " ").trim();
+    }
+
+    // The body's h2 for a changed or added section: by its id, else, as a
+    // page left with one heading gives it none, by its words, given an id
+    // here (as the outline would make it) so the box can link to it.
+    function sectionHeading(section) {
+      if (section.id) {
+        var named = document.getElementById(section.id);
+        return named && named.tagName === "H2" && named.closest(".artifact-body") ? named : null;
+      }
+      var title = String(section.title || "");
+      var found = null;
+      Array.prototype.forEach.call(document.querySelectorAll(".artifact-body h2:not([id])"), function (heading) {
+        if (!found && !heading.closest("pre") && headingText(heading) === title) {
+          found = heading;
+        }
+      });
+      if (found) {
+        var base = title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "section";
+        var id = base;
+        for (var n = 2; document.getElementById(id); n += 1) {
+          id = base + "-" + n;
+        }
+        found.id = id;
+        section.id = id;
+      }
+      return found;
+    }
+
     // The box under the header, and the tags on the sections' headings.
     function box(found) {
       var header = main.querySelector("header.artifact-header");
       if (!header) {
         return;
       }
+      var tagged = [];
+      [["changed", "changed"], ["added", "new"]].forEach(function (kind) {
+        (Array.isArray(found.sections[kind[0]]) ? found.sections[kind[0]] : []).forEach(function (section) {
+          var target = sectionHeading(section);
+          if (target && !target.querySelector(".artifact-changed-tag")) {
+            tagged.push([target, kind[1]]);
+          }
+        });
+      });
       var node = element("section", "artifact-changes");
       node.setAttribute("aria-labelledby", "artifact-changes-heading");
       var heading = element("h2", "artifact-changes-heading", "What changed since you last looked");
@@ -112,15 +156,8 @@
       actions.append(diff, dismiss);
       node.append(heading, said, sectionList(found.sections), actions);
       main.insertBefore(node, header.nextSibling);
-
-      [["changed", "changed"], ["added", "new"]].forEach(function (kind) {
-        (Array.isArray(found.sections[kind[0]]) ? found.sections[kind[0]] : []).forEach(function (section) {
-          var target = section.id ? document.getElementById(section.id) : null;
-          if (target && target.tagName === "H2" && target.closest(".artifact-body") &&
-              !target.querySelector(".artifact-changed-tag")) {
-            target.appendChild(element("span", "artifact-changed-tag", kind[1]));
-          }
-        });
+      tagged.forEach(function (pair) {
+        pair[0].appendChild(element("span", "artifact-changed-tag", pair[1]));
       });
     }
 
