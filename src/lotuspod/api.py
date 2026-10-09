@@ -60,9 +60,10 @@ now. It answers {from, to, older, truncated, pages: [{page, title, latest,
 events}]}, `from` and `to` the window's bounds as the database writes times,
 a page for each one with an event after `from` and up to `to`, by its newest
 event (`latest`), newest first, and its events newest first. Events are
-versions (History.recent()), {kind: version, at, commit, revision, actor,
-first, summary}, `actor` the handle the version's lotuspod:owner names or
-null, and the comments, replies and answers of Database.activity(). At most
+versions (History.recent()), {kind: version, at, commit, revision, current,
+actor, first, summary}, `current` true when its revision is the page's as
+serve answers it now, `actor` the handle the version's lotuspod:owner names
+or null, and the comments, replies and answers of Database.activity(). At most
 MAX_EVENTS are kept, the newest, and `truncated` says when any were left
 out; `older` says whether anything on those pages happened up to `from`. Any
 query but one `before` that parses is 400 invalid_query. An archived page has
@@ -659,6 +660,9 @@ class Api:
         for event in events[:MAX_EVENTS]:
             name = event.pop("page")
             page = served(name)
+            # Only for the events kept, so no page is read for one left out.
+            if event["kind"] == "version":
+                event["current"] = page is not None and event["revision"] == page.revision
             entry = pages.setdefault(name, {"page": name, "title": page.title if page else name,
                                             "latest": event["at"], "events": []})
             entry["events"].append(event)
