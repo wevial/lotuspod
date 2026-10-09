@@ -181,7 +181,7 @@ def _run(args: argparse.Namespace, archived: bool) -> int:
     if not out_dir.is_dir():
         raise FileNotFoundError(f"artifacts directory not found: {out_dir}")
     _, written = set_archived(out_dir, args.name, archived, superseded_by)
-    if not archived and not written:
+    if not written:
         print(f"{args.name} is not archived")
         return 0
     print(f"{action}d {args.name}")

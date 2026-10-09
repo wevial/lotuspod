@@ -2050,12 +2050,11 @@ def serve_allow_list(out_dir: Path) -> frozenset[str]:
     return frozenset(allowed)
 
 
-def served_page_names(out_dir: Path, archived: bool = True) -> list[str]:
-    """The names of the pages serve answers, in order; without archived,
-    leaving out the archived ones."""
+def served_page_names(out_dir: Path) -> list[str]:
+    """The names of the pages serve answers, archived ones left out, in order."""
     return sorted(file[:-len(".html")] for file in serve_allow_list(out_dir)
                   if file.endswith(".html") and is_page_name(file)
-                  and (archived or not archive.is_archived(out_dir, file[:-len(".html")])))
+                  and not archive.is_archived(out_dir, file[:-len(".html")]))
 
 
 def api_page(out_dir: Path, name: str) -> api.Page | None:
@@ -2405,8 +2404,7 @@ def _make_server(out_dir: Path, host: str, port: int,
     if db_path is not None:
         routes = api.Api(db.Database(db_path), partial(api_page, out_dir), window,
                          media_dir=media.media_dir(out_dir), max_image_bytes=max_image_bytes,
-                         history=history,
-                         names=partial(served_page_names, out_dir, archived=False),
+                         history=history, names=partial(served_page_names, out_dir),
                          archive=partial(archive.set_archived, out_dir),
                          owners=verifier.config.owners if verifier is not None else frozenset())
     handler = partial(
