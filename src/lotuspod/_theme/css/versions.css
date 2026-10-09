@@ -124,10 +124,13 @@ html:has(meta[name="lotuspod:revision"]) .artifact-meta--versions::after {
   outline-offset: -2px;
 }
 
+/* Where the date and a pill do not fit side by side, the pill wraps under
+   the date rather than passing the menu's edge. */
 .artifact-versions-menu-top {
   align-items: baseline;
   display: flex;
-  gap: 0.5rem;
+  flex-wrap: wrap;
+  gap: 0.15rem 0.5rem;
 }
 
 .artifact-versions-menu-date {

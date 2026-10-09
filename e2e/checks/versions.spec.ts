@@ -469,6 +469,19 @@ test.describe('signed in, what changed', () => {
     await page.keyboard.press('Escape');
     await expect(page.getByRole('menu')).toBeHidden();
 
+    // On a narrow window with large text the pill wraps under the date,
+    // inside the menu.
+    const size = page.viewportSize()!;
+    await page.setViewportSize({ width: 320, height: 844 });
+    await page.evaluate(() => { document.documentElement.style.fontSize = '32px'; });
+    await button.click();
+    const [pill, list] = await Promise.all([items.nth(1).locator('.artifact-versions-seen'),
+      page.locator('.artifact-versions-menu-list')].map((node) => node.boundingBox()));
+    expect(pill!.x + pill!.width).toBeLessThanOrEqual(list!.x + list!.width);
+    await page.keyboard.press('Escape');
+    await page.evaluate(() => { document.documentElement.style.fontSize = ''; });
+    await page.setViewportSize(size);
+
     await box.getByRole('link', { name: 'See the full diff' }).click();
     await expect(page).toHaveURL(new RegExp(`/${name}\\.html#versions$`));
     const versions = view(page);

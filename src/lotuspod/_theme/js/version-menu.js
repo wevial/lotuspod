@@ -4,19 +4,19 @@
   // with its date and time, its summary on one line ("First version" when it
   // has none), and "current" or "you last looked" where those apply, then a
   // last item "See all versions" linking to #versions. An older version's
-  // item links to NAME.html?version=COMMIT, the current one's to NAME.html,
-  // which carries aria-current="page". It follows the menu-button
+  // item links to NAME.html?version=COMMIT, the current one's to NAME.html;
+  // the one shown carries aria-current="page". It follows the menu-button
   // pattern: Enter, Space or ArrowDown on the button opens it on the newest
   // version, ArrowUp on "See all versions"; in it the arrows, Home and End
   // move between the items, Escape closes it and returns focus to the
   // button, and Tab or a click outside closes it.
   //
   // It reads nothing and posts nothing: its inputs are the versions, the
-  // page's name and the commit the reader last looked at (null when none),
-  // so a script of its own can join it as it is. It returns the button and
-  // the menu, to be put side by side in a positioned box, and close(), which
-  // closes the menu.
-  function versionMenu(versions, page, seen) {
+  // page's name, the commit shown and the commit the reader last looked at
+  // (null when none), so a script of its own can join it as it is. It
+  // returns the button and the menu, to be put side by side in a positioned
+  // box, and close(), which closes the menu.
+  function versionMenu(versions, page, shown, seen) {
     var button = element("button", "artifact-versions-menu-button", "▾");
     button.type = "button";
     button.id = "artifact-versions-menu-button";
@@ -43,7 +43,7 @@
     versions.forEach(function (version) {
       var link = item(encodeURIComponent(page) + ".html" + (version.current ? "" :
         "?version=" + encodeURIComponent(version.commit)));
-      if (version.current) {
+      if (version.commit === shown) {
         link.setAttribute("aria-current", "page");
       }
       var top = element("span", "artifact-versions-menu-top");
@@ -53,7 +53,7 @@
       if (version.current) {
         top.appendChild(element("span", "artifact-versions-current", "current"));
       }
-      if (version.commit === seen) {
+      if (seen && version.commit === seen) {
         top.appendChild(element("span", "artifact-versions-seen", "you last looked"));
       }
       link.append(top, element("span", "artifact-versions-menu-note",
