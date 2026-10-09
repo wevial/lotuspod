@@ -100,10 +100,9 @@ def archived_page(page_html: str, record: dict, successor_title: str | None) -> 
         "</head>", f'  <meta name="lotuspod:archived" content="{stamp}">\n</head>', 1)
     page_html = versions._disable_forms(
         page_html, f'<p class="artifact-archived-note">{CLOSED_NOTE}</p>')
-    successor = record.get("supersededBy")
     replaced = ""
-    if successor and successor_title is not None:
-        link = html.escape(urllib.parse.quote(f"{successor}.html"))
+    if successor_title is not None:
+        link = html.escape(urllib.parse.quote(f"{record['supersededBy']}.html"))
         replaced = f' · superseded by <a href="{link}">{html.escape(successor_title)}</a>'
     banner = (
         '\n    <div class="artifact-archived-banner" role="note">'
