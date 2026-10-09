@@ -233,6 +233,73 @@ test.describe('signed in', () => {
     expect(errors).toEqual([]);
   });
 
+  test('a thread opened from a folded panel is the only one seen', async ({ page, request }) => {
+    test.setTimeout(120_000);
+    const errors = watchErrors(page);
+    await catchUp(request);
+    hermes('pull', '--owner', OWNER);
+    const start = async (section: string, text: string) => {
+      const posted = await request.post(COMMENTS, { headers: SIGNED_IN, data: { page: NAME, section, text } });
+      expect(posted.status()).toBe(201);
+      return ((await posted.json()) as Row).id;
+    };
+    const mine = await start(SECTION, 'Should the pump come out for winter?');
+    const other = await start('findings', 'How thick does the ice get?');
+
+    await openPage(page);
+    await chip(page).click();
+    await expect(page.locator(`.artifact-comment-thread[data-thread="${mine}"]`)).toBeVisible();
+    await page.locator('.artifact-comments-fold').click();
+
+    const answer = page.waitForResponse(async (response) =>
+      new URL(response.url()).pathname === COMMENTS && response.request().method() === 'GET' &&
+      ((await response.json()) as { unread?: number[] }).unread?.length === 1, { timeout: 60_000 });
+    const claim = hermes('claim', String(mine));
+    const { id } = hermes('reply', String(mine), `--claim=${claim.claimToken}`,
+      '--key', `unread-switch-${mine}`, '--text', 'Out, and stored somewhere frost-free.');
+    await answer;
+    await expect(page.locator('.artifact-unread')).toHaveText('1 new reply to you');
+
+    // Another section's chip opens the panel at its own thread: the one
+    // selected before is not looked at, so nothing is posted as seen.
+    const posts: unknown[] = [];
+    page.on('request', (sent) => {
+      if (new URL(sent.url()).pathname === SEEN && sent.method() === 'POST') posts.push(sent.postDataJSON());
+    });
+    await page.locator('details.artifact-comment[data-section="findings"] summary').click();
+    await expect(page.locator(`.artifact-comment-thread[data-thread="${other}"]`)).toBeVisible();
+    await page.waitForTimeout(500);
+    expect(posts).toEqual([]);
+    await expect(page.locator('.artifact-unread')).toHaveText('1 new reply to you');
+    const read = await request.get(`${COMMENTS}?page=${NAME}`, { headers: SIGNED_IN });
+    expect(((await read.json()) as { unread: number[] }).unread).toEqual([id]);
+    expect(errors).toEqual([]);
+  });
+
+  test('a thread open in the panel keeps its New marks when the window narrows to a popover', async ({ page, request }) => {
+    test.setTimeout(120_000);
+    const errors = watchErrors(page);
+    const { thread, reply: id } = await answered(request, 'Will the liner hold?');
+
+    await openPage(page);
+    const seen = page.waitForResponse((response) =>
+      new URL(response.url()).pathname === SEEN && response.request().method() === 'POST' &&
+      'thread' in (response.request().postDataJSON() ?? {}));
+    await chip(page).click();
+    expect((await seen).status()).toBe(200);
+    await expect(reply(page, id)).toHaveClass(/\bartifact-comment--unread\b/);
+
+    await page.setViewportSize({ width: 1024, height: 900 });
+    const popover = page.locator('.artifact-comments-popover');
+    await expect(popover.locator(`.artifact-comment-thread[data-thread="${thread}"]`)).toBeVisible();
+    const theirs = popover.locator(`.artifact-comment-item:has(#artifact-comment-text-${id})`);
+    await expect(theirs).toHaveClass(/\bartifact-comment--unread\b/);
+    await expect(theirs.locator('.artifact-comment-new')).toHaveText('New');
+    await expect(popover.locator('.artifact-comment-divider')).toHaveText('New since you last looked');
+    await expect(page.locator('.artifact-unread')).toHaveCount(0);
+    expect(errors).toEqual([]);
+  });
+
   test('the index counts the reply on its row and in its title, and Unread keeps only that row', async ({ page, request }) => {
     test.setTimeout(120_000);
     const errors = watchErrors(page);

@@ -1140,6 +1140,9 @@
       var open = false;
       // The thread whose entry is open, if any.
       var current = null;
+      // While the threads move to another layout (api.arrange), none opens
+      // or closes: one open in the old place is open in the new.
+      var moving = false;
       var groups = new Map();
       // Each decision's chip, by its form, once it has a thread.
       var decisionChips = new Map();
@@ -1436,10 +1439,16 @@
       function setOpen(show, remember) {
         var was = open;
         open = show;
-        // The thread open in it goes out of view or comes back into it.
-        if (current && show !== was) {
-          draw(current);
-          showUnread();
+        // The thread open in it goes out of view or comes back into it,
+        // drawn once the caller has chosen which thread that is, so one
+        // only passing through is never taken as seen.
+        if (show !== was) {
+          queueMicrotask(function () {
+            if (current) {
+              draw(current);
+            }
+            showUnread();
+          });
         }
         aside.classList.toggle("artifact-comments-panel--open", show);
         rail.hidden = show;
@@ -1629,7 +1638,7 @@
         // Open in a folded panel, it is not in view: folding closes it, and
         // unfolding opens it again.
         var viewed = opened && (over.holds(thread) || (api.wide && open));
-        if (viewed !== thread.lit) {
+        if (!moving && viewed !== thread.lit) {
           thread.lit = viewed;
           looked(thread, viewed);
         }
@@ -2242,6 +2251,7 @@
           });
         }
         arranged = true;
+        moving = true;
         // Moving a field takes its focus away: it is given back after.
         var focused = document.activeElement;
         var taken = api.wide ? opened() : over.take();
@@ -2268,6 +2278,9 @@
         if (writing) {
           compose(writing, true);
         }
+        // In its new place, a thread opens or closes as it now stands.
+        moving = false;
+        refresh();
         // A passage's composer goes where the window now has room for it.
         passages.place();
         if (focused && focused !== document.body && focused.isConnected && document.activeElement !== focused) {
