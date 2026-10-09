@@ -5,11 +5,13 @@ six docs pages, five each written for one kind of reader and one showing how
 the parts fit together. This file witnesses the split: the README's size and
 links, every relative link and anchor between
 the pages and SECURITY.md, every code block of the README before the split kept exactly once
-(as it was, or with the placeholders the public repository uses), one
+(as it was, or with the placeholders the public repository uses) but the
+Layout, revised on purpose and naming every command `lotuspod --help` lists, one
 "Decisions for the maintainer" heading, and the README's pictures: three
 PNG screenshots and one GIF under docs/images/, each with alt text, each a
 real image of its kind and small enough to load. It also witnesses what the
-README tells a first-time visitor: how Lotuspod was built, that it is a
+README tells a first-time visitor: why Lotuspod, in five bullets before
+"See it" whose commands `lotuspod --help` lists, how Lotuspod was built, that it is a
 personal project with issues off, and a Security section whose cited
 tests.test_access ids each load. The architecture page holds one Mermaid
 diagram, whose nodes name the closed list of parts it shows.
@@ -26,6 +28,7 @@ import unittest
 from pathlib import Path
 
 from tests import history
+from tests.test_cli_surface import run_lotuspod
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -44,6 +47,9 @@ PUBLIC_PLACEHOLDERS = (
     (r"lotuspod credential list          #", "lotuspod credential list            #"),
     (r"hermes|claude-3f9a2c|codex-7d21e0", "my-agent"),
 )
+# The blocks of that README revised on purpose, by their first content line:
+# only the Layout, which names what main has. Every other block is kept.
+REVISED_BLOCKS = ("lotuspod/",)
 
 FENCE = re.compile(r"^(\s*)(`{3,}|~{3,})")
 HEADING = re.compile(r"^(#{1,6})\s+(.*?)\s*#*\s*$")
@@ -99,6 +105,11 @@ def split_fences(text: str) -> tuple[list[str], list[str]]:
     if block is not None:
         blocks.append("\n".join(block))
     return prose, blocks
+
+
+def first_line(block: str) -> str:
+    """A block's first line inside its fences, or the block if it has one line."""
+    return block.splitlines()[1] if "\n" in block else block
 
 
 def headings(text: str) -> list[str]:
@@ -190,6 +201,37 @@ class ReadmeTests(unittest.TestCase):
         for page in DOCS_PAGES:
             with self.subTest(page=page):
                 self.assertIn(page, targets)
+
+    def help_commands(self) -> list[str]:
+        """The commands `lotuspod --help` lists."""
+        proc = run_lotuspod("--help")
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        choices = re.search(r"\{([a-z,]+)\}", proc.stdout)
+        self.assertIsNotNone(choices, proc.stdout)
+        return choices.group(1).split(",")
+
+    def test_the_layout_names_each_command_help_lists(self):
+        commands = self.help_commands()
+        readme = read("README.md")
+        _, blocks = split_fences(readme[readme.index("\n## Layout\n"):])
+        named = re.search(r"`lotuspod ([a-z|]+)`", blocks[0])
+        self.assertIsNotNone(named, blocks[0])
+        for command in commands:
+            with self.subTest(command=command):
+                self.assertIn(command, named.group(1).split("|"))
+
+    def test_why_lotuspod_is_five_bullets_before_see_it_naming_real_commands(self):
+        readme = read("README.md")
+        found = headings(readme)
+        self.assertEqual(found[:3], ["Lotuspod", "Why Lotuspod", "See it"])
+        why = section(readme, "Why Lotuspod")
+        self.assertEqual(len(re.findall(r"^- ", why, re.M)), 5, why)
+        named = re.findall(r"`lotuspod ([a-z]+)", why)
+        self.assertLessEqual({"comments", "answers"}, set(named))
+        commands = self.help_commands()
+        for command in named:
+            with self.subTest(command=command):
+                self.assertIn(command, commands)
 
 
 class ReadmeStoryTests(unittest.TestCase):
@@ -309,13 +351,18 @@ class ContentTests(unittest.TestCase):
     def test_every_code_block_of_the_old_readme_is_kept_exactly_once(self):
         _, blocks = split_fences(self.base_readme())
         self.assertEqual(len(blocks), 37)
+        self.assertEqual(REVISED_BLOCKS, ("lotuspod/",))
+        revised = [block for block in blocks if first_line(block) in REVISED_BLOCKS]
+        self.assertEqual([first_line(block) for block in revised], list(REVISED_BLOCKS))
         texts = [read(page) for page in PAGES]
         for block in blocks:
+            if block in revised:
+                continue
             public = block
             for old, new in PUBLIC_PLACEHOLDERS:
                 public = re.sub(old, new, public)
             forms = {block, public}
-            with self.subTest(block=block.splitlines()[1] if "\n" in block else block):
+            with self.subTest(block=first_line(block)):
                 self.assertEqual(
                     sum(text.count(form) for text in texts for form in forms), 1)
 

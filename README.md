@@ -4,9 +4,11 @@ Lotuspod publishes pages for a small, signed-in circle of readers, and lets
 those readers answer on them. A page is written in markdown or HTML and
 published in one command, drawn in one shared lotus theme. Readers comment on
 a section or on a passage they highlight, and answer the decision tables a
-plan page asks the maintainer. Agents (a Claude Code or Codex session, or
-the default responder) pull the comments and answers meant for them, reply in
-the thread, and revise the page when asked.
+plan page asks the maintainer. They tick a checklist as one form, ask about a
+decision in a thread from its card's Ask, and see every answer in the
+Answered table that ends the page. A comment can carry images. Agents (a
+Claude Code or Codex session, or the default responder) pull the comments and
+answers meant for them, reply in the thread, and revise the page when asked.
 
 Try the demo: [https://lotuspod.kovial.co/](https://lotuspod.kovial.co/) (your comments stay in your browser; replies are scripted)
 
@@ -14,6 +16,25 @@ The site runs on one writer host, behind Cloudflare Access, and is reached
 through a Cloudflare Tunnel or over a tailnet.
 
 Lotuspod is a personal project, and issues are off.
+
+## Why Lotuspod
+
+- **Yours.** Pages, comments, answers and every published version live in
+  your own artifacts directory (committed on each publish when it is a git
+  repository) and SQLite database, which you can back up, diff and move. No
+  hosted service holds them.
+- **Any agent.** Comments route to an owner handle. A Claude Code or Codex
+  session, another agent or a script claims a thread and replies through
+  `lotuspod comments` or the local socket API; the default responder is one
+  of them.
+- **Structured answers.** Decision tables, checklists and their context
+  columns come back as data. Agents read them with `lotuspod answers` and in
+  their pull, not as free text in a thread.
+- **Self-hosted and open source.** It runs on your own writer host behind
+  your own access control, under the [MIT license](LICENSE).
+- **Built for a factory.** It is the review surface
+  [Holophyte](https://github.com/wevial/holophyte) publishes its reports and
+  plans to.
 
 ## See it
 
@@ -36,12 +57,12 @@ The pictures come from a sample page served on loopback by the test fixture;
 
 ```
 lotuspod/
-├── src/lotuspod/          # package + minimal CLI (`lotuspod render|publish|manifest|index|serve|answers|backup|restore`)
+├── src/lotuspod/          # package + CLI (`lotuspod render|publish|manifest|index|serve|credential|answers|audit|comments|respond|backup|restore`)
 │   ├── _templates/artifact.html   # artifact template ({{placeholder}} substitution)
 │   ├── _templates/index.html      # index-page template
-│   └── _theme/            # tokens.json (colors, fonts, radii) + lotuspod.css
+│   └── _theme/            # tokens.json (colors, fonts, radii), css/, js/, favicon.svg; the served lotuspod.css is css/ joined in order
 ├── artifacts/             # rendered output (gitignored)
-└── lotuspod-media/        # markdown pages' images, beside artifacts/ (gitignored)
+└── lotuspod-media/        # markdown pages' images and the images readers attach to comments, beside artifacts/ (gitignored)
 ```
 
 Beside these, `docs/` holds the reference pages listed below, `deploy/` the
@@ -50,10 +71,10 @@ Playwright captures and browser checks.
 
 ## Quick start
 
-Install the package, write a markdown page, publish it and serve it:
+Install the package from PyPI, write a markdown page, publish it and serve it:
 
 ```sh
-pip install -e .
+pip install lotuspod   # or, in a checkout of this repository: pip install -e .
 printf '# Opening the Pond\n\n## The pond\n\nHello from the pond.\n' > pond.md
 lotuspod publish pond.md --local --summary "Why we started Lotuspod."
 lotuspod serve
@@ -75,7 +96,7 @@ page itself is served as usual.
 
 - [Publishing pages](docs/publishing.md): for people publishing pages.
   Markdown and HTML pages, images, the manifest and the index, decision
-  tables, the template and the theme, and what a page may run.
+  tables and checklists, the template and the theme, and what a page may run.
 - [Reading and answering pages](docs/comments.md): for readers and the people
   answering them. Answers and comments, the comments panel, the popover and
   bottom sheet, and comments on passages.
@@ -85,7 +106,7 @@ page itself is served as usual.
   Serve, Cloudflare Access, publishing through the tunnel, deploying from
   `main`, and backups.
 - [Development](docs/development.md): for people changing Lotuspod. The
-  tests and the captures.
+  tests, the leak guard, the captures, the demo and releasing.
 - [Architecture](docs/architecture.md): for reviewers and new contributors.
   One diagram of how the parts fit together.
 
