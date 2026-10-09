@@ -764,8 +764,7 @@ def cmd_respond(args: argparse.Namespace) -> int:
 def wait_for_serve(responder: Responder, stop: threading.Event, bound: int) -> int | None:
     """None once serve answers on the socket (a refusal is an answer); else
     the exit code: 0 when stopped while waiting, 1 when serve has not
-    answered within bound seconds. Tries start WAIT_FIRST apart and double,
-    to at most WAIT_MOST apart."""
+    answered within bound seconds."""
     deadline = time.monotonic() + bound
     delay = WAIT_FIRST
     waiting = False
