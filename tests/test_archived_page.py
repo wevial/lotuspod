@@ -35,16 +35,11 @@ def words(node: Node) -> str:
     return " ".join(node.text().split())
 
 
-def next_element(node: Node) -> Node | None:
+def sibling(node: Node, step: int) -> Node | None:
+    """The element step places from node: 1 the next, -1 the previous."""
     siblings = [child for child in node.parent.children if isinstance(child, Node)]
-    at = siblings.index(node)
-    return siblings[at + 1] if at + 1 < len(siblings) else None
-
-
-def previous_element(node: Node) -> Node | None:
-    siblings = [child for child in node.parent.children if isinstance(child, Node)]
-    at = siblings.index(node)
-    return siblings[at - 1] if at > 0 else None
+    at = siblings.index(node) + step
+    return siblings[at] if 0 <= at < len(siblings) else None
 
 
 class ArchivedSite(activity_witness.ActivityWitness):
@@ -79,7 +74,7 @@ class ArchivedSite(activity_witness.ActivityWitness):
         root = parse(data.decode("utf-8"))
         (banner,) = root.find("div", "artifact-archived-banner")
         self.assertEqual(banner.attrs.get("role"), "note")
-        before = previous_element(banner)
+        before = sibling(banner, -1)
         self.assertEqual((before.tag, before.classes()), ("div", ["artifact-topbar"]))
         return banner
 
@@ -118,7 +113,7 @@ class BannerTests(ArchivedSite):
         self.assertTrue(fieldsets)
         for fieldset in fieldsets:
             self.assertIn("disabled", fieldset.attrs)
-            note = next_element(fieldset)
+            note = sibling(fieldset, 1)
             self.assertEqual((note.tag, words(note)), ("p", CLOSED))
 
         # Served from memory: the file and its versions stay as published.
