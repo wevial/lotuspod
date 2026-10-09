@@ -697,16 +697,13 @@
         document.dispatchEvent(new CustomEvent("lotuspod:view"));
       };
 
-      // Each press is a history entry, so the back button moves between the
-      // views: Recent activity writes #activity, Pages no hash.
+      // Each press writes the address in place, with no history entry:
+      // Recent activity #activity, Pages no hash.
       const choose = (chosen) => {
         if (chosen === view) return;
-        if (chosen === "activity") {
-          location.hash = "activity";
-        } else {
-          history.pushState(null, "", location.pathname + location.search);
-          showView();
-        }
+        const hash = chosen === "activity" ? "#activity" : "";
+        history.replaceState(history.state, "", location.pathname + location.search + hash);
+        showView();
       };
 
       const makeSwitch = () => {

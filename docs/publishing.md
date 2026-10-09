@@ -668,8 +668,9 @@ Signed in to `lotuspod serve`, the index also asks `/api/activity` (see
 When it answers 200, a "Pages | Recent activity" switch (a group named View,
 each button `aria-pressed`) appears after the title, and the index opens on
 Pages unless the URL ends `#activity`: no hash (or `#pages`) is Pages, and
-pressing Recent activity writes `#activity`, so either view can be linked,
-reloading keeps it, and the back button moves between them. The open
+pressing Recent activity writes `#activity` (pressing Pages, no hash), in
+place without a history entry, so either view can be linked and reloading
+keeps it. The open
 tabs' fragment (see [Pods in tabs](#pods-in-tabs)) names Pages, or Recent
 activity when it ends `&view=activity`; either button rewrites it so, keeping
 the tabs. On any other

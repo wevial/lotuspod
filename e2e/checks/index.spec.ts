@@ -76,6 +76,24 @@ test('one click on Updated reverses the order, and Title sorts by title', async 
   expect(errors).toEqual([]);
 });
 
+test('#pages opens the index on Pages, as when no fragment names a view', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  // The activity route answers, so the index has its view switch.
+  const now = Date.now();
+  await page.route((url) => url.pathname === '/api/activity', (route) => route.fulfill({
+    json: { from: new Date(now - 7 * 86_400_000).toISOString(), to: new Date(now).toISOString(),
+      older: false, truncated: false, pages: [] },
+  }));
+  await page.goto('/#pages');
+  const group = page.getByRole('group', { name: 'View' });
+  await expect(group.getByRole('button', { name: 'Pages', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await expect(group.getByRole('button', { name: 'Recent activity' })).toHaveAttribute('aria-pressed', 'false');
+  await expect(page.locator('.index-table')).toBeVisible();
+  await expect(page.locator('.index-activity')).toBeHidden();
+  expect(errors).toEqual([]);
+});
+
 // The Labels menu. The capture fixture labels its published pages - relos,
 // croton and relos, holophyte, croton - and its rendered ones not at all, so
 // one page carries relos second. Expectations are read from the rows'
