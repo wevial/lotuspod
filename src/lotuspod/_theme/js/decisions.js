@@ -456,13 +456,8 @@
         }
         // The answer itself; a note's comment, when one was stored, goes
         // with SAVED to the comment threads.
-        var saved = {};
-        Object.keys(payload).forEach(function (key) {
-          if (key !== "comment") {
-            saved[key] = payload[key];
-          }
-        });
-        answers.current = saved;
+        answers.current = Object.assign({}, payload);
+        delete answers.current.comment;
         // A pick or note changed while this was saving stays open, not saved.
         form.lotuspodEditing = dirty(form);
         status(form, "");

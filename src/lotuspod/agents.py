@@ -188,12 +188,6 @@ def images(row: dict) -> list[str]:
     return [*lines, ""] if lines else []
 
 
-def _with_answer(answer: dict) -> str:
-    """The line naming the answer whose note a comment holds."""
-    line = f"- With answer {answer['id']}: {answer['label']}"
-    return line + (f" (`{answer['choice']}`)" if answer["choice"] else "")
-
-
 def _message(row: dict, level: str) -> list[str]:
     """One comment of a thread: who, when, which model wrote it, where it
     stands, the answer whose note it holds, its text and its images."""
@@ -205,7 +199,9 @@ def _message(row: dict, level: str) -> list[str]:
         head += f" ({_standing(row)})"
     lines = [head, ""]
     if row.get("answer"):
-        lines += [_with_answer(row["answer"]), ""]
+        answer = row["answer"]
+        choice = f" (`{answer['choice']}`)" if answer["choice"] else ""
+        lines += [f"- With answer {answer['id']}: {answer['label']}{choice}", ""]
     if row.get("quote"):
         lead = f"The reader highlighted, on revision {row['revision'] or 'unknown'}:"
         lines += passage(row["quote"], lead)
