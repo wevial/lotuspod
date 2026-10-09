@@ -159,6 +159,18 @@ class DeclaredOrderTests(ThemeCopyTestCase):
         self.assertLess(script.index("js/comment-markdown.js"), script.index("js/comments.js"))
         self.assertGreater(script.index("js/comment-markdown.js"), script.index("js/page-open.js"))
 
+    def test_the_ref_cards_sources_are_declared(self):
+        """LOTUS-100: the cards' script uses when() and linkTab(), so it is
+        joined after js/page-open.js and js/link-tab.js, just before
+        js/page-close.js; its styles just after css/prose.css."""
+        styles = cli.THEME_SOURCES[STYLESHEET]
+        script = cli.THEME_SOURCES[cli.PAGE_SCRIPT]
+        self.assertEqual(script[-2:], ("js/ref-cards.js", "js/page-close.js"))
+        self.assertGreater(script.index("js/ref-cards.js"), script.index("js/link-tab.js"))
+        self.assertEqual(styles.index("css/ref-cards.css"), styles.index("css/prose.css") + 1)
+        problems = source_problems(cli.THEME_DIR, cli.THEME_SOURCES)
+        self.assertEqual(problems, [], "\n".join(problems))
+
     def test_a_source_not_in_the_declared_order_is_named(self):
         theme = self.theme_copy()
         (theme / "css" / "stray.css").write_text(".stray {}\n", encoding="utf-8")
