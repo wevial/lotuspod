@@ -170,13 +170,12 @@
           toggle.focus();
         }
       });
-      // A click elsewhere closes the menu. Focus returns to the button unless
-      // the click put it on something of its own, like the search.
+      // A click elsewhere closes the menu and returns focus to the button, as
+      // Escape does, wherever the click landed.
       document.addEventListener("click", (event) => {
         if (list.hidden || menu.contains(event.target)) return;
         open(false);
-        const focused = document.activeElement;
-        if (!focused || focused === document.body || menu.contains(focused)) toggle.focus();
+        toggle.focus();
       });
 
       // A token per checked label: pressing it unchecks the label, and focus
@@ -218,8 +217,11 @@
         }
         const noun = rows.length === 1 ? "page" : "pages";
         const arrived = sortColumn === arrival.column && ascending === arrival.ascending;
+        // Any active filter counts against the whole listing, even when every
+        // row passes it.
+        const filtered = checked.length > 0 || query !== "";
         count.textContent =
-          shown === rows.length
+          !filtered
             ? arrived && sortColumn >= 0
               ? `${rows.length} ${noun}, newest update first`
               : `${rows.length} ${noun}`

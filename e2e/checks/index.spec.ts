@@ -193,7 +193,7 @@ test('a search that leaves no labelled row says no page matches, and clearing it
   expect(errors).toEqual([]);
 });
 
-test('Escape closes the menu with focus on its button, and a click outside closes it', async ({ page }) => {
+test('Escape or a click outside closes the menu with focus on its button', async ({ page }) => {
   const errors = await load(page);
   const button = menuButton(page);
   await button.click();
@@ -209,24 +209,33 @@ test('Escape closes the menu with focus on its button, and a click outside close
   await expect(page.locator('.index-labels-list')).toBeHidden();
   await expect(button).toHaveAttribute('aria-expanded', 'false');
   await expect(button).toBeFocused();
+
+  // A click on a control of its own, the search, returns focus all the same.
+  await button.click();
+  await expect(page.locator('.index-labels-list')).toBeVisible();
+  await page.getByLabel('Search').click();
+  await expect(page.locator('.index-labels-list')).toBeHidden();
+  await expect(button).toHaveAttribute('aria-expanded', 'false');
+  await expect(button).toBeFocused();
   expect(errors).toEqual([]);
 });
 
-test('an index with no labelled page has no Labels button and still sorts', async ({ page }) => {
+// An index this checkout's CLI builds in a directory of its own, after
+// build(cli, dir) puts pages there, served in place of the fixture's at the
+// site's root so the theme still loads.
+async function serveIndex(page: Page,
+  build: (cli: (...args: string[]) => void, dir: string) => void) {
   expect(PYTHON, 'LOTUSPOD_TEST_PYTHON names the fixture Python').not.toBe('');
-  // An index of three unlabelled pages, built by this checkout's CLI, served
-  // in place of the fixture's at the site's root so the theme still loads.
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lotuspod-unlabelled-'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lotuspod-index-'));
   try {
-    const cli = (...args: string[]) => execFileSync(PYTHON, ['-m', 'lotuspod', ...args], {
-      env: { ...process.env, PYTHONPATH: SRC },
-      stdio: ['ignore', 'pipe', 'pipe'],
-      timeout: 60_000,
-    });
-    for (const [title, date] of [['Bream', '2026-09-03'], ['Alder', '2026-09-01'], ['Carp', '2026-09-02']]) {
-      cli('render', '--name', title.toLowerCase(), '--title', title, '--body', '<p>Still.</p>',
-        '--date', date, '--out-dir', dir);
-    }
+    const cli = (...args: string[]) => {
+      execFileSync(PYTHON, ['-m', 'lotuspod', ...args], {
+        env: { ...process.env, PYTHONPATH: SRC },
+        stdio: ['ignore', 'pipe', 'pipe'],
+        timeout: 60_000,
+      });
+    };
+    build(cli, dir);
     cli('index', '--out-dir', dir);
     const body = fs.readFileSync(path.join(dir, 'index.html'), 'utf-8');
     await page.route((url) => url.pathname === '/', (route) =>
@@ -234,6 +243,42 @@ test('an index with no labelled page has no Labels button and still sorts', asyn
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
+}
+
+test('a label every page carries still counts as a filter', async ({ page }) => {
+  await serveIndex(page, (cli, dir) => {
+    for (const title of ['Alder', 'Bream']) {
+      const source = path.join(dir, `${title.toLowerCase()}.source.md`);
+      fs.writeFileSync(source, `# ${title}\n\nStill.\n`);
+      cli('publish', source, '--local', '--name', title.toLowerCase(), '--label', 'relos',
+        '--out-dir', dir);
+      fs.rmSync(source);
+    }
+  });
+  const errors = await load(page);
+  await expect(page.locator('.index-count')).toHaveText('2 pages, newest update first');
+
+  await menuButton(page).click();
+  await option(page, 'relos').check();
+  await expect(page.locator('.index-table tbody tr:not([hidden])')).toHaveCount(2);
+  await expect(page.locator('.index-active')).toHaveText('Showing relos ✕');
+  await expect(page.locator('.index-count')).toHaveText('2 of 2 pages');
+
+  await option(page, 'relos').uncheck();
+  await expect(page.locator('.index-count')).toHaveText('2 pages, newest update first');
+  // A search every row matches is a filter too.
+  await page.getByLabel('Search').fill('relos');
+  await expect(page.locator('.index-count')).toHaveText('2 of 2 pages');
+  expect(errors).toEqual([]);
+});
+
+test('an index with no labelled page has no Labels button and still sorts', async ({ page }) => {
+  await serveIndex(page, (cli, dir) => {
+    for (const [title, date] of [['Bream', '2026-09-03'], ['Alder', '2026-09-01'], ['Carp', '2026-09-02']]) {
+      cli('render', '--name', title.toLowerCase(), '--title', title, '--body', '<p>Still.</p>',
+        '--date', date, '--out-dir', dir);
+    }
+  });
 
   const errors = await load(page);
   await expect(page.getByLabel('Search')).toBeVisible();
