@@ -162,7 +162,7 @@ test('the README pictures: a section thread hermes answers, the decisions answer
   const side = panel(page);
 
   try {
-    await page.goto(PAGE);
+    await page.goto(`${PAGE}?standalone`);
     await expect(page.getByText(`Published by ${OWNER}`)).toBeVisible();
     await expect(page.locator('details.artifact-comment[data-section="rollout"]')).toHaveCount(1);
     await page.waitForTimeout(600);

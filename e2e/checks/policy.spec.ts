@@ -43,7 +43,7 @@ async function watch(page: Page) {
 
 test('body scripts and inline handlers do not run', async ({ page }) => {
   const seen = await watch(page);
-  await page.goto('/capture-scripts.html');
+  await page.goto('/capture-scripts.html?standalone');
   await expect(page.locator('#inline-output')).toHaveText('Nothing written.');
 
   await page.getByRole('button', { name: 'Press me' }).click();
@@ -62,7 +62,7 @@ test('body scripts and inline handlers do not run', async ({ page }) => {
 
 test('the diagram is drawn under the policy', async ({ page }) => {
   const seen = await watch(page);
-  await page.goto('/capture-diagram.html');
+  await page.goto('/capture-diagram.html?standalone');
   await expect(page.locator('pre.mermaid svg')).toBeVisible();
   await expect(page.locator('pre.mermaid svg')).toContainText('Publish');
 

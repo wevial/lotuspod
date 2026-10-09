@@ -176,7 +176,7 @@ test.describe('signed in', () => {
 
   test('a comment draws paragraphs, bold, italic, code, a code block and both lists', async ({ page }) => {
     const seen = await watch(page);
-    await page.goto(PAGE);
+    await page.goto(`${PAGE}?standalone`);
     const pond = box(page, 'pond');
     // Unfolded at once when the section has no threads, else behind its button.
     await expect(pond.summary).toHaveText(/ · /);
@@ -240,7 +240,7 @@ test.describe('signed in', () => {
       const said = `See [here](${target}) for more.`;
       literal.push({ root: await post(request, 'frogs', said), said });
     }
-    await page.goto(PAGE);
+    await page.goto(`${PAGE}?standalone`);
     await open(page, 'frogs');
     for (const { root, text, target, away, said } of links) {
       const link = bubble(page, root).locator('a');
@@ -273,7 +273,7 @@ test.describe('signed in', () => {
     const bang = await post(request, 'frogs', '**https://example.com/bang**!');
     const after = await post(request, 'frogs',
       '[bad](javascript:alert(f(1)))[good](https://example.com/good) https://example.com/next');
-    await page.goto(PAGE);
+    await page.goto(`${PAGE}?standalone`);
     await open(page, 'frogs');
     // A star at the end, or two inside, stay in the URL; bold closes around it.
     await expect(bubble(page, starred).locator('a')).toHaveAttribute('href', 'https://example.com/find*');
@@ -321,7 +321,7 @@ test.describe('signed in', () => {
     ];
     const roots = [];
     for (const text of texts) roots.push({ root: await post(request, 'pond', text), text });
-    await page.goto(PAGE);
+    await page.goto(`${PAGE}?standalone`);
     await open(page, 'pond');
     for (const { root, text } of roots) {
       await expect(bubble(page, root)).toBeVisible();
@@ -333,7 +333,7 @@ test.describe('signed in', () => {
 
   test("the page body's links open off the site in a new tab and on it in the same one", async ({ page }) => {
     const seen = await watch(page);
-    await page.goto(PAGE);
+    await page.goto(`${PAGE}?standalone`);
     const body = page.locator('.artifact-body');
     const away = body.locator('a[href="https://example.com/body"]');
     await expect(away).toHaveAttribute('target', '_blank');
@@ -352,7 +352,7 @@ test.describe('signed in', () => {
 
   test('a page with no comments and no sections opens its links off the site in a new tab', async ({ page }) => {
     const seen = await watch(page);
-    await page.goto(`/${PLAIN}.html`);
+    await page.goto(`/${PLAIN}.html?standalone`);
     const body = page.locator('.artifact-body');
     const away = body.locator('a[href="https://example.com/plain"]');
     await expect(away).toHaveAttribute('target', '_blank');
@@ -377,7 +377,7 @@ test.describe('signed in', () => {
       entities: await post(request, 'pond', entities),
       bold: await post(request, 'pond', bold),
     };
-    await page.goto(PAGE);
+    await page.goto(`${PAGE}?standalone`);
     await open(page, 'pond');
 
     expect(await exact(bubble(page, roots.script))).toBe(script);
@@ -406,7 +406,7 @@ test.describe('signed in', () => {
       snake: await post(request, 'frogs', 'snake_case_name'),
       times: await post(request, 'frogs', '2 * 3'),
     };
-    await page.goto(PAGE);
+    await page.goto(`${PAGE}?standalone`);
     await open(page, 'frogs');
     const code = bubble(page, roots.code).locator('code');
     expect(await exact(code)).toBe('**not bold**');
@@ -426,7 +426,7 @@ test.describe('signed in', () => {
       refused: await post(request, 'pond', refused),
       fence: await post(request, 'pond', fence),
     };
-    await page.goto(PAGE);
+    await page.goto(`${PAGE}?standalone`);
     await open(page, 'pond');
     expect(await exact(bubble(page, roots.image))).toBe(image);
     await expect(bubble(page, roots.image).locator('a, img')).toHaveCount(0);
@@ -441,7 +441,7 @@ test.describe('signed in', () => {
     const seen = await watch(page);
     const text = 'first line\nsecond line';
     const root = await post(request, 'pond', text);
-    await page.goto(PAGE);
+    await page.goto(`${PAGE}?standalone`);
     await open(page, 'pond');
     const said = bubble(page, root);
     await expect(said).toBeVisible();
@@ -469,7 +469,7 @@ test.describe('signed in', () => {
     // hermes pulls first, so it is listening and the comment waits for it.
     hermes('pull', '--owner', OWNER);
     const root = await post(request, 'frogs', 'Is the **pond** ready for winter?');
-    await page.goto(PAGE);
+    await page.goto(`${PAGE}?standalone`);
     await open(page, 'frogs');
     const node = page.locator(`.artifact-comment-thread[data-thread="${root.id}"]`);
     await expect(node).toBeVisible();
@@ -493,7 +493,7 @@ test.describe('signed in', () => {
     const seen = await watch(page);
     hermes('pull', '--owner', OWNER);
     const root = await post(request, 'pond', 'What does the pond look like now?');
-    await page.goto(PAGE);
+    await page.goto(`${PAGE}?standalone`);
     await open(page, 'pond');
     const node = page.locator(`.artifact-comment-thread[data-thread="${root.id}"]`);
     await expect(node).toBeVisible();

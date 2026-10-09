@@ -104,7 +104,7 @@ test.describe('signed in', () => {
     publish(name, source('Versions check', 'first'));
     publish(name, source('Versions check', 'second'));
 
-    await page.goto(`/${name}.html`);
+    await page.goto(`/${name}.html?standalone`);
     const link = page.locator('.artifact-header .artifact-meta a.artifact-versions-link');
     await expect(link).toHaveText('Versions · 2');
     await link.click();
@@ -238,7 +238,7 @@ test.describe('signed in', () => {
     const newest = entry.events.find((event: { kind: string }) => event.kind === 'version');
     expect(newest.summary).toBe('Pump changed');
 
-    await page.goto(`/${name}.html#versions`);
+    await page.goto(`/${name}.html?standalone#versions`);
     const versions = view(page);
     await expect(versions.heading).toBeVisible();
     await expect(versions.entries).toHaveCount(2);
@@ -253,7 +253,7 @@ test.describe('signed in', () => {
 
   test('a page published once is its only version', async ({ page }) => {
     const errors = watchErrors(page);
-    await page.goto('/capture-versions-once.html');
+    await page.goto('/capture-versions-once.html?standalone');
     const link = page.locator('.artifact-versions-link');
     await expect(link).toHaveText('Versions · 1');
     await link.click();
@@ -276,7 +276,7 @@ test.describe('signed in', () => {
     const oldUrl = new RegExp(`/${name}\\.html\\?version=${listed[1].commit}$`);
     const banner = page.locator('main.artifact--old-version > div.artifact-version-banner');
 
-    await page.goto(`/${name}.html`);
+    await page.goto(`/${name}.html?standalone`);
     const button = page.getByRole('button', { name: 'Choose a version' });
     const menu = page.getByRole('menu');
     const items = menu.getByRole('menuitem');
@@ -328,7 +328,7 @@ test.describe('signed in', () => {
     await expect(menu).toBeHidden();
 
     // The keyboard, as a menu button takes it.
-    await page.goto(`/${name}.html`);
+    await page.goto(`/${name}.html?standalone`);
     await button.focus();
     await page.keyboard.press('ArrowDown');
     await expect(menu).toBeVisible();
@@ -373,7 +373,7 @@ test.describe('signed in', () => {
   test('the menu of 25 versions scrolls them above "See all versions", and fits a phone', async ({ page }) => {
     const errors = watchErrors(page);
     await page.setViewportSize({ width: 1280, height: 800 });
-    await page.goto('/capture-versions-many.html');
+    await page.goto('/capture-versions-many.html?standalone');
     const button = page.getByRole('button', { name: 'Choose a version' });
     const menu = page.getByRole('menu');
     await button.click();
@@ -398,7 +398,7 @@ test.describe('signed in', () => {
 
   test('a page with 25 versions lists 20, then the other 5', async ({ page }) => {
     const errors = watchErrors(page);
-    await page.goto('/capture-versions-many.html#versions');
+    await page.goto('/capture-versions-many.html?standalone#versions');
     const versions = view(page);
     await expect(versions.heading).toBeVisible();
     await expect(versions.node).toContainText('25, newest first');
@@ -423,7 +423,7 @@ test.describe('signed in, what changed', () => {
   async function open(page: Page, name: string) {
     const seen = page.waitForResponse((response) =>
       new URL(response.url()).pathname === '/api/seen' && response.request().method() === 'POST');
-    await page.goto(`/${name}.html`);
+    await page.goto(`/${name}.html?standalone`);
     expect((await seen).status()).toBe(200);
     await expect(page.locator('.artifact-versions-link')).toBeVisible();
   }
@@ -568,7 +568,7 @@ test.describe('signed in, outside a repository', () => {
       status: 200, contentType: 'application/json',
       body: JSON.stringify({ page: 'capture-versions-once', versions: [] }),
     }));
-    await page.goto('/capture-versions-once.html');
+    await page.goto('/capture-versions-once.html?standalone');
     const link = page.locator('.artifact-header .artifact-meta a.artifact-versions-link');
     await expect(link).toHaveText('Versions · 0');
     await link.click();
@@ -586,7 +586,7 @@ test('signed out, a page shows no versions', async ({ page }) => {
   const errors = watchErrors(page);
   const answered = page.waitForResponse((response) =>
     new URL(response.url()).pathname === '/api/versions');
-  await page.goto('/capture-versions-once.html');
+  await page.goto('/capture-versions-once.html?standalone');
   expect((await answered).status()).toBe(401);
   await expect(page.locator('.artifact-meta')).toBeVisible();
   await expect(page.locator('.artifact-versions-link')).toHaveCount(0);

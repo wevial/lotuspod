@@ -551,11 +551,14 @@ test.describe('signed in', () => {
     await expect(page.locator('.pod-tabs-bar')).toHaveCount(0);
   });
 
-  test('a listed pod whose brand link names another index, or opened from a file, stays on its own', async ({ page }) => {
+  test('a pod loaded directly opens in the index its brand link names, and stays when that index does not answer or sends it back', async ({ page }) => {
     const html = await (await page.request.get(`/${ARTICLE.name}.html`)).text();
+    const listing = await (await page.request.get('/')).text();
     const script = await (await page.request.get('/lotuspod-page.js')).text();
     const brand = '<a class="artifact-topbar-brand" href="index.html">';
     expect(html.split(brand)).toHaveLength(2);
+    // As the demo dresses a page: its index is pages.html.
+    const dressed = html.replace(brand, brand.replace('index.html', 'pages.html'));
     // The page script has run, and stayed: it folds each section under a button.
     const stayed = async (address: RegExp) => {
       await expect(page.locator('button.artifact-section-toggle').first()).toBeAttached();
@@ -564,15 +567,32 @@ test.describe('signed in', () => {
       await expect(page.locator('.pod-tabs-bar')).toHaveCount(0);
     };
 
-    // As the demo dresses a page: its index is pages.html, and the demo's /
-    // comes back to a page, so going to / would never settle.
-    const dressed = '/pod-tabs-own-index.html';
-    await page.route(`**${dressed}`, (route) => route.fulfill({
-      contentType: 'text/html',
-      body: html.replace(brand, brand.replace('index.html', 'pages.html')),
-    }));
-    await page.goto(`${dressed}#second-section`);
-    await stayed(/\/pod-tabs-own-index\.html#second-section$/);
+    // No pages.html answers here, as a page rendered with no index beside it.
+    await page.route(`**/${ARTICLE.name}.html`, (route) => route.fulfill({ contentType: 'text/html', body: dressed }));
+    await page.goto(`/${ARTICLE.name}.html#second-section`);
+    await stayed(new RegExp(`/${ARTICLE.name}\\.html#second-section$`));
+
+    // An index that sends it back to a page, as the demo's / and /index.html
+    // do, would never settle: it stays.
+    await page.route('**/pages.html', (route) => route.fulfill({
+      status: 302, headers: { Location: `/${ARTICLE.name}.html?standalone` } }));
+    await page.goto('about:blank');
+    await page.goto(`/${ARTICLE.name}.html#second-section`);
+    await stayed(new RegExp(`/${ARTICLE.name}\\.html#second-section$`));
+
+    // The index it names answers: it opens there in a tab, at its fragment.
+    await page.unroute('**/pages.html');
+    await page.route('**/pages.html', (route) => route.fulfill({ contentType: 'text/html', body: listing }));
+    await page.goto('about:blank');
+    await page.goto(`/${ARTICLE.name}.html#second-section`);
+    await expect(strip(page)).toHaveCount(1);
+    // &at= is read on load and not written again.
+    await expect(page).toHaveURL(new RegExp(`/pages\\.html#tabs=${ARTICLE.name}&on=${ARTICLE.name}$`));
+    await expectActive(page, ARTICLE);
+    expect((await shownIn(page, ARTICLE)).hash).toBe('#second-section');
+    await page.goBack();
+    await expect(page).toHaveURL('about:blank');
+    await page.unrouteAll();
 
     // Opened from disk, as render writes it: no index beside it to go to.
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lotuspod-pod-tabs-file-'));

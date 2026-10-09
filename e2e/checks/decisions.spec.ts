@@ -128,7 +128,7 @@ async function serve(page: Page, answers: () => object) {
 }
 
 async function versions(page: Page) {
-  await page.goto(PAGE);
+  await page.goto(`${PAGE}?standalone`);
   return Object.fromEntries(await page.locator('form.artifact-decision').evaluateAll((forms) =>
     forms.map((form) => [(form as HTMLElement).dataset.question, (form as HTMLElement).dataset.version])));
 }
@@ -195,7 +195,7 @@ test.describe('signed in', () => {
   test('an unanswered question is radio rows, its default picked and not saved, and a folded note', async ({ page }) => {
     expect(ASSERTION, 'LOTUSPOD_TEST_ASSERTION names an assertion the site accepts').toBeTruthy();
     const seen = await watch(page);
-    await page.goto(PAGE);
+    await page.goto(`${PAGE}?standalone`);
     for (const question of ['decision-1', 'decision-2']) {
       const card = decision(page, question);
       await expect(card.radios).toHaveCount(2);
@@ -226,7 +226,7 @@ test.describe('signed in', () => {
 
   test('a picked answer is marked not saved until saved, then folds to one line', async ({ page, request }) => {
     const seen = await watch(page);
-    await page.goto(PAGE);
+    await page.goto(`${PAGE}?standalone`);
     const first = decision(page, 'decision-1');
     await first.option('Opus').check();
     await expect(first.unsaved).toBeVisible();
@@ -295,7 +295,7 @@ test.describe('signed in', () => {
     await page.addInitScript(() => {
       document.addEventListener('lotuspod:answered', () => { (window as any).__answered = true; });
     });
-    await page.goto(PAGE);
+    await page.goto(`${PAGE}?standalone`);
     await page.waitForFunction(() => (window as any).__answered === true);
     const first = decision(page, 'decision-1');
     if (await first.change.isVisible()) await first.change.click();
@@ -320,7 +320,7 @@ test.describe('signed in', () => {
 
   test('a note is shown as the text written, never as markup', async ({ page }) => {
     const note = '<b>bold</b>';
-    await page.goto(PAGE);
+    await page.goto(`${PAGE}?standalone`);
     const second = decision(page, 'decision-2');
     await second.option(/^Yes/).check();
     await second.addNote.click();
@@ -340,7 +340,7 @@ test.describe('signed in', () => {
     await serve(page, () => ({
       'decision-1': { current: row('decision-1', '000000000000', 'opus', 'Old words'), earlier: [] },
     }));
-    await page.goto(PAGE);
+    await page.goto(`${PAGE}?standalone`);
     const first = decision(page, 'decision-1');
     await expect(first.earlier).toContainText(`Answered to an earlier wording by ${READER}`);
     await expect(first.saved).toHaveCount(0);
@@ -362,7 +362,7 @@ test.describe('signed in', () => {
     });
     // Nothing answered yet, as when the page was first published.
     await serve(page, () => ({}));
-    await page.goto(PAGE);
+    await page.goto(`${PAGE}?standalone`);
     const second = decision(page, 'decision-2');
     const answer = second.form.getByRole('button', { name: 'Answer' });
     await expect(answer).toBeVisible();
@@ -418,7 +418,7 @@ test.describe('signed in', () => {
 
   test('an answer saved in the second section folds there and leaves the first section open', async ({ page, request }) => {
     const seen = await watch(page);
-    await page.goto(SECTIONS);
+    await page.goto(`${SECTIONS}?standalone`);
     const pump = decision(page, 'decision-d1');
     const heater = decision(page, 'decision-d2');
     // Each question sits in its own section, under the heading it is about.
@@ -456,7 +456,7 @@ test.describe('signed in', () => {
 
   test('an option with a long label saves and folds', async ({ page, request }) => {
     const seen = await watch(page);
-    await page.goto(LONG_OPTION);
+    await page.goto(`${LONG_OPTION}?standalone`);
     const card = decision(page, 'decision-d1');
     await expect(card.form.locator('.artifact-decision-label').first()).toHaveText(LONG_LABEL);
     const value = await card.radios.first().getAttribute('value');
@@ -506,7 +506,7 @@ test.describe('signed in', () => {
 test.describe('signed out', () => {
   test('an answer is refused with a way to sign in, and nothing is stored', async ({ page, request }) => {
     const before = await stored(request);
-    await page.goto(PAGE);
+    await page.goto(`${PAGE}?standalone`);
     const second = decision(page, 'decision-2');
     await second.option('No').check();
     await second.addNote.click();

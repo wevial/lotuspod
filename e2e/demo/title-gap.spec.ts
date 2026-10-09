@@ -87,11 +87,11 @@ async function gap(page: Page, above: string) {
 async function checkGap(page: Page, width: number) {
   await page.setViewportSize({ width, height: 800 });
 
-  await page.goto(reference);
+  await page.goto(`${reference}?standalone`);
   await expect(page.locator('.demo-banner')).toHaveCount(0);
   const plain = await gap(page, '.artifact-topbar');
 
-  await page.goto(`/${PAGE}.html`);
+  await page.goto(`/${PAGE}.html?standalone`);
   await expect(page.locator('body > .demo-banner')).toBeVisible();
   const demo = await gap(page, 'body > .demo-banner');
 

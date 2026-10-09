@@ -125,7 +125,7 @@ test.describe('the chain', () => {
     });
 
     await test.step('2. the reader answers the decision and comments on the second section', async () => {
-      await page.goto(PAGE);
+      await page.goto(`${PAGE}?standalone`);
       await expect(page.getByText(`Published by ${OWNER}`)).toBeVisible();
       const question = decision(page);
       await question.option('Submerged').check();
@@ -254,7 +254,7 @@ test.describe('the chain', () => {
       try {
         expect((await context.request.get('/api/whoami')).status()).toBe(401);
         const outside = await context.newPage();
-        await outside.goto(PAGE);
+        await outside.goto(`${PAGE}?standalone`);
         const question = decision(outside);
         await question.option(/^Floating/).check();
         await question.addNote.click();

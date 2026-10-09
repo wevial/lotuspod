@@ -92,7 +92,7 @@ test.describe('signed in', () => {
     firstRepeatOnly();
     expect(ASSERTION, 'LOTUSPOD_TEST_ASSERTION names an assertion the site accepts').toBeTruthy();
     const seen = await watch(page);
-    await page.goto(PAGE);
+    await page.goto(`${PAGE}?standalone`);
     const the = sheet(page);
     await expect(the.count).toHaveText('3 to answer · Respond');
     await expect(the.next).toBeVisible();
@@ -120,7 +120,7 @@ test.describe('signed in', () => {
 
   test('Next open steps through the open questions and wraps round', async ({ page }) => {
     firstRepeatOnly();
-    await page.goto(PAGE);
+    await page.goto(`${PAGE}?standalone`);
     const the = sheet(page);
     await expect(the.count).toHaveText('3 to answer · Respond');
     const bar = await page.locator('.artifact-topbar').boundingBox();
@@ -144,7 +144,7 @@ test.describe('signed in', () => {
 
   test('the panel lists every question under its section with its state', async ({ page }) => {
     firstRepeatOnly();
-    await page.goto(PAGE);
+    await page.goto(`${PAGE}?standalone`);
     const the = sheet(page);
     await the.count.click();
     await expect(the.panel).toBeVisible();
@@ -170,7 +170,7 @@ test.describe('signed in', () => {
   test('a pick in the panel or on the page moves both, and one Save stores every answer', async ({ page, request }) => {
     firstRepeatOnly();
     const seen = await watch(page);
-    await page.goto(PAGE);
+    await page.goto(`${PAGE}?standalone`);
     const the = sheet(page);
     await the.count.click();
     await expect(the.save).toHaveText('Save 4 answers');
@@ -243,7 +243,7 @@ test.describe('signed in', () => {
     });
     const before = (await stored(request))['decision-d6'];
     expect(before).toBeUndefined();
-    await page.goto(PAGE);
+    await page.goto(`${PAGE}?standalone`);
     const the = sheet(page);
     await the.count.click();
     await the.entry('decision-d3').option('Any finding').click();
@@ -276,7 +276,7 @@ test.describe('signed in', () => {
       }
       await route.continue();
     });
-    await page.goto(PAGE);
+    await page.goto(`${PAGE}?standalone`);
     const the = sheet(page);
     await expect(the.count).toHaveText('3 to answer · Respond');
     const form = the.form('decision-d3');
@@ -295,7 +295,7 @@ test.describe('signed in', () => {
     firstRepeatOnly();
     const before = (await stored(request))['decision-d1'].current.choice;
     const other = before === 'codex' ? 'Claude Opus' : 'Codex';
-    await page.goto(PAGE);
+    await page.goto(`${PAGE}?standalone`);
     const the = sheet(page);
     const form = the.form('decision-d1');
     await expect(form.locator('.artifact-decision-saved-line')).toBeVisible();
@@ -314,7 +314,7 @@ test.describe('signed in', () => {
 
   test('a changed note is not saved until the panel saves it', async ({ page, request }) => {
     firstRepeatOnly();
-    await page.goto(PAGE);
+    await page.goto(`${PAGE}?standalone`);
     const the = sheet(page);
     const form = the.form('decision-d1');
     await expect(form.locator('.artifact-decision-saved-line')).toBeVisible();
@@ -342,7 +342,7 @@ test.describe('signed in', () => {
           }, earlier: [] },
         } } })
         : route.continue());
-    await page.goto(PAGE);
+    await page.goto(`${PAGE}?standalone`);
     const the = sheet(page);
     const form = the.form('decision-d1');
     await expect(form.locator('.artifact-decision-earlier')).toContainText('Answered to an earlier wording');
@@ -362,7 +362,7 @@ test.describe('signed in', () => {
       route.request().method() === 'POST' && route.request().postDataJSON().question === 'decision-d1'
         ? route.fulfill({ status: 409, json: { error: 'stale_version' } })
         : route.continue());
-    await page.goto(PAGE);
+    await page.goto(`${PAGE}?standalone`);
     const the = sheet(page);
     const form = the.form('decision-d1');
     await expect(form.locator('.artifact-decision-saved-line')).toBeVisible();
@@ -383,7 +383,7 @@ test.describe('signed in', () => {
     const before = (await stored(request))['decision-d1'].current;
     await page.route((url) => url.pathname === '/api/answers', (route) =>
       route.request().method() === 'GET' ? route.fulfill({ status: 503, body: '' }) : route.continue());
-    await page.goto(PAGE);
+    await page.goto(`${PAGE}?standalone`);
     const the = sheet(page);
     await page.waitForFunction(() => document.readyState === 'complete');
     await expect(the.form('decision-d1').locator('input[name="choice"]:checked')).toHaveCount(0);
@@ -392,7 +392,7 @@ test.describe('signed in', () => {
   });
 
   test('a page with no forms has no count, Next open or panel', async ({ page }) => {
-    await page.goto('/capture-article.html');
+    await page.goto('/capture-article.html?standalone');
     await expect(page.locator('nav.artifact-outline')).toBeVisible();
     await expect(page.locator('.artifact-review-bar, .artifact-review-panel, .artifact-review-open'))
       .toHaveCount(0);
@@ -406,7 +406,7 @@ test.describe('signed in', () => {
         route.request().method() === 'GET'
           ? route.fulfill({ json: { page: 'capture-review-sheet', questions: {} } })
           : route.continue());
-      await page.goto(PAGE);
+      await page.goto(`${PAGE}?standalone`);
       const the = sheet(page);
       await expect(the.count).toHaveText('3 to answer · Respond');
       for (const target of [the.count, the.next]) {
@@ -430,7 +430,7 @@ test.describe('signed in', () => {
           route.request().method() === 'GET'
             ? route.fulfill({ json: { page: 'capture-review-sheet', questions: {} } })
             : route.continue());
-        await page.goto(PAGE);
+        await page.goto(`${PAGE}?standalone`);
         const the = sheet(page);
         await expect(the.count).toHaveText('3 to answer · Respond');
         for (const target of [the.count, the.next]) {
@@ -450,7 +450,7 @@ test.describe('signed in', () => {
         route.request().method() === 'GET'
           ? route.fulfill({ json: { page: 'capture-review-sheet', questions: {} } })
           : route.continue());
-      await page.goto(PAGE);
+      await page.goto(`${PAGE}?standalone`);
       const the = sheet(page);
       await expect(the.count).toHaveText('3 to answer · Respond');
       // The words truncate in their own span; the arrow after them lies
@@ -488,7 +488,7 @@ test.describe('signed in', () => {
         route.request().method() === 'GET'
           ? route.fulfill({ json: { page: 'capture-review-sheet', questions: {} } })
           : route.continue());
-      await page.goto(PAGE);
+      await page.goto(`${PAGE}?standalone`);
       const the = sheet(page);
       await expect(the.count).toHaveText('3 to answer · Respond');
       await expect(page.locator('.artifact-topbar-title')).toBeHidden();
@@ -509,7 +509,7 @@ test.describe('without JavaScript', () => {
   test.use({ extraHTTPHeaders: SIGNED_IN, javaScriptEnabled: false });
 
   test('the forms show as before and there is no count', async ({ page }) => {
-    await page.goto(PAGE);
+    await page.goto(`${PAGE}?standalone`);
     await expect(page.locator('form.artifact-decision')).toHaveCount(QUESTIONS.length);
     for (const radio of await page.locator('input[name="choice"]').all()) await expect(radio).not.toBeChecked();
     await expect(page.locator('.artifact-review-bar, .artifact-review-panel')).toHaveCount(0);

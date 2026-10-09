@@ -816,17 +816,18 @@ before the first tab).
 A listed page loaded on its own at the top level of the window (from a link
 in chat, an email or another page, a bookmark, a new browser tab) opens in a
 tab too: every listed page loads the page script, whatever its body, and the
-first thing that script does is replace its address with the index's,
-`#tabs=NAME&on=NAME`, that page its one tab and the active one, with
-`&at=FRAGMENT` after it when the address had a fragment (encoded as with
+first thing that script does is replace its address with the index its
+"Lotuspod" link names (`index.html`, so the site's `/`; the demo's
+`pages.html`), `#tabs=NAME&on=NAME`, that page its one tab and the active one,
+with `&at=FRAGMENT` after it when the address had a fragment (encoded as with
 `encodeURIComponent`), so the framed page opens at that section. `&at=` is
 read on load only and never written again. The replace leaves no history
 entry, so Back leaves the site, and nothing else on the bare page runs, so its
-opening is posted to `/api/seen` once, by its frame. A page in a frame, an old
-version (`?version=`, which runs no script), a page the index does not list,
-a file opened from disk (`file://`, with no index beside it), a page whose
-"Lotuspod" link names another index than `index.html` (the demo's
-`pages.html`), and a page loaded with `?standalone` (for example
+opening is posted to `/api/seen` once, by its frame. It goes only once that
+index answers a `HEAD` itself (2xx, not redirected), so a page rendered with
+no index beside it stays. A page in a frame, an old version (`?version=`,
+which runs no script), a page the index does not list, a file opened from
+disk (`file://`), and a page loaded with `?standalone` (for example
 `NAME.html?standalone#a-section`) stay where they are, alone in the window.
 
 A tab that is not active shows a dot from `/api/seen`: amber, "new version"
