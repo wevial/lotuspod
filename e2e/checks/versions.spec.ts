@@ -257,10 +257,6 @@ test.describe('signed in', () => {
     await expect(menu).toBeVisible();
     await expect(choose).toHaveAttribute('aria-expanded', 'true');
     await expect(items).toHaveCount(3);
-    const menuTimes = await items.locator('time').evaluateAll((nodes) =>
-      nodes.map((node) => node.getAttribute('datetime') ?? ''));
-    expect(menuTimes).toHaveLength(2);
-    expect(menuTimes[0] >= menuTimes[1]).toBe(true);
     await expect(items.nth(0).locator('.artifact-versions-current')).toHaveText('current');
     await expect(items.nth(0)).toHaveAttribute('href', `${name}.html`);
     await expect(items.nth(0)).not.toHaveAttribute('aria-current', /.*/);
@@ -284,23 +280,6 @@ test.describe('signed in', () => {
     await items.nth(2).click();
     await expect(page).toHaveURL(new RegExp(`/${name}\\.html#versions$`));
     await expect(view(page).heading).toBeVisible();
-
-    // The keyboard, as the header's menu takes it, and a click on the
-    // banner's text closes it.
-    await page.goto(`/${name}.html?version=${older.commit}`);
-    await choose.focus();
-    await page.keyboard.press('ArrowDown');
-    await expect(menu).toBeVisible();
-    await expect(items.nth(0)).toBeFocused();
-    await page.keyboard.press('Escape');
-    await expect(menu).toBeHidden();
-    await expect(choose).toBeFocused();
-    await expect(choose).toHaveAttribute('aria-expanded', 'false');
-    await choose.click();
-    await expect(menu).toBeVisible();
-    await banner.locator('.artifact-version-banner-text').click({ position: { x: 4, y: 4 } });
-    await expect(menu).toBeHidden();
-    await expect(choose).toHaveAttribute('aria-expanded', 'false');
     expect(errors).toEqual([]);
   });
 

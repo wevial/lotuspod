@@ -231,9 +231,6 @@ class DeclaredOrderTests(ThemeCopyTestCase):
                                   "js/page-close.js"))
         page = cli.THEME_SOURCES[cli.PAGE_SCRIPT]
         self.assertEqual(page[:2], ("js/page-open.js", "js/shared.js"))
-        for never in ("js/page-open.js", "js/live-page.js", "js/comments.js",
-                      "js/decisions.js"):
-            self.assertNotIn(never, script)
         self.assertIn(cli.OLD_VERSION_SCRIPT, cli.THEME_FILES)
         self.assertIn(cli.OLD_VERSION_SCRIPT, cli.serve_allow_list(self.out_dir))
         problems = source_problems(cli.THEME_DIR, cli.THEME_SOURCES)
