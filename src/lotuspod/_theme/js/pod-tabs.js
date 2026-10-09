@@ -329,9 +329,18 @@
     if (!pod) {
       add(name, hash);
     } else if (hash) {
+      // To the fragment within the pod's page once it is there; until then
+      // (the frame still blank, its page on the way) the pod's page anew,
+      // at the fragment.
+      const target = new URL(pods.get(name).href, location.href);
       try {
         const framed = pod.frame.contentWindow.location;
-        framed.replace(`${framed.pathname}${framed.search}${hash}`);
+        if (framed.origin === target.origin && framed.pathname === target.pathname) {
+          framed.replace(`${framed.pathname}${framed.search}${hash}`);
+        } else {
+          target.hash = hash;
+          framed.replace(target.href);
+        }
       } catch (ignored) {
         // The frame stays where it is.
       }

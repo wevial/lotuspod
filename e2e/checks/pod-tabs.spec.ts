@@ -270,6 +270,10 @@ test.describe('signed in', () => {
     const images = { name: 'capture-images', title: 'Capture images' };
     await openIndex(page);
     await openFromListing(page, images);
+    // The viewer is the page script's, which runs once the page is parsed:
+    // until then a standalone page too loads the image itself.
+    await expect.poll(() => frame(page, images).evaluate((node) =>
+      (node as HTMLIFrameElement).contentDocument?.readyState)).toBe('complete');
     const chart = framed(page, images).locator('.artifact-body figure.artifact-figure a').first();
     await chart.click();
     await expect(framed(page, images).locator('dialog.artifact-image-viewer')).toBeVisible();
@@ -345,6 +349,40 @@ test.describe('signed in', () => {
     await expectListing(page);
     await expect(row.locator('.index-mark')).toHaveCount(0);
     await expect(toggle).toHaveText(`Updated · ${before - 1}`);
+    expect(errors).toEqual([]);
+  });
+
+  test('a link with a fragment to a pod whose page is still on its way opens that page at the fragment', async ({ page }) => {
+    const errors = await watch(page);
+    const pod = { name: 'pod-tabs-fragment', title: 'Pod tabs fragment' };
+    publish(pod.name, [`# ${pod.title}`, '', 'See the [second section](capture-article.html#second-section).',
+      '', '## Findings', '', 'The pump stops in January.', '', '## Next steps', '', 'Order a heater.', ''].join('\n'));
+    // The article's first answer is held until the link is followed.
+    let release = () => {};
+    const held = new Promise<void>((resolve) => { release = resolve; });
+    let asked = 0;
+    await page.route((url) => url.pathname === '/capture-article.html', async (route) => {
+      asked += 1;
+      if (asked === 1) await held;
+      await route.continue().catch(() => {});
+    });
+    await openIndex(page);
+    await listingLink(page, ARTICLE).click();
+    await expectActive(page, ARTICLE);
+    await expect.poll(() => asked).toBe(1);
+    await openFromListing(page, pod);
+    expect(await frame(page, ARTICLE).evaluate((node) =>
+      (node as HTMLIFrameElement).contentWindow?.location.href)).toBe('about:blank');
+
+    await framed(page, pod).getByRole('link', { name: 'second section' }).click();
+    release();
+    await expectActive(page, ARTICLE);
+    await expect(framed(page, ARTICLE).locator('h1')).toHaveText(ARTICLE.title);
+    const shown = await frame(page, ARTICLE).evaluate((node) =>
+      (node as HTMLIFrameElement).contentWindow?.location.href ?? '');
+    expect(new URL(shown).pathname).toBe('/capture-article.html');
+    expect(new URL(shown).hash).toBe('#second-section');
+    expect(await openNames(page)).toEqual([ARTICLE.name, pod.name]);
     expect(errors).toEqual([]);
   });
 
