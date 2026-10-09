@@ -45,7 +45,7 @@ _MENTION = re.compile(
 # offset optional; fromisoformat then checks each part's range, but takes
 # any separator and other forms, so it is not the check alone.
 _ISO_TIME = re.compile(
-    r"\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,6})?)?(?:Z|[+-]\d{2}:\d{2})?)?",
+    r"\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:\d{2})?)?",
     re.ASCII,
 )
 TONES = ("merged", "review", "progress", "waiting")

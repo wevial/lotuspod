@@ -157,7 +157,7 @@ class MarkRefsTests(unittest.TestCase):
 
     def test_an_updated_time_is_taken_only_in_iso_8601_form(self):
         for good in ("2026-10-09", "2026-10-09T12:00", "2026-10-09T12:00:00Z",
-                     "2026-10-09T12:00:00.5+02:00"):
+                     "2026-10-09T12:00:00.5+02:00", "2026-10-08T09:30:00.1234567Z"):
             with self.subTest(updated=good):
                 checked = refs.check_refs({"refs": {"HOLO-175": {"title": "t", "updated": good}}})
                 self.assertEqual(checked["HOLO-175"]["updated"], good)

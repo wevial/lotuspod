@@ -1531,11 +1531,14 @@ class _KeptTail:
 
 
 _END_OF_ARCHIVE = bytes(2 * tarfile.BLOCKSIZE)
+# What read_source_archive returns for the refs of an archive with no
+# refs.json: never JSON, so a member holding null is still checked.
+NO_REFS = object()
 
 
 def read_source_archive(stream, cap: int) -> tuple[bytes, dict[str, media.Image], object]:
     """The source, the images and the refs of the source archive on stream,
-    each image checked again within cap and the refs parsed as JSON (None
+    each image checked again within cap and the refs parsed as JSON (NO_REFS
     when it has no refs.json); RuntimeError naming the first refused member.
 
     The archive is read as a stream and nothing is extracted by its member
@@ -1550,7 +1553,7 @@ def read_source_archive(stream, cap: int) -> tuple[bytes, dict[str, media.Image]
     """
     source: bytes | None = None
     images: dict[str, media.Image] = {}
-    found_refs: object = None
+    found_refs: object = NO_REFS
     seen: set[str] = set()
     member: tarfile.TarInfo | None = None
     tail = _KeptTail(stream)
@@ -1883,7 +1886,7 @@ def cmd_publish(args: argparse.Namespace) -> int:
         sent: dict[str, media.Image] = {}
         if args.source_archive:
             data, sent, archived_refs = read_source_archive(sys.stdin.buffer, media_cap())
-            if archived_refs is not None:
+            if archived_refs is not NO_REFS:
                 given_refs = refs.check_refs(archived_refs)
         else:
             data = read_source(args, label)

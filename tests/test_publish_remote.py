@@ -601,6 +601,11 @@ class FarSideArchiveTests(RemoteImageTestCase):
              archive(("source", self.source()), ("refs.json", b"\xff\xfe"))),
             ("a key that is not one", "holo-175",
              archive(("source", self.source()), ("refs.json", broken))),
+            # Present but null is not absent: it is checked, and is no refs file.
+            ("refs.json holding null", "refs file",
+             archive(("source", self.source()), ("refs.json", b"null"))),
+            ("refs.json holding a list", "refs file",
+             archive(("source", self.source()), ("refs.json", b"[]"))),
         )
         for case, named, data in cases:
             with self.subTest(case=case):
