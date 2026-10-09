@@ -10,7 +10,8 @@ Layout, revised on purpose and naming every command `lotuspod --help` lists, one
 "Decisions for the maintainer" heading, and the README's pictures: three
 PNG screenshots and one GIF under docs/images/, each with alt text, each a
 real image of its kind and small enough to load. It also witnesses what the
-README tells a first-time visitor: how Lotuspod was built, that it is a
+README tells a first-time visitor: why Lotuspod, in five bullets before
+"See it" whose commands `lotuspod --help` lists, how Lotuspod was built, that it is a
 personal project with issues off, and a Security section whose cited
 tests.test_access ids each load. The architecture page holds one Mermaid
 diagram, whose nodes name the closed list of parts it shows.
@@ -201,18 +202,36 @@ class ReadmeTests(unittest.TestCase):
             with self.subTest(page=page):
                 self.assertIn(page, targets)
 
-    def test_the_layout_names_each_command_help_lists(self):
+    def help_commands(self) -> list[str]:
+        """The commands `lotuspod --help` lists."""
         proc = run_lotuspod("--help")
         self.assertEqual(proc.returncode, 0, proc.stderr)
         choices = re.search(r"\{([a-z,]+)\}", proc.stdout)
         self.assertIsNotNone(choices, proc.stdout)
+        return choices.group(1).split(",")
+
+    def test_the_layout_names_each_command_help_lists(self):
+        commands = self.help_commands()
         readme = read("README.md")
         _, blocks = split_fences(readme[readme.index("\n## Layout\n"):])
         named = re.search(r"`lotuspod ([a-z|]+)`", blocks[0])
         self.assertIsNotNone(named, blocks[0])
-        for command in choices.group(1).split(","):
+        for command in commands:
             with self.subTest(command=command):
                 self.assertIn(command, named.group(1).split("|"))
+
+    def test_why_lotuspod_is_five_bullets_before_see_it_naming_real_commands(self):
+        readme = read("README.md")
+        found = headings(readme)
+        self.assertEqual(found[:3], ["Lotuspod", "Why Lotuspod", "See it"])
+        why = section(readme, "Why Lotuspod")
+        self.assertEqual(len(re.findall(r"^- ", why, re.M)), 5, why)
+        named = re.findall(r"`lotuspod ([a-z]+)", why)
+        self.assertLessEqual({"comments", "answers"}, set(named))
+        commands = self.help_commands()
+        for command in named:
+            with self.subTest(command=command):
+                self.assertIn(command, commands)
 
 
 class ReadmeStoryTests(unittest.TestCase):
