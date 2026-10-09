@@ -289,7 +289,6 @@ def _answer(row: sqlite3.Row) -> dict:
     }
     if row["checked"] is not None:
         found["checked"] = json.loads(row["checked"])
-    # Only an answer an agent recorded from elsewhere has one.
     if row["source"] is not None:
         found["source"] = row["source"]
     return found
