@@ -3,7 +3,8 @@ reach the caller as they are, no config at all means a local publish, and
 the config is found through $LOTUSPOD_CONFIG, else $XDG_CONFIG_HOME, else
 ~/.config. A page's images travel in one source archive with it, a page
 without one goes as its bytes, references are refused before ssh, and the
-far side refuses every archive it should not trust.
+far side refuses every archive it should not trust. A refs file (--refs) is
+checked before ssh and travels in the archive as refs.json, image or none.
 
 `ssh` on the PATH is a stub that records its arguments and standard input
 and runs the remote command with `sh -c` on this machine, handing it that
@@ -495,6 +496,67 @@ def pax_record(key: str, value: str) -> bytes:
     return f"{length}{rest}".encode("utf-8")
 
 
+REFS = {"refs": {"HOLO-175": {
+    "title": "Story follow-ups become proposals", "project": "Holophyte", "status": "In review",
+    "tone": "review", "pr": {"text": "PR #475 on GitHub", "href": "https://example.com/pr/475"},
+}}}
+POND_REFS = "# Pond\n\nStill water, as HOLO-175 says.\n"
+
+
+class RemoteRefsTests(RemoteImageTestCase):
+    def test_a_refs_file_goes_in_an_archive_even_with_no_image(self):
+        refs = self.write("refs.json", json.dumps(REFS))
+        done = self.publish(self.write("pond.md", POND_REFS), "--refs", str(refs))
+        self.assertEqual(done.returncode, 0, done.stderr)
+
+        (call,) = self.calls()
+        argv = self.remote_argv(call)
+        self.assertIn("--source-archive", argv)
+        self.assertFalse(any(arg.startswith("--refs") for arg in argv), argv)
+        with tarfile.open(fileobj=io.BytesIO(self.stdin_of(0)), mode="r:") as archive:
+            self.assertEqual([m.name for m in archive.getmembers()], ["source", "refs.json"])
+            self.assertEqual(archive.extractfile("source").read().decode("utf-8"), POND_REFS)
+            self.assertEqual(archive.extractfile("refs.json").read(), refs.read_bytes())
+        page = (self.out_dir / "pond.html").read_text(encoding="utf-8")
+        self.assertIn('data-ref="HOLO-175"', page)
+        self.assertIn("Story follow-ups become proposals", page)
+        files = git(self.out_dir, "show", "--name-only", "--format=", "HEAD").split()
+        self.assertIn("pond.refs.json", files)
+
+    def test_no_refs_reaches_the_far_side_and_drops_the_cards(self):
+        refs = self.write("refs.json", json.dumps(REFS))
+        source = self.write("pond.md", POND_REFS)
+        done = self.publish(source, "--refs", str(refs))
+        self.assertEqual(done.returncode, 0, done.stderr)
+
+        done = self.publish(source)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertNotIn("--no-refs", self.remote_argv(self.calls()[-1]))
+        self.assertEqual(self.stdin_of(1), source.read_bytes())
+        self.assertIn('data-ref="HOLO-175"',
+                      (self.out_dir / "pond.html").read_text(encoding="utf-8"))
+
+        done = self.publish(source, "--no-refs")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertIn("--no-refs", self.remote_argv(self.calls()[-1]))
+        self.assertNotIn("artifact-ref",
+                         (self.out_dir / "pond.html").read_text(encoding="utf-8"))
+        self.assertFalse((self.out_dir / "pond.refs.json").exists())
+
+    def test_a_broken_refs_file_is_refused_before_ssh(self):
+        broken = {"refs": {"HOLO-175": {**REFS["refs"]["HOLO-175"], "tone": "done"}}}
+        for case, text, named in (("not JSON", "{", "not JSON"),
+                                  ("an unknown tone", json.dumps(broken), "HOLO-175 tone")):
+            with self.subTest(case=case):
+                refs = self.write("refs.json", text)
+                done = self.publish(self.write("pond.md", POND_REFS), "--refs", str(refs))
+                self.assertEqual(done.returncode, 1, done.stderr)
+                (line,) = done.stderr.splitlines()
+                self.assertIn(named, line)
+                self.assertEqual(self.calls(), [])
+                self.assertNothingWritten()
+
+
 class FarSideArchiveTests(RemoteImageTestCase):
     """Archives fed straight to the far side, with no ssh."""
 
@@ -518,6 +580,40 @@ class FarSideArchiveTests(RemoteImageTestCase):
         self.assertEqual(done.returncode, 0, done.stderr)
         self.assertEqual(self.media_files(), [self.chart_name])
         self.assertEqual((self.out_dir / "pond.md").read_bytes(), self.source(self.chart_name))
+
+    def test_an_archive_with_refs_publishes_its_cards(self):
+        done = self.far_side(archive(("source", b"# Pond\n\nAs HOLO-175 says.\n"),
+                                     ("refs.json", json.dumps(REFS).encode("utf-8"))))
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertIn('data-ref="HOLO-175"',
+                      (self.out_dir / "pond.html").read_text(encoding="utf-8"))
+        self.assertTrue((self.out_dir / "pond.refs.json").is_file())
+
+    def test_refs_twice_or_not_json_or_broken_is_refused_and_nothing_is_written(self):
+        refs = json.dumps(REFS).encode("utf-8")
+        broken = json.dumps({"refs": {"holo-175": {"title": "x"}}}).encode("utf-8")
+        cases = (
+            ("refs.json twice", "refs.json: named twice",
+             archive(("source", self.source()), ("refs.json", refs), ("refs.json", refs))),
+            ("refs.json not JSON", "refs.json: not JSON",
+             archive(("source", self.source()), ("refs.json", b"{refs"))),
+            ("refs.json not UTF-8", "refs.json: not JSON",
+             archive(("source", self.source()), ("refs.json", b"\xff\xfe"))),
+            ("a key that is not one", "holo-175",
+             archive(("source", self.source()), ("refs.json", broken))),
+            # Present but null is not absent: it is checked, and is no refs file.
+            ("refs.json holding null", "refs file",
+             archive(("source", self.source()), ("refs.json", b"null"))),
+            ("refs.json holding a list", "refs file",
+             archive(("source", self.source()), ("refs.json", b"[]"))),
+        )
+        for case, named, data in cases:
+            with self.subTest(case=case):
+                done = self.far_side(data)
+                self.assertEqual(done.returncode, 1, done.stderr)
+                (line,) = done.stderr.splitlines()
+                self.assertIn(named, line)
+                self.assertNothingWritten()
 
     def test_every_untrusted_archive_is_refused_and_nothing_is_written(self):
         padded = (MEDIA_FIXTURES / "padded-48x32-2000-bytes.png").read_bytes()
