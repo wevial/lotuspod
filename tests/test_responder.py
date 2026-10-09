@@ -751,6 +751,8 @@ class LoopTests(ResponderCase):
             time.sleep(0.2)
         process.send_signal(signal.SIGTERM)
         self.assertEqual(process.wait(15), 0)
+        log.seek(0)
+        self.assertNotIn("waiting for serve", log.read())
 
 
 class StartupWaitTests(ResponderCase):
@@ -767,13 +769,19 @@ class StartupWaitTests(ResponderCase):
         self.log = open(self.tmp / "respond.log", "w+", encoding="utf-8")
         self.addCleanup(self.log.close)
 
-    def start_responder(self, *extra):
+    def launch(self, *extra, stdout=None, stderr=None):
         process = subprocess.Popen(
             [sys.executable, "-m", "lotuspod", "respond", *extra,
              "--command", self.recorder, "--credential", str(self.responder),
              "--socket", str(self.sock), "--out-dir", str(self.out), "--db", str(self.db)],
-            cwd=str(self.tmp), env=self.env, stdout=self.log, stderr=self.log)
+            cwd=str(self.tmp), env=self.env, stdout=stdout or self.log,
+            stderr=stderr or self.log, text=True)
+        self.addCleanup(process.wait, 10)
         self.addCleanup(lambda: process.poll() is None and process.kill())
+        return process
+
+    def start_responder(self, *extra):
+        process = self.launch(*extra)
         time.sleep(1)
         self.start_server()
         return process
@@ -799,6 +807,32 @@ class StartupWaitTests(ResponderCase):
         process = self.start_responder("--once")
         self.assertEqual(process.wait(30), 0, self.output())
         self.assertTrue(self.replies("orphan", self.row["id"]))
+
+    def assert_gives_up(self, *extra):
+        started = time.monotonic()
+        process = self.launch(*extra, "--wait", "2", stderr=subprocess.PIPE)
+        _, stderr = process.communicate(timeout=10)
+        self.assertLess(time.monotonic() - started, 10)
+        self.assertEqual(process.returncode, 1, stderr)
+        lines = stderr.splitlines()
+        self.assertEqual(len(lines), 1, lines)
+        self.assertIn(str(self.sock), lines[0])
+        self.assertIn("2 seconds", lines[0])
+
+    def test_once_gives_up_after_wait_seconds(self):
+        self.assert_gives_up("--once")
+
+    def test_the_loop_gives_up_after_wait_seconds(self):
+        self.assert_gives_up("--interval", "60")
+
+    def test_sigterm_while_waiting_exits_0(self):
+        process = self.launch("--wait", "60")
+        deadline = time.monotonic() + 10
+        while "waiting for serve" not in self.output():
+            self.assertLess(time.monotonic(), deadline, self.output())
+            time.sleep(0.1)
+        process.send_signal(signal.SIGTERM)
+        self.assertEqual(process.wait(5), 0, self.output())
 
 
 class PermissionTests(ResponderCase):
