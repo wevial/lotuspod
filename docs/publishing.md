@@ -449,6 +449,44 @@ as a member `refs.json` of the source archive, after `source`, so a page with
 a refs file is sent as an archive even with no image. The writer host takes
 that member at most once, as JSON within 1 MiB, and checks it again.
 
+## Archive a page
+
+`lotuspod archive NAME` retires a page that is finished or replaced, and
+`lotuspod unarchive NAME` brings it back:
+
+```sh
+lotuspod archive pond-plan --superseded-by pond-plan-2
+lotuspod unarchive pond-plan
+```
+
+An archived page keeps its URL, its versions and its threads; it only leaves
+the index's default list, behind its Archived toggle (see [Index](#index)),
+and Recent activity. Its state is a record beside it, `NAME.archived.json`,
+`{"archivedAt": "2026-10-09T12:00:00Z", "supersededBy": "pond-plan-2"}`
+(`supersededBy` null when no page replaces it): committed with the page and
+never served, as its refs are. The page itself is not rewritten, so archiving
+adds no version, and a republish leaves the record alone: an archived page
+stays archived when it is published again.
+
+Under the publish lock, either command checks its arguments, writes or
+removes the record, rebuilds `manifest.json` and `index.html`, and makes one
+commit, `archive NAME` or `unarchive NAME`, printing "archived NAME" or
+"unarchived NAME". It exits 1, with a line ending "nothing written", when
+NAME is not a visible page of the directory (a page rendered with `--hidden`
+is not), or when `--superseded-by` names a page that is not one, or NAME
+itself. Archiving an archived page keeps its `archivedAt`; `--superseded-by`
+replaces its successor, and without it the successor stays. Unarchiving a
+page that is not archived prints "NAME is not archived", writes nothing and
+exits 0.
+
+Both take `--out-dir` and `--local` as publish does: without `--local`, when
+the config's `[publish]` section names a `host`, the command runs there over
+ssh as `COMMAND archive --local --out-dir=OUT_DIR [--superseded-by=NEXT]
+NAME` (or `unarchive`), each argument quoted, and exits with ssh's status;
+`--out-dir` with a configured host is refused before ssh. An owner can also
+archive a page from the browser, through `/api/archive` (see [Answers and
+comments](comments.md#answers-and-comments)).
+
 ## Manifest
 
 Generate `artifacts/manifest.json`, an index of every rendered artifact in a
@@ -477,8 +515,11 @@ The manifest is a versioned document:
 ```
 
 The schema is uniform: every entry carries exactly `file`, `title`, `episode`,
-`date`, `created`, `updated`, `summary`, `visible` and `labels`; fields with no
-value are empty strings, never `null`. Beside the keys shown above, an entry
+`date`, `created`, `updated`, `summary`, `visible`, `labels`, `archived` and
+`supersededBy`; fields with no value are empty strings, never `null`.
+`archived` is the time an archived page was archived and `supersededBy` the
+page that replaces it, both "" for a page that is not archived (see [Archive
+a page](#archive-a-page)). Beside the keys shown above, an entry
 carries `created`, the same value as `date` (the page's first date);
 `updated`, for example `"2026-10-08T17:04:05Z"`: the time its last publish
 stamped (see [Publish a page](#publish-a-page)); and `labels`, the page's
@@ -596,6 +637,18 @@ The count reads "M pages, newest update first" in the arrival order, and "N of
 M pages" while filtered; when no row is left, the table gives way to "No pages
 match these filters." The table stays one flat list in its sort order.
 
+An archived page's row (see [Archive a page](#archive-a-page)) carries its
+archive time in `data-archived` and is written `hidden`, so the default list
+leaves it out with or without the script. When at least one row is archived,
+an "Archived · N" toggle sits after the Labels menu, and after the Updated and
+Unread toggles when they are there, signed in or not. Pressed, it shows only
+the archived rows, the Labels menu, the other toggles and the search still
+applying on top, and adds the token "archived ✕" to the "Showing" line, which
+releases it. The count leaves archived pages out ("M pages, newest update
+first", "N of M pages"); while the toggle is pressed it reads "M archived
+pages" or "N of M archived pages". An index with no archived row has no
+Archived toggle.
+
 Signed in to `lotuspod serve`, the index asks `/api/seen` (see [Answers and
 comments](comments.md#answers-and-comments)) which pages this reader has
 opened, and at what revision, once on load and again when the browser brings
@@ -625,7 +678,7 @@ no page gets the switch too, and its controls, only when the route answers; its
 Pages view is the "Nothing in the pond yet." line.
 
 Recent activity is the route's pages in its order, by their latest event,
-newest first. Each page's header row holds its title, linking to it, its labels
+newest first; an archived page has none. Each page's header row holds its title, linking to it, its labels
 as tags, its "N new replies to you" from the seen route, and "N events" on the
 right; under it, its events, newest first, each with its time (the time of day
 for today, else the day and time, in the browser's time zone), a dot colored
