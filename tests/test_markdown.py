@@ -15,7 +15,8 @@ blockquote, when it is quoted) and each figure is taken out of the body.
 Inline links (`[TEXT](TARGET)`) are Lotuspod's own too, and none of the
 fixtures holds one: they are held by parsed-tree tests, on converted bodies and
 on pages published with the real `lotuspod publish --local`, the repository's
-README and docs among them.
+README and docs among them. So are bare http(s) URLs, which no fixture holds
+either.
 
 Run from the repo root:
 
@@ -31,6 +32,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from html.parser import HTMLParser
 from pathlib import Path
@@ -38,7 +40,7 @@ from unittest import mock
 
 from tests.test_manifest_v2 import SRC_DIR, TempDirTestCase, run_cli
 
-from lotuspod import media
+from lotuspod import cli, media
 from lotuspod.markdown import images, to_body, with_sources
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -425,6 +427,123 @@ class LinkTests(unittest.TestCase):
         (p,) = parse(body).elements
         self.assertEqual((p.elements, p.text()), ([], source))
 
+class BareUrlTests(unittest.TestCase):
+    def body(self, text: str) -> _Node:
+        return parse(to_body(text))
+
+    def assertLink(self, node: _Node, href: str, text: str) -> None:
+        self.assertEqual((node.tag, node.attrs, node.text()), ("a", {"href": href}, text))
+
+    def test_trailing_punctuation_and_unpaired_brackets_stay_text_after_the_link(self):
+        cases = [
+            ("See https://example.com/a.", "https://example.com/a", "See ", "."),
+            ("(see https://example.com/b)", "https://example.com/b", "(see ", ")"),
+            ("https://example.com/c, then", "https://example.com/c", "", ", then"),
+            ("https://example.com/d;", "https://example.com/d", "", ";"),
+            ("https://example.com/e:", "https://example.com/e", "", ":"),
+            ("https://en.wikipedia.org/wiki/Pond_(water)",
+             "https://en.wikipedia.org/wiki/Pond_(water)", "", ""),
+            ("<https://example.com/f>", "https://example.com/f", "<", ">"),
+        ]
+        for source, href, before, after in cases:
+            with self.subTest(source=source):
+                (p,) = self.body(source + "\n").elements
+                (link,) = p.elements
+                self.assertLink(link, href, href)
+                self.assertEqual(p.children, [c for c in (before, link, after) if c])
+
+    def test_urls_in_code_a_fence_a_link_or_an_image_reference_are_not_linked_again(self):
+        source = (
+            "A span `https://example.com/code` here.\n"
+            "\n"
+            "```\n"
+            "https://example.com/fence\n"
+            "```\n"
+            "\n"
+            "See [https://example.com/g](https://example.com/g) now.\n"
+            "\n"
+            "See ![chart](https://example.com/chart.png) inside a paragraph line.\n"
+        )
+        span, fence, linked, image = self.body(source).elements
+        self.assertEqual(span.find_all("a"), [])
+        self.assertEqual([c.text() for c in span.elements], ["https://example.com/code"])
+        self.assertEqual(fence.find_all("a"), [])
+        self.assertEqual(fence.text(), "https://example.com/fence")
+        (link,) = linked.find_all("a")
+        self.assertLink(link, "https://example.com/g", "https://example.com/g")
+        self.assertEqual(link.elements, [])
+        self.assertEqual(image.find_all("a"), [])
+        self.assertEqual(image.text(),
+                         "See ![chart](https://example.com/chart.png) inside a paragraph line.")
+
+    def test_a_query_upper_case_and_bold_link_and_other_schemes_stay_text(self):
+        source = "https://example.com/q?a=1&b=2 HTTPS://EXAMPLE.COM/U **https://example.com/bold**"
+        body = to_body(source + "\n")
+        self.assertIn('href="https://example.com/q?a=1&amp;b=2"', body)
+        (p,) = parse(body).elements
+        query, upper, strong = p.elements
+        self.assertLink(query, "https://example.com/q?a=1&b=2", "https://example.com/q?a=1&b=2")
+        self.assertLink(upper, "HTTPS://EXAMPLE.COM/U", "HTTPS://EXAMPLE.COM/U")
+        self.assertEqual(strong.tag, "strong")
+        (link,) = strong.elements
+        self.assertLink(link, "https://example.com/bold", "https://example.com/bold")
+        for text in ("javascript:alert(1)", "ftp://example.com/x", "https://",
+                     "xhttps://example.com/x", "/https://example.com/x", "https://.",
+                     "http\u017f://example.com/x"):
+            with self.subTest(text=text):
+                body = to_body(f"See {text} here.\n")
+                self.assertEqual(body, f"<p>See {text} here.</p>\n")
+
+    def test_a_star_at_the_end_stays_in_the_url(self):
+        (p,) = self.body("Search https://example.com/find* now.\n").elements
+        (link,) = p.elements
+        self.assertLink(link, "https://example.com/find*", "https://example.com/find*")
+        self.assertEqual(p.text(), "Search https://example.com/find* now.")
+
+    def test_stars_inside_stay_in_the_url_and_bold_around_it_closes_outside_it(self):
+        (p,) = self.body("Search https://example.com/a**b now.\n").elements
+        (link,) = p.elements
+        self.assertLink(link, "https://example.com/a**b", "https://example.com/a**b")
+        self.assertEqual(p.text(), "Search https://example.com/a**b now.")
+        for source, after in (("**See https://example.com/bold**.", "."),
+                              ("**https://example.com/bold**!", "!"),
+                              ("**https://example.com/bold**b", "b")):
+            with self.subTest(source=source):
+                (p,) = self.body(source + "\n").elements
+                (strong,) = p.elements
+                self.assertEqual((strong.tag, p.children[1:]), ("strong", [after]))
+                (link,) = strong.elements
+                self.assertLink(link, "https://example.com/bold", "https://example.com/bold")
+
+    def test_a_refused_link_and_an_image_reference_with_parentheses_stay_text_whole(self):
+        for source in ("[https://example.com/refused](mailto:a@x)",
+                       "[https://example.com/refused](javascript:alert(1))",
+                       "See ![chart](https://example.com/chart_(pond).png) now.",
+                       "[https://example.com/g](javascript:alert(f(1)))",
+                       "See ![chart](https://example.com/c_(a_(b)).png) now."):
+            with self.subTest(source=source):
+                body = to_body(source + "\n")
+                self.assertEqual(body, f"<p>{source}</p>\n")
+                (p,) = parse(body).elements
+                self.assertEqual((p.elements, p.text()), ([], source))
+
+    def test_a_link_or_url_after_a_nested_refused_link_is_still_drawn(self):
+        refused = "[bad](javascript:alert(f(1)))"
+        for after, href in (("[good](https://example.com/good)", "https://example.com/good"),
+                            ("https://example.com/good(foo)", "https://example.com/good(foo)")):
+            with self.subTest(after=after):
+                (p,) = self.body(refused + after + "\n").elements
+                self.assertEqual(p.children[0], refused)
+                (link,) = p.elements
+                self.assertEqual(link.attrs, {"href": href})
+
+    def test_an_unclosed_image_reference_repeated_converts_quickly(self):
+        source = "![a" * 1000
+        started = time.monotonic()
+        self.assertEqual(to_body(source), f"<p>{source}</p>\n")
+        self.assertLess(time.monotonic() - started, 2)
+
+
 class PublishedLinkTests(TempDirTestCase):
     def publish(self, source: Path) -> str:
         """The body of the page the real `lotuspod publish --local` makes of
@@ -472,6 +591,31 @@ class PublishedLinkTests(TempDirTestCase):
         self.assertEqual(root.find_all("blockquote")[0].find_all("a"), [links[3]])
         self.assertNotIn("](", root.text())
 
+    def test_a_bare_url_in_a_paragraph_a_list_item_a_table_cell_and_a_blockquote(self):
+        url = "https://example.com/plans/product.html"
+        md = self.out_dir / "page.md"
+        md.write_text(
+            "# Bare URLs\n"
+            "\n"
+            f"In a paragraph {url}\n"
+            "\n"
+            f"- {url}\n"
+            "\n"
+            "| Where | Link |\n"
+            "|-------|------|\n"
+            f"| cell | {url} |\n"
+            "\n"
+            f"> {url}\n",
+            encoding="utf-8",
+        )
+        root = parse(self.publish(md))
+        links = root.find_all("a")
+        self.assertEqual([(a.attrs, a.text()) for a in links], [({"href": url}, url)] * 4)
+        self.assertEqual(root.find_all("p")[0].elements, [links[0]])
+        self.assertEqual(root.find_all("li")[0].elements, [links[1]])
+        self.assertEqual(root.find_all("td")[1].elements, [links[2]])
+        self.assertEqual(root.find_all("blockquote")[0].find_all("a"), [links[3]])
+
     def test_the_readme_and_docs_leave_no_link_syntax_outside_code(self):
         sources = [ROOT / "README.md", *sorted((ROOT / "docs").glob("*.md"))]
         names = {path.name for path in sources}
@@ -516,6 +660,35 @@ class RenderMarkdownTests(TempDirTestCase):
             )
         self.assertEqual(rc, 0, err)
         self.assertEqual(self.page("n"), expected)
+
+    def test_a_page_with_a_link_loads_the_page_script_and_one_without_does_not(self):
+        """A page with no headings, comments, decisions or revision still
+        loads the page script when its body holds a link, however written,
+        so the script can open one off the site in a new tab."""
+        markdown = (
+            ("bare", "See https://example.com/x for more.\n", True),
+            ("linked", "See [the site](http://example.com/) for more.\n", True),
+            ("relative", "See [the part](other.md#part) or [the top](#top).\n", True),
+            ("none", "No links at all, only https: as a word.\n", False),
+        )
+        html_bodies = (
+            ("protocol", '<p><a href="//example.com/body">elsewhere</a></p>\n', True),
+            ("entity", '<p><a href="https&#58;//example.com/body">elsewhere</a></p>\n', True),
+            ("upper", "<p><A HREF='/\\example.com/body'>elsewhere</A></p>\n", True),
+            ("anchorless", '<p><a name="x">no href</a></p>\n', False),
+        )
+        cases = [(name, ("--markdown", "-"), source, loads) for name, source, loads in markdown]
+        cases += [(name, ("--body", body), "", loads) for name, body, loads in html_bodies]
+        for name, given, stdin, loads in cases:
+            with self.subTest(name=name):
+                with mock.patch("sys.stdin", io.StringIO(stdin)):
+                    rc, _, err = run_cli(
+                        "render", *given, "--name", name, "--title", "T",
+                        "--out-dir", str(self.out_dir), *self.COMMON,
+                    )
+                self.assertEqual(rc, 0, err)
+                page = self.page(name).decode("utf-8")
+                self.assertEqual(f'<script src="{cli.PAGE_SCRIPT}?v=' in page, loads)
 
     def test_a_body_larger_than_the_command_line_renders_in_a_subprocess(self):
         paragraph = "A line of prose that repeats to make the page large & long. " * 4

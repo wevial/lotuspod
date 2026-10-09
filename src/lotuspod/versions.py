@@ -17,11 +17,18 @@ directory that is not the top of its own repository has none.
 
 old_page() is a version's HTML as serve answers it: marked as old, with a
 banner linking back to the current page, and its decision forms disabled.
+
+compare() is what changed between two versions: the sections of each body,
+split at its h2 elements by id and compared by their text with whitespace
+collapsed, and a line diff of their markdown sources when both have one.
+History.changes() reads both versions and their sources for it, in at most
+three git processes.
 """
 
 from __future__ import annotations
 
 import datetime as _dt
+import difflib
 import html
 import os
 import re
@@ -29,6 +36,7 @@ import subprocess
 import threading
 import urllib.parse
 from dataclasses import dataclass
+from html.parser import HTMLParser
 from pathlib import Path
 from typing import Callable
 
@@ -38,6 +46,14 @@ MAX_VERSIONS = 200
 GIT_TIMEOUT = 10
 # A version's commit as a URL names it: the full object id.
 COMMIT = re.compile(r"[0-9a-f]{40}")
+# The lines of a source diff compare() keeps.
+MAX_DIFF_LINES = 400
+# Context lines around each change in a source diff.
+DIFF_CONTEXT = 3
+# What a body's text before its first h2 is called, the whole text of a body
+# without one.
+PAGE_TEXT = "The page text"
+_SLUG_STRIP = re.compile(r"[^a-z0-9]+")
 
 _NO_BLOB = "0" * 40
 _MAIN_OPEN_RE = re.compile(r'<main class="([^"]*)"([^>]*)>')
@@ -67,6 +83,167 @@ def _utc(stamp: str) -> str:
     except ValueError:
         return ""
     return moment.astimezone(_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+@dataclass(frozen=True)
+class Section:
+    """One h2 section of a page's body; the text before the first h2 is one
+    with id "" titled PAGE_TEXT."""
+
+    id: str
+    title: str
+    # Its text, the heading's included, with whitespace collapsed.
+    text: str
+
+    # Whether it starts at an h2; the text before the first one does not.
+    headed: bool = True
+
+    @property
+    def key(self) -> str:
+        """What the section is known by in another version: its id, else the
+        id the outline gives its heading text (cli.slugify), as a page left
+        with one h2 has none, with its heading text, so a renamed heading
+        is one section removed and one added even where it keeps an id the
+        author gave it; "" for the text before the first h2."""
+        if not self.headed:
+            return ""
+        anchor = self.id or _SLUG_STRIP.sub("-", self.title.lower()).strip("-") or "section"
+        return f"{anchor}\n{self.title}"
+
+
+class _Sections(HTMLParser):
+    """The sections of a page's section.artifact-body, by text alone: an
+    attribute, such as a form's version hash, is never part of it. A block
+    element's tags count as whitespace, so a line break between two blocks is
+    no change, and an inline element's as nothing, so neither is wrapping
+    words in one."""
+
+    _SKIPPED = frozenset({"script", "style", "template"})
+    # The elements that start a new line of text, as the page script reads
+    # the text (js/page-open.js BLOCK).
+    _BLOCKS = frozenset({
+        "address", "article", "aside", "blockquote", "br", "caption", "dd", "details", "div",
+        "dl", "dt", "fieldset", "figcaption", "figure", "footer", "form", "h1", "h2", "h3",
+        "h4", "h5", "h6", "header", "hr", "legend", "li", "main", "nav", "ol", "p", "pre",
+        "section", "summary", "table", "tbody", "td", "tfoot", "th", "thead", "tr", "ul"})
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        # Open section elements while inside the body, 0 outside it.
+        self._depth = 0
+        self._skipped = 0
+        # pre elements open inside a pre.mermaid: an h2 there is diagram source.
+        self._mermaid = 0
+        self._heading: list[str] | None = None
+        self._current = {"id": "", "title": PAGE_TEXT, "text": [], "headed": False}
+        self.found: list[dict] = []
+
+    def _gap(self, tag: str) -> None:
+        if self._depth and not self._skipped and tag in self._BLOCKS:
+            self._current["text"].append(" ")
+
+    def handle_starttag(self, tag: str, attrs: list) -> None:
+        values = dict(attrs)
+        if tag == "section":
+            # A section inside the body is a block too.
+            self._gap(tag)
+            if self._depth or "artifact-body" in (values.get("class") or "").split():
+                self._depth += 1
+            return
+        if not self._depth:
+            return
+        self._gap(tag)
+        if tag in self._SKIPPED:
+            self._skipped += 1
+        elif tag == "pre" and (self._mermaid or "mermaid" in (values.get("class") or "").split()):
+            self._mermaid += 1
+        elif tag == "h2" and not self._mermaid and self._heading is None:
+            self.found.append(self._current)
+            self._current = {"id": values.get("id") or "", "title": "", "text": [],
+                             "headed": True}
+            self._heading = []
+
+    def handle_endtag(self, tag: str) -> None:
+        if not self._depth:
+            return
+        self._gap(tag)
+        if tag == "section":
+            self._depth -= 1
+        elif tag in self._SKIPPED and self._skipped:
+            self._skipped -= 1
+        elif tag == "pre" and self._mermaid:
+            self._mermaid -= 1
+        elif tag == "h2" and self._heading is not None:
+            self._current["title"] = " ".join("".join(self._heading).split())
+            self._heading = None
+
+    def handle_data(self, data: str) -> None:
+        if not self._depth or self._skipped:
+            return
+        self._current["text"].append(data)
+        if self._heading is not None:
+            self._heading.append(data)
+
+    def sections(self) -> list[Section]:
+        self.close()
+        if self._heading is not None:
+            self._current["title"] = " ".join("".join(self._heading).split())
+        made = []
+        for found in [*self.found, self._current]:
+            text = " ".join("".join(found["text"]).split())
+            # The text before the first h2 counts only when there is some.
+            if found["headed"] or text:
+                made.append(Section(found["id"], found["title"] or found["id"], text,
+                                    found["headed"]))
+        return made
+
+
+def sections(page_html: str) -> list[Section]:
+    """The sections of a page's body, in its order."""
+    parser = _Sections()
+    parser.feed(page_html)
+    return parser.sections()
+
+
+def source_diff(old: str, new: str) -> tuple[list[dict], bool]:
+    """A unified diff of two sources, as {op, text} lines: op "+", "-", " "
+    or "@" for a hunk's header; at most MAX_DIFF_LINES of them, and whether
+    any were cut."""
+    lines: list[dict] = []
+    diff = difflib.unified_diff(old.splitlines(), new.splitlines(), n=DIFF_CONTEXT, lineterm="")
+    for line in diff:
+        if line.startswith(("---", "+++")) and not lines:
+            continue
+        if len(lines) == MAX_DIFF_LINES:
+            return lines, True
+        if line.startswith("@@"):
+            lines.append({"op": "@", "text": line})
+        else:
+            lines.append({"op": line[:1] or " ", "text": line[1:]})
+    return lines, False
+
+
+def compare(old_html: str, new_html: str, old_source: str | None = None,
+            new_source: str | None = None) -> dict:
+    """What changed from one version of a page to another: {sections:
+    {changed, added, removed}}, the first two as {id, title} in the new
+    page's order and removed ones as {title} in the old page's (id "" for
+    a heading the page gives none, and for the text before the first), and, when
+    both sources are given, {lines, truncated} from source_diff()."""
+    before = {section.key: section for section in sections(old_html)}
+    after = sections(new_html)
+    keys = {section.key for section in after}
+    found: dict = {"sections": {
+        "changed": [{"id": section.id, "title": section.title} for section in after
+                    if section.key in before and before[section.key].text != section.text],
+        "added": [{"id": section.id, "title": section.title} for section in after
+                  if section.key not in before],
+        "removed": [{"title": section.title} for key, section in before.items()
+                    if key not in keys],
+    }}
+    if old_source is not None and new_source is not None:
+        found["lines"], found["truncated"] = source_diff(old_source, new_source)
+    return found
 
 
 class History:
@@ -178,6 +355,55 @@ class History:
             if version.commit == commit and text is not None:
                 return version, behind, text
         return None
+
+    def _objects(self, names: list[str]) -> list[str | None] | None:
+        """Each named object's text, None for one git does not have; None
+        when git failed."""
+        asked = "".join(f"{name}\n" for name in names).encode("utf-8")
+        out = self._git("cat-file", "--batch", data=asked)
+        if out is None:
+            return None
+        texts: list[str | None] = []
+        at = 0
+        while at < len(out) and len(texts) < len(names):
+            end = out.find(b"\n", at)
+            if end < 0:
+                break
+            header = out[at:end].split()
+            at = end + 1
+            if len(header) == 3 and header[2].isdigit():
+                size = int(header[2])
+                texts.append(out[at:at + size].decode("utf-8", "replace"))
+                at += size + 1
+            else:
+                # NAME missing, or ambiguous.
+                texts.append(None)
+        return texts if len(texts) == len(names) else None
+
+    def changes(self, name: str, since: str) -> tuple[Version, int, dict | None] | None:
+        """NAME's newest listed version whose revision is since, how many
+        listed versions are newer, and what changed from it to the current
+        one (compare(), with the sources when both versions kept NAME.md);
+        None for what changed when it is the current one. None unless a
+        listed version carries since."""
+        if not since:
+            return None
+        commits = self._commits(name)
+        listed = self._versions(commits)[0]
+        found = next(((behind, version) for behind, version in enumerate(listed)
+                      if version.revision == since), None)
+        if found is None:
+            return None
+        behind, version = found
+        if behind == 0:
+            return version, 0, None
+        blobs = {commit: blob for commit, _, blob in commits}
+        current = listed[0]
+        texts = self._objects([blobs[version.commit], blobs[current.commit],
+                               f"{version.commit}:{name}.md", f"{current.commit}:{name}.md"])
+        if texts is None or texts[0] is None or texts[1] is None:
+            return None
+        return version, behind, compare(*texts)
 
 
 def _shown_date(stamp: str) -> str:

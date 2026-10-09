@@ -88,6 +88,21 @@ twice.
   [Versions](publishing.md#versions)). It is empty when the output directory
   is not the top of its own repository, and only read (any other method is
   405).
+- `GET /api/changes?page=NAME&since=REV` compares the newest listed version
+  of the page whose revision is REV with the current one, and answers
+  `{page, since: {commit, date, revision}, behind, changed, sections}`:
+  `behind` is how many listed versions are newer, and `changed` is false,
+  with nothing else compared, when REV is the current revision. `sections`
+  is `{changed: [{id, title}], added: [{id, title}], removed: [{title}]}`,
+  the first two in the current page's order. When both versions kept
+  `NAME.md` it also answers `lines`, a unified diff of the two sources with
+  three lines of context, each `{op, text}` with `op` one of `+`, `-`, a
+  space or `@` (a hunk's header), at most 400, and `truncated`, true when
+  the diff was cut (see [Versions](publishing.md#versions)). It is 404
+  `unknown_revision` when no listed version carries REV, which includes
+  every page outside a repository, 400 `invalid_query` without exactly one
+  `page` and one `since` of 1 to 100 characters, and only read (any other
+  method is 405).
 
 An open page notices when it is published again: every published page
 carries a revision, so it loads the page script, `lotuspod-page.js`, even
@@ -97,7 +112,7 @@ threads carries, and asks `/api/revision` every 60 seconds and at once when
 its tab is seen again. Once they differ, a banner fixed over the top of the
 window, which moves no text and is announced politely, reads "A newer version
 of this page is available" with a Reload button. Reload brings the new
-revision back at the same scroll position, with the comments thread that was
+revision back at the same place in its text, with the comments thread that was
 open open again and any comment or reply not yet sent back in its composer,
 its text and its uploaded images (kept per page in sessionStorage; where the
 browser keeps nothing, the page still reloads, at its top). A comment
@@ -217,11 +232,19 @@ as typed):
   unclosed block runs to the end.
 - Lines starting `- ` or `* ` make a bullet list, and lines starting `1. ` a
   numbered one. Lists are one level deep: an indented item is an item.
-- `[TEXT](TARGET)` is a link that opens in a new tab, its text plain, only
-  when TARGET is `http:` or `https:` (any case), a `#anchor`, or a relative
-  path (no `//` start, no `:` before its first `/`, `?` or `#`), as for a
-  page's own links. Any other target (`javascript:`, `data:`, `mailto:`,
-  `//host/`) leaves the whole link as typed.
+- `[TEXT](TARGET)` is a link, its text plain, only when TARGET is `http:` or
+  `https:` (any case), a `#anchor`, or a relative path (no `//` start, no
+  `:` before its first `/`, `?` or `#`), as for a page's own links. Any other
+  target (`javascript:`, `data:`, `mailto:`, `//host/`) leaves the whole link
+  as typed.
+- A bare `http://` or `https://` URL is a link to itself, by the same rules
+  as a page's bare URLs (see "From markdown" in
+  [publishing.md](publishing.md#from-markdown)): trailing punctuation and an
+  unpaired closing bracket stay text after it. One in a code span, a code
+  block, an image or a link, refused or not, is not linked again.
+- A link to the page's own site (a relative path, an `#anchor` or an
+  absolute URL on the same origin) opens in the same tab; any other opens in
+  a new tab with `rel="noopener noreferrer"`.
 - Anything else (headings, quotes, tables, images, HTML) is literal text.
 
 A passage's opening words in a list stay plain text.

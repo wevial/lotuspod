@@ -99,6 +99,29 @@ def load_tokens() -> dict:
 _MERMAID_BLOCK = re.compile(r'<pre\b[^>]*\bclass="[^"]*\bmermaid\b')
 
 
+class _LinkFinder(HTMLParser):
+    """Whether a body holds an `a` element with an href."""
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.found = False
+
+    def handle_starttag(self, tag: str, attrs: list) -> None:
+        if tag == "a" and any(key == "href" for key, _ in attrs):
+            self.found = True
+
+
+def has_link(body: str) -> bool:
+    """Whether body holds any link. Which site a link goes to is only known
+    in the browser (`//host`, an entity in the scheme and `/\\host` all leave
+    it), so the page script (js/link-tab.js) is loaded for every link and
+    decides its tab there."""
+    finder = _LinkFinder()
+    finder.feed(body)
+    finder.close()
+    return finder.found
+
+
 def has_mermaid_block(body: str) -> bool:
     return _MERMAID_BLOCK.search(body) is not None
 
@@ -297,6 +320,7 @@ THEME_SOURCES = {
     ),
     PAGE_SCRIPT: (
         "js/page-open.js",
+        "js/link-tab.js",
         "js/decisions.js",
         "js/narrow.js",
         "js/attachments.js",
@@ -713,9 +737,11 @@ def cmd_render(args: argparse.Namespace) -> int:
         "owner": owner,
         "variant_class": variant_class(args.variant),
         "mermaid": has_mermaid_block(body),
-        # A page stamped with a revision notices when it is published again.
+        # A page stamped with a revision notices when it is published again,
+        # and a link off the site opens in a new tab.
         "page_script_needed": (has_decisions or with_comments or wrapped or has_node_tables
-                               or bool(getattr(args, "revision", ""))),
+                               or bool(getattr(args, "revision", ""))
+                               or has_link(body)),
         "page_script": PAGE_SCRIPT,
         "mermaid_theme_variables": mermaid_theme_variables(tokens),
         "mermaid_dir": MERMAID_DIR,
