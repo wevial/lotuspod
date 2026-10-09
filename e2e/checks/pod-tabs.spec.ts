@@ -101,7 +101,7 @@ function publish(name: string, markdown: string): string {
   }
 }
 
-// The Pages view of the index, which signed in is not the one it opens on.
+// The Pages view of the index.
 async function openIndex(page: Page, address = '/#pages') {
   await page.goto(address);
   await expect(strip(page)).toHaveCount(1);
@@ -326,15 +326,17 @@ test.describe('signed in', () => {
     await expect(page.locator('.index-activity')).toBeVisible();
     await expect(page).toHaveURL(/\/#tabs=capture-article&view=activity$/);
 
+    const entries = await page.evaluate(() => history.length);
     await pages.click();
     await expect(pages).toHaveAttribute('aria-pressed', 'true');
     await expect(page.locator('.index-table')).toBeVisible();
     await expect(page).toHaveURL(/\/#tabs=capture-article$/);
-    // The back button still moves between the views, the tab kept.
-    await page.goBack();
+    // Back to Recent activity, the tab kept, each press written in place.
+    await activity.click();
     await expect(activity).toHaveAttribute('aria-pressed', 'true');
     await expect(page).toHaveURL(/\/#tabs=capture-article&view=activity$/);
     await expect(tabs(page)).toHaveCount(1);
+    expect(await page.evaluate(() => history.length)).toBe(entries);
 
     // With a tab active too.
     await activity.click();
@@ -583,8 +585,8 @@ test.describe('signed in', () => {
     await expect(tabs(page)).toHaveCount(0);
     await expectListing(page);
     await expect(page.getByLabel('Search')).toBeFocused();
-    // The fragment is the one the index had before any tab, its view too.
-    await expect(page).toHaveURL(/\/#pages$/);
+    // The fragment is the view's own again: none for Pages.
+    await expect(page).not.toHaveURL(/#/);
     await expect(page.getByRole('button', { name: 'Pages', exact: true })).toHaveAttribute('aria-pressed', 'true');
     await expect(page.locator('.index-table')).toBeVisible();
 

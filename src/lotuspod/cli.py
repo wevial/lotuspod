@@ -345,6 +345,7 @@ THEME_SOURCES = {
         "js/tables.js",
         "js/table-expand.js",
         "js/image-viewer.js",
+        "js/version-menu.js",
         "js/versions.js",
         "js/diagram-cards.js",
         "js/ref-cards.js",

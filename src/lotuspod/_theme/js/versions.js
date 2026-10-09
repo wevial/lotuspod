@@ -7,9 +7,11 @@
   // page shows its versions view in place of its header and body: a
   // breadcrumb back to the page, the heading, and the versions newest first,
   // each with its date and time, a note under it saying what it changed (its
-  // summary, "First version" when it has none), the current one marked and
-  // every other with a "View" link to its read-only old version
-  // (NAME.html?version=COMMIT).
+  // summary, "First version" when it has none), the current one marked, and
+  // each with a "View" link that a click anywhere on its row follows: the
+  // current one's to the page (NAME.html), every other's to its read-only
+  // old version (NAME.html?version=COMMIT). Beside the "Versions · N" link a
+  // "▾" button opens a menu of the versions (js/version-menu.js).
   // The list shows SHOWN entries, and "Show older versions" shows SHOWN more
   // each time. Any other answer leaves the page as it is: no link, no view.
   //
@@ -217,11 +219,15 @@
       var count = versions.length;
       var link = element("a", "artifact-versions-link", "Versions · " + count);
       link.href = HASH;
-      // The link takes the slot the theme kept for it at the end of the
-      // line, so the header does not move when it arrives; only the badge
-      // of replies to the reader (js/comments.js) comes after it.
+      // The link and the version menu's button (js/version-menu.js) take
+      // the slot the theme kept for them at the end of the line, so the
+      // header does not move when they arrive; only the badge of replies to
+      // the reader (js/comments.js) comes after them.
+      var current = versions.find(function (version) { return version.current; });
+      var menu = versionMenu(versions, page, current ? current.commit : null,
+        found ? found.since.commit : null);
       var slot = element("span", "artifact-versions-slot", "· ");
-      slot.appendChild(link);
+      slot.append(link, menu.button, menu.menu);
       line.insertBefore(slot, line.querySelector(".artifact-unread"));
       line.classList.add("artifact-meta--versions");
 
@@ -240,16 +246,20 @@
           item.classList.add("artifact-versions-entry--seen");
           item.appendChild(element("span", "artifact-versions-seen", "you last looked"));
         }
+        // The row's one link, stretched over the row (css/versions.css), so
+        // a click anywhere on it is a click on the link.
+        var open = element("a", "artifact-versions-view", "View");
         if (version.current) {
           item.classList.add("artifact-versions-entry--current");
           item.appendChild(element("span", "artifact-versions-current", "current"));
+          open.href = encodeURIComponent(page) + ".html";
+          open.setAttribute("aria-label", "View the current version");
         } else {
-          var open = element("a", "artifact-versions-view", "View");
           open.href = encodeURIComponent(page) + ".html?version=" +
             encodeURIComponent(version.commit);
           open.setAttribute("aria-label", "View the version of " + time.textContent);
-          item.appendChild(open);
         }
+        item.appendChild(open);
         return item;
       }
 
@@ -304,6 +314,10 @@
         var open = location.hash === HASH;
         if (open === Boolean(view && !view.hidden)) {
           return;
+        }
+        if (open) {
+          // The view hides the header, the menu with it.
+          menu.close(false);
         }
         if (!view) {
           make();
