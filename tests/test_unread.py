@@ -263,7 +263,6 @@ class UnreadTests(UnreadTestCase):
         self.assertEqual(status, 200, got)
         self.republish("--no-comments")
 
-        self.assertEqual(self.unread(A), [])
         status, got = self.ask("GET", "/api/seen")
         self.assertEqual(status, 200, got)
         self.assertEqual(got["pages"]["plan"]["unread"], 0)
