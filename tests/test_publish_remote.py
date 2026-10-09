@@ -69,6 +69,15 @@ def git(cwd: Path, *argv: str) -> str:
     return done.stdout
 
 
+# Two publishes a second apart stamp different updated times, in the page,
+# the index and the manifest; everything else must match byte for byte.
+_UPDATED_STAMP_RE = re.compile(rb"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z")
+
+
+def unstamped(data: bytes) -> bytes:
+    return _UPDATED_STAMP_RE.sub(b"STAMP", data)
+
+
 class RemotePublishTestCase(unittest.TestCase):
     def setUp(self) -> None:
         tmp = tempfile.TemporaryDirectory()
@@ -219,7 +228,8 @@ class NoConfigTests(RemotePublishTestCase):
         self.assertEqual(sorted(p.name for p in here.iterdir()),
                          sorted(p.name for p in local.iterdir()))
         for page in here.iterdir():
-            self.assertEqual(page.read_bytes(), (local / page.name).read_bytes(), page.name)
+            self.assertEqual(unstamped(page.read_bytes()),
+                             unstamped((local / page.name).read_bytes()), page.name)
 
     def test_a_config_variable_naming_no_file_publishes_here(self):
         here = self.tmp / "here"
@@ -403,8 +413,8 @@ class RemoteImageTests(RemoteImageTestCase):
         self.assertEqual(done.returncode, 0, done.stderr)
         self.assertIn("--source-archive", self.remote_argv(self.calls()[0]))
         for name in ("garden.html", "garden.body.html"):
-            self.assertEqual((self.out_dir / name).read_bytes(), (here / name).read_bytes(),
-                             name)
+            self.assertEqual(unstamped((self.out_dir / name).read_bytes()),
+                             unstamped((here / name).read_bytes()), name)
         self.assertEqual(self.media_files(), sorted([self.chart_name, self.fish_name]))
 
     def test_standard_input_finds_its_images_under_base(self):
