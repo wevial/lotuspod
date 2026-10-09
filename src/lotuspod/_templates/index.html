@@ -677,18 +677,22 @@
       // Show older: the 7 days before the earliest asked, merged in. A
       // page already listed takes its older events at the end of its group;
       // a new one is listed after the others.
+      const merge = (into, earlier) => {
+        for (const entry of earlier.pages) {
+          const listed = into.pages.find((page) => page.page === entry.page);
+          if (listed) listed.events.push(...entry.events);
+          else into.pages.push(entry);
+        }
+        into.from = earlier.from;
+        into.older = earlier.older;
+      };
+
       older.addEventListener("click", async () => {
         older.disabled = true;
         const earlier = await askActivity(feed.from);
         older.disabled = false;
         if (!earlier) return;
-        for (const entry of earlier.pages) {
-          const listed = feed.pages.find((page) => page.page === entry.page);
-          if (listed) listed.events.push(...entry.events);
-          else feed.pages.push(entry);
-        }
-        feed.from = earlier.from;
-        feed.older = earlier.older;
+        merge(feed, earlier);
         showActivity();
         if (older.hidden) activityView.focus();
       });
@@ -712,10 +716,30 @@
       filter();
       askSeen();
       startActivity();
+      // The days the view already shows, asked again from the newest, so
+      // each reply's unread flag is the route's word now; kept as they were
+      // when the route does not answer.
+      const askAgain = async () => {
+        if (!feed) return;
+        const until = feed.from;
+        const fresh = await askActivity(null);
+        while (fresh && fresh.older && fresh.from > until) {
+          const earlier = await askActivity(fresh.from);
+          if (!earlier) return;
+          merge(fresh, earlier);
+        }
+        if (!fresh) return;
+        feed = fresh;
+        showActivity();
+      };
+
       // Back from a page through the back-forward cache, the index is the one
-      // it was: ask again, so a page just read loses its mark and its count.
+      // it was: ask again, so a page just read loses its mark, its count and
+      // its replies' "new, to you".
       window.addEventListener("pageshow", (event) => {
-        if (event.persisted) askSeen();
+        if (!event.persisted) return;
+        askSeen();
+        askAgain();
       });
     })();
   </script>

@@ -576,7 +576,8 @@ and one "Showing" line, across both views: a page's group is kept when its page
 passes the label and toggle tests its row does, and the search matches its
 title, labels and events, an unread reply's "new, to you" included. When the filters leave no group, the view reads "No
 activity matches these filters." Nothing updates while the index is open; a
-reload or "Show older" asks again.
+reload or "Show older" asks again, and so does coming back to the index from
+the browser's back-forward cache, over the days the view already showed.
 
 Sorting, the search, the Labels menu, the marks and Recent activity are progressive enhancement from a
 script inlined in `index.html` — no extra file to serve — so with scripting off

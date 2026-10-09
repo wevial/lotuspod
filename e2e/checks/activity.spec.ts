@@ -347,6 +347,46 @@ test.describe('signed in', () => {
     expect(errors).toEqual([]);
   });
 
+  test('back through the back-forward cache, the view asks again over the days it shows', async ({ page }) => {
+    const errors = watchErrors(page);
+    let read = false;
+    const asked: (string | null)[] = [];
+    const reply = (unread: boolean) => ({ kind: 'reply', id: 7, thread: 6, sectionTitle: 'Heater',
+      actor: { kind: 'agent', handle: 'hermes' }, mine: false, yours: true, unread });
+    // The week before `before`.
+    const earlier = (before: string) => oneEvent('capture-article', 'Capture article',
+      { kind: 'version', commit: 'c2', revision: 'r2', actor: 'hermes', first: true, summary: '' },
+      3 * DAY, false, Date.parse(before));
+    await page.route((url) => url.pathname === ACTIVITY, (route) => {
+      const before = new URL(route.request().url()).searchParams.get('before');
+      asked.push(before);
+      if (before) return route.fulfill({ json: earlier(before) });
+      // The newest week ends now, as the route's does.
+      return route.fulfill({ json: oneEvent('capture-comments', 'Capture comments', reply(!read), DAY, true,
+        Date.now()) });
+    });
+
+    await page.goto('/');
+    const comments = group(page, 'capture-comments');
+    await expect(comments.locator('.index-activity-new')).toHaveText('new, to you');
+    await page.getByRole('button', { name: 'Show older' }).click();
+    await expect.poll(() => shownGroups(page)).toEqual(['capture-comments', 'capture-article']);
+
+    // The reply is read elsewhere; the index comes back from the cache.
+    read = true;
+    asked.length = 0;
+    await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true })));
+    await expect(comments.locator('.index-activity-new')).toHaveCount(0);
+    await expect(comments.locator('.index-dot')).toHaveClass('index-dot index-dot--reply');
+    await expect(comments).toContainText('hermes replied to your comment on “Heater”');
+    // Both weeks, as shown before.
+    expect(await shownGroups(page)).toEqual(['capture-comments', 'capture-article']);
+    expect(asked.length).toBe(2);
+    expect(asked[0]).toBeNull();
+    await expect(page.locator('.index-count')).toHaveText('2 pages with activity in the last 14 days');
+    expect(errors).toEqual([]);
+  });
+
   test('an answer with nothing in it says there was no activity', async ({ page }) => {
     const errors = watchErrors(page);
     const now = Date.now();
