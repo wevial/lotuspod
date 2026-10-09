@@ -241,6 +241,8 @@ _SCHEMA = {1: (
     # The answer whose note a comment holds, as JSON {id, choice, label};
     # NULL on every other comment.
     "ALTER TABLE comments ADD COLUMN answer TEXT",
+    # So the pull finds the comment holding each answer's note by its id.
+    "CREATE INDEX comments_by_answer ON comments(json_extract(answer, '$.id'))",
 )}
 # The settings row that holds whether the responder is paused.
 _PAUSED = "responder_paused"
@@ -1061,19 +1063,36 @@ class Database:
         {answer, asked, comment}: the answer, the {text, label} of its
         question and choice as the page asked them (None in an answer stored
         before they were kept), and the id of the comment holding its note,
-        or None."""
+        or None. A note kept unchanged with another option is held by the
+        comment of the answer that first gave it."""
         with self._connect() as conn:
             rows = conn.execute(
-                "SELECT answers.*, (SELECT MIN(comments.id) FROM comments"
-                " WHERE comments.page = answers.page AND comments.answer IS NOT NULL"
-                " AND json_extract(comments.answer, '$.id') = answers.id) AS note_comment"
-                " FROM answers WHERE id NOT IN"
+                "SELECT * FROM answers WHERE id NOT IN"
                 " (SELECT answer FROM answer_acks WHERE handle = ?) ORDER BY id", (handle,)
             ).fetchall()
-        return [{"answer": _answer(row),
-                 "asked": {"text": row["question_text"], "label": row["choice_label"]},
-                 "comment": row["note_comment"]}
-                for row in rows]
+            # Each answer's note comment, read once along comments_by_answer:
+            # looked up per answer, the index goes unused.
+            notes = dict(conn.execute(
+                "SELECT json_extract(answer, '$.id'), MIN(id) FROM comments"
+                " WHERE json_extract(answer, '$.id') IS NOT NULL"
+                " GROUP BY json_extract(answer, '$.id')").fetchall())
+            found = []
+            for row in rows:
+                comment = notes.get(row["id"])
+                note, earlier = row["note"], row["supersedes"]
+                # Back along the answers it supersedes while the note stays.
+                while comment is None and note.strip() and earlier is not None:
+                    before = conn.execute(
+                        "SELECT note, supersedes FROM answers WHERE id = ?", (earlier,)
+                    ).fetchone()
+                    if before is None or before["note"] != note:
+                        break
+                    comment, earlier = notes.get(earlier), before["supersedes"]
+                found.append({"answer": _answer(row),
+                              "asked": {"text": row["question_text"],
+                                        "label": row["choice_label"]},
+                              "comment": comment})
+        return found
 
     def acknowledge_answer(self, answer_id: int, handle: str) -> str:
         """Record that handle has the answer answer_id; when it first did."""

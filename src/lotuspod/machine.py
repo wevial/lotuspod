@@ -79,7 +79,8 @@ the question while it asks it at the answer's version, and "" when
 `reworded` is true. The context is not kept with the answer.
 
 A pulled answer whose note the reader's page stored as a comment in a
-thread on its decision also carries `noteComment`, that comment's id; the
+thread on its decision also carries `noteComment`, that comment's id (the
+earlier answer's, for a note kept unchanged with another option); the
 comment carries `answer`, {id, choice, label} of the answer, and is pulled
 as any comment is.
 

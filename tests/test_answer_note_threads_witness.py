@@ -33,7 +33,12 @@ Which model runs at night.
 NOTE = "Why not Sonnet for nightly runs?"
 
 
-class AnswerNoteThreadsWitness(Site):
+class NoteSite(Site):
+    """The page published as hermes and served; with listening, hermes has
+    pulled, so the reader's comments are routed to it."""
+
+    listening = True
+
     def setUp(self):
         super().setUp()
         self.hermes = self.credential("hermes", ["hermes"], ["pull", "claim", "reply", "publish"])
@@ -43,8 +48,8 @@ class AnswerNoteThreadsWitness(Site):
                         str(self.hermes), "--db", str(self.db), "--out-dir", str(self.out))
         self.assertEqual(done.returncode, 0, done.stderr)
         self.start_server()
-        # hermes is listening, so the reader's comments are routed to it.
-        self.assertEqual(self.pull(self.hermes, "hermes"), [])
+        if self.listening:
+            self.assertEqual(self.pull(self.hermes, "hermes"), [])
 
     def answer(self, choice, note, question="decision-1"):
         """The reader's answer at the version the page's form asks it."""
@@ -68,6 +73,8 @@ class AnswerNoteThreadsWitness(Site):
         self.assertEqual(done.returncode, 0, done.stderr)
         return done.stdout
 
+
+class AnswerNoteThreadsWitness(NoteSite):
     def test_a_note_is_a_thread_the_owner_pulls_claims_and_replies_to(self):
         answer = self.answer("opus", NOTE)
         comment = answer["comment"]
@@ -120,6 +127,35 @@ class AnswerNoteThreadsWitness(Site):
         [thread] = self.threads()
         self.assertEqual(thread["replies"][-1]["id"], back["comment"]["id"])
         self.assertFalse(thread["resolution"]["resolved"])
+
+    def test_a_note_kept_with_another_option_is_still_printed_once(self):
+        first = self.answer("opus", NOTE)
+        second = self.answer("sonnet", NOTE)
+        self.assertNotIn("comment", second)
+        items = self.pull(self.hermes, "hermes")
+        pointed = {item["answer"]["id"]: item.get("noteComment")
+                   for item in items if item["kind"] == "answer"}
+        self.assertEqual(pointed, {first["id"]: first["comment"]["id"],
+                                   second["id"]: first["comment"]["id"]})
+        out = self.text_pull()
+        self.assertEqual(out.count(NOTE), 1, out)
+        self.assertNotIn("The answer's note:", out)
+
+
+class NoteBeforeTheOwnerListensWitness(NoteSite):
+    """A note saved before hermes ever pulled goes to the responder."""
+
+    listening = False
+
+    def test_the_answer_does_not_tell_the_owner_to_claim_it(self):
+        answer = self.answer("opus", NOTE)
+        self.assertEqual(answer["comment"]["owner"], "responder")
+        out = self.text_pull()
+        [line] = [line for line in out.splitlines() if line.startswith("- Note: comment")]
+        self.assertEqual(line, f"- Note: comment {answer['comment']['id']}, "
+                               "in a thread on this decision")
+        code, refused = self.agent(self.hermes, "claim", str(answer["comment"]["id"]))
+        self.assertEqual((code, refused.get("error")), (1, "not_routed"))
 
 
 if __name__ == "__main__":

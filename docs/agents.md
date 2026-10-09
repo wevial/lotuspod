@@ -136,7 +136,9 @@ responder may claim it. Items are, comments first, oldest first:
   order, read against the page's form, or `null` when `reworded` is true.
   An answer whose note opened a thread on its decision also carries
   `noteComment`, the id of the comment holding the note, which comes as its
-  own comment item.
+  own comment item while it waits for the handle; an answer that kept the
+  answer it replaced's note with another option points to that note's
+  comment.
 - `page` is `{name, title, owner, revision, sourceFile, source}`: `source`
   is the page's kept `NAME.md` or `NAME.body.html`, exactly as kept, and
   `revision` the revision of those very bytes, which is the page's
@@ -159,15 +161,17 @@ state, ``- Decision: `ID`, QUESTION`` (or ``- Decision: `ID`, which the page
 no longer asks``), a `- Context: LINE` line for each of its context lines,
 ``- Options: LABEL (`VALUE`), ...`` and `- Answer: not
 answered yet`, or the answer's label, choice, reader and time, with its note
-in a fence under "The answer's note:" unless a message of the thread holds
-that note; `show` heads that thread ``## Decision
+in a fence under "The answer's note:" unless a message of the thread holding
+an answer's note has that text; `show` heads that thread ``## Decision
 `ID` in section ...`` rather than `## Section ...`. Under the heading of a
 message holding an answer's note, `pull` and `show` print ``- With answer N:
 LABEL (`VALUE`)``, and a comment item for such a message points to it in the
 thread, "- Note: the reader's note on answer N, comment M in the thread
-below", rather than printing its text twice. An answer whose note opened a
-thread prints "- Note: comment M, in a thread on this decision; claim and
-reply to it there" in place of its note's fence. Under the heading of a resolved thread, `pull` and
+below", rather than printing its text twice. An answer whose note is in a
+thread prints "- Note: comment M, in a thread on this decision" in place of
+its note's fence, ending "; claim and reply to it there" when the same pull
+has that comment routed to the handle, or "; routed to HANDLE, which may claim
+it" when it has it routed to another. Under the heading of a resolved thread, `pull` and
 `show` print "Resolved by WHO at TIME". Under a message's text, `pull` and
 `show` print a line for each of its images, `- Image /media/NAME, WxH, file
 PATH`, or `not in the media directory` in place of `file PATH` when its file

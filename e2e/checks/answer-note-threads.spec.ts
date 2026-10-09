@@ -43,14 +43,14 @@ function hermes(action: string, ...args: string[]) {
   return JSON.parse(run('comments', action, ...args, '--json', '--socket', SOCKET, '--credential', HERMES));
 }
 
-function publish() {
+function publish(name = NAME) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lotuspod-note-threads-'));
   try {
-    const file = path.join(dir, `${NAME}.md`);
+    const file = path.join(dir, `${name}.md`);
     fs.writeFileSync(file, MARKDOWN, 'utf-8');
     const said = run('publish', file, '--local', '--out-dir', OUT, '--owner', 'hermes',
       '--credential', HERMES, '--comments');
-    expect(said).toContain(`published ${NAME} at revision`);
+    expect(said).toContain(`published ${name} at revision`);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
@@ -150,6 +150,39 @@ test.describe('signed in', () => {
     await expect(nightly.chip).toHaveCount(0);
     await expect(page.locator('form.artifact-decision[data-question="decision-2"] + .artifact-decision-chip'))
       .toHaveCount(0);
+    expect(errors).toEqual([]);
+  });
+
+  test("a failed read of the threads after a note is saved is tried again, and the chip comes", async ({ page }) => {
+    test.setTimeout(60_000);
+    test.skip(test.info().repeatEachIndex > 0, 'answers a page the first repeat answered');
+    const name = `${NAME}-retry`;
+    publish(name);
+    const errors = watch(page);
+    await page.goto(`/${name}.html`);
+    const model = decision(page, 'decision-1');
+    // The first read of the comments after the save fails.
+    let saved = false;
+    let refused = 0;
+    let reads = 0;
+    await page.route((url) => url.pathname === '/api/comments', async (route) => {
+      if (route.request().method() !== 'GET' || !saved) return route.fallback();
+      reads += 1;
+      if (refused === 0) {
+        refused += 1;
+        return route.fulfill({ status: 503, json: { error: 'storage_unavailable' } });
+      }
+      return route.fallback();
+    });
+    await model.option('Opus').check();
+    await model.addNote.click();
+    await model.note.fill(NOTE);
+    saved = true;
+    await model.save.click();
+    await expect(model.saved).toContainText('Saved · Opus');
+    await expect.poll(() => refused).toBe(1);
+    await expect(model.chip).toHaveText('1 comment · waiting', { timeout: 15_000 });
+    expect(reads).toBeGreaterThanOrEqual(2);
     expect(errors).toEqual([]);
   });
 });

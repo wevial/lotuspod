@@ -209,6 +209,17 @@ def _message(row: dict, level: str) -> list[str]:
     return lines
 
 
+def _note_line(comment: int, routed: dict, owner: str) -> str:
+    """The line pointing an answer item to the comment holding its note:
+    to claim it only when this pull has it routed to owner."""
+    line = f"- Note: comment {comment}, in a thread on this decision"
+    if comment not in routed:
+        return line
+    if routed[comment] == owner:
+        return line + "; claim and reply to it there"
+    return line + f"; routed to {routed[comment]}, which may claim it"
+
+
 def _page_lines(page: dict) -> list[str]:
     source = page["sourceFile"] or "none kept"
     return [
@@ -225,6 +236,9 @@ def pull_text(payload: dict) -> str:
     if not items:
         lines.append("Nothing waits for this handle.")
     pages: dict[str, dict] = {}
+    # The handle each pulled comment is routed to, by its id.
+    routed = {item["comment"]["id"]: item["comment"].get("owner")
+              for item in items if item["kind"] == "comment"}
     for number, item in enumerate(items, 1):
         page = item["page"]
         pages.setdefault(page["name"], page)
@@ -242,10 +256,11 @@ def pull_text(payload: dict) -> str:
             decision = item.get("decision")
             if decision:
                 lines += _decision(decision)
-                # A note the thread holds is read there, not twice.
-                noted = {row["answer"]["id"] for row in thread if row.get("answer")}
+                # A note the thread holds is read there, not twice, also
+                # once kept unchanged with another option.
+                noted = {row["text"] for row in thread if row.get("answer")}
                 if (decision["answer"] and decision["answer"]["note"]
-                        and decision["answer"]["id"] not in noted):
+                        and decision["answer"]["note"] not in noted):
                     lines += ["", "The answer's note:", "", fence(decision["answer"]["note"])]
             if comment.get("quote"):
                 lines += [f"- Passage: highlighted on {moved(comment, page['revision'])}", "",
@@ -298,8 +313,8 @@ def pull_text(payload: dict) -> str:
                 f"- From: {_by(answer)} at {answer['createdAt']}, "
                 f"against revision {answer['revision'] or 'unknown'}",
                 *([f"- Answered elsewhere: {answer['source']}"] if answer.get("source") else []),
-                *([f"- Note: comment {item['noteComment']}, in a thread on this decision; "
-                   "claim and reply to it there"] if item.get("noteComment") else []),
+                *([_note_line(item["noteComment"], routed, payload["owner"])]
+                  if item.get("noteComment") else []),
                 f"- Acknowledge: `lotuspod comments ack-answer {answer['id']}`",
                 "",
                 ("The answer was given elsewhere and recorded by an agent, on this question "
