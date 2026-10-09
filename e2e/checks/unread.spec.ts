@@ -100,6 +100,14 @@ function seenPost(page: Page, thread: number) {
     (response.request().postDataJSON() ?? {}).thread === thread);
 }
 
+// The page's read of the threads that finds a thread resolved.
+function readResolved(page: Page, thread: number) {
+  return page.waitForResponse(async (response) =>
+    new URL(response.url()).pathname === COMMENTS && response.request().method() === 'GET' &&
+    ((await response.json()) as { threads: (Thread & { resolution: { resolved: boolean } | null })[] })
+      .threads.some((each) => each.root.id === thread && each.resolution?.resolved), { timeout: 60_000 });
+}
+
 function watchErrors(page: Page) {
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
@@ -468,10 +476,7 @@ test.describe('signed in', () => {
     await expect(head).toHaveAttribute('aria-expanded', 'true');
 
     // Resolved in another tab: the page reads it so and folds it.
-    const polled = page.waitForResponse(async (response) =>
-      new URL(response.url()).pathname === COMMENTS && response.request().method() === 'GET' &&
-      ((await response.json()) as { threads: (Thread & { resolution: { resolved: boolean } | null })[] })
-        .threads.some((each) => each.root.id === thread && each.resolution?.resolved), { timeout: 60_000 });
+    let polled = readResolved(page, thread);
     await resolve(request, thread);
     await polled;
     await expect(item).toHaveClass(/\bartifact-comments-entry--resolved\b/);
@@ -487,6 +492,24 @@ test.describe('signed in', () => {
     await page.locator('.artifact-comments-show-resolved', { hasText: 'Hide resolved' }).click();
     await expect(head).toHaveAttribute('aria-expanded', 'true');
     await expect(said).toBeVisible();
+
+    // Resolved elsewhere again, it folds, hidden with the others, and is
+    // not taken as read while out of sight.
+    const posts: unknown[] = [];
+    page.on('request', (sent) => {
+      if (new URL(sent.url()).pathname === SEEN && sent.method() === 'POST' &&
+        (sent.postDataJSON() ?? {}).thread === thread) posts.push(sent.postDataJSON());
+    });
+    polled = readResolved(page, thread);
+    await resolve(request, thread);
+    await polled;
+    await expect(item).toBeHidden();
+    await expect(read).toHaveAttribute('aria-expanded', 'false');
+    await page.locator('.artifact-comments-fold').click();
+    await page.locator('.artifact-comments-rail').click();
+    await expect(page.locator('.artifact-comments-fold')).toBeVisible();
+    await page.waitForTimeout(500);
+    expect(posts).toEqual([]);
     expect(errors).toEqual([]);
   });
 

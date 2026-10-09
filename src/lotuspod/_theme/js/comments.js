@@ -1665,6 +1665,11 @@
       function draw(thread) {
         var made = entry(thread);
         var done = resolved(thread);
+        // Reopened, here or elsewhere, it is no longer open to read: resolved
+        // again, it folds as any thread does.
+        if (!done && toRead === thread) {
+          toRead = null;
+        }
         var opened = done ? current === thread && toRead === thread :
           current === thread || over.holds(thread);
         // Open in a folded panel, it is not in view: folding closes it, and
