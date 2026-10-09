@@ -418,6 +418,9 @@ test.describe('signed in', () => {
         page: request.postDataJSON()?.page ?? '',
       });
     });
+    // Short enough that the section is below the fold until the frame
+    // scrolls to it.
+    await page.setViewportSize({ width: WIDE.width, height: 360 });
     await page.goto('about:blank');
     await page.goto(`/${ARTICLE.name}.html#second-section`);
 
@@ -429,6 +432,16 @@ test.describe('signed in', () => {
       (node as HTMLIFrameElement).contentWindow?.location.href ?? '');
     expect(new URL(shown).pathname).toBe(`/${ARTICLE.name}.html`);
     expect(new URL(shown).hash).toBe('#second-section');
+    // The framed page has scrolled to the section, which sits below its fold.
+    const placed = () => framed(page, ARTICLE).locator('#second-section').evaluate((node) => {
+      const top = node.getBoundingClientRect().top;
+      return { scrolled: window.scrollY, top, from: top + window.scrollY, fold: window.innerHeight };
+    });
+    await expect.poll(async () => (await placed()).scrolled).toBeGreaterThan(0);
+    const where = await placed();
+    expect(where.from).toBeGreaterThan(where.fold);
+    expect(where.top).toBeGreaterThanOrEqual(0);
+    expect(where.top).toBeLessThan(where.fold / 2);
 
     await page.keyboard.press('ControlOrMeta+K');
     await expect(page.getByRole('dialog', { name: 'Find a pod' })).toBeVisible();
