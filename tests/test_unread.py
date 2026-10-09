@@ -253,6 +253,30 @@ class UnreadTests(UnreadTestCase):
         self.assertEqual(status, 200, got)
         self.assertNotIn("plan", got["pages"])
 
+    def republish(self, *options: str) -> None:
+        run_cli("publish", str(self.work / "plan.md"), "--name", "plan", "--out-dir",
+                str(self.out_dir), "--local", "--owner", OWNER, "--credential",
+                str(self.token), "--db", str(self.db_path), *options)
+
+    def test_an_opened_page_without_comments_counts_no_unread_and_they_come_back(self):
+        root = self.open_thread(A, "Is the heater enough?")
+        reply = self.follow_up(root, "It is.")
+        status, got = self.seen({"page": "plan", "revision": self.revision})
+        self.assertEqual(status, 200, got)
+        self.republish("--no-comments")
+
+        self.assertEqual(self.unread(A), [])
+        status, got = self.ask("GET", "/api/seen")
+        self.assertEqual(status, 200, got)
+        self.assertEqual(got["pages"]["plan"]["unread"], 0)
+
+        # Comments, threads and marks stayed stored: the reply is unread again.
+        self.republish()
+        self.assertEqual(self.unread(A), [reply["id"]])
+        status, got = self.ask("GET", "/api/seen")
+        self.assertEqual(status, 200, got)
+        self.assertEqual(got["pages"]["plan"]["unread"], 1)
+
 
 class UnreadSchemaTests(UnreadTestCase):
     def test_a_database_from_the_previous_step_reads_back_with_nothing_unread(self):
