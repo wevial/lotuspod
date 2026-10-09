@@ -953,6 +953,9 @@ class RecordAnswerTests(PullTestCase):
             ("a long source", {**record, "source": "s" * 201}, None, 400, "invalid_body"),
             ("an extra key", {**record, "version": "v"}, None, 400, "invalid_body"),
             ("an unknown page", {**record, "page": "nowhere"}, None, 404, "unknown_page"),
+            ("no page", {key: value for key, value in record.items() if key != "page"},
+             None, 400, "invalid_body"),
+            ("a null page", {**record, "page": None}, None, 400, "invalid_body"),
         )
         for name, body, credential, status, error in cases:
             with self.subTest(name):
@@ -984,6 +987,22 @@ class RecordAnswerTests(PullTestCase):
         [line] = [line for line in out.splitlines() if line.startswith("- Answer:")]
         self.assertTrue(line.startswith(f"- Answer: Yes (`yes`), by {keys.EMAIL} at "), line)
         self.assertNotIn("answered elsewhere", out)
+
+    def test_a_recorded_answer_pulled_by_a_new_owner_names_its_source(self):
+        status, payload = self.record({"page": "plan", "question": "decision-1",
+                                       "choice": "no", "source": self.SOURCE})
+        self.assertEqual(status, 200, payload)
+        rc, _out, err = run_cli("publish", str(self.work / "plan.md"), "--out-dir",
+                                str(self.out_dir), "--local", "--owner", "hermes-desk",
+                                "--credential", str(self.desk))
+        self.assertEqual(rc, 0, err)
+        [item] = self.pull("hermes-desk")
+        self.assertEqual(item["answer"]["id"], payload["answer"]["id"])
+        rc, out, err = self.agent("pull", "--owner", "hermes-desk")
+        self.assertEqual(rc, 0, err)
+        self.assertIn(f"- Answered elsewhere: {self.SOURCE}\n", out)
+        self.assertIn("The answer was given elsewhere and recorded by an agent", out)
+        self.assertNotIn("the reader's choice", out)
 
 
 class ContextPullTests(PullTestCase):

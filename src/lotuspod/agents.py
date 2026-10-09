@@ -283,9 +283,12 @@ def pull_text(payload: dict) -> str:
                 *chosen,
                 f"- From: {_by(answer)} at {answer['createdAt']}, "
                 f"against revision {answer['revision'] or 'unknown'}",
+                *([f"- Answered elsewhere: {answer['source']}"] if answer.get("source") else []),
                 f"- Acknowledge: `lotuspod comments ack-answer {answer['id']}`",
                 "",
-                "The answer is the reader's choice on this question only.",
+                ("The answer was given elsewhere and recorded by an agent, on this question "
+                 "only." if answer.get("source") else
+                 "The answer is the reader's choice on this question only."),
                 "",
             ]
             if answer["note"]:
