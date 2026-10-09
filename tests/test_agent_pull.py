@@ -265,6 +265,13 @@ class PullTestCase(unittest.TestCase):
         text = (self.out_dir / f"{page}.html").read_text(encoding="utf-8")
         return re.search(r'<meta name="lotuspod:revision" content="([0-9a-f]+)">', text).group(1)
 
+    def publish_mail(self, text: str) -> None:
+        source = self.work / "mail.md"
+        source.write_text(text, encoding="utf-8")
+        rc, _out, err = run_cli("publish", str(source), "--out-dir", str(self.out_dir),
+                                "--local", "--owner", "hermes", "--credential", str(self.desk))
+        self.assertEqual(rc, 0, err)
+
 
 class PullTests(PullTestCase):
     def test_pulling_twice_returns_the_same_comment_and_answer(self):
@@ -937,7 +944,7 @@ class RecordAnswerTests(PullTestCase):
         self.assertEqual(self.stored()["decision-1"]["earlier"], [])
 
     def test_a_refused_record_stores_nothing(self):
-        self.publish_mail()
+        self.publish_mail(MAIL)
         machine.create_credential(db.Database(self.db_path), "reader-only", ["hermes"],
                                   ["pull"], self.work / "reader-only.token")
         record = {"page": "plan", "question": "decision-1", "choice": "yes",
@@ -992,13 +999,6 @@ class RecordAnswerTests(PullTestCase):
         [line] = [line for line in out.splitlines() if line.startswith("- Answer:")]
         self.assertTrue(line.startswith(f"- Answer: Yes (`yes`), by {keys.EMAIL} at "), line)
         self.assertNotIn("answered elsewhere", out)
-
-    def publish_mail(self) -> None:
-        source = self.work / "mail.md"
-        source.write_text(MAIL, encoding="utf-8")
-        rc, _out, err = run_cli("publish", str(source), "--out-dir", str(self.out_dir),
-                                "--local", "--owner", "hermes", "--credential", str(self.desk))
-        self.assertEqual(rc, 0, err)
 
 
 class ContextPullTests(PullTestCase):
@@ -1132,13 +1132,6 @@ class ChecklistPullTests(PullTestCase):
         super().setUp()
         self.publish_mail(MAIL)
         self.pull("hermes")
-
-    def publish_mail(self, text: str) -> None:
-        source = self.work / "mail.md"
-        source.write_text(text, encoding="utf-8")
-        rc, _out, err = run_cli("publish", str(source), "--out-dir", str(self.out_dir),
-                                "--local", "--owner", "hermes", "--credential", str(self.desk))
-        self.assertEqual(rc, 0, err)
 
     def answer_checklist(self, checked: list[str]) -> dict:
         page = (self.out_dir / "mail.html").read_text(encoding="utf-8")
