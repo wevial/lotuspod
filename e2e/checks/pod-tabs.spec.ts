@@ -150,6 +150,25 @@ function seenPost(page: Page, name: string) {
     response.request().postDataJSON()?.page === name);
 }
 
+// A tab's focus ring: the tab's own outline and its title's, and whether the
+// tab's box holds both its buttons'.
+function ringOf(page: Page, pod: Pod) {
+  return tab(page, pod).evaluate((node) => {
+    const style = getComputedStyle(node);
+    const title = node.querySelector('.pod-tab-title') as Element;
+    const box = node.getBoundingClientRect();
+    const holds = (inner: Element) => {
+      const each = inner.getBoundingClientRect();
+      return each.left >= box.left && each.right <= box.right && each.top >= box.top && each.bottom <= box.bottom;
+    };
+    return {
+      tab: `${style.outlineStyle} ${style.outlineWidth} ${style.outlineColor} ${style.outlineOffset}`,
+      title: getComputedStyle(title).outlineStyle,
+      encloses: holds(title) && holds(node.querySelector('.pod-tab-close') as Element),
+    };
+  });
+}
+
 async function focusWindow(page: Page) {
   const read = page.waitForResponse((response) =>
     new URL(response.url()).pathname === SEEN && response.request().method() === 'GET');
@@ -469,6 +488,65 @@ test.describe('signed in', () => {
     expect(active.rule).toContain('-2px');
     expect(active.color).toBe(white);
     expect(active.weight).toBe('600');
+  });
+
+  test('a tab focused from the keyboard is outlined whole, title and ✕ together; one focused after a mouse pick shows no ring', async ({ page }) => {
+    await openIndex(page);
+    await openFromListing(page, ARTICLE);
+    await openFromListing(page, CHECKLIST);
+
+    // The Tab key onto the second tab's title: one lavender ring, inset, on
+    // the tab around both its buttons, none on the title alone.
+    await close(page, ARTICLE).focus();
+    await page.keyboard.press('Tab');
+    await expect(tabTitle(page, CHECKLIST)).toBeFocused();
+    expect.soft(await ringOf(page, CHECKLIST))
+      .toEqual({ tab: `solid 2px ${rgb(COLORS.lavender)} -2px`, title: 'none', encloses: true });
+
+    // A pod picked in the finder with the mouse: its tab focused, no ring.
+    await page.keyboard.press('ControlOrMeta+K');
+    const finder = page.getByRole('dialog', { name: 'Find a pod' });
+    await finder.getByRole('combobox').fill(ARTICLE.title);
+    await finder.locator(`[role="option"][data-page="${ARTICLE.name}"]`).click();
+    await expectActive(page, ARTICLE);
+    await expect(tabTitle(page, ARTICLE)).toBeFocused();
+    await expect(page.locator('.pod-tabs-bar :focus-visible')).toHaveCount(0);
+  });
+
+  test('a tab focused after a click on ✕ shows no ring until a key moves focus; one picked in the finder with Enter is outlined whole', async ({ page }) => {
+    await openIndex(page);
+    await openFromListing(page, ARTICLE);
+    await openFromListing(page, CONTEXT);
+    await openFromListing(page, CHECKLIST);
+    await tabTitle(page, CONTEXT).click();
+    await expectActive(page, CONTEXT);
+
+    // The middle tab's ✕ clicked: its neighbour takes focus with no ring.
+    await close(page, CONTEXT).click();
+    await expectActive(page, CHECKLIST);
+    await expect(tabTitle(page, CHECKLIST)).toBeFocused();
+    await expect(page.locator('.pod-tabs-bar :focus-visible')).toHaveCount(0);
+    expect.soft((await ringOf(page, CHECKLIST)).tab).toMatch(/^none /);
+
+    // The Tab key next: the ✕ it reaches is ringed.
+    await page.keyboard.press('Tab');
+    await expect(close(page, CHECKLIST)).toBeFocused();
+    await expect(page.locator('.pod-tabs-bar :focus-visible')).toHaveCount(1);
+    expect.soft(await close(page, CHECKLIST).evaluate((node) => {
+      const style = getComputedStyle(node);
+      return `${style.outlineStyle} ${style.outlineWidth} ${style.outlineColor} ${style.outlineOffset}`;
+    })).toBe(`solid 2px ${rgb(COLORS.lavender)} -2px`);
+
+    // A pod picked in the finder with Enter: its tab focused, ringed whole.
+    await page.keyboard.press('ControlOrMeta+K');
+    const finder = page.getByRole('dialog', { name: 'Find a pod' });
+    await finder.getByRole('combobox').fill(CONTEXT.title);
+    await expect(finder.locator(`[role="option"][data-page="${CONTEXT.name}"]`)).toHaveAttribute('aria-selected', 'true');
+    await page.keyboard.press('Enter');
+    await expectActive(page, CONTEXT);
+    await expect(tabTitle(page, CONTEXT)).toBeFocused();
+    expect.soft(await ringOf(page, CONTEXT))
+      .toEqual({ tab: `solid 2px ${rgb(COLORS.lavender)} -2px`, title: 'none', encloses: true });
   });
 
   test('a pod published again shows an amber "new version" dot until its tab is activated', async ({ page }) => {
