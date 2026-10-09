@@ -405,6 +405,44 @@ test.describe('signed in', () => {
     expect(errors).toEqual([]);
   });
 
+  test('a link to the fragment an open pod already holds scrolls its page back to it', async ({ page }) => {
+    const errors = await watch(page);
+    const pod = { name: 'pod-tabs-same-fragment', title: 'Pod tabs same fragment' };
+    publish(pod.name, [`# ${pod.title}`, '', 'See the [second section](capture-article.html#second-section).',
+      '', '## Findings', '', 'The pump stops in January.', '', '## Next steps', '', 'Order a heater.', ''].join('\n'));
+    // Short enough that the section is below the fold of the page's top.
+    await page.setViewportSize({ width: WIDE.width, height: 360 });
+    await openIndex(page);
+    await openFromListing(page, pod);
+    const link = framed(page, pod).getByRole('link', { name: 'second section' });
+    const placed = () => framed(page, ARTICLE).locator('#second-section').evaluate((node) => {
+      const top = node.getBoundingClientRect().top;
+      return { scrolled: window.scrollY, top, fold: window.innerHeight };
+    });
+
+    await link.click();
+    await expectActive(page, ARTICLE);
+    await expect(framed(page, ARTICLE).locator('h1')).toHaveText(ARTICLE.title);
+    await expect.poll(async () => (await placed()).scrolled).toBeGreaterThan(0);
+    // Scrolled away, back to the pod with the link, and the link again.
+    await frame(page, ARTICLE).evaluate((node) =>
+      (node as HTMLIFrameElement).contentWindow?.scrollTo({ top: 0, behavior: 'instant' }));
+    expect((await placed()).scrolled).toBe(0);
+    await tabTitle(page, pod).click();
+    await expectActive(page, pod);
+    await link.click();
+
+    await expectActive(page, ARTICLE);
+    await expect.poll(async () => (await placed()).scrolled).toBeGreaterThan(0);
+    const where = await placed();
+    expect(where.top).toBeGreaterThanOrEqual(0);
+    expect(where.top).toBeLessThan(where.fold / 2);
+    const shown = await frame(page, ARTICLE).evaluate((node) =>
+      (node as HTMLIFrameElement).contentWindow?.location.href ?? '');
+    expect(new URL(shown).hash).toBe('#second-section');
+    expect(errors).toEqual([]);
+  });
+
   test('a pod loaded directly at its own address opens in the index as the active tab, at its fragment, with the finder', async ({ page }) => {
     const errors = await watch(page);
     // Each POST to the seen route, and whether the window still showed the

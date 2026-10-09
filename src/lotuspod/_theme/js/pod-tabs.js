@@ -425,13 +425,14 @@
       try {
         const framed = pod.frame.contentWindow.location;
         if (framed.origin === target.origin && framed.pathname === target.pathname) {
-          if (framed.hash === hash) {
-            // The fragment it already holds fires no hashchange: the page is
-            // told as if it had, so a link to a thread opens it again.
+          const held = framed.hash === hash;
+          framed.replace(`${framed.pathname}${framed.search}${hash}`);
+          if (held) {
+            // The fragment it already holds is scrolled to again but fires
+            // no hashchange: the page is told as if it had, so a link to a
+            // thread opens it again.
             const view = pod.frame.contentWindow;
             view.dispatchEvent(new view.HashChangeEvent("hashchange", { oldURL: framed.href, newURL: framed.href }));
-          } else {
-            framed.replace(`${framed.pathname}${framed.search}${hash}`);
           }
         } else {
           target.hash = hash;
