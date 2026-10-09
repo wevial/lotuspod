@@ -4,6 +4,28 @@ All notable changes to Lotuspod are recorded here, newest first, in the
 Keep a Changelog style. Each version's section, headed
 `## X.Y.Z - YYYY-MM-DD`, becomes the notes of its GitHub release.
 
+## 0.3.0 - 2026-10-08
+
+- Pages carry labels from `lotuspod publish`, shown as tags on the page and
+  on the index, and the index filters by label.
+- Every page shows when it was created and last updated, and the index lists
+  both, newest update first.
+- A "Checklist for the maintainer" table becomes one card of checkboxes
+  preset to their defaults, with one Save. It is stored, versioned and pulled
+  like a decision, folds to what changed, and takes one row in the Answered
+  table.
+- A decisions table's Context column shows as unlabelled text under its
+  question, and agents get it in their pull.
+- The Answered table folds under its own "Answered (N)" heading and stays
+  folded per page.
+- Comments render a safe markdown subset, and an image dropped on a composer
+  is attached.
+- The comment composer is one box: thumbnails above the text, an X on each,
+  and a + inside to add one.
+- A decision option with a long label can be saved: its value is bounded to
+  what the answers route accepts.
+- The README names every command, installs from PyPI, and says why Lotuspod.
+
 ## 0.2.0 - 2026-10-07
 
 - Readers can ask about a decision from its card: an Ask button posts a
