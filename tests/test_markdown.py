@@ -372,6 +372,15 @@ class LinkTests(unittest.TestCase):
                 self.assertEqual(paragraph.find_all("a"), [])
                 self.assertEqual(paragraph.text(), source)
 
+    def test_a_scheme_that_is_http_only_by_unicode_case_folding_stays_the_escaped_text(self):
+        for target in ("http\u017f://example.com/x", "HTTP\u017f://example.com/x"):
+            with self.subTest(target=target):
+                source = f"A [link]({target}) here."
+                body = to_body(source + "\n")
+                self.assertEqual(body, f"<p>{html.escape(source, quote=False)}</p>\n")
+                (paragraph,) = parse(body).elements
+                self.assertEqual(paragraph.find_all("a"), [])
+
     def test_links_in_a_code_span_a_fence_an_image_reference_or_after_the_cut_stay_text(self):
         source = (
             "A span `[in code](a.md)` here.\n"
