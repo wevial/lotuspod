@@ -1110,16 +1110,44 @@
   color: var(--color-mint);
 }
 
-/* Resolved: one greyed, dashed line, with Reopen at its end. */
+/* Resolved: one greyed, dashed line, with Reopen at its end. Its words
+   open the thread to read, and it keeps the line while open. */
 .artifact-comments-entry-resolved {
   align-items: center;
   border: 1px dashed var(--hairline-strong);
   border-radius: var(--radius-block);
-  grid-template-columns: 1.1rem minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   padding: 0.35rem 0.5rem 0.35rem 0.4rem;
 }
 
+.artifact-comments-entry-read {
+  align-items: center;
+  appearance: none;
+  background: none;
+  border: 0;
+  border-radius: var(--radius-block);
+  color: inherit;
+  cursor: pointer;
+  display: grid;
+  font: inherit;
+  gap: 0.1rem 0.5rem;
+  grid-template-columns: 1.1rem minmax(0, 1fr);
+  margin: 0;
+  padding: 0;
+  text-align: left;
+}
+
+.artifact-comments-entry-read:hover .artifact-comments-entry-words {
+  color: var(--color-pale-lavender);
+}
+
+.artifact-comments-entry--open .artifact-comments-entry-resolved {
+  margin-bottom: 0.6rem;
+}
+
 .artifact-comments-entry-resolved .artifact-comments-entry-mark {
+  background: none;
+  border-color: var(--hairline-strong);
   color: var(--color-muted-lavender);
   margin: 0;
 }

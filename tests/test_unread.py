@@ -161,6 +161,24 @@ class UnreadTests(UnreadTestCase):
         later = self.follow_up(root, "One more thing.")
         self.assertEqual(self.unread(A), [later["id"]])
 
+    def test_a_resolved_thread_is_seen_and_stays_resolved(self):
+        # The page opens a resolved thread to read and posts it seen.
+        self.hermes("pull", "--owner", OWNER)
+        root = self.open_thread(A, "Is the heater enough?")
+        answered = self.answer(root, "It is, down to minus ten.")
+        status, got = self.ask("POST", "/api/comments",
+                               {"page": "plan", "thread": root["id"], "resolved": True})
+        self.assertEqual(status, 200, got)
+        self.assertEqual(self.unread(A), [answered["id"]])
+
+        body = {"page": "plan", "thread": root["id"], "comment": answered["id"]}
+        self.assertEqual(self.seen(body), (200, {"thread": root["id"], "comment": answered["id"]}))
+        status, got = self.ask("GET", "/api/comments?page=plan", assertion=keys.assertion(A))
+        self.assertEqual(status, 200, got)
+        self.assertEqual(got["unread"], [])
+        [thread] = [each for each in got["threads"] if each["root"]["id"] == root["id"]]
+        self.assertIs(thread["resolution"]["resolved"], True)
+
     def test_a_post_marks_the_thread_seen_and_the_mark_never_goes_down(self):
         root = self.open_thread(A, "Is the heater enough?")
         first = self.follow_up(root, "It is.")
