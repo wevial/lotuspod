@@ -696,7 +696,10 @@ opened it, else orchid, "new replies", when someone else has commented on it
 since. The new-version dot wins, since the pod needs a reload first. The index
 script reads the route on load, when a tab is activated or closed, and when the
 window gets focus again; activating a tab first posts the framed page's
-revision to it, so what the reader sees there counts as read. When the route
+revision to it, so what the reader sees there counts as read. A page with no
+revision (rendered, never published) has no script of its own to record its
+opening, so the index script posts it at `""`, its own revision, each time it
+loads in a tab. When the route
 answers anything but 200 (signed out, or the demo), there are no dots. Each
 time the listing shows again over the tabs, it reads `/api/seen` and the
 activity route again, as when the browser brings the index back from its

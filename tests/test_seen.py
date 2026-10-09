@@ -117,6 +117,20 @@ class SeenTests(SeenTestCase):
             "other": {"revision": other, "seen": R1, "seenAt": AT, "replies": 0, "unread": 0},
         }}))
 
+    def test_a_page_with_no_revision_is_opened_at_its_own_and_a_stamped_one_never_is(self):
+        """LOTUS-102: a rendered page, never published, carries no revision,
+        so the index's tabs record its opening at "", its own."""
+        run_cli("render", "--name", "draft", "--title", "Draft", "--body", "<p>A draft.</p>",
+                "--out-dir", str(self.out_dir))
+        self.assertEqual(self.page_revision("draft"), "")
+        self.assertEqual(self.seen("draft", ""),
+                         (200, {"page": "draft", "revision": "", "previous": None}))
+        self.assertEqual(self.views(), (200, {"pages": {
+            "draft": {"revision": "", "seen": "", "seenAt": AT, "replies": 0, "unread": 0},
+        }}))
+        self.assertEqual(self.seen("plan", ""), (400, {"error": "invalid_body"}))
+        self.assertEqual(self.rows(), [(keys.EMAIL, "draft", "")])
+
     def test_a_refused_post_stores_nothing(self):
         for body, headers, assertion, answer in (
             ({"page": "secret", "revision": R1}, {}, "default",

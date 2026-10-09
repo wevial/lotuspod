@@ -32,8 +32,10 @@
 // it, else orchid ("new replies") when someone else has commented since. The
 // route is read on load, when a tab is activated or closed and when the window
 // is seen again; activating a tab first posts the framed page's revision, so
-// what it shows counts as read. Any answer but 200 (signed out, or the demo)
-// shows no dot.
+// what it shows counts as read. A page with no revision (rendered, never
+// published) has no script of its own to record its opening, so each time it
+// loads in a tab, it is posted at "", its own. Any answer but 200 (signed out,
+// or the demo) shows no dot.
 //
 // The pod finder (js/pod-finder.js) opens from a "+" after the last tab, a
 // "Find a pod" button at the strip's end, and Cmd+K on a Mac or Ctrl+K
@@ -181,20 +183,23 @@
     showDots();
   };
 
-  // The revision the framed page was rendered at; "" until it has loaded.
+  // The revision the framed page was rendered at: "" once a page with no
+  // stamp has loaded, null before.
   const revisionOf = (pod) => {
     try {
-      const stamp = pod.frame.contentDocument.querySelector('meta[name="lotuspod:revision"]');
-      return stamp ? stamp.content.trim() : "";
+      const framed = pod.frame.contentDocument;
+      const stamp = framed.querySelector('meta[name="lotuspod:revision"]');
+      if (stamp) return stamp.content.trim();
+      return framed.URL !== "about:blank" && framed.readyState === "complete" ? "" : null;
     } catch (ignored) {
-      return "";
+      return null;
     }
   };
 
   // Mark the pod read at the revision its frame shows, then read the route.
   const markSeen = async (pod) => {
     const revision = revisionOf(pod);
-    if (revision) {
+    if (revision !== null) {
       try {
         await fetch(SEEN, {
           method: "POST",
@@ -335,6 +340,10 @@
       if (active !== name) activate(name);
     });
     cross.addEventListener("click", () => close(name));
+    // A page with no stamp records nothing itself: its opening is posted here.
+    frame.addEventListener("load", () => {
+      if (revisionOf(pod) === "") markSeen(pod);
+    });
     const soon = watch(frame);
     frame.src = href + hash;
     frames.append(frame);
