@@ -51,13 +51,14 @@ function publish(name: string, markdown: string): string {
 }
 
 // Other checks open pages and publish them again: the reader catches up on
-// every one, so only this check's page can be marked.
+// every one, so only this check's page can be marked. A page never opened,
+// listed for its unread replies, is never marked.
 async function catchUp(request: APIRequestContext) {
   const response = await request.get(SEEN, { headers: SIGNED_IN });
   expect(response.status()).toBe(200);
-  const { pages } = (await response.json()) as { pages: Record<string, { revision: string; seen: string }> };
+  const { pages } = (await response.json()) as { pages: Record<string, { revision: string; seen: string | null }> };
   for (const [name, entry] of Object.entries(pages)) {
-    if (entry.seen === entry.revision) continue;
+    if (entry.seen === null || entry.seen === entry.revision) continue;
     const seen = await request.post(SEEN, {
       headers: SIGNED_IN, data: { page: name, revision: entry.revision },
     });
@@ -125,7 +126,7 @@ test.describe('signed in', () => {
     expect(await openPage(page, name)).toEqual({ page: name, revision: first });
 
     await openIndex(page);
-    const toggle = page.locator('button.index-toggle');
+    const toggle = page.locator('button.index-toggle', { hasText: /^Updated/ });
     await expect(row(page, name)).toHaveCount(1);
     await expect(row(page, name).locator('.index-mark')).toHaveCount(0);
     await expect(page.locator('.index-mark')).toHaveCount(0);
