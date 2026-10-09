@@ -46,7 +46,8 @@ from lotuspod import cli  # noqa: E402
 from tests import history  # noqa: E402
 
 
-MANIFEST_KEYS = {"file", "title", "episode", "date", "created", "updated", "summary", "visible"}
+MANIFEST_KEYS = {"file", "title", "episode", "date", "created", "updated", "summary", "visible",
+                 "labels"}
 
 VISIBLE_PAGE = (
     "<!DOCTYPE html><html><head>"
@@ -286,6 +287,8 @@ class ArtifactHeaderTests(TempDirTestCase):
                 "updated": "",
                 "summary": "back from the pond",
                 "visible": True,
+                # A bare render files the page under no label.
+                "labels": [],
             },
         )
 

@@ -175,6 +175,22 @@ Republishing a page keeps its date, summary and treatment unless `--date`,
 `--summary` or `--variant` is given; a new page gets today's date and the
 `report` treatment.
 
+```sh
+lotuspod publish pond-plan.md --label relos --label holophyte
+```
+
+`--label NAME` files the page under a label; repeat it for more. Each name is
+lower-cased and must then be letters, digits and hyphens, starting with a
+letter or digit, at most 40 characters; a name that is not is refused, naming
+it, before anything is written. A name given twice is kept once, in the order
+given. The page keeps its labels in a `lotuspod:labels` meta tag, the names
+joined by commas (no tag when it has none), and its header's date line ends
+with them as tags. A republish without `--label` keeps the page's labels, as
+it keeps the summary; `--label` replaces the whole set, and `--no-labels`
+clears it, so removing one label means republishing with the ones that stay.
+`--label` and `--no-labels` together are a usage error (exit 2). The
+responder's republish keeps the labels too.
+
 That date is the page's created date. Every publish also stamps the page with
 the time it ran, in UTC to the second (`2026-10-08T17:04:05Z`), in a
 `lotuspod:updated` meta tag. The page's header reads "Created 2026-09-01 ·
@@ -213,7 +229,8 @@ OUT_DIR --format FORMAT --name NAME ...` with the source on standard input
 (and its images with it; see [Images](#images)); the format and name are
 worked out here from the file name, and every
 argument after `command` is shell-quoted (`command`, default `lotuspod`, is
-used as written); `--owner`, `--credential`, `--db` and `--no-comments` go
+used as written); `--owner`, `--credential`, `--db`, each `--label` (as
+`--label=NAME`, in order), `--no-labels` and `--no-comments` go
 along when given, so the credential file and the database named are the writer
 host's. `out_dir` is required when `host` is set. The far side's
 output passes through and its exit status is `publish`'s, so a revision
@@ -339,11 +356,12 @@ The manifest is a versioned document:
 ```
 
 The schema is uniform: every entry carries exactly `file`, `title`, `episode`,
-`date`, `created`, `updated`, `summary`, and `visible`; fields with no value
-are empty strings, never `null`. Beside the keys shown above, an entry
-carries `created`, the same value as `date` (the page's first date), and
+`date`, `created`, `updated`, `summary`, `visible` and `labels`; fields with no
+value are empty strings, never `null`. Beside the keys shown above, an entry
+carries `created`, the same value as `date` (the page's first date);
 `updated`, for example `"2026-10-08T17:04:05Z"`: the time its last publish
-stamped (see [Publish a page](#publish-a-page)). A page published before publish stamped it takes,
+stamped (see [Publish a page](#publish-a-page)); and `labels`, the page's
+labels in its order, for example `["relos"]`, or `[]` when it has none. A page published before publish stamped it takes,
 when the directory is the top of its own git repository, the time of the
 newest commit that touched it, read from one `git log`; anywhere else, or with
 no such commit, its created date. Entries are sorted by `updated`, newest
@@ -365,8 +383,9 @@ lotuspod index               # scans artifacts/ (or pass --out-dir DIR)
 ```
 
 The listing is a table: one row per page, with its title (linking to the
-page), created and updated dates, and summary, as `lotuspod manifest` records
-them. Only fail-closed-visible artifacts are listed
+page) and its labels as small tags under it, created and updated dates, and
+summary, as `lotuspod manifest` records them. A labelled row carries its labels
+in `data-labels`, joined by commas. Only fail-closed-visible artifacts are listed
 (same rule as `lotuspod manifest`).
 Rows arrive newest update first, the file name breaking ties, and are styled
 by the lotus theme. Re-running is
@@ -378,10 +397,23 @@ column starts sorted newest first, so its first click shows the oldest first.
 A date column sorts by its full time, not the day it shows, and rows with a
 blank value in the sorted column sink
 to the bottom either way), and type in the search box to filter rows down to
-those matching the query in any column. Both are progressive enhancement from a
+those matching the query in any column, labels included.
+
+When at least one listed page has a label, a "Labels ▾" menu sits beside the
+search: a checkbox per label, A to Z, each with the number of pages carrying
+it. Checking labels keeps the pages carrying any of them, and the search
+applies on top; the button reads "Labels (N) ▾" while N are checked, and
+Escape or a click outside closes the menu. A line under the filter row then
+reads "Showing" and one token per checked label, "relos ✕", which unchecks it.
+The count reads "M pages, newest update first" in the arrival order, and "N of
+M pages" while filtered; when no row is left, the table gives way to "No pages
+match these filters." The table stays one flat list in its sort order.
+
+Sorting, the search and the Labels menu are progressive enhancement from a
 script inlined in `index.html` — no extra file to serve — so with scripting off
 the page is still the complete listing, just unsorted and unfiltered (the search
-box stays hidden rather than offering a control that cannot filter).
+box and the menu stay hidden rather than offering a control that cannot
+filter).
 
 ## Decisions for the maintainer
 

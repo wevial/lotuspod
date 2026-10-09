@@ -193,6 +193,30 @@ class FarSideOutcomeTests(RemotePublishTestCase):
              "--summary=it's", "--variant=article", "--date=2026-09-01"],
         )
 
+    def test_labels_and_no_labels_reach_the_far_side_in_order(self):
+        done = self.publish(self.pond, "--label", "a", "--label", "b")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        argv = self.remote_argv(self.calls()[-1])
+        self.assertEqual([arg for arg in argv if arg.startswith("--label")],
+                         ["--label=a", "--label=b"])
+        self.assertNotIn("--no-labels", argv)
+        page = (self.out_dir / "pond.html").read_text(encoding="utf-8")
+        self.assertIn('<meta name="lotuspod:labels" content="a,b">', page)
+
+        done = self.publish(self.pond, "--no-labels")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        argv = self.remote_argv(self.calls()[-1])
+        self.assertIn("--no-labels", argv)
+        self.assertEqual([arg for arg in argv if arg.startswith("--label")], [])
+        page = (self.out_dir / "pond.html").read_text(encoding="utf-8")
+        self.assertNotIn("lotuspod:labels", page)
+
+    def test_a_label_that_is_not_one_is_refused_before_ssh(self):
+        done = self.publish(self.pond, "--label", "two words")
+        self.assertEqual(done.returncode, 1, done.stderr)
+        self.assertIn("'two words'", done.stderr)
+        self.assertEqual(self.calls(), [])
+
     def test_values_beginning_with_a_dash_reach_the_far_side_as_values(self):
         done = self.publish(self.pond, "--title=--draft", "--summary=-v")
         self.assertEqual(done.returncode, 0, done.stderr)

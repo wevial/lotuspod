@@ -22,7 +22,9 @@ of LOTUSPOD_TEST_OUT), so a check can publish it again, and so is the
 decision threads page, capture-decision-threads, from
 capture-decision-threads.md beside it. So is the images page, capture-images, from a source with the
 fixture images (tests/fixtures/media/) beside it: its images are stored in
-lotuspod-media/ beside the site, as publish stores them for serve. For an
+lotuspod-media/ beside the site, as publish stores them for serve. The
+published pages carry labels (PAGE_LABELS) for the index's Labels menu; the
+rendered ones carry none. For an
 agent command, the command's environment names:
 
     LOTUSPOD_TEST_SOCKET             the agent socket
@@ -576,6 +578,20 @@ SAMPLE_PAGES = (
 )
 
 
+# Each published page's labels, as --label options. One page carries relos
+# second, so a filter on it cannot lean on the first label alone.
+PAGE_LABELS = {
+    OWNED_PAGE: ("relos",),
+    PASSAGES_PAGE: ("croton", "relos"),
+    DECISION_THREADS_PAGE: ("holophyte",),
+    IMAGES_PAGE: ("croton",),
+}
+
+
+def label_options(name: str) -> list[str]:
+    return [arg for label in PAGE_LABELS[name] for arg in ("--label", label)]
+
+
 def credential_path(db_path: Path, name: str) -> Path:
     """The file the credential name's token is kept in, beside the database."""
     return db_path.with_name(f"{name}.token")
@@ -621,6 +637,7 @@ def render(out_dir: Path, db_path: Path) -> None:
         f"publish {OWNED_PAGE}",
         [
             "publish", str(source), "--local", "--date", SAMPLE_DATE,
+            *label_options(OWNED_PAGE),
             "--out-dir", str(out_dir), "--owner", OWNER,
             "--credential", str(token), "--db", str(db_path),
         ],
@@ -629,6 +646,7 @@ def render(out_dir: Path, db_path: Path) -> None:
         f"publish {PASSAGES_PAGE}",
         [
             "publish", str(passages_source), "--local", "--date", SAMPLE_DATE,
+            *label_options(PASSAGES_PAGE),
             "--out-dir", str(out_dir), "--owner", OWNER,
             "--credential", str(token), "--db", str(db_path),
         ],
@@ -637,6 +655,7 @@ def render(out_dir: Path, db_path: Path) -> None:
         f"publish {DECISION_THREADS_PAGE}",
         [
             "publish", str(decision_threads_source), "--local", "--date", SAMPLE_DATE,
+            *label_options(DECISION_THREADS_PAGE),
             "--out-dir", str(out_dir), "--comments", "--owner", OWNER,
             "--credential", str(token), "--db", str(db_path),
         ],
@@ -645,6 +664,7 @@ def render(out_dir: Path, db_path: Path) -> None:
         f"publish {IMAGES_PAGE}",
         [
             "publish", str(images_source), "--local", "--date", SAMPLE_DATE,
+            *label_options(IMAGES_PAGE),
             "--out-dir", str(out_dir), "--variant", "article", "--no-comments",
         ],
     ))
