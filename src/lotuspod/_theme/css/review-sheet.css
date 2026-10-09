@@ -373,8 +373,8 @@
 }
 
 /* Narrower than the title bar holds both controls whole: the title and its
-   separator give way first, then Next open's words to an ellipsis, then
-   those words whole, its arrow kept; the count stays whole. */
+   separator give way first, then Next open's words to an ellipsis, its
+   arrow kept, and the count stays whole. */
 @media (max-width: 22rem) {
   .artifact-topbar:has(.artifact-review-bar) .artifact-topbar-sep,
   .artifact-topbar:has(.artifact-review-bar) .artifact-topbar-title {
