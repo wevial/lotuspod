@@ -948,10 +948,14 @@ def index_entries_html(artifacts: list[dict]) -> str:
         return _INDEX_EMPTY_BLOCK
     esc = html.escape
 
-    def date_cell(value: str) -> str:
-        # The full time sorts; the cell shows its UTC day.
+    def date_cell(value: str, clock: bool = False) -> str:
+        # The full time sorts; the cell shows its UTC day, and with clock its
+        # time of day too when the value has one.
         value = esc(value)
-        return f'<time datetime="{value}">{value[:10]}</time>' if value else ""
+        shown = value[:10]
+        if clock and value[10:11] == "T" and len(value) >= 16:
+            shown += f" {value[11:16]}"
+        return f'<time datetime="{value}">{shown}</time>' if value else ""
 
     rows = []
     for meta in artifacts:
@@ -973,8 +977,8 @@ def index_entries_html(artifacts: list[dict]) -> str:
         rows.append(
             f"          {row}\n"
             f'            <td class="episode-title"><a href="{href}">{title}</a>{tags}</td>\n'
+            f'            <td class="episode-date">{date_cell(str(meta["updated"]), clock=True)}</td>\n'
             f'            <td class="episode-date">{date_cell(str(meta["created"]))}</td>\n'
-            f'            <td class="episode-date">{date_cell(str(meta["updated"]))}</td>\n'
             f'            <td class="episode-summary">{summary}</td>\n'
             "          </tr>"
         )
@@ -983,8 +987,8 @@ def index_entries_html(artifacts: list[dict]) -> str:
         "        <thead>\n"
         "          <tr>\n"
         '            <th scope="col">Title</th>\n'
-        '            <th scope="col">Created</th>\n'
         '            <th scope="col" aria-sort="descending">Updated</th>\n'
+        '            <th scope="col">Created</th>\n'
         '            <th scope="col">Summary</th>\n'
         "          </tr>\n"
         "        </thead>\n"

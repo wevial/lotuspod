@@ -495,8 +495,9 @@ lotuspod index               # scans artifacts/ (or pass --out-dir DIR)
 ```
 
 The listing is a table: one row per page, with its title (linking to the
-page) and its labels as small tags under it, created and updated dates, and
-summary, as `lotuspod manifest` records them. Each row names its page in
+page) and its labels as small tags under it, when it was updated (the day and
+the time of day, in UTC) and created (the day), and summary, as `lotuspod
+manifest` records them. Each row names its page in
 `data-page`, and a labelled row carries its labels in `data-labels`, joined by
 commas. Only fail-closed-visible artifacts are listed
 (same rule as `lotuspod manifest`).
@@ -534,7 +535,45 @@ line, which releases it; the Labels menu and the search still apply on top.
 When the route answers anything but 200 (signed out, or the demo site, whose
 stand-in answers 404), there are no marks and no toggle.
 
-Sorting, the search, the Labels menu and the marks are progressive enhancement from a
+### Recent activity
+
+Signed in to `lotuspod serve`, the index also asks `/api/activity` (see
+[Answers and comments](comments.md#answers-and-comments)) for the last 7 days.
+When it answers 200, a "Pages | Recent activity" switch (a group named View,
+each button `aria-pressed`) appears after the title, and the index opens on
+Recent activity unless the URL ends `#pages`: no hash is Recent activity, so
+either view can be linked and the back button moves between them. On any other
+answer (signed out, or the demo site, whose stand-in answers 404) there is no
+switch, and the index is the Pages view, whatever the hash says.
+
+Recent activity is the route's pages in its order, by their latest event,
+newest first. Each page's header row holds its title, linking to it, its labels
+as tags, its "N new replies to you" from the seen route, and "N events" on the
+right; under it, its events, newest first, each with its time (the time of day
+for today, else the day and time, in the browser's time zone), a dot colored
+for its kind, who did it ("you" for the reader, a version with no owner
+"Lotuspod") and what happened:
+
+- "published the page", or "published a new version: SUMMARY" ("published a
+  new version" when nothing named changed);
+- "commented on “SECTION”", or on the decision's question;
+- "replied to your comment on “SECTION”" in the reader's own thread, else
+  "replied in “SECTION”", followed by "· new, to you" while the reply is
+  unread, its dot ringed;
+- "answered “QUESTION”: LABEL".
+
+The count reads "N pages with activity in the last D days", or "No activity in
+the last D days." When the route says there is older activity, "Show older"
+ends the view and loads the 7 days before: a page already listed takes its
+older events at the end of its group, and new pages follow the listed ones.
+The search, the Labels menu and the Updated and Unread toggles keep one state,
+and one "Showing" line, across both views: a page's group is kept when its page
+passes the label and toggle tests its row does, and the search matches its
+title, labels and events. When the filters leave no group, the view reads "No
+activity matches these filters." Nothing updates while the index is open; a
+reload or "Show older" asks again.
+
+Sorting, the search, the Labels menu, the marks and Recent activity are progressive enhancement from a
 script inlined in `index.html` — no extra file to serve — so with scripting off
 the page is still the complete listing, just unsorted and unfiltered (the search
 box and the menu stay hidden rather than offering a control that cannot

@@ -93,10 +93,11 @@ async function openPage(page: Page, name: string) {
   return posted(answer);
 }
 
-// Open the index, or load it again, and let its read of the seen route come back.
+// Open the index's Pages view, which signed in is not the one it opens on,
+// or load it again, and let its read of the seen route come back.
 async function openIndex(page: Page, again = false) {
   const read = seenAnswer(page, 'GET');
-  await (again ? page.reload() : page.goto('/'));
+  await (again ? page.reload() : page.goto('/#pages'));
   await read;
 }
 
