@@ -528,6 +528,17 @@ class DefaultTests(DecisionsTestCase):
         self.assertEqual([form.default for form in self.forms.values()],
                          ["sonnet", "", "accept"])
 
+    def test_the_default_is_the_option_its_words_name_before_its_slug(self):
+        text = DEFAULTS.replace("| Sonnet / Opus | Sonnet |", "| C++ / C# | C# |").replace(
+            "| Yes / No | |", "| Rust / Go | go |")
+        page_html = self.render_markdown("slugs", text)
+        forms = decisions.read_forms(page_html)
+        self.assertEqual(forms["decision-1"].options, (("c", "C++"), ("c-2", "C#")))
+        self.assertEqual(forms["decision-1"].default, "c-2")
+        self.assertEqual(forms["decision-2"].default, "go")
+        labels = read(page_html).forms[0]["labels"]
+        self.assertEqual([label["marks"] for label in labels], [[], ["default"]])
+
     def test_a_checklist_names_no_default(self):
         page_html = self.render_markdown("mail", CHECKLIST)
         [attrs] = [form["attrs"] for form in read(page_html).forms]

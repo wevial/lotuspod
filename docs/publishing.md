@@ -591,7 +591,8 @@ the default" accepts. A form with a default names it in `data-default`: the
 default option's value, or `accept`. The page as written picks no option;
 once the page script has read the answers, it picks the default of each
 question that has one and no answer, which shows "Not saved" until it is
-saved. A table with any row of fewer than two options is left
+saved. A Default cell names the option whose label it matches, in any case,
+before one whose slug alone matches. A table with any row of fewer than two options is left
 exactly as written, and the page then loads no script.
 
 Each form carries `data-version`, a short hash of its question's text and its
@@ -675,19 +676,21 @@ section's heading, in page order (under the page's title on a page with no
 h2). Each shows its options as buttons (a checklist's items as checkboxes),
 its state, Default, Changed or Open, and for a changed question "was:" the
 default's label, "was: open" when it has none, or a checklist's changes
-("Off: LABEL"). "not saved" marks a question whose shown choice differs from
-its saved answer, and "Show on page" closes the panel and jumps to the form
+("Off: LABEL"). "not saved" marks a question whose shown choice, or its
+form's note, differs from its saved answer, and "Show on page" closes the panel and jumps to the form
 as Next open does. A pick in the panel picks the same option in the form,
 and a pick in the form shows in the panel. ✕, Esc or the count closes it.
 
-"Save N answers" at the panel's foot posts each question whose shown choice
-is not saved, defaults included, in page order, one answer each with its
+"Save N answers" at the panel's foot posts each question marked "not saved",
+defaults included, in page order, one answer each with its
 form's note, as the form's own Save would; open questions are left out, and
 each saved form folds. Its line then reads "Saved at TIME. K questions stay
 open." An answer refused keeps "not saved", with why in its form, and the
 others still save. With nothing to save the button reads "Nothing new to
-save". A page published before forms carried `data-default` has no defaults
-until it is published again.
+save". A form posts one answer at a time, so its own Save and the panel's
+never land out of order. A page whose answers could not be read gets no
+review sheet, and no default is picked. A page published before forms
+carried `data-default` has no defaults until it is published again.
 
 An answer is the reader's choice on that one question, recorded with the page
 revision it was given against. It is evidence for that question's scope only

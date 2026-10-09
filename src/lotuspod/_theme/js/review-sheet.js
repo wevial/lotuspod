@@ -10,7 +10,8 @@
   // open question, and "N to answer · Respond", which opens the Respond
   // panel: every question under its section's heading, its options as
   // pressed buttons (a checklist's as checkboxes), its state, and one Save
-  // that posts each answer whose shown choice is not stored, in page order.
+  // that posts each answer whose shown choice or note is not stored, in page
+  // order. A page whose answers could not be read gets no sheet.
   // Each h2 whose section asks open questions, and its outline link, is
   // marked "N open". The panel and the forms are one state: a pick in
   // either moves the other.
@@ -88,7 +89,7 @@
     }
 
     // {name, was, pending}: Open, Default or Changed, the "was" line, and
-    // whether its shown choice differs from its stored answer.
+    // whether its shown choice, or its note, differs from its stored answer.
     function state(question) {
       var form = question.form;
       var answer = the.saved(form);
@@ -97,7 +98,7 @@
         var kept = the.same(now, the.ticked(form, "defaultChecked"));
         return {
           name: kept ? "Default" : "Changed", was: kept ? "" : the.summary(form, now),
-          pending: !answer || !the.same(now, answer.checked || []),
+          pending: !answer || the.dirty(form),
         };
       }
       var value = shown(question);
@@ -106,7 +107,7 @@
         name: name,
         was: name !== "Changed" ? "" :
           "was: " + (question.fallback ? label(question, question.fallback) : "open"),
-        pending: Boolean(value) && (!answer || String(answer.choice) !== value),
+        pending: Boolean(value) && (!answer || String(answer.choice) !== value || the.dirty(form)),
       };
     }
 
@@ -428,6 +429,12 @@
     refresh();
   }
 
+  // Without the page's answers there is no telling what is answered: no
+  // sheet, so no default is picked or saved over an answer.
   if (answering && forms.length) {
-    document.addEventListener(ANSWERED, function () { reviewSheet(answering); }, { once: true });
+    document.addEventListener(ANSWERED, function () {
+      if (answering.read) {
+        reviewSheet(answering);
+      }
+    }, { once: true });
   }

@@ -19,6 +19,14 @@
   padding-left: 0.5rem;
 }
 
+.artifact-topbar a.artifact-review-next {
+  min-width: 0;
+}
+
+.artifact-review-count {
+  flex: none;
+}
+
 .artifact-review-bar [hidden] {
   display: none;
 }
@@ -346,5 +354,18 @@
     border-left: 0;
     left: 0;
     width: auto;
+  }
+}
+
+/* Narrower than the title bar holds both controls whole: the title gives
+   way first, then Next open to an ellipsis, and the count stays whole. */
+@media (max-width: 22rem) {
+  .artifact-topbar:has(.artifact-review-bar) .artifact-topbar-title {
+    flex-shrink: 1000;
+  }
+
+  .artifact-review-bar {
+    flex: 0 1 auto;
+    min-width: 0;
   }
 }

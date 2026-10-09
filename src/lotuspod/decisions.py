@@ -298,9 +298,15 @@ def _questions(rows: list[list[dict]], taken: set[str]) -> list[dict] | None:
             return None
         marked = ""
         if columns["options"] is not None and default["text"]:
-            wanted = option_value(default["text"])
-            marked = next((value for value, label in options if option_value(label) == wanted),
-                          "")
+            # The option the Default cell names by its words, in any case,
+            # before one whose slug only matches: labels such as "C++" and
+            # "C#" share a slug.
+            wanted = default["text"]
+            matches = (lambda label: label == wanted,
+                       lambda label: label.casefold() == wanted.casefold(),
+                       lambda label: option_value(label) == option_value(wanted))
+            marked = next((value for match in matches for value, label in options
+                           if match(label)), "")
         questions.append({
             "id": question_id,
             "number": _cell(row, columns["#"])["html"],

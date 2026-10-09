@@ -246,6 +246,86 @@ test.describe('signed in', () => {
     expect((await stored(request))['decision-d3']).toBeUndefined();
   });
 
+  test('a form posts one answer at a time, so its form Save never lands after a panel Save', async ({ page, request }) => {
+    // The page reads nothing answered; the form's own post of D3 is held.
+    let release = () => {};
+    const held = new Promise<void>((resolve) => { release = resolve; });
+    let first = true;
+    await page.route((url) => url.pathname === '/api/answers', async (route) => {
+      const request = route.request();
+      if (request.method() === 'GET') {
+        await route.fulfill({ json: { page: 'capture-review-sheet', questions: {} } });
+        return;
+      }
+      if (request.postDataJSON().question === 'decision-d3' && first) {
+        first = false;
+        await held;
+      }
+      await route.continue();
+    });
+    await page.goto(PAGE);
+    const the = sheet(page);
+    await expect(the.count).toHaveText('3 to answer · Respond');
+    const form = the.form('decision-d3');
+    await form.getByRole('radio', { name: 'Reproduced findings' }).check();
+    await form.getByRole('button', { name: 'Save answer' }).click();
+    await expect(form.locator('.artifact-decision-status')).toHaveText('Saving your answer...');
+    await the.count.click();
+    await the.entry('decision-d3').option('Any finding').click();
+    await the.save.click();
+    release();
+    await expect(the.outcome).toContainText('Saved at');
+    expect((await stored(request))['decision-d3'].current).toMatchObject({ choice: 'any-finding' });
+  });
+
+  test('a pick in the panel stays picked when its saved form is opened with "change"', async ({ page, request }) => {
+    const before = (await stored(request))['decision-d1'].current.choice;
+    const other = before === 'codex' ? 'Claude Opus' : 'Codex';
+    await page.goto(PAGE);
+    const the = sheet(page);
+    const form = the.form('decision-d1');
+    await expect(form.locator('.artifact-decision-saved-line')).toBeVisible();
+    await the.count.click();
+    await the.entry('decision-d1').option(other).click();
+    await expect(the.entry('decision-d1').unsaved).toBeVisible();
+    await the.entry('decision-d1').item.locator('.artifact-review-show').click();
+    await expect(the.panel).toBeHidden();
+    await form.getByRole('button', { name: 'change' }).click();
+    await expect(form.getByRole('radio', { name: other })).toBeChecked();
+    await expect(form.locator('.artifact-decision-unsaved')).toBeVisible();
+    await the.count.click();
+    await expect(the.entry('decision-d1').unsaved).toBeVisible();
+    await expect(the.entry('decision-d1').option(other)).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  test('a changed note is not saved until the panel saves it', async ({ page, request }) => {
+    await page.goto(PAGE);
+    const the = sheet(page);
+    const form = the.form('decision-d1');
+    await expect(form.locator('.artifact-decision-saved-line')).toBeVisible();
+    await form.getByRole('button', { name: 'change' }).click();
+    await form.locator('details.artifact-decision-note > summary').click();
+    await form.locator('textarea[name="note"]').fill('Only the note changed');
+    await the.count.click();
+    await expect(the.entry('decision-d1').unsaved).toBeVisible();
+    await expect(the.save).toHaveText('Save 1 answer');
+    await the.save.click();
+    await expect(the.save).toHaveText('Nothing new to save');
+    expect((await stored(request))['decision-d1'].current).toMatchObject({ note: 'Only the note changed' });
+  });
+
+  test('a failed read of the answers draws no sheet and picks no default', async ({ page, request }) => {
+    const before = (await stored(request))['decision-d1'].current;
+    await page.route((url) => url.pathname === '/api/answers', (route) =>
+      route.request().method() === 'GET' ? route.fulfill({ status: 503, body: '' }) : route.continue());
+    await page.goto(PAGE);
+    const the = sheet(page);
+    await page.waitForFunction(() => document.readyState === 'complete');
+    await expect(the.form('decision-d1').locator('input[name="choice"]:checked')).toHaveCount(0);
+    await expect(page.locator('.artifact-review-bar, .artifact-review-panel')).toHaveCount(0);
+    expect((await stored(request))['decision-d1'].current.id).toBe(before.id);
+  });
+
   test('a page with no forms has no count, Next open or panel', async ({ page }) => {
     await page.goto('/capture-article.html');
     await expect(page.locator('nav.artifact-outline')).toBeVisible();
@@ -275,6 +355,27 @@ test.describe('signed in', () => {
       expect(box!.width).toBe(360);
     });
   });
+
+  for (const width of [320, 280]) {
+    test.describe(`at ${width} wide`, () => {
+      test.use({ viewport: { width, height: 640 } });
+
+      test('the count and Next open stay inside the window', async ({ page }) => {
+        await page.route((url) => url.pathname === '/api/answers', (route) =>
+          route.request().method() === 'GET'
+            ? route.fulfill({ json: { page: 'capture-review-sheet', questions: {} } })
+            : route.continue());
+        await page.goto(PAGE);
+        const the = sheet(page);
+        await expect(the.count).toHaveText('3 to answer · Respond');
+        for (const target of [the.count, the.next]) {
+          const box = await target.boundingBox();
+          expect(box!.x).toBeGreaterThanOrEqual(0);
+          expect(box!.x + box!.width).toBeLessThanOrEqual(width);
+        }
+      });
+    });
+  }
 });
 
 test.describe('without JavaScript', () => {

@@ -358,9 +358,12 @@
       unfold(form);
     }
 
-    // "change": the card open again with its answer picked and its note.
+    // "change": the card open again with its answer picked and its note; a
+    // pick made since in the review sheet (js/review-sheet.js) stays picked.
     function unfold(form) {
-      fill(form);
+      if (!dirty(form)) {
+        fill(form);
+      }
       var note = form.querySelector("details.artifact-decision-note");
       if (note) {
         note.open = Boolean(form.elements.note.value);
@@ -385,10 +388,17 @@
       return "Your answer was not saved (" + error + "). Try again.";
     }
 
-    // Post a form's answer, as picked, with its note: true once it is
-    // saved and the form drawn from it, false when it is not, with why in
-    // the form's status.
-    async function save(form) {
+    // Post a form's answer, as picked when its turn comes, with its note:
+    // true once it is saved and the form drawn from it, false when it is
+    // not, with why in the form's status. A form posts one answer at a
+    // time, so an older post never lands after a newer one.
+    function save(form) {
+      var turn = (form.lotuspodSaving || Promise.resolve()).then(function () { return post(form); });
+      form.lotuspodSaving = turn;
+      return turn;
+    }
+
+    async function post(form) {
       var checklist = isChecklist(form);
       var picked = form.querySelector('input[name="choice"]:checked');
       if (!checklist && !picked) {
@@ -449,10 +459,11 @@
       }
     }
 
+    // True once the page's answers are read.
     async function load() {
       var response = await fetch(ANSWERS + "?page=" + encodeURIComponent(page));
       if (!response.ok) {
-        return;
+        return false;
       }
       var questions = (await response.json()).questions || {};
       Object.keys(questions).forEach(function (question) {
@@ -480,6 +491,7 @@
         }
       });
       table();
+      return true;
     }
 
     forms.forEach(function (form) {
@@ -490,14 +502,18 @@
       form.addEventListener("change", function () { mark(form); });
       mark(form);
     });
-    load().catch(function () {}).then(function () {
+    // What the review sheet (js/review-sheet.js) reads the forms by; read
+    // is true once the answers are read, so a failed read is never taken
+    // for a page with nothing answered.
+    var reading = {
+      saved: saved, ticked: ticked, same: same, summary: summary, optionText: optionText,
+      isChecklist: isChecklist, dirty: dirty, save: save, read: false,
+    };
+    load().catch(function () { return false; }).then(function (read) {
+      reading.read = read === true;
       document.dispatchEvent(new CustomEvent(ANSWERED));
     });
-    // What the review sheet (js/review-sheet.js) reads the forms by.
-    return {
-      saved: saved, ticked: ticked, same: same, summary: summary, optionText: optionText,
-      isChecklist: isChecklist, save: save,
-    };
+    return reading;
   }
 
   // A page with no form names itself on its comment boxes.
