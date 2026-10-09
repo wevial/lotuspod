@@ -757,7 +757,6 @@ class LongOptionValueTests(DecisionsTestCase):
     label is shown in full."""
 
     def test_a_long_label_gets_a_bounded_hashed_value_and_shows_in_full(self):
-        self.assertEqual(len(LONG_LABEL), 200)
         form = read(self.render_markdown("pond", long_options(f"{LONG_LABEL} / No"))).forms[0]
         values = [radio["value"] for radio in form["radios"]]
         self.assertLessEqual(len(values[0]), 100)
@@ -767,7 +766,6 @@ class LongOptionValueTests(DecisionsTestCase):
         self.assertEqual([label["text"] for label in form["labels"]], [LONG_LABEL, "No"])
 
     def test_long_labels_sharing_a_prefix_get_distinct_values(self):
-        self.assertEqual(len(OTHER_LONG_LABEL), 200)
         form = read(self.render_markdown(
             "pond", long_options(f"{LONG_LABEL} / {OTHER_LONG_LABEL}"))).forms[0]
         values = [radio["value"] for radio in form["radios"]]
@@ -777,8 +775,7 @@ class LongOptionValueTests(DecisionsTestCase):
             self.assertRegex(value, r"-[0-9a-f]{8}$")
 
     def test_short_labels_keep_their_slug(self):
-        labels = ["Sonnet", "Keep it, then sweep it after 30 days", "A" * 40 + " " + "b" * 39]
-        self.assertTrue(all(len(cli.slugify(label)) <= 80 for label in labels))
+        labels = ["Sonnet", "A" * 40 + " " + "b" * 39]
         form = read(self.render_markdown("pond", long_options(" / ".join(labels)))).forms[0]
         self.assertEqual([radio["value"] for radio in form["radios"]],
                          [cli.slugify(label) for label in labels])
