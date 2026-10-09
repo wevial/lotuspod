@@ -443,6 +443,76 @@ test.describe('signed in', () => {
     expect(errors).toEqual([]);
   });
 
+  test('a thread resolved elsewhere while open reads from its line at the first press, and reopened stays open as resolved ones hide', async ({ page, request }) => {
+    test.setTimeout(120_000);
+    const errors = watchErrors(page);
+    await catchUp(request);
+    const start = async (text: string) => {
+      const posted = await request.post(COMMENTS, {
+        headers: SIGNED_IN, data: { page: NAME, section: SECTION, text },
+      });
+      expect(posted.status()).toBe(201);
+      return ((await posted.json()) as Row).id;
+    };
+    // Another resolved thread keeps the Hide resolved control once this
+    // one is reopened.
+    await resolve(request, await start('Is the old heater kept as a spare?'));
+    const thread = await start('Is the heater on a timer?');
+
+    await openPage(page);
+    await chip(page).click();
+    const item = page.locator(`.artifact-comments-panel .artifact-comments-entry[data-thread="${thread}"]`);
+    const head = item.locator('.artifact-comments-entry-head');
+    const read = item.locator('.artifact-comments-entry-read');
+    const said = item.locator('.artifact-comment-thread');
+    await expect(head).toHaveAttribute('aria-expanded', 'true');
+
+    // Resolved in another tab: the page reads it so and folds it.
+    const polled = page.waitForResponse(async (response) =>
+      new URL(response.url()).pathname === COMMENTS && response.request().method() === 'GET' &&
+      ((await response.json()) as { threads: (Thread & { resolution: { resolved: boolean } | null })[] })
+        .threads.some((each) => each.root.id === thread && each.resolution?.resolved), { timeout: 60_000 });
+    await resolve(request, thread);
+    await polled;
+    await expect(item).toHaveClass(/\bartifact-comments-entry--resolved\b/);
+    await page.locator('.artifact-comments-show-resolved', { hasText: /^Show resolved/ }).click();
+    await expect(said).toBeHidden();
+    await read.click();
+    await expect(read).toHaveAttribute('aria-expanded', 'true');
+    await expect(said).toBeVisible();
+
+    // Reopened, it is no longer read as resolved: hiding those leaves it open.
+    await item.getByRole('button', { name: 'Reopen' }).click();
+    await expect(head).toHaveAttribute('aria-expanded', 'true');
+    await page.locator('.artifact-comments-show-resolved', { hasText: 'Hide resolved' }).click();
+    await expect(head).toHaveAttribute('aria-expanded', 'true');
+    await expect(said).toBeVisible();
+    expect(errors).toEqual([]);
+  });
+
+  test('a resolved thread open to read in the panel moves to a popover as the window narrows', async ({ page, request }) => {
+    test.setTimeout(120_000);
+    const errors = watchErrors(page);
+    const { thread, reply: id } = await answered(request, 'Does the heater need its own fuse?');
+    await resolve(request, thread);
+
+    await openPage(page);
+    await page.locator('.artifact-comments-rail').click();
+    await page.locator('.artifact-comments-show-resolved', { hasText: /^Show resolved/ }).click();
+    const seen = seenPost(page, thread);
+    await page.locator(`.artifact-comments-entry[data-thread="${thread}"] .artifact-comments-entry-read`).click();
+    expect((await seen).status()).toBe(200);
+    await expect(reply(page, id)).toBeVisible();
+
+    await page.setViewportSize({ width: 1024, height: 900 });
+    const popover = page.locator('.artifact-comments-popover');
+    const theirs = popover.locator(`.artifact-comment-item:has(#artifact-comment-text-${id})`);
+    await expect(theirs).toBeVisible();
+    await expect(theirs.locator('.artifact-comment-new')).toHaveText('New');
+    await expect(popover.locator('.artifact-comments-entry-read')).toHaveAttribute('aria-expanded', 'true');
+    expect(errors).toEqual([]);
+  });
+
   test('the index counts the reply on its row and in its title, and Unread keeps only that row', async ({ page, request }) => {
     test.setTimeout(120_000);
     const errors = watchErrors(page);

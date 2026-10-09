@@ -1146,7 +1146,7 @@
       var current = null;
       // The resolved thread the reader opened to read, if any: a thread
       // resolved while open closes, unless it is this one.
-      var reading = null;
+      var toRead = null;
       // While the threads move to another layout (api.arrange), none opens
       // or closes: one open in the old place is open in the new.
       var moving = false;
@@ -1499,7 +1499,7 @@
       showResolved.addEventListener("click", function () {
         setResolvedShown(!resolvedShown, true);
         // A resolved thread open to read is hidden with the rest: it closes.
-        if (!resolvedShown && current && current === reading) {
+        if (!resolvedShown && current && current === toRead && resolved(current)) {
           expand(null);
         }
         api.refresh();
@@ -1634,18 +1634,25 @@
         // Pointing at a passage's entry lights its words.
         item.addEventListener("mouseenter", function () { passages.point(thread, "entry"); });
         item.addEventListener("mouseleave", function () { passages.point(null, "entry"); });
-        function toggle() {
+        top.addEventListener("click", function () {
           if (current === thread) {
             expand(null);
           } else {
             expand(thread);
             bring(thread);
           }
-        }
-        top.addEventListener("click", toggle);
+        });
+        // Open to read only while drawn so: a thread resolved elsewhere while
+        // open may still be current.
         read.addEventListener("click", function () {
-          reading = current === thread ? null : thread;
-          toggle();
+          var was = current === thread && toRead === thread;
+          toRead = was ? null : thread;
+          if (was) {
+            expand(null);
+          } else {
+            expand(thread);
+            bring(thread);
+          }
         });
         resolve.addEventListener("click", function () { settle(thread, true); });
         reopen.addEventListener("click", function () { settle(thread, false); });
@@ -1658,7 +1665,7 @@
       function draw(thread) {
         var made = entry(thread);
         var done = resolved(thread);
-        var opened = done ? current === thread && reading === thread :
+        var opened = done ? current === thread && toRead === thread :
           current === thread || over.holds(thread);
         // Open in a folded panel, it is not in view: folding closes it, and
         // unfolding opens it again.
@@ -2256,7 +2263,7 @@
           var chipNode = writing.box.querySelector("summary");
           return { view: { box: writing.box }, opener: chipNode, anchor: chipNode, writing: writing };
         }
-        if (current && !resolved(current)) {
+        if (current && (!resolved(current) || current === toRead)) {
           var anchor = anchorOf(current);
           return { view: { thread: current }, opener: anchor, anchor: anchor, writing: null };
         }
