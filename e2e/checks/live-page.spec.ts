@@ -112,6 +112,13 @@ function revisionOf(page: Page) {
   return page.locator('meta[name="lotuspod:revision"]').getAttribute('content');
 }
 
+// Where the page's text starts in the window: the same, to the pixel the
+// scroll position snaps to, after a reload that brings the reader back to the
+// same place in it, even with the box saying what changed drawn above it.
+function textTop(page: Page) {
+  return page.evaluate(() => document.querySelector('.artifact-main')!.getBoundingClientRect().top);
+}
+
 function banner(page: Page) {
   const node = page.locator('.artifact-live-page-banner');
   return { node, reload: node.getByRole('button', { name: 'Reload' }) };
@@ -258,6 +265,7 @@ test.describe('signed in', () => {
       return window.scrollY;
     });
     expect(y).toBeGreaterThan(300);
+    const top = await textTop(page);
 
     const second = publish(name, source('Live page reload', 'second', 8));
     await page.clock.runFor(CHECK);
@@ -272,7 +280,7 @@ test.describe('signed in', () => {
     await expect(entry).toHaveClass(/artifact-comments-entry--open/);
     await expect(field).toBeVisible();
     await expect(field).toHaveValue(UNSENT);
-    await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(y);
+    await expect.poll(async () => Math.abs(await textTop(page) - top)).toBeLessThanOrEqual(1);
     await expect(banner(page).node).toHaveCount(0);
     expect(errors).toEqual([]);
   });
@@ -313,13 +321,14 @@ test.describe('signed in', () => {
       return window.scrollY;
     });
     expect(y).toBeGreaterThan(300);
+    const top = await textTop(page);
     const loaded = page.waitForEvent('load');
     release();
     await loaded;
 
     expect(await revisionOf(page)).toBe(second);
     await expect(field).toHaveValue('And if the heater fails as well?');
-    await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(y);
+    await expect.poll(async () => Math.abs(await textTop(page) - top)).toBeLessThanOrEqual(1);
     expect(errors).toEqual([]);
   });
 
@@ -346,6 +355,7 @@ test.describe('signed in', () => {
       return window.scrollY;
     });
     expect(y).toBeGreaterThan(1000);
+    const top = await textTop(page);
 
     const second = publish(name, source('Live page phone', 'second', 8));
     await page.clock.runFor(CHECK);
@@ -356,7 +366,7 @@ test.describe('signed in', () => {
     expect(await revisionOf(page)).toBe(second);
     await expect(node).toBeVisible();
     await expect(field).toHaveValue(UNSENT);
-    await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(y);
+    await expect.poll(async () => Math.abs(await textTop(page) - top)).toBeLessThanOrEqual(1);
     expect(errors).toEqual([]);
   });
 

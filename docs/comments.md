@@ -88,6 +88,21 @@ twice.
   [Versions](publishing.md#versions)). It is empty when the output directory
   is not the top of its own repository, and only read (any other method is
   405).
+- `GET /api/changes?page=NAME&since=REV` compares the newest listed version
+  of the page whose revision is REV with the current one, and answers
+  `{page, since: {commit, date, revision}, behind, changed, sections}`:
+  `behind` is how many listed versions are newer, and `changed` is false,
+  with nothing else compared, when REV is the current revision. `sections`
+  is `{changed: [{id, title}], added: [{id, title}], removed: [{title}]}`,
+  the first two in the current page's order. When both versions kept
+  `NAME.md` it also answers `lines`, a unified diff of the two sources with
+  three lines of context, each `{op, text}` with `op` one of `+`, `-`, a
+  space or `@` (a hunk's header), at most 400, and `truncated`, true when
+  the diff was cut (see [Versions](publishing.md#versions)). It is 404
+  `unknown_revision` when no listed version carries REV, which includes
+  every page outside a repository, 400 `invalid_query` without exactly one
+  `page` and one `since` of 1 to 100 characters, and only read (any other
+  method is 405).
 
 An open page notices when it is published again: every published page
 carries a revision, so it loads the page script, `lotuspod-page.js`, even
@@ -97,7 +112,7 @@ threads carries, and asks `/api/revision` every 60 seconds and at once when
 its tab is seen again. Once they differ, a banner fixed over the top of the
 window, which moves no text and is announced politely, reads "A newer version
 of this page is available" with a Reload button. Reload brings the new
-revision back at the same scroll position, with the comments thread that was
+revision back at the same place in its text, with the comments thread that was
 open open again and any comment or reply not yet sent back in its composer,
 its text and its uploaded images (kept per page in sessionStorage; where the
 browser keeps nothing, the page still reloads, at its top). A comment

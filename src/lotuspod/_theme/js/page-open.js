@@ -76,7 +76,7 @@
   // What the page's text leaves out as never read: the marks and numbers the
   // page script draws, and what is not shown at all.
   var UNSEEN = "script, style, template, noscript, .artifact-section-mark, .artifact-passage-number, " +
-    ".artifact-table-expand";
+    ".artifact-table-expand, .artifact-changed-tag";
   var BLOCK = new RegExp("^(ADDRESS|ARTICLE|ASIDE|BLOCKQUOTE|BR|CAPTION|DD|DETAILS|DIV|DL|DT|" +
     "FIELDSET|FIGCAPTION|FIGURE|FOOTER|FORM|H[1-6]|HEADER|HR|LI|MAIN|NAV|OL|P|PRE|SECTION|" +
     "SUMMARY|TABLE|TBODY|TD|TFOOT|TH|THEAD|TR|UL)$");

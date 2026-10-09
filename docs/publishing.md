@@ -408,6 +408,34 @@ diagram's included, and its forms from running: comments and answers stay
 on the current page. It is sent with `Cache-Control: private, no-store`. Any
 other query on a page is served as the page.
 
+A page the reader last opened at an older revision says what changed since.
+The page's post to `/api/seen` answers the revision they opened it at before
+(`previous`); when that is not the page's own, the page asks
+`GET /api/changes?page=NAME&since=REV`, which compares the newest listed
+version carrying that revision with the current one in at most three git
+processes. Each version's body is split into sections at its `h2` headings,
+known by id, or by the id the outline would give its words when it has none
+(a page left with one heading), together with those words, and their text compared with whitespace
+collapsed, a block's tags taken as a space and an inline element's as
+nothing, so a change to markup alone, such as a line break between two
+blocks, words wrapped in `<strong>` or a decision form's version hash, does
+not count; text before the first heading, or a body with none, is one
+section, "The page text", whose link goes to the start of the body. A renamed heading reads as one section removed and one added.
+
+The page then opens with a "What changed since you last looked" box under
+its header: "You last opened this on DATE · K versions ago", DATE being when
+that version was published, then one line per section changed, new or
+removed, each changed or new one a link to its section, whose heading carries
+a "changed" or "new" tag. "See the full diff" opens the versions view, where
+a pane beside the list, headed "DATE → current", shows a line diff of the
+markdown source when both versions kept `NAME.md`, at most 400 lines and then
+"More changes not shown.". A page with no kept source for that version, as
+one published before sources were kept, or from HTML, compares by section
+instead. The list marks that version "you last looked". "Dismiss" removes the
+box until the next load; the next load is seen at the page's own revision,
+so the box and the tags are gone. A first visit, a reader signed out, or any
+failure shows no box and no pane.
+
 ## Index
 
 Build `artifacts/index.html`, a browsable index linking every rendered page:
