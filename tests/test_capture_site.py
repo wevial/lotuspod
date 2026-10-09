@@ -42,7 +42,8 @@ with open(sys.argv[1], "w", encoding="utf-8") as fh:
     json.dump(seen, fh)
 """
 
-# Asks /api/whoami with and without LOTUSPOD_TEST_ASSERTION and records
+# Asks /api/whoami with LOTUSPOD_TEST_ASSERTION, with the second reader's
+# LOTUSPOD_TEST_ASSERTION_SECOND and with neither, and records
 # each answer's status, Cache-Control and JSON body.
 WHOAMI_COMMAND = """\
 import json, os, sys, urllib.error, urllib.request
@@ -50,6 +51,7 @@ url = os.environ["LOTUSPOD_URL"] + "/api/whoami"
 seen = {}
 for label, headers in (
     ("with", {"Cf-Access-Jwt-Assertion": os.environ["LOTUSPOD_TEST_ASSERTION"]}),
+    ("second", {"Cf-Access-Jwt-Assertion": os.environ["LOTUSPOD_TEST_ASSERTION_SECOND"]}),
     ("without", {}),
 ):
     try:
@@ -341,6 +343,10 @@ class TestAssertionTests(CaptureSiteTestCase):
         self.assertEqual(
             seen["with"],
             [200, "no-store", {"actor": {"kind": "human", "email": "maintainer@example.com"}}],
+        )
+        self.assertEqual(
+            seen["second"],
+            [200, "no-store", {"actor": {"kind": "human", "email": "heron@example.com"}}],
         )
         self.assertEqual(seen["without"], [401, "no-store", {"error": "signed_out"}])
 

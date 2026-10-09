@@ -613,7 +613,9 @@ Signed in to `lotuspod serve`, the index also asks `/api/activity` (see
 When it answers 200, a "Pages | Recent activity" switch (a group named View,
 each button `aria-pressed`) appears after the title, and the index opens on
 Recent activity unless the URL ends `#pages`: no hash is Recent activity, so
-either view can be linked and the back button moves between them. On any other
+either view can be linked and the back button moves between them. The open
+tabs' fragment (see [Pods in tabs](#pods-in-tabs)) names no view: the index
+stays on the view it shows, and one loaded with it opens on Pages. On any other
 answer (signed out, or the demo site, whose stand-in answers 404) there is no
 switch, and the index is the Pages view, whatever the hash says. An index with
 no page gets the switch too, and its controls, only when the route answers; its
@@ -650,11 +652,55 @@ activity matches these filters." Nothing updates while the index is open; a
 reload or "Show older" asks again, and so does coming back to the index from
 the browser's back-forward cache, over the days the view already showed.
 
-Sorting, the search, the Labels menu, the marks and Recent activity are progressive enhancement from a
-script inlined in `index.html` — no extra file to serve — so with scripting off
-the page is still the complete listing, just unsorted and unfiltered (the search
-box and the menu stay hidden rather than offering a control that cannot
-filter).
+### Pods in tabs
+
+The index also loads the site's index script, `lotuspod-index.js`, which keeps
+a strip of open pods above the index header: a "Lotuspod" button, which shows
+the listing, then a group named "Open pods" with one tab per open pod. A tab is
+the pod's title, read from its listing row (`aria-current="page"` while it is
+the active tab), and a ✕ named "Close TITLE"; the pointer anywhere on a tab
+lifts the whole tab, ✕ included. The active tab sits on the glow, a lavender
+rule under it, its text white and semibold, and the strip scrolls sideways when
+it is full.
+
+A plain click (the main button, no modifier key) on a link with no `target`
+and no `download`, to `NAME.html` on this site for a page the listing has and
+with no `version` query, opens that page in a tab with the link's fragment,
+whether the link is in the listing or in a pod already open: just after the
+active tab, which it then becomes, or by activating its tab when it is open.
+Each tab is the page as serve answers it, in an iframe titled with its title:
+the active tab's fills the window under the strip and hides the listing, and
+the others stay loaded but hidden, so switching tabs keeps a pod's scroll
+position and any comment not yet sent. In a framed page, a plain click on a
+link to the index shows the listing, one on a link within the page scrolls it,
+and one on any other link loads it in the whole window, as it would outside
+the strip. Cmd-click, Ctrl-click and middle-click are left to the browser,
+which opens a browser tab.
+
+Closing the active tab activates its right neighbour, else its left one, else
+shows the listing, and focus moves to the newly active tab, else to the
+search. The open tabs and the active one are kept in the address as
+`#tabs=NAME,NAME&on=NAME` (`#tabs=NAME,NAME` while the listing shows), written
+in place without a history entry, and loading the index with that fragment
+opens them again; a name the listing does not have is dropped. Once the last
+tab closes, the address gets back the fragment it had before the first, or
+`#pages` after a load that opened tabs.
+
+A tab that is not active shows a dot from `/api/seen`: amber, "new version"
+for a screen reader, when its page was published again since this reader last
+opened it, else orchid, "new replies", when someone else has commented on it
+since. The new-version dot wins, since the pod needs a reload first. The index
+script reads the route on load, when a tab is activated or closed, and when the
+window gets focus again; activating a tab first posts the framed page's
+revision to it, so what the reader sees there counts as read. When the route
+answers anything but 200 (signed out, or the demo), there are no dots.
+
+Sorting, the search, the Labels menu, the marks and Recent activity are
+progressive enhancement from a script inlined in `index.html`, and the tabs
+from the index script, so with scripting off the page is still the complete
+listing, just unsorted and unfiltered, with no strip and its title links
+loading their pages in the window (the search box and the menu stay hidden
+rather than offering a control that cannot filter).
 
 ## Decisions for the maintainer
 
@@ -917,8 +963,9 @@ A script written into a page body is never hashed, so it does not run, and
 neither does an inline event handler such as `onclick`. `render` and
 `publish` still publish the page and print one line naming it and how many
 scripts will not run. Serve adds `Content-Security-Policy: frame-ancestors
-'none'` and `X-Content-Type-Options: nosniff` to every page it answers, so
-no other site can frame a page.
+'self'` and `X-Content-Type-Options: nosniff` to every page it answers, so
+only the site itself, as the index's tabs do, may frame a page; an earlier
+version of a page keeps `frame-ancestors 'none'`.
 
 ## Template
 
@@ -942,9 +989,9 @@ Edit the CSS to restyle all artifacts.
 A feature's CSS goes in its own file in `src/lotuspod/_theme/css/` and its JS in
 `src/lotuspod/_theme/js/`, and each new file takes one line in the declared
 order (`THEME_SOURCES` in `cli.py`), which render joins into the one
-`lotuspod.css` and `lotuspod-page.js` it serves.
-Pages address the stylesheet and page script by a hash of the theme files, so
-there is no version to raise.
+`lotuspod.css`, `lotuspod-page.js` and `lotuspod-index.js` it serves.
+Pages address the stylesheet and page script, and the index its script, by a
+hash of the theme files, so there is no version to raise.
 
 Lavender is the brand: the buttons, the focus outline and the
 agents. Beside it, one colour per job:

@@ -1,0 +1,361 @@
+// Lotuspod index script: pods in tabs. A strip above the index header holds a
+// "Lotuspod" button, which shows the listing, then a tab per open pod: its
+// title, read from its listing row, and a close button. Each tab is the pod's
+// own page in an iframe, as serve answers it, so switching tabs keeps its
+// scroll position and any text not sent; the active tab's frame fills the
+// window under the strip, the others stay loaded but hidden, and the listing
+// is hidden while a tab is active.
+//
+// A plain click (main button, no modifier key) on a link with no target and no
+// download, to NAME.html on this origin for a pod the listing has and with no
+// version query, opens that pod in a tab with the link's fragment, whether the
+// link is in the listing or in a pod already open: just after the active tab
+// when it is not open, else by activating its tab. In a framed page, a plain
+// click on a link to the index shows the listing, and one on any other link
+// loads it in the whole window, as it would outside the strip. Any other click
+// is the browser's, so Cmd-click and Ctrl-click still open a browser tab.
+//
+// The open tabs and the active one are kept in the address, #tabs=NAME,NAME
+// &on=NAME, written with history.replaceState, and a load with that fragment
+// opens them again, a name the listing does not have dropped. Once no tab is
+// open, the fragment goes back to what it was before the first. The tabs'
+// fragment names no view of the index's own script, Pages or Recent
+// activity, so the view stays as it was.
+//
+// A tab that is not active shows a dot from the seen route: amber ("new
+// version") when its pod was published again since this reader last opened
+// it, else orchid ("new replies") when someone else has commented since. The
+// route is read on load, when a tab is activated or closed and when the window
+// is seen again; activating a tab first posts the framed page's revision, so
+// what it shows counts as read. Any answer but 200 (signed out, or the demo)
+// shows no dot. Without this script the index is its listing alone.
+(() => {
+  const main = document.querySelector("main.index");
+  if (!main) return;
+
+  const SEEN = "/api/seen";
+  const FRAGMENT = /^#tabs=([^&]*)(?:&on=(.*))?$/;
+
+  // Each pod the listing has: its title and its link, by name.
+  const pods = new Map();
+  for (const row of document.querySelectorAll(".index-table tbody tr[data-page]")) {
+    const link = row.cells[0] ? row.cells[0].querySelector("a[href]") : null;
+    if (link) pods.set(row.dataset.page, { title: link.textContent.trim(), href: link.getAttribute("href") });
+  }
+
+  // The directory the index is served from, where every pod sits beside it.
+  const root = new URL(".", location.href).pathname;
+
+  const element = (tag, className, text) => {
+    const node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text !== undefined) node.textContent = text;
+    return node;
+  };
+
+  const bar = element("div", "pod-tabs-bar");
+  const home = element("button", "pod-tabs-home", "Lotuspod");
+  home.type = "button";
+  const strip = element("div", "pod-tabs");
+  strip.setAttribute("role", "group");
+  strip.setAttribute("aria-label", "Open pods");
+  bar.append(home, strip);
+  const frames = element("div", "pod-tabs-frames");
+  document.body.prepend(bar);
+  main.after(frames);
+
+  // The open pods in strip order, each {name, tab, title, dot, frame}; the
+  // active one's name, null while the listing shows.
+  const open = [];
+  let active = null;
+  // The seen route's pages as last answered 200, else null.
+  let seen = null;
+  // The fragment the address had before any tab was open. The index shows
+  // its Pages view under the tabs' fragment it was loaded with, so that is
+  // #pages.
+  let before = FRAGMENT.test(location.hash) ? "#pages" : location.hash;
+
+  const find = (name) => open.find((pod) => pod.name === name) || null;
+
+  // The pod a link names, else null: NAME.html beside the index on this
+  // origin, a NAME the listing has, asked with no version.
+  const podOf = (url) => {
+    if (url.origin !== location.origin || url.searchParams.has("version")) return null;
+    if (!url.pathname.startsWith(root)) return null;
+    let file;
+    try {
+      file = decodeURIComponent(url.pathname.slice(root.length));
+    } catch (ignored) {
+      return null;
+    }
+    const match = /^([^/]+)\.html$/.exec(file);
+    return match && pods.has(match[1]) ? match[1] : null;
+  };
+
+  const isIndex = (url) => url.origin === location.origin &&
+    (url.pathname === root || url.pathname === `${root}index.html`);
+
+  const write = () => {
+    if (!FRAGMENT.test(location.hash)) before = location.hash;
+    let fragment = before;
+    if (open.length) {
+      fragment = `#tabs=${open.map((pod) => encodeURIComponent(pod.name)).join(",")}`;
+      if (active !== null) fragment += `&on=${encodeURIComponent(active)}`;
+    }
+    history.replaceState(history.state, "", location.pathname + location.search + fragment);
+  };
+
+  // Each tab's dot, from the seen route's entry for its pod: none on the
+  // active tab, nor with no answer of 200.
+  const showDots = () => {
+    for (const pod of open) {
+      const entry = seen && Object.prototype.hasOwnProperty.call(seen, pod.name) ? seen[pod.name] : null;
+      let kind = null;
+      if (entry && pod.name !== active) {
+        if (typeof entry.seen === "string" && entry.seen !== entry.revision) kind = "version";
+        else if (Number.isInteger(entry.replies) && entry.replies > 0) kind = "replies";
+      }
+      if (!kind) {
+        if (pod.dot) pod.dot.remove();
+        pod.dot = null;
+        continue;
+      }
+      if (pod.dot && pod.dot.dataset.kind === kind) continue;
+      if (pod.dot) pod.dot.remove();
+      pod.dot = element("span", `pod-tab-dot pod-tab-dot--${kind}`);
+      pod.dot.dataset.kind = kind;
+      pod.dot.append(element("span", "pod-tab-dot-text", kind === "version" ? "new version" : "new replies"));
+      pod.title.append(pod.dot);
+    }
+  };
+
+  // Answers are drawn in the order they were asked: a later read wins.
+  let asked = 0;
+  const askSeen = async () => {
+    const ask = ++asked;
+    let pages = null;
+    try {
+      const response = await fetch(SEEN, { cache: "no-store" });
+      if (response.status === 200) {
+        const payload = await response.json();
+        if (payload && typeof payload.pages === "object" && payload.pages) pages = payload.pages;
+      }
+    } catch (ignored) {
+      // Shown as if the route had not answered.
+    }
+    if (ask !== asked) return;
+    seen = pages;
+    showDots();
+  };
+
+  // The revision the framed page was rendered at; "" until it has loaded.
+  const revisionOf = (pod) => {
+    try {
+      const stamp = pod.frame.contentDocument.querySelector('meta[name="lotuspod:revision"]');
+      return stamp ? stamp.content.trim() : "";
+    } catch (ignored) {
+      return "";
+    }
+  };
+
+  // Mark the pod read at the revision its frame shows, then read the route.
+  const markSeen = async (pod) => {
+    const revision = revisionOf(pod);
+    if (revision) {
+      try {
+        await fetch(SEEN, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ page: pod.name, revision }),
+        });
+      } catch (ignored) {
+        // Read as it is.
+      }
+    }
+    await askSeen();
+  };
+
+  // Show the active tab's frame, or the listing with no tab active.
+  const show = () => {
+    for (const pod of open) {
+      const on = pod.name === active;
+      if (on) pod.title.setAttribute("aria-current", "page");
+      else pod.title.removeAttribute("aria-current");
+      pod.tab.classList.toggle("pod-tab--active", on);
+      pod.frame.classList.toggle("pod-frame--active", on);
+    }
+    if (active === null) home.setAttribute("aria-current", "page");
+    else home.removeAttribute("aria-current");
+    main.hidden = active !== null;
+    frames.classList.toggle("pod-tabs-frames--active", active !== null);
+    showDots();
+  };
+
+  const activate = (name) => {
+    active = name;
+    show();
+    write();
+    const pod = find(name);
+    pod.tab.scrollIntoView({ block: "nearest", inline: "nearest" });
+    markSeen(pod);
+  };
+
+  const showListing = () => {
+    active = null;
+    show();
+    write();
+    askSeen();
+  };
+
+  const close = (name) => {
+    const at = open.findIndex((pod) => pod.name === name);
+    if (at < 0) return;
+    const [pod] = open.splice(at, 1);
+    pod.tab.remove();
+    pod.frame.remove();
+    if (name === active) {
+      const next = open[at] || open[at - 1] || null;
+      if (next) activate(next.name);
+      else showListing();
+    } else {
+      write();
+      askSeen();
+    }
+    const now = active === null ? null : find(active);
+    if (now) now.title.focus();
+    else {
+      const search = document.getElementById("index-search");
+      if (search) search.focus();
+    }
+  };
+
+  // A framed page's clicks reach its window last, after the page's own
+  // handlers: it is on this origin. The window a new frame starts with is
+  // kept for its first page, so its links are handled before that page has
+  // loaded; each later load (a reload) brings a window of its own.
+  const watched = new WeakSet();
+  const watch = (frame) => {
+    let framed = null;
+    try {
+      framed = frame.contentWindow;
+    } catch (ignored) {
+      return;
+    }
+    if (!framed || watched.has(framed)) return;
+    watched.add(framed);
+    framed.addEventListener("click", (event) => follow(event, framed.document));
+  };
+
+  // Add the pod's tab just after the active one, its frame at the address
+  // its listing link gives with the fragment.
+  const add = (name, hash) => {
+    const { title, href } = pods.get(name);
+    const tab = element("div", "pod-tab");
+    tab.dataset.page = name;
+    const button = element("button", "pod-tab-title");
+    button.type = "button";
+    button.append(element("span", "pod-tab-name", title));
+    const cross = element("button", "pod-tab-close", "✕");
+    cross.type = "button";
+    cross.setAttribute("aria-label", `Close ${title}`);
+    tab.append(button, cross);
+    const frame = element("iframe", "pod-frame");
+    frame.title = title;
+    const pod = { name, tab, title: button, dot: null, frame };
+    const at = active === null ? -1 : open.findIndex((other) => other.name === active);
+    if (at < 0) {
+      open.push(pod);
+      strip.append(tab);
+    } else {
+      open.splice(at + 1, 0, pod);
+      open[at].tab.after(tab);
+    }
+    button.addEventListener("click", () => {
+      if (active !== name) activate(name);
+    });
+    cross.addEventListener("click", () => close(name));
+    frame.addEventListener("load", () => watch(frame));
+    frame.src = href + hash;
+    frames.append(frame);
+    watch(frame);
+    return pod;
+  };
+
+  const openPod = (name, hash) => {
+    const pod = find(name);
+    if (!pod) {
+      add(name, hash);
+    } else if (hash) {
+      try {
+        const framed = pod.frame.contentWindow.location;
+        framed.replace(`${framed.pathname}${framed.search}${hash}`);
+      } catch (ignored) {
+        // The frame stays where it is.
+      }
+    }
+    activate(name);
+  };
+
+  // A plain click on a link, in the index (framed null) or in a framed page.
+  const follow = (event, framed) => {
+    if (event.defaultPrevented || event.button !== 0 ||
+        event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    const link = event.target && event.target.closest ? event.target.closest("a[href]") : null;
+    if (!link || link.hasAttribute("target") || link.hasAttribute("download")) return;
+    let url;
+    try {
+      url = new URL(link.getAttribute("href"), link.baseURI);
+    } catch (ignored) {
+      return;
+    }
+    if (framed) {
+      // A link within the framed page itself only scrolls it.
+      const here = new URL(framed.location.href);
+      if (url.hash && url.origin === here.origin && url.pathname === here.pathname &&
+          url.search === here.search) return;
+    }
+    const name = podOf(url);
+    if (name !== null) {
+      event.preventDefault();
+      openPod(name, url.hash);
+    } else if (framed && isIndex(url)) {
+      event.preventDefault();
+      showListing();
+    } else if (framed && /^https?:$/.test(url.protocol)) {
+      event.preventDefault();
+      location.assign(url.href);
+    }
+  };
+
+  home.addEventListener("click", () => {
+    if (active !== null) showListing();
+  });
+  document.addEventListener("click", (event) => follow(event, null));
+  window.addEventListener("focus", askSeen);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") askSeen();
+  });
+
+  // The tabs the address names, in its order, the listing's pods alone.
+  const named = FRAGMENT.exec(location.hash);
+  if (named) {
+    const decode = (part) => {
+      try {
+        return decodeURIComponent(part);
+      } catch (ignored) {
+        return "";
+      }
+    };
+    for (const name of named[1].split(",").map(decode)) {
+      if (pods.has(name) && !find(name)) add(name, "");
+    }
+    const on = named[2] === undefined ? null : decode(named[2]);
+    if (on !== null && find(on)) {
+      activate(on);
+      return;
+    }
+  }
+  show();
+  if (named) write();
+  askSeen();
+})();

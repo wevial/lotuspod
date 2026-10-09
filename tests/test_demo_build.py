@@ -234,7 +234,7 @@ class BuiltSiteTests(unittest.TestCase):
         lines = (self.out / "_headers").read_text(encoding="utf-8").splitlines()
         self.assertEqual(lines[0], "/*")
         self.assertEqual([line.strip() for line in lines[1:]], [
-            "Content-Security-Policy: frame-ancestors 'none'",
+            "Content-Security-Policy: frame-ancestors 'self'",
             "X-Content-Type-Options: nosniff",
             "Referrer-Policy: no-referrer",
         ])

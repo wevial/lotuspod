@@ -26,11 +26,13 @@ POST /api/seen records that the reader opened `page` at `revision`, the
 revision it was rendered at, keyed by their verified address, and answers
 200 {page, revision, previous}: `previous` is the revision recorded for them
 before, null the first time. GET /api/seen, which takes no query (400
-invalid_query for any), answers {pages: {NAME: {revision, seen, unread}}},
-one entry for each page the reader has opened, or has unread replies on,
-that serve still answers: `revision` the page's current one, `seen` the one
-recorded (null for a page never opened) and `unread` the count of the
-reader's unread replies on it (lotuspod.db). It never names the reader.
+invalid_query for any), answers {pages: {NAME: {revision, seen, seenAt,
+replies, unread}}}, one entry for each page the reader has opened, or has
+unread replies on, that serve still answers: `revision` the page's current
+one, `seen` the one recorded and `seenAt` when (both null for a page never
+opened), `replies` the count of the page's comments stored since then by
+anyone but the reader (0 for a page never opened) and `unread` the count of
+the reader's unread replies on it (lotuspod.db). It never names the reader.
 
 `{page, thread, comment}` records that the reader has seen the thread whose
 first comment is `thread` up to `comment`, and answers 200 {thread, comment}
@@ -760,14 +762,16 @@ class Api:
         if query:
             raise Refusal(HTTPStatus.BAD_REQUEST, "invalid_query")
         reader = str(actor.get("email") or "")
-        views = self.database.views(reader)
+        views = self.database.page_views(reader)
         unread = self.database.unread(reader)
         pages = {}
         for name in sorted(views.keys() | unread.keys()):
             # A page serve no longer answers, hidden or gone, is left out.
             page = self.pages(name)
             if page is not None:
-                pages[name] = {"revision": page.revision, "seen": views.get(name),
+                view = views.get(name, {})
+                pages[name] = {"revision": page.revision, "seen": view.get("revision"),
+                               "seenAt": view.get("seenAt"), "replies": view.get("replies", 0),
                                "unread": len(unread.get(name, []))}
         return {"pages": pages}
 

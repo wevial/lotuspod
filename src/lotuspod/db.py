@@ -831,13 +831,21 @@ class Database:
             )
         return None if row is None else row[0]
 
-    def views(self, reader: str) -> dict[str, str]:
-        """Each page reader has opened, to the revision they last opened it at."""
+    def page_views(self, reader: str) -> dict[str, dict]:
+        """Each page reader has opened, to {revision, seenAt, replies}: the
+        revision they last opened it at, when they did, and how many of the
+        page's comments were stored after that whose author is not them (an
+        agent's reply has no address, so it counts)."""
         with self._connect() as conn:
             rows = conn.execute(
-                "SELECT page, revision FROM page_views WHERE reader = ?", (reader,)
+                "SELECT page, revision, seen_at, (SELECT COUNT(*) FROM comments"
+                " WHERE comments.page = page_views.page"
+                " AND comments.created_at > page_views.seen_at"
+                " AND json_extract(comments.actor, '$.email') IS NOT page_views.reader)"
+                " AS replies FROM page_views WHERE reader = ?", (reader,)
             ).fetchall()
-        return {row["page"]: row["revision"] for row in rows}
+        return {row["page"]: {"revision": row["revision"], "seenAt": row["seen_at"],
+                              "replies": row["replies"]} for row in rows}
 
     def record_thread_view(self, *, reader: str, page: str, thread: int,
                            comment: int) -> int:

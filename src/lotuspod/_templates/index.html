@@ -637,9 +637,12 @@
       };
 
       // The view the URL names: #pages the Pages view, no hash Recent
-      // activity; with no switch, always Pages.
+      // activity; with no switch, always Pages. The open tabs' fragment
+      // (#tabs=..., lotuspod-index.js) names no view, so the view stays.
       const showView = () => {
-        view = feed && location.hash !== "#pages" ? "activity" : "pages";
+        if (!location.hash.startsWith("#tabs=")) {
+          view = feed && location.hash !== "#pages" ? "activity" : "pages";
+        }
         for (const button of viewButtons) {
           button.setAttribute("aria-pressed", String(button.dataset.view === view));
         }
@@ -743,5 +746,6 @@
       });
     })();
   </script>
+  <script src="lotuspod-index.js?v={{theme_hash}}" defer></script>
 </body>
 </html>

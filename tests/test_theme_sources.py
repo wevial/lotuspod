@@ -1,7 +1,8 @@
-"""Test suite for the theme's sources: the stylesheet and the page script are
-written as one source file per feature (src/lotuspod/_theme/css/ and
-src/lotuspod/_theme/js/), and render joins each served file's sources in the
-order cli.THEME_SOURCES declares into the one file serve answers.
+"""Test suite for the theme's sources: the stylesheet, the page script and the
+index script are written as one source file per feature
+(src/lotuspod/_theme/css/ and src/lotuspod/_theme/js/), and render joins each
+served file's sources in the order cli.THEME_SOURCES declares into the one
+file serve answers.
 
 The joined bytes are never read from cli here: each test joins the source
 files itself.
@@ -69,8 +70,16 @@ class JoinTests(TempDirTestCase):
                     joined(cli.THEME_DIR, sources),
                 )
 
-    def test_both_served_files_are_written_from_sources(self):
-        self.assertEqual(sorted(cli.THEME_SOURCES), sorted([STYLESHEET, cli.PAGE_SCRIPT]))
+    def test_sync_writes_the_index_script_from_its_source(self):
+        cli.sync_theme_css(self.out_dir)
+        self.assertEqual(
+            (self.out_dir / cli.INDEX_SCRIPT).read_bytes(),
+            joined(cli.THEME_DIR, cli.THEME_SOURCES[cli.INDEX_SCRIPT]),
+        )
+
+    def test_the_three_served_files_are_written_from_sources(self):
+        self.assertEqual(sorted(cli.THEME_SOURCES),
+                         sorted([STYLESHEET, cli.PAGE_SCRIPT, cli.INDEX_SCRIPT]))
         for filename in cli.THEME_SOURCES:
             self.assertFalse((cli.THEME_DIR / filename).exists(), filename)
 
@@ -168,6 +177,19 @@ class DeclaredOrderTests(ThemeCopyTestCase):
         self.assertEqual(script[-2:], ("js/ref-cards.js", "js/page-close.js"))
         self.assertGreater(script.index("js/ref-cards.js"), script.index("js/link-tab.js"))
         self.assertEqual(styles.index("css/ref-cards.css"), styles.index("css/prose.css") + 1)
+        problems = source_problems(cli.THEME_DIR, cli.THEME_SOURCES)
+        self.assertEqual(problems, [], "\n".join(problems))
+
+    def test_the_pod_tabs_sources_are_declared_and_the_index_script_is_served(self):
+        """LOTUS-101: the index script, lotuspod-index.js, is joined from
+        js/pod-tabs.js, written and served beside the page script; the tabs'
+        styles follow css/index.css, which they draw over."""
+        styles = cli.THEME_SOURCES[STYLESHEET]
+        self.assertEqual(cli.INDEX_SCRIPT, "lotuspod-index.js")
+        self.assertEqual(cli.THEME_SOURCES[cli.INDEX_SCRIPT], ("js/pod-tabs.js",))
+        self.assertEqual(styles.index("css/pod-tabs.css"), styles.index("css/index.css") + 1)
+        self.assertIn(cli.INDEX_SCRIPT, cli.THEME_FILES)
+        self.assertIn(cli.INDEX_SCRIPT, cli.serve_allow_list(self.out_dir))
         problems = source_problems(cli.THEME_DIR, cli.THEME_SOURCES)
         self.assertEqual(problems, [], "\n".join(problems))
 

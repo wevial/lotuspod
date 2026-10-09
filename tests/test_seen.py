@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import sqlite3
 import sys
+import time
 import unittest
 from pathlib import Path
 
@@ -20,11 +21,28 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from lotuspod import db  # noqa: E402
 from tests import access_keys as keys  # noqa: E402
-from tests.test_api import ACTOR, DECISIONS_BODY, PLAN, ApiTestCase, run_cli  # noqa: E402
+from tests.test_api import (  # noqa: E402
+    ACTOR, CREATED_AT, DECISIONS_BODY, PLAN, ApiTestCase, run_cli,
+)
+from tests.test_unread import A, B, OWNER, UnreadTestCase  # noqa: E402
 
 OTHER = "heron@example.com"
 R1 = "aaaaaaaaaaaa"
 R2 = "bbbbbbbbbbbb"
+
+
+class _Stamp:
+    """Equal to any time as stored: when a reader opened a page is not known
+    ahead."""
+
+    def __eq__(self, other: object) -> bool:
+        return isinstance(other, str) and CREATED_AT.match(other) is not None
+
+    def __repr__(self) -> str:
+        return "<a stored time>"
+
+
+AT = _Stamp()
 
 
 class SeenTestCase(ApiTestCase):
@@ -67,7 +85,7 @@ class SeenTests(SeenTestCase):
                          (200, {"page": "plan", "revision": R2, "previous": R1}))
         self.assertEqual(self.views(),
                          (200, {"pages": {"plan": {"revision": self.revision, "seen": R2,
-                                                   "unread": 0}}}))
+                                                   "seenAt": AT, "replies": 0, "unread": 0}}}))
         self.assertEqual(self.views(OTHER), (200, {"pages": {}}))
         # Keyed by the address, never the shown name.
         self.assertEqual(self.rows(), [(keys.EMAIL, "plan", R2)])
@@ -78,7 +96,8 @@ class SeenTests(SeenTestCase):
                          (200, {"page": "plan", "revision": self.revision, "previous": R2}))
         self.assertEqual(self.views(),
                          (200, {"pages": {"plan": {"revision": self.revision,
-                                                   "seen": self.revision, "unread": 0}}}))
+                                                   "seen": self.revision, "seenAt": AT,
+                                                   "replies": 0, "unread": 0}}}))
 
     def test_a_republish_shows_beside_the_revision_seen_and_a_hidden_page_is_left_out(self):
         other = self.page_revision("other")
@@ -87,14 +106,15 @@ class SeenTests(SeenTestCase):
         revised = self.republish()
         self.assertNotEqual(revised, self.revision)
         self.assertEqual(self.views(), (200, {"pages": {
-            "plan": {"revision": revised, "seen": self.revision, "unread": 0},
-            "other": {"revision": other, "seen": R1, "unread": 0},
+            "plan": {"revision": revised, "seen": self.revision, "seenAt": AT, "replies": 0,
+                     "unread": 0},
+            "other": {"revision": other, "seen": R1, "seenAt": AT, "replies": 0, "unread": 0},
         }}))
 
         run_cli("render", "--name", "plan", "--title", "Plan", "--comments", "--body",
                 DECISIONS_BODY, "--out-dir", str(self.out_dir), "--hidden")
         self.assertEqual(self.views(), (200, {"pages": {
-            "other": {"revision": other, "seen": R1, "unread": 0},
+            "other": {"revision": other, "seen": R1, "seenAt": AT, "replies": 0, "unread": 0},
         }}))
 
     def test_a_refused_post_stores_nothing(self):
@@ -134,6 +154,45 @@ class SeenTests(SeenTestCase):
                                   headers={"Content-Type": "text/plain"}),
                          (415, {"error": "unsupported_media_type"}))
         self.assertEqual(self.rows(), [])
+
+
+class SeenRepliesTests(UnreadTestCase):
+    """`seenAt` and `replies` on the UnreadTestCase site: readers a and b,
+    and hermes replying through the agents' socket."""
+
+    def entry(self, email: str, page: str = "plan") -> dict:
+        status, got = self.ask("GET", "/api/seen", assertion=keys.assertion(email))
+        self.assertEqual(status, 200, got)
+        return got["pages"][page]
+
+    def test_replies_count_the_comments_by_others_since_the_reader_last_opened_the_page(self):
+        # hermes listens, so b's comment waits for it.
+        self.hermes("pull", "--owner", OWNER)
+        posted = db.stamp(time.time())
+        self.assertEqual(self.seen({"page": "plan", "revision": self.revision})[0], 200)
+        first = self.entry(A)
+        self.assertEqual((first["seenAt"], first["replies"]), (AT, 0))
+        # A comment stored in the very millisecond of the view would not be after it.
+        time.sleep(0.01)
+
+        root = self.open_thread(B, "Is the heater enough?")
+        self.answer(root, "It is, down to minus ten.")
+        self.open_thread(A, "And the pump?")
+        entry = self.entry(A)
+        self.assertEqual(entry["replies"], 2)
+        self.assertEqual(entry["seenAt"], first["seenAt"])
+        self.assertGreaterEqual(entry["seenAt"], posted)
+        self.assertEqual(entry["seen"], self.revision)
+
+        time.sleep(0.01)
+        self.assertEqual(self.seen({"page": "plan", "revision": self.revision})[0], 200)
+        again = self.entry(A)
+        self.assertEqual(again["replies"], 0)
+        self.assertGreater(again["seenAt"], entry["seenAt"])
+
+        # b never opened the page: listed for hermes's unread reply alone.
+        self.assertEqual(self.entry(B), {"revision": self.revision, "seen": None,
+                                         "seenAt": None, "replies": 0, "unread": 1})
 
 
 class SeenSchemaTests(SeenTestCase):
@@ -176,7 +235,7 @@ class SeenSchemaTests(SeenTestCase):
                          (200, {"page": "plan", "revision": R1, "previous": None}))
         self.assertEqual(self.views(),
                          (200, {"pages": {"plan": {"revision": self.revision, "seen": R1,
-                                                   "unread": 0}}}))
+                                                   "seenAt": AT, "replies": 0, "unread": 0}}}))
         conn = sqlite3.connect(str(path))
         try:
             self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0],
