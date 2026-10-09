@@ -122,9 +122,21 @@ html:has(meta[name="lotuspod:revision"]) .artifact-meta--versions::after {
   border-top: 0;
 }
 
+.artifact-versions-when {
+  flex: 1;
+  min-width: 0;
+}
+
 .artifact-versions-date {
   color: var(--color-pale-lavender);
   font-variant-numeric: tabular-nums;
+}
+
+.artifact-versions-note {
+  color: var(--color-muted-lavender);
+  font-size: 0.875rem;
+  margin: 0.15rem 0 0;
+  overflow-wrap: anywhere;
 }
 
 .artifact-versions-current {

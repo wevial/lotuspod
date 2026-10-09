@@ -9,7 +9,7 @@ import { expect, test, type Page } from '@playwright/test';
 // day; published pages carry publish's later stamp on the same day. The rows arrive newest update first,
 // the Updated header says so, and its first click reverses that order. Times
 // are read from each date cell's time element, never from the day it shows.
-const COLUMNS = ['Title', 'Created', 'Updated', 'Summary'];
+const COLUMNS = ['Title', 'Updated', 'Created', 'Summary'];
 
 async function load(page: Page) {
   const errors: string[] = [];
@@ -26,7 +26,7 @@ function header(page: Page, label: string) {
 // The Updated column's datetime values, top row first.
 function updatedTimes(page: Page): Promise<string[]> {
   return page.locator('.index-table tbody tr').evaluateAll((rows) =>
-    rows.map((row) => (row as HTMLTableRowElement).cells[2]
+    rows.map((row) => (row as HTMLTableRowElement).cells[1]
       .querySelector('time')?.getAttribute('datetime') ?? ''));
 }
 

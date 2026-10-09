@@ -390,7 +390,7 @@ class Responder:
         serve cannot be reached or does not answer within timeout seconds."""
         try:
             status, payload = machine.request(self.socket_path, self.token, method, target,
-                                              body, timeout)
+                                              body, timeout=timeout)
         except OSError as exc:
             raise Unreachable(f"cannot reach serve on {self.socket_path}: {exc}") from None
         except ValueError:

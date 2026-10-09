@@ -972,10 +972,14 @@ def index_entries_html(artifacts: list[dict]) -> str:
         return _INDEX_EMPTY_BLOCK
     esc = html.escape
 
-    def date_cell(value: str) -> str:
-        # The full time sorts; the cell shows its UTC day.
+    def date_cell(value: str, clock: bool = False) -> str:
+        # The full time sorts; the cell shows its UTC day, and with clock its
+        # time of day too when the value has one.
         value = esc(value)
-        return f'<time datetime="{value}">{value[:10]}</time>' if value else ""
+        shown = value[:10]
+        if clock and value[10:11] == "T" and len(value) >= 16:
+            shown += f" {value[11:16]}"
+        return f'<time datetime="{value}">{shown}</time>' if value else ""
 
     rows = []
     for meta in artifacts:
@@ -997,8 +1001,8 @@ def index_entries_html(artifacts: list[dict]) -> str:
         rows.append(
             f"          {row}\n"
             f'            <td class="episode-title"><a href="{href}">{title}</a>{tags}</td>\n'
+            f'            <td class="episode-date">{date_cell(str(meta["updated"]), clock=True)}</td>\n'
             f'            <td class="episode-date">{date_cell(str(meta["created"]))}</td>\n'
-            f'            <td class="episode-date">{date_cell(str(meta["updated"]))}</td>\n'
             f'            <td class="episode-summary">{summary}</td>\n'
             "          </tr>"
         )
@@ -1007,8 +1011,8 @@ def index_entries_html(artifacts: list[dict]) -> str:
         "        <thead>\n"
         "          <tr>\n"
         '            <th scope="col">Title</th>\n'
-        '            <th scope="col">Created</th>\n'
         '            <th scope="col" aria-sort="descending">Updated</th>\n'
+        '            <th scope="col">Created</th>\n'
         '            <th scope="col">Summary</th>\n'
         "          </tr>\n"
         "        </thead>\n"
@@ -1092,12 +1096,15 @@ def page_revision(out_dir: Path, name: str) -> str:
     return ""
 
 
-def version_stamp(page_html: str) -> tuple[str, bool]:
-    """A page's lotuspod:revision ("" when none) and whether it is visible,
-    read from its HTML alone: what lotuspod.versions keeps of each version."""
+def version_stamp(page_html: str) -> tuple[str, bool, str]:
+    """A page's lotuspod:revision ("" when none), whether it is visible and
+    the handle its lotuspod:owner names ("" when none does), read from its
+    HTML alone: what lotuspod.versions keeps of each version."""
     tag = _REVISION_TAG_RE.search(page_html)
     content = _META_CONTENT_RE.search(tag.group(0)) if tag else None
-    return (content.group(1).strip() if content else ""), extract_visibility(page_html)
+    owner = page_owner(page_html)
+    return ((content.group(1).strip() if content else ""), extract_visibility(page_html),
+            owner if machine.is_handle(owner) else "")
 
 
 def page_variant(page_html: str) -> str:
@@ -2021,6 +2028,12 @@ def serve_allow_list(out_dir: Path) -> frozenset[str]:
     return frozenset(allowed)
 
 
+def served_page_names(out_dir: Path) -> list[str]:
+    """The names of the pages serve answers, in order."""
+    return sorted(file[:-len(".html")] for file in serve_allow_list(out_dir)
+                  if file.endswith(".html") and is_page_name(file))
+
+
 def api_page(out_dir: Path, name: str) -> api.Page | None:
     """The page serve answers as NAME.html, as /api records it; None when
     serve would not answer it."""
@@ -2362,7 +2375,7 @@ def _make_server(out_dir: Path, host: str, port: int,
     if db_path is not None:
         routes = api.Api(db.Database(db_path), partial(api_page, out_dir), window,
                          media_dir=media.media_dir(out_dir), max_image_bytes=max_image_bytes,
-                         history=history)
+                         history=history, names=partial(served_page_names, out_dir))
     handler = partial(
         _AllowListHandler, directory=str(out_dir), root=out_dir, verifier=verifier,
         api=routes, history=history,
@@ -2427,7 +2440,7 @@ def cmd_serve(args: argparse.Namespace) -> int:
         sockets = machine.SocketServer(
             socket_path, db.Database(db_path), pages=partial(api_page, out_dir),
             describe=partial(agent_page, out_dir), window=window, claim_sec=claim_sec,
-            media_dir=media.media_dir(out_dir),
+            media_dir=media.media_dir(out_dir), max_image_bytes=image_cap,
         )
     except (OSError, machine.SocketInUse) as exc:
         server.server_close()

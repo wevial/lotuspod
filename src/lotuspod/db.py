@@ -37,10 +37,10 @@ resolves or reopens it, one row in resolutions names who did and when, and
 the thread's resolution is its newest row. A reader's reply to a resolved
 thread reopens it. A resolution never changes a comment's state.
 
-A reader's comment may name up to four images in the media store
-(lotuspod.media), each kept by its stored name with its width and height; a
-comment row carries them as `images`, each with its /media/ URL, and an
-empty list when it has none.
+A reader's comment, and an agent's reply or follow-up, may name up to four
+images in the media store (lotuspod.media), each kept by its stored name with
+its width and height; a comment row carries them as `images`, each with its
+/media/ URL, and an empty list when it has none.
 
 A thread may be anchored to a decision rather than a section: each of its
 comments keeps the decision's question id as `question`, beside the section
@@ -601,9 +601,13 @@ class Database:
 
     def reply(self, comment_id: int, *, credential: str, token_hash: str, key: str,
               text: str, revision: str | None, clock: Callable[[], float],
-              page_of: Callable[[str], Mapping | None], model: str | None = None) -> dict:
+              page_of: Callable[[str], Mapping | None], model: str | None = None,
+              images_of: Callable[[], Sequence[Mapping]] | None = None) -> dict:
         """Store credential's reply to comment_id under its claim, naming
-        model as its writer when it is not None; the reply.
+        model as its writer when it is not None, with the images images_of()
+        gives, each {name, width, height}, as a reader's comment keeps them;
+        the reply. images_of is called only once the key is new, so a
+        retried key answers what it stored whatever has left the media store.
 
         clock() is the time the claim is checked at and page_of(name) the
         page {revision, sections} as serve answers it now, or None; both are
@@ -631,6 +635,7 @@ class Database:
             page = page_of(found["page"])
             if page is None:
                 raise Refused("unknown_page")
+            images = () if images_of is None else images_of()
             if revision is not None and revision != page["revision"] and not _published(
                     conn, comment_id, credential, key, revision):
                 raise Refused("revision_mismatch")
@@ -640,12 +645,12 @@ class Database:
             cursor = conn.execute(
                 "INSERT INTO comments (page, section, section_title, revision, parent, text,"
                 " quote, actor, created_at, state, reply_credential, reply_key, model,"
-                " question) VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?)",
+                " question, images) VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (found["page"], found["section"],
                  page["sections"].get(found["section"], ""),
                  # A reply's revision is the page revision it made, if any.
                  revision or "", root, text, _dump(actor), _now(), ANSWERED,
-                 credential, key, model, found.get("question")),
+                 credential, key, model, found.get("question"), _stored_images(images)),
             )
             conn.execute(
                 "UPDATE comments SET state = ?, claim_hash = NULL, claim_expires = NULL"
@@ -656,9 +661,11 @@ class Database:
 
     def follow_up(self, root: int, *, credential: str, handle: str, key: str, text: str,
                   revision: str | None, reopen: bool,
-                  page_of: Callable[[str], Mapping | None]) -> dict:
+                  page_of: Callable[[str], Mapping | None],
+                  images_of: Callable[[], Sequence[Mapping]] | None = None) -> dict:
         """Store credential's message, as handle, in the thread whose first
-        comment is root, with no claim; the message.
+        comment is root, with no claim and with images_of()'s images as reply
+        keeps them; the message.
 
         A key credential has used before answers the message stored with
         it. Otherwise refused unknown_thread when root is not a reader's
@@ -681,18 +688,19 @@ class Database:
             page = page_of(found["page"])
             if page is None:
                 raise Refused("unknown_page")
+            images = () if images_of is None else images_of()
             if revision is not None and revision != page["revision"] and not _published(
                     conn, root, credential, key, revision):
                 raise Refused("revision_mismatch")
             actor = {"kind": "agent", "handle": handle, "credential": credential}
             cursor = conn.execute(
                 "INSERT INTO comments (page, section, section_title, revision, parent, text,"
-                " quote, actor, created_at, state, reply_credential, reply_key, question)"
-                " VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?)",
+                " quote, actor, created_at, state, reply_credential, reply_key, question,"
+                " images) VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?)",
                 (found["page"], found["section"],
                  page["sections"].get(found["section"], ""),
                  revision or "", root, text, _dump(actor), _now(), ANSWERED,
-                 credential, key, found.get("question")),
+                 credential, key, found.get("question"), _stored_images(images)),
             )
             _record(conn, "follow-up", found, credential, handle, key)
             if reopen and _resolution(_newest(conn, root))["resolved"]:
@@ -868,25 +876,75 @@ class Database:
                 rows = conn.execute(
                     "SELECT id, page, parent, actor FROM comments WHERE page = ? ORDER BY id",
                     (page,)).fetchall()
-            marks = dict(conn.execute(
-                "SELECT thread, comment FROM thread_views WHERE reader = ?", (reader,)
-            ).fetchall())
-        threads: dict[int, list[tuple[int, str, bool]]] = {}
-        for row in rows:
-            actor = _actor(row["actor"])
-            mine = actor.get("kind") == "human" and actor.get("email") == reader
-            threads.setdefault(row["parent"] or row["id"], []).append(
-                (row["id"], row["page"], mine))
-        found: dict[str, list[int]] = {}
-        for root, comments in threads.items():
-            own = max((at for at, _page, mine in comments if mine), default=None)
-            if own is None:
-                continue
-            seen = max(own, marks.get(root, 0))
-            for at, name, mine in comments:
-                if not mine and at > seen:
-                    found.setdefault(name, []).append(at)
-        return {name: sorted(ids) for name, ids in found.items()}
+            marks = _marks(conn, reader)
+        return _unread(rows, reader, marks)[0]
+
+    def activity(self, reader: str, start: str, end: str, pages: Callable[[str], bool],
+                 limit: int) -> tuple[list[dict], bool]:
+        """The comments and answers stored after start and up to end (times
+        as stored) on the pages pages(name) accepts, newest first, at most
+        limit of each; and whether any on those pages was stored before.
+
+        Each is {page, kind, at, ...} as the activity route answers it, with
+        `mine` true when reader wrote it: a thread's first comment {kind:
+        comment, id, thread, section, sectionTitle, question?}, a reply
+        {kind: reply, id, thread, sectionTitle, yours, unread}, `yours` true
+        when the thread is reader's and `unread` the unread rule's for them
+        (unread()), and an answer {kind: answer, question, questionText,
+        label}, its question's text and choice's label as the page asked
+        them."""
+        window = (start, end)
+        with self._connect() as conn:
+            named = [row[0] for row in conn.execute(
+                "SELECT page FROM comments WHERE created_at > ? AND created_at <= ?"
+                " UNION SELECT page FROM answers WHERE created_at > ? AND created_at <= ?",
+                window + window)]
+            shown = json.dumps(sorted(name for name in named if pages(name)))
+            earlier = [row[0] for row in conn.execute(
+                "SELECT page FROM comments WHERE created_at <= ?"
+                " UNION SELECT page FROM answers WHERE created_at <= ?", (start, start))]
+            comments = conn.execute(
+                "SELECT * FROM comments WHERE page IN (SELECT value FROM json_each(?))"
+                " AND created_at > ? AND created_at <= ? ORDER BY created_at DESC, id DESC"
+                " LIMIT ?", (shown, *window, limit)).fetchall()
+            answers = conn.execute(
+                "SELECT * FROM answers WHERE page IN (SELECT value FROM json_each(?))"
+                " AND created_at > ? AND created_at <= ? ORDER BY created_at DESC, id DESC"
+                " LIMIT ?", (shown, *window, limit)).fetchall()
+            roots = json.dumps(sorted({row["parent"] or row["id"] for row in comments}))
+            threads = conn.execute(
+                "SELECT id, page, parent, actor FROM comments WHERE COALESCE(parent, id) IN"
+                " (SELECT value FROM json_each(?)) ORDER BY id", (roots,)).fetchall()
+            marks = _marks(conn, reader)
+        unread, own = _unread(threads, reader, marks)
+        unread_ids = {comment for ids in unread.values() for comment in ids}
+
+        def mine(text: str) -> bool:
+            actor = _actor(text)
+            return actor.get("kind") == "human" and actor.get("email") == reader
+
+        found: list[dict] = []
+        for row in comments:
+            event = {"page": row["page"], "at": row["created_at"], "id": row["id"]}
+            if row["parent"] is None:
+                event.update(kind="comment", thread=row["id"], section=row["section"],
+                             sectionTitle=row["section_title"])
+                if row["question"] is not None:
+                    event["question"] = row["question"]
+            else:
+                event.update(kind="reply", thread=row["parent"],
+                             sectionTitle=row["section_title"])
+            event.update(actor=_actor(row["actor"]), mine=mine(row["actor"]))
+            if row["parent"] is not None:
+                event.update(yours=row["parent"] in own, unread=row["id"] in unread_ids)
+            found.append(event)
+        for row in answers:
+            found.append({"page": row["page"], "kind": "answer", "at": row["created_at"],
+                          "question": row["question"], "questionText": row["question_text"],
+                          "label": row["choice_label"], "actor": _actor(row["actor"]),
+                          "mine": mine(row["actor"])})
+        found.sort(key=lambda event: event["at"], reverse=True)
+        return found, any(pages(name) for name in earlier)
 
     def answer(self, answer_id: int) -> dict | None:
         """The answer answer_id; None when there is none."""
@@ -973,6 +1031,38 @@ def _stored_images(images: Sequence[Mapping]) -> str | None:
         return None
     return json.dumps([{"name": image["name"], "width": image["width"],
                         "height": image["height"]} for image in images])
+
+
+def _marks(conn: sqlite3.Connection, reader: str) -> dict[int, int]:
+    """How far reader has seen each thread they opened, by its first comment."""
+    return dict(conn.execute(
+        "SELECT thread, comment FROM thread_views WHERE reader = ?", (reader,)).fetchall())
+
+
+def _unread(rows: Sequence[sqlite3.Row], reader: str,
+            marks: Mapping[int, int]) -> tuple[dict[str, list[int]], set[int]]:
+    """Among rows ({id, page, parent, actor}, oldest first, every comment of
+    each thread they hold), the ids of reader's unread comments by page,
+    oldest first, and the first comments of the threads that are reader's:
+    those they wrote a comment in, as a human by that address."""
+    threads: dict[int, list[tuple[int, str, bool]]] = {}
+    for row in rows:
+        actor = _actor(row["actor"])
+        mine = actor.get("kind") == "human" and actor.get("email") == reader
+        threads.setdefault(row["parent"] or row["id"], []).append(
+            (row["id"], row["page"], mine))
+    found: dict[str, list[int]] = {}
+    own: set[int] = set()
+    for root, comments in threads.items():
+        newest = max((at for at, _page, mine in comments if mine), default=None)
+        if newest is None:
+            continue
+        own.add(root)
+        seen = max(newest, marks.get(root, 0))
+        for at, name, mine in comments:
+            if not mine and at > seen:
+                found.setdefault(name, []).append(at)
+    return {name: sorted(ids) for name, ids in found.items()}, own
 
 
 def _row(conn: sqlite3.Connection, comment_id: int) -> sqlite3.Row:

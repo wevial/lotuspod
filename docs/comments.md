@@ -92,12 +92,15 @@ twice.
   `unread` the count of their unread replies on it. A page since hidden or
   removed drops out. It never names a reader.
 - `GET /api/versions?page=NAME` answers `{page, versions}`: each commit of
-  the artifacts repository that changed the page while it was visible, as
-  `{commit, date, revision, current}`, newest first and at most 200, `date`
-  its committer time in UTC and `current` true on the newest only (see
-  [Versions](publishing.md#versions)). It is empty when the output directory
-  is not the top of its own repository, and only read (any other method is
-  405).
+  the artifacts repository that changed the page while it was visible (a
+  merge by what it changed), as
+  `{commit, date, revision, current, summary}`, newest first and at most
+  200, `date` its committer time in UTC, `current` true on the newest only
+  and `summary` what it changed from the page before it in one line (as
+  `/api/activity` words it, below), shown as the entry's note in the
+  versions view (see [Versions](publishing.md#versions)). It is empty when
+  the output directory is not the top of its own repository, and only read
+  (any other method is 405).
 - `GET /api/changes?page=NAME&since=REV` compares the newest listed version
   of the page whose revision is REV with the current one, and answers
   `{page, since: {commit, date, revision}, behind, changed, sections}`:
@@ -113,6 +116,44 @@ twice.
   every page outside a repository, 400 `invalid_query` without exactly one
   `page` and one `since` of 1 to 100 characters, and only read (any other
   method is 405).
+- `GET /api/activity` answers the reader's recent activity on every page
+  serve answers: the 7 days up to `before`, an optional ISO 8601 UTC time
+  (`2026-10-07T12:00:00Z`), else now. It answers `{from, to, older,
+  truncated, pages}`: `from` and `to` the window's bounds, UTC to the
+  millisecond; `pages` one `{page, title, latest, events}` for each page
+  with an event after `from` and up to `to`, ordered by `latest`, its newest
+  event's time, newest first, and its `events` newest first. At most 500
+  events are kept, the newest, and `truncated` is true when any were left
+  out, or when the repository lacks the version before one, as a shallow
+  clone does (that version then has `first: false` and `summary` "");
+  `older` is true when anything the reader may see happened up to `from`, so asking again with `before` set to `from` reads the 7 days
+  before. A hidden or removed page never appears. Each event is one of:
+  - `{kind: "version", at, commit, revision, actor, first, summary}`, a
+    commit of the artifacts repository that changed the page while it was
+    visible, read from git in at most two processes, the served pages'
+    whole history up to `to` read so the version before each is known: `actor` the handle the
+    version's `lotuspod:owner` names, or null, and `first` true when the page
+    had no visible version before it. `summary` compares its sections with
+    the visible version before it, as `/api/changes` does: "Alpha and Beta changed;
+    Delta added; Gamma removed", each part naming at most three sections and
+    then "and N more", a part left out when empty, "new version" when no
+    section changed, and "" on a first version. A commit whose
+    `lotuspod:revision` is that of the visible version before it, as a page
+    hidden and shown again unchanged, is not an event; a merge is one when
+    it changed the page; outside a repository there are none;
+  - `{kind: "comment", at, id, thread, section, sectionTitle, question?,
+    actor, mine}`, a thread's first comment, with `question` on a thread on
+    a decision;
+  - `{kind: "reply", at, id, thread, sectionTitle, actor, mine, yours,
+    unread}`, `yours` true when the thread is the reader's and `unread` as
+    [Replies to you](#replies-to-you) counts it;
+  - `{kind: "answer", at, question, questionText, label, actor, mine}`, with
+    the question's text and the choice's label as the page asked them.
+
+  `mine` is true on what the reader wrote, and every actor is shown as on
+  the other routes, never with an address. A `before` that is not such a
+  time, or any other query key, is 400 `invalid_query`; it is only read
+  (any other method is 405).
 
 An open page notices when it is published again: every published page
 carries a revision, so it loads the page script, `lotuspod-page.js`, even

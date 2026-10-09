@@ -196,6 +196,13 @@ lotuspod comments release 7 --claim TOKEN      # back to routing, unanswered
 lotuspod comments fail 7 --claim TOKEN --reason "source missing"
 ```
 
+A reply or follow-up can attach up to four images:
+
+```sh
+lotuspod comments reply 7 --claim TOKEN --key my-agent-7-3 --text "Like this." \
+  --image chart.png --image after.jpg
+```
+
 A claim token never starts with `-`; one issued by an older serve may, and
 parses when passed as `--claim=TOKEN`.
 
@@ -206,8 +213,8 @@ parses when passed as `--claim=TOKEN`.
   expiresAt}` and the comment is `claimed`, leaving every pull, until the
   claim expires (`[comments] claim_sec`), when it lapses and is routed again.
 - `reply ID --claim TOKEN --key KEY (--text TEXT | --text-file PATH)
-  [--revision R] [--model NAME]` (`POST /v1/comments/ID/reply` with
-  `{claimToken, idempotencyKey, text[, revision, model]}`) needs `reply`. A KEY this credential
+  [--revision R] [--model NAME] [--image PATH]...` (`POST /v1/comments/ID/reply` with
+  `{claimToken, idempotencyKey, text[, revision, model, images]}`) needs `reply`. A KEY this credential
   has sent before answers the reply stored with it, whatever has happened to
   the claim since. Otherwise the claim must be this credential's, current,
   and the one TOKEN names, else 409 `not_claimed`; a `revision` must be the
@@ -221,14 +228,36 @@ parses when passed as `--claim=TOKEN`.
   then carries `model` on every route that returns it, and `comments pull`
   and `comments show` print it on the reply's line; a reply sent without one
   carries no `model` key. A retried KEY answers the model first stored.
+- `--image PATH`, on `reply` and `follow-up`, attaches an image; repeat it
+  for up to four, shown in the reply's bubble in the order given, as a
+  reader's images are. Each file is uploaded first (`POST /v1/media`, below),
+  its type named by its extension (`.png`, `.jpg` or `.jpeg`, `.webp`,
+  `.gif`), and the message then names the stored images in `images`. More
+  than four, a file the command cannot read, or another extension is refused
+  (`too_many_images`, `unreadable_image`, `unsupported_media_type`) before
+  anything is uploaded. The text is still required. A retried KEY answers
+  the message first stored, with its first images.
+- `POST /v1/media` takes one image's bytes, with `Content-Type` `image/png`,
+  `image/jpeg`, `image/webp` or `image/gif`, needs `reply`, and answers
+  `{name, url, width, height}` once the image is in the media directory
+  beside the artifacts directory, under the SHA-256 of its bytes. It checks
+  and stores it as the reader's upload is, and is refused with nothing
+  stored: 415 `unsupported_media_type`, 411 `length_required`, 413
+  `body_too_large` over `[media] max_image_bytes`, 400 `invalid_image` for
+  bytes that are not a whole image of the declared type, and 503
+  `storage_unavailable` with no media directory. A message's `images` is a
+  list of 1 to 4 distinct stored names (else 400 `invalid_body`); a name not
+  in the media directory is 400 `unknown_image`, and nothing is stored. The
+  reply's images then come back from every route, with their `path` in
+  `comments pull` and `comments show` as a reader's do.
 - `release ID --claim TOKEN` ends the claim unanswered: the comment is
   `pending` again and in its route's next pull. `fail ID --claim TOKEN
   --reason TEXT` (up to 200 characters) leaves it `failed`, the reason on the
   page; nothing retries it, and the reader routes it again by writing a new
   comment. Both need `claim` and the current claim, else 409 `not_claimed`.
-- `follow-up ID --key KEY (--text TEXT | --text-file PATH) [--revision R]`
-  (`POST /v1/threads/ID/follow-up` with `{idempotencyKey, text[, revision,
-  reopen]}`) adds a message to the thread whose first comment is ID with no
+- `follow-up ID --key KEY (--text TEXT | --text-file PATH) [--revision R]
+  [--image PATH]...` (`POST /v1/threads/ID/follow-up` with `{idempotencyKey,
+  text[, revision, reopen, images]}`) adds a message to the thread whose first comment is ID with no
   claim, so a result an earlier reply promised reaches the reader there: it
   needs `reply` and the page's owner or the handle that answered the thread
   (else 403 `not_routed`), lands once per KEY as a reply does, changes no
