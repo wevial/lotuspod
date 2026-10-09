@@ -584,7 +584,6 @@
         toggle.setAttribute("aria-expanded", open ? "true" : "false");
       }
       unfold(false);
-      // An archived page takes no reply.
       toggle.disabled = ARCHIVED;
       toggle.addEventListener("click", function () {
         unfold(form.hidden);
