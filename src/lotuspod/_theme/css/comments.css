@@ -201,8 +201,73 @@
 }
 
 :is(.artifact-body, .artifact-comments-panel, .artifact-comments-held) .artifact-comment-text {
+  max-width: 100%;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
+}
+
+/* A bubble's markdown (js/comment-markdown.js): its blocks spaced apart, a
+   single newline in a paragraph or an item still a line break. */
+:is(.artifact-body, .artifact-comments-panel, .artifact-comments-held) .artifact-comment-text > :is(p, pre, ul, ol) {
+  margin: 0;
+}
+
+:is(.artifact-body, .artifact-comments-panel, .artifact-comments-held) .artifact-comment-text > :is(p, pre, ul, ol) + :is(p, pre, ul, ol) {
+  margin-top: 0.6em;
+}
+
+:is(.artifact-body, .artifact-comments-panel, .artifact-comments-held) .artifact-comment-text :is(ul, ol) {
+  padding-left: 1.3rem;
+}
+
+:is(.artifact-body, .artifact-comments-panel, .artifact-comments-held) .artifact-comment-text li {
+  margin: 0;
+  padding-left: 0.1rem;
+}
+
+:is(.artifact-body, .artifact-comments-panel, .artifact-comments-held) .artifact-comment-text li + li {
+  margin-top: 0.2em;
+}
+
+:is(.artifact-body, .artifact-comments-panel, .artifact-comments-held) .artifact-comment-text li::marker {
+  color: var(--color-lavender);
+}
+
+:is(.artifact-body, .artifact-comments-panel, .artifact-comments-held) .artifact-comment-text code {
+  background: var(--code-chip);
+  border-radius: var(--radius-chip);
+  color: var(--color-pale-sky);
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  padding: 0.1em 0.3em;
+}
+
+:is(.artifact-body, .artifact-comments-panel, .artifact-comments-held) .artifact-comment-text pre {
+  background: var(--color-deep-night);
+  font-family: var(--font-mono);
+  border: 1px solid var(--code-edge);
+  border-radius: var(--radius-chip);
+  font-size: 0.85em;
+  line-height: 1.5;
+  overflow-x: auto;
+  padding: 0.5rem 0.65rem;
+  white-space: pre;
+}
+
+:is(.artifact-body, .artifact-comments-panel, .artifact-comments-held) .artifact-comment-text pre code {
+  background: none;
+  border-radius: 0;
+  color: var(--body-ink);
+  font-size: inherit;
+  padding: 0;
+  white-space: pre;
+}
+
+:is(.artifact-body, .artifact-comments-panel, .artifact-comments-held) .artifact-comment-text a {
+  color: var(--color-sky);
+  text-decoration-color: var(--link-line);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.18em;
 }
 
 :is(.artifact-body, .artifact-comments-panel, .artifact-comments-held) .artifact-comment-item--reader .artifact-comment-text {

@@ -178,8 +178,32 @@ no longer has is listed at the end of the body under "Comments on sections
 that have changed" (in the panel, where there is one). Every author and text
 is set as text, never as markup.
 
-Every composer takes up to 4 images, pasted into its field or picked with its
-"Add image" button. The page refuses a file that is not a PNG, JPEG, WebP or
+A bubble draws its text as a small markdown subset, a reader's comment and an
+agent's reply alike (the page script's `js/comment-markdown.js`, which builds
+every node itself and sets every text as text, so raw HTML and entities show
+as typed):
+
+- A blank line separates paragraphs; a single newline inside one stays a line
+  break.
+- `**bold**` is bold and `*italic*` is italic. `_` is always literal, so
+  `snake_case` names survive, and a `*` with a space after it opens nothing.
+- `` `code` `` is inline code, its contents literal, markdown included. A line
+  of three backticks opens a code block and the next such line closes it; an
+  unclosed block runs to the end.
+- Lines starting `- ` or `* ` make a bullet list, and lines starting `1. ` a
+  numbered one. Lists are one level deep: an indented item is an item.
+- `[TEXT](TARGET)` is a link that opens in a new tab, its text plain, only
+  when TARGET is `http:` or `https:` (any case), a `#anchor`, or a relative
+  path (no `//` start, no `:` before its first `/`, `?` or `#`), as for a
+  page's own links. Any other target (`javascript:`, `data:`, `mailto:`,
+  `//host/`) leaves the whole link as typed.
+- Anything else (headings, quotes, tables, images, HTML) is literal text.
+
+A passage's opening words in a list stay plain text.
+
+Every composer takes up to 4 images, pasted into its field, dropped on it
+(a drag of text alone is left to the browser) or picked with its "Add image"
+button. The page refuses a file that is not a PNG, JPEG, WebP or
 GIF, or is over the `maxImageBytes` the threads route reports, in the
 composer's status line, and never sends it (a file attached before the page's
 first read of the threads waits for it); any other is uploaded to

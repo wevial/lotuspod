@@ -35,6 +35,7 @@ import unittest
 import urllib.error
 import urllib.request
 from contextlib import redirect_stderr, redirect_stdout
+from html.parser import HTMLParser
 from pathlib import Path
 from unittest import mock
 
@@ -45,7 +46,7 @@ from lotuspod import cli  # noqa: E402
 from tests import history  # noqa: E402
 
 
-MANIFEST_KEYS = {"file", "title", "episode", "date", "summary", "visible"}
+MANIFEST_KEYS = {"file", "title", "episode", "date", "created", "updated", "summary", "visible"}
 
 VISIBLE_PAGE = (
     "<!DOCTYPE html><html><head>"
@@ -59,11 +60,65 @@ VISIBLE_PAGE = (
 )
 
 
+class _IndexTable(HTMLParser):
+    """The index table's header labels and, per row, each cell's classes and
+    text and the datetime of any time element in it."""
+
+    def __init__(self, page: str) -> None:
+        super().__init__()
+        self.headers: list[str] = []
+        self.rows: list[list[dict]] = []
+        self._cell: dict | None = None
+        self._header: list[str] | None = None
+        self.feed(page)
+        self.close()
+
+    def handle_starttag(self, tag: str, attrs: list) -> None:
+        attrs = dict(attrs)
+        if tag == "th":
+            self._header = []
+        elif tag == "tr" and self._header is None:
+            self.rows.append([])
+        elif tag == "td":
+            self._cell = {"class": attrs.get("class", ""), "text": "", "datetime": None}
+            self.rows[-1].append(self._cell)
+        elif tag == "time" and self._cell is not None:
+            self._cell["datetime"] = attrs.get("datetime")
+
+    def handle_data(self, data: str) -> None:
+        if self._header is not None:
+            self._header.append(data)
+        elif self._cell is not None:
+            self._cell["text"] += data
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag == "th":
+            self.headers.append("".join(self._header).strip())
+            self._header = None
+        elif tag == "td":
+            self._cell = None
+
+    def body_rows(self) -> list[list[dict]]:
+        return [row for row in self.rows if row]
+
+
 def run_cli(*argv: str) -> tuple[int, str, str]:
     out, err = io.StringIO(), io.StringIO()
     with redirect_stdout(out), redirect_stderr(err):
         rc = cli.main(list(argv))
     return rc, out.getvalue(), err.getvalue()
+
+
+def render_updated(out_dir: Path, name: str, date: str, updated: str) -> None:
+    """Render a page as publish does, stamped with the updated time."""
+    args = cli.build_parser().parse_args([
+        "render", "--name", name, "--title", name.title(), "--date", date,
+        "--out-dir", str(out_dir),
+    ])
+    args.updated = updated
+    with redirect_stdout(io.StringIO()):
+        if cli.cmd_render(args) != 0:
+            raise AssertionError(f"render {name} failed")
 
 
 _STYLESHEET_LINK = re.compile(r'<link rel="stylesheet" href="lotuspod\.css\?v=([^"]*)">')
@@ -226,10 +281,36 @@ class ArtifactHeaderTests(TempDirTestCase):
                 "title": "Ep-002",
                 "episode": "2",
                 "date": "2026-03-04",
+                "created": "2026-03-04",
+                # A bare render stamps no updated time.
+                "updated": "",
                 "summary": "back from the pond",
                 "visible": True,
             },
         )
+
+    def test_a_page_shows_its_created_date_and_an_updated_day_that_differs(self):
+        page = self.rendered("ep-004", "--date", "2026-09-01")
+        self.assertIn(
+            '<p class="artifact-meta">Created <time datetime="2026-09-01">2026-09-01</time></p>',
+            page,
+        )
+        self.assertNotIn("lotuspod:updated", page)
+        cases = (
+            ("2026-10-08T17:04:05Z",
+             'Created <time datetime="2026-09-01">2026-09-01</time> · Updated '
+             '<time datetime="2026-10-08T17:04:05Z">2026-10-08</time>'),
+            ("2026-09-01T23:59:59Z",
+             'Created <time datetime="2026-09-01">2026-09-01</time></p>'),
+        )
+        for updated, header in cases:
+            with self.subTest(updated=updated):
+                render_updated(self.out_dir, "stamped", "2026-09-01", updated)
+                page = (self.out_dir / "stamped.html").read_text(encoding="utf-8")
+                self.assertIn(header, page)
+                self.assertIn(f'<meta name="lotuspod:updated" content="{updated}">', page)
+                self.assertEqual(cli.extract_meta(page, "stamped")["date"], "2026-09-01")
+                self.assertEqual(cli.extract_meta(page, "stamped")["updated"], updated)
 
 
 class ArtifactTopbarTests(TempDirTestCase):
@@ -487,7 +568,7 @@ class ManifestV2Tests(TempDirTestCase):
         self.assertEqual(len(artifacts), 1)
         entry = artifacts[0]
         self.assertEqual(set(entry.keys()), MANIFEST_KEYS)
-        for field in ("file", "title", "episode", "date", "summary"):
+        for field in ("file", "title", "episode", "date", "created", "updated", "summary"):
             self.assertIsInstance(entry[field], str, field)
         self.assertIsInstance(entry["visible"], bool)
         stack = [data]
@@ -503,6 +584,9 @@ class ManifestV2Tests(TempDirTestCase):
         self.assertEqual(entry["file"], "zeta.html")
         self.assertEqual(entry["episode"], "7")
         self.assertEqual(entry["date"], "2026-03-04")
+        self.assertEqual(entry["created"], "2026-03-04")
+        # Never stamped, and not in a repository: updated is the created date.
+        self.assertEqual(entry["updated"], "2026-03-04")
         self.assertTrue(entry["visible"])
 
     def test_fail_closed_exclusions(self):
@@ -629,36 +713,83 @@ class IndexTableTests(TempDirTestCase):
         make_mixed_fixture(self.out_dir)
         index_html = self.build_index()
         self.assertIn('<table class="index-table">', index_html)
-        self.assertIn('<td class="episode-number">7</td>', index_html)
         self.assertIn(
             '<td class="episode-title"><a href="zeta.html">Zeta Pond</a></td>',
             index_html,
         )
-        self.assertIn(
-            '<td class="episode-date">'
-            '<time datetime="2026-03-04">2026-03-04</time></td>',
-            index_html,
+        self.assertEqual(
+            index_html.count(
+                '<td class="episode-date">'
+                '<time datetime="2026-03-04">2026-03-04</time></td>'
+            ),
+            2,
         )
         self.assertIn(
             '<td class="episode-summary">latest from the pond</td>', index_html
         )
         self.assertNotIn("episode-card", index_html)
 
-    def test_columns_are_labelled_and_the_episode_column_sorts_numerically(self):
+    def test_columns_are_title_created_updated_summary_with_no_page_column(self):
         make_mixed_fixture(self.out_dir)
+        self.render("note")
+        table = _IndexTable(self.build_index())
+        self.assertEqual(table.headers, ["Title", "Created", "Updated", "Summary"])
+        rows = table.body_rows()
+        self.assertEqual(len(rows), 2)
+        for row in rows:
+            self.assertEqual(len(row), 4)
+            self.assertNotIn("episode-number", [cell["class"] for cell in row])
+
+    def test_an_episode_page_keeps_its_kicker_and_manifest_episode(self):
+        make_mixed_fixture(self.out_dir)
+        page = (self.out_dir / "zeta.html").read_text(encoding="utf-8")
+        self.assertIn('<p class="artifact-kicker">Lotuspod · Episode 7</p>', page)
+        rc, _, err = run_cli("manifest", "--out-dir", str(self.out_dir))
+        self.assertEqual(rc, 0, err)
+        data = json.loads((self.out_dir / "manifest.json").read_text(encoding="utf-8"))
+        self.assertEqual([entry["episode"] for entry in data["artifacts"]], ["7"])
+        self.assertNotIn("episode-number", self.build_index())
+
+    def test_the_updated_header_starts_sorted_descending(self):
+        self.render("note")
         index_html = self.build_index()
-        self.assertIn(
-            '<th scope="col" data-sort-type="number">Page</th>', index_html
-        )
-        self.assertNotIn(">Episode<", index_html)
-        for label in ("Title", "Date", "Summary"):
+        self.assertIn('<th scope="col" aria-sort="descending">Updated</th>', index_html)
+        for label in ("Title", "Created", "Summary"):
             with self.subTest(label=label):
                 self.assertIn(f'<th scope="col">{label}</th>', index_html)
 
+    def test_rows_come_newest_update_first(self):
+        for name, updated in (("a-page", "2026-09-02T08:00:00Z"),
+                              ("b-page", "2026-10-01T08:00:00Z"),
+                              ("c-page", "2026-09-15T08:00:00Z")):
+            render_updated(self.out_dir, name, "2026-09-01", updated)
+        rows = _IndexTable(self.build_index()).body_rows()
+        self.assertEqual(
+            [(row[0]["text"], row[2]["datetime"], row[2]["text"]) for row in rows],
+            [("B-Page", "2026-10-01T08:00:00Z", "2026-10-01"),
+             ("C-Page", "2026-09-15T08:00:00Z", "2026-09-15"),
+             ("A-Page", "2026-09-02T08:00:00Z", "2026-09-02")],
+        )
+        self.assertEqual({row[1]["datetime"] for row in rows}, {"2026-09-01"})
+        rc, _, err = run_cli("manifest", "--out-dir", str(self.out_dir))
+        self.assertEqual(rc, 0, err)
+        data = json.loads((self.out_dir / "manifest.json").read_text(encoding="utf-8"))
+        self.assertEqual([entry["file"] for entry in data["artifacts"]],
+                         ["b-page.html", "c-page.html", "a-page.html"])
+        for entry in data["artifacts"]:
+            with self.subTest(file=entry["file"]):
+                self.assertEqual(set(entry), MANIFEST_KEYS)
+                self.assertEqual(entry["created"], entry["date"])
+
+    def test_equal_updated_times_fall_back_to_file_name(self):
+        for name in ("b-page", "a-page"):
+            render_updated(self.out_dir, name, "2026-09-01", "2026-09-03T08:00:00Z")
+        rows = _IndexTable(self.build_index()).body_rows()
+        self.assertEqual([row[0]["text"] for row in rows], ["A-Page", "B-Page"])
+
     def test_missing_fields_leave_empty_cells(self):
-        self.render("note")  # no --episode, no --summary
+        self.render("note")  # no --summary
         index_html = self.build_index()
-        self.assertIn('<td class="episode-number"></td>', index_html)
         self.assertIn('<td class="episode-summary"></td>', index_html)
 
     def test_row_values_are_escaped(self):

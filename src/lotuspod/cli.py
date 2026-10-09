@@ -69,6 +69,9 @@ _VISIBLE_TAG_RE = re.compile(
     r"<meta\s[^>]*name=[\"']lotuspod:visible[\"'][^>]*>", re.IGNORECASE
 )
 _META_CONTENT_RE = re.compile(r"content=[\"']([^\"']*)[\"']", re.IGNORECASE)
+_UPDATED_TAG_RE = re.compile(
+    r"<meta\s[^>]*name=[\"']lotuspod:updated[\"'][^>]*>", re.IGNORECASE
+)
 
 # Render variants. Each is one ruleset in lotuspod.css keyed off a class on
 # the main element, never a second stylesheet: the one file serve allow-lists
@@ -289,6 +292,7 @@ THEME_SOURCES = {
         "js/narrow.js",
         "js/attachments.js",
         "js/live-page.js",
+        "js/comment-markdown.js",
         "js/comments.js",
         "js/panel-resize.js",
         "js/tables.js",
@@ -551,13 +555,7 @@ def commit_output(out_dir: Path, message: str) -> None:
     nothing. A git failure prints one warning line and returns: the files
     are already written, and the next render pushes the backlog.
     """
-    try:
-        top = _git(out_dir, "rev-parse", "--show-toplevel")
-        if top.returncode != 0 or not top.stdout.strip():
-            return
-        if Path(top.stdout.strip()).resolve() != Path(out_dir).resolve():
-            return
-    except OSError:
+    if not is_repository_top(out_dir):
         return
 
     try:
@@ -667,10 +665,16 @@ def cmd_render(args: argparse.Namespace) -> int:
         body = comments.render_comments(body, args.name)
     # Last, so each section's box and forms fall inside its wrapper.
     body, wrapped = sections.wrap_sections(body) if outline else (body, False)
+    date = args.date or _dt.date.today().isoformat()
+    # Publish stamps the time it ran; a bare render stamps nothing. The header
+    # names the updated day only when it is not the created one.
+    updated = getattr(args, "updated", "")
     context = {
         "title": args.title,
         "kicker": kicker,
-        "date": args.date or _dt.date.today().isoformat(),
+        "date": date,
+        "updated": updated,
+        "updated_day": updated[:10] if updated[:10] != date else "",
         "summary_block": summary_block,
         "body": body,
         "outline": outline,
@@ -736,11 +740,18 @@ def extract_meta(page_html: str, stem: str) -> dict:
 
     # The page holds its title and summary as markup; the metadata is their
     # text, escaped again only for wherever it is written next.
+    # A page published before publish stamped it has no updated time: "" here,
+    # which collect_artifacts fills in.
+    updated_tag = _UPDATED_TAG_RE.search(page_html)
+    updated = _META_CONTENT_RE.search(updated_tag.group(0)) if updated_tag else None
+    created = date.group(1) if date else ""
     return {
         "file": f"{stem}.html",
         "title": html.unescape(title.group(1)) if title else stem,
         "episode": episode,
-        "date": date.group(1) if date else "",
+        "date": created,
+        "created": created,
+        "updated": updated.group(1).strip() if updated else "",
         "summary": html.unescape(summary.group(1)) if summary else "",
         "visible": extract_visibility(page_html),
     }
@@ -760,15 +771,71 @@ def is_page_name(name: str) -> bool:
     )
 
 
+def _utc_stamp(moment: _dt.datetime) -> str:
+    return moment.astimezone(_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def is_repository_top(out_dir: Path) -> bool:
+    """Whether out_dir is the top of its own git repository."""
+    try:
+        top = _git(out_dir, "rev-parse", "--show-toplevel")
+    except OSError:
+        return False
+    if top.returncode != 0 or not top.stdout.strip():
+        return False
+    return Path(top.stdout.strip()).resolve() == Path(out_dir).resolve()
+
+
+# How git log marks each commit's line among the file names it lists: a
+# file name never holds a NUL.
+_COMMIT_FORMAT = "%x00%cI"
+_COMMIT_MARK = "\x00"
+
+
+def committed_times(out_dir: Path) -> dict[str, str]:
+    """Each page's newest commit time, UTC, by file name, from one git log.
+
+    Empty unless out_dir is the top of its own repository with commits."""
+    if not is_repository_top(out_dir):
+        return {}
+    try:
+        done = _git(out_dir, "-c", "core.quotePath=false", "log",
+                    f"--format={_COMMIT_FORMAT}", "--name-only", "--", "*.html")
+    except OSError:
+        return {}
+    if done.returncode != 0:
+        return {}
+    times: dict[str, str] = {}
+    when = ""
+    for line in done.stdout.splitlines():
+        if line.startswith(_COMMIT_MARK):
+            # git prints the committer's offset (+00:00, or a local one):
+            # parse it and store the time as UTC Z, as publish stamps it.
+            try:
+                when = _utc_stamp(_dt.datetime.fromisoformat(line[len(_COMMIT_MARK):]))
+            except ValueError:
+                when = ""
+        elif line and when:
+            # Newest first: the first commit that names a page is its last.
+            times.setdefault(line, when)
+    return times
+
+
 def collect_artifacts(out_dir: Path) -> tuple[list[dict], int]:
     """Parse every artifact page; return (visible entries, hidden count).
 
-    Visible entries come back newest-first (date descending, filename as the
-    tiebreaker) so the index leads with the latest work by default."""
+    A page publish never stamped takes its updated time from its newest
+    commit when out_dir is the top of its own repository, else its created
+    date. Visible entries come back newest update first (filename as the
+    tiebreaker) so the index leads with what moved."""
     pages = sorted(p for p in out_dir.glob("*.html") if is_page_name(p.name))
     metas = [extract_meta(p.read_text(encoding="utf-8"), p.stem) for p in pages]
     visible = [m for m in metas if m["visible"]]
-    visible.sort(key=lambda m: m.get("date") or "", reverse=True)
+    unstamped = [m for m in visible if not m["updated"]]
+    committed = committed_times(out_dir) if unstamped else {}
+    for meta in unstamped:
+        meta["updated"] = committed.get(meta["file"], meta["created"])
+    visible.sort(key=lambda m: m["updated"], reverse=True)
     return visible, len(metas) - len(visible)
 
 
@@ -815,19 +882,22 @@ def index_entries_html(artifacts: list[dict]) -> str:
     if not artifacts:
         return _INDEX_EMPTY_BLOCK
     esc = html.escape
+
+    def date_cell(value: str) -> str:
+        # The full time sorts; the cell shows its UTC day.
+        value = esc(value)
+        return f'<time datetime="{value}">{value[:10]}</time>' if value else ""
+
     rows = []
     for meta in artifacts:
         href = esc(str(meta["file"]))
         title = esc(str(meta["title"]))
-        episode = esc(str(meta["episode"]))
-        date = esc(str(meta["date"]))
         summary = esc(str(meta["summary"]))
-        date_cell = f'<time datetime="{date}">{date}</time>' if date else ""
         rows.append(
             "          <tr>\n"
-            f'            <td class="episode-number">{episode}</td>\n'
             f'            <td class="episode-title"><a href="{href}">{title}</a></td>\n'
-            f'            <td class="episode-date">{date_cell}</td>\n'
+            f'            <td class="episode-date">{date_cell(str(meta["created"]))}</td>\n'
+            f'            <td class="episode-date">{date_cell(str(meta["updated"]))}</td>\n'
             f'            <td class="episode-summary">{summary}</td>\n'
             "          </tr>"
         )
@@ -835,9 +905,9 @@ def index_entries_html(artifacts: list[dict]) -> str:
         '<table class="index-table">\n'
         "        <thead>\n"
         "          <tr>\n"
-        '            <th scope="col" data-sort-type="number">Page</th>\n'
         '            <th scope="col">Title</th>\n'
-        '            <th scope="col">Date</th>\n'
+        '            <th scope="col">Created</th>\n'
+        '            <th scope="col" aria-sort="descending">Updated</th>\n'
         '            <th scope="col">Summary</th>\n'
         "          </tr>\n"
         "        </thead>\n"
@@ -1656,12 +1726,15 @@ def cmd_publish(args: argparse.Namespace) -> int:
         summary = args.summary if args.summary is not None else kept.get("summary", "")
         variant = args.variant or (page_variant(previous) if previous else PUBLISH_VARIANT)
         owner = args.owner or page_owner(previous)
+        updated = _utc_stamp(_dt.datetime.now(_dt.timezone.utc))
         cmd_render(
             argparse.Namespace(
                 name=name,
                 title=html.escape(title, quote=False),
                 episode="",
-                date=args.date or kept.get("date") or _dt.date.today().isoformat(),
+                # Created on the UTC day of its first publish, as updated is.
+                date=args.date or kept.get("date") or updated[:10],
+                updated=updated,
                 summary=html.escape(summary, quote=False),
                 body=body,
                 hidden=False,

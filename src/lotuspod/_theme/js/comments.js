@@ -135,7 +135,7 @@
       by.appendChild(document.createTextNode(" "));
       by.appendChild(time);
       drawn.column.appendChild(by);
-      var said = element("p", "artifact-comment-text", String(entry.text || ""));
+      var said = commentMarkdown(element("div", "artifact-comment-text"), String(entry.text || ""));
       // A passage's highlight is described by its thread's first comment.
       said.id = "artifact-comment-text-" + entry.id;
       drawn.column.appendChild(said);

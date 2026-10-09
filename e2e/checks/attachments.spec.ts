@@ -4,7 +4,8 @@ import path from 'node:path';
 import { expect, test, type APIRequestContext, type Locator, type Page } from '@playwright/test';
 
 // Images on a comment: pasted into a thread's reply field, picked with a
-// new thread's Add image button, refused before sending, and drawn as
+// new thread's Add image button or dropped on its composer, refused before
+// sending, and drawn as
 // thumbnails that open full size. The checks render their own page into the
 // capture fixture's site, so the threads they post are the only ones on it.
 // At this width a chip opens its section's threads in a popover.
@@ -25,6 +26,11 @@ const FISH = path.join(FIXTURES, 'fish-320x240.jpg');
 const FROG = path.join(FIXTURES, 'frog-140x100.gif');
 const LILY = path.join(FIXTURES, 'lily-lossy-240x160.webp');
 const LOGO = path.join(FIXTURES, 'logo.svg');
+const POND = path.join(FIXTURES, 'pond-progressive-300x200.jpg');
+const CHART = path.join(FIXTURES, 'chart-1600x600.png');
+const TYPES: Record<string, string> = {
+  '.jpg': 'image/jpeg', '.gif': 'image/gif', '.png': 'image/png', '.webp': 'image/webp', '.svg': 'image/svg+xml',
+};
 const HOLD_MS = 500;
 const BODY = `<p>A page for the attachment checks.</p>
 <h2>Pond</h2>
@@ -136,6 +142,26 @@ async function paste(field: Locator, files: { name: string; type: string; base64
     }
     node.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }));
   }, files);
+}
+
+// Drag files over a node and drop them, as the browser hands a drop from
+// the desktop to the page; whether the page took the dragover and the drop.
+async function drop(node: Locator, files: string[]) {
+  const given = files.map((file) => ({
+    name: path.basename(file),
+    type: TYPES[path.extname(file)],
+    base64: fs.readFileSync(file).toString('base64'),
+  }));
+  return node.evaluate((target, given) => {
+    const data = new DataTransfer();
+    for (const file of given) {
+      const bytes = Uint8Array.from(atob(file.base64), (c) => c.charCodeAt(0));
+      data.items.add(new File([bytes], file.name, { type: file.type }));
+    }
+    const fire = (type: string) =>
+      !target.dispatchEvent(new DragEvent(type, { dataTransfer: data, bubbles: true, cancelable: true }));
+    return { over: fire('dragover'), drop: fire('drop') };
+  }, given);
 }
 
 async function pick(page: Page, button: Locator, files: string[]) {
@@ -295,6 +321,63 @@ test.describe('signed in', () => {
     expect(after[0][0]).toBeGreaterThan(0);
     expect(held.count).toBe(2);
     expect(await seen.shifts()).toEqual([]);
+    await seen.clean();
+  });
+
+  test('two images dropped on a new thread\'s composer are uploaded and saved with it, in order', async ({ page }) => {
+    const seen = await watch(page);
+    await page.goto(PAGE);
+    const frogs = box(page, 'frogs');
+    await compose(page, 'frogs');
+    const tray = frogs.form.locator('.artifact-attach-item');
+    expect(await drop(frogs.text, [FISH, FROG])).toEqual({ over: true, drop: true });
+    await expect(tray.locator('img')).toHaveCount(2);
+    const shown = await tray.locator('img').evaluateAll((nodes) => nodes.map((img) => img.getAttribute('src')));
+    for (const src of shown) expect(src).toMatch(MEDIA_URL);
+    expect(seen.uploads).toEqual(['POST', 'POST']);
+    await expect(frogs.status).toHaveText('');
+
+    // A drag of text alone is the browser's.
+    const text = await frogs.text.evaluate((target) => {
+      const data = new DataTransfer();
+      data.setData('text/plain', 'words');
+      return ['dragover', 'drop'].map((type) =>
+        !target.dispatchEvent(new DragEvent(type, { dataTransfer: data, bubbles: true, cancelable: true })));
+    });
+    expect(text).toEqual([false, false]);
+
+    await frogs.text.fill('The fish and the frog.');
+    const [posted] = await Promise.all([
+      page.waitForResponse((r) => new URL(r.url()).pathname === '/api/comments' && r.request().method() === 'POST'),
+      frogs.comment.click(),
+    ]);
+    expect(posted.status()).toBe(201);
+    const row = await posted.json();
+    expect(row.images.map((image: { url: string }) => image.url)).toEqual(shown);
+    expect(row.images.map((image: { width: number; height: number }) => [image.width, image.height]))
+      .toEqual([[320, 240], [140, 100]]);
+    await seen.clean();
+  });
+
+  test('a dropped file of another type is refused, and a drop of five attaches four', async ({ page }) => {
+    const seen = await watch(page);
+    await page.goto(PAGE);
+    const pond = box(page, 'pond');
+    await compose(page, 'pond');
+    const tray = pond.form.locator('.artifact-attach-item');
+
+    expect(await drop(pond.form, [LOGO])).toEqual({ over: true, drop: true });
+    await expect(pond.status).toHaveText('logo.svg is not a PNG, JPEG, WebP or GIF image.');
+    await expect(tray).toHaveCount(0);
+    await page.waitForTimeout(300);
+    expect(seen.uploads).toEqual([]);
+
+    await drop(pond.form, [FISH, FROG, POND, CHART, LILY]);
+    await expect(pond.status).toContainText('A comment takes up to 4 images.');
+    await expect(tray).toHaveCount(4);
+    await expect(tray.locator('img')).toHaveCount(4);
+    await expect(pond.add).toBeDisabled();
+    expect(seen.uploads).toEqual(['POST', 'POST', 'POST', 'POST']);
     await seen.clean();
   });
 
