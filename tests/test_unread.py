@@ -239,6 +239,20 @@ class UnreadTests(UnreadTestCase):
         self.assertEqual(self.ask("GET", "/api/seen", assertion=keys.assertion(B)),
                          (200, {"pages": {}}))
 
+    def test_a_page_republished_without_comments_has_no_unread_replies(self):
+        root = self.open_thread(A, "Is the heater enough?")
+        reply = self.follow_up(root, "It is.")
+        self.assertEqual(self.unread(A), [reply["id"]])
+        run_cli("publish", str(self.work / "plan.md"), "--name", "plan", "--out-dir",
+                str(self.out_dir), "--local", "--owner", OWNER, "--credential",
+                str(self.token), "--db", str(self.db_path), "--no-comments")
+
+        self.assertEqual(self.unread(A), [])
+        # Reader a never opened plan: it was listed only for its unread reply.
+        status, got = self.ask("GET", "/api/seen")
+        self.assertEqual(status, 200, got)
+        self.assertNotIn("plan", got["pages"])
+
 
 class UnreadSchemaTests(UnreadTestCase):
     def test_a_database_from_the_previous_step_reads_back_with_nothing_unread(self):
