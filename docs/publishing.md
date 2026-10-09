@@ -579,14 +579,24 @@ A published page's header ends its date line in a "Versions · N" link to
 `#versions`, which shows the page's versions in place of its body: each with
 its date and time, a note under it saying which sections it changed from the
 version before ("Beta changed; Delta added", or "new version" when none did;
-"First version" on the first), the current one marked "current", and every
-other with a "View" link. The list shows 20, and "Show older versions" shows 20 more. A
+"First version" on the first), the current one marked "current", and each
+with a "View" link: the current one's to the page, every other's to that
+version. A click anywhere on a row follows its link, a middle or
+Cmd/Ctrl-click opening it in a new tab, and the link stays the row's one stop
+for Tab. The list shows 20, and "Show older versions" shows 20 more. A
 page with one version says "This is the only version.", and one in a
 directory that is not a repository shows "Versions · 0" and says "This page
 has no versions yet." The page asks
 `GET /api/versions?page=NAME` (see [Reading and answering
 pages](comments.md#answers-and-comments)) once as it loads; when it answers
 anything but 200, as on the demo, there is no link and no view.
+
+Beside the link a ▾ button, "Choose a version", opens a menu of the versions
+without leaving the page: newest first, each with its date and time, its
+summary on one line, and "current" or "you last looked" where those apply,
+then "See all versions" to `#versions`. Choosing one opens it in the same
+tab. The arrow keys, Home and End move through the menu, and Escape, Tab or
+a click outside closes it.
 
 "View" opens `NAME.html?version=COMMIT`, that version read-only, for a
 reader whose Access assertion verifies as on `/api`. It answers 404 unless

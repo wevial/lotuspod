@@ -6,14 +6,19 @@
 
 /* The link arrives after the page is drawn, so a page with a revision keeps
    its slot at the end of the date line from the start, as wide as the
-   widest link ("· Versions · 200"). The link fills the slot without moving
-   the header, even where the line wraps. */
+   widest link ("· Versions · 200") and the version menu's button. The link
+   and the button fill the slot without moving the header, even where the
+   line wraps. */
 html:has(meta[name="lotuspod:revision"]) .artifact-meta::after,
 .artifact-versions-slot {
   display: inline-block;
   margin-left: 0.3em;
-  min-width: 7.5em;
+  min-width: 9.25em;
   white-space: nowrap;
+}
+
+.artifact-versions-slot {
+  position: relative;
 }
 
 html:has(meta[name="lotuspod:revision"]) .artifact-meta::after {
@@ -35,6 +40,125 @@ html:has(meta[name="lotuspod:revision"]) .artifact-meta--versions::after {
 .artifact-versions-link:focus-visible {
   color: var(--color-pale-sky);
   text-decoration-color: currentColor;
+}
+
+/* The version menu (js/version-menu.js): a "▾" button after the link, and
+   under it the Labels menu's surface (css/index.css) listing the versions,
+   which scroll past about 20rem above "See all versions". */
+.artifact-versions-menu-button {
+  align-items: center;
+  appearance: none;
+  background: none;
+  border: 0;
+  border-radius: var(--radius-chip);
+  color: var(--color-sky);
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  justify-content: center;
+  margin: -0.3rem 0 -0.3rem 0.15em;
+  min-height: 24px;
+  min-width: 24px;
+  padding: 0;
+  vertical-align: middle;
+}
+
+.artifact-versions-menu-button:hover,
+.artifact-versions-menu-button:focus-visible,
+.artifact-versions-menu-button[aria-expanded="true"] {
+  background: var(--row-tint);
+  color: var(--color-pale-sky);
+}
+
+.artifact-versions-menu {
+  background: var(--color-glow);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-block);
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  left: 0;
+  margin-top: 0.35rem;
+  max-width: calc(100vw - 1rem);
+  padding: 0.35rem;
+  position: absolute;
+  top: 100%;
+  white-space: normal;
+  width: 21rem;
+  z-index: 10;
+}
+
+.artifact-versions-menu[hidden] {
+  display: none;
+}
+
+.artifact-versions-menu-list {
+  display: flex;
+  flex-direction: column;
+  max-height: 20rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.artifact-versions-menu-item {
+  border-radius: var(--radius-chip);
+  color: var(--color-pale-lavender);
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  font-size: 0.92rem;
+  gap: 0.1rem;
+  padding: 0.35rem 0.5rem;
+  text-decoration: none;
+}
+
+.artifact-versions-menu-item:hover,
+.artifact-versions-menu-item:focus {
+  background: var(--row-tint);
+  color: var(--color-white);
+  outline: none;
+}
+
+.artifact-versions-menu-item:focus-visible {
+  outline: 2px solid var(--color-lavender);
+  outline-offset: -2px;
+}
+
+/* Where the date and a pill do not fit side by side, the pill wraps under
+   the date rather than passing the menu's edge. */
+.artifact-versions-menu-top {
+  align-items: baseline;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.15rem 0.5rem;
+}
+
+.artifact-versions-menu-date {
+  font-variant-numeric: tabular-nums;
+  margin-right: auto;
+}
+
+.artifact-versions-menu-top .artifact-versions-current,
+.artifact-versions-menu-top .artifact-versions-seen {
+  font-size: 0.75rem;
+  margin: 0;
+  white-space: nowrap;
+}
+
+.artifact-versions-menu-note {
+  color: var(--color-muted-lavender);
+  font-size: 0.82rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.artifact-versions-menu-all {
+  border-top: 1px solid var(--hairline);
+  border-radius: 0 0 var(--radius-chip) var(--radius-chip);
+  color: var(--color-sky);
+  margin-top: 0.35rem;
+  padding-top: 0.5rem;
 }
 
 .artifact--versions .artifact-header,
@@ -102,6 +226,7 @@ html:has(meta[name="lotuspod:revision"]) .artifact-meta--versions::after {
   border-radius: var(--radius-card);
   list-style: none;
   margin: 0;
+  overflow: hidden;
   padding: 0;
 }
 
@@ -109,13 +234,27 @@ html:has(meta[name="lotuspod:revision"]) .artifact-meta--versions::after {
   display: none;
 }
 
+/* Each row's "View" link is stretched over it: a click anywhere on the row
+   is a click on the link, which stays the row's one focus stop. */
 .artifact-versions-entry {
   align-items: baseline;
   border-top: 1px solid var(--hairline);
+  cursor: pointer;
   display: flex;
   gap: 1rem;
   justify-content: space-between;
   padding: 0.75rem 1.25rem;
+  position: relative;
+}
+
+.artifact-versions-entry:hover {
+  background-image: linear-gradient(var(--row-tint), var(--row-tint));
+}
+
+.artifact-versions-view::after {
+  content: "";
+  inset: 0;
+  position: absolute;
 }
 
 .artifact-versions-entry:first-child {
