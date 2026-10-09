@@ -149,7 +149,6 @@
       by.appendChild(document.createTextNode(" "));
       by.appendChild(time);
       drawn.column.appendChild(by);
-      // A note saved with an answer names the answer above it.
       if (entry.answer && typeof entry.answer === "object") {
         drawn.column.appendChild(element("p", "artifact-comment-answered",
           "Answered: " + String(entry.answer.label || entry.answer.choice || "")));

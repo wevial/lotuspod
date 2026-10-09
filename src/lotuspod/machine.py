@@ -547,7 +547,6 @@ class Routes:
                 "question": question,
                 "page": item_page(page),
             }
-            # The comment holding its note, in a thread on the decision.
             if found["comment"] is not None:
                 item["noteComment"] = found["comment"]
             items.append(item)
