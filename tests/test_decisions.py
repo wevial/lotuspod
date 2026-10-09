@@ -795,15 +795,7 @@ class LongOptionTests(ServedTestCase):
     def test_a_long_option_the_page_offers_saves(self):
         label = ("Evidence levels: reproduced or traced can block; a concern is answered "
                  "but never blocks, at most 3 per round, high-tier ones also go to the operator")
-        forms = self.publish(f"""\
-# Pond plan
-
-## Decisions for the maintainer
-
-| # | Question | Options |
-| --- | --- | --- |
-| D1 | How do reviews weigh evidence? | {label} / No |
-""")
+        forms = self.publish(long_options(f"{label} / No"))
         asked = forms["decision-d1"]
         value = next(value for value, shown in asked.options if shown == label)
         status, saved = self.ask("POST", "/api/answers", {
