@@ -1076,23 +1076,39 @@ class Database:
                 "SELECT json_extract(answer, '$.id'), MIN(id) FROM comments"
                 " WHERE json_extract(answer, '$.id') IS NOT NULL"
                 " GROUP BY json_extract(answer, '$.id')").fetchall())
-            found = []
-            for row in rows:
-                comment = notes.get(row["id"])
-                note, earlier = row["note"], row["supersedes"]
+            # Each answer's (note, supersedes), the rows read here first, and
+            # the comment holding the note of each answer resolved so far, so
+            # every answer of a chain is walked once.
+            kept = {row["id"]: (row["note"], row["supersedes"]) for row in rows}
+            held: dict[int, int | None] = {}
+
+            def holder(answer_id: int) -> int | None:
+                note, earlier = kept[answer_id]
+                walked = [answer_id]
+                comment = notes.get(answer_id)
                 # Back along the answers it supersedes while the note stays.
                 while comment is None and note.strip() and earlier is not None:
-                    before = conn.execute(
-                        "SELECT note, supersedes FROM answers WHERE id = ?", (earlier,)
-                    ).fetchone()
-                    if before is None or before["note"] != note:
+                    if earlier in held:
+                        comment = held[earlier] if kept[earlier][0] == note else None
                         break
-                    comment, earlier = notes.get(earlier), before["supersedes"]
-                found.append({"answer": _answer(row),
-                              "asked": {"text": row["question_text"],
-                                        "label": row["choice_label"]},
-                              "comment": comment})
-        return found
+                    if earlier not in kept:
+                        before = conn.execute(
+                            "SELECT note, supersedes FROM answers WHERE id = ?", (earlier,)
+                        ).fetchone()
+                        if before is None:
+                            break
+                        kept[earlier] = (before["note"], before["supersedes"])
+                    if kept[earlier][0] != note:
+                        break
+                    walked.append(earlier)
+                    comment, earlier = notes.get(earlier), kept[earlier][1]
+                for each in walked:
+                    held[each] = comment
+                return comment
+
+            return [{"answer": _answer(row),
+                     "asked": {"text": row["question_text"], "label": row["choice_label"]},
+                     "comment": holder(row["id"])} for row in rows]
 
     def acknowledge_answer(self, answer_id: int, handle: str) -> str:
         """Record that handle has the answer answer_id; when it first did."""

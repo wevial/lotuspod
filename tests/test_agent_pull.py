@@ -1226,6 +1226,48 @@ class ChecklistPullTests(PullTestCase):
                       self.markdown(answer))
 
 
+class NoteCommentTests(unittest.TestCase):
+    """Each pulled answer names the comment holding its note, along the
+    answers it supersedes while the note stays the same."""
+
+    THREAD = {"section": "decisions", "section_title": "Decisions", "owner": "hermes"}
+
+    def setUp(self) -> None:
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.database = db.Database(Path(tmp.name) / db.DEFAULT_NAME)
+
+    def save(self, choice: str, note: str, thread: dict | None = THREAD) -> dict:
+        return self.database.add_answer(
+            page="plan", question="decision-1", version="v", choice=choice, note=note,
+            revision="r", actor=READER, question_text="Freeze?", choice_label=choice,
+            thread=thread)
+
+    def held(self) -> list:
+        return [found["comment"] for found in self.database.unacknowledged_answers("other")]
+
+    def test_a_kept_note_points_to_the_comment_that_first_held_it(self):
+        answers = [self.save("yes", "X"), self.save("no", "X"), self.save("yes", "Y"),
+                   self.save("no", "Y"), self.save("yes", "X"), self.save("no", ""),
+                   self.save("yes", "Z", thread=None), self.save("no", "Z")]
+        x, y, x_again = (answers[i]["comment"]["id"] for i in (0, 2, 4))
+        self.assertEqual(self.held(), [x, x, y, y, x_again, None, None, None])
+        # Acknowledged answers along the chain are still walked.
+        for answer in answers[:4]:
+            self.database.acknowledge_answer(answer["id"], "other")
+        latest = self.save("yes", "X")
+        self.assertEqual(self.held(), [x_again, None, None, None, latest["comment"]["id"]])
+
+    def test_a_long_chain_of_one_note_is_walked_once(self):
+        first = self.save("yes", "Kept.")
+        for number in range(3000):
+            self.save("no" if number % 2 == 0 else "yes", "Kept.")
+        started = time.monotonic()
+        held = self.held()
+        self.assertLess(time.monotonic() - started, 2)
+        self.assertEqual(set(held), {first["comment"]["id"]})
+
+
 class SchemaTests(PullTestCase):
     # The schema version the database is left at before serve opens it.
     version = 2
