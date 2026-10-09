@@ -345,6 +345,17 @@ label.artifact-decision-note span {
   white-space: pre-wrap;
 }
 
+/* Where an answer an agent recorded was given: quieter than a note. */
+.artifact-body .artifact-decision-saved-source {
+  border-left: 1px solid var(--hairline-strong);
+  color: var(--color-muted-lavender);
+  font-size: 0.9rem;
+  margin-top: 0.45em;
+  overflow-wrap: anywhere;
+  padding-left: 0.7rem;
+  white-space: pre-wrap;
+}
+
 .artifact-body .artifact-decision-saved-by {
   color: var(--color-muted-lavender);
   font-size: 0.85rem;
@@ -456,6 +467,16 @@ label.artifact-decision-note span {
 
 .artifact-answered-choice {
   color: var(--color-pale-lavender);
+}
+
+.artifact-body .artifact-answered-source {
+  border-left: 1px solid var(--hairline-strong);
+  color: var(--color-muted-lavender);
+  font-size: 0.9em;
+  margin-top: 0.35em;
+  overflow-wrap: anywhere;
+  padding-left: 0.6rem;
+  white-space: pre-wrap;
 }
 
 .artifact-body .artifact-answered-note {

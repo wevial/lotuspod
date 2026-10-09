@@ -1,8 +1,9 @@
 """Any agent reads what is meant for it through serve's socket: `lotuspod
 comments pull|ack-answer|show`, the routing of reader's comments to one
 handle each (`pending` while it listens, `unavailable` while it does not),
-the answers on an owner's pages until it acknowledges them, and the database
-schema that keeps pulls and acknowledgements.
+the answers on an owner's pages until it acknowledges them, the answers an
+owner records from elsewhere, and the database schema that keeps pulls and
+acknowledgements.
 
 serve runs on a thread with the test Access key trusted; the reader posts
 over its port with assertions from that key, and agents use the commands.
@@ -900,6 +901,106 @@ class DecisionPullTests(PullTestCase):
         self.assertEqual(out.count("## Decision"), 1, asked)
 
 
+class RecordAnswerTests(PullTestCase):
+    """An agent that may publish as a page's owner records a decision's
+    answer given elsewhere on POST /v1/answers/record."""
+
+    SOURCE = "Chat with the maintainer, 2026-10-09"
+
+    def record(self, body: dict, credential: Path | None = None) -> tuple[int, dict]:
+        token = machine.read_token(credential or self.desk)
+        return machine.request(self.socket_path, token, "POST", "/v1/answers/record", body)
+
+    def stored(self, page: str = "plan") -> dict:
+        return db.Database(self.db_path).answers(page)
+
+    def test_a_recorded_answer_is_an_agents_answer_with_its_source(self):
+        status, payload = self.record({"page": "plan", "question": "decision-1",
+                                       "choice": "no", "source": self.SOURCE,
+                                       "note": "Said in chat."})
+        self.assertEqual(status, 200, payload)
+        answer = payload["answer"]
+        self.assertTrue(payload["created"])
+        page = (self.out_dir / "plan.html").read_text(encoding="utf-8")
+        self.assertEqual((answer["choice"], answer["source"], answer["note"], answer["version"],
+                          answer["revision"], answer["actor"], answer["asked"]),
+                         ("no", self.SOURCE, "Said in chat.",
+                          decisions.read_forms(page)["decision-1"].version, self.revision(),
+                          {"kind": "agent", "handle": "hermes", "credential": "desk"},
+                          {"text": "Freeze the pond?", "label": "No"}))
+        self.assertEqual(self.pull("hermes"), [])
+
+        status, again = self.record({"page": "plan", "question": "decision-1",
+                                     "choice": "no", "source": self.SOURCE})
+        self.assertEqual(status, 200, again)
+        self.assertEqual((again["answer"]["id"], again["created"]), (answer["id"], False))
+        self.assertEqual(self.stored()["decision-1"]["earlier"], [])
+
+    def test_a_refused_record_stores_nothing(self):
+        self.publish_mail()
+        machine.create_credential(db.Database(self.db_path), "reader-only", ["hermes"],
+                                  ["pull"], self.work / "reader-only.token")
+        record = {"page": "plan", "question": "decision-1", "choice": "yes",
+                  "source": self.SOURCE}
+        no_source = {key: value for key, value in record.items() if key != "source"}
+        cases = (
+            ("a checklist", {**record, "page": "mail", "question": "checklist-1",
+                             "choice": "w"}, None, 400, "not_a_decision"),
+            ("another handle's page", record, self.claude, 403, "handle_not_allowed"),
+            ("no publish", record, self.work / "reader-only.token", 403,
+             "operation_not_allowed"),
+            ("a page with no owner", {**record, "page": "loose"}, None, 403,
+             "handle_not_allowed"),
+            ("no source", no_source, None, 400, "invalid_body"),
+            ("a long source", {**record, "source": "s" * 201}, None, 400, "invalid_body"),
+            ("an extra key", {**record, "version": "v"}, None, 400, "invalid_body"),
+            ("an unknown page", {**record, "page": "nowhere"}, None, 404, "unknown_page"),
+        )
+        for name, body, credential, status, error in cases:
+            with self.subTest(name):
+                self.assertEqual(self.record(body, credential), (status, {"error": error}))
+        for page in ("plan", "mail", "loose", "nowhere"):
+            self.assertEqual(self.stored(page), {})
+
+        status, payload = self.record({**record, "source": "s" * 200})
+        self.assertEqual(status, 200, payload)
+
+    def test_a_reader_cannot_be_written_on_the_socket(self):
+        token = machine.read_token(self.desk)
+        status, payload = machine.request(self.socket_path, token, "POST", "/v1/answers",
+                                          {"page": "plan"})
+        self.assertEqual((status, payload), (404, {"error": "not_found"}))
+
+    def test_the_pull_names_where_the_current_answer_was_given(self):
+        self.pull("hermes")
+        asked = self.decision_thread("Which did we settle on?")
+        status, payload = self.record({"page": "plan", "question": "decision-1",
+                                       "choice": "no", "source": self.SOURCE})
+        self.assertEqual(status, 200, payload)
+        [item] = [item for item in self.pull("hermes") if item["kind"] == "comment"]
+        self.assertEqual(item["comment"]["id"], asked["id"])
+        self.assertEqual(item["decision"]["answer"]["source"], self.SOURCE)
+        rc, out, err = self.agent("pull", "--owner", "hermes")
+        self.assertEqual(rc, 0, err)
+        [line] = [line for line in out.splitlines() if line.startswith("- Answer:")]
+        self.assertTrue(line.startswith("- Answer: No (`no`), by hermes at "), line)
+        self.assertTrue(line.endswith(f", answered elsewhere: {self.SOURCE}"), line)
+
+        self.answer(choice="yes")
+        rc, out, err = self.agent("pull", "--owner", "hermes")
+        self.assertEqual(rc, 0, err)
+        [line] = [line for line in out.splitlines() if line.startswith("- Answer:")]
+        self.assertTrue(line.startswith(f"- Answer: Yes (`yes`), by {keys.EMAIL} at "), line)
+        self.assertNotIn("answered elsewhere", out)
+
+    def publish_mail(self) -> None:
+        source = self.work / "mail.md"
+        source.write_text(MAIL, encoding="utf-8")
+        rc, _out, err = run_cli("publish", str(source), "--out-dir", str(self.out_dir),
+                                "--local", "--owner", "hermes", "--credential", str(self.desk))
+        self.assertEqual(rc, 0, err)
+
+
 class ContextPullTests(PullTestCase):
     """A decision's context lines, as its card shows them, are pulled with a
     thread on it and with an answer to it, but not kept with the answer."""
@@ -1140,7 +1241,7 @@ class SchemaTests(PullTestCase):
                              db.SCHEMA_VERSION)
         finally:
             conn.close()
-        self.assertEqual(db.SCHEMA_VERSION, 12)
+        self.assertEqual(db.SCHEMA_VERSION, 13)
 
 
 class ReplySchemaTests(SchemaTests):
@@ -1174,6 +1275,35 @@ class DecisionSchemaTests(SchemaTests):
         [thread] = self.threads()
         self.assertEqual(thread["root"]["text"], "Kept from before.")
         self.assertNotIn("question", thread["root"])
+
+
+class AnswerSchemaTests(SchemaTests):
+    """The schema before an answer could be recorded from elsewhere, holding
+    a reader's answer."""
+
+    version = 12
+
+    def prepare_rows(self, conn: sqlite3.Connection) -> None:
+        conn.execute(
+            "INSERT INTO answers (page, question, version, choice, note, revision, actor,"
+            " created_at, supersedes, question_text, choice_label) VALUES ('plan',"
+            " 'decision-1', 'v1', 'no', '', 'r', ?, '2026-01-02T03:06:05.000Z', NULL,"
+            " 'Freeze the pond?', 'No')",
+            (json.dumps(READER),),
+        )
+
+    def test_an_answer_from_before_keeps_its_choice_and_has_no_source(self):
+        status, payload = self.reader("GET", "/api/answers?page=plan")
+        self.assertEqual(status, 200, payload)
+        current = payload["questions"]["decision-1"]["current"]
+        self.assertEqual((current["choice"], current["actor"]), ("no", SHOWN))
+        self.assertNotIn("source", current)
+        conn = sqlite3.connect(str(self.db_path))
+        try:
+            self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0],
+                             db.SCHEMA_VERSION)
+        finally:
+            conn.close()
 
 
 class OwnerWindowOptionTests(unittest.TestCase):

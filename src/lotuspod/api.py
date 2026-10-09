@@ -239,6 +239,23 @@ def summary(changed: Sequence[Mapping]) -> str:
     return " · ".join(parts) or "No change from the defaults"
 
 
+def asked_question(page: Page, question: str) -> Question:
+    """The question page asks by that id; Refusal unknown_question when it
+    asks none."""
+    asked = page.questions.get(question)
+    if asked is None:
+        raise Refusal(HTTPStatus.BAD_REQUEST, "unknown_question")
+    return asked
+
+
+def chosen(asked: Question, choice: str) -> str:
+    """The label of a decision's option choice; Refusal invalid_choice when
+    its form offers none."""
+    if choice not in asked.choices:
+        raise Refusal(HTTPStatus.BAD_REQUEST, "invalid_choice")
+    return asked.labels.get(choice, choice)
+
+
 @dataclass(frozen=True)
 class Page:
     """What a row records of the page it was written against."""
@@ -721,9 +738,7 @@ class Api:
             choice = _text(fields["choice"], 1, MAX_NAME)
         note = _text(fields["note"], 0, MAX_TEXT)
         page = self._page(fields["page"])
-        asked = page.questions.get(question)
-        if asked is None:
-            raise Refusal(HTTPStatus.BAD_REQUEST, "unknown_question")
+        asked = asked_question(page, question)
         if checklist != asked.checklist:
             raise _invalid()
         if version != asked.version:
@@ -735,9 +750,7 @@ class Api:
             checked = [item for item in asked.labels if item in set(checked)]
             choice, label = "", summary(changes(asked.labels, asked.defaults, checked))
         else:
-            if choice not in asked.choices:
-                raise Refusal(HTTPStatus.BAD_REQUEST, "invalid_choice")
-            checked, label = None, asked.labels.get(choice, choice)
+            checked, label = None, chosen(asked, choice)
         return self.database.add_answer(
             page=page.name, question=question, version=version, choice=choice,
             note=note, revision=page.revision, actor=actor,

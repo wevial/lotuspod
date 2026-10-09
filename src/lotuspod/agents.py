@@ -2,6 +2,8 @@
 
     lotuspod comments pull --owner HANDLE   GET  /v1/pull?owner=HANDLE
     lotuspod comments ack-answer ID         POST /v1/answers/ID/ack
+    lotuspod comments record-answer PAGE QUESTION OPTION --source TEXT [--note TEXT]
+                                            POST /v1/answers/record
     lotuspod comments show PAGE             GET  /v1/threads?page=PAGE
     lotuspod comments claim ID              POST /v1/comments/ID/claim
     lotuspod comments reply ID --claim TOKEN --key KEY (--text TEXT | --text-file PATH)
@@ -137,14 +139,18 @@ def moved(comment: dict, revision: str) -> str:
 
 
 def answered(decision: dict) -> str:
-    """A decision's current answer: its label and choice, who and when;
-    "not answered yet" when it has none."""
+    """A decision's current answer: its label and choice, who and when, and
+    where it was given when an agent recorded it from elsewhere; "not
+    answered yet" when it has none."""
     answer = decision["answer"]
     if answer is None:
         return "not answered yet"
     label = next((option["label"] for option in decision["options"]
                   if option["value"] == answer["choice"]), answer["choice"])
-    return f"{label} (`{answer['choice']}`), by {_by(answer)} at {answer['createdAt']}"
+    line = f"{label} (`{answer['choice']}`), by {_by(answer)} at {answer['createdAt']}"
+    if answer.get("source"):
+        line += f", answered elsewhere: {answer['source']}"
+    return line
 
 
 def _context_lines(context: str) -> list[str]:
@@ -297,6 +303,13 @@ def ack_text(payload: dict) -> str:
             f"at {payload['ackedAt']}")
 
 
+def record_text(payload: dict) -> str:
+    answer = payload["answer"]
+    done = "recorded" if payload["created"] else "was already recorded"
+    label = answer["asked"]["label"] or answer["choice"]
+    return f"answer {answer['id']} {done} on {answer['page']}: {answer['question']} = {label}"
+
+
 def show_text(payload: dict) -> str:
     """`comments show` without --json."""
     threads = payload["threads"]
@@ -344,6 +357,14 @@ def cmd_pull(args: argparse.Namespace) -> int:
 
 def cmd_ack_answer(args: argparse.Namespace) -> int:
     return _run(args, "POST", f"/v1/answers/{args.id}/ack", ack_text)
+
+
+def cmd_record_answer(args: argparse.Namespace) -> int:
+    body = {"page": args.page, "question": args.question, "choice": args.option,
+            "source": args.source}
+    if args.note is not None:
+        body["note"] = args.note
+    return _run(args, "POST", "/v1/answers/record", record_text, body)
 
 
 def cmd_show(args: argparse.Namespace) -> int:
@@ -466,7 +487,8 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
     parser = sub.add_parser(
         "comments",
         help="read the comments routed to an agent and the answers on its pages, "
-        "claim and answer comments, and resolve and reopen threads, over serve's socket",
+        "claim and answer comments, record answers given elsewhere, and resolve and "
+        "reopen threads, over serve's socket",
     )
     actions = parser.add_subparsers(dest="action", required=True)
 
@@ -493,6 +515,31 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
     ack.add_argument("--json", action="store_true", help="print the socket's JSON")
     cli.add_agent_options(ack)
     ack.set_defaults(func=cmd_ack_answer)
+
+    record = actions.add_parser(
+        "record-answer",
+        help="record a decision's answer the page's owner gave elsewhere, so the page shows "
+        "it saved",
+        description="Record OPTION as the answer to decision QUESTION on PAGE, given "
+        "elsewhere (a chat, another seat's conversation, another page), which --source "
+        "names. The page shows it saved, with \"Answered elsewhere: SOURCE\", and it counts "
+        "as answered wherever answers count; a reader may still change it. It is recorded "
+        "as the page's owner at the version the page asks now, and that owner's pulls "
+        "leave it out. Recording the same OPTION from the same SOURCE again stores "
+        "nothing and prints the answer recorded first. Needs a credential that may "
+        "publish as the page's owner.",
+    )
+    record.add_argument("page", metavar="PAGE", help="the page's name")
+    record.add_argument("question", metavar="QUESTION",
+                        help="the decision's question id, as `lotuspod answers` and the pull "
+                        "print it (decision-1)")
+    record.add_argument("option", metavar="OPTION", help="the chosen option's value")
+    record.add_argument("--source", required=True, metavar="TEXT",
+                        help="where the answer was given, in 1 to 200 characters")
+    record.add_argument("--note", default=None, metavar="TEXT", help="a note kept with it")
+    record.add_argument("--json", action="store_true", help="print the socket's JSON")
+    cli.add_agent_options(record)
+    record.set_defaults(func=cmd_record_answer)
 
     show = actions.add_parser(
         "show", help="a page's threads, as the reader's threads route answers them"

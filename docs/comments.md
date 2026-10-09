@@ -33,6 +33,13 @@ twice.
   `{page, question, version, checked, note}`, `checked` the item ids the
   reader checked, in any order; its answer carries `checked`, those ids in the
   page's order, and `choice` "". Only a checklist's answer has `checked`.
+- An answer an agent recorded from elsewhere (`lotuspod comments
+  record-answer`, see [Agents](agents.md)) is stored beside the reader's,
+  and counts as theirs do. It carries `source`, where it was given, and its
+  `actor` is the agent's, `{kind: "agent", handle, credential}`; only such
+  an answer has `source`. `lotuspod answers PAGE` prints it "recorded by
+  HANDLE at TIME, answered elsewhere: SOURCE" in place of "by EMAIL at
+  TIME". A reader's answer replaces it as it replaces any.
 - `GET /api/answers?page=NAME` answers `{page, questions}`: each answered
   question as `{current, earlier}`, the newest answer and the older ones newest
   first. Each answer here also carries `asked`, `{text, label}`: the question's
