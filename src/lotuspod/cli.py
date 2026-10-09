@@ -328,6 +328,7 @@ THEME_SOURCES = {
         "css/pod-tabs.css",
         "css/pod-finder.css",
         "css/versions.css",
+        "css/archive.css",
     ),
     PAGE_SCRIPT: (
         "js/open-in-tabs.js",
@@ -347,6 +348,7 @@ THEME_SOURCES = {
         "js/versions.js",
         "js/diagram-cards.js",
         "js/ref-cards.js",
+        "js/archive.js",
         "js/page-close.js",
     ),
     INDEX_SCRIPT: (
@@ -2142,6 +2144,9 @@ _OLD_VERSION_HEADERS = (
     ("Cache-Control", "private, no-store"),
 )
 _VERSION_QUERY = "version"
+# Headers on an archived page, answered from memory: never answered 304 from
+# a copy kept before it was archived or unarchived.
+_ARCHIVED_HEADERS = (*_PAGE_HEADERS, ("Cache-Control", "no-cache"))
 
 
 # Headers on every /api answer.
@@ -2172,7 +2177,8 @@ class _AllowListHandler(SimpleHTTPRequestHandler):
 
     NAME.html?version=COMMIT answers an earlier version of an allow-listed
     page, read-only (see _serve_version), after the same Access check; any
-    other query on a page is served as the page.
+    other query on a page is served as the page. A page with an archive
+    record is answered marked archived (see _serve_archived).
     """
 
     # Whether the response being written is a page's, and the type of the
@@ -2324,6 +2330,29 @@ class _AllowListHandler(SimpleHTTPRequestHandler):
         self.end_headers()
         return io.BytesIO(data)
 
+    def _serve_archived(self, stored: Path):
+        """The page at stored as archived_page() marks it, always a 200;
+        None when it has no archive record, or one that cannot be read, so
+        it is answered from its file."""
+        stem = stored.name[:-len(".html")]
+        try:
+            record = archive.read_record(self.root, stem)
+            if record is None:
+                return None
+            page_html = stored.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError, RuntimeError):
+            return None
+        data = archive.archived_page(
+            page_html, record, archive.successor_title(self.root, record)).encode("utf-8")
+        self._page_response, self._media_type = False, ""
+        self.send_response(HTTPStatus.OK)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(data)))
+        for header, value in _ARCHIVED_HEADERS:
+            self.send_header(header, value)
+        self.end_headers()
+        return io.BytesIO(data)
+
     def send_head(self):
         # Denial never reaches the file system: were a file ever to sit at
         # the sentinel's name, it would still not be served.
@@ -2336,6 +2365,10 @@ class _AllowListHandler(SimpleHTTPRequestHandler):
             commit = self._version_asked(stored.name)
             if commit is not None:
                 return self._serve_version(stored.name, commit)
+            if stored.name.endswith(".html") and is_page_name(stored.name):
+                answer = self._serve_archived(stored)
+                if answer is not None:
+                    return answer
         if stored.parent == media.media_dir(self.root):
             self._page_response = False
             self._media_type = media.CONTENT_TYPES[stored.suffix[1:]]

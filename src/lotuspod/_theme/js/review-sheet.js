@@ -11,14 +11,15 @@
   // panel: every question under its section's heading, its options as
   // pressed buttons (a checklist's as checkboxes), its state, and one Save
   // that posts each answer whose shown choice or note is not stored, in page
-  // order. A page whose answers could not be read gets no sheet.
+  // order. A page whose answers could not be read gets no sheet, and nor
+  // does an archived one, which takes no answer.
   // Each h2 whose section asks open questions, and its outline link, is
   // marked "N open". The panel and the forms are one state: a pick in
   // either moves the other.
   function reviewSheet(the) {
     var bar = document.querySelector(".artifact-topbar");
     var body = document.querySelector("section.artifact-body");
-    if (!bar || !body) {
+    if (!bar || !body || ARCHIVED) {
       return;
     }
     var outline = document.querySelector("ol.artifact-outline-list");
@@ -433,10 +434,43 @@
 
   // Without the page's answers there is no telling what is answered: no
   // sheet, so no default is picked or saved over an answer.
+  //
+  // #question=ID, a link from the index's Recent activity: once the answers
+  // are drawn, an answered form folded to its saved line, and again on each
+  // hashchange, the form asking ID has its section opened if it is folded
+  // and lands just under the title bar, as jump() places it, with or without
+  // the sheet. A question the page does not ask leaves the page where it is.
+  // A link followed before the answers are drawn is no reload's fragment,
+  // and one after waits for every other hashchange listener, such as the
+  // versions view's (js/versions.js), which may still hide the text.
   if (answering && forms.length) {
+    var toQuestion = function (first) {
+      var id = linkedTo("question", first);
+      var form = forms.filter(function (each) { return each.dataset.question === id; })[0];
+      if (!form) {
+        return;
+      }
+      var wrapper = form.closest("div.artifact-section-body");
+      if (wrapper && wrapper.hasAttribute("hidden")) {
+        wrapper.dispatchEvent(new Event("beforematch"));
+      }
+      var bar = document.querySelector(".artifact-topbar");
+      var under = bar ? Math.max(0, bar.getBoundingClientRect().bottom) : 0;
+      window.scrollBy({ top: form.getBoundingClientRect().top - under - 16, left: 0, behavior: "instant" });
+    };
+    var drawnAnswers = false;
+    var followed = false;
+    window.addEventListener("hashchange", function () {
+      followed = true;
+      if (drawnAnswers) {
+        setTimeout(function () { toQuestion(false); }, 0);
+      }
+    });
     document.addEventListener(ANSWERED, function () {
       if (answering.read) {
         reviewSheet(answering);
       }
+      drawnAnswers = true;
+      toQuestion(!followed);
     }, { once: true });
   }

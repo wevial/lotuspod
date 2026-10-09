@@ -91,6 +91,10 @@
   var CONTEXT = 32;
   // How long the selection must keep still before the pill shows, in ms.
   var STILL = 200;
+  // An archived page, as serve marks it (lotuspod.archive): its threads and
+  // answers are read, but it takes no new comment, reply or answer.
+  var ARCHIVED = Boolean(document.querySelector('meta[name="lotuspod:archived"]'));
+  var CLOSED = "Comments are closed: this page is archived.";
 
   function when(stamp) {
     var date = new Date(stamp);
@@ -111,6 +115,29 @@
 
   function all(selector, root) {
     return Array.prototype.slice.call((root || document).querySelectorAll(selector));
+  }
+
+  // What the address's fragment gives name as #NAME=VALUE, decoded: a link
+  // from the index's Recent activity, #thread=ID (js/comments.js) or
+  // #question=ID (js/review-sheet.js). Null for any other fragment, and,
+  // read as the page opens (first), for a page reloaded, by the reader or by
+  // itself (js/live-page.js), which keeps where the reader was instead.
+  function linkedTo(name, first) {
+    var prefix = "#" + name + "=";
+    if (location.hash.indexOf(prefix) !== 0) {
+      return null;
+    }
+    if (first && performance.getEntriesByType) {
+      var opened = performance.getEntriesByType("navigation")[0];
+      if (opened && opened.type === "reload") {
+        return null;
+      }
+    }
+    try {
+      return decodeURIComponent(location.hash.slice(prefix.length));
+    } catch (ignored) {
+      return null;
+    }
   }
 
   async function json(response) {

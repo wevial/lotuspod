@@ -584,6 +584,7 @@
         toggle.setAttribute("aria-expanded", open ? "true" : "false");
       }
       unfold(false);
+      toggle.disabled = ARCHIVED;
       toggle.addEventListener("click", function () {
         unfold(form.hidden);
         if (!form.hidden) {
@@ -840,7 +841,7 @@
       // them, holding the text and images kept; false when it has them no
       // more.
       api.reopen = function (kept) {
-        if (!article || !kept.quote || typeof kept.quote.exact !== "string") {
+        if (ARCHIVED || !article || !kept.quote || typeof kept.quote.exact !== "string") {
           return false;
         }
         var model = textModel(article);
@@ -888,10 +889,10 @@
 
       // The passage the reader has selected, or null when it is not one a
       // comment can be on: 1 to MAX_EXACT characters of the page's text, all
-      // in it and in one section.
+      // in it and in one section, on a page that is not archived.
       function selected() {
         var selection = document.getSelection();
-        if (!selection || !selection.rangeCount || selection.isCollapsed) {
+        if (ARCHIVED || !selection || !selection.rangeCount || selection.isCollapsed) {
           return null;
         }
         var range = selection.getRangeAt(0);
@@ -1224,6 +1225,12 @@
       pick.setAttribute("aria-expanded", "false");
       pick.setAttribute("aria-controls", choices.id);
       start.append(none, pick, choices);
+      // An archived page takes no new thread: the panel says so above its
+      // threads, and its controls for one are disabled.
+      if (ARCHIVED) {
+        pick.disabled = true;
+        start.insertBefore(element("p", "artifact-comments-closed", CLOSED), none);
+      }
       sheet.append(head, start, list);
       aside.append(rail, sheet);
       document.body.appendChild(aside);
@@ -1257,6 +1264,7 @@
           holder.hidden = true;
           toggle.setAttribute("aria-controls", holder.id);
           toggle.setAttribute("aria-expanded", "false");
+          toggle.disabled = ARCHIVED;
           toggle.addEventListener("click", function () { compose(made, holder.hidden); });
           node.append(toggle, holder);
           made.toggle = toggle;
@@ -1411,8 +1419,11 @@
 
       // Unfold or fold a group's form for a new thread; unfolded, its field
       // has focus. In the panel one form is open at a time: another left
-      // empty folds.
+      // empty folds. An archived page unfolds none.
       function compose(made, show) {
+        if (show && ARCHIVED) {
+          return;
+        }
         if (show && api.wide) {
           groups.forEach(function (other) {
             if (other !== made && !other.holder.hidden && !forms.get(other.box).elements.text.value) {
@@ -1979,12 +1990,28 @@
         if (!thread) {
           return;
         }
+        reach(thread, decisionChips.get(form), false);
+      }
+
+      // A thread opened from outside its entry: in a popover under opener or
+      // in the sheet; in the panel as a highlight opens it, or, resolved,
+      // listed with the resolved threads and its entry in view. With read, a
+      // resolved thread is also opened to read, as its dashed line opens it.
+      function reach(thread, opener, read) {
         if (!api.wide) {
-          over.show({ thread: thread }, decisionChips.get(form));
+          over.show({ thread: thread }, opener);
+          if (read && resolved(thread)) {
+            toRead = thread;
+            expand(thread);
+          }
         } else if (resolved(thread)) {
           // Listed with the resolved threads, its Reopen at hand.
           setOpen(true, true);
           setResolvedShown(true, true);
+          if (read) {
+            toRead = thread;
+            expand(thread);
+          }
           api.refresh();
           reveal(thread.entry.item);
           thread.entry.reopen.focus({ preventScroll: true });
@@ -1992,6 +2019,21 @@
           api.open(thread);
         }
       }
+
+      // A link to a thread (#thread=ID): it opens as its highlight, else its
+      // chip, would open it, a resolved one opened to read. Already open in
+      // view, its replies since are seen, as on opening it, and its entry is
+      // brought into the panel's view.
+      api.reach = function (thread) {
+        if (thread.lit) {
+          looked(thread, true);
+          if (api.wide) {
+            reveal(thread.entry.item);
+          }
+          return;
+        }
+        reach(thread, anchorOf(thread), true);
+      };
 
       // A thread just asked about a decision: its entry opens in the panel,
       // else it opens in a popover under the decision's chip or in the sheet.
@@ -2061,14 +2103,14 @@
       };
 
       // A chip: the panel opens at its section's newest open thread, or at
-      // its form for a new one.
+      // its form for a new one, which an archived page has none of.
       function show(box) {
         setOpen(true, true);
         var newest = latest(unresolvedOf(box));
         if (newest) {
           expand(newest);
           newest.entry.head.focus({ preventScroll: true });
-        } else {
+        } else if (!ARCHIVED) {
           compose(groups.get(box), true);
         }
       }
@@ -2350,7 +2392,7 @@
         if (!view) {
           return;
         }
-        var writing = view.box && kept.writing ? groups.get(view.box) : null;
+        var writing = view.box && kept.writing && !ARCHIVED ? groups.get(view.box) : null;
         if (api.wide) {
           setOpen(true, false);
           if (view.thread) {
@@ -2567,6 +2609,12 @@
       reading = false;
       refresh();
       restore();
+      if (!linked || relink) {
+        // A link followed before the first read is no reload's fragment.
+        openLinked(!relink);
+        linked = true;
+        relink = false;
+      }
       gap = touched || fresh ? FIRST : Math.min(gap * 1.5, LAST);
       fresh = false;
       plan();
@@ -2671,7 +2719,11 @@
         if (thread) {
           thread.field.value = String(each.text || "");
           told(thread.field.form, attached.get(thread.field.form).restore(each.images));
-          thread.unfold(true);
+          // On an archived page the text is kept, folded away, for a reload
+          // once it takes replies again.
+          if (!ARCHIVED) {
+            thread.unfold(true);
+          }
         } else if (box) {
           told(forms.get(box), join(forms.get(box), each));
         } else {
@@ -2703,6 +2755,33 @@
       refresh();
       plan();
     }
+
+    // #thread=ID, a link from the index's Recent activity, opens the thread
+    // whose first comment is ID (panel.reach) once the first read has drawn
+    // the threads, and again on each hashchange after the threads are read
+    // again, so a reply since is among what it marks seen; one before the
+    // first read waits for it. An ID no thread here has, or not a number,
+    // opens nothing.
+    var linked = false;
+    var relink = false;
+    function openLinked(first) {
+      var id = linkedTo("thread", first);
+      var thread = id !== null && /^[1-9][0-9]*$/.test(id) ? shown.get(Number(id)) : null;
+      if (thread) {
+        panel.reach(thread);
+      }
+    }
+    window.addEventListener("hashchange", function () {
+      if (linkedTo("thread") === null) {
+        return;
+      }
+      relink = true;
+      if (linked && !reading) {
+        clearTimeout(timer);
+        fresh = true;
+        read();
+      }
+    });
 
     document.addEventListener("visibilitychange", function () {
       if (hidden()) {

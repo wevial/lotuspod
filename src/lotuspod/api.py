@@ -60,9 +60,10 @@ now. It answers {from, to, older, truncated, pages: [{page, title, latest,
 events}]}, `from` and `to` the window's bounds as the database writes times,
 a page for each one with an event after `from` and up to `to`, by its newest
 event (`latest`), newest first, and its events newest first. Events are
-versions (History.recent()), {kind: version, at, commit, revision, actor,
-first, summary}, `actor` the handle the version's lotuspod:owner names or
-null, and the comments, replies and answers of Database.activity(). At most
+versions (History.recent()), {kind: version, at, commit, revision, current,
+actor, first, summary}, `current` true when its revision is the page's as
+serve answers it now, `actor` the handle the version's lotuspod:owner names
+or null, and the comments, replies and answers of Database.activity(). At most
 MAX_EVENTS are kept, the newest, and `truncated` says when any were left
 out; `older` says whether anything on those pages happened up to `from`. Any
 query but one `before` that parses is 400 invalid_query. An archived page has
@@ -100,6 +101,9 @@ for a resolution or a seen mark naming no thread's first comment on its page. An
 against the page's own decision forms: 400 unknown_question for a question
 the page does not ask, 409 stale for a version other than the page's, and
 400 invalid_choice for a choice its form does not offer.
+An archived page (Page.archived) takes no new thread, reply, thread on a
+decision or answer: each is 409 archived once the page is found. Its
+resolutions, seen marks and reads are as any page's.
 
 A checklist's answer sends `checked`, the item ids the reader checked, in
 place of `choice`: 400 invalid_body for a list that is not of distinct
@@ -656,6 +660,9 @@ class Api:
         for event in events[:MAX_EVENTS]:
             name = event.pop("page")
             page = served(name)
+            # Only for the events kept, so no page is read for one left out.
+            if event["kind"] == "version":
+                event["current"] = page is not None and event["revision"] == page.revision
             entry = pages.setdefault(name, {"page": name, "title": page.title if page else name,
                                             "latest": event["at"], "events": []})
             entry["events"].append(event)
@@ -733,6 +740,14 @@ class Api:
             raise Refusal(HTTPStatus.NOT_FOUND, "unknown_page")
         return page
 
+    def _open_page(self, name: object) -> Page:
+        """The page named, as _page() finds it, refused 409 archived when it
+        is archived: it takes no new comment, reply or answer."""
+        page = self._page(name)
+        if page.archived:
+            raise Refusal(HTTPStatus.CONFLICT, "archived")
+        return page
+
     @staticmethod
     def _json_body(headers: Message, body: Body) -> dict:
         if cross_origin(headers):
@@ -806,7 +821,7 @@ class Api:
         else:
             choice = _text(fields["choice"], 1, MAX_NAME)
         note = _text(fields["note"], 0, MAX_TEXT)
-        page = self._page(fields["page"])
+        page = self._open_page(fields["page"])
         asked = asked_question(page, question)
         if checklist != asked.checklist:
             raise _invalid()
@@ -911,7 +926,7 @@ class Api:
             _keys(fields, {"page", "parent", "text"}, frozenset({"images"}))
             parent = _id(fields["parent"])
             text = _text(fields["text"], least, MAX_TEXT)
-            page = self._page(fields["page"])
+            page = self._open_page(fields["page"])
             images = self._images(names)
             try:
                 return self.database.add_reply(
@@ -931,7 +946,7 @@ class Api:
         quote = _quote(fields.get("quote"))
         # The revision the reader's page was rendered at; absent when it had none.
         read = _text(fields["revision"], 0, MAX_REVISION) if "revision" in fields else None
-        page = self._page(fields["page"])
+        page = self._open_page(fields["page"])
         if section not in page.comment_sections:
             raise Refusal(HTTPStatus.BAD_REQUEST, "unknown_section")
         if read is not None and read != page.revision:
@@ -949,7 +964,7 @@ class Api:
         question = _text(fields["question"], 1, MAX_NAME)
         text = _text(fields["text"], least, MAX_TEXT)
         read = _text(fields["revision"], 0, MAX_REVISION) if "revision" in fields else None
-        page = self._page(fields["page"])
+        page = self._open_page(fields["page"])
         asked = page.questions.get(question)
         if asked is None:
             raise Refusal(HTTPStatus.BAD_REQUEST, "unknown_question")
