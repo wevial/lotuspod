@@ -196,10 +196,10 @@ test.describe('signed in, what changed', () => {
     await expect(page.locator('.artifact-versions-link')).toBeVisible();
   }
 
-  test('a page republished since the reader opened it says what changed', async ({ page }) => {
-    const errors = watchErrors(page);
-    const name = 'changes-check';
-    publish(name, changesSource('Changes check', 'The pump stops in January.'));
+  // Publishes the page, opens it with nothing to say yet, publishes it again
+  // with the pump's line changed and opens it once more.
+  async function republish(page: Page, name: string, title: string) {
+    publish(name, changesSource(title, 'The pump stops in January.'));
     await open(page, name);
     await expect(page.locator(BOX)).toHaveCount(0);
     await expect(page.locator('.artifact-changed-tag')).toHaveCount(0);
@@ -207,8 +207,14 @@ test.describe('signed in, what changed', () => {
     // serve dates a page to the second: a publish in the second the page was
     // served would leave the browser's cached copy current.
     await page.waitForTimeout(1100);
-    publish(name, changesSource('Changes check', 'The pump runs all winter.'));
+    publish(name, changesSource(title, 'The pump runs all winter.'));
     await open(page, name);
+  }
+
+  test('a page republished since the reader opened it says what changed', async ({ page }) => {
+    const errors = watchErrors(page);
+    const name = 'changes-check';
+    await republish(page, name, 'Changes check');
     const box = page.locator(BOX);
     await expect(box.getByRole('heading', { name: 'What changed since you last looked' })).toBeVisible();
     await expect(box).toContainText('You last opened this on');
@@ -249,13 +255,7 @@ test.describe('signed in, what changed', () => {
 
   test('Dismiss removes the box', async ({ page }) => {
     const errors = watchErrors(page);
-    const name = 'changes-dismiss';
-    publish(name, changesSource('Changes dismiss', 'The pump stops in January.'));
-    await open(page, name);
-    await expect(page.locator(BOX)).toHaveCount(0);
-    await page.waitForTimeout(1100);
-    publish(name, changesSource('Changes dismiss', 'The pump runs all winter.'));
-    await open(page, name);
+    await republish(page, 'changes-dismiss', 'Changes dismiss');
     const box = page.locator(BOX);
     await expect(box).toBeVisible();
     await box.getByRole('button', { name: 'Dismiss' }).click();

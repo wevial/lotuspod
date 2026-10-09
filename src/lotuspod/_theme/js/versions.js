@@ -57,8 +57,8 @@
       return count + " " + noun + (count === 1 ? "" : "s");
     }
 
-    function stamped(date) {
-      var time = element("time", "", when(date));
+    function stamped(date, className) {
+      var time = element("time", className, when(date));
       time.setAttribute("datetime", date);
       return time;
     }
@@ -175,8 +175,7 @@
 
       function entry(version) {
         var item = element("li", "artifact-versions-entry");
-        var time = element("time", "artifact-versions-date", when(version.date));
-        time.setAttribute("datetime", version.date);
+        var time = stamped(version.date, "artifact-versions-date");
         item.appendChild(time);
         if (found && version.commit === found.since.commit) {
           item.classList.add("artifact-versions-entry--seen");
