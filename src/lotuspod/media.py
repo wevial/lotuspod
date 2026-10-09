@@ -100,6 +100,12 @@ def sniff(data: bytes) -> str | None:
     return None
 
 
+def named_type(filename: str) -> str | None:
+    """The type filename's extension names, as check reads it; None for
+    any other extension."""
+    return _TYPE_BY_SUFFIX.get(Path(filename).suffix.lower())
+
+
 def check(data: bytes, filename: str, cap: int | None = DEFAULT_MAX_BYTES) -> Image:
     """data as an image named filename, or MediaError saying why it is not one.
 
@@ -108,7 +114,7 @@ def check(data: bytes, filename: str, cap: int | None = DEFAULT_MAX_BYTES) -> Im
     suffix = Path(filename).suffix.lower()
     if suffix == ".svg":
         raise MediaError("SVG images are not published, only PNG, JPEG, WebP and GIF")
-    named = _TYPE_BY_SUFFIX.get(suffix)
+    named = named_type(filename)
     if named is None:
         raise MediaError("not a .png, .jpg, .jpeg, .webp or .gif file name")
     if cap is not None:

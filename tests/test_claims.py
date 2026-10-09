@@ -14,6 +14,7 @@ Run from the repo root:
 
 from __future__ import annotations
 
+import hashlib
 import json
 import secrets
 import socket
@@ -28,8 +29,15 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from lotuspod import db, machine  # noqa: E402
-from tests.test_agent_pull import PLAN, READER, PullTestCase, run_cli  # noqa: E402
+from lotuspod import db, machine, media  # noqa: E402
+from tests.test_agent_pull import (  # noqa: E402
+    CHART, FISH, MEDIA_FIXTURES, PLAN, READER, PullTestCase, run_cli,
+)
+
+FROG = MEDIA_FIXTURES / "frog-140x100.gif"
+LILY = MEDIA_FIXTURES / "lily-lossy-240x160.webp"
+POND = MEDIA_FIXTURES / "pond-progressive-300x200.jpg"
+LOGO = MEDIA_FIXTURES / "logo.svg"
 
 
 class ClaimTestCase(PullTestCase):
@@ -575,6 +583,211 @@ class FollowUpTests(ClaimTestCase):
         self.assertEqual(rows[-1], ("follow-up", comment["id"], "plan", "hermes-two", "hermes",
                                     "audit-f-1"))
         self.assertEqual([row[0] for row in rows], ["claim", "reply", "follow-up"])
+
+
+class ImageTestCase(ClaimTestCase):
+    """An agent's reply or follow-up attaches images: `--image PATH`, each
+    uploaded to POST /v1/media and named in the message."""
+
+    def stored(self) -> set[str]:
+        """The files in the media directory beside the artifacts directory."""
+        directory = media.media_dir(self.out_dir)
+        return {path.name for path in directory.iterdir()} if directory.is_dir() else set()
+
+    def socket(self, name: str, method: str, target: str, body: object = None,
+               content_type: str | None = None) -> tuple[int, dict]:
+        return machine.request(self.socket_path, machine.read_token(self.creds[name]), method,
+                               target, body, content_type)
+
+    def expect_image(self, image: dict, fixture: Path, size: tuple[int, int]) -> None:
+        name = hashlib.sha256(fixture.read_bytes()).hexdigest() + fixture.suffix
+        self.assertEqual(image, {"name": name, "url": f"/media/{name}",
+                                 "width": size[0], "height": size[1]})
+        self.assertEqual((media.media_dir(self.out_dir) / name).read_bytes(),
+                         fixture.read_bytes())
+
+
+class ImageReplyTests(ImageTestCase):
+    def test_a_reply_through_the_cli_carries_its_images_everywhere_it_is_read(self):
+        self.pull("hermes")
+        comment = self.comment("Is the heater enough?")
+        token = self.claim("hermes", comment["id"])
+        rc, reply = self.send_reply("hermes", comment["id"], token, "image-1", "See it.",
+                                    "--image", str(CHART), "--image", str(FISH))
+        self.assertEqual(rc, 0, reply)
+        self.assertEqual(len(reply["images"]), 2)
+        self.expect_image(reply["images"][0], CHART, (1600, 600))
+        self.expect_image(reply["images"][1], FISH, (320, 240))
+        # The reader's route: the same images, with no path.
+        [row] = self.replies(comment["id"])
+        self.assertEqual((row["id"], row["text"], row["images"]),
+                         (reply["id"], "See it.", reply["images"]))
+        # An agent's: each with its file in the media directory.
+        rc, shown = self.act("hermes", "show", "plan")
+        self.assertEqual(rc, 0, shown)
+        [thread] = shown["threads"]
+        [row] = thread["replies"]
+        self.assertEqual([{key: image[key] for key in ("name", "url", "width", "height")}
+                          for image in row["images"]], reply["images"])
+        for image in row["images"]:
+            self.assertEqual(Path(image["path"]),
+                             media.media_dir(self.out_dir) / image["name"])
+
+    def test_a_follow_up_through_the_cli_carries_its_image(self):
+        self.pull("hermes")
+        comment = self.comment("Is the heater enough?")
+        token = self.claim("hermes", comment["id"])
+        rc, reply = self.send_reply("hermes", comment["id"], token, "image-1", "I'll look.")
+        self.assertEqual(rc, 0, reply)
+        self.assertEqual(reply["images"], [])
+        rc, follow = self.act("hermes", "follow-up", str(comment["id"]), "--key", "image-2",
+                              "--text", "And this.", "--image", str(FROG))
+        self.assertEqual(rc, 0, follow)
+        [image] = follow["images"]
+        self.expect_image(image, FROG, (140, 100))
+        self.assertEqual(self.replies(comment["id"]), [reply, follow])
+
+    def test_a_retried_key_answers_the_reply_first_stored_with_its_images(self):
+        self.pull("hermes")
+        comment = self.comment("Is the heater enough?")
+        token = self.claim("hermes", comment["id"])
+        rc, reply = self.send_reply("hermes", comment["id"], token, "K", "See it.",
+                                    "--image", str(CHART))
+        self.assertEqual(rc, 0, reply)
+        rc, again = self.send_reply("hermes", comment["id"], token, "K", "See it.",
+                                    "--image", str(FISH), "--image", str(FROG))
+        self.assertEqual((rc, again), (0, reply))
+        [image] = again["images"]
+        self.expect_image(image, CHART, (1600, 600))
+        self.assertEqual(self.replies(comment["id"]), [reply])
+
+    def test_a_retried_key_answers_its_message_though_its_image_has_left_the_store(self):
+        self.pull("hermes")
+        comment = self.comment("Is the heater enough?")
+        token = self.claim("hermes", comment["id"])
+        status, uploaded = self.socket("hermes", "POST", machine.MEDIA, CHART.read_bytes(),
+                                       "image/png")
+        self.assertEqual(status, 200, uploaded)
+        reply_body = {"claimToken": token, "idempotencyKey": "gone-1", "text": "See it.",
+                      "images": [uploaded["name"]]}
+        follow_body = {"idempotencyKey": "gone-2", "text": "And again.",
+                       "images": [uploaded["name"]]}
+        sent = []
+        for target, body in ((f"/v1/comments/{comment['id']}/reply", reply_body),
+                             (f"/v1/threads/{comment['id']}/follow-up", follow_body)):
+            status, row = self.socket("hermes", "POST", target, body)
+            self.assertEqual(status, 200, row)
+            sent.append((target, body, row))
+        (media.media_dir(self.out_dir) / uploaded["name"]).unlink()
+        for target, body, row in sent:
+            with self.subTest(target=target):
+                self.assertEqual(self.socket("hermes", "POST", target, body), (200, row))
+        self.assertEqual(self.replies(comment["id"]), [row for _t, _b, row in sent])
+        # A new key naming it is refused, with nothing stored.
+        status, refused = self.socket("hermes", "POST", f"/v1/threads/{comment['id']}/follow-up",
+                                      {**follow_body, "idempotencyKey": "gone-3"})
+        self.assertEqual((status, refused), (400, {"error": "unknown_image"}))
+        self.assertEqual(len(self.replies(comment["id"])), 2)
+
+    def test_too_many_images_or_an_unreadable_file_uploads_nothing(self):
+        self.pull("hermes")
+        comment = self.comment("Is the heater enough?")
+        token = self.claim("hermes", comment["id"])
+        for key, paths, error in (
+                ("five", (CHART, FISH, FROG, LILY, POND), "too_many_images"),
+                ("missing", (FISH, self.work / "no-such.png"), "unreadable_image")):
+            with self.subTest(key=key):
+                argv = [arg for path in paths for arg in ("--image", str(path))]
+                rc, refused = self.send_reply("hermes", comment["id"], token, key, "See it.",
+                                              *argv)
+                self.assertEqual((rc, refused), (1, {"error": error}))
+                self.assertEqual(self.stored(), set())
+                self.assertEqual(self.replies(comment["id"]), [])
+                self.assertEqual(self.row(comment["id"])["state"], "claimed")
+
+    def test_a_message_naming_an_image_not_in_the_store_is_refused(self):
+        self.pull("hermes")
+        comment = self.comment("Is the heater enough?")
+        token = self.claim("hermes", comment["id"])
+        absent = hashlib.sha256(b"never uploaded").hexdigest() + ".png"
+        status, refused = self.socket("hermes", "POST", f"/v1/comments/{comment['id']}/reply",
+                                      {"claimToken": token, "idempotencyKey": "absent",
+                                       "text": "See it.", "images": [absent]})
+        self.assertEqual((status, refused), (400, {"error": "unknown_image"}))
+        self.assertEqual(self.replies(comment["id"]), [])
+        self.assertEqual(self.row(comment["id"])["state"], "claimed")
+        status, uploaded = self.socket("hermes", "POST", machine.MEDIA, FISH.read_bytes(),
+                                       "image/jpeg")
+        self.assertEqual(status, 200, uploaded)
+        # Not a list of 1 to four distinct stored names.
+        for images in ([], [uploaded["name"]] * 2, "x.png", [uploaded["name"], "fish.jpg"],
+                       [uploaded["name"], *(f"{n:064x}.png" for n in range(4))]):
+            with self.subTest(images=images):
+                status, refused = self.socket(
+                    "hermes", "POST", f"/v1/comments/{comment['id']}/reply",
+                    {"claimToken": token, "idempotencyKey": "bad", "text": "See it.",
+                     "images": images})
+                self.assertEqual((status, refused), (400, {"error": "invalid_body"}))
+        self.assertEqual(self.replies(comment["id"]), [])
+        # A reply of images alone is still refused: its text is required.
+        status, refused = self.socket("hermes", "POST", f"/v1/comments/{comment['id']}/reply",
+                                      {"claimToken": token, "idempotencyKey": "bare",
+                                       "text": "", "images": [uploaded["name"]]})
+        self.assertEqual((status, refused), (400, {"error": "invalid_body"}))
+        self.assertEqual(self.replies(comment["id"]), [])
+
+    def test_the_media_route_needs_reply_and_an_image_type(self):
+        status, refused = self.socket("mute", "POST", machine.MEDIA, FISH.read_bytes(),
+                                      "image/jpeg")
+        self.assertEqual((status, refused), (403, {"error": "operation_not_allowed"}))
+        self.assertEqual(self.stored(), set())
+        for content_type in ("text/plain", "image/svg+xml"):
+            with self.subTest(content_type=content_type):
+                status, refused = self.socket("hermes", "POST", machine.MEDIA,
+                                              FISH.read_bytes(), content_type)
+                self.assertEqual((status, refused), (415, {"error": "unsupported_media_type"}))
+        status, refused = self.socket("hermes", "GET", machine.MEDIA)
+        self.assertEqual((status, refused), (405, {"error": "method_not_allowed"}))
+        self.assertEqual(self.stored(), set())
+        status, uploaded = self.socket("hermes", "POST", machine.MEDIA, FROG.read_bytes(),
+                                       "image/gif")
+        self.assertEqual(status, 200, uploaded)
+        self.expect_image(uploaded, FROG, (140, 100))
+
+
+class ImageRefusalTests(ImageTestCase):
+    """A configured [media] max_image_bytes of 5000: the chart (7557 bytes)
+    is over it, the fish (4868 bytes) within it."""
+
+    cap = 5000
+
+    def prepare(self) -> None:
+        super().prepare()
+        config = self.work / "config.ini"
+        config.write_text(config.read_text(encoding="utf-8")
+                          + f"\n[media]\nmax_image_bytes = {self.cap}\n", encoding="utf-8")
+
+    def test_an_image_refused_by_type_shape_or_size_stores_nothing(self):
+        self.assertGreater(CHART.stat().st_size, self.cap)
+        short = self.work / "short.png"
+        short.write_bytes(CHART.read_bytes()[:2000])
+        self.pull("hermes")
+        comment = self.comment("Is the heater enough?")
+        token = self.claim("hermes", comment["id"])
+        for path, error in ((LOGO, "unsupported_media_type"), (short, "invalid_image"),
+                            (CHART, "body_too_large")):
+            with self.subTest(path=path.name):
+                rc, refused = self.send_reply("hermes", comment["id"], token, path.name,
+                                              "See it.", "--image", str(path))
+                self.assertEqual((rc, refused), (1, {"error": error}))
+                self.assertEqual(self.stored(), set())
+                self.assertEqual(self.replies(comment["id"]), [])
+                self.assertEqual(self.row(comment["id"])["state"], "claimed")
+        # Within the cap, the same reply is stored.
+        rc, reply = self.send_reply("hermes", comment["id"], token, "fish", "See it.",
+                                    "--image", str(FISH))
+        self.assertEqual(rc, 0, reply)
+        self.expect_image(reply["images"][0], FISH, (320, 240))
 
 
 class SchemaTests(unittest.TestCase):
