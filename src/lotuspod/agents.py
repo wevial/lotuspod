@@ -188,9 +188,15 @@ def images(row: dict) -> list[str]:
     return [*lines, ""] if lines else []
 
 
+def _with_answer(answer: dict) -> str:
+    """The line naming the answer whose note a comment holds."""
+    line = f"- With answer {answer['id']}: {answer['label']}"
+    return line + (f" (`{answer['choice']}`)" if answer["choice"] else "")
+
+
 def _message(row: dict, level: str) -> list[str]:
     """One comment of a thread: who, when, which model wrote it, where it
-    stands, its text and its images."""
+    stands, the answer whose note it holds, its text and its images."""
     kind = "Comment" if row.get("parent") is None else "Reply"
     head = f"{level} {kind} {row['id']}, {_by(row)}, {row['createdAt']}"
     if row.get("model"):
@@ -198,6 +204,8 @@ def _message(row: dict, level: str) -> list[str]:
     if row.get("owner"):
         head += f" ({_standing(row)})"
     lines = [head, ""]
+    if row.get("answer"):
+        lines += [_with_answer(row["answer"]), ""]
     if row.get("quote"):
         lead = f"The reader highlighted, on revision {row['revision'] or 'unknown'}:"
         lines += passage(row["quote"], lead)
@@ -238,7 +246,10 @@ def pull_text(payload: dict) -> str:
             decision = item.get("decision")
             if decision:
                 lines += _decision(decision)
-                if decision["answer"] and decision["answer"]["note"]:
+                # A note the thread holds is read there, not twice.
+                noted = {row["answer"]["id"] for row in thread if row.get("answer")}
+                if (decision["answer"] and decision["answer"]["note"]
+                        and decision["answer"]["id"] not in noted):
                     lines += ["", "The answer's note:", "", fence(decision["answer"]["note"])]
             if comment.get("quote"):
                 lines += [f"- Passage: highlighted on {moved(comment, page['revision'])}", "",
@@ -250,7 +261,14 @@ def pull_text(payload: dict) -> str:
             else:
                 take = (f"- Passed to {comment.get('owner')} once the owner window ended; "
                         "only it may claim this")
-            lines += [fence(comment["text"]), "", *images(comment), take, ""]
+            # A note's comment is read once, in the thread below, under the
+            # answer it came with.
+            if comment.get("answer") and comment["id"] in {row["id"] for row in thread}:
+                said = [f"- Note: the reader's note on answer {comment['answer']['id']}, "
+                        f"comment {comment['id']} in the thread below", ""]
+            else:
+                said = [fence(comment["text"]), "", *images(comment)]
+            lines += [*said, take, ""]
             about = "the thread's first comment and its latest replies"
             if item["omitted"]:
                 about += f"; {item['omitted']} earlier replies left out"
@@ -284,6 +302,8 @@ def pull_text(payload: dict) -> str:
                 f"- From: {_by(answer)} at {answer['createdAt']}, "
                 f"against revision {answer['revision'] or 'unknown'}",
                 *([f"- Answered elsewhere: {answer['source']}"] if answer.get("source") else []),
+                *([f"- Note: comment {item['noteComment']}, in a thread on this decision; "
+                   "claim and reply to it there"] if item.get("noteComment") else []),
                 f"- Acknowledge: `lotuspod comments ack-answer {answer['id']}`",
                 "",
                 ("The answer was given elsewhere and recorded by an agent, on this question "
@@ -291,7 +311,7 @@ def pull_text(payload: dict) -> str:
                  "The answer is the reader's choice on this question only."),
                 "",
             ]
-            if answer["note"]:
+            if answer["note"] and not item.get("noteComment"):
                 lines += ["Note:", "", fence(answer["note"]), ""]
     for page in pages.values():
         if not page["sourceFile"]:

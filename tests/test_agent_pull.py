@@ -223,12 +223,15 @@ class PullTestCase(unittest.TestCase):
         self.assertEqual(status, 201, row)
         return row
 
-    def answer(self, question: str = "decision-1", choice: str = "yes") -> dict:
+    def answer(self, question: str = "decision-1", choice: str = "yes",
+               note: str = "") -> dict:
+        """The reader's answer; with a note, which also opens a thread on
+        the decision, as plan has a comment box after its decisions."""
         page = (self.out_dir / "plan.html").read_text(encoding="utf-8")
         version = decisions.read_forms(page)[question].version
         status, row = self.reader("POST", "/api/answers", {
             "page": "plan", "question": question, "version": version, "choice": choice,
-            "note": "Before the frost.",
+            "note": note,
         })
         self.assertEqual(status, 201, row)
         return row
@@ -847,12 +850,14 @@ class DecisionPullTests(PullTestCase):
         self.assertNotIn("decision", items[plain["id"]])
         self.assertNotIn("question", items[plain["id"]]["comment"])
 
-        answer = self.answer(choice="no")
+        answer = self.answer(choice="no", note="Before the frost.")
         decision = self.items()[asked["id"]]["decision"]
         self.assertEqual((decision["answer"]["choice"], decision["answer"]["note"]),
                          ("no", "Before the frost."))
         self.assertEqual(decision["answer"]["actor"], READER)
-        self.assertEqual(api.shown(decision["answer"]), answer)
+        # The 201 body also carries the note's comment; the answer does not.
+        self.assertEqual(api.shown(decision["answer"]),
+                         {key: value for key, value in answer.items() if key != "comment"})
 
         source = self.work / "plan.md"
         source.write_text(PLAN.replace("| 1 | Freeze the pond? | Yes / No |\n", ""),
@@ -905,7 +910,8 @@ class DecisionPullTests(PullTestCase):
                       "Decisions for the maintainer (`decisions-for-the-maintainer`)\n", out)
         self.assertIn("## Section Goals (`goals`)\n", out)
         self.assertLess(out.index("Which are the same buttons?"), out.index("## Section Goals"))
-        self.assertEqual(out.count("## Decision"), 1, asked)
+        # The question asked with Ask, and the thread the answer's note opened.
+        self.assertEqual(out.count("## Decision `decision-2`"), 2, asked)
 
 
 class RecordAnswerTests(PullTestCase):
@@ -933,6 +939,23 @@ class RecordAnswerTests(PullTestCase):
                           {"kind": "agent", "handle": "hermes", "credential": "desk"},
                           {"text": "Freeze the pond?", "label": "No"}))
         self.assertEqual(self.pull("hermes"), [])
+
+    def test_a_recorded_note_opens_no_thread(self):
+        self.pull("hermes")
+        asked = self.decision_thread("Which pump?")
+        before = [item for item in self.pull("hermes") if item["kind"] == "comment"]
+        status, payload = self.record({"page": "plan", "question": "decision-1",
+                                       "choice": "no", "source": self.SOURCE,
+                                       "note": "Said in chat, with a question?"})
+        self.assertEqual(status, 200, payload)
+        self.assertNotIn("comment", payload["answer"])
+        [thread] = self.threads()
+        self.assertEqual((thread["root"]["id"], thread["replies"]), (asked["id"], []))
+        after = [item for item in self.pull("hermes") if item["kind"] == "comment"]
+        for item in before + after:
+            del item["decision"]["answer"]
+        self.assertEqual(after, before)
+        self.assertNotIn("noteComment", json.dumps(self.pull("hermes")))
 
     def test_a_refused_record_stores_nothing(self):
         self.publish_mail(MAIL)
@@ -1254,7 +1277,7 @@ class SchemaTests(PullTestCase):
                              db.SCHEMA_VERSION)
         finally:
             conn.close()
-        self.assertEqual(db.SCHEMA_VERSION, 13)
+        self.assertEqual(db.SCHEMA_VERSION, 14)
 
 
 class ReplySchemaTests(SchemaTests):
@@ -1311,6 +1334,24 @@ class AnswerSchemaTests(SchemaTests):
         current = payload["questions"]["decision-1"]["current"]
         self.assertEqual((current["choice"], current["actor"]), ("no", SHOWN))
         self.assertNotIn("source", current)
+
+
+class NoteSchemaTests(SchemaTests):
+    """The schema before an answer's note could open a thread, holding a
+    thread on a decision."""
+
+    version = 13
+
+    def prepare_rows(self, conn: sqlite3.Connection) -> None:
+        conn.execute(
+            "UPDATE comments SET section = 'decisions-for-the-maintainer',"
+            " section_title = 'Decisions for the maintainer', question = 'decision-1'")
+
+    def test_a_decision_thread_from_before_keeps_its_question_and_has_no_answer(self):
+        [thread] = self.threads()
+        self.assertEqual((thread["root"]["text"], thread["root"]["question"]),
+                         ("Kept from before.", "decision-1"))
+        self.assertNotIn("answer", thread["root"])
 
 
 class OwnerWindowOptionTests(unittest.TestCase):

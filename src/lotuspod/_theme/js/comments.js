@@ -149,6 +149,11 @@
       by.appendChild(document.createTextNode(" "));
       by.appendChild(time);
       drawn.column.appendChild(by);
+      // A note saved with an answer names the answer above it.
+      if (entry.answer && typeof entry.answer === "object") {
+        drawn.column.appendChild(element("p", "artifact-comment-answered",
+          "Answered: " + String(entry.answer.label || entry.answer.choice || "")));
+      }
       var said = commentMarkdown(element("div", "artifact-comment-text"), String(entry.text || ""));
       // A passage's highlight is described by its thread's first comment.
       said.id = "artifact-comment-text-" + entry.id;
@@ -2617,6 +2622,12 @@
       }
       gap = touched || fresh ? FIRST : Math.min(gap * 1.5, LAST);
       fresh = false;
+      if (again) {
+        again = false;
+        fresh = true;
+        read();
+        return;
+      }
       plan();
     }
 
@@ -2821,11 +2832,29 @@
       return "Your question was not sent (" + error + "). Try again.";
     }
 
+    // An answer saved with a note opens a thread on its decision, or adds
+    // to one: the threads are read again at once, so its chip shows it. A
+    // read already in flight may have missed it, and is followed by another.
+    var again = false;
+    function noted(event) {
+      if (!event.detail || !event.detail.comment) {
+        return;
+      }
+      if (reading) {
+        again = true;
+        return;
+      }
+      clearTimeout(timer);
+      fresh = true;
+      read();
+    }
+
     // Each decision's Ask, beside "Save answer": the note's text posted as
     // a question thread on the decision, which saves no answer. Sent, the
     // note is emptied and folded, so it is never saved as the answer's note,
     // and the thread opens where the window has room for it.
     function askAbout(form) {
+      form.addEventListener(SAVED, noted);
       var save = form.querySelector('button[type="submit"]');
       var note = form.elements.note;
       if (!save || !note) {

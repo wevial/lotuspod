@@ -113,7 +113,10 @@ responder may claim it. Items are, comments first, oldest first:
   while it is unanswered, and whether the page still `asked` it; when it does
   not, `text`, `context` and `options` are empty. An item for any other
   thread has no `decision`. The thread holds the reader's question about the
-  decision, not an answer to it; reply to it as to any comment.
+  decision, not an answer to it; reply to it as to any comment. A comment
+  holding the note the reader saved with an answer (see [Answers and
+  comments](comments.md#answers-and-comments)) also carries `answer`, `{id,
+  choice, label}` of that answer; claim and reply to it as to any comment.
 - `{"kind": "answer", "answer", "question", "page"}` for each answer on a page
   the handle owns that it has not acknowledged, superseded ones included (each
   names the answer it `supersedes`). `question` is `{id, text, context,
@@ -131,6 +134,9 @@ responder may claim it. Items are, comments first, oldest first:
   defaults", and its `question` also carries `changed`: `{id, label,
   checked}` for each item whose state differs from its default, in the page's
   order, read against the page's form, or `null` when `reworded` is true.
+  An answer whose note opened a thread on its decision also carries
+  `noteComment`, the id of the comment holding the note, which comes as its
+  own comment item.
 - `page` is `{name, title, owner, revision, sourceFile, source}`: `source`
   is the page's kept `NAME.md` or `NAME.body.html`, exactly as kept, and
   `revision` the revision of those very bytes, which is the page's
@@ -153,8 +159,15 @@ state, ``- Decision: `ID`, QUESTION`` (or ``- Decision: `ID`, which the page
 no longer asks``), a `- Context: LINE` line for each of its context lines,
 ``- Options: LABEL (`VALUE`), ...`` and `- Answer: not
 answered yet`, or the answer's label, choice, reader and time, with its note
-in a fence under "The answer's note:"; `show` heads that thread ``## Decision
-`ID` in section ...`` rather than `## Section ...`. Under the heading of a resolved thread, `pull` and
+in a fence under "The answer's note:" unless a message of the thread holds
+that note; `show` heads that thread ``## Decision
+`ID` in section ...`` rather than `## Section ...`. Under the heading of a
+message holding an answer's note, `pull` and `show` print ``- With answer N:
+LABEL (`VALUE`)``, and a comment item for such a message points to it in the
+thread, "- Note: the reader's note on answer N, comment M in the thread
+below", rather than printing its text twice. An answer whose note opened a
+thread prints "- Note: comment M, in a thread on this decision; claim and
+reply to it there" in place of its note's fence. Under the heading of a resolved thread, `pull` and
 `show` print "Resolved by WHO at TIME". Under a message's text, `pull` and
 `show` print a line for each of its images, `- Image /media/NAME, WxH, file
 PATH`, or `not in the media directory` in place of `file PATH` when its file
