@@ -505,11 +505,15 @@ class BareUrlTests(unittest.TestCase):
         (link,) = p.elements
         self.assertLink(link, "https://example.com/a**b", "https://example.com/a**b")
         self.assertEqual(p.text(), "Search https://example.com/a**b now.")
-        (p,) = self.body("**See https://example.com/bold**.\n").elements
-        (strong,) = p.elements
-        self.assertEqual((strong.tag, p.children[1:]), ("strong", ["."]))
-        (link,) = strong.elements
-        self.assertLink(link, "https://example.com/bold", "https://example.com/bold")
+        for source, after in (("**See https://example.com/bold**.", "."),
+                              ("**https://example.com/bold**!", "!"),
+                              ("**https://example.com/bold**b", "b")):
+            with self.subTest(source=source):
+                (p,) = self.body(source + "\n").elements
+                (strong,) = p.elements
+                self.assertEqual((strong.tag, p.children[1:]), ("strong", [after]))
+                (link,) = strong.elements
+                self.assertLink(link, "https://example.com/bold", "https://example.com/bold")
 
     def test_a_refused_link_and_an_image_reference_with_parentheses_stay_text_whole(self):
         for source in ("[https://example.com/refused](mailto:a@x)",
@@ -522,6 +526,16 @@ class BareUrlTests(unittest.TestCase):
                 self.assertEqual(body, f"<p>{source}</p>\n")
                 (p,) = parse(body).elements
                 self.assertEqual((p.elements, p.text()), ([], source))
+
+    def test_a_link_or_url_after_a_nested_refused_link_is_still_drawn(self):
+        refused = "[bad](javascript:alert(f(1)))"
+        for after, href in (("[good](https://example.com/good)", "https://example.com/good"),
+                            ("https://example.com/good(foo)", "https://example.com/good(foo)")):
+            with self.subTest(after=after):
+                (p,) = self.body(refused + after + "\n").elements
+                self.assertEqual(p.children[0], refused)
+                (link,) = p.elements
+                self.assertEqual(link.attrs, {"href": href})
 
     def test_an_unclosed_image_reference_repeated_converts_quickly(self):
         source = "![a" * 1000

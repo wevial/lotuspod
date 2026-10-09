@@ -259,12 +259,22 @@ test.describe('signed in', () => {
     const starred = await post(request, 'frogs', 'Search https://example.com/find* now.');
     const stars = await post(request, 'frogs', 'Search https://example.com/a**b now.');
     const bold = await post(request, 'frogs', '**See https://example.com/bold**.');
+    const bang = await post(request, 'frogs', '**https://example.com/bang**!');
+    const after = await post(request, 'frogs',
+      '[bad](javascript:alert(f(1)))[good](https://example.com/good) https://example.com/next');
     await page.goto(PAGE);
     await open(page, 'frogs');
     // A star at the end, or two inside, stay in the URL; bold closes around it.
     await expect(bubble(page, starred).locator('a')).toHaveAttribute('href', 'https://example.com/find*');
     await expect(bubble(page, stars).locator('a')).toHaveAttribute('href', 'https://example.com/a**b');
     await expect(bubble(page, bold).locator('strong > a')).toHaveAttribute('href', 'https://example.com/bold');
+    await expect(bubble(page, bang).locator('strong > a')).toHaveAttribute('href', 'https://example.com/bang');
+    expect(await exact(bubble(page, bang))).toBe('https://example.com/bang!');
+    // A nested refused link stays text, and the links after it are drawn.
+    const later = bubble(page, after).locator('a');
+    await expect(later).toHaveCount(2);
+    await expect(later.nth(0)).toHaveAttribute('href', 'https://example.com/good');
+    await expect(later.nth(1)).toHaveAttribute('href', 'https://example.com/next');
     const links = bubble(page, root).locator('a');
     await expect(links).toHaveCount(2);
     const [same, away] = [links.nth(0), links.nth(1)];

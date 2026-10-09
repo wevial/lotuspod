@@ -15,9 +15,11 @@
   // A link's target: no space, and any parentheses in pairs, so that
   // `javascript:alert(1)` is read whole and refused whole.
   var MD_TARGET = "([^\\s()]*(?:\\([^\\s()]*\\)[^\\s()]*)*)";
-  // The earliest of a code span, an image (kept as typed), a link, an image
-  // or link whose target nests its parentheses (kept as typed, to its last
-  // `)` before a space), a bare URL, bold or italic. Italic opens on a `*`
+  // The earliest of a code span, an image (kept as typed), a link, a bare
+  // URL, bold, italic, or the `[TEXT](` of an image or link whose target nests
+  // its parentheses (kept as typed, to the `)` that pairs its `(`: see
+  // mdReferenceEnd; last, since none of the others starts at a `[` or `!`
+  // where the image and link ones do not match). Italic opens on a `*`
   // before a non-space and closes on one after a non-space, so a lone `2 * 3`
   // is text. A bare URL, as lotuspod.markdown's: `http://` or `https://` (any
   // case, letter by letter, since a case-blind `s` would also match `ſ`) not
@@ -30,10 +32,10 @@
     "`([^`\\n]+)`",
     "(!)\\[[^\\]\\n]*\\]\\(" + MD_TARGET + "\\)",
     "\\[([^\\]\\n]+)\\]\\(" + MD_TARGET + "\\)",
-    "!?\\[[^\\]\\n]*\\]\\(\\S*\\)",
     "(?<![\\p{L}\\p{N}/])([Hh][Tt][Tt][Pp][Ss]?:\\/\\/[^\\s<>\"`]+)",
     "\\*\\*(?=\\S)([\\s\\S]*?\\S)\\*\\*",
     "\\*(?=[^\\s*])([\\s\\S]*?[^\\s*])\\*(?!\\*)",
+    "(!?\\[[^\\]\\n]*\\]\\()",
   ].join("|"), "u");
   // A link target drawn as a link, as lotuspod.markdown's _LINK_TARGET:
   // http(s), or a relative path or `#anchor` (no `//` start, no `:` before
@@ -65,6 +67,24 @@
     return url.length > url.indexOf("//") + 2 ? url : "";
   }
 
+  // Where the reference target starting at text[at], just after its `(`,
+  // ends: after the `)` that pairs that `(`, or with none, at the next space.
+  function mdReferenceEnd(text, at) {
+    var depth = 1;
+    for (; at < text.length; at++) {
+      var character = text.charAt(at);
+      if (/\s/.test(character)) {
+        return at;
+      }
+      if (character === "(") {
+        depth += 1;
+      } else if (character === ")" && !(depth -= 1)) {
+        return at + 1;
+      }
+    }
+    return text.length;
+  }
+
   // The inline markup of text, appended to parent.
   function markdownInline(parent, text) {
     var rest = text;
@@ -76,6 +96,9 @@
       var node = null;
       var end = found.index + found[0].length;
       var url = found[6] !== undefined ? mdUrl(found[6]) : "";
+      if (found[9] !== undefined) {
+        end = mdReferenceEnd(rest, end);
+      }
       if (found[1] !== undefined) {
         node = element("code", "", found[1]);
       } else if (found[4] !== undefined && MD_LINK_TARGET.test(found[5])) {

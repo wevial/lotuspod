@@ -33,8 +33,8 @@ the next whitespace, `<`, `>`, `"` or backtick, is an `a` element whose
 `href` and text are that URL. Trailing `.`, `,`, `;` and `:` are taken off
 it one at a time, and so is a trailing `)` or `]` without its opening
 partner in the URL, so `(see https://example.com/a).` links the URL alone,
-and a trailing `**` that closes a bold opened before it, so bold closes
-around it; any other `*` stays in the URL. Bare URLs are matched after
+and inside a bold opened before it, it ends at its first `**`, so bold
+closes around it; any other `*` stays in the URL. Bare URLs are matched after
 links, so none inside a code span, a link (its target or its text, a refused
 link's included) or an image reference is linked, and before bold.
 """
@@ -73,18 +73,17 @@ _LINK_TARGET = re.compile(r"https?://|(?!//)[^:/?#]*(?:[/?#]|$)", re.IGNORECASE)
 # image reference, each passed over whole, or a bare http(s) URL outside them,
 # not after a letter, digit or `/`, running to whitespace, a `<`, `>`, `"` or
 # backtick (`&lt;` and `&gt;` once escaped).
-# A refused link or an image reference is passed over whole too, its target
-# allowed parentheses in pairs, so that neither `javascript:alert(1)` nor
-# `chart_(pond).png` is read in part, or else running to its last `)` before
-# whitespace, so that nested ones like `alert(f(1))` are not read in part
-# either. Its text holds no `![` but a whole image reference, so no `!` can
-# be read two ways. The scheme is matched letter by letter, since a
-# case-blind `s` would also match `ſ`.
+# A refused link or an image reference is passed over whole too: this
+# matches its `TEXT](`, and _bare_urls() passes over its target to the `)`
+# that pairs its `(` (_reference_end()), so that neither `javascript:alert(1)`
+# nor `chart_(a_(b)).png` is read in part. Its text holds no `![` but a whole
+# image reference, so no `!` can be read two ways. The scheme is matched
+# letter by letter, since a case-blind `s` would also match `ſ`.
 _PAIRED_TARGET = r"[^\s()<]*(?:\([^\s()<]*\)[^\s()<]*)*"
 _SHIELD_TEXT = rf"(?:!\[{_TEXT}*\]\({_PAIRED_TARGET}\)|{_CODE}|!(?!\[)|[^\]<!])"
 _BARE_URL = re.compile(
     rf"{_CODE}|<a [^>]*>.*?</a>"
-    rf"|!?\[{_SHIELD_TEXT}*\]\((?:{_PAIRED_TARGET}\)|[^\s<]*\))"
+    rf"|(!?\[{_SHIELD_TEXT}*\]\()"
     r"|(?<![^\W_])(?<!/)([Hh][Tt][Tt][Pp][Ss]?://(?:(?!&lt;|&gt;)[^\s<>\"`])+)"
 )
 # A bold the bold pass would close: `**`, then no `*` to the end.
@@ -168,12 +167,45 @@ def _link(m: re.Match) -> str:
     return f'<a href="{href}">{m.group(1)}</a>'
 
 
+def _reference_end(text: str, at: int) -> int:
+    """Where the reference target starting at `at`, just after its `(`, ends:
+    after the `)` that pairs that `(`, or with none, at the next whitespace
+    or `<`."""
+    depth = 1
+    for at in range(at, len(text)):
+        character = text[at]
+        if character.isspace() or character == "<":
+            return at
+        if character == "(":
+            depth += 1
+        elif character == ")":
+            depth -= 1
+            if not depth:
+                return at + 1
+    return len(text)
+
+
+def _bare_urls(text: str) -> str:
+    """`text` with its bare URLs drawn as links."""
+    parts = []
+    at = 0
+    while m := _BARE_URL.search(text, at):
+        if m.group(2) is not None:
+            parts += [text[at:m.start()], _bare_url(m)]
+            at = m.end()
+        else:  # a code element, a link or a reference, kept whole
+            end = m.end() if m.group(1) is None else _reference_end(text, m.end())
+            parts.append(text[at:end])
+            at = end
+    parts.append(text[at:])
+    return "".join(parts)
+
+
 def _bare_url(m: re.Match) -> str:
-    if m.group(1) is None:  # a code element, a link or an image reference
-        return m.group(0)
-    url = html.unescape(m.group(1))
+    url = html.unescape(m.group(2))
+    # Inside a bold, the URL ends at its first `**`, which closes the bold.
     in_bold = _BOLD_OPEN.search(_BOLD.sub("", m.string[:m.start()])) is not None
-    end = len(url)
+    end = url.find("**") if in_bold and "**" in url else len(url)
     while end:
         last = url[end - 1]
         opening = _URL_PAIRS.get(last)
@@ -181,9 +213,6 @@ def _bare_url(m: re.Match) -> str:
             opening and url.count(opening, 0, end) < url.count(last, 0, end)
         ):
             end -= 1
-        elif in_bold and url.endswith("**", 0, end):
-            end -= 2
-            in_bold = False
         else:
             break
     url, tail = url[:end], url[end:]
@@ -199,7 +228,7 @@ def _inline(text: str) -> str:
     text = html.escape(text, quote=False)
     text = re.sub(r"`([^`]+)`", r"<code>\1</code>", text)
     text = _LINK.sub(_link, text)
-    text = _BARE_URL.sub(_bare_url, text)
+    text = _bare_urls(text)
     return _BOLD.sub(r"<strong>\1</strong>", text)
 
 

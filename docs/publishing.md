@@ -140,7 +140,7 @@ The converter (`lotuspod.markdown.to_body`) takes a small subset of markdown:
   left out of it, and so is a trailing `)` or `]` without its partner in the
   URL, so `(see https://example.com/a).` links `https://example.com/a` while
   `https://en.wikipedia.org/wiki/Pond_(water)` keeps its `)`. Stars stay in
-  it, except a trailing `**` that closes bold opened before it, so bold
+  it, but inside bold opened before it, it ends at its first `**`, so bold
   around a URL closes outside it. One in a code span, a fence, a link (a
   refused one included) or an image reference is not linked again.
 
