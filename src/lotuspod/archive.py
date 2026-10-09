@@ -32,9 +32,6 @@ from http import HTTPStatus
 # cli imports this module too: only names used at call time are read from it.
 from lotuspod import api, cli
 
-SUFFIX = ".archived.json"
-
-
 class Refused(api.Refusal, RuntimeError):
     """An archive or unarchive that wrote nothing, saying why: a RuntimeError
     for the commands, and the refusal /api/archive answers with."""
@@ -46,7 +43,7 @@ class Refused(api.Refusal, RuntimeError):
 
 
 def record_path(out_dir: Path, name: str) -> Path:
-    return out_dir / f"{name}{SUFFIX}"
+    return out_dir / f"{name}.archived.json"
 
 
 def read_record(out_dir: Path, name: str) -> dict | None:
@@ -129,17 +126,6 @@ def set_archived(out_dir: Path, name: str, archived: bool,
     return record, True
 
 
-def remote_command(command: str, action: str, out_dir: str, name: str,
-                   superseded_by: str | None) -> str:
-    """The command line ssh hands the writer host's shell, quoted as
-    cli.remote_publish_command quotes publish's."""
-    argv = [action, "--local", f"--out-dir={out_dir}"]
-    if superseded_by is not None:
-        argv.append(f"--superseded-by={superseded_by}")
-    argv.append(name)
-    return " ".join([command, *(shlex.quote(arg) for arg in argv)])
-
-
 def over_ssh(args: argparse.Namespace, config: dict[str, str], action: str) -> int:
     """Run the command on the config's host; ssh's exit status."""
     out_dir = config.get("out_dir", "")
@@ -150,9 +136,13 @@ def over_ssh(args: argparse.Namespace, config: dict[str, str], action: str) -> i
             f"--out-dir names a directory on this machine, but config {cli.config_path()} "
             f"{action}s on its host; pass --local to {action} here"
         )
+    # Quoted as cli.remote_publish_command quotes publish's.
+    argv = [action, "--local", f"--out-dir={out_dir}"]
+    if getattr(args, "superseded_by", None) is not None:
+        argv.append(f"--superseded-by={args.superseded_by}")
+    argv.append(args.name)
     command = config.get("command") or cli.DEFAULT_REMOTE_COMMAND
-    remote = remote_command(command, action, out_dir, args.name,
-                            getattr(args, "superseded_by", None))
+    remote = " ".join([command, *(shlex.quote(arg) for arg in argv)])
     # Nothing rides on standard input, so the far side never waits for it.
     try:
         done = subprocess.run(["ssh", config["host"], remote], stdin=subprocess.DEVNULL)
@@ -181,10 +171,7 @@ def _run(args: argparse.Namespace, archived: bool) -> int:
     if not out_dir.is_dir():
         raise FileNotFoundError(f"artifacts directory not found: {out_dir}")
     _, written = set_archived(out_dir, args.name, archived, superseded_by)
-    if not written:
-        print(f"{args.name} is not archived")
-        return 0
-    print(f"{action}d {args.name}")
+    print(f"{action}d {args.name}" if written else f"{args.name} is not archived")
     return 0
 
 

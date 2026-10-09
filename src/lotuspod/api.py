@@ -559,10 +559,12 @@ class Api:
             if path == ACTIVITY:
                 return HTTPStatus.OK, self._activity(query, actor), ()
             page = self._page(self._query(query, ("page",))["page"])
-            if path == ARCHIVE:
-                return HTTPStatus.OK, self._archive_state(page, actor), ()
             if path == ANSWERS:
                 payload = {"page": page.name, "questions": self.database.answers(page.name, asked=True)}
+            elif path == ARCHIVE:
+                payload = {"page": page.name, "archived": page.archived or None,
+                           "supersededBy": page.superseded_by or None,
+                           "mayArchive": str(actor.get("email") or "") in self.owners}
             elif path == REVISION:
                 payload = {"revision": page.revision}
             elif path == VERSIONS:
@@ -640,11 +642,6 @@ class Api:
             entry["events"].append(event)
         return {"from": start, "to": end, "older": older, "truncated": truncated,
                 "pages": list(pages.values())}
-
-    def _archive_state(self, page: Page, actor: Mapping) -> dict:
-        return {"page": page.name, "archived": page.archived or None,
-                "supersededBy": page.superseded_by or None,
-                "mayArchive": str(actor.get("email") or "") in self.owners}
 
     def _post_archive(self, fields: dict, actor: Mapping) -> dict:
         if str(actor.get("email") or "") not in self.owners:

@@ -52,11 +52,6 @@ function group(page: Page, name: string) {
   return page.locator(`section.index-activity-page[data-page="${name}"]`);
 }
 
-// Every row of the listing, archived ones included.
-function allRows(page: Page) {
-  return page.locator('.index-table tbody tr').count();
-}
-
 test.describe('archived', () => {
   test.use({ extraHTTPHeaders: SIGNED_IN });
 
@@ -99,7 +94,7 @@ test.describe('archived', () => {
     await expect(archived).toHaveText('Archived · 1');
     await expect(archived).toHaveAttribute('aria-pressed', 'false');
 
-    const total = (await allRows(page)) - 1;
+    const total = (await page.locator('.index-table tbody tr').count()) - 1;
     await expect(row(page, NAME)).toBeHidden();
     expect(await shownPages(page)).not.toContain(NAME);
     expect(await shownPages(page)).toHaveLength(total);
