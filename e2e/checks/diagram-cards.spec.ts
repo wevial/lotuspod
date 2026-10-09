@@ -434,6 +434,7 @@ test('a box with its own Mermaid style keeps it, and only an unstyled box takes 
 
   await expect(box(page, 'F', 3)).toHaveAttribute('aria-label', 'Styled, ready');
   await box(page, 'F', 3).click();
+  await expect(card(page)).toBeVisible();
   await expect(card(page).locator('h3')).toHaveText('Styled');
   await expect(card(page).locator('dl.artifact-node-card-fields dt')).toHaveText(['Title', 'Status']);
   await expect(card(page).locator('dl.artifact-node-card-fields dd'))
