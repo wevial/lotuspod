@@ -184,6 +184,16 @@ body {
   margin: 0;
 }
 
+/* The page's labels end its date line as small tags, as the index shows them. */
+.artifact-label {
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-chip);
+  font-size: 0.75rem;
+  margin-left: 0.4rem;
+  padding: 0 0.4rem;
+  white-space: nowrap;
+}
+
 .artifact-summary {
   border-left: 1px solid var(--hairline-strong);
   color: var(--color-pale-lavender);
