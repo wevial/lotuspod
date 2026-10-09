@@ -93,7 +93,7 @@ BANNER_TEXT = (
 )
 HEADERS = """\
 /*
-  Content-Security-Policy: frame-ancestors 'none'
+  Content-Security-Policy: frame-ancestors 'self'
   X-Content-Type-Options: nosniff
   Referrer-Policy: no-referrer
 """

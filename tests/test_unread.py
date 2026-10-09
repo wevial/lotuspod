@@ -26,7 +26,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from lotuspod import cli, db, machine, routing  # noqa: E402
 from tests import access_keys as keys  # noqa: E402
-from tests.test_api import ACTOR, DECISIONS_BODY, ApiTestCase, run_cli  # noqa: E402
+from tests.test_api import ACTOR, CREATED_AT, DECISIONS_BODY, ApiTestCase, run_cli  # noqa: E402
 
 # Reader a, the maintainer, and reader b.
 A = keys.EMAIL
@@ -226,9 +226,13 @@ class UnreadTests(UnreadTestCase):
 
         status, got = self.ask("GET", "/api/seen")
         self.assertEqual(status, 200, got)
+        seen_at = got["pages"]["plan"]["seenAt"]
+        self.assertRegex(seen_at, CREATED_AT)
         self.assertEqual(got, {"pages": {
-            "other": {"revision": self.page_revision("other"), "seen": None, "unread": 1},
-            "plan": {"revision": self.revision, "seen": self.revision, "unread": 2},
+            "other": {"revision": self.page_revision("other"), "seen": None, "seenAt": None,
+                      "replies": 0, "unread": 1},
+            "plan": {"revision": self.revision, "seen": self.revision, "seenAt": seen_at,
+                     "replies": 0, "unread": 2},
         }})
         # No answer names a reader or carries an address.
         self.assertNotIn("@", json.dumps(got))

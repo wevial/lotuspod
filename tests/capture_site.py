@@ -6,7 +6,9 @@ temporary directory, serves it with the site's own allow-list server on
 in LOTUSPOD_URL, then stops the server, removes the directory and exits with
 the command's code. The site trusts the test Access key
 (tests/fixtures/access/), and LOTUSPOD_TEST_ASSERTION holds an assertion it
-accepts, for a browser check to send as Cf-Access-Jwt-Assertion. Answers and
+accepts, for a browser check to send as Cf-Access-Jwt-Assertion;
+LOTUSPOD_TEST_ASSERTION_SECOND holds one for a second reader (SECOND_READER),
+for a check that needs someone else's comment. Answers and
 comments go to a database in the same temporary directory, beside the
 rendered site and never in it. It never reads or writes the operator's
 artifacts/ and never binds the tailnet address.
@@ -76,6 +78,7 @@ from tests import access_keys  # noqa: E402
 HOST = "127.0.0.1"
 URL_ENV = "LOTUSPOD_URL"
 ASSERTION_ENV = "LOTUSPOD_TEST_ASSERTION"
+SECOND_ASSERTION_ENV = "LOTUSPOD_TEST_ASSERTION_SECOND"
 SOCKET_ENV = "LOTUSPOD_TEST_SOCKET"
 HERMES_ENV = "LOTUSPOD_TEST_CREDENTIAL_HERMES"
 OTHER_ENV = "LOTUSPOD_TEST_CREDENTIAL_OTHER"
@@ -92,6 +95,8 @@ OWNER_OPERATIONS = ("pull", "claim", "reply", "publish")
 # Another agent's credential, bound to its own handle only.
 OTHER = "claude-3f9a2c"
 OTHER_OPERATIONS = ("pull", "claim", "reply")
+# A second reader the site allows beside the maintainer.
+SECOND_READER = "heron@example.com"
 
 
 # The time publish stamps a page updated: later on SAMPLE_DATE, so a published
@@ -954,7 +959,8 @@ def main(argv: list[str] | None = None) -> int:
         except Exception as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 1
-        verifier = access.Verifier(access.parse_config(access_keys.config_section()))
+        verifier = access.Verifier(access.parse_config(access_keys.config_section(
+            allowed_emails=f"{access_keys.EMAIL} {SECOND_READER}")))
         server = cli._make_server(site, HOST, 0, verifier=verifier, db_path=db_path)
         port = server.server_address[1]
         thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -971,6 +977,8 @@ def main(argv: list[str] | None = None) -> int:
         env = dict(os.environ)
         env[URL_ENV] = f"http://{HOST}:{port}"
         env[ASSERTION_ENV] = access_keys.assertion(lifetime=ASSERTION_LIFETIME)
+        env[SECOND_ASSERTION_ENV] = access_keys.assertion(SECOND_READER,
+                                                          lifetime=ASSERTION_LIFETIME)
         env[SOCKET_ENV] = str(socket_path)
         env[HERMES_ENV] = str(credential_path(db_path, OWNER))
         env[OTHER_ENV] = str(credential_path(db_path, OTHER))

@@ -297,7 +297,10 @@ def script_warning(name: str, body: str) -> str:
 # and offers a reload once its page is published again; only a page with
 # any of them, or stamped with a revision (every published page), loads it.
 PAGE_SCRIPT = "lotuspod-page.js"
-THEME_FILES = ("lotuspod.css", "favicon.svg", PAGE_SCRIPT)
+# The index script opens pods in tabs over the index's listing; the index
+# loads it deferred, beside its own inline script.
+INDEX_SCRIPT = "lotuspod-index.js"
+THEME_FILES = ("lotuspod.css", "favicon.svg", PAGE_SCRIPT, INDEX_SCRIPT)
 # The served files written as one source per feature, relative to THEME_DIR:
 # each is its sources joined in this order, byte for byte. A theme file not
 # named here is served as it is. A new feature's file takes one line here.
@@ -319,6 +322,7 @@ THEME_SOURCES = {
         "css/table-expand.css",
         "css/image-viewer.css",
         "css/index.css",
+        "css/pod-tabs.css",
         "css/versions.css",
     ),
     PAGE_SCRIPT: (
@@ -339,6 +343,9 @@ THEME_SOURCES = {
         "js/diagram-cards.js",
         "js/ref-cards.js",
         "js/page-close.js",
+    ),
+    INDEX_SCRIPT: (
+        "js/pod-tabs.js",
     ),
 }
 
@@ -397,7 +404,8 @@ def theme_hash() -> str:
 def sync_theme_css(out_dir: Path) -> None:
     """Keep the artifact dir's theme files identical to the packaged theme.
 
-    Covers the stylesheet, the favicon and the page script (THEME_FILES).
+    Covers the stylesheet, the favicon, the page script and the index script
+    (THEME_FILES).
     Rewriting only on a content difference means a theme upgrade reaches
     already-rendered directories while untouched ones keep their mtime.
     """
@@ -1992,7 +2000,7 @@ def cmd_publish(args: argparse.Namespace) -> int:
 
 _SERVE_CSS_FILE = "lotuspod.css"
 _SERVE_ICON_FILE = "favicon.svg"
-_SERVE_SUPPORT_FILES = (_SERVE_CSS_FILE, _SERVE_ICON_FILE, PAGE_SCRIPT)
+_SERVE_SUPPORT_FILES = (_SERVE_CSS_FILE, _SERVE_ICON_FILE, PAGE_SCRIPT, INDEX_SCRIPT)
 _SERVE_NEVER_FILES = frozenset({MANIFEST_FILE, "FINDINGS.md"})
 _DENY_PATH_NAME = ".lotuspod-not-found"
 
@@ -2092,17 +2100,18 @@ def agent_page(out_dir: Path, page: api.Page) -> dict:
             "revision": revision, "sourceFile": source_file, "source": source}
 
 
-# Headers on every page response. A meta tag cannot forbid framing, and
-# nosniff keeps a browser from reading a file as a type it was not served as.
+# Headers on every page response. A meta tag cannot limit framing: only this
+# site may frame a page, as the index's tabs do (lotuspod-index.js). nosniff
+# keeps a browser from reading a file as a type it was not served as.
 _PAGE_HEADERS = (
-    ("Content-Security-Policy", "frame-ancestors 'none'"),
+    ("Content-Security-Policy", "frame-ancestors 'self'"),
     ("X-Content-Type-Options", "nosniff"),
 )
 
 
 # Headers on an earlier version of a page, in place of _PAGE_HEADERS: its
 # policy adds to the page's own meta policy, so none of its scripts and no
-# form runs, and it is never kept.
+# form runs, no page frames it, and it is never kept.
 _OLD_VERSION_HEADERS = (
     ("Content-Security-Policy",
      "frame-ancestors 'none'; script-src 'none'; form-action 'none'"),

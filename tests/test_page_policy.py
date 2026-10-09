@@ -15,9 +15,16 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import json
+import os
+import subprocess
+import sys
+import tempfile
 import threading
+import unittest
 import urllib.request
 from html.parser import HTMLParser
+from pathlib import Path
 
 from tests.test_manifest_v2 import TempDirTestCase, cli, run_cli
 
@@ -25,6 +32,8 @@ MERMAID_DIR = "https://cdn.jsdelivr.net/npm/mermaid@11.4.1/"
 
 PROSE = "<h2>One</h2>\n<p>Plain prose.</p>\n<h2>Two</h2>\n<p>More prose.</p>\n"
 DIAGRAM = '<p>A diagram.</p>\n<pre class="mermaid">graph TD; A --> B</pre>\n'
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
 
 INLINE_SCRIPT = '<script>document.title = "ran";</script>'
 REMOTE_SCRIPT = '<script src="https://scripts.example.com/widget.js"></script>'
@@ -172,7 +181,7 @@ class BodyScriptTests(PolicyTestCase):
 
 
 class ServeHeaderTests(PolicyTestCase):
-    def test_a_served_page_forbids_framing_and_sniffing(self):
+    def test_a_served_page_may_be_framed_by_its_own_site_alone_and_forbids_sniffing(self):
         self.render_body("prose", PROSE)
         server = cli._make_server(self.out_dir, "127.0.0.1", 0)
         thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -184,12 +193,52 @@ class ServeHeaderTests(PolicyTestCase):
             self.assertEqual(response.status, 200)
             self.assertEqual(
                 response.headers.get_all("Content-Security-Policy"),
-                ["frame-ancestors 'none'"],
+                ["frame-ancestors 'self'"],
             )
             self.assertEqual(response.headers.get_all("X-Content-Type-Options"), ["nosniff"])
 
 
-if __name__ == "__main__":
-    import unittest
+# Run inside the capture fixture: records the policy headers of the article
+# page and of an earlier version of capture-versions-many, signed in.
+CAPTURE_HEADERS_COMMAND = """\
+import json, os, sys, urllib.request
+base = os.environ["LOTUSPOD_URL"]
+signed = {"Cf-Access-Jwt-Assertion": os.environ["LOTUSPOD_TEST_ASSERTION"]}
+def get(path):
+    request = urllib.request.Request(base + path, headers=signed)
+    with urllib.request.urlopen(request, timeout=10) as response:
+        return response.status, response.headers.get_all("Content-Security-Policy"), response.read()
+seen = {}
+status, policy, _ = get("/capture-article.html")
+seen["article"] = [status, policy]
+_, _, body = get("/api/versions?page=capture-versions-many")
+earlier = json.loads(body)["versions"][-1]["commit"]
+status, policy, _ = get(f"/capture-versions-many.html?version={earlier}")
+seen["old"] = [status, policy]
+with open(sys.argv[1], "w", encoding="utf-8") as fh:
+    json.dump(seen, fh)
+"""
 
+
+class CaptureSiteHeaderTests(unittest.TestCase):
+    def test_a_page_may_be_framed_by_the_site_and_an_earlier_version_by_none(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            record = Path(tmp) / "seen.json"
+            proc = subprocess.run(
+                [sys.executable, "-m", "tests.capture_site", sys.executable, "-c",
+                 CAPTURE_HEADERS_COMMAND, str(record)],
+                capture_output=True, text=True, cwd=str(REPO_ROOT), timeout=120,
+                env=dict(os.environ, TMPDIR=tmp), check=False,
+            )
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            seen = json.loads(record.read_text(encoding="utf-8"))
+        self.assertEqual(seen["article"], [200, ["frame-ancestors 'self'"]])
+        status, policies = seen["old"]
+        self.assertEqual(status, 200)
+        directives = [part.strip() for policy in policies for part in policy.split(";")]
+        self.assertIn("frame-ancestors 'none'", directives)
+        self.assertNotIn("frame-ancestors 'self'", directives)
+
+
+if __name__ == "__main__":
     unittest.main()

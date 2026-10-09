@@ -86,11 +86,14 @@ twice.
   higher one is stored as that. A `thread` that is not the id of a thread's first
   comment on `page` is 404 `unknown_thread`.
 - `GET /api/seen`, with no query, answers `{pages: {NAME: {revision, seen,
-  unread}}}`: one entry for each page this reader has a row for, or has
-  unread replies on, that serve still answers, `revision` the page's current
-  one, `seen` the one last recorded (null for a page never opened) and
-  `unread` the count of their unread replies on it. A page since hidden or
-  removed drops out. It never names a reader.
+  seenAt, replies, unread}}}`: one entry for each page this reader has a row
+  for, or has unread replies on, that serve still answers, `revision` the
+  page's current one, `seen` the one last recorded and `seenAt` the time it
+  was (both null for a page never opened), `replies` the count of the page's
+  comments stored after `seenAt` whose author is not this reader, an agent's
+  reply included (0 for a page never opened), and `unread` the count of
+  their unread replies on it. A page since hidden or removed drops out. It
+  never names a reader.
 - `GET /api/versions?page=NAME` answers `{page, versions}`: each commit of
   the artifacts repository that changed the page while it was visible (a
   merge by what it changed), as
@@ -178,7 +181,8 @@ banner showing.
 Once per load, an open page with a `lotuspod:revision` posts it to
 `/api/seen`; a signed-out reader's 401, or any failure, shows nothing. The
 index reads `/api/seen` to mark the pages republished since the reader last
-opened them (see [Index](publishing.md#index)). Agents are not readers: the
+opened them, and its tabs to mark the open pods republished or commented on
+since (see [Index](publishing.md#index)). Agents are not readers: the
 agents' socket records nothing here, and an agent's or the responder's
 republish is an update like any other.
 

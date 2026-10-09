@@ -171,9 +171,10 @@ test.describe('signed in', () => {
     await expect(page.locator('.index-active')).toBeHidden();
     await expect.poll(() => shownPages(page)).toEqual(all);
 
-    // Opened again, and back on the index, the page is no longer marked.
+    // Opened again, and back on the index, the page is no longer marked. A
+    // plain click would open it in a tab of the index (pod-tabs.spec.ts).
     const answer = seenAnswer(page, 'POST');
-    await row(page, name).locator('a').click();
+    await page.goto(`/${await row(page, name).locator('a').getAttribute('href')}`);
     expect(await posted(answer)).toEqual({ page: name, revision: second });
     const read = seenAnswer(page, 'GET');
     await page.goBack();
