@@ -413,6 +413,10 @@
       }
     });
     window.addEventListener("resize", place);
+    // The card is set in the page, so a scroll of the page would carry it
+    // out of the window: it is set again, beside its box as far as the
+    // window lets it be.
+    window.addEventListener("scroll", place, { passive: true });
 
     pres.forEach(function (pre) {
       pre.addEventListener("scroll", place);

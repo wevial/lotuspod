@@ -179,6 +179,26 @@ test("a box's card sits beside it with its row and its arrows", async ({ page })
   await seen.clean();
 });
 
+test('an open card stays inside the window as the page scrolls', async ({ page }) => {
+  const seen = await drawn(page);
+  await openB(page);
+  const inside = async () => {
+    const where = (await card(page).boundingBox())!;
+    return where.y >= 0 && where.y + where.height <= 800 && where.x >= 0 && where.x + where.width <= 1280;
+  };
+  // Down past B, so its box leaves the window, then back to the top.
+  for (const top of [1200, 2000, 0]) {
+    await page.evaluate((y) => window.scrollTo(0, y), top);
+    await expect.poll(inside).toBe(true);
+    await expect(card(page)).toBeVisible();
+  }
+  // Back at the top, the card sits beside B again, not over it.
+  const where = (await card(page).boundingBox())!;
+  const b = (await box(page, 'B').boundingBox())!;
+  expect(where.x).toBeGreaterThanOrEqual(b.x + b.width);
+  await seen.clean();
+});
+
 test('the card closes on its X, on Esc anywhere and on a click outside it', async ({ page }) => {
   const seen = await drawn(page);
 
