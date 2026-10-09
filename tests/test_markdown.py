@@ -372,6 +372,13 @@ class LinkTests(unittest.TestCase):
                 self.assertEqual(paragraph.find_all("a"), [])
                 self.assertEqual(paragraph.text(), source)
 
+    def test_an_http_scheme_in_upper_or_mixed_case_is_a_link_as_written(self):
+        for text, target in (("a", "HTTPS://EXAMPLE.COM/U"), ("b", "Http://example.com")):
+            with self.subTest(target=target):
+                (p,) = self.body(f"[{text}]({target})\n").elements
+                (link,) = p.elements
+                self.assertLink(link, target, text)
+
     def test_a_scheme_that_is_http_only_by_unicode_case_folding_stays_the_escaped_text(self):
         for target in ("http\u017f://example.com/x", "HTTP\u017f://example.com/x"):
             with self.subTest(target=target):
