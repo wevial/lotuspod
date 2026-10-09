@@ -294,11 +294,11 @@ class UnreadTests(UnreadTestCase):
 
 
 class UnreadSchemaTests(UnreadTestCase):
-    def test_a_database_from_the_previous_step_reads_back_with_nothing_unread(self):
+    def test_a_version_eleven_database_reads_back_with_nothing_unread(self):
         self.stop()
         path = self.work / "before.sqlite3"
         conn = sqlite3.connect(str(path))
-        for step in range(1, db.SCHEMA_VERSION):
+        for step in range(1, 12):
             for statement in db._SCHEMA[step]:
                 conn.execute(statement)
         conn.execute(
@@ -314,7 +314,7 @@ class UnreadSchemaTests(UnreadTestCase):
             (self.revision, json.dumps({"kind": "agent", "handle": OWNER,
                                         "credential": OWNER})),
         )
-        conn.execute(f"PRAGMA user_version = {db.SCHEMA_VERSION - 1}")
+        conn.execute("PRAGMA user_version = 11")
         conn.commit()
         conn.close()
         self.start(path, allowed_emails=f"{A} {B}")

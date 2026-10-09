@@ -17,6 +17,9 @@ credential that exists and is not revoked:
                                         acknowledged (needs pull for HANDLE)
     POST /v1/answers/ID/ack             the page's owner has answer ID (needs
                                         pull for that owner)
+    POST /v1/answers/record             {page, question, choice, source[, note]}:
+                                        a decision's answer given elsewhere
+                                        (needs publish as the page's owner)
     GET  /v1/threads?page=NAME          the page's threads, as the reader's
                                         route answers them (needs pull)
     POST /v1/comments/ID/claim          take comment ID up, for claim_sec
@@ -105,6 +108,23 @@ state, so nothing is claimed, settled or routed again, and a resolved thread
 stays resolved unless reopen is true. Its key names it for good, as a
 reply's does, and its revision is checked as a reply's is.
 
+POST /v1/answers/record stores an answer the page's owner gave somewhere
+else, such as a chat or another page: an agent's answer, as that owner,
+keeping where in `source` (1 to MAX_SOURCE characters). Its version,
+question text and option label are the page's as it asks the decision now,
+and its revision is the page's. It counts as answered wherever answers do,
+supersedes the question's newest answer, and the owner has it acknowledged
+already. The same option recorded again from the same source, at the same
+version, is not stored again: it answers {answer, created: false} with the
+answer stored first, and {answer, created: true} otherwise, the answer
+carrying `asked` as the pull's do. It is refused, with nothing stored, in
+this order: 400 invalid_body when page is missing or not a string, 404
+unknown_page, 403 handle_not_allowed or operation_not_allowed, 400
+invalid_body for any other missing or extra key or length, 400
+unknown_question, 400 not_a_decision for a checklist, and
+400 invalid_choice for an option the form does not offer. A reader's later
+answer replaces it, as it replaces any.
+
 No socket route writes a reader's answer, comment or resolution as the
 reader, whatever the credential.
 """
@@ -146,6 +166,7 @@ CHECK = "/v1/check"
 PULL = "/v1/pull"
 THREADS = "/v1/threads"
 MEDIA = "/v1/media"
+RECORD = "/v1/answers/record"
 ROUTES = (WHOAMI, CHECK, PULL, THREADS)
 METHODS = ("GET", "HEAD")
 # POST /v1/answers/ID/ack
@@ -160,6 +181,8 @@ MAX_KEY = 200
 MAX_REASON = 200
 # Characters of the model a reply names.
 MAX_MODEL = 40
+# Characters of where a recorded answer was given.
+MAX_SOURCE = 200
 CLAIM_BYTES = 32
 # The HTTP status of each refusal a claim, reply, release, failure or resolution meets.
 _REFUSED = {
@@ -373,8 +396,8 @@ class Routes:
         ack = _ACK.fullmatch(path)
         acting = _COMMENT.fullmatch(path)
         resolving = _THREAD.fullmatch(path)
-        if (path not in ROUTES and path != MEDIA and ack is None and acting is None
-                and resolving is None):
+        if (path not in ROUTES and path not in (MEDIA, RECORD) and ack is None
+                and acting is None and resolving is None):
             return HTTPStatus.NOT_FOUND, {"error": "not_found"}, ()
         allowed = METHODS if path in ROUTES else ACK_METHODS
         if method not in allowed:
@@ -395,6 +418,8 @@ class Routes:
                 return HTTPStatus.OK, self._threads(credential, _query(query, ("page",))["page"]), ()
             if path == MEDIA:
                 return HTTPStatus.OK, self._media(credential, headers, body), ()
+            if path == RECORD:
+                return HTTPStatus.OK, self._record(credential, headers, body), ()
             if acting is not None:
                 return HTTPStatus.OK, self._act(credential, int(acting.group(1)),
                                                 acting.group(2), headers, body), ()
@@ -578,6 +603,34 @@ class Routes:
         _allow(credential, "pull", page.owner)
         acked_at = self.database.acknowledge_answer(answer_id, page.owner)
         return {"answer": answer_id, "owner": page.owner, "ackedAt": acked_at}
+
+    def _record(self, credential: Mapping, headers: Message, body: api.Body | None) -> dict:
+        """Store a decision's answer given elsewhere, as the page's owner."""
+        fields = _json_body(headers, body)
+        # With no page named, there is none to look up: the body is wrong.
+        if not isinstance(fields.get("page"), str):
+            raise api.Refusal(HTTPStatus.BAD_REQUEST, "invalid_body")
+        page = self._page(fields["page"])
+        if page is None:
+            raise api.Refusal(HTTPStatus.NOT_FOUND, "unknown_page")
+        # A page with no owner is no handle's to answer for.
+        _allow(credential, "publish", page.owner)
+        api._keys(fields, {"page", "question", "choice", "source"}, frozenset({"note"}))
+        question = api._text(fields["question"], 1, api.MAX_NAME)
+        choice = api._text(fields["choice"], 1, api.MAX_NAME)
+        source = api._text(fields["source"], 1, MAX_SOURCE)
+        note = api._text(fields.get("note", ""), 0, api.MAX_TEXT)
+        asked = api.asked_question(page, question)
+        if asked.checklist:
+            raise api.Refusal(HTTPStatus.BAD_REQUEST, "not_a_decision")
+        label = api.chosen(asked, choice)
+        answer, created = self.database.record_answer(
+            page=page.name, question=question, version=asked.version, choice=choice,
+            note=note, revision=page.revision, owner=page.owner,
+            credential=credential["name"], source=source, question_text=asked.text,
+            choice_label=label,
+        )
+        return {"answer": answer, "created": created}
 
 
     def _act(self, credential: Mapping, comment_id: int, action: str,

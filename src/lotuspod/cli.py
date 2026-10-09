@@ -2629,7 +2629,9 @@ def answers_text(name: str, questions: dict, forms: dict[str, decisions.Form]) -
     checklist's answer is its change summary, read against the page's form
     while it asks at the answer's version, else the summary kept with it. A
     decision answered at its form's version with another option than the
-    form's default says so: "LABEL, was: DEFAULT-LABEL"."""
+    form's default says so: "LABEL, was: DEFAULT-LABEL". An answer an agent
+    recorded from elsewhere names the handle that recorded it and where it
+    was given."""
     if not questions:
         return f"no answers to {name}"
 
@@ -2651,7 +2653,12 @@ def answers_text(name: str, questions: dict, forms: dict[str, decisions.Form]) -
         head += ")"
         if form is None or row["version"] != form.version:
             head += ", to an earlier wording"
-        lines = [head, f"{indent}  by {row['actor'].get('email', '')} at {row['createdAt']}"]
+        if "source" in row:
+            by = (f"recorded by {row['actor'].get('handle', '')} at {row['createdAt']}, "
+                  f"answered elsewhere: {row['source']}")
+        else:
+            by = f"by {row['actor'].get('email', '')} at {row['createdAt']}"
+        lines = [head, f"{indent}  {by}"]
         if row["note"]:
             lines.append(f"{indent}  note: {row['note']}")
         return lines
