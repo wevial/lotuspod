@@ -447,6 +447,30 @@ test.describe('signed in', () => {
       const listed = page.locator(`.artifact-comments-panel li.artifact-comments-entry--resolved[data-thread="${thread}"]`);
       await expect(listed).toBeInViewport();
       await expect(page.locator('.artifact-comments-panel')).toHaveClass(/\bartifact-comments-panel--resolved-shown\b/);
+
+      // hermes adds to the resolved thread: a link opens it to read, on a
+      // phone and in the panel, and its reply counts as read.
+      const unreadOnC = async () => {
+        const seen = await request.get(SEEN, { headers: SIGNED_IN });
+        const { pages } = (await seen.json()) as { pages: Record<string, { unread: number }> };
+        return pages[C]?.unread ?? 0;
+      };
+      const addTo = (text: string, key: string) =>
+        hermes('follow-up', String(thread), '--key', key, '--text', text);
+      for (const [width, height, held, text] of [
+        [390, 844, '.artifact-comments-bottom-sheet--open', 'And clear of the pump.'],
+        [1280, 800, '.artifact-comments-panel', 'The fish keep to the far end.'],
+      ] as const) {
+        addTo(text, `activity-links-${thread}-${width}`);
+        await expect.poll(unreadOnC).toBe(1);
+        await page.setViewportSize({ width, height });
+        await page.goto('about:blank');
+        await page.goto(`/${C}.html#thread=${thread}`);
+        const opened = page.locator(`${held} li.artifact-comments-entry--resolved[data-thread="${thread}"]`);
+        await expect(opened).toHaveClass(/\bartifact-comments-entry--open\b/);
+        await expect(opened.getByText(text)).toBeVisible();
+        await expect.poll(unreadOnC).toBe(0);
+      }
       expect(errors).toEqual([]);
     } finally {
       await catchUp(request);

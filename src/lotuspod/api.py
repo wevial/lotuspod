@@ -592,13 +592,10 @@ class Api:
             older = older or recent.older
             truncated = recent.truncated
             for change in recent.changes:
-                page = served(change.name)
                 events.append({"page": change.name, "kind": "version",
                                # As the database writes times, so all sort as text.
                                "at": change.date[:-1] + ".000Z", "commit": change.commit,
-                               "revision": change.revision,
-                               "current": page is not None and change.revision == page.revision,
-                               "actor": change.owner or None,
+                               "revision": change.revision, "actor": change.owner or None,
                                "first": change.first, "summary": change.summary})
             events.sort(key=lambda event: event["at"], reverse=True)
         truncated = truncated or len(events) > MAX_EVENTS
@@ -606,6 +603,9 @@ class Api:
         for event in events[:MAX_EVENTS]:
             name = event.pop("page")
             page = served(name)
+            # Only for the events kept, so no page is read for one left out.
+            if event["kind"] == "version":
+                event["current"] = page is not None and event["revision"] == page.revision
             entry = pages.setdefault(name, {"page": name, "title": page.title if page else name,
                                             "latest": event["at"], "events": []})
             entry["events"].append(event)

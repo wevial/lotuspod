@@ -439,6 +439,9 @@
   // hashchange, the form asking ID has its section opened if it is folded
   // and lands just under the title bar, as jump() places it, with or without
   // the sheet. A question the page does not ask leaves the page where it is.
+  // A link followed before the answers are drawn is no reload's fragment,
+  // and one after waits for every other hashchange listener, such as the
+  // versions view's (js/versions.js), which may still hide the text.
   if (answering && forms.length) {
     var toQuestion = function (first) {
       var id = linkedTo("question", first);
@@ -454,11 +457,19 @@
       var under = bar ? Math.max(0, bar.getBoundingClientRect().bottom) : 0;
       window.scrollBy({ top: form.getBoundingClientRect().top - under - 16, left: 0, behavior: "instant" });
     };
+    var drawnAnswers = false;
+    var followed = false;
+    window.addEventListener("hashchange", function () {
+      followed = true;
+      if (drawnAnswers) {
+        setTimeout(function () { toQuestion(false); }, 0);
+      }
+    });
     document.addEventListener(ANSWERED, function () {
       if (answering.read) {
         reviewSheet(answering);
       }
-      toQuestion(true);
-      window.addEventListener("hashchange", function () { toQuestion(false); });
+      drawnAnswers = true;
+      toQuestion(!followed);
     }, { once: true });
   }
