@@ -696,6 +696,29 @@ for its kind, who did it ("you" for the reader, a version with no owner
   unread, its dot ringed;
 - "answered “QUESTION”: LABEL".
 
+Each event's line, after its time and dot, links to where it happened: a
+version the route says is the page's `current` one to the page itself, which
+shows what changed since the reader last looked; an earlier version to its
+read-only old version, `NAME.html?version=COMMIT`; a comment or a reply to
+`NAME.html#thread=ID`, ID its thread's first comment; an answer to
+`NAME.html#question=ID`, the decision's id. An event missing its commit,
+thread or question links to the page. The line keeps its pale lavender, with
+no underline until it is pointed at or focused, and a click on it opens the
+page in a tab as any link to it does (see [Pods in tabs](#pods-in-tabs)),
+except an old version, which loads in the whole window.
+
+A page opened at `#thread=ID` opens that thread once its comments are read:
+in the side panel as its highlight would, a resolved one listed with the
+resolved threads, else in the popover or the bottom sheet, its replies counted
+as read as when the reader opens it by hand. A page opened at `#question=ID`
+opens that decision's section if it is folded and scrolls its form to just
+under the title bar, once its answers are drawn. Each does so again whenever
+the fragment changes, as a link to a pod already open in a tab changes it. A
+fragment naming no thread or decision the page has, or a `#thread=` that is
+not a number, opens nothing and leaves the page at its top; a page reloaded
+keeps where the reader was instead. No heading's slug holds `=`, so neither
+fragment ever names a section.
+
 The count reads "N pages with activity in the last D days", or "No activity in
 the last D days." When the route says there is older activity, "Show older"
 ends the view and loads the 7 days before: a page already listed takes its
@@ -723,7 +746,11 @@ A plain click (the main button, no modifier key) on a link with no `target`
 and no `download`, to `NAME.html` on this site for a page the listing has and
 with no `version` query, opens that page in a tab with the link's fragment,
 whether the link is in the listing or in a pod already open: just after the
-active tab, which it then becomes, or by activating its tab when it is open.
+active tab, which it then becomes, or by activating its tab when it is open,
+its page moved to the link's fragment, which the page hears as a change of
+fragment even when it already holds that one. A Recent activity row's link
+(`data-pod-exact`) with no fragment drops the open page's own, so a pod left
+on its versions view shows its page again.
 Each tab is the page as serve answers it, in an iframe titled with its title:
 the active tab's fills the window under the strip and hides the listing, and
 the others stay loaded but hidden, so switching tabs keeps a pod's scroll

@@ -141,10 +141,12 @@ twice.
   clone does (that version then has `first: false` and `summary` "");
   `older` is true when anything the reader may see happened up to `from`, so asking again with `before` set to `from` reads the 7 days
   before. A hidden or removed page never appears. Each event is one of:
-  - `{kind: "version", at, commit, revision, actor, first, summary}`, a
+  - `{kind: "version", at, commit, revision, current, actor, first, summary}`, a
     commit of the artifacts repository that changed the page while it was
     visible, read from git in at most two processes, the served pages'
-    whole history up to `to` read so the version before each is known: `actor` the handle the
+    whole history up to `to` read so the version before each is known:
+    `current` true when its revision is the revision of the page as serve
+    answers it now, else false, `actor` the handle the
     version's `lotuspod:owner` names, or null, and `first` true when the page
     had no visible version before it. `summary` compares its sections with
     the visible version before it, as `/api/changes` does: "Alpha and Beta changed;

@@ -1979,12 +1979,28 @@
         if (!thread) {
           return;
         }
+        reach(thread, decisionChips.get(form), false);
+      }
+
+      // A thread opened from outside its entry: in a popover under opener or
+      // in the sheet; in the panel as a highlight opens it, or, resolved,
+      // listed with the resolved threads and its entry in view. With read, a
+      // resolved thread is also opened to read, as its dashed line opens it.
+      function reach(thread, opener, read) {
         if (!api.wide) {
-          over.show({ thread: thread }, decisionChips.get(form));
+          over.show({ thread: thread }, opener);
+          if (read && resolved(thread)) {
+            toRead = thread;
+            expand(thread);
+          }
         } else if (resolved(thread)) {
           // Listed with the resolved threads, its Reopen at hand.
           setOpen(true, true);
           setResolvedShown(true, true);
+          if (read) {
+            toRead = thread;
+            expand(thread);
+          }
           api.refresh();
           reveal(thread.entry.item);
           thread.entry.reopen.focus({ preventScroll: true });
@@ -1992,6 +2008,21 @@
           api.open(thread);
         }
       }
+
+      // A link to a thread (#thread=ID): it opens as its highlight, else its
+      // chip, would open it, a resolved one opened to read. Already open in
+      // view, its replies since are seen, as on opening it, and its entry is
+      // brought into the panel's view.
+      api.reach = function (thread) {
+        if (thread.lit) {
+          looked(thread, true);
+          if (api.wide) {
+            reveal(thread.entry.item);
+          }
+          return;
+        }
+        reach(thread, anchorOf(thread), true);
+      };
 
       // A thread just asked about a decision: its entry opens in the panel,
       // else it opens in a popover under the decision's chip or in the sheet.
@@ -2567,6 +2598,12 @@
       reading = false;
       refresh();
       restore();
+      if (!linked || relink) {
+        // A link followed before the first read is no reload's fragment.
+        openLinked(!relink);
+        linked = true;
+        relink = false;
+      }
       gap = touched || fresh ? FIRST : Math.min(gap * 1.5, LAST);
       fresh = false;
       plan();
@@ -2703,6 +2740,33 @@
       refresh();
       plan();
     }
+
+    // #thread=ID, a link from the index's Recent activity, opens the thread
+    // whose first comment is ID (panel.reach) once the first read has drawn
+    // the threads, and again on each hashchange after the threads are read
+    // again, so a reply since is among what it marks seen; one before the
+    // first read waits for it. An ID no thread here has, or not a number,
+    // opens nothing.
+    var linked = false;
+    var relink = false;
+    function openLinked(first) {
+      var id = linkedTo("thread", first);
+      var thread = id !== null && /^[1-9][0-9]*$/.test(id) ? shown.get(Number(id)) : null;
+      if (thread) {
+        panel.reach(thread);
+      }
+    }
+    window.addEventListener("hashchange", function () {
+      if (linkedTo("thread") === null) {
+        return;
+      }
+      relink = true;
+      if (linked && !reading) {
+        clearTimeout(timer);
+        fresh = true;
+        read();
+      }
+    });
 
     document.addEventListener("visibilitychange", function () {
       if (hidden()) {
