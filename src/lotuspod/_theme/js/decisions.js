@@ -157,7 +157,8 @@
       });
     }
 
-    // The folded card: "✓ Saved · LABEL · change", the note, who and when.
+    // The folded card: "✓ Saved · LABEL · change", where an answer an agent
+    // recorded was given, the note, who and when.
     function fold(form, answer) {
       var block = form.querySelector(".artifact-decision-saved");
       if (!block) {
@@ -174,10 +175,15 @@
       line.append(check, " Saved · ", element("strong", "", label(form, answer)),
         " · ", change);
       var parts = [line];
+      if (answer.source) {
+        parts.push(element("p", "artifact-decision-saved-source",
+          "Answered elsewhere: " + answer.source));
+      }
       if (answer.note) {
         parts.push(element("p", "artifact-decision-saved-note", answer.note));
       }
-      var by = reader(answer) + " · " + when(answer.createdAt);
+      var by = (answer.source ? "recorded by " : "") + reader(answer) + " · " +
+        when(answer.createdAt);
       if (answer.supersedes) {
         by += " · replaced an earlier answer";
       }
@@ -284,6 +290,10 @@
       }
       var cell = element("td", "artifact-answered-answer");
       cell.appendChild(line);
+      if (answer.source) {
+        cell.appendChild(element("p", "artifact-answered-source",
+          "Answered elsewhere: " + answer.source));
+      }
       if (answer.note) {
         cell.appendChild(element("p", "artifact-answered-note", answer.note));
       }

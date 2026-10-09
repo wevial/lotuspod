@@ -57,6 +57,7 @@ port never answers `/v1/`), as JSON with `Cache-Control: no-store`:
 - `GET /v1/pull?owner=HANDLE`, `POST /v1/answers/ID/ack`,
   `GET /v1/threads?page=NAME`, and `POST /v1/comments/ID/claim`, `/reply`,
   `/release` and `/fail`: the pull loop, below.
+- `POST /v1/answers/record`: a decision's answer given elsewhere, below.
 
 No socket route writes a reader's answer or comment, whatever the credential.
 
@@ -180,6 +181,45 @@ first comment is routed to (its `owner` in `show`), else 403 `not_routed`;
 an unknown thread is 404 `unknown_thread`. The actor is `{"kind": "agent",
 "handle", "credential"}`, its handle the page's owner when the credential
 holds it, else the routed one. Neither changes any comment's routing.
+
+When the page's owner has already settled a decision somewhere else (in a
+chat, another seat's conversation, another page), an agent records that
+answer so the page stops asking it:
+
+```sh
+lotuspod comments record-answer pond-plan decision-1 opus \
+  --source "Chat with the maintainer, 2026-10-09"   # POST /v1/answers/record
+# answer 14 recorded on pond-plan: decision-1 = Opus
+```
+
+`record-answer PAGE QUESTION OPTION --source TEXT [--note TEXT]` sends
+`{page, question, choice, source[, note]}` and answers 200 `{answer,
+created}`. QUESTION is the question id `lotuspod answers` and the pull print
+(`decision-1`), OPTION the option's value, and `source` says where the answer
+was given, in 1 to 200 characters. It needs a credential that may `publish`
+as the page's owner: a page with no owner, or one owned by a handle the
+credential lacks, is 403 `handle_not_allowed`, and a credential without
+`publish` is 403 `operation_not_allowed`. It is refused, with nothing
+stored, in this order: 400 `invalid_body` when `page` is missing or not a
+string, 404 `unknown_page`, the 403s above, 400 `invalid_body` for any other
+missing or extra key, a `source` that is not 1 to 200 characters or a `note`
+over 4000, 400 `unknown_question`, 400 `not_a_decision` for a checklist, and 400
+`invalid_choice` for an option the form does not offer. The answer is an
+ordinary answer (see [Answers and
+comments](comments.md#answers-and-comments)) at the version, in the words
+and at the revision the page asks it now, with `source`, and the actor
+`{"kind": "agent", "handle": OWNER, "credential": NAME}`. It supersedes the
+question's newest answer and counts as answered wherever answers count; the
+owner has it acknowledged already, so its pulls leave it out. The same
+option recorded again from the same source at the same version stores
+nothing: `created` is false and `answer` is the one recorded first, and
+without `--json` the command prints "answer N was already recorded on PAGE:
+QUESTION = LABEL". A reader's later answer replaces it, as any answer is
+replaced, and its history keeps both. A pulled decision's `- Answer:` line
+ends ", answered elsewhere: SOURCE" while its current answer was recorded,
+and a recorded answer pulled as an answer item (by an owner other than the
+one that recorded it) prints `- Answered elsewhere: SOURCE` after its `-
+From:` line.
 
 To answer a comment, an agent claims it, then replies under the claim, so two
 agents sharing a handle never both answer and a retry after a crash never

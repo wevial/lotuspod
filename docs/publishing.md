@@ -871,8 +871,13 @@ saved answer, the rule turns lavender and "Not saved" shows beside "Save
 answer"; a failed save keeps both and says why. A saved answer folds the card
 under its question to "✓ Saved · LABEL · change", then the note, then the
 reader and the time, with "replaced an earlier answer" when it superseded
-one. "change" opens the card again with the saved option picked and the note
-filled. An answer to an earlier wording leaves the card open, not filled
+one. An answer an agent recorded because it was given elsewhere (see
+[Agents](agents.md)) folds the card the same way, with a quiet line
+"Answered elsewhere: SOURCE" under "Saved", and "recorded by HANDLE" in place
+of the reader; the Answered table's answer cell has the same line. It counts
+as answered in the title bar and the section marks. "change" opens the card again with the saved option picked and the note
+filled; saving replaces the recorded answer, which stays in the card's
+history. An answer to an earlier wording leaves the card open, not filled
 from it, with the line "Answered to an earlier wording by READER, TIME" (the
 page script picks its default, as for a question not answered).
 
