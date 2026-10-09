@@ -51,9 +51,10 @@
     // yet read: each page with any gets a count, the tab's title the total,
     // and an Unread toggle keeps only those. Any other answer (signed out,
     // the demo) leaves no mark, no count and no toggle. When the activity
-    // route answers 200, a "Pages | Recent activity" switch appears and the
-    // index opens on Recent activity, the last 7 days grouped by page, unless
-    // the URL ends #pages. The filters keep one state across both views.
+    // route answers 200, a "Pages | Recent activity" switch appears; the
+    // index opens on Pages, and on Recent activity, the last 7 days grouped
+    // by page, when the URL ends #activity. The filters keep one state across
+    // both views.
     // An archived page's row (data-archived) arrives hidden and never shows
     // unless an "Archived · N" toggle, made when any row is archived, is
     // pressed: then only archived rows show, and the count counts them alone.
@@ -678,15 +679,16 @@
         }
       };
 
-      // The view the URL names: #pages the Pages view, no hash Recent
-      // activity; with no switch, always Pages. The open tabs' fragment
-      // (#tabs=..., lotuspod-index.js) names Pages unless it ends
-      // &view=activity. The tabs are told the view shown ("lotuspod:view"),
-      // to write their fragment again over the one a view button leaves.
+      // The view the URL names: #activity Recent activity, any other hash
+      // (#pages, or none) the Pages view; with no switch, always Pages. The
+      // open tabs' fragment (#tabs=..., lotuspod-index.js) names Pages unless
+      // it ends &view=activity. The tabs are told the view shown
+      // ("lotuspod:view"), to write their fragment again over the one a view
+      // button leaves.
       const showView = () => {
         const asked = location.hash.startsWith("#tabs=")
           ? location.hash.endsWith("&view=activity")
-          : location.hash !== "#pages";
+          : location.hash === "#activity";
         view = feed && asked ? "activity" : "pages";
         for (const button of viewButtons) {
           button.setAttribute("aria-pressed", String(button.dataset.view === view));
@@ -696,11 +698,11 @@
       };
 
       // Each press is a history entry, so the back button moves between the
-      // views.
+      // views: Recent activity writes #activity, Pages no hash.
       const choose = (chosen) => {
         if (chosen === view) return;
-        if (chosen === "pages") {
-          location.hash = "pages";
+        if (chosen === "activity") {
+          location.hash = "activity";
         } else {
           history.pushState(null, "", location.pathname + location.search);
           showView();

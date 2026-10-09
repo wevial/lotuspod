@@ -101,7 +101,7 @@ function publish(name: string, markdown: string): string {
   }
 }
 
-// The Pages view of the index, which signed in is not the one it opens on.
+// The Pages view of the index.
 async function openIndex(page: Page, address = '/#pages') {
   await page.goto(address);
   await expect(strip(page)).toHaveCount(1);
@@ -441,8 +441,8 @@ test.describe('signed in', () => {
     await expect(tabs(page)).toHaveCount(0);
     await expectListing(page);
     await expect(page.getByLabel('Search')).toBeFocused();
-    // The fragment is the one the index had before any tab, its view too.
-    await expect(page).toHaveURL(/\/#pages$/);
+    // The fragment is the view's own again: none for Pages.
+    await expect(page).not.toHaveURL(/#/);
     await expect(page.getByRole('button', { name: 'Pages', exact: true })).toHaveAttribute('aria-pressed', 'true');
     await expect(page.locator('.index-table')).toBeVisible();
 
