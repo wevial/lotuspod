@@ -97,8 +97,11 @@ percent, zoom in (+), Fit and ✕. Drag the diagram, scroll with two fingers or
 press the arrow keys to move it; pinch, ctrl+scroll, the buttons or the `+`
 and `-` keys zoom it, from 25% to 400%, where 100% is Mermaid's own size. Fit,
 `0` or `F` shows it whole again, as it opens. Esc or ✕ puts it back on the
-page and the focus back on its Expand button. Without scripting, and on an
-old version, the diagram stays as it is on the page.
+page and the focus back on its Expand button. A flowchart's node cards (below)
+work in the view as on the page, and on a touch screen, where the Expand button
+is always shown, one finger drags the diagram and two pinch to zoom about the
+point between them. Without scripting, and on an old version, the diagram
+stays as it is on the page.
 
 A flowchart (source starting `flowchart` or `graph`) can be followed by a
 Nodes table, which the page script turns into a card for each box. Put an
