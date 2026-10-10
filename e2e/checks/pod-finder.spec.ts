@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page, type Route } from '@playwright/test';
 
 // The index's pod finder (lotuspod-index.js): Cmd+K on a Mac, Ctrl+K
 // elsewhere, the strip's "+" or its "Find a pod" button opens a dialog
@@ -495,5 +495,47 @@ test.describe('the index read again answering 500', () => {
     await expect(finder(page)).toBeHidden();
     // The console reports the routed 500 as a failed load.
     expect(errors.filter((error) => !/500/.test(error))).toEqual([]);
+  });
+});
+
+test.describe('the seen route and the index read held', () => {
+  test.use({ extraHTTPHeaders: { 'Cf-Access-Jwt-Assertion': SECOND } });
+
+  test('the finder draws the pods it has, typing filters them, and the index read adds a pod published since', async ({ page }) => {
+    const errors = await watch(page);
+    await openIndex(page);
+    const before = await listed(page);
+    const seenHeld: Route[] = [];
+    const indexHeld: Route[] = [];
+    await page.route((url) => url.pathname === SEEN, (route) => {
+      if (route.request().method() !== 'GET') return route.continue();
+      seenHeld.push(route);
+    });
+    await page.route((url) => url.pathname === '/', (route) => {
+      if (route.request().resourceType() !== 'fetch') return route.continue();
+      indexHeld.push(route);
+    });
+    const held = { name: 'pod-finder-held', title: 'Pod finder held' };
+    publish(held.name, held.title);
+
+    await find(page);
+    await expect.poll(() => seenHeld.length).toBeGreaterThan(0);
+    await expect.poll(() => indexHeld.length).toBe(1);
+    // Neither has answered: the listing's pods in its order, no heading.
+    await expect(options(page).locator('.pod-finder-title')).toHaveText(before.map((pod) => pod.title));
+    await expect(headings(page)).toHaveCount(0);
+    await input(page).fill('capture tables');
+    expect((await optionTitles(page)).sort()).toEqual(['Capture tables', 'Capture tables report']);
+
+    await input(page).fill(held.title);
+    await expect(options(page)).toHaveCount(0);
+    await indexHeld[0].continue();
+    await expect(options(page).locator('.pod-finder-title')).toHaveText([held.title]);
+    expect(await selectedName(page)).toBe(held.name);
+
+    for (const route of seenHeld.splice(0)) await route.continue();
+    await page.keyboard.press('Escape');
+    await expect(finder(page)).toBeHidden();
+    expect(errors).toEqual([]);
   });
 });

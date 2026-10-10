@@ -4,14 +4,17 @@
 // its title, "in a tab" while it is open in one, its summary on one line, its
 // labels as the listing's tags and the day it was updated, all read from the
 // listing's rows. Each opening reads the index again, so a pod published
-// since it loaded is listed too once that read answers 200. Typing filters
-// them: each word of the query, ignoring case, must appear in the pod's
-// title, labels and summary joined.
+// since it loaded is listed too once that read answers 200, the options
+// drawn again then. Typing filters them: each word of the query, ignoring
+// case, must appear in the pod's title, labels and summary joined.
 //
 // The pods this reader has opened, by their seenAt in the seen route, come
 // first under "Recent", newest first, and the rest follow under "Other pods"
 // in the listing's order, newest update first. Any answer but 200 (signed
 // out, or the demo) leaves the listing's order alone, with no heading.
+// Each opening asks the seen route again and draws its options once it
+// answers, so none moves under the reader, or sooner if it is slow or the
+// reader types: they are drawn again, grouped, when it answers.
 //
 // ↑ and ↓ move the selection, wrapping at either end, and Tab stays in the
 // input. Enter or a click opens the pod in a tab ("lotuspod:open"), whose
@@ -27,6 +30,8 @@
   const SEEN = "/api/seen";
   const MAC = /^Mac/.test(navigator.platform);
   const RESULTS = "pod-finder-results";
+  // How long an opening waits on the seen route before drawing without it.
+  const GRACE = 300;
 
   // The modifier that sends a pod to a browser tab.
   const modified = (event) => (MAC ? event.metaKey : event.ctrlKey);
@@ -101,11 +106,15 @@
   backdrop.append(dialog);
   document.body.append(backdrop);
 
-  // The seen route's pages as last answered 200, else null. Each opening
-  // asks again and draws no option until it has the answer, so none moves
-  // under the reader.
+  // The seen route's pages as last answered 200, else null.
   let seen = null;
-  let answered = false;
+  // Whether this opening has drawn its options, and the wait on the seen
+  // route before it does so anyway.
+  let drawn = false;
+  let grace = 0;
+  // Whether the reader moved the selection since the options were last
+  // drawn for the query: drawn again, it stays on that pod.
+  let moved = false;
   // The options shown, each {pod, node}, and the selected one's place.
   let shown = [];
   let selected = -1;
@@ -162,7 +171,11 @@
       for (const label of pod.labels) tags.append(element("span", "index-tag", label));
       node.append(tags);
     }
-    node.addEventListener("pointermove", () => select(at));
+    node.addEventListener("pointermove", () => {
+      if (at === selected) return;
+      moved = true;
+      select(at);
+    });
     node.addEventListener("click", (event) => choose(at, modified(event)));
     return node;
   };
@@ -180,6 +193,8 @@
   // Draw the options again; the pod selected stays so when keep is set and
   // it is still listed, else the first is.
   const render = (keep) => {
+    drawn = true;
+    clearTimeout(grace);
     const was = keep && shown[selected] ? shown[selected].pod.name : null;
     const open = inTabs();
     shown = [];
@@ -227,8 +242,7 @@
     }
     if (ask !== asked) return;
     seen = pages;
-    answered = true;
-    if (!backdrop.hidden) render(true);
+    if (!backdrop.hidden) render(moved);
   };
 
   // Any answer but 200, or one with no listing, keeps the pods there are.
@@ -247,7 +261,7 @@
     }
     if (ask !== read || fresh === null) return;
     pods = fresh;
-    if (!backdrop.hidden && answered) render(true);
+    if (!backdrop.hidden && drawn) render(moved);
   };
 
   const show = () => {
@@ -265,7 +279,12 @@
     backdrop.hidden = false;
     list.hidden = true;
     empty.hidden = true;
-    answered = false;
+    drawn = false;
+    moved = false;
+    clearTimeout(grace);
+    grace = setTimeout(() => {
+      if (!backdrop.hidden && !drawn) render(false);
+    }, GRACE);
     input.focus();
     askSeen();
     askIndex();
@@ -275,6 +294,7 @@
   const hide = (restore) => {
     if (backdrop.hidden) return;
     backdrop.hidden = true;
+    clearTimeout(grace);
     list.replaceChildren();
     shown = [];
     selected = -1;
@@ -303,13 +323,15 @@
   };
 
   input.addEventListener("input", () => {
-    if (answered) render(false);
+    moved = false;
+    render(false);
   });
   dialog.addEventListener("keydown", (event) => {
     if (event.key === "ArrowDown" || event.key === "ArrowUp") {
       event.preventDefault();
       if (!shown.length) return;
       const step = event.key === "ArrowDown" ? 1 : -1;
+      moved = true;
       select((selected + step + shown.length) % shown.length);
     } else if (event.key === "Enter") {
       event.preventDefault();
