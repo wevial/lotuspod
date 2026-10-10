@@ -111,7 +111,7 @@ test.describe('signed in', () => {
     publish();
 
     const errors = watch(page);
-    await page.goto(`/${NAME}.html`);
+    await page.goto(`/${NAME}.html?standalone`);
     const model = decision(page, 'decision-1');
     const side = parts(page);
     await expect(side.count).toHaveText('2 to answer · Respond');
@@ -154,7 +154,7 @@ test.describe('signed in', () => {
     try {
       const other = await context.newPage();
       const otherErrors = watch(other);
-      await other.goto(`/${NAME}.html`);
+      await other.goto(`/${NAME}.html?standalone`);
       const nightly = decision(other, 'decision-2');
       await expect(nightly.form).toHaveClass(/\bartifact-decision--dismissed\b/);
       await expect(nightly.saved).toHaveText('Dismissed');
@@ -190,7 +190,7 @@ test.describe('signed in', () => {
       await route.continue();
     });
     const errors = watch(page);
-    await page.goto(`/${name}.html`);
+    await page.goto(`/${name}.html?standalone`);
     const model = decision(page, 'decision-1');
     const side = parts(page);
     await expect(model.dismiss).toBeVisible();
