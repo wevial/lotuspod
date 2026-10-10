@@ -47,8 +47,7 @@ and the page events `ANSWERED`, `SAVED` and `DRAWN` (`js/page-open.js`), and
 exports one object, `page`, built from them as the bundle loads, so a name
 that does not exist throws on every page at once. A minifier never renames a
 free name, so the bridge's reads stay the closure's own. An island imports
-`page`, never the names, which no other islands module can name: only the
-bridge declares them. `main.tsx` mounts each island it lists, handing it
+`page`, never the names. `main.tsx` mounts each island it lists, handing it
 `page`; with none listed yet the bundle holds the bridge and no Preact.
 
 ```sh
