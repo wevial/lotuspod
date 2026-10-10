@@ -9,9 +9,10 @@
 // WEB_DIR defaults to this directory; the output is its ../src/lotuspod/_theme/js.
 
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { basename, join } from "node:path";
+import { basename, join, resolve } from "node:path";
 
 const MARKER_PREFIX = "// Built from web/src/";
+const USE_STRICT = /^\s*(["'])use strict\1/gm;
 
 class BuildError extends Error {}
 
@@ -37,6 +38,22 @@ function checkBun(webDir: string): void {
   }
 }
 
+// The JS of one source, refused when it would not run as the source does in
+// the classic script render joins it into: Bun's transpiler reads every input
+// as a module, so it drops each "use strict" and keeps import and export.
+function strip(transpiler: Bun.Transpiler, name: string, source: string): string {
+  const stripped = transpiler.transformSync(source);
+  if ((source.match(USE_STRICT) ?? []).length > (stripped.match(USE_STRICT) ?? []).length) {
+    throw new BuildError(`web/src/${name}.ts: Bun's transpiler drops its "use strict", so the built script would not be strict`);
+  }
+  try {
+    new Function(stripped);
+  } catch (error) {
+    throw new BuildError(`web/src/${name}.ts: its JS is not a classic script, as render joins it (${(error as Error).message}); a source has no import or export`);
+  }
+  return marker(name) + stripped;
+}
+
 type BuildResult = { written: string[]; removed: string[] };
 
 export function build(webDir: string): BuildResult {
@@ -49,11 +66,12 @@ export function build(webDir: string): BuildResult {
     .sort();
   const transpiler = new Bun.Transpiler({ loader: "ts", target: "browser" });
   const result: BuildResult = { written: [], removed: [] };
+  const builds = names.map((name) => strip(transpiler, name, readFileSync(join(srcDir, `${name}.ts`), "utf8")));
   if (names.length) {
     mkdirSync(out, { recursive: true });
   }
-  for (const name of names) {
-    const built = marker(name) + transpiler.transformSync(readFileSync(join(srcDir, `${name}.ts`), "utf8"));
+  for (const [index, name] of names.entries()) {
+    const built = builds[index]!;
     const target = join(out, `${name}.js`);
     if (!existsSync(target) || readFileSync(target, "utf8") !== built) {
       writeFileSync(target, built);
@@ -85,7 +103,8 @@ function git(cwd: string, args: string[]): string {
 
 function main(args: string[]): number {
   const check = args.includes("--check");
-  const webDir = args.find((arg) => arg !== "--check") ?? import.meta.dir;
+  // Absolute, since git runs in it and is handed the output directory.
+  const webDir = resolve(args.find((arg) => arg !== "--check") ?? import.meta.dir);
   try {
     const { written, removed } = build(webDir);
     for (const target of written) console.log(`built ${target}`);

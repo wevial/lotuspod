@@ -109,3 +109,73 @@ test("another Bun exits non-zero before writing anything, naming both versions",
   expect(stderr).toContain("bun@0.0.1");
   expect(readdirSync(out)).toEqual(["gone.js"]);
 });
+
+test("a source whose \"use strict\" the transpiler drops is refused before anything is written", () => {
+  writeFileSync(join(web, "src", "a.ts"), SOURCE);
+  writeFileSync(join(web, "src", "strict.ts"), '(function () {\n  "use strict";\n  document.title = "x";\n})();\n');
+  expect(() => build(web)).toThrow('web/src/strict.ts: Bun\'s transpiler drops its "use strict"');
+  expect(readdirSync(out)).toEqual([]);
+});
+
+test("a source with an import or export is refused, since render joins classic scripts", () => {
+  writeFileSync(join(web, "src", "a.ts"), SOURCE);
+  for (const source of ["export const count: number = 1;\n", "export {};\nconst count = 1;\n", 'import "./a";\n']) {
+    writeFileSync(join(web, "src", "module.ts"), source);
+    expect(() => build(web)).toThrow("web/src/module.ts: its JS is not a classic script");
+    expect(readdirSync(out)).toEqual([]);
+  }
+});
+
+// check, run as CI runs it but from the root of a scratch repository and
+// given web/ as a relative path.
+function git(...args: string[]): void {
+  const run = Bun.spawnSync(["git", "-c", "user.name=test", "-c", "user.email=test@example.com", "-c", "commit.gpgsign=false", ...args], { cwd: root });
+  expect(run.exitCode).toBe(0);
+}
+
+function check(): { exitCode: number; stderr: string } {
+  const run = Bun.spawnSync([process.execPath, join(import.meta.dir, "build.ts"), "--check", "web"], { cwd: root });
+  return { exitCode: run.exitCode, stderr: run.stderr.toString() };
+}
+
+function commitAll(): void {
+  git("add", "-A");
+  git("commit", "-q", "--allow-empty", "-m", "scratch");
+}
+
+test("check passes when the committed JS is fresh", () => {
+  git("init", "-q");
+  writeFileSync(join(web, "src", "pod-count.ts"), SOURCE);
+  build(web);
+  commitAll();
+  expect(check().exitCode).toBe(0);
+});
+
+test("check fails naming a built file missing after its source was added", () => {
+  git("init", "-q");
+  writeFileSync(join(web, "src", "pod-count.ts"), SOURCE);
+  commitAll();
+  const { exitCode, stderr } = check();
+  expect(exitCode).toBe(1);
+  expect(stderr).toContain("?? src/lotuspod/_theme/js/pod-count.js");
+});
+
+test("check fails naming a hand-edited built file", () => {
+  git("init", "-q");
+  writeFileSync(join(web, "src", "pod-count.ts"), SOURCE);
+  build(web);
+  writeFileSync(join(out, "pod-count.js"), marker("pod-count") + "edited();\n");
+  commitAll();
+  const { exitCode, stderr } = check();
+  expect(exitCode).toBe(1);
+  expect(stderr).toContain(" M src/lotuspod/_theme/js/pod-count.js");
+});
+
+test("check fails naming an orphaned built file it deleted", () => {
+  git("init", "-q");
+  writeFileSync(join(out, "gone.js"), marker("gone") + STRIPPED);
+  commitAll();
+  const { exitCode, stderr } = check();
+  expect(exitCode).toBe(1);
+  expect(stderr).toContain(" D src/lotuspod/_theme/js/gone.js");
+});

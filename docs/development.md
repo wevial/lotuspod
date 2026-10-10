@@ -25,7 +25,11 @@ Bun project of its own, beside `e2e/`. The build strips each source's types
 on its own with Bun's transpiler, without bundling, which also drops its
 comments, and starts the file with a marker line naming the source; edit the
 source, never the built file. A marked file whose source is gone is deleted,
-and a JS file without the marker, written by hand, is left alone.
+and a JS file without the marker, written by hand, is left alone. Bun's
+transpiler reads each source as a module, so the build refuses, before
+writing anything, a source whose `"use strict"` it would drop or whose JS is
+not a classic script (an `import` or `export`): render joins the scripts
+into one classic script.
 
 ```sh
 bun install --cwd web --frozen-lockfile
@@ -38,6 +42,9 @@ bun run --cwd web check
 `typecheck` runs the pinned TypeScript's `tsc --noEmit` on Bun's runtime, in
 strict mode and with `erasableSyntaxOnly`, so a source is plain JavaScript
 once its types are erased: no enums, namespaces or parameter properties.
+It checks the build script and its test against Bun's types
+(`web/tsconfig.json`), and the sources against the DOM's and none of Bun's
+(`web/src/tsconfig.json`).
 `test` runs `web/build.test.ts`. `check` builds, then fails when git sees any
 file under `src/lotuspod/_theme/js/` modified, deleted or new, and prints
 what differs.
