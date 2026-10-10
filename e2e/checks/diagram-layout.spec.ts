@@ -111,14 +111,11 @@ test('a flowchart asking for ELK draws its lanes with no title over another lane
   await expect(svg.locator('g.cluster')).toHaveCount(3);
   expect(seen.elkFiles.filter((file) => ELK_RENDERER.test(file))).toHaveLength(1);
 
-  const titles: Record<string, Rect> = {};
   for (const lane of Object.keys(LANES)) {
     // ELK's clusters carry no id, so each is found by its title.
     const label = svg.locator('g.cluster .cluster-label', { hasText: lane });
     await expect(label).toHaveCount(1);
-    titles[lane] = (await label.boundingBox())!;
-  }
-  for (const [lane, title] of Object.entries(titles)) {
+    const title = (await label.boundingBox())!;
     for (const [other, ids] of Object.entries(LANES)) {
       if (other === lane) continue;
       for (const id of ids) {
