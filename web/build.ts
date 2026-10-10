@@ -4,11 +4,12 @@
 // served in stays in THEME_SOURCES in src/lotuspod/cli.py, which joins them.
 //
 //   bun build.ts [WEB_DIR]           build
-//   bun build.ts --check [WEB_DIR]   build, then fail on a difference from git
+//   bun build.ts --check [WEB_DIR]   build, then fail on a file that does not
+//                                    parse alone or a difference from git
 //
 // WEB_DIR defaults to this directory; the output is its ../src/lotuspod/_theme/js.
 
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 
 const MARKER_PREFIX = "// Built from web/src/";
@@ -99,6 +100,27 @@ export function build(webDir: string): BuildResult {
   return result;
 }
 
+// Each JS file under the output directory, at any depth, built or written by
+// hand, that does not parse on its own, with Bun's parse error: a source is a
+// complete script, and render adds the closure some served scripts share
+// (THEME_CLOSURES in src/lotuspod/cli.py).
+export function unparsed(dir: string): string[] {
+  const transpiler = new Bun.Transpiler({ loader: "js", target: "browser" });
+  const problems: string[] = [];
+  const files = readdirSync(dir, { recursive: true, encoding: "utf8" })
+    .filter((file) => file.endsWith(".js") && statSync(join(dir, file)).isFile())
+    .sort();
+  for (const file of files) {
+    const target = join(dir, file);
+    try {
+      transpiler.transformSync(readFileSync(target, "utf8"));
+    } catch (error) {
+      problems.push(`${target}: does not parse on its own (${(error as Error).message})`);
+    }
+  }
+  return problems;
+}
+
 function git(cwd: string, args: string[]): string {
   const run = Bun.spawnSync(["git", ...args], { cwd, stderr: "inherit" });
   if (run.exitCode !== 0) {
@@ -117,6 +139,11 @@ function main(args: string[]): number {
     for (const target of removed) console.log(`removed ${target}, its source is gone`);
     if (!check) {
       return 0;
+    }
+    const problems = existsSync(outDir(webDir)) ? unparsed(outDir(webDir)) : [];
+    if (problems.length) {
+      for (const problem of problems) console.error(problem);
+      return 1;
     }
     // What git sees differ under the output directory once built: modified,
     // deleted or new. Empty when the committed JS is fresh.

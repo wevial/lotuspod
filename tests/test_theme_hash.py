@@ -85,7 +85,7 @@ class ThemeEditTests(ThemeHashTestCase):
         with mock.patch.object(cli, "THEME_DIR", changed):
             after = self.rendered("after")
             data = cli.theme_file_bytes(filename)
-        self.assertTrue(data.endswith(bytes(edited)))
+        self.assertIn(bytes(edited), data)
 
         for page in (before, after):
             self.assertRegex(stylesheet_hash(page), HASH)

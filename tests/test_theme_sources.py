@@ -3,7 +3,9 @@ index script and the old-version script are written as one source file per
 feature
 (src/lotuspod/_theme/css/ and src/lotuspod/_theme/js/), and render joins each
 served file's sources in the order cli.THEME_SOURCES declares into the one
-file serve answers.
+file serve answers. The page script and the old-version script each run as
+one strict function: the join opens it before their shared sources and
+closes it after the last, so every source is a complete script.
 
 The joined bytes are never read from cli here: each test joins the source
 files itself.
@@ -30,8 +32,21 @@ STYLESHEET = "lotuspod.css"
 SOURCE_DIRS = ("css", "js")
 
 
+# The closure the join wraps the page script's and the old-version script's
+# sources in.
+CLOSURE_OPEN = b'(function () {\n  "use strict";\n'
+CLOSURE_CLOSE = b"})();\n"
+
+
 def joined(theme_dir: Path, sources: tuple[str, ...]) -> bytes:
     return b"".join((theme_dir / source).read_bytes() for source in sources)
+
+
+def closure_joined(theme_dir: Path, outside: tuple[str, ...], inside: tuple[str, ...]) -> bytes:
+    """The sources outside, then the closure's opening, the sources inside and
+    its close."""
+    return (joined(theme_dir, outside) + CLOSURE_OPEN + joined(theme_dir, inside)
+            + CLOSURE_CLOSE)
 
 
 def source_problems(theme_dir: Path, declared: dict[str, tuple[str, ...]]) -> list[str]:
@@ -62,14 +77,41 @@ class ThemeCopyTestCase(TempDirTestCase):
 class JoinTests(TempDirTestCase):
     def test_sync_writes_each_file_as_its_sources_joined_in_order(self):
         cli.sync_theme_css(self.out_dir)
-        for filename in (STYLESHEET, cli.PAGE_SCRIPT):
-            with self.subTest(filename=filename):
-                sources = cli.THEME_SOURCES[filename]
-                self.assertGreater(len(sources), 1)
-                self.assertEqual(
-                    (self.out_dir / filename).read_bytes(),
-                    joined(cli.THEME_DIR, sources),
-                )
+        sources = cli.THEME_SOURCES[STYLESHEET]
+        self.assertGreater(len(sources), 1)
+        self.assertEqual(
+            (self.out_dir / STYLESHEET).read_bytes(),
+            joined(cli.THEME_DIR, sources),
+        )
+        sources = cli.THEME_SOURCES[cli.PAGE_SCRIPT]
+        self.assertGreater(len(sources), 2)
+        self.assertEqual(
+            (self.out_dir / cli.PAGE_SCRIPT).read_bytes(),
+            closure_joined(cli.THEME_DIR, sources[:1], sources[1:]),
+        )
+
+    def test_the_page_scripts_are_joined_inside_one_closure(self):
+        """The old-version script is the closure's opening, its sources in
+        order and its close."""
+        old = cli.THEME_SOURCES[cli.OLD_VERSION_SCRIPT]
+        self.assertEqual(
+            cli.theme_file_bytes(cli.OLD_VERSION_SCRIPT),
+            closure_joined(cli.THEME_DIR, (), old),
+        )
+        # The hand-off ends in a call with no semicolon, so the opening right
+        # after it is its argument.
+        self.assertTrue((cli.THEME_DIR / "js/open-in-tabs.js").read_bytes().endswith(b"})()\n"))
+
+    def test_no_source_opens_or_closes_the_closure(self):
+        """The closure's opening and close are the join's: js/page-close.js
+        and js/old-version-open.js are neither declared nor on disk."""
+        declared = {source for sources in cli.THEME_SOURCES.values() for source in sources}
+        for fragment in ("js/page-close.js", "js/old-version-open.js"):
+            with self.subTest(fragment=fragment):
+                self.assertNotIn(fragment, declared)
+                self.assertFalse((cli.THEME_DIR / fragment).exists())
+        problems = source_problems(cli.THEME_DIR, cli.THEME_SOURCES)
+        self.assertEqual(problems, [], "\n".join(problems))
 
     def test_sync_writes_the_index_script_from_its_source(self):
         cli.sync_theme_css(self.out_dir)
@@ -116,48 +158,46 @@ class DeclaredOrderTests(ThemeCopyTestCase):
     def test_the_tables_script_is_declared_after_the_comments_script(self):
         """LOTUS-49: a table's room is measured against the comments panel,
         which the comments script makes, so js/tables.js is joined after
-        js/comments.js and before js/page-close.js closes the script."""
+        js/comments.js, inside the closure the join closes after the last
+        source."""
         script = cli.THEME_SOURCES[cli.PAGE_SCRIPT]
         self.assertIn("js/tables.js", script)
         self.assertGreater(script.index("js/tables.js"), script.index("js/comments.js"))
-        self.assertEqual(script[-1], "js/page-close.js")
         problems = source_problems(cli.THEME_DIR, cli.THEME_SOURCES)
         self.assertEqual(problems, [], "\n".join(problems))
 
     def test_the_panel_resize_sources_are_declared_after_the_comments(self):
         """LOTUS-51: the resize handle is added to the panel the comments
-        script makes, so js/panel-resize.js is joined after js/comments.js
-        and before js/page-close.js closes the script; its styles override
-        the panel's, so they are joined after css/comments.css."""
+        script makes, so js/panel-resize.js is joined after js/comments.js,
+        inside the closure; its styles override the panel's, so they are
+        joined after css/comments.css."""
         styles = cli.THEME_SOURCES[STYLESHEET]
         script = cli.THEME_SOURCES[cli.PAGE_SCRIPT]
         self.assertIn("css/panel-resize.css", styles)
         self.assertIn("js/panel-resize.js", script)
         self.assertGreater(styles.index("css/panel-resize.css"), styles.index("css/comments.css"))
         self.assertGreater(script.index("js/panel-resize.js"), script.index("js/comments.js"))
-        self.assertLess(script.index("js/panel-resize.js"), script.index("js/page-close.js"))
         problems = source_problems(cli.THEME_DIR, cli.THEME_SOURCES)
         self.assertEqual(problems, [], "\n".join(problems))
 
     def test_the_table_expand_sources_are_declared(self):
         """LOTUS-50: the Expand button reads the room js/tables.js publishes,
-        so js/table-expand.js is joined after it and before js/page-close.js;
-        its styles are declared in the stylesheet's order."""
+        so js/table-expand.js is joined after it, inside the closure; its
+        styles are declared in the stylesheet's order."""
         script = cli.THEME_SOURCES[cli.PAGE_SCRIPT]
         self.assertIn("js/table-expand.js", script)
         self.assertGreater(script.index("js/table-expand.js"), script.index("js/tables.js"))
-        self.assertEqual(script[-1], "js/page-close.js")
         self.assertIn("css/table-expand.css", cli.THEME_SOURCES["lotuspod.css"])
         problems = source_problems(cli.THEME_DIR, cli.THEME_SOURCES)
         self.assertEqual(problems, [], "\n".join(problems))
 
     def test_the_image_viewer_sources_are_declared(self):
-        """LOTUS-56: the image viewer's script is joined before
-        js/page-close.js closes the script, and its styles are declared in
+        """LOTUS-56: the image viewer's script is joined after
+        js/page-open.js, inside the closure, and its styles are declared in
         the stylesheet's order."""
         script = cli.THEME_SOURCES[cli.PAGE_SCRIPT]
         self.assertIn("js/image-viewer.js", script)
-        self.assertEqual(script[-1], "js/page-close.js")
+        self.assertGreater(script.index("js/image-viewer.js"), script.index("js/page-open.js"))
         self.assertIn("css/image-viewer.css", cli.THEME_SOURCES[STYLESHEET])
         problems = source_problems(cli.THEME_DIR, cli.THEME_SOURCES)
         self.assertEqual(problems, [], "\n".join(problems))
@@ -172,12 +212,11 @@ class DeclaredOrderTests(ThemeCopyTestCase):
 
     def test_the_ref_cards_sources_are_declared(self):
         """LOTUS-100: the cards' script uses when() and linkTab(), so it is
-        joined after js/page-open.js and js/link-tab.js, just before
-        js/page-close.js but for js/archive.js; its styles just after
-        css/prose.css."""
+        joined after js/page-open.js and js/link-tab.js, last but for
+        js/archive.js; its styles just after css/prose.css."""
         styles = cli.THEME_SOURCES[STYLESHEET]
         script = cli.THEME_SOURCES[cli.PAGE_SCRIPT]
-        self.assertEqual(script[-3:], ("js/ref-cards.js", "js/archive.js", "js/page-close.js"))
+        self.assertEqual(script[-2:], ("js/ref-cards.js", "js/archive.js"))
         self.assertGreater(script.index("js/ref-cards.js"), script.index("js/link-tab.js"))
         self.assertEqual(styles.index("css/ref-cards.css"), styles.index("css/prose.css") + 1)
         problems = source_problems(cli.THEME_DIR, cli.THEME_SOURCES)
@@ -198,12 +237,12 @@ class DeclaredOrderTests(ThemeCopyTestCase):
 
     def test_the_archive_sources_are_declared(self):
         """LOTUS-118: the header's Archive button uses element(), json() and
-        SIGNED_OUT, so js/archive.js is joined after js/page-open.js, just
-        before js/page-close.js; its styles, the archived banner's among
-        them, follow css/versions.css, whose old-version banner they match."""
+        SIGNED_OUT, so js/archive.js is joined after js/page-open.js, last;
+        its styles, the archived banner's among them, follow
+        css/versions.css, whose old-version banner they match."""
         styles = cli.THEME_SOURCES[STYLESHEET]
         script = cli.THEME_SOURCES[cli.PAGE_SCRIPT]
-        self.assertEqual(script[-2:], ("js/archive.js", "js/page-close.js"))
+        self.assertEqual(script[-1], "js/archive.js")
         self.assertEqual(styles.index("css/archive.css"), styles.index("css/versions.css") + 1)
         problems = source_problems(cli.THEME_DIR, cli.THEME_SOURCES)
         self.assertEqual(problems, [], "\n".join(problems))
@@ -220,15 +259,14 @@ class DeclaredOrderTests(ThemeCopyTestCase):
         self.assertEqual(problems, [], "\n".join(problems))
 
     def test_the_old_version_script_joins_the_menu_and_no_page_feature(self):
-        """The old-version script, served beside the page script,
-        is its opening, the helpers it shares with the page script, the
-        version menu, its own source and the closing line; no page feature
-        that reads, shows or posts comments or answers is in it."""
+        """The old-version script, served beside the page script, joins
+        the helpers it shares with the page script, the version menu and its
+        own source, inside the closure the join adds; no page feature that
+        reads, shows or posts comments or answers is in it."""
         script = cli.THEME_SOURCES[cli.OLD_VERSION_SCRIPT]
         self.assertEqual(cli.OLD_VERSION_SCRIPT, "lotuspod-old-version.js")
-        self.assertEqual(script, ("js/old-version-open.js", "js/shared.js",
-                                  "js/version-menu.js", "js/old-version.js",
-                                  "js/page-close.js"))
+        self.assertEqual(script, ("js/shared.js", "js/version-menu.js",
+                                  "js/old-version.js"))
         page = cli.THEME_SOURCES[cli.PAGE_SCRIPT]
         self.assertEqual(page[:3], ("js/open-in-tabs.js", "js/page-open.js", "js/shared.js"))
         problems = source_problems(cli.THEME_DIR, cli.THEME_SOURCES)
