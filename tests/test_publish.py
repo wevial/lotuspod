@@ -45,6 +45,10 @@ GARDEN_IMAGES = (
     "<img alt='Chart'  src=chart.png>\n"
     '<p><img src="photos/fish.jpg" alt="Fish" width="40" height="30"/></p>\n'
 )
+# Where a page carries the time publish stamped it: its lotuspod:updated meta
+# tag, and the Updated time of its meta line when that names another day.
+_UPDATED_META_RE = re.compile(rb'(<meta name="lotuspod:updated" content=")[^"]*(">)')
+_UPDATED_TIME_RE = re.compile(rb'( \xc2\xb7 Updated <time datetime=")[^"]*(">)')
 GARDEN = "<h1>Garden notes</h1>\n<h2>Beds</h2>\n<p>North.</p>\n<h2>Path</h2>\n<p>Gravel.</p>\n"
 
 
@@ -53,6 +57,13 @@ def git(cwd: Path, *argv: str) -> str:
         ["git", "-C", str(cwd), *argv], capture_output=True, text=True, check=True
     )
     return done.stdout
+
+
+def without_update_stamp(page: bytes) -> bytes:
+    """The page with the time publish stamped it set to a fixed one."""
+    page, stamps = _UPDATED_META_RE.subn(rb"\g<1>STAMP\g<2>", page)
+    assert stamps == 1, f"{stamps} lotuspod:updated meta tags"
+    return _UPDATED_TIME_RE.sub(rb"\g<1>STAMP\g<2>", page, count=1)
 
 
 def lotuspod(*argv: str, cwd: Path, stdin: str | None = None,
@@ -341,9 +352,15 @@ class StandardInputTests(PublishTestCase):
         done = self.publish("-", "--format", "markdown", "--name", "pond",
                             "--date", "2026-09-01", out_dir=from_stdin, stdin=POND)
         self.assertEqual(done.returncode, 0, done.stderr)
-        for name in ("pond.html", "pond.md"):
-            self.assertEqual((from_stdin / name).read_bytes(),
-                             (from_file / name).read_bytes(), name)
+        self.assertSamePage(from_stdin, from_file)
+
+    def assertSamePage(self, one: Path, other: Path) -> None:
+        # The same page but for when each was published.
+        self.assertEqual(without_update_stamp((one / "pond.html").read_bytes()),
+                         without_update_stamp((other / "pond.html").read_bytes()),
+                         "pond.html")
+        self.assertEqual((one / "pond.md").read_bytes(),
+                         (other / "pond.md").read_bytes(), "pond.md")
 
     def publish_at(self, moment: str, *argv: str,
                    stdin: str | None = None) -> subprocess.CompletedProcess:
@@ -388,9 +405,16 @@ class StandardInputTests(PublishTestCase):
         self.assertEqual(done.returncode, 0, done.stderr)
         self.assertIn("2026-10-09T12:43:16Z", (from_file / "pond.html").read_text())
         self.assertIn("2026-10-09T12:43:17Z", (from_stdin / "pond.html").read_text())
-        for name in ("pond.html", "pond.md"):
-            self.assertEqual((from_stdin / name).read_bytes(),
-                             (from_file / name).read_bytes(), name)
+        self.assertSamePage(from_stdin, from_file)
+
+        # Only the stamp is set aside: a byte changed anywhere else in the
+        # page still fails the comparison.
+        page = (from_stdin / "pond.html").read_bytes()
+        changed = page.replace(b"Still water.", b"Still waters", 1)
+        self.assertNotEqual(changed, page)
+        (from_stdin / "pond.html").write_bytes(changed)
+        with self.assertRaises(AssertionError):
+            self.assertSamePage(from_stdin, from_file)
 
 
 
