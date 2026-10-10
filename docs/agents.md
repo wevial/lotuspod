@@ -190,11 +190,12 @@ decision's answer prints ``- Chosen: LABEL (`VALUE`)``, then, when its
 checklist's answer prints `- Chosen: SUMMARY`, then a line for each item
 changed, ``- Changed: LABEL (`ID`) on`` or `off`, or `- Changed: nothing`;
 none while it is reworded. A dismissal prints `- Chosen: Dismissed: REASON`
-(`- Chosen: Dismissed` with no reason) and no `- Was:` line, adds `- Undone
+(`- Chosen: Dismissed` with no reason), its reason on one line, each run of
+whitespace in it, line breaks included, one space, and no `- Was:` line, adds `- Undone
 at TIME` once it is undone, and ends "The reader dismissed this question as
 no longer relevant."; its reason is printed once, never again as a note. A
 decision's `- Answer:` line reads a dismissal "dismissed, by WHO at TIME",
-then ": REASON" when it has one.
+then ": REASON" when it has one, on one line too.
 
 `ack-answer ID` needs `pull` for the page's owner; the owner's pulls leave an
 acknowledged answer out from then on. `show PAGE` needs `pull` for any handle

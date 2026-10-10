@@ -179,7 +179,11 @@ test.describe('signed in', () => {
     // Each POST to the answers route held until its gate is opened.
     const gates: Array<() => void> = [];
     let holding = false;
+    let posts = 0;
     await page.route('**/api/answers', async (route) => {
+      if (route.request().method() === 'POST') {
+        posts += 1;
+      }
       if (holding && route.request().method() === 'POST') {
         await new Promise<void>((open) => gates.push(open));
       }
@@ -227,20 +231,37 @@ test.describe('signed in', () => {
     await expect(side.state('decision-2')).toHaveText('Open');
     await expect(side.count).toHaveText('1 to answer · Respond');
 
-    // A note written while the dismissal is on its way stays, open; the
-    // reason is the note as it read, on one line, counted in characters.
-    const reason = '\u{1F41F}'.repeat(101);
+    // A note over 200 characters once trimmed posts nothing, however much
+    // of it is spaces.
     await nightly.noteToggle.click();
-    await nightly.note.fill(`${reason}\n\nsecond line`);
+    const before = posts;
+    await nightly.note.fill(`a${' '.repeat(200)}b`);
+    await nightly.dismiss.click();
+    await expect(nightly.status)
+      .toHaveText('Shorten the note to 200 characters to dismiss with it as the reason.');
+    expect(posts).toBe(before);
+
+    // The reason is the note as it read, trimmed, counted in characters. A
+    // note written while the dismissal is on its way waits in the folded
+    // card, and Undo opens it again.
+    const reason = '\u{1F41F}'.repeat(101);
+    await nightly.note.fill(`  ${reason}\n\nsecond line `);
     holding = true;
     await nightly.dismiss.click();
     await expect.poll(() => gates.length).toBe(1);
     await nightly.note.fill('Draft B');
     holding = false;
     gates.shift()!();
-    await expect.poll(async () => (await current('decision-2'))?.note).toBe(`${reason} second line`);
+    await expect(nightly.form).toHaveClass(/\bartifact-decision--dismissed\b/);
+    await expect(nightly.undo).toBeVisible();
+    await expect(side.count).toHaveText('All answered · Respond');
+    expect((await current('decision-2')).note).toBe(`${reason}\n\nsecond line`);
+    await nightly.undo.click();
+    await expect(nightly.form).not.toHaveClass(/\bartifact-decision--saved\b/);
     await expect(nightly.note).toHaveValue('Draft B');
     await expect(nightly.note).toBeVisible();
+    await nightly.dismiss.click();
+    await expect(nightly.saved).toHaveText('Dismissed: Draft B · Undo');
 
     // A failed Undo keeps the card, and its Undo, to try again.
     await page.reload();

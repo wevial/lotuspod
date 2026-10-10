@@ -138,6 +138,12 @@ def moved(comment: dict, revision: str) -> str:
             f"the page is now at revision {revision or 'unknown'}")
 
 
+def one_line(text: str) -> str:
+    """text with every run of whitespace, line breaks included, one space:
+    a reader's words printed unfenced never start a line of their own."""
+    return " ".join(text.split())
+
+
 def answered(decision: dict) -> str:
     """A decision's current answer: its label and choice, who and when, and
     where it was given when an agent recorded it from elsewhere; "not
@@ -148,7 +154,8 @@ def answered(decision: dict) -> str:
         return "not answered yet"
     if answer.get("dismissed"):
         line = f"dismissed, by {_by(answer)} at {answer['createdAt']}"
-        return line + f": {answer['note']}" if answer["note"] else line
+        reason = one_line(answer["note"])
+        return line + f": {reason}" if reason else line
     label = next((option["label"] for option in decision["options"]
                   if option["value"] == answer["choice"]), answer["choice"])
     line = f"{label} (`{answer['choice']}`), by {_by(answer)} at {answer['createdAt']}"
@@ -300,7 +307,8 @@ def pull_text(payload: dict) -> str:
             dismissed = bool(answer.get("dismissed"))
             if dismissed:
                 # Its reason is said here, once.
-                reason = f": {answer['note']}" if answer["note"] else ""
+                reason = one_line(answer["note"])
+                reason = f": {reason}" if reason else ""
                 chosen = [f"- Chosen: Dismissed{reason}"]
             elif "checked" in answer:
                 chosen = [f"- Chosen: {question['label']}"]

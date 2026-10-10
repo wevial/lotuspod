@@ -2666,8 +2666,10 @@ def answers_text(name: str, questions: dict, forms: dict[str, decisions.Form]) -
             by = f"by {row['actor'].get('email', '')} at {row['createdAt']}"
         lines = [head, f"{indent}  {by}"]
         if row["note"]:
-            said = "reason" if row.get("dismissed") else "note"
-            lines.append(f"{indent}  {said}: {row['note']}")
+            if row.get("dismissed"):
+                lines.append(f"{indent}  reason: {agents.one_line(row['note'])}")
+            else:
+                lines.append(f"{indent}  note: {row['note']}")
         return lines
 
     lines = []

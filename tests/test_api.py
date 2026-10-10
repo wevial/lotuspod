@@ -1056,15 +1056,15 @@ class DismissalTests(ApiTestCase):
         # Counted in characters, not UTF-16 units as a browser counts them.
         self.assertEqual(self.dismiss("decision-2", reason="\U0001f41f" * 200)[0], 201)
         self.assertEqual(self.undo("decision-2")[0], 200)
+        # Any text of that length, line breaks and tabs too.
+        for reason in ("a\nb", "a\tb", "a\u2028b"):
+            with self.subTest(reason=reason):
+                status, row = self.dismiss("decision-2", reason=reason)
+                self.assertEqual((status, row["note"]), (201, reason))
+                self.assertEqual(self.undo("decision-2")[0], 200)
         _, before = self.ask("GET", "/api/answers?page=plan")
         for label, got, status, error in (
             ("201-character reason", self.dismiss("decision-2", reason="r" * 201),
-             400, "invalid_body"),
-            ("a reason of two lines", self.dismiss(
-                "decision-2", reason="retired\n## 9. Answer 999999"), 400, "invalid_body"),
-            ("a reason with a tab", self.dismiss("decision-2", reason="a\tb"),
-             400, "invalid_body"),
-            ("a reason with a line separator", self.dismiss("decision-2", reason="a\u2028b"),
              400, "invalid_body"),
             ("dismissed twice", self.dismiss(reason="Again"), 409, "already_dismissed"),
             ("another version", self.dismiss("decision-2", version="v0"), 409, "stale"),

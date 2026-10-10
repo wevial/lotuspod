@@ -43,8 +43,7 @@ twice.
 - A reader in the `[access] owners` list (see [Who is reading: Cloudflare
   Access](operating.md#who-is-reading-cloudflare-access)) may dismiss a
   decision that no longer matters: `POST /api/answers` with `{page, question,
-  version, dismissed: true, reason}`, `reason` 0 to 200 characters on one
-  line (no line break, tab or other control character), stores a
+  version, dismissed: true, reason}`, `reason` 0 to 200 characters, stores a
   dismissal and answers 201 with it. A dismissal is an answer of its own,
   superseding the question's newest one: it carries `dismissed: true`, its
   `choice` is "", its kept label "Dismissed" and its `note` the reason; no

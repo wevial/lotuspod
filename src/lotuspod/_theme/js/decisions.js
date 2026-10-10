@@ -527,16 +527,16 @@
       return "This decision was not dismissed (" + error + "). Try again.";
     }
 
-    // Dismiss, in the form's turn: the note's text as it then reads, on one
-    // line and trimmed, posted as the reason, its length counted in
-    // characters as the server counts them. Dismissed, the note is emptied
-    // and folded, as Ask leaves it, and the form folds to the dismissal; a
-    // pick or a note changed while it was dismissing stays, open.
+    // Dismiss, in the form's turn: the note's text as it then reads,
+    // trimmed, posted as the reason, its length counted in characters as
+    // the server counts them. Dismissed, no option stays picked, the note is
+    // emptied and folded, as Ask leaves it, and the form folds to the
+    // dismissal. A note written while it was dismissing stays in the folded
+    // card, unsent, for Undo to open again.
     async function dismiss(form, button) {
       var note = form.elements.note;
       var sent = note.value;
-      var reason = sent.replace(/\s+/g, " ").trim();
-      var picked = form.querySelector('input[name="choice"]:checked');
+      var reason = sent.trim();
       try {
         if (Array.from(reason).length > MAX_REASON) {
           status(form, "Shorten the note to " + MAX_REASON +
@@ -562,9 +562,7 @@
           answers.earlier.unshift(answers.current);
         }
         answers.current = payload;
-        if (form.querySelector('input[name="choice"]:checked') === picked) {
-          radios(form).forEach(function (radio) { radio.checked = false; });
-        }
+        radios(form).forEach(function (radio) { radio.checked = false; });
         if (note.value === sent) {
           note.value = "";
           var fold = note.closest("details");
@@ -572,7 +570,7 @@
             fold.open = false;
           }
         }
-        form.lotuspodEditing = dirty(form);
+        form.lotuspodEditing = false;
         status(form, "");
         var back = draw(form);
         table();
@@ -603,8 +601,9 @@
     // Undo, in the form's turn: the dismissal taken back, and the form drawn
     // from the answers the route gives back, its inputs as they hold, or
     // none picked when no answer is left, so a pick made in the review sheet
-    // while it was dismissed goes too. A question with none also leaves the
-    // answers read on load, so the table drops its row.
+    // while it was dismissed goes too. A note written while it was dismissed
+    // stays, the form open to save it. A question with no answer left also
+    // leaves the answers read on load, so the table drops its row.
     async function undo(form, button) {
       try {
         var response = await fetch(ANSWERS, {
@@ -625,9 +624,17 @@
         if (!payload.current) {
           stored.delete(form.dataset.question);
         }
+        var draft = form.elements.note.value;
         radios(form).forEach(function (radio) { radio.checked = false; });
         fill(form);
-        form.lotuspodEditing = false;
+        if (draft) {
+          form.elements.note.value = draft;
+          var noteFold = form.elements.note.closest("details");
+          if (noteFold) {
+            noteFold.open = true;
+          }
+        }
+        form.lotuspodEditing = dirty(form);
         status(form, "");
         var change = draw(form);
         table();

@@ -972,7 +972,7 @@ A reader in the `[access] owners` list (the page asks the archive route, as
 its Archive button does; see [Archive a page](#archive-a-page)) also gets
 "Dismiss" after "Save answer" and Ask on each decision, for one that no
 longer matters, such as one another plan replaced. It posts the note's text,
-on one line and trimmed, as the reason (see [Answers and
+trimmed, as the reason (see [Answers and
 comments](comments.md#answers-and-comments)); a note over 200 characters
 posts nothing and says "Shorten the note to 200 characters to dismiss with it
 as the reason." Dismissed, the note is emptied and folded, and the card folds

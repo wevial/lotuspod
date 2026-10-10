@@ -599,11 +599,11 @@ class Database:
             row = conn.execute("SELECT * FROM answers WHERE id = ?", (cursor.lastrowid,))
             return _answer(row.fetchone())
 
-    def undismiss(self, *, page: str, question: str) -> dict:
+    def undismiss(self, *, page: str, question: str, asked: bool = False) -> dict:
         """Undo the dismissal that is the question's current answer, so the
-        answer before it is current again, or none; the question's entry as
-        answers(asked=True) gives it, or {current: None, earlier: []}.
-        Refused not_dismissed when its current answer is not a dismissal."""
+        answer before it is current again, or none; the question's entry
+        as answers() gives it, or {current: None, earlier: []}. Refused
+        not_dismissed when its current answer is not a dismissal."""
         with self._connect() as conn, _write(conn):
             current = _current(conn, page, question)
             if current is None or not current["dismissed"]:
@@ -614,7 +614,7 @@ class Database:
                 "SELECT * FROM answers WHERE page = ? AND question = ? ORDER BY id DESC",
                 (page, question),
             ).fetchall()
-        return _entries(rows, True).get(question, {"current": None, "earlier": []})
+        return _entries(rows, asked).get(question, {"current": None, "earlier": []})
 
     def answers(self, page: str, *, asked: bool = False) -> dict:
         """The page's answered questions, each as {current, earlier}: the
