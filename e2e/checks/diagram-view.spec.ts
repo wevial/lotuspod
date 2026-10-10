@@ -8,7 +8,9 @@ import { expect, test, type Locator, type Page } from '@playwright/test';
 // paragraph, a flowchart LR of fourteen boxes in one chain (S1 --> ... -->
 // S14), paragraphs enough that the page scrolls, then an h3 "Small loop" and
 // a sequence diagram. Each drawn diagram has an Expand button that opens it
-// in a window-filling view (js/diagram-view.js).
+// in a window-filling view (js/diagram-view.js). Each is loaded with
+// ?standalone, so it stays in the window rather than opening in a tab of the
+// index.
 const PAGE = '/capture-diagram-view.html';
 const CARDS_PAGE = '/capture-node-cards.html';
 // The pinned Mermaid (e2e/package.json) answers jsDelivr's requests for it,
@@ -96,7 +98,7 @@ function view(page: Page) {
     zoomIn: dialog.getByRole('button', { name: 'Zoom in' }),
     zoomOut: dialog.getByRole('button', { name: 'Zoom out' }),
     fit: dialog.getByRole('button', { name: 'Fit', exact: true }),
-    close: dialog.getByRole('button', { name: 'Close' }),
+    close: dialog.locator('.artifact-diagram-view-bar').getByRole('button', { name: 'Close' }),
   };
 }
 
@@ -127,7 +129,7 @@ async function opacity(locator: Locator) {
 // Open the page and wait until both diagrams are drawn and have their button.
 async function drawn(page: Page) {
   const seen = await watch(page);
-  await page.goto(PAGE);
+  await page.goto(`${PAGE}?standalone`);
   for (const index of [0, 1]) {
     await expect(drawing(page, index)).toBeVisible();
     await expect(expand(page, index)).toHaveCount(1);
@@ -475,7 +477,7 @@ test('a diagram scrolled sideways in its block comes back scrolled as it was', a
 
 test("a node card closes when its diagram's view opens and opens again after", async ({ page }) => {
   const seen = await watch(page);
-  await page.goto(CARDS_PAGE);
+  await page.goto(`${CARDS_PAGE}?standalone`);
   const box = diagram(page).locator('g.node[id^="flowchart-B-"]');
   const card = page.locator('.artifact-node-card');
   await expect(box).toHaveAttribute('role', 'button');
@@ -495,11 +497,303 @@ test("a node card closes when its diagram's view opens and opens again after", a
   await seen.clean();
 });
 
+// The capture-node-cards page with its first diagram open in the view.
+async function cardsView(page: Page) {
+  const seen = await watch(page);
+  await page.goto(`${CARDS_PAGE}?standalone`);
+  await expect(diagram(page).locator('g.node[id^="flowchart-B-"]')).toHaveAttribute('role', 'button');
+  await expect(expand(page)).toHaveCount(1);
+  await open(page);
+  return seen;
+}
+
+function card(page: Page) {
+  return page.locator('.artifact-node-card');
+}
+
+function overlaps(a: Box, b: Box) {
+  return a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
+}
+
+// The card shown, inside the window and clear of the box it is open for.
+async function beside(page: Page, id: string) {
+  await expect(page.locator('.artifact-node-card:visible')).toHaveCount(1);
+  const shown = await where(card(page));
+  const size = page.viewportSize()!;
+  expect(shown.x).toBeGreaterThanOrEqual(0);
+  expect(shown.y).toBeGreaterThanOrEqual(0);
+  expect(shown.x + shown.width).toBeLessThanOrEqual(size.width);
+  expect(shown.y + shown.height).toBeLessThanOrEqual(size.height);
+  expect(overlaps(shown, await where(step(page, id)))).toBe(false);
+}
+
+// A point of a box in the view that nothing covers, the card included.
+async function uncovered(page: Page, id: string) {
+  const point = await step(page, id).evaluate((group) => {
+    const rect = group.getBoundingClientRect();
+    for (let y = 0.5; y < 1; y += 0.2) {
+      for (let x = 0.1; x < 1; x += 0.1) {
+        const at = { x: rect.left + rect.width * x, y: rect.top + rect.height * y };
+        if (group.contains(document.elementFromPoint(at.x, at.y))) return at;
+      }
+    }
+    return null;
+  });
+  expect(point, `some of box ${id} is uncovered`).not.toBeNull();
+  return point!;
+}
+
+async function openB(page: Page) {
+  await step(page, 'B').click();
+  await expect(card(page).locator('h3')).toHaveText('Draw the cards');
+  await beside(page, 'B');
+}
+
+// Press the mouse at x, y, move it by dx, dy in a few steps and let go.
+async function press(page: Page, x: number, y: number, dx: number, dy: number) {
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  await page.mouse.move(x + dx, y + dy, { steps: 4 });
+  await page.mouse.up();
+}
+
+// A point of the stage no box is under: its top left corner, inside.
+async function empty(page: Page) {
+  const stage = await where(view(page).stage);
+  return { x: stage.x + 12, y: stage.y + 12 };
+}
+
+test('the boxes keep their status colors and lit arrows in the view', async ({ page }) => {
+  const seen = await cardsView(page);
+  const shapes = await view(page).svg.evaluate((svg) => {
+    const probe = document.createElement('span');
+    svg.closest('dialog')!.appendChild(probe);
+    const color = (name: string) => {
+      probe.style.color = `var(${name})`;
+      return getComputedStyle(probe).color;
+    };
+    const tokens = { mint: color('--color-mint'), amber: color('--color-amber'), lavender: color('--color-lavender') };
+    probe.remove();
+    const shape = (id: string) => {
+      const style = getComputedStyle(svg.querySelector(`g.node[id^="flowchart-${id}-"] > .label-container`)!);
+      return { stroke: style.stroke, dash: style.strokeDasharray };
+    };
+    return { tokens, A: shape('A'), B: shape('B'), C: shape('C') };
+  });
+  expect(shapes.A.stroke).toBe(shapes.tokens.mint);
+  expect(shapes.B.stroke).toBe(shapes.tokens.amber);
+  expect(shapes.C.stroke).toBe(shapes.tokens.lavender);
+  expect(shapes.C.dash).not.toBe('none');
+  expect(shapes.A.dash).toBe('none');
+
+  await step(page, 'D').hover();
+  await expect.poll(() => view(page).svg.evaluate((svg) =>
+    svg.querySelectorAll('path.artifact-node-arrow').length)).toBe(1);
+  const lit = await view(page).svg.evaluate((svg) => {
+    const probe = document.createElement('span');
+    probe.style.color = 'var(--color-cyan)';
+    svg.closest('dialog')!.appendChild(probe);
+    const cyan = getComputedStyle(probe).color;
+    probe.remove();
+    const copy = svg.querySelector('path.artifact-node-arrow')!;
+    return {
+      cyan,
+      stroke: getComputedStyle(copy).stroke,
+      same: copy.getAttribute('d') === svg.querySelector('path.flowchart-link[id="L_A_D_3"]')!.getAttribute('d'),
+      dimmed: Number(getComputedStyle(svg.querySelector('path.flowchart-link[id="L_A_B_0"]')!).opacity),
+    };
+  });
+  expect(lit.cyan).toBe('rgb(94, 224, 255)');
+  expect(lit.stroke).toBe(lit.cyan);
+  expect(lit.same).toBe(true);
+  expect(lit.dimmed).toBeLessThan(1);
+  await seen.clean();
+});
+
+test("a box's card opens in the view beside it, on a click or from the keyboard", async ({ page }) => {
+  const seen = await cardsView(page);
+  await openB(page);
+  expect(await card(page).evaluate((node) => Boolean(node.closest('dialog[open]')))).toBe(true);
+  const graph = await card(page).locator('dl.artifact-node-card-graph').evaluate((list) =>
+    Array.from(list.querySelectorAll('dt')).map((term) => [term.textContent, term.nextElementSibling?.textContent]));
+  expect(graph[0]).toEqual(['Waits for', 'A (merged), E']);
+  const close = card(page).getByRole('button', { name: 'Close' });
+  const middle = centre(await where(close));
+  expect(await close.evaluate((button, at) => document.elementFromPoint(at.x, at.y) === button, middle)).toBe(true);
+
+  await page.keyboard.press('Escape');
+  await expect(card(page)).toBeHidden();
+  await view(page).stage.focus();
+  for (let tab = 0; tab < 10; tab += 1) {
+    await page.keyboard.press('Tab');
+    if (await step(page, 'A').evaluate((node) => node === document.activeElement)) break;
+  }
+  await expect(step(page, 'A')).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(card(page).locator('h3')).toHaveText('Write the parser');
+  await beside(page, 'A');
+  expect(await card(page).evaluate((node) => node.contains(document.activeElement))).toBe(true);
+  await seen.clean();
+});
+
+test('the card follows its box as the view moves, and only a press that keeps still clicks a box', async ({ page }) => {
+  const seen = await cardsView(page);
+  await openB(page);
+  const before = await where(step(page, 'B'));
+  const from = await empty(page);
+  await press(page, from.x + 300, from.y, -200, 0);
+  near((await where(step(page, 'B'))).x, before.x - 200, 1);
+  await expect(card(page).locator('h3')).toHaveText('Draw the cards');
+  await beside(page, 'B');
+
+  const c = await where(step(page, 'C'));
+  const onC = await uncovered(page, 'C');
+  await press(page, onC.x, onC.y, 40, 0);
+  near((await where(step(page, 'C'))).x, c.x + 40, 1);
+  await expect(card(page).locator('h3')).toHaveText('Draw the cards');
+  await beside(page, 'B');
+
+  const moved = await uncovered(page, 'C');
+  await press(page, moved.x, moved.y, 3, 0);
+  await expect(card(page).locator('h3')).toHaveText('Light the arrows');
+  await beside(page, 'C');
+  await seen.clean();
+});
+
+test("a click on the stage's empty space closes the card and leaves the view open", async ({ page }) => {
+  const seen = await cardsView(page);
+  await openB(page);
+  const at = await empty(page);
+  await page.mouse.click(at.x, at.y);
+  await expect(card(page)).toBeHidden();
+  await expect(view(page).dialog).toBeVisible();
+  await seen.clean();
+});
+
+test("Esc closes the card before the view, and the view's ✕ closes both", async ({ page }) => {
+  const seen = await cardsView(page);
+  await openB(page);
+  await page.keyboard.press('Escape');
+  await expect(card(page)).toBeHidden();
+  await expect(step(page, 'B')).toBeFocused();
+  await expect(view(page).dialog).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(view(page).dialog).toBeHidden();
+  await expect(expand(page)).toBeFocused();
+
+  await open(page);
+  await openB(page);
+  await view(page).close.click();
+  await expect(view(page).dialog).toBeHidden();
+  await expect(card(page)).toBeHidden();
+  await expect(page.locator('dialog .artifact-node-card')).toHaveCount(0);
+
+  const onPage = diagram(page).locator('g.node[id^="flowchart-B-"]');
+  await onPage.click();
+  await expect(card(page)).toBeVisible();
+  await expect(card(page).locator('h3')).toHaveText('Draw the cards');
+  expect(await card(page).evaluate((node) => node.parentElement === document.body)).toBe(true);
+  const shown = await where(card(page));
+  const b = await where(onPage);
+  expect(overlaps(shown, b)).toBe(false);
+  near(shown.x, b.x + b.width + 12, 1);
+  await seen.clean();
+});
+
+test.describe('on a touch screen', () => {
+  test.use({ hasTouch: true, isMobile: true, viewport: { width: 390, height: 844 } });
+
+  // A CDP session's touches: Playwright has no pinch of its own.
+  async function touches(page: Page) {
+    const session = await page.context().newCDPSession(page);
+    async function send(type: string, points: { x: number; y: number }[]) {
+      await session.send('Input.dispatchTouchEvent', {
+        type,
+        touchPoints: points.map((point, id) => ({ x: point.x, y: point.y, id })),
+      });
+    }
+    return {
+      // Move the fingers from their start to their end in steps.
+      async gesture(from: { x: number; y: number }[], to: { x: number; y: number }[], steps = 8) {
+        await send('touchStart', from);
+        for (let at = 1; at <= steps; at += 1) {
+          await send('touchMove', from.map((point, index) => ({
+            x: point.x + (to[index].x - point.x) * at / steps,
+            y: point.y + (to[index].y - point.y) * at / steps,
+          })));
+        }
+        await send('touchEnd', []);
+      },
+    };
+  }
+
+  test('the Expand button is shown at rest and a tap opens the view', async ({ page }) => {
+    const seen = await drawn(page);
+    expect(await page.evaluate(() => matchMedia('(hover: none)').matches)).toBe(true);
+    await expect.poll(() => opacity(expand(page))).toBe('1');
+    await expand(page).tap();
+    await expect(view(page).dialog).toBeVisible();
+    await expect(view(page).svg).toHaveCount(1);
+    await seen.clean();
+  });
+
+  test('one finger drags the diagram and two pinch it about their midpoint', async ({ page }) => {
+    const seen = await drawn(page);
+    await expand(page).tap();
+    await expect(view(page).svg).toHaveCount(1);
+    const fingers = await touches(page);
+    const first = await where(step(page, 'S1'));
+    const middle = centre(await where(view(page).stage));
+    await fingers.gesture([middle], [{ x: middle.x + 100, y: middle.y + 60 }]);
+    const dragged = await where(step(page, 'S1'));
+    near(dragged.x - first.x, 100, 1);
+    near(dragged.y - first.y, 60, 1);
+
+    // The diagram's point under P, in its own units, before and after.
+    const P = middle;
+    const under = () => view(page).svg.evaluate((svg, at) => {
+      const point = new DOMPoint(at.x, at.y).matrixTransform(svg.getScreenCTM()!.inverse());
+      return { x: point.x, y: point.y };
+    }, P);
+    const toScreen = (point: { x: number; y: number }) => view(page).svg.evaluate((svg, at) => {
+      const screen = new DOMPoint(at.x, at.y).matrixTransform(svg.getScreenCTM()!);
+      return { x: screen.x, y: screen.y };
+    }, point);
+    const held = await under();
+    const zoomed = await zoom(page);
+    await fingers.gesture([{ x: P.x - 50, y: P.y }, { x: P.x + 50, y: P.y }],
+      [{ x: P.x - 100, y: P.y }, { x: P.x + 100, y: P.y }]);
+    near(await zoom(page), zoomed * 2, 1);
+    const now = await toScreen(held);
+    near(now.x, P.x, 3);
+    near(now.y, P.y, 3);
+
+    for (let pinch = 0; pinch < 4; pinch += 1) {
+      await fingers.gesture([{ x: P.x - 150, y: P.y }, { x: P.x + 150, y: P.y }],
+        [{ x: P.x - 10, y: P.y }, { x: P.x + 10, y: P.y }]);
+    }
+    await expect(view(page).readout).toHaveText('25%');
+    await seen.clean();
+  });
+
+  test('a tap on a node box in the view opens its card', async ({ page }) => {
+    const seen = await watch(page);
+    await page.goto(`${CARDS_PAGE}?standalone`);
+    await expect(diagram(page).locator('g.node[id^="flowchart-B-"]')).toHaveAttribute('role', 'button');
+    await expand(page).tap();
+    await expect(view(page).svg).toHaveCount(1);
+    await step(page, 'B').tap();
+    await expect(card(page).locator('h3')).toHaveText('Draw the cards');
+    expect(await card(page).evaluate((node) => Boolean(node.closest('dialog[open]')))).toBe(true);
+    await seen.clean();
+  });
+});
+
 test.describe('without scripts', () => {
   test.use({ javaScriptEnabled: false });
 
   test('each diagram shows its source and no Expand button', async ({ page }) => {
-    await page.goto(PAGE);
+    await page.goto(`${PAGE}?standalone`);
     await expect(page.locator('pre.mermaid')).toHaveCount(2);
     await expect(diagram(page)).toBeVisible();
     await expect(diagram(page)).toContainText('S1[Step 1] --> S2[Step 2]');

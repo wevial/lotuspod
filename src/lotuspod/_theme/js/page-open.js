@@ -71,6 +71,9 @@
   var ANSWERED = "lotuspod:answered";
   // Sent on a decision form once an answer to it is saved.
   var SAVED = "lotuspod:saved";
+  // Sent on a diagram's svg each time its view (js/diagram-view.js) moves or
+  // zooms it, so an open node card (js/diagram-cards.js) follows its box.
+  var MOVED = "lotuspod:diagram-moved";
   // What the page's text leaves out and no passage may hold: the comment UI,
   // decision forms and their chips, the Answered table, diagrams and their
   // node cards, and the list of changed sections.

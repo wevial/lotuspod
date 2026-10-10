@@ -4,54 +4,73 @@
    unless it has an authored Mermaid style (style, class or :::), which wins:
    the script then adds no status class, so no rule here reaches it.
    Mermaid's own rules inside the svg are scoped by the svg's id, which no
-   rule here can name, so the colors that replace them are !important. */
-.artifact-body pre.mermaid g.artifact-node {
+   rule here can name, so the colors that replace them are !important.
+   Each rule holds as well while the svg is in its view's stage
+   (js/diagram-view.js). */
+.artifact-body pre.mermaid g.artifact-node,
+.artifact-diagram-view-stage g.artifact-node {
   cursor: pointer;
 }
 
-.artifact-body pre.mermaid g.artifact-node:focus {
+.artifact-body pre.mermaid g.artifact-node:focus,
+.artifact-diagram-view-stage g.artifact-node:focus {
   outline: none;
 }
 
 .artifact-body pre.mermaid g.artifact-node:focus-visible > .label-container,
-.artifact-body pre.mermaid g.artifact-node:focus-visible > .label-container > path {
+.artifact-diagram-view-stage g.artifact-node:focus-visible > .label-container,
+.artifact-body pre.mermaid g.artifact-node:focus-visible > .label-container > path,
+.artifact-diagram-view-stage g.artifact-node:focus-visible > .label-container > path {
   stroke-width: 3px !important;
 }
 
 /* In review. */
-.artifact-body pre.mermaid g.artifact-node--open {
+.artifact-body pre.mermaid g.artifact-node--open,
+.artifact-diagram-view-stage g.artifact-node--open {
   --node-stroke: var(--color-amber);
 }
 
 /* Merged. */
-.artifact-body pre.mermaid g.artifact-node--merged {
+.artifact-body pre.mermaid g.artifact-node--merged,
+.artifact-diagram-view-stage g.artifact-node--merged {
   --node-stroke: var(--color-mint);
 }
 
 /* Can start now. */
-.artifact-body pre.mermaid g.artifact-node--ready {
+.artifact-body pre.mermaid g.artifact-node--ready,
+.artifact-diagram-view-stage g.artifact-node--ready {
   --node-stroke: var(--color-lavender);
 }
 
 .artifact-body pre.mermaid g.artifact-node--open > .label-container,
+.artifact-diagram-view-stage g.artifact-node--open > .label-container,
 .artifact-body pre.mermaid g.artifact-node--open > .label-container > path,
+.artifact-diagram-view-stage g.artifact-node--open > .label-container > path,
 .artifact-body pre.mermaid g.artifact-node--merged > .label-container,
+.artifact-diagram-view-stage g.artifact-node--merged > .label-container,
 .artifact-body pre.mermaid g.artifact-node--merged > .label-container > path,
+.artifact-diagram-view-stage g.artifact-node--merged > .label-container > path,
 .artifact-body pre.mermaid g.artifact-node--ready > .label-container,
-.artifact-body pre.mermaid g.artifact-node--ready > .label-container > path {
+.artifact-diagram-view-stage g.artifact-node--ready > .label-container,
+.artifact-body pre.mermaid g.artifact-node--ready > .label-container > path,
+.artifact-diagram-view-stage g.artifact-node--ready > .label-container > path {
   fill: color-mix(in srgb, var(--node-stroke) 14%, var(--color-surface)) !important;
   stroke: var(--node-stroke) !important;
   stroke-width: 1.5px;
 }
 
 .artifact-body pre.mermaid g.artifact-node--ready > .label-container,
-.artifact-body pre.mermaid g.artifact-node--ready > .label-container > path {
+.artifact-diagram-view-stage g.artifact-node--ready > .label-container,
+.artifact-body pre.mermaid g.artifact-node--ready > .label-container > path,
+.artifact-diagram-view-stage g.artifact-node--ready > .label-container > path {
   stroke-dasharray: 6 4 !important;
 }
 
 /* Waiting on another box. */
 .artifact-body pre.mermaid g.artifact-node--waiting > .label-container,
-.artifact-body pre.mermaid g.artifact-node--waiting > .label-container > path {
+.artifact-diagram-view-stage g.artifact-node--waiting > .label-container,
+.artifact-body pre.mermaid g.artifact-node--waiting > .label-container > path,
+.artifact-diagram-view-stage g.artifact-node--waiting > .label-container > path {
   fill: var(--color-surface) !important;
   stroke: var(--hairline-strong) !important;
 }
@@ -59,27 +78,32 @@
 /* While a box is highlighted, every arrow of its diagram is dimmed and its
    own are drawn again above the boxes, cyan over a night halo. */
 /* !important, as an authored linkStyle sets an arrow's opacity inline. */
-.artifact-body pre.mermaid svg.artifact-diagram--lit path.flowchart-link {
+.artifact-body pre.mermaid svg.artifact-diagram--lit path.flowchart-link,
+.artifact-diagram-view-stage svg.artifact-diagram--lit path.flowchart-link {
   opacity: 0.25 !important;
 }
 
-.artifact-body pre.mermaid g.artifact-node-arrows {
+.artifact-body pre.mermaid g.artifact-node-arrows,
+.artifact-diagram-view-stage g.artifact-node-arrows {
   pointer-events: none;
 }
 
-.artifact-body pre.mermaid path.artifact-node-arrow-halo {
+.artifact-body pre.mermaid path.artifact-node-arrow-halo,
+.artifact-diagram-view-stage path.artifact-node-arrow-halo {
   fill: none !important;
   stroke: var(--color-night) !important;
   stroke-width: 6px !important;
 }
 
-.artifact-body pre.mermaid path.artifact-node-arrow {
+.artifact-body pre.mermaid path.artifact-node-arrow,
+.artifact-diagram-view-stage path.artifact-node-arrow {
   fill: none !important;
   stroke: var(--color-cyan) !important;
   stroke-width: 2px !important;
 }
 
-.artifact-body pre.mermaid marker.artifact-node-marker {
+.artifact-body pre.mermaid marker.artifact-node-marker,
+.artifact-diagram-view-stage marker.artifact-node-marker {
   fill: var(--color-cyan) !important;
   stroke: var(--color-cyan) !important;
 }

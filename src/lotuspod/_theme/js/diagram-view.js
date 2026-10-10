@@ -4,11 +4,13 @@
   // that fills the window. The page's own svg moves into the dialog's stage,
   // so its ids and the listeners js/diagram-cards.js set on its boxes stay as
   // they are, and the pre keeps its height so the page behind holds still.
-  // A drag, a two-finger scroll, the arrow keys or the bar's buttons move and
-  // zoom it by rewriting the svg's viewBox, so text stays sharp at any zoom;
-  // 100% is Mermaid's own size. Fit (or 0, or F) shows it whole again. The
-  // dialog's own Escape or its ✕ puts the svg back in its pre, with every
-  // attribute the view changed restored, and the focus on its Expand button.
+  // A drag, a two-finger scroll or pinch, the arrow keys or the bar's buttons
+  // move and zoom it by rewriting the svg's viewBox, so text stays sharp at
+  // any zoom; 100% is Mermaid's own size. Each move is announced on the svg
+  // as MOVED, and a drag ends in no click, so it opens no node card. Fit (or
+  // 0, or F) shows it whole again. The dialog's own Escape or its ✕ puts the
+  // svg back in its pre, with every attribute the view changed restored, and
+  // the focus on its Expand button.
   function diagramView(pres) {
     // The room kept round the diagram at Fit, in px, and the zoom Fit stops at.
     var MARGIN = 24;
@@ -20,6 +22,8 @@
     var MOVE = 60;
     // A wheel's zoom: exp(-deltaY / PINCH).
     var PINCH = 300;
+    // A press that moves further than this, in px, is a drag.
+    var NUDGE = 4;
     // The keys that would scroll the page behind.
     var SCROLLING = /^( |Spacebar|PageUp|PageDown|Home|End)$/;
     var OPEN = "artifact-diagram-view-open";
@@ -32,8 +36,11 @@
     var zoom = 1;
     var left = 0;
     var top = 0;
-    // The pointer dragging the diagram, and where it last was.
-    var dragging = null;
+    // The pointers down on the stage (two at most), each where it last
+    // was; where the first one went down; and whether this press is a drag.
+    var pointers = new Map();
+    var press = null;
+    var dragged = false;
 
     function button(className, text, label) {
       var made = element("button", className, text);
@@ -75,11 +82,26 @@
       // thread's popover or sheet) stays open.
       dialog.addEventListener("keydown", keys);
       dialog.addEventListener("close", restore);
+      // Capturing, so the click that ends a drag reaches no box and no
+      // listener outside the stage.
+      stage.addEventListener("click", function (event) {
+        if (dragged) {
+          dragged = false;
+          event.preventDefault();
+          event.stopPropagation();
+        }
+      }, true);
       stage.addEventListener("pointerdown", grab);
       stage.addEventListener("pointermove", drag);
       stage.addEventListener("pointerup", drop);
       stage.addEventListener("pointercancel", drop);
-      stage.addEventListener("lostpointercapture", drop);
+      // Not a finger's own capture of the box it went down on, which the
+      // stage takes over once the press is a drag.
+      stage.addEventListener("lostpointercapture", function (event) {
+        if (event.target === stage) {
+          drop(event);
+        }
+      });
       stage.addEventListener("wheel", wheel, { passive: false });
       window.addEventListener("resize", function () {
         if (shown) {
@@ -151,6 +173,7 @@
       var room = size();
       shown.svg.setAttribute("viewBox", [left, top, room.width / zoom, room.height / zoom].join(" "));
       parts.readout.textContent = Math.round(zoom * 100) + "%";
+      shown.svg.dispatchEvent(new CustomEvent(MOVED, { bubbles: true }));
     }
 
     // The whole diagram, centred, with MARGIN round it.
@@ -177,44 +200,97 @@
       var room = size();
       var atX = x === undefined ? room.width / 2 : x;
       var atY = y === undefined ? room.height / 2 : y;
-      var pointX = left + atX / zoom;
-      var pointY = top + atY / zoom;
+      zoomTo(factor, atX, atY, atX, atY);
+    }
+
+    // Zoom by factor, and set the diagram's point at x, y in the stage at
+    // toX, toY.
+    function zoomTo(factor, x, y, toX, toY) {
+      var pointX = left + x / zoom;
+      var pointY = top + y / zoom;
       zoom = clamp(zoom * factor);
-      left = pointX - atX / zoom;
-      top = pointY - atY / zoom;
+      left = pointX - toX / zoom;
+      top = pointY - toY / zoom;
       draw();
     }
 
-    function grab(event) {
-      if (dragging || (event.pointerType === "mouse" && event.button !== 0)) {
-        return;
-      }
-      dragging = { id: event.pointerId, x: event.clientX, y: event.clientY };
-      parts.stage.setPointerCapture(event.pointerId);
+    // The stage takes the drag's pointers, so it goes on outside the stage
+    // and ends in a click on the stage itself.
+    function startDrag() {
+      dragged = true;
       parts.stage.classList.add("artifact-diagram-view-stage--dragging");
+      pointers.forEach(function (point, id) {
+        parts.stage.setPointerCapture(id);
+      });
     }
 
+    function grab(event) {
+      if (pointers.size >= 2 || (event.pointerType === "mouse" && event.button !== 0)) {
+        return;
+      }
+      if (!pointers.size) {
+        press = { x: event.clientX, y: event.clientY };
+        dragged = false;
+      }
+      pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+      // A second finger starts a pinch, never a click.
+      if (pointers.size === 2) {
+        startDrag();
+      }
+    }
+
+    // One pointer moves the diagram with it. Two pinch: the diagram zooms
+    // by the change in their distance and moves with their midpoint, so the
+    // point under the fingers stays under them.
     function drag(event) {
-      if (!dragging || event.pointerId !== dragging.id) {
+      var at = pointers.get(event.pointerId);
+      if (!at) {
         return;
       }
-      var x = event.clientX - dragging.x;
-      var y = event.clientY - dragging.y;
-      dragging.x = event.clientX;
-      dragging.y = event.clientY;
-      if (x || y) {
-        pan(x, y);
+      var x = event.clientX;
+      var y = event.clientY;
+      if (!dragged) {
+        if (Math.hypot(x - press.x, y - press.y) <= NUDGE) {
+          return;
+        }
+        startDrag();
       }
+      var other = null;
+      pointers.forEach(function (point, id) {
+        if (id !== event.pointerId) {
+          other = point;
+        }
+      });
+      var fromX = at.x;
+      var fromY = at.y;
+      at.x = x;
+      at.y = y;
+      if (!other) {
+        if (x !== fromX || y !== fromY) {
+          pan(x - fromX, y - fromY);
+        }
+        return;
+      }
+      var before = Math.hypot(fromX - other.x, fromY - other.y);
+      var after = Math.hypot(x - other.x, y - other.y);
+      var rect = parts.stage.getBoundingClientRect();
+      zoomTo(before && after ? after / before : 1,
+        (fromX + other.x) / 2 - rect.left, (fromY + other.y) / 2 - rect.top,
+        (x + other.x) / 2 - rect.left, (y + other.y) / 2 - rect.top);
     }
 
+    // A finger lifted from a pinch leaves the other dragging from where it
+    // is; dragged stays set until the click that ends the press.
     function drop(event) {
-      if (!dragging || event.pointerId !== dragging.id) {
+      if (!pointers.delete(event.pointerId)) {
         return;
       }
-      dragging = null;
-      parts.stage.classList.remove("artifact-diagram-view-stage--dragging");
       if (parts.stage.hasPointerCapture(event.pointerId)) {
         parts.stage.releasePointerCapture(event.pointerId);
+      }
+      if (!pointers.size) {
+        press = null;
+        parts.stage.classList.remove("artifact-diagram-view-stage--dragging");
       }
     }
 
@@ -285,7 +361,9 @@
     function restore() {
       var was = shown;
       shown = null;
-      dragging = null;
+      pointers.clear();
+      press = null;
+      dragged = false;
       parts.stage.classList.remove("artifact-diagram-view-stage--dragging");
       was.pre.insertBefore(was.svg, was.next && was.next.parentNode === was.pre ? was.next : was.expand);
       was.saved.forEach(function (at) {

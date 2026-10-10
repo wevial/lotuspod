@@ -9,7 +9,9 @@
   // arrow is dimmed. Each box takes its row's status color, unless the
   // author styled it in Mermaid. The heading and table are hidden only when
   // every row names a box the diagram draws, so nothing the author wrote
-  // disappears.
+  // disappears. While a diagram is in its view (js/diagram-view.js), the
+  // card opens inside the view's dialog and follows its box as the view
+  // moves; Esc there closes the card before the view.
   function diagramCards(pres) {
     // Mermaid 11.4.1's ids: a box's group is flowchart-ID-N and an arrow's
     // path L_START_END_N. Neither carries the diagram's id, so every lookup
@@ -358,8 +360,19 @@
         element("dt", "", "Unblocks"), element("dd", "", named(diagram, unblocks)));
     }
 
+    // The card's place: the dialog its box is in, as the modal view makes
+    // the rest of the page inert, else the page.
+    function home(box) {
+      var parent = box.group.closest("dialog") || document.body;
+      if (card.parentNode !== parent) {
+        parent.appendChild(card);
+      }
+    }
+
     // Set the card beside its box: on the right where the window has room,
-    // else on the left, else below (or above), always inside the window.
+    // else on the left, else below (or above), always inside the window. In
+    // the page it is set in the page's coordinates, in the view's dialog,
+    // which fills the window, in the window's.
     function place() {
       if (!opened || card.hidden) {
         return;
@@ -385,8 +398,9 @@
           : rect.top - GAP - height >= EDGE ? rect.top - GAP - height
             : clamp(rect.bottom + GAP, EDGE, tall - height - EDGE);
       }
-      card.style.left = Math.round(left + window.scrollX) + "px";
-      card.style.top = Math.round(top + window.scrollY) + "px";
+      var paged = card.parentNode === document.body;
+      card.style.left = Math.round(left + (paged ? window.scrollX : 0)) + "px";
+      card.style.top = Math.round(top + (paged ? window.scrollY : 0)) + "px";
     }
 
     function open(box) {
@@ -399,6 +413,7 @@
       opened = box;
       box.group.setAttribute("aria-expanded", "true");
       fill(box);
+      home(box);
       card.hidden = false;
       place();
       card.focus({ preventScroll: true });
@@ -428,6 +443,25 @@
         shut(true);
       }
     });
+    // The view's dialog keeps Esc from the page, so a card open in it is
+    // closed here first, and the canceled key leaves the view open.
+    document.addEventListener("keydown", function (event) {
+      if (event.key === "Escape" && opened && card.parentNode !== document.body) {
+        event.preventDefault();
+        event.stopPropagation();
+        shut(true);
+      }
+    }, true);
+    // The view closing, by Esc or its ✕, closes the card in it and puts the
+    // card back in the page. A close event does not bubble, so it is caught
+    // on its way down.
+    document.addEventListener("close", function (event) {
+      var closed = event.target;
+      if (card && closed !== card && closed.contains && closed.contains(card)) {
+        shut(false);
+        document.body.appendChild(card);
+      }
+    }, true);
     // A click on a listed box opens its own card; one anywhere else outside
     // the card closes it.
     document.addEventListener("click", function (event) {
@@ -441,6 +475,8 @@
       }
     });
     window.addEventListener("resize", place);
+    // The view moved or zoomed the diagram: the card follows its box.
+    document.addEventListener(MOVED, place);
     // The card is set in the page, so a scroll of the page would carry it
     // out of the window: it is set again, beside its box as far as the
     // window lets it be.
