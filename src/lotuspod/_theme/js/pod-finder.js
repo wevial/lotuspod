@@ -4,9 +4,9 @@
 // its title, "in a tab" while it is open in one, its summary on one line, its
 // labels as the listing's tags and the day it was updated, all read from the
 // listing's rows. Each opening reads the index again, so a pod published
-// since it loaded is listed too: the pods there are show at once, and the
-// served index's once it answers 200. Typing filters them: each word of the query, ignoring case,
-// must appear in the pod's title, labels and summary joined.
+// since it loaded is listed too once that read answers 200. Typing filters
+// them: each word of the query, ignoring case, must appear in the pod's
+// title, labels and summary joined.
 //
 // The pods this reader has opened, by their seenAt in the seen route, come
 // first under "Recent", newest first, and the rest follow under "Other pods"
@@ -231,8 +231,7 @@
     if (!backdrop.hidden) render(true);
   };
 
-  // Read the index again, so a pod published since it loaded is listed;
-  // any answer but 200, or one with no listing, keeps the pods there are.
+  // Any answer but 200, or one with no listing, keeps the pods there are.
   let read = 0;
   const askIndex = async () => {
     const ask = ++read;
