@@ -345,6 +345,53 @@ class StandardInputTests(PublishTestCase):
             self.assertEqual((from_stdin / name).read_bytes(),
                              (from_file / name).read_bytes(), name)
 
+    def publish_at(self, moment: str, *argv: str,
+                   stdin: str | None = None) -> subprocess.CompletedProcess:
+        # Set the CLI's clock from outside: a sitecustomize gives the
+        # datetime module cli.py reads a now() that is `moment`.
+        hook = self.tmp / f"clock-{moment.replace(':', '')}"
+        hook.mkdir()
+        (hook / "sitecustomize.py").write_text(
+            "import datetime, sys, types\n"
+            f"sys.path.insert(0, {str(SRC_DIR)!r})\n"
+            "from lotuspod import cli\n"
+            "class _Moment(datetime.datetime):\n"
+            "    @classmethod\n"
+            "    def now(cls, tz=None):\n"
+            f"        return cls.fromisoformat({moment!r}).astimezone(tz)\n"
+            "clock = types.ModuleType('datetime')\n"
+            "clock.__dict__.update(vars(datetime))\n"
+            "clock.datetime = _Moment\n"
+            "cli._dt = clock\n",
+            encoding="utf-8",
+        )
+        env = dict(os.environ, PYTHONPATH=os.pathsep.join((str(hook), str(SRC_DIR))))
+        return subprocess.run(
+            [sys.executable, "-m", "lotuspod", "publish", *argv],
+            cwd=str(self.tmp), env=env, input=stdin, capture_output=True,
+            text=True, timeout=TIMEOUT,
+        )
+
+    def test_the_same_page_from_either_source_when_the_publishes_straddle_a_second(self):
+        # The two publishes of the test above, a second apart, as they fell
+        # in the unit check of #65: :43:16Z, then :43:17Z.
+        from_file = self.tmp / "from-file"
+        from_stdin = self.tmp / "from-stdin"
+        done = self.publish_at("2026-10-09T12:43:16+00:00",
+                               str(self.source("pond.md", POND)),
+                               "--out-dir", str(from_file), "--date", "2026-09-01")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        done = self.publish_at("2026-10-09T12:43:17+00:00",
+                               "-", "--format", "markdown", "--name", "pond",
+                               "--out-dir", str(from_stdin), "--date", "2026-09-01",
+                               stdin=POND)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertIn("2026-10-09T12:43:16Z", (from_file / "pond.html").read_text())
+        self.assertIn("2026-10-09T12:43:17Z", (from_stdin / "pond.html").read_text())
+        for name in ("pond.html", "pond.md"):
+            self.assertEqual((from_stdin / name).read_bytes(),
+                             (from_file / name).read_bytes(), name)
+
 
 
 def stored_name(data: bytes, extension: str) -> str:
