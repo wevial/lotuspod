@@ -84,6 +84,11 @@ earlier answer's, for a note kept unchanged with another option); the
 comment carries `answer`, {id, choice, label} of the answer, and is pulled
 as any comment is.
 
+A pulled answer may be an owner's dismissal of a question that no longer
+matters (lotuspod.db): still of kind `answer`, its `answer` carries
+`dismissed: true`, its reason in `note` and `undoneAt` once it is undone,
+and it is acknowledged by its id as any answer is.
+
 A pulled answer to a checklist also carries, in its `question`, `changed`:
 {id, label, checked} for each item whose state differs from its default, in
 the page's order, read against the page's form while it asks the checklist

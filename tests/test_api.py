@@ -106,7 +106,9 @@ class ApiTestCase(unittest.TestCase):
     questions decision-1 and decision-2), a visible page `other` asking the
     same questions, with one comment box for the page, and a hidden page
     `secret`, served with the test key trusted and a database beside the
-    output directory."""
+    output directory. owners are the [access] owners, none by default."""
+
+    owners = ""
 
     def setUp(self) -> None:
         tmp = tempfile.TemporaryDirectory()
@@ -140,8 +142,10 @@ class ApiTestCase(unittest.TestCase):
 
     def start(self, db_path: Path | None = None, *, allowed_emails: str = keys.EMAIL,
               max_image_bytes: int = media.DEFAULT_MAX_BYTES) -> None:
-        verifier = access.Verifier(access.parse_config(
-            keys.config_section(allowed_emails=allowed_emails)))
+        section = keys.config_section(allowed_emails=allowed_emails)
+        if self.owners:
+            section["owners"] = self.owners
+        verifier = access.Verifier(access.parse_config(section))
         server = cli._make_server(self.out_dir, HOST, 0, verifier=verifier,
                                   db_path=db_path or self.db_path,
                                   max_image_bytes=max_image_bytes)
@@ -982,6 +986,122 @@ class RefusalTests(ApiTestCase):
     def test_other_methods_are_not_allowed(self):
         self.assertEqual(self.ask("PUT", "/api/answers", {}),
                          (405, {"error": "method_not_allowed"}))
+        self.assertEmpty()
+
+
+class DismissalTests(ApiTestCase):
+    """An owner dismisses a question with an optional reason, and undoes it."""
+
+    owners = keys.EMAIL
+
+    def dismiss(self, question: str = "decision-1", reason: str = "", **extra):
+        return self.ask("POST", "/api/answers", {
+            "page": "plan", "question": question, "version": self.version(question),
+            "dismissed": True, "reason": reason, **extra})
+
+    def undo(self, question: str = "decision-1", **extra):
+        return self.ask("POST", "/api/answers",
+                        {"page": "plan", "question": question, "dismissed": False, **extra})
+
+    def test_a_dismissal_is_current_until_undone_and_the_earlier_answer_returns(self):
+        _, first = self.answer(choice="yes")
+        status, dismissal = self.dismiss(reason="Superseded by the pump plan")
+        self.assertEqual(status, 201, dismissal)
+        self.assertEqual(
+            {key: dismissal[key] for key in dismissal if key not in ("id", "createdAt")},
+            {"page": "plan", "question": "decision-1", "version": self.version(),
+             "choice": "", "note": "Superseded by the pump plan", "revision": self.revision,
+             "actor": SHOWN, "supersedes": first["id"], "dismissed": True})
+        asked_yes = {"text": "Freeze the pond?", "label": "Yes"}
+        asked_dismissed = {"text": "Freeze the pond?", "label": "Dismissed"}
+        _, got = self.ask("GET", "/api/answers?page=plan")
+        self.assertEqual(got["questions"]["decision-1"], {
+            "current": {**dismissal, "asked": asked_dismissed},
+            "earlier": [{**first, "asked": asked_yes}]})
+        # The reason opens no thread.
+        self.assertEqual(self.ask("GET", "/api/comments?page=plan")[1]["threads"], [])
+
+        status, undone = self.undo()
+        self.assertEqual(status, 200, undone)
+        self.assertEqual(undone["current"], {**first, "asked": asked_yes})
+        [earlier] = undone["earlier"]
+        self.assertRegex(earlier["undoneAt"], CREATED_AT)
+        self.assertEqual(earlier, {**dismissal, "asked": asked_dismissed,
+                                   "undoneAt": earlier["undoneAt"]})
+        self.assertEqual((undone["page"], undone["question"]), ("plan", "decision-1"))
+        _, got = self.ask("GET", "/api/answers?page=plan")
+        self.assertEqual(got["questions"]["decision-1"],
+                         {"current": undone["current"], "earlier": undone["earlier"]})
+        self.assertEqual(self.undo(), (409, {"error": "not_dismissed"}))
+
+        # Dismissed again once undone, then answered: the answer replaces it.
+        self.assertEqual(self.dismiss()[0], 201)
+        _, later = self.answer(choice="no")
+        self.assertEqual(self.undo(), (409, {"error": "not_dismissed"}))
+        _, got = self.ask("GET", "/api/answers?page=plan")
+        self.assertEqual(got["questions"]["decision-1"]["current"]["id"], later["id"])
+
+    def test_undoing_the_only_answer_leaves_the_question_unanswered(self):
+        status, dismissal = self.dismiss("decision-2")
+        self.assertEqual(status, 201, dismissal)
+        self.assertEqual((dismissal["note"], dismissal["supersedes"]), ("", None))
+        self.assertEqual(self.undo("decision-2"),
+                         (200, {"page": "plan", "question": "decision-2", "current": None,
+                                "earlier": []}))
+        self.assertEqual(self.ask("GET", "/api/answers?page=plan"),
+                         (200, {"page": "plan", "questions": {}}))
+
+    def test_refused_dismissals_and_undos_store_nothing(self):
+        self.assertEqual(self.dismiss(reason="r" * 200)[0], 201)
+        # Counted in characters, not UTF-16 units as a browser counts them.
+        self.assertEqual(self.dismiss("decision-2", reason="\U0001f41f" * 200)[0], 201)
+        self.assertEqual(self.undo("decision-2")[0], 200)
+        # Any text of that length, line breaks and tabs too.
+        for reason in ("a\nb", "a\tb", "a\u2028b"):
+            with self.subTest(reason=reason):
+                status, row = self.dismiss("decision-2", reason=reason)
+                self.assertEqual((status, row["note"]), (201, reason))
+                self.assertEqual(self.undo("decision-2")[0], 200)
+        _, before = self.ask("GET", "/api/answers?page=plan")
+        for label, got, status, error in (
+            ("201-character reason", self.dismiss("decision-2", reason="r" * 201),
+             400, "invalid_body"),
+            ("dismissed twice", self.dismiss(reason="Again"), 409, "already_dismissed"),
+            ("another version", self.dismiss("decision-2", version="v0"), 409, "stale"),
+            ("a question the page does not ask", self.dismiss("decision-3"),
+             400, "unknown_question"),
+            ("no reason", self.ask("POST", "/api/answers", {
+                "page": "plan", "question": "decision-2", "version": self.version("decision-2"),
+                "dismissed": True}), 400, "invalid_body"),
+            ("dismissed not a boolean", self.dismiss("decision-2", dismissed="yes"),
+             400, "invalid_body"),
+            ("a choice beside it", self.dismiss("decision-2", choice="yes"),
+             400, "invalid_body"),
+            ("an undo with a version", self.undo(version=self.version()), 400, "invalid_body"),
+            ("an undo of a question never answered", self.undo("decision-2"),
+             409, "not_dismissed"),
+            ("an undo of a question the page does not ask", self.undo("decision-3"),
+             400, "unknown_question"),
+            ("a hidden page", self.dismiss(page="secret"), 404, "unknown_page"),
+        ):
+            with self.subTest(label):
+                self.assertEqual(got, (status, {"error": error}))
+        self.assertEqual(self.ask("GET", "/api/answers?page=plan"), (200, before))
+        self.assertEqual(self.ask("GET", "/api/comments?page=plan")[1]["threads"], [])
+
+
+class NotOwnerDismissalTests(ApiTestCase):
+    """With no owners configured, no reader may dismiss or undo."""
+
+    def test_a_reader_who_is_no_owner_may_not_dismiss_or_undo(self):
+        version = self.version()
+        for body in ({"page": "plan", "question": "decision-1", "version": version,
+                      "dismissed": True, "reason": "Not needed"},
+                     {"page": "plan", "question": "decision-1", "dismissed": False},
+                     {"page": "plan", "question": "decision-1", "dismissed": True}):
+            with self.subTest(body=body):
+                self.assertEqual(self.ask("POST", "/api/answers", body),
+                                 (403, {"error": "not_owner"}))
         self.assertEmpty()
 
 

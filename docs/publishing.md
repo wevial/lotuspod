@@ -1040,6 +1040,24 @@ open thread (see [The comments panel](comments.md#the-comments-panel)). Ask
 sits in the card's foot, so a folded card shows it again after "change"; the
 chip stays under a folded card.
 
+A reader in the `[access] owners` list (the page asks the archive route, as
+its Archive button does; see [Archive a page](#archive-a-page)) also gets
+"Dismiss" after "Save answer" and Ask on each decision, for one that no
+longer matters, such as one another plan replaced. It posts the note's text,
+trimmed, as the reason (see [Answers and
+comments](comments.md#answers-and-comments)); a note over 200 characters
+posts nothing and says "Shorten the note to 200 characters to dismiss with it
+as the reason." Dismissed, the note is emptied and folded, and the card folds
+to "Dismissed: REASON · Undo" (or "Dismissed · Undo" with no reason), with
+no ✓, then the reader and the time. A dismissed decision stops counting as
+open: the title bar's "N to answer", the section marks and Next open leave it
+out, the Respond panel shows its state as "Dismissed", and the Answered table
+lists it as "Dismissed" with its reason under it and no "change". Undo puts
+the decision back as it stood: open, or folded to its earlier answer. Any
+other reader sees a dismissed card as "Dismissed: REASON", with no Undo and
+no Dismiss. A dismissal reaches the page owner's agent as an answer (see
+[Agents](agents.md)).
+
 On such a page, an answer saved with a note also opens a thread on the
 decision holding the note, so the page's owner can reply to it: the chip
 appears under the card as soon as it is saved, and the note's message in the
