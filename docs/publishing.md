@@ -1263,6 +1263,9 @@ A feature's CSS goes in its own file in `src/lotuspod/_theme/css/` and its JS in
 order (`THEME_SOURCES` in `cli.py`), which render joins into the one
 `lotuspod.css`, `lotuspod-page.js`, `lotuspod-index.js` and
 `lotuspod-old-version.js` it serves.
+A script converted to TypeScript lives in `web/src/`, and its built file, the
+one `THEME_SOURCES` names, under `src/lotuspod/_theme/js/` (see
+[Theme build](development.md#theme-build)).
 Pages address the stylesheet and page script, and the index its script, by a
 hash of the theme files, so there is no version to raise.
 

@@ -1,0 +1,17 @@
+{
+  // The build script and its test, on Bun's types; the browser sources have
+  // their own config in src/.
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "Preserve",
+    "moduleResolution": "bundler",
+    "lib": ["ESNext"],
+    "types": ["bun"],
+    "strict": true,
+    "erasableSyntaxOnly": true,
+    "verbatimModuleSyntax": true,
+    "noEmit": true,
+    "skipLibCheck": true
+  },
+  "include": ["build.ts", "build.test.ts"]
+}

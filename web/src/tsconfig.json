@@ -1,0 +1,15 @@
+{
+  // The browser sources: the DOM's types and none of Bun's. The empty
+  // "references" keeps tsc from failing while no source is converted yet.
+  "compilerOptions": {
+    "target": "ESNext",
+    "lib": ["ESNext", "DOM"],
+    "types": [],
+    "strict": true,
+    "erasableSyntaxOnly": true,
+    "noEmit": true,
+    "skipLibCheck": true
+  },
+  "include": ["*.ts"],
+  "references": []
+}
