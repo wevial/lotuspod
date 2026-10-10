@@ -1,0 +1,20 @@
+{
+  // The islands: modules with imports, bundled with Preact into one script
+  // (web/build.ts), JSX through Preact's automatic runtime. The DOM's types
+  // and none of Bun's, as for the per-file sources in ../.
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "Preserve",
+    "moduleResolution": "bundler",
+    "lib": ["ESNext", "DOM"],
+    "types": [],
+    "jsx": "react-jsx",
+    "jsxImportSource": "preact",
+    "strict": true,
+    "erasableSyntaxOnly": true,
+    "verbatimModuleSyntax": true,
+    "noEmit": true,
+    "skipLibCheck": true
+  },
+  "include": ["*.ts", "*.tsx"]
+}

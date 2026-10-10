@@ -2,11 +2,11 @@
 // WEB/package.json and WEB/src beside src/lotuspod/_theme/js.
 
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { build, marker, outDir, unparsed } from "./build";
+import { build, ISLANDS_MARKER, marker, outDir, unparsed } from "./build";
 
 const SOURCE = `// Counts the pods a reader has open.
 interface Pod {
@@ -60,9 +60,9 @@ test("the output directory is the theme's js directory beside web", () => {
   expect(out).toBe(join(root, "src", "lotuspod", "_theme", "js"));
 });
 
-test("a source is written as its JS after the marker line, with no types or comments", () => {
+test("a source is written as its JS after the marker line, with no types or comments", async () => {
   writeFileSync(join(web, "src", "pod-count.ts"), SOURCE);
-  build(web);
+  await build(web);
   const built = readFileSync(join(out, "pod-count.js"), "utf8");
   const [first, ...rest] = built.split("\n");
   expect(first + "\n").toBe(marker("pod-count"));
@@ -70,30 +70,30 @@ test("a source is written as its JS after the marker line, with no types or comm
   expect(rest.join("\n")).toBe(STRIPPED);
 });
 
-test("building twice gives identical bytes and rewrites nothing", () => {
+test("building twice gives identical bytes and rewrites nothing", async () => {
   writeFileSync(join(web, "src", "pod-count.ts"), SOURCE);
-  build(web);
-  expect(build(web)).toEqual({ written: [], removed: [] });
+  await build(web);
+  expect(await build(web)).toEqual({ written: [], removed: [] });
 });
 
-test("a hand edit to a built file is overwritten", () => {
+test("a hand edit to a built file is overwritten", async () => {
   writeFileSync(join(web, "src", "pod-count.ts"), SOURCE);
-  build(web);
+  await build(web);
   writeFileSync(join(out, "pod-count.js"), marker("pod-count") + "edited();\n");
-  expect(build(web).written).toEqual([join(out, "pod-count.js")]);
+  expect((await build(web)).written).toEqual([join(out, "pod-count.js")]);
   expect(readFileSync(join(out, "pod-count.js"), "utf8")).toBe(marker("pod-count") + STRIPPED);
 });
 
-test("a declaration file is not built", () => {
+test("a declaration file is not built", async () => {
   writeFileSync(join(web, "src", "globals.d.ts"), "declare const lotuspod: string;\n");
-  build(web);
+  await build(web);
   expect(readdirSync(out)).toEqual([]);
 });
 
-test("a marked file whose source is gone is deleted, and a hand-written one is untouched", () => {
+test("a marked file whose source is gone is deleted, and a hand-written one is untouched", async () => {
   writeFileSync(join(out, "gone.js"), marker("gone") + STRIPPED);
   writeFileSync(join(out, "shared.js"), HAND_WRITTEN);
-  expect(build(web)).toEqual({ written: [], removed: [join(out, "gone.js")] });
+  expect(await build(web)).toEqual({ written: [], removed: [join(out, "gone.js")] });
   expect(existsSync(join(out, "gone.js"))).toBe(false);
   expect(readFileSync(join(out, "shared.js"), "utf8")).toBe(HAND_WRITTEN);
 });
@@ -110,14 +110,14 @@ test("another Bun exits non-zero before writing anything, naming both versions",
   expect(readdirSync(out)).toEqual(["gone.js"]);
 });
 
-test("a source whose \"use strict\" the transpiler drops is refused before anything is written", () => {
+test("a source whose \"use strict\" the transpiler drops is refused before anything is written", async () => {
   writeFileSync(join(web, "src", "a.ts"), SOURCE);
   writeFileSync(join(web, "src", "strict.ts"), '(function () {\n  "use strict";\n  document.title = "x";\n})();\n');
-  expect(() => build(web)).toThrow('web/src/strict.ts: Bun\'s transpiler drops its "use strict"');
+  await expect(build(web)).rejects.toThrow('web/src/strict.ts: Bun\'s transpiler drops its "use strict"');
   expect(readdirSync(out)).toEqual([]);
 });
 
-test("a \"use strict\" directive is refused wherever it stands: at the top, inline, in an arrow or a method", () => {
+test("a \"use strict\" directive is refused wherever it stands: at the top, inline, in an arrow or a method", async () => {
   for (const source of [
     "'use strict';\nvar count = 1;\n",
     '(function (this: void) { "use strict"; return this === undefined; })();\n',
@@ -125,27 +125,85 @@ test("a \"use strict\" directive is refused wherever it stands: at the top, inli
     'class Pods {\n  count(): number {\n    "use strict";\n    return 1;\n  }\n}\n',
   ]) {
     writeFileSync(join(web, "src", "strict.ts"), source);
-    expect(() => build(web)).toThrow('web/src/strict.ts: Bun\'s transpiler drops its "use strict"');
+    await expect(build(web)).rejects.toThrow('web/src/strict.ts: Bun\'s transpiler drops its "use strict"');
     expect(readdirSync(out)).toEqual([]);
   }
 });
 
-test("\"use strict\" in a comment or a string is not a directive, and builds", () => {
+test("\"use strict\" in a comment or a string is not a directive, and builds", async () => {
   const source = '/*\n"use strict"\n*/\nconst why: string = "use strict";\ndocument.title = `${why}, \'use strict\'`;\n';
   writeFileSync(join(web, "src", "quoted.ts"), source);
-  build(web);
+  await build(web);
   expect(readFileSync(join(out, "quoted.js"), "utf8")).toBe(
     marker("quoted") + 'const why = "use strict";\ndocument.title = `${why}, \'use strict\'`;\n',
   );
 });
 
-test("a source with an import or export is refused, since render joins classic scripts", () => {
+test("a source with an import or export is refused, since render joins classic scripts", async () => {
   writeFileSync(join(web, "src", "a.ts"), SOURCE);
   for (const source of ["export const count: number = 1;\n", "export {};\nconst count = 1;\n", 'import "./a";\n']) {
     writeFileSync(join(web, "src", "module.ts"), source);
-    expect(() => build(web)).toThrow("web/src/module.ts: its JS is not a classic script");
+    await expect(build(web)).rejects.toThrow("web/src/module.ts: its JS is not a classic script");
     expect(readdirSync(out)).toEqual([]);
   }
+});
+
+// The islands entry: a module whose import names a free variable, as an
+// island reaches the page script's closure through the bridge.
+function writeIslands(files: Record<string, string>): void {
+  mkdirSync(join(web, "src", "islands"), { recursive: true });
+  for (const [file, source] of Object.entries(files)) {
+    writeFileSync(join(web, "src", "islands", file), source);
+  }
+}
+
+const BRIDGE = "declare const live: { seen(revision: string): void };\nexport const page = { live };\n";
+const ENTRY = 'import { page } from "./bridge";\n\npage.live.seen("r2");\n';
+
+test("the islands entry is bundled with its imports into islands.js, after its marker, as one script", async () => {
+  writeFileSync(join(web, "src", "pod-count.ts"), SOURCE);
+  writeIslands({ "bridge.ts": BRIDGE, "main.tsx": ENTRY });
+  await build(web);
+  expect(readdirSync(out).sort()).toEqual(["islands.js", "pod-count.js"]);
+  const built = readFileSync(join(out, "islands.js"), "utf8");
+  expect(built).toStartWith(ISLANDS_MARKER);
+  expect(ISLANDS_MARKER).toContain("web/src/islands/main.tsx");
+  expect(built).not.toContain("import");
+  expect(unparsed(out)).toEqual([]);
+  // The free name keeps its own, so the closure's live is the one read.
+  const seen: string[] = [];
+  new Function("live", built)({ seen: (revision: string) => seen.push(revision) });
+  expect(seen).toEqual(["r2"]);
+  expect(await build(web)).toEqual({ written: [], removed: [] });
+});
+
+test("an island's JSX goes through Preact's automatic runtime, not its development one", async () => {
+  symlinkSync(join(import.meta.dir, "node_modules"), join(web, "node_modules"));
+  writeIslands({ "main.tsx": 'import { render } from "preact";\n\nrender(<p class="island">hi</p>, document.body);\n' });
+  await build(web);
+  const built = readFileSync(join(out, "islands.js"), "utf8");
+  expect(built).toContain('{class:"island",children:"hi"}');
+  expect(built).not.toContain("void 0,this)");
+  expect(unparsed(out)).toEqual([]);
+});
+
+test("an islands.js whose entry is gone is deleted", async () => {
+  writeFileSync(join(out, "islands.js"), ISLANDS_MARKER + "(()=>{})();\n");
+  expect(await build(web)).toEqual({ written: [], removed: [join(out, "islands.js")] });
+});
+
+test("an islands entry that does not bundle is refused before anything is written", async () => {
+  writeFileSync(join(web, "src", "pod-count.ts"), SOURCE);
+  writeIslands({ "main.tsx": 'import { page } from "./missing";\n\nconsole.log(page);\n' });
+  await expect(build(web)).rejects.toThrow("web/src/islands/main.tsx: Bun could not bundle it");
+  expect(readdirSync(out)).toEqual([]);
+});
+
+test("a source named as the islands bundle is refused", async () => {
+  writeFileSync(join(web, "src", "islands.ts"), SOURCE);
+  writeIslands({ "bridge.ts": BRIDGE, "main.tsx": ENTRY });
+  await expect(build(web)).rejects.toThrow("web/src/islands.ts: its name is the islands bundle's");
+  expect(readdirSync(out)).toEqual([]);
 });
 
 // check, run as CI runs it but from the root of a scratch repository and
@@ -165,10 +223,10 @@ function commitAll(): void {
   git("commit", "-q", "--allow-empty", "-m", "scratch");
 }
 
-test("check passes when the committed JS is fresh", () => {
+test("check passes when the committed JS is fresh", async () => {
   git("init", "-q");
   writeFileSync(join(web, "src", "pod-count.ts"), SOURCE);
-  build(web);
+  await build(web);
   commitAll();
   expect(check().exitCode).toBe(0);
 });
@@ -182,10 +240,10 @@ test("check fails naming a built file missing after its source was added", () =>
   expect(stderr).toContain("?? src/lotuspod/_theme/js/pod-count.js");
 });
 
-test("check fails naming a hand-edited built file", () => {
+test("check fails naming a hand-edited built file", async () => {
   git("init", "-q");
   writeFileSync(join(web, "src", "pod-count.ts"), SOURCE);
-  build(web);
+  await build(web);
   writeFileSync(join(out, "pod-count.js"), marker("pod-count") + "edited();\n");
   commitAll();
   const { exitCode, stderr } = check();

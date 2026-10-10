@@ -1,7 +1,10 @@
 // Builds each theme source web/src/NAME.ts into src/lotuspod/_theme/js/NAME.js:
 // its types stripped by Bun's transpiler (no bundling, so each file stands
-// alone), after one marker line naming the source. The order the scripts are
-// served in stays in THEME_SOURCES in src/lotuspod/cli.py, which joins them.
+// alone), after one marker line naming the source. Beside them it bundles the
+// islands entry, web/src/islands/main.tsx, with its imports and Preact into
+// src/lotuspod/_theme/js/islands.js, after its marker line. The order the
+// scripts are served in stays in THEME_SOURCES in src/lotuspod/cli.py, which
+// joins them.
 //
 //   bun build.ts [WEB_DIR]           build
 //   bun build.ts --check [WEB_DIR]   build, then fail on a file that does not
@@ -17,11 +20,22 @@ const USE_STRICT = "use strict";
 // Not a directive JavaScript knows, so Bun keeps it where it stands.
 const USE_STRICT_PROBE = "use strict, probed by web/build.ts";
 
+// The islands entry under web/src, and the name of the script it is bundled
+// into.
+const ISLANDS_ENTRY = "islands/main.tsx";
+const ISLANDS = "islands";
+
 class BuildError extends Error {}
 
-export function marker(name: string): string {
-  return `${MARKER_PREFIX}${name}.ts by web/build.ts. Edit that file, not this one.\n`;
+function markerOf(source: string): string {
+  return `${MARKER_PREFIX}${source} by web/build.ts. Edit that file, not this one.\n`;
 }
+
+export function marker(name: string): string {
+  return markerOf(`${name}.ts`);
+}
+
+export const ISLANDS_MARKER = markerOf(ISLANDS_ENTRY);
 
 export function outDir(webDir: string): string {
   return join(webDir, "..", "src", "lotuspod", "_theme", "js");
@@ -61,9 +75,36 @@ function strip(transpiler: Bun.Transpiler, name: string, source: string): string
   return marker(name) + stripped;
 }
 
+// The JS of the islands entry and everything it imports, Preact among them,
+// as one minified IIFE for the browser, with JSX through Preact's automatic
+// runtime: a classic script render joins last inside the page script's
+// closure. Null when there is no entry.
+async function bundle(srcDir: string): Promise<string | null> {
+  const entry = join(srcDir, ISLANDS_ENTRY);
+  if (!existsSync(entry)) {
+    return null;
+  }
+  const result = await Bun.build({
+    entrypoints: [entry],
+    target: "browser",
+    format: "iife",
+    minify: true,
+    sourcemap: "none",
+    jsx: { runtime: "automatic", importSource: "preact", development: false },
+    throw: false,
+  });
+  if (!result.success) {
+    throw new BuildError(`web/src/${ISLANDS_ENTRY}: Bun could not bundle it\n${result.logs.join("\n")}`);
+  }
+  if (result.outputs.length !== 1) {
+    throw new BuildError(`web/src/${ISLANDS_ENTRY}: Bun bundled it into ${result.outputs.length} files, not one script`);
+  }
+  return ISLANDS_MARKER + (await result.outputs[0]!.text());
+}
+
 type BuildResult = { written: string[]; removed: string[] };
 
-export function build(webDir: string): BuildResult {
+export async function build(webDir: string): Promise<BuildResult> {
   checkBun(webDir);
   const srcDir = join(webDir, "src");
   const out = outDir(webDir);
@@ -74,6 +115,14 @@ export function build(webDir: string): BuildResult {
   const transpiler = new Bun.Transpiler({ loader: "ts", target: "browser" });
   const result: BuildResult = { written: [], removed: [] };
   const builds = names.map((name) => strip(transpiler, name, readFileSync(join(srcDir, `${name}.ts`), "utf8")));
+  const islands = await bundle(srcDir);
+  if (islands !== null) {
+    if (names.includes(ISLANDS)) {
+      throw new BuildError(`web/src/${ISLANDS}.ts: its name is the islands bundle's, ${ISLANDS}.js`);
+    }
+    names.push(ISLANDS);
+    builds.push(islands);
+  }
   if (names.length) {
     mkdirSync(out, { recursive: true });
   }
@@ -129,12 +178,12 @@ function git(cwd: string, args: string[]): string {
   return run.stdout.toString();
 }
 
-function main(args: string[]): number {
+async function main(args: string[]): Promise<number> {
   const check = args.includes("--check");
   // Absolute, since git runs in it and is handed the output directory.
   const webDir = resolve(args.find((arg) => arg !== "--check") ?? import.meta.dir);
   try {
-    const { written, removed } = build(webDir);
+    const { written, removed } = await build(webDir);
     for (const target of written) console.log(`built ${target}`);
     for (const target of removed) console.log(`removed ${target}, its source is gone`);
     if (!check) {
@@ -165,5 +214,5 @@ function main(args: string[]): number {
 }
 
 if (import.meta.main) {
-  process.exit(main(process.argv.slice(2)));
+  process.exit(await main(process.argv.slice(2)));
 }

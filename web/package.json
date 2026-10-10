@@ -5,12 +5,15 @@
   "packageManager": "bun@1.4.2",
   "scripts": {
     "build": "bun build.ts",
-    "typecheck": "bunx --bun tsc --noEmit -p tsconfig.json && bunx --bun tsc --noEmit -p src/tsconfig.json",
+    "typecheck": "bunx --bun tsc --noEmit -p tsconfig.json && bunx --bun tsc --noEmit -p src/tsconfig.json && bunx --bun tsc --noEmit -p src/islands/tsconfig.json",
     "test": "bun test",
     "check": "bun build.ts --check"
   },
   "devDependencies": {
     "@types/bun": "1.4.2",
     "typescript": "7.0.2"
+  },
+  "dependencies": {
+    "preact": "11.0.1"
   }
 }
