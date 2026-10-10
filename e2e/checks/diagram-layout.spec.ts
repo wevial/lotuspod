@@ -9,8 +9,8 @@ const SIGNED_IN = { 'Cf-Access-Jwt-Assertion': process.env.LOTUSPOD_TEST_ASSERTI
 test.use({ viewport: { width: 1280, height: 800 }, extraHTTPHeaders: SIGNED_IN });
 
 // The capture fixture's ELK layout page: a flowchart whose first line asks for
-// the ELK layout, with three subgraph lanes (Plan lane: P1, P2; Build lane:
-// B1, B2, B3; Ship lane: S1, S2), arrows between the lanes, and a Nodes table listing every box.
+// the ELK layout, with these subgraph lanes, arrows between them, and a Nodes
+// table listing every box.
 const PAGE = '/capture-elk-layout.html';
 const LANES: Record<string, string[]> = {
   'Plan lane': ['P1', 'P2'],
