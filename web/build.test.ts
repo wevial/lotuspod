@@ -220,3 +220,12 @@ test("a file of a closure's body parses on its own: top-level functions, var and
   writeFileSync(join(out, "notes.txt"), "})();\n");
   expect(unparsed(out)).toEqual([]);
 });
+
+test("a file nested under the output directory that does not parse is named", () => {
+  mkdirSync(join(out, "feature"));
+  writeFileSync(join(out, "feature", "broken.js"), "(function () {\n");
+  writeFileSync(join(out, "feature", "whole.js"), HAND_WRITTEN);
+  const problems = unparsed(out);
+  expect(problems).toHaveLength(1);
+  expect(problems[0]).toStartWith(`${join(out, "feature", "broken.js")}: does not parse on its own`);
+});

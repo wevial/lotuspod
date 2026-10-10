@@ -9,7 +9,7 @@
 //
 // WEB_DIR defaults to this directory; the output is its ../src/lotuspod/_theme/js.
 
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 
 const MARKER_PREFIX = "// Built from web/src/";
@@ -100,14 +100,17 @@ export function build(webDir: string): BuildResult {
   return result;
 }
 
-// Each JS file in the output directory, built or written by hand, that does
-// not parse on its own, with Bun's parse error: a source is a complete script,
-// and render adds the closure some served scripts share (THEME_CLOSURES in
-// src/lotuspod/cli.py).
+// Each JS file under the output directory, at any depth, built or written by
+// hand, that does not parse on its own, with Bun's parse error: a source is a
+// complete script, and render adds the closure some served scripts share
+// (THEME_CLOSURES in src/lotuspod/cli.py).
 export function unparsed(dir: string): string[] {
   const transpiler = new Bun.Transpiler({ loader: "js", target: "browser" });
   const problems: string[] = [];
-  for (const file of readdirSync(dir).filter((file) => file.endsWith(".js")).sort()) {
+  const files = readdirSync(dir, { recursive: true, encoding: "utf8" })
+    .filter((file) => file.endsWith(".js") && statSync(join(dir, file)).isFile())
+    .sort();
+  for (const file of files) {
     const target = join(dir, file);
     try {
       transpiler.transformSync(readFileSync(target, "utf8"));

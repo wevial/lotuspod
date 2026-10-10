@@ -102,6 +102,17 @@ class JoinTests(TempDirTestCase):
         # after it is its argument.
         self.assertTrue((cli.THEME_DIR / "js/open-in-tabs.js").read_bytes().endswith(b"})()\n"))
 
+    def test_no_source_opens_or_closes_the_closure(self):
+        """The closure's opening and close are the join's: js/page-close.js
+        and js/old-version-open.js are neither declared nor on disk."""
+        declared = {source for sources in cli.THEME_SOURCES.values() for source in sources}
+        for fragment in ("js/page-close.js", "js/old-version-open.js"):
+            with self.subTest(fragment=fragment):
+                self.assertNotIn(fragment, declared)
+                self.assertFalse((cli.THEME_DIR / fragment).exists())
+        problems = source_problems(cli.THEME_DIR, cli.THEME_SOURCES)
+        self.assertEqual(problems, [], "\n".join(problems))
+
     def test_sync_writes_the_index_script_from_its_source(self):
         cli.sync_theme_css(self.out_dir)
         self.assertEqual(
