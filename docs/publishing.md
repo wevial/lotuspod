@@ -89,7 +89,9 @@ the script runs, or without scripting, it reads as a code block. A body with no
 diagram block ships no script and no CDN reference at all.
 
 The same script registers Mermaid's ELK layout (`@mermaid-js/layout-elk`
-0.2.3). Diagrams use Mermaid's default layout unless they opt in. To opt in,
+0.2.3), which it loads only when a diagram asks for it, so a diagram without
+the opt-in draws even if ELK cannot load. Diagrams use Mermaid's default
+layout unless they opt in. To opt in,
 make the diagram's first line an init line that asks for `elk`. ELK keeps
 lanes drawn as subgraphs in their own boxes and routes the arrows between them
 in straight channels. Node cards, the Expand view and status colors work as

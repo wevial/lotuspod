@@ -50,8 +50,14 @@
   </main>
 {{#mermaid}}  <script type="module">
     import mermaid from "{{mermaid_dir}}dist/mermaid.esm.min.mjs";
-    import elkLayouts from "{{mermaid_elk_dir}}dist/mermaid-layout-elk.esm.min.mjs";
-    mermaid.registerLayoutLoaders(elkLayouts);
+    mermaid.registerLayoutLoaders([{
+      name: "elk",
+      algorithm: "elk.layered",
+      async loader() {
+        const { default: layouts } = await import("{{mermaid_elk_dir}}dist/mermaid-layout-elk.esm.min.mjs");
+        return layouts.find((layout) => layout.name === "elk").loader();
+      }
+    }]);
     mermaid.initialize({
       startOnLoad: true,
       theme: "base",

@@ -142,3 +142,23 @@ test('a box on an ELK diagram opens its node card', async ({ page }) => {
   expect(graph).toEqual([['Waits for', 'P1 (merged)'], ['Unblocks', 'B2 (open)']]);
   await seen.clean();
 });
+
+test('a diagram without the opt-in is drawn even when ELK fails to load', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  const mermaid = Object.entries(COPIES).find(([dir]) => dir !== MERMAID_ELK_DIR)!;
+  await page.route(`${mermaid[0]}**`, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'text/javascript',
+      headers: { 'Access-Control-Allow-Origin': '*' },
+      body: fs.readFileSync(path.join(mermaid[1], route.request().url().slice(mermaid[0].length))),
+    });
+  });
+  await page.route(`${MERMAID_ELK_DIR}**`, (route) => route.abort());
+  // The capture fixture's diagram page: one default-layout flowchart, A --> B --> C.
+  await page.goto('/capture-diagram.html?standalone');
+  await expect(page.locator('pre.mermaid svg')).toHaveCount(1);
+  await expect(page.locator('pre.mermaid svg g.node')).toHaveCount(3);
+  expect(errors).toEqual([]);
+});
