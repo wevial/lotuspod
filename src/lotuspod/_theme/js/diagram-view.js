@@ -289,7 +289,6 @@
         parts.stage.releasePointerCapture(event.pointerId);
       }
       if (!pointers.size) {
-        press = null;
         parts.stage.classList.remove("artifact-diagram-view-stage--dragging");
       }
     }
@@ -362,7 +361,6 @@
       var was = shown;
       shown = null;
       pointers.clear();
-      press = null;
       dragged = false;
       parts.stage.classList.remove("artifact-diagram-view-stage--dragging");
       was.pre.insertBefore(was.svg, was.next && was.next.parentNode === was.pre ? was.next : was.expand);

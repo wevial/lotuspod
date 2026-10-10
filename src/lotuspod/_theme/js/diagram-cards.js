@@ -457,7 +457,7 @@
     // on its way down.
     document.addEventListener("close", function (event) {
       var closed = event.target;
-      if (card && closed !== card && closed.contains && closed.contains(card)) {
+      if (card && closed.contains(card)) {
         shut(false);
         document.body.appendChild(card);
       }
