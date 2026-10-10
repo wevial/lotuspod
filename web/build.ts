@@ -23,27 +23,18 @@ export function outDir(webDir: string): string {
   return join(webDir, "..", "src", "lotuspod", "_theme", "js");
 }
 
-// The one Bun pin, package.json's "packageManager": "bun@X.Y.Z".
-function pinnedBun(webDir: string): string {
+// The one Bun pin is package.json's "packageManager": "bun@X.Y.Z". Bun's
+// transpiler output is byte-stable only within one release, so any other Bun
+// would make the committed JS look stale.
+function checkBun(webDir: string): void {
   const manifest = JSON.parse(readFileSync(join(webDir, "package.json"), "utf8"));
-  const match = /^bun@(\S+)$/.exec(manifest.packageManager ?? "");
-  if (!match) {
+  const pinned = /^bun@(\S+)$/.exec(manifest.packageManager ?? "")?.[1];
+  if (!pinned) {
     throw new BuildError(`${join(webDir, "package.json")}: "packageManager" does not name bun@VERSION`);
   }
-  return match[1]!;
-}
-
-// Bun's transpiler output is byte-stable only within one release, so any
-// other Bun would make the committed JS look stale.
-function checkBun(webDir: string): void {
-  const pinned = pinnedBun(webDir);
   if (Bun.version !== pinned) {
     throw new BuildError(`this is Bun ${Bun.version}, but web/package.json pins bun@${pinned}: install Bun ${pinned} to build`);
   }
-}
-
-function strip(source: string): string {
-  return new Bun.Transpiler({ loader: "ts", target: "browser" }).transformSync(source);
 }
 
 type BuildResult = { written: string[]; removed: string[] };
@@ -56,12 +47,13 @@ export function build(webDir: string): BuildResult {
     .filter((file) => file.endsWith(".ts") && !file.endsWith(".d.ts"))
     .map((file) => basename(file, ".ts"))
     .sort();
+  const transpiler = new Bun.Transpiler({ loader: "ts", target: "browser" });
   const result: BuildResult = { written: [], removed: [] };
   if (names.length) {
     mkdirSync(out, { recursive: true });
   }
   for (const name of names) {
-    const built = marker(name) + strip(readFileSync(join(srcDir, `${name}.ts`), "utf8"));
+    const built = marker(name) + transpiler.transformSync(readFileSync(join(srcDir, `${name}.ts`), "utf8"));
     const target = join(out, `${name}.js`);
     if (!existsSync(target) || readFileSync(target, "utf8") !== built) {
       writeFileSync(target, built);
@@ -91,12 +83,6 @@ function git(cwd: string, args: string[]): string {
   return run.stdout.toString();
 }
 
-// What git sees differ under the output directory once built: modified,
-// deleted or new. Empty when the committed JS is fresh.
-function staleFiles(webDir: string): string {
-  return git(webDir, ["status", "--porcelain", "--untracked-files=all", "--", outDir(webDir)]);
-}
-
 function main(args: string[]): number {
   const check = args.includes("--check");
   const webDir = args.find((arg) => arg !== "--check") ?? import.meta.dir;
@@ -107,7 +93,9 @@ function main(args: string[]): number {
     if (!check) {
       return 0;
     }
-    const stale = staleFiles(webDir);
+    // What git sees differ under the output directory once built: modified,
+    // deleted or new. Empty when the committed JS is fresh.
+    const stale = git(webDir, ["status", "--porcelain", "--untracked-files=all", "--", outDir(webDir)]);
     if (!stale) {
       console.log("theme build is fresh");
       return 0;
