@@ -495,6 +495,34 @@ test("a node card closes when its diagram's view opens and opens again after", a
   await seen.clean();
 });
 
+test('the view colors each box by its status as the page does, and Esc leaves them so', async ({ page }) => {
+  const seen = await watch(page);
+  await page.goto(`${CARDS_PAGE}?standalone`);
+  await expect(expand(page)).toHaveCount(1);
+  // The first plan's Nodes table gives A merged, C ready and D waiting.
+  const looks = (svg: Locator) => svg.evaluate((node) => {
+    const look = (id: string) => {
+      const style = getComputedStyle(node.querySelector(`g.node[id^="flowchart-${id}-"] > .label-container`)!);
+      return { stroke: style.stroke, fill: style.fill, dash: style.strokeDasharray, opacity: style.opacity };
+    };
+    return { merged: look('A'), ready: look('C'), waiting: look('D') };
+  });
+  const before = await looks(drawing(page));
+  expect(new Set(Object.values(before).map((look) => JSON.stringify(look))).size).toBe(3);
+
+  await diagram(page).hover({ position: { x: 4, y: 4 } });
+  await expand(page).click();
+  await expect(view(page).dialog).toBeVisible();
+  await expect(view(page).svg).toHaveCount(1);
+  expect(await looks(view(page).svg)).toEqual(before);
+
+  await page.keyboard.press('Escape');
+  await expect(view(page).dialog).toBeHidden();
+  await expect(drawing(page)).toHaveCount(1);
+  expect(await looks(drawing(page))).toEqual(before);
+  await seen.clean();
+});
+
 test.describe('without scripts', () => {
   test.use({ javaScriptEnabled: false });
 
