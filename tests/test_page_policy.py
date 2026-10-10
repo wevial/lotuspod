@@ -140,7 +140,7 @@ class PolicyTagTests(PolicyTestCase):
         script_src = self.policy_of(page)["script-src"]
         hashes = [source for source in script_src if source.startswith("'sha256-")]
         self.assertEqual(hashes, [sha256_source(module["text"])])
-        self.assertEqual(sorted(script_src), sorted(["'self'", MERMAID_DIR, *hashes]))
+        self.assertEqual(sorted(script_src), sorted(["'self'", MERMAID_DIR, MERMAID_ELK_DIR, *hashes]))
 
     def test_a_diagram_page_registers_and_allows_the_elk_layout(self):
         page, _ = self.render_body("diagram", DIAGRAM)

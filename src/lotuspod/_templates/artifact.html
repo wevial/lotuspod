@@ -50,6 +50,8 @@
   </main>
 {{#mermaid}}  <script type="module">
     import mermaid from "{{mermaid_dir}}dist/mermaid.esm.min.mjs";
+    import elkLayouts from "{{mermaid_elk_dir}}dist/mermaid-layout-elk.esm.min.mjs";
+    mermaid.registerLayoutLoaders(elkLayouts);
     mermaid.initialize({
       startOnLoad: true,
       theme: "base",

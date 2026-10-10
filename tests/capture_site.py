@@ -667,6 +667,43 @@ DIAGRAM_VIEW_BODY = """\
 <p>The end of the page.</p>
 """
 
+# The ELK layout page: a flowchart that opts into the ELK layout with its
+# init line, three subgraph lanes (Plan: P1 --> P2, Build: B1 --> B2 --> B3,
+# Ship: S1 --> S2) with arrows between the lanes (P1 --> B1, P2 --> B2,
+# B3 --> S1, P2 --> S2), and a Nodes table listing every box. No comments, so
+# the page needs no network but the pinned Mermaid and its ELK layout.
+ELK_LAYOUT_BODY = """\
+<p>A sample laned plan for captures, laid out by ELK.</p>
+<pre class="mermaid">%%{init: {"layout": "elk"}}%%
+flowchart LR
+  subgraph plan [Plan lane]
+    P1[Write the ticket] --&gt; P2[Settle the questions]
+  end
+  subgraph build [Build lane]
+    B1[Load the layout] --&gt; B2[Allow it in the policy] --&gt; B3[Document the opt-in]
+  end
+  subgraph ship [Ship lane]
+    S1[Review the change] --&gt; S2[Merge it]
+  end
+  P1 --&gt; B1
+  P2 --&gt; B2
+  B3 --&gt; S1
+  P2 --&gt; S2</pre>
+<h3>Nodes</h3>
+<table>
+<thead><tr><th>Node</th><th>Title</th><th>Status</th></tr></thead>
+<tbody>
+<tr><td>P1</td><td>Write the ticket</td><td>merged</td></tr>
+<tr><td>P2</td><td>Settle the questions</td><td>merged</td></tr>
+<tr><td>B1</td><td>Register the ELK layout beside Mermaid</td><td>open</td></tr>
+<tr><td>B2</td><td>Allow its directory in script-src</td><td>open</td></tr>
+<tr><td>B3</td><td>Show the init line in the docs</td><td>ready</td></tr>
+<tr><td>S1</td><td>Review the change</td><td>waiting</td></tr>
+<tr><td>S2</td><td>Merge it</td><td>waiting</td></tr>
+</tbody>
+</table>
+"""
+
 # The refs page: published from markdown with REFS_FILE, so the tickets and
 # pull requests it names open cards. Its first paragraph names three of
 # them, its second relos#2266 and LOTUS-95, which the refs file lacks. No
@@ -812,6 +849,7 @@ SAMPLE_PAGES = (
     ("capture-decision-context", "Capture decision context", DECISION_CONTEXT_BODY, ()),
     ("capture-node-cards", "Capture node cards", NODE_CARDS_BODY, ()),
     ("capture-diagram-view", "Capture diagram view", DIAGRAM_VIEW_BODY, ()),
+    ("capture-elk-layout", "Capture ELK layout", ELK_LAYOUT_BODY, ()),
     ("capture-review-sheet", "Capture review sheet", REVIEW_SHEET_BODY, ()),
 )
 
