@@ -978,7 +978,15 @@ does ("1 comment · waiting", "HANDLE is writing…", "1 reply · ✓ HANDLE
 answered"), or "N resolved" once every one is resolved, and opens its newest
 open thread (see [The comments panel](comments.md#the-comments-panel)). Ask
 sits in the card's foot, so a folded card shows it again after "change"; the
-chip stays under a folded card. Both are drawn by the page script, so a page
+chip stays under a folded card.
+
+On such a page, an answer saved with a note also opens a thread on the
+decision holding the note, so the page's owner can reply to it: the chip
+appears under the card as soon as it is saved, and the note's message in the
+thread shows "Answered: LABEL" above it. A later note to the same question
+joins that thread, so one chip keeps the notes and their replies together.
+An empty note, or one saved again unchanged with another option, opens
+nothing (see [Answers and comments](comments.md#answers-and-comments)). Both are drawn by the page script, so a page
 published before them gets them without publishing it again.
 
 Once any of its decisions is answered, the page ends in a table captioned
