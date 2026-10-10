@@ -3,9 +3,9 @@
 // elsewhere), a dialog over a dimmed backdrop lists every pod the listing has:
 // its title, "in a tab" while it is open in one, its summary on one line, its
 // labels as the listing's tags and the day it was updated, all read from the
-// listing's rows. Each opening draws the pods it has at once, and reads the
-// index again, so a pod published since it loaded is listed too once that
-// read answers 200, the options drawn again with the same pod selected.
+// listing's rows. Each opening also reads the index again, never waiting on
+// it, so a pod published since it loaded is listed too once that read
+// answers 200, the options drawn again with the same pod selected.
 // Typing filters them: each word of the query, ignoring case, must appear
 // in the pod's title, labels and summary joined.
 //
@@ -13,10 +13,7 @@
 // first under "Recent", newest first, and the rest follow under "Other pods"
 // in the listing's order, newest update first. Any answer but 200 (signed
 // out, or the demo) leaves the listing's order alone, with no heading.
-// The route is asked at load and again at each opening, whose options are
-// drawn by its last answer and grouped again by the new one; when that
-// changes Recent the first is selected, unless the reader moved the
-// selection. The list is aria-busy until both reads have answered.
+// The list is aria-busy until both reads have answered.
 //
 // ↑ and ↓ move the selection, wrapping at either end, and Tab stays in the
 // input. Enter or a click opens the pod in a tab ("lotuspod:open"), whose
@@ -106,11 +103,11 @@
   backdrop.append(dialog);
   document.body.append(backdrop);
 
-  // The seen route's pages as last answered 200, else null.
+  // The seen route's pages as last answered 200, else null. Each opening
+  // asks again and draws no option until it has the answer, so none moves
+  // under the reader.
   let seen = null;
-  // Whether the reader moved the selection since the options were last
-  // drawn for the query: grouped again, it stays on that pod.
-  let moved = false;
+  let answered = false;
   // The reads this opening still waits on.
   const pending = new Set();
   // The options shown, each {pod, node}, and the selected one's place.
@@ -172,11 +169,7 @@
       for (const label of pod.labels) tags.append(element("span", "index-tag", label));
       node.append(tags);
     }
-    node.addEventListener("pointermove", () => {
-      if (at === selected) return;
-      moved = true;
-      select(at);
-    });
+    node.addEventListener("pointermove", () => select(at));
     node.addEventListener("click", (event) => choose(at, modified(event)));
     return node;
   };
@@ -225,10 +218,7 @@
     select(at < 0 ? 0 : at);
   };
 
-  // The pods under Recent, newest first, by name.
-  const recent = () => pods.filter(seenAt).sort(newest).map((pod) => pod.name).join("\n");
-
-  const answered = (read) => {
+  const settled = (read) => {
     pending.delete(read);
     if (!pending.size) list.removeAttribute("aria-busy");
   };
@@ -248,10 +238,10 @@
       // Ordered as if the route had not answered.
     }
     if (ask !== asked) return;
-    const was = recent();
     seen = pages;
-    answered("seen");
-    if (!backdrop.hidden) render(moved || recent() === was);
+    answered = true;
+    settled("seen");
+    if (!backdrop.hidden) render(true);
   };
 
   // Any answer but 200, or one with no listing, keeps the pods there are.
@@ -269,10 +259,10 @@
       // Listed as before.
     }
     if (ask !== read) return;
-    answered("index");
+    settled("index");
     if (fresh === null) return;
     pods = fresh;
-    if (!backdrop.hidden) render(true);
+    if (!backdrop.hidden && answered) render(true);
   };
 
   const show = () => {
@@ -288,11 +278,12 @@
     back = { at, inner };
     input.value = "";
     backdrop.hidden = false;
-    moved = false;
+    list.hidden = true;
+    empty.hidden = true;
+    answered = false;
     pending.add("seen");
     pending.add("index");
     list.setAttribute("aria-busy", "true");
-    render(false);
     input.focus();
     askSeen();
     askIndex();
@@ -330,15 +321,13 @@
   };
 
   input.addEventListener("input", () => {
-    moved = false;
-    render(false);
+    if (answered) render(false);
   });
   dialog.addEventListener("keydown", (event) => {
     if (event.key === "ArrowDown" || event.key === "ArrowUp") {
       event.preventDefault();
       if (!shown.length) return;
       const step = event.key === "ArrowDown" ? 1 : -1;
-      moved = true;
       select((selected + step + shown.length) % shown.length);
     } else if (event.key === "Enter") {
       event.preventDefault();
@@ -361,5 +350,4 @@
     if (backdrop.hidden) show();
     else if (event.detail && event.detail.toggle) hide(true);
   });
-  askSeen();
 })();
