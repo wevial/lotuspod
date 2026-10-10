@@ -3,18 +3,20 @@
 // elsewhere), a dialog over a dimmed backdrop lists every pod the listing has:
 // its title, "in a tab" while it is open in one, its summary on one line, its
 // labels as the listing's tags and the day it was updated, all read from the
-// listing's rows. Each opening reads the index again, so a pod published
-// since it loaded is listed too once that read answers 200, the options
-// drawn again then. Typing filters them: each word of the query, ignoring
-// case, must appear in the pod's title, labels and summary joined.
+// listing's rows. Each opening draws the pods it has at once, and reads the
+// index again, so a pod published since it loaded is listed too once that
+// read answers 200, the options drawn again with the same pod selected.
+// Typing filters them: each word of the query, ignoring case, must appear
+// in the pod's title, labels and summary joined.
 //
 // The pods this reader has opened, by their seenAt in the seen route, come
 // first under "Recent", newest first, and the rest follow under "Other pods"
 // in the listing's order, newest update first. Any answer but 200 (signed
 // out, or the demo) leaves the listing's order alone, with no heading.
-// Each opening asks the seen route again and draws its options once it
-// answers, so none moves under the reader, or sooner if it is slow or the
-// reader types: they are drawn again, grouped, when it answers.
+// The route is asked at load and again at each opening, whose options are
+// drawn by its last answer and grouped again by the new one; when that
+// changes Recent the first is selected, unless the reader moved the
+// selection. The list is aria-busy until both reads have answered.
 //
 // ↑ and ↓ move the selection, wrapping at either end, and Tab stays in the
 // input. Enter or a click opens the pod in a tab ("lotuspod:open"), whose
@@ -30,8 +32,6 @@
   const SEEN = "/api/seen";
   const MAC = /^Mac/.test(navigator.platform);
   const RESULTS = "pod-finder-results";
-  // How long an opening waits on the seen route before drawing without it.
-  const GRACE = 300;
 
   // The modifier that sends a pod to a browser tab.
   const modified = (event) => (MAC ? event.metaKey : event.ctrlKey);
@@ -108,13 +108,11 @@
 
   // The seen route's pages as last answered 200, else null.
   let seen = null;
-  // Whether this opening has drawn its options, and the wait on the seen
-  // route before it does so anyway.
-  let drawn = false;
-  let grace = 0;
   // Whether the reader moved the selection since the options were last
-  // drawn for the query: drawn again, it stays on that pod.
+  // drawn for the query: grouped again, it stays on that pod.
   let moved = false;
+  // The reads this opening still waits on.
+  const pending = new Set();
   // The options shown, each {pod, node}, and the selected one's place.
   let shown = [];
   let selected = -1;
@@ -193,8 +191,6 @@
   // Draw the options again; the pod selected stays so when keep is set and
   // it is still listed, else the first is.
   const render = (keep) => {
-    drawn = true;
-    clearTimeout(grace);
     const was = keep && shown[selected] ? shown[selected].pod.name : null;
     const open = inTabs();
     shown = [];
@@ -226,6 +222,16 @@
     select(at < 0 ? 0 : at);
   };
 
+  // The pods under Recent, newest first, by name.
+  const recent = () => pods.filter(seenAt).map((pod) => [seenAt(pod), pod.name])
+    .sort(([left], [right]) => (left < right ? 1 : left > right ? -1 : 0))
+    .map(([, name]) => name).join("\n");
+
+  const answered = (read) => {
+    pending.delete(read);
+    if (!pending.size) list.removeAttribute("aria-busy");
+  };
+
   // Answers are drawn in the order they were asked: a later read wins.
   let asked = 0;
   const askSeen = async () => {
@@ -241,8 +247,10 @@
       // Ordered as if the route had not answered.
     }
     if (ask !== asked) return;
+    const was = recent();
     seen = pages;
-    if (!backdrop.hidden) render(moved);
+    answered("seen");
+    if (!backdrop.hidden) render(moved || recent() === was);
   };
 
   // Any answer but 200, or one with no listing, keeps the pods there are.
@@ -259,9 +267,11 @@
     } catch (ignored) {
       // Listed as before.
     }
-    if (ask !== read || fresh === null) return;
+    if (ask !== read) return;
+    answered("index");
+    if (fresh === null) return;
     pods = fresh;
-    if (!backdrop.hidden && drawn) render(moved);
+    if (!backdrop.hidden) render(true);
   };
 
   const show = () => {
@@ -277,14 +287,11 @@
     back = { at, inner };
     input.value = "";
     backdrop.hidden = false;
-    list.hidden = true;
-    empty.hidden = true;
-    drawn = false;
     moved = false;
-    clearTimeout(grace);
-    grace = setTimeout(() => {
-      if (!backdrop.hidden && !drawn) render(false);
-    }, GRACE);
+    pending.add("seen");
+    pending.add("index");
+    list.setAttribute("aria-busy", "true");
+    render(false);
     input.focus();
     askSeen();
     askIndex();
@@ -294,7 +301,6 @@
   const hide = (restore) => {
     if (backdrop.hidden) return;
     backdrop.hidden = true;
-    clearTimeout(grace);
     list.replaceChildren();
     shown = [];
     selected = -1;
@@ -354,4 +360,5 @@
     if (backdrop.hidden) show();
     else if (event.detail && event.detail.toggle) hide(true);
   });
+  askSeen();
 })();

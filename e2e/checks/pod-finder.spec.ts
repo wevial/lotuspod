@@ -150,12 +150,13 @@ async function openRecorded(page: Page, pod: Pod) {
 }
 
 // Open the finder with the key, from wherever focus is, once it has drawn
-// its options.
+// its options and its reads of the seen route and the index have answered.
 async function find(page: Page) {
   await page.keyboard.press('ControlOrMeta+K');
   await expect(finder(page)).toBeVisible();
   await expect(input(page)).toBeFocused();
   await expect(options(page).first()).toBeVisible();
+  await expect(listbox(page)).not.toHaveAttribute('aria-busy', 'true');
 }
 
 // The option selected, by aria-selected and by the input's active descendant.
@@ -499,11 +500,9 @@ test.describe('the index read again answering 500', () => {
 });
 
 test.describe('the seen route and the index read held', () => {
-  test.use({ extraHTTPHeaders: { 'Cf-Access-Jwt-Assertion': SECOND } });
-
-  test('the finder draws the pods it has, typing filters them, and the index read adds a pod published since', async ({ page }) => {
+  test('the finder draws the pods it has at once, the index read adds a pod published since with the selection kept, and Enter opens the pod selected before either answers', async ({ page }) => {
     const errors = await watch(page);
-    await openIndex(page);
+    await openIndex(page, '/');
     const before = await listed(page);
     const seenHeld: Route[] = [];
     const indexHeld: Route[] = [];
@@ -518,24 +517,42 @@ test.describe('the seen route and the index read held', () => {
     const held = { name: 'pod-finder-held', title: 'Pod finder held' };
     publish(held.name, held.title);
 
-    await find(page);
-    await expect.poll(() => seenHeld.length).toBeGreaterThan(0);
-    await expect.poll(() => indexHeld.length).toBe(1);
-    // Neither has answered: the listing's pods in its order, no heading.
-    await expect(options(page).locator('.pod-finder-title')).toHaveText(before.map((pod) => pod.title));
-    await expect(headings(page)).toHaveCount(0);
+    // Drawn as the finder opens, before either read can answer.
+    const drawn = await page.evaluate(() => {
+      document.dispatchEvent(new CustomEvent('lotuspod:find'));
+      return Array.from(document.querySelectorAll('.pod-finder-option .pod-finder-title'),
+        (node) => node.textContent);
+    });
+    expect(drawn).toEqual(before.map((pod) => pod.title));
+    await expect(input(page)).toBeFocused();
+    await expect(listbox(page)).toHaveAttribute('aria-busy', 'true');
+    expect(await selectedName(page)).toBe(before[0].name);
     await input(page).fill('capture tables');
     expect((await optionTitles(page)).sort()).toEqual(['Capture tables', 'Capture tables report']);
+    await input(page).fill('');
+    expect(await selectedName(page)).toBe(before[0].name);
 
-    await input(page).fill(held.title);
-    await expect(options(page)).toHaveCount(0);
+    // The index read answers: the pod published since comes first, newest,
+    // and the selection stays where it was.
+    await expect.poll(() => indexHeld.length).toBe(1);
     await indexHeld[0].continue();
-    await expect(options(page).locator('.pod-finder-title')).toHaveText([held.title]);
-    expect(await selectedName(page)).toBe(held.name);
-
+    await expect(options(page).first()).toHaveAttribute('data-page', held.name);
+    expect(await selectedName(page)).toBe(before[0].name);
+    await expect.poll(() => seenHeld.length).toBeGreaterThan(0);
     for (const route of seenHeld.splice(0)) await route.continue();
+    await expect(listbox(page)).not.toHaveAttribute('aria-busy', 'true');
+    expect(await selectedName(page)).toBe(before[0].name);
     await page.keyboard.press('Escape');
     await expect(finder(page)).toBeHidden();
-    expect(errors).toEqual([]);
+
+    // Opened again, both reads held, Enter at once opens the first pod.
+    await page.keyboard.press('ControlOrMeta+K');
+    await page.keyboard.press('Enter');
+    await expect(finder(page)).toBeHidden();
+    await expect(tabTitle(page, held)).toHaveAttribute('aria-current', 'page');
+    await expect(framed(page, held).locator('h1')).toHaveText(held.title);
+    await page.unrouteAll({ behavior: 'ignoreErrors' });
+    // The signed-out answers are the seen route's 401s.
+    expect(errors.filter((error) => !/401/.test(error))).toEqual([]);
   });
 });
