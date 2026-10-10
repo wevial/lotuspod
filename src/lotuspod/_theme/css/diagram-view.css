@@ -28,6 +28,13 @@ pre.mermaid:hover > .artifact-diagram-expand,
   opacity: 1;
 }
 
+/* A touch screen has no hover to show it by, so it is always shown. */
+@media (hover: none) {
+  .artifact-diagram-expand {
+    opacity: 1;
+  }
+}
+
 /* The icon, four corners pointing out, in the button's own color. */
 .artifact-diagram-expand::before {
   background-color: currentColor;
