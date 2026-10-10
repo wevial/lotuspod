@@ -125,6 +125,13 @@
     return entry && typeof entry.seenAt === "string" ? entry.seenAt : null;
   };
 
+  // The pods seen, newest first.
+  const newest = (a, b) => {
+    const left = seenAt(a);
+    const right = seenAt(b);
+    return left < right ? 1 : left > right ? -1 : 0;
+  };
+
   // The pods matching the query, as groups {heading, pods}: while the seen
   // route has answered 200, Recent then Other pods, a heading only over a
   // group with a pod in it; else the listing's order under no heading.
@@ -132,11 +139,7 @@
     const words = input.value.toLowerCase().split(/\s+/).filter(Boolean);
     const matching = pods.filter((pod) => words.every((word) => pod.text.includes(word)));
     if (seen === null) return [{ heading: null, pods: matching }];
-    const recent = matching.filter(seenAt).sort((a, b) => {
-      const left = seenAt(a);
-      const right = seenAt(b);
-      return left < right ? 1 : left > right ? -1 : 0;
-    });
+    const recent = matching.filter(seenAt).sort(newest);
     const other = matching.filter((pod) => !seenAt(pod));
     return [{ heading: "Recent", pods: recent }, { heading: "Other pods", pods: other }]
       .filter((group) => group.pods.length);
@@ -223,9 +226,7 @@
   };
 
   // The pods under Recent, newest first, by name.
-  const recent = () => pods.filter(seenAt).map((pod) => [seenAt(pod), pod.name])
-    .sort(([left], [right]) => (left < right ? 1 : left > right ? -1 : 0))
-    .map(([, name]) => name).join("\n");
+  const recent = () => pods.filter(seenAt).sort(newest).map((pod) => pod.name).join("\n");
 
   const answered = (read) => {
     pending.delete(read);
