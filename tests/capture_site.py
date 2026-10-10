@@ -58,6 +58,7 @@ import datetime
 import json
 import os
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -646,6 +647,26 @@ lines.</p>
 </table>
 """
 
+# The diagram view page: a wide flowchart (S1 --> ... --> S14 in one chain)
+# under "Release plan", enough text after it that the page scrolls at 1280 by
+# 800, then a sequence diagram under "Small loop". No comments, so the page
+# needs no network but the pinned Mermaid.
+DIAGRAM_VIEW_BODY = """\
+<h2>Release plan</h2>
+<p>A sample plan for captures: each step waits for the one before it.</p>
+<pre class="mermaid">flowchart LR
+  """ + " --&gt; ".join(f"S{step}[Step {step}]" for step in range(1, 15)) + """</pre>
+""" + "".join(
+    f"<p>Step {step} of the release is written up here, so the page runs long enough "
+    "to scroll: what it changes, who reads it, and what it waits for.</p>\n"
+    for step in range(1, 15)
+) + """<h3>Small loop</h3>
+<pre class="mermaid">sequenceDiagram
+  Reader-&gt;&gt;Page: Expand the diagram
+  Page--&gt;&gt;Reader: The diagram fills the window</pre>
+<p>The end of the page.</p>
+"""
+
 # The refs page: published from markdown with REFS_FILE, so the tickets and
 # pull requests it names open cards. Its first paragraph names three of
 # them, its second relos#2266 and LOTUS-95, which the refs file lacks. No
@@ -790,6 +811,7 @@ SAMPLE_PAGES = (
      ("--variant", "report", "--comments", "--owner", OWNER)),
     ("capture-decision-context", "Capture decision context", DECISION_CONTEXT_BODY, ()),
     ("capture-node-cards", "Capture node cards", NODE_CARDS_BODY, ()),
+    ("capture-diagram-view", "Capture diagram view", DIAGRAM_VIEW_BODY, ()),
     ("capture-review-sheet", "Capture review sheet", REVIEW_SHEET_BODY, ()),
 )
 
@@ -1029,4 +1051,9 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
+    # A run stopped by SIGTERM (a timeout, a killed verify) unwinds through
+    # main's finally like Ctrl+C does, so it removes PACKAGED_CSS and its temp
+    # directory; a leftover PACKAGED_CSS would look like a run beside this one
+    # wrote it, and no later run would remove it.
+    signal.signal(signal.SIGTERM, lambda signum, frame: sys.exit(128 + signum))
     raise SystemExit(main())

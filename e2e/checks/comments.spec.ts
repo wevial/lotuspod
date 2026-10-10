@@ -229,7 +229,7 @@ test.describe('signed in', () => {
   test('a comment starts a thread that is there again after a reload, and takes a reply', async ({ page }) => {
     expect(ASSERTION, 'LOTUSPOD_TEST_ASSERTION names an assertion the site accepts').toBeTruthy();
     const seen = await watch(page);
-    await page.goto(PAGE);
+    await page.goto(`${PAGE}?standalone`);
     await expect(page.locator('details.artifact-comment')).toHaveCount(3);
     const risks = box(page, 'risks');
     await expect(risks.summary).toHaveText('No comments · Comment');
@@ -289,7 +289,7 @@ test.describe('signed in', () => {
     const seen = await watch(page);
     const { roots, threads } = everyState();
     await serve(page, threads);
-    await page.goto(PAGE);
+    await page.goto(`${PAGE}?standalone`);
 
     // Each popover holds its section's threads, and only those.
     for (const [section, count] of [['risks', 2], ['next-steps', 3], ['findings', 4]] as const) {
@@ -376,7 +376,7 @@ test.describe('signed in', () => {
     const seen = await watch(page);
     const { roots, threads } = everyState();
     await serve(page, threads);
-    await page.goto(PAGE);
+    await page.goto(`${PAGE}?standalone`);
     await open(page, 'findings');
 
     const answered = thread(page, roots.answered);
@@ -412,9 +412,11 @@ test.describe('signed in', () => {
     await expect(answered.locator('.artifact-comment-item a')).toHaveCount(0);
     await expect(items.nth(3).locator('.artifact-comment-text')).toHaveText('No change needed.');
 
+    // The page, loaded on its own at the top level, opens in the index's
+    // tabs (js/open-in-tabs.js).
     await link.click();
-    await expect(page).toHaveURL(new RegExp(`${PAGE}$`));
-    await expect(page.locator('details.artifact-comment')).toHaveCount(3);
+    await expect(page).toHaveURL(/\/#tabs=capture-comments&on=capture-comments$/);
+    await expect(page.frameLocator('iframe.pod-frame--active').locator('details.artifact-comment')).toHaveCount(3);
     expect(seen.errors).toEqual([]);
     expect(await seen.violations()).toEqual([]);
   });
@@ -423,7 +425,7 @@ test.describe('signed in', () => {
     const seen = await watch(page);
     const { roots, threads } = everyState();
     await serve(page, threads);
-    await page.goto(PAGE);
+    await page.goto(`${PAGE}?standalone`);
     await open(page, 'findings');
     await expect(box(page, 'findings').popover).toBeFocused();
     await box(page, 'findings').start.click();
@@ -487,7 +489,7 @@ test.describe('signed in', () => {
       .filter((animation) => animation.playState === 'running').length);
 
     await page.emulateMedia({ reducedMotion: 'no-preference' });
-    await page.goto(PAGE);
+    await page.goto(`${PAGE}?standalone`);
     await open(page, 'risks');
     const dots = thread(page, roots.claimed).locator('.artifact-comment-mark--dots i');
     await expect(dots).toHaveCount(3);
@@ -513,7 +515,7 @@ test.describe('signed in', () => {
     const long = row({ text: `A long word: ${'unbroken'.repeat(30)}` });
     threads.push({ root: long, replies: [] });
     await serve(page, threads);
-    await page.goto(PAGE);
+    await page.goto(`${PAGE}?standalone`);
     // On a phone the chip opens its section's newest thread in the bottom sheet.
     await box(page, 'findings').summary.click();
     const sheet = page.locator('.artifact-comments-bottom-sheet');
@@ -544,7 +546,7 @@ test.describe('signed in', () => {
       { root: row({ section: '__proto__', sectionTitle: 'Next steps', text: 'On the renamed section.' }), replies: [] },
       { root: row({ section: 'constructor', sectionTitle: 'Constructor', text: 'On no section here.' }), replies: [] },
     ]);
-    await page.goto(PAGE);
+    await page.goto(`${PAGE}?standalone`);
 
     const proto = box(page, '__proto__');
     await expect(proto.summary).toHaveText('1 comment · waiting');

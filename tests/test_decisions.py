@@ -231,10 +231,10 @@ class DecisionsTestCase(unittest.TestCase):
         self.assertEqual(rc, 0, err)
         return (self.out_dir / f"{name}.html").read_text(encoding="utf-8")
 
-    def render_body(self, name: str, body: str) -> str:
+    def render_body(self, name: str, body: str, *extra: str) -> str:
         rc, _, err = run_cli("render", "--name", name, "--title", name.title(),
                              "--date", "2026-01-02", "--body", body,
-                             "--out-dir", str(self.out_dir))
+                             "--out-dir", str(self.out_dir), *extra)
         self.assertEqual(rc, 0, err)
         return (self.out_dir / f"{name}.html").read_text(encoding="utf-8")
 
@@ -243,10 +243,9 @@ class DecisionsTestCase(unittest.TestCase):
         page = read(page_html)
         self.assertEqual(page.forms, [])
         self.assertEqual(page.tables, 1)
-        # A page with sections still loads the page script, to fold them.
-        folds = 'class="artifact-section-body"' in page_html
-        self.assertEqual([src.split("?")[0] for src in page.scripts],
-                         [cli.PAGE_SCRIPT] if folds else [])
+        # A listed page still loads the page script, to open in the index's
+        # tabs and to fold its sections.
+        self.assertEqual([src.split("?")[0] for src in page.scripts], [cli.PAGE_SCRIPT])
 
 
 class FormTests(DecisionsTestCase):
@@ -614,10 +613,11 @@ class LeftAsWrittenTests(DecisionsTestCase):
             "  A[\"<table><tr><th>Question</th><th>Options</th></tr>"
             "<tr><td>Go?</td><td>Yes / No</td></tr></table>\"]</pre>\n"
         )
-        page_html = self.render_body("plan", body)
+        # Not listed: a listed page loads the page script to open in the
+        # index's tabs.
+        page_html = self.render_body("plan", body, "--hidden")
         self.assertIn(body.split("\n", 1)[1].strip(), page_html)
         self.assertNotIn("artifact-decision", page_html)
-        self.assertNotIn(cli.PAGE_SCRIPT, page_html)
 
 
 class ChecklistTests(DecisionsTestCase):

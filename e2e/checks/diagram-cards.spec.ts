@@ -2,7 +2,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test, type ConsoleMessage, type Locator, type Page } from '@playwright/test';
 
-test.use({ viewport: { width: 1280, height: 800 } });
+// Signed in, as a reader of the site is: the page script asks the API about the
+// page, which refuses a signed-out request with a 401 the console reports.
+const SIGNED_IN = { 'Cf-Access-Jwt-Assertion': process.env.LOTUSPOD_TEST_ASSERTION ?? '' };
+
+test.use({ viewport: { width: 1280, height: 800 }, extraHTTPHeaders: SIGNED_IN });
 
 // The capture fixture's node cards page: an opening paragraph, then a
 // flowchart (A --> B, E --> B, B --> C, A --> D) whose Nodes table lists A to
@@ -77,7 +81,7 @@ function card(page: Page) {
 // Open the page and wait until the first diagram is drawn and bound.
 async function drawn(page: Page) {
   const seen = await watch(page);
-  await page.goto(PAGE);
+  await page.goto(`${PAGE}?standalone`);
   await expect(diagram(page).locator('svg')).toBeVisible();
   await expect(box(page, 'A')).toHaveAttribute('role', 'button');
   await expect(box(page, 'A', 1)).toHaveAttribute('role', 'button');
@@ -464,7 +468,7 @@ test.describe('without scripts', () => {
   test.use({ javaScriptEnabled: false });
 
   test('every Nodes heading and table shows and no box is focusable', async ({ page }) => {
-    await page.goto(PAGE);
+    await page.goto(`${PAGE}?standalone`);
     const headings = page.locator('.artifact-body > h3', { hasText: 'Nodes' });
     await expect(headings).toHaveCount(4);
     await expect(headings.nth(0)).toBeVisible();

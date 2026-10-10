@@ -48,7 +48,7 @@ for (const width of [1280, 360]) {
   test(`images keep their reserved boxes and the column at ${width} pixels wide`, async ({ page }) => {
     await page.setViewportSize({ width, height: 800 });
     const seen = await watch(page);
-    await page.goto(PAGE);
+    await page.goto(`${PAGE}?standalone`);
 
     const images = page.locator('.artifact-body figure.artifact-figure img');
     await expect(images).toHaveCount(8);
@@ -97,7 +97,7 @@ for (const width of [1280, 360]) {
 // A plain click opens the image viewer (image-viewer.spec.ts).
 test('clicking an image with the platform modifier opens its media URL', async ({ page, context }) => {
   const seen = await watch(page);
-  await page.goto(PAGE);
+  await page.goto(`${PAGE}?standalone`);
   const fish = page.getByRole('img', { name: 'A fish in the pond' });
   const src = await fish.getAttribute('src');
   expect(src).toMatch(/^\/media\/[0-9a-f]{64}\.jpg$/);

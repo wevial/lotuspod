@@ -88,6 +88,18 @@ the block is left exactly as written, since Mermaid reads it verbatim; before
 the script runs, or without scripting, it reads as a code block. A body with no
 diagram block ships no script and no CDN reference at all.
 
+A page with a diagram block also loads the page script. Once Mermaid has
+drawn a diagram, an Expand button sits in its top right corner, shown while
+the pointer is over the diagram or the button has keyboard focus. It opens the
+diagram in a view that fills the window, with a top bar naming the nearest
+heading before the diagram (else the page title), zoom out (−), the zoom in
+percent, zoom in (+), Fit and ✕. Drag the diagram, scroll with two fingers or
+press the arrow keys to move it; pinch, ctrl+scroll, the buttons or the `+`
+and `-` keys zoom it, from 25% to 400%, where 100% is Mermaid's own size. Fit,
+`0` or `F` shows it whole again, as it opens. Esc or ✕ puts it back on the
+page and the focus back on its Expand button. Without scripting, and on an
+old version, the diagram stays as it is on the page.
+
 A flowchart (source starting `flowchart` or `graph`) can be followed by a
 Nodes table, which the page script turns into a card for each box. Put an
 `h3` or `h4` whose text is exactly `Nodes` straight after the diagram, and a
@@ -812,6 +824,26 @@ or Recent activity writes it again, so the view buttons keep the tabs. Once
 the last tab closes, the address is the view's own again: none for Pages, or
 `#activity` for Recent activity (with no views to switch, the fragment it had
 before the first tab).
+
+A listed page loaded on its own at the top level of the window (from a link
+in chat, an email or another page, a bookmark, a new browser tab) opens in a
+tab too: every listed page loads the page script, whatever its body, and the
+first thing that script does is replace its address with the index its
+"Lotuspod" link names (`index.html`, so the site's `/`; the demo's
+`pages.html`), `#tabs=NAME&on=NAME`, that page its one tab and the active one,
+with `&at=FRAGMENT` after it when the address had a fragment (encoded as with
+`encodeURIComponent`), so the framed page opens at that section. `&at=` is
+read on load only and never written again. The replace leaves no history
+entry, so Back leaves the site, and nothing else on the bare page runs, so its
+opening is posted to `/api/seen` once, by its frame. It goes only once that
+index answers itself (2xx, not redirected), however long that takes, with a
+row for that page in its listing, so a page rendered with no index beside
+it, or not yet listed on the index, stays; until then the page shows but its
+script waits. The fragment carried is the one the page
+holds when the index answers. A page in a frame, an old version (`?version=`,
+which runs no script), a page the index does not list, a file opened from
+disk (`file://`), and a page loaded with `?standalone` (for example
+`NAME.html?standalone#a-section`) stay where they are, alone in the window.
 
 A tab that is not active shows a dot from `/api/seen`: amber, "new version"
 for a screen reader, when its page was published again since this reader last

@@ -36,7 +36,7 @@ async function load(page: Page) {
   page.on('pageerror', (error) => errors.push(error.message));
   await page.route((url) => url.pathname === '/api/comments', (route) =>
     route.fulfill({ json: { page: SLUG, threads: [] } }));
-  await page.goto(PAGE);
+  await page.goto(`${PAGE}?standalone`);
   await expect(page.locator('details.artifact-comment').first()).toBeAttached();
   expect(await page.locator('.artifact-body h2').count()).toBeGreaterThanOrEqual(2);
   expect(await page.evaluate(() => window.scrollY)).toBe(0);

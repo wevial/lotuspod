@@ -294,8 +294,11 @@ def script_warning(name: str, body: str) -> str:
 
 # The page script answers decision forms (lotuspod.decisions), shows and
 # posts comments (lotuspod.comments) and folds sections (lotuspod.sections),
-# and offers a reload once its page is published again; only a page with
-# any of them, or stamped with a revision (every published page), loads it.
+# and offers a reload once its page is published again. Every listed page
+# loads it: loaded on its own at the top level, a listed page first goes to
+# the index, opened there in a tab (js/open-in-tabs.js), and runs none of the
+# rest. A page not listed loads it only with any of those, a revision or a
+# link.
 PAGE_SCRIPT = "lotuspod-page.js"
 # The index script opens pods in tabs over the index's listing; the index
 # loads it deferred, beside its own inline script.
@@ -318,6 +321,7 @@ THEME_SOURCES = {
         "css/prose.css",
         "css/ref-cards.css",
         "css/diagram-cards.css",
+        "css/diagram-view.css",
         "css/report.css",
         "css/table-expand.css",
         "css/image-viewer.css",
@@ -328,6 +332,7 @@ THEME_SOURCES = {
         "css/archive.css",
     ),
     PAGE_SCRIPT: (
+        "js/open-in-tabs.js",
         "js/page-open.js",
         "js/link-tab.js",
         "js/decisions.js",
@@ -344,6 +349,7 @@ THEME_SOURCES = {
         "js/version-menu.js",
         "js/versions.js",
         "js/diagram-cards.js",
+        "js/diagram-view.js",
         "js/ref-cards.js",
         "js/archive.js",
         "js/page-close.js",
@@ -762,10 +768,13 @@ def cmd_render(args: argparse.Namespace) -> int:
         "variant_class": variant_class(args.variant),
         "mermaid": has_mermaid_block(body),
         # A page stamped with a revision notices when it is published again,
-        # and a link off the site opens in a new tab.
-        "page_script_needed": (has_decisions or with_comments or wrapped or has_node_tables
-                               or bool(refs_block) or bool(getattr(args, "revision", ""))
-                               or has_link(body)),
+        # a link off the site opens in a new tab, a diagram can be expanded
+        # to fill the window, and a listed page loaded on its own opens in
+        # the index's tabs.
+        "page_script_needed": (not args.hidden or has_decisions or with_comments or wrapped
+                               or has_node_tables or bool(refs_block)
+                               or bool(getattr(args, "revision", "")) or has_link(body)
+                               or has_mermaid_block(body)),
         "page_script": PAGE_SCRIPT,
         "mermaid_theme_variables": mermaid_theme_variables(tokens),
         "mermaid_dir": MERMAID_DIR,

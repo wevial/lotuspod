@@ -91,7 +91,7 @@ test.describe('signed in', () => {
     expect(ASSERTION, 'LOTUSPOD_TEST_ASSERTION names an assertion the site accepts').toBeTruthy();
     const errors = await watch(page);
     expect(await stored(request)).toEqual({});
-    await page.goto(PAGE);
+    await page.goto(`${PAGE}?standalone`);
     await expect(decision(page, 'decision-1').save).toBeVisible();
     await page.evaluate(() => new Promise((resolve) => setTimeout(resolve, 300)));
     await expect(page.locator('.artifact-answered')).toHaveCount(0);
@@ -144,7 +144,7 @@ test.describe('signed in', () => {
 
   test('a row\'s change reopens its card, opening its folded section, and a new answer moves to the top', async ({ page }) => {
     const errors = await watch(page);
-    await page.goto(PAGE);
+    await page.goto(`${PAGE}?standalone`);
     const { rows, row } = answered(page);
     await expect(rows).toHaveCount(2);
 
@@ -186,7 +186,7 @@ test.describe('signed in', () => {
       const html = (await response.text()).replace(/<form class="artifact-decision"[\s\S]*?<\/form>\n?/g, '');
       await route.fulfill({ response, body: html });
     });
-    await page.goto(PAGE);
+    await page.goto(`${PAGE}?standalone`);
     await expect(page.locator('form.artifact-decision')).toHaveCount(0);
     const { rows, table } = answered(page);
     await expect(rows).toHaveCount(2);
@@ -214,7 +214,7 @@ test.describe('signed in', () => {
           earlier: [],
         },
       }));
-      await page.goto(PAGE);
+      await page.goto(`${PAGE}?standalone`);
       const { rows, row } = answered(page);
       await expect(rows).toHaveCount(3);
       await expect(row('3').cells).toHaveText(['3', 'Oct 1, 2026, 9:30 AM', 'Feed the fish?', 'No', READER]);
@@ -230,7 +230,7 @@ test.describe('signed in', () => {
   test('at 360 pixels wide a note of several lines wraps in the table and the page does not scroll sideways', async ({ page }) => {
     const errors = await watch(page);
     await page.setViewportSize({ width: 360, height: 780 });
-    await page.goto(PAGE);
+    await page.goto(`${PAGE}?standalone`);
     const version = await decision(page, 'decision-3').form.getAttribute('data-version');
     await serve(page, () => ({
       'decision-3': {
@@ -259,7 +259,7 @@ test.describe('signed in', () => {
 
   test('the Answered table folds under its heading, stays folded after a reload, and counts a new answer while folded', async ({ page }) => {
     const errors = await watch(page);
-    await page.goto(PAGE);
+    await page.goto(`${PAGE}?standalone`);
     // A folded table is out of the accessibility tree, so its rows are found
     // by class.
     const rows = page.locator('.artifact-answered tbody tr');
@@ -322,7 +322,7 @@ test.describe('signed in', () => {
       if (route.request().method() === 'GET') await held;
       await route.continue();
     });
-    await page.goto(PAGE);
+    await page.goto(`${PAGE}?standalone`);
     const control = page.locator('nav.artifact-outline button.artifact-sections-all');
     const pump = page.locator('h2[id=":answered"] button.artifact-section-toggle');
     const toggle = page.getByRole('heading', { level: 2, name: /^Answered/ }).getByRole('button');
@@ -360,7 +360,7 @@ test.describe('signed in', () => {
 test.describe('signed out', () => {
   test('the answers route refuses the reader, so there is no table', async ({ page, request }) => {
     expect(Object.keys(await stored(request)).length).toBeGreaterThan(0);
-    await page.goto(PAGE);
+    await page.goto(`${PAGE}?standalone`);
     await expect(decision(page, 'decision-1').save).toBeVisible();
     await page.evaluate(() => new Promise((resolve) => setTimeout(resolve, 300)));
     await expect(page.locator('.artifact-answered')).toHaveCount(0);
