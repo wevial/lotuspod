@@ -3,7 +3,9 @@
 // elsewhere), a dialog over a dimmed backdrop lists every pod the listing has:
 // its title, "in a tab" while it is open in one, its summary on one line, its
 // labels as the listing's tags and the day it was updated, all read from the
-// listing's rows. Typing filters them: each word of the query, ignoring case,
+// listing's rows. Each opening reads the index again, so a pod published
+// since it loaded is listed too: the pods there are show at once, and the
+// served index's once it answers 200. Typing filters them: each word of the query, ignoring case,
 // must appear in the pod's title, labels and summary joined.
 //
 // The pods this reader has opened, by their seenAt in the seen route, come
@@ -36,27 +38,34 @@
     return node;
   };
 
-  // Each pod the listing has, in its order: what an option shows, and the
-  // text a query is matched against.
-  const pods = [];
-  for (const row of document.querySelectorAll(".index-table tbody tr[data-page]")) {
-    const link = row.cells[0] ? row.cells[0].querySelector("a[href]") : null;
-    if (!link) continue;
-    const title = link.textContent.trim();
-    const labels = (row.dataset.labels || "").split(",").filter(Boolean);
-    const summaryCell = row.querySelector("td.episode-summary");
-    const summary = summaryCell ? summaryCell.textContent.trim() : "";
-    const time = row.cells[1] ? row.cells[1].querySelector("time[datetime]") : null;
-    pods.push({
-      name: row.dataset.page,
-      title,
-      href: link.getAttribute("href"),
-      labels,
-      summary,
-      updated: time ? time.getAttribute("datetime") : "",
-      text: [title, labels.join(" "), summary].join(" ").toLowerCase(),
-    });
-  }
+  // Each pod a document's listing has, in its order: what an option shows,
+  // and the text a query is matched against.
+  const listing = (doc) => {
+    const found = [];
+    for (const row of doc.querySelectorAll(".index-table tbody tr[data-page]")) {
+      const link = row.cells[0] ? row.cells[0].querySelector("a[href]") : null;
+      if (!link) continue;
+      const title = link.textContent.trim();
+      const labels = (row.dataset.labels || "").split(",").filter(Boolean);
+      const summaryCell = row.querySelector("td.episode-summary");
+      const summary = summaryCell ? summaryCell.textContent.trim() : "";
+      const time = row.cells[1] ? row.cells[1].querySelector("time[datetime]") : null;
+      found.push({
+        name: row.dataset.page,
+        title,
+        href: link.getAttribute("href"),
+        labels,
+        summary,
+        updated: time ? time.getAttribute("datetime") : "",
+        text: [title, labels.join(" "), summary].join(" ").toLowerCase(),
+      });
+    }
+    return found;
+  };
+
+  // The pods listed: this page's at load, then the served index's as last
+  // read when the finder opened.
+  let pods = listing(document);
 
   const backdrop = element("div", "pod-finder-backdrop");
   backdrop.hidden = true;
@@ -222,6 +231,26 @@
     if (!backdrop.hidden) render(true);
   };
 
+  // Read the index again, so a pod published since it loaded is listed;
+  // any answer but 200, or one with no listing, keeps the pods there are.
+  let read = 0;
+  const askIndex = async () => {
+    const ask = ++read;
+    let fresh = null;
+    try {
+      const response = await fetch(location.pathname, { cache: "no-store", credentials: "same-origin" });
+      if (response.status === 200) {
+        const doc = new DOMParser().parseFromString(await response.text(), "text/html");
+        if (doc.querySelector(".index-table")) fresh = listing(doc);
+      }
+    } catch (ignored) {
+      // Listed as before.
+    }
+    if (ask !== read || fresh === null) return;
+    pods = fresh;
+    if (!backdrop.hidden && answered) render(true);
+  };
+
   const show = () => {
     const at = document.activeElement;
     let inner = null;
@@ -240,6 +269,7 @@
     answered = false;
     input.focus();
     askSeen();
+    askIndex();
   };
 
   // Close the finder, focus back where it was unless restore is false.
@@ -268,7 +298,9 @@
       return;
     }
     hide(false);
-    document.dispatchEvent(new CustomEvent("lotuspod:open", { detail: { name: choice.pod.name } }));
+    document.dispatchEvent(new CustomEvent("lotuspod:open", { detail: {
+      name: choice.pod.name, title: choice.pod.title, href: choice.pod.href,
+    } }));
   };
 
   input.addEventListener("input", () => {

@@ -496,8 +496,13 @@
   findButton.addEventListener("click", () => ask(false));
   window.addEventListener("keydown", findKey, true);
   // The finder's choice, opened as a link to it would be, its tab focused.
+  // A pod listed since the index loaded comes with its title and link.
   document.addEventListener("lotuspod:open", (event) => {
-    const name = event.detail ? event.detail.name : null;
+    const detail = event.detail || {};
+    const name = typeof detail.name === "string" ? detail.name : null;
+    if (name !== null && typeof detail.title === "string" && typeof detail.href === "string") {
+      pods.set(name, { title: detail.title, href: detail.href });
+    }
     if (!pods.has(name)) return;
     openPod(name, "");
     focusTab(find(name));

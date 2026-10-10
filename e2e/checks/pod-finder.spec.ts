@@ -468,3 +468,32 @@ test.describe('published after the index opened', () => {
     expect(errors).toEqual([]);
   });
 });
+
+test.describe('the index read again answering 500', () => {
+  test.use({ extraHTTPHeaders: { 'Cf-Access-Jwt-Assertion': SECOND } });
+
+  test('the finder lists the pods it listed before and shows no error', async ({ page }) => {
+    const errors = await watch(page);
+    await openIndex(page);
+    const before = (await listed(page)).map((pod) => pod.name).sort();
+    let asked = 0;
+    await page.route((url) => url.pathname === '/', async (route) => {
+      if (route.request().resourceType() !== 'fetch') return route.continue();
+      asked += 1;
+      await route.fulfill({ status: 500, contentType: 'text/plain', body: 'down' });
+    });
+    const unlisted = { name: 'pod-finder-unlisted', title: 'Pod finder unlisted' };
+    publish(unlisted.name, unlisted.title);
+
+    await find(page);
+    await expect.poll(() => asked).toBe(1);
+    expect((await optionNames(page)).sort()).toEqual(before);
+    await input(page).fill(unlisted.title);
+    await expect(options(page)).toHaveCount(0);
+    await expect(finder(page).locator('.pod-finder-empty')).toHaveText(`No pod matches “${unlisted.title}”.`);
+    await page.keyboard.press('Escape');
+    await expect(finder(page)).toBeHidden();
+    // The console reports the routed 500 as a failed load.
+    expect(errors.filter((error) => !/500/.test(error))).toEqual([]);
+  });
+});
