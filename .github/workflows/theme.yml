@@ -1,0 +1,24 @@
+name: theme
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  theme:
+    name: theme
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: web/package.json
+      - run: bun install --cwd web --frozen-lockfile
+      - run: bun run --cwd web typecheck
+      - run: bun run --cwd web test
+      - run: bun run --cwd web check

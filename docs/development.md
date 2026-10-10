@@ -1,7 +1,7 @@
 # Development
 
-For people working on Lotuspod itself: the unit tests, the Playwright
-captures and browser checks, and the demo site. Back to the [README](../README.md).
+For people working on Lotuspod itself: the unit tests, the theme build, the
+Playwright captures and browser checks, and the demo site. Back to the [README](../README.md).
 
 ## Tests
 
@@ -15,6 +15,41 @@ python -m unittest discover
 
 The suite always tests this checkout's `src/`, so an ambient `lotuspod`
 install cannot shadow the code under test.
+
+## Theme build
+
+A theme script can be written in TypeScript: its source is `web/src/NAME.ts`,
+and the build writes it as `src/lotuspod/_theme/js/NAME.js`, the file render
+already joins in the order `THEME_SOURCES` in `cli.py` declares. `web/` is a
+Bun project of its own, beside `e2e/`. The build strips each source's types
+on its own with Bun's transpiler, without bundling, which also drops its
+comments, and starts the file with a marker line naming the source; edit the
+source, never the built file. A marked file whose source is gone is deleted,
+and a JS file without the marker, written by hand, is left alone.
+
+```sh
+bun install --cwd web --frozen-lockfile
+bun run --cwd web build
+bun run --cwd web typecheck
+bun run --cwd web test
+bun run --cwd web check
+```
+
+`typecheck` runs the pinned TypeScript's `tsc --noEmit` on Bun's runtime, in
+strict mode and with `erasableSyntaxOnly`, so a source is plain JavaScript
+once its types are erased: no enums, namespaces or parameter properties.
+`test` runs `web/build.test.ts`. `check` builds, then fails when git sees any
+file under `src/lotuspod/_theme/js/` modified, deleted or new, and prints
+what differs.
+
+The built JS is committed, so the wheel ships it, and `pip install`, the unit
+suite and the demo need neither Bun nor Node. The `theme` workflow
+(`.github/workflows/theme.yml`) runs the install, `typecheck`, `test` and
+`check` on every pull request and push to `main`, so a stale or hand-edited
+built file fails there. Every dependency in `web/package.json` is pinned
+exactly, with `web/bun.lock` committed, and `"packageManager"` pins Bun
+itself. Its transpiler's output is byte-stable only within one release, so
+the build refuses to run under any other Bun, naming both versions.
 
 ## Leak guard
 
