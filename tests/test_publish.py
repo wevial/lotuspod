@@ -60,7 +60,6 @@ def git(cwd: Path, *argv: str) -> str:
 
 
 def without_update_stamp(page: bytes) -> bytes:
-    """The page with the time publish stamped it set to a fixed one."""
     page, stamps = _UPDATED_META_RE.subn(rb"\g<1>STAMP\g<2>", page)
     assert stamps == 1, f"{stamps} lotuspod:updated meta tags"
     return _UPDATED_TIME_RE.sub(rb"\g<1>STAMP\g<2>", page, count=1)
@@ -390,8 +389,7 @@ class StandardInputTests(PublishTestCase):
         )
 
     def test_the_same_page_from_either_source_when_the_publishes_straddle_a_second(self):
-        # The two publishes of the test above, a second apart, as they fell
-        # in the unit check of #65: :43:16Z, then :43:17Z.
+        # The two publishes of the test above, a second apart.
         from_file = self.tmp / "from-file"
         from_stdin = self.tmp / "from-stdin"
         done = self.publish_at("2026-10-09T12:43:16+00:00",
