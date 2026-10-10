@@ -117,6 +117,28 @@ test("a source whose \"use strict\" the transpiler drops is refused before anyth
   expect(readdirSync(out)).toEqual([]);
 });
 
+test("a \"use strict\" directive is refused wherever it stands: at the top, inline, in an arrow or a method", () => {
+  for (const source of [
+    "'use strict';\nvar count = 1;\n",
+    '(function (this: void) { "use strict"; return this === undefined; })();\n',
+    '(() => {\n  // the reader\'s pods\n  "use strict";\n})();\n',
+    'class Pods {\n  count(): number {\n    "use strict";\n    return 1;\n  }\n}\n',
+  ]) {
+    writeFileSync(join(web, "src", "strict.ts"), source);
+    expect(() => build(web)).toThrow('web/src/strict.ts: Bun\'s transpiler drops its "use strict"');
+    expect(readdirSync(out)).toEqual([]);
+  }
+});
+
+test("\"use strict\" in a comment or a string is not a directive, and builds", () => {
+  const source = '/*\n"use strict"\n*/\nconst why: string = "use strict";\ndocument.title = `${why}, \'use strict\'`;\n';
+  writeFileSync(join(web, "src", "quoted.ts"), source);
+  build(web);
+  expect(readFileSync(join(out, "quoted.js"), "utf8")).toBe(
+    marker("quoted") + 'const why = "use strict";\ndocument.title = `${why}, \'use strict\'`;\n',
+  );
+});
+
 test("a source with an import or export is refused, since render joins classic scripts", () => {
   writeFileSync(join(web, "src", "a.ts"), SOURCE);
   for (const source of ["export const count: number = 1;\n", "export {};\nconst count = 1;\n", 'import "./a";\n']) {

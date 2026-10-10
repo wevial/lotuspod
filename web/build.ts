@@ -12,7 +12,9 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync
 import { basename, join, resolve } from "node:path";
 
 const MARKER_PREFIX = "// Built from web/src/";
-const USE_STRICT = /^\s*(["'])use strict\1/gm;
+const USE_STRICT = "use strict";
+// Not a directive JavaScript knows, so Bun keeps it where it stands.
+const USE_STRICT_PROBE = "use strict, probed by web/build.ts";
 
 class BuildError extends Error {}
 
@@ -40,10 +42,14 @@ function checkBun(webDir: string): void {
 
 // The JS of one source, refused when it would not run as the source does in
 // the classic script render joins it into: Bun's transpiler reads every input
-// as a module, so it drops each "use strict" and keeps import and export.
+// as a module, so it drops each "use strict" directive and keeps import and
+// export. A directive shows as the one difference between the source's JS and
+// the JS of the source with each "use strict" renamed to the probe, which the
+// transpiler keeps, renamed back; comments and strings strip alike in both.
 function strip(transpiler: Bun.Transpiler, name: string, source: string): string {
   const stripped = transpiler.transformSync(source);
-  if ((source.match(USE_STRICT) ?? []).length > (stripped.match(USE_STRICT) ?? []).length) {
+  const probed = transpiler.transformSync(source.replaceAll(USE_STRICT, USE_STRICT_PROBE));
+  if (probed.replaceAll(USE_STRICT_PROBE, USE_STRICT) !== stripped) {
     throw new BuildError(`web/src/${name}.ts: Bun's transpiler drops its "use strict", so the built script would not be strict`);
   }
   try {
