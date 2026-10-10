@@ -310,7 +310,8 @@ PAGE_SCRIPT = "lotuspod-page.js"
 INDEX_SCRIPT = "lotuspod-index.js"
 # The old-version script draws the version menu in an earlier version's
 # banner (lotuspod.versions.old_page); serve allows it there, and only it, by
-# a nonce of its own answer (_OLD_VERSION_HEADERS).
+# a nonce of its own answer (_OLD_VERSION_HEADERS). It draws nothing else: no
+# comment, no answer, and nothing posted.
 OLD_VERSION_SCRIPT = "lotuspod-old-version.js"
 THEME_FILES = ("lotuspod.css", "favicon.svg", PAGE_SCRIPT, INDEX_SCRIPT, OLD_VERSION_SCRIPT)
 # The served files written as one source per feature, relative to THEME_DIR:
@@ -382,12 +383,6 @@ THEME_SOURCES = {
 # that is handed the closure and runs it only when the page stays, so the
 # opening follows it with nothing between. The close ends the closure and
 # calls the result.
-#
-# The old-version script is the one script an earlier version of a page runs
-# (lotuspod.versions.old_page), allowed by a nonce of serve's answer that none
-# of the page's own scripts carries. It draws the banner's version menu
-# (js/old-version.js) and nothing else: no comment, no answer, and nothing
-# posted.
 THEME_CLOSURES = {
     PAGE_SCRIPT: 1,
     OLD_VERSION_SCRIPT: 0,
