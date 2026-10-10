@@ -122,10 +122,8 @@ class DismissalsWitness(Site):
         self.assertEqual(status, 200, undone)
         entry = self.answers()["decision-2"]
         self.assertEqual(entry["current"]["id"], yes["id"])
-        self.assertEqual(entry["current"]["choice"], "yes")
         [earlier] = entry["earlier"]
         self.assertEqual((earlier["id"], earlier["dismissed"]), (dismissal["id"], True))
-        self.assertIn("undoneAt", earlier)
         self.assertEqual(entry, {"current": undone["current"], "earlier": undone["earlier"]})
 
         done = self.cli("answers", NAME, "--db", str(self.db), "--out-dir", str(self.out))

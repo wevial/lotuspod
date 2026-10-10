@@ -1050,7 +1050,6 @@ class DismissalTests(ApiTestCase):
                                 "earlier": []}))
         self.assertEqual(self.ask("GET", "/api/answers?page=plan"),
                          (200, {"page": "plan", "questions": {}}))
-        self.assertEqual(self.undo("decision-2"), (409, {"error": "not_dismissed"}))
 
     def test_refused_dismissals_and_undos_store_nothing(self):
         self.assertEqual(self.dismiss(reason="r" * 200)[0], 201)

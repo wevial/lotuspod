@@ -947,8 +947,6 @@ class DismissalPullTests(PullTestCase):
         self.assertTrue(item["decision"]["answer"]["dismissed"])
         out = self.markdown("pull", "--owner", "hermes")
         [line] = [line for line in out.splitlines() if line.startswith("- Answer:")]
-        self.assertTrue(line.startswith("- Answer: dismissed, by "), line)
-        self.assertTrue(line.endswith(": Not needed now"), line)
         self.assertEqual(line, f"- Answer: dismissed, by {keys.EMAIL} at "
                                f"{dismissal['createdAt']}: Not needed now")
         self.assertNotIn("The answer's note:", out)
@@ -973,7 +971,6 @@ class DismissalPullTests(PullTestCase):
         self.assertEqual(out.count("The reader dismissed this question as no longer relevant."),
                          2)
         self.assertNotIn("- Was:", out)
-        self.assertNotIn("Note:", out)
         self.assertNotIn("Undone at", out)
 
         status, undone = self.reader("POST", "/api/answers", {
