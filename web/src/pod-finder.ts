@@ -41,16 +41,6 @@
   // The seen route's pages, of which the finder reads each one's seenAt.
   type Seen = Record<string, { seenAt: string | null }>;
 
-  interface Group {
-    heading: string | null;
-    pods: Pod[];
-  }
-
-  interface Shown {
-    pod: Pod;
-    node: HTMLDivElement;
-  }
-
   type Read = "seen" | "index";
 
   const main = document.querySelector("main.index");
@@ -141,7 +131,7 @@
   // The reads this opening still waits on.
   const pending = new Set<Read>();
   // The options shown, each {pod, node}, and the selected one's place.
-  let shown: Shown[] = [];
+  let shown: { pod: Pod; node: HTMLDivElement }[] = [];
   let selected = -1;
   // Where focus was when the finder opened: the element, and within a
   // framed pod's page, its own.
@@ -163,7 +153,7 @@
   // The pods matching the query, as groups {heading, pods}: while the seen
   // route has answered 200, Recent then Other pods, a heading only over a
   // group with a pod in it; else the listing's order under no heading.
-  const groups = (): Group[] => {
+  const groups = () => {
     const words = input.value.toLowerCase().split(/\s+/).filter(Boolean);
     const matching = pods.filter((pod) => words.every((word) => pod.text.includes(word)));
     if (seen === null) return [{ heading: null, pods: matching }];
