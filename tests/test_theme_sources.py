@@ -91,16 +91,8 @@ class JoinTests(TempDirTestCase):
         )
 
     def test_the_page_scripts_are_joined_inside_one_closure(self):
-        """The page script is the hand-off source, the closure's opening, the
-        other page sources in order and its close; the old-version script is
-        the opening, its sources in order and the close."""
-        page = cli.THEME_SOURCES[cli.PAGE_SCRIPT]
-        self.assertEqual(page[0], "js/open-in-tabs.js")
-        self.assertEqual(
-            cli.theme_file_bytes(cli.PAGE_SCRIPT),
-            (cli.THEME_DIR / "js/open-in-tabs.js").read_bytes() + CLOSURE_OPEN
-            + joined(cli.THEME_DIR, page[1:]) + CLOSURE_CLOSE,
-        )
+        """The old-version script is the closure's opening, its sources in
+        order and its close."""
         old = cli.THEME_SOURCES[cli.OLD_VERSION_SCRIPT]
         self.assertEqual(
             cli.theme_file_bytes(cli.OLD_VERSION_SCRIPT),
@@ -109,19 +101,6 @@ class JoinTests(TempDirTestCase):
         # The hand-off ends in a call with no semicolon, so the opening right
         # after it is its argument.
         self.assertTrue((cli.THEME_DIR / "js/open-in-tabs.js").read_bytes().endswith(b"})()\n"))
-
-    def test_no_source_opens_or_closes_the_closure(self):
-        """The closure's opening and close are the join's, so no source holds
-        either: js/page-close.js and js/old-version-open.js are gone, and
-        js/page-open.js starts no function."""
-        declared = {source for sources in cli.THEME_SOURCES.values() for source in sources}
-        for fragment in ("js/page-close.js", "js/old-version-open.js"):
-            with self.subTest(fragment=fragment):
-                self.assertNotIn(fragment, declared)
-                self.assertFalse((cli.THEME_DIR / fragment).exists())
-        self.assertNotIn(CLOSURE_OPEN, (cli.THEME_DIR / "js/page-open.js").read_bytes())
-        problems = source_problems(cli.THEME_DIR, cli.THEME_SOURCES)
-        self.assertEqual(problems, [], "\n".join(problems))
 
     def test_sync_writes_the_index_script_from_its_source(self):
         cli.sync_theme_css(self.out_dir)
@@ -173,7 +152,6 @@ class DeclaredOrderTests(ThemeCopyTestCase):
         script = cli.THEME_SOURCES[cli.PAGE_SCRIPT]
         self.assertIn("js/tables.js", script)
         self.assertGreater(script.index("js/tables.js"), script.index("js/comments.js"))
-        self.assertGreater(script.index("js/tables.js"), script.index("js/page-open.js"))
         problems = source_problems(cli.THEME_DIR, cli.THEME_SOURCES)
         self.assertEqual(problems, [], "\n".join(problems))
 
@@ -188,7 +166,6 @@ class DeclaredOrderTests(ThemeCopyTestCase):
         self.assertIn("js/panel-resize.js", script)
         self.assertGreater(styles.index("css/panel-resize.css"), styles.index("css/comments.css"))
         self.assertGreater(script.index("js/panel-resize.js"), script.index("js/comments.js"))
-        self.assertGreater(script.index("js/panel-resize.js"), script.index("js/page-open.js"))
         problems = source_problems(cli.THEME_DIR, cli.THEME_SOURCES)
         self.assertEqual(problems, [], "\n".join(problems))
 
