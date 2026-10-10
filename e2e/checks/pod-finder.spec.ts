@@ -502,69 +502,78 @@ test.describe('the index read again answering 500', () => {
 test.describe('the seen route and the index read held', () => {
   test.use({ extraHTTPHeaders: { 'Cf-Access-Jwt-Assertion': SECOND } });
 
-  test('the finder draws no option until the seen route answers, and the index read answering after keeps the pod selected', async ({ page }) => {
+  test('the finder draws the pods it has at once, selects one once the seen route answers, and keeps it as either read answers', async ({ page }) => {
     const errors = await watch(page);
     await openIndex(page);
     expect(await openRecorded(page, ARTICLE)).toBe('');
     const seenHeld: Route[] = [];
     const indexHeld: Route[] = [];
-    let holdSeen = true;
+    let holding = true;
     await page.route((url) => url.pathname === SEEN, (route) => {
-      if (!holdSeen || route.request().method() !== 'GET') return route.continue();
+      if (!holding || route.request().method() !== 'GET') return route.continue();
       seenHeld.push(route);
     });
     await page.route((url) => url.pathname === '/', (route) => {
-      if (route.request().resourceType() !== 'fetch') return route.continue();
+      if (!holding || route.request().resourceType() !== 'fetch') return route.continue();
       indexHeld.push(route);
     });
+    const release = async (held: Route[]) => {
+      await expect.poll(() => held.length).toBeGreaterThan(0);
+      for (const route of held.splice(0)) await route.continue();
+    };
+    const chosen = finder(page).locator('[role="option"][aria-selected="true"]');
     const held = { name: 'pod-finder-held', title: 'Pod finder held' };
     publish(held.name, held.title);
-    // Hidden while it waits, so found by its role and not its name.
-    const waiting = finder(page).locator('[role="listbox"]');
 
-    // Opened with both reads held: no option drawn, so none moves under the
-    // reader; the index answering first draws none either.
+    // Opened with both reads held: the pods it has, drawn at once, none
+    // selected yet; once the index answers, typing lists the pod published
+    // since while the seen route is still held.
     await page.keyboard.press('ControlOrMeta+K');
-    await expect(finder(page)).toBeVisible();
     await expect(input(page)).toBeFocused();
-    await expect(waiting).toHaveAttribute('aria-busy', 'true');
-    await expect(options(page)).toHaveCount(0);
-    await expect.poll(() => indexHeld.length).toBe(1);
-    await indexHeld.splice(0)[0].continue();
-    await expect.poll(() => seenHeld.length).toBe(1);
-    await expect(options(page)).toHaveCount(0);
+    await expect(options(page).first()).toBeVisible();
+    await expect(listbox(page)).toHaveAttribute('aria-busy', 'true');
+    await expect(optionFor(page, held)).toHaveCount(0);
+    await expect(chosen).toHaveCount(0);
+    await release(indexHeld);
+    await expect(optionFor(page, held)).toHaveCount(1);
+    await input(page).fill(held.title);
+    await expect(options(page).locator('.pod-finder-title')).toHaveText([held.title]);
+    await expect(chosen).toHaveCount(0);
+    await input(page).fill('');
 
-    // The seen route answers: the pod opened last is under Recent, selected,
-    // and the pod published since is listed.
-    holdSeen = false;
-    await seenHeld.splice(0)[0].continue();
+    // The seen route answers: the pod opened last comes first, selected.
+    await release(seenHeld);
     await expect(listbox(page)).not.toHaveAttribute('aria-busy', 'true');
     await expect(headings(page).first()).toHaveText('Recent');
     await expect(options(page).first()).toHaveAttribute('data-page', ARTICLE.name);
     expect(await selectedName(page)).toBe(ARTICLE.name);
-    await expect(optionFor(page, held)).toHaveCount(1);
     await page.keyboard.press('Escape');
     await expect(finder(page)).toBeHidden();
 
-    // Opened again with the index read held: the reader moves the selection,
-    // and the index answering after lists a pod published since and keeps it.
+    // Another pod opened since, the finder opened again with both reads held:
+    // the reader selects the first pod, and neither the index read nor the
+    // seen route putting the other pod first moves the selection.
+    holding = false;
+    expect(await openRecorded(page, CHECKLIST)).toBe('');
+    await home(page).click();
+    holding = true;
     const later = { name: 'pod-finder-later', title: 'Pod finder later' };
     publish(later.name, later.title);
     await page.keyboard.press('ControlOrMeta+K');
-    await expect(options(page).first()).toBeVisible();
+    await expect(options(page).first()).toHaveAttribute('data-page', ARTICLE.name);
+    await expect(chosen).toHaveCount(0);
     await page.keyboard.press('ArrowDown');
-    const chosen = await selectedName(page);
-    expect(chosen).not.toBe(ARTICLE.name);
-    await expect(optionFor(page, later)).toHaveCount(0);
-    await expect.poll(() => indexHeld.length).toBe(1);
-    await indexHeld.splice(0)[0].continue();
+    expect(await selectedName(page)).toBe(ARTICLE.name);
+    await release(indexHeld);
     await expect(optionFor(page, later)).toHaveCount(1);
+    expect(await selectedName(page)).toBe(ARTICLE.name);
+    await release(seenHeld);
     await expect(listbox(page)).not.toHaveAttribute('aria-busy', 'true');
-    expect(await selectedName(page)).toBe(chosen);
+    await expect(options(page).first()).toHaveAttribute('data-page', CHECKLIST.name);
+    expect(await selectedName(page)).toBe(ARTICLE.name);
     await page.keyboard.press('Enter');
     await expect(finder(page)).toBeHidden();
-    await expect(strip(page).locator(`.pod-tab[data-page="${chosen}"] button.pod-tab-title`))
-      .toHaveAttribute('aria-current', 'page');
+    await expect(tabTitle(page, ARTICLE)).toHaveAttribute('aria-current', 'page');
     await page.unrouteAll({ behavior: 'ignoreErrors' });
     expect(errors).toEqual([]);
   });

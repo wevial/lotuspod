@@ -3,9 +3,9 @@
 // elsewhere), a dialog over a dimmed backdrop lists every pod the listing has:
 // its title, "in a tab" while it is open in one, its summary on one line, its
 // labels as the listing's tags and the day it was updated, all read from the
-// listing's rows. Each opening also reads the index again, never waiting on
-// it, so a pod published since it loaded is listed too once that read
-// answers 200, the options drawn again with the same pod selected.
+// listing's rows. Each opening draws the pods it has at once and reads the
+// index again, so a pod published since it loaded is listed too once that
+// read answers 200, the options drawn again with the same pod selected.
 // Typing filters them: each word of the query, ignoring case, must appear
 // in the pod's title, labels and summary joined.
 //
@@ -13,7 +13,11 @@
 // first under "Recent", newest first, and the rest follow under "Other pods"
 // in the listing's order, newest update first. Any answer but 200 (signed
 // out, or the demo) leaves the listing's order alone, with no heading.
-// The list is aria-busy until both reads have answered.
+// The route is asked at load and again at each opening, whose options are
+// grouped by its last answer and again by the new one. No option is selected
+// until the new one has answered, so the selection never moves under the
+// reader: from then on, or once the reader has moved it, it stays on its pod
+// while that is listed. The list is aria-busy until both reads have answered.
 //
 // ↑ and ↓ move the selection, wrapping at either end, and Tab stays in the
 // input. Enter or a click opens the pod in a tab ("lotuspod:open"), whose
@@ -103,9 +107,8 @@
   backdrop.append(dialog);
   document.body.append(backdrop);
 
-  // The seen route's pages as last answered 200, else null. Each opening
-  // asks again and draws no option until it has the answer, so none moves
-  // under the reader.
+  // The seen route's pages as last answered 200, else null, and whether it
+  // has answered since the finder opened.
   let seen = null;
   let answered = false;
   // The reads this opening still waits on.
@@ -185,7 +188,7 @@
   };
 
   // Draw the options again; the pod selected stays so when keep is set and
-  // it is still listed, else the first is.
+  // it is still listed, else the first is once the seen route has answered.
   const render = (keep) => {
     const was = keep && shown[selected] ? shown[selected].pod.name : null;
     const open = inTabs();
@@ -215,7 +218,7 @@
     empty.hidden = shown.length > 0;
     empty.textContent = query ? `No pod matches “${query}”.` : "No pod is listed.";
     const at = was === null ? -1 : shown.findIndex((each) => each.pod.name === was);
-    select(at < 0 ? 0 : at);
+    select(at >= 0 ? at : answered ? 0 : -1);
   };
 
   const settled = (read) => {
@@ -262,7 +265,7 @@
     settled("index");
     if (fresh === null) return;
     pods = fresh;
-    if (!backdrop.hidden && answered) render(true);
+    if (!backdrop.hidden) render(true);
   };
 
   const show = () => {
@@ -278,12 +281,11 @@
     back = { at, inner };
     input.value = "";
     backdrop.hidden = false;
-    list.hidden = true;
-    empty.hidden = true;
     answered = false;
     pending.add("seen");
     pending.add("index");
     list.setAttribute("aria-busy", "true");
+    render(false);
     input.focus();
     askSeen();
     askIndex();
@@ -321,14 +323,15 @@
   };
 
   input.addEventListener("input", () => {
-    if (answered) render(false);
+    render(false);
   });
   dialog.addEventListener("keydown", (event) => {
     if (event.key === "ArrowDown" || event.key === "ArrowUp") {
       event.preventDefault();
       if (!shown.length) return;
       const step = event.key === "ArrowDown" ? 1 : -1;
-      select((selected + step + shown.length) % shown.length);
+      const from = selected >= 0 ? selected : step > 0 ? -1 : 0;
+      select((from + step + shown.length) % shown.length);
     } else if (event.key === "Enter") {
       event.preventDefault();
       if (!event.repeat) choose(selected, modified(event));
@@ -350,4 +353,5 @@
     if (backdrop.hidden) show();
     else if (event.detail && event.detail.toggle) hide(true);
   });
+  askSeen();
 })();
