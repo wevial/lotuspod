@@ -190,6 +190,9 @@ def render_template(context: dict, template_path: Path = TEMPLATE_PATH) -> str:
 # The pinned Mermaid's directory on jsDelivr. The page template's start-up
 # module imports the library from here, and the library its chunks.
 MERMAID_DIR = "https://cdn.jsdelivr.net/npm/mermaid@11.4.1/"
+# The ELK layout's directory, for Mermaid 11. The same module registers it,
+# so a diagram whose init line asks for layout "elk" is drawn with it.
+MERMAID_ELK_DIR = "https://cdn.jsdelivr.net/npm/@mermaid-js/layout-elk@0.2.3/"
 
 # Context values an author supplies. None of them is part of a script the
 # template writes, so a page rendered with them blank holds exactly the
@@ -241,17 +244,18 @@ def page_policy(page_html: str, own_scripts: set[str]) -> str:
 
     Scripts run from the site itself, and inline only when the template
     wrote them (own_scripts): each such script in the page is allowed by its
-    hash, and the Mermaid directory only when one of them loads from it. A
-    script in the body is never hashed, so it never runs, and neither does
-    an inline event handler.
+    hash, and the Mermaid and ELK directories each only when one of them
+    loads from it. A script in the body is never hashed, so it never runs,
+    and neither does an inline event handler.
     """
     script_src = ["'self'"]
     hashes: list[str] = []
     for text in collect_scripts(page_html).inline:
         if text not in own_scripts:
             continue
-        if MERMAID_DIR in text and MERMAID_DIR not in script_src:
-            script_src.append(MERMAID_DIR)
+        for directory in (MERMAID_DIR, MERMAID_ELK_DIR):
+            if directory in text and directory not in script_src:
+                script_src.append(directory)
         source = script_hash(text)
         if source not in hashes:
             hashes.append(source)
@@ -790,6 +794,7 @@ def cmd_render(args: argparse.Namespace) -> int:
         "page_script": PAGE_SCRIPT,
         "mermaid_theme_variables": mermaid_theme_variables(tokens),
         "mermaid_dir": MERMAID_DIR,
+        "mermaid_elk_dir": MERMAID_ELK_DIR,
     }
     html = render_page(context)
 
