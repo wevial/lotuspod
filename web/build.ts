@@ -13,7 +13,7 @@ import { basename, join } from "node:path";
 
 const MARKER_PREFIX = "// Built from web/src/";
 
-export class BuildError extends Error {}
+class BuildError extends Error {}
 
 export function marker(name: string): string {
   return `${MARKER_PREFIX}${name}.ts by web/build.ts. Edit that file, not this one.\n`;
@@ -24,7 +24,7 @@ export function outDir(webDir: string): string {
 }
 
 // The one Bun pin, package.json's "packageManager": "bun@X.Y.Z".
-export function pinnedBun(webDir: string): string {
+function pinnedBun(webDir: string): string {
   const manifest = JSON.parse(readFileSync(join(webDir, "package.json"), "utf8"));
   const match = /^bun@(\S+)$/.exec(manifest.packageManager ?? "");
   if (!match) {
@@ -35,18 +35,18 @@ export function pinnedBun(webDir: string): string {
 
 // Bun's transpiler output is byte-stable only within one release, so any
 // other Bun would make the committed JS look stale.
-export function checkBun(webDir: string, running: string = Bun.version): void {
+function checkBun(webDir: string): void {
   const pinned = pinnedBun(webDir);
-  if (running !== pinned) {
-    throw new BuildError(`this is Bun ${running}, but web/package.json pins bun@${pinned}: install Bun ${pinned} to build`);
+  if (Bun.version !== pinned) {
+    throw new BuildError(`this is Bun ${Bun.version}, but web/package.json pins bun@${pinned}: install Bun ${pinned} to build`);
   }
 }
 
-export function strip(source: string): string {
+function strip(source: string): string {
   return new Bun.Transpiler({ loader: "ts", target: "browser" }).transformSync(source);
 }
 
-export type BuildResult = { written: string[]; removed: string[] };
+type BuildResult = { written: string[]; removed: string[] };
 
 export function build(webDir: string): BuildResult {
   checkBun(webDir);
