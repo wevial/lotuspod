@@ -1,5 +1,6 @@
-"""Test suite for the theme's sources: the stylesheet, the page script and the
-index script are written as one source file per feature
+"""Test suite for the theme's sources: the stylesheet, the page script, the
+index script and the old-version script are written as one source file per
+feature
 (src/lotuspod/_theme/css/ and src/lotuspod/_theme/js/), and render joins each
 served file's sources in the order cli.THEME_SOURCES declares into the one
 file serve answers.
@@ -77,9 +78,10 @@ class JoinTests(TempDirTestCase):
             joined(cli.THEME_DIR, cli.THEME_SOURCES[cli.INDEX_SCRIPT]),
         )
 
-    def test_the_three_served_files_are_written_from_sources(self):
+    def test_the_four_served_files_are_written_from_sources(self):
         self.assertEqual(sorted(cli.THEME_SOURCES),
-                         sorted([STYLESHEET, cli.PAGE_SCRIPT, cli.INDEX_SCRIPT]))
+                         sorted([STYLESHEET, cli.PAGE_SCRIPT, cli.INDEX_SCRIPT,
+                                 cli.OLD_VERSION_SCRIPT]))
         for filename in cli.THEME_SOURCES:
             self.assertFalse((cli.THEME_DIR / filename).exists(), filename)
 
@@ -214,6 +216,21 @@ class DeclaredOrderTests(ThemeCopyTestCase):
         self.assertEqual(cli.THEME_SOURCES[cli.INDEX_SCRIPT],
                          ("js/pod-tabs.js", "js/pod-finder.js"))
         self.assertEqual(styles.index("css/pod-finder.css"), styles.index("css/pod-tabs.css") + 1)
+        problems = source_problems(cli.THEME_DIR, cli.THEME_SOURCES)
+        self.assertEqual(problems, [], "\n".join(problems))
+
+    def test_the_old_version_script_joins_the_menu_and_no_page_feature(self):
+        """The old-version script, served beside the page script,
+        is its opening, the helpers it shares with the page script, the
+        version menu, its own source and the closing line; no page feature
+        that reads, shows or posts comments or answers is in it."""
+        script = cli.THEME_SOURCES[cli.OLD_VERSION_SCRIPT]
+        self.assertEqual(cli.OLD_VERSION_SCRIPT, "lotuspod-old-version.js")
+        self.assertEqual(script, ("js/old-version-open.js", "js/shared.js",
+                                  "js/version-menu.js", "js/old-version.js",
+                                  "js/page-close.js"))
+        page = cli.THEME_SOURCES[cli.PAGE_SCRIPT]
+        self.assertEqual(page[:3], ("js/open-in-tabs.js", "js/page-open.js", "js/shared.js"))
         problems = source_problems(cli.THEME_DIR, cli.THEME_SOURCES)
         self.assertEqual(problems, [], "\n".join(problems))
 

@@ -12,11 +12,14 @@
   // button, and Tab or a click outside closes it.
   //
   // It reads nothing and posts nothing: its inputs are the versions, the
-  // page's name, the commit shown and the commit the reader last looked at
-  // (null when none), so a script of its own can join it as it is. It
-  // returns the button and the menu, to be put side by side in a positioned
-  // box, and close(), which closes the menu.
-  function versionMenu(versions, page, shown, seen) {
+  // page's name, the commit shown, the commit the reader last looked at
+  // (null when none) and whether the one shown is an old version (old, as
+  // the old-version script draws it in the banner, js/old-version.js), so a
+  // script of its own can join it as it is. On an old version the one shown
+  // carries a "viewing" pill and "See all versions" links to the page's
+  // NAME.html#versions. It returns the button and the menu, to be put side
+  // by side in a positioned box, and close(), which closes the menu.
+  function versionMenu(versions, page, shown, seen, old) {
     var button = element("button", "artifact-versions-menu-button", "▾");
     button.type = "button";
     button.id = "artifact-versions-menu-button";
@@ -38,10 +41,11 @@
       return link;
     }
 
+    var file = encodeURIComponent(page) + ".html";
     var list = element("div", "artifact-versions-menu-list");
     list.setAttribute("role", "none");
     versions.forEach(function (version) {
-      var link = item(encodeURIComponent(page) + ".html" + (version.current ? "" :
+      var link = item(file + (version.current ? "" :
         "?version=" + encodeURIComponent(version.commit)));
       if (version.commit === shown) {
         link.setAttribute("aria-current", "page");
@@ -56,11 +60,14 @@
       if (seen && version.commit === seen) {
         top.appendChild(element("span", "artifact-versions-seen", "you last looked"));
       }
+      if (old && version.commit === shown) {
+        top.appendChild(element("span", "artifact-versions-viewing", "viewing"));
+      }
       link.append(top, element("span", "artifact-versions-menu-note",
         String(version.summary || "") || "First version"));
       list.appendChild(link);
     });
-    var seeAll = item("#versions", "artifact-versions-menu-all");
+    var seeAll = item((old ? file : "") + "#versions", "artifact-versions-menu-all");
     seeAll.textContent = "See all versions";
     menu.append(list, seeAll);
 

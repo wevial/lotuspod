@@ -97,8 +97,11 @@ percent, zoom in (+), Fit and ✕. Drag the diagram, scroll with two fingers or
 press the arrow keys to move it; pinch, ctrl+scroll, the buttons or the `+`
 and `-` keys zoom it, from 25% to 400%, where 100% is Mermaid's own size. Fit,
 `0` or `F` shows it whole again, as it opens. Esc or ✕ puts it back on the
-page and the focus back on its Expand button. Without scripting, and on an
-old version, the diagram stays as it is on the page.
+page and the focus back on its Expand button. A flowchart's node cards (below)
+work in the view as on the page, and on a touch screen, where the Expand button
+is always shown, one finger drags the diagram and two pinch to zoom about the
+point between them. Without scripting, and on an old version, the diagram
+stays as it is on the page.
 
 A flowchart (source starting `flowchart` or `graph`) can be followed by a
 Nodes table, which the page script turns into a card for each box. Put an
@@ -618,10 +621,23 @@ served as it was published, under a banner saying it is an earlier version,
 from when, and how many versions behind the current one it is, with links
 "All versions" and "Back to current". Its decision forms are disabled, its
 comment boxes hidden, and a `Content-Security-Policy` header of
-`script-src 'none'; form-action 'none'` keeps any of its scripts, a Mermaid
-diagram's included, and its forms from running: comments and answers stay
-on the current page. It is sent with `Cache-Control: private, no-store`. Any
-other query on a page is served as the page.
+`frame-ancestors 'none'; form-action 'none'; base-uri 'none'; script-src
+'nonce-NONCE'`, with a fresh NONCE made for each answer, keeps its forms and
+every script it carries, a Mermaid diagram's included, from running: comments
+and answers stay on the current page. The one script it runs is the one serve adds before `</body>`
+with that nonce, the site's old-version script, `lotuspod-old-version.js`; no
+script in the page itself carries the nonce, and none can guess it. It is sent
+with `Cache-Control: private, no-store`. Any other query on a page is served
+as the page.
+
+That script gives the banner the header's version menu: a "Choose a version
+▾" button before "All versions" whose menu lists the versions as the
+header's does, the one shown marked "viewing", the current one opening the
+page and "See all versions" opening `NAME.html#versions`. It asks
+`GET /api/versions?page=NAME` once as the version loads and posts nothing, so
+an old version records no visit and marks no "you last looked"; when the
+route answers anything but 200 with a list, or the request fails, the banner
+keeps only its two links.
 
 A page the reader last opened at an older revision says what changed since.
 The page's post to `/api/seen` answers the revision they opened it at before
@@ -1200,7 +1216,8 @@ Edit the CSS to restyle all artifacts.
 A feature's CSS goes in its own file in `src/lotuspod/_theme/css/` and its JS in
 `src/lotuspod/_theme/js/`, and each new file takes one line in the declared
 order (`THEME_SOURCES` in `cli.py`), which render joins into the one
-`lotuspod.css`, `lotuspod-page.js` and `lotuspod-index.js` it serves.
+`lotuspod.css`, `lotuspod-page.js`, `lotuspod-index.js` and
+`lotuspod-old-version.js` it serves.
 Pages address the stylesheet and page script, and the index its script, by a
 hash of the theme files, so there is no version to raise.
 

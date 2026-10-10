@@ -422,9 +422,10 @@ class ArtifactTopbarTests(TempDirTestCase):
         for filename in ("lotuspod.css", "tokens.json"):
             text = history.show("afec6b8", f"src/lotuspod/_theme/{filename}", repo=repo)
             (previous / filename).write_text(text, encoding="utf-8")
-        # afec6b8 predates the favicon (KO-244) and the page and index scripts; the copy
-        # step needs them present.
-        for filename in ("favicon.svg", cli.PAGE_SCRIPT, cli.INDEX_SCRIPT):
+        # afec6b8 predates the favicon (KO-244) and the page, index and old-version
+        # scripts; the copy step needs them present.
+        for filename in ("favicon.svg", cli.PAGE_SCRIPT, cli.INDEX_SCRIPT,
+                         cli.OLD_VERSION_SCRIPT):
             (previous / filename).write_bytes(cli.theme_file_bytes(filename))
 
         after = self.rendered()
@@ -921,7 +922,7 @@ class ServeAllowListTests(TempDirTestCase):
         self.assertEqual(
             allowed,
             {"index.html", "lotuspod.css", "favicon.svg", "lotuspod-page.js", "lotuspod-index.js",
-             "zeta.html"},
+             "lotuspod-old-version.js", "zeta.html"},
         )
         self.assertNotIn("alpha.html", allowed)
         self.assertNotIn("mike.html", allowed)
@@ -933,7 +934,7 @@ class ServeAllowListTests(TempDirTestCase):
         self.assertEqual(
             self.allow_list(),
             {"index.html", "lotuspod.css", "favicon.svg", "lotuspod-page.js", "lotuspod-index.js",
-             "good.html"},
+             "lotuspod-old-version.js", "good.html"},
         )
 
     def test_allow_list_recomputed_on_rewrite(self):
@@ -1252,7 +1253,8 @@ class PublishHttpRoundTripTests(TempDirTestCase):
         self.assertEqual(
             sorted(p.name for p in self.out_dir.iterdir()),
             ["FINDINGS.md", "alpha.html", "asked.html", "favicon.svg", "index.html",
-             "lotuspod-index.js", "lotuspod-page.js", "lotuspod.css", "manifest.json",
+             "lotuspod-index.js", "lotuspod-old-version.js", "lotuspod-page.js",
+             "lotuspod.css", "manifest.json",
              "mike.html", "tango.html", "zeta.html"],
         )
         self.assertEqual(self.fetch("/lotuspod-form.js")[0], 404)
@@ -1674,9 +1676,10 @@ class OutlineSideRenderTests(TempDirTestCase):
             text = history.show(self.PREVIOUS_COMMIT, f"src/lotuspod/_theme/{filename}",
                                 repo=repo)
             (previous / filename).write_text(text, encoding="utf-8")
-        # 175406f predates the favicon (KO-244) and the page and index scripts; the copy
-        # step needs them present.
-        for filename in ("favicon.svg", cli.PAGE_SCRIPT, cli.INDEX_SCRIPT):
+        # 175406f predates the favicon (KO-244) and the page, index and old-version
+        # scripts; the copy step needs them present.
+        for filename in ("favicon.svg", cli.PAGE_SCRIPT, cli.INDEX_SCRIPT,
+                         cli.OLD_VERSION_SCRIPT):
             (previous / filename).write_bytes(cli.theme_file_bytes(filename))
 
         after = self.rendered()
@@ -1869,11 +1872,11 @@ class ReportVariantTests(TempDirTestCase):
         cli.sync_theme_css(self.out_dir)
         self.assertEqual(sorted(p.name for p in self.out_dir.glob("*.css")), ["lotuspod.css"])
         self.assertEqual(sorted(p.name for p in self.out_dir.glob("*.js")),
-                         sorted([cli.PAGE_SCRIPT, cli.INDEX_SCRIPT]))
+                         sorted([cli.PAGE_SCRIPT, cli.INDEX_SCRIPT, cli.OLD_VERSION_SCRIPT]))
         self.assertEqual(
             cli.serve_allow_list(self.out_dir),
             {"index.html", "lotuspod.css", "favicon.svg", "lotuspod-page.js",
-             "lotuspod-index.js"},
+             "lotuspod-index.js", "lotuspod-old-version.js"},
         )
         for rule in self.css.split("}"):
             if "--size-body-report" in rule or "--leading-body-report" in rule:
