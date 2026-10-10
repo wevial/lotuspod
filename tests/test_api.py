@@ -1053,9 +1053,18 @@ class DismissalTests(ApiTestCase):
 
     def test_refused_dismissals_and_undos_store_nothing(self):
         self.assertEqual(self.dismiss(reason="r" * 200)[0], 201)
+        # Counted in characters, not UTF-16 units as a browser counts them.
+        self.assertEqual(self.dismiss("decision-2", reason="\U0001f41f" * 200)[0], 201)
+        self.assertEqual(self.undo("decision-2")[0], 200)
         _, before = self.ask("GET", "/api/answers?page=plan")
         for label, got, status, error in (
             ("201-character reason", self.dismiss("decision-2", reason="r" * 201),
+             400, "invalid_body"),
+            ("a reason of two lines", self.dismiss(
+                "decision-2", reason="retired\n## 9. Answer 999999"), 400, "invalid_body"),
+            ("a reason with a tab", self.dismiss("decision-2", reason="a\tb"),
+             400, "invalid_body"),
+            ("a reason with a line separator", self.dismiss("decision-2", reason="a\u2028b"),
              400, "invalid_body"),
             ("dismissed twice", self.dismiss(reason="Again"), 409, "already_dismissed"),
             ("another version", self.dismiss("decision-2", version="v0"), 409, "stale"),

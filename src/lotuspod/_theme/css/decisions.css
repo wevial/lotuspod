@@ -292,7 +292,8 @@ label.artifact-decision-note span {
   color: var(--color-muted-lavender);
 }
 
-.artifact-body .artifact-decision-status {
+.artifact-body .artifact-decision-status,
+.artifact-body .artifact-decision-saved-status {
   color: var(--color-muted-lavender);
   font-size: 0.85rem;
   margin: 0;

@@ -193,7 +193,10 @@
         if (owner) {
           back = element("button", "artifact-decision-undo", "Undo");
           back.type = "button";
-          back.addEventListener("click", function () { undo(form, back); });
+          back.addEventListener("click", function () {
+            back.disabled = true;
+            queue(form, function () { return undo(form, back); });
+          });
           line.append(" · ", back);
         }
         block.replaceChildren(line, element("p", "artifact-decision-saved-by",
@@ -442,14 +445,20 @@
       status(form, text);
     }
 
-    // Post a form's answer, as picked when its turn comes, with its note:
-    // true once it is saved and the form drawn from it, false when it is
-    // not, with why in the form's status. A form posts one answer at a
-    // time, so an older post never lands after a newer one.
-    function save(form) {
-      var turn = (form.lotuspodSaving || Promise.resolve()).then(function () { return post(form); });
+    // Run work once the form's earlier posts are answered: a form posts one
+    // answer, dismissal or undo at a time, so an older post never lands
+    // after a newer one.
+    function queue(form, work) {
+      var turn = (form.lotuspodSaving || Promise.resolve()).then(work);
       form.lotuspodSaving = turn;
       return turn;
+    }
+
+    // Post a form's answer, as picked when its turn comes, with its note:
+    // true once it is saved and the form drawn from it, false when it is
+    // not, with why in the form's status.
+    function save(form) {
+      return queue(form, function () { return post(form); });
     }
 
     async function post(form) {
@@ -518,20 +527,23 @@
       return "This decision was not dismissed (" + error + "). Try again.";
     }
 
-    // Dismiss: the note's text, trimmed, posted as the reason. Dismissed,
-    // the note is emptied and folded, as Ask leaves it, and the form folds
-    // to the dismissal.
+    // Dismiss, in the form's turn: the note's text as it then reads, on one
+    // line and trimmed, posted as the reason, its length counted in
+    // characters as the server counts them. Dismissed, the note is emptied
+    // and folded, as Ask leaves it, and the form folds to the dismissal; a
+    // pick or a note changed while it was dismissing stays, open.
     async function dismiss(form, button) {
       var note = form.elements.note;
-      var reason = note.value.trim();
-      if (reason.length > MAX_REASON) {
-        status(form, "Shorten the note to " + MAX_REASON +
-          " characters to dismiss with it as the reason.");
-        return;
-      }
-      button.disabled = true;
-      status(form, "Dismissing this decision...");
+      var sent = note.value;
+      var reason = sent.replace(/\s+/g, " ").trim();
+      var picked = form.querySelector('input[name="choice"]:checked');
       try {
+        if (Array.from(reason).length > MAX_REASON) {
+          status(form, "Shorten the note to " + MAX_REASON +
+            " characters to dismiss with it as the reason.");
+          return;
+        }
+        status(form, "Dismissing this decision...");
         var response = await fetch(ANSWERS, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -550,13 +562,17 @@
           answers.earlier.unshift(answers.current);
         }
         answers.current = payload;
-        // No option stays picked, and the note is emptied and folded.
-        fill(form);
-        var fold = note.closest("details");
-        if (fold) {
-          fold.open = false;
+        if (form.querySelector('input[name="choice"]:checked') === picked) {
+          radios(form).forEach(function (radio) { radio.checked = false; });
         }
-        form.lotuspodEditing = false;
+        if (note.value === sent) {
+          note.value = "";
+          var fold = note.closest("details");
+          if (fold) {
+            fold.open = false;
+          }
+        }
+        form.lotuspodEditing = dirty(form);
         status(form, "");
         var back = draw(form);
         table();
@@ -571,11 +587,25 @@
       }
     }
 
-    // Undo: the dismissal taken back, and the form drawn from the answers
-    // the route gives back, open when none is left. A question with none
-    // also leaves the answers read on load, so the table drops its row.
+    // Why an Undo failed, under the dismissed card, which stays folded so
+    // its Undo can be pressed again.
+    function cardSays(form, text) {
+      var block = form.querySelector(".artifact-decision-saved");
+      var said = block.querySelector(".artifact-decision-saved-status");
+      if (!said) {
+        said = element("p", "artifact-decision-saved-status");
+        said.setAttribute("role", "status");
+        block.appendChild(said);
+      }
+      said.textContent = text;
+    }
+
+    // Undo, in the form's turn: the dismissal taken back, and the form drawn
+    // from the answers the route gives back, its inputs as they hold, or
+    // none picked when no answer is left, so a pick made in the review sheet
+    // while it was dismissed goes too. A question with none also leaves the
+    // answers read on load, so the table drops its row.
     async function undo(form, button) {
-      button.disabled = true;
       try {
         var response = await fetch(ANSWERS, {
           method: "POST",
@@ -587,7 +617,7 @@
         var payload = await json(response);
         if (response.status !== 200 || !payload) {
           var error = payload && payload.error ? String(payload.error) : "status " + response.status;
-          refused(form, response.status === 401 ? SIGNED_OUT :
+          cardSays(form, response.status === 401 ? SIGNED_OUT :
             "This dismissal was not undone (" + error + "). Try again.");
           return;
         }
@@ -595,6 +625,7 @@
         if (!payload.current) {
           stored.delete(form.dataset.question);
         }
+        radios(form).forEach(function (radio) { radio.checked = false; });
         fill(form);
         form.lotuspodEditing = false;
         status(form, "");
@@ -606,7 +637,7 @@
           next.focus();
         }
       } catch (ignored) {
-        refused(form, "This dismissal was not undone: the site did not answer. Try again.");
+        cardSays(form, "This dismissal was not undone: the site did not answer. Try again.");
       } finally {
         button.disabled = false;
       }
@@ -629,7 +660,10 @@
           if (!isChecklist(form)) {
             var button = element("button", "artifact-decision-dismiss", "Dismiss");
             button.type = "button";
-            button.addEventListener("click", function () { dismiss(form, button); });
+            button.addEventListener("click", function () {
+              button.disabled = true;
+              queue(form, function () { return dismiss(form, button); });
+            });
             var after = form.querySelector(".artifact-decision-ask") ||
               form.querySelector('button[type="submit"]');
             after.parentNode.insertBefore(button, after.nextSibling);

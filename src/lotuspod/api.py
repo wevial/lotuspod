@@ -126,8 +126,9 @@ which it reopens if resolved. A note-less answer's body has no `comment`.
 
 An owner (one of the [access] owners) may dismiss a question that no
 longer matters: `{page, question, version, dismissed: true, reason}`, the
-reason 0 to MAX_REASON characters, stores a dismissal (lotuspod.db), an
-answer of its own marked `dismissed`, its choice "", its kept label
+reason 0 to MAX_REASON characters on one line (no control character, line
+or paragraph separator), stores a dismissal (lotuspod.db), an answer of its
+own marked `dismissed`, its choice "", its kept label
 "Dismissed" and its reason as its note, and answers 201 with it. It opens
 no thread. `{page, question, dismissed: false}` undoes the dismissal that
 is the question's current answer, so the answer before it is current again,
@@ -185,6 +186,7 @@ import socket
 import sqlite3
 import threading
 import time
+import unicodedata
 import urllib.parse
 from collections import deque
 from dataclasses import dataclass, field
@@ -897,6 +899,10 @@ class Api:
         question = _text(fields["question"], 1, MAX_NAME)
         version = _text(fields["version"], 1, MAX_NAME)
         reason = _text(fields["reason"], 0, MAX_REASON)
+        # One line, as agents print it on one (lotuspod.agents): no line
+        # break or other control character may start a line of its own.
+        if any(unicodedata.category(char) in ("Cc", "Zl", "Zp") for char in reason):
+            raise _invalid()
         page = self._open_page(fields["page"])
         asked = asked_question(page, question)
         if version != asked.version:

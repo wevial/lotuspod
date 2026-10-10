@@ -28,10 +28,10 @@ const MARKDOWN = ['# Pond model', '', 'Which model runs the pond.', '',
   '| 1 | Which model? | Sonnet / Opus |',
   '| 2 | Run it nightly? | Yes / No |', ''].join('\n');
 
-function publish() {
+function publish(name = NAME) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lotuspod-dismiss-'));
   try {
-    const file = path.join(dir, `${NAME}.md`);
+    const file = path.join(dir, `${name}.md`);
     fs.writeFileSync(file, MARKDOWN, 'utf-8');
     const said = execFileSync(PYTHON, ['-m', 'lotuspod', 'publish', file, '--local',
       '--out-dir', OUT, '--owner', 'hermes', '--credential', HERMES, '--comments'], {
@@ -40,7 +40,7 @@ function publish() {
       stdio: ['ignore', 'pipe', 'pipe'],
       timeout: 60_000,
     });
-    expect(said).toContain(`published ${NAME} at revision`);
+    expect(said).toContain(`published ${name} at revision`);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
@@ -59,6 +59,10 @@ function decision(page: Page, question: string) {
     note: form.locator('textarea[name="note"]'),
     noteToggle: form.locator('details.artifact-decision-note > summary'),
     dismiss: form.locator('button.artifact-decision-dismiss'),
+    option: (name: string) => form.getByRole('radio', { name }),
+    save: form.getByRole('button', { name: 'Save answer' }),
+    status: form.locator('.artifact-decision-status'),
+    cardStatus: form.locator('.artifact-decision-saved-status'),
     saved: form.locator('.artifact-decision-saved-line'),
     undo: form.locator('.artifact-decision-saved button.artifact-decision-undo'),
   };
@@ -163,5 +167,100 @@ test.describe('signed in', () => {
     } finally {
       await context.close();
     }
+  });
+
+  test('Dismiss and Undo take their turn after a Save, keep what was written since, and say why they failed', async ({ page, request }) => {
+    test.skip(test.info().repeatEachIndex > 0, 'dismisses on a page the first repeat answered');
+    const name = 'dismiss-decision-turns';
+    publish(name);
+    const answers = `/api/answers?page=${name}`;
+    const current = async (question: string) =>
+      (await (await request.get(answers, { headers: SIGNED_IN })).json()).questions[question]?.current;
+    // Each POST to the answers route held until its gate is opened.
+    const gates: Array<() => void> = [];
+    let holding = false;
+    await page.route('**/api/answers', async (route) => {
+      if (holding && route.request().method() === 'POST') {
+        await new Promise<void>((open) => gates.push(open));
+      }
+      await route.continue();
+    });
+    const errors = watch(page);
+    await page.goto(`/${name}.html`);
+    const model = decision(page, 'decision-1');
+    const side = parts(page);
+    await expect(model.dismiss).toBeVisible();
+
+    // A Save still on its way when Dismiss is pressed lands first.
+    holding = true;
+    await model.option('Sonnet').check();
+    await model.save.click();
+    await model.dismiss.click();
+    await expect.poll(() => gates.length).toBe(1);
+    holding = false;
+    gates.shift()!();
+    await expect(model.saved).toHaveText('Dismissed · Undo');
+    expect((await current('decision-1')).dismissed).toBe(true);
+
+    // A Respond pick on the dismissed question goes with Undo, which leaves
+    // no answer: the question is open again.
+    await side.count.click();
+    await page.locator('.artifact-review-entry[data-question="decision-1"] .artifact-review-option',
+      { hasText: 'Opus' }).click();
+    await expect(side.state('decision-1')).toHaveText('Dismissed');
+    await page.keyboard.press('Escape');
+    // The Save before it stays: Undo brings it back.
+    await model.undo.click();
+    await expect(model.saved).toContainText('Saved · Sonnet');
+    expect((await current('decision-1')).choice).toBe('sonnet');
+
+    const nightly = decision(page, 'decision-2');
+    await nightly.dismiss.click();
+    await expect(nightly.saved).toHaveText('Dismissed · Undo');
+    await side.count.click();
+    await page.locator('.artifact-review-entry[data-question="decision-2"] .artifact-review-option',
+      { hasText: 'Yes' }).click();
+    await page.keyboard.press('Escape');
+    await nightly.undo.click();
+    await expect(nightly.form).not.toHaveClass(/\bartifact-decision--saved\b/);
+    await expect(nightly.option('Yes')).not.toBeChecked();
+    await expect(side.state('decision-2')).toHaveText('Open');
+    await expect(side.count).toHaveText('1 to answer · Respond');
+
+    // A note written while the dismissal is on its way stays, open; the
+    // reason is the note as it read, on one line, counted in characters.
+    const reason = '\u{1F41F}'.repeat(101);
+    await nightly.noteToggle.click();
+    await nightly.note.fill(`${reason}\n\nsecond line`);
+    holding = true;
+    await nightly.dismiss.click();
+    await expect.poll(() => gates.length).toBe(1);
+    await nightly.note.fill('Draft B');
+    holding = false;
+    gates.shift()!();
+    await expect.poll(async () => (await current('decision-2'))?.note).toBe(`${reason} second line`);
+    await expect(nightly.note).toHaveValue('Draft B');
+    await expect(nightly.note).toBeVisible();
+
+    // A failed Undo keeps the card, and its Undo, to try again.
+    await page.reload();
+    await page.route('**/api/answers', async (route) => {
+      if (route.request().method() === 'POST') {
+        await route.fulfill({ status: 503, contentType: 'application/json',
+          body: JSON.stringify({ error: 'storage_unavailable' }) });
+        return;
+      }
+      await route.fallback();
+    });
+    await nightly.undo.click();
+    await expect(nightly.cardStatus)
+      .toHaveText('This dismissal was not undone (storage_unavailable). Try again.');
+    await expect(nightly.undo).toBeEnabled();
+    await expect(nightly.form).toHaveClass(/\bartifact-decision--dismissed\b/);
+    await page.unroute('**/api/answers');
+    await nightly.undo.click();
+    await expect(nightly.form).not.toHaveClass(/\bartifact-decision--saved\b/);
+    expect(await current('decision-2')).toBeUndefined();
+    expect(errors).toEqual([]);
   });
 });
