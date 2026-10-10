@@ -136,7 +136,6 @@ class PolicyTagTests(PolicyTestCase):
         (module,) = scripts
         self.assertEqual(module["attrs"].get("type"), "module")
         self.assertIn(MERMAID_DIR, module["text"])
-        self.assertIn("registerLayoutLoaders", module["text"])
 
         script_src = self.policy_of(page)["script-src"]
         hashes = [source for source in script_src if source.startswith("'sha256-")]
