@@ -172,29 +172,7 @@ class ViewTests(VersionsWitness):
             self.assertIn("artifact-version-note", note.classes())
             self.assertEqual(" ".join(note.text().split()),
                              "Answering is off on old versions. Answer on the current page.")
-        self.assert_one_nonce_allowed_script(headers, root)
         self.assertIn("no-store", headers["Cache-Control"])
-
-    def assert_one_nonce_allowed_script(self, headers, root) -> str:
-        """The answer's policy allows scripts by one nonce only, and the body
-        holds exactly one script carrying it, the old-version script; the
-        nonce."""
-        policy = "; ".join(headers.get_all("Content-Security-Policy"))
-        self.assertIn("form-action 'none'", policy)
-        self.assertIn("frame-ancestors 'none'", policy)
-        self.assertIn("base-uri 'none'", policy)
-        directives = [part.split() for part in policy.split(";") if part.strip()]
-        (script_src,) = [part[1:] for part in directives if part[0] == "script-src"]
-        self.assertEqual(len(script_src), 1, policy)
-        found = re.fullmatch(r"'nonce-([A-Za-z0-9+/_=-]+)'", script_src[0])
-        self.assertIsNotNone(found, policy)
-        nonce = found.group(1)
-        carrying = [node for node in root.find("script") if "nonce" in node.attrs]
-        self.assertEqual(len(carrying), 1)
-        self.assertEqual(carrying[0].attrs["nonce"], nonce)
-        self.assertEqual(carrying[0].attrs["src"],
-                         f"{cli.OLD_VERSION_SCRIPT}?v={cli.theme_hash()}")
-        return nonce
 
     def test_each_answer_allows_the_old_version_script_by_a_nonce_of_its_own(self):
         self.repository(self.out)
@@ -203,12 +181,28 @@ class ViewTests(VersionsWitness):
         older = self.commits(self.out, PAGE)[1]
         self.start_server()
 
+        # The policy allows scripts by one nonce only, and the body holds
+        # exactly one script carrying it, the old-version script.
         nonces = []
         for _ in range(2):
             status, headers, data = self.get(f"/{PAGE}.html?version={older}")
             self.assertEqual(status, 200)
-            root = parse(data.decode("utf-8"))
-            nonces.append(self.assert_one_nonce_allowed_script(headers, root))
+            policy = "; ".join(headers.get_all("Content-Security-Policy"))
+            self.assertIn("form-action 'none'", policy)
+            self.assertIn("frame-ancestors 'none'", policy)
+            self.assertIn("base-uri 'none'", policy)
+            directives = [part.split() for part in policy.split(";") if part.strip()]
+            (script_src,) = [part[1:] for part in directives if part[0] == "script-src"]
+            self.assertEqual(len(script_src), 1, policy)
+            found = re.fullmatch(r"'nonce-([A-Za-z0-9+/_=-]+)'", script_src[0])
+            self.assertIsNotNone(found, policy)
+            carrying = [node for node in parse(data.decode("utf-8")).find("script")
+                        if "nonce" in node.attrs]
+            self.assertEqual(len(carrying), 1)
+            self.assertEqual(carrying[0].attrs["nonce"], found.group(1))
+            self.assertEqual(carrying[0].attrs["src"],
+                             f"{cli.OLD_VERSION_SCRIPT}?v={cli.theme_hash()}")
+            nonces.append(found.group(1))
         self.assertNotEqual(nonces[0], nonces[1])
 
         status, _, data = self.get(f"/{cli.OLD_VERSION_SCRIPT}?v={cli.theme_hash()}")
