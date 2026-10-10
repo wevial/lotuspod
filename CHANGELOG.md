@@ -4,6 +4,46 @@ All notable changes to Lotuspod are recorded here, newest first, in the
 Keep a Changelog style. Each version's section, headed
 `## X.Y.Z - YYYY-MM-DD`, becomes the notes of its GitHub release.
 
+## 0.4.0 - 2026-10-09
+
+- The index opens pods in tabs, with dots for a new version or a new reply,
+  and a pod loaded on its own opens in the index as a tab. Cmd/Ctrl+K finds a
+  pod by title, label or summary, recent first, from the live index.
+- The index marks pages republished since the reader last opened them, with
+  an Updated filter. A Recent activity view, kept in the address as
+  `#activity`, groups the last seven days by page, and each row links to its
+  version, thread or decision. `/api/activity` serves the same feed.
+- A page lists its earlier versions, opens each read-only, and picks one from
+  a ▾ menu in its header. It says what changed since the reader last looked,
+  with a changed-sections box and a source diff.
+- `lotuspod archive` archives a page: off the index's default list and
+  Recent activity, still readable, with a banner, and closed to new comments
+  and answers. Owners get an Archive button.
+- A reader can comment on the whole page from a chip under its title.
+- Replies in a reader's own threads are marked unread on the page and the
+  index. A resolved thread opens from its dashed line, which marks its
+  replies seen.
+- An agent's reply or follow-up can attach images with `--image PATH`, and
+  `respond` waits for `serve`'s socket before its first pass.
+- Pages with decisions get a review sheet: the open-question count, Next
+  open, and one Respond panel. An agent can record an answer given
+  elsewhere, an owner can dismiss a decision that no longer matters, and a
+  reader's note on a saved answer opens a thread on its decision.
+- A flowchart's Nodes table is a card for each box, with arrows that light up
+  and status colors; boxes with their own Mermaid style keep it. An Expand
+  button opens a diagram full-window to pan and zoom, with node cards, status
+  colors and touch pinch. A flowchart can opt into Mermaid's ELK layout so
+  subgraph lanes draw as tidy boxes.
+- Ticket keys and PR numbers on a page become cards, from a refs file given
+  at publish.
+- Bare http(s) URLs in comments and markdown pages become links, and only
+  off-site links open in a new tab. Lookalike schemes such as `httpſ://` are
+  never linked.
+- Smaller fixes: a pod tab rings whole, title and ✕ together, and only after
+  keyboard focus; a diagram box's multi-line label keeps its spaces in its card
+  title; the review bar's Next open fits at 280 px wide; and a page
+  republished without comments counts no unread replies.
+
 ## 0.3.0 - 2026-10-08
 
 - Pages carry labels from `lotuspod publish`, shown as tags on the page and
