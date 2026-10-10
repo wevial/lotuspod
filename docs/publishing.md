@@ -88,6 +88,30 @@ the block is left exactly as written, since Mermaid reads it verbatim; before
 the script runs, or without scripting, it reads as a code block. A body with no
 diagram block ships no script and no CDN reference at all.
 
+The same script registers Mermaid's ELK layout (`@mermaid-js/layout-elk`
+0.2.3), which it loads only when a diagram asks for it, so a diagram without
+the opt-in draws even if ELK cannot load. Diagrams use Mermaid's default
+layout unless they opt in. To opt in,
+make the diagram's first line an init line that asks for `elk`. ELK keeps
+lanes drawn as subgraphs in their own boxes and routes the arrows between them
+in straight channels. Node cards, the Expand view and status colors work as
+on any other diagram:
+
+```html
+<pre class="mermaid">
+%%{init: {"layout": "elk"}}%%
+flowchart LR
+  subgraph docs [Docs]
+    a[Draft] --> b[Review]
+  end
+  subgraph code [Code]
+    c[Build] --> d[Ship]
+  end
+  a --> c
+  b --> d
+</pre>
+```
+
 A page with a diagram block also loads the page script. Once Mermaid has
 drawn a diagram, an Expand button sits in its top right corner, shown while
 the pointer is over the diagram or the button has keyboard focus. It opens the
@@ -1017,6 +1041,24 @@ open thread (see [The comments panel](comments.md#the-comments-panel)). Ask
 sits in the card's foot, so a folded card shows it again after "change"; the
 chip stays under a folded card.
 
+A reader in the `[access] owners` list (the page asks the archive route, as
+its Archive button does; see [Archive a page](#archive-a-page)) also gets
+"Dismiss" after "Save answer" and Ask on each decision, for one that no
+longer matters, such as one another plan replaced. It posts the note's text,
+trimmed, as the reason (see [Answers and
+comments](comments.md#answers-and-comments)); a note over 200 characters
+posts nothing and says "Shorten the note to 200 characters to dismiss with it
+as the reason." Dismissed, the note is emptied and folded, and the card folds
+to "Dismissed: REASON · Undo" (or "Dismissed · Undo" with no reason), with
+no ✓, then the reader and the time. A dismissed decision stops counting as
+open: the title bar's "N to answer", the section marks and Next open leave it
+out, the Respond panel shows its state as "Dismissed", and the Answered table
+lists it as "Dismissed" with its reason under it and no "change". Undo puts
+the decision back as it stood: open, or folded to its earlier answer. Any
+other reader sees a dismissed card as "Dismissed: REASON", with no Undo and
+no Dismiss. A dismissal reaches the page owner's agent as an answer (see
+[Agents](agents.md)).
+
 On such a page, an answer saved with a note also opens a thread on the
 decision holding the note, so the page's owner can reply to it: the chip
 appears under the card as soon as it is saved, and the note's message in the
@@ -1179,8 +1221,9 @@ legend as its Question and the summary as its Answer, the note under it. Its
 Every artifact page carries a Content-Security-Policy meta tag at the top of
 its head, computed from the finished page so it never allows more than the
 page holds. A page runs only the site's own script files, the pinned Mermaid
-(`https://cdn.jsdelivr.net/npm/mermaid@11.4.1/`, allowed only on a page with a
-diagram) and the inline scripts the page template writes, each allowed by its
+(`https://cdn.jsdelivr.net/npm/mermaid@11.4.1/`) and its ELK layout
+(`https://cdn.jsdelivr.net/npm/@mermaid-js/layout-elk@0.2.3/`), both allowed
+only on a page with a diagram, and the inline scripts the page template writes, each allowed by its
 `sha256` hash; today that is the Mermaid start-up module alone. A page with
 decision forms, comment boxes or folding sections also loads the site's page
 script, `lotuspod-page.js`. Styles may be
@@ -1199,7 +1242,8 @@ version of a page keeps `frame-ancestors 'none'`.
 
 `src/lotuspod/_templates/artifact.html` uses `{{placeholder}}` substitution with the context:
 `title`, `kicker`, `date`, `summary_block`, `body`, `theme_name`, `theme_hash`,
-plus the `mermaid` section flag with its `mermaid_theme_variables` and `mermaid_dir`,
+plus the `mermaid` section flag with its `mermaid_theme_variables`, `mermaid_dir` and
+`mermaid_elk_dir`,
 the `page_script_needed` section flag (decision forms, comment boxes or folding
 sections) with
 the `page_script` it loads, the `owner` section and its handle,
