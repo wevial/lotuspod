@@ -4,7 +4,9 @@
    unless it has an authored Mermaid style (style, class or :::), which wins:
    the script then adds no status class, so no rule here reaches it.
    Mermaid's own rules inside the svg are scoped by the svg's id, which no
-   rule here can name, so the colors that replace them are !important. */
+   rule here can name, so the colors that replace them are !important.
+   The status colors also hold in the full-window view (js/diagram-view.js),
+   whose stage the svg moves into. */
 .artifact-body pre.mermaid g.artifact-node {
   cursor: pointer;
 }
@@ -19,17 +21,20 @@
 }
 
 /* In review. */
-.artifact-body pre.mermaid g.artifact-node--open {
+.artifact-body pre.mermaid g.artifact-node--open,
+.artifact-diagram-view-stage g.artifact-node--open {
   --node-stroke: var(--color-amber);
 }
 
 /* Merged. */
-.artifact-body pre.mermaid g.artifact-node--merged {
+.artifact-body pre.mermaid g.artifact-node--merged,
+.artifact-diagram-view-stage g.artifact-node--merged {
   --node-stroke: var(--color-mint);
 }
 
 /* Can start now. */
-.artifact-body pre.mermaid g.artifact-node--ready {
+.artifact-body pre.mermaid g.artifact-node--ready,
+.artifact-diagram-view-stage g.artifact-node--ready {
   --node-stroke: var(--color-lavender);
 }
 
@@ -38,20 +43,30 @@
 .artifact-body pre.mermaid g.artifact-node--merged > .label-container,
 .artifact-body pre.mermaid g.artifact-node--merged > .label-container > path,
 .artifact-body pre.mermaid g.artifact-node--ready > .label-container,
-.artifact-body pre.mermaid g.artifact-node--ready > .label-container > path {
+.artifact-body pre.mermaid g.artifact-node--ready > .label-container > path,
+.artifact-diagram-view-stage g.artifact-node--open > .label-container,
+.artifact-diagram-view-stage g.artifact-node--open > .label-container > path,
+.artifact-diagram-view-stage g.artifact-node--merged > .label-container,
+.artifact-diagram-view-stage g.artifact-node--merged > .label-container > path,
+.artifact-diagram-view-stage g.artifact-node--ready > .label-container,
+.artifact-diagram-view-stage g.artifact-node--ready > .label-container > path {
   fill: color-mix(in srgb, var(--node-stroke) 14%, var(--color-surface)) !important;
   stroke: var(--node-stroke) !important;
   stroke-width: 1.5px;
 }
 
 .artifact-body pre.mermaid g.artifact-node--ready > .label-container,
-.artifact-body pre.mermaid g.artifact-node--ready > .label-container > path {
+.artifact-body pre.mermaid g.artifact-node--ready > .label-container > path,
+.artifact-diagram-view-stage g.artifact-node--ready > .label-container,
+.artifact-diagram-view-stage g.artifact-node--ready > .label-container > path {
   stroke-dasharray: 6 4 !important;
 }
 
 /* Waiting on another box. */
 .artifact-body pre.mermaid g.artifact-node--waiting > .label-container,
-.artifact-body pre.mermaid g.artifact-node--waiting > .label-container > path {
+.artifact-body pre.mermaid g.artifact-node--waiting > .label-container > path,
+.artifact-diagram-view-stage g.artifact-node--waiting > .label-container,
+.artifact-diagram-view-stage g.artifact-node--waiting > .label-container > path {
   fill: var(--color-surface) !important;
   stroke: var(--hairline-strong) !important;
 }
