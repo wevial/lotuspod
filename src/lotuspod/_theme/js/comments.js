@@ -2453,7 +2453,10 @@
       var node = element("div", "artifact-comment-thread");
       node.dataset.thread = String(root.id);
       thread.node = node;
-      var box = sections.get(root.section) || null;
+      // A thread on the whole page of a page that has kept only its "page"
+      // box (republished with fewer sections) is that box's.
+      var box = sections.get(root.section) ||
+        (root.section === WHOLE_PAGE && sections.get("page")) || null;
       thread.box = box;
       if (!box) {
         node.appendChild(element("p", "artifact-comment-section",

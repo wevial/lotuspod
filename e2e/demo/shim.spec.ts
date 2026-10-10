@@ -219,6 +219,17 @@ test('a comment on a section replies.json does not name gets the generic reply',
   seen.clean();
 });
 
+test('a comment on the whole page from the chip under the title gets the generic reply', async ({ context, page }) => {
+  const seen = watch(context, page);
+  await load(page, TRY_IT);
+  const root = await comment(page, 'try-it', '', 'This page', 'Is this plan still current?');
+  expect(root).toMatchObject({ section: '', sectionTitle: '', quote: null, state: 'pending' });
+  const thread = entry(page, root.id);
+  await expect(thread.waiting).toContainText(AGENT);
+  await expectReply(thread, REPLIES['*']);
+  seen.clean();
+});
+
 test('a passage comment is highlighted and gets its reply', async ({ context, page }) => {
   const seen = watch(context, page);
   await load(page, TRY_IT);
@@ -492,11 +503,14 @@ test('what the visitor wrote stays over reloads, tabs and a minute, until "Reset
   // Each section's box and the whole page's.
   await expect(page.locator('details.artifact-comment > summary.artifact-comment-chip--none')).toHaveCount(4);
   await expect(side.entries).toHaveCount(0);
-  for (const question of ['decision-1', 'decision-2']) {
+  // With no answer stored, each decision has its default picked, not saved
+  // (js/review-sheet.js), so it reads "Not saved" rather than "Not answered yet".
+  for (const [question, fallback] of [['decision-1', 'Next weekend'], ['decision-2', 'No']]) {
     const form = decision(page, question);
     await expect(form.form).not.toHaveClass(/artifact-decision--saved/);
     await expect(form.saved).toHaveCount(0);
-    await expect(form.hint).toBeVisible();
+    await expect(form.option(fallback)).toBeChecked();
+    await expect(form.hint).toBeHidden();
   }
   seen.clean();
 });

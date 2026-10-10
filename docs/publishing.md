@@ -508,7 +508,8 @@ review sheet; each decision's Ask is disabled with its fieldset. Resolving and
 reopening a thread still work.
 
 A reader in the `[access]` `owners` list gets a button in the page header,
-after the date line: "Archive" on a page that is not archived, "Unarchive" on
+after the date line (and after the chip for a comment on the whole page
+under it, when the page has one): "Archive" on a page that is not archived, "Unarchive" on
 one that is. Pressing it posts to `/api/archive` and reloads the page; on any
 other answer the page stays, and a line beside the button says why. The
 button archives with no successor: only `lotuspod archive --superseded-by`

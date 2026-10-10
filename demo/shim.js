@@ -328,8 +328,13 @@
       }
       made = readerRow(page, { section: anchored, parent: null, text: words, question: question });
     } else {
-      var section = text(fields.section, 1, 16384);
+      // Section "" is the whole page, whose box the page script draws on a
+      // page with section boxes; it takes no quote.
+      var section = text(fields.section, 0, 16384);
       var quoted = quote(fields.quote);
+      if (section === "" && quoted) {
+        throw new Refusal(400, "invalid_body");
+      }
       if (!hasBox(section)) {
         throw new Refusal(400, "unknown_section");
       }

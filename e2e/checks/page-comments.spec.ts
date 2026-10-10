@@ -120,15 +120,13 @@ test.describe('signed in', () => {
     const risks = box(page, 'risks');
     await expect(page.locator('header.artifact-header > details.artifact-comment[data-section=""]'))
       .toHaveCount(1);
-    // Right after the date line: only the owner's Archive control, which
-    // also follows the date line, may come between.
-    expect(await whole.details.evaluate((node) => {
-      let before = node.previousElementSibling;
-      while (before?.matches('.artifact-archive, .artifact-archive-status')) {
-        before = before.previousElementSibling;
-      }
-      return before?.classList.contains('artifact-meta');
-    })).toBe(true);
+    // Right after the date line, the owner's Archive control after it.
+    const archive = page.locator('header.artifact-header > button.artifact-archive');
+    await expect(archive).toHaveText('Archive');
+    expect(await whole.details.evaluate((node) =>
+      node.previousElementSibling?.classList.contains('artifact-meta'))).toBe(true);
+    expect(await archive.evaluate((node) =>
+      node.previousElementSibling?.matches('details.artifact-comment[data-section=""]'))).toBe(true);
     await expect(whole.chip).toHaveText('No comments · Comment on this page');
     await expect(goals.chip).toHaveText('No comments · Comment');
 
@@ -194,6 +192,28 @@ test.describe('signed in', () => {
     await expect(boxes).toHaveCount(1);
     await expect(boxes).toHaveAttribute('data-section', 'page');
     await expect(page.locator('header.artifact-header details.artifact-comment')).toHaveCount(0);
+    expect(errors).toEqual([]);
+  });
+
+  test('a thread on the whole page stays in the page box once the page keeps one section', async ({ page, request }) => {
+    const name = `page-comments-fewer-${test.info().repeatEachIndex}`;
+    publish(name, TWO);
+    const posted = await request.post('/api/comments', {
+      headers: SIGNED_IN, data: { page: name, section: '', text: QUESTION } });
+    expect(posted.status()).toBe(201);
+    publish(name, ONE);
+    const errors = watch(page);
+    await load(page, `/${name}.html`);
+    const only = box(page, 'page');
+    await expect(page.locator('details.artifact-comment')).toHaveCount(1);
+    await expect(only.chip).toHaveText('1 comment · waiting');
+    await expect(page.locator('.artifact-comments-group-title', { hasText: 'Sections that have changed' }))
+      .toBeHidden();
+    await only.chip.click();
+    const side = panel(page);
+    await expect(side.titles).toHaveText(['This page']);
+    await expect(side.group('This page').locator('.artifact-comment-item--reader .artifact-comment-text'))
+      .toHaveText(QUESTION);
     expect(errors).toEqual([]);
   });
 });
