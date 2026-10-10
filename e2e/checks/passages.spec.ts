@@ -230,7 +230,7 @@ async function settle(page: Page) {
 }
 
 async function load(page: Page) {
-  await page.goto(PAGE);
+  await page.goto(`${PAGE}?standalone`);
   await expect(page.locator('details.artifact-comment')).toHaveCount(3);
   await settle(page);
 }
@@ -528,9 +528,10 @@ test.describe('signed in', () => {
     expect(page.url()).toBe(url);
     await page.evaluate(() => document.getSelection()!.removeAllRanges());
 
-    // A click on the highlighted words follows the link.
+    // A click on the highlighted words follows the link: the page it names,
+    // loaded on its own, opens in the index's tabs (js/open-in-tabs.js).
     await drawn.click();
-    await expect(page).toHaveURL(/\/capture-article\.html$/);
+    await expect(page).toHaveURL(/\/#tabs=capture-article&on=capture-article$/);
     await seen.clean();
   });
 

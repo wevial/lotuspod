@@ -89,7 +89,7 @@ async function posted(answer: Promise<Response>) {
 // Open the page and let its post to the seen route come back; what it sent.
 async function openPage(page: Page, name: string) {
   const answer = seenAnswer(page, 'POST');
-  await page.goto(`/${name}.html`);
+  await page.goto(`/${name}.html?standalone`);
   return posted(answer);
 }
 
@@ -174,7 +174,7 @@ test.describe('signed in', () => {
     // Opened again, and back on the index, the page is no longer marked. A
     // plain click would open it in a tab of the index (pod-tabs.spec.ts).
     const answer = seenAnswer(page, 'POST');
-    await page.goto(`/${await row(page, name).locator('a').getAttribute('href')}`);
+    await page.goto(`/${await row(page, name).locator('a').getAttribute('href')}?standalone`);
     expect(await posted(answer)).toEqual({ page: name, revision: second });
     const read = seenAnswer(page, 'GET');
     await page.goBack();

@@ -139,7 +139,7 @@ async function settle(page: Page) {
 }
 
 async function load(page: Page, where: string) {
-  await page.goto(where);
+  await page.goto(`${where}?standalone`);
   await expect(page.locator('details.artifact-comment')).toHaveCount(3);
   await settle(page);
 }
@@ -746,7 +746,7 @@ test.describe('signed in', () => {
       const seen = await watch(page);
       const ids = new Set<number>();
       await ownThreads(page, ids);
-      await page.goto(PASSAGES);
+      await page.goto(`${PASSAGES}?standalone`);
       const revision = await page.locator('meta[name="lotuspod:revision"]').getAttribute('content');
       const posted = await request.post('/api/comments', {
         data: { page: PASSAGES_SLUG, section: 'findings', text: 'Is the heater wired?', quote: HEATER_QUOTE, revision },

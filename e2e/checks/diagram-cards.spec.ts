@@ -81,7 +81,7 @@ function card(page: Page) {
 // Open the page and wait until the first diagram is drawn and bound.
 async function drawn(page: Page) {
   const seen = await watch(page);
-  await page.goto(PAGE);
+  await page.goto(`${PAGE}?standalone`);
   await expect(diagram(page).locator('svg')).toBeVisible();
   await expect(box(page, 'A')).toHaveAttribute('role', 'button');
   await expect(box(page, 'A', 1)).toHaveAttribute('role', 'button');
@@ -468,7 +468,7 @@ test.describe('without scripts', () => {
   test.use({ javaScriptEnabled: false });
 
   test('every Nodes heading and table shows and no box is focusable', async ({ page }) => {
-    await page.goto(PAGE);
+    await page.goto(`${PAGE}?standalone`);
     const headings = page.locator('.artifact-body > h3', { hasText: 'Nodes' });
     await expect(headings).toHaveCount(4);
     await expect(headings.nth(0)).toBeVisible();

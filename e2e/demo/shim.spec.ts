@@ -42,7 +42,7 @@ function watch(context: BrowserContext, page: Page) {
 
 // Load a page and wait for its first read of threads: every chip drawn.
 async function load(page: Page, url: string) {
-  await page.goto(url);
+  await page.goto(`${url}?standalone`);
   await settle(page);
 }
 
@@ -216,6 +216,26 @@ test('a comment on a section replies.json does not name gets the generic reply',
   const thread = entry(page, root.id);
   await expect(thread.waiting).toContainText(AGENT);
   await expectReply(thread, REPLIES['*']);
+  seen.clean();
+});
+
+test('a page loaded directly opens in the demo index as its tab, the landing page too, and settles', async ({ context, page }) => {
+  const seen = watch(context, page);
+  const shown = (name: string) => page.frames().map((frame) => new URL(frame.url()))
+    .find((where) => where.pathname === `/${name}.html`);
+
+  await page.goto(`${TRY_IT}#the-pond-today`);
+  await expect(page).toHaveURL(/\/pages\.html#tabs=try-it&on=try-it$/);
+  await expect(page.getByRole('group', { name: 'Open pods' })).toHaveCount(1);
+  await expect.poll(() => shown('try-it')?.hash).toBe('#the-pond-today');
+
+  // The demo's / answers /readme.html, which opens in the index the same way
+  // and stays there.
+  await page.goto('/');
+  await expect(page).toHaveURL(/\/pages\.html#tabs=readme&on=readme$/);
+  await expect.poll(() => shown('readme')?.pathname).toBe('/readme.html');
+  await page.waitForTimeout(500);
+  await expect(page).toHaveURL(/\/pages\.html#tabs=readme&on=readme$/);
   seen.clean();
 });
 
@@ -472,7 +492,7 @@ test('what the visitor wrote stays over reloads, tabs and a minute, until "Reset
   await page.reload();
   await still(page);
   const second = await context.newPage();
-  await second.goto(TRY_IT);
+  await second.goto(`${TRY_IT}?standalone`);
   await still(second);
   await second.close();
   await page.waitForTimeout(60_000);

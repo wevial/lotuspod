@@ -50,7 +50,7 @@ const THREAD = {
 async function load(page: Page, target = COMMENTS, threads: unknown[] = []) {
   await page.route((url) => url.pathname === '/api/comments', (route) =>
     route.fulfill({ json: { page: target.slug, threads } }));
-  await page.goto(target.url);
+  await page.goto(`${target.url}?standalone`);
   await expect(page.locator('details.artifact-comment').first()).toBeAttached();
   await expect(page.locator(PANEL)).toBeVisible();
   await settle(page);

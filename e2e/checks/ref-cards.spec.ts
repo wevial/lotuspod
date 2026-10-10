@@ -48,7 +48,7 @@ function shown(page: Page): Locator {
 // Open the page and wait until the script has taken its references.
 async function opened(page: Page) {
   const seen = await watch(page);
-  await page.goto(PAGE);
+  await page.goto(`${PAGE}?standalone`);
   await expect(ref(page, 'HOLO-175')).toHaveClass(/artifact-ref--live/);
   return seen;
 }
@@ -246,7 +246,7 @@ test.describe('without the script', () => {
   test.use({ javaScriptEnabled: false });
 
   test('references read as plain text and no card shows', async ({ page }) => {
-    await page.goto(PAGE);
+    await page.goto(`${PAGE}?standalone`);
     const paragraph = page.locator('.artifact-body p', { hasText: 'The proposal work' });
     await expect(paragraph).toHaveText('The proposal work in HOLO-175 builds on HOLO-171, which '
       + 'merged last week, and the cards in LOTUS-97 follow from both.');

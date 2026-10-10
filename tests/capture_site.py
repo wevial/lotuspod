@@ -58,6 +58,7 @@ import datetime
 import json
 import os
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -1050,4 +1051,9 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
+    # A run stopped by SIGTERM (a timeout, a killed verify) unwinds through
+    # main's finally like Ctrl+C does, so it removes PACKAGED_CSS and its temp
+    # directory; a leftover PACKAGED_CSS would look like a run beside this one
+    # wrote it, and no later run would remove it.
+    signal.signal(signal.SIGTERM, lambda signum, frame: sys.exit(128 + signum))
     raise SystemExit(main())
