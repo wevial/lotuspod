@@ -363,6 +363,9 @@ THEME_SOURCES = {
         "js/diagram-view.js",
         "js/ref-cards.js",
         "js/archive.js",
+        # The islands, bundled from web/src/islands/main.tsx: last, so they run
+        # once every source above has, through the closure's names.
+        "js/islands.js",
     ),
     INDEX_SCRIPT: (
         "js/pod-tabs.js",

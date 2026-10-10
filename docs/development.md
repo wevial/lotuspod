@@ -31,6 +31,26 @@ writing anything, a source whose `"use strict"` it would drop or whose JS is
 not a classic script (an `import` or `export`): render joins the scripts
 into one classic script.
 
+The page's islands, widgets written in Preact, are the one bundle: the build
+bundles `web/src/islands/main.tsx` with its imports and Preact (pinned in
+`web/package.json` as a dependency) with `Bun.build` into
+`src/lotuspod/_theme/js/islands.js`, after its marker line, as one minified
+IIFE for the browser with no source map, JSX through Preact's automatic
+runtime. `THEME_SOURCES` declares it as the page script's last source, so the
+join puts it inside the shared closure just before its close: it runs once
+every legacy source has, and never on a pod that goes to the index
+(`js/open-in-tabs.js`). Neither the index script nor the old-version script
+has it. The islands reach the legacy page only through
+`web/src/islands/bridge.ts`, the one module that names the closure's
+variables: it declares the types of `live` (`js/live-page.js`), `ARCHIVED`
+and the page events `ANSWERED`, `SAVED` and `DRAWN` (`js/page-open.js`), and
+exports one object, `page`, built from them as the bundle loads, so a name
+that does not exist throws on every page at once. A minifier never renames a
+free name, so the bridge's reads stay the closure's own. An island imports
+`page`, never the names, which no other islands module can name: only the
+bridge declares them. `main.tsx` mounts each island it lists, handing it
+`page`; with none listed yet the bundle holds the bridge and no Preact.
+
 ```sh
 bun install --cwd web --frozen-lockfile
 bun run --cwd web build
@@ -43,8 +63,10 @@ bun run --cwd web check
 strict mode and with `erasableSyntaxOnly`, so a source is plain JavaScript
 once its types are erased: no enums, namespaces or parameter properties.
 It checks the build script and its test against Bun's types
-(`web/tsconfig.json`), and the sources against the DOM's and none of Bun's
-(`web/src/tsconfig.json`).
+(`web/tsconfig.json`), the sources against the DOM's and none of Bun's
+(`web/src/tsconfig.json`), and the islands, modules with imports and JSX
+whose `jsxImportSource` is `preact`, under their own config
+(`web/src/islands/tsconfig.json`).
 `test` runs `web/build.test.ts`. `check` builds, then fails naming each file
 under `src/lotuspod/_theme/js/`, built or written by hand, that does not parse
 on its own with Bun, and fails when git sees any file there modified, deleted
