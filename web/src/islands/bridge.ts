@@ -22,8 +22,48 @@ export interface Live {
   previous(): Promise<string | null>;
 }
 
+// A stored answer to a decision, as the answers route gives it: a choice, a
+// checklist's items checked, or a dismissal.
+export interface Answer {
+  choice?: string;
+  checked?: string[];
+  note?: string;
+  dismissed?: boolean;
+}
+
+// What js/decisions.js reads and saves the page's decision forms by
+// (answerForms()): the forms and the stored answers are the truth.
+export interface Answering {
+  // The form's stored answer at its version, else null.
+  saved(form: HTMLFormElement): Answer | null;
+  // A checklist's item ids checked now ("checked") or by default
+  // ("defaultChecked"), in page order.
+  ticked(form: HTMLFormElement, state: "checked" | "defaultChecked"): string[];
+  // Whether two lists of item ids hold the same items.
+  same(a: string[], b: string[]): boolean;
+  // The items whose state in checked differs from their defaults, worded.
+  summary(form: HTMLFormElement, checked: string[]): string;
+  // An option's label, else its value.
+  optionText(input: HTMLInputElement): string;
+  isChecklist(form: HTMLFormElement): boolean;
+  // Whether the picked option, items or note differ from the stored answer.
+  dirty(form: HTMLFormElement): boolean;
+  // Post the form's answer in its turn: true once saved, false when refused,
+  // with why in the form's status.
+  save(form: HTMLFormElement): Promise<boolean>;
+  // True once the page's answers are read, set before ANSWERED is sent.
+  read: boolean;
+}
+
 // js/live-page.js.
 declare const live: Live;
+// js/decisions.js: the page's decision forms, in page order, and what reads
+// them, null on a page with neither a form nor a comment box.
+declare const forms: HTMLFormElement[];
+declare const answering: Answering | null;
+// js/page-open.js: what the address's fragment gives name as #NAME=VALUE,
+// decoded, else null; read as the page opens (first), null on a reload.
+declare function linkedTo(name: string, first?: boolean): string | null;
 // js/page-open.js: an archived page takes no new comment, reply or answer.
 declare const ARCHIVED: boolean;
 // js/page-open.js: the page events. ANSWERED is sent on the document once
@@ -35,6 +75,9 @@ declare const DRAWN: string;
 
 export const page = Object.freeze({
   live,
+  forms,
+  answering,
+  linkedTo,
   archived: ARCHIVED,
   events: Object.freeze({ answered: ANSWERED, saved: SAVED, drawn: DRAWN }),
 });

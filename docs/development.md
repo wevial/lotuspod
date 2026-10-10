@@ -42,13 +42,30 @@ every legacy source has, and never on a pod that goes to the index
 (`js/open-in-tabs.js`). Neither the index script nor the old-version script
 has it. The islands reach the legacy page only through
 `web/src/islands/bridge.ts`, the one module that names the closure's
-variables: it declares the types of `live` (`js/live-page.js`), `ARCHIVED`
-and the page events `ANSWERED`, `SAVED` and `DRAWN` (`js/page-open.js`), and
-exports one object, `page`, built from them as the bundle loads, so a name
-that does not exist throws on every page at once. A minifier never renames a
-free name, so the bridge's reads stay the closure's own. An island imports
-`page`, never the names. `main.tsx` mounts each island it lists, handing it
-`page`; with none listed yet the bundle holds the bridge and no Preact.
+variables: it declares the types of `live` (`js/live-page.js`), `forms` and
+`answering`, the decision forms and what reads and saves them
+(`js/decisions.js`), `linkedTo()`, `ARCHIVED` and the page events
+`ANSWERED`, `SAVED` and `DRAWN` (`js/page-open.js`), and exports one object,
+`page`, built from them as the bundle loads, so a name that does not exist
+throws on every page at once. A minifier never renames a free name, so the
+bridge's reads stay the closure's own. An island imports `page`, never the
+names. `main.tsx` mounts each island it lists, handing it `page`.
+
+The one island so far is the review sheet (`web/src/islands/review-sheet.tsx`):
+the title bar's open-question count and Next open, the "N open" marks on
+headings and outline links, and the Respond panel. Once `ANSWERED` is sent,
+and only when `answering.read` is true and the page is not archived, it
+renders into a `div.artifact-review-bar` it adds to the title bar, with the
+panel and each mark as a portal: the panel into the body, each mark into an
+empty span it adds to the heading or outline link, so the heading the fold
+code owns is never drawn again. The forms and their stored answers stay the
+truth: the sheet draws from them on each form's `input`, `change` and
+`SAVED`, a pick in the panel sets the form's own input, and it saves through
+`answering.save()`, one question at a time in page order. Preact holds only
+the sheet's own state: the panel open, a Save under way, what it did, and
+where Next open last jumped. The bundle, Preact with it, stays at most
+16,000 bytes gzipped; it uses plain Preact and its hooks, not
+`preact/compat`.
 
 ```sh
 bun install --cwd web --frozen-lockfile

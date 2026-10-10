@@ -406,7 +406,8 @@
     }
 
     // "change": the card open again with its answer picked and its note; a
-    // pick made since in the review sheet (js/review-sheet.js) stays picked.
+    // pick made since in the review sheet (web/src/islands/review-sheet.tsx)
+    // stays picked.
     function unfold(form) {
       if (!dirty(form)) {
         fill(form);
@@ -750,9 +751,10 @@
       mark(form);
     });
     mayDismiss();
-    // What the review sheet (js/review-sheet.js) reads the forms by; read
-    // is true once the answers are read, so a failed read is never taken
-    // for a page with nothing answered.
+    // What the review sheet (web/src/islands/review-sheet.tsx, through
+    // web/src/islands/bridge.ts) reads the forms by; read is true once the
+    // answers are read, so a failed read is never taken for a page with
+    // nothing answered.
     var reading = {
       saved: saved, ticked: ticked, same: same, summary: summary, optionText: optionText,
       isChecklist: isChecklist, dirty: dirty, save: save, read: false,
