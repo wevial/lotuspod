@@ -575,8 +575,6 @@ The frog that sits on them.
 # the third has an arrow both ways, an arrow its linkStyle makes opaque, a
 # row too long for the window, and no thead; the fourth styles F with a
 # style line, G with a class line and J with :::, and leaves H unstyled.
-# Hidden, so that loaded on its own it stays rather than opening in the
-# index's tabs.
 NODE_CARDS_BODY = """\
 <p>A sample plan for captures: click a box for its card.</p>
 <pre class="mermaid">flowchart LR
@@ -649,7 +647,7 @@ lines.</p>
 </table>
 """
 
-# The diagram view page, hidden like the node cards page: a wide flowchart (S1 --> ... --> S14 in one chain)
+# The diagram view page: a wide flowchart (S1 --> ... --> S14 in one chain)
 # under "Release plan", enough text after it that the page scrolls at 1280 by
 # 800, then a sequence diagram under "Small loop". No comments, so the page
 # needs no network but the pinned Mermaid.
@@ -849,8 +847,8 @@ SAMPLE_PAGES = (
     ("capture-tables-report", "Capture tables report", TABLES_BODY,
      ("--variant", "report", "--comments", "--owner", OWNER)),
     ("capture-decision-context", "Capture decision context", DECISION_CONTEXT_BODY, ()),
-    ("capture-node-cards", "Capture node cards", NODE_CARDS_BODY, ("--hidden",)),
-    ("capture-diagram-view", "Capture diagram view", DIAGRAM_VIEW_BODY, ("--hidden",)),
+    ("capture-node-cards", "Capture node cards", NODE_CARDS_BODY, ()),
+    ("capture-diagram-view", "Capture diagram view", DIAGRAM_VIEW_BODY, ()),
     ("capture-elk-layout", "Capture ELK layout", ELK_LAYOUT_BODY, ()),
     ("capture-review-sheet", "Capture review sheet", REVIEW_SHEET_BODY, ()),
 )
