@@ -33,18 +33,10 @@ declare const ANSWERED: string;
 declare const SAVED: string;
 declare const DRAWN: string;
 
-export interface Page {
-  readonly live: Live;
-  readonly archived: boolean;
-  readonly events: {
-    readonly answered: string;
-    readonly saved: string;
-    readonly drawn: string;
-  };
-}
-
-export const page: Page = Object.freeze({
+export const page = Object.freeze({
   live,
   archived: ARCHIVED,
   events: Object.freeze({ answered: ANSWERED, saved: SAVED, drawn: DRAWN }),
 });
+
+export type Page = typeof page;
