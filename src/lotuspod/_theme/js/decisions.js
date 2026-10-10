@@ -454,13 +454,16 @@
         if (answers.current) {
           answers.earlier.unshift(answers.current);
         }
-        answers.current = payload;
+        // The answer itself; a note's comment, when one was stored, goes
+        // with SAVED to the comment threads.
+        answers.current = Object.assign({}, payload);
+        delete answers.current.comment;
         // A pick or note changed while this was saving stays open, not saved.
         form.lotuspodEditing = dirty(form);
         status(form, "");
         draw(form);
         table();
-        form.dispatchEvent(new CustomEvent(SAVED));
+        form.dispatchEvent(new CustomEvent(SAVED, { detail: payload }));
         return true;
       } catch (ignored) {
         refused(form, "Your answer was not saved: the site did not answer. Try again.");
