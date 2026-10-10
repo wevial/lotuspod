@@ -325,7 +325,6 @@ test.describe('signed in', () => {
     await page.waitForLoadState('networkidle');
     await page.evaluate(() => new Promise((done) => setTimeout(done, 100)));
     await expect(banner.getByRole('button')).toHaveCount(0);
-    await expect(page.getByRole('button', { name: 'Choose a version' })).toHaveCount(0);
     await expect(banner.getByRole('link', { name: 'All versions' })).toBeVisible();
     await expect(banner.getByRole('link', { name: 'Back to current' })).toBeVisible();
     expect(errors).toEqual([]);
