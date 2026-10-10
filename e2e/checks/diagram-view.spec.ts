@@ -127,7 +127,7 @@ async function opacity(locator: Locator) {
 // Open the page and wait until both diagrams are drawn and have their button.
 async function drawn(page: Page) {
   const seen = await watch(page);
-  await page.goto(`${PAGE}?standalone`);
+  await page.goto(PAGE);
   for (const index of [0, 1]) {
     await expect(drawing(page, index)).toBeVisible();
     await expect(expand(page, index)).toHaveCount(1);
@@ -475,7 +475,7 @@ test('a diagram scrolled sideways in its block comes back scrolled as it was', a
 
 test("a node card closes when its diagram's view opens and opens again after", async ({ page }) => {
   const seen = await watch(page);
-  await page.goto(`${CARDS_PAGE}?standalone`);
+  await page.goto(CARDS_PAGE);
   const box = diagram(page).locator('g.node[id^="flowchart-B-"]');
   const card = page.locator('.artifact-node-card');
   await expect(box).toHaveAttribute('role', 'button');
@@ -499,7 +499,7 @@ test.describe('without scripts', () => {
   test.use({ javaScriptEnabled: false });
 
   test('each diagram shows its source and no Expand button', async ({ page }) => {
-    await page.goto(`${PAGE}?standalone`);
+    await page.goto(PAGE);
     await expect(page.locator('pre.mermaid')).toHaveCount(2);
     await expect(diagram(page)).toBeVisible();
     await expect(diagram(page)).toContainText('S1[Step 1] --> S2[Step 2]');
