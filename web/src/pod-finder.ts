@@ -38,14 +38,8 @@
     text: string;
   }
 
-  // The seen route's answer, of which the finder reads each page's seenAt.
-  interface SeenPage {
-    seenAt: string | null;
-  }
-
-  interface SeenAnswer {
-    pages: Record<string, SeenPage>;
-  }
+  // The seen route's pages, of which the finder reads each one's seenAt.
+  type Seen = Record<string, { seenAt: string | null }>;
 
   interface Group {
     heading: string | null;
@@ -142,7 +136,7 @@
 
   // The seen route's pages as last answered 200, else null, and whether it
   // has answered since the finder opened.
-  let seen: Record<string, SeenPage> | null = null;
+  let seen: Seen | null = null;
   let answered = false;
   // The reads this opening still waits on.
   const pending = new Set<Read>();
@@ -264,11 +258,11 @@
   let asked = 0;
   const askSeen = async () => {
     const ask = ++asked;
-    let pages: Record<string, SeenPage> | null = null;
+    let pages: Seen | null = null;
     try {
       const response = await fetch(SEEN, { cache: "no-store" });
       if (response.status === 200) {
-        const payload: Partial<SeenAnswer> | null = await response.json();
+        const payload: { pages?: Seen } | null = await response.json();
         if (payload && typeof payload.pages === "object" && payload.pages) pages = payload.pages;
       }
     } catch (ignored) {
