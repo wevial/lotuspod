@@ -230,7 +230,7 @@ test.describe('signed in', () => {
     expect(ASSERTION, 'LOTUSPOD_TEST_ASSERTION names an assertion the site accepts').toBeTruthy();
     const seen = await watch(page);
     await page.goto(PAGE);
-    await expect(page.locator('details.artifact-comment')).toHaveCount(3);
+    await expect(page.locator('.artifact-body details.artifact-comment')).toHaveCount(3);
     const risks = box(page, 'risks');
     await expect(risks.summary).toHaveText('No comments · Comment');
     await open(page, 'risks');
@@ -414,7 +414,7 @@ test.describe('signed in', () => {
 
     await link.click();
     await expect(page).toHaveURL(new RegExp(`${PAGE}$`));
-    await expect(page.locator('details.artifact-comment')).toHaveCount(3);
+    await expect(page.locator('.artifact-body details.artifact-comment')).toHaveCount(3);
     expect(seen.errors).toEqual([]);
     expect(await seen.violations()).toEqual([]);
   });

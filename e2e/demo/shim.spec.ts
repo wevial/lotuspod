@@ -489,7 +489,8 @@ test('what the visitor wrote stays over reloads, tabs and a minute, until "Reset
   await settle(page);
   expect(await demoKeys(page)).toEqual([]);
   expect(await page.evaluate(() => localStorage.getItem('lotuspod:not-the-demo'))).toBe('kept');
-  await expect(page.locator('details.artifact-comment > summary.artifact-comment-chip--none')).toHaveCount(3);
+  // Each section's box and the whole page's.
+  await expect(page.locator('details.artifact-comment > summary.artifact-comment-chip--none')).toHaveCount(4);
   await expect(side.entries).toHaveCount(0);
   for (const question of ['decision-1', 'decision-2']) {
     const form = decision(page, question);

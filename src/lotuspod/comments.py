@@ -12,7 +12,8 @@ Headings inside a `pre.mermaid` are diagram source, and headings inside a
 form start no section: a box never lands inside a diagram or a form.
 
 `read_boxes()` reads the boxes back from a finished page, which is how the
-comments route knows which sections a page takes new threads on.
+comments route knows which sections a page takes new threads on. A page
+with section boxes also takes threads on the whole page, section WHOLE_PAGE.
 """
 
 from __future__ import annotations
@@ -23,6 +24,9 @@ from html.parser import HTMLParser
 BOX_CLASS = "artifact-comment"
 # The section of the one box a page with fewer than two h2 sections gets.
 PAGE_SECTION = "page"
+# The section of a thread on the whole page of a page with section boxes. No
+# box carries it: the page script draws that page's box under its title.
+WHOLE_PAGE = ""
 MIN_SECTIONS = 2
 
 

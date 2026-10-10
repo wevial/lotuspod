@@ -48,6 +48,8 @@
   var PLACE_GONE = "Where you were writing has changed since. Your text is kept here.";
   var CHANGED = "Comments on sections that have changed";
   var CHANGED_GROUP = "Sections that have changed";
+  // The section of a thread on the whole page (lotuspod.comments.WHOLE_PAGE).
+  var WHOLE_PAGE = "";
   // Whether the reader left the comments panel open or folded.
   var PANEL = "lotuspod:comments-panel";
   // Whether the reader shows the panel's resolved threads, kept for the

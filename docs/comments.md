@@ -234,8 +234,9 @@ is its `Host` over the scheme `X-Forwarded-Proto` names (the tunnel ends the
 TLS), else `http`; one that is not
 `application/json` 415; one with no length 411; a body over 16 KiB 413. A
 missing, extra or mistyped field is 400 `invalid_body`, as are `question`,
-`version` or `choice` outside 1 to 100 characters, a `resolved` that is not a boolean, an empty `section` (any
-heading id's length is taken, since it must name one of the page's boxes),
+`version` or `choice` outside 1 to 100 characters, a `resolved` that is not a boolean, a `section` that is not a string (any
+heading id's length is taken, since it must name one of the page's boxes;
+`""` is the whole page), a `quote` on a thread on the whole page,
 `text` outside 1 to 4000, `note` over 4000, a quote whose `exact` is outside 1 to 500 or
 whose `prefix` or `suffix` is over 32 (code points, as Python counts them), a new
 thread's `revision` that is not a string of at most 100 characters, a seen
@@ -255,7 +256,8 @@ strings, a `checked` sent for a decision and a `choice` sent for a checklist
 are 400 `invalid_body`, and an item the checklist does not offer 400
 `invalid_choice`. A new thread is checked against the page's comment
 boxes (below): a `section` the page has no box for is 400 `unknown_section`,
-and a `revision` other than the page's current one is 409 `stale_page`, so a
+as is a thread on the whole page (`section` `""`) on a page with no comment
+boxes or whose only box is `page`, and a `revision` other than the page's current one is 409 `stale_page`, so a
 quote is never stored against a revision its words were not taken from.
 Without a `revision` (a page rendered with none), a new thread is taken as is.
 A thread on a decision is checked in this order: 404 `unknown_page`, 400
@@ -309,7 +311,9 @@ A remark about one part of a page belongs next to it. `publish` ends every h2
 section of a page with a comment box, and `render --comments` does the same
 (off by default for `render`; `publish --no-comments` turns it off). A section
 runs from its heading to the next h2 or the end of the body; a body with fewer
-than two h2 sections gets one box, for the whole page, at its end. The pass
+than two h2 sections gets one box, for the whole page, at its end. A page
+with section boxes takes threads on the whole page too: the page script draws
+a box for it under the page's title (below). The pass
 runs on the body's HTML after the outline pass, so markdown and HTML pages
 alike get it, and each box names its heading's id: `--comments` with
 `--no-outline` is refused (exit 1, nothing written). A heading inside a
@@ -336,7 +340,19 @@ composer for a new thread. Posting adds the comment without a reload (and
 folds a thread's composer again). With the page script a box never opens in
 the text: its summary is a chip (below) that opens its threads in the
 comments panel, a popover or a bottom sheet, as the window allows; a page
-read without the script keeps the plain box. A thread whose section the page
+read without the script keeps the plain box.
+
+A page with section boxes also has a box for the whole page, which the page
+script draws in the page's header, right after its date line: a copy of the
+first box with `data-section=""`, its field named "Comment on this page", and
+first among the page's boxes. Its chip reads "No comments · Comment on this
+page" while it has no thread. Its threads are stored with `section` `""`
+(`lotuspod.comments.WHOLE_PAGE`), which no heading's id can be, and
+`sectionTitle` `""`, and carry text and images only: never a quote or a
+decision. They are routed, pulled, claimed, answered, resolved and counted
+unread as any thread, and an agent reads them as "the whole page". A page
+whose only box is `page` has no other: its box already covers the whole page.
+To start one, `POST /api/comments` with `{page, section: "", text}`. A thread whose section the page
 no longer has is listed at the end of the body under "Comments on sections
 that have changed" (in the panel, where there is one). Every author and text
 is set as text, never as markup.
@@ -439,15 +455,18 @@ page order, filled mint once its newest reader comment is `answered`, pulsing
 lavender while it is `claimed`, and a hollow amber ring while it is `pending`,
 `unavailable`, `paused` or `failed`. Opened, it is 20rem wide, headed
 "Comments" and "N open · M resolved" with a "Fold comments" control, and lists
-every thread under the text of its section's heading, in page order, with
+every thread under the text of its section's heading, in page order (threads
+on the whole page first, under "This page"), with
 threads on sections the page no longer has last under "Sections that have
 changed". A section thread's entry is marked "§" and shows its first
 comment's opening words, its status ("✓ Answered", "HANDLE is writing",
 "Waiting for HANDLE", "HANDLE couldn't answer") and its reply count. One entry
 is open at a time and holds the whole thread as a box would, with a "Resolve"
 control; opening one scrolls the page to its section's chip, opening the
-section first if it is folded. Each group ends in "Comment on this section",
-which unfolds the box's own form in the panel. The page remembers whether the
+section first if it is folded. Each group ends in "Comment on this section"
+("Comment on this page" for the whole page's), which unfolds the box's own
+form in the panel. "Comment on a section" lists "This page" first on a page
+with a box for the whole page, then each section in page order. The page remembers whether the
 reader left the panel open or folded in `localStorage` (a page whose storage
 throws starts folded), and Escape folds it.
 
@@ -465,7 +484,7 @@ page whose storage throws opens it at 20rem and still resizes.
 
 At any width, each box never opens: its summary is a one-line chip reading
 where its section's open threads stand. With none, "No comments ·
-Comment"; when the newest reader comment among them is `claimed`, "HANDLE is
+Comment" ("No comments · Comment on this page" on the whole page's); when the newest reader comment among them is `claimed`, "HANDLE is
 writing…"; `pending`, `unavailable` or `paused`, "N comments · waiting",
 counting every message in them; `failed`, "HANDLE couldn't answer"; otherwise
 "N replies · ✓ HANDLE answered", naming the newest agent reply's handle.

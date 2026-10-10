@@ -7,6 +7,7 @@ the reader as actor. Ten routes:
                           {page, question, version, checked, note}
     GET  /api/answers?page=NAME
     POST /api/comments    {page, section, text[, quote][, revision][, images]},
+                          {page, section: "", text[, revision][, images]},
                           {page, question, text[, revision][, images]},
                           {page, parent, text[, images]} or {page, thread, resolved}
     GET  /api/comments?page=NAME
@@ -114,6 +115,13 @@ items in the page's order and `choice` "", its kept label the change summary
 the page has no box for, and 409 stale_page when it names a revision other
 than the page's, so a quote is never stored against words it was not taken from.
 
+`{page, section: "", text}` opens a thread on the whole page rather than one
+section: section "" (lotuspod.comments.WHOLE_PAGE), which no box carries, is
+stored with section_title "". It takes no quote (400 invalid_body), and only
+a page with section boxes takes it: 400 unknown_section on a page with no
+comment boxes and on one whose only box is `page`, which already covers the
+whole page. It is refused otherwise as any new thread is.
+
 `{page, question, text}` opens a thread on one of the page's decisions
 instead of a section: it is stored in the section whose comment box follows
 the decision's form, and each comment in it carries `question`, the
@@ -167,7 +175,7 @@ from http import HTTPStatus
 from pathlib import Path
 from typing import BinaryIO, Callable, Mapping, Sequence
 
-from lotuspod import db, media, routing, versions
+from lotuspod import comments, db, media, routing, versions
 
 ANSWERS = "/api/answers"
 COMMENTS = "/api/comments"
@@ -941,13 +949,21 @@ class Api:
         _keys(fields, {"page", "section", "text"}, frozenset({"quote", "revision", "images"}))
         # A heading's id may be any length, and must match one of the page's
         # boxes exactly: the body's own limit is the only one it needs.
-        section = _text(fields["section"], 1, MAX_BODY)
+        # comments.WHOLE_PAGE, "", is the whole page, and matches no box.
+        section = _text(fields["section"], 0, MAX_BODY)
         text = _text(fields["text"], least, MAX_TEXT)
         quote = _quote(fields.get("quote"))
+        if section == comments.WHOLE_PAGE and quote is not None:
+            raise _invalid()
         # The revision the reader's page was rendered at; absent when it had none.
         read = _text(fields["revision"], 0, MAX_REVISION) if "revision" in fields else None
         page = self._open_page(fields["page"])
-        if section not in page.comment_sections:
+        if section == comments.WHOLE_PAGE:
+            # Only a page with section boxes takes one: a page whose only box
+            # is comments.PAGE_SECTION already has its box for the whole page.
+            if not page.comment_sections - {comments.PAGE_SECTION}:
+                raise Refusal(HTTPStatus.BAD_REQUEST, "unknown_section")
+        elif section not in page.comment_sections:
             raise Refusal(HTTPStatus.BAD_REQUEST, "unknown_section")
         if read is not None and read != page.revision:
             raise Refusal(HTTPStatus.CONFLICT, "stale_page")

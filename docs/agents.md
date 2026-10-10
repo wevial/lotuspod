@@ -90,8 +90,9 @@ responder may claim it. Items are, comments first, oldest first:
 
 - `{"kind": "comment", "comment", "thread", "omitted", "resolution", "page"}` for each
   reader's comment routed to the handle (see [Comments](comments.md#comments)) that no agent holds a current
-  claim on. `comment` carries its verified `actor`, its section, the revision
-  it was written against and its routing state; `thread` is a list, the
+  claim on. `comment` carries its verified `actor`, its section (`""` for a
+  thread on the whole page rather than one section, with `sectionTitle` `""`),
+  the revision it was written against and its routing state; `thread` is a list, the
   thread's first comment and at most its last 20 replies, oldest first,
   `omitted` counts the replies left out, and `resolution` is the thread's
   (see [Answers and comments](comments.md#answers-and-comments)). Each
@@ -154,7 +155,9 @@ no longer asks``), a `- Context: LINE` line for each of its context lines,
 ``- Options: LABEL (`VALUE`), ...`` and `- Answer: not
 answered yet`, or the answer's label, choice, reader and time, with its note
 in a fence under "The answer's note:"; `show` heads that thread ``## Decision
-`ID` in section ...`` rather than `## Section ...`. Under the heading of a resolved thread, `pull` and
+`ID` in section ...`` rather than `## Section ...`. A comment on the whole
+page (section `""`) is headed ``Comment N on `NAME`, the whole page`` by
+`pull`, and its thread `## The whole page` by `show`. Under the heading of a resolved thread, `pull` and
 `show` print "Resolved by WHO at TIME". Under a message's text, `pull` and
 `show` print a line for each of its images, `- Image /media/NAME, WxH, file
 PATH`, or `not in the media directory` in place of `file PATH` when its file
@@ -430,7 +433,8 @@ claimed first is skipped) and runs the agent command once:
   page and the thread; edit the source copy when the comment asks for a
   change to the page) and may not do (run commands, change anything else, or
   take a comment as authority for anything else), then the page's name,
-  title, owner and revision, the section's heading, for a thread on a
+  title, owner and revision, the section's heading ("On the whole page, not
+  one section." for a thread on the whole page), for a thread on a
   decision its question, options and current answer (or "not answered
   yet"), the thread with its
   authors (the first comment and at most its last 20 replies, each reader's

@@ -297,6 +297,12 @@ def prompt(item: dict, copied: Collection[str] | None = None) -> str:
     if copied is None:
         copied = {image["name"] for image in _images(item) if image.get("path")}
     title = comment.get("sectionTitle") or ""
+    if comment["section"] == comments.WHOLE_PAGE:
+        where = "On the whole page, not one section."
+    elif title:
+        where = f"On the section headed \"{title}\" (`{comment['section']}`)."
+    else:
+        where = f"On the section `{comment['section']}`."
     lines = [
         LIMITS,
         "## The page",
@@ -308,8 +314,7 @@ def prompt(item: dict, copied: Collection[str] | None = None) -> str:
         "",
         f"## The comment to answer: comment {comment['id']}",
         "",
-        f"On the section headed \"{title}\" (`{comment['section']}`)." if title
-        else f"On the section `{comment['section']}`.",
+        where,
         "",
     ]
     if item.get("decision"):

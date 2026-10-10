@@ -1257,7 +1257,8 @@
         list.appendChild(node);
         var made = { node: node, entries: entries, box: box, toggle: null, holder: null };
         if (box) {
-          var toggle = element("button", "artifact-comments-new", "Comment on this section");
+          var toggle = element("button", "artifact-comments-new",
+            box.dataset.section === WHOLE_PAGE ? "Comment on this page" : "Comment on this section");
           toggle.type = "button";
           var holder = element("div", "artifact-comments-compose");
           holder.id = "artifact-comments-compose-" + index;
@@ -1871,7 +1872,7 @@
       // Where some open threads stand, in one line: its kind, the faces of
       // who wrote and answered, and its words, ending in how many replies
       // to the reader are unread when any are.
-      function line(threads, fresh) {
+      function line(threads, fresh, act) {
         var newest = latest(threads);
         var kind = newest ? standing(newest) : "none";
         var faces = mute(element("span", "artifact-comment-chip-faces"));
@@ -1910,7 +1911,7 @@
           }
         } else {
           faces.appendChild(element("span", "artifact-comment-chip-icon"));
-          parts.push("No comments", " · ", element("span", "artifact-comment-chip-act", "Comment"));
+          parts.push("No comments", " · ", element("span", "artifact-comment-chip-act", act || "Comment"));
         }
         if (fresh > 0) {
           parts.push(" · ", element("span", "artifact-comment-chip-unread", fresh + " new"));
@@ -1934,7 +1935,8 @@
       // A box's chip: where its section's open threads stand, in one line.
       function chip(box) {
         paint(box.querySelector("summary"), "artifact-comment-summary",
-          line(unresolvedOf(box), unreadIn(threadsOf(box))));
+          line(unresolvedOf(box), unreadIn(threadsOf(box)),
+            box.dataset.section === WHOLE_PAGE ? "Comment on this page" : "Comment"));
       }
 
       // A decision's threads, oldest first.
@@ -2895,7 +2897,31 @@
     read();
   }
 
+  // A page with section boxes also takes threads on the whole page, section
+  // WHOLE_PAGE, which no box of its own carries: its box is a copy of the
+  // first, drawn under the page's title, and first among the boxes, so its
+  // threads are listed first. A page whose only box is "page" has its box
+  // for the whole page already.
+  function pageBox(boxes) {
+    var meta = document.querySelector("header.artifact-header .artifact-meta");
+    var sectioned = boxes.some(function (box) { return box.dataset.section !== "page"; });
+    if (!meta || !sectioned) {
+      return boxes;
+    }
+    var box = boxes[0].cloneNode(true);
+    box.open = false;
+    box.dataset.section = WHOLE_PAGE;
+    box.querySelector(".artifact-comment-threads").replaceChildren();
+    var form = box.querySelector("form.artifact-comment-form");
+    form.reset();
+    form.elements.text.textContent = "";
+    form.elements.text.setAttribute("aria-label", "Comment on this page");
+    box.querySelector(".artifact-comment-status").textContent = "";
+    meta.parentNode.insertBefore(box, meta.nextSibling);
+    return [box].concat(boxes);
+  }
+
   var boxes = all("details.artifact-comment");
   if (boxes.length) {
-    commentBoxes(boxes);
+    commentBoxes(pageBox(boxes));
   }

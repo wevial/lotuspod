@@ -267,14 +267,14 @@ async function settle(page: Page) {
 
 async function load(page: Page, url = PAGE) {
   await page.goto(url);
-  await expect(page.locator('details.artifact-comment')).toHaveCount(3);
+  await expect(page.locator('.artifact-body details.artifact-comment')).toHaveCount(3);
   await settle(page);
 }
 
 // The five-section page with the panel open.
 async function loadFive(page: Page) {
   await page.goto(FIVE);
-  await expect(page.locator('details.artifact-comment')).toHaveCount(5);
+  await expect(page.locator('.artifact-body details.artifact-comment')).toHaveCount(5);
   await settle(page);
   const side = panel(page);
   await side.opener.click();
@@ -732,8 +732,8 @@ test.describe('signed in', () => {
     await pick.button.click();
     await expect(pick.button).toHaveAttribute('aria-expanded', 'true');
     await expect(pick.list).toBeVisible();
-    await expect(pick.options).toHaveText(FIVE_TITLES);
-    await pick.options.nth(2).click();
+    await expect(pick.options).toHaveText(['This page', ...FIVE_TITLES]);
+    await pick.options.nth(3).click();
     await expect(pick.list).toBeHidden();
     const heater = side.group('Heater');
     const field = heater.getByLabel('Comment on Heater');
@@ -768,10 +768,12 @@ test.describe('signed in', () => {
     await page.keyboard.press('Enter');
     await expect(pick.list).toBeVisible();
     await expect(pick.list).toBeFocused();
+    // This page comes first, then the sections.
     await page.keyboard.press('ArrowDown');
     await page.keyboard.press('ArrowDown');
-    await expect(pick.options.nth(1)).toHaveAttribute('aria-selected', 'true');
-    await expect(pick.list).toHaveAttribute('aria-activedescendant', (await pick.options.nth(1).getAttribute('id'))!);
+    await page.keyboard.press('ArrowDown');
+    await expect(pick.options.nth(2)).toHaveAttribute('aria-selected', 'true');
+    await expect(pick.list).toHaveAttribute('aria-activedescendant', (await pick.options.nth(2).getAttribute('id'))!);
     await page.keyboard.press('Enter');
     await expect(pick.list).toBeHidden();
     const field = side.group('Risks').locator('textarea[name="text"]');

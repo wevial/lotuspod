@@ -26,7 +26,7 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from lotuspod import access, api, cli, db, decisions, media, routing  # noqa: E402
+from lotuspod import access, api, cli, db, decisions, machine, media, routing  # noqa: E402
 from tests import access_keys as keys  # noqa: E402
 
 HOST = "127.0.0.1"
@@ -523,6 +523,65 @@ class CommentTests(ApiTestCase):
                          [{"root": goals, "replies": [], "resolution": db.UNRESOLVED},
                           {"root": elsewhere, "replies": [reply],
                            "resolution": db.UNRESOLVED}])
+
+
+    def publish_owned(self, name: str) -> None:
+        """Publish PLAN as name, owned by hermes."""
+        token = self.work / "hermes.token"
+        if not token.exists():
+            machine.create_credential(db.Database(self.db_path), "desk", ["hermes"],
+                                      ["publish"], token)
+        source = self.work / f"{name}.md"
+        source.write_text(PLAN, encoding="utf-8")
+        run_cli("publish", str(source), "--name", name, "--out-dir", str(self.out_dir),
+                "--local", "--owner", "hermes", "--credential", str(token),
+                "--db", str(self.db_path))
+
+    def test_a_thread_on_the_whole_page_has_no_section_quote_or_question(self):
+        self.publish_owned("owned")
+        # hermes is listening, so the thread is routed to it.
+        db.Database(self.db_path).record_pull("hermes")
+        revision = self.page_revision("owned")
+        status, root = self.comment(page="owned", section="", text="Is this plan current?",
+                                    revision=revision)
+        self.assertEqual(status, 201, root)
+        self.assertEqual(
+            {key: root[key] for key in root if key not in ("id", "createdAt")},
+            {"page": "owned", "section": "", "sectionTitle": "", "revision": revision,
+             "parent": None, "text": "Is this plan current?", "quote": None, "images": [],
+             "actor": SHOWN, "state": "pending", "owner": "hermes"},
+        )
+        self.assertNotIn("question", root)
+        status, reply = self.comment(page="owned", parent=root["id"], text="And the risks?")
+        self.assertEqual(status, 201, reply)
+        self.assertEqual((reply["section"], reply["sectionTitle"], reply["owner"]),
+                         ("", "", "hermes"))
+        self.assertEqual(
+            self.ask("GET", "/api/comments?page=owned"),
+            (200, {"page": "owned", "revision": revision,
+                   "threads": [{"root": root, "replies": [reply],
+                                "resolution": db.UNRESOLVED}],
+                   "unread": [], "maxImageBytes": media.DEFAULT_MAX_BYTES}),
+        )
+
+    def test_only_a_page_with_section_boxes_takes_a_thread_on_the_whole_page(self):
+        run_cli("render", "--name", "bare", "--title", "Bare", "--body", DECISIONS_BODY,
+                "--out-dir", str(self.out_dir))
+        self.publish_owned("old")
+        run_cli("archive", "old", "--out-dir", str(self.out_dir), "--local")
+        run_cli("index", "--out-dir", str(self.out_dir))
+        quote = {"exact": "may freeze", "prefix": "The pond ", "suffix": "."}
+        for label, body, status, error in (
+                ("only the page box", {"page": "other"}, 400, "unknown_section"),
+                ("no comment boxes", {"page": "bare"}, 400, "unknown_section"),
+                ("archived", {"page": "old"}, 409, "archived"),
+                ("with a quote", {"quote": quote}, 400, "invalid_body"),
+                ("stale revision", {"revision": "0000000000ff"}, 409, "stale_page")):
+            with self.subTest(label):
+                self.assertEqual(self.comment(**{"section": "", "text": "Current?", **body}),
+                                 (status, {"error": error}))
+        for page in ("plan", "other", "bare", "old"):
+            self.assertEmpty(page)
 
 
 class DecisionThreadTests(ApiTestCase):

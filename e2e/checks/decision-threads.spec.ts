@@ -137,7 +137,7 @@ async function settle(page: Page) {
 
 async function load(page: Page) {
   await page.goto(PAGE);
-  await expect(page.locator('details.artifact-comment')).toHaveCount(2);
+  await expect(page.locator('.artifact-body details.artifact-comment')).toHaveCount(2);
   await settle(page);
 }
 
