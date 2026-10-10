@@ -752,16 +752,25 @@ test.describe('on a touch screen', () => {
         touchPoints: points.map((point, id) => ({ x: point.x, y: point.y, id })),
       });
     }
-    return {
-      async gesture(from: { x: number; y: number }[], to: { x: number; y: number }[], steps = 8) {
-        await send('touchStart', from);
+    // Move the fingers through each stop in turn, lifting them at the last.
+    async function through(stops: { x: number; y: number }[][], steps = 8) {
+      await send('touchStart', stops[0]);
+      for (let stop = 1; stop < stops.length; stop += 1) {
+        const from = stops[stop - 1];
+        const to = stops[stop];
         for (let at = 1; at <= steps; at += 1) {
           await send('touchMove', from.map((point, index) => ({
             x: point.x + (to[index].x - point.x) * at / steps,
             y: point.y + (to[index].y - point.y) * at / steps,
           })));
         }
-        await send('touchEnd', []);
+      }
+      await send('touchEnd', []);
+    }
+    return {
+      through,
+      async gesture(from: { x: number; y: number }[], to: { x: number; y: number }[], steps = 8) {
+        await through([from, to], steps);
       },
     };
   }
@@ -819,6 +828,12 @@ test.describe('on a touch screen', () => {
         [{ x: P.x + first + shift, y: P.y }, { x: P.x - first + shift, y: P.y }]);
       await expect(view(page).readout).toHaveText('25%');
     }
+
+    // A pinch past 25% and back, without lifting: it zooms back from 25% at
+    // once, by the ratio of the fingers' distance since the clamp.
+    const apart = (half: number) => [{ x: P.x, y: P.y - half }, { x: P.x, y: P.y + half }];
+    await fingers.through([apart(150), apart(25), apart(50)]);
+    near(await zoom(page), 50, 1);
     await seen.clean();
   });
 
@@ -831,6 +846,22 @@ test.describe('on a touch screen', () => {
     await step(page, 'B').tap();
     await expect(card(page).locator('h3')).toHaveText('Draw the cards');
     expect(await card(page).evaluate((node) => Boolean(node.closest('dialog[open]')))).toBe(true);
+
+    // A drag ends in no click, so the next tap on a control is not lost.
+    const fingers = await touches(page);
+    const stage = await where(view(page).stage);
+    const from = { x: stage.x + 40, y: stage.y + 40 };
+    await fingers.gesture([from], [{ x: from.x + 60, y: from.y + 30 }]);
+    const before = await zoom(page);
+    // Chromium's gesture detector drops a tap sent the instant a touch
+    // sequence ends, which no finger can do; a finger's pause comes first.
+    await page.waitForTimeout(400);
+    await view(page).zoomIn.tap();
+    await expect.poll(() => zoom(page)).toBeGreaterThan(before);
+    await fingers.gesture([from], [{ x: from.x + 60, y: from.y + 30 }]);
+    await page.waitForTimeout(400);
+    await card(page).getByRole('button', { name: 'Close' }).tap();
+    await expect(card(page)).toBeHidden();
     await seen.clean();
   });
 });

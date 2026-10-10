@@ -41,7 +41,8 @@
     var pointers = new Map();
     var press = null;
     var dragged = false;
-    // The zoom and the fingers' distance as the pinch began.
+    // The zoom and the fingers' distance at the pinch's last input frame,
+    // and that frame's time.
     var pinch = null;
 
     function button(className, text, label) {
@@ -95,10 +96,23 @@
           event.stopPropagation();
         }
       }, true);
+      // A touch drag ends in no click: a new press anywhere in the view
+      // leaves no drag's click to stop.
+      dialog.addEventListener("pointerdown", function () {
+        if (!pointers.size) {
+          dragged = false;
+        }
+      }, true);
       stage.addEventListener("pointerdown", grab);
       dialog.addEventListener("pointermove", drag);
       dialog.addEventListener("pointerup", drop);
-      dialog.addEventListener("pointercancel", drop);
+      // A canceled press ends in no click either.
+      dialog.addEventListener("pointercancel", function (event) {
+        drop(event);
+        if (!pointers.size) {
+          dragged = false;
+        }
+      });
       // Not a finger's own capture of the box it went down on, which the
       // stage takes over once the press is a drag.
       stage.addEventListener("lostpointercapture", function (event) {
@@ -239,16 +253,18 @@
       pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
       // A second finger starts a pinch, never a click.
       if (pointers.size === 2) {
-        var both = Array.from(pointers.values());
-        pinch = { zoom: zoom, distance: Math.hypot(both[0].x - both[1].x, both[0].y - both[1].y) };
+        pinch = null;
         startDrag();
       }
     }
 
     // One pointer moves the diagram with it. Two pinch: the diagram zooms
-    // by the change in their distance since the pinch began, so fingers that
-    // move together never zoom it at the clamp, and moves with their
-    // midpoint, so the point under the fingers stays under them.
+    // by the ratio of their distance to their distance at the last input
+    // frame, and moves with their midpoint, so the point under the fingers
+    // stays under them. Both fingers' moves in one frame (one timeStamp) are
+    // measured from that frame's start, so fingers moving together never
+    // zoom it at the clamp, and a pinch reversed past the clamp zooms back
+    // at once.
     function drag(event) {
       var at = pointers.get(event.pointerId);
       if (!at) {
@@ -279,6 +295,9 @@
         return;
       }
       var after = Math.hypot(x - other.x, y - other.y);
+      if (!pinch || pinch.stamp !== event.timeStamp) {
+        pinch = { zoom: zoom, distance: Math.hypot(fromX - other.x, fromY - other.y), stamp: event.timeStamp };
+      }
       var rect = parts.stage.getBoundingClientRect();
       zoomTo(pinch.distance && after ? clamp(pinch.zoom * after / pinch.distance) / zoom : 1,
         (fromX + other.x) / 2 - rect.left, (fromY + other.y) / 2 - rect.top,
@@ -286,7 +305,7 @@
     }
 
     // A finger lifted from a pinch leaves the other dragging from where it
-    // is; dragged stays set until the click that ends the press.
+    // is; dragged stays set for the click that ends the press.
     function drop(event) {
       if (!pointers.delete(event.pointerId)) {
         return;
