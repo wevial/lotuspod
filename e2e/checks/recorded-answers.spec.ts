@@ -95,7 +95,7 @@ test.describe('signed in', () => {
     expect([recorded.choice, recorded.source]).toEqual(['opus', SOURCE]);
 
     const errors = watch(page);
-    await page.goto(`/${NAME}.html`);
+    await page.goto(`/${NAME}.html?standalone`);
     const model = decision(page, 'decision-1');
     await expect(model.form).toHaveClass(/\bartifact-decision--saved\b/);
     await expect(model.saved).toContainText('Saved · Opus');

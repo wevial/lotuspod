@@ -181,7 +181,9 @@ class UnwrappedTests(SectionsTestCase):
         }
         for name, (body, *extra) in cases.items():
             with self.subTest(case=name):
-                page = self.render(name, body, *extra)
+                # Not listed: a listed page loads the page script to open in
+                # the index's tabs.
+                page = self.render(name, body, *extra, "--hidden")
                 self.assertFalse(any(is_wrapper(node) for node in walk(page.root)))
                 self.assertNotIn(WRAPPER, (self.out_dir / f"{name}.html").read_text())
                 # Only the comment box loads the page script.

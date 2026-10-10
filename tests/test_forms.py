@@ -96,7 +96,9 @@ class FormsTestCase(TempDirTestCase):
 
 class TaskListTests(FormsTestCase):
     def test_a_task_list_renders_as_the_plain_list_written(self):
-        page = self.render_body("plan", TWO_ITEMS)
+        # Not listed: a listed page loads the page script to open in the
+        # index's tabs.
+        page = self.render_body("plan", TWO_ITEMS, "--hidden")
         reader = read_page(page)
         self.assertEqual(reader.forms, 0)
         self.assertEqual(reader.scripts, 0)

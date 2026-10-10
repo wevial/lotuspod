@@ -1,16 +1,21 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { expect, test, type Locator, type Page } from '@playwright/test';
+import { expect, test, type ConsoleMessage, type Locator, type Page } from '@playwright/test';
 
-test.use({ viewport: { width: 1280, height: 800 } });
+// Signed in, as a reader of the site is: the page script asks the API about the
+// page, which refuses a signed-out request with a 401 the console reports.
+const SIGNED_IN = { 'Cf-Access-Jwt-Assertion': process.env.LOTUSPOD_TEST_ASSERTION ?? '' };
+
+test.use({ viewport: { width: 1280, height: 800 }, extraHTTPHeaders: SIGNED_IN });
 
 // The capture fixture's node cards page: an opening paragraph, then a
 // flowchart (A --> B, E --> B, B --> C, A --> D) whose Nodes table lists A to
 // D and not E, then a second flowchart that repeats node id A, holds a
 // subgraph (P --> Q), and whose table has a row Z naming no box, and a third
 // (K <--> R, R --> S, S --> T styled opaque) whose table has no thead and a
-// row too long for the window, and a fourth (F --> G, G --> H, J --> H)
-// that styles F with a style line, G with a class line and J with :::.
+// row too long for the window, and a fourth (F --> G, G --> H, J --> H,
+// M --> H) that styles F with a style line, G with a class line and J with
+// :::, and labels M "one", "two" and "three" split by <br> tags.
 const PAGE = '/capture-node-cards.html';
 // The pinned Mermaid (e2e/package.json) answers jsDelivr's requests for it,
 // as in policy.spec.ts.
@@ -19,10 +24,18 @@ const MERMAID_COPY = path.join(__dirname, '..', 'node_modules', 'mermaid');
 
 type Violation = { blockedURI: string; effectiveDirective: string };
 
+// The page asks the archive route whether its reader may archive it; signed
+// out, as here, the route answers 401, which the browser logs as the
+// network's line. Only that line, for that route, is not an error.
+function signedOutArchive(message: ConsoleMessage) {
+  return message.text() === 'Failed to load resource: the server responded with a status of 401 (Unauthorized)' &&
+    new URL(message.location().url).pathname === '/api/archive';
+}
+
 async function watch(page: Page) {
   const errors: string[] = [];
   page.on('console', (message) => {
-    if (message.type() === 'error') errors.push(message.text());
+    if (message.type() === 'error' && !signedOutArchive(message)) errors.push(message.text());
   });
   page.on('pageerror', (error) => errors.push(error.message));
   await page.addInitScript(() => {
@@ -68,7 +81,7 @@ function card(page: Page) {
 // Open the page and wait until the first diagram is drawn and bound.
 async function drawn(page: Page) {
   const seen = await watch(page);
-  await page.goto(PAGE);
+  await page.goto(`${PAGE}?standalone`);
   await expect(diagram(page).locator('svg')).toBeVisible();
   await expect(box(page, 'A')).toHaveAttribute('role', 'button');
   await expect(box(page, 'A', 1)).toHaveAttribute('role', 'button');
@@ -442,11 +455,20 @@ test('a box with its own Mermaid style keeps it, and only an unstyled box takes 
   await seen.clean();
 });
 
+test("a box's label that breaks its lines reads as words split by spaces", async ({ page }) => {
+  const seen = await drawn(page);
+  await expect(box(page, 'M', 3)).toHaveAttribute('role', 'button');
+  await box(page, 'M', 3).click();
+  await expect(card(page)).toBeVisible();
+  await expect(card(page).locator('h3')).toHaveText('one two three');
+  await seen.clean();
+});
+
 test.describe('without scripts', () => {
   test.use({ javaScriptEnabled: false });
 
   test('every Nodes heading and table shows and no box is focusable', async ({ page }) => {
-    await page.goto(PAGE);
+    await page.goto(`${PAGE}?standalone`);
     const headings = page.locator('.artifact-body > h3', { hasText: 'Nodes' });
     await expect(headings).toHaveCount(4);
     await expect(headings.nth(0)).toBeVisible();

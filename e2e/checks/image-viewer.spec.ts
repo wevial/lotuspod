@@ -90,7 +90,7 @@ test.describe('a page figure', () => {
   test('a click opens the image in a modal dialog, captioned and fit to the window, and the page stays', async ({ page }) => {
     const seen = await watch(page);
     await page.setViewportSize({ width: 1280, height: 720 });
-    await page.goto(IMAGES);
+    await page.goto(`${IMAGES}?standalone`);
     const url = page.url();
     const view = viewer(page);
 
@@ -127,7 +127,7 @@ test.describe('a page figure', () => {
 
   test('Escape, Close and a click on the backdrop each close it, and the focus is back on the image', async ({ page }) => {
     const seen = await watch(page);
-    await page.goto(IMAGES);
+    await page.goto(`${IMAGES}?standalone`);
     const view = viewer(page);
     const link = figure(page, 'A fish in the pond');
     const closers: [string, () => Promise<void>][] = [
@@ -147,7 +147,7 @@ test.describe('a page figure', () => {
 
   test('Tab reaches the image, Enter opens it, and Tab stays in the dialog until it closes', async ({ page }) => {
     const seen = await watch(page);
-    await page.goto(IMAGES);
+    await page.goto(`${IMAGES}?standalone`);
     const view = viewer(page);
     const link = figure(page, 'A fish in the pond');
     const linked = () => link.evaluate((node) => node === document.activeElement);
@@ -172,7 +172,7 @@ test.describe('a page figure', () => {
 
   test('a click with the platform modifier opens the original in a new page, not the viewer', async ({ page, context }) => {
     const seen = await watch(page);
-    await page.goto(IMAGES);
+    await page.goto(`${IMAGES}?standalone`);
     const url = page.url();
     const link = figure(page, 'A fish in the pond');
     const src = await link.locator('img').getAttribute('src');
@@ -190,7 +190,7 @@ test.describe('a page figure', () => {
 
   test('Open original opens the image in a new page', async ({ page, context }) => {
     const seen = await watch(page);
-    await page.goto(IMAGES);
+    await page.goto(`${IMAGES}?standalone`);
     const view = viewer(page);
     const link = figure(page, 'A fish in the pond');
     const src = await link.locator('img').getAttribute('src');
@@ -245,7 +245,7 @@ test.describe('a comment\'s images', () => {
     expect(posted.status()).toBe(201);
     const row = await posted.json();
 
-    await page.goto(PAGE);
+    await page.goto(`${PAGE}?standalone`);
     const url = page.url();
     await page.locator('details.artifact-comment[data-section="pond"] summary').click();
     const popover = page.locator('.artifact-comments-popover');

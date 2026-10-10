@@ -278,8 +278,9 @@ test.describe('signed in', () => {
     let opened = context.waitForEvent('page');
     await page.keyboard.press('ControlOrMeta+Enter');
     let other = await opened;
-    await other.waitForLoadState();
-    expect(new URL(other.url()).pathname).toBe(`/${CHECKLIST.name}.html`);
+    // The new browser tab, a pod loaded on its own, opens it in the index's
+    // tabs there (js/open-in-tabs.js).
+    await expect(other).toHaveURL(new RegExp(`/#tabs=${CHECKLIST.name}&on=${CHECKLIST.name}$`));
     await other.close();
     await expect(finder(page)).toBeHidden();
     expect(await openNames(page)).toEqual(before);
@@ -290,8 +291,7 @@ test.describe('signed in', () => {
     opened = context.waitForEvent('page');
     await optionFor(page, pod).click({ modifiers: ['ControlOrMeta'] });
     other = await opened;
-    await other.waitForLoadState();
-    expect(new URL(other.url()).pathname).toBe(`/${pod.name}.html`);
+    await expect(other).toHaveURL(new RegExp(`/#tabs=${pod.name}&on=${pod.name}$`));
     await other.close();
     expect(await openNames(page)).toEqual(before);
 

@@ -11,9 +11,9 @@ test('the index and the article page render', async ({ page }) => {
   await expect(article).toBeVisible();
   await page.screenshot({ path: path.join(OUT!, '01-index.png') });
 
-  // A plain click opens the article in a tab of the index; the page itself
-  // is loaded in the window here.
-  await page.goto(`/${await article.getAttribute('href')}`);
+  // A plain click opens the article in a tab of the index, and so does a
+  // load of its address; ?standalone keeps the page itself in the window here.
+  await page.goto(`/${await article.getAttribute('href')}?standalone`);
   await expect(page.getByRole('navigation', { name: 'On this page' })).toBeVisible();
   await page.screenshot({ path: path.join(OUT!, '02-article.png'), fullPage: true });
 });

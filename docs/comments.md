@@ -68,6 +68,18 @@ twice.
   decision's id; no other comment has the key at all. It takes no `quote`,
   and it records no answer: the decision stays unanswered until the reader
   saves one.
+- An answer saved with a note, on a page with a comment box after the
+  decision's form, also stores the note as the reader's comment in a thread on
+  that decision, so the page's owner can reply to it there. The comment's
+  `text` is the note as written, its `question` the decision's id, and it
+  carries `answer`, `{id, choice, label}` of the answer it came with; no other
+  comment has the key. `POST /api/answers` then answers 201 with the comment as
+  `comment` beside the answer, shaped as `POST /api/comments` answers a new
+  thread. A later note to the same question is a reply in the newest thread a
+  note opened, and reopens it if resolved; a thread opened with Ask never takes
+  one. A note that is empty once trimmed, or is the note of the answer it
+  replaces, opens nothing, and nor does a page with no such comment box or an
+  answer an agent recorded.
 - A new thread or reply may name up to 4 uploaded images as `images`, a list
   of their stored names in the order they are shown; a comment with images may
   have empty `text`. Every comment row carries `images`, each `{name, url,

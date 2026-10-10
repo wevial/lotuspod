@@ -143,7 +143,7 @@ async function pass(page: Page, ms: number) {
 }
 
 async function load(page: Page) {
-  await page.goto(PAGE);
+  await page.goto(`${PAGE}?standalone`);
   await expect(page.locator('details.artifact-comment')).toHaveCount(3);
   await settle(page);
 }
@@ -305,7 +305,7 @@ test.describe('signed in', () => {
 
   test('a folded question answered as the page asks it draws no mark', async ({ page }) => {
     const seen = await watch(page);
-    await page.goto(PAGE);
+    await page.goto(`${PAGE}?standalone`);
     const asked = await question(page);
     await serveAnswers(page, () => answered(asked));
     await serveThreads(page, () => []);

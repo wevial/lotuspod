@@ -52,7 +52,7 @@ test.describe('a theme edit reaches the reader at a new address', () => {
     helper('change', COMMENT);
     const stylesheet = page.waitForResponse(
       (response) => new URL(response.url()).pathname === '/lotuspod.css');
-    await page.goto(`/${NAME}.html`);
+    await page.goto(`/${NAME}.html?standalone`);
     const response = await stylesheet;
     const changed = new URL(response.url()).searchParams.get('v') ?? '';
     expect(changed).toMatch(/^[0-9a-f]{12}$/);

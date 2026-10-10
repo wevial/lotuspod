@@ -34,8 +34,32 @@
     // Each bound diagram: its svg, boxes by id, arrows and the copies drawn.
     var diagrams = [];
 
+    // A node's words, a space wherever its lines break: at a <br> in an
+    // HTML label, and around each SVG <text> or placed <tspan> line.
     function text(node) {
-      return (node ? node.textContent : "").replace(/\s+/g, " ").trim();
+      var pieces = [];
+      function walk(at) {
+        if (at.nodeType === Node.TEXT_NODE) {
+          pieces.push(at.nodeValue);
+        } else if (at.nodeType === Node.ELEMENT_NODE) {
+          var name = at.localName;
+          var line = name === "br" || name === "text" ||
+            (name === "tspan" && (at.hasAttribute("x") || at.hasAttribute("y")));
+          if (line) {
+            pieces.push(" ");
+          }
+          for (var child = at.firstChild; child; child = child.nextSibling) {
+            walk(child);
+          }
+          if (line) {
+            pieces.push(" ");
+          }
+        }
+      }
+      if (node) {
+        walk(node);
+      }
+      return pieces.join("").replace(/\s+/g, " ").trim();
     }
 
     // The box ids of an arrow's two ends: the one split of START_END that

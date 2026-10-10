@@ -109,7 +109,7 @@ test.describe('signed in', () => {
 
   test('the root element names the new colours and the highlight tints as the tokens do', async ({ page }) => {
     const seen = await watch(page);
-    await page.goto(PAGE);
+    await page.goto(`${PAGE}?standalone`);
     const root = page.locator('html');
     for (const name of ['sky', 'pale_sky', 'rose', 'pale_rose', 'mint', 'amber']) {
       const property = `--color-${name.replace(/_/g, '-')}`;
@@ -124,7 +124,7 @@ test.describe('signed in', () => {
 
   test('a link, inline code, a table header, a quote and a code block take the sky colours', async ({ page }) => {
     const seen = await watch(page);
-    await page.goto(PAGE);
+    await page.goto(`${PAGE}?standalone`);
     const body = page.locator('.artifact-body');
 
     const link = body.locator('p a').first();
@@ -162,7 +162,7 @@ test.describe('signed in', () => {
 
   test('a section title is lavender, apart from body text and a pale-lavender subsection title', async ({ page }) => {
     const seen = await watch(page);
-    await page.goto(SUBSECTIONS);
+    await page.goto(`${SUBSECTIONS}?standalone`);
     const body = page.locator('.artifact-body');
     const sections = body.locator('h2');
     const subsections = body.locator('h3');
@@ -182,7 +182,7 @@ test.describe('signed in', () => {
 
   test('a folded section title keeps a visible focus ring around its lavender text', async ({ page }) => {
     const seen = await watch(page);
-    await page.goto(SECTIONS);
+    await page.goto(`${SECTIONS}?standalone`);
     const heading = page.locator('h2#findings');
     const button = heading.getByRole('button', { name: 'Findings' });
     await button.click();
@@ -214,7 +214,7 @@ test.describe('signed in', () => {
       actor: { kind: 'agent', handle: OWNER },
     });
     await serveThreads(page, [{ root, replies: [reply] }]);
-    await page.goto(PAGE);
+    await page.goto(`${PAGE}?standalone`);
     await box(page, 'links-and-code').locator('summary').click();
 
     const answered = thread(page, root);
@@ -246,7 +246,7 @@ test.describe('signed in', () => {
     const pending = row({ state: 'pending', text: 'Is the table right?', section: 'table', sectionTitle: 'Table' });
     const claimed = row({ state: 'claimed', text: 'Who wrote the quote?', section: 'quote', sectionTitle: 'Quote' });
     await serveThreads(page, [{ root: pending, replies: [] }, { root: claimed, replies: [] }]);
-    await page.goto(PAGE);
+    await page.goto(`${PAGE}?standalone`);
 
     const waiting = thread(page, pending).locator('.artifact-comment-typing--pending .artifact-comment-mark--dots i');
     const writing = thread(page, claimed).locator('.artifact-comment-typing--claimed .artifact-comment-mark--dots i');
@@ -265,7 +265,7 @@ test.describe('signed in', () => {
 
   test('a saved answer is checked in mint and a picked one is not saved in amber', async ({ page }) => {
     const seen = await watch(page);
-    await page.goto(DECISIONS);
+    await page.goto(`${DECISIONS}?standalone`);
     const version = await page.locator('form.artifact-decision[data-question="decision-1"]')
       .getAttribute('data-version');
     // The spec answers the page's read; nothing is ever posted.
