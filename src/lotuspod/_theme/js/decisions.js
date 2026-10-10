@@ -591,10 +591,7 @@
             "This dismissal was not undone (" + error + "). Try again.");
           return;
         }
-        form.lotuspodAnswers = {
-          current: payload.current || null,
-          earlier: Array.isArray(payload.earlier) ? payload.earlier.slice() : [],
-        };
+        form.lotuspodAnswers = { current: payload.current, earlier: payload.earlier.slice() };
         if (!payload.current) {
           stored.delete(form.dataset.question);
         }
@@ -635,9 +632,7 @@
             button.addEventListener("click", function () { dismiss(form, button); });
             var after = form.querySelector(".artifact-decision-ask") ||
               form.querySelector('button[type="submit"]');
-            if (after) {
-              after.parentNode.insertBefore(button, after.nextSibling);
-            }
+            after.parentNode.insertBefore(button, after.nextSibling);
           }
           if (form.classList.contains("artifact-decision--dismissed")) {
             draw(form);
