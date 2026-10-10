@@ -713,7 +713,6 @@ test.describe('on a touch screen', () => {
       });
     }
     return {
-      // Move the fingers from their start to their end in steps.
       async gesture(from: { x: number; y: number }[], to: { x: number; y: number }[], steps = 8) {
         await send('touchStart', from);
         for (let at = 1; at <= steps; at += 1) {

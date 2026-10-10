@@ -470,7 +470,6 @@
       }
     });
     window.addEventListener("resize", place);
-    // The view moved or zoomed the diagram: the card follows its box.
     document.addEventListener(MOVED, place);
     // The card is set in the page, so a scroll of the page would carry it
     // out of the window: it is set again, beside its box as far as the
