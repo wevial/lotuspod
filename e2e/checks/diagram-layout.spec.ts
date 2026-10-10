@@ -48,8 +48,9 @@ async function watch(page: Page) {
   });
   for (const [dir, copy] of Object.entries(COPIES)) {
     await page.route(`${dir}**`, async (route) => {
-      if (dir === MERMAID_ELK_DIR) elkFiles.push(route.request().url().slice(dir.length));
-      const file = path.join(copy, route.request().url().slice(dir.length));
+      const name = route.request().url().slice(dir.length);
+      if (dir === MERMAID_ELK_DIR) elkFiles.push(name);
+      const file = path.join(copy, name);
       if (!file.startsWith(copy + path.sep) || !fs.existsSync(file)) {
         await route.fulfill({ status: 404 });
         return;
@@ -136,21 +137,12 @@ test('a box on an ELK diagram opens its node card', async ({ page }) => {
 });
 
 test('a diagram without the opt-in is drawn even when ELK fails to load', async ({ page }) => {
-  const errors: string[] = [];
-  page.on('pageerror', (error) => errors.push(error.message));
-  const mermaid = Object.entries(COPIES).find(([dir]) => dir !== MERMAID_ELK_DIR)!;
-  await page.route(`${mermaid[0]}**`, async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: 'text/javascript',
-      headers: { 'Access-Control-Allow-Origin': '*' },
-      body: fs.readFileSync(path.join(mermaid[1], route.request().url().slice(mermaid[0].length))),
-    });
-  });
+  const seen = await watch(page);
+  // Registered after watch's route, so it answers ELK's requests first.
   await page.route(`${MERMAID_ELK_DIR}**`, (route) => route.abort());
   // The capture fixture's diagram page: one default-layout flowchart, A --> B --> C.
   await page.goto('/capture-diagram.html?standalone');
   await expect(page.locator('pre.mermaid svg')).toHaveCount(1);
   await expect(page.locator('pre.mermaid svg g.node')).toHaveCount(3);
-  expect(errors).toEqual([]);
+  await seen.clean();
 });
