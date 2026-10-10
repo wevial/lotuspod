@@ -1,4 +1,8 @@
-import { expect, test, type Page } from '@playwright/test';
+import { execFileSync } from 'node:child_process';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { expect, test, type Page, type Route } from '@playwright/test';
 
 // The index's pod finder (lotuspod-index.js): Cmd+K on a Mac, Ctrl+K
 // elsewhere, the strip's "+" or its "Find a pod" button opens a dialog
@@ -12,7 +16,13 @@ import { expect, test, type Page } from '@playwright/test';
 const WIDE = { width: 1280, height: 800 };
 test.use({ viewport: WIDE });
 
-const SECOND = process.env.LOTUSPOD_TEST_ASSERTION_SECOND ?? '';
+const ENV = process.env;
+const SECOND = ENV.LOTUSPOD_TEST_ASSERTION_SECOND ?? '';
+const HERMES = ENV.LOTUSPOD_TEST_CREDENTIAL_HERMES ?? '';
+const OUT = ENV.LOTUSPOD_TEST_OUT ?? '';
+const PYTHON = ENV.LOTUSPOD_TEST_PYTHON ?? '';
+// This checkout's package, whatever lotuspod is installed.
+const SRC = path.resolve(__dirname, '..', '..', 'src');
 const SEEN = '/api/seen';
 const MAC_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 ' +
   '(KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36';
@@ -87,6 +97,26 @@ function listed(page: Page): Promise<Pod[]> {
   })));
 }
 
+// hermes publishes a page titled title as name, with a real `lotuspod
+// publish`, as pod-tabs.spec.ts does.
+function publish(name: string, title: string) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lotuspod-pod-finder-'));
+  try {
+    const file = path.join(dir, `${name}.md`);
+    fs.writeFileSync(file, `# ${title}\n\nThe pond freezes in January.\n`, 'utf-8');
+    const said = execFileSync(PYTHON, ['-m', 'lotuspod', 'publish', file, '--local', '--out-dir', OUT,
+      '--owner', 'hermes', '--credential', HERMES], {
+      encoding: 'utf-8',
+      env: { ...ENV, PYTHONPATH: SRC },
+      stdio: ['ignore', 'pipe', 'pipe'],
+      timeout: 60_000,
+    });
+    expect(said).toMatch(/at revision [0-9a-f]{12}/);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}
+
 // The Pages view of the index, its finder answered once.
 async function openIndex(page: Page, address = '/#pages') {
   await page.goto(address);
@@ -120,12 +150,13 @@ async function openRecorded(page: Page, pod: Pod) {
 }
 
 // Open the finder with the key, from wherever focus is, once it has drawn
-// its options.
+// its options and its reads of the seen route and the index have answered.
 async function find(page: Page) {
   await page.keyboard.press('ControlOrMeta+K');
   await expect(finder(page)).toBeVisible();
   await expect(input(page)).toBeFocused();
   await expect(options(page).first()).toBeVisible();
+  await expect(listbox(page)).not.toHaveAttribute('aria-busy', 'true');
 }
 
 // The option selected, by aria-selected and by the input's active descendant.
@@ -404,5 +435,146 @@ test.describe('signed out', () => {
     // The signed-out answers are the seen route's 401s, which the console
     // reports as failed loads.
     expect(errors.filter((error) => !/401/.test(error))).toEqual([]);
+  });
+});
+
+// Last, so the pods it publishes and opens are in no check above.
+test.describe('published after the index opened', () => {
+  test.use({ extraHTTPHeaders: { 'Cf-Access-Jwt-Assertion': SECOND } });
+
+  test('the finder lists a pod published since, Enter opens it, and a pod published again shows its new title', async ({ page }) => {
+    const errors = await watch(page);
+    const renamed = { name: 'pod-finder-renamed', title: 'Pod finder renamed after' };
+    publish(renamed.name, 'Pod finder renamed before');
+    await openIndex(page);
+    await expect(listingLink(page, renamed)).toHaveText('Pod finder renamed before');
+
+    const fresh = { name: 'pod-finder-fresh', title: 'Pod finder fresh' };
+    publish(fresh.name, fresh.title);
+    // The site's index lists it now.
+    expect(await (await page.request.get('/')).text()).toContain(`data-page="${fresh.name}"`);
+    await find(page);
+    await input(page).fill(fresh.title);
+    await expect(options(page).locator('.pod-finder-title')).toHaveText([fresh.title]);
+    await page.keyboard.press('Enter');
+    await expect(finder(page)).toBeHidden();
+    await expect(tabTitle(page, fresh)).toHaveAttribute('aria-current', 'page');
+    await expect(framed(page, fresh).locator('h1')).toHaveText(fresh.title);
+
+    publish(renamed.name, renamed.title);
+    expect(await (await page.request.get('/')).text()).toContain(renamed.title);
+    await find(page);
+    await input(page).fill('pod finder renamed');
+    await expect(options(page).locator('.pod-finder-title')).toHaveText([renamed.title]);
+    expect(errors).toEqual([]);
+  });
+});
+
+test.describe('the index read again answering 500', () => {
+  test.use({ extraHTTPHeaders: { 'Cf-Access-Jwt-Assertion': SECOND } });
+
+  test('the finder lists the pods it listed before and shows no error', async ({ page }) => {
+    const errors = await watch(page);
+    await openIndex(page);
+    const before = (await listed(page)).map((pod) => pod.name).sort();
+    let asked = 0;
+    await page.route((url) => url.pathname === '/', async (route) => {
+      if (route.request().resourceType() !== 'fetch') return route.continue();
+      asked += 1;
+      await route.fulfill({ status: 500, contentType: 'text/plain', body: 'down' });
+    });
+    const unlisted = { name: 'pod-finder-unlisted', title: 'Pod finder unlisted' };
+    publish(unlisted.name, unlisted.title);
+
+    await find(page);
+    await expect.poll(() => asked).toBe(1);
+    expect((await optionNames(page)).sort()).toEqual(before);
+    await input(page).fill(unlisted.title);
+    await expect(options(page)).toHaveCount(0);
+    await expect(finder(page).locator('.pod-finder-empty')).toHaveText(`No pod matches “${unlisted.title}”.`);
+    await page.keyboard.press('Escape');
+    await expect(finder(page)).toBeHidden();
+    // The console reports the routed 500 as a failed load.
+    expect(errors.filter((error) => !/500/.test(error))).toEqual([]);
+  });
+});
+
+test.describe('the seen route and the index read held', () => {
+  test.use({ extraHTTPHeaders: { 'Cf-Access-Jwt-Assertion': SECOND } });
+
+  test('the finder draws the pods it has at once, selects one once the seen route answers, and keeps it as either read answers', async ({ page }) => {
+    const errors = await watch(page);
+    await openIndex(page);
+    expect(await openRecorded(page, ARTICLE)).toBe('');
+    const seenHeld: Route[] = [];
+    const indexHeld: Route[] = [];
+    let holding = true;
+    await page.route((url) => url.pathname === SEEN, (route) => {
+      if (!holding || route.request().method() !== 'GET') return route.continue();
+      seenHeld.push(route);
+    });
+    await page.route((url) => url.pathname === '/', (route) => {
+      if (!holding || route.request().resourceType() !== 'fetch') return route.continue();
+      indexHeld.push(route);
+    });
+    const release = async (held: Route[]) => {
+      await expect.poll(() => held.length).toBeGreaterThan(0);
+      for (const route of held.splice(0)) await route.continue();
+    };
+    const chosen = finder(page).locator('[role="option"][aria-selected="true"]');
+    const held = { name: 'pod-finder-held', title: 'Pod finder held' };
+    publish(held.name, held.title);
+
+    // Opened with both reads held: the pods it has, drawn at once, none
+    // selected yet; once the index answers, typing lists the pod published
+    // since while the seen route is still held.
+    await page.keyboard.press('ControlOrMeta+K');
+    await expect(input(page)).toBeFocused();
+    await expect(options(page).first()).toBeVisible();
+    await expect(listbox(page)).toHaveAttribute('aria-busy', 'true');
+    await expect(optionFor(page, held)).toHaveCount(0);
+    await expect(chosen).toHaveCount(0);
+    await release(indexHeld);
+    await expect(optionFor(page, held)).toHaveCount(1);
+    await input(page).fill(held.title);
+    await expect(options(page).locator('.pod-finder-title')).toHaveText([held.title]);
+    await expect(chosen).toHaveCount(0);
+    await input(page).fill('');
+
+    // The seen route answers: the pod opened last comes first, selected.
+    await release(seenHeld);
+    await expect(listbox(page)).not.toHaveAttribute('aria-busy', 'true');
+    await expect(headings(page).first()).toHaveText('Recent');
+    await expect(options(page).first()).toHaveAttribute('data-page', ARTICLE.name);
+    expect(await selectedName(page)).toBe(ARTICLE.name);
+    await page.keyboard.press('Escape');
+    await expect(finder(page)).toBeHidden();
+
+    // Another pod opened since, the finder opened again with both reads held:
+    // the reader selects the first pod, and neither the index read nor the
+    // seen route putting the other pod first moves the selection.
+    holding = false;
+    expect(await openRecorded(page, CHECKLIST)).toBe('');
+    await home(page).click();
+    holding = true;
+    const later = { name: 'pod-finder-later', title: 'Pod finder later' };
+    publish(later.name, later.title);
+    await page.keyboard.press('ControlOrMeta+K');
+    await expect(options(page).first()).toHaveAttribute('data-page', ARTICLE.name);
+    await expect(chosen).toHaveCount(0);
+    await page.keyboard.press('ArrowDown');
+    expect(await selectedName(page)).toBe(ARTICLE.name);
+    await release(indexHeld);
+    await expect(optionFor(page, later)).toHaveCount(1);
+    expect(await selectedName(page)).toBe(ARTICLE.name);
+    await release(seenHeld);
+    await expect(listbox(page)).not.toHaveAttribute('aria-busy', 'true');
+    await expect(options(page).first()).toHaveAttribute('data-page', CHECKLIST.name);
+    expect(await selectedName(page)).toBe(ARTICLE.name);
+    await page.keyboard.press('Enter');
+    await expect(finder(page)).toBeHidden();
+    await expect(tabTitle(page, ARTICLE)).toHaveAttribute('aria-current', 'page');
+    await page.unrouteAll({ behavior: 'ignoreErrors' });
+    expect(errors).toEqual([]);
   });
 });
