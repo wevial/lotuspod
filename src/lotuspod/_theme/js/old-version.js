@@ -2,7 +2,8 @@
   // An earlier version's banner gains the page's version menu
   // (js/version-menu.js) before its "All versions" link: a "Choose a
   // version ▾" button whose menu marks the version shown "viewing". The
-  // page's name is read as js/versions.js reads it. The seen route is never
+  // page's name is the address's, the one serve answered this version for:
+  // a data-page in the page's body may be anyone's. The seen route is never
   // asked: an old version records no visit, so the menu has no "you last
   // looked".
   function oldVersionMenu() {
@@ -11,9 +12,7 @@
     if (!every) {
       return;
     }
-    var named = document.querySelector("[data-page]");
-    var page = named ? named.dataset.page :
-      decodeURIComponent(location.pathname.split("/").pop()).replace(/\.html$/, "");
+    var page = decodeURIComponent(location.pathname.split("/").pop()).replace(/\.html$/, "");
     var shown = new URLSearchParams(location.search).get("version");
 
     (async function () {

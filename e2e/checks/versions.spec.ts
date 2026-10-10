@@ -54,11 +54,12 @@ function changesSource(title: string, pump: string) {
   ].join('\n');
 }
 
-// hermes publishes markdown as the page name, with comments.
-function publish(name: string, markdown: string) {
+// hermes publishes markdown, or HTML with suffix .html, as the page name,
+// with comments.
+function publish(name: string, markdown: string, suffix = '.md') {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lotuspod-versions-'));
   try {
-    const file = path.join(dir, `${name}.md`);
+    const file = path.join(dir, `${name}${suffix}`);
     fs.writeFileSync(file, markdown, 'utf-8');
     const said = run('publish', file, '--local', '--out-dir', OUT, '--owner', OWNER,
       '--credential', HERMES, '--comments');
@@ -303,6 +304,39 @@ test.describe('signed in', () => {
     await banner.locator('.artifact-version-banner-text').click({ position: { x: 4, y: 4 } });
     await expect(menu).toBeHidden();
     await expect(choose).toHaveAttribute('aria-expanded', 'false');
+    expect(errors).toEqual([]);
+  });
+
+  test("an old version's banner menu is its own page's, whatever data-page its body carries", async ({ page }) => {
+    const errors = watchErrors(page);
+    const name = 'versions-named-check';
+    // An HTML page is published as it is written, any attribute kept.
+    const embedded = (edition: string) => [
+      '<h1>Versions named check</h1>', `<p>Edition: ${edition}.</p>`,
+      '<div data-page="capture-versions-many">Embedded.</div>', '',
+    ].join('\n');
+    publish(name, embedded('first'), '.html');
+    publish(name, embedded('second'), '.html');
+    const answered = await page.request.get(`/api/versions?page=${name}`);
+    expect(answered.status()).toBe(200);
+    const older = (await answered.json()).versions[1];
+
+    const asked: string[] = [];
+    page.on('request', (request) => {
+      const url = new URL(request.url());
+      if (url.pathname === '/api/versions') asked.push(url.search);
+    });
+    await page.goto(`/${name}.html?version=${older.commit}`);
+    await expect(page.locator('[data-page="capture-versions-many"]')).toHaveCount(1);
+    const choose = page.getByRole('button', { name: 'Choose a version' });
+    await choose.click();
+    const items = page.getByRole('menu').getByRole('menuitem');
+    await expect(items).toHaveCount(3);
+    expect(asked).toEqual([`?page=${name}`]);
+    await expect(items.nth(0)).toHaveAttribute('href', `${name}.html`);
+    await expect(items.nth(1)).toHaveAttribute('href', `${name}.html?version=${older.commit}`);
+    await expect(items.nth(1)).toHaveAttribute('aria-current', 'page');
+    await expect(items.nth(2)).toHaveAttribute('href', `${name}.html#versions`);
     expect(errors).toEqual([]);
   });
 
