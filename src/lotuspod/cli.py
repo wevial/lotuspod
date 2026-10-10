@@ -13,6 +13,7 @@ import io
 import json
 import os
 import re
+import secrets
 import shlex
 import shutil
 import signal
@@ -189,6 +190,9 @@ def render_template(context: dict, template_path: Path = TEMPLATE_PATH) -> str:
 # The pinned Mermaid's directory on jsDelivr. The page template's start-up
 # module imports the library from here, and the library its chunks.
 MERMAID_DIR = "https://cdn.jsdelivr.net/npm/mermaid@11.4.1/"
+# The ELK layout's directory, for Mermaid 11. The same module registers it,
+# so a diagram whose init line asks for layout "elk" is drawn with it.
+MERMAID_ELK_DIR = "https://cdn.jsdelivr.net/npm/@mermaid-js/layout-elk@0.2.3/"
 
 # Context values an author supplies. None of them is part of a script the
 # template writes, so a page rendered with them blank holds exactly the
@@ -240,17 +244,18 @@ def page_policy(page_html: str, own_scripts: set[str]) -> str:
 
     Scripts run from the site itself, and inline only when the template
     wrote them (own_scripts): each such script in the page is allowed by its
-    hash, and the Mermaid directory only when one of them loads from it. A
-    script in the body is never hashed, so it never runs, and neither does
-    an inline event handler.
+    hash, and the Mermaid and ELK directories each only when one of them
+    loads from it. A script in the body is never hashed, so it never runs,
+    and neither does an inline event handler.
     """
     script_src = ["'self'"]
     hashes: list[str] = []
     for text in collect_scripts(page_html).inline:
         if text not in own_scripts:
             continue
-        if MERMAID_DIR in text and MERMAID_DIR not in script_src:
-            script_src.append(MERMAID_DIR)
+        for directory in (MERMAID_DIR, MERMAID_ELK_DIR):
+            if directory in text and directory not in script_src:
+                script_src.append(directory)
         source = script_hash(text)
         if source not in hashes:
             hashes.append(source)
@@ -294,13 +299,20 @@ def script_warning(name: str, body: str) -> str:
 
 # The page script answers decision forms (lotuspod.decisions), shows and
 # posts comments (lotuspod.comments) and folds sections (lotuspod.sections),
-# and offers a reload once its page is published again; only a page with
-# any of them, or stamped with a revision (every published page), loads it.
+# and offers a reload once its page is published again. Every listed page
+# loads it: loaded on its own at the top level, a listed page first goes to
+# the index, opened there in a tab (js/open-in-tabs.js), and runs none of the
+# rest. A page not listed loads it only with any of those, a revision or a
+# link.
 PAGE_SCRIPT = "lotuspod-page.js"
 # The index script opens pods in tabs over the index's listing; the index
 # loads it deferred, beside its own inline script.
 INDEX_SCRIPT = "lotuspod-index.js"
-THEME_FILES = ("lotuspod.css", "favicon.svg", PAGE_SCRIPT, INDEX_SCRIPT)
+# The old-version script draws the version menu in an earlier version's
+# banner (lotuspod.versions.old_page); serve allows it there, and only it, by
+# a nonce of its own answer (_OLD_VERSION_HEADERS).
+OLD_VERSION_SCRIPT = "lotuspod-old-version.js"
+THEME_FILES = ("lotuspod.css", "favicon.svg", PAGE_SCRIPT, INDEX_SCRIPT, OLD_VERSION_SCRIPT)
 # The served files written as one source per feature, relative to THEME_DIR:
 # each is its sources joined in this order, byte for byte. A theme file not
 # named here is served as it is. A new feature's file takes one line here.
@@ -318,6 +330,7 @@ THEME_SOURCES = {
         "css/prose.css",
         "css/ref-cards.css",
         "css/diagram-cards.css",
+        "css/diagram-view.css",
         "css/report.css",
         "css/table-expand.css",
         "css/image-viewer.css",
@@ -328,7 +341,9 @@ THEME_SOURCES = {
         "css/archive.css",
     ),
     PAGE_SCRIPT: (
+        "js/open-in-tabs.js",
         "js/page-open.js",
+        "js/shared.js",
         "js/link-tab.js",
         "js/decisions.js",
         "js/review-sheet.js",
@@ -344,6 +359,7 @@ THEME_SOURCES = {
         "js/version-menu.js",
         "js/versions.js",
         "js/diagram-cards.js",
+        "js/diagram-view.js",
         "js/ref-cards.js",
         "js/archive.js",
         "js/page-close.js",
@@ -351,6 +367,13 @@ THEME_SOURCES = {
     INDEX_SCRIPT: (
         "js/pod-tabs.js",
         "js/pod-finder.js",
+    ),
+    OLD_VERSION_SCRIPT: (
+        "js/old-version-open.js",
+        "js/shared.js",
+        "js/version-menu.js",
+        "js/old-version.js",
+        "js/page-close.js",
     ),
 }
 
@@ -409,8 +432,7 @@ def theme_hash() -> str:
 def sync_theme_css(out_dir: Path) -> None:
     """Keep the artifact dir's theme files identical to the packaged theme.
 
-    Covers the stylesheet, the favicon, the page script and the index script
-    (THEME_FILES).
+    Covers the served theme files (THEME_FILES).
     Rewriting only on a content difference means a theme upgrade reaches
     already-rendered directories while untouched ones keep their mtime.
     """
@@ -762,13 +784,17 @@ def cmd_render(args: argparse.Namespace) -> int:
         "variant_class": variant_class(args.variant),
         "mermaid": has_mermaid_block(body),
         # A page stamped with a revision notices when it is published again,
-        # and a link off the site opens in a new tab.
-        "page_script_needed": (has_decisions or with_comments or wrapped or has_node_tables
-                               or bool(refs_block) or bool(getattr(args, "revision", ""))
-                               or has_link(body)),
+        # a link off the site opens in a new tab, a diagram can be expanded
+        # to fill the window, and a listed page loaded on its own opens in
+        # the index's tabs.
+        "page_script_needed": (not args.hidden or has_decisions or with_comments or wrapped
+                               or has_node_tables or bool(refs_block)
+                               or bool(getattr(args, "revision", "")) or has_link(body)
+                               or has_mermaid_block(body)),
         "page_script": PAGE_SCRIPT,
         "mermaid_theme_variables": mermaid_theme_variables(tokens),
         "mermaid_dir": MERMAID_DIR,
+        "mermaid_elk_dir": MERMAID_ELK_DIR,
     }
     html = render_page(context)
 
@@ -2017,7 +2043,8 @@ def cmd_publish(args: argparse.Namespace) -> int:
 
 _SERVE_CSS_FILE = "lotuspod.css"
 _SERVE_ICON_FILE = "favicon.svg"
-_SERVE_SUPPORT_FILES = (_SERVE_CSS_FILE, _SERVE_ICON_FILE, PAGE_SCRIPT, INDEX_SCRIPT)
+_SERVE_SUPPORT_FILES = (_SERVE_CSS_FILE, _SERVE_ICON_FILE, PAGE_SCRIPT, INDEX_SCRIPT,
+                        OLD_VERSION_SCRIPT)
 _SERVE_NEVER_FILES = frozenset({MANIFEST_FILE, "FINDINGS.md"})
 _DENY_PATH_NAME = ".lotuspod-not-found"
 
@@ -2131,11 +2158,15 @@ _PAGE_HEADERS = (
 
 
 # Headers on an earlier version of a page, in place of _PAGE_HEADERS: its
-# policy adds to the page's own meta policy, so none of its scripts and no
-# form runs, no page frames it, and it is never kept.
+# policy adds to the page's own meta policy, so no form runs, no page frames
+# it, and it is never kept. _serve_version adds the policy's script source:
+# a nonce made for each answer, which allows the one script old_page() adds,
+# the old-version script. None of the page's own scripts carries it, so none
+# of them runs; and no base element in the page may move that script's
+# address to another site, as a page published before its own meta policy
+# (page_policy) could.
 _OLD_VERSION_HEADERS = (
-    ("Content-Security-Policy",
-     "frame-ancestors 'none'; script-src 'none'; form-action 'none'"),
+    ("Content-Security-Policy", "frame-ancestors 'none'; form-action 'none'; base-uri 'none'"),
     ("X-Content-Type-Options", "nosniff"),
     ("Cache-Control", "private, no-store"),
 )
@@ -2316,12 +2347,16 @@ class _AllowListHandler(SimpleHTTPRequestHandler):
             self.send_error(HTTPStatus.NOT_FOUND, "File not found")
             return None
         version, behind, page_html = found
-        data = versions.old_page(page_html, stem, version, behind).encode("utf-8")
+        nonce = secrets.token_urlsafe(18)
+        script = f"{OLD_VERSION_SCRIPT}?v={theme_hash()}"
+        data = versions.old_page(page_html, stem, version, behind, nonce, script).encode("utf-8")
         self._page_response, self._media_type = False, ""
         self.send_response(HTTPStatus.OK)
         self.send_header("Content-Type", "text/html; charset=utf-8")
         self.send_header("Content-Length", str(len(data)))
         for header, value in _OLD_VERSION_HEADERS:
+            if header == "Content-Security-Policy":
+                value += f"; script-src 'nonce-{nonce}'"
             self.send_header(header, value)
         self.end_headers()
         return io.BytesIO(data)
@@ -2632,12 +2667,15 @@ def answers_text(name: str, questions: dict, forms: dict[str, decisions.Form]) -
     decision answered at its form's version with another option than the
     form's default says so: "LABEL, was: DEFAULT-LABEL". An answer an agent
     recorded from elsewhere names the handle that recorded it and where it
-    was given."""
+    was given. A dismissal is "Dismissed", its note its reason, and says
+    when it was undone, if it was."""
     if not questions:
         return f"no answers to {name}"
 
     def entry(row: dict, form: decisions.Form | None, indent: str) -> list[str]:
-        if "checked" in row:
+        if row.get("dismissed"):
+            label = "Dismissed"
+        elif "checked" in row:
             if form is not None and row["version"] == form.version:
                 label = api.summary(api.changes(dict(form.options), form.defaults,
                                                 row["checked"]))
@@ -2654,6 +2692,8 @@ def answers_text(name: str, questions: dict, forms: dict[str, decisions.Form]) -
         head += ")"
         if form is None or row["version"] != form.version:
             head += ", to an earlier wording"
+        if "undoneAt" in row:
+            head += f", undone at {row['undoneAt']}"
         if "source" in row:
             by = (f"recorded by {row['actor'].get('handle', '')} at {row['createdAt']}, "
                   f"answered elsewhere: {row['source']}")
@@ -2661,7 +2701,10 @@ def answers_text(name: str, questions: dict, forms: dict[str, decisions.Form]) -
             by = f"by {row['actor'].get('email', '')} at {row['createdAt']}"
         lines = [head, f"{indent}  {by}"]
         if row["note"]:
-            lines.append(f"{indent}  note: {row['note']}")
+            if row.get("dismissed"):
+                lines.append(f"{indent}  reason: {agents.one_line(row['note'])}")
+            else:
+                lines.append(f"{indent}  note: {row['note']}")
         return lines
 
     lines = []

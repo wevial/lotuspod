@@ -29,7 +29,8 @@ however far back it is, and one git cat-file --batch for the blobs and
 texts not known yet.
 
 old_page() is a version's HTML as serve answers it: marked as old, with a
-banner linking back to the current page, and its decision forms disabled.
+banner linking back to the current page, its decision forms disabled, and
+the one script that runs on it, which draws the banner's version menu.
 
 compare() is what changed between two versions: the sections of each body,
 split at its h2 elements by id and compared by their text with whitespace
@@ -718,8 +719,11 @@ def _disable_forms(page_html: str, note: str) -> str:
                               for edit in ((start, start, " disabled"), (end, end, "\n" + note))])
 
 
-def old_page(page_html: str, name: str, version: Version, behind: int) -> str:
-    """An earlier version's HTML as serve answers it."""
+def old_page(page_html: str, name: str, version: Version, behind: int,
+             nonce: str, script: str) -> str:
+    """An earlier version's HTML as serve answers it, ending in one script
+    element: script, the old-version script's address, allowed by nonce, the
+    answer's own; no other script in the page carries it."""
     current = html.escape(urllib.parse.quote(f"{name}.html"))
     page_html = _disable_forms(page_html, (
         '<p class="artifact-version-note">Answering is off on old versions. '
@@ -739,4 +743,10 @@ def old_page(page_html: str, name: str, version: Version, behind: int) -> str:
     def opened(match: re.Match) -> str:
         return f'<main class="{match.group(1)} artifact--old-version"{match.group(2)}>{banner}'
 
-    return _MAIN_OPEN_RE.sub(opened, page_html, count=1)
+    page_html = _MAIN_OPEN_RE.sub(opened, page_html, count=1)
+    tag = (f'  <script nonce="{html.escape(nonce)}" src="{html.escape(script)}" defer>'
+           '</script>\n')
+    end = page_html.rfind("</body>")
+    if end < 0:
+        return page_html + tag
+    return page_html[:end] + tag + page_html[end:]

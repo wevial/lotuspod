@@ -42,6 +42,7 @@ import argparse
 import json
 import re
 import sys
+import unicodedata
 import urllib.parse
 from pathlib import Path
 
@@ -147,13 +148,26 @@ def moved(comment: dict, revision: str) -> str:
             f"the page is now at revision {revision or 'unknown'}")
 
 
+def one_line(text: str) -> str:
+    """text with each control character a space, then every run of
+    whitespace, line breaks included, one space: a reader's words printed
+    unfenced never start a line of their own nor drive the terminal."""
+    shown = "".join(" " if unicodedata.category(char) == "Cc" else char for char in text)
+    return " ".join(shown.split())
+
+
 def answered(decision: dict) -> str:
     """A decision's current answer: its label and choice, who and when, and
     where it was given when an agent recorded it from elsewhere; "not
-    answered yet" when it has none."""
+    answered yet" when it has none, and "dismissed, by NAME at TIME", with
+    ": REASON" when it has one, when an owner dismissed it."""
     answer = decision["answer"]
     if answer is None:
         return "not answered yet"
+    if answer.get("dismissed"):
+        line = f"dismissed, by {_by(answer)} at {answer['createdAt']}"
+        reason = one_line(answer["note"])
+        return line + f": {reason}" if reason else line
     label = next((option["label"] for option in decision["options"]
                   if option["value"] == answer["choice"]), answer["choice"])
     line = f"{label} (`{answer['choice']}`), by {_by(answer)} at {answer['createdAt']}"
@@ -199,7 +213,7 @@ def images(row: dict) -> list[str]:
 
 def _message(row: dict, level: str) -> list[str]:
     """One comment of a thread: who, when, which model wrote it, where it
-    stands, its text and its images."""
+    stands, the answer whose note it holds, its text and its images."""
     kind = "Comment" if row.get("parent") is None else "Reply"
     head = f"{level} {kind} {row['id']}, {_by(row)}, {row['createdAt']}"
     if row.get("model"):
@@ -207,11 +221,26 @@ def _message(row: dict, level: str) -> list[str]:
     if row.get("owner"):
         head += f" ({_standing(row)})"
     lines = [head, ""]
+    if row.get("answer"):
+        answer = row["answer"]
+        choice = f" (`{answer['choice']}`)" if answer["choice"] else ""
+        lines += [f"- With answer {answer['id']}: {answer['label']}{choice}", ""]
     if row.get("quote"):
         lead = f"The reader highlighted, on revision {row['revision'] or 'unknown'}:"
         lines += passage(row["quote"], lead)
     lines += [fence(row["text"]), "", *images(row)]
     return lines
+
+
+def _note_line(comment: int, routed: dict, owner: str) -> str:
+    """The line pointing an answer item to the comment holding its note:
+    to claim it only when this pull has it routed to owner."""
+    line = f"- Note: comment {comment}, in a thread on this decision"
+    if comment not in routed:
+        return line
+    if routed[comment] == owner:
+        return line + "; claim and reply to it there"
+    return line + f"; routed to {routed[comment]}, which may claim it"
 
 
 def _page_lines(page: dict) -> list[str]:
@@ -230,6 +259,9 @@ def pull_text(payload: dict) -> str:
     if not items:
         lines.append("Nothing waits for this handle.")
     pages: dict[str, dict] = {}
+    # The handle each pulled comment is routed to, by its id.
+    routed = {item["comment"]["id"]: item["comment"].get("owner")
+              for item in items if item["kind"] == "comment"}
     for number, item in enumerate(items, 1):
         page = item["page"]
         pages.setdefault(page["name"], page)
@@ -246,7 +278,13 @@ def pull_text(payload: dict) -> str:
             decision = item.get("decision")
             if decision:
                 lines += _decision(decision)
-                if decision["answer"] and decision["answer"]["note"]:
+                # A note the thread holds is read there, not twice, also
+                # once kept unchanged with another option.
+                noted = {row["text"] for row in thread if row.get("answer")}
+                # A dismissal's reason is on its Answer line.
+                if (decision["answer"] and decision["answer"]["note"]
+                        and not decision["answer"].get("dismissed")
+                        and decision["answer"]["note"] not in noted):
                     lines += ["", "The answer's note:", "", fence(decision["answer"]["note"])]
             if comment.get("quote"):
                 lines += [f"- Passage: highlighted on {moved(comment, page['revision'])}", "",
@@ -258,7 +296,14 @@ def pull_text(payload: dict) -> str:
             else:
                 take = (f"- Passed to {comment.get('owner')} once the owner window ended; "
                         "only it may claim this")
-            lines += [fence(comment["text"]), "", *images(comment), take, ""]
+            # A note's comment is read once, in the thread below, under the
+            # answer it came with.
+            if comment.get("answer") and comment["id"] in {row["id"] for row in thread}:
+                said = [f"- Note: the reader's note on answer {comment['answer']['id']}, "
+                        f"comment {comment['id']} in the thread below", ""]
+            else:
+                said = [fence(comment["text"]), "", *images(comment)]
+            lines += [*said, take, ""]
             about = "the thread's first comment and its latest replies"
             if item["omitted"]:
                 about += f"; {item['omitted']} earlier replies left out"
@@ -270,7 +315,13 @@ def pull_text(payload: dict) -> str:
             asked = question["text"] or "(its words were not kept)"
             if question["reworded"]:
                 asked += " (the page now asks it in other words, or not at all)"
-            if "checked" in answer:
+            dismissed = answer.get("dismissed")
+            if dismissed:
+                # Its reason is said here, once.
+                reason = one_line(answer["note"])
+                reason = f": {reason}" if reason else ""
+                chosen = [f"- Chosen: Dismissed{reason}"]
+            elif "checked" in answer:
                 chosen = [f"- Chosen: {question['label']}"]
                 if question.get("changed") is not None:
                     chosen += [f"- Changed: {item['label']} (`{item['id']}`) "
@@ -292,14 +343,18 @@ def pull_text(payload: dict) -> str:
                 f"- From: {_by(answer)} at {answer['createdAt']}, "
                 f"against revision {answer['revision'] or 'unknown'}",
                 *([f"- Answered elsewhere: {answer['source']}"] if answer.get("source") else []),
+                *([f"- Undone at {answer['undoneAt']}"] if answer.get("undoneAt") else []),
+                *([_note_line(item["noteComment"], routed, payload["owner"])]
+                  if item.get("noteComment") else []),
                 f"- Acknowledge: `lotuspod comments ack-answer {answer['id']}`",
                 "",
-                ("The answer was given elsewhere and recorded by an agent, on this question "
+                ("The reader dismissed this question as no longer relevant." if dismissed else
+                 "The answer was given elsewhere and recorded by an agent, on this question "
                  "only." if answer.get("source") else
                  "The answer is the reader's choice on this question only."),
                 "",
             ]
-            if answer["note"]:
+            if answer["note"] and not dismissed and not item.get("noteComment"):
                 lines += ["Note:", "", fence(answer["note"]), ""]
     for page in pages.values():
         if not page["sourceFile"]:

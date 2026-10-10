@@ -167,7 +167,7 @@ async function pass(page: Page, ms: number) {
 }
 
 async function load(page: Page) {
-  await page.goto(PAGE);
+  await page.goto(`${PAGE}?standalone`);
   await expect(page.locator('.artifact-body details.artifact-comment')).toHaveCount(3);
   await settle(page);
 }
@@ -193,7 +193,7 @@ test.describe('signed in', () => {
     // hermes pulls first, so it is listening and the comment waits for it.
     hermes('pull', '--owner', OWNER);
 
-    await page.goto(PAGE);
+    await page.goto(`${PAGE}?standalone`);
     const steps = box(page, 'next-steps');
     await steps.summary.click();
     await expect(steps.popover).toBeVisible();
@@ -255,7 +255,7 @@ test.describe('signed in', () => {
     expect(posted.status()).toBe(201);
     const { id } = await posted.json();
 
-    await page.goto(PAGE);
+    await page.goto(`${PAGE}?standalone`);
     await box(page, 'next-steps').summary.click();
     const mine = thread(page, { id });
     await expect(mine.node).toBeVisible();

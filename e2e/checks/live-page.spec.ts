@@ -104,7 +104,7 @@ async function stopClock(page: Page) {
 async function open(page: Page, name: string) {
   const read = page.waitForResponse((response) =>
     new URL(response.url()).pathname === '/api/comments' && response.request().method() === 'GET');
-  await page.goto(`/${name}.html`);
+  await page.goto(`/${name}.html?standalone`);
   await read;
 }
 
@@ -206,7 +206,7 @@ test.describe('signed in', () => {
     const NOTE = (edition: string) => `# Live page plain\n\nEdition: ${edition}. One note, no sections.\n`;
     const first = publish(name, NOTE('first'), '--no-comments');
     await stopClock(page);
-    await page.goto(`/${name}.html`);
+    await page.goto(`/${name}.html?standalone`);
     expect(await revisionOf(page)).toBe(first);
     await expect(page.locator('details.artifact-comment, form.artifact-decision, h2')).toHaveCount(0);
 
@@ -303,7 +303,7 @@ test.describe('signed in', () => {
     let release = () => {};
     const held = new Promise<void>((resolve) => { release = resolve; });
     let asked = false;
-    await page.route(`**/${name}.html`, async (route) => {
+    await page.route((url) => url.pathname === `/${name}.html`, async (route) => {
       if (route.request().resourceType() === 'fetch') {
         asked = true;
         await held;

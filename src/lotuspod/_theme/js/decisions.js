@@ -3,10 +3,18 @@
   // one row per answered question, newest first, read from the answers route
   // for the page every form and comment box names. forms may be empty, on a
   // page whose decisions are no longer asked.
+  //
+  // An owner (one of the [access] owners, as the archive route says) may
+  // dismiss a decision that no longer matters, the note's text its reason:
+  // the dismissal is an answer of its own, folded to "Dismissed: REASON" with
+  // an Undo for an owner, which puts the decision back as it stood.
   function answerForms(forms, page) {
     // Each question the read found answered, to its current answer.
     var stored = new Map();
     var answered = null;
+    // Whether the reader may dismiss and undo, once the archive route says so.
+    var owner = false;
+    var MAX_REASON = 200;
 
     function radios(form) {
       return all('input[type="radio"][name="choice"]', form);
@@ -71,11 +79,21 @@
       return Array.isArray(answer.checked) ? answer.checked.join(", ") : String(answer.choice);
     }
 
-    // The label the form shows for an answer: a decision's option label, or
-    // the choice itself when it offers no such option (an answer to an
-    // earlier wording); a checklist's summary while the answer is at the
-    // form's version, else the words it was given in.
+    // The note an answer leaves in its form: none for a dismissal, whose note
+    // is its reason.
+    function noteOf(answer) {
+      return answer && answer.note && !answer.dismissed ? answer.note : "";
+    }
+
+    // The label the form shows for an answer: "Dismissed" for a dismissal;
+    // a decision's option label, or the choice itself when it offers no
+    // such option (an answer to an earlier wording); a checklist's summary
+    // while the answer is at the form's version, else the words it was
+    // given in.
     function label(form, answer) {
+      if (answer.dismissed) {
+        return "Dismissed";
+      }
       if (isChecklist(form)) {
         return answer.version === form.dataset.version ? summary(form, answer.checked || []) :
           kept(answer);
@@ -110,7 +128,7 @@
           return true;
         }
       }
-      return form.elements.note.value !== (answer && answer.note ? answer.note : "");
+      return form.elements.note.value !== noteOf(answer);
     }
 
     // The lavender rule and "Not saved" while the form differs from its
@@ -158,7 +176,9 @@
     }
 
     // The folded card: "✓ Saved · LABEL · change", where an answer an agent
-    // recorded was given, the note, who and when.
+    // recorded was given, the note, who and when. A dismissal's is
+    // "Dismissed: REASON · Undo", Undo for an owner only, then who and when.
+    // The button the card offers is returned.
     function fold(form, answer) {
       var block = form.querySelector(".artifact-decision-saved");
       if (!block) {
@@ -167,6 +187,22 @@
         legend.parentNode.insertBefore(block, legend.nextSibling);
       }
       var line = element("p", "artifact-decision-saved-line");
+      if (answer.dismissed) {
+        line.append(answer.note ? "Dismissed: " + answer.note : "Dismissed");
+        var back = null;
+        if (owner) {
+          back = element("button", "artifact-decision-undo", "Undo");
+          back.type = "button";
+          back.addEventListener("click", function () {
+            back.disabled = true;
+            queue(form, function () { return undo(form, back); });
+          });
+          line.append(" · ", back);
+        }
+        block.replaceChildren(line, element("p", "artifact-decision-saved-by",
+          reader(answer) + " · " + when(answer.createdAt)));
+        return back;
+      }
       var check = element("span", "artifact-decision-check", "✓");
       check.setAttribute("aria-hidden", "true");
       var change = element("button", "artifact-decision-change", "change");
@@ -218,6 +254,7 @@
         child.hidden = child.classList.contains("artifact-decision-saved") ? !folded : folded;
       });
       form.classList.toggle("artifact-decision--saved", folded);
+      form.classList.toggle("artifact-decision--dismissed", folded && Boolean(answer.dismissed));
       history(form);
       mark(form);
       return change;
@@ -240,7 +277,7 @@
           radio.checked = radio.value === answer.choice;
         });
       }
-      form.elements.note.value = answer.note || "";
+      form.elements.note.value = noteOf(answer);
     }
 
     // The words of a form's part, its whitespace collapsed.
@@ -267,9 +304,9 @@
     }
 
     // A row of the table. A question the page asks at the answer's version
-    // takes its number, question and label from its card, and has "change";
-    // any other takes the words it was answered in, or else its id and the
-    // choice. A checklist has no number.
+    // takes its number, question and label from its card, and has "change"
+    // unless it is dismissed; any other takes the words it was answered in,
+    // or else its id and the choice. A checklist has no number.
     function row(answer) {
       var question = String(answer.question);
       var form = formOf(question);
@@ -282,7 +319,7 @@
       var chosen = asks ? label(form, answer) : kept(answer);
       var line = element("p", "artifact-answered-choice");
       line.appendChild(element("strong", "", chosen));
-      if (asks) {
+      if (asks && !answer.dismissed) {
         var change = element("button", "artifact-decision-change", "change");
         change.type = "button";
         change.addEventListener("click", function () { reopen(form); });
@@ -408,14 +445,20 @@
       status(form, text);
     }
 
-    // Post a form's answer, as picked when its turn comes, with its note:
-    // true once it is saved and the form drawn from it, false when it is
-    // not, with why in the form's status. A form posts one answer at a
-    // time, so an older post never lands after a newer one.
-    function save(form) {
-      var turn = (form.lotuspodSaving || Promise.resolve()).then(function () { return post(form); });
+    // Run work once the form's earlier posts are answered: a form posts one
+    // answer, dismissal or undo at a time, so an older post never lands
+    // after a newer one.
+    function queue(form, work) {
+      var turn = (form.lotuspodSaving || Promise.resolve()).then(work);
       form.lotuspodSaving = turn;
       return turn;
+    }
+
+    // Post a form's answer, as picked when its turn comes, with its note:
+    // true once it is saved and the form drawn from it, false when it is
+    // not, with why in the form's status.
+    function save(form) {
+      return queue(form, function () { return post(form); });
     }
 
     async function post(form) {
@@ -454,13 +497,16 @@
         if (answers.current) {
           answers.earlier.unshift(answers.current);
         }
-        answers.current = payload;
+        // The answer itself; a note's comment, when one was stored, goes
+        // with SAVED to the comment threads.
+        answers.current = Object.assign({}, payload);
+        delete answers.current.comment;
         // A pick or note changed while this was saving stays open, not saved.
         form.lotuspodEditing = dirty(form);
         status(form, "");
         draw(form);
         table();
-        form.dispatchEvent(new CustomEvent(SAVED));
+        form.dispatchEvent(new CustomEvent(SAVED, { detail: payload }));
         return true;
       } catch (ignored) {
         refused(form, "Your answer was not saved: the site did not answer. Try again.");
@@ -468,6 +514,179 @@
       } finally {
         button.disabled = false;
       }
+    }
+
+    function undismissed(response, payload) {
+      if (response.status === 401) {
+        return SIGNED_OUT;
+      }
+      var error = payload && payload.error ? String(payload.error) : "status " + response.status;
+      if (response.status === 409 && error === "stale") {
+        return STALE;
+      }
+      return "This decision was not dismissed (" + error + "). Try again.";
+    }
+
+    // Dismiss, in the form's turn: the note's text as it then reads,
+    // trimmed, posted as the reason, its length counted in characters as
+    // the server counts them. Dismissed, no option stays picked, the note is
+    // emptied and folded, as Ask leaves it, and the form folds to the
+    // dismissal. A note written while it was dismissing stays in the folded
+    // card, unsent, for Undo to open again.
+    async function dismiss(form, button) {
+      var note = form.elements.note;
+      var sent = note.value;
+      var reason = sent.trim();
+      try {
+        if (Array.from(reason).length > MAX_REASON) {
+          status(form, "Shorten the note to " + MAX_REASON +
+            " characters to dismiss with it as the reason.");
+          return;
+        }
+        status(form, "Dismissing this decision...");
+        var response = await fetch(ANSWERS, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            page: form.dataset.page, question: form.dataset.question,
+            version: form.dataset.version, dismissed: true, reason: reason,
+          }),
+        });
+        var payload = await json(response);
+        if (response.status !== 201 || !payload) {
+          refused(form, undismissed(response, payload));
+          return;
+        }
+        var answers = form.lotuspodAnswers;
+        if (answers.current) {
+          answers.earlier.unshift(answers.current);
+        }
+        answers.current = payload;
+        radios(form).forEach(function (radio) { radio.checked = false; });
+        if (note.value === sent) {
+          note.value = "";
+          var fold = note.closest("details");
+          if (fold) {
+            fold.open = false;
+          }
+        }
+        form.lotuspodEditing = false;
+        status(form, "");
+        var back = draw(form);
+        table();
+        form.dispatchEvent(new CustomEvent(SAVED, { detail: payload }));
+        if (back) {
+          back.focus();
+        }
+      } catch (ignored) {
+        refused(form, "This decision was not dismissed: the site did not answer. Try again.");
+      } finally {
+        button.disabled = false;
+      }
+    }
+
+    // Why an Undo failed, under the dismissed card, which stays folded so
+    // its Undo can be pressed again.
+    function cardSays(form, text) {
+      var block = form.querySelector(".artifact-decision-saved");
+      var said = block.querySelector(".artifact-decision-saved-status");
+      if (!said) {
+        said = element("p", "artifact-decision-saved-status");
+        said.setAttribute("role", "status");
+        block.appendChild(said);
+      }
+      said.textContent = text;
+    }
+
+    // Undo, in the form's turn: the dismissal taken back, and the form drawn
+    // from the answers the route gives back, its inputs as they hold, or
+    // only its default picked when no answer is left, as the page opened it,
+    // so a pick made in the review sheet while it was dismissed goes. A note
+    // written while it was dismissed stays, the form open to save it. A
+    // question with no answer left also leaves the answers read on load, so
+    // the table drops its row, and a read that is still coming is not taken
+    // over it.
+    async function undo(form, button) {
+      try {
+        var response = await fetch(ANSWERS, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            page: form.dataset.page, question: form.dataset.question, dismissed: false,
+          }),
+        });
+        var payload = await json(response);
+        if (response.status !== 200 || !payload) {
+          var error = payload && payload.error ? String(payload.error) : "status " + response.status;
+          cardSays(form, response.status === 401 ? SIGNED_OUT :
+            "This dismissal was not undone (" + error + "). Try again.");
+          return;
+        }
+        form.lotuspodAnswers = { current: payload.current, earlier: payload.earlier.slice() };
+        form.lotuspodUndone = true;
+        if (!payload.current) {
+          stored.delete(form.dataset.question);
+        }
+        var draft = form.elements.note.value;
+        radios(form).forEach(function (radio) {
+          radio.checked = !saved(form) && radio.value === (form.dataset.default || null);
+        });
+        fill(form);
+        if (draft) {
+          form.elements.note.value = draft;
+          var noteFold = form.elements.note.closest("details");
+          if (noteFold) {
+            noteFold.open = true;
+          }
+        }
+        form.lotuspodEditing = dirty(form);
+        status(form, "");
+        var change = draw(form);
+        table();
+        form.dispatchEvent(new CustomEvent(SAVED, { detail: payload }));
+        var next = change || form.querySelector("input");
+        if (next) {
+          next.focus();
+        }
+      } catch (ignored) {
+        cardSays(form, "This dismissal was not undone: the site did not answer. Try again.");
+      } finally {
+        button.disabled = false;
+      }
+    }
+
+    // Each decision's Dismiss, after its Save answer and Ask, and Undo on
+    // its dismissed card, only once the archive route says the reader is an
+    // owner. An archived page takes no answer, so it asks nothing.
+    function mayDismiss() {
+      if (ARCHIVED || !forms.length) {
+        return;
+      }
+      fetch("/api/archive?page=" + encodeURIComponent(page)).then(async function (response) {
+        var payload = response.status === 200 ? await json(response) : null;
+        if (!payload || payload.mayArchive !== true) {
+          return;
+        }
+        owner = true;
+        forms.forEach(function (form) {
+          if (!isChecklist(form)) {
+            var button = element("button", "artifact-decision-dismiss", "Dismiss");
+            button.type = "button";
+            button.addEventListener("click", function () {
+              button.disabled = true;
+              queue(form, function () { return dismiss(form, button); });
+            });
+            var after = form.querySelector(".artifact-decision-ask") ||
+              form.querySelector('button[type="submit"]');
+            after.parentNode.insertBefore(button, after.nextSibling);
+          }
+          if (form.classList.contains("artifact-decision--dismissed")) {
+            draw(form);
+          }
+        });
+      }).catch(function () {
+        // No answer: no Dismiss and no Undo.
+      });
     }
 
     async function submit(event) {
@@ -486,23 +705,31 @@
         return false;
       }
       var questions = (await response.json()).questions || {};
+      // A form undone while this was loading holds what the undo gave
+      // back, which is newer than what was read.
       Object.keys(questions).forEach(function (question) {
         var entry = questions[question];
-        if (entry && entry.current) {
+        var form = formOf(question);
+        if (entry && entry.current && !(form && form.lotuspodUndone)) {
           stored.set(question, entry.current);
         }
       });
       forms.forEach(function (form) {
-        var entry = Object.prototype.hasOwnProperty.call(questions, form.dataset.question)
-          ? questions[form.dataset.question] : null;
+        var entry = Object.prototype.hasOwnProperty.call(questions, form.dataset.question) &&
+          !form.lotuspodUndone ? questions[form.dataset.question] : null;
         // A form answered while this was loading already shows the newest,
         // and one picked or written in (or restored by the browser) other
-        // than its answer stays open as the reader left it.
+        // than its answer stays open as the reader left it. A dismissal
+        // folds it all the same, as Dismiss does: no option stays picked,
+        // and a note written stays in the folded card for Undo to open.
         if (entry && !form.lotuspodAnswers.current) {
           var touched = (isChecklist(form) ? !same(ticked(form, "checked"), ticked(form, "defaultChecked")) :
             form.querySelector('input[name="choice"]:checked')) || form.elements.note.value;
           form.lotuspodAnswers = { current: entry.current, earlier: entry.earlier.slice() };
-          if (touched && dirty(form)) {
+          if (saved(form) && saved(form).dismissed) {
+            radios(form).forEach(function (radio) { radio.checked = false; });
+            form.lotuspodEditing = false;
+          } else if (touched && dirty(form)) {
             form.lotuspodEditing = true;
           } else {
             fill(form);
@@ -522,6 +749,7 @@
       form.addEventListener("change", function () { mark(form); });
       mark(form);
     });
+    mayDismiss();
     // What the review sheet (js/review-sheet.js) reads the forms by; read
     // is true once the answers are read, so a failed read is never taken
     // for a page with nothing answered.

@@ -88,6 +88,45 @@ the block is left exactly as written, since Mermaid reads it verbatim; before
 the script runs, or without scripting, it reads as a code block. A body with no
 diagram block ships no script and no CDN reference at all.
 
+The same script registers Mermaid's ELK layout (`@mermaid-js/layout-elk`
+0.2.3), which it loads only when a diagram asks for it, so a diagram without
+the opt-in draws even if ELK cannot load. Diagrams use Mermaid's default
+layout unless they opt in. To opt in,
+make the diagram's first line an init line that asks for `elk`. ELK keeps
+lanes drawn as subgraphs in their own boxes and routes the arrows between them
+in straight channels. Node cards, the Expand view and status colors work as
+on any other diagram:
+
+```html
+<pre class="mermaid">
+%%{init: {"layout": "elk"}}%%
+flowchart LR
+  subgraph docs [Docs]
+    a[Draft] --> b[Review]
+  end
+  subgraph code [Code]
+    c[Build] --> d[Ship]
+  end
+  a --> c
+  b --> d
+</pre>
+```
+
+A page with a diagram block also loads the page script. Once Mermaid has
+drawn a diagram, an Expand button sits in its top right corner, shown while
+the pointer is over the diagram or the button has keyboard focus. It opens the
+diagram in a view that fills the window, with a top bar naming the nearest
+heading before the diagram (else the page title), zoom out (−), the zoom in
+percent, zoom in (+), Fit and ✕. Drag the diagram, scroll with two fingers or
+press the arrow keys to move it; pinch, ctrl+scroll, the buttons or the `+`
+and `-` keys zoom it, from 25% to 400%, where 100% is Mermaid's own size. Fit,
+`0` or `F` shows it whole again, as it opens. Esc or ✕ puts it back on the
+page and the focus back on its Expand button. A flowchart's node cards (below)
+work in the view as on the page, and on a touch screen, where the Expand button
+is always shown, one finger drags the diagram and two pinch to zoom about the
+point between them. Without scripting, and on an old version, the diagram
+stays as it is on the page.
+
 A flowchart (source starting `flowchart` or `graph`) can be followed by a
 Nodes table, which the page script turns into a card for each box. Put an
 `h3` or `h4` whose text is exactly `Nodes` straight after the diagram, and a
@@ -607,10 +646,23 @@ served as it was published, under a banner saying it is an earlier version,
 from when, and how many versions behind the current one it is, with links
 "All versions" and "Back to current". Its decision forms are disabled, its
 comment boxes hidden, and a `Content-Security-Policy` header of
-`script-src 'none'; form-action 'none'` keeps any of its scripts, a Mermaid
-diagram's included, and its forms from running: comments and answers stay
-on the current page. It is sent with `Cache-Control: private, no-store`. Any
-other query on a page is served as the page.
+`frame-ancestors 'none'; form-action 'none'; base-uri 'none'; script-src
+'nonce-NONCE'`, with a fresh NONCE made for each answer, keeps its forms and
+every script it carries, a Mermaid diagram's included, from running: comments
+and answers stay on the current page. The one script it runs is the one serve adds before `</body>`
+with that nonce, the site's old-version script, `lotuspod-old-version.js`; no
+script in the page itself carries the nonce, and none can guess it. It is sent
+with `Cache-Control: private, no-store`. Any other query on a page is served
+as the page.
+
+That script gives the banner the header's version menu: a "Choose a version
+▾" button before "All versions" whose menu lists the versions as the
+header's does, the one shown marked "viewing", the current one opening the
+page and "See all versions" opening `NAME.html#versions`. It asks
+`GET /api/versions?page=NAME` once as the version loads and posts nothing, so
+an old version records no visit and marks no "you last looked"; when the
+route answers anything but 200 with a list, or the request fails, the banner
+keeps only its two links.
 
 A page the reader last opened at an older revision says what changed since.
 The page's post to `/api/seen` answers the revision they opened it at before
@@ -814,6 +866,26 @@ the last tab closes, the address is the view's own again: none for Pages, or
 `#activity` for Recent activity (with no views to switch, the fragment it had
 before the first tab).
 
+A listed page loaded on its own at the top level of the window (from a link
+in chat, an email or another page, a bookmark, a new browser tab) opens in a
+tab too: every listed page loads the page script, whatever its body, and the
+first thing that script does is replace its address with the index its
+"Lotuspod" link names (`index.html`, so the site's `/`; the demo's
+`pages.html`), `#tabs=NAME&on=NAME`, that page its one tab and the active one,
+with `&at=FRAGMENT` after it when the address had a fragment (encoded as with
+`encodeURIComponent`), so the framed page opens at that section. `&at=` is
+read on load only and never written again. The replace leaves no history
+entry, so Back leaves the site, and nothing else on the bare page runs, so its
+opening is posted to `/api/seen` once, by its frame. It goes only once that
+index answers itself (2xx, not redirected), however long that takes, with a
+row for that page in its listing, so a page rendered with no index beside
+it, or not yet listed on the index, stays; until then the page shows but its
+script waits. The fragment carried is the one the page
+holds when the index answers. A page in a frame, an old version (`?version=`,
+which runs no script), a page the index does not list, a file opened from
+disk (`file://`), and a page loaded with `?standalone` (for example
+`NAME.html?standalone#a-section`) stay where they are, alone in the window.
+
 A tab that is not active shows a dot from `/api/seen`: amber, "new version"
 for a screen reader, when its page was published again since this reader last
 opened it, else orchid, "new replies", when someone else has commented on it
@@ -967,7 +1039,33 @@ does ("1 comment · waiting", "HANDLE is writing…", "1 reply · ✓ HANDLE
 answered"), or "N resolved" once every one is resolved, and opens its newest
 open thread (see [The comments panel](comments.md#the-comments-panel)). Ask
 sits in the card's foot, so a folded card shows it again after "change"; the
-chip stays under a folded card. Both are drawn by the page script, so a page
+chip stays under a folded card.
+
+A reader in the `[access] owners` list (the page asks the archive route, as
+its Archive button does; see [Archive a page](#archive-a-page)) also gets
+"Dismiss" after "Save answer" and Ask on each decision, for one that no
+longer matters, such as one another plan replaced. It posts the note's text,
+trimmed, as the reason (see [Answers and
+comments](comments.md#answers-and-comments)); a note over 200 characters
+posts nothing and says "Shorten the note to 200 characters to dismiss with it
+as the reason." Dismissed, the note is emptied and folded, and the card folds
+to "Dismissed: REASON · Undo" (or "Dismissed · Undo" with no reason), with
+no ✓, then the reader and the time. A dismissed decision stops counting as
+open: the title bar's "N to answer", the section marks and Next open leave it
+out, the Respond panel shows its state as "Dismissed", and the Answered table
+lists it as "Dismissed" with its reason under it and no "change". Undo puts
+the decision back as it stood: open, or folded to its earlier answer. Any
+other reader sees a dismissed card as "Dismissed: REASON", with no Undo and
+no Dismiss. A dismissal reaches the page owner's agent as an answer (see
+[Agents](agents.md)).
+
+On such a page, an answer saved with a note also opens a thread on the
+decision holding the note, so the page's owner can reply to it: the chip
+appears under the card as soon as it is saved, and the note's message in the
+thread shows "Answered: LABEL" above it. A later note to the same question
+joins that thread, so one chip keeps the notes and their replies together.
+An empty note, or one saved again unchanged with another option, opens
+nothing (see [Answers and comments](comments.md#answers-and-comments)). Both are drawn by the page script, so a page
 published before them gets them without publishing it again.
 
 Once any of its decisions is answered, the page ends in a table captioned
@@ -1123,8 +1221,9 @@ legend as its Question and the summary as its Answer, the note under it. Its
 Every artifact page carries a Content-Security-Policy meta tag at the top of
 its head, computed from the finished page so it never allows more than the
 page holds. A page runs only the site's own script files, the pinned Mermaid
-(`https://cdn.jsdelivr.net/npm/mermaid@11.4.1/`, allowed only on a page with a
-diagram) and the inline scripts the page template writes, each allowed by its
+(`https://cdn.jsdelivr.net/npm/mermaid@11.4.1/`) and its ELK layout
+(`https://cdn.jsdelivr.net/npm/@mermaid-js/layout-elk@0.2.3/`), both allowed
+only on a page with a diagram, and the inline scripts the page template writes, each allowed by its
 `sha256` hash; today that is the Mermaid start-up module alone. A page with
 decision forms, comment boxes or folding sections also loads the site's page
 script, `lotuspod-page.js`. Styles may be
@@ -1143,7 +1242,8 @@ version of a page keeps `frame-ancestors 'none'`.
 
 `src/lotuspod/_templates/artifact.html` uses `{{placeholder}}` substitution with the context:
 `title`, `kicker`, `date`, `summary_block`, `body`, `theme_name`, `theme_hash`,
-plus the `mermaid` section flag with its `mermaid_theme_variables` and `mermaid_dir`,
+plus the `mermaid` section flag with its `mermaid_theme_variables`, `mermaid_dir` and
+`mermaid_elk_dir`,
 the `page_script_needed` section flag (decision forms, comment boxes or folding
 sections) with
 the `page_script` it loads, the `owner` section and its handle,
@@ -1161,7 +1261,8 @@ Edit the CSS to restyle all artifacts.
 A feature's CSS goes in its own file in `src/lotuspod/_theme/css/` and its JS in
 `src/lotuspod/_theme/js/`, and each new file takes one line in the declared
 order (`THEME_SOURCES` in `cli.py`), which render joins into the one
-`lotuspod.css`, `lotuspod-page.js` and `lotuspod-index.js` it serves.
+`lotuspod.css`, `lotuspod-page.js`, `lotuspod-index.js` and
+`lotuspod-old-version.js` it serves.
 Pages address the stylesheet and page script, and the index its script, by a
 hash of the theme files, so there is no version to raise.
 

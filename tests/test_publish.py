@@ -45,6 +45,13 @@ GARDEN_IMAGES = (
     "<img alt='Chart'  src=chart.png>\n"
     '<p><img src="photos/fish.jpg" alt="Fish" width="40" height="30"/></p>\n'
 )
+# Where a page carries the time publish stamped it: its lotuspod:updated meta
+# tag, and the Updated time of its meta line, with the day it shows, when that
+# names another day.
+_UPDATED_META_RE = re.compile(rb'(<meta name="lotuspod:updated" content=")[^"]*(">)')
+_UPDATED_TIME_RE = re.compile(
+    rb'( \xc2\xb7 Updated <time datetime=")[^"]*(">)[^<]*(</time>)'
+)
 GARDEN = "<h1>Garden notes</h1>\n<h2>Beds</h2>\n<p>North.</p>\n<h2>Path</h2>\n<p>Gravel.</p>\n"
 
 
@@ -53,6 +60,12 @@ def git(cwd: Path, *argv: str) -> str:
         ["git", "-C", str(cwd), *argv], capture_output=True, text=True, check=True
     )
     return done.stdout
+
+
+def without_update_stamp(page: bytes) -> bytes:
+    page, stamps = _UPDATED_META_RE.subn(rb"\g<1>STAMP\g<2>", page)
+    assert stamps == 1, f"{stamps} lotuspod:updated meta tags"
+    return _UPDATED_TIME_RE.sub(rb"\g<1>STAMP\g<2>DAY\g<3>", page, count=1)
 
 
 def lotuspod(*argv: str, cwd: Path, stdin: str | None = None,
@@ -341,9 +354,79 @@ class StandardInputTests(PublishTestCase):
         done = self.publish("-", "--format", "markdown", "--name", "pond",
                             "--date", "2026-09-01", out_dir=from_stdin, stdin=POND)
         self.assertEqual(done.returncode, 0, done.stderr)
-        for name in ("pond.html", "pond.md"):
-            self.assertEqual((from_stdin / name).read_bytes(),
-                             (from_file / name).read_bytes(), name)
+        self.assertSamePage(from_stdin, from_file)
+
+    def assertSamePage(self, one: Path, other: Path) -> None:
+        # The same page but for when each was published.
+        self.assertEqual(without_update_stamp((one / "pond.html").read_bytes()),
+                         without_update_stamp((other / "pond.html").read_bytes()),
+                         "pond.html")
+        self.assertEqual((one / "pond.md").read_bytes(),
+                         (other / "pond.md").read_bytes(), "pond.md")
+
+    def publish_at(self, moment: str, *argv: str,
+                   stdin: str | None = None) -> subprocess.CompletedProcess:
+        # Set the CLI's clock from outside: a sitecustomize gives the
+        # datetime module cli.py reads a now() that is `moment`.
+        hook = self.tmp / f"clock-{moment.replace(':', '')}"
+        hook.mkdir()
+        (hook / "sitecustomize.py").write_text(
+            "import datetime, sys, types\n"
+            f"sys.path.insert(0, {str(SRC_DIR)!r})\n"
+            "from lotuspod import cli\n"
+            "class _Moment(datetime.datetime):\n"
+            "    @classmethod\n"
+            "    def now(cls, tz=None):\n"
+            f"        return cls.fromisoformat({moment!r}).astimezone(tz)\n"
+            "clock = types.ModuleType('datetime')\n"
+            "clock.__dict__.update(vars(datetime))\n"
+            "clock.datetime = _Moment\n"
+            "cli._dt = clock\n",
+            encoding="utf-8",
+        )
+        env = dict(os.environ, PYTHONPATH=os.pathsep.join((str(hook), str(SRC_DIR))))
+        return subprocess.run(
+            [sys.executable, "-m", "lotuspod", "publish", *argv],
+            cwd=str(self.tmp), env=env, input=stdin, capture_output=True,
+            text=True, timeout=TIMEOUT,
+        )
+
+    def test_the_same_page_from_either_source_when_the_publishes_straddle_a_second(self):
+        # The two publishes of the test above, a second apart: as they fell
+        # in the unit check of #65, :43:16Z then :43:17Z, and across UTC
+        # midnight, where the Updated day the page shows changes too.
+        straddles = (
+            ("2026-10-09T12:43:16+00:00", "2026-10-09T12:43:17+00:00"),
+            ("2026-10-09T23:59:59+00:00", "2026-10-10T00:00:00+00:00"),
+        )
+        for first, second in straddles:
+            with self.subTest(first=first, second=second):
+                self.assertSameStraddling(first, second)
+
+    def assertSameStraddling(self, first: str, second: str) -> None:
+        from_file = self.tmp / f"from-file-{first.replace(':', '')}"
+        from_stdin = self.tmp / f"from-stdin-{first.replace(':', '')}"
+        done = self.publish_at(first,
+                               str(self.source("pond.md", POND)),
+                               "--out-dir", str(from_file), "--date", "2026-09-01")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        done = self.publish_at(second,
+                               "-", "--format", "markdown", "--name", "pond",
+                               "--out-dir", str(from_stdin), "--date", "2026-09-01",
+                               stdin=POND)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        for out_dir, moment in ((from_file, first), (from_stdin, second)):
+            stamp = moment.replace("+00:00", "Z")
+            self.assertIn(f'<time datetime="{stamp}">{stamp[:10]}</time>',
+                          (out_dir / "pond.html").read_text(encoding="utf-8"))
+        self.assertSamePage(from_stdin, from_file)
+
+        # Only the stamp is set aside: a byte changed anywhere else in the
+        # page still fails the comparison.
+        page = from_stdin / "pond.html"
+        page.write_bytes(page.read_bytes().replace(b"Still water.", b"Still waters", 1))
+        with self.assertRaises(AssertionError):
+            self.assertSamePage(from_stdin, from_file)
 
 
 

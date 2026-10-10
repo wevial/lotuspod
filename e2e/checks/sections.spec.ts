@@ -88,7 +88,7 @@ test.describe('signed in', () => {
 
   test('a heading button folds its section and opens it again', async ({ page }) => {
     const seen = await watch(page);
-    await page.goto(PAGE);
+    await page.goto(`${PAGE}?standalone`);
     const second = section(page, 1);
     const form = second.wrapper.locator('form.artifact-decision');
     for (const part of [second.paragraph, form, second.box]) await expect(part).toBeVisible();
@@ -119,7 +119,7 @@ test.describe('signed in', () => {
 
   test('the keyboard reaches the first heading button and folds and opens it', async ({ page }) => {
     const seen = await watch(page);
-    await page.goto(PAGE);
+    await page.goto(`${PAGE}?standalone`);
     const first = section(page, 0);
     await page.locator('.artifact-outline-list a').last().focus();
     let reached = false;
@@ -146,7 +146,7 @@ test.describe('signed in', () => {
 
   test('the page remembers what the reader folded across a reload', async ({ page }) => {
     const seen = await watch(page);
-    await page.goto(PAGE);
+    await page.goto(`${PAGE}?standalone`);
     await fold(page, 0);
     await fold(page, 2);
     await page.reload();
@@ -166,7 +166,7 @@ test.describe('signed in', () => {
         get() { throw new DOMException('The page may keep nothing.', 'SecurityError'); },
       });
     });
-    await page.goto(PAGE);
+    await page.goto(`${PAGE}?standalone`);
     expect(await page.evaluate(() => {
       try { return typeof window.localStorage; } catch (error) { return 'throws'; }
     })).toBe('throws');
@@ -178,10 +178,10 @@ test.describe('signed in', () => {
 
   test('a text fragment in a folded section opens it and it stays open', async ({ page }) => {
     const seen = await watch(page);
-    await page.goto(PAGE);
+    await page.goto(`${PAGE}?standalone`);
     await fold(page, 0);
     await page.goto('about:blank');
-    await page.goto(`${PAGE}#:~:text=frazil`);
+    await page.goto(`${PAGE}?standalone#:~:text=frazil`);
     const first = section(page, 0);
     // Chromium may not drive a text fragment for an automated navigation:
     // then the event it would fire is dispatched on the wrapper instead.
@@ -191,14 +191,14 @@ test.describe('signed in', () => {
       await first.wrapper.evaluate((node) => node.dispatchEvent(new Event('beforematch')));
     }
     await expectOpen(page, 0);
-    await page.goto(PAGE);
+    await page.goto(`${PAGE}?standalone`);
     await expectOpen(page, 0);
     await seen.clean();
   });
 
   test('a beforematch event on a folded section opens it', async ({ page }) => {
     const seen = await watch(page);
-    await page.goto(PAGE);
+    await page.goto(`${PAGE}?standalone`);
     await fold(page, 0);
     await section(page, 0).wrapper.evaluate((node) => node.dispatchEvent(new Event('beforematch')));
     await expectOpen(page, 0);
@@ -209,7 +209,7 @@ test.describe('signed in', () => {
 
   test('an outline link or a URL fragment opens a folded section and shows its heading', async ({ page }) => {
     const seen = await watch(page);
-    await page.goto(PAGE);
+    await page.goto(`${PAGE}?standalone`);
     await fold(page, 2);
     await page.evaluate(() => window.scrollTo(0, 0));
     await page.locator('.artifact-outline-list a[href="#next-steps"]').click();
@@ -218,7 +218,7 @@ test.describe('signed in', () => {
 
     await fold(page, 1);
     await page.goto('about:blank');
-    await page.goto(`${PAGE}#decisions-for-the-maintainer`);
+    await page.goto(`${PAGE}?standalone#decisions-for-the-maintainer`);
     await expectOpen(page, 1);
     await expect(section(page, 1).heading).toBeInViewport();
     await seen.clean();
@@ -226,7 +226,7 @@ test.describe('signed in', () => {
 
   test('one control folds every section and opens them all again', async ({ page }) => {
     const seen = await watch(page);
-    await page.goto(PAGE);
+    await page.goto(`${PAGE}?standalone`);
     const control = all(page);
     await expect(control).toHaveText('Collapse all');
     // Outside the outline's disclosure.
@@ -249,7 +249,7 @@ test.describe('signed in', () => {
   test('at 360 pixels wide the page never scrolls sideways, open or folded', async ({ page }) => {
     const seen = await watch(page);
     await page.setViewportSize({ width: 360, height: 780 });
-    await page.goto(PAGE);
+    await page.goto(`${PAGE}?standalone`);
     await expect(all(page)).toBeVisible();
     expect(await wide(page)).toBe(false);
     await all(page).click();
@@ -261,7 +261,7 @@ test.describe('signed in', () => {
   test('at 1280 pixels wide the code block steps out of the reading column', async ({ page }) => {
     const seen = await watch(page);
     await page.setViewportSize({ width: 1280, height: 800 });
-    await page.goto(PAGE);
+    await page.goto(`${PAGE}?standalone`);
     const first = section(page, 0);
     const code = first.wrapper.locator(':scope > pre');
     const [codeWidth, proseWidth] = await Promise.all([
@@ -274,7 +274,7 @@ test.describe('signed in', () => {
 
   test('in print every section is open and nothing that folds is drawn', async ({ page }) => {
     const seen = await watch(page);
-    await page.goto(PAGE);
+    await page.goto(`${PAGE}?standalone`);
     await fold(page, 0);
     await page.emulateMedia({ media: 'print' });
     await expect(section(page, 0).paragraph).toBeVisible();
@@ -293,7 +293,7 @@ test.describe('without scripts', () => {
 
   test('every section shows and no heading holds a button', async ({ page }) => {
     const seen = await watch(page);
-    await page.goto(PAGE);
+    await page.goto(`${PAGE}?standalone`);
     for (let index = 0; index < IDS.length; index += 1) {
       const { heading, wrapper, paragraph } = section(page, index);
       await expect(heading).toBeVisible();

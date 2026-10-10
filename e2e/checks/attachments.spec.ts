@@ -204,7 +204,7 @@ test.describe('signed in', () => {
   test('a pasted image is sent with a reply, drawn as a thumbnail and opens full size', async ({ page, context, request }) => {
     const seen = await watch(page);
     const root = await thread(request, 'pond', 'What does the ice look like?');
-    await page.goto(PAGE);
+    await page.goto(`${PAGE}?standalone`);
     await open(page, 'pond');
     const node = page.locator(`.artifact-comment-thread[data-thread="${root.id}"]`);
     await expect(node).toBeVisible();
@@ -265,7 +265,7 @@ test.describe('signed in', () => {
 
   test('two picked images start a thread whose thumbnails keep their boxes while their bytes arrive', async ({ page }) => {
     const seen = await watch(page);
-    await page.goto(PAGE);
+    await page.goto(`${PAGE}?standalone`);
     const frogs = box(page, 'frogs');
     await compose(page, 'frogs');
     await pick(page, frogs.add, [FROG, LILY]);
@@ -326,7 +326,7 @@ test.describe('signed in', () => {
 
   test('two images dropped on a new thread\'s composer are uploaded and saved with it, in order', async ({ page }) => {
     const seen = await watch(page);
-    await page.goto(PAGE);
+    await page.goto(`${PAGE}?standalone`);
     const frogs = box(page, 'frogs');
     await compose(page, 'frogs');
     const tray = frogs.form.locator('.artifact-attach-item');
@@ -361,7 +361,7 @@ test.describe('signed in', () => {
 
   test('a dropped file of another type is refused, and a drop of five attaches four', async ({ page }) => {
     const seen = await watch(page);
-    await page.goto(PAGE);
+    await page.goto(`${PAGE}?standalone`);
     const pond = box(page, 'pond');
     await compose(page, 'pond');
     const tray = pond.form.locator('.artifact-attach-item');
@@ -384,7 +384,7 @@ test.describe('signed in', () => {
   test('a file of another type or over the cap is refused before it is sent', async ({ page, request }) => {
     const seen = await watch(page);
     const cap = await capOf(request);
-    await page.goto(PAGE);
+    await page.goto(`${PAGE}?standalone`);
     const pond = box(page, 'pond');
     await compose(page, 'pond');
 
@@ -407,7 +407,7 @@ test.describe('signed in', () => {
       if (route.request().method() === 'GET') await released;
       await route.continue();
     });
-    await page.goto(PAGE);
+    await page.goto(`${PAGE}?standalone`);
     const pond = box(page, 'pond');
     await compose(page, 'pond');
     await paste(pond.text, [{ name: 'big.png', type: 'image/png', size: cap + 1 }, fish()]);
@@ -426,7 +426,7 @@ test.describe('signed in', () => {
 
   test('a composer takes no image while its comment saves, and keeps those it sends', async ({ page }) => {
     const seen = await watch(page);
-    await page.goto(PAGE);
+    await page.goto(`${PAGE}?standalone`);
     const pond = box(page, 'pond');
     await compose(page, 'pond');
     const tray = pond.form.locator('.artifact-attach-item');
@@ -471,7 +471,7 @@ test.describe('signed in', () => {
 
   test('an image attached twice is attached once', async ({ page }) => {
     const seen = await watch(page);
-    await page.goto(PAGE);
+    await page.goto(`${PAGE}?standalone`);
     const pond = box(page, 'pond');
     await compose(page, 'pond');
     const tray = pond.form.locator('.artifact-attach-item');

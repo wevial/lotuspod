@@ -78,6 +78,17 @@ A pulled answer's `question` also carries `context`: the page's context for
 the question while it asks it at the answer's version, and "" when
 `reworded` is true. The context is not kept with the answer.
 
+A pulled answer whose note the reader's page stored as a comment in a
+thread on its decision also carries `noteComment`, that comment's id (the
+earlier answer's, for a note kept unchanged with another option); the
+comment carries `answer`, {id, choice, label} of the answer, and is pulled
+as any comment is.
+
+A pulled answer may be an owner's dismissal of a question that no longer
+matters (lotuspod.db): still of kind `answer`, its `answer` carries
+`dismissed: true`, its reason in `note` and `undoneAt` once it is undone,
+and it is acknowledged by its id as any answer is.
+
 A pulled answer to a checklist also carries, in its `question`, `changed`:
 {id, label, checked} for each item whose state differs from its default, in
 the page's order, read against the page's form while it asks the checklist
@@ -536,12 +547,15 @@ class Routes:
                         "reworded": reworded, "default": default}
             if "checked" in answer:
                 question["changed"] = changed
-            items.append({
+            item = {
                 "kind": "answer",
                 "answer": answer,
                 "question": question,
                 "page": item_page(page),
-            })
+            }
+            if found["comment"] is not None:
+                item["noteComment"] = found["comment"]
+            items.append(item)
         return {"owner": owner, "pulledAt": pulled_at, "items": items}
 
     def _threads(self, credential: Mapping, name: str) -> dict:

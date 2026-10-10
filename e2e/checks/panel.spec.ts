@@ -266,14 +266,14 @@ async function settle(page: Page) {
 }
 
 async function load(page: Page, url = PAGE) {
-  await page.goto(url);
+  await page.goto(`${url}?standalone`);
   await expect(page.locator('.artifact-body details.artifact-comment')).toHaveCount(3);
   await settle(page);
 }
 
 // The five-section page with the panel open.
 async function loadFive(page: Page) {
-  await page.goto(FIVE);
+  await page.goto(`${FIVE}?standalone`);
   await expect(page.locator('.artifact-body details.artifact-comment')).toHaveCount(5);
   await settle(page);
   const side = panel(page);

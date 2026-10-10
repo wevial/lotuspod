@@ -73,7 +73,7 @@ test.describe.serial('signed in', () => {
     expect(ASSERTION, 'LOTUSPOD_TEST_ASSERTION names an assertion the site accepts').toBeTruthy();
     const errors = await watch(page);
     expect(await stored(request)).toEqual({});
-    await page.goto(PAGE);
+    await page.goto(`${PAGE}?standalone`);
     const card = checklist(page);
     await expect(page.locator('form.artifact-decision')).toHaveCount(1);
     await expect(card.legend).toHaveText('Emails');
@@ -97,7 +97,7 @@ test.describe.serial('signed in', () => {
 
   test('saving folds the card to the items changed from their defaults, which a reload keeps', async ({ page, request }) => {
     const errors = await watch(page);
-    await page.goto(PAGE);
+    await page.goto(`${PAGE}?standalone`);
     const card = checklist(page);
     await card.item('1').uncheck();
     await card.item('2').check();
@@ -124,7 +124,7 @@ test.describe.serial('signed in', () => {
 
   test('the Answered table holds the checklist as one row, whose change opens the card at its saved items', async ({ page }) => {
     const errors = await watch(page);
-    await page.goto(PAGE);
+    await page.goto(`${PAGE}?standalone`);
     const table = page.getByRole('table', { name: 'Answered' });
     const rows = table.locator('tbody tr');
     await expect(rows).toHaveCount(1);
@@ -150,7 +150,7 @@ test.describe.serial('signed in', () => {
 
   test('change reopens the card at its answer, and saving it back at the defaults keeps the first in its history', async ({ page, request }) => {
     const errors = await watch(page);
-    await page.goto(PAGE);
+    await page.goto(`${PAGE}?standalone`);
     const card = checklist(page);
     await card.change.click();
     expect(await checked(page)).toEqual(['2', '3']);
@@ -188,7 +188,7 @@ test.describe.serial('signed in', () => {
         earlier: read.questions[QUESTION].earlier,
       } } } });
     });
-    await page.goto(PAGE);
+    await page.goto(`${PAGE}?standalone`);
     const card = checklist(page);
     await expect(card.earlier).toContainText(`Answered to an earlier wording by ${READER}`);
     await expect(card.saved).toHaveCount(0);
@@ -203,7 +203,7 @@ test.describe.serial('signed in', () => {
   test('at 360 pixels wide the card, open and folded, does not scroll the page sideways', async ({ page }) => {
     const errors = await watch(page);
     await page.setViewportSize({ width: 360, height: 780 });
-    await page.goto(PAGE);
+    await page.goto(`${PAGE}?standalone`);
     const card = checklist(page);
     await expect(card.saved).toBeVisible();
     await card.form.scrollIntoViewIfNeeded();

@@ -64,7 +64,7 @@ test.describe('signed in', () => {
   test('the context sits unlabelled between the question and its options, its link kept', async ({ page }) => {
     expect(ASSERTION, 'LOTUSPOD_TEST_ASSERTION names an assertion the site accepts').toBeTruthy();
     const seen = await watch(page);
-    await page.goto(PAGE);
+    await page.goto(`${PAGE}?standalone`);
     const first = decision(page, 'decision-1');
     await expect(first.radios).toHaveCount(2);
     await expect(first.context).toHaveCount(1);
@@ -90,7 +90,7 @@ test.describe('signed in', () => {
   test('at 360 pixels wide the context wraps and the page does not scroll sideways', async ({ page }) => {
     const seen = await watch(page);
     await page.setViewportSize({ width: 360, height: 780 });
-    await page.goto(PAGE);
+    await page.goto(`${PAGE}?standalone`);
     const first = decision(page, 'decision-1');
     await expect(first.context).toBeVisible();
     await first.form.scrollIntoViewIfNeeded();

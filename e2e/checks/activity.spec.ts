@@ -438,7 +438,7 @@ test.describe('signed in', () => {
 
       // A phone opens the thread in the bottom sheet.
       await page.setViewportSize({ width: 390, height: 844 });
-      await page.goto(`/${C}.html#thread=${thread}`);
+      await page.goto(`/${C}.html?standalone#thread=${thread}`);
       const sheet = page.locator('.artifact-comments-bottom-sheet--open');
       await expect(sheet.locator(`li.artifact-comments-entry[data-thread="${thread}"]`))
         .toHaveClass(/\bartifact-comments-entry--open\b/);
@@ -451,7 +451,7 @@ test.describe('signed in', () => {
       await page.setViewportSize({ width: 1280, height: 800 });
       // A load of its own, not a move within the page already open.
       await page.goto('about:blank');
-      await page.goto(`/${C}.html#thread=${thread}`);
+      await page.goto(`/${C}.html?standalone#thread=${thread}`);
       const listed = page.locator(`.artifact-comments-panel li.artifact-comments-entry--resolved[data-thread="${thread}"]`);
       await expect(listed).toBeInViewport();
       await expect(page.locator('.artifact-comments-panel')).toHaveClass(/\bartifact-comments-panel--resolved-shown\b/);
@@ -473,7 +473,7 @@ test.describe('signed in', () => {
         await expect.poll(unreadOnC).toBe(1);
         await page.setViewportSize({ width, height });
         await page.goto('about:blank');
-        await page.goto(`/${C}.html#thread=${thread}`);
+        await page.goto(`/${C}.html?standalone#thread=${thread}`);
         const opened = page.locator(`${held} li.artifact-comments-entry--resolved[data-thread="${thread}"]`);
         await expect(opened).toHaveClass(/\bartifact-comments-entry--open\b/);
         await expect(opened.getByText(text)).toBeVisible();
@@ -554,7 +554,7 @@ test.describe('signed in', () => {
           page.waitForResponse((response) => new URL(response.url()).pathname === route));
         // A load of its own, not a move within the page already open.
         await page.goto('about:blank');
-        await page.goto(`/capture-comments.html${hash}`);
+        await page.goto(`/capture-comments.html?standalone${hash}`);
         await Promise.all(reads);
         // What the reads draw, drawn.
         await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => setTimeout(done, 200))));

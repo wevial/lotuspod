@@ -149,6 +149,10 @@
       by.appendChild(document.createTextNode(" "));
       by.appendChild(time);
       drawn.column.appendChild(by);
+      if (entry.answer && typeof entry.answer === "object") {
+        drawn.column.appendChild(element("p", "artifact-comment-answered",
+          "Answered: " + String(entry.answer.label || entry.answer.choice || "")));
+      }
       var said = commentMarkdown(element("div", "artifact-comment-text"), String(entry.text || ""));
       // A passage's highlight is described by its thread's first comment.
       said.id = "artifact-comment-text-" + entry.id;
@@ -2505,6 +2509,10 @@
     var last = 0;
     var timer = null;
     var reading = false;
+    // A note's thread not read yet (noted below), and how many notes were
+    // saved: only a read begun after the newest finds its thread.
+    var owed = false;
+    var notes = 0;
     // The read in flight is followed by the first gap.
     var fresh = false;
     // False once a read finds the reader signed out.
@@ -2530,9 +2538,10 @@
       }
     }
 
-    // Whether anything calls for another read.
+    // Whether anything calls for another read: a note saved with an
+    // answer calls for one until a read finds its thread.
     function wanted() {
-      return viewed.size > 0 || Boolean(waiting());
+      return viewed.size > 0 || owed || Boolean(waiting());
     }
 
     function waiting() {
@@ -2582,6 +2591,7 @@
       reading = true;
       last = Date.now();
       var touched = false;
+      var asOf = notes;
       try {
         var response = await fetch(COMMENTS + "?page=" + encodeURIComponent(page));
         if (response.status === 401) {
@@ -2598,6 +2608,7 @@
           settleImageCap(null, NO_CAP);
         }
         if (payload) {
+          owed = owed && asOf !== notes;
           tracked = Array.isArray(payload.unread);
           unread = new Set(tracked ? payload.unread : []);
           (payload.threads || []).forEach(function (entry) {
@@ -2622,6 +2633,12 @@
       }
       gap = touched || fresh ? FIRST : Math.min(gap * 1.5, LAST);
       fresh = false;
+      if (again) {
+        again = false;
+        fresh = true;
+        read();
+        return;
+      }
       plan();
     }
 
@@ -2826,11 +2843,32 @@
       return "Your question was not sent (" + error + "). Try again.";
     }
 
+    // An answer saved with a note opens a thread on its decision, or adds
+    // to one: the threads are read again at once, so its chip shows it. A
+    // read already in flight may have missed it, and is followed by another;
+    // one that fails is tried again after the schedule's first gap.
+    var again = false;
+    function noted(event) {
+      if (!event.detail.comment) {
+        return;
+      }
+      owed = true;
+      notes += 1;
+      if (reading) {
+        again = true;
+        return;
+      }
+      clearTimeout(timer);
+      fresh = true;
+      read();
+    }
+
     // Each decision's Ask, beside "Save answer": the note's text posted as
     // a question thread on the decision, which saves no answer. Sent, the
     // note is emptied and folded, so it is never saved as the answer's note,
     // and the thread opens where the window has room for it.
     function askAbout(form) {
+      form.addEventListener(SAVED, noted);
       var save = form.querySelector('button[type="submit"]');
       var note = form.elements.note;
       if (!save || !note) {

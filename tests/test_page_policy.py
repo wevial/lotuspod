@@ -29,6 +29,7 @@ from pathlib import Path
 from tests.test_manifest_v2 import TempDirTestCase, cli, run_cli
 
 MERMAID_DIR = "https://cdn.jsdelivr.net/npm/mermaid@11.4.1/"
+MERMAID_ELK_DIR = "https://cdn.jsdelivr.net/npm/@mermaid-js/layout-elk@0.2.3/"
 
 PROSE = "<h2>One</h2>\n<p>Plain prose.</p>\n<h2>Two</h2>\n<p>More prose.</p>\n"
 DIAGRAM = '<p>A diagram.</p>\n<pre class="mermaid">graph TD; A --> B</pre>\n'
@@ -139,7 +140,7 @@ class PolicyTagTests(PolicyTestCase):
         script_src = self.policy_of(page)["script-src"]
         hashes = [source for source in script_src if source.startswith("'sha256-")]
         self.assertEqual(hashes, [sha256_source(module["text"])])
-        self.assertEqual(sorted(script_src), sorted(["'self'", MERMAID_DIR, *hashes]))
+        self.assertEqual(sorted(script_src), sorted(["'self'", MERMAID_DIR, MERMAID_ELK_DIR, *hashes]))
 
 
 class BodyScriptTests(PolicyTestCase):

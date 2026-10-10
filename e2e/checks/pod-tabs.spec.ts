@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { expect, request as requests, test, type Page, type Response } from '@playwright/test';
 
 // The index opens pods in tabs (lotuspod-index.js): a plain click on a link
@@ -144,6 +145,20 @@ async function openFromListing(page: Page, pod: Pod) {
   await expect(framed(page, pod).locator('h1')).toHaveText(pod.title);
 }
 
+// The address the pod's frame shows.
+async function shownIn(page: Page, pod: Pod) {
+  return new URL(await frame(page, pod).evaluate((node) =>
+    (node as HTMLIFrameElement).contentWindow?.location.href ?? ''));
+}
+
+// Where the article's second section sits in its frame's window.
+function placed(page: Page) {
+  return framed(page, ARTICLE).locator('#second-section').evaluate((node) => {
+    const top = node.getBoundingClientRect().top;
+    return { scrolled: window.scrollY, top, from: top + window.scrollY, fold: window.innerHeight };
+  });
+}
+
 function seenPost(page: Page, name: string) {
   return page.waitForResponse((response: Response) =>
     new URL(response.url()).pathname === SEEN && response.request().method() === 'POST' &&
@@ -227,14 +242,14 @@ test.describe('signed in', () => {
     await expect(framed(page, ARTICLE).locator('h1')).toHaveText(ARTICLE.title);
     await expect(page).toHaveURL(/#tabs=capture-decision-context,capture-article&on=capture-article$/);
 
-    // Cmd-click or Ctrl-click is the browser's.
+    // Cmd-click or Ctrl-click is the browser's: its tab, a pod loaded on
+    // its own, opens it in the index's tabs there.
     await tabTitle(page, CONTEXT).click();
     await expectActive(page, CONTEXT);
     const opened = context.waitForEvent('page');
     await link.click({ modifiers: ['ControlOrMeta'] });
     const other = await opened;
-    await other.waitForLoadState();
-    expect(new URL(other.url()).pathname).toBe('/capture-article.html');
+    await expect(other).toHaveURL(/\/#tabs=capture-article&on=capture-article$/);
     await other.close();
     await expect(tabs(page)).toHaveCount(2);
     await expectActive(page, CONTEXT);
@@ -350,7 +365,7 @@ test.describe('signed in', () => {
     const pod = { name: 'pod-tabs-marks', title: 'Pod tabs marks' };
     publish(pod.name, source(pod.title, 'first'));
     const first = seenPost(page, pod.name);
-    await page.goto(`/${pod.name}.html`);
+    await page.goto(`/${pod.name}.html?standalone`);
     await first;
     await page.waitForTimeout(1100);
     publish(pod.name, source(pod.title, 'second'));
@@ -399,11 +414,285 @@ test.describe('signed in', () => {
     release();
     await expectActive(page, ARTICLE);
     await expect(framed(page, ARTICLE).locator('h1')).toHaveText(ARTICLE.title);
-    const shown = await frame(page, ARTICLE).evaluate((node) =>
-      (node as HTMLIFrameElement).contentWindow?.location.href ?? '');
-    expect(new URL(shown).pathname).toBe('/capture-article.html');
-    expect(new URL(shown).hash).toBe('#second-section');
+    const shown = await shownIn(page, ARTICLE);
+    expect(shown.pathname).toBe('/capture-article.html');
+    expect(shown.hash).toBe('#second-section');
     expect(await openNames(page)).toEqual([ARTICLE.name, pod.name]);
+    expect(errors).toEqual([]);
+  });
+
+  test('a link to the fragment an open pod already holds scrolls its page back to it', async ({ page }) => {
+    const errors = await watch(page);
+    const pod = { name: 'pod-tabs-same-fragment', title: 'Pod tabs same fragment' };
+    publish(pod.name, [`# ${pod.title}`, '', 'See the [second section](capture-article.html#second-section).',
+      '', '## Findings', '', 'The pump stops in January.', '', '## Next steps', '', 'Order a heater.', ''].join('\n'));
+    // Short enough that the section is below the fold of the page's top.
+    await page.setViewportSize({ width: WIDE.width, height: 360 });
+    await openIndex(page);
+    await openFromListing(page, pod);
+    const link = framed(page, pod).getByRole('link', { name: 'second section' });
+
+    await link.click();
+    await expectActive(page, ARTICLE);
+    await expect(framed(page, ARTICLE).locator('h1')).toHaveText(ARTICLE.title);
+    await expect.poll(async () => (await placed(page)).scrolled).toBeGreaterThan(0);
+    // Scrolled away, back to the pod with the link, and the link again.
+    await frame(page, ARTICLE).evaluate((node) =>
+      (node as HTMLIFrameElement).contentWindow?.scrollTo({ top: 0, behavior: 'instant' }));
+    expect((await placed(page)).scrolled).toBe(0);
+    await tabTitle(page, pod).click();
+    await expectActive(page, pod);
+    await link.click();
+
+    await expectActive(page, ARTICLE);
+    await expect.poll(async () => (await placed(page)).scrolled).toBeGreaterThan(0);
+    const where = await placed(page);
+    expect(where.top).toBeGreaterThanOrEqual(0);
+    expect(where.top).toBeLessThan(where.fold / 2);
+    expect((await shownIn(page, ARTICLE)).hash).toBe('#second-section');
+    expect(errors).toEqual([]);
+  });
+
+  test('a pod loaded directly at its own address opens in the index as the active tab, at its fragment, with the finder', async ({ page }) => {
+    const errors = await watch(page);
+    // Each POST to the seen route, and whether the window still showed the
+    // bare page when it was sent.
+    const posted: { bare: boolean; page: string }[] = [];
+    page.on('request', (request) => {
+      if (new URL(request.url()).pathname !== SEEN || request.method() !== 'POST') return;
+      const sender = request.frame();
+      posted.push({
+        bare: sender === page.mainFrame() && new URL(sender.url()).pathname === `/${ARTICLE.name}.html`,
+        page: request.postDataJSON()?.page ?? '',
+      });
+    });
+    // Short enough that the section is below the fold until the frame
+    // scrolls to it.
+    await page.setViewportSize({ width: WIDE.width, height: 360 });
+    await page.goto('about:blank');
+    await page.goto(`/${ARTICLE.name}.html#second-section`);
+
+    await expect(strip(page)).toHaveCount(1);
+    expect(new URL(page.url()).pathname).toBe('/');
+    await expectActive(page, ARTICLE);
+    await expect(framed(page, ARTICLE).locator('h1')).toHaveText(ARTICLE.title);
+    const shown = await shownIn(page, ARTICLE);
+    expect(shown.pathname).toBe(`/${ARTICLE.name}.html`);
+    expect(shown.hash).toBe('#second-section');
+    // The framed page has scrolled to the section, which sits below its fold.
+    await expect.poll(async () => (await placed(page)).scrolled).toBeGreaterThan(0);
+    const where = await placed(page);
+    expect(where.from).toBeGreaterThan(where.fold);
+    expect(where.top).toBeGreaterThanOrEqual(0);
+    expect(where.top).toBeLessThan(where.fold / 2);
+
+    await page.keyboard.press('ControlOrMeta+K');
+    await expect(page.getByRole('dialog', { name: 'Find a pod' })).toBeVisible();
+
+    // The framed page's opening is posted once; the page loaded on its own,
+    // which went before anything else ran, posted nothing.
+    await expect.poll(() => posted.length).toBeGreaterThan(0);
+    await page.waitForTimeout(500);
+    expect(posted).toEqual([{ bare: false, page: ARTICLE.name }]);
+
+    // The bare page left no history entry: Back leaves the site.
+    await page.goBack();
+    await expect(page).toHaveURL('about:blank');
+    expect(errors).toEqual([]);
+  });
+
+  test('a listed page rendered with one heading and plain text, loaded directly, opens in the index as the active tab', async ({ page }) => {
+    const errors = await watch(page);
+    // Nothing on the page asks for the page script but being listed: no
+    // sections to fold, no comments, decisions, links or revision.
+    const plain = { name: 'pod-tabs-plain', title: 'Pod tabs plain' };
+    run('render', '--name', plain.name, '--title', plain.title, '--date', '2026-01-02',
+      '--body', '<h2 id="a-section">A section</h2><p>Plain text.</p>', '--out-dir', OUT);
+    run('index', '--out-dir', OUT);
+
+    await page.goto('about:blank');
+    await page.goto(`/${plain.name}.html#a-section`);
+    await expect(strip(page)).toHaveCount(1);
+    expect(new URL(page.url()).pathname).toBe('/');
+    await expectActive(page, plain);
+    await expect(framed(page, plain).locator('h1')).toHaveText(plain.title);
+    const shown = await shownIn(page, plain);
+    expect(shown.pathname).toBe(`/${plain.name}.html`);
+    expect(shown.hash).toBe('#a-section');
+
+    await page.keyboard.press('ControlOrMeta+K');
+    await expect(page.getByRole('dialog', { name: 'Find a pod' })).toBeVisible();
+    await page.goBack();
+    await expect(page).toHaveURL('about:blank');
+    expect(errors).toEqual([]);
+  });
+
+  test('a pod loaded with ?standalone, or an old version of it, stays on its own at the top level', async ({ page }) => {
+    const errors = await watch(page);
+    await page.goto(`/${ARTICLE.name}.html?standalone#second-section`);
+    await expect(page.locator('main.artifact h1')).toHaveText(ARTICLE.title);
+    // Its deferred page script has run by now, and has not left.
+    await expect.poll(() => page.evaluate(() => document.readyState)).toBe('complete');
+    await page.waitForTimeout(500);
+    expect(new URL(page.url()).pathname).toBe(`/${ARTICLE.name}.html`);
+    expect(new URL(page.url()).hash).toBe('#second-section');
+    await expect(page.locator('.pod-tabs-bar')).toHaveCount(0);
+    expect(errors).toEqual([]);
+
+    // An old version runs no script: its page script is refused by its policy.
+    const commit = execFileSync('git', ['-C', OUT, 'log', '-1', '--format=%H', '--', `${ARTICLE.name}.html`],
+      { encoding: 'utf-8' }).trim();
+    expect(commit).toMatch(/^[0-9a-f]{40}$/);
+    await page.goto(`/${ARTICLE.name}.html?version=${commit}`);
+    await expect(page.locator('main.artifact--old-version h1')).toHaveText(ARTICLE.title);
+    await page.waitForTimeout(500);
+    expect(new URL(page.url()).pathname).toBe(`/${ARTICLE.name}.html`);
+    expect(new URL(page.url()).searchParams.get('version')).toBe(commit);
+    await expect(page.locator('.pod-tabs-bar')).toHaveCount(0);
+  });
+
+  test('a pod loaded directly opens in the index its brand link names, and stays when that index does not answer or sends it back', async ({ page }) => {
+    const html = await (await page.request.get(`/${ARTICLE.name}.html`)).text();
+    const listing = await (await page.request.get('/')).text();
+    const script = await (await page.request.get('/lotuspod-page.js')).text();
+    const brand = '<a class="artifact-topbar-brand" href="index.html">';
+    expect(html.split(brand)).toHaveLength(2);
+    // As the demo dresses a page: its index is pages.html.
+    const dressed = html.replace(brand, brand.replace('index.html', 'pages.html'));
+    // The page script has run, and stayed: it folds each section under a button.
+    const stayed = async (address: RegExp) => {
+      await expect(page.locator('button.artifact-section-toggle').first()).toBeAttached();
+      await page.waitForTimeout(500);
+      await expect(page).toHaveURL(address);
+      await expect(page.locator('.pod-tabs-bar')).toHaveCount(0);
+    };
+
+    // No pages.html answers here, as a page rendered with no index beside it.
+    await page.route(`**/${ARTICLE.name}.html`, (route) => route.fulfill({ contentType: 'text/html', body: dressed }));
+    await page.goto(`/${ARTICLE.name}.html#second-section`);
+    await stayed(new RegExp(`/${ARTICLE.name}\\.html#second-section$`));
+
+    // An index that sends it back to a page, as the demo's / and /index.html
+    // do, would never settle: it stays.
+    await page.route('**/pages.html', (route) => route.fulfill({
+      status: 302, headers: { Location: `/${ARTICLE.name}.html?standalone` } }));
+    await page.goto('about:blank');
+    await page.goto(`/${ARTICLE.name}.html#second-section`);
+    await stayed(new RegExp(`/${ARTICLE.name}\\.html#second-section$`));
+
+    // The index it names answers: it opens there in a tab, at its fragment.
+    await page.unroute('**/pages.html');
+    await page.route('**/pages.html', (route) => route.fulfill({ contentType: 'text/html', body: listing }));
+    await page.goto('about:blank');
+    await page.goto(`/${ARTICLE.name}.html#second-section`);
+    await expect(strip(page)).toHaveCount(1);
+    // &at= is read on load and not written again.
+    await expect(page).toHaveURL(new RegExp(`/pages\\.html#tabs=${ARTICLE.name}&on=${ARTICLE.name}$`));
+    await expectActive(page, ARTICLE);
+    expect((await shownIn(page, ARTICLE)).hash).toBe('#second-section');
+    await page.goBack();
+    await expect(page).toHaveURL('about:blank');
+    await page.unrouteAll();
+
+    // Opened from disk, as render writes it: no index beside it to go to.
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lotuspod-pod-tabs-file-'));
+    try {
+      fs.writeFileSync(path.join(dir, `${ARTICLE.name}.html`), html, 'utf-8');
+      fs.writeFileSync(path.join(dir, 'lotuspod-page.js'), script, 'utf-8');
+      const file = pathToFileURL(path.join(dir, `${ARTICLE.name}.html`)).href;
+      await page.goto(`${file}#second-section`);
+      await stayed(new RegExp(`/${ARTICLE.name}\\.html#second-section$`));
+      expect(new URL(page.url()).protocol).toBe('file:');
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('a pod the index does not list yet stays on its own, and one whose index answers slowly still opens there', async ({ page }) => {
+    const errors = await watch(page);
+    // The page script has run, and stayed: it folds each section under a button.
+    const stayed = async (address: RegExp) => {
+      await expect(page.locator('button.artifact-section-toggle').first()).toBeAttached();
+      await expect(page).toHaveURL(address);
+      await expect(page.locator('.pod-tabs-bar')).toHaveCount(0);
+    };
+
+    // Rendered listed, with no index built after it.
+    const fresh = { name: 'pod-tabs-unindexed', title: 'Pod tabs unindexed' };
+    run('render', '--name', fresh.name, '--title', fresh.title, '--date', '2026-01-02',
+      '--body', '<h2 id="a-section">A section</h2><p>Plain text.</p><h2 id="b-section">B section</h2><p>More.</p>',
+      '--out-dir', OUT);
+    await page.goto(`/${fresh.name}.html#a-section`);
+    await stayed(new RegExp(`/${fresh.name}\\.html#a-section$`));
+    await page.waitForTimeout(500);
+    await expect(page).toHaveURL(new RegExp(`/${fresh.name}\\.html#a-section$`));
+
+    // The page's read of its index held past three seconds: the bare page
+    // runs nothing meanwhile, posts no opening, and goes once it answers.
+    let release = () => {};
+    const held = new Promise<void>((resolve) => { release = resolve; });
+    let asked = false;
+    await page.route((url) => url.pathname === '/', async (route) => {
+      if (route.request().resourceType() === 'fetch') {
+        asked = true;
+        await held;
+      }
+      await route.continue();
+    });
+    // Each POST to the seen route, and whether the bare page sent it.
+    const posted: { bare: boolean; page: string }[] = [];
+    page.on('request', (request) => {
+      if (new URL(request.url()).pathname !== SEEN || request.method() !== 'POST') return;
+      const sender = request.frame();
+      posted.push({
+        bare: sender === page.mainFrame() && new URL(sender.url()).pathname === `/${ARTICLE.name}.html`,
+        page: request.postDataJSON()?.page ?? '',
+      });
+    });
+    await page.goto('about:blank');
+    await page.goto(`/${ARTICLE.name}.html#second-section`);
+    await expect.poll(() => asked).toBe(true);
+    await page.waitForTimeout(3500);
+    await expect(page).toHaveURL(new RegExp(`/${ARTICLE.name}\\.html#second-section$`));
+    await expect(page.locator('button.artifact-section-toggle')).toHaveCount(0);
+    expect(posted).toEqual([]);
+    release();
+
+    await expect(strip(page)).toHaveCount(1);
+    await expect(page).toHaveURL(new RegExp(`/#tabs=${ARTICLE.name}&on=${ARTICLE.name}$`));
+    await expectActive(page, ARTICLE);
+    await expect(framed(page, ARTICLE).locator('h1')).toHaveText(ARTICLE.title);
+    expect((await shownIn(page, ARTICLE)).hash).toBe('#second-section');
+    await expect.poll(() => posted.length).toBeGreaterThan(0);
+    await page.waitForTimeout(500);
+    expect(posted).toEqual([{ bare: false, page: ARTICLE.name }]);
+    await page.unrouteAll({ behavior: 'ignoreErrors' });
+    expect(errors).toEqual([]);
+  });
+
+  test('a pod whose fragment changes while the index answers opens at the fragment it holds then', async ({ page }) => {
+    const errors = await watch(page);
+    let release = () => {};
+    const held = new Promise<void>((resolve) => { release = resolve; });
+    let asked = false;
+    await page.route((url) => url.pathname === '/', async (route) => {
+      if (route.request().resourceType() === 'fetch') {
+        asked = true;
+        await held;
+      }
+      await route.continue();
+    });
+    await page.goto('about:blank');
+    await page.goto(`/${ARTICLE.name}.html#first-section`);
+    await expect.poll(() => asked).toBe(true);
+    await page.evaluate(() => { location.hash = 'second-section'; });
+    release();
+
+    await expect(strip(page)).toHaveCount(1);
+    await expectActive(page, ARTICLE);
+    await expect(framed(page, ARTICLE).locator('h1')).toHaveText(ARTICLE.title);
+    expect((await shownIn(page, ARTICLE)).hash).toBe('#second-section');
+    await page.unrouteAll({ behavior: 'ignoreErrors' });
     expect(errors).toEqual([]);
   });
 

@@ -139,7 +139,8 @@ html:has(meta[name="lotuspod:revision"]) .artifact-meta--versions::after {
 }
 
 .artifact-versions-menu-top .artifact-versions-current,
-.artifact-versions-menu-top .artifact-versions-seen {
+.artifact-versions-menu-top .artifact-versions-seen,
+.artifact-versions-menu-top .artifact-versions-viewing {
   font-size: 0.75rem;
   margin: 0;
   white-space: nowrap;
@@ -336,19 +337,48 @@ html:has(meta[name="lotuspod:revision"]) .artifact-meta--versions::after {
   margin: 0;
 }
 
+/* Where the links do not fit on one line, each wraps whole. */
 .artifact-version-banner-links {
+  align-items: baseline;
   display: flex;
-  gap: 1rem;
+  flex-wrap: wrap;
+  gap: 0.35rem 1rem;
 }
 
-.artifact-version-banner a {
+.artifact-version-banner-links > * {
+  white-space: nowrap;
+}
+
+/* The banner's own links; the version menu's items keep the menu's look. */
+.artifact-version-banner-links > a {
   color: var(--color-amber);
   font-weight: 600;
   text-decoration: none;
 }
 
-.artifact-version-banner a:hover,
-.artifact-version-banner a:focus-visible {
+.artifact-version-banner-links > a:hover,
+.artifact-version-banner-links > a:focus-visible {
+  text-decoration: underline;
+}
+
+/* The banner's version menu (js/old-version.js): "Choose a version ▾" drawn
+   as the banner's links are, and under it the header's menu as it is. */
+.artifact-version-banner-menu {
+  position: relative;
+}
+
+.artifact-version-banner .artifact-versions-menu-button {
+  color: var(--color-amber);
+  font-weight: 600;
+  gap: 0.3em;
+  margin: -0.15rem -0.3rem;
+  padding: 0 0.3rem;
+}
+
+.artifact-version-banner .artifact-versions-menu-button:hover,
+.artifact-version-banner .artifact-versions-menu-button:focus-visible,
+.artifact-version-banner .artifact-versions-menu-button[aria-expanded="true"] {
+  color: var(--color-amber);
   text-decoration: underline;
 }
 
@@ -541,7 +571,8 @@ a.artifact-changes-section:focus-visible,
   background: color-mix(in srgb, var(--color-sky) 7%, transparent);
 }
 
-.artifact-versions-seen {
+.artifact-versions-seen,
+.artifact-versions-viewing {
   border: 1px solid color-mix(in srgb, var(--color-sky) 60%, transparent);
   border-radius: var(--radius-pill);
   color: var(--color-sky);

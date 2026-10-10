@@ -44,7 +44,7 @@ test.use({ extraHTTPHeaders: SIGNED_IN });
 async function load(page: Page, target: Target) {
   await page.route((url) => url.pathname === '/api/comments', (route) =>
     route.fulfill({ json: { page: target.slug, threads: [] } }));
-  await page.goto(target.url);
+  await page.goto(`${target.url}?standalone`);
   await expect(page.locator('.artifact-body table')).toHaveCount(7);
   await settle(page);
 }
@@ -452,7 +452,7 @@ for (const target of TARGETS) {
       const page = await context.newPage();
       await page.route((url) => url.pathname === '/api/comments', (route) =>
         route.fulfill({ json: { page: target.slug, threads: [] } }));
-      await page.goto(target.url);
+      await page.goto(`${target.url}?standalone`);
       await expect(page.locator('.artifact-body table')).toHaveCount(7);
       if (javaScriptEnabled) {
         await settle(page);
