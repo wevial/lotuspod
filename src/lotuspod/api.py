@@ -3,8 +3,10 @@
 serve hands a request here only after its Access assertion verifies, with
 the reader as actor. Ten routes:
 
-    POST /api/answers     {page, question, version, choice, note} or
-                          {page, question, version, checked, note}
+    POST /api/answers     {page, question, version, choice, note},
+                          {page, question, version, checked, note},
+                          {page, question, version, dismissed: true, reason}
+                          or {page, question, dismissed: false}
     GET  /api/answers?page=NAME
     POST /api/comments    {page, section, text[, quote][, revision][, images]},
                           {page, question, text[, revision][, images]},
@@ -122,6 +124,22 @@ body carries it as `comment`, as a new thread's POST answers it. A later
 note to the same question is a reply in the newest thread a note opened,
 which it reopens if resolved. A note-less answer's body has no `comment`.
 
+An owner (one of the [access] owners) may dismiss a question that no
+longer matters: `{page, question, version, dismissed: true, reason}`, the
+reason 0 to MAX_REASON characters, stores a dismissal (lotuspod.db), an
+answer of its own marked `dismissed`, its choice "", its kept label
+"Dismissed" and its reason as its note, and answers 201 with it. It opens
+no thread. `{page, question, dismissed: false}` undoes the dismissal that
+is the question's current answer, so the answer before it is current again,
+or none, and answers 200 {page, question, current, earlier}, the question's
+entry as a read of the answers gives it, current null when it has none.
+Each is refused, with nothing stored, in this order: 403 not_owner for a
+reader who is not an owner, 400 invalid_body for any other key set or
+length, 404 unknown_page, 409 archived, 400 unknown_question, 409 stale for
+a dismissal's version other than the page's, and 409 already_dismissed
+when the question's current answer is a dismissal at that version, or 409
+not_dismissed for an undo when it is not a dismissal.
+
 `{page, question, text}` opens a thread on one of the page's decisions
 instead of a section: it is stored in the section whose comment box follows
 the decision's form, and each comment in it carries `question`, the
@@ -197,6 +215,8 @@ MAX_TEXT = 4000
 MAX_EXACT = 500
 MAX_CONTEXT = 32
 MAX_REVISION = 100
+# Characters of a dismissal's reason.
+MAX_REASON = 200
 # The images one comment may name.
 MAX_IMAGES = 4
 # Accepted uploads one reader may make in any UPLOAD_WINDOW seconds.
@@ -573,9 +593,12 @@ class Api:
                             (("Allow", "POST"),))
                 return HTTPStatus.CREATED, self._post_media(headers, body, actor), ()
             if method == "POST":
-                if path == ANSWERS:
-                    return HTTPStatus.CREATED, self._post_answer(headers, body, actor), ()
                 fields = self._json_body(headers, body)
+                if path == ANSWERS:
+                    if fields.get("dismissed") is False:
+                        # An undo stores no answer: 200, where every other is 201.
+                        return HTTPStatus.OK, self._post_undismiss(fields, actor), ()
+                    return HTTPStatus.CREATED, self._post_answer(fields, actor), ()
                 if path == ARCHIVE:
                     return HTTPStatus.OK, self._post_archive(fields, actor), ()
                 if path == SEEN:
@@ -677,9 +700,13 @@ class Api:
         return {"from": start, "to": end, "older": older, "truncated": truncated,
                 "pages": list(pages.values())}
 
-    def _post_archive(self, fields: dict, actor: Mapping) -> dict:
+    def _owner(self, actor: Mapping) -> None:
+        """Refusal not_owner unless the reader is one of the owners."""
         if str(actor.get("email") or "") not in self.owners:
             raise Refusal(HTTPStatus.FORBIDDEN, "not_owner")
+
+    def _post_archive(self, fields: dict, actor: Mapping) -> dict:
+        self._owner(actor)
         _keys(fields, {"page", "archived"}, frozenset({"supersededBy"}))
         archived = fields["archived"]
         if not isinstance(archived, bool):
@@ -815,8 +842,9 @@ class Api:
     def _images(self, names: list[str] | None) -> list[dict]:
         return stored_images(self.media_dir, names)
 
-    def _post_answer(self, headers: Message, body: Body, actor: Mapping) -> dict:
-        fields = self._json_body(headers, body)
+    def _post_answer(self, fields: dict, actor: Mapping) -> dict:
+        if "dismissed" in fields:
+            return self._post_dismissal(fields, actor)
         # A checklist's answer sends checked in place of choice; which the
         # question takes is known only once it is found.
         checklist = "checked" in fields
@@ -860,6 +888,37 @@ class Api:
                 stored["comment"], routing.last_pulls(self.database), self.window,
                 self.clock(), self.database.responder_paused())
         return stored
+
+    def _post_dismissal(self, fields: dict, actor: Mapping) -> dict:
+        self._owner(actor)
+        _keys(fields, {"page", "question", "version", "dismissed", "reason"})
+        if fields["dismissed"] is not True:
+            raise _invalid()
+        question = _text(fields["question"], 1, MAX_NAME)
+        version = _text(fields["version"], 1, MAX_NAME)
+        reason = _text(fields["reason"], 0, MAX_REASON)
+        page = self._open_page(fields["page"])
+        asked = asked_question(page, question)
+        if version != asked.version:
+            raise Refusal(HTTPStatus.CONFLICT, "stale")
+        try:
+            return self.database.dismiss(
+                page=page.name, question=question, version=version, reason=reason,
+                revision=page.revision, actor=actor, question_text=asked.text)
+        except db.Refused as exc:
+            raise Refusal(HTTPStatus.CONFLICT, exc.error) from None
+
+    def _post_undismiss(self, fields: dict, actor: Mapping) -> dict:
+        self._owner(actor)
+        _keys(fields, {"page", "question", "dismissed"})
+        question = _text(fields["question"], 1, MAX_NAME)
+        page = self._open_page(fields["page"])
+        asked_question(page, question)
+        try:
+            entry = self.database.undismiss(page=page.name, question=question, asked=True)
+        except db.Refused as exc:
+            raise Refusal(HTTPStatus.CONFLICT, exc.error) from None
+        return {"page": page.name, "question": question, **entry}
 
     def _unread(self, page: Page, threads: list[dict], actor: Mapping) -> list[int]:
         """The ids of the reader's unread comments on page, among the threads
