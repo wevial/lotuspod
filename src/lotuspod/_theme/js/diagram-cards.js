@@ -360,15 +360,6 @@
         element("dt", "", "Unblocks"), element("dd", "", named(diagram, unblocks)));
     }
 
-    // The card's place: the dialog its box is in, as the modal view makes
-    // the rest of the page inert, else the page.
-    function home(box) {
-      var parent = box.group.closest("dialog") || document.body;
-      if (card.parentNode !== parent) {
-        parent.appendChild(card);
-      }
-    }
-
     // Set the card beside its box: on the right where the window has room,
     // else on the left, else below (or above), always inside the window. In
     // the page it is set in the page's coordinates, in the view's dialog,
@@ -413,7 +404,12 @@
       opened = box;
       box.group.setAttribute("aria-expanded", "true");
       fill(box);
-      home(box);
+      // The card's place: the dialog its box is in, as the modal view makes
+      // the rest of the page inert, else the page.
+      var parent = box.group.closest("dialog") || document.body;
+      if (card.parentNode !== parent) {
+        parent.appendChild(card);
+      }
       card.hidden = false;
       place();
       card.focus({ preventScroll: true });
@@ -456,8 +452,7 @@
     // card back in the page. A close event does not bubble, so it is caught
     // on its way down.
     document.addEventListener("close", function (event) {
-      var closed = event.target;
-      if (card && closed.contains(card)) {
+      if (card && event.target.contains(card)) {
         shut(false);
         document.body.appendChild(card);
       }
