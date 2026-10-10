@@ -220,7 +220,7 @@ class DeclaredOrderTests(ThemeCopyTestCase):
         self.assertEqual(problems, [], "\n".join(problems))
 
     def test_the_old_version_script_joins_the_menu_and_no_page_feature(self):
-        """LOTUS-123: the old-version script, served beside the page script,
+        """The old-version script, served beside the page script,
         is its opening, the helpers it shares with the page script, the
         version menu, its own source and the closing line; no page feature
         that reads, shows or posts comments or answers is in it."""

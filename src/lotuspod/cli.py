@@ -428,8 +428,7 @@ def theme_hash() -> str:
 def sync_theme_css(out_dir: Path) -> None:
     """Keep the artifact dir's theme files identical to the packaged theme.
 
-    Covers the stylesheet, the favicon, the page script, the index script
-    and the old-version script (THEME_FILES).
+    Covers the served theme files (THEME_FILES).
     Rewriting only on a content difference means a theme upgrade reaches
     already-rendered directories while untouched ones keep their mtime.
     """
