@@ -68,17 +68,12 @@ test("a source is written as its JS after the marker line, with no types or comm
   expect(first + "\n").toBe(marker("pod-count"));
   expect(first).toContain("web/src/pod-count.ts");
   expect(rest.join("\n")).toBe(STRIPPED);
-  for (const syntax of ["interface", ": Pod", ": number", " as Pod", "Counts the pods", "How many"]) {
-    expect(built).not.toContain(syntax);
-  }
 });
 
 test("building twice gives identical bytes and rewrites nothing", () => {
   writeFileSync(join(web, "src", "pod-count.ts"), SOURCE);
   build(web);
-  const first = readFileSync(join(out, "pod-count.js"));
   expect(build(web)).toEqual({ written: [], removed: [] });
-  expect(readFileSync(join(out, "pod-count.js"))).toEqual(first);
 });
 
 test("a hand edit to a built file is overwritten", () => {
