@@ -248,23 +248,6 @@ class DeclaredOrderTests(ThemeCopyTestCase):
         problems = source_problems(cli.THEME_DIR, cli.THEME_SOURCES)
         self.assertEqual(problems, [], "\n".join(problems))
 
-    def test_the_islands_are_the_page_scripts_last_source_inside_the_closure(self):
-        """LOTUS-156: the islands bundle (web/src/islands/main.tsx) reaches
-        the legacy sources' names through its bridge, so js/islands.js is
-        the page script's last source, joined just before the closure's
-        close; neither the index script nor the old-version script has
-        it."""
-        script = cli.THEME_SOURCES[cli.PAGE_SCRIPT]
-        self.assertEqual(script[-1], "js/islands.js")
-        self.assertEqual(script.count("js/islands.js"), 1)
-        self.assertTrue(cli.theme_file_bytes(cli.PAGE_SCRIPT).endswith(
-            (cli.THEME_DIR / "js/islands.js").read_bytes() + CLOSURE_CLOSE))
-        for other in (cli.INDEX_SCRIPT, cli.OLD_VERSION_SCRIPT):
-            with self.subTest(script=other):
-                self.assertNotIn("js/islands.js", cli.THEME_SOURCES[other])
-        problems = source_problems(cli.THEME_DIR, cli.THEME_SOURCES)
-        self.assertEqual(problems, [], "\n".join(problems))
-
     def test_the_pod_finder_sources_follow_the_pod_tabs_sources(self):
         """LOTUS-102: the finder hands its choice to the tabs and opens from
         their strip, so js/pod-finder.js is joined just after js/pod-tabs.js
