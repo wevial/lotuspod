@@ -2632,12 +2632,15 @@ def answers_text(name: str, questions: dict, forms: dict[str, decisions.Form]) -
     decision answered at its form's version with another option than the
     form's default says so: "LABEL, was: DEFAULT-LABEL". An answer an agent
     recorded from elsewhere names the handle that recorded it and where it
-    was given."""
+    was given. A dismissal is "Dismissed", its note its reason, and says
+    when it was undone, if it was."""
     if not questions:
         return f"no answers to {name}"
 
     def entry(row: dict, form: decisions.Form | None, indent: str) -> list[str]:
-        if "checked" in row:
+        if row.get("dismissed"):
+            label = "Dismissed"
+        elif "checked" in row:
             if form is not None and row["version"] == form.version:
                 label = api.summary(api.changes(dict(form.options), form.defaults,
                                                 row["checked"]))
@@ -2654,6 +2657,8 @@ def answers_text(name: str, questions: dict, forms: dict[str, decisions.Form]) -
         head += ")"
         if form is None or row["version"] != form.version:
             head += ", to an earlier wording"
+        if "undoneAt" in row:
+            head += f", undone at {row['undoneAt']}"
         if "source" in row:
             by = (f"recorded by {row['actor'].get('handle', '')} at {row['createdAt']}, "
                   f"answered elsewhere: {row['source']}")
@@ -2661,7 +2666,8 @@ def answers_text(name: str, questions: dict, forms: dict[str, decisions.Form]) -
             by = f"by {row['actor'].get('email', '')} at {row['createdAt']}"
         lines = [head, f"{indent}  {by}"]
         if row["note"]:
-            lines.append(f"{indent}  note: {row['note']}")
+            said = "reason" if row.get("dismissed") else "note"
+            lines.append(f"{indent}  {said}: {row['note']}")
         return lines
 
     lines = []

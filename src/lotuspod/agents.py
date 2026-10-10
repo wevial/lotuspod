@@ -141,10 +141,14 @@ def moved(comment: dict, revision: str) -> str:
 def answered(decision: dict) -> str:
     """A decision's current answer: its label and choice, who and when, and
     where it was given when an agent recorded it from elsewhere; "not
-    answered yet" when it has none."""
+    answered yet" when it has none, and "dismissed, by NAME at TIME", with
+    ": REASON" when it has one, when an owner dismissed it."""
     answer = decision["answer"]
     if answer is None:
         return "not answered yet"
+    if answer.get("dismissed"):
+        line = f"dismissed, by {_by(answer)} at {answer['createdAt']}"
+        return line + f": {answer['note']}" if answer["note"] else line
     label = next((option["label"] for option in decision["options"]
                   if option["value"] == answer["choice"]), answer["choice"])
     line = f"{label} (`{answer['choice']}`), by {_by(answer)} at {answer['createdAt']}"
@@ -259,7 +263,9 @@ def pull_text(payload: dict) -> str:
                 # A note the thread holds is read there, not twice, also
                 # once kept unchanged with another option.
                 noted = {row["text"] for row in thread if row.get("answer")}
+                # A dismissal's reason is on its Answer line.
                 if (decision["answer"] and decision["answer"]["note"]
+                        and not decision["answer"].get("dismissed")
                         and decision["answer"]["note"] not in noted):
                     lines += ["", "The answer's note:", "", fence(decision["answer"]["note"])]
             if comment.get("quote"):
@@ -291,7 +297,12 @@ def pull_text(payload: dict) -> str:
             asked = question["text"] or "(its words were not kept)"
             if question["reworded"]:
                 asked += " (the page now asks it in other words, or not at all)"
-            if "checked" in answer:
+            dismissed = bool(answer.get("dismissed"))
+            if dismissed:
+                # Its reason is said here, once.
+                reason = f": {answer['note']}" if answer["note"] else ""
+                chosen = [f"- Chosen: Dismissed{reason}"]
+            elif "checked" in answer:
                 chosen = [f"- Chosen: {question['label']}"]
                 if question.get("changed") is not None:
                     chosen += [f"- Changed: {item['label']} (`{item['id']}`) "
@@ -313,16 +324,18 @@ def pull_text(payload: dict) -> str:
                 f"- From: {_by(answer)} at {answer['createdAt']}, "
                 f"against revision {answer['revision'] or 'unknown'}",
                 *([f"- Answered elsewhere: {answer['source']}"] if answer.get("source") else []),
+                *([f"- Undone at {answer['undoneAt']}"] if answer.get("undoneAt") else []),
                 *([_note_line(item["noteComment"], routed, payload["owner"])]
                   if item.get("noteComment") else []),
                 f"- Acknowledge: `lotuspod comments ack-answer {answer['id']}`",
                 "",
-                ("The answer was given elsewhere and recorded by an agent, on this question "
+                ("The reader dismissed this question as no longer relevant." if dismissed else
+                 "The answer was given elsewhere and recorded by an agent, on this question "
                  "only." if answer.get("source") else
                  "The answer is the reader's choice on this question only."),
                 "",
             ]
-            if answer["note"] and not item.get("noteComment"):
+            if answer["note"] and not dismissed and not item.get("noteComment"):
                 lines += ["Note:", "", fence(answer["note"]), ""]
     for page in pages.values():
         if not page["sourceFile"]:

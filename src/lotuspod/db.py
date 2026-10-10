@@ -21,6 +21,13 @@ An agent may record a decision's answer given elsewhere, as the page's
 owner: it keeps where as `source`, which only such an answer carries, and
 the owner has it acknowledged as it is stored.
 
+An owner may dismiss a question that no longer matters: a dismissal is an
+answer of its own, written by the reader, its choice "", its label
+"Dismissed" and its reason in `note`, which only it carries as `dismissed`.
+Undo marks it `undoneAt` and keeps it. A question's current answer is its
+newest one that is not an undone dismissal; a question whose only answers
+are undone dismissals is not answered.
+
 A reader's comment also keeps, as it arrives, its page's owner and that
 owner's last pull then, so routing (lotuspod.routing) can tell whether the
 owner was listening when it came, whatever pulls follow.
@@ -80,7 +87,7 @@ from typing import Callable, Iterator, Mapping, Sequence
 from lotuspod import media
 
 DEFAULT_NAME = "lotuspod.sqlite3"
-SCHEMA_VERSION = 14
+SCHEMA_VERSION = 15
 # Seconds a connection waits for another writer before giving up.
 BUSY_TIMEOUT = 30
 # The state of a reader's comment until an agent takes it up.
@@ -243,6 +250,11 @@ _SCHEMA = {1: (
     "ALTER TABLE comments ADD COLUMN answer TEXT",
     # So the pull finds the comment holding each answer's note by its id.
     "CREATE INDEX comments_by_answer ON comments(json_extract(answer, '$.id'))",
+), 15: (
+    # A dismissal: 1 on it, NULL on every other answer; and when it was
+    # undone, NULL until it is.
+    "ALTER TABLE answers ADD COLUMN dismissed INTEGER",
+    "ALTER TABLE answers ADD COLUMN undone_at TEXT",
 )}
 # The settings row that holds whether the responder is paused.
 _PAUSED = "responder_paused"
@@ -261,7 +273,8 @@ class DuplicateCredential(ValueError):
 class Refused(Exception):
     """A claim, reply, release, failure or resolution refused, naming why:
     unknown_comment, unknown_thread, unknown_page, settled, not_routed,
-    claimed, not_claimed or revision_mismatch. Nothing is stored."""
+    claimed, not_claimed or revision_mismatch; a dismissal or its undo,
+    already_dismissed or not_dismissed. Nothing is stored."""
 
     def __init__(self, error: str) -> None:
         super().__init__(error)
@@ -302,7 +315,49 @@ def _answer(row: sqlite3.Row) -> dict:
         found["checked"] = json.loads(row["checked"])
     if row["source"] is not None:
         found["source"] = row["source"]
+    # Only a dismissal has them, and undoneAt once it is undone.
+    if row["dismissed"]:
+        found["dismissed"] = True
+    if row["undone_at"] is not None:
+        found["undoneAt"] = row["undone_at"]
     return found
+
+
+def _undone(row: sqlite3.Row) -> bool:
+    """Whether row is a dismissal undone, which is no question's current answer."""
+    return bool(row["dismissed"]) and row["undone_at"] is not None
+
+
+def _current(conn: sqlite3.Connection, page: str, question: str) -> sqlite3.Row | None:
+    """The question's current answer: its newest that is not an undone dismissal."""
+    return conn.execute(
+        "SELECT * FROM answers WHERE page = ? AND question = ?"
+        " AND (dismissed IS NULL OR undone_at IS NULL) ORDER BY id DESC LIMIT 1",
+        (page, question),
+    ).fetchone()
+
+
+def _entries(rows: Sequence[sqlite3.Row], asked: bool) -> dict:
+    """The answered questions among rows, newest first, as answers() gives
+    them."""
+
+    def answer(row: sqlite3.Row) -> dict:
+        found = _answer(row)
+        if asked:
+            found["asked"] = {"text": row["question_text"], "label": row["choice_label"]}
+        return found
+
+    questions: dict[str, dict] = {}
+    for row in reversed(rows):
+        questions.setdefault(row["question"], {"current": None, "earlier": []})
+    for row in rows:
+        entry = questions[row["question"]]
+        if entry["current"] is None and not _undone(row):
+            entry["current"] = answer(row)
+        else:
+            entry["earlier"].append(answer(row))
+    return {question: entry for question, entry in questions.items()
+            if entry["current"] is not None}
 
 
 def _comment(row: sqlite3.Row) -> dict:
@@ -428,10 +483,10 @@ class Database:
 
         With thread, {section, section_title, owner}, a note that is not
         empty once trimmed and is not the note of the answer it supersedes
-        is stored too, as the reader's comment on the decision carrying
-        `answer`: a reply in the newest thread on the question opened by
-        such a comment, reopening it if resolved, else a new thread in
-        section. The answer then carries the comment as `comment`."""
+        (past any dismissal, whose reason is no note) is stored too, as the
+        reader's comment on the decision carrying `answer`: a reply in the
+        newest thread on the question opened by such a comment, reopening it
+        if resolved, else a new thread in section. The answer then carries the comment as `comment`."""
         with self._connect() as conn, _write(conn):
             last = conn.execute(
                 "SELECT MAX(id) FROM answers WHERE page = ? AND question = ?",
@@ -449,8 +504,12 @@ class Database:
             found = _answer(row.fetchone())
             if thread is None or not note.strip():
                 return found
-            if last is not None and conn.execute(
-                    "SELECT note FROM answers WHERE id = ?", (last,)).fetchone()[0] == note:
+            before = conn.execute(
+                "SELECT note FROM answers WHERE page = ? AND question = ? AND id < ?"
+                " AND dismissed IS NULL ORDER BY id DESC LIMIT 1",
+                (page, question, found["id"]),
+            ).fetchone()
+            if before is not None and before[0] == note:
                 return found
             # The newest thread a note to this question opened, if any.
             root = conn.execute(
@@ -516,33 +575,58 @@ class Database:
         found["asked"] = {"text": row["question_text"], "label": row["choice_label"]}
         return found, created
 
+    def dismiss(self, *, page: str, question: str, version: str, reason: str,
+                revision: str, actor: Mapping, question_text: str | None = None) -> dict:
+        """Store the reader's dismissal of a question, its reason kept as
+        its note; it supersedes the newest answer to the question.
+        Refused already_dismissed when the question's current answer is a
+        dismissal at the same version."""
+        with self._connect() as conn, _write(conn):
+            current = _current(conn, page, question)
+            if current is not None and current["dismissed"] and current["version"] == version:
+                raise Refused("already_dismissed")
+            last = conn.execute(
+                "SELECT MAX(id) FROM answers WHERE page = ? AND question = ?",
+                (page, question),
+            ).fetchone()[0]
+            cursor = conn.execute(
+                "INSERT INTO answers (page, question, version, choice, note, revision,"
+                " actor, created_at, supersedes, question_text, choice_label, dismissed)"
+                " VALUES (?, ?, ?, '', ?, ?, ?, ?, ?, ?, 'Dismissed', 1)",
+                (page, question, version, reason, revision, _dump(actor), _now(), last,
+                 question_text),
+            )
+            row = conn.execute("SELECT * FROM answers WHERE id = ?", (cursor.lastrowid,))
+            return _answer(row.fetchone())
+
+    def undismiss(self, *, page: str, question: str, asked: bool = False) -> dict:
+        """Undo the dismissal that is the question's current answer, so the
+        answer before it is current again, or none; the question's entry
+        as answers() gives it, or {current: None, earlier: []}. Refused
+        not_dismissed when its current answer is not a dismissal."""
+        with self._connect() as conn, _write(conn):
+            current = _current(conn, page, question)
+            if current is None or not current["dismissed"]:
+                raise Refused("not_dismissed")
+            conn.execute("UPDATE answers SET undone_at = ? WHERE id = ?",
+                         (_now(), current["id"]))
+            rows = conn.execute(
+                "SELECT * FROM answers WHERE page = ? AND question = ? ORDER BY id DESC",
+                (page, question),
+            ).fetchall()
+        return _entries(rows, asked).get(question, {"current": None, "earlier": []})
+
     def answers(self, page: str, *, asked: bool = False) -> dict:
         """The page's answered questions, each as {current, earlier}: the
-        newest answer, and the older ones newest first. With asked, each
-        answer also carries asked, the {text, label} of its question and
-        choice as the page asked them (None in an answer stored before they
-        were kept)."""
+        newest answer that is not an undone dismissal, and the others newest
+        first. With asked, each answer also carries asked, the {text, label}
+        of its question and choice as the page asked them (None in an answer
+        stored before they were kept)."""
         with self._connect() as conn:
             rows = conn.execute(
                 "SELECT * FROM answers WHERE page = ? ORDER BY id DESC", (page,)
             ).fetchall()
-
-        def answer(row: sqlite3.Row) -> dict:
-            found = _answer(row)
-            if asked:
-                found["asked"] = {"text": row["question_text"], "label": row["choice_label"]}
-            return found
-
-        questions: dict[str, dict] = {}
-        for row in reversed(rows):
-            questions.setdefault(row["question"], {"current": None, "earlier": []})
-        for row in rows:
-            entry = questions[row["question"]]
-            if entry["current"] is None:
-                entry["current"] = answer(row)
-            else:
-                entry["earlier"].append(answer(row))
-        return questions
+        return _entries(rows, asked)
 
     def add_comment(self, *, page: str, section: str, section_title: str, revision: str,
                     text: str, quote: Mapping | None, actor: Mapping, owner: str = "",
@@ -1064,7 +1148,8 @@ class Database:
         question and choice as the page asked them (None in an answer stored
         before they were kept), and the id of the comment holding its note,
         or None. A note kept unchanged with another option is held by the
-        comment of the answer that first gave it."""
+        comment of the answer that first gave it, past any dismissal; a
+        dismissal's reason is no note, held by none."""
         with self._connect() as conn:
             rows = conn.execute(
                 "SELECT * FROM answers WHERE id NOT IN"
@@ -1078,26 +1163,36 @@ class Database:
                 " GROUP BY json_extract(answer, '$.id')").fetchall())
             # Each answer's (note, supersedes), the rows read here first, and
             # the comment holding the note of each answer resolved so far, so
-            # every answer of a chain is walked once.
-            kept = {row["id"]: (row["note"], row["supersedes"]) for row in rows}
+            # every answer of a chain is walked once. A dismissal's note is
+            # None: its reason is no note.
+            kept = {row["id"]: (None if row["dismissed"] else row["note"], row["supersedes"])
+                    for row in rows}
             held: dict[int, int | None] = {}
 
             def holder(answer_id: int) -> int | None:
                 note, earlier = kept[answer_id]
+                if note is None:
+                    return None
                 walked = [answer_id]
                 comment = notes.get(answer_id)
                 # Back along the answers it supersedes while the note stays.
                 while comment is None and note.strip() and earlier is not None:
-                    if earlier in held:
-                        comment = held[earlier] if kept[earlier][0] == note else None
-                        break
                     if earlier not in kept:
                         before = conn.execute(
-                            "SELECT note, supersedes FROM answers WHERE id = ?", (earlier,)
+                            "SELECT note, supersedes, dismissed FROM answers WHERE id = ?",
+                            (earlier,),
                         ).fetchone()
                         if before is None:
                             break
-                        kept[earlier] = (before["note"], before["supersedes"])
+                        kept[earlier] = (None if before["dismissed"] else before["note"],
+                                         before["supersedes"])
+                    if kept[earlier][0] is None:
+                        # A dismissal between them: the walk passes it.
+                        earlier = kept[earlier][1]
+                        continue
+                    if earlier in held:
+                        comment = held[earlier] if kept[earlier][0] == note else None
+                        break
                     if kept[earlier][0] != note:
                         break
                     walked.append(earlier)

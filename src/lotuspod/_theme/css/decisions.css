@@ -246,7 +246,8 @@ label.artifact-decision-note span {
 
 /* Ask, beside "Save answer" on a page that takes comments: the note sent as
    a question about the decision, in the quieter outlined voice. */
-.artifact-decision-ask {
+.artifact-decision-ask,
+.artifact-decision-dismiss {
   background: none;
   border: 1px solid var(--color-lavender);
   border-radius: var(--radius-pill);
@@ -259,12 +260,14 @@ label.artifact-decision-note span {
   padding: 0.4em 1.1em;
 }
 
-.artifact-decision-ask:hover {
+.artifact-decision-ask:hover,
+.artifact-decision-dismiss:hover {
   border-color: var(--color-pale-lavender);
   color: var(--color-pale-lavender);
 }
 
-.artifact-decision-ask:disabled {
+.artifact-decision-ask:disabled,
+.artifact-decision-dismiss:disabled {
   cursor: default;
   opacity: 0.6;
 }
@@ -317,7 +320,8 @@ label.artifact-decision-note span {
   color: var(--color-white);
 }
 
-.artifact-decision-change {
+.artifact-decision-change,
+.artifact-decision-undo {
   appearance: none;
   background: none;
   border: 0;
@@ -330,7 +334,8 @@ label.artifact-decision-note span {
   text-underline-offset: 0.18em;
 }
 
-.artifact-decision-change:hover {
+.artifact-decision-change:hover,
+.artifact-decision-undo:hover {
   color: var(--color-pale-lavender);
   text-decoration-color: currentColor;
 }
