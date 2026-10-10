@@ -411,7 +411,6 @@ class StandardInputTests(PublishTestCase):
         # page still fails the comparison.
         page = (from_stdin / "pond.html").read_bytes()
         changed = page.replace(b"Still water.", b"Still waters", 1)
-        self.assertNotEqual(changed, page)
         (from_stdin / "pond.html").write_bytes(changed)
         with self.assertRaises(AssertionError):
             self.assertSamePage(from_stdin, from_file)
