@@ -409,9 +409,8 @@ class StandardInputTests(PublishTestCase):
 
         # Only the stamp is set aside: a byte changed anywhere else in the
         # page still fails the comparison.
-        page = (from_stdin / "pond.html").read_bytes()
-        changed = page.replace(b"Still water.", b"Still waters", 1)
-        (from_stdin / "pond.html").write_bytes(changed)
+        page = from_stdin / "pond.html"
+        page.write_bytes(page.read_bytes().replace(b"Still water.", b"Still waters", 1))
         with self.assertRaises(AssertionError):
             self.assertSamePage(from_stdin, from_file)
 
