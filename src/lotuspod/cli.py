@@ -362,20 +362,38 @@ THEME_SOURCES = {
         "js/diagram-view.js",
         "js/ref-cards.js",
         "js/archive.js",
-        "js/page-close.js",
     ),
     INDEX_SCRIPT: (
         "js/pod-tabs.js",
         "js/pod-finder.js",
     ),
     OLD_VERSION_SCRIPT: (
-        "js/old-version-open.js",
         "js/shared.js",
         "js/version-menu.js",
         "js/old-version.js",
-        "js/page-close.js",
     ),
 }
+# The served scripts that run as one strict function, so their sources share
+# its helpers and objects (js/page-open.js, js/shared.js) while each source
+# stays a complete script: the join puts THEME_CLOSURE_OPEN before the source
+# at the index named here and THEME_CLOSURE_CLOSE after the last.
+#
+# The page script's first source, js/open-in-tabs.js, evaluates to a function
+# that is handed the closure and runs it only when the page stays, so the
+# opening follows it with nothing between. The close ends the closure and
+# calls the result.
+#
+# The old-version script is the one script an earlier version of a page runs
+# (lotuspod.versions.old_page), allowed by a nonce of serve's answer that none
+# of the page's own scripts carries. It draws the banner's version menu
+# (js/old-version.js) and nothing else: no comment, no answer, and nothing
+# posted.
+THEME_CLOSURES = {
+    PAGE_SCRIPT: 1,
+    OLD_VERSION_SCRIPT: 0,
+}
+THEME_CLOSURE_OPEN = b'(function () {\n  "use strict";\n'
+THEME_CLOSURE_CLOSE = b"})();\n"
 
 
 def write_atomic(path: Path, data: bytes) -> None:
@@ -411,11 +429,16 @@ def theme_files() -> list[tuple[str, bytes]]:
 
 def theme_file_bytes(filename: str) -> bytes:
     """The bytes of one served theme file: its sources (THEME_SOURCES) joined
-    in their declared order, or the file itself when it has none."""
+    in their declared order, the closure (THEME_CLOSURES) around those it
+    wraps, or the file itself when it has none."""
     sources = THEME_SOURCES.get(filename)
     if sources is None:
         return (THEME_DIR / filename).read_bytes()
-    return b"".join((THEME_DIR / source).read_bytes() for source in sources)
+    parts = [(THEME_DIR / source).read_bytes() for source in sources]
+    start = THEME_CLOSURES.get(filename)
+    if start is not None:
+        parts = [*parts[:start], THEME_CLOSURE_OPEN, *parts[start:], THEME_CLOSURE_CLOSE]
+    return b"".join(parts)
 
 
 def theme_hash() -> str:

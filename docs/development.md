@@ -45,9 +45,10 @@ once its types are erased: no enums, namespaces or parameter properties.
 It checks the build script and its test against Bun's types
 (`web/tsconfig.json`), and the sources against the DOM's and none of Bun's
 (`web/src/tsconfig.json`).
-`test` runs `web/build.test.ts`. `check` builds, then fails when git sees any
-file under `src/lotuspod/_theme/js/` modified, deleted or new, and prints
-what differs.
+`test` runs `web/build.test.ts`. `check` builds, then fails naming each file
+under `src/lotuspod/_theme/js/`, built or written by hand, that does not parse
+on its own with Bun, and fails when git sees any file there modified, deleted
+or new, printing what differs.
 
 The built JS is committed, so the wheel ships it, and `pip install`, the unit
 suite and the demo need neither Bun nor Node. The `theme` workflow

@@ -14,8 +14,9 @@
 // file opened from disk.
 //
 // This source opens the page script's one statement: it is a function handed
-// the rest, from js/page-open.js to js/page-close.js, and runs that only
-// when the page stays, so a load that goes to the index posts nothing, not
+// the rest, the closure the join opens just after it and closes after the
+// last source (THEME_CLOSURES in cli.py), and runs that only when the page
+// stays, so a load that goes to the index posts nothing, not
 // even its opening to the seen route; its frame posts that once it loads.
 // The rest waits for the index's answer only on a load that may go.
 (function () {

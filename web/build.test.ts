@@ -6,7 +6,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { build, marker, outDir } from "./build";
+import { build, marker, outDir, unparsed } from "./build";
 
 const SOURCE = `// Counts the pods a reader has open.
 interface Pod {
@@ -200,4 +200,23 @@ test("check fails naming an orphaned built file it deleted", () => {
   const { exitCode, stderr } = check();
   expect(exitCode).toBe(1);
   expect(stderr).toContain(" D src/lotuspod/_theme/js/gone.js");
+});
+
+test("check fails naming each hand-written file that does not parse on its own", () => {
+  git("init", "-q");
+  writeFileSync(join(out, "closure-open.js"), "// Opens the closure.\n(function () {\n  \"use strict\";\n");
+  writeFileSync(join(out, "closure-close.js"), "})();\n");
+  writeFileSync(join(out, "whole.js"), HAND_WRITTEN);
+  commitAll();
+  const { exitCode, stderr } = check();
+  expect(exitCode).toBe(1);
+  expect(stderr).toContain(`${join(out, "closure-close.js")}: does not parse on its own`);
+  expect(stderr).toContain(`${join(out, "closure-open.js")}: does not parse on its own`);
+  expect(stderr).not.toContain("whole.js");
+});
+
+test("a file of a closure's body parses on its own: top-level functions, var and return", () => {
+  writeFileSync(join(out, "body.js"), "var seen = 0;\nfunction mark() {\n  seen += 1;\n}\nif (!document.body) {\n  return;\n}\nmark();\n");
+  writeFileSync(join(out, "notes.txt"), "})();\n");
+  expect(unparsed(out)).toEqual([]);
 });

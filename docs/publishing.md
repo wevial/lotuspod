@@ -1262,7 +1262,12 @@ A feature's CSS goes in its own file in `src/lotuspod/_theme/css/` and its JS in
 `src/lotuspod/_theme/js/`, and each new file takes one line in the declared
 order (`THEME_SOURCES` in `cli.py`), which render joins into the one
 `lotuspod.css`, `lotuspod-page.js`, `lotuspod-index.js` and
-`lotuspod-old-version.js` it serves.
+`lotuspod-old-version.js` it serves. `lotuspod-page.js` and
+`lotuspod-old-version.js` each run as one strict function, so their sources
+share `js/page-open.js`'s and `js/shared.js`'s helpers: the join opens that
+function before them and closes it after the last (`THEME_CLOSURES` in
+`cli.py`). A new source is a complete script that parses on its own, never
+one that opens or closes the function.
 A script converted to TypeScript lives in `web/src/`, and its built file, the
 one `THEME_SOURCES` names, under `src/lotuspod/_theme/js/` (see
 [Theme build](development.md#theme-build)).

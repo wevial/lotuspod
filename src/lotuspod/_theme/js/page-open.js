@@ -34,8 +34,6 @@
 // number, found again from its quote on every revision of the page. It
 // sends no credential of its own: the reader's Cloudflare Access session is
 // the only identity. Everything anyone wrote is set as text, never as markup.
-(function () {
-  "use strict";
 
   var ANSWERS = "/api/answers";
   var COMMENTS = "/api/comments";
