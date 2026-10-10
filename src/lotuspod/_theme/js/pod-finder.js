@@ -238,7 +238,7 @@
     const ask = ++read;
     let fresh = null;
     try {
-      const response = await fetch(location.pathname, { cache: "no-store", credentials: "same-origin" });
+      const response = await fetch(location.pathname, { cache: "no-store" });
       if (response.status === 200) {
         const doc = new DOMParser().parseFromString(await response.text(), "text/html");
         if (doc.querySelector(".index-table")) fresh = listing(doc);
