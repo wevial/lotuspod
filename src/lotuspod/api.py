@@ -915,7 +915,7 @@ class Api:
         page = self._open_page(fields["page"])
         asked_question(page, question)
         try:
-            entry = self.database.undismiss(page=page.name, question=question)
+            entry = self.database.undismiss(page=page.name, question=question, asked=True)
         except db.Refused as exc:
             raise Refusal(HTTPStatus.CONFLICT, exc.error) from None
         return {"page": page.name, "question": question, **entry}

@@ -364,28 +364,37 @@
     }
 
     // Post each answer not stored, in page order, as its form's own Save
-    // does; an open question has nothing to post.
+    // does; an open question has nothing to post, nor has one dismissed or
+    // saved on its form while the earlier ones were posting.
     save.addEventListener("click", async function () {
       var due = questions.filter(function (question) { return state(question).pending; });
       saving = true;
       outcome.textContent = "";
       refresh();
       var failed = 0;
-      for (var i = 0; i < due.length; i += 1) {
-        var question = due[i];
-        if (!question.checklist && !question.form.querySelector('input[name="choice"]:checked')) {
-          radioOf(question, shown(question)).checked = true;
+      var tried = 0;
+      try {
+        for (var i = 0; i < due.length; i += 1) {
+          var question = due[i];
+          if (!state(question).pending) {
+            continue;
+          }
+          tried += 1;
+          if (!question.checklist && !question.form.querySelector('input[name="choice"]:checked')) {
+            radioOf(question, shown(question)).checked = true;
+          }
+          if (!(await the.save(question.form))) {
+            failed += 1;
+          }
         }
-        if (!(await the.save(question.form))) {
-          failed += 1;
-        }
+      } finally {
+        saving = false;
+        refresh();
       }
-      saving = false;
-      refresh();
       var open = questions.filter(opened).length;
       var stay = plural(open, "question stays", "questions stay") + " open.";
       var time = new Date().toLocaleTimeString(undefined, { timeStyle: "short" });
-      if (failed === due.length) {
+      if (failed === tried) {
         outcome.textContent = "Nothing was saved: see each question's form. " + stay;
       } else {
         outcome.textContent = "Saved at " + time + ". " + stay +

@@ -985,6 +985,19 @@ class DismissalPullTests(PullTestCase):
         self.assertEqual([item["answer"]["id"] for item in self.pull("hermes")
                           if item["kind"] == "answer"], [bare["id"]])
 
+    def test_an_undo_gives_the_entry_as_answers_gives_it(self):
+        database = db.Database(self.db_path)
+        args = {"page": "plan", "question": "decision-2", "version": "v1", "revision": "r",
+                "actor": READER}
+        database.add_answer(choice="yes", note="", question_text="Run it?",
+                            choice_label="Yes", **args)
+        database.dismiss(reason="Not needed now", question_text="Run it?", **args)
+        entry = database.undismiss(page="plan", question="decision-2")
+        self.assertEqual(entry, database.answers("plan")["decision-2"])
+        self.assertNotIn("asked", entry["current"])
+        asked = database.answers("plan", asked=True)["decision-2"]
+        self.assertEqual(asked["current"]["asked"], {"text": "Run it?", "label": "Yes"})
+
     def test_a_reason_of_several_lines_is_printed_on_one(self):
         self.pull("hermes")
         asked = self.decision_thread("Still needed?")

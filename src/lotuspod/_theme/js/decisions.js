@@ -600,10 +600,12 @@
 
     // Undo, in the form's turn: the dismissal taken back, and the form drawn
     // from the answers the route gives back, its inputs as they hold, or
-    // none picked when no answer is left, so a pick made in the review sheet
-    // while it was dismissed goes too. A note written while it was dismissed
-    // stays, the form open to save it. A question with no answer left also
-    // leaves the answers read on load, so the table drops its row.
+    // only its default picked when no answer is left, as the page opened it,
+    // so a pick made in the review sheet while it was dismissed goes. A note
+    // written while it was dismissed stays, the form open to save it. A
+    // question with no answer left also leaves the answers read on load, so
+    // the table drops its row, and a read that is still coming is not taken
+    // over it.
     async function undo(form, button) {
       try {
         var response = await fetch(ANSWERS, {
@@ -621,11 +623,14 @@
           return;
         }
         form.lotuspodAnswers = { current: payload.current, earlier: payload.earlier.slice() };
+        form.lotuspodUndone = true;
         if (!payload.current) {
           stored.delete(form.dataset.question);
         }
         var draft = form.elements.note.value;
-        radios(form).forEach(function (radio) { radio.checked = false; });
+        radios(form).forEach(function (radio) {
+          radio.checked = !saved(form) && radio.value === (form.dataset.default || null);
+        });
         fill(form);
         if (draft) {
           form.elements.note.value = draft;
@@ -700,15 +705,18 @@
         return false;
       }
       var questions = (await response.json()).questions || {};
+      // A form undone while this was loading holds what the undo gave
+      // back, which is newer than what was read.
       Object.keys(questions).forEach(function (question) {
         var entry = questions[question];
-        if (entry && entry.current) {
+        var form = formOf(question);
+        if (entry && entry.current && !(form && form.lotuspodUndone)) {
           stored.set(question, entry.current);
         }
       });
       forms.forEach(function (form) {
-        var entry = Object.prototype.hasOwnProperty.call(questions, form.dataset.question)
-          ? questions[form.dataset.question] : null;
+        var entry = Object.prototype.hasOwnProperty.call(questions, form.dataset.question) &&
+          !form.lotuspodUndone ? questions[form.dataset.question] : null;
         // A form answered while this was loading already shows the newest,
         // and one picked or written in (or restored by the browser) other
         // than its answer stays open as the reader left it. A dismissal

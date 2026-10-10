@@ -28,11 +28,19 @@ const MARKDOWN = ['# Pond model', '', 'Which model runs the pond.', '',
   '| 1 | Which model? | Sonnet / Opus |',
   '| 2 | Run it nightly? | Yes / No |', ''].join('\n');
 
-function publish(name = NAME) {
+// decision-1 and decision-3 with defaults, decision-2 with none.
+const DEFAULTS = ['# Pond heater', '', 'How the pond is heated.', '',
+  '## Decisions for the maintainer', '',
+  '| # | Question | Options | Default |', '| --- | --- | --- | --- |',
+  '| 1 | Which model? | Sonnet / Opus | Sonnet |',
+  '| 2 | Run it nightly? | Yes / No | |',
+  '| 3 | Heat it in winter? | Yes / No | No |', ''].join('\n');
+
+function publish(name = NAME, markdown = MARKDOWN) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lotuspod-dismiss-'));
   try {
     const file = path.join(dir, `${name}.md`);
-    fs.writeFileSync(file, MARKDOWN, 'utf-8');
+    fs.writeFileSync(file, markdown, 'utf-8');
     const said = execFileSync(PYTHON, ['-m', 'lotuspod', 'publish', file, '--local',
       '--out-dir', OUT, '--owner', 'hermes', '--credential', HERMES, '--comments'], {
       encoding: 'utf-8',
@@ -308,6 +316,105 @@ test.describe('signed in', () => {
     await page.unroute('**/api/answers');
     await nightly.undo.click();
     await expect(nightly.form).not.toHaveClass(/\bartifact-decision--saved\b/);
+    expect(await current('decision-2')).toBeUndefined();
+    expect(errors).toEqual([]);
+  });
+
+  test('Undo gives a default back, a dismissal during Respond\'s Save is skipped, and a slow read never undoes an Undo', async ({ page, request }) => {
+    test.skip(test.info().repeatEachIndex > 0, 'dismisses on a page the first repeat answered');
+    const name = 'dismiss-decision-defaults';
+    publish(name, DEFAULTS);
+    const answers = `/api/answers?page=${name}`;
+    const current = async (question: string) =>
+      (await (await request.get(answers, { headers: SIGNED_IN })).json()).questions[question]?.current;
+    // The first POST to the answers route held until its gate is opened.
+    const gates: Array<() => void> = [];
+    let holding = false;
+    await page.route('**/api/answers', async (route) => {
+      if (route.request().method() === 'POST' && holding) {
+        holding = false;
+        await new Promise<void>((open) => gates.push(open));
+      }
+      await route.fallback();
+    });
+    const errors = watch(page);
+    await page.goto(`/${name}.html?standalone`);
+    const model = decision(page, 'decision-1');
+    const nightly = decision(page, 'decision-2');
+    const winter = decision(page, 'decision-3');
+    const side = parts(page);
+    await expect(side.count).toHaveText('1 to answer · Respond');
+    await expect(winter.dismiss).toBeVisible();
+
+    // Undo puts the default back as the page opened it, so Save answer saves it.
+    await expect(winter.option('No')).toBeChecked();
+    await winter.dismiss.click();
+    await expect(winter.saved).toHaveText('Dismissed · Undo');
+    await expect(winter.form.locator('input[name="choice"]:checked')).toHaveCount(0);
+    await winter.undo.click();
+    await expect(winter.form).not.toHaveClass(/\bartifact-decision--saved\b/);
+    await expect(winter.option('No')).toBeChecked();
+    await expect(side.state('decision-3')).toHaveText('Default');
+    await winter.save.click();
+    await expect(winter.saved).toContainText('Saved · No');
+    expect((await current('decision-3')).choice).toBe('no');
+
+    // A question dismissed while Respond's Save posts an earlier one is not
+    // posted, and the Save finishes.
+    await side.count.click();
+    await page.locator('.artifact-review-entry[data-question="decision-2"] .artifact-review-option',
+      { hasText: 'Yes' }).click();
+    const save = page.locator('button.artifact-review-save');
+    await expect(save).toHaveText('Save 2 answers');
+    holding = true;
+    await save.click();
+    await expect.poll(() => gates.length).toBe(1);
+    await page.keyboard.press('Escape');
+    await nightly.dismiss.click();
+    await expect(nightly.saved).toHaveText('Dismissed · Undo');
+    gates.shift()!();
+    await expect(model.saved).toContainText('Saved · Sonnet');
+    await side.count.click();
+    await expect(save).toHaveText('Nothing new to save');
+    await expect(page.locator('.artifact-review-outcome')).toContainText('Saved at');
+    await page.keyboard.press('Escape');
+    expect((await current('decision-1')).choice).toBe('sonnet');
+    expect((await current('decision-2')).dismissed).toBe(true);
+
+    // A read of the answers taken after a Dismiss but arriving after its
+    // Undo leaves the question open, with no row.
+    const undone = await request.post('/api/answers', {
+      headers: SIGNED_IN, data: { page: name, question: 'decision-2', dismissed: false },
+    });
+    expect(undone.status()).toBe(200);
+    let fetchRead: () => void = () => {};
+    let answerRead: () => void = () => {};
+    const fetching = new Promise<void>((open) => { fetchRead = open; });
+    const answering = new Promise<void>((open) => { answerRead = open; });
+    const reading = (url: URL) => url.pathname === '/api/answers';
+    await page.route(reading, async (route) => {
+      if (route.request().method() !== 'GET') {
+        await route.fallback();
+        return;
+      }
+      await fetching;
+      const response = await route.fetch();
+      await answering;
+      await route.fulfill({ response });
+    });
+    await page.reload();
+    await nightly.dismiss.click();
+    await expect(nightly.saved).toHaveText('Dismissed · Undo');
+    fetchRead();
+    await expect.poll(async () => (await current('decision-2'))?.dismissed).toBe(true);
+    await nightly.undo.click();
+    await expect(nightly.form).not.toHaveClass(/\bartifact-decision--saved\b/);
+    answerRead();
+    await expect(side.count).toHaveText('1 to answer · Respond');
+    await expect(nightly.form).not.toHaveClass(/\bartifact-decision--saved\b/);
+    await expect(nightly.form).not.toHaveClass(/\bartifact-decision--dismissed\b/);
+    await expect(side.title).toHaveText('Answered (2)');
+    await expect(side.row('decision-2')).toHaveCount(0);
     expect(await current('decision-2')).toBeUndefined();
     expect(errors).toEqual([]);
   });
