@@ -65,11 +65,8 @@
     // The box ids of an arrow's two ends: the one split of START_END that
     // names two drawn boxes, else null.
     function ends(path, boxes) {
-      var id = path.id;
-      var prefix = path.ownerSVGElement ? path.ownerSVGElement.id + "-" : "";
-      if (prefix.length > 1 && id.indexOf(prefix) === 0) {
-        id = id.slice(prefix.length);
-      }
+      var prefix = path.ownerSVGElement.id + "-";
+      var id = path.id.indexOf(prefix) === 0 ? path.id.slice(prefix.length) : path.id;
       var match = ARROW_ID.exec(id);
       var found = [];
       if (match) {
