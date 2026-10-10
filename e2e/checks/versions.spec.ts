@@ -254,12 +254,7 @@ test.describe('signed in', () => {
     await expect(page.locator('.artifact-versions-link')).toHaveCount(0);
     await expect(page.locator('aside.artifact-comments-panel')).toHaveCount(0);
     // The button sits before the banner's "All versions" link.
-    expect(await choose.evaluate((node) => {
-      const links = node.closest('.artifact-version-banner-links');
-      const every = Array.from(links?.querySelectorAll('a') ?? [])
-        .find((link) => link.textContent === 'All versions');
-      return Boolean(every && node.compareDocumentPosition(every) & Node.DOCUMENT_POSITION_FOLLOWING);
-    })).toBe(true);
+    await expect(banner.locator('.artifact-version-banner-menu + a')).toHaveText('All versions');
 
     await expect(menu).toBeHidden();
     await choose.click();
