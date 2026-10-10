@@ -1,3 +1,7 @@
+import { execFileSync } from 'node:child_process';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 
 // The index's pod finder (lotuspod-index.js): Cmd+K on a Mac, Ctrl+K
@@ -12,7 +16,13 @@ import { expect, test, type Page } from '@playwright/test';
 const WIDE = { width: 1280, height: 800 };
 test.use({ viewport: WIDE });
 
-const SECOND = process.env.LOTUSPOD_TEST_ASSERTION_SECOND ?? '';
+const ENV = process.env;
+const SECOND = ENV.LOTUSPOD_TEST_ASSERTION_SECOND ?? '';
+const HERMES = ENV.LOTUSPOD_TEST_CREDENTIAL_HERMES ?? '';
+const OUT = ENV.LOTUSPOD_TEST_OUT ?? '';
+const PYTHON = ENV.LOTUSPOD_TEST_PYTHON ?? '';
+// This checkout's package, whatever lotuspod is installed.
+const SRC = path.resolve(__dirname, '..', '..', 'src');
 const SEEN = '/api/seen';
 const MAC_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 ' +
   '(KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36';
@@ -85,6 +95,26 @@ function listed(page: Page): Promise<Pod[]> {
     name: (row as HTMLElement).dataset.page ?? '',
     title: (row as HTMLTableRowElement).cells[0].querySelector('a')?.textContent?.trim() ?? '',
   })));
+}
+
+// hermes publishes a page titled title as name, with a real `lotuspod
+// publish`, as pod-tabs.spec.ts does.
+function publish(name: string, title: string) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lotuspod-pod-finder-'));
+  try {
+    const file = path.join(dir, `${name}.md`);
+    fs.writeFileSync(file, `# ${title}\n\nThe pond freezes in January.\n`, 'utf-8');
+    const said = execFileSync(PYTHON, ['-m', 'lotuspod', 'publish', file, '--local', '--out-dir', OUT,
+      '--owner', 'hermes', '--credential', HERMES], {
+      encoding: 'utf-8',
+      env: { ...ENV, PYTHONPATH: SRC },
+      stdio: ['ignore', 'pipe', 'pipe'],
+      timeout: 60_000,
+    });
+    expect(said).toMatch(/at revision [0-9a-f]{12}/);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 }
 
 // The Pages view of the index, its finder answered once.
@@ -404,5 +434,37 @@ test.describe('signed out', () => {
     // The signed-out answers are the seen route's 401s, which the console
     // reports as failed loads.
     expect(errors.filter((error) => !/401/.test(error))).toEqual([]);
+  });
+});
+
+// Last, so the pods it publishes and opens are in no check above.
+test.describe('published after the index opened', () => {
+  test.use({ extraHTTPHeaders: { 'Cf-Access-Jwt-Assertion': SECOND } });
+
+  test('the finder lists a pod published since, Enter opens it, and a pod published again shows its new title', async ({ page }) => {
+    const errors = await watch(page);
+    const renamed = { name: 'pod-finder-renamed', title: 'Pod finder renamed after' };
+    publish(renamed.name, 'Pod finder renamed before');
+    await openIndex(page);
+    await expect(listingLink(page, renamed)).toHaveText('Pod finder renamed before');
+
+    const fresh = { name: 'pod-finder-fresh', title: 'Pod finder fresh' };
+    publish(fresh.name, fresh.title);
+    // The site's index lists it now.
+    expect(await (await page.request.get('/')).text()).toContain(`data-page="${fresh.name}"`);
+    await find(page);
+    await input(page).fill(fresh.title);
+    await expect(options(page).locator('.pod-finder-title')).toHaveText([fresh.title]);
+    await page.keyboard.press('Enter');
+    await expect(finder(page)).toBeHidden();
+    await expect(tabTitle(page, fresh)).toHaveAttribute('aria-current', 'page');
+    await expect(framed(page, fresh).locator('h1')).toHaveText(fresh.title);
+
+    publish(renamed.name, renamed.title);
+    expect(await (await page.request.get('/')).text()).toContain(renamed.title);
+    await find(page);
+    await input(page).fill('pod finder renamed');
+    await expect(options(page).locator('.pod-finder-title')).toHaveText([renamed.title]);
+    expect(errors).toEqual([]);
   });
 });
