@@ -44,7 +44,7 @@ test('the shim answers the script in the shapes serve gives', async ({ page }) =
   expect(REPLY_AFTER, 'demo/shim.js names REPLY_AFTER').toBeGreaterThan(0);
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
-  await page.goto(`/${PAGE}.html`);
+  await page.goto(`/${PAGE}.html?standalone`);
   await expect(page.locator(`details.artifact-comment[data-section="${SECTION}"]`)).toBeAttached();
   await expect(page.locator(`details.artifact-comment[data-section="${PASSAGE_SECTION}"]`)).toBeAttached();
   const revision = await page.locator('meta[name="lotuspod:revision"]').getAttribute('content') ?? '';

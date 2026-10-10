@@ -31,7 +31,7 @@ test.use({ extraHTTPHeaders: SIGNED_IN });
 async function load(page: Page, target: { url: string; slug: string }) {
   await page.route((url) => url.pathname === '/api/comments', (route) =>
     route.fulfill({ json: { page: target.slug, threads: [] } }));
-  await page.goto(target.url);
+  await page.goto(`${target.url}?standalone`);
   await expect(page.locator('.artifact-body table')).toHaveCount(7);
 }
 

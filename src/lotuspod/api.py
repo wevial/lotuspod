@@ -115,6 +115,14 @@ items in the page's order and `choice` "", its kept label the change summary
 the page has no box for, and 409 stale_page when it names a revision other
 than the page's, so a quote is never stored against words it was not taken from.
 
+An answer's note also opens a thread on its decision when the page has a
+comment box after the decision's form: the note, not empty once trimmed and
+not the note of the answer it replaces, is stored as the reader's comment
+there, carrying `answer`, {id, choice, label} of the answer, and the 201
+body carries it as `comment`, as a new thread's POST answers it. A later
+note to the same question is a reply in the newest thread a note opened,
+which it reopens if resolved. A note-less answer's body has no `comment`.
+
 `{page, section: "", text}` opens a thread on the whole page rather than one
 section: section "" (lotuspod.comments.WHOLE_PAGE), which no box carries, is
 stored with section_title "". It takes no quote (400 invalid_body), and only
@@ -843,11 +851,23 @@ class Api:
             choice, label = "", summary(changes(asked.labels, asked.defaults, checked))
         else:
             checked, label = None, chosen(asked, choice)
-        return self.database.add_answer(
+        # A note opens a thread on the decision only where the page has a
+        # comment box for it, as a question asked with Ask does.
+        thread = None
+        if asked.section in page.comment_sections:
+            thread = {"section": asked.section,
+                      "section_title": page.sections.get(asked.section, ""),
+                      "owner": page.owner}
+        stored = self.database.add_answer(
             page=page.name, question=question, version=version, choice=choice,
             note=note, revision=page.revision, actor=actor,
-            question_text=asked.text, choice_label=label, checked=checked,
+            question_text=asked.text, choice_label=label, checked=checked, thread=thread,
         )
+        if "comment" in stored:
+            stored["comment"] = routing.public(
+                stored["comment"], routing.last_pulls(self.database), self.window,
+                self.clock(), self.database.responder_paused())
+        return stored
 
     def _unread(self, page: Page, threads: list[dict], actor: Mapping) -> list[int]:
         """The ids of the reader's unread comments on page, among the threads

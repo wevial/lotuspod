@@ -73,6 +73,9 @@
   var ANSWERED = "lotuspod:answered";
   // Sent on a decision form once an answer to it is saved.
   var SAVED = "lotuspod:saved";
+  // Sent on a diagram's svg each time its view (js/diagram-view.js) moves or
+  // zooms it, so an open node card (js/diagram-cards.js) follows its box.
+  var MOVED = "lotuspod:diagram-moved";
   // What the page's text leaves out and no passage may hold: the comment UI,
   // decision forms and their chips, the Answered table, diagrams and their
   // node cards, and the list of changed sections.
@@ -97,14 +100,6 @@
   // answers are read, but it takes no new comment, reply or answer.
   var ARCHIVED = Boolean(document.querySelector('meta[name="lotuspod:archived"]'));
   var CLOSED = "Comments are closed: this page is archived.";
-
-  function when(stamp) {
-    var date = new Date(stamp);
-    if (isNaN(date.getTime())) {
-      return String(stamp);
-    }
-    return date.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
-  }
 
   // A reader's name, else a handle; never an address.
   function reader(row) {
@@ -148,17 +143,6 @@
     } catch (ignored) {
       return null;
     }
-  }
-
-  function element(tag, className, text) {
-    var node = document.createElement(tag);
-    if (className) {
-      node.className = className;
-    }
-    if (text !== undefined) {
-      node.textContent = text;
-    }
-    return node;
   }
 
   // Whitespace of any kind, a no-break or thin space as much as a newline:

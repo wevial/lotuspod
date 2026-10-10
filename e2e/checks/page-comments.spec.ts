@@ -69,7 +69,7 @@ function watch(page: Page) {
 
 // Load a page and wait for its first read of threads: every chip drawn.
 async function load(page: Page, url: string) {
-  await page.goto(url);
+  await page.goto(`${url}?standalone`);
   const boxes = page.locator('details.artifact-comment');
   await expect(boxes.first()).toBeAttached();
   await expect(page.locator('details.artifact-comment > summary.artifact-comment-chip'))

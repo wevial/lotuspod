@@ -136,7 +136,7 @@ async function settle(page: Page) {
 }
 
 async function load(page: Page) {
-  await page.goto(PAGE);
+  await page.goto(`${PAGE}?standalone`);
   await expect(page.locator('.artifact-body details.artifact-comment')).toHaveCount(2);
   await settle(page);
 }
@@ -523,7 +523,7 @@ test.describe('signed in', () => {
 
   test('a page with decisions and no comment boxes has no Ask and no chip', async ({ page }) => {
     const seen = await watch(page);
-    await page.goto(NO_COMMENTS);
+    await page.goto(`${NO_COMMENTS}?standalone`);
     await settle(page);
     await expect(page.locator('form.artifact-decision')).toHaveCount(2);
     await expect(page.getByRole('button', { name: 'Save answer' })).toHaveCount(2);
@@ -564,7 +564,7 @@ test.describe('signed in', () => {
 test.describe('signed out', () => {
   test('Ask is refused with the line the answers use, and the note is kept', async ({ page }) => {
     const seen = await watch(page, ['401 (Unauthorized)']);
-    await page.goto(PAGE);
+    await page.goto(`${PAGE}?standalone`);
     await settle(page);
     await ask(page, 'decision-2', 'Do they need feeding at all?');
     const second = decision(page, 'decision-2');

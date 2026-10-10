@@ -96,7 +96,7 @@ async function settle(page: Page) {
 async function open(page: Page) {
   const read = page.waitForResponse((response) =>
     new URL(response.url()).pathname === '/api/archive' && response.request().method() === 'GET');
-  await page.goto(`/${NAME}.html`);
+  await page.goto(`/${NAME}.html?standalone`);
   await read;
   await settle(page);
 }
@@ -293,7 +293,7 @@ test.describe.serial('an archived page', () => {
         '<td>Which pump?</td><td>Small / Large</td><td>Small</td></tr></tbody></table>');
       const asked = page.waitForRequest((request) =>
         new URL(request.url()).pathname === '/api/archive' && request.method() === 'GET');
-      await page.goto(`/${LINKED}.html`);
+      await page.goto(`/${LINKED}.html?standalone`);
       expect(new URL((await asked).url()).searchParams.get('page')).toBe(LINKED);
       const button = parts(page).button;
       await expect(button).toHaveText('Archive');

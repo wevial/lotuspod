@@ -193,6 +193,14 @@
   padding: 0 0.4em;
 }
 
+/* The answer a note was saved with, above the note's bubble. */
+:is(.artifact-body, .artifact-comments-panel, .artifact-comments-held) .artifact-comment-answered {
+  color: var(--color-muted-lavender);
+  font-size: 0.78em;
+  margin: 0 0.3rem 0.2rem;
+  overflow-wrap: anywhere;
+}
+
 .artifact-comment-model {
   color: var(--color-muted-lavender);
   font-family: var(--font-mono);
