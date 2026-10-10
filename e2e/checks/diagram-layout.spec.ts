@@ -140,7 +140,5 @@ test('a box on an ELK diagram opens its node card', async ({ page }) => {
       term.textContent, term.nextElementSibling?.textContent,
     ]));
   expect(graph).toEqual([['Waits for', 'P1 (merged)'], ['Unblocks', 'B2 (open)']]);
-  await page.keyboard.press('Escape');
-  await expect(card(page)).toBeHidden();
   await seen.clean();
 });

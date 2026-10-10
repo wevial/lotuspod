@@ -136,18 +136,12 @@ class PolicyTagTests(PolicyTestCase):
         (module,) = scripts
         self.assertEqual(module["attrs"].get("type"), "module")
         self.assertIn(MERMAID_DIR, module["text"])
+        self.assertIn("registerLayoutLoaders", module["text"])
 
         script_src = self.policy_of(page)["script-src"]
         hashes = [source for source in script_src if source.startswith("'sha256-")]
         self.assertEqual(hashes, [sha256_source(module["text"])])
         self.assertEqual(sorted(script_src), sorted(["'self'", MERMAID_DIR, MERMAID_ELK_DIR, *hashes]))
-
-    def test_a_diagram_page_registers_and_allows_the_elk_layout(self):
-        page, _ = self.render_body("diagram", DIAGRAM)
-        (module,) = read_page(page).inline_scripts
-        self.assertIn(MERMAID_ELK_DIR, module["text"])
-        self.assertIn("registerLayoutLoaders", module["text"])
-        self.assertIn(MERMAID_ELK_DIR, self.policy_of(page)["script-src"])
 
 
 class BodyScriptTests(PolicyTestCase):
