@@ -14,8 +14,8 @@
   // moves; Esc there closes the card before the view.
   function diagramCards(pres) {
     // Mermaid 11.4.1's ids: a box's group is flowchart-ID-N and an arrow's
-    // path L_START_END_N. Neither carries the diagram's id, so every lookup
-    // stays inside its own svg.
+    // path L_START_END_N, which the ELK layout prefixes with the svg's own id
+    // and a dash. Every lookup stays inside its own svg.
     var BOX_ID = /^flowchart-(.+)-\d+$/;
     var ARROW_ID = /^L_(.+)_\d+$/;
     var SVG = "http://www.w3.org/2000/svg";
@@ -67,7 +67,9 @@
     // The box ids of an arrow's two ends: the one split of START_END that
     // names two drawn boxes, else null.
     function ends(path, boxes) {
-      var match = ARROW_ID.exec(path.id);
+      var prefix = path.ownerSVGElement.id + "-";
+      var id = path.id.indexOf(prefix) === 0 ? path.id.slice(prefix.length) : path.id;
+      var match = ARROW_ID.exec(id);
       var found = [];
       if (match) {
         var both = match[1];
