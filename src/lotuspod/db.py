@@ -323,16 +323,11 @@ def _answer(row: sqlite3.Row) -> dict:
     return found
 
 
-def _undone(row: sqlite3.Row) -> bool:
-    """Whether row is a dismissal undone, which is no question's current answer."""
-    return bool(row["dismissed"]) and row["undone_at"] is not None
-
-
 def _current(conn: sqlite3.Connection, page: str, question: str) -> sqlite3.Row | None:
     """The question's current answer: its newest that is not an undone dismissal."""
     return conn.execute(
         "SELECT * FROM answers WHERE page = ? AND question = ?"
-        " AND (dismissed IS NULL OR undone_at IS NULL) ORDER BY id DESC LIMIT 1",
+        " AND undone_at IS NULL ORDER BY id DESC LIMIT 1",
         (page, question),
     ).fetchone()
 
@@ -352,7 +347,7 @@ def _entries(rows: Sequence[sqlite3.Row], asked: bool) -> dict:
         questions.setdefault(row["question"], {"current": None, "earlier": []})
     for row in rows:
         entry = questions[row["question"]]
-        if entry["current"] is None and not _undone(row):
+        if entry["current"] is None and row["undone_at"] is None:
             entry["current"] = answer(row)
         else:
             entry["earlier"].append(answer(row))
@@ -599,10 +594,10 @@ class Database:
             row = conn.execute("SELECT * FROM answers WHERE id = ?", (cursor.lastrowid,))
             return _answer(row.fetchone())
 
-    def undismiss(self, *, page: str, question: str, asked: bool = False) -> dict:
+    def undismiss(self, *, page: str, question: str) -> dict:
         """Undo the dismissal that is the question's current answer, so the
         answer before it is current again, or none; the question's entry
-        as answers() gives it, or {current: None, earlier: []}. Refused
+        as answers(asked=True) gives it, or {current: None, earlier: []}. Refused
         not_dismissed when its current answer is not a dismissal."""
         with self._connect() as conn, _write(conn):
             current = _current(conn, page, question)
@@ -614,7 +609,7 @@ class Database:
                 "SELECT * FROM answers WHERE page = ? AND question = ? ORDER BY id DESC",
                 (page, question),
             ).fetchall()
-        return _entries(rows, asked).get(question, {"current": None, "earlier": []})
+        return _entries(rows, True).get(question, {"current": None, "earlier": []})
 
     def answers(self, page: str, *, asked: bool = False) -> dict:
         """The page's answered questions, each as {current, earlier}: the
