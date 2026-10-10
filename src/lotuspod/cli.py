@@ -321,6 +321,7 @@ THEME_SOURCES = {
         "css/prose.css",
         "css/ref-cards.css",
         "css/diagram-cards.css",
+        "css/diagram-view.css",
         "css/report.css",
         "css/table-expand.css",
         "css/image-viewer.css",
@@ -348,6 +349,7 @@ THEME_SOURCES = {
         "js/version-menu.js",
         "js/versions.js",
         "js/diagram-cards.js",
+        "js/diagram-view.js",
         "js/ref-cards.js",
         "js/archive.js",
         "js/page-close.js",
@@ -766,11 +768,13 @@ def cmd_render(args: argparse.Namespace) -> int:
         "variant_class": variant_class(args.variant),
         "mermaid": has_mermaid_block(body),
         # A page stamped with a revision notices when it is published again,
-        # a link off the site opens in a new tab, and a listed page loaded
-        # on its own opens in the index's tabs.
+        # a link off the site opens in a new tab, a diagram can be expanded
+        # to fill the window, and a listed page loaded on its own opens in
+        # the index's tabs.
         "page_script_needed": (not args.hidden or has_decisions or with_comments or wrapped
                                or has_node_tables or bool(refs_block)
-                               or bool(getattr(args, "revision", "")) or has_link(body)),
+                               or bool(getattr(args, "revision", "")) or has_link(body)
+                               or has_mermaid_block(body)),
         "page_script": PAGE_SCRIPT,
         "mermaid_theme_variables": mermaid_theme_variables(tokens),
         "mermaid_dir": MERMAID_DIR,

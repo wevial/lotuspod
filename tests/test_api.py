@@ -220,6 +220,9 @@ class AnswerTests(ApiTestCase):
     def test_a_second_answer_supersedes_the_first(self):
         status, first = self.answer(choice="yes", note="first thoughts")
         self.assertEqual(status, 201)
+        # The note opened a thread on the decision (NoteThreadTests).
+        self.assertEqual(first.pop("comment")["answer"],
+                         {"id": first["id"], "choice": "yes", "label": "Yes"})
         status, second = self.answer(choice="no")
         self.assertEqual(status, 201)
 
@@ -378,6 +381,8 @@ class ChecklistAnswerTests(ApiTestCase):
         status, first = self.ask("POST", "/api/answers", self.checklist_body(
             ["r", "d"], note="Skip the welcome"))
         self.assertEqual(status, 201, first)
+        # The note opened a thread on the checklist (NoteThreadTests).
+        first.pop("comment")
         self.assertEqual(
             {key: first[key] for key in first if key not in ("id", "createdAt")},
             {"page": "mail", "question": "checklist-1",
@@ -596,6 +601,104 @@ class DecisionThreadTests(ApiTestCase):
                                  (status, {"error": error}))
         self.assertEmpty()
         self.assertEmpty("bare")
+
+
+class NoteThreadTests(ApiTestCase):
+    """An answer's note opens a thread on its decision, where the page has a
+    comment box after the decision's form."""
+
+    def threads(self, page: str = "plan") -> list[dict]:
+        status, got = self.ask("GET", f"/api/comments?page={page}")
+        self.assertEqual(status, 200, got)
+        return got["threads"]
+
+    def test_a_note_is_the_reader_s_comment_in_a_thread_on_the_decision(self):
+        status, answer = self.answer(choice="no", note="  Not before March.\n")
+        self.assertEqual(status, 201, answer)
+        comment = answer.pop("comment")
+        self.assertEqual(
+            {key: comment[key] for key in comment if key not in ("id", "createdAt")},
+            {"page": "plan", "section": "decisions-for-the-maintainer",
+             "sectionTitle": "Decisions for the maintainer", "revision": self.revision,
+             "parent": None, "text": "  Not before March.\n", "quote": None, "images": [],
+             "actor": SHOWN, "question": "decision-1",
+             "answer": {"id": answer["id"], "choice": "no", "label": "No"},
+             "state": "unavailable", "owner": "responder"})
+        self.assertEqual(answer["note"], "  Not before March.\n")
+        self.assertEqual(self.threads(),
+                         [{"root": comment, "replies": [], "resolution": db.UNRESOLVED}])
+        _, got = self.ask("GET", "/api/answers?page=plan")
+        self.assertNotIn("comment", got["questions"]["decision-1"]["current"])
+
+    def test_an_empty_or_blank_note_opens_no_thread(self):
+        for choice, note in (("yes", ""), ("no", "   ")):
+            with self.subTest(choice=choice, note=note):
+                status, answer = self.answer(choice=choice, note=note)
+                self.assertEqual(status, 201, answer)
+                self.assertNotIn("comment", answer)
+        self.assertEqual(self.threads(), [])
+
+    def test_another_option_with_the_same_note_adds_nothing_to_its_thread(self):
+        _, first = self.answer(choice="yes", note="Same.")
+        status, second = self.answer(choice="no", note="Same.")
+        self.assertEqual(status, 201, second)
+        self.assertNotIn("comment", second)
+        self.assertEqual(self.threads(), [{"root": first["comment"], "replies": [],
+                                           "resolution": db.UNRESOLVED}])
+
+    def test_a_later_note_is_a_reply_in_the_same_thread(self):
+        _, first = self.answer(choice="yes", note="First.")
+        root = first["comment"]
+        status, second = self.answer(choice="no", note="Second.")
+        self.assertEqual(status, 201, second)
+        reply = second["comment"]
+        self.assertEqual((reply["parent"], reply["question"], reply["answer"]),
+                         (root["id"], "decision-1",
+                          {"id": second["id"], "choice": "no", "label": "No"}))
+        [thread] = self.threads()
+        self.assertEqual(thread["replies"], [reply])
+
+        # A question asked with Ask carries no answer: a note never joins it.
+        status, asked = self.comment(question="decision-2", text="Why skate?")
+        self.assertEqual(status, 201, asked)
+        _, third = self.answer(question="decision-2", choice="yes", note="To cross.")
+        self.assertIsNone(third["comment"]["parent"])
+
+        # A resolved thread is reopened by the note that joins it.
+        self.ask("POST", "/api/comments", {"page": "plan", "thread": root["id"],
+                                           "resolved": True})
+        _, fourth = self.answer(choice="yes", note="Back to yes.")
+        self.assertEqual(fourth["comment"]["parent"], root["id"])
+        resolution = {thread["root"]["id"]: thread["resolution"]
+                      for thread in self.threads()}[root["id"]]
+        self.assertEqual((resolution["resolved"], resolution["actor"]), (False, SHOWN))
+
+    def test_a_page_with_no_comment_boxes_keeps_the_note_on_the_answer_alone(self):
+        run_cli("render", "--name", "bare", "--title", "Bare", "--body", DECISIONS_BODY,
+                "--out-dir", str(self.out_dir))
+        run_cli("index", "--out-dir", str(self.out_dir))
+        status, answer = self.answer(page="bare", note="Why not?")
+        self.assertEqual(status, 201, answer)
+        self.assertNotIn("comment", answer)
+        _, got = self.ask("GET", "/api/answers?page=bare")
+        self.assertEqual(got["questions"]["decision-1"]["current"]["note"], "Why not?")
+        self.assertEqual(self.threads("bare"), [])
+
+    def test_a_checklist_s_note_names_its_change_summary(self):
+        ChecklistAnswerTests.publish_mail(self, CHECKLIST)
+        body = {"page": "mail", "question": "checklist-1",
+                "version": self.version("checklist-1", "mail"), "checked": ["w"],
+                "note": "Only the welcome."}
+        status, answer = self.ask("POST", "/api/answers", body)
+        self.assertEqual(status, 201, answer)
+        _, got = self.ask("GET", "/api/answers?page=mail")
+        label = got["questions"]["checklist-1"]["current"]["asked"]["label"]
+        self.assertEqual(label, "Off: Reminder")
+        self.assertEqual(answer["comment"]["answer"],
+                         {"id": answer["id"], "choice": "", "label": label})
+        [thread] = self.threads("mail")
+        self.assertEqual((thread["root"]["question"], thread["root"]["text"]),
+                         ("checklist-1", "Only the welcome."))
 
 
 class ResolutionTests(ApiTestCase):

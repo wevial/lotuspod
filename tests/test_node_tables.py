@@ -176,14 +176,15 @@ class RenderTests(TempDirTestCase):
         self.assertEqual(rc, 0, err)
         return (self.out_dir / "plan.html").read_text(encoding="utf-8")
 
-    def test_a_diagram_alone_loads_no_page_script(self):
-        # Not listed: a listed page loads it to open in the index's tabs.
+    def test_a_diagram_alone_loads_the_page_script_once(self):
+        # Not listed, so the diagram alone loads it: a listed page loads it
+        # to open in the index's tabs.
         sequence = "```mermaid\nsequenceDiagram\n  A->>B: hi\n```\n"
         for diagram in (sequence, DIAGRAM):
             with self.subTest(diagram.splitlines()[1]):
-                page = self.rendered(f"Intro.\n\n{diagram}", "--hidden")
+                page = self.rendered(diagram, "--hidden")
                 self.assertIn('class="mermaid"', page)
-                self.assertNotIn(cli.PAGE_SCRIPT, page)
+                self.assertEqual(page.count(f'<script src="{cli.PAGE_SCRIPT}?v='), 1)
 
     def test_a_marked_diagram_loads_the_page_script_once(self):
         page = self.rendered(SOURCE)

@@ -6,6 +6,7 @@ import { expect, test, type Page } from '@playwright/test';
 // The route keeps the URL, so the page policy applies as it does for readers.
 const MERMAID_DIR = 'https://cdn.jsdelivr.net/npm/mermaid@11.4.1/';
 const MERMAID_COPY = path.join(__dirname, '..', 'node_modules', 'mermaid');
+const SIGNED_IN = { 'Cf-Access-Jwt-Assertion': process.env.LOTUSPOD_TEST_ASSERTION ?? '' };
 
 type Violation = { blockedURI: string; effectiveDirective: string };
 
@@ -61,6 +62,9 @@ test('body scripts and inline handlers do not run', async ({ page }) => {
 });
 
 test('the diagram is drawn under the policy', async ({ page }) => {
+  // A diagram page loads the page script, which asks the API about the page:
+  // signed in, as a reader of the site is, it answers rather than refuses.
+  await page.setExtraHTTPHeaders(SIGNED_IN);
   const seen = await watch(page);
   await page.goto('/capture-diagram.html?standalone');
   await expect(page.locator('pre.mermaid svg')).toBeVisible();
