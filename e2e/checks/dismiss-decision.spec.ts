@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page, type Route } from '@playwright/test';
 
 // An owner dismisses a decision that no longer matters. The check publishes a
 // page of its own as hermes on the capture fixture's site with a real
@@ -262,6 +262,33 @@ test.describe('signed in', () => {
     await expect(nightly.note).toBeVisible();
     await nightly.dismiss.click();
     await expect(nightly.saved).toHaveText('Dismissed: Draft B · Undo');
+
+    // Answers read on load over a note written meanwhile still fold the
+    // dismissal, the note kept for Undo.
+    let release: () => void = () => {};
+    const held = new Promise<void>((open) => { release = open; });
+    const reading = (url: URL) => url.pathname === '/api/answers';
+    const holdRead = async (route: Route) => {
+      if (route.request().method() === 'GET') {
+        await held;
+      }
+      await route.fallback();
+    };
+    await page.route(reading, holdRead);
+    await page.reload();
+    await nightly.noteToggle.click();
+    await nightly.note.fill('Draft C');
+    release();
+    await expect(nightly.form).toHaveClass(/\bartifact-decision--dismissed\b/);
+    await expect(nightly.saved).toHaveText('Dismissed: Draft B · Undo');
+    // Saved, so a folded section's mark (js/page-open.js) never counts it.
+    await expect(nightly.form).toHaveClass(/\bartifact-decision--saved\b/);
+    await expect(side.count).toHaveText('All answered · Respond');
+    await page.unroute(reading, holdRead);
+    await nightly.undo.click();
+    await expect(nightly.note).toHaveValue('Draft C');
+    await nightly.dismiss.click();
+    await expect(nightly.saved).toHaveText('Dismissed: Draft C · Undo');
 
     // A failed Undo keeps the card, and its Undo, to try again.
     await page.reload();

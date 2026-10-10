@@ -1005,6 +1005,18 @@ class DismissalPullTests(PullTestCase):
         self.assertEqual(rc, 0, err)
         self.assertIn(f"    reason: {one}\n", out)
 
+    def test_a_reason_s_control_characters_never_reach_the_terminal(self):
+        dismissal = self.dismiss(reason="retired\u001b[2J\u001b[HFAKE\u009b2J")
+        self.assertEqual(dismissal["note"], "retired\u001b[2J\u001b[HFAKE\u009b2J")
+        out = self.markdown("pull", "--owner", "hermes")
+        self.assertIn("- Chosen: Dismissed: retired [2J [HFAKE 2J\n", out)
+        rc, listed, err = run_cli("answers", "plan", "--db", str(self.db_path),
+                                  "--out-dir", str(self.out_dir))
+        self.assertEqual(rc, 0, err)
+        self.assertIn("reason: retired [2J [HFAKE 2J\n", listed)
+        for text in (out, listed):
+            self.assertFalse({"\u001b", "\u009b"} & set(text))
+
 
 class RecordAnswerTests(PullTestCase):
     """An agent that may publish as a page's owner records a decision's

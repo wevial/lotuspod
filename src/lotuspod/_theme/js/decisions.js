@@ -711,12 +711,17 @@
           ? questions[form.dataset.question] : null;
         // A form answered while this was loading already shows the newest,
         // and one picked or written in (or restored by the browser) other
-        // than its answer stays open as the reader left it.
+        // than its answer stays open as the reader left it. A dismissal
+        // folds it all the same, as Dismiss does: no option stays picked,
+        // and a note written stays in the folded card for Undo to open.
         if (entry && !form.lotuspodAnswers.current) {
           var touched = (isChecklist(form) ? !same(ticked(form, "checked"), ticked(form, "defaultChecked")) :
             form.querySelector('input[name="choice"]:checked')) || form.elements.note.value;
           form.lotuspodAnswers = { current: entry.current, earlier: entry.earlier.slice() };
-          if (touched && dirty(form)) {
+          if (saved(form) && saved(form).dismissed) {
+            radios(form).forEach(function (radio) { radio.checked = false; });
+            form.lotuspodEditing = false;
+          } else if (touched && dirty(form)) {
             form.lotuspodEditing = true;
           } else {
             fill(form);

@@ -42,6 +42,7 @@ import argparse
 import json
 import re
 import sys
+import unicodedata
 import urllib.parse
 from pathlib import Path
 
@@ -139,9 +140,11 @@ def moved(comment: dict, revision: str) -> str:
 
 
 def one_line(text: str) -> str:
-    """text with every run of whitespace, line breaks included, one space:
-    a reader's words printed unfenced never start a line of their own."""
-    return " ".join(text.split())
+    """text with each control character a space, then every run of
+    whitespace, line breaks included, one space: a reader's words printed
+    unfenced never start a line of their own nor drive the terminal."""
+    shown = "".join(" " if unicodedata.category(char) == "Cc" else char for char in text)
+    return " ".join(shown.split())
 
 
 def answered(decision: dict) -> str:
