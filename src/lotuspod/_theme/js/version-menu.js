@@ -41,10 +41,11 @@
       return link;
     }
 
+    var file = encodeURIComponent(page) + ".html";
     var list = element("div", "artifact-versions-menu-list");
     list.setAttribute("role", "none");
     versions.forEach(function (version) {
-      var link = item(encodeURIComponent(page) + ".html" + (version.current ? "" :
+      var link = item(file + (version.current ? "" :
         "?version=" + encodeURIComponent(version.commit)));
       if (version.commit === shown) {
         link.setAttribute("aria-current", "page");
@@ -66,8 +67,7 @@
         String(version.summary || "") || "First version"));
       list.appendChild(link);
     });
-    var seeAll = item((old ? encodeURIComponent(page) + ".html" : "") + "#versions",
-      "artifact-versions-menu-all");
+    var seeAll = item((old ? file : "") + "#versions", "artifact-versions-menu-all");
     seeAll.textContent = "See all versions";
     menu.append(list, seeAll);
 
