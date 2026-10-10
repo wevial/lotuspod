@@ -183,9 +183,9 @@ test.describe('signed in', () => {
     await page.route('**/api/answers', async (route) => {
       if (route.request().method() === 'POST') {
         posts += 1;
-      }
-      if (holding && route.request().method() === 'POST') {
-        await new Promise<void>((open) => gates.push(open));
+        if (holding) {
+          await new Promise<void>((open) => gates.push(open));
+        }
       }
       await route.continue();
     });

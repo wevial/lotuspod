@@ -307,7 +307,7 @@ def pull_text(payload: dict) -> str:
             asked = question["text"] or "(its words were not kept)"
             if question["reworded"]:
                 asked += " (the page now asks it in other words, or not at all)"
-            dismissed = bool(answer.get("dismissed"))
+            dismissed = answer.get("dismissed")
             if dismissed:
                 # Its reason is said here, once.
                 reason = one_line(answer["note"])
