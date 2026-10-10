@@ -91,9 +91,14 @@
 
     // {name, was, pending}: Open, Default or Changed, the "was" line, and
     // whether its shown choice, or its note, differs from its stored answer.
+    // A question whose saved answer is a dismissal is Dismissed, never
+    // pending, so it is never counted nor jumped to as open.
     function state(question) {
       var form = question.form;
       var answer = the.saved(form);
+      if (answer && answer.dismissed) {
+        return { name: "Dismissed", was: "", pending: false };
+      }
       if (question.checklist) {
         var now = the.ticked(form, "checked");
         var kept = the.same(now, the.ticked(form, "defaultChecked"));
@@ -123,7 +128,7 @@
 
     // Open a form's section if it is folded, as a row's "change" does, put
     // the form just below the title bar and focus its first option, or its
-    // "change" when it is folded to its answer.
+    // "change" (a dismissal's Undo) when it is folded to its answer.
     function jump(form) {
       var wrapper = form.closest("div.artifact-section-body");
       if (wrapper && wrapper.hasAttribute("hidden")) {
@@ -132,7 +137,8 @@
       var top = form.getBoundingClientRect().top;
       window.scrollBy({ top: top - barBottom() - 16, left: 0, behavior: "instant" });
       var target = form.classList.contains("artifact-decision--saved") ?
-        form.querySelector(".artifact-decision-saved .artifact-decision-change") :
+        form.querySelector(".artifact-decision-saved :is(.artifact-decision-change, " +
+          ".artifact-decision-undo)") :
         form.querySelector("input");
       if (target) {
         target.focus({ preventScroll: true });
@@ -358,28 +364,37 @@
     }
 
     // Post each answer not stored, in page order, as its form's own Save
-    // does; an open question has nothing to post.
+    // does; an open question has nothing to post, nor has one dismissed or
+    // saved on its form while the earlier ones were posting.
     save.addEventListener("click", async function () {
       var due = questions.filter(function (question) { return state(question).pending; });
       saving = true;
       outcome.textContent = "";
       refresh();
       var failed = 0;
-      for (var i = 0; i < due.length; i += 1) {
-        var question = due[i];
-        if (!question.checklist && !question.form.querySelector('input[name="choice"]:checked')) {
-          radioOf(question, shown(question)).checked = true;
+      var tried = 0;
+      try {
+        for (var i = 0; i < due.length; i += 1) {
+          var question = due[i];
+          if (!state(question).pending) {
+            continue;
+          }
+          tried += 1;
+          if (!question.checklist && !question.form.querySelector('input[name="choice"]:checked')) {
+            radioOf(question, shown(question)).checked = true;
+          }
+          if (!(await the.save(question.form))) {
+            failed += 1;
+          }
         }
-        if (!(await the.save(question.form))) {
-          failed += 1;
-        }
+      } finally {
+        saving = false;
+        refresh();
       }
-      saving = false;
-      refresh();
       var open = questions.filter(opened).length;
       var stay = plural(open, "question stays", "questions stay") + " open.";
       var time = new Date().toLocaleTimeString(undefined, { timeStyle: "short" });
-      if (failed === due.length) {
+      if (failed === tried) {
         outcome.textContent = "Nothing was saved: see each question's form. " + stay;
       } else {
         outcome.textContent = "Saved at " + time + ". " + stay +

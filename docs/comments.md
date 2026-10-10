@@ -40,6 +40,29 @@ twice.
   an answer has `source`. `lotuspod answers PAGE` prints it "recorded by
   HANDLE at TIME, answered elsewhere: SOURCE" in place of "by EMAIL at
   TIME". A reader's answer replaces it as it replaces any.
+- A reader in the `[access] owners` list (see [Who is reading: Cloudflare
+  Access](operating.md#who-is-reading-cloudflare-access)) may dismiss a
+  decision that no longer matters: `POST /api/answers` with `{page, question,
+  version, dismissed: true, reason}`, `reason` 0 to 200 characters, stores a
+  dismissal and answers 201 with it. A dismissal is an answer of its own,
+  superseding the question's newest one: it carries `dismissed: true`, its
+  `choice` is "", its kept label "Dismissed" and its `note` the reason; no
+  other answer has `dismissed`. It counts as answered wherever answers do,
+  and opens no thread. `{page, question, dismissed: false}` undoes the
+  dismissal that is the question's current answer and answers 200 `{page,
+  question, current, earlier}`, the question's entry as the GET below gives
+  it, `current` null when no other answer is left. An undone dismissal keeps
+  `undoneAt`, the time it was undone, and is listed among `earlier`, never
+  current; a question whose only answers are undone dismissals is not
+  answered. Each is refused with nothing stored, in this order: 403
+  `not_owner` for a reader not in `owners`, 400 `invalid_body` for any other
+  key set or length, 404 `unknown_page`, 409 `archived`, 400
+  `unknown_question`, 409 `stale` for a dismissal's version other than the
+  page's, 409 `already_dismissed` when the question's current answer is a
+  dismissal at that version, and 409 `not_dismissed` for an undo when it is
+  not a dismissal. `lotuspod answers PAGE` prints a dismissal "Dismissed
+  (answer N ...)", its reason as "reason: TEXT", and ", undone at TIME" once
+  it is undone.
 - `GET /api/answers?page=NAME` answers `{page, questions}`: each answered
   question as `{current, earlier}`, the newest answer and the older ones newest
   first. Each answer here also carries `asked`, `{text, label}`: the question's
