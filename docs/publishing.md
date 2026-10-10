@@ -88,6 +88,18 @@ the block is left exactly as written, since Mermaid reads it verbatim; before
 the script runs, or without scripting, it reads as a code block. A body with no
 diagram block ships no script and no CDN reference at all.
 
+A page with a diagram block also loads the page script. Once Mermaid has
+drawn a diagram, an Expand button sits in its top right corner, shown while
+the pointer is over the diagram or the button has keyboard focus. It opens the
+diagram in a view that fills the window, with a top bar naming the nearest
+heading before the diagram (else the page title), zoom out (−), the zoom in
+percent, zoom in (+), Fit and ✕. Drag the diagram, scroll with two fingers or
+press the arrow keys to move it; pinch, ctrl+scroll, the buttons or the `+`
+and `-` keys zoom it, from 25% to 400%, where 100% is Mermaid's own size. Fit,
+`0` or `F` shows it whole again, as it opens. Esc or ✕ puts it back on the
+page and the focus back on its Expand button. Without scripting, and on an
+old version, the diagram stays as it is on the page.
+
 A flowchart (source starting `flowchart` or `graph`) can be followed by a
 Nodes table, which the page script turns into a card for each box. Put an
 `h3` or `h4` whose text is exactly `Nodes` straight after the diagram, and a
