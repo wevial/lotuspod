@@ -127,7 +127,7 @@ async function opacity(locator: Locator) {
 // Open the page and wait until both diagrams are drawn and have their button.
 async function drawn(page: Page) {
   const seen = await watch(page);
-  await page.goto(PAGE);
+  await page.goto(`${PAGE}?standalone`);
   for (const index of [0, 1]) {
     await expect(drawing(page, index)).toBeVisible();
     await expect(expand(page, index)).toHaveCount(1);
@@ -475,7 +475,7 @@ test('a diagram scrolled sideways in its block comes back scrolled as it was', a
 
 test("a node card closes when its diagram's view opens and opens again after", async ({ page }) => {
   const seen = await watch(page);
-  await page.goto(CARDS_PAGE);
+  await page.goto(`${CARDS_PAGE}?standalone`);
   const box = diagram(page).locator('g.node[id^="flowchart-B-"]');
   const card = page.locator('.artifact-node-card');
   await expect(box).toHaveAttribute('role', 'button');
