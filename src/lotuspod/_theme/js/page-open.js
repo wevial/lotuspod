@@ -99,14 +99,6 @@
   var ARCHIVED = Boolean(document.querySelector('meta[name="lotuspod:archived"]'));
   var CLOSED = "Comments are closed: this page is archived.";
 
-  function when(stamp) {
-    var date = new Date(stamp);
-    if (isNaN(date.getTime())) {
-      return String(stamp);
-    }
-    return date.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
-  }
-
   // A reader's name, else a handle; never an address.
   function reader(row) {
     var actor = row && row.actor;
@@ -149,17 +141,6 @@
     } catch (ignored) {
       return null;
     }
-  }
-
-  function element(tag, className, text) {
-    var node = document.createElement(tag);
-    if (className) {
-      node.className = className;
-    }
-    if (text !== undefined) {
-      node.textContent = text;
-    }
-    return node;
   }
 
   // Whitespace of any kind, a no-break or thin space as much as a newline:

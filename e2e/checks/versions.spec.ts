@@ -2,7 +2,9 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { expect, test, type Frame, type FrameLocator, type Locator, type Page } from '@playwright/test';
+import {
+  expect, test, type Frame, type FrameLocator, type Locator, type Page, type Request,
+} from '@playwright/test';
 
 // A page lists its earlier versions from the artifacts repository, and opens
 // each one read-only. The capture fixture's site is the top of its own git
@@ -52,11 +54,12 @@ function changesSource(title: string, pump: string) {
   ].join('\n');
 }
 
-// hermes publishes markdown as the page name, with comments.
-function publish(name: string, markdown: string) {
+// hermes publishes markdown, or HTML with suffix .html, as the page name,
+// with comments.
+function publish(name: string, markdown: string, suffix = '.md') {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lotuspod-versions-'));
   try {
-    const file = path.join(dir, `${name}.md`);
+    const file = path.join(dir, `${name}${suffix}`);
     fs.writeFileSync(file, markdown, 'utf-8');
     const said = run('publish', file, '--local', '--out-dir', OUT, '--owner', OWNER,
       '--credential', HERMES, '--comments');
@@ -228,6 +231,142 @@ test.describe('signed in', () => {
     await view(all).node.getByRole('link', { name: 'Versions check' }).click();
     await expect(all.locator('.artifact-body')).toBeVisible();
     await expect(view(all).node).toBeHidden();
+
+    // The old version's banner carries the header's version menu, drawn by
+    // the one script it runs, which asks the versions route once and posts
+    // nothing; the page script never runs there.
+    const requests: string[] = [];
+    const onRequest = (request: Request) => {
+      const url = new URL(request.url());
+      requests.push(`${request.method()} ${url.pathname}${url.search}`);
+    };
+    page.on('request', onRequest);
+    await page.goto(`/${name}.html?version=${older.commit}`);
+    const choose = banner.getByRole('button', { name: 'Choose a version' });
+    const menu = page.getByRole('menu');
+    const items = menu.getByRole('menuitem');
+    await expect(choose).toBeVisible();
+    await expect(choose).toHaveText('Choose a version ▾');
+    await page.waitForLoadState('networkidle');
+    page.off('request', onRequest);
+    expect(requests.filter((said) => / \/api(\/|\?|$)/.test(said)))
+      .toEqual([`GET /api/versions?page=${name}`]);
+    expect(requests.filter((said) => !said.startsWith('GET '))).toEqual([]);
+    await expect(page.locator('.artifact-versions-link')).toHaveCount(0);
+    await expect(page.locator('aside.artifact-comments-panel')).toHaveCount(0);
+    // The button sits before the banner's "All versions" link.
+    await expect(banner.locator('.artifact-version-banner-menu + a')).toHaveText('All versions');
+
+    await expect(menu).toBeHidden();
+    await choose.click();
+    await expect(menu).toBeVisible();
+    await expect(choose).toHaveAttribute('aria-expanded', 'true');
+    await expect(items).toHaveCount(3);
+    await expect(items.nth(0).locator('.artifact-versions-current')).toHaveText('current');
+    await expect(items.nth(0)).toHaveAttribute('href', `${name}.html`);
+    await expect(items.nth(0)).not.toHaveAttribute('aria-current', /.*/);
+    await expect(items.nth(0).locator('.artifact-versions-viewing')).toHaveCount(0);
+    await expect(items.nth(1)).toHaveAttribute('aria-current', 'page');
+    await expect(items.nth(1).locator('.artifact-versions-viewing')).toHaveText('viewing');
+    await expect(items.nth(1).locator('.artifact-versions-current')).toHaveCount(0);
+    await expect(items.nth(1)).toHaveAttribute('href', `${name}.html?version=${older.commit}`);
+    await expect(menu.locator('.artifact-versions-seen')).toHaveCount(0);
+    await expect(items.nth(2)).toHaveText('See all versions');
+    await expect(items.nth(2)).toHaveAttribute('href', `${name}.html#versions`);
+
+    // The current item opens the page as the index's active tab, as any
+    // direct load of a current page does; "See all versions" its versions
+    // view.
+    await items.nth(0).click();
+    await expect(page).toHaveURL(new RegExp(`/#tabs=${name}&on=${name}$`));
+    const chosen = page.frameLocator('iframe.pod-frame--active');
+    await expect(page.locator('iframe.pod-frame--active'))
+      .toHaveAttribute('src', new RegExp(`(^|/)${name}\\.html$`));
+    await expect(chosen.locator('.artifact-body')).toContainText('Edition: second.');
+    const framed = page.frames().find((frame) => frame !== page.mainFrame()
+      && new URL(frame.url()).pathname.endsWith(`/${name}.html`));
+    expect(framed, `a frame holds ${name}.html`).toBeTruthy();
+    expect(new URL(framed!.url()).search).toBe('');
+    await expect(chosen.locator('.artifact-version-banner')).toHaveCount(0);
+    await page.goBack();
+    await expect(page).toHaveURL(oldUrl);
+    await choose.click();
+    await items.nth(2).click();
+    await expect(view(await inTab(page, name)).heading).toBeVisible();
+
+    // The keyboard, as the header's menu takes it, and a click on the
+    // banner's text closes it.
+    await page.goto(`/${name}.html?version=${older.commit}`);
+    await choose.focus();
+    await page.keyboard.press('ArrowDown');
+    await expect(menu).toBeVisible();
+    await expect(items.nth(0)).toBeFocused();
+    await page.keyboard.press('Escape');
+    await expect(menu).toBeHidden();
+    await expect(choose).toBeFocused();
+    await expect(choose).toHaveAttribute('aria-expanded', 'false');
+    await choose.click();
+    await expect(menu).toBeVisible();
+    await banner.locator('.artifact-version-banner-text').click({ position: { x: 4, y: 4 } });
+    await expect(menu).toBeHidden();
+    await expect(choose).toHaveAttribute('aria-expanded', 'false');
+    expect(errors).toEqual([]);
+  });
+
+  test("an old version's banner menu is its own page's, whatever data-page its body carries", async ({ page }) => {
+    const errors = watchErrors(page);
+    const name = 'versions-named-check';
+    // An HTML page is published as it is written, any attribute kept.
+    const embedded = (edition: string) => [
+      '<h1>Versions named check</h1>', `<p>Edition: ${edition}.</p>`,
+      '<div data-page="capture-versions-many">Embedded.</div>', '',
+    ].join('\n');
+    publish(name, embedded('first'), '.html');
+    publish(name, embedded('second'), '.html');
+    const answered = await page.request.get(`/api/versions?page=${name}`);
+    expect(answered.status()).toBe(200);
+    const older = (await answered.json()).versions[1];
+
+    const asked: string[] = [];
+    page.on('request', (request) => {
+      const url = new URL(request.url());
+      if (url.pathname === '/api/versions') asked.push(url.search);
+    });
+    await page.goto(`/${name}.html?version=${older.commit}`);
+    await expect(page.locator('[data-page="capture-versions-many"]')).toHaveCount(1);
+    const choose = page.getByRole('button', { name: 'Choose a version' });
+    await choose.click();
+    const items = page.getByRole('menu').getByRole('menuitem');
+    await expect(items).toHaveCount(3);
+    expect(asked).toEqual([`?page=${name}`]);
+    await expect(items.nth(0)).toHaveAttribute('href', `${name}.html`);
+    await expect(items.nth(1)).toHaveAttribute('href', `${name}.html?version=${older.commit}`);
+    await expect(items.nth(1)).toHaveAttribute('aria-current', 'page');
+    await expect(items.nth(2)).toHaveAttribute('href', `${name}.html#versions`);
+    expect(errors).toEqual([]);
+  });
+
+  test("an old version's banner keeps its links when the versions route fails", async ({ page }) => {
+    const errors = watchErrors(page);
+    const answered = await page.request.get('/api/versions?page=capture-versions-many');
+    expect(answered.status()).toBe(200);
+    const older = (await answered.json()).versions[1];
+    expect(older.current).toBe(false);
+    let asked = 0;
+    await page.route((url) => url.pathname === '/api/versions', (route) => {
+      asked += 1;
+      return route.fulfill({ status: 500, contentType: 'application/json', body: '{"error":"x"}' });
+    });
+
+    await page.goto(`/capture-versions-many.html?version=${older.commit}`);
+    const banner = page.locator('main.artifact--old-version > div.artifact-version-banner');
+    await expect(banner).toBeVisible();
+    await expect.poll(() => asked).toBe(1);
+    await page.waitForLoadState('networkidle');
+    await page.evaluate(() => new Promise((done) => setTimeout(done, 100)));
+    await expect(banner.getByRole('button')).toHaveCount(0);
+    await expect(banner.getByRole('link', { name: 'All versions' })).toBeVisible();
+    await expect(banner.getByRole('link', { name: 'Back to current' })).toBeVisible();
     expect(errors).toEqual([]);
   });
 
