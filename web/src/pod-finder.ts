@@ -26,8 +26,6 @@
 // on the backdrop closes the finder, and focus goes back where it was, into a
 // framed pod's page too.
 (() => {
-  // A pod the listing has, as an option shows it; text is what a query is
-  // matched against.
   interface Pod {
     name: string;
     title: string;
@@ -38,7 +36,6 @@
     text: string;
   }
 
-  // The seen route's pages, of which the finder reads each one's seenAt.
   type Seen = Record<string, { seenAt: string | null }>;
 
   type Read = "seen" | "index";
