@@ -44,6 +44,7 @@ import sys
 import tempfile
 import threading
 from functools import partial
+from http import HTTPStatus
 from html.parser import HTMLParser
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -350,24 +351,31 @@ def build(out: Path, root: Path | None = None,
 
 
 class _Handler(SimpleHTTPRequestHandler):
-    """A static file server that answers / as the host's _redirects would.
+    """A static file server that answers / as the host's _redirects do.
     With a log, each request is written there as `METHOD PATH`, not to stderr."""
 
     def __init__(self, *args, log=None, **kwargs) -> None:
         self.log = log
         super().__init__(*args, **kwargs)
 
-    def _landing(self) -> None:
-        if self.path.split("?")[0] in ("/", f"/{INDEX_FILE}"):
-            self.path = f"/{LANDING_PAGE}.html"
+    def _landing(self) -> bool:
+        """Answer / and /index.html with a 302 to the landing page, as the
+        host does, so the page loads at its own path; whether it did."""
+        if self.path.split("?")[0] not in ("/", f"/{INDEX_FILE}"):
+            return False
+        self.send_response(HTTPStatus.FOUND)
+        self.send_header("Location", f"/{LANDING_PAGE}.html")
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+        return True
 
     def do_GET(self) -> None:
-        self._landing()
-        super().do_GET()
+        if not self._landing():
+            super().do_GET()
 
     def do_HEAD(self) -> None:
-        self._landing()
-        super().do_HEAD()
+        if not self._landing():
+            super().do_HEAD()
 
     def log_request(self, code="-", size="-") -> None:
         if self.log is None:
