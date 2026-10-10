@@ -274,14 +274,17 @@ test.describe('signed in', () => {
     await expect(items.nth(2)).toHaveText('See all versions');
     await expect(items.nth(2)).toHaveAttribute('href', `${name}.html#versions`);
 
-    // The current item opens the page, in the index's tabs as any link to it
-    // does; "See all versions" its versions view.
+    // The current item opens the page itself, alone in the window and not
+    // in the index's tabs, as "Back to current" does; "See all versions"
+    // its versions view.
     await items.nth(0).click();
-    const chosen = await inTab(page, name);
-    await expect(page.locator('iframe.pod-frame--active'))
-      .toHaveAttribute('src', new RegExp(`(^|/)${name}\\.html$`));
-    await expect(chosen.locator('.artifact-version-banner')).toHaveCount(0);
-    await expect(chosen.locator('.artifact-body')).toContainText('Edition: second.');
+    await expect(page).toHaveURL(new RegExp(`/${name}\\.html$`));
+    await expect(page.locator('.artifact-body')).toContainText('Edition: second.');
+    await expect(page.locator('.artifact-versions-link')).toHaveText('Versions · 2');
+    await page.waitForLoadState('networkidle');
+    await expect(page).toHaveURL(new RegExp(`/${name}\\.html$`));
+    await expect(page.locator('.artifact-version-banner')).toHaveCount(0);
+    expect(await page.evaluate(() => sessionStorage.getItem('lotuspod:stay'))).toBeNull();
     await page.goBack();
     await expect(page).toHaveURL(oldUrl);
     await choose.click();

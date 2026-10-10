@@ -11,7 +11,10 @@
 // listing, as pod-tabs.js reads it: a page rendered with no index beside
 // it, one the index does not list yet, one whose index sends it back to a
 // page (the demo's / and /index.html) or cannot be read, stays, as does a
-// file opened from disk.
+// file opened from disk, and so does the one load an old version's banner
+// menu asks with its current item (js/old-version.js): a mark in
+// sessionStorage naming this pod, taken and cleared by the first load that
+// reads it.
 //
 // This source opens the page script's one statement: it is a function handed
 // the rest, from js/page-open.js to js/page-close.js, and runs that only
@@ -20,6 +23,18 @@
 // The rest waits for the index's answer only on a load that may go.
 (function () {
   "use strict";
+
+  // Whether the old version's menu asked this pod's load to stay; the mark
+  // is cleared whichever pod it names.
+  function stays(name) {
+    try {
+      var mark = sessionStorage.getItem("lotuspod:stay");
+      sessionStorage.removeItem("lotuspod:stay");
+      return mark === name;
+    } catch (ignored) {
+      return false;
+    }
+  }
 
   // The index this page may open in, its name and its file, or null when
   // it stays.
@@ -53,7 +68,7 @@
       return null;
     }
     var match = /^(.+)\.html$/.exec(file);
-    if (!match) {
+    if (!match || stays(match[1])) {
       return null;
     }
     return { index: index.pathname.replace(/\/index\.html$/, "/"), name: match[1] };

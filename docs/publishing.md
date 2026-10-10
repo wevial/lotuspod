@@ -630,7 +630,10 @@ as the page.
 That script gives the banner the header's version menu: a "Choose a version
 ▾" button before "All versions" whose menu lists the versions as the
 header's does, the one shown marked "viewing", the current one opening the
-page and "See all versions" opening `NAME.html#versions`. It asks
+page alone in the window (a plain click leaves a one-load mark in
+`sessionStorage` that keeps it out of the index's tabs, see
+[Pods in tabs](#pods-in-tabs)) and "See all versions" opening
+`NAME.html#versions`. It asks
 `GET /api/versions?page=NAME` once as the version loads and posts nothing, so
 an old version records no visit and marks no "you last looked"; when the
 route answers anything but 200 with a list, or the request fails, the banner
@@ -855,8 +858,9 @@ it, or not yet listed on the index, stays; until then the page shows but its
 script waits. The fragment carried is the one the page
 holds when the index answers. A page in a frame, an old version (`?version=`,
 which runs no script), a page the index does not list, a file opened from
-disk (`file://`), and a page loaded with `?standalone` (for example
-`NAME.html?standalone#a-section`) stay where they are, alone in the window.
+disk (`file://`), a page loaded with `?standalone` (for example
+`NAME.html?standalone#a-section`), and the one load an old version's banner
+menu asks with its current item stay where they are, alone in the window.
 
 A tab that is not active shows a dot from `/api/seen`: amber, "new version"
 for a screen reader, when its page was published again since this reader last
