@@ -41,6 +41,8 @@
     var pointers = new Map();
     var press = null;
     var dragged = false;
+    // The zoom and the fingers' distance as the pinch began.
+    var pinch = null;
 
     function button(className, text, label) {
       var made = element("button", className, text);
@@ -83,8 +85,10 @@
       dialog.addEventListener("keydown", keys);
       dialog.addEventListener("close", restore);
       // Capturing, so the click that ends a drag reaches no box and no
-      // listener outside the stage.
-      stage.addEventListener("click", function (event) {
+      // listener outside the stage. On the dialog, and the moves and
+      // releases with it, as a press can leave the stage before it is a
+      // drag and the stage captures it.
+      dialog.addEventListener("click", function (event) {
         if (dragged) {
           dragged = false;
           event.preventDefault();
@@ -92,9 +96,9 @@
         }
       }, true);
       stage.addEventListener("pointerdown", grab);
-      stage.addEventListener("pointermove", drag);
-      stage.addEventListener("pointerup", drop);
-      stage.addEventListener("pointercancel", drop);
+      dialog.addEventListener("pointermove", drag);
+      dialog.addEventListener("pointerup", drop);
+      dialog.addEventListener("pointercancel", drop);
       // Not a finger's own capture of the box it went down on, which the
       // stage takes over once the press is a drag.
       stage.addEventListener("lostpointercapture", function (event) {
@@ -112,7 +116,7 @@
 
     // Tab and Shift+Tab go round the dialog's controls, never out of it.
     function keepFocus(event) {
-      var stops = all("button, [tabindex='0']", dialog).filter(function (node) {
+      var stops = all("a[href], button, [tabindex='0']", dialog).filter(function (node) {
         return !node.disabled && node.getClientRects().length;
       });
       if (!stops.length) {
@@ -235,13 +239,16 @@
       pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
       // A second finger starts a pinch, never a click.
       if (pointers.size === 2) {
+        var both = Array.from(pointers.values());
+        pinch = { zoom: zoom, distance: Math.hypot(both[0].x - both[1].x, both[0].y - both[1].y) };
         startDrag();
       }
     }
 
     // One pointer moves the diagram with it. Two pinch: the diagram zooms
-    // by the change in their distance and moves with their midpoint, so the
-    // point under the fingers stays under them.
+    // by the change in their distance since the pinch began, so fingers that
+    // move together never zoom it at the clamp, and moves with their
+    // midpoint, so the point under the fingers stays under them.
     function drag(event) {
       var at = pointers.get(event.pointerId);
       if (!at) {
@@ -271,10 +278,9 @@
         }
         return;
       }
-      var before = Math.hypot(fromX - other.x, fromY - other.y);
       var after = Math.hypot(x - other.x, y - other.y);
       var rect = parts.stage.getBoundingClientRect();
-      zoomTo(before && after ? after / before : 1,
+      zoomTo(pinch.distance && after ? clamp(pinch.zoom * after / pinch.distance) / zoom : 1,
         (fromX + other.x) / 2 - rect.left, (fromY + other.y) / 2 - rect.top,
         (x + other.x) / 2 - rect.left, (y + other.y) / 2 - rect.top);
     }
@@ -288,6 +294,7 @@
       if (parts.stage.hasPointerCapture(event.pointerId)) {
         parts.stage.releasePointerCapture(event.pointerId);
       }
+      pinch = null;
       if (!pointers.size) {
         parts.stage.classList.remove("artifact-diagram-view-stage--dragging");
       }
@@ -362,6 +369,7 @@
       shown = null;
       pointers.clear();
       dragged = false;
+      pinch = null;
       parts.stage.classList.remove("artifact-diagram-view-stage--dragging");
       was.pre.insertBefore(was.svg, was.next && was.next.parentNode === was.pre ? was.next : was.expand);
       was.saved.forEach(function (at) {

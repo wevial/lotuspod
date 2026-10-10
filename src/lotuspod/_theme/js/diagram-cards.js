@@ -382,6 +382,8 @@
         left = rect.left - GAP - width;
       }
       if (left !== undefined) {
+        // A box moved out past the window's side keeps its card inside it.
+        left = clamp(left, EDGE, wide - width - EDGE);
         top = clamp(rect.top, EDGE, tall - height - EDGE);
       } else {
         left = clamp(rect.left, EDGE, wide - width - EDGE);
@@ -462,6 +464,12 @@
     document.addEventListener("click", function (event) {
       var target = event.target;
       if (!opened || !target || !target.closest || card.contains(target)) {
+        return;
+      }
+      // In the view, only a click on the diagram's stage closes it: its bar
+      // zooms and fits, and its ✕ closes the card with the view.
+      var view = card.parentNode !== document.body;
+      if (view && !opened.diagram.svg.parentNode.contains(target)) {
         return;
       }
       var group = target.closest("g.artifact-node");

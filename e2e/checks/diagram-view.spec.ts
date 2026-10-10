@@ -620,6 +620,10 @@ test("a box's card opens in the view beside it, on a click or from the keyboard"
   const close = card(page).getByRole('button', { name: 'Close' });
   const middle = centre(await where(close));
   expect(await close.evaluate((button, at) => document.elementFromPoint(at.x, at.y) === button, middle)).toBe(true);
+  // The dialog's Tab loop reaches the card's link.
+  await close.focus();
+  await page.keyboard.press('Tab');
+  await expect(card(page).locator('.artifact-node-card-link a')).toBeFocused();
 
   await page.keyboard.press('Escape');
   await expect(card(page)).toBeHidden();
@@ -657,6 +661,42 @@ test('the card follows its box as the view moves, and only a press that keeps st
   await press(page, moved.x, moved.y, 3, 0);
   await expect(card(page).locator('h3')).toHaveText('Light the arrows');
   await beside(page, 'C');
+  await seen.clean();
+});
+
+test('the card stays open as the bar zooms and fits, and inside the window once its box leaves it', async ({ page }) => {
+  const seen = await cardsView(page);
+  await openB(page);
+  for (const button of [view(page).zoomIn, view(page).zoomOut, view(page).fit]) {
+    await button.click();
+    await expect(card(page).locator('h3')).toHaveText('Draw the cards');
+    await beside(page, 'B');
+  }
+  await view(page).stage.focus();
+  for (let key = 0; key < 30; key += 1) await page.keyboard.press('ArrowLeft');
+  const b = await where(step(page, 'B'));
+  expect(b.x + b.width).toBeLessThan(0);
+  await beside(page, 'B');
+  await seen.clean();
+});
+
+test('a press that leaves the stage still drags, and ends with its release', async ({ page }) => {
+  const seen = await cardsView(page);
+  await openB(page);
+  const stage = await where(view(page).stage);
+  const x = stage.x + 300;
+  const before = await where(step(page, 'B'));
+  await press(page, x, stage.y + 2, 0, -12);
+  await expect(card(page).locator('h3')).toHaveText('Draw the cards');
+  const dragged = await where(step(page, 'B'));
+  near(dragged.y, before.y - 12, 1);
+  await page.mouse.move(x, stage.y + 200, { steps: 4 });
+  near((await where(step(page, 'B'))).y, dragged.y, 0.5);
+
+  // A click across the stage's edge: released, the mouse moves nothing.
+  await press(page, x, stage.y + 1, 0, -3);
+  await page.mouse.move(x, stage.y + 200, { steps: 4 });
+  near((await where(step(page, 'B'))).y, dragged.y, 0.5);
   await seen.clean();
 });
 
@@ -772,6 +812,13 @@ test.describe('on a touch screen', () => {
         [{ x: P.x - 10, y: P.y }, { x: P.x + 10, y: P.y }]);
     }
     await expect(view(page).readout).toHaveText('25%');
+    // Two fingers moving together at the clamp move it without zooming,
+    // whichever finger's move comes first.
+    for (const [first, shift] of [[50, -40], [-50, -40], [50, 40], [-50, 40]]) {
+      await fingers.gesture([{ x: P.x + first, y: P.y }, { x: P.x - first, y: P.y }],
+        [{ x: P.x + first + shift, y: P.y }, { x: P.x - first + shift, y: P.y }]);
+      await expect(view(page).readout).toHaveText('25%');
+    }
     await seen.clean();
   });
 
