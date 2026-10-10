@@ -291,6 +291,23 @@ test.describe('signed in', () => {
     await choose.click();
     await items.nth(2).click();
     await expect(view(await inTab(page, name)).heading).toBeVisible();
+
+    // The keyboard, as the header's menu takes it, and a click on the
+    // banner's text closes it.
+    await page.goto(`/${name}.html?version=${older.commit}`);
+    await choose.focus();
+    await page.keyboard.press('ArrowDown');
+    await expect(menu).toBeVisible();
+    await expect(items.nth(0)).toBeFocused();
+    await page.keyboard.press('Escape');
+    await expect(menu).toBeHidden();
+    await expect(choose).toBeFocused();
+    await expect(choose).toHaveAttribute('aria-expanded', 'false');
+    await choose.click();
+    await expect(menu).toBeVisible();
+    await banner.locator('.artifact-version-banner-text').click({ position: { x: 4, y: 4 } });
+    await expect(menu).toBeHidden();
+    await expect(choose).toHaveAttribute('aria-expanded', 'false');
     expect(errors).toEqual([]);
   });
 
