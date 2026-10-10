@@ -153,7 +153,8 @@ requests there, so comments and answers stay in that browser, and a scripted
 `demo-agent` replies from `demo/replies.json`. No server code runs.
 
 Build it into `demo/dist/` (git ignores it), or build it into a scratch
-directory and serve it on 127.0.0.1, with `/` answered by the README's page:
+directory and serve it on 127.0.0.1, with `/` redirected to the README's
+page as the host redirects it:
 
 ```sh
 python -m demo.build --out demo/dist

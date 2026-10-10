@@ -296,6 +296,39 @@ class ConversationTests(ActivityWitness):
                          (False, False, False))
 
 
+    def test_a_thread_on_the_whole_page_is_listed_and_counted_as_any(self):
+        self.site()
+        self.serve()
+        self.assertEqual(self.pull(self.hermes, "hermes"), [])
+
+        mine = self.comment("a", "", "Is this plan still current?")
+        self.assertEqual((mine["section"], mine["sectionTitle"], mine["owner"]),
+                         ("", "", "hermes"))
+        code, claimed = self.agent(self.hermes, "claim", str(mine["id"]))
+        self.assertEqual(code, 0, claimed)
+        code, reply = self.agent(self.hermes, "reply", str(mine["id"]), "--claim",
+                                 claimed["claimToken"], "--key", "hermes-page-1",
+                                 "--text", "Yes, as of today.")
+        self.assertEqual(code, 0, reply)
+
+        events = [event for event in self.events(self.activity(), "a")
+                  if event["kind"] != "version"]
+        self.assertEqual([event["kind"] for event in events], ["reply", "comment"])
+        replied, opened = events
+        self.assertEqual(opened, {
+            "kind": "comment", "at": mine["createdAt"], "id": mine["id"], "thread": mine["id"],
+            "section": "", "sectionTitle": "",
+            "actor": {"kind": "human", "name": "maintainer"}, "mine": True})
+        self.assertEqual(replied, {
+            "kind": "reply", "at": replied["at"], "id": reply["id"], "thread": mine["id"],
+            "sectionTitle": "",
+            "actor": {"kind": "agent", "handle": "hermes", "credential": "hermes"},
+            "mine": False, "yours": True, "unread": True})
+        status, _, seen = self.api("GET", "/api/seen")
+        self.assertEqual(status, 200, seen)
+        self.assertEqual(seen["pages"]["a"]["unread"], 1)
+
+
 class VersionRuleTests(ActivityWitness):
     def test_whitespace_reads_new_version_a_hidden_commit_is_none_and_a_hidden_page_leaves(self):
         self.site()

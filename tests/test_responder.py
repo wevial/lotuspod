@@ -236,6 +236,22 @@ class PromptTests(ResponderCase):
         self.assertLess(answer.index("Answer about that passage."), answer.index("Why dusk?"))
         self.assertNotIn("Quoting the page", prompt)
 
+    def test_a_comment_on_the_whole_page_names_no_section(self):
+        status, _, row = self.api("POST", "/api/comments", {
+            "page": "orphan", "section": "", "text": "Is this page still current?"})
+        self.assertEqual(status, 201, row)
+        self.assertEqual((row["section"], row["owner"]), ("", "responder"))
+
+        done = self.respond()
+        self.assertEqual(done.returncode, 0, done.stderr)
+        [record] = self.records()
+        prompt = record["prompt"]
+        start = prompt.index(f"## The comment to answer: comment {row['id']}")
+        answer = prompt[start:prompt.index("### The thread it belongs to")]
+        self.assertIn("On the whole page, not one section.", answer)
+        self.assertNotIn("On the section", prompt)
+        self.assertIn("Is this page still current?", answer)
+
     def page_revision(self) -> str:
         page = (self.out / "orphan.html").read_text(encoding="utf-8")
         return page.split('name="lotuspod:revision" content="', 1)[1].split('"', 1)[0]

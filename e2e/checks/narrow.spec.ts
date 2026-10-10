@@ -140,7 +140,7 @@ async function settle(page: Page) {
 
 async function load(page: Page, where: string) {
   await page.goto(`${where}?standalone`);
-  await expect(page.locator('details.artifact-comment')).toHaveCount(3);
+  await expect(page.locator('.artifact-body details.artifact-comment')).toHaveCount(3);
   await settle(page);
 }
 
@@ -427,7 +427,8 @@ test.describe('signed in', () => {
     const field = bottom.node.locator('form.artifact-comment-form textarea[name="text"]');
     await expect(field).toBeVisible();
     await expect(field).toHaveValue('Half a thought');
-    await expect(page.locator('form.artifact-comment-form textarea[name="text"]')).toHaveCount(3);
+    // One form for each box, the whole page's among them: none copied.
+    await expect(page.locator('form.artifact-comment-form textarea[name="text"]')).toHaveCount(4);
     let fit = await widths(page);
     expect(fit.scroll).toBeLessThanOrEqual(fit.viewport);
 

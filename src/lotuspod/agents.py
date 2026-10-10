@@ -47,7 +47,7 @@ import urllib.parse
 from pathlib import Path
 
 # cli imports this module too: only names used at call time are read from it.
-from lotuspod import api, cli, machine, media
+from lotuspod import api, cli, comments, machine, media
 
 _BACKTICKS = re.compile(r"`+")
 
@@ -120,8 +120,17 @@ def _standing(row: dict) -> str:
 
 
 def _section(row: dict) -> str:
+    if row["section"] == comments.WHOLE_PAGE:
+        return "the whole page"
     title = row.get("sectionTitle") or ""
     return f"{title} (`{row['section']}`)" if title else f"`{row['section']}`"
+
+
+def _place(row: dict) -> str:
+    """Where a thread is: its section, or the whole page."""
+    if row["section"] == comments.WHOLE_PAGE:
+        return _section(row)
+    return f"section {_section(row)}"
 
 
 def passage(quote: dict, lead: str) -> list[str]:
@@ -259,8 +268,7 @@ def pull_text(payload: dict) -> str:
         if item["kind"] == "comment":
             comment, thread = item["comment"], item["thread"]
             lines += [
-                f"## {number}. Comment {comment['id']} on `{page['name']}`, "
-                f"section {_section(comment)}",
+                f"## {number}. Comment {comment['id']} on `{page['name']}`, {_place(comment)}",
                 "",
                 *_page_lines(page),
                 f"- From: {_by(comment)} at {comment['createdAt']}, "
@@ -376,8 +384,12 @@ def show_text(payload: dict) -> str:
         lines.append("No comments yet.")
     for thread in threads:
         root = thread["root"]
-        head = (f"## Decision `{root['question']}` in section {_section(root)}"
-                if root.get("question") else f"## Section {_section(root)}")
+        if root.get("question"):
+            head = f"## Decision `{root['question']}` in section {_section(root)}"
+        elif root["section"] == comments.WHOLE_PAGE:
+            head = "## The whole page"
+        else:
+            head = f"## Section {_section(root)}"
         lines += [head, "", *_resolved(thread.get("resolution"))]
         for row in (root, *thread["replies"]):
             lines += _message(row, "###")

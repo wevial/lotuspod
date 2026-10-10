@@ -168,7 +168,7 @@ async function pass(page: Page, ms: number) {
 
 async function load(page: Page) {
   await page.goto(`${PAGE}?standalone`);
-  await expect(page.locator('details.artifact-comment')).toHaveCount(3);
+  await expect(page.locator('.artifact-body details.artifact-comment')).toHaveCount(3);
   await settle(page);
 }
 

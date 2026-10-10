@@ -12,6 +12,16 @@
   margin: 0 0 1.5em;
 }
 
+/* The box for the whole page, which the page script draws under the date
+   line: its chip sits apart from the lines around it. */
+.artifact-header > .artifact-comment {
+  margin: 0.75rem 0;
+}
+
+.artifact-header > .artifact-comment:last-child {
+  margin-bottom: 0;
+}
+
 /* Its line is the height of the chip the page script draws in its place
    (.artifact-comment-chip, its faces 1.3rem), set at the top of its line as
    the chip is, so a page lays out the same with scripts as without, whatever

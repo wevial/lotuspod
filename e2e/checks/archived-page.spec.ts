@@ -315,9 +315,15 @@ test.describe.serial('an archived page', () => {
       const side = parts(page);
       await expect(side.banner).toBeVisible();
       await expect(side.button).toHaveText('Unarchive');
-      expect(await side.button.evaluate((node) =>
-        node.previousElementSibling?.classList.contains('artifact-meta') &&
-        node.parentElement?.matches('header.artifact-header'))).toBe(true);
+      // After the date line, and after the chip for the whole page under it.
+      expect(await side.button.evaluate((node) => {
+        let before = node.previousElementSibling;
+        if (before?.matches('details.artifact-comment[data-section=""]')) {
+          before = before.previousElementSibling;
+        }
+        return before?.classList.contains('artifact-meta') &&
+          node.parentElement?.matches('header.artifact-header');
+      })).toBe(true);
 
       await press(page, 'Unarchive');
       await expect(side.banner).toHaveCount(0);
