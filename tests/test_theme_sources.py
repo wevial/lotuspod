@@ -248,6 +248,20 @@ class DeclaredOrderTests(ThemeCopyTestCase):
         problems = source_problems(cli.THEME_DIR, cli.THEME_SOURCES)
         self.assertEqual(problems, [], "\n".join(problems))
 
+    def test_the_review_sheet_is_an_island(self):
+        """LOTUS-157: the review sheet is drawn by the islands bundle, last,
+        after js/decisions.js, whose forms it reads: no script of its own is
+        declared, and its styles stay css/review-sheet.css."""
+        styles = cli.THEME_SOURCES[STYLESHEET]
+        script = cli.THEME_SOURCES[cli.PAGE_SCRIPT]
+        self.assertNotIn("js/review-sheet.js", script)
+        self.assertFalse((cli.THEME_DIR / "js" / "review-sheet.js").exists())
+        self.assertEqual(script[-1], "js/islands.js")
+        self.assertGreater(script.index("js/islands.js"), script.index("js/decisions.js"))
+        self.assertIn("css/review-sheet.css", styles)
+        problems = source_problems(cli.THEME_DIR, cli.THEME_SOURCES)
+        self.assertEqual(problems, [], "\n".join(problems))
+
     def test_the_pod_finder_sources_follow_the_pod_tabs_sources(self):
         """LOTUS-102: the finder hands its choice to the tabs and opens from
         their strip, so js/pod-finder.js is joined just after js/pod-tabs.js

@@ -13,7 +13,7 @@
 // thread on the decision, and once the decision has threads a chip under it
 // opens them as a section's chip does. Its review sheet counts the open
 // questions in the title bar, marks where they are, and answers them all in
-// one Respond panel (js/review-sheet.js). For
+// one Respond panel (web/src/islands/review-sheet.tsx). For
 // comments it reads the page's threads, draws each in its section's box as a
 // chat (the reader's comments on the right, agents' replies on the left, each
 // state as its own mark outside what anyone wrote), and posts new threads and
@@ -114,7 +114,8 @@
 
   // What the address's fragment gives name as #NAME=VALUE, decoded: a link
   // from the index's Recent activity, #thread=ID (js/comments.js) or
-  // #question=ID (js/review-sheet.js). Null for any other fragment, and,
+  // #question=ID (the review sheet, web/src/islands/review-sheet.tsx, reads
+  // it through web/src/islands/bridge.ts). Null for any other fragment, and,
   // read as the page opens (first), for a page reloaded, by the reader or by
   // itself (js/live-page.js), which keeps where the reader was instead.
   function linkedTo(name, first) {

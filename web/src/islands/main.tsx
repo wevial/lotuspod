@@ -5,12 +5,13 @@
 // page only through the bridge's page.
 
 import { page, type Page } from "./bridge";
+import { reviewSheet } from "./review-sheet";
 
 // An island mounts itself on the page it is handed.
 type Island = (page: Page) => void;
 
 // The islands, in the order they mount.
-const islands: Island[] = [];
+const islands: Island[] = [reviewSheet];
 
 for (const mount of islands) {
   mount(page);

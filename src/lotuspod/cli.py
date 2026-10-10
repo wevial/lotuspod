@@ -347,7 +347,6 @@ THEME_SOURCES = {
         "js/shared.js",
         "js/link-tab.js",
         "js/decisions.js",
-        "js/review-sheet.js",
         "js/narrow.js",
         "js/attachments.js",
         "js/live-page.js",
