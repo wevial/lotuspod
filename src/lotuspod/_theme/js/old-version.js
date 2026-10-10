@@ -33,22 +33,6 @@
       var box = element("span", "artifact-version-banner-menu");
       box.append(menu.button, menu.menu);
       links.insertBefore(box, every);
-      // The current item opens the page itself, alone in the window: a
-      // plain click on it leaves a mark for that one load, which
-      // js/open-in-tabs.js takes in place of opening the index's tabs.
-      var current = encodeURIComponent(page) + ".html";
-      menu.menu.addEventListener("click", function (event) {
-        var link = event.target.closest('[role="menuitem"]');
-        if (!link || link.getAttribute("href") !== current || event.button !== 0 ||
-            event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
-          return;
-        }
-        try {
-          sessionStorage.setItem("lotuspod:stay", page);
-        } catch (ignored) {
-          // No storage: the page opens in the index's tabs, as any link does.
-        }
-      });
     })().catch(function () {
       // No menu: the banner keeps its links.
     });
