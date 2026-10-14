@@ -773,6 +773,172 @@ class LoopTests(ResponderCase):
         self.assertNotIn("waiting for serve", log.read())
 
 
+# A stand-in that records its pid, then takes 30 seconds to answer.
+SLEEPER = """\
+import json, os, sys, time
+sys.stdin.read()
+with open(os.environ["RECORD"], "a", encoding="utf-8") as log:
+    log.write(json.dumps({"pid": os.getpid()}) + "\\n")
+time.sleep(30)
+print("Too late.")
+"""
+
+
+class InterruptTests(ResponderCase):
+    """The responder stopped, or killed, while the agent runs on a comment:
+    the comment is released and answered after the restart, until it has
+    been released twice."""
+
+    def start(self, *extra):
+        """A responder running SLEEPER, and the agent's record once it runs."""
+        before = len(self.records())
+        log = open(self.tmp / "respond.log", "a+", encoding="utf-8")
+        self.addCleanup(log.close)
+        process = subprocess.Popen(
+            [sys.executable, "-m", "lotuspod", "respond", *extra,
+             "--command", self.stand_in("sleeper", SLEEPER), "--credential",
+             str(self.responder), "--socket", str(self.sock), "--out-dir", str(self.out),
+             "--db", str(self.db)],
+            cwd=str(self.tmp), env=self.env, stdout=log, stderr=log)
+        self.addCleanup(lambda: process.poll() is None and process.kill())
+        deadline = time.monotonic() + 15
+        while len(self.records()) == before:
+            self.assertLess(time.monotonic(), deadline, "the agent never ran")
+            time.sleep(0.1)
+        return process, self.records()[-1]
+
+    def stop(self):
+        """Start a looping responder, then stop it as systemd does once its
+        agent runs: SIGTERM to every process in the unit's cgroup."""
+        process, agent = self.start("--interval", "1")
+        process.send_signal(signal.SIGTERM)
+        os.kill(agent["pid"], signal.SIGTERM)
+        self.assertEqual(process.wait(15), 0)
+
+    def journal(self):
+        path = self.tmp / responder.JOURNAL_NAME
+        return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+
+    def released(self):
+        done = self.cli("audit", "--json", "--db", str(self.db))
+        self.assertEqual(done.returncode, 0, done.stderr)
+        return [e for e in json.loads(done.stdout) if e["action"] == "release"]
+
+    def test_a_comment_answering_when_the_responder_is_stopped_is_answered_after_restart(self):
+        row = self.comment("orphan", "other", "Answer me across a deploy.")
+        self.stop()
+        root = self.root("orphan", row["id"])
+        self.assertNotEqual(root.get("state"), "failed", root.get("reason"))
+        [entry] = self.journal()
+        self.assertEqual((entry["comment"], entry.get("released"), entry.get("done")),
+                         (row["id"], True, True))
+        self.assertNotIn("fail", entry)
+        self.assertEqual(len(self.released()), 1)
+        self.record.unlink()
+        done = self.respond(env=dict(self.env, ANSWER="Answered after the restart."))
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(self.replies("orphan", row["id"]),
+                         [("Answered after the restart.", "responder", "")])
+
+    def test_a_comment_a_killed_responder_left_unanswered_is_released_on_start(self):
+        row = self.comment("orphan", "other", "Answer me across a crash.")
+        process, agent = self.start("--once")
+        # No handler runs: the journal is left "before its answer was ready".
+        process.kill()
+        process.wait(15)
+        os.killpg(agent["pid"], signal.SIGKILL)
+        [entry] = self.journal()
+        self.assertEqual(entry["comment"], row["id"])
+        self.assertNotIn("text", entry)
+
+        done = self.respond(env=dict(self.env, ANSWER="Answered after the crash."))
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertIn(f"comment {row['id']}: released", done.stdout)
+        self.assertEqual(len(self.released()), 1)
+        self.assertEqual(self.replies("orphan", row["id"]),
+                         [("Answered after the crash.", "responder", "")])
+        self.assertEqual(self.root("orphan", row["id"]).get("state"), "answered")
+
+    def test_a_comment_interrupted_a_third_time_fails_as_interrupted_by_restarts(self):
+        row = self.comment("orphan", "other", "Answer me across a crash loop.")
+        for count in (1, 2):
+            self.stop()
+            self.assertEqual(self.root("orphan", row["id"]).get("state"), "pending")
+            self.assertEqual(len(self.released()), count)
+            self.assertEqual(sum(1 for e in self.journal() if e.get("released")), count)
+        self.stop()
+        root = self.root("orphan", row["id"])
+        self.assertEqual((root.get("state"), root.get("reason")),
+                         ("failed", responder.INTERRUPTED))
+        self.assertEqual(responder.INTERRUPTED, "interrupted by restarts")
+        self.assertEqual(len(self.released()), 2)
+        self.assertEqual(len(self.records()), 3)
+        self.assertEqual(self.replies("orphan", row["id"]), [])
+        # Settled: its releases leave the journal.
+        self.assertEqual(self.journal(), [])
+
+
+# A stand-in that reads its prompt only after a pause, then answers.
+LATE_READER = """\
+import sys, time
+time.sleep(0.5)
+sys.stdin.read()
+print("Read it all.")
+"""
+
+
+class LargePromptTests(ResponderCase):
+    def test_a_prompt_larger_than_a_pipe_reaches_an_agent_that_reads_it_late(self):
+        self.publish("orphan", ORPHAN + "\n" + "Lilies at dusk, at length. " * 4000)
+        row = self.comment("orphan", "other", "Read the whole page.")
+        done = self.respond("--timeout", "10", command=self.stand_in("late", LATE_READER))
+        self.assertEqual(done.returncode, 0, done.stderr)
+        root = self.root("orphan", row["id"])
+        self.assertNotEqual(root.get("state"), "failed", root.get("reason"))
+        self.assertEqual(self.replies("orphan", row["id"]),
+                         [("Read it all.", "responder", "")])
+
+
+class ReleaseCountTests(unittest.TestCase):
+    """Only a settlement of the comment clears its count of releases."""
+
+    def setUp(self):
+        import tempfile
+        scratch = tempfile.TemporaryDirectory()
+        self.addCleanup(scratch.cleanup)
+        self.journal = responder.Journal(Path(scratch.name) / responder.JOURNAL_NAME)
+        for key in ("a", "b"):
+            self.journal.write({"key": key, "comment": 7, "released": True, "done": True})
+        self.responder = responder.Responder.__new__(responder.Responder)
+        self.responder.journal = self.journal
+        self.responder.log = lambda line: None
+
+    def settle_refused(self, error):
+        def ask(method, target, body=None):
+            raise responder.Refused(error)
+        self.responder.ask = ask
+        self.journal.write({"key": "c", "comment": 7})
+        self.assertFalse(self.responder._settle(7, "token", "c", "reply", {"text": "x"}))
+        self.journal.compact()
+
+    def test_a_reply_refused_as_another_s_claim_keeps_the_count(self):
+        self.settle_refused("claimed")
+        self.assertEqual(self.journal.releases(7), 2)
+
+    def test_a_reply_refused_as_settled_clears_the_count(self):
+        self.settle_refused("settled")
+        self.assertEqual(self.journal.releases(7), 0)
+
+    def test_a_comment_still_open_keeps_the_count(self):
+        self.journal.compact(open_ids={7})
+        self.assertEqual(self.journal.releases(7), 2)
+
+    def test_a_comment_another_agent_settled_clears_the_count(self):
+        self.journal.compact(open_ids={8})
+        self.assertEqual(self.journal.releases(7), 0)
+        self.assertEqual(self.journal.path.read_text(encoding="utf-8"), "")
+
+
 class StartupWaitTests(ResponderCase):
     """serve restarted with the responder: a comment waits for it, serve is
     stopped (its socket goes), the responder starts, and serve starts again

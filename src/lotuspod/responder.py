@@ -21,7 +21,13 @@ it first, through publish's own code, only if the page is still at the
 revision the agent read; the reply then names the new revision. A command
 that exits non-zero, prints nothing or runs past --timeout, a revision
 conflict and a credential without publish each fail the comment with a
-reason the page shows. Nothing is retried.
+reason the page shows, and none of these is retried. A stop is not a
+failure: when the agent command ends, or is still running, as the responder
+is stopped (SIGTERM, as systemd stops it on every deploy), its process group
+is killed and the comment is released, journaled as released, so the next
+pass after the restart answers it. A comment released this way twice
+already fails with the reason "interrupted by restarts" the third time, so
+a crash loop cannot hold it forever.
 
 Before running the agent the responder appends to a journal (mode 0600) the
 comment, the reply's idempotency key and the revision it expects, then the
@@ -32,8 +38,9 @@ Each pass first finishes what the journal left unfinished: a reply whose
 page was republished (or needed no republish) is sent again with the same
 key and revision (the audit trail, the page, and the artifacts repository's
 history since the entry began stand in for a record the crash lost), and
-neither the agent nor publish runs again; a failure is sent again with its
-reason; a comment left before its answer was ready is failed. One pass at a
+neither the agent nor publish runs again; a failure or a release is sent
+again; a comment left before its answer was ready, by a crash or a kill, is
+released as a stop's is, under the same cap. One pass at a
 time holds the journal (a lock beside it): a pass that finds it held does
 nothing, so it never takes another process's live work for a crash's.
 Each reply names the model the agent command names with --model NAME or
@@ -93,8 +100,16 @@ IMAGES_DIR = "images"
 # The exit status of the test-only fault point.
 CRASH_EXIT = 70
 CONFLICT = "the page changed while I was editing it"
+# How many times a comment is released after an interruption before the
+# next interruption fails it, with INTERRUPTED.
+MOST_RELEASES = 2
+INTERRUPTED = "interrupted by restarts"
+# Seconds between looks at the stop event while the agent command runs.
+STOP_POLL = 0.2
 # Refusals that put a comment out of the responder's hands for good.
 _GONE = ("settled", "claimed", "not_routed", "unknown_comment", "unknown_page")
+# The refusals of _GONE that leave the comment unsettled.
+_UNSETTLED = ("claimed", "not_routed")
 NO_PUBLISH = "my credential lacks the publish permission, so I did not revise the page"
 
 LIMITS = """\
@@ -139,6 +154,10 @@ class _Failed(Exception):
     def __init__(self, reason: str) -> None:
         super().__init__(reason)
         self.reason = reason[:machine.MAX_REASON]
+
+
+class _Stopped(Exception):
+    """The responder was stopped while the agent command ran."""
 
 
 class Journal:
@@ -194,11 +213,24 @@ class Journal:
         """Every key's merged entry that is not done, oldest first."""
         return [entry for entry in self._merged().values() if not entry.get("done")]
 
-    def compact(self) -> None:
-        """Keep only what is unfinished."""
+    def releases(self, comment_id: int) -> int:
+        """How many times comment_id was released after an interruption."""
+        return sum(1 for entry in self._merged().values()
+                   if entry.get("comment") == comment_id and entry.get("released"))
+
+    def compact(self, open_ids: Collection[int] | None = None) -> None:
+        """Keep only what is unfinished, and the releases of each comment
+        not since settled (answered, failed or gone), which count towards
+        MOST_RELEASES. A comment is settled once this journal says so, or,
+        when open_ids names the comments still open, once it is not among
+        them: another agent may have answered it since its release."""
         if not self.path.exists():
             return
-        left = self.unfinished()
+        merged = self._merged().values()
+        settled = {entry.get("comment") for entry in merged if entry.get("settled")}
+        left = [entry for entry in merged if not entry.get("done") or (
+            entry.get("released") and entry.get("comment") not in settled
+            and (open_ids is None or entry.get("comment") in open_ids))]
         temp = self.path.with_name(f".{self.path.name}.tmp")
         fd = os.open(temp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
         with os.fdopen(fd, "w", encoding="utf-8") as fh:
@@ -340,25 +372,54 @@ def prompt(item: dict, copied: Collection[str] | None = None) -> str:
     return "\n".join(lines)
 
 
-def run_agent(argv: list[str], text: str, cwd: Path, env: dict, timeout: float) -> str:
+def _kill(proc: subprocess.Popen) -> None:
+    """Kill proc's whole session, so nothing the command started lives on."""
+    try:
+        os.killpg(proc.pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
+    proc.communicate()
+
+
+def run_agent(argv: list[str], text: str, cwd: Path, env: dict, timeout: float,
+              stop: threading.Event | None = None) -> str:
     """The trimmed standard output of argv run on text; _Failed when it
-    cannot run, exits non-zero, prints nothing or runs past timeout."""
+    cannot run, exits non-zero, prints nothing or runs past timeout;
+    _Stopped when stop is set as it ends or while it runs."""
     try:
         proc = subprocess.Popen(argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                 stderr=subprocess.PIPE, cwd=str(cwd), env=env,
                                 start_new_session=True)
     except OSError as exc:
         raise _Failed(f"the agent command could not run: {exc.strerror or exc}") from None
+    ended = threading.Event()
+
+    def watch() -> None:
+        # A stop kills the agent, so communicate() returns; one call writes
+        # the whole prompt, however slowly the agent reads it.
+        while not ended.wait(STOP_POLL):
+            if stop.is_set():
+                try:
+                    os.killpg(proc.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+                return
+
+    if stop is not None:
+        threading.Thread(target=watch, daemon=True).start()
     try:
         out, _err = proc.communicate(text.encode("utf-8"), timeout=timeout)
     except subprocess.TimeoutExpired:
-        # The whole session, so nothing the command started lives on.
-        try:
-            os.killpg(proc.pid, signal.SIGKILL)
-        except ProcessLookupError:
-            pass
-        proc.communicate()
+        _kill(proc)
+        if stop is not None and stop.is_set():
+            raise _Stopped() from None
         raise _Failed(f"the agent command ran past {timeout:g} seconds") from None
+    finally:
+        ended.set()
+    if stop is not None and stop.is_set():
+        # systemd stops the agent with the responder: its exit is no answer.
+        _kill(proc)
+        raise _Stopped()
     if proc.returncode != 0:
         raise _Failed(f"the agent command exited {proc.returncode}")
     answer = out.decode("utf-8", "replace").strip()
@@ -385,6 +446,7 @@ class Responder:
         self.model = command_model(command)
         self.timeout = timeout
         self.credential: dict = {}
+        self.stop: threading.Event | None = None
 
     def log(self, line: str) -> None:
         print(line, flush=True)
@@ -418,6 +480,7 @@ class Responder:
             self._pass(stop)
 
     def _pass(self, stop: threading.Event | None) -> None:
+        self.stop = stop
         self.credential = self.ask("GET", machine.WHOAMI)["credential"]
         self.finish()
         target = f"{machine.PULL}?" + urllib.parse.urlencode({"owner": routing.RESPONDER})
@@ -431,7 +494,7 @@ class Responder:
             # another handle's.
             if item["kind"] == "comment" and item["comment"]["owner"] == routing.RESPONDER:
                 self.answer(item)
-        self.journal.compact()
+        self.journal.compact({comment["id"] for comment in self.database.open_comments()})
 
     def answer(self, item: dict) -> None:
         comment_id, page = item["comment"]["id"], item["page"]
@@ -455,6 +518,9 @@ class Responder:
         except _Failed as exc:
             self.fail(comment_id, token, key, exc.reason)
             return
+        except _Stopped:
+            self.interrupted(comment_id, token, key)
+            return
         self.reply(comment_id, token, key, text, revision, self.model)
 
     def consult(self, item: dict) -> tuple[str, bytes | None]:
@@ -475,7 +541,7 @@ class Responder:
             env[SOURCE_ENV] = str(copy) if copy is not None else ""
             copied = copy_images(item, Path(scratch))
             text = run_agent(self.command, prompt(item, copied), Path(scratch), env,
-                             self.timeout)
+                             self.timeout, self.stop)
             if copy is None:
                 return text, None
             try:
@@ -581,6 +647,30 @@ class Responder:
         if self._settle(comment_id, token, key, "fail", {"reason": reason}):
             self.log(f"comment {comment_id}: failed: {reason}")
 
+    def interrupted(self, comment_id: int, token: str, key: str) -> None:
+        """Release a comment whose answer a stop or a crash cut short, so a
+        later pass answers it; fail it once it has been released
+        MOST_RELEASES times this way. The release is journaled first."""
+        if self.journal.releases(comment_id) >= MOST_RELEASES:
+            self.fail(comment_id, token, key, INTERRUPTED)
+            return
+        self.journal.write({"key": key, "released": True})
+        self.release(comment_id, token, key)
+
+    def release(self, comment_id: int, token: str, key: str) -> None:
+        """Route the comment again, unanswered. A claim that lapsed meanwhile
+        has routed it again already."""
+        try:
+            if not token:
+                raise Refused("not_claimed")
+            self.ask("POST", f"/v1/comments/{comment_id}/release", {"claimToken": token})
+        except Refused as exc:
+            if exc.error != "not_claimed" and exc.error not in _GONE:
+                self.log(f"comment {comment_id}: release refused ({exc.error})")
+                return
+        self.journal.write({"key": key, "done": True})
+        self.log(f"comment {comment_id}: released, interrupted before its answer was ready")
+
     def _settle(self, comment_id: int, token: str, key: str, action: str,
                 body: dict) -> bool:
         """POST the reply or failure under token, and under a new claim when
@@ -606,11 +696,14 @@ class Responder:
         except Refused as exc:
             self.log(f"comment {comment_id}: {action} refused ({exc.error})")
             if exc.error in _GONE:
-                self.journal.write({"key": key, "done": True})
+                # Another agent's claim or a new route leaves it unsettled,
+                # and its releases still count.
+                self.journal.write({"key": key, "done": True,
+                                    "settled": exc.error not in _UNSETTLED})
             elif action == "reply":
                 self.fail(comment_id, token, key, f"I could not post my answer ({exc.error})")
             return False
-        self.journal.write({"key": key, "done": True})
+        self.journal.write({"key": key, "done": True, "settled": True})
         return True
 
     def finish(self) -> None:
@@ -625,6 +718,9 @@ class Responder:
             reason = entry.get("fail")
             if reason is not None:
                 self.fail(comment_id, token, key, reason)
+                continue
+            if entry.get("released"):
+                self.release(comment_id, token, key)
                 continue
             publishing = entry.get("publishing")
             # The journal, else the audit trail, else the page itself, else
@@ -651,8 +747,7 @@ class Responder:
                 self.fail(comment_id, token, key, "I stopped while revising the page and "
                           "found no sign my edit was published")
             else:
-                self.fail(comment_id, token, key,
-                          "the responder stopped before its answer was ready")
+                self.interrupted(comment_id, token, key)
 
 
 def committed(out_dir: Path, source_file: str, revision: str, since: float) -> bool:
