@@ -29,8 +29,7 @@ newest one that is not an undone dismissal; a question whose only answers
 are undone dismissals is not answered.
 
 A reader's comment also keeps, as it arrives, its page's owner and that
-owner's last pull then, so routing (lotuspod.routing) can tell whether the
-owner was listening when it came, whatever pulls follow.
+owner's last pull then. Routing (lotuspod.routing) no longer reads them.
 
 An agent takes a reader's comment up by claiming it: the comment keeps the
 claim's credential, handle, token hash and expiry, and becomes `claimed`.
@@ -72,6 +71,14 @@ started or replied in, as a human by that address, someone else wrote it,
 and its id is above both their own newest comment in the thread and their
 mark for it (unread). The step that keeps the marks marks every thread seen
 up to its newest comment then, for each reader in it.
+
+Each owner handle has an inbox: what the responder answered on the owner's
+page but could not do itself, the reader's comment and the ask in one line,
+addressed to the handle, never to a session. An item is claimed with a
+token and an expiry as a comment is, though a current claim is never
+renewed, not even by the credential holding it, so two sessions never both
+act on it; a lapsed claim leaves it open again. Done closes it for good.
+One item per comment, however often it is queued.
 """
 
 from __future__ import annotations
@@ -87,7 +94,7 @@ from typing import Callable, Iterator, Mapping, Sequence
 from lotuspod import media
 
 DEFAULT_NAME = "lotuspod.sqlite3"
-SCHEMA_VERSION = 15
+SCHEMA_VERSION = 16
 # Seconds a connection waits for another writer before giving up.
 BUSY_TIMEOUT = 30
 # The state of a reader's comment until an agent takes it up.
@@ -255,6 +262,22 @@ _SCHEMA = {1: (
     # undone, NULL until it is.
     "ALTER TABLE answers ADD COLUMN dismissed INTEGER",
     "ALTER TABLE answers ADD COLUMN undone_at TEXT",
+), 16: (
+    # Each owner's inbox: the ask the responder queued for it from a reader's
+    # comment, its claim as a comment's, and when it was done.
+    """CREATE TABLE inbox (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        owner TEXT NOT NULL,
+        page TEXT NOT NULL,
+        comment INTEGER NOT NULL UNIQUE REFERENCES comments(id),
+        ask TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        claim_credential TEXT,
+        claim_hash TEXT,
+        claim_expires TEXT,
+        done_at TEXT
+    )""",
+    "CREATE INDEX inbox_by_owner ON inbox(owner, done_at, id)",
 )}
 # The settings row that holds whether the responder is paused.
 _PAUSED = "responder_paused"
@@ -274,7 +297,8 @@ class Refused(Exception):
     """A claim, reply, release, failure or resolution refused, naming why:
     unknown_comment, unknown_thread, unknown_page, settled, not_routed,
     claimed, not_claimed or revision_mismatch; a dismissal or its undo,
-    already_dismissed or not_dismissed. Nothing is stored."""
+    already_dismissed or not_dismissed; an inbox item's claim or done,
+    unknown_item, settled, claimed or not_claimed. Nothing is stored."""
 
     def __init__(self, error: str) -> None:
         super().__init__(error)
@@ -408,6 +432,19 @@ def _audit(row: sqlite3.Row) -> dict:
         "handle": row["handle"],
         "key": row["key"],
         "revision": row["revision"],
+    }
+
+
+def _inbox_item(row: sqlite3.Row) -> dict:
+    return {
+        "id": row["id"],
+        "owner": row["owner"],
+        "page": row["page"],
+        "comment": row["comment"],
+        "ask": row["ask"],
+        "createdAt": row["created_at"],
+        "claim": {"credential": row["claim_credential"], "expiresAt": row["claim_expires"]},
+        "doneAt": row["done_at"],
     }
 
 
@@ -1212,6 +1249,73 @@ class Database:
                 (answer_id, handle),
             ).fetchone()[0]
 
+    def queue(self, *, owner: str, page: str, comment: int, ask: str) -> dict:
+        """Put ask, from comment on page, in owner's inbox; the item. A
+        comment already queued gives back its item, and nothing changes."""
+        with self._connect() as conn, _write(conn):
+            conn.execute(
+                "INSERT OR IGNORE INTO inbox (owner, page, comment, ask, created_at)"
+                " VALUES (?, ?, ?, ?, ?)", (owner, page, comment, ask, _now()),
+            )
+            row = conn.execute("SELECT * FROM inbox WHERE comment = ?", (comment,))
+            return _inbox_item(row.fetchone())
+
+    def inbox(self, owner: str, now: float) -> list[dict]:
+        """owner's open items at now, oldest first: not done, and unclaimed
+        or their claim lapsed."""
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT * FROM inbox WHERE owner = ? AND done_at IS NULL"
+                " AND (claim_expires IS NULL OR claim_expires <= ?) ORDER BY id",
+                (owner, stamp(now)),
+            ).fetchall()
+        return [_inbox_item(row) for row in rows]
+
+    def inbox_item(self, item_id: int) -> dict | None:
+        """The inbox item item_id; None when there is none."""
+        with self._connect() as conn:
+            row = conn.execute("SELECT * FROM inbox WHERE id = ?", (item_id,)).fetchone()
+        return None if row is None else _inbox_item(row)
+
+    def claim_item(self, item_id: int, *, owner: str, credential: str, token_hash: str,
+                   claim_sec: float, clock: Callable[[], float]) -> dict:
+        """Claim owner's inbox item item_id for credential for claim_sec
+        seconds; the item. Refused unknown_item when owner has no such item,
+        settled once it is done, claimed while any claim on it is current."""
+        with self._connect() as conn, _write(conn):
+            now = clock()
+            found = _find_item(conn, item_id, owner)
+            if found["doneAt"] is not None:
+                raise Refused("settled")
+            changed = conn.execute(
+                "UPDATE inbox SET claim_credential = ?, claim_hash = ?, claim_expires = ?"
+                " WHERE id = ? AND (claim_expires IS NULL OR claim_expires <= ?)",
+                (credential, token_hash, stamp(now + claim_sec), item_id, stamp(now)),
+            ).rowcount
+            if changed != 1:
+                raise Refused("claimed")
+            return _find_item(conn, item_id, owner)
+
+    def finish_item(self, item_id: int, *, owner: str, credential: str, token_hash: str,
+                    clock: Callable[[], float]) -> dict:
+        """Close owner's inbox item item_id under credential's current claim;
+        the item. Refused unknown_item as claim_item is, settled once it is
+        done, and not_claimed without that claim and its token."""
+        with self._connect() as conn, _write(conn):
+            found = _held_item(conn, item_id, owner, credential, token_hash, clock())
+            conn.execute(
+                "UPDATE inbox SET done_at = ?, claim_hash = NULL, claim_expires = NULL"
+                " WHERE id = ?", (_now(), found["id"]),
+            )
+            return _find_item(conn, item_id, owner)
+
+    def check_item(self, item_id: int, *, owner: str, credential: str, token_hash: str,
+                   clock: Callable[[], float]) -> dict:
+        """The item as finish_item would close it, refused as it would be;
+        nothing changes."""
+        with self._connect() as conn:
+            return _held_item(conn, item_id, owner, credential, token_hash, clock())
+
     def add_credential(self, *, name: str, handles: list[str], operations: list[str],
                        token_hash: str) -> dict:
         """Store a credential; DuplicateCredential when name is taken."""
@@ -1321,6 +1425,30 @@ def _held(conn: sqlite3.Connection, comment_id: int, credential: str, token_hash
     if (found["state"] != CLAIMED or claim["credential"] != credential
             or claim["expiresAt"] is None or claim["expiresAt"] <= stamp(now)
             or not hmac.compare_digest(claim["tokenHash"] or "", token_hash)):
+        raise Refused("not_claimed")
+    return found
+
+
+def _find_item(conn: sqlite3.Connection, item_id: int, owner: str) -> dict:
+    """owner's inbox item item_id; Refused unknown_item when it has none."""
+    row = conn.execute("SELECT * FROM inbox WHERE id = ? AND owner = ?",
+                       (item_id, owner)).fetchone()
+    if row is None:
+        raise Refused("unknown_item")
+    return _inbox_item(row)
+
+
+def _held_item(conn: sqlite3.Connection, item_id: int, owner: str, credential: str,
+               token_hash: str, now: float) -> dict:
+    """owner's open item item_id while credential's claim on it is current
+    and token_hash is its token's, as _held checks a comment's."""
+    found = _find_item(conn, item_id, owner)
+    if found["doneAt"] is not None:
+        raise Refused("settled")
+    stored = conn.execute("SELECT claim_hash FROM inbox WHERE id = ?", (item_id,)).fetchone()[0]
+    expires = found["claim"]["expiresAt"]
+    if (found["claim"]["credential"] != credential or expires is None
+            or expires <= stamp(now) or not hmac.compare_digest(stored or "", token_hash)):
         raise Refused("not_claimed")
     return found
 

@@ -23,7 +23,8 @@ const SRC = path.resolve(__dirname, '..', '..', 'src');
 const OWNER = 'hermes';
 const WIDE = { width: 1440, height: 900 };
 const MEDIUM = { width: 1024, height: 768 };
-const QUESTION = 'Is this plan still current?';
+// It names hermes, so it waits for hermes, not the responder.
+const QUESTION = '@hermes Is this plan still current?';
 const REPLY = 'Yes, as of today.';
 const TWO = ['# Pond plan', '', 'What we will do this winter.', '',
   '## Goals', '', 'Keep the fish alive until spring.', '',
@@ -111,7 +112,7 @@ test.describe('signed in', () => {
     }
     const name = `page-comments-check-${test.info().repeatEachIndex}`;
     publish(name, TWO);
-    // hermes pulls first, so it is listening and the comment waits for it.
+    // hermes pulls first, so it is listening and the comment, naming it, waits for it.
     hermes('pull', '--owner', OWNER);
     const errors = watch(page);
     await load(page, `/${name}.html`);

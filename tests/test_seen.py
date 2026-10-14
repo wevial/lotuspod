@@ -180,7 +180,7 @@ class SeenRepliesTests(UnreadTestCase):
         return got["pages"][page]
 
     def test_replies_count_the_comments_by_others_since_the_reader_last_opened_the_page(self):
-        # hermes listens, so b's comment waits for it.
+        # hermes listens, and b's comment names it, so it waits for it.
         self.hermes("pull", "--owner", OWNER)
         posted = db.stamp(time.time())
         self.assertEqual(self.seen({"page": "plan", "revision": self.revision})[0], 200)
@@ -189,7 +189,7 @@ class SeenRepliesTests(UnreadTestCase):
         # A comment stored in the very millisecond of the view would not be after it.
         time.sleep(0.01)
 
-        root = self.open_thread(B, "Is the heater enough?")
+        root = self.open_thread(B, "@hermes Is the heater enough?")
         self.answer(root, "It is, down to minus ten.")
         self.open_thread(A, "And the pump?")
         entry = self.entry(A)

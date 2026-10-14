@@ -190,7 +190,7 @@ test.describe('signed in', () => {
     }
     const errors: string[] = [];
     page.on('pageerror', (error) => errors.push(error.message));
-    // hermes pulls first, so it is listening and the comment waits for it.
+    // hermes pulls first, so it is listening and the comment, naming it, waits for it.
     hermes('pull', '--owner', OWNER);
 
     await page.goto(`${PAGE}?standalone`);
@@ -202,7 +202,8 @@ test.describe('signed in', () => {
     if (before) await steps.start.click();
     await expect(steps.text).toBeFocused();
     await page.evaluate(() => { (window as any).__stayed = 'this page'; });
-    const COMMENT = 'Which heater, and where does it go?';
+    // It names hermes, so it waits for hermes, not the responder.
+    const COMMENT = '@hermes Which heater, and where does it go?';
     await steps.text.fill(COMMENT);
     await steps.comment.click();
     await expect(steps.threads).toHaveCount(before + 1);
@@ -250,7 +251,7 @@ test.describe('signed in', () => {
     page.on('pageerror', (error) => errors.push(error.message));
     hermes('pull', '--owner', OWNER);
     const posted = await page.request.post('/api/comments', {
-      data: { page: 'capture-comments', section: 'next-steps', text: 'Which model answers this?' },
+      data: { page: 'capture-comments', section: 'next-steps', text: '@hermes Which model answers this?' },
     });
     expect(posted.status()).toBe(201);
     const { id } = await posted.json();

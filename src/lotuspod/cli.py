@@ -3024,6 +3024,7 @@ def build_parser() -> argparse.ArgumentParser:
     audit.set_defaults(func=cmd_audit)
 
     agents.add_parser(sub)
+    agents.add_inbox_parser(sub)
     responder.add_parser(sub)
     backup.add_parser(sub)
     archive.add_parser(sub)

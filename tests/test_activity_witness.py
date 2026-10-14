@@ -239,7 +239,7 @@ class ConversationTests(ActivityWitness):
         self.serve()
         self.assertEqual(self.pull(self.hermes, "hermes"), [])
 
-        mine = self.comment("a", "alpha", "Is the pond deep enough?")
+        mine = self.comment("a", "alpha", "@hermes Is the pond deep enough?")
         code, claimed = self.agent(self.hermes, "claim", str(mine["id"]))
         self.assertEqual(code, 0, claimed)
         code, reply = self.agent(self.hermes, "reply", str(mine["id"]), "--claim",
@@ -301,7 +301,7 @@ class ConversationTests(ActivityWitness):
         self.serve()
         self.assertEqual(self.pull(self.hermes, "hermes"), [])
 
-        mine = self.comment("a", "", "Is this plan still current?")
+        mine = self.comment("a", "", "@hermes Is this plan still current?")
         self.assertEqual((mine["section"], mine["sectionTitle"], mine["owner"]),
                          ("", "", "hermes"))
         code, claimed = self.agent(self.hermes, "claim", str(mine["id"]))

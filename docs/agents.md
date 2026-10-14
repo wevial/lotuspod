@@ -82,11 +82,10 @@ lotuspod comments reopen 7                     # POST /v1/threads/7/reopen
 
 `pull` records that the handle is listening and returns its items. It claims
 nothing and settles nothing, so the same items come back on every pull until
-they are claimed or acknowledged: an agent that only reads never blocks the
-fallback to the responder. A page's owner goes on reading a comment that was
-routed to it as it arrived after the owner window passes it to `responder`,
-until an agent takes it up; its `owner` is then `responder`, and only the
-responder may claim it. Items are, comments first, oldest first:
+they are claimed or acknowledged. A comment with no mention is the
+responder's, on the handle's own pages too: the handle reads only what names
+it, and its inbox (see [The owner's inbox](#the-owners-inbox)) for what the
+responder queued for it. Items are, comments first, oldest first:
 
 - `{"kind": "comment", "comment", "thread", "omitted", "resolution", "page"}` for each
   reader's comment routed to the handle (see [Comments](comments.md#comments)) that no agent holds a current
@@ -422,15 +421,51 @@ done
 ```
 
 A loop that pulls less often than the owner window is not listening: comments
-naming it show as `unavailable`, and comments on its pages go to the
-responder.
+naming it show as `unavailable` until it pulls again.
+
+## The owner's inbox
+
+A reader's comment with no mention goes to the default responder, on an
+owner's page too. When it asks the owner to *do* something (file a ticket,
+change something beyond the page, act on a decision), the responder answers
+what it can, replies "I've queued this for OWNER: ASK", and puts the ask in
+the owner's inbox: a queue in serve's database, addressed to the handle, not
+to any session, so nothing is lost when a session stops. An owner session
+drains it with the same socket and credential as `comments`:
+
+```sh
+lotuspod inbox pull --owner operator --json        # GET /v1/inbox?owner=operator
+lotuspod inbox claim 3 --owner operator            # POST /v1/inbox/3/claim
+lotuspod inbox done 3 --owner operator --claim TOKEN \
+  --key operator-inbox-3 --text "Filed as LOTUS-170."  # POST /v1/inbox/3/done
+```
+
+`pull` (needs `pull` as the handle) lists, oldest first, each item not done
+and not under a current claim, `{"kind": "ask", "id", "owner", "ask",
+"createdAt", "comment", "thread", "page"}`: the one-line ask, the reader's
+comment as `comments show` gives it, the id of its thread's first comment,
+and the page's `name`, `title`, `owner` and `revision`. Then it lists each
+decision answer on the handle's pages it has not acknowledged, as `comments
+pull` gives them (the page without its source), until `lotuspod comments
+ack-answer ID`: one pull covers both. Reading the inbox does not make the
+handle listening.
+
+`claim` (needs `claim` as the handle) prints a claim token and when it
+expires, as a comment's claim does (`[comments] claim_sec`). While a claim
+is current no one else may claim the item, not even the same credential
+from another session (409 `claimed`), and `pull` leaves it out; once it
+expires it lapses and the item is listed again. `done` closes it under the
+claim, for good; with `--text` (or `--text-file`) and `--key`, it first adds
+the text to the reader's thread as a follow-up from the handle (which also
+needs `reply`), once per key, so running it again after a failure posts
+nothing twice. An item another handle owns is 404 `unknown_item`, a closed
+one 409 `settled`, and `done` without the current claim 409 `not_claimed`.
 
 ## The default responder
 
-Comments routed to an owner are answered while that owner listens. The rest
-go to the default responder: comments on pages whose owner is not listening,
-on pages with no owner, those an owner held past the owner window, and those
-naming `@responder`. `lotuspod respond` answers them. It is an ordinary agent
+Comments with no mention, and those naming `@responder`, go to the default
+responder, on pages with an owner, whether or not the owner is listening,
+and on pages with none. `lotuspod respond` answers them. It is an ordinary agent
 on the socket, with its own credential for the handle `responder`:
 
 ```sh
@@ -482,6 +517,13 @@ claimed first is skipped) and runs the agent command once:
   only if the page is still at the revision the agent read, keeping the
   page's date, summary, variant, owner and comment boxes; the reply then
   carries the new revision, so it links to it.
+- The prompt tells the agent to end its answer with one line `NEEDS_OWNER:
+  ASK` only when the comment asks the page's owner to act, never for a
+  question it answered. With that line, the responder takes it off, ends the
+  reply with "I've queued this for OWNER: ASK" and puts ASK, with the page
+  and the comment, in the owner's inbox (see [The owner's
+  inbox](#the-owners-inbox)) before replying, once per comment; on a page
+  with no owner the reply says there is no one to queue it for.
 - The comment is `failed`, with the reason on the page and nothing
   published or replied, when the command exits non-zero, prints nothing or
   runs past `--timeout` (default 600 seconds), when the page changed while it
