@@ -6,7 +6,9 @@
    semibold text. A tab not active may carry a dot: amber for a new version,
    orchid for new replies, its words for a screen reader alone. A "+" follows
    the last tab and "Find a pod", with its key, ends the strip; both open the
-   finder (css/pod-finder.css). The active
+   finder (css/pod-finder.css). A tab dragged along the strip rides above
+   the others on the surface, lavender-edged, while they slide aside to show
+   where it lands. The active
    tab's frame fills the window under the strip; the others keep their place,
    loaded and hidden. */
 .pod-tabs-bar {
@@ -64,6 +66,23 @@
   flex: none;
   font-size: 0.9rem;
   max-width: 16rem;
+  touch-action: pan-x;
+  user-select: none;
+}
+
+.pod-tab--shifting {
+  transition: transform 0.15s ease;
+}
+
+.pod-tabs--dragging,
+.pod-tabs--dragging .pod-tab-title {
+  cursor: grabbing;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pod-tab--shifting {
+    transition: none;
+  }
 }
 
 .pod-tab:hover {
@@ -78,6 +97,18 @@
 }
 
 .pod-tab--active:hover {
+  background: var(--color-glow);
+}
+
+.pod-tab--dragging {
+  background: var(--color-surface);
+  box-shadow: inset 0 0 0 1px var(--color-lavender), 0 0.25rem 0.75rem rgb(0 0 0 / 50%);
+  color: var(--color-white);
+  position: relative;
+  z-index: 1;
+}
+
+.pod-tab--active.pod-tab--dragging {
   background: var(--color-glow);
 }
 
@@ -200,4 +231,14 @@
 
 .pod-tabs-frames--active .pod-frame--active {
   visibility: visible;
+}
+
+/* Read by a screen reader alone: where a tab moved from the keyboard went. */
+.pod-tabs-said {
+  clip-path: inset(50%);
+  height: 1px;
+  overflow: hidden;
+  position: absolute;
+  white-space: nowrap;
+  width: 1px;
 }
