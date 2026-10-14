@@ -13,7 +13,7 @@
 // when it is not open, else by activating its tab. A link to the index as its
 // address reads with a tab open, #tabs=...&on=NAME (copied into a comment,
 // say), opens the pod NAME so, at its &at=FRAGMENT. In a framed page, a plain
-// click on any other link to the index shows the listing, and one on any other link
+// click on any other link to the index shows the listing, and one elsewhere
 // loads it in the whole window, as it would outside the strip. Any other click
 // is the browser's, so Cmd-click and Ctrl-click still open a browser tab. A
 // link to an open pod moves its framed page to the link's fragment, which
