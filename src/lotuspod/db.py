@@ -1271,12 +1271,6 @@ class Database:
             ).fetchall()
         return [_inbox_item(row) for row in rows]
 
-    def inbox_item(self, item_id: int) -> dict | None:
-        """The inbox item item_id; None when there is none."""
-        with self._connect() as conn:
-            row = conn.execute("SELECT * FROM inbox WHERE id = ?", (item_id,)).fetchone()
-        return None if row is None else _inbox_item(row)
-
     def claim_item(self, item_id: int, *, owner: str, credential: str, token_hash: str,
                    claim_sec: float, clock: Callable[[], float]) -> dict:
         """Claim owner's inbox item item_id for credential for claim_sec

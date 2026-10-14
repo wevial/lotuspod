@@ -665,7 +665,7 @@ class Responder:
         self.journal.write({"key": key, "published": revision})
 
     def reply(self, comment_id: int, token: str, key: str, text: str,
-              revision: str | None, model: str | None, queue: dict | None = None) -> None:
+              revision: str | None, model: str | None, queue: dict | None) -> None:
         """Reply with key, naming revision when the page was republished for
         it, and model, the one the agent ran with, when there is one; the
         socket takes a revision this credential published for key even once
