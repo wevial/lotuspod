@@ -199,7 +199,10 @@
   background: var(--color-orchid);
 }
 
-.pod-tab-dot-text {
+/* Read by a screen reader alone: a dot's words, and where a tab moved from
+   the keyboard went. */
+.pod-tab-dot-text,
+.pod-tabs-said {
   clip-path: inset(50%);
   height: 1px;
   overflow: hidden;
@@ -231,14 +234,4 @@
 
 .pod-tabs-frames--active .pod-frame--active {
   visibility: visible;
-}
-
-/* Read by a screen reader alone: where a tab moved from the keyboard went. */
-.pod-tabs-said {
-  clip-path: inset(50%);
-  height: 1px;
-  overflow: hidden;
-  position: absolute;
-  white-space: nowrap;
-  width: 1px;
 }
