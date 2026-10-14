@@ -29,7 +29,7 @@ newest one that is not an undone dismissal; a question whose only answers
 are undone dismissals is not answered.
 
 A reader's comment also keeps, as it arrives, its page's owner and that
-owner's last pull then. Routing (lotuspod.routing) no longer reads them.
+owner's last pull then.
 
 An agent takes a reader's comment up by claiming it: the comment keeps the
 claim's credential, handle, token hash and expiry, and becomes `claimed`.
