@@ -888,6 +888,28 @@ test.describe('signed in', () => {
     await expectActive(page, ARTICLE);
   });
 
+  test('Alt+Shift+Right pressed while a tab is dragged moves nothing, and the drop moves the dragged tab', async ({ page }) => {
+    await openIndex(page);
+    await openFromListing(page, ARTICLE);
+    await openFromListing(page, CONTEXT);
+    await openFromListing(page, CHECKLIST);
+
+    const from = (await tabTitle(page, CONTEXT).boundingBox())!;
+    const onto = (await tab(page, ARTICLE).boundingBox())!;
+    await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(onto.x + onto.width / 4, onto.y + onto.height / 2, { steps: 12 });
+    await expect(tab(page, CONTEXT)).toHaveClass(/pod-tab--dragging/);
+    await page.keyboard.press('Alt+Shift+ArrowRight');
+    expect(await openNames(page)).toEqual([ARTICLE.name, CONTEXT.name, CHECKLIST.name]);
+    await page.mouse.up();
+
+    expect(await openNames(page)).toEqual([CONTEXT.name, ARTICLE.name, CHECKLIST.name]);
+    await expect(page).toHaveURL(
+      /#tabs=capture-decision-context,capture-article,capture-checklist&on=capture-checklist$/);
+    await expectActive(page, CHECKLIST);
+  });
+
   test('Alt+Shift+Right moves a focused tab one place, keeping its focus and ring, and says where; Alt+Shift+Left on the first does nothing', async ({ page }) => {
     await openIndex(page);
     await openFromListing(page, ARTICLE);

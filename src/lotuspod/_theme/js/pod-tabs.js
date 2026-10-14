@@ -58,7 +58,8 @@
 // Escape, or the browser taking the pointer, puts it back. A press that never
 // starts a drag is a click as any other. With its title focused,
 // Alt+Shift+Left or Right (Option+Shift on a Mac) moves it one place, keeps
-// it focused and says its new place in a polite live region. Either move
+// it focused and says its new place in a polite live region, though not
+// while a drag is under way. Either move
 // reorders the open pods and draws the strip from them, then writes the
 // address, so the active tab and the dots stay as they were.
 //
@@ -367,6 +368,7 @@
 
   const begin = () => {
     drag.started = true;
+    drag.from = open.indexOf(drag.pod);
     const box = drag.pod.tab.getBoundingClientRect();
     drag.width = box.width;
     drag.others = open.filter((pod) => pod !== drag.pod).map((pod) => {
@@ -410,9 +412,11 @@
       swallow = false;
     }, 0);
     settle();
-    if (drop) {
+    // Where the dragged pod is now, should the strip have changed under it.
+    const from = open.indexOf(was.pod);
+    if (drop && from >= 0) {
       const to = landing(was, x);
-      if (to !== was.from) move(was.from, to);
+      if (to !== from) move(from, to);
     }
   };
 
@@ -490,6 +494,8 @@
     const from = open.findIndex((pod) => pod.title === event.target.closest(".pod-tab-title"));
     if (from < 0) return;
     event.preventDefault();
+    // The drag under way places the tabs until it ends.
+    if (drag && drag.started) return;
     const to = from + (event.key === "ArrowLeft" ? -1 : 1);
     if (to < 0 || to >= open.length) return;
     const pod = move(from, to);
