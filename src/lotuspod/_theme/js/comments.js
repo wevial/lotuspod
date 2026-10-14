@@ -1507,7 +1507,7 @@
       // that starts it again.
       function uncompose(made) {
         compose(made, false);
-        (made.box === whole && onPage ? onPage : pick).focus({ preventScroll: true });
+        (made.box === whole ? onPage : pick).focus({ preventScroll: true });
       }
 
       // Scroll the panel's list, never the page, until node is in view.
