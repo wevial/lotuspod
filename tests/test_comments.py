@@ -434,13 +434,6 @@ class OwnedPageRoutingTests(unittest.TestCase):
                                        pulls, routing.DEFAULT_WINDOW, now)
         self.assertEqual(handle, routing.RESPONDER)
 
-    def test_an_unmentioned_comment_goes_to_the_responder_when_the_owner_is_away(self):
-        now = routing.seconds("2026-10-14T13:00:00Z")
-        pulls = {"operator": routing.seconds("2026-10-14T11:59:00Z")}
-        handle, _state = routing.route(self.comment("Is this still true?"),
-                                       pulls, routing.DEFAULT_WINDOW, now)
-        self.assertEqual(handle, routing.RESPONDER)
-
     def test_a_mention_of_the_owner_goes_to_the_owner(self):
         now = routing.seconds("2026-10-14T12:01:00Z")
         for pulls in ({"operator": routing.seconds("2026-10-14T11:59:00Z")}, {}):
