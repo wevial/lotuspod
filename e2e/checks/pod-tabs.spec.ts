@@ -833,6 +833,61 @@ test.describe('signed in', () => {
     await expectActive(page, ARTICLE);
   });
 
+  test('a touch held on a tab and lifted without moving activates it; a held touch then moved drags it', async ({ page }) => {
+    await openIndex(page);
+    await openFromListing(page, ARTICLE);
+    await openFromListing(page, CONTEXT);
+    await openFromListing(page, CHECKLIST);
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 1 });
+    const touch = (type: string, points: { x: number; y: number }[]) =>
+      cdp.send('Input.dispatchTouchEvent', { type, touchPoints: points });
+
+    // Held past the drag's delay, lifted in place: the tab's tap.
+    const a = (await tabTitle(page, ARTICLE).boundingBox())!;
+    const at = { x: a.x + a.width / 2, y: a.y + a.height / 2 };
+    await touch('touchStart', [at]);
+    await page.waitForTimeout(450);
+    await touch('touchEnd', []);
+    await expectActive(page, ARTICLE);
+    expect(await openNames(page)).toEqual([ARTICLE.name, CONTEXT.name, CHECKLIST.name]);
+
+    // Held, then moved onto the first tab's left half: dropped first.
+    const c = (await tabTitle(page, CHECKLIST).boundingBox())!;
+    const from = { x: c.x + c.width / 2, y: c.y + c.height / 2 };
+    await touch('touchStart', [from]);
+    await page.waitForTimeout(450);
+    for (let step = 1; step <= 10; step++) {
+      await touch('touchMove', [{ x: from.x + (a.x + a.width / 4 - from.x) * step / 10, y: from.y }]);
+    }
+    await touch('touchEnd', []);
+    expect(await openNames(page)).toEqual([CHECKLIST.name, ARTICLE.name, CONTEXT.name]);
+    await expectActive(page, ARTICLE);
+  });
+
+  test('a press released outside the strip before it drags leaves no drag behind', async ({ page }) => {
+    await openIndex(page);
+    await openFromListing(page, ARTICLE);
+    await openFromListing(page, CONTEXT);
+    await openFromListing(page, CHECKLIST);
+    const c = (await tab(page, CHECKLIST).boundingBox())!;
+    const a = (await tabTitle(page, ARTICLE).boundingBox())!;
+
+    // Pressed at the tab's bottom edge, out over the pod's page at once,
+    // released there.
+    await page.mouse.move(c.x + c.width / 2, c.y + c.height - 1);
+    await page.mouse.down();
+    await page.mouse.move(c.x + c.width / 2, c.y + c.height + 80);
+    await page.mouse.up();
+
+    // Back over the first tab with no button held, then a click on it.
+    await page.mouse.move(a.x + a.width / 2, a.y + a.height / 2, { steps: 8 });
+    await expect(strip(page).locator('.pod-tab--dragging')).toHaveCount(0);
+    await page.mouse.click(a.x + a.width / 2, a.y + a.height / 2);
+    expect(await openNames(page)).toEqual([ARTICLE.name, CONTEXT.name, CHECKLIST.name]);
+    await expectActive(page, ARTICLE);
+  });
+
   test('Alt+Shift+Right moves a focused tab one place, keeping its focus and ring, and says where; Alt+Shift+Left on the first does nothing', async ({ page }) => {
     await openIndex(page);
     await openFromListing(page, ARTICLE);

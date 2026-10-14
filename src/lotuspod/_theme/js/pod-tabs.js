@@ -51,7 +51,8 @@
 //
 // A tab moves along the strip: pressed (not on its ✕) and dragged more than
 // a few pixels with a mouse or pen, or held a moment then dragged on touch,
-// so a quick swipe still scrolls the strip, it follows the pointer while the
+// so a quick swipe still scrolls the strip and a touch held then lifted is
+// still a tap, it follows the pointer while the
 // others shift to show where it lands, and the release drops it there before
 // the tab under the pointer when the pointer is on that tab's left half.
 // Escape, or the browser taking the pointer, puts it back. A press that never
@@ -339,8 +340,9 @@
     return pod;
   };
 
-  // The press on a tab that may become a drag, else null: started once the
-  // tab follows the pointer, cancelled once Escape has put it back; others,
+  // The press on a tab that may become a drag, else null: held once a touch
+  // has stayed long enough to drag, started once the tab follows the
+  // pointer, cancelled once Escape has put it back; others,
   // the other tabs' pods in strip order with their middles when it started.
   const SLOP = 5;
   const HOLD = 300;
@@ -416,26 +418,34 @@
 
   strip.addEventListener("pointerdown", (event) => {
     swallow = false;
+    // A press whose release never reached the strip is over.
+    if (drag && !drag.started) end(false, event.clientX);
     if (drag || !event.isPrimary || event.button !== 0) return;
     const tab = event.target.closest(".pod-tab");
     if (!tab || event.target.closest(".pod-tab-close")) return;
     const pod = open.find((each) => each.tab === tab);
     drag = {
       pod, from: open.indexOf(pod), pointer: event.pointerId, x: event.clientX, y: event.clientY,
-      started: false, cancelled: false, timer: 0, touch: event.pointerType === "touch",
+      held: false, started: false, cancelled: false, timer: 0, touch: event.pointerType === "touch",
     };
     if (drag.touch) {
-      drag.timer = setTimeout(() => {
-        if (drag && !drag.started) begin();
+      const press = drag;
+      press.timer = setTimeout(() => {
+        press.held = true;
       }, HOLD);
     }
   });
   strip.addEventListener("pointermove", (event) => {
     if (!drag || drag.cancelled || event.pointerId !== drag.pointer) return;
+    // Its release went elsewhere (a framed page): the press is over.
+    if (event.buttons === 0) {
+      end(false, event.clientX);
+      return;
+    }
     if (!drag.started) {
       if (Math.hypot(event.clientX - drag.x, event.clientY - drag.y) <= SLOP) return;
       // A touch moved before its hold is the strip's to scroll.
-      if (drag.touch) {
+      if (drag.touch && !drag.held) {
         end(false, event.clientX);
         return;
       }
@@ -443,18 +453,21 @@
     }
     drift(event.clientX);
   });
-  strip.addEventListener("pointerup", (event) => {
+  // Taken on the window, so a release off the strip ends the press too.
+  window.addEventListener("pointerup", (event) => {
     if (drag && event.pointerId === drag.pointer) end(true, event.clientX);
-  });
+  }, true);
   strip.addEventListener("pointercancel", (event) => {
     if (drag && event.pointerId === drag.pointer) end(false, event.clientX);
   });
+  // The strip's own capture lost, not a touch's implicit one on the tab
+  // pressed, which the strip takes over.
   strip.addEventListener("lostpointercapture", (event) => {
-    if (drag && drag.started && event.pointerId === drag.pointer) end(false, event.clientX);
+    if (event.target === strip && drag && drag.started && event.pointerId === drag.pointer) end(false, event.clientX);
   });
   // A touch held into a drag scrolls nothing.
   strip.addEventListener("touchmove", (event) => {
-    if (drag && drag.started) event.preventDefault();
+    if (drag && (drag.held || drag.started)) event.preventDefault();
   }, { passive: false });
   strip.addEventListener("click", (event) => {
     if (!swallow) return;
