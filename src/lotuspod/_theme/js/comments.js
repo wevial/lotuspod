@@ -539,6 +539,22 @@
       }
     }
 
+    // Cmd+Enter (Ctrl+Enter off macOS) in a composer's field sends it as
+    // its button does, unless the button is disabled: while it saves, or
+    // on an archived page. Enter alone still adds a line.
+    function sendOnEnter(form, field) {
+      field.addEventListener("keydown", function (event) {
+        if (event.key !== "Enter" || !(event.metaKey || event.ctrlKey) || event.isComposing) {
+          return;
+        }
+        event.preventDefault();
+        var button = form.querySelector('button[type="submit"]');
+        if (button && !button.disabled) {
+          form.requestSubmit(button);
+        }
+      });
+    }
+
     // The composer's control: "Reply" once an agent has answered in the
     // thread; before that the quieter "Add to your comment", its field
     // saying the agent reads it with the comment.
@@ -579,6 +595,7 @@
       actions.appendChild(status);
       form.appendChild(actions);
       attached.set(form, attachments(form, text));
+      sendOnEnter(form, text);
       thread.toggle = toggle;
       thread.field = text;
       thread.unfold = unfold;
@@ -1029,6 +1046,7 @@
         actions.append(send, status);
         form.append(field, actions);
         attached.set(form, attachments(form, field));
+        sendOnEnter(form, field);
         var quit = element("button", "artifact-passage-cancel", "Cancel");
         quit.type = "button";
         holder.append(form, quit);
@@ -1213,10 +1231,23 @@
       tally.append(count, showResolved);
       head.append(element("h2", "artifact-comments-title", "Comments"), tally, fold);
       var list = element("div", "artifact-comments-groups");
-      // The one way to start a thread on a section: a button opening a list
-      // of the page's sections, under a word saying when there are no threads.
+      // The ways to start a thread: a button opening the form for the whole
+      // page, when the page has a box for it, and one opening a list of the
+      // page's sections, under a word saying when there are no threads.
       var start = element("div", "artifact-comments-start");
       var none = element("p", "artifact-comments-none", "No comments yet");
+      var whole = boxes.filter(function (box) { return box.dataset.section === WHOLE_PAGE; })[0]
+        || boxes.filter(function (box) { return box.dataset.section === "page"; })[0]
+        || null;
+      var onPage = null;
+      if (whole) {
+        onPage = element("button", "artifact-comments-on-page", "Comment on this page");
+        onPage.type = "button";
+        onPage.addEventListener("click", function () {
+          unpick(false);
+          compose(groups.get(whole), true);
+        });
+      }
       var pick = element("button", "artifact-comments-pick", "Comment on a section");
       pick.type = "button";
       var choices = element("ul", "artifact-comments-choices");
@@ -1228,11 +1259,18 @@
       pick.setAttribute("aria-haspopup", "listbox");
       pick.setAttribute("aria-expanded", "false");
       pick.setAttribute("aria-controls", choices.id);
-      start.append(none, pick, choices);
+      start.append(none);
+      if (onPage) {
+        start.appendChild(onPage);
+      }
+      start.append(pick, choices);
       // An archived page takes no new thread: the panel says so above its
       // threads, and its controls for one are disabled.
       if (ARCHIVED) {
         pick.disabled = true;
+        if (onPage) {
+          onPage.disabled = true;
+        }
         start.insertBefore(element("p", "artifact-comments-closed", CLOSED), none);
       }
       sheet.append(head, start, list);
@@ -1253,7 +1291,10 @@
 
       // A group: a section's heading, its threads, and for a section the
       // page has, the control that opens the box's form here. The panel
-      // never draws that control; a popover or the sheet does.
+      // never draws that control; a popover or the sheet does. In the panel
+      // the form has a Cancel, and Escape in it does the same: the form
+      // folds, keeping what was typed, and the focus goes back to the
+      // control that starts one.
       function group(name, box, index) {
         var node = element("section", "artifact-comments-group");
         var entries = element("ol", "artifact-comments-entries");
@@ -1271,6 +1312,18 @@
           toggle.setAttribute("aria-expanded", "false");
           toggle.disabled = ARCHIVED;
           toggle.addEventListener("click", function () { compose(made, holder.hidden); });
+          var cancel = element("button", "artifact-comments-cancel", "Cancel");
+          cancel.type = "button";
+          holder.appendChild(cancel);
+          cancel.addEventListener("click", function () { uncompose(made); });
+          holder.addEventListener("keydown", function (event) {
+            if (event.key === "Escape" && api.wide) {
+              // The panel would fold on it too.
+              event.preventDefault();
+              event.stopPropagation();
+              uncompose(made);
+            }
+          });
           node.append(toggle, holder);
           made.toggle = toggle;
           made.holder = holder;
@@ -1448,6 +1501,13 @@
           }
           forms.get(made.box).elements.text.focus({ preventScroll: true });
         }
+      }
+
+      // Fold a group's form in the panel; the focus goes to the control
+      // that starts it again.
+      function uncompose(made) {
+        compose(made, false);
+        (made.box === whole && onPage ? onPage : pick).focus({ preventScroll: true });
       }
 
       // Scroll the panel's list, never the page, until node is in view.
@@ -2334,7 +2394,8 @@
         if (!arranged) {
           boxes.forEach(function (box) {
             box.open = false;
-            groups.get(box).holder.appendChild(forms.get(box));
+            var holder = groups.get(box).holder;
+            holder.insertBefore(forms.get(box), holder.firstChild);
           });
         }
         arranged = true;
@@ -2818,6 +2879,7 @@
     boxes.forEach(function (box) {
       var form = forms.get(box);
       attached.set(form, attachments(form, form.elements.text));
+      sendOnEnter(form, form.elements.text);
       form.addEventListener("submit", async function (event) {
         event.preventDefault();
         var row = await post(form, {

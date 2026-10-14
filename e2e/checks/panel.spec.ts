@@ -315,6 +315,7 @@ function picker(page: Page) {
   const aside = page.locator('aside.artifact-comments-panel');
   return {
     button: aside.getByRole('button', { name: 'Comment on a section' }),
+    onPage: aside.locator('.artifact-comments-start').getByRole('button', { name: 'Comment on this page' }),
     list: aside.getByRole('listbox', { name: 'Sections' }),
     options: aside.getByRole('option'),
     none: aside.getByText('No comments yet'),
@@ -998,6 +999,98 @@ test.describe('signed in', () => {
     await heater.press('Escape');
     await expect.soft(side.fold).toBeVisible();
     await expect.soft(heater).toBeHidden();
+  });
+
+  test('"Comment on this page" opens the page form first in the list, and Cancel folds it, keeping its text', async ({ page }) => {
+    const seen = await watch(page);
+    const ids = new Set<number>();
+    await ownThreads(page, ids);
+    const posts: string[] = [];
+    page.on('request', (request) => {
+      if (request.method() === 'POST' && new URL(request.url()).pathname === '/api/comments') {
+        posts.push(request.url());
+      }
+    });
+    const side = await loadFive(page);
+    const pick = picker(page);
+    await expect(pick.onPage).toBeVisible();
+    // Before "Comment on a section", in the start area.
+    expect(await pick.onPage.evaluate((node) =>
+      Boolean(node.compareDocumentPosition(node.parentElement!.querySelector('.artifact-comments-pick')!)
+        & Node.DOCUMENT_POSITION_FOLLOWING))).toBe(true);
+    await expect(side.titles).toHaveCount(0);
+
+    await pick.onPage.click();
+    const whole = side.group('This page');
+    const field = whole.getByLabel('Comment on this page');
+    await expect(field).toBeVisible();
+    await expect(field).toBeFocused();
+    await expect(side.titles.first()).toHaveText('This page');
+    await field.fill('Not yet');
+
+    await whole.getByRole('button', { name: 'Cancel' }).click();
+    await expect(field).toBeHidden();
+    await expect(side.titles).toHaveCount(0);
+    await expect(side.fold).toBeVisible();
+    await expect(pick.onPage).toBeFocused();
+
+    await pick.onPage.click();
+    await expect(field).toBeFocused();
+    await expect(field).toHaveValue('Not yet');
+    await page.waitForTimeout(300);
+    expect(posts).toEqual([]);
+    expect(ids.size).toBe(0);
+    await seen.clean();
+  });
+
+  test('Escape folds a section form to its control, and ControlOrMeta+Enter sends a comment and a reply', async ({ page }) => {
+    const seen = await watch(page);
+    const ids = new Set<number>();
+    await ownThreads(page, ids);
+    const side = await loadFive(page);
+    const pick = picker(page);
+    await pick.button.click();
+    await pick.options.nth(3).click();
+    const heater = side.group('Heater');
+    const field = heater.getByLabel('Comment on Heater');
+    await expect(field).toBeFocused();
+    await field.press('Escape');
+    await expect(field).toBeHidden();
+    await expect(side.fold).toBeVisible();
+    await expect(pick.button).toBeFocused();
+
+    await pick.button.click();
+    await pick.options.nth(3).click();
+    await expect(field).toBeFocused();
+    // Empty, it sends nothing; Enter alone adds a line.
+    await field.press('ControlOrMeta+Enter');
+    await field.pressSequentially('Which heater');
+    await field.press('Enter');
+    await field.pressSequentially('fits?');
+    await expect(field).toHaveValue('Which heater\nfits?');
+    await page.waitForTimeout(300);
+    expect(ids.size).toBe(0);
+    await field.press('ControlOrMeta+Enter');
+    await expect.poll(() => ids.size).toBe(1);
+    const [id] = [...ids];
+    const mine = entry(page, { id });
+    await expect(heater.locator('.artifact-comments-entry')).toHaveCount(1);
+    await expect(mine.readers.locator('.artifact-comment-text')).toHaveText('Which heater\nfits?');
+    await expect(field).toBeHidden();
+    await page.waitForTimeout(300);
+    expect(ids.size).toBe(1);
+
+    const toggle = mine.item.getByRole('button', { name: 'Add to your comment' });
+    await toggle.click();
+    const answer = mine.item.getByRole('textbox', { name: 'Add to your comment' });
+    await expect(answer).toBeFocused();
+    await answer.fill('The one by the outlet.');
+    await answer.press('ControlOrMeta+Enter');
+    await expect(mine.readers).toHaveCount(2);
+    await expect(mine.readers.last().locator('.artifact-comment-text')).toHaveText('The one by the outlet.');
+    await expect(answer).toBeHidden();
+    await expect(toggle).toBeFocused();
+    await seen.clean();
   });
 
   test('at 1024 pixels a chip opens a popover, never its box, its thread moves with the window, and no width scrolls sideways', async ({ page }) => {
