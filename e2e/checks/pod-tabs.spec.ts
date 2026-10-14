@@ -264,6 +264,100 @@ test.describe('signed in', () => {
     expect(errors).toEqual([]);
   });
 
+  test('a link to another pod, in a framed pod\'s body or comment, opens it in a tab of its own and leaves the pod where it was', async ({ page }) => {
+    const errors = await watch(page);
+    const pod = { name: 'pod-tabs-links', title: 'Pod tabs links' };
+    const body = (old: string) => [`# ${pod.title}`, '',
+      'Read [the article](capture-article.html), its [second section](capture-article.html#second-section),',
+      `[the findings below](#findings) and [the first edition](${pod.name}.html?version=${old}).`,
+      '', '## Findings', '', 'The pump stops in January.', '', '## Next steps', '', 'Order a heater.', ''].join('\n');
+    publish(pod.name, body('none'));
+    // The first edition's commit, which names its old version.
+    const first = execFileSync('git', ['-C', OUT, 'log', '-1', '--format=%H'], { encoding: 'utf-8' }).trim();
+    publish(pod.name, body(first));
+    const comment = await page.request.post('/api/comments', {
+      data: { page: pod.name, section: 'findings', text: 'See [the article\'s second section](capture-article.html#second-section).' },
+    });
+    expect(comment.status(), await comment.text()).toBe(201);
+    await openIndex(page);
+    await openFromListing(page, pod);
+    const inPod = framed(page, pod);
+    const shownPod = async () => {
+      expect((await shownIn(page, pod)).pathname).toBe(`/${pod.name}.html`);
+      await expect(tabTitle(page, pod)).toHaveText(pod.title);
+      await expect(framed(page, pod).locator('h1')).toHaveText(pod.title);
+    };
+
+    // A plain click: a tab of its own, the pod's tab still the pod.
+    await inPod.getByRole('link', { name: 'the article', exact: true }).click();
+    await expect.poll(() => openNames(page)).toEqual([pod.name, ARTICLE.name]);
+    await expectActive(page, ARTICLE);
+    await expect(framed(page, ARTICLE).locator('h1')).toHaveText(ARTICLE.title);
+    await expect(page).toHaveURL(/#tabs=pod-tabs-links,capture-article&on=capture-article$/);
+    await shownPod();
+
+    // Open already: its tab, at the link's fragment, and no other.
+    await tabTitle(page, pod).click();
+    await expectActive(page, pod);
+    await inPod.getByRole('link', { name: 'second section' }).click();
+    await expectActive(page, ARTICLE);
+    expect(await openNames(page)).toEqual([pod.name, ARTICLE.name]);
+    await expect.poll(async () => (await shownIn(page, ARTICLE)).hash).toBe('#second-section');
+    await shownPod();
+
+    // The same link in a comment.
+    await close(page, ARTICLE).click();
+    await expectActive(page, pod);
+    const chip = inPod.locator('details.artifact-comment[data-section="findings"] summary');
+    await expect(chip).toHaveText(/ · /);
+    await chip.click();
+    // The side panel, at this width, shows the section's thread.
+    const said = inPod.locator('.artifact-comment-text a:visible', { hasText: 'the article\'s second section' });
+    await expect(said).toBeVisible();
+    await said.click();
+    await expect.poll(() => openNames(page)).toEqual([pod.name, ARTICLE.name]);
+    await expectActive(page, ARTICLE);
+    await expect.poll(async () => (await shownIn(page, ARTICLE)).hash).toBe('#second-section');
+    await shownPod();
+
+    // A link within the pod only scrolls it.
+    await tabTitle(page, pod).click();
+    await expectActive(page, pod);
+    await inPod.getByRole('link', { name: 'the findings below' }).click();
+    await expect.poll(async () => (await shownIn(page, pod)).hash).toBe('#findings');
+    await expectActive(page, pod);
+    expect(await openNames(page)).toEqual([pod.name, ARTICLE.name]);
+
+    expect(errors).toEqual([]);
+
+    // A page on the site that is no pod the listing has loads in the window.
+    await inPod.getByRole('link', { name: 'the first edition' }).click();
+    await expect(page).toHaveURL(new RegExp(`/${pod.name}\\.html\\?version=${first}$`));
+  });
+
+  test('a link to another pod in a comment, as the address shows it in the index, opens it in a tab of its own', async ({ page }) => {
+    const pod = { name: 'pod-tabs-comment-link', title: 'Pod tabs comment link' };
+    publish(pod.name, source(pod.title, 'first'));
+    // The address the reader sees while reading the article in its tab.
+    await openIndex(page);
+    await openFromListing(page, ARTICLE);
+    const address = page.url();
+    expect(new URL(address).hash).toBe('#tabs=capture-article&on=capture-article');
+    await close(page, ARTICLE).click();
+    const comment = await page.request.post('/api/comments', {
+      data: { page: pod.name, section: 'findings', text: `See [the article](${address}).` },
+    });
+    expect(comment.status(), await comment.text()).toBe(201);
+    await openFromListing(page, pod);
+    const inPod = framed(page, pod);
+    await inPod.locator('details.artifact-comment[data-section="findings"] summary').click();
+    await inPod.locator('.artifact-comment-text a:visible', { hasText: 'the article' }).click();
+    await expect.poll(() => openNames(page)).toEqual([pod.name, ARTICLE.name]);
+    await expectActive(page, ARTICLE);
+    await expect(tabTitle(page, pod)).toHaveText(pod.title);
+    expect((await shownIn(page, pod)).pathname).toBe(`/${pod.name}.html`);
+  });
+
   test('a framed pod reloaded still opens its links in tabs, before and after it has loaded again', async ({ page }) => {
     const errors = await watch(page);
     const readyState = () => frame(page, CONTEXT).evaluate((node) =>

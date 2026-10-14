@@ -10,8 +10,10 @@
 // download, to NAME.html on this origin for a pod the listing has and with no
 // version query, opens that pod in a tab with the link's fragment, whether the
 // link is in the listing or in a pod already open: just after the active tab
-// when it is not open, else by activating its tab. In a framed page, a plain
-// click on a link to the index shows the listing, and one on any other link
+// when it is not open, else by activating its tab. A link to the index as its
+// address reads with a tab open, #tabs=...&on=NAME (copied into a comment,
+// say), opens the pod NAME so, at its &at=FRAGMENT. In a framed page, a plain
+// click on any other link to the index shows the listing, and one elsewhere
 // loads it in the whole window, as it would outside the strip. Any other click
 // is the browser's, so Cmd-click and Ctrl-click still open a browser tab. A
 // link to an open pod moves its framed page to the link's fragment, which
@@ -179,6 +181,21 @@
 
   const isIndex = (url) => url.origin === location.origin &&
     (url.pathname === root || url.pathname === `${root}index.html`);
+
+  // The active pod an index address names, #tabs=...&on=NAME as the address
+  // reads while a tab is open, a NAME the listing has, with its &at=FRAGMENT;
+  // else null.
+  const podShown = (url) => {
+    const named = isIndex(url) ? FRAGMENT.exec(url.hash) : null;
+    if (!named || named[2] === undefined) return null;
+    try {
+      const name = decodeURIComponent(named[2]);
+      if (!pods.has(name)) return null;
+      return { name, hash: named[3] ? `#${decodeURIComponent(named[3])}` : "" };
+    } catch (ignored) {
+      return null;
+    }
+  };
 
   // The view the index's own script shows, "pages" or "activity"; null
   // while it has no views to switch.
@@ -653,9 +670,13 @@
           url.search === here.search) return;
     }
     const name = podOf(url);
+    const shown = name === null ? podShown(url) : null;
     if (name !== null) {
       event.preventDefault();
       openPod(name, url.hash, link.hasAttribute("data-pod-exact"));
+    } else if (shown) {
+      event.preventDefault();
+      openPod(shown.name, shown.hash);
     } else if (framed && isIndex(url)) {
       event.preventDefault();
       showListing();
