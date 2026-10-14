@@ -785,6 +785,45 @@ print("Too late.")
 
 
 class InterruptTests(ResponderCase):
+    """The responder stopped, or killed, while the agent runs on a comment:
+    the comment is released and answered after the restart, until it has
+    been released twice."""
+
+    def start(self, *extra):
+        """A responder running SLEEPER, and the agent's record once it runs."""
+        before = len(self.records())
+        log = open(self.tmp / "respond.log", "a+", encoding="utf-8")
+        self.addCleanup(log.close)
+        process = subprocess.Popen(
+            [sys.executable, "-m", "lotuspod", "respond", *extra,
+             "--command", self.stand_in("sleeper", SLEEPER), "--credential",
+             str(self.responder), "--socket", str(self.sock), "--out-dir", str(self.out),
+             "--db", str(self.db)],
+            cwd=str(self.tmp), env=self.env, stdout=log, stderr=log)
+        self.addCleanup(lambda: process.poll() is None and process.kill())
+        deadline = time.monotonic() + 15
+        while len(self.records()) == before:
+            self.assertLess(time.monotonic(), deadline, "the agent never ran")
+            time.sleep(0.1)
+        return process, self.records()[-1]
+
+    def stop(self):
+        """Start a looping responder, then stop it as systemd does once its
+        agent runs."""
+        process, agent = self.start("--interval", "1")
+        process.send_signal(signal.SIGTERM)
+        os.kill(agent["pid"], signal.SIGTERM)
+        self.assertEqual(process.wait(15), 0)
+
+    def journal(self):
+        path = self.tmp / responder.JOURNAL_NAME
+        return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+
+    def released(self):
+        done = self.cli("audit", "--json", "--db", str(self.db))
+        self.assertEqual(done.returncode, 0, done.stderr)
+        return [e for e in json.loads(done.stdout) if e["action"] == "release"]
+
     def test_a_comment_answering_when_the_responder_is_stopped_is_answered_after_restart(self):
         row = self.comment("orphan", "other", "Answer me across a deploy.")
         log = open(self.tmp / "respond.log", "w+", encoding="utf-8")
@@ -808,11 +847,53 @@ class InterruptTests(ResponderCase):
 
         root = self.root("orphan", row["id"])
         self.assertNotEqual(root.get("state"), "failed", root.get("reason"))
+        [entry] = self.journal()
+        self.assertEqual((entry["comment"], entry.get("released"), entry.get("done")),
+                         (row["id"], True, True))
+        self.assertNotIn("fail", entry)
+        self.assertEqual(len(self.released()), 1)
         self.record.unlink()
         done = self.respond(env=dict(self.env, ANSWER="Answered after the restart."))
         self.assertEqual(done.returncode, 0, done.stderr)
         self.assertEqual(self.replies("orphan", row["id"]),
                          [("Answered after the restart.", "responder", "")])
+
+    def test_a_comment_a_killed_responder_left_unanswered_is_released_on_start(self):
+        row = self.comment("orphan", "other", "Answer me across a crash.")
+        process, agent = self.start("--once")
+        # No handler runs: the journal is left "before its answer was ready".
+        process.kill()
+        process.wait(15)
+        os.killpg(agent["pid"], signal.SIGKILL)
+        [entry] = self.journal()
+        self.assertEqual(entry["comment"], row["id"])
+        self.assertNotIn("text", entry)
+
+        done = self.respond(env=dict(self.env, ANSWER="Answered after the crash."))
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertIn(f"comment {row['id']}: released", done.stdout)
+        self.assertEqual(len(self.released()), 1)
+        self.assertEqual(self.replies("orphan", row["id"]),
+                         [("Answered after the crash.", "responder", "")])
+        self.assertEqual(self.root("orphan", row["id"]).get("state"), "answered")
+
+    def test_a_comment_interrupted_a_third_time_fails_as_interrupted_by_restarts(self):
+        row = self.comment("orphan", "other", "Answer me across a crash loop.")
+        for count in (1, 2):
+            self.stop()
+            self.assertEqual(self.root("orphan", row["id"]).get("state"), "pending")
+            self.assertEqual(len(self.released()), count)
+            self.assertEqual(sum(1 for e in self.journal() if e.get("released")), count)
+        self.stop()
+        root = self.root("orphan", row["id"])
+        self.assertEqual((root.get("state"), root.get("reason")),
+                         ("failed", responder.INTERRUPTED))
+        self.assertEqual(responder.INTERRUPTED, "interrupted by restarts")
+        self.assertEqual(len(self.released()), 2)
+        self.assertEqual(len(self.records()), 3)
+        self.assertEqual(self.replies("orphan", row["id"]), [])
+        # Settled: its releases leave the journal.
+        self.assertEqual(self.journal(), [])
 
 
 class StartupWaitTests(ResponderCase):
