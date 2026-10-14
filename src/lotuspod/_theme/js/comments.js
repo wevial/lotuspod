@@ -1236,7 +1236,11 @@
       // page's sections, under a word saying when there are no threads.
       var start = element("div", "artifact-comments-start");
       var none = element("p", "artifact-comments-none", "No comments yet");
-      var whole = sections.get(WHOLE_PAGE) || sections.get("page") || null;
+      // The first box for the whole page: a page may repeat a section id.
+      function first(section) {
+        return boxes.filter(function (box) { return box.dataset.section === section; })[0];
+      }
+      var whole = first(WHOLE_PAGE) || first("page") || null;
       var onPage = null;
       if (whole) {
         onPage = element("button", "artifact-comments-on-page", "Comment on this page");
