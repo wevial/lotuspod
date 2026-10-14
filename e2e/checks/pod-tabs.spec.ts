@@ -756,6 +756,26 @@ test.describe('signed in', () => {
     expect(errors).toEqual([]);
   });
 
+  test('a tab dragged onto the left half of the first goes first, in the strip and the address', async ({ page }) => {
+    await openIndex(page);
+    await openFromListing(page, ARTICLE);
+    await openFromListing(page, CONTEXT);
+    await openFromListing(page, CHECKLIST);
+    expect(await openNames(page)).toEqual([ARTICLE.name, CONTEXT.name, CHECKLIST.name]);
+
+    const from = (await tabTitle(page, CHECKLIST).boundingBox())!;
+    const onto = (await tab(page, ARTICLE).boundingBox())!;
+    await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(onto.x + onto.width / 4, onto.y + onto.height / 2, { steps: 12 });
+    await page.mouse.up();
+
+    expect(await openNames(page)).toEqual([CHECKLIST.name, ARTICLE.name, CONTEXT.name]);
+    await expect(page).toHaveURL(
+      /#tabs=capture-checklist,capture-article,capture-decision-context&on=capture-checklist$/);
+    await expectActive(page, CHECKLIST);
+  });
+
   test('the pointer on a tab not active lifts the whole tab, its ✕ white as its title', async ({ page }) => {
     await openIndex(page);
     await openFromListing(page, ARTICLE);
