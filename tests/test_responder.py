@@ -929,6 +929,15 @@ class ReleaseCountTests(unittest.TestCase):
         self.settle_refused("settled")
         self.assertEqual(self.journal.releases(7), 0)
 
+    def test_a_comment_still_open_keeps_the_count(self):
+        self.journal.compact(open_ids={7})
+        self.assertEqual(self.journal.releases(7), 2)
+
+    def test_a_comment_another_agent_settled_clears_the_count(self):
+        self.journal.compact(open_ids={8})
+        self.assertEqual(self.journal.releases(7), 0)
+        self.assertEqual(self.journal.path.read_text(encoding="utf-8"), "")
+
 
 class StartupWaitTests(ResponderCase):
     """serve restarted with the responder: a comment waits for it, serve is

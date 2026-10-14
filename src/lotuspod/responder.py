@@ -218,16 +218,19 @@ class Journal:
         return sum(1 for entry in self._merged().values()
                    if entry.get("comment") == comment_id and entry.get("released"))
 
-    def compact(self) -> None:
+    def compact(self, open_ids: Collection[int] | None = None) -> None:
         """Keep only what is unfinished, and the releases of each comment
         not since settled (answered, failed or gone), which count towards
-        MOST_RELEASES."""
+        MOST_RELEASES. A comment is settled once this journal says so, or,
+        when open_ids names the comments still open, once it is not among
+        them: another agent may have answered it since its release."""
         if not self.path.exists():
             return
         merged = self._merged().values()
         settled = {entry.get("comment") for entry in merged if entry.get("settled")}
         left = [entry for entry in merged if not entry.get("done") or (
-            entry.get("released") and entry.get("comment") not in settled)]
+            entry.get("released") and entry.get("comment") not in settled
+            and (open_ids is None or entry.get("comment") in open_ids))]
         temp = self.path.with_name(f".{self.path.name}.tmp")
         fd = os.open(temp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
         with os.fdopen(fd, "w", encoding="utf-8") as fh:
@@ -491,7 +494,7 @@ class Responder:
             # another handle's.
             if item["kind"] == "comment" and item["comment"]["owner"] == routing.RESPONDER:
                 self.answer(item)
-        self.journal.compact()
+        self.journal.compact({comment["id"] for comment in self.database.open_comments()})
 
     def answer(self, item: dict) -> None:
         comment_id, page = item["comment"]["id"], item["page"]
