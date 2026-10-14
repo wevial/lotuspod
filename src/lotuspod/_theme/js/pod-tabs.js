@@ -327,19 +327,14 @@
     }
   };
 
-  // Draw the strip's tabs in the open pods' order, then write it.
-  const reorder = () => {
-    for (const pod of open) plus.before(pod.tab);
-    write();
-  };
-
   // Move the pod at index from to index to, its title focused again: a node
   // put back in place loses focus.
   const move = (from, to) => {
     const focused = document.activeElement;
     const [pod] = open.splice(from, 1);
     open.splice(to, 0, pod);
-    reorder();
+    for (const each of open) plus.before(each.tab);
+    write();
     if (focused && pod.tab.contains(focused)) focusTab(pod);
     return pod;
   };
@@ -479,8 +474,7 @@
   strip.addEventListener("keydown", (event) => {
     if (!event.altKey || !event.shiftKey || event.ctrlKey || event.metaKey ||
         (event.key !== "ArrowLeft" && event.key !== "ArrowRight")) return;
-    const title = event.target.closest(".pod-tab-title");
-    const from = title ? open.findIndex((pod) => pod.title === title) : -1;
+    const from = open.findIndex((pod) => pod.title === event.target.closest(".pod-tab-title"));
     if (from < 0) return;
     event.preventDefault();
     const to = from + (event.key === "ArrowLeft" ? -1 : 1);
