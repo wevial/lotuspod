@@ -1241,6 +1241,7 @@
       if (whole) {
         onPage = element("button", "artifact-comments-on-page", "Comment on this page");
         onPage.type = "button";
+        onPage.disabled = ARCHIVED;
         onPage.addEventListener("click", function () {
           unpick(false);
           compose(groups.get(whole), true);
@@ -1266,9 +1267,6 @@
       // threads, and its controls for one are disabled.
       if (ARCHIVED) {
         pick.disabled = true;
-        if (onPage) {
-          onPage.disabled = true;
-        }
         start.insertBefore(element("p", "artifact-comments-closed", CLOSED), none);
       }
       sheet.append(head, start, list);
