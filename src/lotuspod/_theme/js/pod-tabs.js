@@ -49,6 +49,20 @@
 // asks it with "lotuspod:find", and it hands back the pod chosen with
 // "lotuspod:open", which opens it as a link would and focuses its tab.
 //
+// A tab moves along the strip: pressed (not on its ✕) and dragged more than
+// a few pixels with a mouse or pen, or held a moment then dragged on touch,
+// so a quick swipe still scrolls the strip and a touch held then lifted is
+// still a tap, it follows the pointer while the
+// others shift to show where it lands, and the release drops it there before
+// the tab under the pointer when the pointer is on that tab's left half.
+// Escape, or the browser taking the pointer, puts it back. A press that never
+// starts a drag is a click as any other. With its title focused,
+// Alt+Shift+Left or Right (Option+Shift on a Mac) moves it one place, keeps
+// it focused and says its new place in a polite live region, though not
+// while a drag is under way. Either move
+// reorders the open pods and draws the strip from them, then writes the
+// address, so the active tab and the dots stay as they were.
+//
 // Focus moved to a tab after a pointer press (a click on ✕, a mouse pick in
 // the finder) draws no ring: with focus({ focusVisible: false }) where the
 // browser honours it, else a class the stylesheet reads, gone at the next
@@ -94,7 +108,9 @@
   findButton.setAttribute("aria-keyshortcuts", MAC ? "Meta+K" : "Control+K");
   findButton.append(element("span", "pod-tabs-find-text", "Find a pod"),
     element("kbd", "pod-tabs-find-key", MAC ? "⌘K" : "Ctrl K"));
-  bar.append(home, strip, findButton);
+  const said = element("div", "pod-tabs-said");
+  said.setAttribute("aria-live", "polite");
+  bar.append(home, strip, findButton, said);
   const frames = element("div", "pod-tabs-frames");
   document.body.prepend(bar);
   main.after(frames);
@@ -312,6 +328,179 @@
       if (search) search.focus();
     }
   };
+
+  // Move the pod at index from to index to, its title focused again: a node
+  // put back in place loses focus.
+  const move = (from, to) => {
+    const focused = document.activeElement;
+    const [pod] = open.splice(from, 1);
+    open.splice(to, 0, pod);
+    for (const each of open) plus.before(each.tab);
+    write();
+    if (focused && pod.tab.contains(focused)) focusTab(pod);
+    return pod;
+  };
+
+  // The press on a tab that may become a drag, else null: held once a touch
+  // has stayed long enough to drag, started once the tab follows the
+  // pointer, cancelled once Escape has put it back; others,
+  // the other tabs' pods in strip order with their middles when it started.
+  const SLOP = 5;
+  const HOLD = 300;
+  let drag = null;
+  // A drag ended, so the click its release makes is not the tab's.
+  let swallow = false;
+
+  const settle = () => {
+    for (const pod of open) {
+      pod.tab.style.transform = "";
+      pod.tab.classList.remove("pod-tab--dragging", "pod-tab--shifting");
+    }
+    strip.classList.remove("pod-tabs--dragging");
+  };
+
+  // Where the dragged tab would land: before the first other tab whose
+  // middle is right of the pointer.
+  const landing = ({ others }, x) => {
+    const at = others.findIndex((other) => x < other.middle);
+    return at < 0 ? others.length : at;
+  };
+
+  const begin = () => {
+    drag.started = true;
+    drag.from = open.indexOf(drag.pod);
+    const box = drag.pod.tab.getBoundingClientRect();
+    drag.width = box.width;
+    drag.others = open.filter((pod) => pod !== drag.pod).map((pod) => {
+      const rect = pod.tab.getBoundingClientRect();
+      return { pod, middle: rect.left + rect.width / 2 };
+    });
+    const bounds = strip.getBoundingClientRect();
+    drag.min = Math.min(0, bounds.left - box.left);
+    drag.max = Math.max(0, bounds.right - box.right);
+    try {
+      strip.setPointerCapture(drag.pointer);
+    } catch (ignored) {
+      // Followed as far as the strip's own events reach.
+    }
+    strip.classList.add("pod-tabs--dragging");
+    drag.pod.tab.classList.add("pod-tab--dragging");
+    for (const other of drag.others) other.pod.tab.classList.add("pod-tab--shifting");
+  };
+
+  const drift = (x) => {
+    const dx = Math.min(drag.max, Math.max(drag.min, x - drag.x));
+    drag.pod.tab.style.transform = `translateX(${dx}px)`;
+    const to = landing(drag, x);
+    drag.others.forEach((other, k) => {
+      const i = open.indexOf(other.pod);
+      let shift = 0;
+      if (i < drag.from && k >= to) shift = drag.width;
+      else if (i > drag.from && k < to) shift = -drag.width;
+      other.pod.tab.style.transform = shift ? `translateX(${shift}px)` : "";
+    });
+  };
+
+  const end = (drop, x) => {
+    const was = drag;
+    drag = null;
+    clearTimeout(was.timer);
+    if (!was.started) return;
+    if (was.cancelled) drop = false;
+    swallow = true;
+    setTimeout(() => {
+      swallow = false;
+    }, 0);
+    settle();
+    // Where the dragged pod is now, should the strip have changed under it.
+    const from = open.indexOf(was.pod);
+    if (drop && from >= 0) {
+      const to = landing(was, x);
+      if (to !== from) move(from, to);
+    }
+  };
+
+  strip.addEventListener("pointerdown", (event) => {
+    swallow = false;
+    // A press whose release never reached the strip is over.
+    if (drag && !drag.started) end(false, event.clientX);
+    if (drag || !event.isPrimary || event.button !== 0) return;
+    const tab = event.target.closest(".pod-tab");
+    if (!tab || event.target.closest(".pod-tab-close")) return;
+    const pod = open.find((each) => each.tab === tab);
+    drag = {
+      pod, from: open.indexOf(pod), pointer: event.pointerId, x: event.clientX, y: event.clientY,
+      held: false, started: false, cancelled: false, timer: 0, touch: event.pointerType === "touch",
+    };
+    if (drag.touch) {
+      const press = drag;
+      press.timer = setTimeout(() => {
+        press.held = true;
+      }, HOLD);
+    }
+  });
+  strip.addEventListener("pointermove", (event) => {
+    if (!drag || drag.cancelled || event.pointerId !== drag.pointer) return;
+    // Its release went elsewhere (a framed page): the press is over.
+    if (event.buttons === 0) {
+      end(false, event.clientX);
+      return;
+    }
+    if (!drag.started) {
+      if (Math.hypot(event.clientX - drag.x, event.clientY - drag.y) <= SLOP) return;
+      // A touch moved before its hold is the strip's to scroll.
+      if (drag.touch && !drag.held) {
+        end(false, event.clientX);
+        return;
+      }
+      begin();
+    }
+    drift(event.clientX);
+  });
+  // Taken on the window, so a release off the strip ends the press too.
+  window.addEventListener("pointerup", (event) => {
+    if (drag && event.pointerId === drag.pointer) end(true, event.clientX);
+  }, true);
+  strip.addEventListener("pointercancel", (event) => {
+    if (drag && event.pointerId === drag.pointer) end(false, event.clientX);
+  });
+  // The strip's own capture lost, not a touch's implicit one on the tab
+  // pressed, which the strip takes over.
+  strip.addEventListener("lostpointercapture", (event) => {
+    if (event.target === strip && drag && drag.started && event.pointerId === drag.pointer) end(false, event.clientX);
+  });
+  // A touch held into a drag scrolls nothing.
+  strip.addEventListener("touchmove", (event) => {
+    if (drag && (drag.held || drag.started)) event.preventDefault();
+  }, { passive: false });
+  strip.addEventListener("click", (event) => {
+    if (!swallow) return;
+    swallow = false;
+    event.preventDefault();
+    event.stopPropagation();
+  }, true);
+  window.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape" || !drag || !drag.started) return;
+    event.preventDefault();
+    // Put back, the pointer still down: its release drops nothing and is
+    // no click.
+    settle();
+    drag.cancelled = true;
+  }, true);
+
+  strip.addEventListener("keydown", (event) => {
+    if (!event.altKey || !event.shiftKey || event.ctrlKey || event.metaKey ||
+        (event.key !== "ArrowLeft" && event.key !== "ArrowRight")) return;
+    const from = open.findIndex((pod) => pod.title === event.target.closest(".pod-tab-title"));
+    if (from < 0) return;
+    event.preventDefault();
+    // The drag under way places the tabs until it ends.
+    if (drag && drag.started) return;
+    const to = from + (event.key === "ArrowLeft" ? -1 : 1);
+    if (to < 0 || to >= open.length) return;
+    const pod = move(from, to);
+    said.textContent = `${pods.get(pod.name).title} moved to position ${to + 1} of ${open.length}`;
+  });
 
   // Each document a frame loads handles its links, on this origin, from its
   // window: a click reaches it last, after every handler of the page's own,

@@ -834,7 +834,11 @@ the pod's title, read from its listing row (`aria-current="page"` while it is
 the active tab), and a ✕ named "Close TITLE"; the pointer anywhere on a tab
 lifts the whole tab, ✕ included. The active tab sits on the glow, a lavender
 rule under it, its text white and semibold, and the strip scrolls sideways when
-it is full.
+it is full. A tab dragged along the strip (on touch, after a short press)
+drops where it is released, Escape putting it back, and Alt+Shift+Left or
+Right (Option+Shift on a Mac) moves a focused tab one place, announced as
+"moved to position N of M"; the new order is kept in the address like any
+other.
 
 A plain click (the main button, no modifier key) on a link with no `target`
 and no `download`, to `NAME.html` on this site for a page the listing has and

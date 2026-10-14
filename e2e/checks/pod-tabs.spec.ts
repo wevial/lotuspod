@@ -756,6 +756,190 @@ test.describe('signed in', () => {
     expect(errors).toEqual([]);
   });
 
+  test('a tab dragged onto the left half of the first goes first, in the strip and the address', async ({ page }) => {
+    await openIndex(page);
+    await openFromListing(page, ARTICLE);
+    await openFromListing(page, CONTEXT);
+    await openFromListing(page, CHECKLIST);
+    expect(await openNames(page)).toEqual([ARTICLE.name, CONTEXT.name, CHECKLIST.name]);
+
+    const from = (await tabTitle(page, CHECKLIST).boundingBox())!;
+    const onto = (await tab(page, ARTICLE).boundingBox())!;
+    await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(onto.x + onto.width / 4, onto.y + onto.height / 2, { steps: 12 });
+    await page.mouse.up();
+
+    expect(await openNames(page)).toEqual([CHECKLIST.name, ARTICLE.name, CONTEXT.name]);
+    await expect(page).toHaveURL(
+      /#tabs=capture-checklist,capture-article,capture-decision-context&on=capture-checklist$/);
+    await expectActive(page, CHECKLIST);
+
+    // The address keeps the order through a reload.
+    await page.reload();
+    await expectActive(page, CHECKLIST);
+    expect(await openNames(page)).toEqual([CHECKLIST.name, ARTICLE.name, CONTEXT.name]);
+  });
+
+  test('a press on a tab that never moves activates it; a drag ended with Escape, or begun on ✕, moves nothing', async ({ page }) => {
+    await openIndex(page);
+    await openFromListing(page, ARTICLE);
+    await openFromListing(page, CONTEXT);
+    await openFromListing(page, CHECKLIST);
+    const order = [ARTICLE.name, CONTEXT.name, CHECKLIST.name];
+    const centre = async (target: ReturnType<typeof tab>) => {
+      const box = (await target.boundingBox())!;
+      return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+    };
+
+    // Pressed and released in place: a click, the tab activated.
+    let at = await centre(tabTitle(page, ARTICLE));
+    await page.mouse.move(at.x, at.y);
+    await page.mouse.down();
+    await page.mouse.up();
+    await expectActive(page, ARTICLE);
+    expect(await openNames(page)).toEqual(order);
+
+    // A tab not active dragged over another, then Escape: back in place,
+    // and its release activates nothing.
+    at = await centre(tabTitle(page, CHECKLIST));
+    const onto = (await tab(page, CONTEXT).boundingBox())!;
+    await page.mouse.move(at.x, at.y);
+    await page.mouse.down();
+    await page.mouse.move(onto.x + 4, at.y, { steps: 8 });
+    await expect(tab(page, CHECKLIST)).toHaveClass(/pod-tab--dragging/);
+    await page.keyboard.press('Escape');
+    await expect(tab(page, CHECKLIST)).not.toHaveClass(/pod-tab--dragging/);
+    await page.mouse.move(onto.x + 2, at.y, { steps: 2 });
+    await page.mouse.up();
+    expect(await openNames(page)).toEqual(order);
+    await expectActive(page, ARTICLE);
+    await expect(page).toHaveURL(/#tabs=capture-article,capture-decision-context,capture-checklist&on=capture-article$/);
+    expect(await tabs(page).evaluateAll((nodes) => nodes.map((node) => (node as HTMLElement).style.transform)))
+      .toEqual(['', '', '']);
+
+    // A press on ✕ dragged along the strip starts no drag.
+    at = await centre(close(page, CONTEXT));
+    await page.mouse.move(at.x, at.y);
+    await page.mouse.down();
+    await page.mouse.move(at.x - 120, at.y, { steps: 8 });
+    await expect(strip(page).locator('.pod-tab--dragging')).toHaveCount(0);
+    await page.mouse.up();
+    expect(await openNames(page)).toEqual(order);
+
+    // And a plain click on ✕ closes the tab as ever.
+    await close(page, CONTEXT).click();
+    expect(await openNames(page)).toEqual([ARTICLE.name, CHECKLIST.name]);
+    await expectActive(page, ARTICLE);
+  });
+
+  test('a touch held on a tab and lifted without moving activates it; a held touch then moved drags it', async ({ page }) => {
+    await openIndex(page);
+    await openFromListing(page, ARTICLE);
+    await openFromListing(page, CONTEXT);
+    await openFromListing(page, CHECKLIST);
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 1 });
+    const touch = (type: string, points: { x: number; y: number }[]) =>
+      cdp.send('Input.dispatchTouchEvent', { type, touchPoints: points });
+
+    // Held past the drag's delay, lifted in place: the tab's tap.
+    const a = (await tabTitle(page, ARTICLE).boundingBox())!;
+    const at = { x: a.x + a.width / 2, y: a.y + a.height / 2 };
+    await touch('touchStart', [at]);
+    await page.waitForTimeout(450);
+    await touch('touchEnd', []);
+    await expectActive(page, ARTICLE);
+    expect(await openNames(page)).toEqual([ARTICLE.name, CONTEXT.name, CHECKLIST.name]);
+
+    // Held, then moved onto the first tab's left half: dropped first.
+    const c = (await tabTitle(page, CHECKLIST).boundingBox())!;
+    const from = { x: c.x + c.width / 2, y: c.y + c.height / 2 };
+    await touch('touchStart', [from]);
+    await page.waitForTimeout(450);
+    for (let step = 1; step <= 10; step++) {
+      await touch('touchMove', [{ x: from.x + (a.x + a.width / 4 - from.x) * step / 10, y: from.y }]);
+    }
+    await touch('touchEnd', []);
+    expect(await openNames(page)).toEqual([CHECKLIST.name, ARTICLE.name, CONTEXT.name]);
+    await expectActive(page, ARTICLE);
+  });
+
+  test('a press released outside the strip before it drags leaves no drag behind', async ({ page }) => {
+    await openIndex(page);
+    await openFromListing(page, ARTICLE);
+    await openFromListing(page, CONTEXT);
+    await openFromListing(page, CHECKLIST);
+    const c = (await tab(page, CHECKLIST).boundingBox())!;
+    const a = (await tabTitle(page, ARTICLE).boundingBox())!;
+
+    // Pressed at the tab's bottom edge, out over the pod's page at once,
+    // released there.
+    await page.mouse.move(c.x + c.width / 2, c.y + c.height - 1);
+    await page.mouse.down();
+    await page.mouse.move(c.x + c.width / 2, c.y + c.height + 80);
+    await page.mouse.up();
+
+    // Back over the first tab with no button held, then a click on it.
+    await page.mouse.move(a.x + a.width / 2, a.y + a.height / 2, { steps: 8 });
+    await expect(strip(page).locator('.pod-tab--dragging')).toHaveCount(0);
+    await page.mouse.click(a.x + a.width / 2, a.y + a.height / 2);
+    expect(await openNames(page)).toEqual([ARTICLE.name, CONTEXT.name, CHECKLIST.name]);
+    await expectActive(page, ARTICLE);
+  });
+
+  test('Alt+Shift+Right pressed while a tab is dragged moves nothing, and the drop moves the dragged tab', async ({ page }) => {
+    await openIndex(page);
+    await openFromListing(page, ARTICLE);
+    await openFromListing(page, CONTEXT);
+    await openFromListing(page, CHECKLIST);
+
+    const from = (await tabTitle(page, CONTEXT).boundingBox())!;
+    const onto = (await tab(page, ARTICLE).boundingBox())!;
+    await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(onto.x + onto.width / 4, onto.y + onto.height / 2, { steps: 12 });
+    await expect(tab(page, CONTEXT)).toHaveClass(/pod-tab--dragging/);
+    await page.keyboard.press('Alt+Shift+ArrowRight');
+    expect(await openNames(page)).toEqual([ARTICLE.name, CONTEXT.name, CHECKLIST.name]);
+    await page.mouse.up();
+
+    expect(await openNames(page)).toEqual([CONTEXT.name, ARTICLE.name, CHECKLIST.name]);
+    await expect(page).toHaveURL(
+      /#tabs=capture-decision-context,capture-article,capture-checklist&on=capture-checklist$/);
+    await expectActive(page, CHECKLIST);
+  });
+
+  test('Alt+Shift+Right moves a focused tab one place, keeping its focus and ring, and says where; Alt+Shift+Left on the first does nothing', async ({ page }) => {
+    await openIndex(page);
+    await openFromListing(page, ARTICLE);
+    await openFromListing(page, CONTEXT);
+    await openFromListing(page, CHECKLIST);
+    const said = page.locator('.pod-tabs-bar [aria-live="polite"]');
+
+    await close(page, ARTICLE).focus();
+    await page.keyboard.press('Tab');
+    await expect(tabTitle(page, CONTEXT)).toBeFocused();
+    await page.keyboard.press('Alt+Shift+ArrowRight');
+    expect(await openNames(page)).toEqual([ARTICLE.name, CHECKLIST.name, CONTEXT.name]);
+    await expect(tabTitle(page, CONTEXT)).toBeFocused();
+    await expect(said).toHaveText(`${CONTEXT.title} moved to position 3 of 3`);
+    await expect(page).toHaveURL(/#tabs=capture-article,capture-checklist,capture-decision-context&on=capture-checklist$/);
+    await expectActive(page, CHECKLIST);
+    expect.soft(await ringOf(page, CONTEXT))
+      .toEqual({ tab: `solid 2px ${rgb(COLORS.lavender)} -2px`, title: 'none', encloses: true });
+
+    // At the end already: nothing further.
+    await page.keyboard.press('Alt+Shift+ArrowRight');
+    expect(await openNames(page)).toEqual([ARTICLE.name, CHECKLIST.name, CONTEXT.name]);
+
+    await tabTitle(page, ARTICLE).focus();
+    await page.keyboard.press('Alt+Shift+ArrowLeft');
+    expect(await openNames(page)).toEqual([ARTICLE.name, CHECKLIST.name, CONTEXT.name]);
+    await expect(tabTitle(page, ARTICLE)).toBeFocused();
+    await expect(said).toHaveText(`${CONTEXT.title} moved to position 3 of 3`);
+  });
+
   test('the pointer on a tab not active lifts the whole tab, its ✕ white as its title', async ({ page }) => {
     await openIndex(page);
     await openFromListing(page, ARTICLE);
