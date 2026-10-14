@@ -1236,9 +1236,7 @@
       // page's sections, under a word saying when there are no threads.
       var start = element("div", "artifact-comments-start");
       var none = element("p", "artifact-comments-none", "No comments yet");
-      var whole = boxes.filter(function (box) { return box.dataset.section === WHOLE_PAGE; })[0]
-        || boxes.filter(function (box) { return box.dataset.section === "page"; })[0]
-        || null;
+      var whole = sections.get(WHOLE_PAGE) || sections.get("page") || null;
       var onPage = null;
       if (whole) {
         onPage = element("button", "artifact-comments-on-page", "Comment on this page");
