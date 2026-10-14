@@ -399,8 +399,7 @@ def run_agent(argv: list[str], text: str, cwd: Path, env: dict, timeout: float,
             # Input is given only once; a later communicate() goes on with it.
             data = None
             if stop is not None and stop.is_set():
-                _kill(proc)
-                raise _Stopped() from None
+                break
             if time.monotonic() >= deadline:
                 _kill(proc)
                 raise _Failed(f"the agent command ran past {timeout:g} seconds") from None
