@@ -29,7 +29,7 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from lotuspod import access, cli, comments, db, machine, media  # noqa: E402
+from lotuspod import access, cli, comments, db, machine, media, routing  # noqa: E402
 from tests import access_keys as keys  # noqa: E402
 from tests.test_forms import normalised_page  # noqa: E402
 
@@ -413,6 +413,26 @@ class SectionCheckTests(CommentsTestCase):
                 self.assertEqual(row["section"], section)
         _, got = self.ask("GET", "/api/comments?page=long")
         self.assertEqual([thread["root"]["section"] for thread in got["threads"]], sections)
+
+
+class OwnedPageRoutingTests(unittest.TestCase):
+    """A reader's comment with no mention on an owned page goes to the
+    responder first, whether or not the owner pulled recently."""
+
+    def comment(self, text: str) -> dict:
+        return {
+            "actor": {"kind": "human"}, "state": db.PENDING, "text": text,
+            "claim": {"handle": None, "expiresAt": None},
+            "createdAt": "2026-10-14T12:00:00Z",
+            "arrival": {"owner": "operator", "ownerPull": "2026-10-14T11:59:00Z"},
+        }
+
+    def test_an_unmentioned_comment_goes_to_the_responder_while_the_owner_listens(self):
+        now = routing.seconds("2026-10-14T12:01:00Z")
+        pulls = {"operator": routing.seconds("2026-10-14T11:59:00Z")}
+        handle, _state = routing.route(self.comment("Please file a ticket for this."),
+                                       pulls, routing.DEFAULT_WINDOW, now)
+        self.assertEqual(handle, routing.RESPONDER)
 
 
 if __name__ == "__main__":
