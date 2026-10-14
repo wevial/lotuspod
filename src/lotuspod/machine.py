@@ -664,7 +664,9 @@ class Routes:
                 reopen=False, page_of=self._current))
         found = self.database.finish_item(item_id, owner=owner, credential=name,
                                           token_hash=token, clock=self.clock)
-        return {"item": _public_item(found), "reply": reply}
+        # The claim's expiry may be shown, never its credential.
+        return {"item": {**found, "claim": {"expiresAt": found["claim"]["expiresAt"]}},
+                "reply": reply}
 
     def _threads(self, credential: Mapping, name: str) -> dict:
         if "pull" not in credential["operations"]:
@@ -871,11 +873,6 @@ class Routes:
         """A comment as the threads routes show it."""
         return routing.public(row, routing.last_pulls(self.database), self.window,
                               self.clock(), self.database.responder_paused())
-
-
-def _public_item(item: Mapping) -> dict:
-    """What may be shown of an inbox item: its claim's expiry, never its credential."""
-    return {**item, "claim": {"expiresAt": item["claim"]["expiresAt"]}}
 
 
 def _json_body(headers: Message, body: api.Body | None) -> dict:
