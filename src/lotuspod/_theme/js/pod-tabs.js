@@ -425,7 +425,6 @@
     const tab = event.target.closest(".pod-tab");
     if (!tab || event.target.closest(".pod-tab-close")) return;
     const pod = open.find((each) => each.tab === tab);
-    if (!pod) return;
     drag = {
       pod, from: open.indexOf(pod), pointer: event.pointerId, x: event.clientX, y: event.clientY,
       started: false, cancelled: false, timer: 0, touch: event.pointerType === "touch",
