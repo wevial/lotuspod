@@ -773,6 +773,48 @@ class LoopTests(ResponderCase):
         self.assertNotIn("waiting for serve", log.read())
 
 
+# A stand-in that records its pid, then takes 30 seconds to answer.
+SLEEPER = """\
+import json, os, sys, time
+sys.stdin.read()
+with open(os.environ["RECORD"], "a", encoding="utf-8") as log:
+    log.write(json.dumps({"pid": os.getpid()}) + "\\n")
+time.sleep(30)
+print("Too late.")
+"""
+
+
+class InterruptTests(ResponderCase):
+    def test_a_comment_answering_when_the_responder_is_stopped_is_answered_after_restart(self):
+        row = self.comment("orphan", "other", "Answer me across a deploy.")
+        log = open(self.tmp / "respond.log", "w+", encoding="utf-8")
+        self.addCleanup(log.close)
+        process = subprocess.Popen(
+            [sys.executable, "-m", "lotuspod", "respond", "--interval", "1",
+             "--command", self.stand_in("sleeper", SLEEPER), "--credential",
+             str(self.responder), "--socket", str(self.sock), "--out-dir", str(self.out),
+             "--db", str(self.db)],
+            cwd=str(self.tmp), env=self.env, stdout=log, stderr=log)
+        self.addCleanup(lambda: process.poll() is None and process.kill())
+        deadline = time.monotonic() + 15
+        while not self.records():
+            self.assertLess(time.monotonic(), deadline, "the agent never ran")
+            time.sleep(0.1)
+        [agent] = self.records()
+        # systemd's stop: SIGTERM to every process in the unit's cgroup.
+        process.send_signal(signal.SIGTERM)
+        os.kill(agent["pid"], signal.SIGTERM)
+        self.assertEqual(process.wait(15), 0)
+
+        root = self.root("orphan", row["id"])
+        self.assertNotEqual(root.get("state"), "failed", root.get("reason"))
+        self.record.unlink()
+        done = self.respond(env=dict(self.env, ANSWER="Answered after the restart."))
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(self.replies("orphan", row["id"]),
+                         [("Answered after the restart.", "responder", "")])
+
+
 class StartupWaitTests(ResponderCase):
     """serve restarted with the responder: a comment waits for it, serve is
     stopped (its socket goes), the responder starts, and serve starts again
