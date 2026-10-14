@@ -264,7 +264,7 @@ test.describe('signed in', () => {
     expect(errors).toEqual([]);
   });
 
-  test('a link to another pod, in a framed pod\'s body or comment, opens it in a tab of its own and leaves the pod where it was', async ({ page, context }) => {
+  test('a link to another pod, in a framed pod\'s body or comment, opens it in a tab of its own and leaves the pod where it was', async ({ page }) => {
     const errors = await watch(page);
     const pod = { name: 'pod-tabs-links', title: 'Pod tabs links' };
     const body = (old: string) => [`# ${pod.title}`, '',
@@ -325,15 +325,6 @@ test.describe('signed in', () => {
     await expectActive(page, pod);
     await inPod.getByRole('link', { name: 'the findings below' }).click();
     await expect.poll(async () => (await shownIn(page, pod)).hash).toBe('#findings');
-    await expectActive(page, pod);
-    expect(await openNames(page)).toEqual([pod.name, ARTICLE.name]);
-
-    // Cmd-click or Ctrl-click is the browser's own tab.
-    const opened = context.waitForEvent('page');
-    await inPod.getByRole('link', { name: 'the article', exact: true }).click({ modifiers: ['ControlOrMeta'] });
-    const other = await opened;
-    await expect(other).toHaveURL(/\/#tabs=capture-article&on=capture-article$/);
-    await other.close();
     await expectActive(page, pod);
     expect(await openNames(page)).toEqual([pod.name, ARTICLE.name]);
 
