@@ -108,6 +108,8 @@ INTERRUPTED = "interrupted by restarts"
 STOP_POLL = 0.2
 # Refusals that put a comment out of the responder's hands for good.
 _GONE = ("settled", "claimed", "not_routed", "unknown_comment", "unknown_page")
+# The refusals of _GONE that leave the comment unsettled.
+_UNSETTLED = ("claimed", "not_routed")
 NO_PUBLISH = "my credential lacks the publish permission, so I did not revise the page"
 
 LIMITS = """\
@@ -218,12 +220,12 @@ class Journal:
 
     def compact(self) -> None:
         """Keep only what is unfinished, and the releases of each comment
-        not since settled, which count towards MOST_RELEASES."""
+        not since settled (answered, failed or gone), which count towards
+        MOST_RELEASES."""
         if not self.path.exists():
             return
         merged = self._merged().values()
-        settled = {entry.get("comment") for entry in merged
-                   if entry.get("done") and not entry.get("released")}
+        settled = {entry.get("comment") for entry in merged if entry.get("settled")}
         left = [entry for entry in merged if not entry.get("done") or (
             entry.get("released") and entry.get("comment") not in settled)]
         temp = self.path.with_name(f".{self.path.name}.tmp")
@@ -387,22 +389,30 @@ def run_agent(argv: list[str], text: str, cwd: Path, env: dict, timeout: float,
                                 start_new_session=True)
     except OSError as exc:
         raise _Failed(f"the agent command could not run: {exc.strerror or exc}") from None
-    deadline = time.monotonic() + timeout
-    data: bytes | None = text.encode("utf-8")
-    while True:
-        left = deadline - time.monotonic()
-        try:
-            out, _err = proc.communicate(
-                data, timeout=max(0, left if stop is None else min(left, STOP_POLL)))
-            break
-        except subprocess.TimeoutExpired:
-            # Input is given only once; a later communicate() goes on with it.
-            data = None
-            if stop is not None and stop.is_set():
-                break
-            if time.monotonic() >= deadline:
-                _kill(proc)
-                raise _Failed(f"the agent command ran past {timeout:g} seconds") from None
+    ended = threading.Event()
+
+    def watch() -> None:
+        # A stop kills the agent, so communicate() returns; one call writes
+        # the whole prompt, however slowly the agent reads it.
+        while not ended.wait(STOP_POLL):
+            if stop.is_set():
+                try:
+                    os.killpg(proc.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+                return
+
+    if stop is not None:
+        threading.Thread(target=watch, daemon=True).start()
+    try:
+        out, _err = proc.communicate(text.encode("utf-8"), timeout=timeout)
+    except subprocess.TimeoutExpired:
+        _kill(proc)
+        if stop is not None and stop.is_set():
+            raise _Stopped() from None
+        raise _Failed(f"the agent command ran past {timeout:g} seconds") from None
+    finally:
+        ended.set()
     if stop is not None and stop.is_set():
         # systemd stops the agent with the responder: its exit is no answer.
         _kill(proc)
@@ -683,11 +693,14 @@ class Responder:
         except Refused as exc:
             self.log(f"comment {comment_id}: {action} refused ({exc.error})")
             if exc.error in _GONE:
-                self.journal.write({"key": key, "done": True})
+                # Another agent's claim or a new route leaves it unsettled,
+                # and its releases still count.
+                self.journal.write({"key": key, "done": True,
+                                    "settled": exc.error not in _UNSETTLED})
             elif action == "reply":
                 self.fail(comment_id, token, key, f"I could not post my answer ({exc.error})")
             return False
-        self.journal.write({"key": key, "done": True})
+        self.journal.write({"key": key, "done": True, "settled": True})
         return True
 
     def finish(self) -> None:

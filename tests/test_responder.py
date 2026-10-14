@@ -878,6 +878,58 @@ class InterruptTests(ResponderCase):
         self.assertEqual(self.journal(), [])
 
 
+# A stand-in that reads its prompt only after a pause, then answers.
+LATE_READER = """\
+import sys, time
+time.sleep(0.5)
+sys.stdin.read()
+print("Read it all.")
+"""
+
+
+class LargePromptTests(ResponderCase):
+    def test_a_prompt_larger_than_a_pipe_reaches_an_agent_that_reads_it_late(self):
+        self.publish("orphan", ORPHAN + "\n" + "Lilies at dusk, at length. " * 4000)
+        row = self.comment("orphan", "other", "Read the whole page.")
+        done = self.respond("--timeout", "10", command=self.stand_in("late", LATE_READER))
+        self.assertEqual(done.returncode, 0, done.stderr)
+        root = self.root("orphan", row["id"])
+        self.assertNotEqual(root.get("state"), "failed", root.get("reason"))
+        self.assertEqual(self.replies("orphan", row["id"]),
+                         [("Read it all.", "responder", "")])
+
+
+class ReleaseCountTests(unittest.TestCase):
+    """Only a settlement of the comment clears its count of releases."""
+
+    def setUp(self):
+        import tempfile
+        scratch = tempfile.TemporaryDirectory()
+        self.addCleanup(scratch.cleanup)
+        self.journal = responder.Journal(Path(scratch.name) / responder.JOURNAL_NAME)
+        for key in ("a", "b"):
+            self.journal.write({"key": key, "comment": 7, "released": True, "done": True})
+        self.responder = responder.Responder.__new__(responder.Responder)
+        self.responder.journal = self.journal
+        self.responder.log = lambda line: None
+
+    def settle_refused(self, error):
+        def ask(method, target, body=None):
+            raise responder.Refused(error)
+        self.responder.ask = ask
+        self.journal.write({"key": "c", "comment": 7})
+        self.assertFalse(self.responder._settle(7, "token", "c", "reply", {"text": "x"}))
+        self.journal.compact()
+
+    def test_a_reply_refused_as_another_s_claim_keeps_the_count(self):
+        self.settle_refused("claimed")
+        self.assertEqual(self.journal.releases(7), 2)
+
+    def test_a_reply_refused_as_settled_clears_the_count(self):
+        self.settle_refused("settled")
+        self.assertEqual(self.journal.releases(7), 0)
+
+
 class StartupWaitTests(ResponderCase):
     """serve restarted with the responder: a comment waits for it, serve is
     stopped (its socket goes), the responder starts, and serve starts again
