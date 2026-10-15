@@ -1151,14 +1151,17 @@
           if (!row) {
             return;
           }
-          // Where the words start now: a swap since may have moved them.
+          // Where the words start now: a swap since may have moved them, or
+          // taken their marks away, when the quote alone finds them.
           var start = marks.length && article.contains(marks[0]) ?
-            offsetOf(textModel(article), marks[0], 0) : found.start;
+            offsetOf(textModel(article), marks[0], 0) : null;
           var focused = holder.contains(document.activeElement) || document.activeElement === document.body;
           if (open === mine) {
             close(mine);
           }
-          hints.set(row.id, start);
+          if (start !== null) {
+            hints.set(row.id, start);
+          }
           add({ root: row, replies: [] });
           posted();
           panel.started(shown.get(row.id), focused);
@@ -3340,9 +3343,9 @@
     }
 
     // Where in the boxes, once it is taken away, each box a swap took away
-    // was: a section added while it was held back that took its place
-    // under a new name, which a swap puts just before it, else the next
-    // (the index a reload finds it at). And for each section taken away
+    // was: the first of the sections added while it was held back that
+    // took its place under new names, which a swap puts just before it,
+    // else the next (the index a reload finds it at). And for each section taken away
     // and held back, the boxes added since.
     var places = new Map();
     var since = new Map();
@@ -3354,7 +3357,11 @@
       var at = boxes.indexOf(old);
       var added = since.get(old);
       since.delete(old);
-      var place = at > 0 && added && added.has(boxes[at - 1]) ? at - 1 : at;
+      // Every section added just before it, the first of them in its place.
+      var place = at;
+      while (place > 0 && added && added.has(boxes[place - 1])) {
+        place -= 1;
+      }
       places.set(old, place);
       var form = forms.get(old);
       var each = { field: form.elements.text, images: attached.get(form) };

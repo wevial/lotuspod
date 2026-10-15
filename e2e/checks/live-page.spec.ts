@@ -915,17 +915,17 @@ test.describe('signed in', () => {
     expect(errors).toEqual([]);
   });
 
-  // Select the first `length` characters of the paragraph holding `words`
-  // and open the passage composer on them.
-  async function selectPassage(page: Page, words: string, length: number) {
-    await page.locator('.artifact-body p', { hasText: words }).evaluate((paragraph, length) => {
+  // Select `length` characters of the paragraph holding `words`, from its
+  // first or from `from`, and open the passage composer on them.
+  async function selectPassage(page: Page, words: string, length: number, from = 0) {
+    await page.locator('.artifact-body p', { hasText: words }).evaluate((paragraph, [length, from]) => {
       const range = document.createRange();
-      range.setStart(paragraph.firstChild!, 0);
-      range.setEnd(paragraph.firstChild!, length);
+      range.setStart(paragraph.firstChild!, from);
+      range.setEnd(paragraph.firstChild!, from + length);
       const selection = document.getSelection()!;
       selection.removeAllRanges();
       selection.addRange(range);
-    }, length);
+    }, [length, from]);
     await page.keyboard.press('Control+Alt+m');
     const field = page.getByRole('textbox', { name: 'Comment on the selected words' });
     await expect(field).toBeFocused();
@@ -1023,6 +1023,39 @@ test.describe('signed in', () => {
     await expect(form.locator('textarea')).toHaveValue(UNSENT);
     await expect(form.locator('.artifact-comment-status')).toHaveText(
       'Where you were writing has changed since. Your text is kept here.');
+    expect(loads.count).toBe(0);
+    expect(errors).toEqual([]);
+  });
+
+  test('a comment on a section renamed along with the next is kept in the form where the section was', async ({ page }) => {
+    const errors = watchErrors(page);
+    const name = 'live-page-renamed-both';
+    publish(name, source('Live page renamed both', 'first'));
+    await stopClock(page);
+    await open(page, name);
+    await page.locator('details.artifact-comment[data-section="risks"] summary').click();
+    const risks = page.locator('.artifact-comments-panel').getByRole('textbox', { name: 'Comment on Risks' });
+    await expect(risks).toBeFocused();
+    const UNSENT = 'What cracks first, the pump or the pipe?';
+    await risks.fill(UNSENT);
+
+    const loads = watchLoads(page);
+    const second = publish(name, source('Live page renamed both', 'first')
+      .replace(/Risks/g, 'Hazards').replace(/Next steps/g, 'Actions'));
+    await page.clock.runFor(CHECK);
+    await expect.poll(() => revisionOf(page)).toBe(second);
+    const bar = page.locator('div.artifact-section-body[data-section="risks"] div.artifact-swap-held');
+    await expect(bar).toContainText('This section was removed');
+
+    await bar.getByRole('button', { name: 'Update' }).click();
+    await expect(page.locator('details.artifact-comment[data-section="risks"]')).toHaveCount(0);
+    const form = page.locator('.artifact-comments-panel form.artifact-comment-form')
+      .filter({ has: page.getByRole('textbox', { name: 'Comment on Hazards' }) });
+    await expect(form.locator('textarea')).toHaveValue(UNSENT);
+    await expect(form.locator('.artifact-comment-status')).toHaveText(
+      'Where you were writing has changed since. Your text is kept here.');
+    await expect(page.locator('.artifact-comments-panel')
+      .getByRole('textbox', { name: 'Comment on Actions', includeHidden: true })).toHaveValue('');
     expect(loads.count).toBe(0);
     expect(errors).toEqual([]);
   });
@@ -1706,6 +1739,58 @@ test.describe('signed in', () => {
     await expect(page.locator('mark.artifact-passage--pending')).toHaveText('The pond');
     // The failed post is logged by the browser; nothing else is.
     expect(errors.filter((error) => !error.includes('status of 500'))).toEqual([]);
+  });
+
+  test('a passage comment saved after its held section is updated is highlighted on its own words, not on others where they were', async ({ page }) => {
+    const errors = watchErrors(page);
+    const name = 'live-page-comments-moved-passage';
+    // Words far enough into their paragraph that what comes before them
+    // can grow and leave their context as it is.
+    const LEAD = 'Ice forms first along the edges, thick by the new year. ';
+    const WORDS = `${LEAD}The pump may crack.`;
+    publish(name, sectioned(name, pond({ Risks: { paragraphs: [WORDS, POND[1][1][1]] } })));
+    await stopClock(page);
+    await open(page, name);
+    const field = await selectPassage(page, WORDS, 'The pump'.length, LEAD.length);
+    await field.fill('Which pump is this?');
+
+    // The same words, ahead of them, where they were; theirs move on.
+    const AHEAD = `${LEAD}The pump hums all winter long. `;
+    publish(name, sectioned(name, pond({ Risks: { paragraphs: [AHEAD + WORDS, POND[1][1][1]] } })));
+    await page.clock.runFor(CHECK);
+    const bar = page.locator('div.artifact-section-body[data-section="risks"] div.artifact-swap-held');
+    await expect(bar).toContainText('This section changed');
+
+    // The post waits until the reader has updated the section.
+    let release!: () => void;
+    const released = new Promise<void>((resolve) => { release = resolve; });
+    let posted = 0;
+    await page.route((url) => url.pathname === '/api/comments', async (route) => {
+      if (route.request().method() !== 'POST') {
+        await route.fallback();
+        return;
+      }
+      await released;
+      posted += 1;
+      await route.fallback();
+    });
+    await page.locator('form.artifact-passage-form button[type="submit"]').click();
+    await bar.getByRole('button', { name: 'Update' }).click();
+    const risks = page.locator('div.artifact-section-body[data-section="risks"]');
+    await expect(risks).toContainText(AHEAD);
+    release();
+    await expect.poll(() => posted).toBe(1);
+
+    const mark = risks.locator('mark.artifact-passage');
+    await expect(mark).toHaveText('The pump');
+    // Its own words, after the others, not the others where they were.
+    expect(await mark.evaluate((node) => {
+      const range = document.createRange();
+      range.selectNodeContents(node.closest('p')!);
+      range.setEnd(node, 0);
+      return range.toString().length;
+    })).toBe(AHEAD.length + LEAD.length);
+    expect(errors).toEqual([]);
   });
 
   test('a section comment still sending when its section is taken away is saved once, not kept as a draft', async ({ page }) => {
