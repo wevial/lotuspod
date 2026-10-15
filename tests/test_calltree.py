@@ -100,3 +100,22 @@ class CalltreeTests(unittest.TestCase):
         self.assertEqual(rows[1].text(), bad)
         self.assertEqual(nodes(root, 'calltree-summary')[0].text(),
                          '1 changed · 1 new · across 1 file')
+
+    def test_guide_character_names(self):
+        for guide in '│├└─':
+            for separator in (' ', '\t'):
+                with self.subTest(guide=guide, separator=separator):
+                    root = parse(calltree.render([
+                        f'{guide}{separator}src/a.py:1',
+                        f'   {guide}{separator}src/a.py:2',
+                    ], []))
+                    rows = nodes(root, 'calltree-row')
+                    self.assertEqual([r.attrs['data-kind'] for r in rows],
+                                     ['context', 'context'])
+                    self.assertEqual([r.attrs['data-depth'] for r in rows], ['0', '1'])
+                    self.assertEqual([n.text() for n in nodes(root, 'calltree-name')],
+                                     [guide, guide])
+                    self.assertEqual([n.text() for n in nodes(root, 'calltree-chip')],
+                                     ['a.py:1', 'a.py:2'])
+                    self.assertEqual(nodes(root, 'calltree-summary')[0].text(),
+                                     '0 changed · 0 new · across 1 file')

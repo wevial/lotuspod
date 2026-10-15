@@ -23,13 +23,21 @@ def render(lines: list[str], info: list[str]) -> str:
         if not line.strip():
             continue
         prefix = _PREFIX.match(line).group()
+        match = _LINE.fullmatch(line, len(prefix))
+        if not match:
+            # The greedy guide prefix may have swallowed a guide-only name.
+            # Its last non-space character is the regex's first possible
+            # fallback name. Earlier starts cannot change whether the remaining
+            # path parses, so try just this one to avoid quadratic backtracking.
+            name_start = len(prefix.rstrip(' ')) - 1
+            if name_start >= 0:
+                match = _LINE.fullmatch(line, name_start)
+                if match:
+                    prefix = prefix[:name_start]
         # Round three-column steps and cap jumps. Only parsed rows can
         # supply parents, even when a malformed line has deeper indentation.
         depth = min((len(prefix) + 1) // 3, previous_depth + 1, len(stack))
         previous_depth = depth
-        # Consume guides only once: allowing the name to backtrack into the
-        # prefix makes malformed guide-heavy lines take quadratic time.
-        match = _LINE.fullmatch(line, len(prefix))
         if not match:
             rows.append({"depth": depth, "text": line.rstrip()})
             continue
