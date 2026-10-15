@@ -245,7 +245,18 @@ the intro, and each changed, added or removed section. Everything else stays
 as it was, the scroll position and the folded sections with it; a swapped
 section stays folded if the one it replaces was, and an added one starts open
 unless the reader folded it before. The page then shows the new revision
-without a reload, and a later publish is noticed the same way. It does not
+without a reload, and a later publish is noticed the same way. A line in the
+banner's place, which moves no text and is announced politely, says "Page
+updated · 2 sections changed" (the intro counting as a section; just "Page
+updated" when only the header or outline changed) and goes after 6 seconds;
+each changed or added section is tinted for 2 seconds (without the fade when
+the reader asks for reduced motion), and a folded one says "changed" on its
+heading until it is opened. The first section heading below the title bar
+stays where it was in the window. A changed or removed section, or the intro,
+holding the focus is held back: it keeps its old text under a bar reading
+"This section changed" (or "This section was removed") with an Update button,
+which swaps it in and moves the focus to its heading, while the rest of the
+page swaps; a later publish that brings back its text takes the bar away. It does not
 swap, and shows the banner as below, when the theme or the page's policy
 changed, when either copy holds a comments box (any page that takes
 comments), or when a changed part, as it was or as it is now, holds a

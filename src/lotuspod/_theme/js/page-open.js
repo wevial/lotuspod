@@ -85,9 +85,10 @@
     "form.artifact-decision, .artifact-decision-chip, .artifact-answered, pre.mermaid, svg, " +
     ".artifact-node-card";
   // What the page's text leaves out as never read: the marks and numbers the
-  // page script draws, and what is not shown at all.
+  // page script draws, the bar over a part a swap held back, and what is not
+  // shown at all.
   var UNSEEN = "script, style, template, noscript, .artifact-section-mark, .artifact-passage-number, " +
-    ".artifact-table-expand, .artifact-changed-tag, .artifact-review-open";
+    ".artifact-table-expand, .artifact-changed-tag, .artifact-review-open, .artifact-swap-held";
   var BLOCK = new RegExp("^(ADDRESS|ARTICLE|ASIDE|BLOCKQUOTE|BR|CAPTION|DD|DETAILS|DIV|DL|DT|" +
     "FIELDSET|FIGCAPTION|FIGURE|FOOTER|FORM|H[1-6]|HEADER|HR|LI|MAIN|NAV|OL|P|PRE|SECTION|" +
     "SUMMARY|TABLE|TBODY|TD|TFOOT|TH|THEAD|TR|UL)$");
@@ -327,7 +328,8 @@
   // it. What the reader folded is kept per page in localStorage, when the
   // browser lets the page keep anything. A folded heading's button ends in a
   // mark saying what waits in its section: the comments and replies drawn
-  // into its box while it was folded, and its questions with no saved answer.
+  // into its box while it was folded, its questions with no saved answer, and
+  // "changed" when a newer revision swapped it in while it was folded.
   // What it returns folds a later heading and body the same way, as the
   // Answered table does once it is drawn and a section a newer revision
   // swapped in does (web/src/page-swap.ts), and its drop forgets one taken
@@ -378,7 +380,7 @@
       button.append(" ", mark);
       heading.appendChild(button);
       var section = {
-        id: id, heading: heading, wrapper: wrapper, button: button, mark: mark, fresh: 0,
+        id: id, heading: heading, wrapper: wrapper, button: button, mark: mark, fresh: 0, changed: false,
       };
       sections.push(section);
       button.addEventListener("click", function () {
@@ -419,16 +421,17 @@
       } else {
         section.wrapper.removeAttribute("hidden");
         section.fresh = 0;
+        section.changed = false;
       }
       section.button.setAttribute("aria-expanded", fold ? "false" : "true");
       tally(section);
     }
 
-    // Draw a section's mark: "N new", "N to answer" or both, only while it
-    // is folded and something waits. A question waits once the answers are
+    // Draw a section's mark: "changed", "N new", "N to answer" or several,
+    // only while it is folded and something waits. A question waits once the answers are
     // read while its form is not folded to a saved answer.
     function tally(section) {
-      var parts = [];
+      var parts = section.changed ? ["changed"] : [];
       if (section.fresh) {
         parts.push(section.fresh + " new");
       }
@@ -551,10 +554,12 @@
 
     // A later section, folded as fold says when it is given (a swapped
     // section folds as the one it replaces was), else if the reader left it
-    // folded or folded all before it was drawn.
-    function later(heading, wrapper, id, fold) {
+    // folded or folded all before it was drawn. One a newer revision changed
+    // or added is marked "changed" when it folds, until it is opened.
+    function later(heading, wrapper, id, fold, changed) {
       var section = add(heading, wrapper, id);
       if (section && (fold === undefined ? kept.indexOf(id) >= 0 : fold)) {
+        section.changed = Boolean(changed);
         set(section, true);
       }
       label();
