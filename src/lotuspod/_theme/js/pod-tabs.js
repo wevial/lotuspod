@@ -247,9 +247,35 @@
   // again.
   const TICKS = new Set(["publish", "index", "comment", "resync"]);
 
+  // At most one read of ask in flight, and one more asked after it however
+  // many callers ask meanwhile: each caller's promise settles once a read
+  // begun after its call has. A read of the seen route can take seconds on
+  // a busy serve, and a pile of them, with the change stream's connection,
+  // would leave a framed page none of the browser's connections to load on.
+  const single = (ask) => {
+    let flying = null;
+    let queued = null;
+    const run = () => {
+      if (!flying) {
+        flying = ask().finally(() => {
+          flying = null;
+        });
+        return flying;
+      }
+      if (!queued) {
+        queued = flying.then(() => {
+          queued = null;
+          return run();
+        });
+      }
+      return queued;
+    };
+    return run;
+  };
+
   // Answers are drawn in the order they were asked: a later read wins.
   let asked = 0;
-  const askSeen = async () => {
+  const askSeen = single(async () => {
     const ask = ++asked;
     let pages = null;
     try {
@@ -264,7 +290,7 @@
     if (ask !== asked) return;
     seen = pages;
     showDots();
-  };
+  });
 
   // The revision the framed page was rendered at: "" once a page with no
   // stamp has loaded, null before.

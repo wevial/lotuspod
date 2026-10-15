@@ -2843,9 +2843,14 @@
       fresh = false;
       if (again) {
         again = false;
-        fresh = true;
-        read();
-        return;
+        // A hidden page reads it once it is seen again.
+        if (hidden()) {
+          ticked = true;
+        } else {
+          fresh = true;
+          read();
+          return;
+        }
       }
       plan();
     }

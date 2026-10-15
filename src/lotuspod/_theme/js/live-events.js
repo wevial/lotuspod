@@ -70,5 +70,8 @@
       wait = Math.min(wait * 2, MAX_BACKOFF);
     });
   };
-  open();
+  if (document.readyState === "complete")
+    open();
+  else
+    window.addEventListener("load", open, { once: true });
 })();

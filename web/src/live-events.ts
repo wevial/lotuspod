@@ -13,7 +13,9 @@
 // opens. A stream that opens again after a drop sends {what: "resync",
 // page: null} once, since ticks may have been missed while it was down; the
 // first open sends nothing, as the page has just loaded. The stream stays
-// open while the tab is hidden, as the revision check does.
+// open while the tab is hidden, as the revision check does. It opens once
+// the document has loaded (the index's once its frames have), so it never
+// competes with the page's own loading for the browser's connections.
 //
 // A page framed in a same-origin window whose document holds the stream (the
 // index's tabs, js/pod-tabs.js) opens none of its own: it sends each tick
@@ -91,5 +93,6 @@
       wait = Math.min(wait * 2, MAX_BACKOFF);
     });
   };
-  open();
+  if (document.readyState === "complete") open();
+  else window.addEventListener("load", open, { once: true });
 })();

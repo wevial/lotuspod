@@ -111,6 +111,14 @@ async function stopClock(page: Page) {
   await page.clock.pauseAt(START + 1000);
 }
 
+async function setVisibility(page: Page, state: 'hidden' | 'visible') {
+  await page.evaluate((state) => {
+    Object.defineProperty(document, 'visibilityState', { value: state, configurable: true });
+    Object.defineProperty(document, 'hidden', { value: state === 'hidden', configurable: true });
+    document.dispatchEvent(new Event('visibilitychange'));
+  }, state);
+}
+
 // The stream answered 200, so the page is listening.
 function streaming(page: Page) {
   return page.waitForResponse((response) =>
@@ -172,7 +180,8 @@ test.describe('signed in', () => {
     const asked = watchAsked(page, REVISION);
     await stopClock(page);
     await open(page, name);
-    expect(asked).toEqual([]);
+    // A tick for the first publish may still reach the page: it checks then too.
+    const before = asked.length;
 
     const second = publish(name, source('Live events publish', 'second'));
     expect(second).not.toBe(first);
@@ -180,7 +189,7 @@ test.describe('signed in', () => {
     await expect(page.locator('.artifact-body')).not.toContainText('Edition: first.');
     await expect.poll(() => page.locator('meta[name="lotuspod:revision"]').getAttribute('content'))
       .toBe(second);
-    expect(asked.length).toBeGreaterThanOrEqual(1);
+    expect(asked.length).toBeGreaterThan(before);
     await expect(page.locator('.artifact-live-page-banner')).toHaveCount(0);
     expect(await page.evaluate(() => Date.now())).toBe(START + 1000);
     expect(errors).toEqual([]);
@@ -272,6 +281,41 @@ test.describe('signed in', () => {
     await expect(tab.locator('.pod-tab-dot')).toHaveText('new version', { timeout: 10_000 });
     expect(await page.evaluate(() => Date.now())).toBe(START + 1000);
     expect(streams).toEqual([true]);
+    expect(errors).toEqual([]);
+  });
+
+  test('a tick that comes during a read and is still owed once the page is hidden waits for it to be seen', async ({ page, request }) => {
+    const errors = watchErrors(page);
+    const name = 'live-events-hidden';
+    publish(name, source('Live events hidden', 'first'));
+    await comment(request, name, 'findings', 'Will the pump crack?');
+    await stopClock(page);
+    await open(page, name);
+
+    // Each read of the threads from now on, and whether the page was hidden
+    // as it was sent; the first is held until released.
+    const reads: string[] = [];
+    let release = () => {};
+    const held = new Promise<void>((done) => { release = done; });
+    await page.route((url) => url.pathname === '/api/comments', async (route) => {
+      if (route.request().method() !== 'GET') return route.fallback();
+      reads.push(await page.evaluate(() => document.visibilityState));
+      if (reads.length === 1) await held;
+      await route.fallback();
+    });
+    await comment(request, name, 'risks', 'Is the heater on?');
+    await expect.poll(() => reads.length).toBe(1);
+    await comment(request, name, 'next-steps', 'When is it ordered?');
+    // The second tick has reached the page while its read is held.
+    await page.waitForTimeout(2500);
+    await setVisibility(page, 'hidden');
+    release();
+    await page.waitForTimeout(1500);
+    expect(reads).toEqual(['visible']);
+
+    await setVisibility(page, 'visible');
+    await expect.poll(() => reads.length).toBe(2);
+    expect(reads).toEqual(['visible', 'visible']);
     expect(errors).toEqual([]);
   });
 

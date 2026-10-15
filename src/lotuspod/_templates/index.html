@@ -388,7 +388,33 @@
         showActivity();
       };
 
-      const askSeen = async () => {
+      // At most one read of ask in flight, and one more asked after it
+      // however many callers ask meanwhile, so answers are drawn in the
+      // order they were asked: a read can take seconds on a busy serve, and
+      // a pile of them would hold the browser's connections the open tabs'
+      // pages load on.
+      const single = (ask) => {
+        let flying = null;
+        let queued = null;
+        const run = () => {
+          if (!flying) {
+            flying = ask().finally(() => {
+              flying = null;
+            });
+            return flying;
+          }
+          if (!queued) {
+            queued = flying.then(() => {
+              queued = null;
+              return run();
+            });
+          }
+          return queued;
+        };
+        return run;
+      };
+
+      const askSeen = single(async () => {
         let pages = null;
         try {
           const response = await fetch("/api/seen", { cache: "no-store" });
@@ -400,7 +426,7 @@
           // Shown as if the route had not answered.
         }
         showSeen(pages);
-      };
+      });
 
       // The Recent activity view: the activity route's pages, each a group
       // with a header row and its events, newest first. It is built with
@@ -773,7 +799,7 @@
       // The days the view already shows, asked again from the newest, so
       // each reply's unread flag is the route's word now; kept as they were
       // when the route does not answer.
-      const askAgain = async () => {
+      const askAgain = single(async () => {
         if (!feed) return;
         const until = feed.from;
         const fresh = await askActivity(null);
@@ -785,7 +811,7 @@
         if (!fresh) return;
         feed = fresh;
         showActivity();
-      };
+      });
 
       // Back from a page through the back-forward cache, the index is the one
       // it was: ask again, so a page just read loses its mark, its count and
@@ -802,8 +828,11 @@
         askAgain();
       });
       // And so does a tick from serve's stream (lotuspod-index.js) that a
-      // page was published or commented on, or the listing rebuilt.
+      // page was published or commented on, or the listing rebuilt; one
+      // while a tab hides the listing asks nothing, as the listing asks
+      // again as it shows.
       document.addEventListener("lotuspod:change", (event) => {
+        if (document.querySelector("main.index")?.hidden) return;
         if (!["publish", "index", "comment", "resync"].includes(event.detail.what)) return;
         askSeen();
         askAgain();
