@@ -31,6 +31,15 @@ writing anything, a source whose `"use strict"` it would drop or whose JS is
 not a classic script (an `import` or `export`): render joins the scripts
 into one classic script.
 
+A page source written in TypeScript (`web/src/page-swap.ts`) runs inside the
+page script's shared closure, so it calls the closure's names (`live`,
+`element()`, `all()`, `json()`, `linkTab()`, `foldSection`, `SWAPPED`)
+directly. Their types are declared once, in `web/src/page-closure.d.ts`, with
+the source that defines each, and so is the detail of a page event such a
+source sends. Its own top-level names join the closure's too, so each must be
+one no other source uses: a duplicate `const` or `let` breaks the whole page
+script.
+
 The page's islands, widgets written in Preact, are the one bundle: the build
 bundles `web/src/islands/main.tsx` with its imports and Preact (pinned in
 `web/package.json` as a dependency) with `Bun.build` into

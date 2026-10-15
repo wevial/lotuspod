@@ -71,6 +71,9 @@
   var ANSWERED = "lotuspod:answered";
   // Sent on a decision form once an answer to it is saved.
   var SAVED = "lotuspod:saved";
+  // Sent on the document once a newer revision's changed parts are swapped
+  // into the page (web/src/page-swap.ts), naming each.
+  var SWAPPED = "lotuspod:swapped";
   // Sent on a diagram's svg each time its view (js/diagram-view.js) moves or
   // zooms it, so an open node card (js/diagram-cards.js) follows its box.
   var MOVED = "lotuspod:diagram-moved";
@@ -326,7 +329,9 @@
   // mark saying what waits in its section: the comments and replies drawn
   // into its box while it was folded, and its questions with no saved answer.
   // What it returns folds a later heading and body the same way, as the
-  // Answered table does once it is drawn.
+  // Answered table does once it is drawn and a section a newer revision
+  // swapped in does (web/src/page-swap.ts), and its drop forgets one taken
+  // away.
   function foldSections(wrappers) {
     var key = SECTIONS + location.pathname;
     var sections = [];
@@ -542,15 +547,24 @@
       }
     });
 
-    // A later section, folded if the reader left it folded or folded all
-    // before it was drawn.
-    return function (heading, wrapper, id) {
+    // A later section, folded as fold says when it is given (a swapped
+    // section folds as the one it replaces was), else if the reader left it
+    // folded or folded all before it was drawn.
+    function later(heading, wrapper, id, fold) {
       var section = add(heading, wrapper, id);
-      if (section && kept.indexOf(id) >= 0) {
+      if (section && (fold === undefined ? kept.indexOf(id) >= 0 : fold)) {
         set(section, true);
       }
       label();
+    }
+
+    // Forget the section whose body is wrapper, as a newer revision takes it
+    // away or replaces it.
+    later.drop = function (wrapper) {
+      sections = sections.filter(function (section) { return section.wrapper !== wrapper; });
+      label();
     };
+    return later;
   }
 
   var foldSection = foldSections(all("div.artifact-section-body"));

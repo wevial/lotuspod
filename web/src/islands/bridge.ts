@@ -10,6 +10,9 @@ export interface Live {
   // A revision the page learned it is now published at; once it is not its
   // own, the page offers a reload.
   seen(revision: unknown): void;
+  // The revision the page shows now: its own, then each one a swap brought
+  // in (web/src/page-swap.ts); "" on a page with none.
+  revision(): string;
   // What to keep over a reload: save() is kept, and unsent() says whether a
   // composer holds text not sent, so a hidden page does not reload itself.
   keep(keeper: { save(): unknown; unsent(): boolean }): void;
