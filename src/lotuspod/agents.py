@@ -267,9 +267,10 @@ def _page_lines(page: dict) -> list[str]:
 
 
 def _answer_lines(heading: str, item: dict, page_lines: list[str], routed: dict,
-                  owner: str) -> list[str]:
+                  owner: str, note_in_thread: bool = True) -> list[str]:
     """An answer item's lines under heading, for owner, routed as
-    _note_line takes it."""
+    _note_line takes it. note_in_thread says the output shows the note's
+    comment elsewhere, so the note is not repeated here."""
     answer, question = item["answer"], item["question"]
     asked = question["text"] or "(its words were not kept)"
     if question["reworded"]:
@@ -312,7 +313,7 @@ def _answer_lines(heading: str, item: dict, page_lines: list[str], routed: dict,
          "The answer is the reader's choice on this question only."),
         "",
     ]
-    if answer["note"] and not dismissed and not item.get("noteComment"):
+    if answer["note"] and not dismissed and not (note_in_thread and item.get("noteComment")):
         lines += ["Note:", "", fence(answer["note"]), ""]
     return lines
 
@@ -395,9 +396,10 @@ def inbox_text(payload: dict) -> str:
         page = item["page"]
         where = f"`{page['name']}`" + (f", {page['title']}" if page["title"] else "")
         if item["kind"] == "answer":
-            # As the pull shows it, but the page's source is not in the inbox.
+            # As the pull shows it, but the page's source and the note's
+            # thread are not in the inbox, so the note is said here.
             lines += _answer_lines(f"## {number}. Answer {item['answer']['id']} on {where}",
-                                   item, [], {}, owner)
+                                   item, [], {}, owner, note_in_thread=False)
             continue
         comment = item["comment"]
         source = f", from comment {comment['id']} in thread {item['thread']}" if comment else ""

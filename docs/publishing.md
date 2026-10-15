@@ -54,9 +54,11 @@ Render wraps everything from just after each section's `<h2>` to the next one
 `data-section` is the heading's id, after the comment boxes are placed, so a
 section's box and decision forms fold with it; the intro before the first
 `<h2>` is never wrapped. Render stamps content digests on the header (including
-the updated day it shows, not the second publish ran), outline, each section (heading plus content, including boxes
-and forms), and reference cards; the body's intro digest covers the prose
-before the first wrapped heading, or the whole body when no sections are wrapped.
+the day it shows as updated, but not the publish time, so the same source
+published twice stamps the same digest), outline, each section (heading plus
+content, including boxes and forms), and reference cards; the body's intro
+digest covers the prose before the first wrapped heading, or the whole body
+when no sections are wrapped.
 These stamps describe render's markup before scripts change it and are not yet
 read by the browser. The page script then turns each heading's text into a
 button with a caret: pressing it hides the section (`hidden="until-found"`)

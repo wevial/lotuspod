@@ -352,6 +352,23 @@ class AnswerTests(InboxTestCase):
         self.assertEqual(rc, 0, out + err)
         self.assertEqual([i["kind"] for i in self.pulled("one")], ["ask"])
 
+    def test_an_answer_note_is_shown_in_the_inbox_text(self):
+        page = (self.out_dir / "ops.html").read_text(encoding="utf-8")
+        version = decisions.read_forms(page)["decision-1"].version
+        status, answer = self.reader("POST", "/api/answers", {
+            "page": "ops", "question": "decision-1", "version": version, "choice": "yes",
+            "note": "Only if we buy the safety heater first"})
+        self.assertEqual(status, 201, answer)
+        [item] = self.pulled("one")
+        # The note is kept as a comment, which the inbox does not show.
+        self.assertTrue(item.get("noteComment"), item)
+
+        rc, out, err = run_cli("inbox", "pull", "--owner", "operator",
+                               "--socket", str(self.socket_path),
+                               "--credential", str(self.creds["one"]))
+        self.assertEqual(rc, 0, out + err)
+        self.assertIn("Only if we buy the safety heater first", out)
+
 
 class AnswerTextTests(unittest.TestCase):
     def test_an_undone_dismissal_and_a_reworded_question_say_so(self):
