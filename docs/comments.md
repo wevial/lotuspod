@@ -657,8 +657,8 @@ by one rule that the threads routes and the agents' pull share:
 - A comment with no mention is routed to `responder`, on a page with an
   owner too, whether or not the owner is listening. The responder answers
   what the page and its thread can answer, and puts what asks the owner to
-  act in the owner's inbox (see [The owner's
-  inbox](agents.md#the-owners-inbox)), replying "I've queued this for
+  act in the owner's inbox (see [The owner
+  inbox](agents.md#the-owner-inbox)), replying "I've queued this for
   OWNER: …".
 - A handle is listening when its last pull (see [the pull
   loop](agents.md#agents-the-pull-loop)) is within the owner
