@@ -2458,9 +2458,11 @@
       node.dataset.thread = String(root.id);
       thread.node = node;
       // A thread on the whole page of a page that has kept only its "page"
-      // box (republished with fewer sections) is that box's.
+      // box (republished with fewer sections) is that box's, and a thread on
+      // that "page" box is the whole page's once the page has sections.
       var box = sections.get(root.section) ||
-        (root.section === WHOLE_PAGE && sections.get("page")) || null;
+        (root.section === WHOLE_PAGE && sections.get("page")) ||
+        (root.section === "page" && sections.get(WHOLE_PAGE)) || null;
       thread.box = box;
       if (!box) {
         node.appendChild(element("p", "artifact-comment-section",
