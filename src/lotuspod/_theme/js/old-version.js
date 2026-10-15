@@ -8,7 +8,7 @@
     if (!every) {
       return;
     }
-    var page = decodeURIComponent(location.pathname.split("/").pop()).replace(/\.html$/, "");
+    var page = pageName();
     var shown = new URLSearchParams(location.search).get("version");
 
     // Only the request and its answer fail quietly; an error above throws.

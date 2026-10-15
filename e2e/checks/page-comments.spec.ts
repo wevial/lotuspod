@@ -217,4 +217,36 @@ test.describe('signed in', () => {
       .toHaveText(QUESTION);
     expect(errors).toEqual([]);
   });
+
+  test('a thread on the one page box shows in the whole page box once the page has sections', async ({ page, request }) => {
+    const name = `page-comments-more-${test.info().repeatEachIndex}`;
+    publish(name, ONE);
+    const posted = await request.post('/api/comments', {
+      headers: SIGNED_IN, data: { page: name, section: 'page', text: QUESTION } });
+    expect(posted.status()).toBe(201);
+    publish(name, TWO);
+    const errors = watch(page);
+    await load(page, `/${name}.html`);
+    const whole = box(page, '');
+    await expect(whole.chip).toHaveText('1 comment · waiting');
+    await expect(page.locator('.artifact-comments-group-title', { hasText: 'Sections that have changed' }))
+      .toBeHidden();
+    await whole.chip.click();
+    const side = panel(page);
+    await expect(side.titles).toHaveText(['This page']);
+    await expect(side.group('This page').locator('.artifact-comment-item--reader .artifact-comment-text'))
+      .toHaveText(QUESTION);
+    const [thread] = await threads(request, name);
+    expect(thread.root.section).toBe('page');
+
+    await page.setViewportSize(MEDIUM);
+    await load(page, `/${name}.html`);
+    await expect(page.locator('section.artifact-comments-changed')).toHaveCount(0);
+    await whole.chip.click();
+    const pop = page.locator('.artifact-comments-popover');
+    await expect(pop).toBeVisible();
+    await expect(pop.locator('.artifact-comments-held-title')).toHaveText('This page');
+    await expect(pop.locator(`.artifact-comment-thread[data-thread="${thread.root.id}"]`)).toBeVisible();
+    expect(errors).toEqual([]);
+  });
 });

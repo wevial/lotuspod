@@ -740,10 +740,15 @@ def old_page(page_html: str, name: str, version: Version, behind: int,
         f'<a href="{current}">Back to current</a></p></div>'
     )
 
-    def opened(match: re.Match) -> str:
-        return f'<main class="{match.group(1)} artifact--old-version"{match.group(2)}>{banner}'
-
-    page_html = _MAIN_OPEN_RE.sub(opened, page_html, count=1)
+    # Found as a browser finds it, so no main tag spelled in the title or a
+    # comment takes the class or the banner.
+    places = Places(page_html)
+    if places.main is not None:
+        start, end = places.main
+        tag = _MAIN_OPEN_RE.sub(
+            lambda match: f'<main class="{match.group(1)} artifact--old-version"{match.group(2)}>',
+            page_html[start:end], count=1)
+        page_html = edited(page_html, [(start, end, tag), (end, end, banner)])
     tag = (f'  <script nonce="{html.escape(nonce)}" src="{html.escape(script)}" defer>'
            '</script>\n')
     end = page_html.rfind("</body>")
