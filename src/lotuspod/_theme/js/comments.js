@@ -886,7 +886,8 @@
         }
         compose({ box: box, start: spot.start, quote: kept.quote });
         open.field.value = String(kept.text || "");
-        var over = attached.get(open.form).restore(kept.images);
+        var images = attached.get(open.form);
+        var over = kept.from ? kept.from.pass(images) : images.restore(kept.images);
         if (over) {
           open.form.querySelector(".artifact-comment-status").textContent = over;
         }
@@ -939,6 +940,7 @@
         }
         var kept = api.writing();
         var mine = open;
+        kept.from = attached.get(mine.form);
         kept.box = mine.box;
         kept.saving = mine.saving || null;
         mine.holder.remove();
@@ -2971,14 +2973,17 @@
     // Images go with their text, up to MAX_IMAGES a composer.
     var kept = live.kept();
 
-    // Add each's text and images to form; why some images were not.
+    // Add each's text and images to form; why some images were not. Those
+    // of a composer still on the page (each.from: its attachments, as a
+    // swap takes it away) come as they are now, any still uploading too.
     function join(form, each) {
       var field = form.elements.text;
       var text = String(each.text || "");
       if (text.trim()) {
         field.value = field.value.trim() ? field.value + "\n\n" + text : text;
       }
-      return attached.get(form).restore(each.images);
+      var images = attached.get(form);
+      return each.from ? each.from.pass(images) : images.restore(each.images);
     }
 
     function told(form, why) {
@@ -2989,18 +2994,41 @@
 
     // Text whose place is gone goes to the form for a new thread on its
     // section, else on the box at its index, else on the page's first,
-    // saying why; that box.
+    // saying why; that box. A form sending a post empties once it is saved,
+    // so what goes to one joins it after, opened for the reader (or goes on
+    // to another form, should a swap take this one away meanwhile).
     function rehome(each, why) {
       var box = (typeof each.section === "string" && sections.get(each.section)) ||
         boxes[Number(each.index)] || boxes[0];
       var form = forms.get(box);
-      var over = join(form, each);
-      told(form, over ? why + " " + over : why);
+      var saving = sending.get(form);
+      if (saving) {
+        saving.then(function () {
+          var now = boxWith(form);
+          if (!now) {
+            now = rehome(each, why);
+          } else {
+            // A post not saved says why first.
+            var said = form.querySelector(".artifact-comment-status").textContent;
+            land(form, each, said ? said + " " + why : why);
+          }
+          panel.reopen({ section: now.dataset.section, writing: true });
+        });
+        return box;
+      }
+      land(form, each, why);
       return box;
     }
 
+    // Join each to form, saying why.
+    function land(form, each, why) {
+      var over = join(form, each);
+      told(form, over ? why + " " + over : why);
+    }
+
     function worth(each) {
-      return String(each.text || "").trim() !== "" || (Array.isArray(each.images) && each.images.length > 0);
+      return String(each.text || "").trim() !== "" || (Array.isArray(each.images) && each.images.length > 0) ||
+        Boolean(each.from && each.from.held());
     }
 
     function restore() {
@@ -3367,7 +3395,7 @@
       var each = { field: form.elements.text, images: attached.get(form) };
       var unsent = holding(each) ? {
         section: old.dataset.section, index: place, text: each.field.value,
-        images: each.images.kept(), saving: sending.get(form) || null,
+        images: each.images.kept(), from: each.images, saving: sending.get(form) || null,
       } : null;
       boxes.splice(at, 1);
       if (sections.get(old.dataset.section) === old) {

@@ -219,15 +219,31 @@ async function setVisibility(page: Page, state: 'hidden' | 'visible') {
 // Paste the fish JPEG into a field, as the clipboard hands it to the page,
 // and wait for its upload to be answered.
 async function pasteFish(page: Page, field: Locator) {
-  const base64 = fs.readFileSync(FISH).toString('base64');
   const uploaded = page.waitForResponse((response) => new URL(response.url()).pathname === '/api/media');
+  await pasteFishOnly(field);
+  expect((await uploaded).status()).toBe(201);
+}
+
+// Paste the fish JPEG into a field, its upload left to answer when it may.
+async function pasteFishOnly(field: Locator) {
+  const base64 = fs.readFileSync(FISH).toString('base64');
   await field.evaluate((node, base64) => {
     const data = new DataTransfer();
     const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
     data.items.add(new File([bytes], 'fish.jpg', { type: 'image/jpeg' }));
     node.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }));
   }, base64);
-  expect((await uploaded).status()).toBe(201);
+}
+
+// Hold the page's uploads (/api/media) until the returned release is called.
+async function holdUploads(page: Page) {
+  let release!: () => void;
+  const released = new Promise<void>((resolve) => { release = resolve; });
+  await page.route((url) => url.pathname === '/api/media', async (route) => {
+    await released;
+    await route.continue();
+  });
+  return release;
 }
 
 // The thumbnails attached in a form: their /media/ paths, once drawn.
@@ -1023,6 +1039,138 @@ test.describe('signed in', () => {
     await expect(form.locator('textarea')).toHaveValue(UNSENT);
     await expect(form.locator('.artifact-comment-status')).toHaveText(
       'Where you were writing has changed since. Your text is kept here.');
+    expect(loads.count).toBe(0);
+    expect(errors).toEqual([]);
+  });
+
+  test('a comment on a section renamed since joins the form where the section was after a post it is sending there', async ({ page }) => {
+    const errors = watchErrors(page);
+    const name = 'live-page-renamed-sending';
+    publish(name, source('Live page renamed sending', 'first'));
+    await stopClock(page);
+    await open(page, name);
+    await page.locator('details.artifact-comment[data-section="risks"] summary').click();
+    const risks = page.locator('.artifact-comments-panel').getByRole('textbox', { name: 'Comment on Risks' });
+    const UNSENT = 'What cracks first, the pump or the pipe?';
+    await risks.fill(UNSENT);
+
+    const loads = watchLoads(page);
+    const second = publish(name, source('Live page renamed sending', 'first').replace(/Risks/g, 'Hazards'));
+    await page.clock.runFor(CHECK);
+    await expect.poll(() => revisionOf(page)).toBe(second);
+    const bar = page.locator('div.artifact-section-body[data-section="risks"] div.artifact-swap-held');
+    await expect(bar).toContainText('This section was removed');
+
+    // A Hazards comment is sending when Risks is updated.
+    let release!: () => void;
+    const released = new Promise<void>((resolve) => { release = resolve; });
+    await page.route((url) => url.pathname === '/api/comments', async (route) => {
+      if (route.request().method() !== 'POST') {
+        await route.fallback();
+        return;
+      }
+      await released;
+      await route.continue();
+    });
+    await page.locator('details.artifact-comment[data-section="hazards"] summary').click();
+    const form = page.locator('.artifact-comments-panel form.artifact-comment-form')
+      .filter({ has: page.getByRole('textbox', { name: 'Comment on Hazards' }) });
+    const SENT = 'Is the pipe lagged?';
+    await form.locator('textarea').fill(SENT);
+    await form.getByRole('button', { name: 'Comment' }).click();
+    await expect(form.locator('.artifact-comment-status')).toHaveText('Saving...');
+    await bar.getByRole('button', { name: 'Update' }).click();
+    await expect(page.locator('details.artifact-comment[data-section="risks"]')).toHaveCount(0);
+
+    const [posted] = await Promise.all([
+      page.waitForResponse((r) => new URL(r.url()).pathname === '/api/comments' && r.request().method() === 'POST'),
+      release(),
+    ]);
+    expect(posted.status()).toBe(201);
+    expect(posted.request().postDataJSON().text).toBe(SENT);
+    await expect(form.locator('textarea')).toBeVisible();
+    await expect(form.locator('textarea')).toHaveValue(UNSENT);
+    await expect(form.locator('.artifact-comment-status')).toHaveText(
+      'Where you were writing has changed since. Your text is kept here.');
+    expect(loads.count).toBe(0);
+    expect(errors).toEqual([]);
+  });
+
+  test('an image still uploading to a section renamed since joins the form where the section was', async ({ page }) => {
+    const errors = watchErrors(page);
+    const name = 'live-page-renamed-uploading';
+    publish(name, source('Live page renamed uploading', 'first'));
+    await stopClock(page);
+    await open(page, name);
+    await page.locator('details.artifact-comment[data-section="risks"] summary').click();
+    const risks = page.locator('.artifact-comments-panel').getByRole('textbox', { name: 'Comment on Risks' });
+    const UNSENT = 'What cracks first, the pump or the pipe?';
+    await risks.fill(UNSENT);
+    const release = await holdUploads(page);
+    await pasteFishOnly(risks);
+    await expect(page.locator('.artifact-attach-item--loading')).toHaveCount(1);
+
+    const loads = watchLoads(page);
+    const second = publish(name, source('Live page renamed uploading', 'first').replace(/Risks/g, 'Hazards'));
+    await page.clock.runFor(CHECK);
+    await expect.poll(() => revisionOf(page)).toBe(second);
+    const bar = page.locator('div.artifact-section-body[data-section="risks"] div.artifact-swap-held');
+    await expect(bar).toContainText('This section was removed');
+    await bar.getByRole('button', { name: 'Update' }).click();
+
+    const form = page.locator('.artifact-comments-panel form.artifact-comment-form')
+      .filter({ has: page.getByRole('textbox', { name: 'Comment on Hazards' }) });
+    await expect(form.locator('textarea')).toHaveValue(UNSENT);
+    await expect(form.locator('.artifact-attach-item--loading')).toHaveCount(1);
+    const [uploaded] = await Promise.all([
+      page.waitForResponse((r) => new URL(r.url()).pathname === '/api/media'),
+      release(),
+    ]);
+    expect(uploaded.status()).toBe(201);
+    await expect(form.locator('.artifact-attach-item img')).toHaveCount(1);
+    const attached = await attachedIn(form);
+    expect(attached[0]).toMatch(MEDIA_URL);
+    await expect(form.locator('.artifact-comment-status')).toHaveText(
+      'Where you were writing has changed since. Your text is kept here.');
+    expect(loads.count).toBe(0);
+    expect(errors).toEqual([]);
+  });
+
+  test('an image still uploading to a passage comment whose words changed joins its section\'s form', async ({ page }) => {
+    const errors = watchErrors(page);
+    const name = 'live-page-passage-uploading';
+    publish(name, source('Live page passage uploading', 'first'));
+    await stopClock(page);
+    await open(page, name);
+    const field = await selectPassage(page, 'Risks, paragraph 1', 18);
+    const UNSENT = 'Which pump is this?';
+    await field.fill(UNSENT);
+    const release = await holdUploads(page);
+    await pasteFishOnly(field);
+    await expect(page.locator('form.artifact-passage-form .artifact-attach-item--loading')).toHaveCount(1);
+
+    const loads = watchLoads(page);
+    const second = publish(name, source('Live page passage uploading', 'first')
+      .replace('Risks, paragraph 1:', 'Risks, first point:'));
+    await page.clock.runFor(CHECK);
+    await expect.poll(() => revisionOf(page)).toBe(second);
+    const bar = page.locator('div.artifact-section-body[data-section="risks"] div.artifact-swap-held');
+    await expect(bar).toContainText('This section changed');
+    await bar.getByRole('button', { name: 'Update' }).click();
+
+    const form = page.locator('.artifact-comments-panel form.artifact-comment-form')
+      .filter({ has: page.getByRole('textbox', { name: 'Comment on Risks' }) });
+    await expect(form.locator('textarea')).toHaveValue(UNSENT);
+    await expect(form.locator('.artifact-attach-item--loading')).toHaveCount(1);
+    const [uploaded] = await Promise.all([
+      page.waitForResponse((r) => new URL(r.url()).pathname === '/api/media'),
+      release(),
+    ]);
+    expect(uploaded.status()).toBe(201);
+    await expect(form.locator('.artifact-attach-item img')).toHaveCount(1);
+    expect((await attachedIn(form))[0]).toMatch(MEDIA_URL);
+    await expect(form.locator('.artifact-comment-status')).toHaveText(
+      'The words you selected have changed since. Your comment is kept here, on the section.');
     expect(loads.count).toBe(0);
     expect(errors).toEqual([]);
   });

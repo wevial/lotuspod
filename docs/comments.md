@@ -279,7 +279,8 @@ section whose form for a new thread holds text or images not sent, is held
 back with the bar too. Its Update opens the passage comment again on its
 words, text and images, where the new text still has them; else what was
 written goes to a form for a new thread, saying why, as after a reload
-(below). It does not swap, and shows the banner as below, when the theme or
+(below), with any image still uploading, which joins it once uploaded; a
+form sending a comment takes it once that comment is saved. It does not swap, and shows the banner as below, when the theme or
 the page's policy changed, when a changed part, as it was or as it is now,
 holds a diagram, a reference card or a table, or when it holds a decision
 form while the page shows the review sheet (a page that loaded with decision
