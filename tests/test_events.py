@@ -1,13 +1,16 @@
 """Stream resource limits and shutdown over the real HTTP handler."""
 import http.client
 import json
+import queue
+import socket
 import tempfile
 import threading
 import time
 import unittest
+from unittest import mock
 from pathlib import Path
 
-from lotuspod import access, cli, events
+from lotuspod import access, archive, cli, events
 from tests import access_keys as keys
 
 
@@ -66,6 +69,85 @@ class EventsTest(unittest.TestCase):
         start = time.monotonic()
         self.assertEqual(stream.readline(), b": keepalive\n")
         self.assertLess(time.monotonic() - start, 1)
+
+    def test_half_closed_request_keeps_reading(self):
+        hub = self.start(heartbeat=.2)
+        conn = http.client.HTTPConnection("127.0.0.1", self.port, timeout=2)
+        self.addCleanup(conn.close)
+        conn.request("GET", "/api/events", headers={"Cf-Access-Jwt-Assertion": keys.assertion()})
+        conn.sock.shutdown(socket.SHUT_WR)
+        response = conn.getresponse()
+        self.addCleanup(response.close)
+        self.assertEqual(response.status, 200)
+        self.assertEqual(response.readline(), b"retry: 3000\n")
+        self.assertEqual(response.readline(), b"\n")
+        self.assertEqual(response.readline(), b": keepalive\n")
+        self.assertEqual(response.readline(), b"\n")
+        hub.changed("index", None)
+        while True:
+            line = response.readline()
+            self.assertTrue(line, "half-close ended the response")
+            if line == b"event: change\n":
+                break
+        self.assertEqual(json.loads(response.readline().decode().removeprefix("data: ")),
+                         {"what": "index", "page": None})
+
+    def render_pages(self, hub):
+        for name in ("pond", "next"):
+            self.assertEqual(cli.main(["render", "--name", name, "--title", name,
+                                       "--body", "<p>Page</p>", "--out-dir", str(hub.out_dir)]), 0)
+        self.assertEqual(cli.main(["manifest", "--out-dir", str(hub.out_dir)]), 0)
+        self.assertEqual(cli.main(["index", "--out-dir", str(hub.out_dir)]), 0)
+
+    def test_index_tick_waits_for_rebuild(self):
+        hub = self.start(poll=.02)
+        self.render_pages(hub)
+        subscription = hub.open()
+        original_index = (hub.out_dir / cli.INDEX_FILE).read_bytes()
+        rebuild = cli.cmd_index
+
+        def paused_index(args):
+            # Archive, like publish, replaces the manifest before rebuilding
+            # the index while holding the publish lock.
+            with self.assertRaises(queue.Empty):
+                subscription.get(timeout=.2)
+            self.assertEqual((hub.out_dir / cli.INDEX_FILE).read_bytes(), original_index)
+            return rebuild(args)
+
+        with mock.patch.object(cli, "cmd_index", side_effect=paused_index):
+            archive.set_archived(hub.out_dir, "pond", True)
+        self.assertEqual(subscription.get(timeout=2), events.frame("publish", "pond"))
+        self.assertEqual(subscription.get(timeout=2), events.frame("index", None))
+        self.assertNotEqual((hub.out_dir / cli.INDEX_FILE).read_bytes(), original_index)
+
+    def test_open_during_publish_and_close_while_locked(self):
+        hub = self.start(poll=.02)
+        self.render_pages(hub)
+        with cli.publish_lock(hub.out_dir):
+            subscription = hub.open()
+            with self.assertRaises(queue.Empty):
+                subscription.get(timeout=.1)
+        self.assertEqual(subscription.get(timeout=2), events.frame("publish", "next"))
+        self.assertEqual(subscription.get(timeout=2), events.frame("publish", "pond"))
+        self.assertEqual(subscription.get(timeout=2), events.frame("index", None))
+        with cli.publish_lock(hub.out_dir):
+            cli.write_atomic(hub.out_dir / cli.MANIFEST_FILE,
+                             (hub.out_dir / cli.MANIFEST_FILE).read_bytes())
+            with self.assertRaises(queue.Empty):
+                subscription.get(timeout=.1)
+            closer = threading.Thread(target=hub.close, daemon=True)
+            closer.start()
+            closer.join(timeout=1)
+            self.assertFalse(closer.is_alive(), "shutdown waited for the publisher")
+
+    def test_archive_successor_notifies_page(self):
+        hub = self.start(poll=.02)
+        self.render_pages(hub)
+        archive.set_archived(hub.out_dir, "pond", True)
+        subscription = hub.open()
+        archive.set_archived(hub.out_dir, "pond", True, "next")
+        self.assertEqual(subscription.get(timeout=2), events.frame("publish", "pond"))
+        self.assertEqual(subscription.get(timeout=2), events.frame("index", None))
 
     def test_lifetime(self):
         self.start(max_age=1)

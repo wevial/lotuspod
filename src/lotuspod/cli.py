@@ -1258,15 +1258,16 @@ def html_title(body: str) -> tuple[str, str]:
 
 
 @contextmanager
-def publish_lock(out_dir: Path):
+def publish_lock(out_dir: Path, *, blocking: bool = True):
     """Hold the output directory's publish lock for the block.
 
     The lock file sits beside the directory, never inside it, so it is
     never a file of the site and never reaches the artifacts repository.
+    With blocking=False, raise BlockingIOError if a publisher holds it.
     """
     lock_path = out_dir.parent / f".{out_dir.name}.publish.lock"
     with open(lock_path, "a") as fh:
-        fcntl.flock(fh.fileno(), fcntl.LOCK_EX)
+        fcntl.flock(fh.fileno(), fcntl.LOCK_EX | (0 if blocking else fcntl.LOCK_NB))
         yield
 
 
@@ -2336,10 +2337,12 @@ class _AllowListHandler(SimpleHTTPRequestHandler):
                 now = time.monotonic()
                 if now >= deadline:
                     break
-                # Notice a reader closing even between heartbeats.
+                # EOF on the request side can be a legitimate half-close.
+                # Probe with a comment instead: only a failed response write
+                # proves the reader is gone, and releases its slot promptly.
                 if select.select([self.connection], [], [], 0)[0]:
                     if not self.connection.recv(1, socket.MSG_PEEK):
-                        break
+                        heartbeat = min(heartbeat, now + .2)
                 try:
                     data = subscription.get(timeout=max(0, min(.2, deadline-now, heartbeat-now)))
                 except queue.Empty:
