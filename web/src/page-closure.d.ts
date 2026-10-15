@@ -64,7 +64,3 @@ declare const SWAPPED: "lotuspod:swapped";
 interface DocumentEventMap {
   "lotuspod:swapped": CustomEvent<SwappedDetail>;
 }
-
-// web/src/page-swap.ts: hold back from a swap each part whose nodes (a
-// section's heading and wrapper, or the intro's) test says to.
-declare function holdSwap(test: (nodes: readonly Element[]) => boolean): void;

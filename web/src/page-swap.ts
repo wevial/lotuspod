@@ -12,9 +12,9 @@
 // bar stays where it was in the window, as do the next one kept when the swap
 // takes it away and the new one when it replaces it.
 //
-// A changed or removed part any test registered with holdSwap holds (the
-// swap's own: the focus is in it) stays as it is, under a bar saying so with
-// an Update button, which applies the part's newest nodes as a swap would.
+// A changed or removed part holding the reader's focus stays as it is, under
+// a bar saying so with an Update button, which applies the part's newest
+// nodes as a swap would.
 // The page still takes the new revision; a later swap replaces the kept nodes
 // when the part changed again, and takes the bar away when it is back to the
 // open page's digest.
@@ -31,17 +31,6 @@
 // What a swapped part may not hold yet, old or new: each later ticket mounts
 // one and takes it off.
 const SWAP_UNMOUNTED = "details.artifact-comment, form.artifact-decision, pre.mermaid, button.artifact-ref, table";
-
-// Each test a changed or removed part, as the open page has it, is put to
-// before a swap: a part any test holds is kept as it is under a bar until the
-// reader presses its Update (holdSwap).
-const SWAP_HOLDS: ((nodes: readonly Element[]) => boolean)[] = [];
-
-// Hold back from a swap each part whose nodes (a section's heading and
-// wrapper, or the intro's) test says to.
-function holdSwap(test: (nodes: readonly Element[]) => boolean): void {
-  SWAP_HOLDS.push(test);
-}
 
 function pageSwap(): void {
   // What the page script adds to the body outside any part, left where it is.
@@ -70,7 +59,6 @@ function pageSwap(): void {
   }
   interface HeldIntro {
     bar: HTMLElement;
-    text: HTMLElement;
     fresh: Node[];
     digest: string;
   }
@@ -265,11 +253,11 @@ function pageSwap(): void {
       return null;
     }
 
-    // Each changed or removed part, as the open page has it, that a test
-    // holds back: kept as it is, its new nodes kept for the reader's Update.
+    // Each changed or removed part, as the open page has it, that holds the
+    // reader's focus: kept as it is, its new nodes kept for the reader's Update.
     const holds = (nodes: Node[]): boolean => {
-      const elements = nodes.filter((node): node is Element => node instanceof Element);
-      return SWAP_HOLDS.some((test) => test(elements));
+      const focused = document.activeElement;
+      return focused !== null && focused !== document.body && nodes.some((node) => node.contains(focused));
     };
     const introHeld = introChanged && holds(intro);
     const sectionHeld = new Set([...removed, ...changed.map((part) => byId.get(part.id)!)]
@@ -477,7 +465,7 @@ function pageSwap(): void {
       const made = heldBar(updateIntro);
       made.text.textContent = CHANGED_TEXT;
       body.prepend(made.bar);
-      heldIntro = { ...made, fresh, digest };
+      heldIntro = { bar: made.bar, fresh, digest };
     }
     heldIntro.fresh = fresh;
     heldIntro.digest = digest;
@@ -497,11 +485,6 @@ function pageSwap(): void {
     toggleOf(parts[0]?.heading)?.focus();
   }
 
-  // The reader's focus is not swapped out from under them.
-  holdSwap((nodes) => {
-    const focused = document.activeElement;
-    return focused !== null && focused !== document.body && nodes.some((node) => node.contains(focused));
-  });
   live.swapWith(swap);
 }
 

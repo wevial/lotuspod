@@ -1,9 +1,5 @@
 // Built from web/src/page-swap.ts by web/build.ts. Edit that file, not this one.
 const SWAP_UNMOUNTED = "details.artifact-comment, form.artifact-decision, pre.mermaid, button.artifact-ref, table";
-const SWAP_HOLDS = [];
-function holdSwap(test) {
-  SWAP_HOLDS.push(test);
-}
 function pageSwap() {
   const ADDED = "div.artifact-answered, .artifact-comments-changed";
   const HELD = "div.artifact-swap-held";
@@ -170,8 +166,8 @@ function pageSwap() {
       return null;
     }
     const holds = (nodes) => {
-      const elements = nodes.filter((node) => node instanceof Element);
-      return SWAP_HOLDS.some((test) => test(elements));
+      const focused = document.activeElement;
+      return focused !== null && focused !== document.body && nodes.some((node) => node.contains(focused));
     };
     const introHeld = introChanged && holds(intro);
     const sectionHeld = new Set([...removed, ...changed.map((part) => byId.get(part.id))].filter((part) => holds([part.heading, part.wrapper])).map((part) => part.id));
@@ -351,7 +347,7 @@ function pageSwap() {
       const made = heldBar(updateIntro);
       made.text.textContent = CHANGED_TEXT;
       body.prepend(made.bar);
-      heldIntro = { ...made, fresh, digest };
+      heldIntro = { bar: made.bar, fresh, digest };
     }
     heldIntro.fresh = fresh;
     heldIntro.digest = digest;
@@ -369,10 +365,6 @@ function pageSwap() {
     swapped(live.revision(), [applyIntro(body, introOf(body, parts), entry.fresh, entry.digest)]);
     toggleOf(parts[0]?.heading)?.focus();
   }
-  holdSwap((nodes) => {
-    const focused = document.activeElement;
-    return focused !== null && focused !== document.body && nodes.some((node) => node.contains(focused));
-  });
   live.swapWith(swap);
 }
 pageSwap();
