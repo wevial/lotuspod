@@ -801,6 +801,13 @@
         askSeen();
         askAgain();
       });
+      // And so does a tick from serve's stream (lotuspod-index.js) that a
+      // page was published or commented on, or the listing rebuilt.
+      document.addEventListener("lotuspod:change", (event) => {
+        if (!["publish", "index", "comment", "resync"].includes(event.detail.what)) return;
+        askSeen();
+        askAgain();
+      });
     })();
   </script>
   <script src="lotuspod-index.js?v={{theme_hash}}" defer></script>

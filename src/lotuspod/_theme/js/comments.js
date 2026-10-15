@@ -3017,10 +3017,43 @@
       if (hidden()) {
         clearTimeout(timer);
         timer = null;
+      } else if (ticked && checking) {
+        ticked = false;
+        readNow();
       } else if (!timer && !reading && checking && wanted()) {
         fresh = true;
         read();
       }
+    });
+
+    // Read the threads at once, or once more after the read in flight, which
+    // may have missed what called for this one.
+    function readNow() {
+      if (reading) {
+        again = true;
+        return;
+      }
+      clearTimeout(timer);
+      fresh = true;
+      read();
+    }
+
+    // A tick from serve's stream (js/live-events.js) that this page's
+    // threads or answers changed, or that the stream missed some, reads the
+    // threads at once; one while the page is hidden is read once it is seen
+    // again. Signed out, nothing is read.
+    var ticked = false;
+    document.addEventListener("lotuspod:change", function (event) {
+      var tick = event.detail;
+      if (!checking || !(tick.what === "resync" ||
+          ((tick.what === "comment" || tick.what === "answer") && tick.page === page))) {
+        return;
+      }
+      if (hidden()) {
+        ticked = true;
+        return;
+      }
+      readNow();
     });
 
     // The box whose form for a new thread form is: a swap gives a section's
@@ -3236,13 +3269,7 @@
       }
       owed = true;
       notes += 1;
-      if (reading) {
-        again = true;
-        return;
-      }
-      clearTimeout(timer);
-      fresh = true;
-      read();
+      readNow();
     }
 
     // Each decision's Ask, beside "Save answer": the note's text posted as

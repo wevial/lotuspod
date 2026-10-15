@@ -38,12 +38,13 @@
 // A tab that is not active shows a dot from the seen route: amber ("new
 // version") when its pod was published again since this reader last opened
 // it, else orchid ("new replies") when someone else has commented since. The
-// route is read on load, when a tab is activated or closed and when the window
-// is seen again; activating a tab first posts the framed page's revision, so
-// what it shows counts as read. A page with no revision (rendered, never
-// published) has no script of its own to record its opening, so each time it
-// loads in a tab, it is posted at "", its own. Any answer but 200 (signed out,
-// or the demo) shows no dot.
+// route is read on load, when a tab is activated or closed, when the window
+// is seen again, and on a tick from serve's stream that a page was published
+// or commented on or the listing rebuilt (js/live-events.js); activating a tab
+// first posts the framed page's revision, so what it shows counts as read. A
+// page with no revision (rendered, never published) has no script of its own
+// to record its opening, so each time it loads in a tab, it is posted at "",
+// its own. Any answer but 200 (signed out, or the demo) shows no dot.
 //
 // The pod finder (js/pod-finder.js) opens from a "+" after the last tab, a
 // "Find a pod" button at the strip's end, and Cmd+K on a Mac or Ctrl+K
@@ -241,6 +242,10 @@
       pod.title.append(pod.dot);
     }
   };
+
+  // The ticks from serve's stream (js/live-events.js) that read the route
+  // again.
+  const TICKS = new Set(["publish", "index", "comment", "resync"]);
 
   // Answers are drawn in the order they were asked: a later read wins.
   let asked = 0;
@@ -723,6 +728,9 @@
   window.addEventListener("focus", askSeen);
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible") askSeen();
+  });
+  document.addEventListener("lotuspod:change", (event) => {
+    if (TICKS.has(event.detail.what)) askSeen();
   });
 
   // The tabs the address names, in its order, the listing's pods alone.

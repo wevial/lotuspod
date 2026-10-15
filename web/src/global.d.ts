@@ -19,3 +19,16 @@ interface DocumentEventMap {
   "lotuspod:find": CustomEvent<PodFindDetail>;
   "lotuspod:open": CustomEvent<PodOpenDetail>;
 }
+
+// serve's change stream (/api/events), sent on the document by
+// js/live-events.js: what changed (comment, answer, publish or index, or
+// resync once a dropped stream opens again) and the page it names, null for
+// index and resync.
+interface LotuspodChangeDetail {
+  what: string;
+  page: string | null;
+}
+
+interface DocumentEventMap {
+  "lotuspod:change": CustomEvent<LotuspodChangeDetail>;
+}
