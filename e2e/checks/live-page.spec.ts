@@ -1394,7 +1394,7 @@ test.describe('signed in', () => {
     const name = 'live-page-comments-title';
     listen();
     publish(name, source('Live page title', 'first'));
-    const root = await comment(request, name, 'findings', 'Which heater?');
+    const root = await comment(request, name, 'findings', '@hermes Which heater?');
     expect(root.state).toBe('pending');
     await stopClock(page);
     await open(page, name);
@@ -1582,6 +1582,315 @@ test.describe('signed in', () => {
     expect(posted.status()).toBe(201);
     await expect(second.locator('mark.artifact-passage')).toHaveText(TWICE);
     await expect(page.locator('div.artifact-section-body[data-section="risks"] p').nth(0).locator('mark')).toHaveCount(0);
+    expect(errors).toEqual([]);
+  });
+
+  // A "Decisions for the maintainer" section of two questions, the first
+  // worded as first says.
+  function decisions(first = 'Which heater?'): [string, string[]] {
+    return ['Decisions for the maintainer', ['Two questions for the maintainer.',
+      '| # | Question | Options | Default |\n| --- | --- | --- | --- |\n' +
+      `| 1 | ${first} | Small / Large | Small |\n` +
+      '| 2 | Lift the pump out? | Yes / No | No |']];
+  }
+
+  function card(page: Page, question: string) {
+    const form = page.locator(`form.artifact-decision[data-question="${question}"]`);
+    return {
+      form,
+      option: (name: string) => form.getByRole('radio', { name }),
+      save: form.getByRole('button', { name: 'Save answer' }),
+      ask: form.getByRole('button', { name: 'Ask', exact: true }),
+      saved: form.locator('.artifact-decision-saved-line'),
+      earlier: form.locator('.artifact-decision-earlier'),
+      text: form.locator('.artifact-decision-text'),
+      chip: page.locator(`form.artifact-decision[data-question="${question}"] + .artifact-decision-chip`),
+    };
+  }
+
+  // Save an answer through a form's "Save answer".
+  async function answer(page: Page, question: string, option: string) {
+    const made = card(page, question);
+    await made.option(option).check();
+    const [saved] = await Promise.all([
+      page.waitForResponse((r) => new URL(r.url()).pathname === '/api/answers' && r.request().method() === 'POST'),
+      made.save.click(),
+    ]);
+    expect(saved.status()).toBe(201);
+  }
+
+  // The body's children after its last section: the Answered table alone.
+  function afterSections(page: Page) {
+    return page.locator('section.artifact-body').evaluate((body) => {
+      const wrappers = body.querySelectorAll(':scope > div.artifact-section-body');
+      const names: string[] = [];
+      for (let node = wrappers[wrappers.length - 1]!.nextElementSibling; node; node = node.nextElementSibling) {
+        names.push(node.className);
+      }
+      return names;
+    });
+  }
+
+  // A page with comments on and no decisions, open, its clock stopped.
+  async function undecided(page: Page, name: string) {
+    publish(name, sectioned(name, pond()));
+    await stopClock(page);
+    await open(page, name);
+    await expect(page.locator('form.artifact-decision')).toHaveCount(0);
+    const moved = watchLoads(page);
+    await page.evaluate(() => { (window as any).__stayed = 'this page'; });
+    return moved;
+  }
+
+  // Publish markdown and let the 60-second check swap it in.
+  async function republish(page: Page, name: string, markdown: string) {
+    const revision = publish(name, markdown);
+    await page.clock.runFor(CHECK);
+    await expect.poll(() => revisionOf(page)).toBe(revision);
+    return revision;
+  }
+
+  test('a decisions section a republish adds is wired in place: answered, folded, listed and re-read when reworded', async ({ page }) => {
+    const errors = watchErrors(page);
+    const name = 'live-page-decisions-added';
+    const moved = await undecided(page, name);
+
+    await republish(page, name, sectioned(name, [...pond(), decisions()]));
+    const first = card(page, 'decision-1');
+    const second = card(page, 'decision-2');
+    await expect(page.locator('form.artifact-decision')).toHaveCount(2);
+    await expect(banner(page).node).toHaveCount(0);
+    await expect(first.ask).toBeVisible();
+    await expect(second.ask).toBeVisible();
+    // The fixture's reader is an owner: Dismiss follows Ask on each.
+    for (const each of [first, second]) {
+      await expect(each.form.getByRole('button', { name: 'Dismiss' })).toBeVisible();
+      expect(await each.ask.evaluate((node) => node.nextElementSibling?.textContent)).toBe('Dismiss');
+    }
+    // No review sheet on a page that loaded with no form.
+    await expect(page.locator('div.artifact-review-bar')).toHaveCount(0);
+
+    await answer(page, 'decision-1', 'Large');
+    await expect(first.saved).toHaveText('✓ Saved · Large · change');
+    const table = page.locator('div.artifact-answered');
+    await expect(table.locator('tbody tr')).toHaveCount(1);
+    await expect(table.locator('tbody tr td.artifact-answered-question')).toHaveText('Which heater?');
+    expect(await afterSections(page)).toEqual(['artifact-answered']);
+    // The focus, on "change", would hold the section back.
+    await page.locator('h1.artifact-title').click();
+    await expect(first.form.locator(':focus')).toHaveCount(0);
+
+    // Reworded: the answer is to an earlier wording, the form open; the
+    // second is drawn as it was, and the table keeps the earlier answer.
+    await republish(page, name, sectioned(name, [...pond(), decisions('Which heater, for a deep pond?')]));
+    await expect(first.text).toHaveText('Which heater, for a deep pond?');
+    await expect(first.earlier).toContainText('Answered to an earlier wording by');
+    await expect(first.form).not.toHaveClass(/artifact-decision--saved/);
+    await expect(first.option('Large')).toBeVisible();
+    await expect(second.form).not.toHaveClass(/artifact-decision--saved/);
+    await expect(second.earlier).toHaveCount(0);
+    await expect(second.ask).toHaveCount(1);
+    await expect(table.locator('tbody tr')).toHaveCount(1);
+    await expect(table.locator('tbody tr td.artifact-answered-question')).toHaveText('Which heater?');
+    await expect(table.locator('tbody tr .artifact-answered-choice')).toHaveText('Large');
+    expect(await afterSections(page)).toEqual(['artifact-answered']);
+    expect(moved.count).toBe(0);
+    expect(await page.evaluate(() => (window as any).__stayed)).toBe('this page');
+    expect(errors).toEqual([]);
+  });
+
+  test('a decisions section with an answer picked and not saved is held until Update, its pick kept', async ({ page }) => {
+    const errors = watchErrors(page);
+    const name = 'live-page-decisions-held';
+    const moved = await undecided(page, name);
+    await republish(page, name, sectioned(name, [...pond(), decisions()]));
+    await answer(page, 'decision-1', 'Large');
+    const second = card(page, 'decision-2');
+    await second.option('Yes').check();
+    // Held for the pick alone, not the focus.
+    await page.locator('h1.artifact-title').click();
+    await expect(page.locator('form.artifact-decision :focus')).toHaveCount(0);
+
+    const wrapper = page.locator('div.artifact-section-body[data-section="decisions-for-the-maintainer"]');
+    const bar = wrapper.locator('div.artifact-swap-held');
+    await republish(page, name, sectioned(name, [...pond(), decisions('Which heater, for a deep pond?')]));
+    await expect(bar).toContainText('This section changed');
+    await expect(bar.getByRole('button', { name: 'Update' })).toBeVisible();
+    await expect(card(page, 'decision-1').text).toHaveText('Which heater?');
+    await expect(second.option('Yes')).toBeChecked();
+
+    // Saved, the pick no longer holds it back; Update brings the new forms.
+    await second.save.click();
+    await expect(second.saved).toHaveText('✓ Saved · Yes · change');
+    await bar.getByRole('button', { name: 'Update' }).click();
+    await expect(bar).toHaveCount(0);
+    const first = card(page, 'decision-1');
+    await expect(first.text).toHaveText('Which heater, for a deep pond?');
+    await expect(first.earlier).toContainText('Answered to an earlier wording by');
+    await expect(second.saved).toHaveText('✓ Saved · Yes · change');
+    await expect(page.locator('div.artifact-answered tbody tr')).toHaveCount(2);
+    expect(moved.count).toBe(0);
+    expect(errors).toEqual([]);
+  });
+
+  test('a dismissal undone elsewhere leaves the Answered table once its section is swapped', async ({ page, request }) => {
+    const errors = watchErrors(page);
+    const name = 'live-page-decisions-undone';
+    await undecided(page, name);
+    await republish(page, name, sectioned(name, [...pond(), decisions()]));
+    const second = card(page, 'decision-2');
+    await second.form.getByRole('button', { name: 'Dismiss' }).click();
+    await expect(second.saved).toContainText('Dismissed');
+    const rows = page.locator('div.artifact-answered tbody tr');
+    await expect(rows).toHaveCount(1);
+    await page.locator('h1.artifact-title').click();
+
+    const undone = await request.post('/api/answers', {
+      headers: SIGNED_IN, data: { page: name, question: 'decision-2', dismissed: false },
+    });
+    expect(undone.status()).toBe(200);
+    await republish(page, name, sectioned(name, [...pond(), decisions('Which heater, for a deep pond?')]));
+    await expect(card(page, 'decision-1').text).toHaveText('Which heater, for a deep pond?');
+    await expect(second.form).not.toHaveClass(/artifact-decision--dismissed/);
+    await expect(second.form.getByRole('button', { name: 'Dismiss' })).toBeVisible();
+    await expect(page.locator('div.artifact-answered')).toHaveCount(0);
+    expect(errors).toEqual([]);
+  });
+
+  test('a read of the answers a later swap replaces fills no form, the later read drawing the newest answer', async ({ page }) => {
+    const errors = watchErrors(page);
+    const name = 'live-page-decisions-reads';
+    await undecided(page, name);
+    await republish(page, name, sectioned(name, [...pond(), decisions()]));
+    await answer(page, 'decision-2', 'No');
+    await page.locator('h1.artifact-title').click();
+
+    // Each read from here on is answered only when let go, as the site
+    // answered it when asked.
+    const held: (() => Promise<void>)[] = [];
+    await page.route((url) => url.pathname === '/api/answers', async (route) => {
+      if (route.request().method() !== 'GET') {
+        await route.fallback();
+        return;
+      }
+      const response = await route.fetch();
+      held.push(() => route.fulfill({ response }));
+    });
+    await republish(page, name, sectioned(name, [...pond(), decisions('Which heater, for a deep pond?')]));
+    await expect.poll(() => held.length).toBe(1);
+    const second = card(page, 'decision-2');
+    await answer(page, 'decision-2', 'Yes');
+    await expect(second.saved).toHaveText('✓ Saved · Yes · change');
+    await page.locator('h1.artifact-title').click();
+    await republish(page, name, sectioned(name, [...pond(), decisions('Which heater, for a pond 2 m deep?')]));
+    await expect.poll(() => held.length).toBe(2);
+
+    // The older read, saying "No", comes back first.
+    const finished = page.waitForEvent('requestfinished', (request) =>
+      new URL(request.url()).pathname === '/api/answers' && request.method() === 'GET');
+    await held[0]!();
+    await finished;
+    await page.evaluate(() => Promise.resolve());
+    await held[1]!();
+    await expect(second.saved).toHaveText('✓ Saved · Yes · change');
+    const row = page.locator('div.artifact-answered tbody tr[data-question="decision-2"]');
+    await expect(row.locator('.artifact-answered-choice strong')).toHaveText('Yes');
+    expect(errors).toEqual([]);
+  });
+
+  test('a thread asked on a question a republish rewords is headed with the new words', async ({ page }) => {
+    const errors = watchErrors(page);
+    const name = 'live-page-decisions-reworded-thread';
+    await undecided(page, name);
+    await republish(page, name, sectioned(name, [...pond(), decisions()]));
+    const first = card(page, 'decision-1');
+    await first.form.locator('details.artifact-decision-note > summary').click();
+    await first.form.locator('textarea[name="note"]').fill('Is the small one enough for the fish?');
+    const [asked] = await Promise.all([
+      page.waitForResponse((r) => new URL(r.url()).pathname === '/api/comments' && r.request().method() === 'POST'),
+      first.ask.click(),
+    ]);
+    const id = (await asked.json()).id as number;
+    const words = page.locator(`.artifact-comments-panel li.artifact-comments-entry[data-thread="${id}"] ` +
+      '.artifact-comments-entry-head .artifact-comments-entry-words');
+    await expect(words).toHaveText('Decision 1 · Which heater?');
+    await page.locator('h1.artifact-title').click();
+
+    await republish(page, name, sectioned(name, [...pond(), decisions('Which heater, for a deep pond?')]));
+    await expect(first.text).toHaveText('Which heater, for a deep pond?');
+    await first.chip.click();
+    await expect(words).toHaveText('Decision 1 · Which heater, for a deep pond?');
+    expect(errors).toEqual([]);
+  });
+
+  test('a section a republish adds after the decisions leaves the Answered table last, still folding', async ({ page }) => {
+    const errors = watchErrors(page);
+    const name = 'live-page-decisions-table';
+    await undecided(page, name);
+    await republish(page, name, sectioned(name, [...pond(), decisions()]));
+    await answer(page, 'decision-1', 'Small');
+    const table = page.locator('div.artifact-answered');
+    await expect(table.locator('tbody tr')).toHaveCount(1);
+
+    await republish(page, name, sectioned(name, [...pond(), decisions(),
+      ['Spring', ['Put the pump back in April.']]]));
+    await expect(page.locator('div.artifact-section-body[data-section="spring"]')).toContainText('April');
+    expect(await afterSections(page)).toEqual(['artifact-answered']);
+    expect(await page.locator('section.artifact-body').evaluate((body) =>
+      body.lastElementChild?.classList.contains('artifact-answered'))).toBe(true);
+    const fold = table.locator('button.artifact-section-toggle');
+    await fold.click();
+    await expect(table.locator('.artifact-answered-body')).toBeHidden();
+    await fold.click();
+    await expect(table.locator('.artifact-answered-body')).toBeVisible();
+    expect(errors).toEqual([]);
+  });
+
+  test('a question asked through Ask keeps its chip and thread when a republish rewords another question', async ({ page }) => {
+    const errors = watchErrors(page);
+    const name = 'live-page-decisions-asked';
+    await undecided(page, name);
+    await republish(page, name, sectioned(name, [...pond(), decisions()]));
+    const second = card(page, 'decision-2');
+    const words = 'Does the pump survive a hard frost in the pond?';
+    await second.form.locator('details.artifact-decision-note > summary').click();
+    await second.form.locator('textarea[name="note"]').fill(words);
+    const [asked] = await Promise.all([
+      page.waitForResponse((r) => new URL(r.url()).pathname === '/api/comments' && r.request().method() === 'POST'),
+      second.ask.click(),
+    ]);
+    expect(asked.status()).toBe(201);
+    const id = (await asked.json()).id as number;
+    await expect(second.chip).toHaveCount(1);
+    await page.locator('h1.artifact-title').click();
+
+    await republish(page, name, sectioned(name, [...pond(), decisions('Which heater, for a deep pond?')]));
+    await expect(card(page, 'decision-1').text).toHaveText('Which heater, for a deep pond?');
+    await expect(page.locator('div.artifact-swap-held')).toHaveCount(0);
+    await expect(second.chip).toHaveCount(1);
+    await expect(page.locator('.artifact-decision-chip')).toHaveCount(1);
+    await second.chip.click();
+    const entry = page.locator(`.artifact-comments-panel li.artifact-comments-entry[data-thread="${id}"]`);
+    await expect(entry).toHaveClass(/artifact-comments-entry--open/);
+    await expect(entry.locator('.artifact-comments-entry-head .artifact-comments-entry-words')).toHaveText('Decision 2 · Lift the pump out?');
+    await expect(entry.locator('.artifact-comment-text')).toHaveText(words);
+    expect(errors).toEqual([]);
+  });
+
+  test('a page that loaded with decision forms, its review sheet drawn, falls back to the banner when a form changes', async ({ page }) => {
+    const errors = watchErrors(page);
+    const name = 'live-page-decisions-sheet';
+    const first = publish(name, sectioned(name, [...pond(), decisions()]));
+    await stopClock(page);
+    await open(page, name);
+    await expect(page.locator('div.artifact-review-bar')).toHaveCount(1);
+    const before = await page.locator('.artifact-body').innerHTML();
+
+    publish(name, sectioned(name, [...pond(), decisions('Which heater, for a deep pond?')]));
+    await page.clock.runFor(CHECK);
+    await expect(banner(page).node).toContainText(NEWER);
+    expect(await page.locator('.artifact-body').innerHTML()).toBe(before);
+    expect(await revisionOf(page)).toBe(first);
     expect(errors).toEqual([]);
   });
 });

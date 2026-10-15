@@ -14,6 +14,9 @@
     var answered = null;
     // Whether the reader may dismiss and undo, once the archive route says so.
     var owner = false;
+    // Whether the archive route was asked: once, as the page's first form
+    // is wired, at load or on a swap.
+    var asked = false;
     var MAX_REASON = 200;
 
     function radios(form) {
@@ -360,6 +363,7 @@
       if (!body) {
         return;
       }
+      var last = all(":scope > .artifact-section-body", body).pop();
       if (!answered) {
         answered = element("div", "artifact-answered");
         // A heading of the section's level, though not one of the page's h2s.
@@ -380,18 +384,25 @@
         grid.appendChild(element("tbody"));
         wrapper.appendChild(grid);
         answered.append(heading, wrapper);
-        var last = all(":scope > .artifact-section-body", body).pop();
-        if (last) {
-          last.after(answered);
-        } else {
-          body.appendChild(answered);
-        }
+        place(body, last);
         foldSection(heading, wrapper, FOLDED_ANSWERED);
+      } else if (last ? last.nextElementSibling !== answered : answered.parentNode !== body) {
+        // A swap added a section after it.
+        place(body, last);
       }
       answered.querySelector(".artifact-answered-title").textContent =
         "Answered (" + rows.length + ")";
       var tbody = answered.querySelector("tbody");
       tbody.replaceChildren.apply(tbody, rows.map(row));
+    }
+
+    // The table right after the body's last section, else at its end.
+    function place(body, last) {
+      if (last) {
+        last.after(answered);
+      } else {
+        body.appendChild(answered);
+      }
     }
 
     // A row's "change": the card's section opened if it is folded, as find
@@ -452,6 +463,10 @@
     function queue(form, work) {
       var turn = (form.lotuspodSaving || Promise.resolve()).then(work);
       form.lotuspodSaving = turn;
+      // How many posts are queued or under way, for holdSwap below.
+      form.lotuspodQueued = (form.lotuspodQueued || 0) + 1;
+      var done = function () { form.lotuspodQueued -= 1; };
+      turn.then(done, done);
       return turn;
     }
 
@@ -660,34 +675,38 @@
     // its dismissed card, only once the archive route says the reader is an
     // owner. An archived page takes no answer, so it asks nothing.
     function mayDismiss() {
-      if (ARCHIVED || !forms.length) {
+      if (ARCHIVED || !forms.length || asked) {
         return;
       }
+      asked = true;
       fetch("/api/archive?page=" + encodeURIComponent(page)).then(async function (response) {
         var payload = response.status === 200 ? await json(response) : null;
         if (!payload || payload.mayArchive !== true) {
           return;
         }
         owner = true;
-        forms.forEach(function (form) {
-          if (!isChecklist(form)) {
-            var button = element("button", "artifact-decision-dismiss", "Dismiss");
-            button.type = "button";
-            button.addEventListener("click", function () {
-              button.disabled = true;
-              queue(form, function () { return dismiss(form, button); });
-            });
-            var after = form.querySelector(".artifact-decision-ask") ||
-              form.querySelector('button[type="submit"]');
-            after.parentNode.insertBefore(button, after.nextSibling);
-          }
-          if (form.classList.contains("artifact-decision--dismissed")) {
-            draw(form);
-          }
-        });
+        forms.forEach(dismissible);
       }).catch(function () {
         // No answer: no Dismiss and no Undo.
       });
+    }
+
+    // A form's Dismiss, for an owner, and its Undo once drawn again.
+    function dismissible(form) {
+      if (!isChecklist(form)) {
+        var button = element("button", "artifact-decision-dismiss", "Dismiss");
+        button.type = "button";
+        button.addEventListener("click", function () {
+          button.disabled = true;
+          queue(form, function () { return dismiss(form, button); });
+        });
+        var after = form.querySelector(".artifact-decision-ask") ||
+          form.querySelector('button[type="submit"]');
+        after.parentNode.insertBefore(button, after.nextSibling);
+      }
+      if (form.classList.contains("artifact-decision--dismissed")) {
+        draw(form);
+      }
     }
 
     async function submit(event) {
@@ -699,13 +718,35 @@
       }
     }
 
-    // True once the page's answers are read.
+    // The newest read of the answers begun, by its turn.
+    var reads = 0;
+
+    // True once the page's answers are read; null for a read a newer one
+    // (begun on a swap) has replaced, which draws nothing: it may predate
+    // an answer saved since, and would fill the forms the newer read fills.
     async function load() {
-      var response = await fetch(ANSWERS + "?page=" + encodeURIComponent(page));
-      if (!response.ok) {
+      var turn = ++reads;
+      var questions;
+      try {
+        var response = await fetch(ANSWERS + "?page=" + encodeURIComponent(page));
+        questions = response.ok ? (await response.json()).questions || {} : null;
+      } catch (ignored) {
+        questions = null;
+      }
+      if (turn !== reads) {
+        return null;
+      }
+      if (!questions) {
         return false;
       }
-      var questions = (await response.json()).questions || {};
+      // A question with no answer left, undone since an earlier read, is
+      // listed no more.
+      stored.forEach(function (ignored, question) {
+        var entry = Object.prototype.hasOwnProperty.call(questions, question) ? questions[question] : null;
+        if (!entry || !entry.current) {
+          stored.delete(question);
+        }
+      });
       // A form undone while this was loading holds what the undo gave
       // back, which is newer than what was read.
       Object.keys(questions).forEach(function (question) {
@@ -742,14 +783,18 @@
       return true;
     }
 
-    forms.forEach(function (form) {
+    // A form joins the page's: no answer until the read says, and marked
+    // as the reader changes it.
+    function wire(form) {
       form.lotuspodAnswers = { current: null, earlier: [] };
       form.lotuspodEditing = false;
       form.addEventListener("submit", submit);
       form.addEventListener("input", function () { mark(form); });
       form.addEventListener("change", function () { mark(form); });
       mark(form);
-    });
+    }
+
+    forms.forEach(wire);
     mayDismiss();
     // What the review sheet (web/src/islands/review-sheet.tsx, through
     // web/src/islands/bridge.ts) reads the forms by; read is true once the
@@ -760,8 +805,85 @@
       isChecklist: isChecklist, dirty: dirty, save: save, read: false,
     };
     load().catch(function () { return false; }).then(function (read) {
+      // Replaced by a swap's read, which sends ANSWERED once it is drawn.
+      if (read === null) {
+        return;
+      }
       reading.read = read === true;
       document.dispatchEvent(new CustomEvent(ANSWERED));
+    });
+
+    // The forms among some nodes and in them.
+    function formsIn(nodes) {
+      var found = [];
+      nodes.forEach(function (node) {
+        if (node instanceof Element) {
+          if (node.matches("form.artifact-decision")) {
+            found.push(node);
+          }
+          found.push.apply(found, all("form.artifact-decision", node));
+        }
+      });
+      return found;
+    }
+
+    // A swap (web/src/page-swap.ts) brought in a newer revision's parts:
+    // each form in a part it took out leaves forms, which stays the one
+    // array, in page order, and each in a part it put in is wired as one is
+    // at load, with Dismiss for an owner. The answers are then read again,
+    // as a reworded question's form, or one answered elsewhere since, is
+    // drawn from them as a reload would draw it, and the table after them;
+    // ANSWERED tells the page the read is drawn.
+    document.addEventListener(SWAPPED, function (event) {
+      var gone = [];
+      var fresh = [];
+      event.detail.units.forEach(function (unit) {
+        gone.push.apply(gone, formsIn(unit.before));
+        fresh.push.apply(fresh, formsIn(unit.after));
+      });
+      if (!gone.length && !fresh.length) {
+        return;
+      }
+      gone.forEach(function (form) {
+        var at = forms.indexOf(form);
+        if (at >= 0) {
+          forms.splice(at, 1);
+        }
+      });
+      fresh.forEach(function (form) {
+        forms.push(form);
+        wire(form);
+        if (owner) {
+          dismissible(form);
+        }
+      });
+      // A page that loaded with no form asks now whether the reader may
+      // dismiss.
+      mayDismiss();
+      forms.sort(function (a, b) {
+        return a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1;
+      });
+      load().catch(function () { return false; }).then(function (read) {
+        if (read === null) {
+          return;
+        }
+        if (read === true) {
+          reading.read = true;
+        }
+        table();
+        document.dispatchEvent(new CustomEvent(ANSWERED));
+      });
+    });
+
+    // A section holding a form the reader changed and has not saved, or
+    // one whose answer, dismissal or undo is still being posted, is held
+    // back from a swap until its Update, so what they picked or wrote is
+    // never lost.
+    holdSwap(function (nodes) {
+      return forms.some(function (form) {
+        return (dirty(form) || form.lotuspodQueued > 0) &&
+          nodes.some(function (node) { return node.contains(form); });
+      });
     });
     return reading;
   }

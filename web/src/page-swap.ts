@@ -13,7 +13,8 @@
 // takes it away and the new one when it replaces it.
 //
 // A changed or removed part any test registered with holdSwap holds (the
-// swap's own: the focus is in it) stays as it is, under a bar saying so with
+// swap's own: the focus is in it; js/decisions.js's: a decision form in it
+// holds an answer not saved) stays as it is, under a bar saying so with
 // an Update button, which applies the part's newest nodes as a swap would.
 // The page still takes the new revision; a later swap replaces the kept nodes
 // when the part changed again, and takes the bar away when it is back to the
@@ -23,31 +24,35 @@
 // nothing touched) when its theme, policy or render variant changed, when
 // either copy predates the digests, when the two differ in having an outline
 // or sections, when their shared sections moved, when the references changed,
-// when the outline changed on a page with decision forms (whose review marks
-// sit on its links), when a changed part, old or new, holds a feature not yet
-// mounted on new markup or a passage's highlight (SWAP_UNMOUNTED), when one
-// copy takes comments and the other does not, or when a section the swap
-// would take away, held back or not, is one any test registered with
-// refuseSwap refuses (js/comments.js's: its form holds text not sent). A
-// held section's Update that would take away one a test refuses, or a held
-// part's that would replace a passage's highlight, reloads the page instead,
-// so its text is kept. A swap that throws partway has the page
+// when the review sheet shows and the outline changed on a page with decision
+// forms (whose review marks sit on its links) or a changed part holds one,
+// when a changed part holds a decision form on a page that loaded with
+// neither a form nor a comment box, when a changed part, old or new, holds a
+// feature not yet mounted on new markup or a passage's highlight
+// (SWAP_UNMOUNTED), when one copy takes comments and the other does not, or
+// when a section the swap would take away, held back or not, is one any test
+// registered with refuseSwap refuses (js/comments.js's: its form holds text
+// not sent). A held section's Update that would take away one a test refuses,
+// or a held part's that would replace a passage's highlight, reloads the page
+// instead, so its text is kept. A swap that throws partway has the page
 // reload.
 
 // What a swapped part may not hold yet, old or new: each later ticket mounts
 // one and takes it off. The open page's passage highlights, a thread's or an
 // open composer's, are not found again in new markup yet.
-const SWAP_UNMOUNTED = "form.artifact-decision, pre.mermaid, button.artifact-ref, table, mark.artifact-passage";
+const SWAP_UNMOUNTED = "pre.mermaid, button.artifact-ref, table, mark.artifact-passage";
 
 // Each test a changed or removed part, as the open page has it, is put to
 // before a swap: a part any test holds is kept as it is under a bar until the
-// reader presses its Update (holdSwap).
-const SWAP_HOLDS: ((nodes: readonly Element[]) => boolean)[] = [];
+// reader presses its Update (holdSwap). A var with no value of its own, made
+// by the first test: js/decisions.js, joined before this source, registers
+// its test as it runs.
+var SWAP_HOLDS: ((nodes: readonly Element[]) => boolean)[] | undefined;
 
 // Hold back from a swap each part whose nodes (a section's heading and
 // wrapper, or the intro's) test says to.
 function holdSwap(test: (nodes: readonly Element[]) => boolean): void {
-  SWAP_HOLDS.push(test);
+  (SWAP_HOLDS ??= []).push(test);
 }
 
 // Each test a section the swap would take away, as the open page has it, is
@@ -63,6 +68,7 @@ function refuseSwap(test: (nodes: readonly Element[]) => boolean): void {
 function pageSwap(): void {
   // What the page script adds to the body outside any part, left where it is.
   const ADDED = "div.artifact-answered, .artifact-comments-changed";
+  const DECISION = "form.artifact-decision";
   // The bar over a part held back, which the intro leaves out.
   const HELD = "div.artifact-swap-held";
   const CHANGED_TEXT = "This section changed";
@@ -278,9 +284,16 @@ function pageSwap(): void {
       }),
     ].filter((node): node is Node => node !== null);
     if (unmounted(touched)) return null;
-    // The review sheet marks the outline's links of sections with questions,
-    // and draws no marks on links swapped in yet.
-    if (outlineChanged && (document.querySelector("form.artifact-decision") || doc.querySelector("form.artifact-decision"))) {
+    // The review sheet reads the forms once, as it is drawn, and marks the
+    // outline's links of sections with questions: while it shows, a part
+    // holding a form, or the outline of a page with forms, is not swapped.
+    // A page that loaded with neither a form nor a comment box has no
+    // answering (js/decisions.js) to mount a form on.
+    const sheet = document.querySelector("div.artifact-review-bar") !== null;
+    const decided = (nodes: Node[]): boolean => nodes.some((node) => node instanceof Element &&
+      (node.matches(DECISION) || node.querySelector(DECISION) !== null));
+    if ((sheet || answering === null) && decided(touched)) return null;
+    if (sheet && outlineChanged && (document.querySelector(DECISION) || doc.querySelector(DECISION))) {
       return null;
     }
 
@@ -288,7 +301,7 @@ function pageSwap(): void {
     // holds back: kept as it is, its new nodes kept for the reader's Update.
     const holds = (nodes: Node[]): boolean => {
       const elements = nodes.filter((node): node is Element => node instanceof Element);
-      return SWAP_HOLDS.some((test) => test(elements));
+      return (SWAP_HOLDS ?? []).some((test) => test(elements));
     };
     // A part held already stays held until its Update, or until its text
     // is the open page's again.

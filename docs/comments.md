@@ -263,13 +263,22 @@ the comments panel, a thread open in the panel, a popover or the bottom sheet
 stays open, and a comment or reply not yet sent stays in its composer, text
 and images. Threads on a section the new revision removed or renamed are
 listed under "Sections that have changed", as a fresh load lists them, and
-an added section gets its own group. It does not
+an added section gets its own group. Decision forms update in place too: a
+swapped section's forms are drawn from the stored answers as a reload draws
+them, folded to a saved answer or open with "Answered to an earlier wording"
+for a reworded question, each with its Ask (and Dismiss, for an owner) and its
+decision chip, and the Answered table is drawn again after the last section.
+A section holding a form whose answer was changed and not saved, or is still
+being saved, is held back under "This section changed" with Update, so the
+answer is never lost. It does not
 swap, and shows the banner as below, when the theme or the page's policy
 changed, when a changed or removed part holds a passage's highlight (a
 thread's, or the words an open passage comment is on), when a removed
-section's form for a new thread holds text or images not sent, or when a
-changed part, as it was or as it is now, holds a decision form, a diagram, a
-reference card or a table; nor when the outline or the sections came or
+section's form for a new thread holds text or images not sent, when a changed
+part, as it was or as it is now, holds a diagram, a reference card or a table,
+or when it holds a decision form while the page shows the review sheet (a page
+that loaded with decision forms) or the page loaded with neither a decision
+form nor a comment box; nor when the outline or the sections came or
 went, the sections both copies have moved, or the references changed. A swap that fails partway reloads the page. Otherwise a
 banner fixed over the top of the
 window, which moves no text and is announced politely, reads "A newer version

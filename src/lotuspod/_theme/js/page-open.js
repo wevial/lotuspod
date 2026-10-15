@@ -67,7 +67,8 @@
   var SECTIONS = "lotuspod:folded:";
   var FOLDED_ANSWERED = 0;
   // Sent on a comment box when rows are drawn into it, and on the document
-  // once the page's read of answers has finished.
+  // once the page's read of answers has finished, and again once each read
+  // after a swap that changed a decision form is drawn.
   var DRAWN = "lotuspod:drawn";
   var ANSWERED = "lotuspod:answered";
   // Sent on a decision form once an answer to it is saved.

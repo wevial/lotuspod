@@ -70,8 +70,10 @@ declare function linkedTo(name: string, first?: boolean): string | null;
 // js/page-open.js: an archived page takes no new comment, reply or answer.
 declare const ARCHIVED: boolean;
 // js/page-open.js: the page events. ANSWERED is sent on the document once
-// the page's read of answers has finished, SAVED on a decision form once an
-// answer to it is saved, DRAWN on a comment box when rows are drawn into it.
+// the page's read of answers has finished, and again once each read after a
+// swap that changed a decision form is drawn; SAVED on a decision form once
+// an answer to it is saved, DRAWN on a comment box when rows are drawn into
+// it.
 declare const ANSWERED: string;
 declare const SAVED: string;
 declare const DRAWN: string;
