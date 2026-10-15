@@ -33,8 +33,7 @@
       caret.setAttribute("aria-expanded", String(open));
       caret.setAttribute("aria-label", `${open ? "Fold" : "Open"} ${name(index)}`);
       folded.get(index)!.hidden = open;
-      const last = end(index);
-      for (let next = index + 1; next < last; next++) {
+      for (let next = index + 1, last = end(index); next < last; next++) {
         rows[next].hidden = !open;
         // An open row's descendants show but for those under one still
         // folded, which its folding already hid.
