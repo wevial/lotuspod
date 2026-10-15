@@ -1,6 +1,10 @@
 // Built from web/src/calltree.ts by web/build.ts. Edit that file, not this one.
 (() => {
-  for (const tree of document.querySelectorAll("div.calltree")) {
+  const mounted = new WeakSet;
+  const mount = (tree) => {
+    if (mounted.has(tree))
+      return;
+    mounted.add(tree);
     const rows = Array.from(tree.querySelectorAll("div.calltree-row"));
     const depths = rows.map((row) => Number(row.dataset.depth) || 0);
     const carets = new Map;
@@ -73,14 +77,14 @@
     const inner = Array.from(carets.keys()).filter((index) => depths[index] > 0);
     const head = tree.querySelector("div.calltree-head");
     if (!inner.length || !head)
-      continue;
-    const all = document.createElement("button");
-    all.type = "button";
-    all.className = "calltree-fold-all";
-    all.textContent = "Fold all";
-    head.append(all);
-    all.addEventListener("click", () => {
-      const fold = all.textContent === "Fold all";
+      return;
+    const toggle = document.createElement("button");
+    toggle.type = "button";
+    toggle.className = "calltree-fold-all";
+    toggle.textContent = "Fold all";
+    head.append(toggle);
+    toggle.addEventListener("click", () => {
+      const fold = toggle.textContent === "Fold all";
       if (fold) {
         for (const index of inner.slice().reverse())
           setOpen(index, false);
@@ -91,7 +95,10 @@
         for (const index of carets.keys())
           setOpen(index, true);
       }
-      all.textContent = fold ? "Open all" : "Fold all";
+      toggle.textContent = fold ? "Open all" : "Fold all";
     });
-  }
+  };
+  const mountAll = () => all("div.calltree").forEach(mount);
+  mountAll();
+  document.addEventListener(SWAPPED, mountAll);
 })();

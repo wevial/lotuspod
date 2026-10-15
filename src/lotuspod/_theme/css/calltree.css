@@ -89,7 +89,8 @@
 .calltree-caret::before { content: "▾"; }
 .calltree-caret[aria-expanded="false"]::before { content: "▸"; }
 .calltree-caret:hover { color: var(--color-pale-lavender); }
-.calltree-caret:focus { outline: none; }
+.calltree-caret:focus,
+.calltree-fold-all:focus { outline: none; }
 .calltree-caret:focus-visible,
 .calltree-fold-all:focus-visible {
   outline: 2px solid var(--color-lavender);
@@ -122,4 +123,3 @@
   cursor: pointer;
 }
 .calltree-fold-all:hover { color: var(--color-pale-lavender); border-color: var(--hairline-strong); }
-.calltree-fold-all:focus { outline: none; }

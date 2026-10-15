@@ -126,6 +126,29 @@ test.describe('folding', () => {
     await expect(page.locator('.calltree').first().locator('.calltree-folded:visible')).toHaveCount(0);
     await expect(all).toHaveText('Fold all');
   });
+
+  test('a focused caret and Fold all show a lavender ring', async ({ page }) => {
+    for (const control of [rowOf(page, '_walk()').locator('.calltree-caret'),
+      page.locator('.calltree').first().locator('.calltree-fold-all')]) {
+      await control.focus();
+      await expect(control).toHaveCSS('outline-style', 'solid');
+      await expect(control).toHaveCSS('outline-color', 'rgb(183, 156, 244)');
+    }
+  });
+
+  test('a tree a page swap brings in folds too', async ({ page }) => {
+    await page.evaluate(async () => {
+      const fresh = new DOMParser().parseFromString(await (await fetch(location.href)).text(), 'text/html');
+      document.querySelector('.calltree')!.replaceWith(document.adoptNode(fresh.querySelector('.calltree')!));
+      document.dispatchEvent(new CustomEvent('lotuspod:swapped', { detail: { revision: '', units: [] } }));
+    });
+    const tree = page.locator('.calltree').first();
+    await expect(tree.locator('.calltree-caret')).toHaveCount(5);
+    await expect(tree.locator('.calltree-fold-all')).toHaveCount(1);
+    await expect(page.locator('.calltree').nth(1).locator('.calltree-caret')).toHaveCount(1);
+    await page.getByRole('button', { name: 'Fold _walk()' }).click();
+    await expect(rowOf(page, '_walk()').locator('.calltree-folded')).toHaveText('5 inside · 1 changed · 3 new');
+  });
 });
 
 test.describe('without JavaScript', () => {
