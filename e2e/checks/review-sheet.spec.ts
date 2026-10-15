@@ -752,7 +752,8 @@ test.describe('signed in, published again', () => {
     await republish(page, name, [['Findings', []], [DECISIONS, [HEATER, PUMP, NETTED]]]);
     await expect(the.form('decision-2')).toHaveCount(1);
     await expect(form.getByRole('radio', { name: 'Yes' })).not.toBeChecked();
-    await expect(page.locator('.artifact-review-bar > *')).toHaveCount(0);
+    await expect(the.count).toBeHidden();
+    await expect(the.next).toBeHidden();
     await expect(the.heading(DECISIONS).locator('.artifact-review-open')).toHaveCount(0);
 
     // The next read that succeeds draws them, the answer as saved.
@@ -780,6 +781,25 @@ test.describe('signed in, published again', () => {
     await expect(the.entry('decision-3').option('Maybe')).toHaveCount(1);
     await expect(the.panel).toBeVisible();
     await expect(the.entry('decision-3').option('No')).toBeFocused();
+    expect(seen.errors).toEqual([]);
+  });
+
+  test('the panel stays open, its focus on Close, as a republish takes the last question away', async ({ page }) => {
+    const seen = await watch(page);
+    const name = named('last');
+    await openPublished(page, name, [['Findings', []], [DECISIONS, [HEATER]]]);
+    const the = sheet(page);
+    await the.count.click();
+    await the.entry('decision-1').option('Large').focus();
+
+    await republish(page, name, [['Findings', []], [DECISIONS, []]]);
+    await expect(the.form('decision-1')).toHaveCount(0);
+    await expect(the.panel).toBeVisible();
+    await expect(page.locator('li.artifact-review-entry')).toHaveCount(0);
+    await expect(the.tally).toHaveText('All answered · 0 changed · 0 in all');
+    await expect(the.close).toBeFocused();
+    await expect(the.count).toBeHidden();
+    await expect(the.heading(DECISIONS).locator('.artifact-review-open')).toHaveCount(0);
     expect(seen.errors).toEqual([]);
   });
 });

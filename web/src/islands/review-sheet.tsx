@@ -382,11 +382,8 @@ function Sheet({ page, the, questions, groups, marks }: SheetProps) {
     );
   }
 
-  // No question whose answers were read: nothing to count or answer.
-  if (!questions.length) {
-    return null;
-  }
-
+  // With no question whose answers were read there is nothing to count,
+  // but an open panel stays open, empty, its Close holding the focus.
   return (
     <>
       <a class="artifact-review-next" href="#" hidden={index < 0} onClick={next}>
@@ -396,7 +393,7 @@ function Sheet({ page, the, questions, groups, marks }: SheetProps) {
         </span>
         <span class="artifact-review-next-arrow" aria-hidden="true">↓</span>
       </a>
-      <button ref={count} class={opens ? "artifact-review-count" : "artifact-review-count artifact-review-count--done"}
+      <button ref={count} hidden={!questions.length} class={opens ? "artifact-review-count" : "artifact-review-count artifact-review-count--done"}
         type="button" aria-expanded={open ? "true" : "false"} aria-controls="artifact-review-panel" onClick={respond}>
         <span class="artifact-review-dot" aria-hidden="true" />
         <span>{tally} · Respond</span>
