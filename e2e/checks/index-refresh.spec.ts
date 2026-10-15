@@ -77,12 +77,11 @@ function indexRead(page: Page) {
   return page.waitForResponse(isIndexRead);
 }
 
-// Every load of the index's window after the first, counted.
+// Every load of the index's window after the first, counted: a fragment
+// written in place is none.
 function watchLoads(page: Page) {
   const loads: string[] = [];
-  page.on('framenavigated', (frame) => {
-    if (frame === page.mainFrame()) loads.push(frame.url());
-  });
+  page.on('load', () => loads.push(page.url()));
   return loads;
 }
 
@@ -298,6 +297,64 @@ test.describe('signed in', () => {
     await expect(row(page, name)).toHaveCount(1);
     await expect(rowLink(page, name)).toBeVisible();
     expect(reads.length).toBe(1);
+    expect(errors).toEqual([]);
+  });
+
+  test('a pressed Archived toggle stays pressed when its last page is unarchived', async ({ page }) => {
+    const errors = watchErrors(page);
+    const name = 'index-refresh-archived';
+    publish(name, 'Index refresh archived', 'A page archived, then brought back.');
+    run('archive', name, '--local', '--out-dir', OUT);
+    try {
+      await openIndex(page);
+      const archived = page.locator('.index-controls button.index-toggle', { hasText: 'Archived' });
+      await expect(archived).toHaveText('Archived · 1');
+      await archived.click();
+      await expect.poll(() => shownRows(page)).toEqual([name]);
+
+      run('unarchive', name, '--local', '--out-dir', OUT);
+      await nextRead(page);
+
+      await expect(row(page, name)).not.toHaveAttribute('data-archived', /.*/);
+      await expect(archived).toHaveText('Archived · 0');
+      await expect(archived).toHaveAttribute('aria-pressed', 'true');
+      expect(await shownRows(page)).toEqual([]);
+      await expect(page.locator('.index-count')).toHaveText('0 archived pages');
+      expect(errors).toEqual([]);
+    } finally {
+      run('unarchive', name, '--local', '--out-dir', OUT);
+    }
+  });
+
+  test('an answer that comes once a tab is active is not drawn and loads nothing', async ({ page }) => {
+    const errors = watchErrors(page);
+    await openIndex(page);
+    const loads = watchLoads(page);
+    // The read held until a tab is active, then answered as an index with
+    // no page, which would load the index again were it drawn.
+    let release = () => {};
+    const held = new Promise<void>((resolve) => { release = resolve; });
+    let asked = () => {};
+    const reached = new Promise<void>((resolve) => { asked = resolve; });
+    await page.route((url) => url.pathname === '/', async (route) => {
+      if (route.request().resourceType() !== 'fetch') return route.continue();
+      const response = await route.fetch();
+      asked();
+      await held;
+      const body = (await response.text()).replace(/<table class="index-table">[\s\S]*?<\/table>/, '');
+      await route.fulfill({ response, body });
+    });
+    await page.clock.runFor(EVERY);
+    await reached;
+    await rowLink(page, ARTICLE.name).click();
+    await expect(page.locator('main.index')).toBeHidden();
+    const answered = indexRead(page);
+    release();
+    await answered;
+    await page.waitForTimeout(500);
+    expect(loads).toEqual([]);
+    await expect(page.locator('main.index')).toBeHidden();
+    await expect(page.locator('.index-table tbody tr')).not.toHaveCount(0);
     expect(errors).toEqual([]);
   });
 

@@ -791,10 +791,11 @@
       search.addEventListener("input", filter);
       // Right after the menu at load: the Updated and Unread toggles, made
       // once the seen route answers, land before it. Made, counted again or
-      // removed as the rows are read again.
+      // removed as the rows are read again; kept, at 0, while it is pressed,
+      // so the filter the reader chose holds.
       const showArchived = () => {
         menu.hidden = boxes.length === 0;
-        if (archived.size === 0) {
+        if (archived.size === 0 && !isPressed(archivedToggle)) {
           if (archivedToggle) archivedToggle.remove();
           archivedToggle = null;
           return;
@@ -809,7 +810,8 @@
       startActivity();
       // The days the view already shows, asked again from the newest, so
       // each reply's unread flag is the route's word now; kept as they were
-      // when the route does not answer.
+      // when the route does not answer. Show older pressed meanwhile reaches
+      // further back: asked again over the days it shows now.
       const askAgain = async () => {
         if (!feed) return;
         const until = feed.from;
@@ -820,6 +822,10 @@
           merge(fresh, earlier);
         }
         if (!fresh) return;
+        if (feed.from < until) {
+          askAgain();
+          return;
+        }
         feed = fresh;
         showActivity();
       };

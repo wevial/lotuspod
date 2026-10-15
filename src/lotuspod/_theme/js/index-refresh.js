@@ -77,7 +77,7 @@
       }
     } catch (ignored) {}
     reading = false;
-    if (fresh)
+    if (fresh && !main.hidden)
       swap(fresh);
     if (again) {
       again = false;

@@ -4,7 +4,8 @@
 // listing shows again over the tabs ("lotuspod:listing"). While a tab is
 // active it reads nothing. Reads never overlap: one asked while another is
 // under way follows it, so a later answer always wins. Any answer but 200, or
-// one that is not an index, leaves the listing as it is.
+// one that is not an index, leaves the listing as it is, and so does one that
+// answers once a tab is active.
 //
 // The rows are compared by what render wrote and no script touches, as a map
 // by page name, since a reader's sort reorders the live rows: each row's
@@ -105,7 +106,10 @@
       // Listed as before.
     }
     reading = false;
-    if (fresh) swap(fresh);
+    // A tab made active meanwhile keeps the answer from being drawn, or from
+    // loading the index again under the reader's unsent text; showing the
+    // listing again reads anew.
+    if (fresh && !main.hidden) swap(fresh);
     if (again) {
       again = false;
       read();
