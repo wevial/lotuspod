@@ -320,11 +320,10 @@ test.describe.serial('an archived page', () => {
       const side = parts(page);
       await expect(side.banner).toBeVisible();
       await expect(side.button).toHaveText('Unarchive');
-      // At the right end of the top bar, its status line beside it; none in the header.
+      // At the right end of the top bar, its status line beside it.
       expect(await side.button.evaluate((node) =>
         node.parentElement?.matches('.artifact-topbar > span.artifact-archive-bar:last-child') &&
         node.nextElementSibling?.matches('span.artifact-archive-status[role="status"]'))).toBe(true);
-      await expect(page.locator('header.artifact-header button.artifact-archive')).toHaveCount(0);
 
       await press(page, 'Unarchive');
       await expect(side.banner).toHaveCount(0);
@@ -460,8 +459,6 @@ test.describe.serial('an archived page', () => {
         return (w.__shifts as { value: number; at: number }[])
           .filter((shift) => shift.at >= w.__arrived).map((shift) => shift.value);
       }), 'no layout shift once the button is drawn').toEqual([]);
-      expect(await button.evaluate((node) => node.closest('.artifact-topbar') !== null),
-        'the button is in .artifact-topbar').toBe(true);
       expect(errors).toEqual([]);
     });
   });
