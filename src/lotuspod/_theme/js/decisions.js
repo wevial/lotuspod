@@ -867,9 +867,9 @@
         if (read === null) {
           return;
         }
-        if (read === true) {
-          reading.read = true;
-        }
+        // The newest read's: a form a failed one brought in has no
+        // answer read, so the review sheet leaves it out.
+        reading.read = read === true;
         table();
         document.dispatchEvent(new CustomEvent(ANSWERED));
       });
