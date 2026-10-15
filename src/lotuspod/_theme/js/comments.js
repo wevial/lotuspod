@@ -1100,11 +1100,14 @@
           if (!row) {
             return;
           }
+          // Where the words start now: a swap since may have moved them.
+          var start = marks.length && article.contains(marks[0]) ?
+            offsetOf(textModel(article), marks[0], 0) : found.start;
           var focused = holder.contains(document.activeElement) || document.activeElement === document.body;
           if (open === mine) {
             close(mine);
           }
-          hints.set(row.id, found.start);
+          hints.set(row.id, start);
           add({ root: row, replies: [] });
           posted();
           panel.started(shown.get(row.id), focused);

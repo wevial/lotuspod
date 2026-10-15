@@ -29,8 +29,9 @@
 // copy takes comments and the other does not, or when a section the swap
 // would take away, held back or not, is one any test registered with
 // refuseSwap refuses (js/comments.js's: its form holds text not sent). A
-// held section's Update that would take away one a test refuses reloads the
-// page instead, so its text is kept. A swap that throws partway has the page
+// held section's Update that would take away one a test refuses, or a held
+// part's that would replace a passage's highlight, reloads the page instead,
+// so its text is kept. A swap that throws partway has the page
 // reload.
 
 // What a swapped part may not hold yet, old or new: each later ticket mounts
@@ -499,9 +500,10 @@ function pageSwap(): void {
     const at = parts.findIndex((part) => part.id === id);
     if (at < 0) return;
     const old = parts[at]!;
-    // A section taken away that a test refuses to lose is reloaded away,
-    // what it holds kept over the reload.
-    if (!entry.fresh && refused(old)) {
+    // A section taken away that a test refuses to lose, or one holding a
+    // highlight since it was held, is reloaded away, what it holds kept
+    // over the reload.
+    if ((!entry.fresh && refused(old)) || unmounted([old.heading, old.wrapper])) {
       live.reload();
       return;
     }
@@ -535,7 +537,12 @@ function pageSwap(): void {
     const body = bodyOf(document);
     if (!entry || !body) return;
     const parts = partsOf(body);
-    swapped(live.revision(), [applyIntro(body, introOf(body, parts), entry.fresh, entry.digest)]);
+    const intro = introOf(body, parts);
+    if (unmounted(intro)) {
+      live.reload();
+      return;
+    }
+    swapped(live.revision(), [applyIntro(body, intro, entry.fresh, entry.digest)]);
     toggleOf(parts[0]?.heading)?.focus();
   }
 

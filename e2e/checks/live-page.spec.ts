@@ -1515,4 +1515,73 @@ test.describe('signed in', () => {
     await expect(page.locator('div.artifact-section-body[data-section="risks"] .artifact-passage-number')).toHaveText('1');
     expect(errors).toEqual([]);
   });
+
+  test('Update on a held section holding a passage composer reloads, the composer kept', async ({ page }) => {
+    const errors = watchErrors(page);
+    const name = 'live-page-comments-held-passage';
+    publish(name, sectioned(name, pond()));
+    await stopClock(page);
+    await open(page, name);
+    const toggle = page.locator('.artifact-body > h2#risks button.artifact-section-toggle');
+    await toggle.focus();
+
+    // The words selected and those around them stay; a paragraph is added.
+    publish(name, sectioned(name, pond({
+      Risks: { paragraphs: ['The pump may crack in the ice.', 'The fish need air under it.', RISKY] },
+    })));
+    await page.clock.runFor(CHECK);
+    const bar = page.locator('div.artifact-section-body[data-section="risks"] div.artifact-swap-held');
+    await expect(bar).toContainText('This section changed');
+    const field = await selectPassage(page, 'The pump may crack', 8);
+    const UNSENT = 'Which pump is this?';
+    await field.fill(UNSENT);
+
+    const loaded = page.waitForEvent('load');
+    await bar.getByRole('button', { name: 'Update' }).click();
+    await loaded;
+    await expect(page.locator('div.artifact-section-body[data-section="risks"]')).toContainText(RISKY);
+    await expect(field).toHaveValue(UNSENT);
+    await expect(page.locator('mark.artifact-passage--pending')).toHaveText('The pump');
+    expect(errors).toEqual([]);
+  });
+
+  test('a passage composer open through a swap posts on the words selected, not the same words before them', async ({ page }) => {
+    const errors = watchErrors(page);
+    const name = 'live-page-comments-composer-moved';
+    const TWICE = 'The fish need air under the ice.';
+    publish(name, sectioned(name, pond({ Risks: { paragraphs: [TWICE, TWICE] } })));
+    await stopClock(page);
+    await open(page, name);
+    const second = page.locator('div.artifact-section-body[data-section="risks"] p').nth(1);
+    await second.evaluate((paragraph) => {
+      const range = document.createRange();
+      range.selectNodeContents(paragraph.firstChild!);
+      const selection = document.getSelection()!;
+      selection.removeAllRanges();
+      selection.addRange(range);
+    });
+    await page.keyboard.press('Control+Alt+m');
+    const field = page.getByRole('textbox', { name: 'Comment on the selected words' });
+    await expect(field).toBeFocused();
+    await field.fill('Which one?');
+
+    // Findings grows by the gap between the two sentences, so the first now
+    // starts where the second did.
+    const grown = `The pond freezes in January. ${'a'.repeat(TWICE.length)}`;
+    const revised = publish(name, sectioned(name, pond({
+      Findings: { paragraphs: [grown, 'The pump stops with it.'] }, Risks: { paragraphs: [TWICE, TWICE] },
+    })));
+    await page.clock.runFor(CHECK);
+    await expect.poll(() => revisionOf(page)).toBe(revised);
+    await expect(banner(page).node).toHaveCount(0);
+
+    const [posted] = await Promise.all([
+      page.waitForResponse((r) => new URL(r.url()).pathname === '/api/comments' && r.request().method() === 'POST'),
+      page.locator('form.artifact-passage-form button[type="submit"]').click(),
+    ]);
+    expect(posted.status()).toBe(201);
+    await expect(second.locator('mark.artifact-passage')).toHaveText(TWICE);
+    await expect(page.locator('div.artifact-section-body[data-section="risks"] p').nth(0).locator('mark')).toHaveCount(0);
+    expect(errors).toEqual([]);
+  });
 });

@@ -358,7 +358,7 @@ function pageSwap() {
     if (at < 0)
       return;
     const old = parts[at];
-    if (!entry.fresh && refused(old)) {
+    if (!entry.fresh && refused(old) || unmounted([old.heading, old.wrapper])) {
       live.reload();
       return;
     }
@@ -390,7 +390,12 @@ function pageSwap() {
     if (!entry || !body)
       return;
     const parts = partsOf(body);
-    swapped(live.revision(), [applyIntro(body, introOf(body, parts), entry.fresh, entry.digest)]);
+    const intro = introOf(body, parts);
+    if (unmounted(intro)) {
+      live.reload();
+      return;
+    }
+    swapped(live.revision(), [applyIntro(body, intro, entry.fresh, entry.digest)]);
     toggleOf(parts[0]?.heading)?.focus();
   }
   holdSwap((nodes) => {
