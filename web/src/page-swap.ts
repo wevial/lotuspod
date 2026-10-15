@@ -39,7 +39,6 @@ function pageSwap(): void {
   const HELD = "div.artifact-swap-held";
   const CHANGED_TEXT = "This section changed";
   const REMOVED_TEXT = "This section was removed";
-  // What a swap brought in is tinted for TINT ms.
   const TINTED = "artifact-swapped";
   const TINT = 2000;
   const HEAD_METAS = ["lotuspod:revision", "lotuspod:updated", "lotuspod:labels", "lotuspod:owner"];
