@@ -38,7 +38,7 @@ POND_IMAGES = (
     "# Pond\n\nStill water.\n\n![Pump chart](./chart.png)\n\n"
     "## Fish\n\n![Fish](photos/fish.jpg)\n\nThree.\n"
 )
-_BODY_RE = re.compile(r'<section class="artifact-body">.*?</section>', re.DOTALL)
+_BODY_RE = re.compile(r'<section class="artifact-body"[^>]*>.*?</section>', re.DOTALL)
 GARDEN_IMAGES = (
     "<h1>Garden</h1>\n<p>Beds &amp; paths.</p>\n"
     "<!-- <img src=\"draft.png\"> -->\n"
@@ -47,10 +47,13 @@ GARDEN_IMAGES = (
 )
 # Where a page carries the time publish stamped it: its lotuspod:updated meta
 # tag, and the Updated time of its meta line, with the day it shows, when that
-# names another day.
+# names another day. The header digest covers those time values too.
 _UPDATED_META_RE = re.compile(rb'(<meta name="lotuspod:updated" content=")[^"]*(">)')
 _UPDATED_TIME_RE = re.compile(
     rb'( \xc2\xb7 Updated <time datetime=")[^"]*(">)[^<]*(</time>)'
+)
+_HEADER_DIGEST_RE = re.compile(
+    rb'(<header class="artifact-header" data-digest=")[0-9a-f]{16}(">)'
 )
 GARDEN = "<h1>Garden notes</h1>\n<h2>Beds</h2>\n<p>North.</p>\n<h2>Path</h2>\n<p>Gravel.</p>\n"
 
@@ -65,6 +68,8 @@ def git(cwd: Path, *argv: str) -> str:
 def without_update_stamp(page: bytes) -> bytes:
     page, stamps = _UPDATED_META_RE.subn(rb"\g<1>STAMP\g<2>", page)
     assert stamps == 1, f"{stamps} lotuspod:updated meta tags"
+    page, digests = _HEADER_DIGEST_RE.subn(rb"\g<1>DIGEST\g<2>", page)
+    assert digests == 1, f"{digests} header digests"
     return _UPDATED_TIME_RE.sub(rb"\g<1>STAMP\g<2>DAY\g<3>", page, count=1)
 
 
@@ -421,8 +426,8 @@ class StandardInputTests(PublishTestCase):
                           (out_dir / "pond.html").read_text(encoding="utf-8"))
         self.assertSamePage(from_stdin, from_file)
 
-        # Only the stamp is set aside: a byte changed anywhere else in the
-        # page still fails the comparison.
+        # Only the stamp and its header digest are set aside: a byte changed
+        # in the body still fails the comparison.
         page = from_stdin / "pond.html"
         page.write_bytes(page.read_bytes().replace(b"Still water.", b"Still waters", 1))
         with self.assertRaises(AssertionError):

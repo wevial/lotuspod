@@ -112,6 +112,18 @@ twice.
   replies, resolution}`, threads and replies oldest first, the ids of this
   reader's unread replies among them, oldest first (see [Replies to
   you](#replies-to-you)), and the largest image `POST /api/media` takes.
+- `GET /api/events` opens an Access-verified server-sent-events stream, with
+  `Content-Type: text/event-stream` and `Cache-Control: no-store`. It opens with
+  `retry: 3000`; each `event: change` carries JSON data `{what, page}`. `what`
+  is `comment` for stored threads, replies, claims, releases, failures,
+  resolutions, reopens and follow-ups; `answer` for answers, dismissals and
+  their undo; `publish` for a visible page's revision or archive change; or
+  `index` for a rebuilt listing, with `page: null`. Other ticks name the page.
+  An idle stream sends `: keepalive` every 30 seconds. At most 32 streams are
+  open: another gets 503 `{"error": "too_many_streams"}` and `Retry-After: 60`.
+  Each stream ends after 10 minutes so reconnecting verifies Access again;
+  a stream 100 ticks behind is ended too. Only GET is allowed (405 with
+  `Allow: GET` otherwise). Seen writes do not send ticks.
 - `GET /api/revision?page=NAME` answers `{revision}`, the page's current
   revision alone; it is only read (any other method is 405).
 - `POST /api/seen` with `{page, revision}` records that the reader opened
@@ -387,6 +399,9 @@ page" while it has no thread. Its threads are stored with `section` `""`
 decision. They are routed, pulled, claimed, answered, resolved and counted
 unread as any thread, and an agent reads them as "the whole page". A page
 whose only box is `page` has no other: its box already covers the whole page.
+A thread on that one `page` box shows in the whole page's box once the page
+has sections, and a `""` thread shows in the `page` box once it has one
+section; either is still stored on the section it was written on.
 To start one, `POST /api/comments` with `{page, section: "", text}`. A thread whose section the page
 no longer has is listed at the end of the body under "Comments on sections
 that have changed" (in the panel, where there is one). Every author and text
@@ -498,12 +513,20 @@ comment's opening words, its status ("✓ Answered", "HANDLE is writing",
 "Waiting for HANDLE", "HANDLE couldn't answer") and its reply count. One entry
 is open at a time and holds the whole thread as a box would, with a "Resolve"
 control; opening one scrolls the page to its section's chip, opening the
-section first if it is folded. Each group ends in "Comment on this section"
-("Comment on this page" for the whole page's), which unfolds the box's own
-form in the panel. "Comment on a section" lists "This page" first on a page
-with a box for the whole page, then each section in page order. The page remembers whether the
+section first if it is folded. A group draws no control of its own for a
+new thread: the panel starts one from above its groups. "Comment on this
+page", on a page with a box for the whole page, unfolds that box's own form
+in the "This page" group; "Comment on a section" lists "This page" first on
+such a page, then each section in page order, and unfolds the chosen box's
+form in its group. On an archived page both are disabled. An open form has a
+"Cancel", and Escape in it does the same: the form folds, keeping what was
+typed and attached, the group is unlisted if it holds no threads, and the
+focus goes back to the button that started it; nothing is posted. In any
+comment composer (a box's form, a reply, a passage's), Cmd+Enter (Ctrl+Enter
+off macOS) sends as its button does, and does nothing while it saves; Enter
+alone adds a line. The page remembers whether the
 reader left the panel open or folded in `localStorage` (a page whose storage
-throws starts folded), and Escape folds it.
+throws starts folded), and Escape elsewhere in it folds it.
 
 The open panel is resized from a handle on its left edge, a separator named
 "Resize comments": dragged, its edge follows the pointer, and focused, Left

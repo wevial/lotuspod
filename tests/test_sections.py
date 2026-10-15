@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import io
 import os
+import re
 import sys
 import tempfile
 import unittest
@@ -194,10 +195,11 @@ class UnwrappedTests(SectionsTestCase):
 class WrapSectionsTests(unittest.TestCase):
     def test_the_authors_bytes_are_kept(self):
         body = '<p>Intro &amp; more</p>\n<H2 ID="a"  class=x>A</H2>\n<p>a<br>b</p>\n<h2 id="b">B</h2>tail'
-        wrapped, done = sections.wrap_sections(body)
+        wrapped, done, intro_digest = sections.wrap_sections(body)
         self.assertTrue(done)
+        self.assertEqual(intro_digest, cli.unit_digest('<p>Intro &amp; more</p>\n'))
         self.assertEqual(
-            wrapped,
+            re.sub(r' data-digest="[0-9a-f]{16}"', "", wrapped),
             '<p>Intro &amp; more</p>\n<H2 ID="a"  class=x>A</H2>\n'
             '<div class="artifact-section-body" data-section="a">\n<p>a<br>b</p>\n</div>\n'
             '<h2 id="b">B</h2>\n<div class="artifact-section-body" data-section="b">tail\n</div>\n',
@@ -211,12 +213,12 @@ class WrapSectionsTests(unittest.TestCase):
             '<h2 id="a">A<h2 id="b">B</h2>',
         ):
             with self.subTest(body=body):
-                self.assertEqual(sections.wrap_sections(body), (body, False))
+                self.assertEqual(sections.wrap_sections(body), (body, False, cli.unit_digest(body)))
 
     def test_void_elements_and_stray_end_tags_keep_the_depth(self):
         body = ('<p>a<img src="x.png"><br/><input type="checkbox"></p></span>\n'
                 '<h2 id="a">A</h2><hr><h2 id="b">B</h2>')
-        _, done = sections.wrap_sections(body)
+        _, done, _ = sections.wrap_sections(body)
         self.assertTrue(done)
 
 

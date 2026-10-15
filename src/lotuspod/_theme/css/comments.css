@@ -948,8 +948,8 @@
   scrollbar-width: thin;
 }
 
-/* One way to start a thread on a section: a button under the heading that
-   opens a list of the page's sections over the groups. */
+/* The ways to start a thread, under the heading: a button for the whole
+   page, and one that opens a list of the page's sections over the groups. */
 .artifact-comments-start {
   border-bottom: 1px solid var(--hairline);
   flex: none;
@@ -962,6 +962,7 @@
   margin: 0 0 0.35rem;
 }
 
+.artifact-comments-on-page,
 .artifact-comments-pick {
   appearance: none;
   background: none;
@@ -977,6 +978,11 @@
   text-underline-offset: 0.18em;
 }
 
+.artifact-comments-on-page {
+  margin-right: 0.9rem;
+}
+
+.artifact-comments-on-page:hover,
 .artifact-comments-pick:hover,
 .artifact-comments-pick[aria-expanded="true"] {
   color: var(--color-pale-lavender);
@@ -1284,6 +1290,30 @@
 
 .artifact-comments-compose .artifact-comment-form {
   margin-top: 0.45rem;
+}
+
+/* A form's Cancel shows in the panel only: a popover or the sheet keeps its
+   own control and Close. */
+.artifact-comments-cancel {
+  appearance: none;
+  background: none;
+  border: 0;
+  border-radius: var(--radius-chip);
+  color: var(--color-lavender);
+  cursor: pointer;
+  display: block;
+  font: inherit;
+  font-size: 0.85rem;
+  margin: 0.4rem 0 0 auto;
+  padding: 0 0.25rem;
+}
+
+.artifact-comments-cancel:hover {
+  color: var(--color-pale-lavender);
+}
+
+.artifact-comments-held .artifact-comments-cancel {
+  display: none;
 }
 
 /* Comments on passages (docs/design/margin-comments-mockup.html, "Selecting

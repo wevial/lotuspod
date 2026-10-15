@@ -437,7 +437,9 @@ class Routes:
                  clock: Callable[[], float] = time.time,
                  claim_sec: float = routing.DEFAULT_CLAIM,
                  media_dir: Path | None = None,
-                 max_image_bytes: int = media.DEFAULT_MAX_BYTES) -> None:
+                 max_image_bytes: int = media.DEFAULT_MAX_BYTES,
+                 changed: Callable[[str, str], None] = lambda what, page: None) -> None:
+        self.changed = changed
         self.database = database
         self.media_dir = media_dir
         self.max_image_bytes = max_image_bytes
@@ -774,6 +776,8 @@ class Routes:
             credential=credential["name"], source=source, question_text=asked.text,
             choice_label=label,
         )
+        if created:
+            self.changed("answer", page.name)
         return {"answer": answer, "created": created}
 
 
@@ -795,11 +799,13 @@ class Routes:
         if action == "release":
             row = self.database.release(comment_id, credential=name, token_hash=token,
                                         clock=self.clock)
+            self.changed("comment", row["page"])
             return self._shown(row)
         if action == "fail":
             reason = api._text(fields["reason"], 1, MAX_REASON)
             row = self.database.fail(comment_id, credential=name, token_hash=token,
                                      clock=self.clock, reason=reason)
+            self.changed("comment", row["page"])
             return self._shown(row)
         key = api._text(fields["idempotencyKey"], 1, MAX_KEY)
         ask = fields.get("ask")
@@ -819,6 +825,7 @@ class Routes:
                                   text=text, revision=revision, model=model, clock=self.clock,
                                   page_of=self._current, images_of=images, ask=ask,
                                   notice=notice)
+        self.changed("comment", row["page"])
         return self._shown(row)
 
     def _thread_handle(self, credential: Mapping, root: int) -> tuple[api.Page, str]:
@@ -845,6 +852,7 @@ class Routes:
         actor = {"kind": "agent", "handle": handle, "credential": credential["name"]}
         resolution = self.database.resolve(root, page=page.name, resolved=resolved,
                                            actor=actor, credential=credential["name"])
+        self.changed("comment", page.name)
         return {"thread": root, "resolution": resolution}
 
     def _follow_up(self, credential: Mapping, root: int, headers: Message,
@@ -866,6 +874,7 @@ class Routes:
         row = self.database.follow_up(root, credential=credential["name"], handle=handle,
                                       key=key, text=text, revision=revision, reopen=reopen,
                                       page_of=self._current, images_of=images)
+        self.changed("comment", row["page"])
         return self._shown(row)
 
     def _current(self, name: str) -> dict | None:
@@ -894,6 +903,7 @@ class Routes:
             token_hash=token_hash(token), claim_sec=self.claim_sec, clock=self.clock,
             route=route,
         )
+        self.changed("comment", row["page"])
         return {"comment": row["id"], "handle": row["claim"]["handle"],
                 "claimToken": token, "expiresAt": row["claim"]["expiresAt"]}
 
@@ -1008,10 +1018,11 @@ class SocketServer(socketserver.ThreadingMixIn, socketserver.UnixStreamServer):
                  window: float = routing.DEFAULT_WINDOW,
                  claim_sec: float = routing.DEFAULT_CLAIM,
                  media_dir: Path | None = None,
-                 max_image_bytes: int = media.DEFAULT_MAX_BYTES) -> None:
+                 max_image_bytes: int = media.DEFAULT_MAX_BYTES,
+                 changed: Callable[[str, str], None] = lambda what, page: None) -> None:
         self.path = Path(path)
         self.routes = Routes(database, pages, describe, window, claim_sec=claim_sec,
-                             media_dir=media_dir, max_image_bytes=max_image_bytes)
+                             media_dir=media_dir, max_image_bytes=max_image_bytes, changed=changed)
         self._inode: int | None = None
         clear_stale(self.path)
         # Never, even briefly, readable or writable by anyone else.

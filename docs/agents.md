@@ -354,7 +354,8 @@ revision}`.
 
 With `--json` each command prints the socket's JSON; without it, readable
 markdown naming the page, section, revision and source file, with every text
-a reader wrote in a fence longer than its longest run of backticks. A refusal
+a reader wrote in a fence longer than its longest run of backticks. Every
+control character other than a line break or a tab is printed as a space. A refusal
 exits 1, printing `{"error": CODE}` with `--json`: `handle_not_allowed` or
 `operation_not_allowed` for a credential that may not, `invalid_credential`,
 `unknown_page`, `unknown_answer`, `unknown_comment`, `unknown_thread`, `not_routed`, `claimed`,

@@ -21,7 +21,7 @@
       <a class="artifact-topbar-title" href="#top">{{title}}</a>
     </div>
 
-    <header class="artifact-header">
+    <header class="artifact-header" data-digest="{{header_digest}}">
 {{#kicker}}      <p class="artifact-kicker">{{kicker}}</p>
 {{/kicker}}      <h1 class="artifact-title">{{title}}</h1>
       <p class="artifact-meta">Created <time datetime="{{date}}">{{date}}</time>{{#updated_day}} · Updated <time datetime="{{updated}}">{{updated_day}}</time>{{/updated_day}}{{label_tags}}</p>
@@ -30,7 +30,7 @@
     </header>
 
     <div class="artifact-main">
-      {{#outline}}<nav class="artifact-outline" aria-label="On this page">
+      {{#outline}}<nav class="artifact-outline" data-digest="{{outline_digest}}" aria-label="On this page">
         <details class="artifact-outline-disclosure">
           <summary class="artifact-outline-summary">On this page</summary>
           <ol class="artifact-outline-list" role="list">
@@ -39,7 +39,7 @@
         </details>
       </nav>{{/outline}}
 
-      <section class="artifact-body">
+      <section class="artifact-body" data-intro-digest="{{intro_digest}}">
         {{body}}
       </section>{{refs_block}}
     </div>

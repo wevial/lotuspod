@@ -36,9 +36,7 @@
     if (!own) {
       return live;
     }
-    var named = document.querySelector("[data-page]");
-    var page = named ? named.dataset.page :
-      decodeURIComponent(location.pathname.split("/").pop()).replace(/\.html$/, "");
+    var page = pageName();
     var key = KEPT + page;
 
     // Where the page's text starts in the document.

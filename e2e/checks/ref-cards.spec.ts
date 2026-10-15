@@ -58,6 +58,37 @@ async function away(page: Page) {
   await page.mouse.move(4, 400);
 }
 
+// The WCAG 2 contrast of a node's text against what is behind it: its
+// backgrounds composited from it up to the nearest opaque one.
+async function contrast(target: Locator) {
+  return target.evaluate((node) => {
+    const parse = (value: string) => {
+      const parts = (/rgba?\(([^)]*)\)/.exec(value)?.[1] ?? '0 0 0 0').split(/[\s,/]+/).filter(Boolean).map(Number);
+      return [parts[0], parts[1], parts[2], parts.length > 3 ? parts[3] : 1];
+    };
+    const over = (top: number[], under: number[]) =>
+      [0, 1, 2].map((index) => top[index] * top[3] + under[index] * (1 - top[3]));
+    const layers: number[][] = [];
+    for (let at: Element | null = node; at; at = at.parentElement) {
+      const background = parse(getComputedStyle(at).backgroundColor);
+      if (background[3] > 0) layers.push(background);
+      if (background[3] >= 1) break;
+    }
+    let behind = [255, 255, 255];
+    for (const layer of layers.reverse()) behind = over(layer, behind);
+    const text = over(parse(getComputedStyle(node).color), behind);
+    const luminance = (rgb: number[]) => {
+      const [r, g, b] = rgb.map((channel) => {
+        const c = channel / 255;
+        return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+      });
+      return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    };
+    const [light, dark] = [luminance(text), luminance(behind)].sort((a, b) => b - a);
+    return (light + 0.05) / (dark + 0.05);
+  });
+}
+
 test('hovering a reference shows its card under it, and leaving hides it', async ({ page }) => {
   const seen = await opened(page);
   const holo = ref(page, 'HOLO-175');
@@ -199,15 +230,25 @@ test.describe('in a narrow window', () => {
         review: [chip('ref-holo-175'), resolve('--color-amber')],
         merged: [chip('ref-holo-171'), resolve('--color-mint')],
         progress: [chip('ref-lotus-97'), resolve('--color-orchid')],
-        // Waiting: border and text a hairline, on the surface.
+        // Waiting: a hairline border and muted ink, on the surface.
         waitingBorder: [chip('ref-relos-2266'), resolve('--hairline-strong')],
-        waitingText: [style('ref-relos-2266').color, resolve('--hairline-strong')],
+        waitingText: [style('ref-relos-2266').color, resolve('--color-muted-lavender')],
         waitingGround: [style('ref-relos-2266').backgroundColor, surfaceColor],
       };
     });
     for (const [tone, [chip, token]] of Object.entries(colors)) {
       expect(chip, tone).toBe(token);
     }
+    await seen.clean();
+  });
+
+  test('a waiting chip reads at AA contrast against what is behind it', async ({ page }) => {
+    const seen = await opened(page);
+    await ref(page, 'relos#2266').hover();
+    await expect(card(page, 'ref-relos-2266')).toBeVisible();
+    // 0.75rem bold is not large text, so the bar is 4.5:1.
+    expect(await contrast(card(page, 'ref-relos-2266').locator('.artifact-ref-chip')))
+      .toBeGreaterThanOrEqual(4.5);
     await seen.clean();
   });
 });
