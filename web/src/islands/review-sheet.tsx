@@ -1,10 +1,12 @@
 // The review sheet over a page's decision forms (js/decisions.js), drawn
-// once the page's answers are read. Each question's shown choice is its
+// once the page's answers are read, and again once each swap's read of
+// them is (web/src/page-swap.ts sends ANSWERED after it). Each question's shown choice is its
 // picked option, else its stored answer at its version, else its default
 // (the form's data-default); it is Open with none, Default at its default
 // (a checklist with every box at its default), else Changed, "was:" the
 // default's label, or "was: open" with no default. A form with a default
-// and no stored answer gets its default picked, so it shows "Not saved".
+// and no stored answer gets its default picked, so it shows "Not saved":
+// on a swap, only a form the swap brought in.
 // The title bar ends in "Next open: QUESTION ↓", which jumps to the next
 // open question, and "N to answer · Respond", which opens the Respond
 // panel: every question under its section's heading, its options as
@@ -16,8 +18,8 @@
 // marked "N open". The panel and the forms are one state: a pick in
 // either moves the other. The sheet draws from the forms and the stored
 // answers on every change to them; Preact keeps only what is the sheet's
-// own, the panel open, a Save under way, what it did and where Next open
-// last jumped.
+// own, the panel open, a Save under way, what it did and the question Next
+// open last jumped to, which a swap keeps.
 
 import { createPortal, Fragment, render } from "preact";
 import { useLayoutEffect, useReducer, useRef, useState } from "preact/hooks";
@@ -45,10 +47,12 @@ interface Standing {
 }
 
 // Where a section's "N open" marks are drawn: a container the island adds
-// to its h2, and one to its outline link, if it has one.
+// to its h2, and one to its outline link, if it has one; key tells them
+// apart across draws.
 interface Marks {
   heading: HTMLElement;
   link: HTMLElement | null;
+  key: number;
 }
 
 function all<T extends Element>(selector: string, root: ParentNode = document): T[] {
@@ -163,13 +167,20 @@ function jump(form: HTMLFormElement): void {
   target?.focus({ preventScroll: true });
 }
 
+interface Group {
+  // The heading's id, "" for the questions before the first h2.
+  key: string;
+  title: string;
+  questions: Question[];
+}
+
 interface SheetProps {
   page: Page;
   the: Answering;
   questions: Question[];
   // One group per section asking a question, in page order, under its
   // title; a question before the first h2 is under the page's title.
-  groups: { title: string; questions: Question[] }[];
+  groups: Group[];
   marks: Map<HTMLElement, Marks>;
 }
 
@@ -179,8 +190,9 @@ function Sheet({ page, the, questions, groups, marks }: SheetProps) {
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [outcome, setOutcome] = useState("");
-  // The question Next open jumps to last, by its place on the page.
-  const [last, setLast] = useState(-1);
+  // The question Next open jumped to last, by its data-question, so a swap
+  // adding or taking away one before it keeps the reader's place.
+  const [last, setLast] = useState("");
   const count = useRef<HTMLButtonElement>(null);
   const close = useRef<HTMLButtonElement>(null);
   const isOpen = useRef(open);
@@ -197,28 +209,32 @@ function Sheet({ page, the, questions, groups, marks }: SheetProps) {
     }
   }
 
-  // Layout effects, so they run as the sheet is first drawn, before the
-  // ANSWERED listener that draws it returns.
+  // Layout effects, so they run as the sheet is drawn, before the
+  // ANSWERED listener that draws it returns. The forms bound are the ones
+  // the sheet is drawn from: a swap unbinds those it took out.
   useLayoutEffect(() => {
-    for (const form of page.forms) {
+    for (const { form } of questions) {
       form.addEventListener("change", redraw);
       form.addEventListener("input", redraw);
       form.addEventListener(page.events.saved, redraw);
     }
+    return () => {
+      for (const { form } of questions) {
+        form.removeEventListener("change", redraw);
+        form.removeEventListener("input", redraw);
+        form.removeEventListener(page.events.saved, redraw);
+      }
+    };
+  }, [questions]);
+
+  useLayoutEffect(() => {
     const escape = (event: KeyboardEvent) => {
       if (event.key === "Escape" && isOpen.current && !event.defaultPrevented) {
         shut(true);
       }
     };
     document.addEventListener("keydown", escape);
-    return () => {
-      for (const form of page.forms) {
-        form.removeEventListener("change", redraw);
-        form.removeEventListener("input", redraw);
-        form.removeEventListener(page.events.saved, redraw);
-      }
-      document.removeEventListener("keydown", escape);
-    };
+    return () => document.removeEventListener("keydown", escape);
   }, []);
 
   useLayoutEffect(() => {
@@ -232,10 +248,12 @@ function Sheet({ page, the, questions, groups, marks }: SheetProps) {
   const changed = states.filter((s) => s.name === "Changed").length;
   const due = states.filter((s) => s.pending).length;
 
-  // The first open question after the last one jumped to, wrapping round.
+  // The first open question after the last one jumped to, wrapping round;
+  // from the top when that one is no longer asked.
   function upcoming(): number {
+    const from = questions.findIndex((question) => question.form.dataset.question === last);
     for (let step = 1; step <= questions.length; step += 1) {
-      const index = (last + step) % questions.length;
+      const index = (from + step) % questions.length;
       if (opened(the, questions[index]!)) {
         return index;
       }
@@ -250,7 +268,7 @@ function Sheet({ page, the, questions, groups, marks }: SheetProps) {
     event.preventDefault();
     const at = upcoming();
     if (at >= 0) {
-      setLast(at);
+      setLast(questions[at]!.form.dataset.question ?? "");
       jump(questions[at]!.form);
     }
   }
@@ -316,7 +334,7 @@ function Sheet({ page, the, questions, groups, marks }: SheetProps) {
     const s = states[at]!;
     const value = question.checklist ? "" : shown(the, question);
     return (
-      <li class="artifact-review-entry" data-question={question.form.dataset.question}>
+      <li key={question.form.dataset.question} class="artifact-review-entry" data-question={question.form.dataset.question}>
         <p class="artifact-review-question">
           {question.number ? <><span class="artifact-review-number">{question.number}</span>{" "}</> : null}
           {question.text}
@@ -371,10 +389,10 @@ function Sheet({ page, the, questions, groups, marks }: SheetProps) {
         <span class="artifact-review-dot" aria-hidden="true" />
         <span>{tally} · Respond</span>
       </button>
-      {Array.from(marks, ([heading, mark], at) => {
+      {Array.from(marks, ([heading, mark]) => {
         const n = counts.get(heading) ?? 0;
         return (
-          <Fragment key={at}>
+          <Fragment key={mark.key}>
             {createPortal(<span class="artifact-review-open" hidden={!n}>{n ? `${n} open` : null}</span>, mark.heading)}
             {mark.link ? createPortal(
               <span class="artifact-review-outline" hidden={!n}>
@@ -397,7 +415,7 @@ function Sheet({ page, the, questions, groups, marks }: SheetProps) {
           </header>
           <div class="artifact-review-list">
             {groups.map((group) => (
-              <section class="artifact-review-group">
+              <section key={group.key} class="artifact-review-group">
                 <h3 class="artifact-review-group-title">{group.title}</h3>
                 <ol class="artifact-review-entries">{group.questions.map(entry)}</ol>
               </section>
@@ -416,17 +434,10 @@ function Sheet({ page, the, questions, groups, marks }: SheetProps) {
   );
 }
 
-// Draw the sheet over the page's forms, once their answers are read.
-function draw(page: Page, the: Answering): void {
-  const bar = document.querySelector(".artifact-topbar");
-  const body = document.querySelector("section.artifact-body");
-  if (!bar || !body || page.archived) {
-    return;
-  }
-  const outline = document.querySelector("ol.artifact-outline-list");
+// Each question in page order, under the nearest h2 before its form, and
+// one group per h2 asking one.
+function questionsOf(page: Page, the: Answering, body: Element): { questions: Question[]; groups: Group[] } {
   const headings = all<HTMLElement>("h2", body);
-
-  // Each question in page order, under the nearest h2 before its form.
   const questions = page.forms.map((form): Question => {
     let heading: HTMLElement | null = null;
     for (const h2 of headings) {
@@ -444,15 +455,13 @@ function draw(page: Page, the: Answering): void {
     question.fallback = radioOf(question, fallback) ? fallback : "";
     return question;
   });
-  if (!questions.length) {
-    return;
-  }
 
-  const groups = new Map<HTMLElement | null, { title: string; questions: Question[] }>();
+  const groups = new Map<HTMLElement | null, Group>();
   for (const question of questions) {
     let group = groups.get(question.heading);
     if (!group) {
       group = {
+        key: question.heading?.id ?? "",
         title: question.heading ? headingTitle(question.heading) :
           words(document.querySelector(".artifact-title")),
         questions: [],
@@ -461,28 +470,63 @@ function draw(page: Page, the: Answering): void {
     }
     group.questions.push(question);
   }
+  return { questions, groups: Array.from(groups.values()) };
+}
 
-  // The marks' containers, added to each h2 asking a question and its
-  // outline link, so the fold code's heading is never drawn again.
-  const marks = new Map<HTMLElement, Marks>();
-  for (const question of questions) {
-    const heading = question.heading;
-    if (!heading || marks.has(heading)) {
+// The marks drawn so far, for their keys.
+let drawn = 0;
+
+// The marks' containers, added to each h2 asking a question and to its
+// outline link, so the fold code's heading is never drawn again. A heading
+// kept from the last draw keeps its own; one that asks none now, or that a
+// swap took out, loses them, and a link a swap brought in gets one.
+function markUp(marks: Map<HTMLElement, Marks>, questions: Question[]): void {
+  const outline = document.querySelector("ol.artifact-outline-list");
+  const asking = new Set(questions.map((question) => question.heading));
+  for (const [heading, mark] of marks) {
+    if (!asking.has(heading) || !heading.isConnected) {
+      mark.heading.remove();
+      mark.link?.remove();
+      marks.delete(heading);
+    }
+  }
+  for (const heading of asking) {
+    if (!heading) {
       continue;
     }
-    const mark: Marks = { heading: heading.appendChild(document.createElement("span")), link: null };
+    let mark = marks.get(heading);
+    if (!mark) {
+      mark = { heading: heading.appendChild(document.createElement("span")), link: null, key: ++drawn };
+      marks.set(heading, mark);
+    }
     const link = outline && heading.id ?
       outline.querySelector(`a[href="#${CSS.escape(heading.id)}"]`) : null;
-    if (link) {
-      mark.link = link.appendChild(document.createElement("span"));
+    if (mark.link?.parentElement !== link) {
+      mark.link?.remove();
+      mark.link = link ? link.appendChild(document.createElement("span")) : null;
+      mark.key = ++drawn;
     }
-    marks.set(heading, mark);
   }
+}
+
+// Draw the sheet over the page's forms, once their answers are read: into
+// tools, the same container each time, so Preact keeps the sheet's own
+// state. The forms in read are those an earlier draw picked defaults on.
+function draw(page: Page, the: Answering, tools: HTMLElement, marks: Map<HTMLElement, Marks>,
+  read: WeakSet<HTMLFormElement>): void {
+  const body = document.querySelector("section.artifact-body")!;
+  const { questions, groups } = questionsOf(page, the, body);
+  markUp(marks, questions);
 
   // A default picked once the answers are read, so the read never takes
   // the form for one the reader touched: for each form with no answer to
   // the question as the page now asks it, one to an earlier wording too.
+  // A form an earlier draw read keeps what the reader left it at.
   for (const question of questions) {
+    if (read.has(question.form)) {
+      continue;
+    }
+    read.add(question.form);
     if (question.fallback && !the.saved(question.form) && !picked(question.form)) {
       const radio = radioOf(question, question.fallback)!;
       radio.checked = true;
@@ -490,9 +534,14 @@ function draw(page: Page, the: Answering): void {
     }
   }
 
-  const tools = bar.appendChild(document.createElement("div"));
-  tools.className = "artifact-review-bar";
-  render(<Sheet page={page} the={the} questions={questions} groups={Array.from(groups.values())} marks={marks} />, tools);
+  // The focus on an entry for a question no longer asked goes to Close.
+  const panel = document.querySelector<HTMLElement>(".artifact-review-panel");
+  const focused = document.activeElement?.closest<HTMLElement>(".artifact-review-entry")?.dataset.question;
+  render(<Sheet page={page} the={the} questions={questions} groups={groups} marks={marks} />, tools);
+  if (focused !== undefined && panel && !panel.hidden &&
+    !questions.some((question) => question.form.dataset.question === focused)) {
+    panel.querySelector<HTMLElement>(".artifact-review-close")?.focus();
+  }
 }
 
 // Without the page's answers there is no telling what is answered: no
@@ -528,9 +577,25 @@ export function reviewSheet(page: Page): void {
   });
   document.addEventListener(page.events.answered, () => {
     if (the.read) {
-      draw(page, the);
+      sheet(page, the);
     }
     drawnAnswers = true;
     toQuestion(!followed);
   }, { once: true });
+}
+
+// The sheet's first draw, and once it is drawn, a draw again after each
+// swap's read of the answers: never before it, so no default is picked
+// over an answer not read yet.
+function sheet(page: Page, the: Answering): void {
+  const bar = document.querySelector(".artifact-topbar");
+  if (!bar || !document.querySelector("section.artifact-body") || page.archived || !page.forms.length) {
+    return;
+  }
+  const tools = bar.appendChild(document.createElement("div"));
+  tools.className = "artifact-review-bar";
+  const marks = new Map<HTMLElement, Marks>();
+  const read = new WeakSet<HTMLFormElement>();
+  draw(page, the, tools, marks, read);
+  document.addEventListener(page.events.answered, () => draw(page, the, tools, marks, read));
 }

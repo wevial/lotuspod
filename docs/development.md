@@ -62,17 +62,21 @@ names. `main.tsx` mounts each island it lists, handing it `page`.
 
 The one island so far is the review sheet (`web/src/islands/review-sheet.tsx`):
 the title bar's open-question count and Next open, the "N open" marks on
-headings and outline links, and the Respond panel. Once `ANSWERED` is sent,
-and only when `answering.read` is true and the page is not archived, it
+headings and outline links, and the Respond panel. Once `ANSWERED` is first
+sent, and only when `answering.read` is true and the page is not archived, it
 renders into a `div.artifact-review-bar` it adds to the title bar, with the
 panel and each mark as a portal: the panel into the body, each mark into an
 empty span it adds to the heading or outline link, so the heading the fold
-code owns is never drawn again. The forms and their stored answers stay the
+code owns is never drawn again. Once drawn, it is drawn again, into the same
+container, on each `ANSWERED` a swap's read of the answers sends
+(`web/src/page-swap.ts`): it reads the questions from the forms again, gives
+a heading that now asks one its span and takes them off one that no longer
+does, and picks a default only on a form the swap brought in. The forms and their stored answers stay the
 truth: the sheet draws from them on each form's `input`, `change` and
 `SAVED`, a pick in the panel sets the form's own input, and it saves through
 `answering.save()`, one question at a time in page order. Preact holds only
 the sheet's own state: the panel open, a Save under way, what it did, and
-where Next open last jumped. The bundle, Preact with it, stays at most
+the question Next open last jumped to, which a swap keeps. The bundle, Preact with it, stays at most
 16,000 bytes gzipped; it uses plain Preact and its hooks, not
 `preact/compat`.
 
