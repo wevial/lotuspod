@@ -1,5 +1,5 @@
 // Built from web/src/page-swap.ts by web/build.ts. Edit that file, not this one.
-const SWAP_UNMOUNTED = "details.artifact-comment, form.artifact-decision, pre.mermaid, button.artifact-ref, table";
+const SWAP_UNMOUNTED = "details.artifact-comment, form.artifact-decision, pre.mermaid";
 function pageSwap() {
   const ADDED = "div.artifact-answered, .artifact-comments-changed";
   const HEAD_METAS = ["lotuspod:revision", "lotuspod:updated", "lotuspod:labels", "lotuspod:owner"];
@@ -124,9 +124,6 @@ function pageSwap() {
 `) !== freshShared.join(`
 `))
       return null;
-    if (digestOf(document.querySelector(".artifact-ref-cards")) !== digestOf(doc.querySelector(".artifact-ref-cards"))) {
-      return null;
-    }
     if (document.querySelector("details.artifact-comment") || doc.querySelector("details.artifact-comment")) {
       return null;
     }
@@ -136,6 +133,9 @@ function pageSwap() {
     const list = outline?.querySelector("ol.artifact-outline-list") ?? null;
     const freshList = freshOutline?.querySelector("ol.artifact-outline-list") ?? null;
     const outlineChanged = digestOf(outline) !== digestOf(freshOutline);
+    const refs = document.querySelector("div.artifact-ref-cards");
+    const freshRefs = doc.querySelector("div.artifact-ref-cards");
+    const refsChanged = digestOf(refs) !== digestOf(freshRefs);
     const introChanged = digestOf(body, "data-intro-digest") !== digestOf(freshBody, "data-intro-digest");
     const intro = introOf(body, parts);
     const freshIntro = introOf(freshBody, freshParts);
@@ -222,6 +222,15 @@ function pageSwap() {
       shown.set(part.id, wrapper);
       inBody.push(heading, wrapper);
       units.push({ kind: "section", id: part.id, change: "added", before: [], after: [heading, wrapper] });
+    }
+    if (refsChanged) {
+      const before = refs ? [refs] : [];
+      const after = freshRefs ? [brought(freshRefs)] : [];
+      refs?.remove();
+      if (after.length)
+        body.after(...after);
+      const change = !refs ? "added" : !freshRefs ? "removed" : "changed";
+      units.push({ kind: "refs", id: "", change, before, after });
     }
     for (const node of inBody) {
       if (node instanceof Element) {

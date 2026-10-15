@@ -7,14 +7,18 @@
   // a click outside closes it. Only one card shows at a time. The card stays
   // where it was written and is set from the reference's rectangle: under it,
   // left-aligned to it, or right-aligned where that would pass the window's
-  // right edge, always inside the window.
-  function refCards(refs) {
+  // right edge, always inside the window. References and cards a swap brings
+  // in (web/src/page-swap.ts) are bound as those at load; a card that shows
+  // while it or its reference is swapped out is hidden.
+  function refCards(body) {
     // The room kept between the card and its reference, and the window's
     // edge, in px.
     var GAP = 6;
     var EDGE = 8;
-    // The reference whose card shows, and whether the reader pinned it.
+    // The reference whose card shows, that card, and whether the reader
+    // pinned it.
     var shown = null;
+    var shownCard = null;
     var pinned = false;
     // True while the script itself puts focus back on a reference.
     var returning = false;
@@ -24,7 +28,7 @@
       return card && card.classList.contains("artifact-ref-card") ? card : null;
     }
 
-    all(".artifact-ref-card").forEach(function (card) {
+    function prepare(card) {
       all("time[datetime]", card).forEach(function (time) {
         time.textContent = when(time.getAttribute("datetime"));
       });
@@ -42,10 +46,10 @@
       note.hidden = true;
       var asOf = card.querySelector(".artifact-ref-card-asof");
       (asOf || card).appendChild(note);
-    });
+    }
 
     function place() {
-      var card = shown && cardOf(shown);
+      var card = shownCard;
       if (!card || card.hidden) {
         return;
       }
@@ -66,7 +70,7 @@
 
     function mark(pin) {
       pinned = pin;
-      var card = shown && cardOf(shown);
+      var card = shownCard;
       if (!card) {
         return;
       }
@@ -88,6 +92,7 @@
         hide(false);
       }
       shown = ref;
+      shownCard = card;
       card.hidden = false;
       place();
     }
@@ -99,11 +104,9 @@
       }
       var ref = shown;
       mark(false);
+      shownCard.hidden = true;
       shown = null;
-      var card = cardOf(ref);
-      if (card) {
-        card.hidden = true;
-      }
+      shownCard = null;
       if (back) {
         returning = true;
         ref.focus({ preventScroll: true });
@@ -116,8 +119,8 @@
       return pinned && shown && shown !== ref;
     }
 
-    refs.forEach(function (ref) {
-      if (!cardOf(ref)) {
+    function bind(ref) {
+      if (!cardOf(ref) || ref.classList.contains("artifact-ref--live")) {
         return;
       }
       ref.classList.add("artifact-ref--live");
@@ -150,6 +153,41 @@
         show(ref);
         mark(true);
       });
+    }
+
+    all(".artifact-ref-card").forEach(prepare);
+    all("button.artifact-ref[aria-controls]", body).forEach(bind);
+
+    document.addEventListener(SWAPPED, function (event) {
+      var units = event.detail.units;
+      var out = function (node) {
+        return units.some(function (unit) {
+          return unit.before.some(function (gone) {
+            return gone === node || gone.contains(node);
+          });
+        });
+      };
+      if (shown && (out(shown) || out(shownCard))) {
+        hide(false);
+      }
+      units.forEach(function (unit) {
+        if (unit.kind === "refs") {
+          unit.after.forEach(function (block) {
+            all(".artifact-ref-card", block).forEach(prepare);
+          });
+        }
+      });
+      units.forEach(function (unit) {
+        unit.after.forEach(function (node) {
+          if (!(node instanceof Element) || !body.contains(node)) {
+            return;
+          }
+          if (node.matches("button.artifact-ref[aria-controls]")) {
+            bind(node);
+          }
+          all("button.artifact-ref[aria-controls]", node).forEach(bind);
+        });
+      });
     });
 
     document.addEventListener("keydown", function (event) {
@@ -175,7 +213,7 @@
   }
 
 
-  var pageRefs = all(".artifact-body button.artifact-ref[aria-controls]");
-  if (pageRefs.length) {
-    refCards(pageRefs);
+  var refsBody = document.querySelector(".artifact-body");
+  if (refsBody) {
+    refCards(refsBody);
   }

@@ -1,8 +1,9 @@
 // Lotuspod page script: once an open page learns it was published again
 // (js/live-page.js), it fetches the new revision and swaps in only the parts
 // whose digest render stamped (data-digest, data-intro-digest) changed: the
-// header's authored text, the outline's links, the intro, and each changed,
-// added or removed section. Every other node stays as it was, and with it the
+// header's authored text, the outline's links, the intro, each changed,
+// added or removed section, and the references block (div.artifact-ref-cards)
+// written after the body. Every other node stays as it was, and with it the
 // scroll position and the folds. A section swapped in folds as the one it
 // replaces was; one added starts open unless the reader's kept folds name it.
 // Once applied, "lotuspod:swapped" (SWAPPED) tells the other page scripts what
@@ -11,15 +12,14 @@
 // The page falls back to the banner or a reload (the swap answers null,
 // nothing touched) when its theme, policy or render variant changed, when
 // either copy predates the digests, when the two differ in having an outline
-// or sections, when their shared sections moved, when the references changed,
-// when either holds a comment box, when the outline changed on a page with
+// or sections, when their shared sections moved, when either holds a comment box, when the outline changed on a page with
 // decision forms (whose review marks sit on its links), or when a changed
 // part, old or new, holds a feature not yet mounted on new markup
 // (SWAP_UNMOUNTED). A swap that throws partway has the page reload.
 
 // What a swapped part may not hold yet, old or new: each later ticket mounts
 // one and takes it off.
-const SWAP_UNMOUNTED = "details.artifact-comment, form.artifact-decision, pre.mermaid, button.artifact-ref, table";
+const SWAP_UNMOUNTED = "details.artifact-comment, form.artifact-decision, pre.mermaid";
 
 function pageSwap(): void {
   // What the page script adds to the body outside any part, left where it is.
@@ -182,9 +182,6 @@ function pageSwap(): void {
     const shared = parts.filter((part) => freshIds.has(part.id)).map((part) => part.id);
     const freshShared = freshParts.filter((part) => ids.has(part.id)).map((part) => part.id);
     if (shared.join("\n") !== freshShared.join("\n")) return null;
-    if (digestOf(document.querySelector(".artifact-ref-cards")) !== digestOf(doc.querySelector(".artifact-ref-cards"))) {
-      return null;
-    }
     if (document.querySelector("details.artifact-comment") || doc.querySelector("details.artifact-comment")) {
       return null;
     }
@@ -196,6 +193,9 @@ function pageSwap(): void {
     const list = outline?.querySelector("ol.artifact-outline-list") ?? null;
     const freshList = freshOutline?.querySelector("ol.artifact-outline-list") ?? null;
     const outlineChanged = digestOf(outline) !== digestOf(freshOutline);
+    const refs = document.querySelector<HTMLElement>("div.artifact-ref-cards");
+    const freshRefs = doc.querySelector<HTMLElement>("div.artifact-ref-cards");
+    const refsChanged = digestOf(refs) !== digestOf(freshRefs);
     const introChanged = digestOf(body, "data-intro-digest") !== digestOf(freshBody, "data-intro-digest");
     const intro = introOf(body, parts);
     const freshIntro = introOf(freshBody, freshParts);
@@ -285,6 +285,15 @@ function pageSwap(): void {
       shown.set(part.id, wrapper);
       inBody.push(heading, wrapper);
       units.push({ kind: "section", id: part.id, change: "added", before: [], after: [heading, wrapper] });
+    }
+    if (refsChanged) {
+      const before = refs ? [refs] : [];
+      const after = freshRefs ? [brought(freshRefs)] : [];
+      // The old block goes first, so the new cards keep their ids.
+      refs?.remove();
+      if (after.length) body.after(...after);
+      const change = !refs ? "added" : !freshRefs ? "removed" : "changed";
+      units.push({ kind: "refs", id: "", change, before, after });
     }
     for (const node of inBody) {
       if (node instanceof Element) {

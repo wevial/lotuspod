@@ -36,11 +36,11 @@ interface FoldSection {
 }
 declare const foldSection: FoldSection;
 
-// One part of the page a swap changed: the header, the outline, the intro or
-// a section (by its id; "" for any other part), with the nodes it took out,
-// detached, and put in.
+// One part of the page a swap changed: the header, the outline, the intro, a
+// section (by its id; "" for any other part) or the references block, with
+// the nodes it took out, detached, and put in.
 interface SwappedUnit {
-  kind: "header" | "outline" | "intro" | "section";
+  kind: "header" | "outline" | "intro" | "section" | "refs";
   id: string;
   change: "changed" | "added" | "removed";
   before: Node[];
