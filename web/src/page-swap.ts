@@ -27,7 +27,7 @@
 // either copy predates the digests, when the two differ in having an outline
 // or sections, when their shared sections moved, when the references changed,
 // when the review sheet shows and the outline changed on a page with decision
-// forms (whose review marks sit on its links) or a changed part holds one,
+// forms (whose review marks sit on its links) and no part swapped holds one,
 // when a changed part holds a decision form on a page that loaded with
 // neither a form nor a comment box, when a changed part, old or new, holds a
 // feature not yet mounted on new markup (SWAP_UNMOUNTED), or when one copy
@@ -269,18 +269,11 @@ function pageSwap(): void {
       }),
     ].filter((node): node is Node => node !== null);
     if (unmounted(touched)) return null;
-    // The review sheet reads the forms once, as it is drawn, and marks the
-    // outline's links of sections with questions: while it shows, a part
-    // holding a form, or the outline of a page with forms, is not swapped.
     // A page that loaded with neither a form nor a comment box has no
     // answering (js/decisions.js) to mount a form on.
-    const sheet = document.querySelector("div.artifact-review-bar") !== null;
     const decided = (nodes: Node[]): boolean => nodes.some((node) => node instanceof Element &&
       (node.matches(DECISION) || node.querySelector(DECISION) !== null));
-    if ((sheet || answering === null) && decided(touched)) return null;
-    if (sheet && outlineChanged && (document.querySelector(DECISION) || doc.querySelector(DECISION))) {
-      return null;
-    }
+    if (answering === null && decided(touched)) return null;
 
     // Each changed or removed part, as the open page has it, that a test
     // holds back: kept as it is, its new nodes kept for the reader's Update.
@@ -296,6 +289,22 @@ function pageSwap(): void {
     const sectionHeld = new Set([...removed, ...changed.map((part) => byId.get(part.id)!)]
       .filter((part) => holds([part.heading, part.wrapper], !freshIds.has(part.id)) || held.has(part.id))
       .map((part) => part.id));
+    // The review sheet draws again after the read of the answers that a
+    // swap of a form starts, its marks on the outline's links with it; a
+    // swap that brings in or takes out no form starts none, so while the
+    // sheet shows, it takes no outline of a page with forms.
+    const swapsForm = decided([
+      ...(introChanged && !introHeld ? [...intro, ...freshIntro] : []),
+      ...[...removed, ...added].filter((part) => !sectionHeld.has(part.id)).flatMap((part) => [part.heading, part.wrapper]),
+      ...changed.filter((part) => !sectionHeld.has(part.id)).flatMap((part) => {
+        const old = byId.get(part.id)!;
+        return [old.heading, old.wrapper, part.heading, part.wrapper];
+      }),
+    ]);
+    if (document.querySelector("div.artifact-review-bar") && outlineChanged && !swapsForm &&
+      (document.querySelector(DECISION) || doc.querySelector(DECISION))) {
+      return null;
+    }
     // The first section heading at or below the title bar, and its top.
     const line = document.querySelector(".artifact-topbar")?.getBoundingClientRect().bottom ?? 0;
     const anchorAt = parts.findIndex((part) => part.heading.getBoundingClientRect().top >= line);

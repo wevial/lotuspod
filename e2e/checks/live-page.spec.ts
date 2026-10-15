@@ -2393,20 +2393,27 @@ test.describe('signed in', () => {
     expect(errors).toEqual([]);
   });
 
-  test('a page that loaded with decision forms, its review sheet drawn, falls back to the banner when a form changes', async ({ page }) => {
+  test('a page that loaded with decision forms, its review sheet drawn, swaps a changed form in place', async ({ page }) => {
     const errors = watchErrors(page);
     const name = 'live-page-decisions-sheet';
-    const first = publish(name, sectioned(name, [...pond(), decisions()]));
+    publish(name, sectioned(name, [...pond(), decisions()]));
     await stopClock(page);
     await open(page, name);
     await expect(page.locator('div.artifact-review-bar')).toHaveCount(1);
-    const before = await page.locator('.artifact-body').innerHTML();
+    // The defaults picked on load are saved, so no pick holds the section.
+    await page.locator('button.artifact-review-count').click();
+    await page.locator('button.artifact-review-save').click();
+    await expect(page.locator('.artifact-review-outcome')).toContainText('Saved at');
+    await page.locator('.artifact-review-close').click();
+    await page.locator('h1.artifact-title').click();
+    const moved = watchLoads(page);
 
-    publish(name, sectioned(name, [...pond(), decisions('Which heater, for a deep pond?')]));
-    await page.clock.runFor(CHECK);
-    await expect(banner(page).node).toContainText(NEWER);
-    expect(await page.locator('.artifact-body').innerHTML()).toBe(before);
-    expect(await revisionOf(page)).toBe(first);
+    await republish(page, name, sectioned(name, [...pond(), decisions('Which heater, for a deep pond?')]));
+    await expect(banner(page).node).toHaveCount(0);
+    await expect(card(page, 'decision-1').text).toHaveText('Which heater, for a deep pond?');
+    await expect(page.locator('div.artifact-review-bar')).toHaveCount(1);
+    await expect(page.locator('button.artifact-review-count')).toHaveText('All answered · Respond');
+    expect(moved.count).toBe(0);
     expect(errors).toEqual([]);
   });
 });
