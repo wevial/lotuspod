@@ -368,4 +368,28 @@ test.describe.serial('an archived page', () => {
       }
     }
   });
+
+  // Last, so a failure here leaves the checks before it run.
+  test.describe('signed in as its owner, as the page loads', () => {
+    test.use({ extraHTTPHeaders: SIGNED_IN });
+
+    test('the button arrives in the top bar, and the page does not move when it does', async ({ page }) => {
+      const errors = await watch(page);
+      await page.addInitScript(() => {
+        const shifts: number[] = [];
+        (window as any).__shifts = shifts;
+        new PerformanceObserver((list) => {
+          for (const entry of list.getEntries()) shifts.push((entry as any).value);
+        }).observe({ type: 'layout-shift', buffered: true });
+      });
+      await open(page);
+      const button = parts(page).button;
+      await expect(button).toHaveText('Unarchive');
+      expect(await page.evaluate(() => (window as any).__shifts as number[]),
+        'no layout shift once the button is drawn').toEqual([]);
+      expect(await button.evaluate((node) => node.closest('.artifact-topbar') !== null),
+        'the button is in .artifact-topbar').toBe(true);
+      expect(errors).toEqual([]);
+    });
+  });
 });
