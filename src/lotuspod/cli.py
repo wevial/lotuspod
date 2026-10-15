@@ -834,8 +834,10 @@ def cmd_render(args: argparse.Namespace) -> int:
         "mermaid_dir": MERMAID_DIR,
         "mermaid_elk_dir": MERMAID_ELK_DIR,
     }
+    # The header changes with the day it names as updated, not with the second
+    # publish ran, so the same source published twice stamps the same digest.
     context["header_digest"] = unit_digest(*(context[key] for key in (
-        "kicker", "title", "date", "updated", "updated_day", "label_tags", "owner",
+        "kicker", "title", "date", "updated_day", "label_tags", "owner",
         "summary_block",
     )))
     context["outline_digest"] = unit_digest(context["outline_items"])
