@@ -13,6 +13,12 @@
     return date.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
   }
 
+  // The page as its URL names it, never as anything in its body does: an
+  // authored data-page could name another page.
+  function pageName() {
+    return decodeURIComponent(location.pathname.split("/").pop()).replace(/\.html$/, "");
+  }
+
   function element(tag, className, text) {
     var node = document.createElement(tag);
     if (className) {
