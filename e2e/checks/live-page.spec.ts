@@ -1757,6 +1757,72 @@ test.describe('signed in', () => {
     expect(errors).toEqual([]);
   });
 
+  test('a read of the answers a later swap replaces fills no form, the later read drawing the newest answer', async ({ page }) => {
+    const errors = watchErrors(page);
+    const name = 'live-page-decisions-reads';
+    await undecided(page, name);
+    await republish(page, name, sectioned(name, [...pond(), decisions()]));
+    await answer(page, 'decision-2', 'No');
+    await page.locator('h1.artifact-title').click();
+
+    // Each read from here on is answered only when let go, as the site
+    // answered it when asked.
+    const held: (() => Promise<void>)[] = [];
+    await page.route((url) => url.pathname === '/api/answers', async (route) => {
+      if (route.request().method() !== 'GET') {
+        await route.fallback();
+        return;
+      }
+      const response = await route.fetch();
+      held.push(() => route.fulfill({ response }));
+    });
+    await republish(page, name, sectioned(name, [...pond(), decisions('Which heater, for a deep pond?')]));
+    await expect.poll(() => held.length).toBe(1);
+    const second = card(page, 'decision-2');
+    await answer(page, 'decision-2', 'Yes');
+    await expect(second.saved).toHaveText('✓ Saved · Yes · change');
+    await page.locator('h1.artifact-title').click();
+    await republish(page, name, sectioned(name, [...pond(), decisions('Which heater, for a pond 2 m deep?')]));
+    await expect.poll(() => held.length).toBe(2);
+
+    // The older read, saying "No", comes back first.
+    const finished = page.waitForEvent('requestfinished', (request) =>
+      new URL(request.url()).pathname === '/api/answers' && request.method() === 'GET');
+    await held[0]!();
+    await finished;
+    await page.evaluate(() => Promise.resolve());
+    await held[1]!();
+    await expect(second.saved).toHaveText('✓ Saved · Yes · change');
+    const row = page.locator('div.artifact-answered tbody tr[data-question="decision-2"]');
+    await expect(row.locator('.artifact-answered-choice strong')).toHaveText('Yes');
+    expect(errors).toEqual([]);
+  });
+
+  test('a thread asked on a question a republish rewords is headed with the new words', async ({ page }) => {
+    const errors = watchErrors(page);
+    const name = 'live-page-decisions-reworded-thread';
+    await undecided(page, name);
+    await republish(page, name, sectioned(name, [...pond(), decisions()]));
+    const first = card(page, 'decision-1');
+    await first.form.locator('details.artifact-decision-note > summary').click();
+    await first.form.locator('textarea[name="note"]').fill('Is the small one enough for the fish?');
+    const [asked] = await Promise.all([
+      page.waitForResponse((r) => new URL(r.url()).pathname === '/api/comments' && r.request().method() === 'POST'),
+      first.ask.click(),
+    ]);
+    const id = (await asked.json()).id as number;
+    const words = page.locator(`.artifact-comments-panel li.artifact-comments-entry[data-thread="${id}"] ` +
+      '.artifact-comments-entry-head .artifact-comments-entry-words');
+    await expect(words).toHaveText('Decision 1 · Which heater?');
+    await page.locator('h1.artifact-title').click();
+
+    await republish(page, name, sectioned(name, [...pond(), decisions('Which heater, for a deep pond?')]));
+    await expect(first.text).toHaveText('Which heater, for a deep pond?');
+    await first.chip.click();
+    await expect(words).toHaveText('Decision 1 · Which heater, for a deep pond?');
+    expect(errors).toEqual([]);
+  });
+
   test('a section a republish adds after the decisions leaves the Answered table last, still folding', async ({ page }) => {
     const errors = watchErrors(page);
     const name = 'live-page-decisions-table';

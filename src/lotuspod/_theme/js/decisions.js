@@ -718,13 +718,27 @@
       }
     }
 
-    // True once the page's answers are read.
+    // The newest read of the answers begun, by its turn.
+    var reads = 0;
+
+    // True once the page's answers are read; null for a read a newer one
+    // (begun on a swap) has replaced, which draws nothing: it may predate
+    // an answer saved since, and would fill the forms the newer read fills.
     async function load() {
-      var response = await fetch(ANSWERS + "?page=" + encodeURIComponent(page));
-      if (!response.ok) {
+      var turn = ++reads;
+      var questions;
+      try {
+        var response = await fetch(ANSWERS + "?page=" + encodeURIComponent(page));
+        questions = response.ok ? (await response.json()).questions || {} : null;
+      } catch (ignored) {
+        questions = null;
+      }
+      if (turn !== reads) {
+        return null;
+      }
+      if (!questions) {
         return false;
       }
-      var questions = (await response.json()).questions || {};
       // A question with no answer left, undone since an earlier read, is
       // listed no more.
       stored.forEach(function (ignored, question) {
@@ -791,6 +805,10 @@
       isChecklist: isChecklist, dirty: dirty, save: save, read: false,
     };
     load().catch(function () { return false; }).then(function (read) {
+      // Replaced by a swap's read, which sends ANSWERED once it is drawn.
+      if (read === null) {
+        return;
+      }
       reading.read = read === true;
       document.dispatchEvent(new CustomEvent(ANSWERED));
     });
@@ -846,6 +864,9 @@
         return a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1;
       });
       load().catch(function () { return false; }).then(function (read) {
+        if (read === null) {
+          return;
+        }
         if (read === true) {
           reading.read = true;
         }

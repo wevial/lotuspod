@@ -1813,7 +1813,10 @@
         made.head.setAttribute("aria-expanded", opened ? "true" : "false");
         made.read.setAttribute("aria-expanded", opened ? "true" : "false");
         var decision = decisionOf(thread);
-        var leadKey = (decision ? "decision " : "") + passages.key(thread);
+        // A decision's name and words are in the key, so a question a swap
+        // reworded is drawn as it now reads.
+        var leadKey = (decision ? "decision " + decision.name + "\n" + decision.question + "\n" : "") +
+          passages.key(thread);
         if (leadKey !== made.leadKey) {
           made.leadKey = leadKey;
           var quoted = Boolean(thread.root.quote);
