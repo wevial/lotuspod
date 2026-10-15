@@ -640,7 +640,6 @@ test.describe('signed in, published again', () => {
     await expect(the.form('decision-2')).toHaveCount(0);
     await expect(the.panel).toBeVisible();
     await expect(page.locator('li.artifact-review-entry')).toHaveCount(3);
-    await expect(the.entry('decision-2').item).toHaveCount(0);
     expect(await page.locator('li.artifact-review-entry').evaluateAll((items) =>
       items.map((item) => (item as HTMLElement).dataset.question))).toEqual(['decision-1', 'decision-3', 'decision-4']);
     await expect(the.tally).toHaveText('3 to answer · 0 changed · 3 in all');
