@@ -236,6 +236,30 @@ class ViewTests(VersionsWitness):
                 for never in ("Notes on the pond", "hidden draft", *TEXTS):
                     self.assertNotIn(never, text)
 
+    def test_a_title_spelling_a_main_tag_moves_neither_the_class_nor_the_banner(self):
+        # render takes a title as markup: in the head's title it is text, but
+        # it spells the start tag the banner is placed after.
+        self.repository(self.out)
+        title = 'Old <main class="decoy"> plan'
+        for body in ("<p>The first plan.</p>", "<p>The second plan.</p>"):
+            done = self.cli("render", "--name", PAGE, "--title", title, "--body", body,
+                            "--out-dir", str(self.out))
+            self.assertEqual(done.returncode, 0, done.stderr)
+        older = self.commits(self.out, PAGE)[1]
+        self.start_server()
+
+        status, _, data = self.get(f"/{PAGE}.html?version={older}")
+        self.assertEqual(status, 200)
+        root = parse(data.decode("utf-8"))
+        (main,) = [node for node in root.find("main") if node.attrs.get("id") == "top"]
+        self.assertIn("artifact--old-version", main.classes())
+        first = next(node for node in main.children if not isinstance(node, str))
+        self.assertEqual((first.tag, first.classes()), ("div", ["artifact-version-banner"]))
+        self.assertEqual(len(root.find("div", "artifact-version-banner")), 1)
+        (head_title,) = [node for node in root.find("title") if node.parent.tag == "head"]
+        for never in ("artifact-version-banner", "artifact--old-version"):
+            self.assertNotIn(never, head_title.text())
+
     def test_a_page_without_a_version_is_served_as_before(self):
         self.three_publishes()
         self.start_server()

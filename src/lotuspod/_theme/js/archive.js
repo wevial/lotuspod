@@ -14,9 +14,7 @@
     if (!line) {
       return;
     }
-    // The page as its URL names it, never as anything in its body does: an
-    // authored data-page could name another page.
-    var page = decodeURIComponent(location.pathname.split("/").pop()).replace(/\.html$/, "");
+    var page = pageName();
 
     function draw(archived) {
       var button = element("button", "artifact-archive", archived ? "Unarchive" : "Archive");
