@@ -384,7 +384,7 @@ test.describe('signed in', () => {
     const pop = popover(page);
     await expect(pop.field).toBeFocused();
     // It names hermes, so it waits for hermes, not the responder.
-    const COMMENT = '@hermes Will the frozen pump crack this winter?';
+    const COMMENT = '@hermes Will the pump crack?';
     await pop.field.fill(COMMENT);
     await pop.send.click();
     await expect(pop.threads).toHaveCount(1);

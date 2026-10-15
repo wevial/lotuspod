@@ -203,7 +203,7 @@ test.describe('signed in', () => {
     await expect(steps.text).toBeFocused();
     await page.evaluate(() => { (window as any).__stayed = 'this page'; });
     // It names hermes, so it waits for hermes, not the responder.
-    const COMMENT = '@hermes Which heater, and where does it go?';
+    const COMMENT = '@hermes Which heater, and where?';
     await steps.text.fill(COMMENT);
     await steps.comment.click();
     await expect(steps.threads).toHaveCount(before + 1);
