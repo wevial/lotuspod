@@ -63,7 +63,7 @@ class ResolutionTestCase(ClaimTestCase):
 class AgentResolutionTests(ResolutionTestCase):
     def test_the_owner_resolves_and_reopens_a_thread(self):
         self.pull("hermes")
-        root = self.comment("Is the heater enough?")
+        root = self.comment("@hermes Is the heater enough?")
         self.reply(root["id"], "And the pump?")
         hermes = {"kind": "agent", "handle": "hermes", "credential": "hermes"}
 

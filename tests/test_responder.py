@@ -32,7 +32,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from lotuspod import cli, decisions, media, responder  # noqa: E402
+from lotuspod import api, cli, decisions, media, responder  # noqa: E402
+from lotuspod.db import Database  # noqa: E402
 from tests.test_responder_witness import (  # noqa: E402
     ASSERTION, REPO, READER, Site, assertion, git)
 
@@ -420,6 +421,98 @@ class ImageTests(ResponderCase):
     page_revision = PromptTests.page_revision
 
 
+class NeedsOwnerTests(ResponderCase):
+    """A comment on an owned page goes to the responder whether or not the
+    owner listens; an answer ending NEEDS_OWNER queues its ask for the owner."""
+
+    def setUp(self):
+        super().setUp()
+        self.operator = self.credential("operator", ["operator"], OPS)
+        source = self.tmp / "tended.md"
+        source.write_text(ORPHAN.replace("Orphan page", "Tended page"), encoding="utf-8")
+        done = self.cli("publish", str(source), "--name", "tended", "--owner", "operator",
+                        "--credential", str(self.operator), "--db", str(self.db),
+                        "--out-dir", str(self.out))
+        self.assertEqual(done.returncode, 0, done.stderr)
+
+    def inbox(self, owner):
+        return Database(self.db).inbox(owner, time.time())
+
+    def test_an_ask_is_queued_for_the_owner_and_the_reply_names_it(self):
+        # The owner pulled, so it is listening; the responder answers anyway.
+        code, pulled = self.agent(self.operator, "pull", "--owner", "operator")
+        self.assertEqual(code, 0, pulled)
+        row = self.comment("tended", "greeting", "Please file a ticket for the lilies.")
+        self.assertEqual((row["owner"], row["state"]), ("responder", "unavailable"))
+
+        answer = "I can't file tickets myself.\n\nNEEDS_OWNER: file a ticket for X"
+        done = self.respond(env=dict(self.env, ANSWER=answer))
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertIn("NEEDS_OWNER:", self.records()[0]["prompt"])
+        queued = ("I can't file tickets myself.\n\n"
+                  "I've queued this for operator: file a ticket for X")
+        self.assertEqual(self.replies("tended", row["id"]), [(queued, "responder", "")])
+        self.assertEqual(self.root("tended", row["id"])["state"], "answered")
+        [item] = self.inbox("operator")
+        self.assertEqual((item["page"], item["comment"], item["ask"]),
+                         ("tended", row["id"], "file a ticket for X"))
+        self.assertTrue(item["createdAt"])
+
+        # Queued once, however often the pass runs.
+        done = self.respond(env=dict(self.env, ANSWER=answer))
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(len(self.inbox("operator")), 1)
+
+    def test_a_long_answer_gives_way_to_the_queued_notice(self):
+        row = self.comment("tended", "greeting", "Please file a ticket for the lilies.")
+        marker = "\nNEEDS_OWNER: file a ticket for X"
+        answer = "A" * (api.MAX_TEXT - len(marker)) + marker
+        done = self.respond(env=dict(self.env, ANSWER=answer))
+        self.assertEqual(done.returncode, 0, done.stderr)
+        [(text, handle, _revision)] = self.replies("tended", row["id"])
+        self.assertEqual(handle, "responder")
+        self.assertLessEqual(len(text), api.MAX_TEXT)
+        self.assertTrue(text.endswith("…\n\nI've queued this for operator: file a ticket for X"),
+                        text[-80:])
+        self.assertEqual([item["ask"] for item in self.inbox("operator")],
+                         ["file a ticket for X"])
+
+    def test_an_answer_over_the_limit_only_by_its_marker_is_still_posted(self):
+        row = self.comment("tended", "greeting", "Please file a ticket for the lilies.")
+        answer = "A" * (api.MAX_TEXT - 10) + "\nNEEDS_OWNER: file a ticket for X"
+        done = self.respond(env=dict(self.env, ANSWER=answer))
+        self.assertEqual(done.returncode, 0, done.stderr)
+        [(text, _handle, _revision)] = self.replies("tended", row["id"])
+        self.assertLessEqual(len(text), api.MAX_TEXT)
+        self.assertTrue(text.endswith("…\n\nI've queued this for operator: file a ticket for X"),
+                        text[-80:])
+        self.assertEqual([item["ask"] for item in self.inbox("operator")],
+                         ["file a ticket for X"])
+
+    def test_an_answered_question_queues_nothing(self):
+        row = self.comment("tended", "greeting", "What are lilies doing here?")
+        done = self.respond(env=dict(self.env, ANSWER="They bloom at dusk."))
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(self.replies("tended", row["id"]),
+                         [("They bloom at dusk.", "responder", "")])
+        self.assertEqual(self.inbox("operator"), [])
+
+    def test_a_page_with_no_owner_queues_nothing_and_says_so(self):
+        row = self.comment("orphan", "greeting", "Please file a ticket.")
+        done = self.respond(env=dict(self.env, ANSWER="NEEDS_OWNER: file a ticket"))
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(self.replies("orphan", row["id"]), [
+            ("This page has no owner I could queue this for: file a ticket", "responder", "")])
+        self.assertEqual(Database(self.db).inbox("", time.time()), [])
+
+    def test_the_marker_is_read_only_on_the_last_line(self):
+        self.assertEqual(responder.needs_owner("Done.\nNEEDS_OWNER:  file  it \n"),
+                         ("Done.", "file it"))
+        self.assertEqual(responder.needs_owner("NEEDS_OWNER: x\nThen more."),
+                         ("NEEDS_OWNER: x\nThen more.", None))
+        self.assertEqual(responder.needs_owner("Done.\nNEEDS_OWNER:"), ("Done.", None))
+
+
 class FailureTests(ResponderCase):
     def test_a_command_that_fails_prints_nothing_or_overruns_fails_its_comment(self):
         commands = (
@@ -446,6 +539,14 @@ class FailureTests(ResponderCase):
         self.assertEqual(self.records(), [])
         for row in rows:
             self.assertEqual(self.root("orphan", row["id"]).get("state"), "failed")
+
+    def test_an_answer_over_the_limit_without_a_marker_fails_its_comment(self):
+        row = self.comment("orphan", "other", "Say a lot.")
+        done = self.respond(env=dict(self.env, ANSWER="A" * (api.MAX_TEXT + 1)))
+        self.assertEqual(done.returncode, 0, done.stderr)
+        root = self.root("orphan", row["id"])
+        self.assertEqual(root.get("state"), "failed")
+        self.assertIn(f"longer than {api.MAX_TEXT}", root.get("reason", ""))
 
 
 # A stand-in that records that it ran, outlives a one-second claim, then

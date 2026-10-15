@@ -43,10 +43,12 @@
     var decisions = all("form.artifact-decision[data-question]");
     var questions = new Map();
 
-    boxes.forEach(function (box) {
+    // A box joins the page's: by its section, and its form for a new thread.
+    function enlist(box) {
       sections.set(box.dataset.section, box);
       forms.set(box, box.querySelector("form.artifact-comment-form"));
-    });
+    }
+    boxes.forEach(enlist);
     decisions.forEach(function (form) {
       questions.set(form.dataset.question, form);
     });
@@ -487,12 +489,12 @@
       return sync(thread);
     }
 
-    function failure(response, payload) {
+    function failure(response, payload, stale) {
       if (response.status === 401) {
         return SIGNED_OUT;
       }
       if (response.status === 409 && payload && payload.error === "stale_page") {
-        return STALE_PAGE;
+        return stale || STALE_PAGE;
       }
       var error = payload && payload.error ? String(payload.error) : "status " + response.status;
       return "Not saved (" + error + "). Try again.";
@@ -524,7 +526,7 @@
         });
         var payload = await json(response);
         if (response.status !== 201 || !payload) {
-          status.textContent = failure(response, payload);
+          status.textContent = failure(response, payload, body.quote ? STALE_PAGE : STALE_SECTION);
           return null;
         }
         status.textContent = "";
@@ -884,6 +886,19 @@
         return true;
       };
 
+      // A swap moved the page's text: each drawn thread's words start where
+      // its highlight now does, so the threads number in page order.
+      api.moved = function () {
+        var model = null;
+        shown.forEach(function (thread) {
+          if (article && thread.spot && thread.marks.length) {
+            model = model || textModel(article);
+            var start = offsetOf(model, thread.marks[0], 0);
+            thread.spot = { start: start, end: start + thread.spot.end - thread.spot.start };
+          }
+        });
+      };
+
       if (!article) {
         return api;
       }
@@ -1085,11 +1100,14 @@
           if (!row) {
             return;
           }
+          // Where the words start now: a swap since may have moved them.
+          var start = marks.length && article.contains(marks[0]) ?
+            offsetOf(textModel(article), marks[0], 0) : found.start;
           var focused = holder.contains(document.activeElement) || document.activeElement === document.body;
           if (open === mine) {
             close(mine);
           }
-          hints.set(row.id, found.start);
+          hints.set(row.id, start);
           add({ root: row, replies: [] });
           posted();
           panel.started(shown.get(row.id), focused);
@@ -1251,7 +1269,9 @@
         onPage.disabled = ARCHIVED;
         onPage.addEventListener("click", function () {
           unpick(false);
-          compose(groups.get(whole), true);
+          if (groups.has(whole)) {
+            compose(groups.get(whole), true);
+          }
         });
       }
       var pick = element("button", "artifact-comments-pick", "Comment on a section");
@@ -1301,9 +1321,10 @@
       function group(name, box, index) {
         var node = element("section", "artifact-comments-group");
         var entries = element("ol", "artifact-comments-entries");
-        node.append(element("h3", "artifact-comments-group-title", name), entries);
+        var heading = element("h3", "artifact-comments-group-title", name);
+        node.append(heading, entries);
         list.appendChild(node);
-        var made = { node: node, entries: entries, box: box, toggle: null, holder: null };
+        var made = { node: node, heading: heading, entries: entries, box: box, toggle: null, holder: null };
         if (box) {
           var toggle = element("button", "artifact-comments-new",
             box.dataset.section === WHOLE_PAGE ? "Comment on this page" : "Comment on this section");
@@ -1334,19 +1355,40 @@
         return made;
       }
 
-      boxes.forEach(function (box, index) {
+      // The number in the ids of the next box's form holder and option: a
+      // box a swap adds takes one no box has had.
+      var serial = 0;
+      var strays = null;
+
+      // The box at boxes[at] joins the panel: its group, before the next
+      // box's (else before the strays), its option in the list of sections
+      // at the same place, and its chip.
+      function mount(box, at) {
         var name = title(box);
-        var made = group(name, box, index);
+        var made = group(name, box, serial);
         made.node.hidden = true;
+        var next = groups.get(boxes[at + 1]);
+        if (next || strays) {
+          list.insertBefore(made.node, (next || strays).node);
+        }
         groups.set(box, made);
         var option = element("li", "artifact-comments-choice", name);
-        option.id = "artifact-comments-choice-" + index;
+        option.id = "artifact-comments-choice-" + serial;
         option.setAttribute("role", "option");
         option.setAttribute("aria-selected", "false");
-        option.addEventListener("click", function () { choose(box); });
-        choices.appendChild(option);
-      });
-      var strays = group(CHANGED_GROUP, null, -1);
+        option.addEventListener("click", function () {
+          choose(boxes[Array.prototype.indexOf.call(choices.children, option)]);
+        });
+        choices.insertBefore(option, choices.children[at] || null);
+        serial += 1;
+        chipOn(box);
+        if (arranged) {
+          house(box);
+        }
+      }
+
+      boxes.forEach(mount);
+      strays = group(CHANGED_GROUP, null, -1);
       strays.node.hidden = true;
 
       // The option lit in the list of sections, or -1.
@@ -2194,7 +2236,8 @@
         }
       }
 
-      boxes.forEach(function (box) {
+      // A box's summary is its chip, and the box itself never opens.
+      function chipOn(box) {
         var summaryNode = box.querySelector("summary");
         summaryNode.addEventListener("click", function (event) {
           event.preventDefault();
@@ -2216,7 +2259,7 @@
             box.open = false;
           }
         });
-      });
+      }
 
       // Show a thread where it belongs: its entry in its group, or in the
       // popover or sheet holding it, with its node in the entry; without
@@ -2256,7 +2299,7 @@
         ordered: ordered,
         latest: latest, standing: standing, routed: routed, asked: asked, said: said, tick: tick,
         title: title, opening: opening, anchorOf: anchorOf, unfold: unfold, barBottom: barBottom,
-        decisionOf: decisionOf,
+        decisionOf: decisionOf, standsFor: standsFor,
       });
       api.show = over.show;
       api.passage = over.passage;
@@ -2264,6 +2307,12 @@
         over.dropped(mine);
         tidy();
       };
+
+      // The box that now stands for box's section: box, the box a swap
+      // replaced it with, or null when the page no longer has it.
+      function standsFor(box) {
+        return groups.has(box) ? box : sections.get(box.dataset.section) || null;
+      }
 
       // Whether a thread is open: in the panel, a popover or the sheet.
       api.lit = function (thread) {
@@ -2386,6 +2435,14 @@
         return none;
       }
 
+      // A box's form for a new thread lives in its group's holder, never in
+      // the box, which stays closed.
+      function house(box) {
+        box.open = false;
+        var holder = groups.get(box).holder;
+        holder.insertBefore(forms.get(box), holder.firstChild);
+      }
+
       // Show the threads in the panel, or else open them in a popover or the
       // sheet, as the window allows. What is open moves to the new place.
       api.arrange = function () {
@@ -2395,11 +2452,7 @@
           return;
         }
         if (!arranged) {
-          boxes.forEach(function (box) {
-            box.open = false;
-            var holder = groups.get(box).holder;
-            holder.insertBefore(forms.get(box), holder.firstChild);
-          });
+          boxes.forEach(house);
         }
         arranged = true;
         moving = true;
@@ -2477,6 +2530,84 @@
         }
       };
 
+      // A swap is about to change the boxes olds: what a popover or the
+      // sheet holds on one of them is taken (over.take), to open again once
+      // they have changed (api.give). Until then no thread opens or closes.
+      api.take = function (olds) {
+        moving = true;
+        if (api.wide) {
+          return null;
+        }
+        var held = over.peek();
+        var view = held.view;
+        if (!view || view.passage) {
+          return null;
+        }
+        var on = view.box || (view.thread && view.thread.box);
+        var gone = held.anchor && !held.anchor.isConnected;
+        return olds.indexOf(on) >= 0 || gone ? over.take() : null;
+      };
+
+      // The swap has changed the boxes: what api.take took opens again where
+      // it was (over.restore), on the box that replaced its own, and a form
+      // being written in stays open.
+      api.give = function (taken) {
+        if (taken && taken.view) {
+          taken.still = true;
+          over.restore(taken);
+          if (taken.writing && groups.get(taken.writing.box) === taken.writing && over.peek().view) {
+            compose(taken.writing, true);
+          }
+        }
+        moving = false;
+      };
+
+      // The box old is replaced by box, which takes its place among the
+      // boxes: old's group and option are box's, its title drawn from its
+      // new heading.
+      api.replace = function (old, box) {
+        var made = groups.get(old);
+        groups.delete(old);
+        groups.set(box, made);
+        made.box = box;
+        var name = title(box);
+        made.heading.textContent = name;
+        choices.children[boxes.indexOf(box)].textContent = name;
+        chipOn(box);
+        unlit();
+      };
+
+      // The box that was boxes[at] is taken away, with its group and option.
+      api.unmount = function (old, at) {
+        var made = groups.get(old);
+        groups.delete(old);
+        made.node.remove();
+        choices.children[at].remove();
+        unlit();
+      };
+
+      // The box at boxes[at] is added.
+      api.mount = function (box, at) {
+        mount(box, at);
+        unlit();
+      };
+
+      // Once the boxes have changed: the groups in page order, and the box
+      // for the whole page as it now stands.
+      api.remounted = function () {
+        var made = boxes.map(function (box) { return [box, groups.get(box)]; });
+        groups.clear();
+        made.forEach(function (pair) { groups.set(pair[0], pair[1]); });
+        whole = first(WHOLE_PAGE) || first("page") || null;
+      };
+
+      // The list of sections lights none while its options move.
+      function unlit() {
+        if (!choices.hidden) {
+          light(-1);
+        }
+      }
+
       return api;
     }
 
@@ -2521,16 +2652,10 @@
       var node = element("div", "artifact-comment-thread");
       node.dataset.thread = String(root.id);
       thread.node = node;
-      // A thread on the whole page of a page that has kept only its "page"
-      // box (republished with fewer sections) is that box's, and a thread on
-      // that "page" box is the whole page's once the page has sections.
-      var box = sections.get(root.section) ||
-        (root.section === WHOLE_PAGE && sections.get("page")) ||
-        (root.section === "page" && sections.get(WHOLE_PAGE)) || null;
+      var box = boxFor(root);
       thread.box = box;
       if (!box) {
-        node.appendChild(element("p", "artifact-comment-section",
-          "On " + String(root.sectionTitle || root.section || "an earlier section")));
+        node.appendChild(whereFrom(root));
       }
       if (root.quote) {
         // Headed by its quote in a box; the panel's entry says it instead.
@@ -2544,6 +2669,23 @@
       merge(thread, entry.replies || []);
       put(thread);
       return true;
+    }
+
+    // The box a thread's first comment is on, or null when the page no
+    // longer has its section. A thread on the whole page of a page that has
+    // kept only its "page" box (republished with fewer sections) is that
+    // box's, and a thread on that "page" box is the whole page's once the
+    // page has sections.
+    function boxFor(root) {
+      return sections.get(root.section) ||
+        (root.section === WHOLE_PAGE && sections.get("page")) ||
+        (root.section === "page" && sections.get(WHOLE_PAGE)) || null;
+    }
+
+    // The line a thread on a section the page no longer has starts with.
+    function whereFrom(root) {
+      return element("p", "artifact-comment-section",
+        "On " + String(root.sectionTitle || root.section || "an earlier section"));
     }
 
     function resolved(thread) {
@@ -2881,20 +3023,193 @@
       }
     });
 
-    boxes.forEach(function (box) {
+    // The box whose form for a new thread form is: a swap gives a section's
+    // new box the form of the box it replaced.
+    function boxWith(form) {
+      var found = null;
+      forms.forEach(function (each, box) {
+        if (each === form) {
+          found = box;
+        }
+      });
+      return found;
+    }
+
+    // A box's form for a new thread takes images, sends on Cmd+Enter and
+    // posts a thread on the section of the box it is now the form of.
+    function wire(box) {
       var form = forms.get(box);
       attached.set(form, attachments(form, form.elements.text));
       sendOnEnter(form, form.elements.text);
       form.addEventListener("submit", async function (event) {
         event.preventDefault();
-        var row = await post(form, {
-          page: page, section: box.dataset.section, text: form.elements.text.value,
-        });
+        var mine = boxWith(form);
+        if (!mine) {
+          return;
+        }
+        var fields = { page: page, section: mine.dataset.section, text: form.elements.text.value };
+        if (revision() !== null) {
+          fields.revision = revision();
+        }
+        var row = await post(form, fields);
+        mine = boxWith(form);
         if (row) {
           add({ root: row, replies: [] });
           posted();
-          panel.posted(box, shown.get(row.id));
+          if (mine) {
+            panel.posted(mine, shown.get(row.id));
+          }
         }
+      });
+    }
+    boxes.forEach(wire);
+
+    // A swap (web/src/page-swap.ts) brought in a newer revision's parts:
+    // each box in a part it replaced, took away or added is mounted in place
+    // of the one it replaces, taken out, or added, and the threads, chips
+    // and panel are drawn from the boxes as they now are. A thread open in
+    // the panel stays open, and one in a popover or the sheet opens again;
+    // a section's form, with what is written in it, stays its section's.
+    // Threads on a section taken away are listed with those on sections
+    // the page no longer has, and a section added takes back its own.
+    document.addEventListener(SWAPPED, function (event) {
+      var units = event.detail.units;
+      passages.moved();
+      var olds = [];
+      var news = [];
+      units.forEach(function (unit) {
+        if (unit.kind === "header") {
+          // The swap gave the tab the new revision's title.
+          tabTitle = document.title;
+        }
+        olds.push.apply(olds, boxesIn(unit.before).filter(function (box) { return boxes.indexOf(box) >= 0; }));
+        news.push.apply(news, boxesIn(unit.after));
+      });
+      if (!olds.length && !news.length) {
+        showUnread();
+        return;
+      }
+      news.sort(function (a, b) {
+        return a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1;
+      });
+      var replaced = [];
+      var added = [];
+      news.forEach(function (box) {
+        var old = olds.filter(function (each) { return each.dataset.section === box.dataset.section; })[0];
+        if (old) {
+          olds.splice(olds.indexOf(old), 1);
+          replaced.push([old, box]);
+        } else {
+          added.push(box);
+        }
+      });
+      var focused = document.activeElement;
+      var taken = panel.take(olds.concat(replaced.map(function (pair) { return pair[0]; })));
+      replaced.forEach(function (pair) { replaceBox(pair[0], pair[1]); });
+      olds.forEach(dropBox);
+      added.forEach(addBox);
+      panel.remounted();
+      var order = boxes.map(function (box) { return [box, forms.get(box)]; });
+      forms.clear();
+      order.forEach(function (pair) { forms.set(pair[0], pair[1]); });
+      shown.forEach(put);
+      refresh();
+      panel.give(taken);
+      refresh();
+      if (focused && focused !== document.body && focused.isConnected && document.activeElement !== focused) {
+        focused.focus({ preventScroll: true });
+      }
+    });
+
+    // The comment boxes among some nodes and in them.
+    function boxesIn(nodes) {
+      var found = [];
+      nodes.forEach(function (node) {
+        if (node instanceof Element) {
+          if (node.matches("details.artifact-comment")) {
+            found.push(node);
+          }
+          found.push.apply(found, all("details.artifact-comment", node));
+        }
+      });
+      return found;
+    }
+
+    // A section's new box takes the place of old: its threads, and its
+    // form, which stays the section's wherever it is shown, the new box's
+    // own taken out.
+    function replaceBox(old, box) {
+      boxes[boxes.indexOf(old)] = box;
+      if (sections.get(old.dataset.section) === old) {
+        sections.set(box.dataset.section, box);
+      }
+      var form = forms.get(old);
+      var own = box.querySelector("form.artifact-comment-form");
+      if (own && own !== form) {
+        if (old.contains(form)) {
+          own.replaceWith(form);
+        } else {
+          own.remove();
+        }
+      }
+      forms.delete(old);
+      forms.set(box, form);
+      shown.forEach(function (thread) {
+        if (thread.box === old) {
+          thread.box = box;
+        }
+      });
+      panel.replace(old, box);
+    }
+
+    // A section taken away takes its box and form with it; its threads say
+    // which section they were on.
+    function dropBox(old) {
+      var at = boxes.indexOf(old);
+      boxes.splice(at, 1);
+      if (sections.get(old.dataset.section) === old) {
+        sections.delete(old.dataset.section);
+      }
+      attached.delete(forms.get(old));
+      forms.delete(old);
+      shown.forEach(function (thread) {
+        if (thread.box === old) {
+          thread.box = null;
+          thread.node.insertBefore(whereFrom(thread.root), thread.node.firstChild);
+        }
+      });
+      panel.unmount(old, at);
+    }
+
+    // A section added: its box joins the boxes in page order, and takes
+    // the threads on its section.
+    function addBox(box) {
+      var at = boxes.findIndex(function (other) {
+        return Boolean(box.compareDocumentPosition(other) & Node.DOCUMENT_POSITION_FOLLOWING);
+      });
+      at = at < 0 ? boxes.length : at;
+      boxes.splice(at, 0, box);
+      enlist(box);
+      wire(box);
+      panel.mount(box, at);
+      shown.forEach(function (thread) {
+        if (!thread.box && boxFor(thread.root) === box) {
+          thread.box = box;
+          var line = thread.node.querySelector(":scope > .artifact-comment-section");
+          if (line) {
+            line.remove();
+          }
+        }
+      });
+    }
+
+    // A section a swap would take away while its form holds text or images
+    // not sent has the page fall back to the banner, its text kept over
+    // the reload.
+    refuseSwap(function (nodes) {
+      return composers().some(function (each) {
+        var box = each.thread === undefined ? boxes[each.index] : null;
+        return Boolean(box) && holding(each) && nodes.some(function (node) { return node.contains(box); });
       });
     });
 

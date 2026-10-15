@@ -548,8 +548,6 @@ class CommentTests(ApiTestCase):
 
     def test_a_thread_on_the_whole_page_has_no_section_quote_or_question(self):
         self.publish_owned("owned")
-        # hermes is listening, so the thread is routed to it.
-        db.Database(self.db_path).record_pull("hermes")
         revision = self.page_revision("owned")
         status, root = self.comment(page="owned", section="", text="Is this plan current?",
                                     revision=revision)
@@ -558,13 +556,13 @@ class CommentTests(ApiTestCase):
             {key: root[key] for key in root if key not in ("id", "createdAt")},
             {"page": "owned", "section": "", "sectionTitle": "", "revision": revision,
              "parent": None, "text": "Is this plan current?", "quote": None, "images": [],
-             "actor": SHOWN, "state": "pending", "owner": "hermes"},
+             "actor": SHOWN, "state": "unavailable", "owner": "responder"},
         )
         self.assertNotIn("question", root)
         status, reply = self.comment(page="owned", parent=root["id"], text="And the risks?")
         self.assertEqual(status, 201, reply)
         self.assertEqual((reply["section"], reply["sectionTitle"], reply["owner"]),
-                         ("", "", "hermes"))
+                         ("", "", "responder"))
         self.assertEqual(
             self.ask("GET", "/api/comments?page=owned"),
             (200, {"page": "owned", "revision": revision,

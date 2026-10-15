@@ -50,9 +50,9 @@ class PageCommentsWitness(Site):
         return done.stdout
 
     def test_hermes_pulls_answers_and_follows_up_a_thread_on_the_whole_page(self):
-        # hermes is listening, so the reader's thread is routed to it.
+        # hermes is listening, and the reader's thread names it, so it waits for it.
         self.assertEqual(self.pull(self.hermes, "hermes"), [])
-        root = self.comment(NAME, "", "Is this plan still current?")
+        root = self.comment(NAME, "", "@hermes Is this plan still current?")
         self.assertEqual((root["section"], root["sectionTitle"], root["quote"], root["owner"]),
                          ("", "", None, "hermes"))
         self.assertNotIn("question", root)

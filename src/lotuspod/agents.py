@@ -20,6 +20,14 @@
     lotuspod comments resolve ID            POST /v1/threads/ID/resolve
     lotuspod comments reopen ID             POST /v1/threads/ID/reopen
 
+`lotuspod inbox`: what the responder queued for an owner to do.
+
+    lotuspod inbox pull --owner HANDLE      GET  /v1/inbox?owner=HANDLE
+    lotuspod inbox claim ID --owner HANDLE  POST /v1/inbox/ID/claim
+    lotuspod inbox done ID --owner HANDLE --claim TOKEN
+        [--key KEY (--text TEXT | --text-file PATH)]
+                                            POST /v1/inbox/ID/done
+
 Each takes --socket and --credential as every agent command does, prints the
 socket's JSON with --json and readable markdown without it, and exits 1 on a
 refusal, printing {"error": CODE} with --json. In the markdown, every text a
@@ -258,6 +266,58 @@ def _page_lines(page: dict) -> list[str]:
     ]
 
 
+def _answer_lines(heading: str, item: dict, page_lines: list[str], routed: dict,
+                  owner: str, note_in_thread: bool = True) -> list[str]:
+    """An answer item's lines under heading, for owner, routed as
+    _note_line takes it. note_in_thread says the output shows the note's
+    comment elsewhere, so the note is not repeated here."""
+    answer, question = item["answer"], item["question"]
+    asked = question["text"] or "(its words were not kept)"
+    if question["reworded"]:
+        asked += " (the page now asks it in other words, or not at all)"
+    dismissed = answer.get("dismissed")
+    if dismissed:
+        # Its reason is said here, once.
+        reason = one_line(answer["note"])
+        reason = f": {reason}" if reason else ""
+        chosen = [f"- Chosen: Dismissed{reason}"]
+    elif "checked" in answer:
+        chosen = [f"- Chosen: {question['label']}"]
+        if question.get("changed") is not None:
+            chosen += [f"- Changed: {box['label']} (`{box['id']}`) "
+                       f"{'on' if box['checked'] else 'off'}"
+                       for box in question["changed"]] or ["- Changed: nothing"]
+    else:
+        chosen = [f"- Chosen: {question['label']} (`{answer['choice']}`)"]
+        default = question.get("default")
+        if default and default["value"] != answer["choice"]:
+            chosen.append(f"- Was: {default['label']} (`{default['value']}`), the default")
+    lines = [
+        f"{heading}, question `{question['id']}`",
+        "",
+        *page_lines,
+        f"- Question: {asked}",
+        *_context_lines(question["context"]),
+        *chosen,
+        f"- From: {_by(answer)} at {answer['createdAt']}, "
+        f"against revision {answer['revision'] or 'unknown'}",
+        *([f"- Answered elsewhere: {answer['source']}"] if answer.get("source") else []),
+        *([f"- Undone at {answer['undoneAt']}"] if answer.get("undoneAt") else []),
+        *([_note_line(item["noteComment"], routed, owner)]
+          if item.get("noteComment") else []),
+        f"- Acknowledge: `lotuspod comments ack-answer {answer['id']}`",
+        "",
+        ("The reader dismissed this question as no longer relevant." if dismissed else
+         "The answer was given elsewhere and recorded by an agent, on this question "
+         "only." if answer.get("source") else
+         "The answer is the reader's choice on this question only."),
+        "",
+    ]
+    if answer["note"] and not dismissed and not (note_in_thread and item.get("noteComment")):
+        lines += ["Note:", "", fence(answer["note"]), ""]
+    return lines
+
+
 def pull_text(payload: dict) -> str:
     """`comments pull` without --json."""
     items = payload["items"]
@@ -298,11 +358,7 @@ def pull_text(payload: dict) -> str:
                           *passage(comment["quote"], "The reader highlighted:")]
             else:
                 lines.append("")
-            if comment.get("owner") == payload["owner"]:
-                take = f"- Claim: `lotuspod comments claim {comment['id']}`"
-            else:
-                take = (f"- Passed to {comment.get('owner')} once the owner window ended; "
-                        "only it may claim this")
+            take = f"- Claim: `lotuspod comments claim {comment['id']}`"
             # A note's comment is read once, in the thread below, under the
             # answer it came with.
             if comment.get("answer") and comment["id"] in {row["id"] for row in thread}:
@@ -318,57 +374,60 @@ def pull_text(payload: dict) -> str:
             for row in thread:
                 lines += _message(row, "####")
         else:
-            answer, question = item["answer"], item["question"]
-            asked = question["text"] or "(its words were not kept)"
-            if question["reworded"]:
-                asked += " (the page now asks it in other words, or not at all)"
-            dismissed = answer.get("dismissed")
-            if dismissed:
-                # Its reason is said here, once.
-                reason = one_line(answer["note"])
-                reason = f": {reason}" if reason else ""
-                chosen = [f"- Chosen: Dismissed{reason}"]
-            elif "checked" in answer:
-                chosen = [f"- Chosen: {question['label']}"]
-                if question.get("changed") is not None:
-                    chosen += [f"- Changed: {item['label']} (`{item['id']}`) "
-                               f"{'on' if item['checked'] else 'off'}"
-                               for item in question["changed"]] or ["- Changed: nothing"]
-            else:
-                chosen = [f"- Chosen: {question['label']} (`{answer['choice']}`)"]
-                default = question.get("default")
-                if default and default["value"] != answer["choice"]:
-                    chosen.append(f"- Was: {default['label']} (`{default['value']}`), the default")
-            lines += [
-                f"## {number}. Answer {answer['id']} on `{page['name']}`, "
-                f"question `{question['id']}`",
-                "",
-                *_page_lines(page),
-                f"- Question: {asked}",
-                *_context_lines(question["context"]),
-                *chosen,
-                f"- From: {_by(answer)} at {answer['createdAt']}, "
-                f"against revision {answer['revision'] or 'unknown'}",
-                *([f"- Answered elsewhere: {answer['source']}"] if answer.get("source") else []),
-                *([f"- Undone at {answer['undoneAt']}"] if answer.get("undoneAt") else []),
-                *([_note_line(item["noteComment"], routed, payload["owner"])]
-                  if item.get("noteComment") else []),
-                f"- Acknowledge: `lotuspod comments ack-answer {answer['id']}`",
-                "",
-                ("The reader dismissed this question as no longer relevant." if dismissed else
-                 "The answer was given elsewhere and recorded by an agent, on this question "
-                 "only." if answer.get("source") else
-                 "The answer is the reader's choice on this question only."),
-                "",
-            ]
-            if answer["note"] and not dismissed and not item.get("noteComment"):
-                lines += ["Note:", "", fence(answer["note"]), ""]
+            lines += _answer_lines(f"## {number}. Answer {item['answer']['id']} on "
+                                   f"`{page['name']}`", item, _page_lines(page),
+                                   routed, payload["owner"])
     for page in pages.values():
         if not page["sourceFile"]:
             continue
         lines += [f"## Source of `{page['name']}`: {page['sourceFile']}, "
                   f"revision {page['revision']}", "", fence(page["source"]), ""]
     return "\n".join(lines).rstrip("\n")
+
+
+def inbox_text(payload: dict) -> str:
+    """`inbox pull` without --json."""
+    items = payload["items"]
+    owner = payload["owner"]
+    lines = [f"# Inbox of {owner}: {len(items)} item{'' if len(items) == 1 else 's'}", ""]
+    if not items:
+        lines.append("Nothing waits for this handle.")
+    for number, item in enumerate(items, 1):
+        page = item["page"]
+        where = f"`{page['name']}`" + (f", {page['title']}" if page["title"] else "")
+        if item["kind"] == "answer":
+            # As the pull shows it, but the page's source and the note's
+            # thread are not in the inbox, so the note is said here.
+            lines += _answer_lines(f"## {number}. Answer {item['answer']['id']} on {where}",
+                                   item, [], {}, owner, note_in_thread=False)
+            continue
+        comment = item["comment"]
+        source = f", from comment {comment['id']} in thread {item['thread']}" if comment else ""
+        lines += [
+            f"## {number}. Item {item['id']} on {where}: {one_line(item['ask'])}",
+            "",
+            f"- Queued: {item['createdAt']}{source}",
+            f"- Claim: `lotuspod inbox claim {item['id']} --owner {owner}`",
+            f"- Done: `lotuspod inbox done {item['id']} --owner {owner} --claim TOKEN "
+            "[--key KEY --text TEXT]`",
+            "",
+        ]
+        if comment:
+            lines += ["The reader's comment:", "", fence(comment["text"]), ""]
+    return "\n".join(lines).rstrip("\n")
+
+
+def item_claim_text(payload: dict) -> str:
+    return (f"inbox item {payload['item']} claimed for {payload['owner']} until "
+            f"{payload['expiresAt']}\nclaim token: {payload['claimToken']}")
+
+
+def item_done_text(payload: dict) -> str:
+    item, reply = payload["item"], payload["reply"]
+    line = f"inbox item {item['id']} done at {item['doneAt']}"
+    if reply is not None:
+        line += f"; reply {reply['id']} stored in the thread of comment {reply['parent']}"
+    return line
 
 
 def ack_text(payload: dict) -> str:
@@ -545,6 +604,36 @@ def cmd_resolve(args: argparse.Namespace) -> int:
 
 def cmd_reopen(args: argparse.Namespace) -> int:
     return _run(args, "POST", f"/v1/threads/{args.id}/reopen", resolution_text)
+
+
+def cmd_inbox_pull(args: argparse.Namespace) -> int:
+    target = machine.INBOX + "?" + urllib.parse.urlencode({"owner": args.owner})
+    return _run(args, "GET", target, inbox_text)
+
+
+def cmd_inbox_claim(args: argparse.Namespace) -> int:
+    return _run(args, "POST", f"{machine.INBOX}/{args.id}/claim", item_claim_text,
+                {"owner": args.owner})
+
+
+def cmd_inbox_done(args: argparse.Namespace) -> int:
+    body = {"owner": args.owner, "claimToken": args.claim}
+    if args.text is not None or args.text_file is not None:
+        text = _text(args)
+        if text is None:
+            return 1
+        if args.key is None:
+            return _refused(args, _Failed("invalid_body", "a reply's text needs --key"))
+        body.update(idempotencyKey=args.key, text=text)
+    elif args.key is not None:
+        return _refused(args, _Failed("invalid_body", "--key names a reply: give its --text"))
+    return _run(args, "POST", f"{machine.INBOX}/{args.id}/done", item_done_text, body)
+
+
+def _item_id(value: str) -> int:
+    if not value.isdigit() or int(value) < 1:
+        raise argparse.ArgumentTypeError(f"not an inbox item id: {value!r}")
+    return int(value)
 
 
 def _answer_id(value: str) -> int:
@@ -735,3 +824,67 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
         change.add_argument("--json", action="store_true", help="print the socket's JSON")
         cli.add_agent_options(change)
         change.set_defaults(func=func)
+
+
+def add_inbox_parser(sub: argparse._SubParsersAction) -> None:
+    """Register `lotuspod inbox` and its actions."""
+    parser = sub.add_parser(
+        "inbox",
+        help="read, claim and close what the responder queued for an owner to do, over "
+        "serve's socket",
+        description="An owner's inbox holds what the default responder answered on the "
+        "owner's pages but could not do itself (file a ticket, change a page, act on a "
+        "decision), and the answers on its pages it has not acknowledged. It is kept in "
+        "serve's database, addressed to the handle, so nothing is lost when a session stops.",
+    )
+    actions = parser.add_subparsers(dest="action", required=True)
+
+    pull = actions.add_parser(
+        "pull",
+        help="the open items in HANDLE's inbox, then the answers on its pages it has not "
+        "acknowledged",
+        description="Print HANDLE's inbox items that are not done and not claimed (a "
+        "lapsed claim leaves an item open again), then the answers on its pages it has not "
+        "acknowledged. Takes nothing off the inbox. Needs a credential that may pull as "
+        "HANDLE.",
+    )
+    pull.add_argument("--owner", required=True, metavar="HANDLE", help="the inbox's handle")
+    pull.add_argument("--json", action="store_true", help="print the socket's JSON")
+    cli.add_agent_options(pull)
+    pull.set_defaults(func=cmd_inbox_pull)
+
+    claim = actions.add_parser(
+        "claim",
+        help="take an inbox item up, so no other session acts on it",
+        description="Claim item ID in HANDLE's inbox. Prints the claim token `inbox done` "
+        "names, and when the claim expires (the config's [comments] claim_sec after now); "
+        "an expired claim lapses and the item is open again. Refused while any claim on it "
+        "is current, this credential's own too. Needs a credential with claim as HANDLE.",
+    )
+    claim.add_argument("id", type=_item_id, metavar="ID", help="the item's id")
+    claim.add_argument("--owner", required=True, metavar="HANDLE", help="the inbox's handle")
+    claim.add_argument("--json", action="store_true", help="print the socket's JSON")
+    cli.add_agent_options(claim)
+    claim.set_defaults(func=cmd_inbox_claim)
+
+    done = actions.add_parser(
+        "done",
+        help="close a claimed inbox item, replying in its thread first when given text",
+        description="Close item ID in HANDLE's inbox under the claim TOKEN names; it is "
+        "never listed again. With --text or --text-file, the text is first added to the "
+        "reader's thread as a follow-up from HANDLE, once per --key, which it then needs "
+        "(and a credential with reply). Needs a credential with claim as HANDLE.",
+    )
+    done.add_argument("id", type=_item_id, metavar="ID", help="the item's id")
+    done.add_argument("--owner", required=True, metavar="HANDLE", help="the inbox's handle")
+    done.add_argument("--claim", required=True, metavar="TOKEN",
+                      help="the claim token `inbox claim` printed")
+    done.add_argument("--key", default=None, metavar="KEY",
+                      help="the idempotency key of the reply, chosen before acting")
+    text = done.add_mutually_exclusive_group()
+    text.add_argument("--text", default=None, metavar="TEXT", help="a reply for the thread")
+    text.add_argument("--text-file", default=None, metavar="PATH",
+                      help="a UTF-8 file holding the reply's text")
+    done.add_argument("--json", action="store_true", help="print the socket's JSON")
+    cli.add_agent_options(done)
+    done.set_defaults(func=cmd_inbox_done)

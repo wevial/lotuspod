@@ -1,7 +1,7 @@
-"""Witness: the agent that owns a page reads the reader's new comment and
-answer on it through the agent socket, each with the page's source and
-revision; reading does not claim. The owner claims the comment, and a
-competing consumer gets no second claim; the owner's reply, retried with the
+"""Witness: the agent that owns a page reads the reader's new comment that
+names it, and the answer on it, through the agent socket, each with the
+page's source and revision; reading does not claim. The owner claims the
+comment, and a competing consumer gets no second claim; the owner's reply, retried with the
 same idempotency key, is stored once and shows in the thread with the
 agent's verified identity. A credential cannot read another handle's queue,
 a mention of an offline handle waits as unavailable, and a reader's
@@ -357,7 +357,7 @@ class AgentPullWitness(Site):
         self.assertEqual(len(self.page.forms), 1)
         self.assertEqual(self.pull(self.hermes, "hermes"), [])
 
-        root = self.comment("pond-review", "risks", "Is risk two real?")
+        root = self.comment("pond-review", "risks", "@hermes Is risk two real?")
         self.assertEqual(root.get("actor"), {"kind": "human", "name": "maintainer"})
         self.assertEqual(root.get("state"), "pending")
         form = self.page.forms[0]
@@ -377,7 +377,7 @@ class AgentPullWitness(Site):
         pulled = next(item for item in items if item["kind"] == "comment")
         self.assertEqual((pulled["comment"].get("id"), pulled["comment"].get("section"),
                           pulled["comment"].get("text"), pulled["comment"].get("actor")),
-                         (root.get("id"), "risks", "Is risk two real?",
+                         (root.get("id"), "risks", "@hermes Is risk two real?",
                           {"kind": "human", "email": READER}))
         answered = next(item for item in items if item["kind"] == "answer")
         self.assertEqual(answered["answer"].get("choice"), form["choices"][0])
@@ -422,7 +422,7 @@ class AgentPullWitness(Site):
     def test_two_consumers_racing_for_one_comment_get_exactly_one_claim(self):
         second = self.credential("hermes-two", ["hermes"], AGENT_OPS)
         self.pull(self.hermes, "hermes")
-        root = self.comment("pond-review", "findings", "Which gauge was this?")
+        root = self.comment("pond-review", "findings", "@hermes Which gauge was this?")
         racers = [subprocess.Popen(
             [sys.executable, "-m", "lotuspod", "comments", "claim", str(root.get("id")),
              "--credential", str(path), "--socket", str(self.sock), "--json"],
@@ -442,7 +442,7 @@ class AgentPullWitness(Site):
 
     def test_a_reply_without_the_current_claim_is_refused(self):
         self.pull(self.hermes, "hermes")
-        root = self.comment("pond-review", "findings", "Which gauge was this?")
+        root = self.comment("pond-review", "findings", "@hermes Which gauge was this?")
         code, claimed = self.claim(self.hermes, root.get("id"))
         self.assertEqual(code, 0, claimed)
         code, refused = self.agent(self.hermes, "reply", str(root.get("id")), "--claim",
@@ -465,26 +465,26 @@ class AgentPullWitness(Site):
 
     def test_a_reader_follow_up_reaches_the_owner_with_the_thread(self):
         self.pull(self.hermes, "hermes")
-        root = self.comment("pond-review", "risks", "Is risk two real?")
+        root = self.comment("pond-review", "risks", "@hermes Is risk two real?")
         code, claimed = self.claim(self.hermes, root.get("id"))
         self.assertEqual(code, 0, claimed)
         code, _ = self.agent(self.hermes, "reply", str(root.get("id")), "--claim",
                              claimed["claimToken"], "--key", "k-2", "--text", "Yes.")
         self.assertEqual(code, 0)
         status, _, follow = self.api("POST", "/api/comments", {
-            "page": "pond-review", "parent": root.get("id"), "text": "Why?"})
+            "page": "pond-review", "parent": root.get("id"), "text": "@hermes Why?"})
         self.assertEqual(status, 201, follow)
         self.assertEqual(follow.get("section"), "risks")
         items = self.pull(self.hermes, "hermes")
         self.assertEqual([item["comment"].get("id") for item in items], [follow.get("id")])
-        self.assertEqual([c.get("text") for c in items[0]["thread"]], ["Is risk two real?", "Yes.", "Why?"])
+        self.assertEqual([c.get("text") for c in items[0]["thread"]], ["@hermes Is risk two real?", "Yes.", "@hermes Why?"])
 
     def test_a_question_on_a_decision_reaches_the_owner_with_the_decision(self):
         self.pull(self.hermes, "hermes")
         [form] = self.page.forms
         status, _, root = self.api("POST", "/api/comments", {
             "page": "pond-review", "question": form["question"],
-            "text": "I need more context pls."})
+            "text": "@hermes I need more context pls."})
         self.assertEqual(status, 201, root)
         self.assertEqual((root.get("question"), root.get("section"), root.get("state"),
                           root.get("owner")),

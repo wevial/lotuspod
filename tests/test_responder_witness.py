@@ -1,9 +1,9 @@
 """Witness: the default responder answers, through the agent socket and
-its own credential, each comment no listening owner will take: one naming
-@responder, one on a page whose owner is not listening, and one an owner
-only read past the owner window. When its agent edits the page source it
+its own credential, each comment no mention sends elsewhere: one naming
+@responder, one on a page whose owner is not listening, and one on a page
+whose owner is. When its agent edits the page source it
 republishes with one commit, and its reply links the new revision. It
-leaves a listening owner's comment and an offline handle's mention alone,
+leaves a mention of the owner and an offline handle's mention alone,
 never overwrites a concurrent edit, does nothing while paused, records who
 replied, and after a crash between republishing and replying it replies
 without running the agent or editing again.
@@ -375,11 +375,12 @@ class ResponderWitness(Site):
         self.assertEqual(status, 200)
         return html
 
-    def test_the_responder_takes_what_no_listening_owner_will_and_links_its_revision(self):
+    def test_the_responder_takes_every_unmentioned_comment_and_links_its_revision(self):
         self.assertEqual(self.pull(self.operator, "operator"), [])
         self.assertEqual(self.commits(), 2)
         left = self.comment("tended", "summary", "Please tighten this.")
         asked = self.comment("tended", "detail", "@responder what does this mean?")
+        named = self.comment("tended", "detail", "@operator can you check this?")
         away = self.comment("tended", "detail", "@hermes-away can you check this?")
         edit = self.comment("orphan", "greeting", "Please add a line that says hello.")
 
@@ -389,12 +390,14 @@ class ResponderWitness(Site):
         self.assertEqual(self.replies("orphan", edit.get("id")),
                          [("Added the hello line.", "responder")])
         self.assertEqual(self.replies("tended", asked.get("id")), [("Glad to help.", "responder")])
-        self.assertEqual(self.replies("tended", left.get("id")), [])
-        self.assertEqual(self.thread("tended", left.get("id"))["root"].get("state"), "pending")
+        # The owner is listening, and the responder answers it all the same.
+        self.assertEqual(self.replies("tended", left.get("id")), [("Glad to help.", "responder")])
+        self.assertEqual(self.replies("tended", named.get("id")), [])
+        self.assertEqual(self.thread("tended", named.get("id"))["root"].get("state"), "pending")
         self.assertEqual(self.replies("tended", away.get("id")), [])
         self.assertEqual(self.thread("tended", away.get("id"))["root"].get("state"), "unavailable")
         prompts = self.prompt_log()
-        self.assertEqual(len(prompts), 2)
+        self.assertEqual(len(prompts), 3)
         edit_prompt = next(p for p in prompts if "add a line that says hello" in p)
         self.assertIn("lilies at dusk", edit_prompt)
 
@@ -416,22 +419,18 @@ class ResponderWitness(Site):
         self.assertEqual(replied, [("responder", "responder")])
 
         items = self.pull(self.operator, "operator")
-        self.assertEqual([item["comment"].get("id") for item in items], [left.get("id")])
+        self.assertEqual([item["comment"].get("id") for item in items], [named.get("id")])
 
         done = self.respond()
         self.assertEqual(done.returncode, 0, done.stderr)
-        self.assertEqual(len(self.prompt_log()), 2)
+        self.assertEqual(len(self.prompt_log()), 3)
         self.assertEqual(self.commits(), 3)
         self.assertEqual(len(self.replies("orphan", edit.get("id"))), 1)
 
-    def test_an_owner_that_only_reads_does_not_hold_a_comment_past_the_window(self):
-        brief = self.tmp / "brief.sock"
-        self.start_server(sock=brief, extra=("--owner-window", "1"))
-        self.sock = brief
+    def test_a_listening_owner_s_pull_leaves_an_unmentioned_comment_to_the_responder(self):
         self.pull(self.operator, "operator")
         left = self.comment("tended", "summary", "Please tighten this.")
-        time.sleep(1.5)
-        self.assertEqual(len(self.pull(self.operator, "operator")), 1)
+        self.assertEqual(self.pull(self.operator, "operator"), [])
         done = self.respond()
         self.assertEqual(done.returncode, 0, done.stderr)
         self.assertEqual(self.replies("tended", left.get("id")), [("Glad to help.", "responder")])
