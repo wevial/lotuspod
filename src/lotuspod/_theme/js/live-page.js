@@ -44,6 +44,7 @@
       revision: function () { return own; },
       swapWith: function () {},
       note: function () {},
+      reload: function () { location.reload(); },
     };
     var stamp = document.querySelector('meta[name="lotuspod:revision"]');
     var own = stamp ? stamp.content.trim() : "";
@@ -234,6 +235,8 @@
         reload();
       });
     };
+
+    live.reload = reload;
 
     live.swapWith = function (made) {
       swap = made;

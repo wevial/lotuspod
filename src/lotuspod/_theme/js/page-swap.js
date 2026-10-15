@@ -1,8 +1,12 @@
 // Built from web/src/page-swap.ts by web/build.ts. Edit that file, not this one.
-const SWAP_UNMOUNTED = "details.artifact-comment, form.artifact-decision, pre.mermaid, button.artifact-ref, table";
+const SWAP_UNMOUNTED = "form.artifact-decision, pre.mermaid, button.artifact-ref, table, mark.artifact-passage";
 const SWAP_HOLDS = [];
 function holdSwap(test) {
   SWAP_HOLDS.push(test);
+}
+const SWAP_REFUSALS = [];
+function refuseSwap(test) {
+  SWAP_REFUSALS.push(test);
 }
 function pageSwap() {
   const ADDED = "div.artifact-answered, .artifact-comments-changed";
@@ -37,6 +41,7 @@ function pageSwap() {
   };
   const unmounted = (nodes) => nodes.some((node) => node instanceof Element && (node.matches(SWAP_UNMOUNTED) || node.querySelector(SWAP_UNMOUNTED) !== null));
   const brought = (node) => document.importNode(node, true);
+  const refused = (part) => SWAP_REFUSALS.some((test) => test([part.heading, part.wrapper]));
   function retext(old, fresh, place) {
     const before = [];
     const after = [];
@@ -99,7 +104,7 @@ function pageSwap() {
     }
   }
   async function swap() {
-    if (!bodyOf(document) || document.querySelector("details.artifact-comment"))
+    if (!bodyOf(document))
       return null;
     let text;
     try {
@@ -138,7 +143,7 @@ function pageSwap() {
     if (digestOf(document.querySelector(".artifact-ref-cards")) !== digestOf(doc.querySelector(".artifact-ref-cards"))) {
       return null;
     }
-    if (document.querySelector("details.artifact-comment") || doc.querySelector("details.artifact-comment")) {
+    if (!document.querySelector("details.artifact-comment") !== !doc.querySelector("details.artifact-comment")) {
       return null;
     }
     const header = document.querySelector("header.artifact-header");
@@ -175,6 +180,8 @@ function pageSwap() {
     };
     const introHeld = introChanged && (heldIntro !== null || holds(intro));
     const sectionHeld = new Set([...removed, ...changed.map((part) => byId.get(part.id))].filter((part) => held.has(part.id) || holds([part.heading, part.wrapper])).map((part) => part.id));
+    if (removed.some(refused))
+      return null;
     const line = document.querySelector(".artifact-topbar")?.getBoundingClientRect().bottom ?? 0;
     const anchorAt = parts.findIndex((part) => part.heading.getBoundingClientRect().top >= line);
     const anchorTop = anchorAt >= 0 ? parts[anchorAt].heading.getBoundingClientRect().top : 0;
@@ -351,6 +358,10 @@ function pageSwap() {
     if (at < 0)
       return;
     const old = parts[at];
+    if (!entry.fresh && refused(old) || unmounted([old.heading, old.wrapper])) {
+      live.reload();
+      return;
+    }
     const unit = entry.fresh ? applyChanged(old, entry.fresh) : applyRemoved(old);
     swapped(live.revision(), [unit]);
     const heading = entry.fresh ? unit.after[0] : (parts[at + 1] ?? parts[at - 1])?.heading;
@@ -379,7 +390,12 @@ function pageSwap() {
     if (!entry || !body)
       return;
     const parts = partsOf(body);
-    swapped(live.revision(), [applyIntro(body, introOf(body, parts), entry.fresh, entry.digest)]);
+    const intro = introOf(body, parts);
+    if (unmounted(intro)) {
+      live.reload();
+      return;
+    }
+    swapped(live.revision(), [applyIntro(body, intro, entry.fresh, entry.digest)]);
     toggleOf(parts[0]?.heading)?.focus();
   }
   holdSwap((nodes) => {
