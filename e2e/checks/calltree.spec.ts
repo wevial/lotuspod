@@ -151,6 +151,30 @@ test.describe('folding', () => {
   });
 });
 
+test('a passage quote leaves out the folded count and Fold all', async ({ page }) => {
+  // capture-calltree takes no comments, so the unlinked tree is set into
+  // the passages page and mounted as a swap would bring it in.
+  await page.goto('/capture-passages.html?standalone');
+  await expect(page.locator('.artifact-body details.artifact-comment')).toHaveCount(3);
+  const selected = await page.evaluate(async () => {
+    const fresh = new DOMParser().parseFromString(await (await fetch('/capture-calltree.html')).text(), 'text/html');
+    const tree = document.adoptNode(fresh.querySelectorAll('.calltree')[1]);
+    document.querySelector('.artifact-section-body')!.prepend(tree);
+    document.dispatchEvent(new CustomEvent('lotuspod:swapped', { detail: { revision: '', units: [] } }));
+    const name = tree.querySelector('.calltree-name')!.firstChild!;
+    const line = tree.querySelector('.calltree-ln')!.firstChild as Text;
+    document.getSelection()!.setBaseAndExtent(name, 0, line, line.data.length);
+    return String(document.getSelection());
+  });
+  expect(selected).not.toContain('inside');
+  await expect(page.locator('.calltree-folded')).toHaveCount(1);
+  await expect(page.locator('button.artifact-passage-pill')).toBeVisible();
+  await page.keyboard.press('Control+Alt+KeyM');
+  const open = page.locator('.artifact-passage-composer');
+  await expect(open.locator('.artifact-passage-quote')).toHaveText('entry()main.py:10');
+  await page.keyboard.press('Escape');
+});
+
 test.describe('without JavaScript', () => {
   test.use({ javaScriptEnabled: false });
   test('all rows, marker colors and chips render statically', async ({ page }) => {
