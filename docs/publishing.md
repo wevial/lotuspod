@@ -237,10 +237,10 @@ file:line chips link to source lines; otherwise they are plain chips. A summary
 counts changed and new functions and distinct files, and a legend explains the
 markers and dimmed context rows. A line that doesn't parse shows as text.
 
-Images, links, bare URLs and calltree fences are Lotuspod's own, outside the subset its
-reference converter takes. Everything from a `## Concrete commands` heading
-on is left out of the page, which keeps host-only commands off published
-pages. Reference-style links and task lists are not converted.
+Images, links, bare URLs and calltree fences are Lotuspod's own, outside
+the subset its reference converter takes. Everything from a
+`## Concrete commands` heading on is left out of the page, which keeps
+host-only commands off published pages. Reference-style links and task lists are not converted.
 
 With the page script, a link in the page body - from markdown or HTML alike,
 and not naming a `target` of its own - opens in the same tab when it points

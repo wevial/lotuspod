@@ -1,23 +1,41 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 
+// The capture fixture's calltree page (tests/capture_site.py): its first
+// section holds the ticket's example fence, linked to GitHub, its second an
+// unlinked fence with one line that doesn't parse.
 const URL = '/capture-calltree.html?standalone';
-test.use({ viewport: { width: 1280, height: 800 },
-  extraHTTPHeaders: { 'Cf-Access-Jwt-Assertion': process.env.LOTUSPOD_TEST_ASSERTION ?? '' } });
+const SIGNED_IN = { 'Cf-Access-Jwt-Assertion': process.env.LOTUSPOD_TEST_ASSERTION ?? '' };
+test.use({ viewport: { width: 1280, height: 800 }, extraHTTPHeaders: SIGNED_IN });
 
-test('scripts load without console errors or CSP violations', async ({ page }) => {
+type Violation = { blockedURI: string; effectiveDirective: string };
+
+async function watch(page: Page) {
   const errors: string[] = [];
-  page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
-  page.on('pageerror', error => errors.push(error.message));
+  page.on('console', (message) => {
+    if (message.type() === 'error') errors.push(message.text());
+  });
+  page.on('pageerror', (error) => errors.push(error.message));
   await page.addInitScript(() => {
-    (window as any).__violations = [];
-    document.addEventListener('securitypolicyviolation', event => {
-      (window as any).__violations.push({ blockedURI: event.blockedURI, effectiveDirective: event.effectiveDirective });
+    const seen: Violation[] = [];
+    (window as any).__violations = seen;
+    document.addEventListener('securitypolicyviolation', (event) => {
+      seen.push({ blockedURI: event.blockedURI, effectiveDirective: event.effectiveDirective });
     });
   });
+  return {
+    async clean() {
+      expect(errors).toEqual([]);
+      expect(await page.evaluate(() => (window as any).__violations as Violation[])).toEqual([]);
+    },
+  };
+}
+
+test('scripts load without console errors or CSP violations', async ({ page }) => {
+  const seen = await watch(page);
   await page.goto(URL);
   await expect(page.locator('.calltree').first()).toBeVisible();
-  expect(errors).toEqual([]);
-  expect(await page.evaluate(() => (window as any).__violations)).toEqual([]);
+  await page.waitForLoadState('networkidle');
+  await seen.clean();
 });
 
 test.describe('without JavaScript', () => {

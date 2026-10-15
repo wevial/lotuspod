@@ -10,7 +10,7 @@ item), `>` blockquotes converted recursively, pipe tables, code spans,
 title is passed separately, and everything from a `## Concrete commands`
 heading on is left out, which keeps host-only commands off published pages.
 
-Additional constructs are Lotuspod's own and outside the reference's subset. A line
+Some constructs are Lotuspod's own and outside the reference's subset. A line
 that is only `![ALT](SRC)`, at the top level or in a blockquote, is an image
 drawn as a figure (and stops a paragraph). One in a code fence, a list item,
 a table cell or the middle of a paragraph line, or after the cut, stays text.

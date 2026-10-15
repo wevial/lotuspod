@@ -26,9 +26,9 @@ capture-decision-threads.md beside it. So is the images page, capture-images, fr
 fixture images (tests/fixtures/media/) beside it: its images are stored in
 lotuspod-media/ beside the site, as publish stores them for serve. The
 published pages above carry labels (PAGE_LABELS) for the index's Labels menu;
-the rendered ones, and the refs and versions pages below, carry none. The
-calltree page, capture-calltree, shows linked and unlinked static call trees. The
-refs page, capture-refs, is published with a refs file (REFS_FILE), so the
+the rendered ones, and the calltree, refs and versions pages below, carry
+none. The calltree page, capture-calltree, holds a linked and an unlinked
+calltree fence. The refs page, capture-refs, is published with a refs file (REFS_FILE), so the
 tickets and pull requests it names open cards.
 
 The site is the top of its own git repository, with a local identity and no
@@ -705,10 +705,9 @@ flowchart LR
 </table>
 """
 
-# The refs page: published from markdown with REFS_FILE, so the tickets and
-# pull requests it names open cards. Its first paragraph names three of
-# them, its second relos#2266 and LOTUS-95, which the refs file lacks. No
-# diagram and no comments, so the page needs no network.
+# The calltree page: published from markdown with no comments. Its first
+# section holds a calltree fence linked to GitHub, its second one with no
+# repo= or sha= and a line that doesn't parse.
 CALLTREE_SOURCE = '''
 # Capture calltree
 
@@ -736,6 +735,10 @@ CALLTREE_SOURCE = '''
 ```
 '''
 
+# The refs page: published from markdown with REFS_FILE, so the tickets and
+# pull requests it names open cards. Its first paragraph names three of
+# them, its second relos#2266 and LOTUS-95, which the refs file lacks. No
+# diagram and no comments, so the page needs no network.
 REFS_PAGE = "capture-refs"
 REFS_SOURCE = """\
 # Capture refs
