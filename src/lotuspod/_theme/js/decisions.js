@@ -14,6 +14,9 @@
     var answered = null;
     // Whether the reader may dismiss and undo, once the archive route says so.
     var owner = false;
+    // Whether the archive route was asked: once, as the page's first form
+    // is wired, at load or on a swap.
+    var asked = false;
     var MAX_REASON = 200;
 
     function radios(form) {
@@ -672,9 +675,10 @@
     // its dismissed card, only once the archive route says the reader is an
     // owner. An archived page takes no answer, so it asks nothing.
     function mayDismiss() {
-      if (ARCHIVED || !forms.length) {
+      if (ARCHIVED || !forms.length || asked) {
         return;
       }
+      asked = true;
       fetch("/api/archive?page=" + encodeURIComponent(page)).then(async function (response) {
         var payload = response.status === 200 ? await json(response) : null;
         if (!payload || payload.mayArchive !== true) {
@@ -721,6 +725,14 @@
         return false;
       }
       var questions = (await response.json()).questions || {};
+      // A question with no answer left, undone since an earlier read, is
+      // listed no more.
+      stored.forEach(function (ignored, question) {
+        var entry = Object.prototype.hasOwnProperty.call(questions, question) ? questions[question] : null;
+        if (!entry || !entry.current) {
+          stored.delete(question);
+        }
+      });
       // A form undone while this was loading holds what the undo gave
       // back, which is newer than what was read.
       Object.keys(questions).forEach(function (question) {
@@ -827,6 +839,9 @@
           dismissible(form);
         }
       });
+      // A page that loaded with no form asks now whether the reader may
+      // dismiss.
+      mayDismiss();
       forms.sort(function (a, b) {
         return a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1;
       });

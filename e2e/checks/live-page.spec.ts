@@ -1394,7 +1394,7 @@ test.describe('signed in', () => {
     const name = 'live-page-comments-title';
     listen();
     publish(name, source('Live page title', 'first'));
-    const root = await comment(request, name, 'findings', 'Which heater?');
+    const root = await comment(request, name, 'findings', '@hermes Which heater?');
     expect(root.state).toBe('pending');
     await stopClock(page);
     await open(page, name);
@@ -1662,6 +1662,11 @@ test.describe('signed in', () => {
     await expect(banner(page).node).toHaveCount(0);
     await expect(first.ask).toBeVisible();
     await expect(second.ask).toBeVisible();
+    // The fixture's reader is an owner: Dismiss follows Ask on each.
+    for (const each of [first, second]) {
+      await expect(each.form.getByRole('button', { name: 'Dismiss' })).toBeVisible();
+      expect(await each.ask.evaluate((node) => node.nextElementSibling?.textContent)).toBe('Dismiss');
+    }
     // No review sheet on a page that loaded with no form.
     await expect(page.locator('div.artifact-review-bar')).toHaveCount(0);
 
@@ -1725,6 +1730,30 @@ test.describe('signed in', () => {
     await expect(second.saved).toHaveText('✓ Saved · Yes · change');
     await expect(page.locator('div.artifact-answered tbody tr')).toHaveCount(2);
     expect(moved.count).toBe(0);
+    expect(errors).toEqual([]);
+  });
+
+  test('a dismissal undone elsewhere leaves the Answered table once its section is swapped', async ({ page, request }) => {
+    const errors = watchErrors(page);
+    const name = 'live-page-decisions-undone';
+    await undecided(page, name);
+    await republish(page, name, sectioned(name, [...pond(), decisions()]));
+    const second = card(page, 'decision-2');
+    await second.form.getByRole('button', { name: 'Dismiss' }).click();
+    await expect(second.saved).toContainText('Dismissed');
+    const rows = page.locator('div.artifact-answered tbody tr');
+    await expect(rows).toHaveCount(1);
+    await page.locator('h1.artifact-title').click();
+
+    const undone = await request.post('/api/answers', {
+      headers: SIGNED_IN, data: { page: name, question: 'decision-2', dismissed: false },
+    });
+    expect(undone.status()).toBe(200);
+    await republish(page, name, sectioned(name, [...pond(), decisions('Which heater, for a deep pond?')]));
+    await expect(card(page, 'decision-1').text).toHaveText('Which heater, for a deep pond?');
+    await expect(second.form).not.toHaveClass(/artifact-decision--dismissed/);
+    await expect(second.form.getByRole('button', { name: 'Dismiss' })).toBeVisible();
+    await expect(page.locator('div.artifact-answered')).toHaveCount(0);
     expect(errors).toEqual([]);
   });
 
