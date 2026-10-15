@@ -32,7 +32,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from lotuspod import cli, decisions, media, responder  # noqa: E402
+from lotuspod import api, cli, decisions, media, responder  # noqa: E402
 from lotuspod.db import Database  # noqa: E402
 from tests.test_responder_witness import (  # noqa: E402
     ASSERTION, REPO, READER, Site, assertion, git)
@@ -462,6 +462,20 @@ class NeedsOwnerTests(ResponderCase):
         done = self.respond(env=dict(self.env, ANSWER=answer))
         self.assertEqual(done.returncode, 0, done.stderr)
         self.assertEqual(len(self.inbox("operator")), 1)
+
+    def test_a_long_answer_gives_way_to_the_queued_notice(self):
+        row = self.comment("tended", "greeting", "Please file a ticket for the lilies.")
+        marker = "\nNEEDS_OWNER: file a ticket for X"
+        answer = "A" * (api.MAX_TEXT - len(marker)) + marker
+        done = self.respond(env=dict(self.env, ANSWER=answer))
+        self.assertEqual(done.returncode, 0, done.stderr)
+        [(text, handle, _revision)] = self.replies("tended", row["id"])
+        self.assertEqual(handle, "responder")
+        self.assertLessEqual(len(text), api.MAX_TEXT)
+        self.assertTrue(text.endswith("…\n\nI've queued this for operator: file a ticket for X"),
+                        text[-80:])
+        self.assertEqual([item["ask"] for item in self.inbox("operator")],
+                         ["file a ticket for X"])
 
     def test_an_answered_question_queues_nothing(self):
         row = self.comment("tended", "greeting", "What are lilies doing here?")

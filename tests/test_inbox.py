@@ -25,7 +25,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from lotuspod import db, decisions, machine  # noqa: E402
+from lotuspod import agents, db, decisions, machine  # noqa: E402
 from tests.test_agent_pull import PLAN, READER, PullTestCase, run_cli  # noqa: E402
 
 
@@ -118,7 +118,63 @@ class ClaimTests(InboxTestCase):
         self.assertEqual(self.asks("one"), [second["id"]])
 
 
+class LapsedDoneTests(InboxTestCase):
+    claim_sec = 1
+
+    def test_a_session_whose_claim_lapsed_replies_nothing(self):
+        row, item = self.queue("Please file a ticket.", "file a ticket for X")
+        rc, first = self.claim("one", item["id"])
+        self.assertEqual(rc, 0, first)
+        time.sleep(2)
+        rc, second = self.claim("two", item["id"])
+        self.assertEqual(rc, 0, second)
+        rc, refused = self.inbox("one", "done", str(item["id"]), "--owner", "operator",
+                                 "--claim", first["claimToken"], "--key", "late-1",
+                                 "--text", "Filed, late.")
+        self.assertEqual((rc, refused), (1, {"error": "not_claimed"}))
+        [thread] = [t for t in self.threads("ops") if t["root"]["id"] == row["id"]]
+        self.assertEqual(thread["replies"], [])
+        rc, done = self.inbox("two", "done", str(item["id"]), "--owner", "operator",
+                              "--claim", second["claimToken"], "--key", "late-1",
+                              "--text", "Filed.")
+        self.assertEqual(rc, 0, done)
+        [thread] = [t for t in self.threads("ops") if t["root"]["id"] == row["id"]]
+        self.assertEqual([r["text"] for r in thread["replies"]], ["Filed."])
+
+
 class DoneTests(InboxTestCase):
+    def test_one_key_names_each_item_s_own_reply(self):
+        done = {}
+        for text, ask in (("Please file a ticket.", "file it"),
+                          ("Please change the page.", "change it")):
+            row, item = self.queue(text, ask)
+            rc, claimed = self.claim("one", item["id"])
+            self.assertEqual(rc, 0, claimed)
+            rc, closed = self.inbox("one", "done", str(item["id"]), "--owner", "operator",
+                                    "--claim", claimed["claimToken"], "--key", "same",
+                                    "--text", f"Done: {ask}.")
+            self.assertEqual(rc, 0, closed)
+            done[row["id"]] = closed["reply"]
+        for root, reply in done.items():
+            self.assertEqual(reply["parent"], root)
+            [thread] = [t for t in self.threads("ops") if t["root"]["id"] == root]
+            self.assertEqual([r["id"] for r in thread["replies"]], [reply["id"]])
+
+    def test_a_new_ask_for_the_same_comment_replaces_an_open_item_s(self):
+        row, item = self.queue("Please file a ticket.", "old task A")
+        again = db.Database(self.db_path).queue(owner="operator", page="ops",
+                                                comment=row["id"], ask="new task B")
+        self.assertEqual((again["id"], again["ask"]), (item["id"], "new task B"))
+        rc, claimed = self.claim("one", item["id"])
+        self.assertEqual(rc, 0, claimed)
+        rc, _done = self.inbox("one", "done", str(item["id"]), "--owner", "operator",
+                               "--claim", claimed["claimToken"])
+        self.assertEqual(rc, 0, _done)
+        kept = db.Database(self.db_path).queue(owner="operator", page="ops",
+                                               comment=row["id"], ask="later task C")
+        self.assertEqual(kept["ask"], "new task B")
+
+
     def test_done_closes_an_item_and_it_is_not_listed_again(self):
         _row, first = self.queue("Please file a ticket.", "file a ticket for X")
         _row, second = self.queue("Please change the page.", "change the risks")
@@ -195,6 +251,20 @@ class AnswerTests(InboxTestCase):
                                "--credential", str(self.creds["one"]))
         self.assertEqual(rc, 0, out + err)
         self.assertEqual([i["kind"] for i in self.pulled("one")], ["ask"])
+
+
+class AnswerTextTests(unittest.TestCase):
+    def test_an_undone_dismissal_and_a_reworded_question_say_so(self):
+        answer = {"id": 4, "choice": "", "note": "", "createdAt": "2026-10-14T12:00:00.000Z",
+                  "actor": READER, "dismissed": True, "undoneAt": "2026-10-14T12:05:00.000Z"}
+        question = {"id": "decision-1", "text": "Freeze the pond?", "label": "Dismissed",
+                    "reworded": True}
+        text = agents.inbox_text({"owner": "operator", "items": [{
+            "kind": "answer", "answer": answer, "question": question,
+            "page": {"name": "ops", "title": "Plan", "owner": "operator", "revision": "r"}}]})
+        self.assertIn("- Question: Freeze the pond? (the page now asks it in other words, "
+                      "or not at all)", text)
+        self.assertIn("- Undone at 2026-10-14T12:05:00.000Z", text)
 
 
 class MigrationTests(unittest.TestCase):

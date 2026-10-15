@@ -162,11 +162,18 @@ def needs_owner(text: str) -> tuple[str, str | None]:
 
 
 def queued(answer: str, owner: str, ask: str) -> str:
-    """The reply to a comment whose ask is queued for owner, after answer;
-    with no owner, it says there is none to queue it for."""
+    """The reply to a comment whose ask is queued for owner, after answer,
+    shortened as it must be for the reply to fit api.MAX_TEXT; with no
+    owner, it says there is none to queue it for."""
     said = (f"I've queued this for {owner}: {ask}" if owner
             else f"This page has no owner I could queue this for: {ask}")
-    return f"{answer}\n\n{said}" if answer else said
+    if not answer:
+        return said
+    # The answer gives way, so the reply stays within what the socket takes.
+    room = api.MAX_TEXT - len(said) - 2
+    if len(answer) > room:
+        answer = answer[:room - 1].rstrip() + "…"
+    return f"{answer}\n\n{said}"
 
 
 class Refused(Exception):

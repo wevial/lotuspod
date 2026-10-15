@@ -385,9 +385,12 @@ def inbox_text(payload: dict) -> str:
             lines += [
                 f"## {number}. Answer {answer['id']} on {where}, question `{question['id']}`",
                 "",
-                f"- Question: {question['text'] or '(its words were not kept)'}",
+                f"- Question: {question['text'] or '(its words were not kept)'}"
+                + (" (the page now asks it in other words, or not at all)"
+                   if question["reworded"] else ""),
                 f"- Chosen: {chosen}",
                 f"- From: {_by(answer)} at {answer['createdAt']}",
+                *([f"- Undone at {answer['undoneAt']}"] if answer.get("undoneAt") else []),
                 f"- Acknowledge: `lotuspod comments ack-answer {answer['id']}`",
                 "",
             ]

@@ -888,39 +888,9 @@ class Database:
         reopened as handle; else its resolution stays as it is.
         """
         with self._connect() as conn, _write(conn):
-            stored = conn.execute(
-                "SELECT * FROM comments WHERE reply_credential = ? AND reply_key = ?",
-                (credential, key),
-            ).fetchone()
-            if stored is not None:
-                return _comment(stored)
-            row = _row(conn, root)
-            if (row is None or row["parent"] is not None
-                    or json.loads(row["actor"]).get("kind") != "human"):
-                raise Refused("unknown_thread")
-            found = _comment(row)
-            page = page_of(found["page"])
-            if page is None:
-                raise Refused("unknown_page")
-            images = () if images_of is None else images_of()
-            if revision is not None and revision != page["revision"] and not _published(
-                    conn, root, credential, key, revision):
-                raise Refused("revision_mismatch")
-            actor = {"kind": "agent", "handle": handle, "credential": credential}
-            cursor = conn.execute(
-                "INSERT INTO comments (page, section, section_title, revision, parent, text,"
-                " quote, actor, created_at, state, reply_credential, reply_key, question,"
-                " images) VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?)",
-                (found["page"], found["section"],
-                 page["sections"].get(found["section"], ""),
-                 revision or "", root, text, _dump(actor), _now(), ANSWERED,
-                 credential, key, found.get("question"), _stored_images(images)),
-            )
-            _record(conn, "follow-up", found, credential, handle, key)
-            if reopen and _resolution(_newest(conn, root))["resolved"]:
-                _insert_resolution(conn, root, False, actor)
-                _record(conn, "reopen", found, credential, handle, None)
-            return _comment(_row(conn, cursor.lastrowid))
+            return _insert_follow_up(conn, root, credential=credential, handle=handle, key=key,
+                                     text=text, revision=revision, reopen=reopen,
+                                     page_of=page_of, images_of=images_of)
 
     def release(self, comment_id: int, *, credential: str, token_hash: str,
                 clock: Callable[[], float]) -> dict:
@@ -1251,11 +1221,15 @@ class Database:
 
     def queue(self, *, owner: str, page: str, comment: int, ask: str) -> dict:
         """Put ask, from comment on page, in owner's inbox; the item. A
-        comment already queued gives back its item, and nothing changes."""
+        comment already queued keeps its one item: while it is open, its ask
+        becomes this one (the reply that promised it is the one that stands);
+        once done, nothing changes."""
         with self._connect() as conn, _write(conn):
             conn.execute(
-                "INSERT OR IGNORE INTO inbox (owner, page, comment, ask, created_at)"
-                " VALUES (?, ?, ?, ?, ?)", (owner, page, comment, ask, _now()),
+                "INSERT INTO inbox (owner, page, comment, ask, created_at)"
+                " VALUES (?, ?, ?, ?, ?) ON CONFLICT (comment) DO UPDATE SET"
+                " ask = excluded.ask WHERE done_at IS NULL",
+                (owner, page, comment, ask, _now()),
             )
             row = conn.execute("SELECT * FROM inbox WHERE comment = ?", (comment,))
             return _inbox_item(row.fetchone())
@@ -1291,24 +1265,31 @@ class Database:
             return _find_item(conn, item_id, owner)
 
     def finish_item(self, item_id: int, *, owner: str, credential: str, token_hash: str,
-                    clock: Callable[[], float]) -> dict:
+                    clock: Callable[[], float], reply: Mapping | None = None,
+                    page_of: Callable[[str], Mapping | None] | None = None
+                    ) -> tuple[dict, dict | None]:
         """Close owner's inbox item item_id under credential's current claim;
-        the item. Refused unknown_item as claim_item is, settled once it is
-        done, and not_claimed without that claim and its token."""
+        the item, and the reply stored or None. With reply, {key, text}, the
+        text is first added to the item's thread as follow_up adds it, as
+        owner, under the key "inbox-ID-KEY", so a key names one item's reply;
+        both happen in one transaction with the claim's check, or neither.
+        Refused unknown_item as claim_item is, settled once it is done,
+        not_claimed without that claim and its token, and as follow_up is."""
         with self._connect() as conn, _write(conn):
             found = _held_item(conn, item_id, owner, credential, token_hash, clock())
+            stored = None
+            if reply is not None:
+                comment = _row(conn, found["comment"])
+                root = comment["parent"] or comment["id"]
+                stored = _insert_follow_up(
+                    conn, root, credential=credential, handle=owner,
+                    key=f"inbox-{item_id}-{reply['key']}", text=reply["text"],
+                    revision=None, reopen=False, page_of=page_of)
             conn.execute(
                 "UPDATE inbox SET done_at = ?, claim_hash = NULL, claim_expires = NULL"
                 " WHERE id = ?", (_now(), found["id"]),
             )
-            return _find_item(conn, item_id, owner)
-
-    def check_item(self, item_id: int, *, owner: str, credential: str, token_hash: str,
-                   clock: Callable[[], float]) -> dict:
-        """The item as finish_item would close it, refused as it would be;
-        nothing changes."""
-        with self._connect() as conn:
-            return _held_item(conn, item_id, owner, credential, token_hash, clock())
+            return _find_item(conn, item_id, owner), stored
 
     def add_credential(self, *, name: str, handles: list[str], operations: list[str],
                        token_hash: str) -> dict:
@@ -1479,6 +1460,46 @@ def _published(conn: sqlite3.Connection, comment_id: int, credential: str, key: 
         "SELECT 1 FROM audit WHERE action = 'publish' AND comment = ? AND credential = ?"
         " AND key = ? AND revision = ?", (comment_id, credential, key, revision),
     ).fetchone() is not None
+
+
+def _insert_follow_up(conn: sqlite3.Connection, root: int, *, credential: str, handle: str,
+                      key: str, text: str, revision: str | None, reopen: bool,
+                      page_of: Callable[[str], Mapping | None],
+                      images_of: Callable[[], Sequence[Mapping]] | None = None) -> dict:
+    """Database.follow_up's work, in the caller's write transaction."""
+    stored = conn.execute(
+        "SELECT * FROM comments WHERE reply_credential = ? AND reply_key = ?",
+        (credential, key),
+    ).fetchone()
+    if stored is not None:
+        return _comment(stored)
+    row = _row(conn, root)
+    if (row is None or row["parent"] is not None
+            or json.loads(row["actor"]).get("kind") != "human"):
+        raise Refused("unknown_thread")
+    found = _comment(row)
+    page = page_of(found["page"])
+    if page is None:
+        raise Refused("unknown_page")
+    images = () if images_of is None else images_of()
+    if revision is not None and revision != page["revision"] and not _published(
+            conn, root, credential, key, revision):
+        raise Refused("revision_mismatch")
+    actor = {"kind": "agent", "handle": handle, "credential": credential}
+    cursor = conn.execute(
+        "INSERT INTO comments (page, section, section_title, revision, parent, text,"
+        " quote, actor, created_at, state, reply_credential, reply_key, question,"
+        " images) VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?)",
+        (found["page"], found["section"],
+         page["sections"].get(found["section"], ""),
+         revision or "", root, text, _dump(actor), _now(), ANSWERED,
+         credential, key, found.get("question"), _stored_images(images)),
+    )
+    _record(conn, "follow-up", found, credential, handle, key)
+    if reopen and _resolution(_newest(conn, root))["resolved"]:
+        _insert_resolution(conn, root, False, actor)
+        _record(conn, "reopen", found, credential, handle, None)
+    return _comment(_row(conn, cursor.lastrowid))
 
 
 def _insert_comment(conn: sqlite3.Connection, *, page: str, section: str,

@@ -73,8 +73,9 @@ sessions never both act on one. Done answers {item, reply}, reply the
 follow-up stored or null. Both are refused 404 unknown_item for an item not
 in owner's inbox and 409 settled once it is done, and done 409 not_claimed
 without the credential's current claim and its token. Done with text needs
-idempotencyKey too, and posts it as a follow-up does before closing, so
-sending it again after a failure stores nothing twice.
+idempotencyKey too, and posts it as a follow-up does, in the same
+transaction as the claim's check and the close, so a session whose claim
+has lapsed posts nothing; a key names the reply of one item only.
 
 POST /v1/media takes one image as its body, with Content-Type image/png,
 image/jpeg, image/webp or image/gif, and answers {name, url, width, height}
@@ -653,17 +654,12 @@ class Routes:
         reply = None
         if "text" in fields:
             _allow(credential, "reply", owner)
-            key = api._text(fields["idempotencyKey"], 1, MAX_KEY)
-            text = api._text(fields["text"], 1, api.MAX_TEXT)
-            found = self.database.check_item(item_id, owner=owner, credential=name,
-                                             token_hash=token, clock=self.clock)
-            comment = self.database.comment(found["comment"])
-            root = comment["parent"] or comment["id"]
-            reply = self._shown(self.database.follow_up(
-                root, credential=name, handle=owner, key=key, text=text, revision=None,
-                reopen=False, page_of=self._current))
-        found = self.database.finish_item(item_id, owner=owner, credential=name,
-                                          token_hash=token, clock=self.clock)
+            reply = {"key": api._text(fields["idempotencyKey"], 1, MAX_KEY),
+                     "text": api._text(fields["text"], 1, api.MAX_TEXT)}
+        found, stored = self.database.finish_item(
+            item_id, owner=owner, credential=name, token_hash=token, clock=self.clock,
+            reply=reply, page_of=self._current)
+        reply = None if stored is None else self._shown(stored)
         # The claim's expiry may be shown, never its credential.
         return {"item": {**found, "claim": {"expiresAt": found["claim"]["expiresAt"]}},
                 "reply": reply}
