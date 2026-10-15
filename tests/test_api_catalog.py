@@ -182,6 +182,16 @@ class CatalogTests(CatalogTestCase):
                 "--body", BODY, "--out-dir", str(self.out_dir))
         self.assertIsNone(lookup(page_name(1)))
 
+    def test_a_page_linked_away_after_the_read_is_not_served(self) -> None:
+        self.grow(2)
+        lookup = cli.api_catalog(self.out_dir)
+        self.assertIsNotNone(lookup(page_name(0)))
+        outside = self.work / "outside.html"
+        shutil.copyfile(self.out_dir / f"{page_name(0)}.html", outside)
+        (self.out_dir / f"{page_name(1)}.html").unlink()
+        (self.out_dir / f"{page_name(1)}.html").symlink_to(outside)
+        self.assertIsNone(lookup(page_name(1)))
+
 
 if __name__ == "__main__":
     unittest.main()

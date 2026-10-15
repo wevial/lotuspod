@@ -2159,6 +2159,10 @@ def api_page(out_dir: Path, name: str,
     if not is_page_name(file) or file not in allowed:
         return None
     try:
+        # The allow-list may have been read before the page was replaced
+        # by a link, which serve_allow_list never lists.
+        if (out_dir / file).is_symlink():
+            return None
         page_html = (out_dir / file).read_text(encoding="utf-8")
         revision = page_revision(out_dir, name)
         record = archive.read_record(out_dir, name) or {}
