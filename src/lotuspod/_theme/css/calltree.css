@@ -79,7 +79,6 @@
 .calltree-caret, .calltree-leaf {
   display: inline-block;
   width: 2ch;
-  vertical-align: baseline;
 }
 .calltree-caret {
   padding: 0;
@@ -88,7 +87,6 @@
   background: none;
   color: var(--color-muted-lavender);
   font: inherit;
-  line-height: inherit;
   text-align: left;
   cursor: pointer;
 }
@@ -107,7 +105,6 @@
   font-family: var(--font-body);
   font-size: 0.75rem;
 }
-.calltree-folded[hidden] { display: none; }
 .calltree-folded-new { color: var(--color-mint); }
 .calltree-folded-changed { color: var(--color-amber); }
 .calltree-head:has(.calltree-fold-all) {

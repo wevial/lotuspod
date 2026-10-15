@@ -36,11 +36,9 @@
       const last = end(index);
       for (let next = index + 1; next < last; next++) {
         rows[next].hidden = !open;
-        // An open row's descendants show but for those under one still folded.
-        if (open && carets.get(next)?.getAttribute("aria-expanded") === "false") {
-          for (let skip = next + 1, stop = end(next); skip < stop; skip++) rows[skip].hidden = true;
-          next = end(next) - 1;
-        }
+        // An open row's descendants show but for those under one still
+        // folded, which its folding already hid.
+        if (open && carets.get(next)?.getAttribute("aria-expanded") === "false") next = end(next) - 1;
       }
     };
 
