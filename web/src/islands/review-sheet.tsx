@@ -197,6 +197,9 @@ function Sheet({ page, the, questions, groups, marks }: SheetProps) {
   const close = useRef<HTMLButtonElement>(null);
   const isOpen = useRef(open);
   isOpen.current = open;
+  // The questions as last drawn, for a Save a swap redraws under.
+  const asked = useRef(questions);
+  asked.current = questions;
 
   function shut(refocus: boolean): void {
     if (!isOpen.current) {
@@ -284,7 +287,9 @@ function Sheet({ page, the, questions, groups, marks }: SheetProps) {
 
   // Post each answer not stored, in page order, as its form's own Save
   // does; an open question has nothing to post, nor has one dismissed or
-  // saved on its form while the earlier ones were posting.
+  // saved on its form while the earlier ones were posting. Each is posted
+  // through the form the page asks it on at its turn: a swap may have put
+  // in a new one, and one it took away or reworded is not posted.
   async function save(): Promise<void> {
     const pending = questions.filter((question) => standing(the, question).pending);
     setSaving(true);
@@ -292,8 +297,10 @@ function Sheet({ page, the, questions, groups, marks }: SheetProps) {
     let failed = 0;
     let tried = 0;
     try {
-      for (const question of pending) {
-        if (!standing(the, question).pending) {
+      for (const was of pending) {
+        const question = asked.current.find((each) => each.form.dataset.question === was.form.dataset.question);
+        if (!question || question.form.dataset.version !== was.form.dataset.version ||
+          !standing(the, question).pending) {
           continue;
         }
         tried += 1;
@@ -310,7 +317,7 @@ function Sheet({ page, the, questions, groups, marks }: SheetProps) {
     } finally {
       setSaving(false);
     }
-    const left = questions.filter((question) => opened(the, question)).length;
+    const left = asked.current.filter((question) => opened(the, question)).length;
     const stay = plural(left, "question stays", "questions stay") + " open.";
     const time = new Date().toLocaleTimeString(undefined, { timeStyle: "short" });
     if (failed === tried) {
@@ -342,8 +349,8 @@ function Sheet({ page, the, questions, groups, marks }: SheetProps) {
         <div class="artifact-review-options">
           {question.checklist ?
             boxes(question.form).map((box) => (
-              <label class="artifact-review-item">
-                <input type="checkbox" checked={box.checked} onChange={(event) => {
+              <label key={box.value} class="artifact-review-item">
+                <input type="checkbox" data-value={box.value} checked={box.checked} onChange={(event) => {
                   box.checked = event.currentTarget.checked;
                   moved(box);
                 }} />
@@ -351,7 +358,7 @@ function Sheet({ page, the, questions, groups, marks }: SheetProps) {
               </label>
             )) :
             radios(question.form).map((radio) => (
-              <button class="artifact-review-option" type="button"
+              <button key={radio.value} data-value={radio.value} class="artifact-review-option" type="button"
                 aria-pressed={radio.value === value ? "true" : "false"}
                 onClick={() => {
                   radio.checked = true;
@@ -373,6 +380,11 @@ function Sheet({ page, the, questions, groups, marks }: SheetProps) {
         </p>
       </li>
     );
+  }
+
+  // No question whose answers were read: nothing to count or answer.
+  if (!questions.length) {
+    return null;
   }
 
   return (
@@ -436,9 +448,10 @@ function Sheet({ page, the, questions, groups, marks }: SheetProps) {
 
 // Each question in page order, under the nearest h2 before its form, and
 // one group per h2 asking one.
-function questionsOf(page: Page, the: Answering): { questions: Question[]; groups: Group[] } {
+function questionsOf(page: Page, the: Answering,
+  asks: (form: HTMLFormElement) => boolean): { questions: Question[]; groups: Group[] } {
   const headings = all<HTMLElement>("h2", document.querySelector("section.artifact-body")!);
-  const questions = page.forms.map((form): Question => {
+  const questions = page.forms.filter(asks).map((form): Question => {
     let heading: HTMLElement | null = null;
     for (const h2 of headings) {
       if (h2.compareDocumentPosition(form) & Node.DOCUMENT_POSITION_FOLLOWING) {
@@ -514,7 +527,10 @@ function markUp(marks: Map<HTMLElement, Marks>, questions: Question[]): void {
 // state. The forms in read are those an earlier draw picked defaults on.
 function draw(page: Page, the: Answering, tools: HTMLElement, marks: Map<HTMLElement, Marks>,
   read: WeakSet<HTMLFormElement>): void {
-  const { questions, groups } = questionsOf(page, the);
+  // A form brought in by a swap whose read failed has no answer read: it
+  // stays out of the sheet, so no default is picked or saved over one,
+  // until a later read.
+  const { questions, groups } = questionsOf(page, the, (form) => the.read || read.has(form));
   markUp(marks, questions);
 
   // A default picked once the answers are read, so the read never takes
@@ -533,14 +549,23 @@ function draw(page: Page, the: Answering, tools: HTMLElement, marks: Map<HTMLEle
     }
   }
 
-  // The focus on an entry for a question no longer asked goes to Close.
+  // The focus on an entry the draw takes out goes to the same control in
+  // the question's entry, as one moved to another section has it, or to
+  // Close for a question no longer asked.
   const panel = document.querySelector<HTMLElement>(".artifact-review-panel");
-  const focused = document.activeElement?.closest<HTMLElement>(".artifact-review-entry")?.dataset.question;
+  const active = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  const focused = active?.closest<HTMLElement>(".artifact-review-entry")?.dataset.question;
   render(<Sheet page={page} the={the} questions={questions} groups={groups} marks={marks} />, tools);
-  if (focused !== undefined && panel && !panel.hidden &&
-    !questions.some((question) => question.form.dataset.question === focused)) {
-    panel.querySelector<HTMLElement>(".artifact-review-close")?.focus();
+  if (focused === undefined || !panel || panel.hidden || document.activeElement === active) {
+    return;
   }
+  const entry = all<HTMLElement>(".artifact-review-entry", panel).find((each) => each.dataset.question === focused);
+  const value = active!.dataset.value;
+  const target = !entry ? panel.querySelector<HTMLElement>(".artifact-review-close") :
+    value === undefined ? entry.querySelector<HTMLElement>(".artifact-review-show") :
+    all<HTMLElement>("[data-value]", entry).find((each) => each.dataset.value === value) ??
+      entry.querySelector<HTMLElement>("button, input");
+  target?.focus({ preventScroll: true });
 }
 
 // Without the page's answers there is no telling what is answered: no

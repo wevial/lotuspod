@@ -54,7 +54,8 @@ export interface Answering {
   // Post the form's answer in its turn: true once saved, false when refused,
   // with why in the form's status.
   save(form: HTMLFormElement): Promise<boolean>;
-  // True once the page's answers are read, set before ANSWERED is sent.
+  // True once the page's answers are read, set before ANSWERED is sent;
+  // after a swap, whether its read of them was.
   read: boolean;
 }
 

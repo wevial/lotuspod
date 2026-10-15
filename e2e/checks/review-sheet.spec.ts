@@ -335,7 +335,8 @@ test.describe('signed in', () => {
 
   test('a form answered only to an earlier wording gets its default picked on the form and in the panel', async ({ page }) => {
     firstRepeatOnly();
-    await page.route((url) => url.pathname === '/api/answers', (route) =>
+    const reads = (url: URL) => url.pathname === '/api/answers';
+    await page.route(reads, (route) =>
       route.request().method() === 'GET'
         ? route.fulfill({ json: { page: 'capture-review-sheet', questions: {
           'decision-d1': { current: {
@@ -362,7 +363,8 @@ test.describe('signed in', () => {
     firstRepeatOnly();
     const before = (await stored(request))['decision-d1'].current.choice;
     const other = before === 'codex' ? 'Claude Opus' : 'Codex';
-    await page.route((url) => url.pathname === '/api/answers', (route) =>
+    const reads = (url: URL) => url.pathname === '/api/answers';
+    await page.route(reads, (route) =>
       route.request().method() === 'POST' && route.request().postDataJSON().question === 'decision-d1'
         ? route.fulfill({ status: 409, json: { error: 'stale_version' } })
         : route.continue());
@@ -385,7 +387,8 @@ test.describe('signed in', () => {
   test('a failed read of the answers draws no sheet and picks no default', async ({ page, request }) => {
     firstRepeatOnly();
     const before = (await stored(request))['decision-d1'].current;
-    await page.route((url) => url.pathname === '/api/answers', (route) =>
+    const reads = (url: URL) => url.pathname === '/api/answers';
+    await page.route(reads, (route) =>
       route.request().method() === 'GET' ? route.fulfill({ status: 503, body: '' }) : route.continue());
     await page.goto(`${PAGE}?standalone`);
     const the = sheet(page);
@@ -406,7 +409,8 @@ test.describe('signed in', () => {
     test.use({ viewport: { width: 360, height: 740 } });
 
     test('the count and Next open fit the title bar and the panel takes the full width', async ({ page }) => {
-      await page.route((url) => url.pathname === '/api/answers', (route) =>
+      const reads = (url: URL) => url.pathname === '/api/answers';
+    await page.route(reads, (route) =>
         route.request().method() === 'GET'
           ? route.fulfill({ json: { page: 'capture-review-sheet', questions: {} } })
           : route.continue());
@@ -430,7 +434,8 @@ test.describe('signed in', () => {
       test.use({ viewport: { width, height: 640 } });
 
       test('the count and Next open stay inside the window', async ({ page }) => {
-        await page.route((url) => url.pathname === '/api/answers', (route) =>
+        const reads = (url: URL) => url.pathname === '/api/answers';
+    await page.route(reads, (route) =>
           route.request().method() === 'GET'
             ? route.fulfill({ json: { page: 'capture-review-sheet', questions: {} } })
             : route.continue());
@@ -450,7 +455,8 @@ test.describe('signed in', () => {
     test.use({ viewport: { width: 280, height: 640 } });
 
     test('Next open ends in an ellipsis when narrow and shows whole when wide', async ({ page }) => {
-      await page.route((url) => url.pathname === '/api/answers', (route) =>
+      const reads = (url: URL) => url.pathname === '/api/answers';
+    await page.route(reads, (route) =>
         route.request().method() === 'GET'
           ? route.fulfill({ json: { page: 'capture-review-sheet', questions: {} } })
           : route.continue());
@@ -488,7 +494,8 @@ test.describe('signed in', () => {
     });
 
     test('with no question open the title stays and the count fits', async ({ page }) => {
-      await page.route((url) => url.pathname === '/api/answers', (route) =>
+      const reads = (url: URL) => url.pathname === '/api/answers';
+    await page.route(reads, (route) =>
         route.request().method() === 'GET'
           ? route.fulfill({ json: { page: 'capture-review-sheet', questions: {} } })
           : route.continue());
@@ -723,6 +730,56 @@ test.describe('signed in, published again', () => {
     await expect(the.entry('decision-3').state).toHaveText('Default');
     await expect(the.entry('decision-3').unsaved).toBeVisible();
     await expect(the.save).toHaveText('Save 1 answer');
+    expect(seen.errors).toEqual([]);
+  });
+
+  test('a swap whose read of the answers fails leaves its forms out, so no default is saved over an answer', async ({ page, request }) => {
+    const seen = await watch(page);
+    const name = named('failed-read');
+    const NETTED: Row = ['3', 'Net the pond?', 'Yes / No', 'Yes'];
+    await openPublished(page, name, [['Findings', []], [DECISIONS, [HEATER, NETTED]]]);
+    const the = sheet(page);
+    const form = the.form('decision-3');
+    await form.getByRole('radio', { name: 'No' }).check();
+    await form.getByRole('button', { name: 'Save answer' }).click();
+    await expect(form.locator('.artifact-decision-saved-line')).toContainText('No');
+    await expect(the.count).toHaveText('1 to answer · Respond');
+    await page.locator('h1.artifact-title').click();
+
+    const reads = (url: URL) => url.pathname === '/api/answers';
+    await page.route(reads, (route) =>
+      route.request().method() === 'GET' ? route.fulfill({ status: 503, body: '' }) : route.fallback());
+    await republish(page, name, [['Findings', []], [DECISIONS, [HEATER, PUMP, NETTED]]]);
+    await expect(the.form('decision-2')).toHaveCount(1);
+    await expect(form.getByRole('radio', { name: 'Yes' })).not.toBeChecked();
+    await expect(page.locator('.artifact-review-bar > *')).toHaveCount(0);
+    await expect(the.heading(DECISIONS).locator('.artifact-review-open')).toHaveCount(0);
+
+    // The next read that succeeds draws them, the answer as saved.
+    await page.unroute(reads);
+    await republish(page, name, [['Findings', []], [DECISIONS, [HEATER, PUMP, NETTED, FISH]]]);
+    await expect(the.count).toHaveText('3 to answer · Respond');
+    await the.count.click();
+    await expect(the.entry('decision-3').option('No')).toHaveAttribute('aria-pressed', 'true');
+    await expect(the.entry('decision-3').unsaved).toBeHidden();
+    const answers = await request.get(`/api/answers?page=${name}`, { headers: SIGNED_IN });
+    expect((await answers.json()).questions['decision-3'].current.choice).toBe('no');
+    expect(seen.errors.filter((error) => !error.includes('503'))).toEqual([]);
+  });
+
+  test('the focus on a panel option follows its question to another section, and stays on its option', async ({ page }) => {
+    const seen = await watch(page);
+    const name = named('moved');
+    await openPublished(page, name, [['Heater', [NET]], [DECISIONS, [PUMP]]]);
+    const the = sheet(page);
+    await the.count.click();
+    await the.entry('decision-3').option('No').focus();
+
+    await republish(page, name, [['Heater', []], [DECISIONS, [PUMP]],
+      ['Spring', [['3', 'Net the pond?', 'Yes / Maybe / No', '']]]]);
+    await expect(the.entry('decision-3').option('Maybe')).toHaveCount(1);
+    await expect(the.panel).toBeVisible();
+    await expect(the.entry('decision-3').option('No')).toBeFocused();
     expect(seen.errors).toEqual([]);
   });
 });

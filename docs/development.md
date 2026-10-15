@@ -71,7 +71,8 @@ code owns is never drawn again. Once drawn, it is drawn again, into the same
 container, on each `ANSWERED` a swap's read of the answers sends
 (`web/src/page-swap.ts`): it reads the questions from the forms again, gives
 a heading that now asks one its span and takes them off one that no longer
-does, and picks a default only on a form the swap brought in. The forms and their stored answers stay the
+does, and picks a default only on a form the swap brought in. A form a
+swap brings in whose read fails stays out of the sheet until a later read. The forms and their stored answers stay the
 truth: the sheet draws from them on each form's `input`, `change` and
 `SAVED`, a pick in the panel sets the form's own input, and it saves through
 `answering.save()`, one question at a time in page order. Preact holds only
