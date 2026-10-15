@@ -654,6 +654,62 @@ test.describe('signed in, what changed', () => {
     expect(errors).toEqual([]);
   });
 
+  test('a page names itself by its address, whatever data-page its body carries', async ({ page }) => {
+    const errors = watchErrors(page);
+    const name = 'changes-named-check';
+    // An HTML page is published as it is written, any attribute kept. With
+    // no h2 it has one comment box, after the body's text, so the authored
+    // data-page is the document's first.
+    const embedded = (pump: string) => [
+      '<div data-page="capture-versions-many">Embedded.</div>',
+      '<h1>Changes named check</h1>', '<p>The plan for the pond this winter.</p>',
+      `<p>The pump sits by the steps. ${pump}</p>`, '',
+    ].join('\n');
+    const asked: { path: string, page: string | null }[] = [];
+    page.on('request', (request) => {
+      const url = new URL(request.url());
+      if (url.pathname === '/api/seen' && request.method() === 'POST') {
+        asked.push({ path: url.pathname, page: request.postDataJSON().page });
+      } else if (url.pathname === '/api/versions' || url.pathname === '/api/changes') {
+        asked.push({ path: url.pathname, page: url.searchParams.get('page') });
+      }
+    });
+
+    publish(name, embedded('The pump stops in January.'), '.html');
+    await open(page, name);
+    await expect(page.locator('[data-page="capture-versions-many"]')).toHaveCount(1);
+    expect.soft(asked.filter((each) => each.path === '/api/seen')).toEqual([{ path: '/api/seen', page: name }]);
+    await expect.soft.poll(() => asked.filter((each) => each.path === '/api/versions'))
+      .toContainEqual({ path: '/api/versions', page: name });
+    expect.soft(asked.filter((each) => each.page !== name)).toEqual([]);
+
+    await page.waitForTimeout(1100);
+    publish(name, embedded('The pump runs all winter.'), '.html');
+    await open(page, name);
+    await expect.soft(page.locator(BOX).getByRole('heading', { name: 'What changed since you last looked' }))
+      .toBeVisible();
+    expect.soft(asked.filter((each) => each.path === '/api/changes'))
+      .toContainEqual({ path: '/api/changes', page: name });
+    expect.soft(asked.filter((each) => each.page !== name)).toEqual([]);
+
+    // A draft kept over a reload under the page's own name comes back.
+    const section = await page.locator('details.artifact-comment').first().getAttribute('data-section');
+    const draft = 'Which pump survives the frost?';
+    await page.evaluate(([key, section, text]) => {
+      sessionStorage.setItem(key, JSON.stringify({ x: 0, y: 0, comments: {
+        open: null, passage: null, texts: [{ section, index: 0, text, images: [] }],
+      } }));
+    }, [`lotuspod:reload:${name}`, section!, draft] as const);
+    await page.reload();
+    await expect(page.locator('.artifact-versions-link')).toBeVisible();
+    const field = page.locator(`details.artifact-comment[data-section="${section}"] form.artifact-comment-form textarea, ` +
+      '.artifact-comments-panel form.artifact-comment-form textarea');
+    await expect.soft.poll(() => field.evaluateAll((nodes) =>
+      nodes.map((node) => (node as HTMLTextAreaElement).value))).toContain(draft);
+    expect.soft(await page.evaluate((key) => sessionStorage.getItem(key), `lotuspod:reload:${name}`)).toBeNull();
+    expect(errors).toEqual([]);
+  });
+
   test('a page left with one heading links and tags it', async ({ page }) => {
     const errors = watchErrors(page);
     const name = 'changes-one-heading';
