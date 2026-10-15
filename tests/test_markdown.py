@@ -576,7 +576,7 @@ class PublishedLinkTests(TempDirTestCase):
         self.assertEqual(proc.returncode, 0, proc.stderr)
         name = source.name.split(".")[0]
         page = (out / f"{name}.html").read_text(encoding="utf-8")
-        found = re.search(r'<section class="artifact-body">(.*?)</section>', page, re.DOTALL)
+        found = re.search(r'<section class="artifact-body"[^>]*>(.*?)</section>', page, re.DOTALL)
         return found.group(1)
 
     def test_a_relative_link_in_a_paragraph_a_list_item_a_table_cell_and_a_blockquote(self):

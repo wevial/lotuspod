@@ -12,16 +12,20 @@ import html
 import io
 import json
 import os
+import queue
 import re
 import secrets
+import select
 import shlex
 import shutil
 import signal
+import socket
 import sqlite3
 import subprocess
 import sys
 import tarfile
 import threading
+import time
 import urllib.parse
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -37,6 +41,7 @@ import importlib.resources as _res
 from lotuspod import (access, agents, api, archive, backup, comments, db, decisions,
                       machine, markdown, media, node_tables, refs, responder, routing,
                       sections, versions)
+from lotuspod import events as event_streams
 
 _PKG = "lotuspod"
 
@@ -198,7 +203,8 @@ MERMAID_ELK_DIR = "https://cdn.jsdelivr.net/npm/@mermaid-js/layout-elk@0.2.3/"
 # template writes, so a page rendered with them blank holds exactly the
 # template's own inline scripts.
 _AUTHORED_KEYS = ("title", "kicker", "date", "summary_block", "body", "outline_items", "revision",
-                  "labels", "label_tags", "refs_block")
+                  "labels", "label_tags", "refs_block", "intro_digest", "header_digest",
+                  "outline_digest")
 
 
 class _ScriptCollector(HTMLParser):
@@ -437,6 +443,16 @@ def theme_file_bytes(filename: str) -> bytes:
     if start is not None:
         parts = [*parts[:start], THEME_CLOSURE_OPEN, *parts[start:], THEME_CLOSURE_CLOSE]
     return b"".join(parts)
+
+
+def unit_digest(*parts: str) -> str:
+    """A content stamp with length framing to distinguish part boundaries."""
+    digest = hashlib.sha256()
+    for part in parts:
+        data = part.encode("utf-8")
+        digest.update(len(data).to_bytes(8, "big"))
+        digest.update(data)
+    return digest.hexdigest()[:16]
 
 
 def theme_hash() -> str:
@@ -777,7 +793,8 @@ def cmd_render(args: argparse.Namespace) -> int:
     if with_comments:
         body = comments.render_comments(body, args.name)
     # Last, so each section's box and forms fall inside its wrapper.
-    body, wrapped = sections.wrap_sections(body) if outline else (body, False)
+    body, wrapped, intro_digest = (sections.wrap_sections(body) if outline
+                                   else (body, False, unit_digest(body)))
     date = args.date or _dt.date.today().isoformat()
     # Publish stamps the time it ran; a bare render stamps nothing. The header
     # names the updated day only when it is not the created one.
@@ -791,6 +808,7 @@ def cmd_render(args: argparse.Namespace) -> int:
         "updated": updated,
         "updated_day": updated[:10] if updated[:10] != date else "",
         "summary_block": summary_block,
+        "intro_digest": intro_digest,
         **label_context(labels),
         "body": body,
         "refs_block": refs_block,
@@ -817,6 +835,11 @@ def cmd_render(args: argparse.Namespace) -> int:
         "mermaid_dir": MERMAID_DIR,
         "mermaid_elk_dir": MERMAID_ELK_DIR,
     }
+    context["header_digest"] = unit_digest(*(context[key] for key in (
+        "kicker", "title", "date", "updated", "updated_day", "label_tags", "owner",
+        "summary_block",
+    )))
+    context["outline_digest"] = unit_digest(context["outline_items"])
     html = render_page(context)
 
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -1254,15 +1277,16 @@ def html_title(body: str) -> tuple[str, str]:
 
 
 @contextmanager
-def publish_lock(out_dir: Path):
+def publish_lock(out_dir: Path, *, blocking: bool = True):
     """Hold the output directory's publish lock for the block.
 
     The lock file sits beside the directory, never inside it, so it is
     never a file of the site and never reaches the artifacts repository.
+    With blocking=False, raise BlockingIOError if a publisher holds it.
     """
     lock_path = out_dir.parent / f".{out_dir.name}.publish.lock"
     with open(lock_path, "a") as fh:
-        fcntl.flock(fh.fileno(), fcntl.LOCK_EX)
+        fcntl.flock(fh.fileno(), fcntl.LOCK_EX | (0 if blocking else fcntl.LOCK_NB))
         yield
 
 
@@ -2236,9 +2260,11 @@ class _AllowListHandler(SimpleHTTPRequestHandler):
 
     def __init__(self, *args, root: Path, verifier: access.Verifier | None = None,
                  api: api.Api | None = None, history: versions.History | None = None,
+                 events: event_streams.Hub | None = None,
                  **kwargs):
         self.root = Path(root)
         self.verifier = verifier
+        self.events = events
         self.api = api
         self.history = history
         super().__init__(*args, **kwargs)
@@ -2281,7 +2307,9 @@ class _AllowListHandler(SimpleHTTPRequestHandler):
         if email is None:
             return
         actor = {"kind": "human", "email": email}
-        if self.api is not None and path in api.ROUTES:
+        if self.api is not None and path == event_streams.PATH:
+            self._serve_events()
+        elif self.api is not None and path in api.ROUTES:
             query = self.path.split("#", 1)[0].partition("?")[2]
             self._api_answer(*self.api.answer(self.command, path, query, self.headers, body, actor))
         elif path != "/api/whoami":
@@ -2293,6 +2321,61 @@ class _AllowListHandler(SimpleHTTPRequestHandler):
             )
         else:
             self._api_answer(HTTPStatus.OK, {"actor": actor})
+
+    def _serve_events(self) -> None:
+        if self.command != "GET":
+            self._api_answer(405, {"error": "method_not_allowed"}, (("Allow", "GET"),))
+            return
+        hub = self.events
+
+        def disconnect():
+            try:
+                self.connection.shutdown(socket.SHUT_RDWR)
+            except OSError:
+                pass
+
+        subscription = hub.open(disconnect)
+        if subscription is None:
+            self._api_answer(503, {"error": "too_many_streams"}, (("Retry-After", "60"),))
+            return
+        self.close_connection = True
+        self.connection.settimeout(min(hub.heartbeat, hub.max_age))
+        try:
+            self.send_response(200)
+            for name, value in (("Content-Type", "text/event-stream"),
+                                ("Cache-Control", "no-store"),
+                                ("X-Content-Type-Options", "nosniff"),
+                                ("X-Accel-Buffering", "no")):
+                self.send_header(name, value)
+            self.end_headers()
+            self.wfile.write(b"retry: 3000\n\n")
+            self.wfile.flush()
+            deadline = time.monotonic() + hub.max_age
+            heartbeat = time.monotonic() + hub.heartbeat
+            while not subscription.ended.is_set():
+                now = time.monotonic()
+                if now >= deadline:
+                    break
+                # EOF on the request side can be a legitimate half-close.
+                # Probe with a comment instead: only a failed response write
+                # proves the reader is gone, and releases its slot promptly.
+                if select.select([self.connection], [], [], 0)[0]:
+                    if not self.connection.recv(1, socket.MSG_PEEK):
+                        heartbeat = min(heartbeat, now + .2)
+                try:
+                    data = subscription.get(timeout=max(0, min(.2, deadline-now, heartbeat-now)))
+                except queue.Empty:
+                    if time.monotonic() < heartbeat:
+                        continue
+                    data = b": keepalive\n\n"
+                self.connection.settimeout(max(.001, min(hub.heartbeat, deadline - time.monotonic())))
+                self.wfile.write(data)
+                self.wfile.flush()
+                heartbeat = time.monotonic() + hub.heartbeat
+        except (BrokenPipeError, ConnectionResetError, TimeoutError):
+            pass
+        finally:
+            hub.remove(subscription)
 
     def parse_request(self) -> bool:
         # /api is answered here, before handle_one_request dispatches on the
@@ -2482,7 +2565,8 @@ def _make_server(out_dir: Path, host: str, port: int,
                  verifier: access.Verifier | None = None,
                  db_path: Path | None = None,
                  window: int = routing.DEFAULT_WINDOW,
-                 max_image_bytes: int = media.DEFAULT_MAX_BYTES) -> ThreadingHTTPServer:
+                 max_image_bytes: int = media.DEFAULT_MAX_BYTES,
+                 events: event_streams.Hub | None = None) -> ThreadingHTTPServer:
     """The allow-list server; /api answers 503 access_unconfigured without a
     verifier, and has no answers, comments, media, revision, seen, versions and
     archive routes without a database. Uploads go to the media store beside out_dir,
@@ -2492,16 +2576,20 @@ def _make_server(out_dir: Path, host: str, port: int,
     history = versions.History(out_dir, version_stamp)
     routes = None
     if db_path is not None:
+        events = events or event_streams.Hub(out_dir)
         routes = api.Api(db.Database(db_path), partial(api_page, out_dir), window,
                          media_dir=media.media_dir(out_dir), max_image_bytes=max_image_bytes,
                          history=history, names=partial(served_page_names, out_dir),
                          archive=partial(archive.set_archived, out_dir),
-                         owners=verifier.config.owners if verifier is not None else frozenset())
+                         owners=verifier.config.owners if verifier is not None else frozenset(),
+                         changed=events.changed)
     handler = partial(
         _AllowListHandler, directory=str(out_dir), root=out_dir, verifier=verifier,
-        api=routes, history=history,
+        api=routes, history=history, events=events,
     )
-    return ThreadingHTTPServer((host, port), handler)
+    server = ThreadingHTTPServer((host, port), handler)
+    server.events = events
+    return server
 
 
 def owner_window(arg: int | None) -> int:
@@ -2562,6 +2650,7 @@ def cmd_serve(args: argparse.Namespace) -> int:
             socket_path, db.Database(db_path), pages=partial(api_page, out_dir),
             describe=partial(agent_page, out_dir), window=window, claim_sec=claim_sec,
             media_dir=media.media_dir(out_dir), max_image_bytes=image_cap,
+            changed=server.events.changed,
         )
     except (OSError, machine.SocketInUse) as exc:
         server.server_close()
@@ -2592,6 +2681,7 @@ def cmd_serve(args: argparse.Namespace) -> int:
         if on_main:
             # A second SIGTERM must not cut the cleanup short.
             signal.signal(signal.SIGTERM, signal.SIG_IGN)
+        server.events.close()
         sockets.shutdown()
         socket_thread.join()
         sockets.server_close()

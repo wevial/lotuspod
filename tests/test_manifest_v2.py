@@ -222,7 +222,7 @@ class ArtifactHeaderTests(TempDirTestCase):
     No back link sits above the header, and a kicker shows only an episode,
     since the bar already names the site and links to the index."""
 
-    HEADER = re.compile(r'<header class="artifact-header">\s*<(\w+) class="([^"]+)"')
+    HEADER = re.compile(r'<header class="artifact-header"[^>]*>\s*<(\w+) class="([^"]+)"')
 
     def rendered(self, name: str = "ep-001", *extra: str) -> str:
         rc, _, err = self.render(name, *extra)
@@ -1328,11 +1328,23 @@ class OutlineTests(TempDirTestCase):
         """Opting out drops both halves at once - the ids and the section list
         built from them - leaving the page a body with no outline at all."""
         # Sections fold only on a page with an outline; left unwrapped here.
-        with mock.patch.object(cli.sections, "wrap_sections", lambda body: (body, False)):
+        with mock.patch.object(
+            cli.sections, "wrap_sections",
+            lambda body: (body, False, cli.unit_digest(body)),
+        ):
             with_ids = self.rendered(self.TWO_H2)
         opted_out = self.rendered(self.TWO_H2, "--no-outline")
         without_nav = re.sub(
             r'<nav class="artifact-outline".*?</nav>', "", with_ids, flags=re.DOTALL
+        )
+        # Removing the generated heading ids also changes the unwrapped body's
+        # digest. Account for that same change in the page comparison.
+        body_with_ids = self.TWO_H2.replace("<h2>A", '<h2 id="a">A').replace(
+            "<h2>B", '<h2 id="b">B'
+        )
+        without_nav = without_nav.replace(
+            f'data-intro-digest="{cli.unit_digest(body_with_ids)}"',
+            f'data-intro-digest="{cli.unit_digest(self.TWO_H2)}"',
         )
         self.assertEqual(
             opted_out,
@@ -1898,7 +1910,9 @@ class ReportVariantTests(TempDirTestCase):
 
     def test_report_header_is_flattened_not_replaced(self):
         """Same .artifact-header markup; only the surface changes."""
-        self.assertIn('<header class="artifact-header">', self.rendered("--variant", "report"))
+        self.assertRegex(
+            self.rendered("--variant", "report"), r'<header class="artifact-header"[^>]*>'
+        )
         header = next(
             rule for rule in self.css.split("}")
             if ".artifact--report .artifact-header" in rule

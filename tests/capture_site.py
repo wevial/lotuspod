@@ -1088,7 +1088,7 @@ def main(argv: list[str] | None = None) -> int:
             socket_path, db.Database(db_path), pages=partial(cli.api_page, site),
             describe=partial(cli.agent_page, site), window=routing.DEFAULT_WINDOW,
             claim_sec=routing.DEFAULT_CLAIM, media_dir=media.media_dir(site),
-            max_image_bytes=media.DEFAULT_MAX_BYTES,
+            max_image_bytes=media.DEFAULT_MAX_BYTES, changed=server.events.changed,
         )
         socket_thread = threading.Thread(target=sockets.serve_forever, daemon=True)
         socket_thread.start()
@@ -1109,6 +1109,8 @@ def main(argv: list[str] | None = None) -> int:
             print(f"error: cannot run {command[0]}: {exc}", file=sys.stderr)
             return 1
     finally:
+        if server is not None:
+            server.events.close()
         if wrote_css:
             PACKAGED_CSS.unlink(missing_ok=True)
         if sockets is not None:

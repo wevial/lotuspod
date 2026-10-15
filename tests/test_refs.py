@@ -338,7 +338,7 @@ class KeptRefsTests(PublishTestCase):
         self.assertEqual(kept["asOf"], stamp)
         self.assertEqual(sorted(kept["refs"]), ["#2266", "HOLO-175", "relos#2266"])
         self.assertIn("plan.refs.json", self.committed())
-        self.assertIn('<div class="artifact-ref-cards">', self.page())
+        self.assertRegex(self.page(), r'<div class="artifact-ref-cards" data-digest="[0-9a-f]{16}">')
         self.assertIn('<script src="lotuspod-page.js?v=', self.page())
 
         # Without --refs, the cards and their as-of time stay, while the
