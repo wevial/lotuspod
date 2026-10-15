@@ -26,8 +26,9 @@ capture-decision-threads.md beside it. So is the images page, capture-images, fr
 fixture images (tests/fixtures/media/) beside it: its images are stored in
 lotuspod-media/ beside the site, as publish stores them for serve. The
 published pages above carry labels (PAGE_LABELS) for the index's Labels menu;
-the rendered ones, and the refs and versions pages below, carry none. The
-refs page, capture-refs, is published with a refs file (REFS_FILE), so the
+the rendered ones, and the calltree, refs and versions pages below, carry
+none. The calltree page, capture-calltree, holds a linked and an unlinked
+calltree fence. The refs page, capture-refs, is published with a refs file (REFS_FILE), so the
 tickets and pull requests it names open cards.
 
 The site is the top of its own git repository, with a local identity and no
@@ -704,6 +705,36 @@ flowchart LR
 </table>
 """
 
+# The calltree page: published from markdown with no comments. Its first
+# section holds a calltree fence linked to GitHub, its second one with no
+# repo= or sha= and a line that doesn't parse.
+CALLTREE_SOURCE = '''
+# Capture calltree
+
+## Change scope
+
+```calltree repo=wevial/lotuspod sha=43b4187318733fe6aa629aaedd462adbbb147d5d
+~ cmd_publish()             src/lotuspod/cli.py:1919
+├─ publish_config()         src/lotuspod/cli.py:1304
+├─ ~ to_body()              src/lotuspod/markdown.py:123
+│  └─ _walk()               src/lotuspod/markdown.py:156
+│     └─ ~ _convert()       src/lotuspod/markdown.py:266
+│        ├─ + render()      src/lotuspod/calltree.py:18
+│        │  ├─ + parse_line()   src/lotuspod/calltree.py:44
+│        │  └─ + source_url()   src/lotuspod/calltree.py:71
+│        └─ _inline()       src/lotuspod/markdown.py:229
+└─ cmd_render()             src/lotuspod/cli.py:729
+```
+
+## Local context
+
+```calltree
+~ entry() src/main.py:10
+   <unparsed & "text">
+└─ + helper() src/helper.py:20
+```
+'''
+
 # The refs page: published from markdown with REFS_FILE, so the tickets and
 # pull requests it names open cards. Its first paragraph names three of
 # them, its second relos#2266 and LOTUS-95, which the refs file lacks. No
@@ -899,6 +930,8 @@ def render(out_dir: Path, db_path: Path) -> None:
         (images_source.parent / relative).parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(MEDIA_FIXTURES / fixture, images_source.parent / relative)
     images_source.write_text(IMAGES_SOURCE, encoding="utf-8")
+    calltree_source = db_path.with_name("capture-calltree.md")
+    calltree_source.write_text(CALLTREE_SOURCE, encoding="utf-8")
     refs_source = db_path.with_name(f"{REFS_PAGE}.md")
     refs_source.write_text(REFS_SOURCE, encoding="utf-8")
     refs_file = db_path.with_name(f"{REFS_PAGE}-refs.json")
@@ -956,6 +989,10 @@ def render(out_dir: Path, db_path: Path) -> None:
             "--out-dir", str(out_dir), "--no-comments", "--refs", str(refs_file),
         ],
     ))
+    steps.append(("publish capture-calltree", [
+        "publish", str(calltree_source), "--local", "--date", SAMPLE_DATE,
+        "--out-dir", str(out_dir), "--no-comments",
+    ]))
     versions_dir = db_path.with_name("versions")
     versions_dir.mkdir(exist_ok=True)
     for name, title, editions in ((VERSIONS_ONCE_PAGE, "Capture versions once", 1),

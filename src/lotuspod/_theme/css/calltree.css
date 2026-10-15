@@ -1,0 +1,74 @@
+/* Static call trees own their horizontal scrolling, including without JS. */
+.calltree {
+  background: var(--color-deep-night);
+  border: 1px solid var(--code-edge);
+  border-radius: var(--radius-block);
+  color: var(--color-pale-lavender);
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  line-height: 1.8;
+  margin: 1.5rem 0;
+  max-width: 100%;
+  overflow-x: auto;
+}
+.artifact-body > .calltree,
+.artifact-section-body > .calltree {
+  width: var(--measure-full);
+  max-width: var(--measure-full);
+}
+.calltree-head {
+  position: sticky;
+  left: 0;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--code-edge);
+  background: var(--color-deep-night);
+}
+.calltree-summary, .calltree-legend { display: block; }
+.calltree-legend { color: var(--color-muted-lavender); font-size: 0.6875rem; }
+.calltree-new, [data-kind="new"] .calltree-mark { color: var(--color-mint); }
+.calltree-changed, [data-kind="changed"] .calltree-mark { color: var(--color-amber); }
+.calltree-rows {
+  display: grid;
+  grid-template-columns: max-content max-content;
+  gap: 0.25rem 1.5rem;
+  padding: 1rem;
+  width: max-content;
+}
+.calltree-row { display: contents; }
+.calltree-tree { white-space: pre; }
+.calltree-row[data-kind="text"] .calltree-tree { grid-column: 1 / -1; }
+.calltree-guide { color: var(--color-muted-lavender); }
+.calltree-mark { display: inline-block; width: 2ch; }
+.calltree .calltree-chip {
+  justify-self: start;
+  align-self: center;
+  color: var(--color-pale-sky);
+  background: var(--code-chip);
+  border: 1px solid transparent;
+  border-radius: var(--radius-chip);
+  padding: 0 0.375rem;
+  font-size: 0.75rem;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.calltree-chip:hover { text-decoration: underline; }
+[data-kind="new"] .calltree-chip { background: var(--mint-tint); }
+[data-kind="changed"] .calltree-chip { background: var(--amber-tint); }
+[data-kind="context"] .calltree-name { color: var(--color-muted-lavender); }
+[data-kind="context"] .calltree-chip {
+  background: transparent;
+  border-color: var(--hairline);
+  opacity: 0.7;
+}
+.calltree-ln { opacity: 0.75; }
+.calltree-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

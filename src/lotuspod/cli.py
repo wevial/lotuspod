@@ -336,6 +336,7 @@ THEME_SOURCES = {
         "css/live-page.css",
         "css/prose.css",
         "css/ref-cards.css",
+        "css/calltree.css",
         "css/diagram-cards.css",
         "css/diagram-view.css",
         "css/report.css",
@@ -356,6 +357,8 @@ THEME_SOURCES = {
         "js/narrow.js",
         "js/attachments.js",
         "js/live-page.js",
+        # Built from web/src/page-swap.ts: it registers its swap with live.
+        "js/page-swap.js",
         "js/comment-markdown.js",
         "js/comments.js",
         "js/panel-resize.js",

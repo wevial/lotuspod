@@ -33,20 +33,18 @@
     // What the comparison calls the text before the first h2, the whole
     // text of a body without one (lotuspod.versions.PAGE_TEXT).
     var PAGE_TEXT = "The page text";
-    var stamp = document.querySelector('meta[name="lotuspod:revision"]');
     var line = document.querySelector("header.artifact-header .artifact-meta");
     var main = document.querySelector("main.artifact");
-    if (!stamp || !stamp.content.trim() || !line || !main) {
+    if (!live.revision() || !line || !main) {
       return;
     }
     var page = pageName();
     var title = document.querySelector(".artifact-title");
-    var own = stamp.content.trim();
 
     // The changes route's answer since the revision the reader last opened
     // the page at, when anything changed; else null.
     var changes = live.previous().then(async function (previous) {
-      if (!previous || previous === own) {
+      if (!previous || previous === live.revision()) {
         return null;
       }
       var response = await fetch(CHANGES + "?page=" + encodeURIComponent(page) +

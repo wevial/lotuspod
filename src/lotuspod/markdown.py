@@ -10,7 +10,7 @@ item), `>` blockquotes converted recursively, pipe tables, code spans,
 title is passed separately, and everything from a `## Concrete commands`
 heading on is left out, which keeps host-only commands off published pages.
 
-Two constructs are Lotuspod's own and outside the reference's subset. A line
+Some constructs are Lotuspod's own and outside the reference's subset. A line
 that is only `![ALT](SRC)`, at the top level or in a blockquote, is an image
 drawn as a figure (and stops a paragraph). One in a code fence, a list item,
 a table cell or the middle of a paragraph line, or after the cut, stays text.
@@ -19,6 +19,9 @@ that the reference matches a fixture once its image lines are emptied and
 its figures taken out. `images()` names the image lines from the same walk
 `to_body()` draws them in, so publish reads and rewrites exactly the lines
 the page shows as images.
+
+A `calltree` fence draws a static call tree with a summary, legend and
+file:line chips, optionally linked to GitHub.
 
 An inline link, `[TEXT](TARGET)` outside a code span or fence and not after
 `!`, is an `a` element whose `href` is TARGET as written, when TARGET is an
@@ -46,6 +49,8 @@ import html
 import re
 from dataclasses import dataclass
 from typing import Callable, Mapping
+
+from . import calltree
 
 CUT = "\n## Concrete commands"
 
@@ -299,6 +304,10 @@ def _convert(lines: list[str], numbers: list[int],
                 code.append(lines[i])
                 i += 1
             i += 1  # the closing fence
+            words = lang.split()
+            if words and words[0] == "calltree":
+                out.append(calltree.render(code, words[1:]))
+                continue
             text = html.escape("\n".join(code), quote=False)
             if lang == "mermaid":
                 out.append(f'<pre class="mermaid">{text}</pre>')

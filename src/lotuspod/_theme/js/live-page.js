@@ -3,7 +3,12 @@
   // the revision its page is now published at from each read of its threads
   // (live.seen, which the comments page calls) and from the revision route,
   // every CHECK ms and at once when the page is seen again. Once that is not
-  // its own, a banner fixed over the top of the window offers a reload; a
+  // its own, the swap web/src/page-swap.ts registers (live.swapWith) is tried
+  // first: it swaps in only the parts the new revision changed and answers
+  // the revision the page now shows, which becomes its own (live.revision),
+  // so a later publish is noticed too; a swap that throws partway reloads the
+  // page. When it answers null, or none is registered, a banner fixed over
+  // the top of the window offers a reload; a
   // hidden page with no unsent text in a composer reloads itself, so it is
   // current when the reader comes back. Before a reload the page keeps where
   // the reader was, per page in sessionStorage: the scroll position, kept
@@ -15,14 +20,20 @@
   // over the text may scroll, and the page may only now be long enough. The
   // banner still shows and the reload still happens when the browser lets
   // the page keep nothing. Once per load the page also posts its own revision
-  // to the seen route, which keeps the reader's last visit for the index;
-  // live.previous() is a promise of the revision that route answers the
-  // reader last opened the page at, null the first time or on any failure.
+  // to the seen route, which keeps the reader's last visit for the index, and
+  // posts each revision a swap brings in the same way, unless it is framed
+  // in an index tab not shown, which keeps its "new version" dot until it is
+  // opened; live.previous() is a promise of the revision that route answers
+  // the reader last opened the page at, null the first time or on any failure.
+  // live.note(text) shows one line in the banner's place for NOTED ms, as a
+  // swap says what it changed; a banner shown takes it away, and none shows
+  // beside one.
   function livePage() {
     var REVISION = "/api/revision";
     var SEEN = "/api/seen";
     var KEPT = "lotuspod:reload:";
     var CHECK = 60000;
+    var NOTED = 6000;
     var NEWER = "A newer version of this page is available";
     var live = {
       seen: function () {},
@@ -30,6 +41,10 @@
       kept: function () { return null; },
       place: function () {},
       previous: function () { return Promise.resolve(null); },
+      revision: function () { return own; },
+      swapWith: function () {},
+      note: function () {},
+      reload: function () { location.reload(); },
     };
     var stamp = document.querySelector('meta[name="lotuspod:revision"]');
     var own = stamp ? stamp.content.trim() : "";
@@ -45,20 +60,33 @@
       return text ? text.getBoundingClientRect().top + window.scrollY : 0;
     }
 
-    // Once per load, record that the reader opened the page at its own
-    // revision, so the index can mark it once it is republished, and keep
-    // the revision they opened it at before. A reader signed out, or a
-    // failure, is shown nothing.
-    var previous = fetch(SEEN, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ page: page, revision: own }),
-    }).then(async function (response) {
-      var payload = response.status === 200 ? await json(response) : null;
-      return payload && typeof payload.previous === "string" ? payload.previous : null;
-    }).catch(function () {
-      return null;
-    });
+    // Record that the reader opened the page at revision, so the index can
+    // mark it once it is republished; the revision they opened it at before.
+    // A reader signed out, or a failure, is shown nothing.
+    function record(revision) {
+      return fetch(SEEN, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ page: page, revision: revision }),
+      }).then(async function (response) {
+        var payload = response.status === 200 ? await json(response) : null;
+        return payload && typeof payload.previous === "string" ? payload.previous : null;
+      }).catch(function () {
+        return null;
+      });
+    }
+
+    // Whether the page is framed in an index tab that is not shown: the
+    // index hides a tab's frame with visibility, which checkVisibility
+    // weighs only when asked.
+    function away() {
+      var frame = window.frameElement;
+      return Boolean(frame && typeof frame.checkVisibility === "function" &&
+        !frame.checkVisibility({ visibilityProperty: true }));
+    }
+
+    // Once per load, and kept: the revision the reader opened it at before.
+    var previous = record(own);
     live.previous = function () {
       return previous;
     };
@@ -70,6 +98,10 @@
     var asking = false;
     var timer = null;
     var reloading = false;
+    // The swap to try first, and the one under way, which a later revision
+    // seen waits for.
+    var swap = null;
+    var swapping = null;
 
     // What was kept before the reload that loaded this page, taken once.
     var kept = null;
@@ -91,8 +123,31 @@
     region.setAttribute("role", "status");
     document.body.appendChild(region);
     var button = null;
+    var note = null;
+    var noting = null;
+
+    function unnote() {
+      clearTimeout(noting);
+      noting = null;
+      if (note) {
+        note.remove();
+        note = null;
+      }
+    }
+
+    live.note = function (text) {
+      unnote();
+      // Never beside the banner, which already says the page is behind.
+      if (region.querySelector(".artifact-live-page-banner")) {
+        return;
+      }
+      note = element("div", "artifact-live-page-note", text);
+      region.appendChild(note);
+      noting = setTimeout(unnote, NOTED);
+    };
 
     function show() {
+      unnote();
       var banner = element("div", "artifact-live-page-banner");
       var dot = element("span", "artifact-live-page-dot", "·");
       dot.setAttribute("aria-hidden", "true");
@@ -139,18 +194,52 @@
       return document.visibilityState === "hidden";
     }
 
+    function offer() {
+      if (hidden() && !(keeper && keeper.unsent())) {
+        reload();
+      } else {
+        show();
+      }
+    }
+
     live.seen = function (revision) {
+      if (swapping) {
+        swapping.then(function () { live.seen(revision); });
+        return;
+      }
       if (noticed || typeof revision !== "string" || !revision || revision === own) {
         return;
       }
       noticed = true;
       clearTimeout(timer);
       timer = null;
-      if (hidden() && !(keeper && keeper.unsent())) {
-        reload();
-      } else {
-        show();
+      if (!swap) {
+        offer();
+        return;
       }
+      swapping = swap(revision).then(function (now) {
+        swapping = null;
+        if (typeof now !== "string" || !now) {
+          offer();
+          return;
+        }
+        own = now;
+        noticed = false;
+        if (!away()) {
+          record(own);
+        }
+        plan();
+      }, function () {
+        // Never left half-swapped.
+        swapping = null;
+        reload();
+      });
+    };
+
+    live.reload = reload;
+
+    live.swapWith = function (made) {
+      swap = made;
     };
 
     live.keep = function (made) {

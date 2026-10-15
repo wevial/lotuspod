@@ -310,6 +310,9 @@ test.describe('signed in', () => {
     await expectActive(page, pod);
     const chip = inPod.locator('details.artifact-comment[data-section="findings"] summary');
     await expect(chip).toHaveText(/ · /);
+    // The chip opens the thread only once the page has read it: before, it
+    // opens the section's form for a new one.
+    await expect(inPod.locator('.artifact-comments-entry')).toHaveCount(1);
     await chip.click();
     // The side panel, at this width, shows the section's thread.
     const said = inPod.locator('.artifact-comment-text a:visible', { hasText: 'the article\'s second section' });
@@ -350,6 +353,8 @@ test.describe('signed in', () => {
     expect(comment.status(), await comment.text()).toBe(201);
     await openFromListing(page, pod);
     const inPod = framed(page, pod);
+    // Once the page has read the thread, which the chip then opens.
+    await expect(inPod.locator('.artifact-comments-entry')).toHaveCount(1);
     await inPod.locator('details.artifact-comment[data-section="findings"] summary').click();
     await inPod.locator('.artifact-comment-text a:visible', { hasText: 'the article' }).click();
     await expect.poll(() => openNames(page)).toEqual([pod.name, ARTICLE.name]);
