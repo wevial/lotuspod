@@ -142,11 +142,8 @@ class LapsedDoneTests(InboxTestCase):
         self.assertEqual([r["text"] for r in thread["replies"]], ["Filed."])
 
 
-class StaleResponderTests(InboxTestCase):
-    """Two responders: A's claim lapses while its agent runs, B answers,
-    then A's reply arrives. Only a stored reply's ask reaches the inbox."""
-
-    claim_sec = 1
+class ResponderCase(InboxTestCase):
+    """InboxTestCase with credentials `ra` and `rb` for two responders."""
 
     def prepare(self) -> None:
         super().prepare()
@@ -160,6 +157,13 @@ class StaleResponderTests(InboxTestCase):
     def ask(self, name: str, target: str, body: dict | None = None) -> tuple[int, dict]:
         return machine.request(self.socket_path, machine.read_token(self.creds[name]),
                                "POST", target, body)
+
+
+class StaleResponderTests(ResponderCase):
+    """Two responders: A's claim lapses while its agent runs, B answers,
+    then A's reply arrives. Only a stored reply's ask reaches the inbox."""
+
+    claim_sec = 1
 
     def race(self, b_ask: str | None) -> tuple[dict, tuple[int, dict]]:
         row = self.comment("Please file a ticket.", page="ops")
@@ -200,6 +204,32 @@ class StaleResponderTests(InboxTestCase):
             self.assertEqual(status, 200, replied)
         [item] = [item for item in self.pulled("one") if item["kind"] == "ask"]
         self.assertEqual((item["ask"], item["comment"]["id"]), ("ask A", row["id"]))
+
+
+class OwnerChangeTests(ResponderCase):
+    """A page that changes owner while the responder answers a comment on it."""
+
+    def test_the_reply_names_the_owner_the_ask_was_queued_for(self):
+        row = self.comment("Please file a ticket.", page="ops")
+        status, a = self.ask("ra", f"/v1/comments/{row['id']}/claim")
+        self.assertEqual(status, 200, a)
+        # The page changes hands while the responder's agent runs.
+        path = self.work / "both.token"
+        machine.create_credential(db.Database(self.db_path), "both", ["operator", "hermes"],
+                                  ["publish"], path)
+        rc, _out, err = run_cli("publish", str(self.work / "ops.md"), "--out-dir",
+                                str(self.out_dir), "--local", "--owner", "hermes",
+                                "--credential", str(path))
+        self.assertEqual(rc, 0, err)
+        status, replied = self.ask("ra", f"/v1/comments/{row['id']}/reply", {
+            "claimToken": a["claimToken"], "idempotencyKey": "a-1", "text": "",
+            "ask": "file it"})
+        self.assertEqual(status, 200, replied)
+        self.assertEqual(replied["text"], "I've queued this for hermes: file it")
+        database = db.Database(self.db_path)
+        self.assertEqual([item["ask"] for item in database.inbox("hermes", time.time())],
+                         ["file it"])
+        self.assertEqual(database.inbox("operator", time.time()), [])
 
 
 class DoneTests(InboxTestCase):
@@ -326,15 +356,32 @@ class AnswerTests(InboxTestCase):
 class AnswerTextTests(unittest.TestCase):
     def test_an_undone_dismissal_and_a_reworded_question_say_so(self):
         answer = {"id": 4, "choice": "", "note": "", "createdAt": "2026-10-14T12:00:00.000Z",
-                  "actor": READER, "dismissed": True, "undoneAt": "2026-10-14T12:05:00.000Z"}
+                  "actor": READER, "dismissed": True, "undoneAt": "2026-10-14T12:05:00.000Z",
+                  "revision": "r"}
         question = {"id": "decision-1", "text": "Freeze the pond?", "label": "Dismissed",
-                    "reworded": True}
+                    "reworded": True, "context": ""}
         text = agents.inbox_text({"owner": "operator", "items": [{
             "kind": "answer", "answer": answer, "question": question,
             "page": {"name": "ops", "title": "Plan", "owner": "operator", "revision": "r"}}]})
         self.assertIn("- Question: Freeze the pond? (the page now asks it in other words, "
                       "or not at all)", text)
         self.assertIn("- Undone at 2026-10-14T12:05:00.000Z", text)
+
+    def test_a_checklist_answer_shows_what_changed(self):
+        answer = {"id": 5, "choice": "", "note": "", "createdAt": "2026-10-14T12:00:00.000Z",
+                  "actor": READER, "checked": ["heater"], "revision": "r"}
+        question = {"id": "decision-2", "text": "Which run?", "reworded": False,
+                    "label": "On: Heater · Off: Pump", "context": "Winter only.",
+                    "changed": [{"id": "heater", "label": "Heater", "checked": True},
+                                {"id": "pump", "label": "Pump", "checked": False}]}
+        text = agents.inbox_text({"owner": "operator", "items": [{
+            "kind": "answer", "answer": answer, "question": question,
+            "page": {"name": "ops", "title": "Plan", "owner": "operator", "revision": "r"}}]})
+        self.assertIn("- Chosen: On: Heater · Off: Pump\n", text)
+        self.assertIn("- Changed: Heater (`heater`) on", text)
+        self.assertIn("- Changed: Pump (`pump`) off", text)
+        self.assertIn("Winter only.", text)
+        self.assertNotIn("(``)", text)
 
 
 class MigrationTests(unittest.TestCase):

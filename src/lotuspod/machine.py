@@ -31,7 +31,9 @@ credential that exists and is not revoked:
     POST /v1/comments/ID/reply          {claimToken, idempotencyKey, text[,
                                         revision, model, images, ask]}: answer it
                                         under the claim, once per key (needs
-                                        reply)
+                                        reply); with ask, text (empty allowed)
+                                        is followed by a notice naming the
+                                        owner the ask was queued for
     POST /v1/comments/ID/release        {claimToken}: route it again (needs claim)
     POST /v1/comments/ID/fail           {claimToken, reason}: leave it failed
                                         (needs claim)
@@ -230,6 +232,21 @@ MAX_MODEL = 40
 MAX_ASK = 300
 # Characters of where a recorded answer was given.
 MAX_SOURCE = 200
+
+
+def queued(answer: str, owner: str, ask: str) -> str:
+    """The reply to a comment whose ask is queued for owner, after answer,
+    shortened as it must be for the reply to fit api.MAX_TEXT; with no
+    owner, it says there is none to queue it for."""
+    said = (f"I've queued this for {owner}: {ask}" if owner
+            else f"This page has no owner I could queue this for: {ask}")
+    if not answer:
+        return said
+    # The answer gives way, so the reply stays within what the socket takes.
+    room = api.MAX_TEXT - len(said) - 2
+    if len(answer) > room:
+        answer = answer[:room - 1].rstrip() + "…"
+    return f"{answer}\n\n{said}"
 CLAIM_BYTES = 32
 # The HTTP status of each refusal a claim, reply, release, failure or resolution meets.
 _REFUSED = {
@@ -785,20 +802,23 @@ class Routes:
                                      clock=self.clock, reason=reason)
             return self._shown(row)
         key = api._text(fields["idempotencyKey"], 1, MAX_KEY)
-        text = api._text(fields["text"], 1, api.MAX_TEXT)
+        ask = fields.get("ask")
+        if ask is not None:
+            ask = api._text(ask, 1, MAX_ASK)
+        # With an ask, text is the answer before the queued notice, and may be empty.
+        text = api._text(fields["text"], 0 if ask is not None else 1, api.MAX_TEXT)
         revision = fields.get("revision")
         if revision is not None:
             revision = api._text(revision, 1, api.MAX_NAME)
         model = fields.get("model")
         if "model" in fields and not is_model(model):
             raise api.Refusal(HTTPStatus.BAD_REQUEST, "invalid_body")
-        ask = fields.get("ask")
-        if ask is not None:
-            ask = api._text(ask, 1, MAX_ASK)
         images = self._images(fields)
+        notice = None if ask is None else (lambda owner: queued(text, owner, ask))
         row = self.database.reply(comment_id, credential=name, token_hash=token, key=key,
                                   text=text, revision=revision, model=model, clock=self.clock,
-                                  page_of=self._current, images_of=images, ask=ask)
+                                  page_of=self._current, images_of=images, ask=ask,
+                                  notice=notice)
         return self._shown(row)
 
     def _thread_handle(self, credential: Mapping, root: int) -> tuple[api.Page, str]:

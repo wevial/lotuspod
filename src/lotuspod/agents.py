@@ -259,6 +259,57 @@ def _page_lines(page: dict) -> list[str]:
     ]
 
 
+def _answer_lines(heading: str, item: dict, page_lines: list[str], routed: dict,
+                  owner: str) -> list[str]:
+    """An answer item's lines under heading, for owner, routed as
+    _note_line takes it."""
+    answer, question = item["answer"], item["question"]
+    asked = question["text"] or "(its words were not kept)"
+    if question["reworded"]:
+        asked += " (the page now asks it in other words, or not at all)"
+    dismissed = answer.get("dismissed")
+    if dismissed:
+        # Its reason is said here, once.
+        reason = one_line(answer["note"])
+        reason = f": {reason}" if reason else ""
+        chosen = [f"- Chosen: Dismissed{reason}"]
+    elif "checked" in answer:
+        chosen = [f"- Chosen: {question['label']}"]
+        if question.get("changed") is not None:
+            chosen += [f"- Changed: {box['label']} (`{box['id']}`) "
+                       f"{'on' if box['checked'] else 'off'}"
+                       for box in question["changed"]] or ["- Changed: nothing"]
+    else:
+        chosen = [f"- Chosen: {question['label']} (`{answer['choice']}`)"]
+        default = question.get("default")
+        if default and default["value"] != answer["choice"]:
+            chosen.append(f"- Was: {default['label']} (`{default['value']}`), the default")
+    lines = [
+        f"{heading}, question `{question['id']}`",
+        "",
+        *page_lines,
+        f"- Question: {asked}",
+        *_context_lines(question["context"]),
+        *chosen,
+        f"- From: {_by(answer)} at {answer['createdAt']}, "
+        f"against revision {answer['revision'] or 'unknown'}",
+        *([f"- Answered elsewhere: {answer['source']}"] if answer.get("source") else []),
+        *([f"- Undone at {answer['undoneAt']}"] if answer.get("undoneAt") else []),
+        *([_note_line(item["noteComment"], routed, owner)]
+          if item.get("noteComment") else []),
+        f"- Acknowledge: `lotuspod comments ack-answer {answer['id']}`",
+        "",
+        ("The reader dismissed this question as no longer relevant." if dismissed else
+         "The answer was given elsewhere and recorded by an agent, on this question "
+         "only." if answer.get("source") else
+         "The answer is the reader's choice on this question only."),
+        "",
+    ]
+    if answer["note"] and not dismissed and not item.get("noteComment"):
+        lines += ["Note:", "", fence(answer["note"]), ""]
+    return lines
+
+
 def pull_text(payload: dict) -> str:
     """`comments pull` without --json."""
     items = payload["items"]
@@ -315,51 +366,9 @@ def pull_text(payload: dict) -> str:
             for row in thread:
                 lines += _message(row, "####")
         else:
-            answer, question = item["answer"], item["question"]
-            asked = question["text"] or "(its words were not kept)"
-            if question["reworded"]:
-                asked += " (the page now asks it in other words, or not at all)"
-            dismissed = answer.get("dismissed")
-            if dismissed:
-                # Its reason is said here, once.
-                reason = one_line(answer["note"])
-                reason = f": {reason}" if reason else ""
-                chosen = [f"- Chosen: Dismissed{reason}"]
-            elif "checked" in answer:
-                chosen = [f"- Chosen: {question['label']}"]
-                if question.get("changed") is not None:
-                    chosen += [f"- Changed: {item['label']} (`{item['id']}`) "
-                               f"{'on' if item['checked'] else 'off'}"
-                               for item in question["changed"]] or ["- Changed: nothing"]
-            else:
-                chosen = [f"- Chosen: {question['label']} (`{answer['choice']}`)"]
-                default = question.get("default")
-                if default and default["value"] != answer["choice"]:
-                    chosen.append(f"- Was: {default['label']} (`{default['value']}`), the default")
-            lines += [
-                f"## {number}. Answer {answer['id']} on `{page['name']}`, "
-                f"question `{question['id']}`",
-                "",
-                *_page_lines(page),
-                f"- Question: {asked}",
-                *_context_lines(question["context"]),
-                *chosen,
-                f"- From: {_by(answer)} at {answer['createdAt']}, "
-                f"against revision {answer['revision'] or 'unknown'}",
-                *([f"- Answered elsewhere: {answer['source']}"] if answer.get("source") else []),
-                *([f"- Undone at {answer['undoneAt']}"] if answer.get("undoneAt") else []),
-                *([_note_line(item["noteComment"], routed, payload["owner"])]
-                  if item.get("noteComment") else []),
-                f"- Acknowledge: `lotuspod comments ack-answer {answer['id']}`",
-                "",
-                ("The reader dismissed this question as no longer relevant." if dismissed else
-                 "The answer was given elsewhere and recorded by an agent, on this question "
-                 "only." if answer.get("source") else
-                 "The answer is the reader's choice on this question only."),
-                "",
-            ]
-            if answer["note"] and not dismissed and not item.get("noteComment"):
-                lines += ["Note:", "", fence(answer["note"]), ""]
+            lines += _answer_lines(f"## {number}. Answer {item['answer']['id']} on "
+                                   f"`{page['name']}`", item, _page_lines(page),
+                                   routed, payload["owner"])
     for page in pages.values():
         if not page["sourceFile"]:
             continue
@@ -379,23 +388,9 @@ def inbox_text(payload: dict) -> str:
         page = item["page"]
         where = f"`{page['name']}`" + (f", {page['title']}" if page["title"] else "")
         if item["kind"] == "answer":
-            answer, question = item["answer"], item["question"]
-            chosen = "Dismissed" if answer.get("dismissed") else (
-                f"{question['label']} (`{answer['choice']}`)")
-            lines += [
-                f"## {number}. Answer {answer['id']} on {where}, question `{question['id']}`",
-                "",
-                f"- Question: {question['text'] or '(its words were not kept)'}"
-                + (" (the page now asks it in other words, or not at all)"
-                   if question["reworded"] else ""),
-                f"- Chosen: {chosen}",
-                f"- From: {_by(answer)} at {answer['createdAt']}",
-                *([f"- Undone at {answer['undoneAt']}"] if answer.get("undoneAt") else []),
-                f"- Acknowledge: `lotuspod comments ack-answer {answer['id']}`",
-                "",
-            ]
-            if answer["note"]:
-                lines += ["Note:", "", fence(answer["note"]), ""]
+            # As the pull shows it, but the page's source is not in the inbox.
+            lines += _answer_lines(f"## {number}. Answer {item['answer']['id']} on {where}",
+                                   item, [], {}, owner)
             continue
         comment = item["comment"]
         source = f", from comment {comment['id']} in thread {item['thread']}" if comment else ""

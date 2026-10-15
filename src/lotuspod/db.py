@@ -818,7 +818,8 @@ class Database:
               text: str, revision: str | None, clock: Callable[[], float],
               page_of: Callable[[str], Mapping | None], model: str | None = None,
               images_of: Callable[[], Sequence[Mapping]] | None = None,
-              ask: str | None = None) -> dict:
+              ask: str | None = None,
+              notice: Callable[[str], str] | None = None) -> dict:
         """Store credential's reply to comment_id under its claim, naming
         model as its writer when it is not None, with the images images_of()
         gives, each {name, width, height}, as a reader's comment keeps them;
@@ -841,7 +842,9 @@ class Database:
         and the claim ends. With ask, the page's owner (page_of's `owner`)
         gets it in its inbox as queue() puts it there, in the same
         transaction: an ask is queued only with a reply that is stored, and
-        a page with no owner queues nothing.
+        a page with no owner queues nothing. With notice, the reply's text is
+        notice(owner) instead, owner the one the ask went to, "" for none, so
+        the reply names the owner as the page has it when the reply is stored.
         """
         with self._connect() as conn, _write(conn):
             stored = conn.execute(
@@ -861,6 +864,9 @@ class Database:
             handle = found["claim"]["handle"]
             actor = {"kind": "agent", "handle": handle, "credential": credential}
             root = found["id"] if found["parent"] is None else found["parent"]
+            owner = (page.get("owner") or "") if ask is not None else ""
+            if notice is not None:
+                text = notice(owner)
             cursor = conn.execute(
                 "INSERT INTO comments (page, section, section_title, revision, parent, text,"
                 " quote, actor, created_at, state, reply_credential, reply_key, model,"
@@ -876,9 +882,8 @@ class Database:
                 " WHERE id = ?", (ANSWERED, comment_id),
             )
             _record(conn, "reply", found, credential, handle, key)
-            if ask is not None and page.get("owner"):
-                _queue(conn, owner=page["owner"], page=found["page"], comment=comment_id,
-                       ask=ask)
+            if owner:
+                _queue(conn, owner=owner, page=found["page"], comment=comment_id, ask=ask)
             return _comment(_row(conn, cursor.lastrowid))
 
     def follow_up(self, root: int, *, credential: str, handle: str, key: str, text: str,

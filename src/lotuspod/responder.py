@@ -52,8 +52,10 @@ When the agent's answer ends with a line `NEEDS_OWNER: ASK`, the comment
 asks the page's owner to do something the agent cannot: the line is taken
 off, the reply ends with "I've queued this for OWNER: ASK" instead, and ASK
 goes into OWNER's inbox (lotuspod.db) with the page and the comment, in the
-same transaction as the reply, so only a reply that is stored queues it; a page with no
-owner gets a reply saying there is no one to queue it for.
+same transaction as the reply, so only a reply that is stored queues it; serve
+names OWNER as the page has it then, and a page with no owner gets a reply
+saying there is no one to queue it for. The line's room is not counted
+against the reply's length.
 The prompt always gives the comment to answer in full, whatever of its
 thread the bounded thread leaves out, and, for a thread on a decision, the
 decision's question, its options and its current answer. The test-only fault point
@@ -121,6 +123,9 @@ NO_PUBLISH = "my credential lacks the publish permission, so I did not revise th
 NEEDS_OWNER = "NEEDS_OWNER:"
 # Characters of an ask kept in an owner's inbox.
 MAX_ASK = machine.MAX_ASK
+# Characters of agent output beyond api.MAX_TEXT left for a NEEDS_OWNER line,
+# spacing around its ask included.
+MARKER_ROOM = len(NEEDS_OWNER) + 2 * MAX_ASK
 
 LIMITS = """\
 You are lotuspod's default responder. A reader left the comment below on a
@@ -159,21 +164,6 @@ def needs_owner(text: str) -> tuple[str, str | None]:
         return text, None
     ask = agents.one_line(lines[-1].strip()[len(NEEDS_OWNER):])[:MAX_ASK]
     return "\n".join(lines[:-1]).strip(), ask or None
-
-
-def queued(answer: str, owner: str, ask: str) -> str:
-    """The reply to a comment whose ask is queued for owner, after answer,
-    shortened as it must be for the reply to fit api.MAX_TEXT; with no
-    owner, it says there is none to queue it for."""
-    said = (f"I've queued this for {owner}: {ask}" if owner
-            else f"This page has no owner I could queue this for: {ask}")
-    if not answer:
-        return said
-    # The answer gives way, so the reply stays within what the socket takes.
-    room = api.MAX_TEXT - len(said) - 2
-    if len(answer) > room:
-        answer = answer[:room - 1].rstrip() + "…"
-    return f"{answer}\n\n{said}"
 
 
 class Refused(Exception):
@@ -465,7 +455,8 @@ def run_agent(argv: list[str], text: str, cwd: Path, env: dict, timeout: float,
     answer = out.decode("utf-8", "replace").strip()
     if not answer:
         raise _Failed("the agent command printed no answer")
-    if len(answer) > api.MAX_TEXT:
+    # Room for a final NEEDS_OWNER line, which the reply does not carry.
+    if len(answer) > api.MAX_TEXT + MARKER_ROOM:
         raise _Failed(f"the answer was longer than {api.MAX_TEXT} characters")
     return answer
 
@@ -552,11 +543,14 @@ class Responder:
         try:
             text, edited = self.consult(item)
             text, ask = needs_owner(text)
+            if len(text) > api.MAX_TEXT:
+                raise _Failed(f"the answer was longer than {api.MAX_TEXT} characters")
             if ask is not None:
-                text = queued(text, page["owner"], ask)
-                if page["owner"]:
-                    queue = {"owner": page["owner"], "page": page["name"], "ask": ask}
-                    self.journal.write({"key": key, "queue": queue})
+                # serve adds the notice naming the owner it queues the ask for.
+                queue = {"page": page["name"], "ask": ask}
+                self.journal.write({"key": key, "queue": queue})
+            elif not text:
+                raise _Failed("the agent command printed no answer")
             revision = None
             if edited is None:
                 self.journal.write({"key": key, "text": text})
@@ -676,10 +670,11 @@ class Responder:
         """Reply with key, naming revision when the page was republished for
         it, and model, the one the agent ran with, when there is one; the
         socket takes a revision this credential published for key even once
-        the page has moved on. With queue, {owner, page, ask}, the reply
-        carries the ask, which serve puts in the page owner's inbox with the
-        reply, in one transaction: a reply refused queues nothing, and a
-        reply sent again after a crash is found by its key, ask and all."""
+        the page has moved on. With queue, {page, ask}, the reply carries the
+        ask, which serve puts in the page owner's inbox with the reply, in one
+        transaction, ending text with a notice naming that same owner: a
+        reply refused queues nothing, and a reply sent again after a crash is
+        found by its key, ask and all."""
         body = {"idempotencyKey": key, "text": text}
         if queue is not None:
             body["ask"] = queue["ask"]
@@ -691,7 +686,7 @@ class Responder:
             revised = f", revising the page to revision {revision}" if revision else ""
             self.log(f"comment {comment_id}: answered{revised}")
             if queue is not None:
-                self.log(f"comment {comment_id}: queued for {queue['owner']}: {queue['ask']}")
+                self.log(f"comment {comment_id}: queued for the page's owner: {queue['ask']}")
 
     def fail(self, comment_id: int, token: str, key: str, reason: str) -> None:
         """Leave the comment failed for reason. The reason is journaled

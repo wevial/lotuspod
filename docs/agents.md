@@ -527,8 +527,11 @@ claimed first is skipped) and runs the agent command once:
   and the comment, in the owner's inbox (see [The owner's
   inbox](#the-owners-inbox)), once per comment. The ask travels with the
   reply (its `ask`), and serve queues it in the reply's own transaction, so
-  only a reply that is stored queues anything; on a page with no owner the
-  reply says there is no one to queue it for.
+  only a reply that is stored queues anything. serve adds the "queued"
+  notice itself, naming the owner it queued the ask for, so a page that
+  changed hands while the agent ran names its new owner; on a page with no
+  owner the reply says there is no one to queue it for. The `NEEDS_OWNER`
+  line does not count toward the answer's 4000-character limit.
 - The comment is `failed`, with the reason on the page and nothing
   published or replied, when the command exits non-zero, prints nothing or
   runs past `--timeout` (default 600 seconds), when the page changed while it

@@ -477,6 +477,18 @@ class NeedsOwnerTests(ResponderCase):
         self.assertEqual([item["ask"] for item in self.inbox("operator")],
                          ["file a ticket for X"])
 
+    def test_an_answer_over_the_limit_only_by_its_marker_is_still_posted(self):
+        row = self.comment("tended", "greeting", "Please file a ticket for the lilies.")
+        answer = "A" * (api.MAX_TEXT - 10) + "\nNEEDS_OWNER: file a ticket for X"
+        done = self.respond(env=dict(self.env, ANSWER=answer))
+        self.assertEqual(done.returncode, 0, done.stderr)
+        [(text, _handle, _revision)] = self.replies("tended", row["id"])
+        self.assertLessEqual(len(text), api.MAX_TEXT)
+        self.assertTrue(text.endswith("…\n\nI've queued this for operator: file a ticket for X"),
+                        text[-80:])
+        self.assertEqual([item["ask"] for item in self.inbox("operator")],
+                         ["file a ticket for X"])
+
     def test_an_answered_question_queues_nothing(self):
         row = self.comment("tended", "greeting", "What are lilies doing here?")
         done = self.respond(env=dict(self.env, ANSWER="They bloom at dusk."))
@@ -527,6 +539,14 @@ class FailureTests(ResponderCase):
         self.assertEqual(self.records(), [])
         for row in rows:
             self.assertEqual(self.root("orphan", row["id"]).get("state"), "failed")
+
+    def test_an_answer_over_the_limit_without_a_marker_fails_its_comment(self):
+        row = self.comment("orphan", "other", "Say a lot.")
+        done = self.respond(env=dict(self.env, ANSWER="A" * (api.MAX_TEXT + 1)))
+        self.assertEqual(done.returncode, 0, done.stderr)
+        root = self.root("orphan", row["id"])
+        self.assertEqual(root.get("state"), "failed")
+        self.assertIn(f"longer than {api.MAX_TEXT}", root.get("reason", ""))
 
 
 # A stand-in that records that it ran, outlives a one-second claim, then
