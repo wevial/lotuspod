@@ -263,14 +263,21 @@ the comments panel, a thread open in the panel, a popover or the bottom sheet
 stays open, and a comment or reply not yet sent stays in its composer, text
 and images. Threads on a section the new revision removed or renamed are
 listed under "Sections that have changed", as a fresh load lists them, and
-an added section gets its own group. It does not
-swap, and shows the banner as below, when the theme or the page's policy
-changed, when a changed or removed part holds a passage's highlight (a
-thread's, or the words an open passage comment is on), when a removed
-section's form for a new thread holds text or images not sent, or when a
-changed part, as it was or as it is now, holds a decision form, a diagram, a
-reference card or a table; nor when the outline or the sections came or
-went, the sections both copies have moved, or the references changed. A swap that fails partway reloads the page. Otherwise a
+an added section gets its own group. The passage threads of a swapped part
+are found again in its new text from their quotes, highlighted and numbered
+in page order as on a fresh load; one whose words are gone keeps its entry,
+its quote struck through, the note's title naming the revision it changed
+in. A changed or removed part holding the words an open passage comment is
+on, and a removed section whose form for a new thread holds text or images
+not sent, is held back with the bar too. Its Update opens the passage
+comment again on its words, text and images, where the new text still has
+them; else what was written goes to a form for a new thread, saying why, as
+after a reload (below). It does not swap, and shows the banner as below,
+when the theme or the page's policy changed, or when a changed part, as it
+was or as it is now, holds a decision form, a diagram, a reference card or a
+table; nor when the outline or the sections came or went, the sections both
+copies have moved, or the references changed. A swap that fails partway
+reloads the page. Otherwise a
 banner fixed over the top of the
 window, which moves no text and is announced politely, reads "A newer version
 of this page is available" with a Reload button. Reload brings the new

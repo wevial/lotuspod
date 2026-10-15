@@ -13,8 +13,10 @@
 // takes it away and the new one when it replaces it.
 //
 // A changed or removed part any test registered with holdSwap holds (the
-// swap's own: the focus is in it) stays as it is, under a bar saying so with
-// an Update button, which applies the part's newest nodes as a swap would.
+// swap's own: the focus is in it; js/comments.js's: an open passage
+// composer's words are in it, or it is a section taken away whose form holds
+// text not sent) stays as it is, under a bar saying so with an Update button,
+// which applies the part's newest nodes as a swap would.
 // The page still takes the new revision; a later swap replaces the kept nodes
 // when the part changed again, and takes the bar away when it is back to the
 // open page's digest.
@@ -25,39 +27,23 @@
 // or sections, when their shared sections moved, when the references changed,
 // when the outline changed on a page with decision forms (whose review marks
 // sit on its links), when a changed part, old or new, holds a feature not yet
-// mounted on new markup or a passage's highlight (SWAP_UNMOUNTED), when one
-// copy takes comments and the other does not, or when a section the swap
-// would take away, held back or not, is one any test registered with
-// refuseSwap refuses (js/comments.js's: its form holds text not sent). A
-// held section's Update that would take away one a test refuses, or a held
-// part's that would replace a passage's highlight, reloads the page instead,
-// so its text is kept. A swap that throws partway has the page
-// reload.
+// mounted on new markup (SWAP_UNMOUNTED), or when one copy takes comments and
+// the other does not. A swap that throws partway has the page reload.
 
 // What a swapped part may not hold yet, old or new: each later ticket mounts
-// one and takes it off. The open page's passage highlights, a thread's or an
-// open composer's, are not found again in new markup yet.
-const SWAP_UNMOUNTED = "form.artifact-decision, pre.mermaid, button.artifact-ref, table, mark.artifact-passage";
+// one and takes it off.
+const SWAP_UNMOUNTED = "form.artifact-decision, pre.mermaid, button.artifact-ref, table";
 
 // Each test a changed or removed part, as the open page has it, is put to
 // before a swap: a part any test holds is kept as it is under a bar until the
 // reader presses its Update (holdSwap).
-const SWAP_HOLDS: ((nodes: readonly Element[]) => boolean)[] = [];
+const SWAP_HOLDS: ((nodes: readonly Element[], removed: boolean) => boolean)[] = [];
 
 // Hold back from a swap each part whose nodes (a section's heading and
-// wrapper, or the intro's) test says to.
-function holdSwap(test: (nodes: readonly Element[]) => boolean): void {
+// wrapper, or the intro's) test says to, told whether the new revision took
+// the part away.
+function holdSwap(test: (nodes: readonly Element[], removed: boolean) => boolean): void {
   SWAP_HOLDS.push(test);
-}
-
-// Each test a section the swap would take away, as the open page has it, is
-// put to: one any test refuses has the whole page fall back (refuseSwap).
-const SWAP_REFUSALS: ((nodes: readonly Element[]) => boolean)[] = [];
-
-// Fall back to the banner or a reload rather than take away a section whose
-// heading and wrapper test says to.
-function refuseSwap(test: (nodes: readonly Element[]) => boolean): void {
-  SWAP_REFUSALS.push(test);
 }
 
 function pageSwap(): void {
@@ -140,8 +126,6 @@ function pageSwap(): void {
       (node.matches(SWAP_UNMOUNTED) || node.querySelector(SWAP_UNMOUNTED) !== null));
 
   const brought = (node: Node): Node => document.importNode(node, true);
-
-  const refused = (part: Part): boolean => SWAP_REFUSALS.some((test) => test([part.heading, part.wrapper]));
 
   // The open page's node, or null, given the new page's text in place of
   // its children; the nodes taken out and put in.
@@ -286,17 +270,16 @@ function pageSwap(): void {
 
     // Each changed or removed part, as the open page has it, that a test
     // holds back: kept as it is, its new nodes kept for the reader's Update.
-    const holds = (nodes: Node[]): boolean => {
+    const holds = (nodes: Node[], gone: boolean): boolean => {
       const elements = nodes.filter((node): node is Element => node instanceof Element);
-      return SWAP_HOLDS.some((test) => test(elements));
+      return SWAP_HOLDS.some((test) => test(elements, gone));
     };
     // A part held already stays held until its Update, or until its text
     // is the open page's again.
-    const introHeld = introChanged && (heldIntro !== null || holds(intro));
+    const introHeld = introChanged && (heldIntro !== null || holds(intro, false));
     const sectionHeld = new Set([...removed, ...changed.map((part) => byId.get(part.id)!)]
-      .filter((part) => held.has(part.id) || holds([part.heading, part.wrapper])).map((part) => part.id));
-    // A section taken away, held back or not, that a test refuses to lose.
-    if (removed.some(refused)) return null;
+      .filter((part) => held.has(part.id) || holds([part.heading, part.wrapper], !freshIds.has(part.id)))
+      .map((part) => part.id));
     // The first section heading at or below the title bar, and its top.
     const line = document.querySelector(".artifact-topbar")?.getBoundingClientRect().bottom ?? 0;
     const anchorAt = parts.findIndex((part) => part.heading.getBoundingClientRect().top >= line);
@@ -500,13 +483,6 @@ function pageSwap(): void {
     const at = parts.findIndex((part) => part.id === id);
     if (at < 0) return;
     const old = parts[at]!;
-    // A section taken away that a test refuses to lose, or one holding a
-    // highlight since it was held, is reloaded away, what it holds kept
-    // over the reload.
-    if ((!entry.fresh && refused(old)) || unmounted([old.heading, old.wrapper])) {
-      live.reload();
-      return;
-    }
     const unit = entry.fresh ? applyChanged(old, entry.fresh) : applyRemoved(old);
     swapped(live.revision(), [unit]);
     const heading = entry.fresh ? unit.after[0] as HTMLElement : (parts[at + 1] ?? parts[at - 1])?.heading;
@@ -537,12 +513,7 @@ function pageSwap(): void {
     const body = bodyOf(document);
     if (!entry || !body) return;
     const parts = partsOf(body);
-    const intro = introOf(body, parts);
-    if (unmounted(intro)) {
-      live.reload();
-      return;
-    }
-    swapped(live.revision(), [applyIntro(body, intro, entry.fresh, entry.digest)]);
+    swapped(live.revision(), [applyIntro(body, introOf(body, parts), entry.fresh, entry.digest)]);
     toggleOf(parts[0]?.heading)?.focus();
   }
 

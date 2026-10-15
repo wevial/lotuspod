@@ -961,19 +961,27 @@ test.describe('signed in', () => {
     publish(name, source('Live page passage gone', 'first'));
     await stopClock(page);
     await open(page, name);
+    const loads = watchLoads(page);
     const field = await selectPassage(page, 'Risks, paragraph 1', 18);
     const UNSENT = 'Which pump is this?';
     await field.fill(UNSENT);
 
-    const second = publish(name, source('Live page passage gone', 'second')
+    // Only Risks changes: the swap holds it back, the composer as it was.
+    const second = publish(name, source('Live page passage gone', 'first')
       .replace('Risks, paragraph 1:', 'Risks, first point:'));
     await page.clock.runFor(CHECK);
-    const loaded = page.waitForEvent('load');
-    await banner(page).reload.click();
-    await loaded;
+    await expect.poll(() => revisionOf(page)).toBe(second);
+    const risks = page.locator('div.artifact-section-body[data-section="risks"]');
+    const bar = risks.locator('div.artifact-swap-held');
+    await expect(bar).toContainText('This section changed');
+    await expect(risks).toContainText('Risks, paragraph 1:');
+    await expect(field).toHaveValue(UNSENT);
+    await expect(page.locator('mark.artifact-passage--pending')).toHaveText('Risks, paragraph 1');
+    await expect(banner(page).node).toHaveCount(0);
 
-    expect(await revisionOf(page)).toBe(second);
-    await expect(page.locator('.artifact-body')).toContainText('Risks, first point:');
+    await bar.getByRole('button', { name: 'Update' }).click();
+    await expect(risks).toContainText('Risks, first point:');
+    await expect(bar).toHaveCount(0);
     await expect(page.locator('mark.artifact-passage--pending')).toHaveCount(0);
     const form = page.locator('.artifact-comments-panel form.artifact-comment-form')
       .filter({ has: page.getByRole('textbox', { name: 'Comment on Risks' }) });
@@ -981,6 +989,8 @@ test.describe('signed in', () => {
     await expect(form.locator('textarea')).toHaveValue(UNSENT);
     await expect(form.locator('.artifact-comment-status')).toHaveText(
       'The words you selected have changed since. Your comment is kept here, on the section.');
+    await expect(page.locator('.artifact-passage-composer')).toHaveCount(0);
+    expect(loads.count).toBe(0);
     expect(errors).toEqual([]);
   });
 
@@ -996,13 +1006,16 @@ test.describe('signed in', () => {
     const UNSENT = 'What cracks first, the pump or the pipe?';
     await risks.fill(UNSENT);
 
-    const second = publish(name, source('Live page renamed', 'second').replace(/Risks/g, 'Hazards'));
+    const loads = watchLoads(page);
+    const second = publish(name, source('Live page renamed', 'first').replace(/Risks/g, 'Hazards'));
     await page.clock.runFor(CHECK);
-    const loaded = page.waitForEvent('load');
-    await banner(page).reload.click();
-    await loaded;
+    await expect.poll(() => revisionOf(page)).toBe(second);
+    const bar = page.locator('div.artifact-section-body[data-section="risks"] div.artifact-swap-held');
+    await expect(bar).toContainText('This section was removed');
+    await expect(risks).toHaveValue(UNSENT);
+    await expect(banner(page).node).toHaveCount(0);
 
-    expect(await revisionOf(page)).toBe(second);
+    await bar.getByRole('button', { name: 'Update' }).click();
     await expect(page.locator('details.artifact-comment[data-section="risks"]')).toHaveCount(0);
     const form = page.locator('.artifact-comments-panel form.artifact-comment-form')
       .filter({ has: page.getByRole('textbox', { name: 'Comment on Hazards' }) });
@@ -1010,6 +1023,7 @@ test.describe('signed in', () => {
     await expect(form.locator('textarea')).toHaveValue(UNSENT);
     await expect(form.locator('.artifact-comment-status')).toHaveText(
       'Where you were writing has changed since. Your text is kept here.');
+    expect(loads.count).toBe(0);
     expect(errors).toEqual([]);
   });
 
@@ -1413,7 +1427,7 @@ test.describe('signed in', () => {
     expect(errors).toEqual([]);
   });
 
-  test('a passage highlighted in a section a republish changes falls back to the banner', async ({ page, request }) => {
+  test('a passage highlighted in a section a republish changes is highlighted again in its new text', async ({ page, request }) => {
     const errors = watchErrors(page);
     const name = 'live-page-comments-passage';
     const first = publish(name, sectioned(name, pond()));
@@ -1429,15 +1443,17 @@ test.describe('signed in', () => {
     await open(page, name);
     await expect(page.locator('mark.artifact-passage')).toHaveText('The pump may crack in the ice.');
 
-    publish(name, sectioned(name, pond({ Risks: { paragraphs: [RISKY, 'The pump may crack in the ice.'] } })));
+    const second = publish(name, sectioned(name, pond({ Risks: { paragraphs: [RISKY, 'The pump may crack in the ice.'] } })));
     await page.clock.runFor(CHECK);
-    await expect(banner(page).node).toContainText(NEWER);
-    await expect(page.locator('div.artifact-section-body[data-section="risks"]')).not.toContainText(RISKY);
-    expect(await revisionOf(page)).toBe(first);
+    await expect.poll(() => revisionOf(page)).toBe(second);
+    await expect(banner(page).node).toHaveCount(0);
+    await expect(page.locator('div.artifact-section-body[data-section="risks"]')).toContainText(RISKY);
+    await expect(page.locator('mark.artifact-passage')).toHaveText('The pump may crack in the ice.');
+    await expect(page.locator('.artifact-passage-number')).toHaveText(['1']);
     expect(errors).toEqual([]);
   });
 
-  test('a removed section held back while its form holds a draft reloads on Update, the draft kept', async ({ page }) => {
+  test('a removed section held back while its form holds a draft keeps the draft on Update', async ({ page }) => {
     const errors = watchErrors(page);
     const name = 'live-page-comments-held-draft';
     publish(name, sectioned(name, pond()));
@@ -1456,11 +1472,11 @@ test.describe('signed in', () => {
     const UNSENT = 'What cracks first, the pump or the pipe?';
     await field.fill(UNSENT);
 
-    const loaded = page.waitForEvent('load');
+    const loads = watchLoads(page);
     await bar.getByRole('button', { name: 'Update' }).click();
-    await loaded;
     await expect(box(page, 'risks')).toHaveCount(0);
-    // Kept in a section's form, saying why, as after any reload.
+    expect(loads.count).toBe(0);
+    // Kept in a section's form, saying why, as after a reload.
     const form = page.locator('.artifact-comments-panel form.artifact-comment-form').filter({
       has: page.locator('.artifact-comment-status', { hasText: 'Where you were writing has changed since.' }),
     });
@@ -1516,7 +1532,7 @@ test.describe('signed in', () => {
     expect(errors).toEqual([]);
   });
 
-  test('Update on a held section holding a passage composer reloads, the composer kept', async ({ page }) => {
+  test('Update on a held section holding a passage composer opens it again on its words', async ({ page }) => {
     const errors = watchErrors(page);
     const name = 'live-page-comments-held-passage';
     publish(name, sectioned(name, pond()));
@@ -1536,10 +1552,10 @@ test.describe('signed in', () => {
     const UNSENT = 'Which pump is this?';
     await field.fill(UNSENT);
 
-    const loaded = page.waitForEvent('load');
+    const loads = watchLoads(page);
     await bar.getByRole('button', { name: 'Update' }).click();
-    await loaded;
     await expect(page.locator('div.artifact-section-body[data-section="risks"]')).toContainText(RISKY);
+    expect(loads.count).toBe(0);
     await expect(field).toHaveValue(UNSENT);
     await expect(page.locator('mark.artifact-passage--pending')).toHaveText('The pump');
     expect(errors).toEqual([]);

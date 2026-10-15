@@ -11,9 +11,11 @@
     var tag = document.querySelector('meta[name="lotuspod:owner"]');
     var owner = tag ? tag.content : "";
     // The revision the page shows now, which a swap moves on
-    // (js/live-page.js); null on a page with none.
+    // (js/live-page.js); null on a page with none. While a swap's SWAPPED
+    // is handled, live.revision() is still the one before it.
+    var swappedTo = "";
     function revision() {
-      return live.revision() || null;
+      return swappedTo || live.revision() || null;
     }
     var article = document.querySelector(".artifact-body");
     // Maps, not objects: a section id is the author's and may be any name,
@@ -886,17 +888,54 @@
         return true;
       };
 
-      // A swap moved the page's text: each drawn thread's words start where
-      // its highlight now does, so the threads number in page order.
+      // A swap moved the page's text. A thread whose highlight went with a
+      // part it took out, its marks wrapped into the old text and never
+      // unwrapped, is looked for again in the new text, as is one not found
+      // before: the new revision may have its words back. Each other drawn
+      // thread's words start where its highlight now does, so the threads
+      // number in page order. A hint is into the old text, so none is kept.
       api.moved = function () {
         var model = null;
         shown.forEach(function (thread) {
-          if (article && thread.spot && thread.marks.length) {
+          if (!thread.root.quote) {
+            return;
+          }
+          if (thread.spot === null || (thread.marks.length && !thread.marks[0].isConnected)) {
+            if (thread.number && thread.number.isConnected) {
+              thread.number.remove();
+            }
+            thread.marks = [];
+            thread.number = null;
+            thread.spot = undefined;
+          } else if (article && thread.spot && thread.marks.length) {
             model = model || textModel(article);
             var start = offsetOf(model, thread.marks[0], 0);
             thread.spot = { start: start, end: start + thread.spot.end - thread.spot.start };
           }
         });
+        hints.clear();
+      };
+
+      // Whether the open composer's words are in any of nodes.
+      api.writes = function (nodes) {
+        return Boolean(open) && open.marks.some(function (mark) {
+          return nodes.some(function (node) { return node.contains(mark); });
+        });
+      };
+
+      // The open composer whose words a swap took out, closed, with what
+      // api.writing kept of it to open again (api.reopen); else null. Its
+      // marks left with the old text, so they stay as they are.
+      api.swept = function () {
+        if (!open || !open.marks.length || open.marks[0].isConnected) {
+          return null;
+        }
+        var kept = api.writing();
+        var mine = open;
+        mine.holder.remove();
+        open = null;
+        panel.dropped(mine);
+        return kept;
       };
 
       if (!article) {
@@ -2908,6 +2947,39 @@
     // else on the page's first, which opens with the reason beside it.
     // Images go with their text, up to MAX_IMAGES a composer.
     var kept = live.kept();
+
+    // Add each's text and images to form; why some images were not.
+    function join(form, each) {
+      var field = form.elements.text;
+      var text = String(each.text || "");
+      if (text.trim()) {
+        field.value = field.value.trim() ? field.value + "\n\n" + text : text;
+      }
+      return attached.get(form).restore(each.images);
+    }
+
+    function told(form, why) {
+      if (why) {
+        form.querySelector(".artifact-comment-status").textContent = why;
+      }
+    }
+
+    // Text whose place is gone goes to the form for a new thread on its
+    // section, else on the box at its index, else on the page's first,
+    // saying why; that box.
+    function rehome(each, why) {
+      var box = (typeof each.section === "string" && sections.get(each.section)) ||
+        boxes[Number(each.index)] || boxes[0];
+      var form = forms.get(box);
+      var over = join(form, each);
+      told(form, over ? why + " " + over : why);
+      return box;
+    }
+
+    function worth(each) {
+      return String(each.text || "").trim() !== "" || (Array.isArray(each.images) && each.images.length > 0);
+    }
+
     function restore() {
       var was = kept;
       kept = null;
@@ -2915,31 +2987,6 @@
         return;
       }
       var moved = null;
-      // Add each's text and images to form; why some images were not.
-      function join(form, each) {
-        var field = form.elements.text;
-        var text = String(each.text || "");
-        if (text.trim()) {
-          field.value = field.value.trim() ? field.value + "\n\n" + text : text;
-        }
-        return attached.get(form).restore(each.images);
-      }
-      function told(form, why) {
-        if (why) {
-          form.querySelector(".artifact-comment-status").textContent = why;
-        }
-      }
-      function rehome(each, why) {
-        var box = (typeof each.section === "string" && sections.get(each.section)) ||
-          boxes[Number(each.index)] || boxes[0];
-        var form = forms.get(box);
-        var over = join(form, each);
-        told(form, over ? why + " " + over : why);
-        moved = box;
-      }
-      function worth(each) {
-        return String(each.text || "").trim() !== "" || (Array.isArray(each.images) && each.images.length > 0);
-      }
       (Array.isArray(was.texts) ? was.texts : []).forEach(function (each) {
         if (!each || typeof each !== "object" || !worth(each)) {
           return;
@@ -2957,7 +3004,7 @@
         } else if (box) {
           told(forms.get(box), join(forms.get(box), each));
         } else {
-          rehome(each, PLACE_GONE);
+          moved = rehome(each, PLACE_GONE);
         }
       });
       if (was.open && typeof was.open === "object") {
@@ -2965,7 +3012,7 @@
       }
       var passage = was.passage && typeof was.passage === "object" ? was.passage : null;
       if (passage && !passages.reopen(passage) && worth(passage)) {
-        rehome(passage, PASSAGE_GONE);
+        moved = rehome(passage, PASSAGE_GONE);
       }
       if (moved) {
         panel.reopen({ section: moved.dataset.section, writing: true });
@@ -3071,10 +3118,20 @@
     // the panel stays open, and one in a popover or the sheet opens again;
     // a section's form, with what is written in it, stays its section's.
     // Threads on a section taken away are listed with those on sections
-    // the page no longer has, and a section added takes back its own.
+    // the page no longer has, and a section added takes back its own. The
+    // passages of the parts swapped are found again in the new text, and
+    // numbered in page order. A passage composer whose words went with a
+    // part (one held back, applied by its Update) opens again on them where
+    // the new text has them; else, like the text in the form of a section
+    // taken away, what was written goes to a section's form saying why, as
+    // after a reload.
     document.addEventListener(SWAPPED, function (event) {
       var units = event.detail.units;
+      swappedTo = event.detail.revision;
+      var focused = document.activeElement;
+      var writing = passages.swept();
       passages.moved();
+      var unsent = [];
       var olds = [];
       var news = [];
       units.forEach(function (unit) {
@@ -3085,10 +3142,30 @@
         olds.push.apply(olds, boxesIn(unit.before).filter(function (box) { return boxes.indexOf(box) >= 0; }));
         news.push.apply(news, boxesIn(unit.after));
       });
-      if (!olds.length && !news.length) {
-        showUnread();
-        return;
+      if (olds.length || news.length) {
+        remount(olds, news, unsent);
+      } else {
+        refresh();
       }
+      var moved = null;
+      unsent.forEach(function (each) {
+        moved = rehome(each, PLACE_GONE);
+      });
+      if (writing && !passages.reopen(writing) && worth(writing)) {
+        moved = rehome(writing, PASSAGE_GONE);
+      }
+      if (moved) {
+        panel.reopen({ section: moved.dataset.section, writing: true });
+      }
+      if (focused && focused !== document.body && focused.isConnected && document.activeElement !== focused) {
+        focused.focus({ preventScroll: true });
+      }
+    });
+
+    // Mount the boxes a swap brought in (news) in place of those it took
+    // out (olds): what was written in the form of each taken away for good
+    // is added to unsent.
+    function remount(olds, news, unsent) {
       news.sort(function (a, b) {
         return a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1;
       });
@@ -3103,10 +3180,14 @@
           added.push(box);
         }
       });
-      var focused = document.activeElement;
       var taken = panel.take(olds.concat(replaced.map(function (pair) { return pair[0]; })));
       replaced.forEach(function (pair) { replaceBox(pair[0], pair[1]); });
-      olds.forEach(dropBox);
+      olds.forEach(function (old) {
+        var each = dropBox(old);
+        if (each) {
+          unsent.push(each);
+        }
+      });
       added.forEach(addBox);
       panel.remounted();
       var order = boxes.map(function (box) { return [box, forms.get(box)]; });
@@ -3116,10 +3197,7 @@
       refresh();
       panel.give(taken);
       refresh();
-      if (focused && focused !== document.body && focused.isConnected && document.activeElement !== focused) {
-        focused.focus({ preventScroll: true });
-      }
-    });
+    }
 
     // The comment boxes among some nodes and in them.
     function boxesIn(nodes) {
@@ -3163,14 +3241,22 @@
     }
 
     // A section taken away takes its box and form with it; its threads say
-    // which section they were on.
+    // which section they were on. What its form holds not sent, to go where
+    // the section was: the box before it, where a section that took its
+    // place under a new name was put; else null.
     function dropBox(old) {
       var at = boxes.indexOf(old);
+      var form = forms.get(old);
+      var each = { field: form.elements.text, images: attached.get(form) };
+      var unsent = holding(each) ? {
+        section: old.dataset.section, index: Math.max(at - 1, 0), text: each.field.value,
+        images: each.images.kept(),
+      } : null;
       boxes.splice(at, 1);
       if (sections.get(old.dataset.section) === old) {
         sections.delete(old.dataset.section);
       }
-      attached.delete(forms.get(old));
+      attached.delete(form);
       forms.delete(old);
       shown.forEach(function (thread) {
         if (thread.box === old) {
@@ -3179,6 +3265,7 @@
         }
       });
       panel.unmount(old, at);
+      return unsent;
     }
 
     // A section added: its box joins the boxes in page order, and takes
@@ -3203,13 +3290,18 @@
       });
     }
 
-    // A section a swap would take away while its form holds text or images
-    // not sent has the page fall back to the banner, its text kept over
-    // the reload.
-    refuseSwap(function (nodes) {
-      return composers().some(function (each) {
-        var box = each.thread === undefined ? boxes[each.index] : null;
-        return Boolean(box) && holding(each) && nodes.some(function (node) { return node.contains(box); });
+    // A swap holds back a part holding the open passage composer's words,
+    // and a section it would take away whose form holds text or images not
+    // sent, until the reader's Update: then the SWAPPED handler above keeps
+    // what was written.
+    holdSwap(function (nodes, removed) {
+      if (passages.writes(nodes)) {
+        return true;
+      }
+      return removed && boxes.some(function (box) {
+        var form = forms.get(box);
+        return nodes.some(function (node) { return node.contains(box); }) &&
+          holding({ field: form.elements.text, images: attached.get(form) });
       });
     });
 

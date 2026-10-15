@@ -122,6 +122,52 @@ function revisionOf(page: Page) {
   return page.locator('meta[name="lotuspod:revision"]').getAttribute('content');
 }
 
+// The revision the site serves the page at now, whatever the open page shows.
+async function served(request: APIRequestContext) {
+  const response = await request.get(PAGE);
+  expect(response.status()).toBe(200);
+  const revision = /<meta[^>]*name="lotuspod:revision"[^>]*content="([^"]+)"/.exec(await response.text())?.[1];
+  expect(revision).toBeTruthy();
+  return revision!;
+}
+
+// The page's clock, paused: it moves only when moved, so the 60-second
+// check for a new revision runs when a check runs it.
+const CHECK = 60_000;
+async function stopClock(page: Page) {
+  await page.clock.install({ time: Date.parse('2026-10-02T12:00:00Z') });
+  await page.clock.pauseAt(Date.parse('2026-10-02T12:00:01Z'));
+}
+
+// The number of loads and navigations of the page from now on.
+function watchLoads(page: Page) {
+  const moved = { count: 0 };
+  page.on('load', () => { moved.count += 1; });
+  page.on('framenavigated', (frame) => {
+    if (frame === page.mainFrame()) moved.count += 1;
+  });
+  return moved;
+}
+
+// hermes publishes source, and the open page's next check swaps it in
+// without a reload or the banner; the revision it then shows.
+async function swapIn(page: Page, source: string, before: string) {
+  publish(source, before);
+  const loads = watchLoads(page);
+  await page.clock.runFor(CHECK);
+  await expect.poll(() => revisionOf(page)).not.toBe(before);
+  await settle(page);
+  await expect(page.locator('.artifact-live-page-banner')).toHaveCount(0);
+  expect(loads.count).toBe(0);
+  return (await revisionOf(page))!;
+}
+
+// A paragraph long enough that, put above them, it moves every passage after
+// it further than the passages lie apart.
+const LONG = Array.from({ length: 16 }, (_, n) =>
+  `Morning ${n + 1}: the ice along the reeds was thicker than the day before.`).join(' ');
+const NEIGHBOUR = 'Through the winter the pond was checked each morning at first light.';
+
 function panel(page: Page) {
   const aside = page.locator('aside.artifact-comments-panel');
   return {
@@ -769,6 +815,136 @@ test.describe('signed in', () => {
     await expect(lost.words).toContainText('this passage has changed since');
     await expect(lost.words).not.toContainText(before);
     await expect(lost.words.locator('.artifact-passage-why')).toHaveAttribute('title', `Changed in revision ${before}`);
+    await seen.clean();
+  });
+
+  test('a passage in a section swapped in place is highlighted again, keeping its number', async ({ page, request }) => {
+    test.setTimeout(120_000);
+    const seen = await watch(page);
+    await stopClock(page);
+    await load(page);
+    const before = (await revisionOf(page))!;
+    const asked = await postHeater(request, before, 'Still on the north wall?');
+    await ownThreads(page, new Set<number>([asked.id]));
+    await page.reload();
+    await settle(page);
+    await expect(entry(page, asked.id).mark).toHaveText('1');
+    const source = original();
+    // Its neighbour paragraph in Findings changes; its own does not.
+    const changed = source.replace(NEIGHBOUR, 'Through the winter the pond was checked twice a day.');
+    expect(changed).not.toBe(source);
+    try {
+      await swapIn(page, changed, before);
+      await expect(page.locator('.artifact-body')).toContainText('checked twice a day');
+      await expect(marks(page, asked.id).first()).toBeVisible();
+      expect(await joined(marks(page, asked.id))).toBe(HEATER);
+      await expect(page.locator(`.artifact-passage-number[data-thread="${asked.id}"]`)).toHaveText('1');
+      await expect(entry(page, asked.id).mark).toHaveText('1');
+      await expect(entry(page, asked.id).words.locator('del')).toHaveCount(0);
+      await expect(page.locator('.artifact-body mark.artifact-passage')).toHaveCount(1);
+    } finally {
+      publish(source, await served(request));
+    }
+    await seen.clean();
+  });
+
+  test('passages found again after a swap that adds a paragraph above them number in page order', async ({ page, request }) => {
+    test.setTimeout(120_000);
+    const seen = await watch(page);
+    await stopClock(page);
+    await load(page);
+    const before = (await revisionOf(page))!;
+    const heater = await postHeater(request, before, 'Still on the north wall?');
+    const response = await request.post('/api/comments', {
+      data: { page: SLUG, section: 'risks', text: 'Which bed?', quote: BED_QUOTE, revision: before },
+    });
+    expect(response.status()).toBe(201);
+    const bed = await response.json();
+    await ownThreads(page, new Set<number>([heater.id, bed.id]));
+    await page.reload();
+    await settle(page);
+    await expect(page.locator('.artifact-passage-number')).toHaveText(['1', '2']);
+    const source = original();
+    const changed = source.replace(`## Findings\n\n${FINDINGS}`, `## Findings\n\n${LONG}\n\n${FINDINGS}`);
+    expect(changed).not.toBe(source);
+    try {
+      await swapIn(page, changed, before);
+      await expect(page.locator('.artifact-body')).toContainText('Morning 16');
+      expect(await joined(marks(page, heater.id))).toBe(HEATER);
+      expect(await joined(marks(page, bed.id))).toBe(BED);
+      await expect(page.locator(`.artifact-passage-number[data-thread="${heater.id}"]`)).toHaveText('1');
+      await expect(page.locator(`.artifact-passage-number[data-thread="${bed.id}"]`)).toHaveText('2');
+      await expect(page.locator('.artifact-passage-number')).toHaveText(['1', '2']);
+      await expect(entry(page, heater.id).mark).toHaveText('1');
+      await expect(entry(page, bed.id).mark).toHaveText('2');
+    } finally {
+      publish(source, await served(request));
+    }
+    await seen.clean();
+  });
+
+  test('a passage a swap deletes loses its highlight and keeps its thread, struck through in the new revision', async ({ page, request }) => {
+    test.setTimeout(120_000);
+    const seen = await watch(page);
+    await stopClock(page);
+    await load(page);
+    const before = (await revisionOf(page))!;
+    const asked = await postHeater(request, before, 'Is the heater still there?');
+    await ownThreads(page, new Set<number>([asked.id]));
+    await page.reload();
+    await settle(page);
+    await expect(marks(page, asked.id).first()).toBeVisible();
+    const source = original();
+    const changed = source.replace(` ${SENTENCE}`, '');
+    expect(changed).not.toBe(source);
+    try {
+      const after = await swapIn(page, changed, before);
+      await expect(page.locator('.artifact-body')).not.toContainText('north wall');
+      await expect(marks(page, asked.id)).toHaveCount(0);
+      await expect(page.locator(`.artifact-passage-number[data-thread="${asked.id}"]`)).toHaveCount(0);
+      const side = panel(page);
+      if (await side.opener.isVisible()) await side.opener.click();
+      const lost = entry(page, asked.id);
+      await expect(side.group('Findings').locator(`.artifact-comments-entry[data-thread="${asked.id}"]`)).toHaveCount(1);
+      await expect(lost.words.locator('del')).toHaveText(HEATER);
+      await expect(lost.words).toContainText('this passage has changed since');
+      await expect(lost.words.locator('.artifact-passage-why')).toHaveAttribute('title', `Changed in revision ${after}`);
+      await expect(lost.mark).toHaveText('1');
+    } finally {
+      publish(source, await served(request));
+    }
+    await seen.clean();
+  });
+
+  test('a passage composer on words a swap leaves as they are stays open, its text and its words kept', async ({ page, request }) => {
+    test.setTimeout(120_000);
+    const seen = await watch(page);
+    await ownThreads(page, new Set<number>());
+    await stopClock(page);
+    await load(page);
+    const before = (await revisionOf(page))!;
+    await choose(page, '.artifact-body li', 'cracked pump', '', 'cracked pump'.length);
+    await page.keyboard.press('Control+Alt+KeyM');
+    const open = composer(page);
+    await expect(open).toBeVisible();
+    const field = open.locator('textarea');
+    await field.fill('Which bed?');
+    const mark = await pending(page).elementHandle();
+    const source = original();
+    const changed = source.replace(NEIGHBOUR, 'Through the winter the pond was checked twice a day.');
+    expect(changed).not.toBe(source);
+    try {
+      await swapIn(page, changed, before);
+      await expect(page.locator('.artifact-body')).toContainText('checked twice a day');
+      await expect(page.locator('div.artifact-swap-held')).toHaveCount(0);
+      await expect(open).toBeVisible();
+      await expect(field).toHaveValue('Which bed?');
+      expect(await joined(pending(page))).toBe('cracked pump');
+      // The same mark, never drawn again.
+      expect(await mark!.evaluate((node) => node.isConnected)).toBe(true);
+    } finally {
+      publish(source, await served(request));
+    }
     await seen.clean();
   });
 
