@@ -387,6 +387,9 @@ page" while it has no thread. Its threads are stored with `section` `""`
 decision. They are routed, pulled, claimed, answered, resolved and counted
 unread as any thread, and an agent reads them as "the whole page". A page
 whose only box is `page` has no other: its box already covers the whole page.
+A thread on that one `page` box shows in the whole page's box once the page
+has sections, and a `""` thread shows in the `page` box once it has one
+section; either is still stored on the section it was written on.
 To start one, `POST /api/comments` with `{page, section: "", text}`. A thread whose section the page
 no longer has is listed at the end of the body under "Comments on sections
 that have changed" (in the panel, where there is one). Every author and text
