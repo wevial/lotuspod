@@ -112,6 +112,18 @@ twice.
   replies, resolution}`, threads and replies oldest first, the ids of this
   reader's unread replies among them, oldest first (see [Replies to
   you](#replies-to-you)), and the largest image `POST /api/media` takes.
+- `GET /api/events` opens an Access-verified server-sent-events stream, with
+  `Content-Type: text/event-stream` and `Cache-Control: no-store`. It opens with
+  `retry: 3000`; each `event: change` carries JSON data `{what, page}`. `what`
+  is `comment` for stored threads, replies, claims, releases, failures,
+  resolutions, reopens and follow-ups; `answer` for answers, dismissals and
+  their undo; `publish` for a visible page's revision or archive change; or
+  `index` for a rebuilt listing, with `page: null`. Other ticks name the page.
+  An idle stream sends `: keepalive` every 30 seconds. At most 32 streams are
+  open: another gets 503 `{"error": "too_many_streams"}` and `Retry-After: 60`.
+  Each stream ends after 10 minutes so reconnecting verifies Access again;
+  a stream 100 ticks behind is ended too. Only GET is allowed (405 with
+  `Allow: GET` otherwise). Seen writes do not send ticks.
 - `GET /api/revision?page=NAME` answers `{revision}`, the page's current
   revision alone; it is only read (any other method is 405).
 - `POST /api/seen` with `{page, revision}` records that the reader opened

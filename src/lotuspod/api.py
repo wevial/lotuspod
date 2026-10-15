@@ -567,7 +567,9 @@ class Api:
                  history: versions.History | None = None,
                  names: Callable[[], Sequence[str]] = tuple,
                  archive: Callable[[str, bool, str | None], tuple] | None = None,
-                 owners: frozenset[str] = frozenset()) -> None:
+                 owners: frozenset[str] = frozenset(),
+                 changed: Callable[[str, str], None] = lambda what, page: None) -> None:
+        self.changed = changed
         self.database = database
         self.pages = pages
         self.window = window
@@ -891,7 +893,9 @@ class Api:
             note=note, revision=page.revision, actor=actor,
             question_text=asked.text, choice_label=label, checked=checked, thread=thread,
         )
+        self.changed("answer", page.name)
         if "comment" in stored:
+            self.changed("comment", page.name)
             stored["comment"] = routing.public(
                 stored["comment"], routing.last_pulls(self.database), self.window,
                 self.clock(), self.database.responder_paused())
@@ -910,11 +914,14 @@ class Api:
         if version != asked.version:
             raise Refusal(HTTPStatus.CONFLICT, "stale")
         try:
-            return self.database.dismiss(
+            stored = self.database.dismiss(
                 page=page.name, question=question, version=version, reason=reason,
                 revision=page.revision, actor=actor, question_text=asked.text)
         except db.Refused as exc:
             raise Refusal(HTTPStatus.CONFLICT, exc.error) from None
+
+        self.changed("answer", page.name)
+        return stored
 
     def _post_undismiss(self, fields: dict, actor: Mapping) -> dict:
         self._owner(actor)
@@ -926,6 +933,7 @@ class Api:
             entry = self.database.undismiss(page=page.name, question=question, asked=True)
         except db.Refused as exc:
             raise Refusal(HTTPStatus.CONFLICT, exc.error) from None
+        self.changed("answer", page.name)
         return {"page": page.name, "question": question, **entry}
 
     def _unread(self, page: Page, threads: list[dict], actor: Mapping) -> list[int]:
@@ -998,6 +1006,7 @@ class Api:
                                                actor=actor)
         except db.Refused as exc:
             raise Refusal(HTTPStatus.NOT_FOUND, exc.error) from None
+        self.changed("comment", page.name)
         return {"thread": root, "resolution": resolution}
 
     def _post_comment(self, fields: dict, actor: Mapping) -> dict:
@@ -1006,6 +1015,11 @@ class Api:
                               self.database.responder_paused())
 
     def _store_comment(self, fields: dict, actor: Mapping) -> dict:
+        row = self._write_comment(fields, actor)
+        self.changed("comment", row["page"])
+        return row
+
+    def _write_comment(self, fields: dict, actor: Mapping) -> dict:
         names = _image_names(fields["images"]) if "images" in fields else None
         # A comment with images may say nothing more.
         least = 0 if names else 1
