@@ -15,7 +15,12 @@ interface PodOpenDetail {
   href: string;
 }
 
+// The listing's rows were swapped for the index's as served again
+// (js/index-refresh.js): the index's own script and the tabs read them again.
+type RowsEvent = CustomEvent<null>;
+
 interface DocumentEventMap {
   "lotuspod:find": CustomEvent<PodFindDetail>;
   "lotuspod:open": CustomEvent<PodOpenDetail>;
+  "lotuspod:rows": RowsEvent;
 }

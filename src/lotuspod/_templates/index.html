@@ -70,8 +70,9 @@
       // Document order is newest update first, filename breaking ties - the
       // listing's stable base. Sorts run from it rather than from the current
       // DOM order, so a sort is repeatable and equal keys keep falling back to
-      // that order.
-      const rows = body ? Array.from(body.rows) : [];
+      // that order. Read again, with all that is read from them below, when
+      // the rows are swapped in ("lotuspod:rows").
+      let rows = body ? Array.from(body.rows) : [];
 
       // A date cell sorts by its time element's full datetime, not the day it
       // shows, so two pages updated on one day keep their order. A title
@@ -145,28 +146,24 @@
       const active = document.querySelector(".index-active");
 
       // Each row's text as the index wrote it, before any mark, for the search.
-      const textOf = new Map(rows.map((row) => [row, row.textContent.toLowerCase()]));
+      const textOf = new Map();
 
       // Each row's labels, from the data-labels the index writes.
-      const labelsOf = new Map(rows.map((row) => [
-        row,
-        (row.dataset.labels || "").split(",").filter(Boolean),
-      ]));
+      const labelsOf = new Map();
 
       // Each page's row, by the name it carries in data-page.
-      const rowOf = new Map(rows.map((row) => [row.dataset.page || "", row]));
+      const rowOf = new Map();
 
       // The archived pages, by the data-archived their rows carry.
-      const archived = new Set(rows.filter((row) => row.hasAttribute("data-archived"))
-        .map((row) => row.dataset.page || ""));
-      const listed = rows.filter((row) => !archived.has(row.dataset.page || "")).length;
+      const archived = new Set();
+      let listed = 0;
 
-      // One checkbox per label any row carries, A to Z, with its page count.
-      const counts = new Map();
-      for (const labels of labelsOf.values()) {
-        for (const label of labels) counts.set(label, (counts.get(label) || 0) + 1);
-      }
-      const boxes = Array.from(counts.keys()).sort().map((label) => {
+      // One checkbox per label any row carries, A to Z, with its page count;
+      // each option by its label.
+      let boxes = [];
+      const options = new Map();
+
+      const optionFor = (label) => {
         const option = document.createElement("label");
         option.className = "index-labels-option";
         const box = document.createElement("input");
@@ -177,12 +174,45 @@
         name.textContent = label;
         const number = document.createElement("span");
         number.className = "index-labels-count";
-        number.textContent = counts.get(label);
         option.append(box, name, number);
-        list.append(option);
         box.addEventListener("change", () => filter());
-        return box;
-      });
+        return { option, box, number };
+      };
+
+      // Read all of the above from the rows in the table. A label still
+      // carried keeps its checkbox, checked or not; a new one gets one
+      // unchecked, in its place A to Z, and one no row carries is dropped.
+      const readRows = () => {
+        rows = body ? Array.from(body.rows) : [];
+        textOf.clear();
+        labelsOf.clear();
+        rowOf.clear();
+        archived.clear();
+        for (const row of rows) {
+          textOf.set(row, row.textContent.toLowerCase());
+          labelsOf.set(row, (row.dataset.labels || "").split(",").filter(Boolean));
+          rowOf.set(row.dataset.page || "", row);
+          if (row.hasAttribute("data-archived")) archived.add(row.dataset.page || "");
+        }
+        listed = rows.filter((row) => !archived.has(row.dataset.page || "")).length;
+        const counts = new Map();
+        for (const labels of labelsOf.values()) {
+          for (const label of labels) counts.set(label, (counts.get(label) || 0) + 1);
+        }
+        for (const [label, { option }] of options) {
+          if (counts.has(label)) continue;
+          option.remove();
+          options.delete(label);
+        }
+        Array.from(counts.keys()).sort().forEach((label, index) => {
+          if (!options.has(label)) options.set(label, optionFor(label));
+          const { option, number } = options.get(label);
+          number.textContent = counts.get(label);
+          if (list.children[index] !== option) list.insertBefore(option, list.children[index] || null);
+        });
+        boxes = Array.from(options.keys()).sort().map((label) => options.get(label).box);
+      };
+      readRows();
 
       const open = (shown) => {
         list.hidden = !shown;
@@ -759,13 +789,20 @@
       };
 
       search.addEventListener("input", filter);
-      menu.hidden = boxes.length === 0;
-      // Right after the menu: the Updated and Unread toggles, made once the
-      // seen route answers, land before it.
-      if (archived.size > 0) {
-        archivedToggle = makeToggle(menu);
+      // Right after the menu at load: the Updated and Unread toggles, made
+      // once the seen route answers, land before it. Made, counted again or
+      // removed as the rows are read again.
+      const showArchived = () => {
+        menu.hidden = boxes.length === 0;
+        if (archived.size === 0) {
+          if (archivedToggle) archivedToggle.remove();
+          archivedToggle = null;
+          return;
+        }
+        if (!archivedToggle) archivedToggle = makeToggle(unreadToggle || updated || menu);
         archivedToggle.textContent = `Archived \u00B7 ${archived.size}`;
-      }
+      };
+      showArchived();
       controls.hidden = !table;
       filter();
       askSeen();
@@ -798,6 +835,20 @@
       // So does showing the listing again over the open tabs
       // (lotuspod-index.js): a page just read there loses its mark too.
       document.addEventListener("lotuspod:listing", () => {
+        askSeen();
+        askAgain();
+      });
+      // The rows swapped in for the index as served again (lotuspod-index.js):
+      // read from them again, before any mark, sorted again as the reader
+      // sorted them, and filtered as the reader left the filters, then their
+      // marks, counts and Recent activity asked again.
+      document.addEventListener("lotuspod:rows", () => {
+        readRows();
+        showArchived();
+        if (sortColumn !== arrival.column || ascending !== arrival.ascending) {
+          for (const row of sorted(sortColumn, ascending)) body.append(row);
+        }
+        filter();
         askSeen();
         askAgain();
       });

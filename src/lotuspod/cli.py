@@ -378,6 +378,9 @@ THEME_SOURCES = {
     INDEX_SCRIPT: (
         "js/pod-tabs.js",
         "js/pod-finder.js",
+        # Built from web/src/index-refresh.ts: it swaps in the listing's rows
+        # as the index is served again.
+        "js/index-refresh.js",
     ),
     OLD_VERSION_SCRIPT: (
         "js/shared.js",
