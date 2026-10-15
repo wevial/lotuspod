@@ -26,6 +26,7 @@ import sys
 import tempfile
 import threading
 import time
+import unicodedata
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
@@ -505,6 +506,24 @@ class TextTests(PullTestCase):
         rc, out, _err = self.agent("show", "nowhere", "--json")
         self.assertNotEqual(rc, 0)
         self.assertEqual(json.loads(out), {"error": "unknown_page"})
+
+
+class ControlCharacterTests(PullTestCase):
+    """No command an agent runs without --json prints a control character
+    other than a line break or a tab, whatever a reader sent."""
+
+    TEXT = "line one\u001b[2J\u001b[H\nline two\u009b31m\rend\u0007"
+
+    def control(self, text: str) -> set[str]:
+        return {c for c in text if unicodedata.category(c) == "Cc" and c not in "\n\t"}
+
+    def test_a_comment_s_control_characters_never_reach_the_terminal(self):
+        self.pull("hermes")
+        self.comment(self.TEXT)
+        rc, out, err = self.agent("pull", "--owner", "hermes")
+        self.assertEqual(rc, 0, err)
+        self.assertEqual(self.control(out), set())
+        self.assertIn("line one [2J [H\nline two 31m end \n", out)
 
 
 class ResolvedThreadTests(PullTestCase):
