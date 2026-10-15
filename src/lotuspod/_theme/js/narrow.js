@@ -309,8 +309,9 @@
 
     // Open a view in the popover or the sheet, in place of what it held.
     // opener takes the focus back when it closes; anchor is what the
-    // popover sits under, or what the page scrolls above the sheet.
-    function hold(kind, view, opener, anchor) {
+    // popover sits under, or what the page scrolls above the sheet. Held
+    // still, the page does not scroll for it.
+    function hold(kind, view, opener, anchor, still) {
       if (held.view) {
         release(false, false, kind);
       }
@@ -327,14 +328,18 @@
       } else if (view.passage) {
         made.extra.appendChild(view.passage.holder);
       }
-      popover.node.style.top = "";
+      if (!still) {
+        popover.node.style.top = "";
+      }
       made.node.hidden = false;
       made.node.classList.add(NAMES[kind] + "--open");
       made.body.scrollTop = 0;
       over.sync();
       if (kind === "sheet") {
         lift();
-        clear(held.anchor);
+        if (!still) {
+          clear(held.anchor);
+        }
       }
     }
 
@@ -507,23 +512,43 @@
 
     // Open again what over.take took, or what the panel showed, in a
     // popover or the sheet. A passage's composer is placed by its own
-    // (passages.place).
+    // (passages.place). Taken over a swap (taken.still), a view on a box
+    // the swap replaced opens on the box that replaced it, under its chip,
+    // without scrolling the page; one on a box taken away stays closed.
     over.restore = function (taken) {
       var view = taken.view;
       if (!view || view.passage) {
         return;
       }
-      if (taken.anchor && taken.anchor.isConnected) {
-        the.unfold(taken.anchor);
+      var opener = taken.opener;
+      var anchor = taken.anchor;
+      if (view.box && !view.box.isConnected) {
+        var box = the.standsFor(view.box);
+        if (!box) {
+          return;
+        }
+        view = { box: box };
+      }
+      if (anchor && !anchor.isConnected) {
+        anchor = view.thread ? the.anchorOf(view.thread) : view.box.querySelector("summary");
+        if (!anchor) {
+          return;
+        }
+        if (!opener || !opener.isConnected) {
+          opener = anchor;
+        }
+      }
+      if (anchor && !taken.still) {
+        the.unfold(anchor);
       }
       if (view.box && panel.mode === "sheet" && !taken.writing) {
         // The sheet shows one thread at a time: a section's newest open
         // one, else its form.
         var newest = newestOwn(view.box);
-        hold("sheet", newest ? { thread: newest } : view, taken.opener,
-          newest ? the.anchorOf(newest) : taken.anchor);
+        hold("sheet", newest ? { thread: newest } : view, opener,
+          newest ? the.anchorOf(newest) : anchor, taken.still);
       } else {
-        hold(panel.mode, view, taken.opener, taken.anchor);
+        hold(panel.mode, view, opener, anchor, taken.still);
       }
     };
 

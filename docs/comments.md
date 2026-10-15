@@ -257,13 +257,20 @@ holding the focus is held back: it keeps its old text under a bar reading
 "This section changed" (or "This section was removed") with an Update button,
 which swaps it in and moves the focus to its heading, while the rest of the
 page swaps; it stays held until then, and a later publish that brings back
-its text takes the bar away. It does not
+its text takes the bar away. A page with comments updates in place too: a
+swapped section's comment box keeps its threads, its chip and its group in
+the comments panel, a thread open in the panel, a popover or the bottom sheet
+stays open, and a comment or reply not yet sent stays in its composer, text
+and images. Threads on a section the new revision removed or renamed are
+listed under "Sections that have changed", as a fresh load lists them, and
+an added section gets its own group. It does not
 swap, and shows the banner as below, when the theme or the page's policy
-changed, when either copy holds a comments box (any page that takes
-comments), or when a changed part, as it was or as it is now, holds a
-decision form, a diagram, a reference card or a table; nor when the outline
-or the sections came or went, the sections both copies have moved, or the
-references changed. A swap that fails partway reloads the page. Otherwise a
+changed, when a changed or removed part holds a passage's highlight (a
+thread's, or the words an open passage comment is on), when a removed
+section's form for a new thread holds text or images not sent, or when a
+changed part, as it was or as it is now, holds a decision form, a diagram, a
+reference card or a table; nor when the outline or the sections came or
+went, the sections both copies have moved, or the references changed. A swap that fails partway reloads the page. Otherwise a
 banner fixed over the top of the
 window, which moves no text and is announced politely, reads "A newer version
 of this page is available" with a Reload button. Reload brings the new
