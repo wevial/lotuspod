@@ -431,11 +431,9 @@ function pageSwap(): void {
   function holdSection(part: Part, fresh: Part | null): void {
     let entry = held.get(part.id);
     if (!entry) {
-      const id = part.id;
-      const made = heldBar(() => updateSection(id));
-      part.wrapper.prepend(made.bar);
-      entry = { ...made, fresh };
-      held.set(id, entry);
+      entry = { ...heldBar(() => updateSection(part.id)), fresh };
+      part.wrapper.prepend(entry.bar);
+      held.set(part.id, entry);
     }
     entry.fresh = fresh;
     entry.text.textContent = fresh ? CHANGED_TEXT : REMOVED_TEXT;
