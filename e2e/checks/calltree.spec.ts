@@ -1,10 +1,10 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 
 const URL = '/capture-calltree.html?standalone';
 test.use({ viewport: { width: 1280, height: 800 },
   extraHTTPHeaders: { 'Cf-Access-Jwt-Assertion': process.env.LOTUSPOD_TEST_ASSERTION ?? '' } });
 
-async function watch(page: Page) {
+test('scripts load without console errors or CSP violations', async ({ page }) => {
   const errors: string[] = [];
   page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
   page.on('pageerror', error => errors.push(error.message));
@@ -14,17 +14,10 @@ async function watch(page: Page) {
       (window as any).__violations.push({ blockedURI: event.blockedURI, effectiveDirective: event.effectiveDirective });
     });
   });
-  return async () => {
-    expect(errors).toEqual([]);
-    expect(await page.evaluate(() => (window as any).__violations)).toEqual([]);
-  };
-}
-
-test('scripts load without console errors or CSP violations', async ({ page }) => {
-  const clean = await watch(page);
   await page.goto(URL);
   await expect(page.locator('.calltree').first()).toBeVisible();
-  await clean();
+  expect(errors).toEqual([]);
+  expect(await page.evaluate(() => (window as any).__violations)).toEqual([]);
 });
 
 test.describe('without JavaScript', () => {
