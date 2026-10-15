@@ -61,16 +61,14 @@
 }
 
 .artifact-archive-bar {
-  align-items: baseline;
-  display: flex;
-  flex: none;
-  margin-left: auto;
-  max-width: 100%;
+  /* Its button and status line are the top bar's own flex items, so the
+     line can give way to the room the bar has left. */
+  display: contents;
 }
 
 /* The review sheet's bar keeps its own margin-left: auto; after the archive
-   bar, that margin would split the free room between the two, so it sits
-   right beside it instead. */
+   button, that margin would split the free room between the two, so it
+   sits right beside it instead. */
 .artifact-archive-bar ~ .artifact-review-bar {
   margin-left: 0;
 }
@@ -82,11 +80,12 @@
   border-radius: var(--radius-pill);
   color: var(--color-pale-lavender);
   cursor: pointer;
+  flex: none;
   font: inherit;
   font-family: var(--font-body);
   font-size: 0.8rem;
   line-height: 1.4;
-  margin: 0;
+  margin: 0 0 0 auto;
   padding: 0.1rem 0.75rem;
 }
 
@@ -102,20 +101,39 @@
 }
 
 /* Empty, the live region takes no width; a message longer than the bar
-   holds ends in an ellipsis, its whole text in its title. */
+   has room for gives way first, ending in an ellipsis, its whole text in
+   its title. */
 .artifact-archive-status {
   color: var(--color-muted-lavender);
+  flex: 0 1000 auto;
   font-family: var(--font-body);
   font-size: 0.8rem;
-  margin-left: 0.6rem;
+  margin-left: 0.1rem;
   max-width: 22rem;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .artifact-archive-status:empty {
-  margin-left: 0;
+  margin-left: -0.5rem;
+}
+
+/* With the review sheet's bar beside it, at any width, the title gives way
+   next, then Next open's words to an ellipsis; the button and the count
+   stay whole. With no question open the count has nothing to give way. */
+.artifact-topbar:has(.artifact-archive-bar ~ .artifact-review-bar) .artifact-topbar-title {
+  flex-shrink: 1000;
+}
+
+.artifact-archive-bar ~ .artifact-review-bar {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.artifact-archive-bar ~ .artifact-review-bar:not(:has(.artifact-review-next:not([hidden]))) {
+  flex: none;
 }
 
 @media (max-width: 40rem) {
@@ -126,16 +144,10 @@
 
   .artifact-archive-status {
     font-size: 0.75rem;
-    max-width: 9rem;
   }
 
-  /* With the review sheet's bar beside it, the title gives way first (and
-     leaves while Next open shows), then the brand and Next open's words to
-     an ellipsis; the button and the count stay whole. */
-  .artifact-topbar:has(.artifact-archive-bar ~ .artifact-review-bar) .artifact-topbar-title {
-    flex-shrink: 1000;
-  }
-
+  /* Narrow, the title leaves while Next open shows, and the brand gives
+     way to an ellipsis too. */
   .artifact-topbar:has(.artifact-archive-bar ~ .artifact-review-bar .artifact-review-next:not([hidden])) .artifact-topbar-sep,
   .artifact-topbar:has(.artifact-archive-bar ~ .artifact-review-bar .artifact-review-next:not([hidden])) .artifact-topbar-title {
     display: none;
@@ -143,17 +155,8 @@
 
   .artifact-topbar:has(.artifact-archive-bar ~ .artifact-review-bar) .artifact-topbar-brand {
     flex: 0 4 auto;
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
-  }
-
-  .artifact-archive-bar ~ .artifact-review-bar {
-    flex: 0 1 auto;
-    min-width: 0;
-  }
-
-  /* With no question open the count alone has nothing to give way. */
-  .artifact-archive-bar ~ .artifact-review-bar:not(:has(.artifact-review-next:not([hidden]))) {
-    flex: none;
   }
 }

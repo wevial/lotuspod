@@ -188,6 +188,43 @@ async function press(page: Page, label: string) {
   await settle(page);
 }
 
+// The top bar is --topbar-height tall, nothing in it overflows, and the
+// button, Next open and the count are each one line inside the window, the
+// button left of Next open.
+async function fits(page: Page, when: string) {
+  const sizes = await page.evaluate(() => {
+    const px = (node: Element) => node.getBoundingClientRect();
+    const top = document.querySelector('.artifact-topbar')!;
+    const probe = document.createElement('div');
+    probe.style.height = 'var(--topbar-height)';
+    document.body.appendChild(probe);
+    const height = probe.getBoundingClientRect().height;
+    probe.remove();
+    const one = (selector: string) => {
+      const node = top.querySelector(selector)!;
+      const box = px(node);
+      const line = parseFloat(getComputedStyle(node).lineHeight) ||
+        parseFloat(getComputedStyle(node).fontSize) * 1.4;
+      return { left: box.left, right: box.right, lines: node.getClientRects().length, tall: box.height, line };
+    };
+    return {
+      height, bar: px(top).height, width: window.innerWidth,
+      barScroll: top.scrollWidth, barClient: top.clientWidth,
+      button: one('button.artifact-archive'), next: one('a.artifact-review-next'),
+      count: one('.artifact-review-count'),
+    };
+  });
+  expect(sizes.bar, `${when}: .artifact-topbar is --topbar-height tall`).toBeCloseTo(sizes.height, 0);
+  expect(sizes.barScroll, `${when}: nothing overflows the top bar`).toBeLessThanOrEqual(sizes.barClient);
+  for (const [name, part] of Object.entries({ button: sizes.button, next: sizes.next, count: sizes.count })) {
+    expect(part.left, `${when}: ${name} starts in the viewport`).toBeGreaterThanOrEqual(0);
+    expect(part.right, `${when}: ${name} ends in the viewport`).toBeLessThanOrEqual(sizes.width);
+    expect(part.lines, `${when}: ${name} is one box`).toBe(1);
+    expect(part.tall, `${when}: ${name} is one line`).toBeLessThan(part.line * 2);
+  }
+  expect(sizes.button.right, `${when}: the button is left of Next open`).toBeLessThanOrEqual(sizes.next.left);
+}
+
 let thread = 0;
 let reply = '';
 
@@ -366,65 +403,52 @@ test.describe.serial('an archived page', () => {
     }
   });
 
-  test.describe('signed in as its owner, 360 px wide', () => {
-    test.use({ extraHTTPHeaders: SIGNED_IN, viewport: { width: 360, height: 780 } });
+  // The top bar with the owner's button and the review sheet's bar both
+  // drawn, at the narrow width and just above where the narrow rules start,
+  // with a long open question; then with a long message beside the button
+  // after a press the site refuses.
+  for (const width of [360, 641]) {
+    test.describe(`signed in as its owner, ${width} px wide`, () => {
+      test.use({ extraHTTPHeaders: SIGNED_IN, viewport: { width, height: 780 } });
 
-    test('the top bar keeps its height with the button and the review bar both drawn', async ({ page }) => {
-      const errors = await watch(page);
-      publish(BAR, ['# A plan for the pond with a long title that the bar cuts short', '',
-        'Still open.', '', '## Decisions for the maintainer', '',
-        '| # | Question | Options | Default |', '|---|---|---|---|',
-        '| 1 | Which pump? | Solar / Mains | |', '']);
-      const read = page.waitForResponse((response) =>
-        new URL(response.url()).pathname === '/api/archive' && response.request().method() === 'GET');
-      await page.goto(`/${BAR}.html?standalone`);
-      await read;
-      const bar = page.locator('.artifact-topbar');
-      const button = parts(page).button;
-      const next = bar.locator('a.artifact-review-next');
-      const count = bar.locator('.artifact-review-count');
-      await expect(button).toHaveText('Archive');
-      await expect(next).toBeVisible();
-      await expect(count).toBeVisible();
-      // The archive bar comes before the review bar, side by side at the right.
-      expect(await bar.evaluate((node) => Array.from(node.children, (child) => child.className)
-        .filter((name) => /artifact-(archive|review)-bar/.test(name))))
-        .toEqual(['artifact-archive-bar', 'artifact-review-bar']);
-      const sizes = await page.evaluate(() => {
-        const px = (node: Element) => node.getBoundingClientRect();
-        const top = document.querySelector('.artifact-topbar')!;
-        const probe = document.createElement('div');
-        probe.style.height = 'var(--topbar-height)';
-        document.body.appendChild(probe);
-        const height = probe.getBoundingClientRect().height;
-        probe.remove();
-        const one = (selector: string) => {
-          const node = top.querySelector(selector)!;
-          const box = px(node);
-          const line = parseFloat(getComputedStyle(node).lineHeight) ||
-            parseFloat(getComputedStyle(node).fontSize) * 1.4;
-          return { left: box.left, right: box.right, lines: node.getClientRects().length,
-            tall: box.height, line, scroll: node.scrollHeight, client: node.clientHeight };
-        };
-        return {
-          height, bar: px(top).height, width: window.innerWidth,
-          barScroll: top.scrollWidth, barClient: top.clientWidth,
-          button: one('button.artifact-archive'), next: one('a.artifact-review-next'),
-          count: one('.artifact-review-count'),
-        };
+      test('the top bar keeps its height with the button and the review bar both drawn', async ({ page }) => {
+        const errors = await watch(page);
+        publish(BAR, ['# A plan for the pond with a long title that the bar cuts short', '',
+          'Still open.', '', '## Decisions for the maintainer', '',
+          '| # | Question | Options | Default |', '|---|---|---|---|',
+          '| 1 | Which pump should we use during winter? | Solar / Mains | |', '']);
+        const read = page.waitForResponse((response) =>
+          new URL(response.url()).pathname === '/api/archive' && response.request().method() === 'GET');
+        await page.goto(`/${BAR}.html?standalone`);
+        await read;
+        const bar = page.locator('.artifact-topbar');
+        const button = parts(page).button;
+        const next = bar.locator('a.artifact-review-next');
+        const count = bar.locator('.artifact-review-count');
+        await expect(button).toHaveText('Archive');
+        await expect(next).toBeVisible();
+        await expect(count).toBeVisible();
+        // The archive bar comes before the review bar, side by side at the right.
+        expect(await bar.evaluate((node) => Array.from(node.children, (child) => child.className)
+          .filter((name) => /artifact-(archive|review)-bar/.test(name))))
+          .toEqual(['artifact-archive-bar', 'artifact-review-bar']);
+        await fits(page, 'drawn');
+
+        await page.route((url) => url.pathname === '/api/archive', (route) =>
+          route.request().method() === 'POST'
+            ? route.fulfill({ status: 500, json: { error: 'stale_page' } })
+            : route.continue());
+        await button.click();
+        const status = bar.locator('.artifact-archive-status');
+        const said = 'The page was not archived (stale_page). Try again.';
+        await expect(status).toHaveText(said);
+        await expect(status).toHaveAttribute('title', said);
+        await expect(button).toBeEnabled();
+        await fits(page, 'after a refused press');
+        expect(errors).toEqual([]);
       });
-      expect(sizes.bar, '.artifact-topbar is --topbar-height tall').toBeCloseTo(sizes.height, 0);
-      expect(sizes.barScroll, 'nothing overflows the top bar').toBeLessThanOrEqual(sizes.barClient);
-      for (const [name, part] of Object.entries({ button: sizes.button, next: sizes.next, count: sizes.count })) {
-        expect(part.left, `${name} starts in the viewport`).toBeGreaterThanOrEqual(0);
-        expect(part.right, `${name} ends in the viewport`).toBeLessThanOrEqual(sizes.width);
-        expect(part.lines, `${name} is one box`).toBe(1);
-        expect(part.tall, `${name} is one line`).toBeLessThan(part.line * 2);
-      }
-      expect(sizes.button.right, 'the button is left of Next open').toBeLessThanOrEqual(sizes.next.left);
-      expect(errors).toEqual([]);
     });
-  });
+  }
 
   // Last, so a failure here leaves the checks before it run.
   test.describe('signed in as its owner, as the page loads', () => {
