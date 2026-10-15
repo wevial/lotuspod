@@ -1011,15 +1011,11 @@ class Api:
 
     def _post_comment(self, fields: dict, actor: Mapping) -> dict:
         row = self._store_comment(fields, actor)
+        self.changed("comment", row["page"])
         return routing.public(row, routing.last_pulls(self.database), self.window, self.clock(),
                               self.database.responder_paused())
 
     def _store_comment(self, fields: dict, actor: Mapping) -> dict:
-        row = self._write_comment(fields, actor)
-        self.changed("comment", row["page"])
-        return row
-
-    def _write_comment(self, fields: dict, actor: Mapping) -> dict:
         names = _image_names(fields["images"]) if "images" in fields else None
         # A comment with images may say nothing more.
         least = 0 if names else 1
