@@ -513,7 +513,7 @@ class ControlCharacterTests(PullTestCase):
     """No command an agent runs without --json prints a control character
     other than a line break or a tab, whatever a reader sent."""
 
-    TEXT = "line one\u001b[2J\u001b[H\nline two\u009b31m\rend\u0007"
+    TEXT = "@hermes line one\u001b[2J\u001b[H\nline two\u009b31m\rend\u0007"
 
     def control(self, text: str) -> set[str]:
         return {c for c in text if unicodedata.category(c) == "Cc" and c not in "\n\t"}
@@ -539,7 +539,7 @@ class ControlCharacterTests(PullTestCase):
         self.pull("hermes")
         root = self.comment(self.TEXT)
         reply = self.reply(root["id"], self.TEXT)
-        shown = "line one [2J [H\nline two 31m end "
+        shown = "@hermes line one [2J [H\nline two 31m end "
         pulled = self.markdown("pull", "--owner", "hermes")
         self.assertIn(f"```\n{shown}\n```\n", pulled)
         listed = self.markdown("show", "plan")
@@ -556,7 +556,7 @@ class ControlCharacterTests(PullTestCase):
     def test_a_passage_s_control_characters_print_as_spaces(self):
         self.pull("hermes")
         quote = {"exact": "may\u001b[2J freeze", "prefix": "The pond\u001b[2J ", "suffix": "."}
-        self.comment("Freeze how hard?", quote=quote)
+        self.comment("@hermes Freeze how hard?", quote=quote)
         out = self.markdown("pull", "--owner", "hermes")
         self.assertNotIn("\u001b", out)
         passages = PassageTests.PASSAGE.findall(out)
@@ -571,7 +571,8 @@ class ControlCharacterTests(PullTestCase):
         note = "warm\u001b]0;owned\u0007 enough"
         self.pull("hermes")
         self.answer(note=note)
-        out = self.markdown("pull", "--owner", "hermes")
+        # The note's thread names no one, so it is the responder's.
+        out = self.markdown("pull", "--owner", "responder")
         rc, listed, err = run_cli("answers", "plan", "--db", str(self.db_path),
                                   "--out-dir", str(self.out_dir))
         self.assertEqual(rc, 0, err)
@@ -579,10 +580,9 @@ class ControlCharacterTests(PullTestCase):
         for text in (out, listed):
             self.assertFalse({"\u001b", "\u0007"} & set(text))
             self.assertIn("warm ]0;owned  enough", text)
-        items = self.json_items()
-        [item] = [item for item in items if item["kind"] == "answer"]
+        [item] = [item for item in self.json_items() if item["kind"] == "answer"]
         self.assertEqual(item["answer"]["note"], note)
-        [thread] = [item for item in items if item["kind"] == "comment"]
+        [thread] = [item for item in self.json_items("responder") if item["kind"] == "comment"]
         self.assertEqual(thread["comment"]["text"], note)
         rc, raw, err = run_cli("answers", "plan", "--json", "--db", str(self.db_path),
                                "--out-dir", str(self.out_dir))
@@ -599,7 +599,7 @@ class ControlCharacterTests(PullTestCase):
                                 "--local", "--owner", "hermes", "--credential", str(self.desk))
         self.assertEqual(rc, 0, err)
         self.pull("hermes")
-        self.comment("Cold enough?", page="pond", section="pond")
+        self.comment("@hermes Cold enough?", page="pond", section="pond")
         out = self.markdown("pull", "--owner", "hermes")
         self.assertNotIn("\u001b", out)
         [heading] = [line for line in out.splitlines() if line.startswith("## 1. Comment")]

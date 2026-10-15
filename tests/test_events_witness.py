@@ -44,7 +44,7 @@ class EventsWitness(Site):
     def test_writes_publish_visibility_and_shutdown(self):
         stream = self.stream()
         self.pull(self.hermes, "hermes")
-        root = self.comment("pond-review", "findings", "Please check.")
+        root = self.comment("pond-review", "findings", "@hermes Please check.")
         self.tick(stream, "comment")
         self.pull(self.hermes, "hermes")
         code, claim = self.agent(self.hermes, "claim", str(root["id"]))

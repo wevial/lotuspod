@@ -84,7 +84,7 @@ lotuspod comments reopen 7                     # POST /v1/threads/7/reopen
 nothing and settles nothing, so the same items come back on every pull until
 they are claimed or acknowledged. A comment with no mention is the
 responder's, on the handle's own pages too: the handle reads only what names
-it, and its inbox (see [The owner's inbox](#the-owner-s-inbox)) for what the
+it, and its inbox (see [The owner inbox](#the-owner-inbox)) for what the
 responder queued for it. Items are, comments first, oldest first:
 
 - `{"kind": "comment", "comment", "thread", "omitted", "resolution", "page"}` for each
@@ -424,7 +424,7 @@ done
 A loop that pulls less often than the owner window is not listening: comments
 naming it show as `unavailable` until it pulls again.
 
-## The owner's inbox
+## The owner inbox
 
 A reader's comment with no mention goes to the default responder, on an
 owner's page too. When it asks the owner to *do* something (file a ticket,
@@ -525,8 +525,8 @@ claimed first is skipped) and runs the agent command once:
   ASK` only when the comment asks the page's owner to act, never for a
   question it answered. With that line, the responder takes it off, ends the
   reply with "I've queued this for OWNER: ASK" and puts ASK, with the page
-  and the comment, in the owner's inbox (see [The owner's
-  inbox](#the-owner-s-inbox)), once per comment. The ask travels with the
+  and the comment, in the owner's inbox (see [The owner
+  inbox](#the-owner-inbox)), once per comment. The ask travels with the
   reply (its `ask`), and serve queues it in the reply's own transaction, so
   only a reply that is stored queues anything. serve adds the "queued"
   notice itself, naming the owner it queued the ask for, so a page that
