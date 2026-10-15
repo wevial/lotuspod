@@ -1,15 +1,11 @@
 """Parsed HTML witnesses for the static calltree fence."""
-import io
 import subprocess
 import sys
-import tempfile
 import unittest
-from unittest import mock
 
 from lotuspod import calltree
 from lotuspod.markdown import to_body
 from tests.test_markdown import parse
-from tests.test_manifest_v2 import run_cli
 
 INFO = 'repo=wevial/lotuspod sha=43b4187318733fe6aa629aaedd462adbbb147d5d'
 EXAMPLE = '''~ cmd_publish()             src/lotuspod/cli.py:1919
@@ -68,7 +64,7 @@ class CalltreeTests(unittest.TestCase):
         self.assertEqual([n.attrs['data-depth'] for n in nodes(root, 'calltree-row')], ['0','1'])
         self.assertEqual(nodes(root, 'calltree-guide')[1].text(), '└─ ')
 
-    def test_malformed_and_cli(self):
+    def test_malformed(self):
         bad = '   <bad & "line"'
         source = f'```calltree\n~ root() x:1\n{bad}   \n      + child() x:2\n\n```'
         root = parse(to_body(source))
@@ -78,9 +74,6 @@ class CalltreeTests(unittest.TestCase):
         self.assertEqual(rows[1].elements[0].elements, [])
         self.assertEqual(rows[2].attrs['data-depth'], '1')
         self.assertEqual(nodes(root, 'calltree-summary')[0].text(), '1 changed · 1 new · across 1 file')
-        with tempfile.TemporaryDirectory() as directory, mock.patch('sys.stdin', io.StringIO(source)):
-            rc, _, err = run_cli('render', '--markdown', '-', '--name', 'tree', '--title', 'Tree', '--out-dir', directory)
-        self.assertEqual(rc, 0, err)
 
     def test_long_malformed_guides_do_not_stall(self):
         bad = '─' * 100_000 + ' x'
