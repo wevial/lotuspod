@@ -501,12 +501,20 @@ comment's opening words, its status ("✓ Answered", "HANDLE is writing",
 "Waiting for HANDLE", "HANDLE couldn't answer") and its reply count. One entry
 is open at a time and holds the whole thread as a box would, with a "Resolve"
 control; opening one scrolls the page to its section's chip, opening the
-section first if it is folded. Each group ends in "Comment on this section"
-("Comment on this page" for the whole page's), which unfolds the box's own
-form in the panel. "Comment on a section" lists "This page" first on a page
-with a box for the whole page, then each section in page order. The page remembers whether the
+section first if it is folded. A group draws no control of its own for a
+new thread: the panel starts one from above its groups. "Comment on this
+page", on a page with a box for the whole page, unfolds that box's own form
+in the "This page" group; "Comment on a section" lists "This page" first on
+such a page, then each section in page order, and unfolds the chosen box's
+form in its group. On an archived page both are disabled. An open form has a
+"Cancel", and Escape in it does the same: the form folds, keeping what was
+typed and attached, the group is unlisted if it holds no threads, and the
+focus goes back to the button that started it; nothing is posted. In any
+comment composer (a box's form, a reply, a passage's), Cmd+Enter (Ctrl+Enter
+off macOS) sends as its button does, and does nothing while it saves; Enter
+alone adds a line. The page remembers whether the
 reader left the panel open or folded in `localStorage` (a page whose storage
-throws starts folded), and Escape folds it.
+throws starts folded), and Escape elsewhere in it folds it.
 
 The open panel is resized from a handle on its left edge, a separator named
 "Resize comments": dragged, its edge follows the pointer, and focused, Left

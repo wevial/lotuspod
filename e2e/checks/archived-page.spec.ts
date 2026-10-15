@@ -111,6 +111,7 @@ function parts(page: Page) {
     fold: aside.getByRole('button', { name: 'Fold comments' }),
     closed: aside.locator('.artifact-comments-closed'),
     pick: aside.locator('button.artifact-comments-pick'),
+    onPage: aside.locator('button.artifact-comments-on-page'),
     pill: page.locator('button.artifact-passage-pill'),
     fieldset: page.locator('form.artifact-decision fieldset'),
     ask: page.locator('form.artifact-decision button.artifact-decision-ask'),
@@ -248,6 +249,8 @@ test.describe.serial('an archived page', () => {
       await expect(side.closed).toHaveText(CLOSED);
       await expect(side.pick).toBeVisible();
       await expect(side.pick).toBeDisabled();
+      await expect(side.onPage).toBeVisible();
+      await expect(side.onPage).toBeDisabled();
       const news = await side.aside.locator('button.artifact-comments-new').evaluateAll((nodes) =>
         nodes.map((node) => (node as HTMLButtonElement).disabled));
       expect(news.length).toBeGreaterThan(0);

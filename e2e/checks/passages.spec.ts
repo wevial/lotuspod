@@ -605,6 +605,30 @@ test.describe('signed in', () => {
     await seen.clean();
   });
 
+  test('ControlOrMeta+Enter in the composer posts the passage thread with its quote and closes it', async ({ page }) => {
+    const seen = await watch(page);
+    const ids = new Set<number>();
+    await ownThreads(page, ids);
+    await load(page);
+    await choose(page, '.artifact-body p', 'pump stops when', 'pump stops when');
+    await expect(pill(page)).toBeVisible();
+    await page.keyboard.press('Control+Alt+KeyM');
+    const open = composer(page);
+    const field = open.locator('textarea');
+    await expect(field).toBeFocused();
+    await field.fill('When exactly?');
+    const sent = page.waitForRequest((request) =>
+      request.method() === 'POST' && new URL(request.url()).pathname === '/api/comments');
+    await field.press('ControlOrMeta+Enter');
+    const body = (await sent).postDataJSON();
+    expect(body.text).toBe('When exactly?');
+    expect(body.quote.exact).toBe('pump stops when');
+    await expect.poll(() => ids.size).toBe(1);
+    await expect(composer(page)).toHaveCount(0);
+    await expect(pending(page)).toHaveCount(0);
+    await seen.clean();
+  });
+
   test('a page changed since it loaded keeps the composer and its text and says to reload', async ({ page }) => {
     const seen = await watch(page, ['409 (Conflict)']);
     const ids = new Set<number>();
