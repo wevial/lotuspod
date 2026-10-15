@@ -25,11 +25,15 @@
   // in an index tab not shown, which keeps its "new version" dot until it is
   // opened; live.previous() is a promise of the revision that route answers
   // the reader last opened the page at, null the first time or on any failure.
+  // live.note(text) shows one line in the banner's place for NOTED ms, as a
+  // swap says what it changed; a banner shown takes it away, and none shows
+  // beside one.
   function livePage() {
     var REVISION = "/api/revision";
     var SEEN = "/api/seen";
     var KEPT = "lotuspod:reload:";
     var CHECK = 60000;
+    var NOTED = 6000;
     var NEWER = "A newer version of this page is available";
     var live = {
       seen: function () {},
@@ -39,6 +43,7 @@
       previous: function () { return Promise.resolve(null); },
       revision: function () { return own; },
       swapWith: function () {},
+      note: function () {},
     };
     var stamp = document.querySelector('meta[name="lotuspod:revision"]');
     var own = stamp ? stamp.content.trim() : "";
@@ -117,8 +122,31 @@
     region.setAttribute("role", "status");
     document.body.appendChild(region);
     var button = null;
+    var note = null;
+    var noting = null;
+
+    function unnote() {
+      clearTimeout(noting);
+      noting = null;
+      if (note) {
+        note.remove();
+        note = null;
+      }
+    }
+
+    live.note = function (text) {
+      unnote();
+      // Never beside the banner, which already says the page is behind.
+      if (region.querySelector(".artifact-live-page-banner")) {
+        return;
+      }
+      note = element("div", "artifact-live-page-note", text);
+      region.appendChild(note);
+      noting = setTimeout(unnote, NOTED);
+    };
 
     function show() {
+      unnote();
       var banner = element("div", "artifact-live-page-banner");
       var dot = element("span", "artifact-live-page-dot", "·");
       dot.setAttribute("aria-hidden", "true");
