@@ -142,6 +142,66 @@ class LapsedDoneTests(InboxTestCase):
         self.assertEqual([r["text"] for r in thread["replies"]], ["Filed."])
 
 
+class StaleResponderTests(InboxTestCase):
+    """Two responders: A's claim lapses while its agent runs, B answers,
+    then A's reply arrives. Only a stored reply's ask reaches the inbox."""
+
+    claim_sec = 1
+
+    def prepare(self) -> None:
+        super().prepare()
+        database = db.Database(self.db_path)
+        for name in ("ra", "rb"):
+            path = self.work / f"{name}.token"
+            machine.create_credential(database, name, ["responder"],
+                                      ["pull", "claim", "reply"], path)
+            self.creds[name] = path
+
+    def ask(self, name: str, target: str, body: dict | None = None) -> tuple[int, dict]:
+        return machine.request(self.socket_path, machine.read_token(self.creds[name]),
+                               "POST", target, body)
+
+    def race(self, b_ask: str | None) -> tuple[dict, tuple[int, dict]]:
+        row = self.comment("Please file a ticket.", page="ops")
+        status, a = self.ask("ra", f"/v1/comments/{row['id']}/claim")
+        self.assertEqual(status, 200, a)
+        time.sleep(2)
+        status, b = self.ask("rb", f"/v1/comments/{row['id']}/claim")
+        self.assertEqual(status, 200, b)
+        body = {"claimToken": b["claimToken"], "idempotencyKey": "b-1", "text": "B's answer."}
+        if b_ask is not None:
+            body["ask"] = b_ask
+        status, replied = self.ask("rb", f"/v1/comments/{row['id']}/reply", body)
+        self.assertEqual(status, 200, replied)
+        late = self.ask("ra", f"/v1/comments/{row['id']}/reply", {
+            "claimToken": a["claimToken"], "idempotencyKey": "a-1", "text": "A's answer.",
+            "ask": "ask A"})
+        return row, late
+
+    def test_a_stale_reply_never_overwrites_the_ask_that_stands(self):
+        _row, late = self.race("ask B")
+        self.assertEqual(late, (409, {"error": "not_claimed"}))
+        self.assertEqual([item["ask"] for item in self.pulled("one") if item["kind"] == "ask"],
+                         ["ask B"])
+
+    def test_a_stale_reply_queues_nothing_after_an_answer_without_an_ask(self):
+        _row, late = self.race(None)
+        self.assertEqual(late, (409, {"error": "not_claimed"}))
+        self.assertEqual(self.asks("one"), [])
+
+    def test_a_retried_reply_queues_its_ask_once(self):
+        row = self.comment("Please file a ticket.", page="ops")
+        status, a = self.ask("ra", f"/v1/comments/{row['id']}/claim")
+        self.assertEqual(status, 200, a)
+        body = {"claimToken": a["claimToken"], "idempotencyKey": "a-1", "text": "Queued.",
+                "ask": "ask A"}
+        for _ in range(2):
+            status, replied = self.ask("ra", f"/v1/comments/{row['id']}/reply", body)
+            self.assertEqual(status, 200, replied)
+        [item] = [item for item in self.pulled("one") if item["kind"] == "ask"]
+        self.assertEqual((item["ask"], item["comment"]["id"]), ("ask A", row["id"]))
+
+
 class DoneTests(InboxTestCase):
     def test_a_key_used_in_another_thread_closes_nothing(self):
         first, one = self.queue("Please file a ticket.", "file it")

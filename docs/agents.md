@@ -525,8 +525,10 @@ claimed first is skipped) and runs the agent command once:
   question it answered. With that line, the responder takes it off, ends the
   reply with "I've queued this for OWNER: ASK" and puts ASK, with the page
   and the comment, in the owner's inbox (see [The owner's
-  inbox](#the-owners-inbox)) before replying, once per comment; on a page
-  with no owner the reply says there is no one to queue it for.
+  inbox](#the-owners-inbox)), once per comment. The ask travels with the
+  reply (its `ask`), and serve queues it in the reply's own transaction, so
+  only a reply that is stored queues anything; on a page with no owner the
+  reply says there is no one to queue it for.
 - The comment is `failed`, with the reason on the page and nothing
   published or replied, when the command exits non-zero, prints nothing or
   runs past `--timeout` (default 600 seconds), when the page changed while it

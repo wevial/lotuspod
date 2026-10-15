@@ -29,7 +29,7 @@ credential that exists and is not revoked:
                                         reader's POST /api/media stores them
                                         (needs reply)
     POST /v1/comments/ID/reply          {claimToken, idempotencyKey, text[,
-                                        revision, model, images]}: answer it
+                                        revision, model, images, ask]}: answer it
                                         under the claim, once per key (needs
                                         reply)
     POST /v1/comments/ID/release        {claimToken}: route it again (needs claim)
@@ -59,10 +59,13 @@ same items come back until they are claimed or acknowledged. The pull is
 the only way a page's kept source leaves the host's files.
 
 An inbox item is what the responder queued for a page's owner from a
-reader's comment it answered (lotuspod.responder): {kind: ask, id, owner,
-ask, createdAt, comment, thread, page}, the comment as the threads routes
-show it, the id of its thread's first comment, and the page {name, title,
-owner, revision}, its title and revision "" once serve no longer answers it. The
+reader's comment it answered (lotuspod.responder): a reply's `ask`, 1 to
+MAX_ASK characters, goes into the page owner's inbox in the reply's own
+transaction, so a refused reply queues nothing, and a page with no owner
+queues nothing. An item is {kind: ask, id, owner, ask, createdAt,
+comment, thread, page}, the comment as the threads routes show it, the id
+of its thread's first comment, and the page {name, title, owner,
+revision}, its title and revision "" once serve no longer answers it. The
 inbox lists each item not done and not under a current claim, then each
 answer on HANDLE's pages it has not acknowledged, as the pull gives it,
 the page without its source; an answer leaves the inbox once acknowledged
@@ -223,6 +226,8 @@ MAX_KEY = 200
 MAX_REASON = 200
 # Characters of the model a reply names.
 MAX_MODEL = 40
+# Characters of the ask a reply queues for the page's owner.
+MAX_ASK = 300
 # Characters of where a recorded answer was given.
 MAX_SOURCE = 200
 CLAIM_BYTES = 32
@@ -766,7 +771,8 @@ class Routes:
                     "release": {"claimToken"},
                     "fail": {"claimToken", "reason"}}[action]
         api._keys(fields, required,
-                  frozenset({"revision", "model", "images"} if action == "reply" else ()))
+                  frozenset({"revision", "model", "images", "ask"}
+                            if action == "reply" else ()))
         token = token_hash(api._text(fields["claimToken"], 1, MAX_KEY))
         name = credential["name"]
         if action == "release":
@@ -786,10 +792,13 @@ class Routes:
         model = fields.get("model")
         if "model" in fields and not is_model(model):
             raise api.Refusal(HTTPStatus.BAD_REQUEST, "invalid_body")
+        ask = fields.get("ask")
+        if ask is not None:
+            ask = api._text(ask, 1, MAX_ASK)
         images = self._images(fields)
         row = self.database.reply(comment_id, credential=name, token_hash=token, key=key,
                                   text=text, revision=revision, model=model, clock=self.clock,
-                                  page_of=self._current, images_of=images)
+                                  page_of=self._current, images_of=images, ask=ask)
         return self._shown(row)
 
     def _thread_handle(self, credential: Mapping, root: int) -> tuple[api.Page, str]:
@@ -840,12 +849,13 @@ class Routes:
         return self._shown(row)
 
     def _current(self, name: str) -> dict | None:
-        """The page's revision, as a pull gives it, and its sections; None
-        when serve would not answer it."""
+        """The page's revision, as a pull gives it, its sections and its
+        owner; None when serve would not answer it."""
         page = self._page(name)
         if page is None:
             return None
-        return {"revision": self.describe(page)["revision"], "sections": page.sections}
+        return {"revision": self.describe(page)["revision"], "sections": page.sections,
+                "owner": page.owner}
 
     def _claim(self, credential: Mapping, comment_id: int) -> dict:
         found = self.database.comment(comment_id)

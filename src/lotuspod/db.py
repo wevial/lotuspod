@@ -817,7 +817,8 @@ class Database:
     def reply(self, comment_id: int, *, credential: str, token_hash: str, key: str,
               text: str, revision: str | None, clock: Callable[[], float],
               page_of: Callable[[str], Mapping | None], model: str | None = None,
-              images_of: Callable[[], Sequence[Mapping]] | None = None) -> dict:
+              images_of: Callable[[], Sequence[Mapping]] | None = None,
+              ask: str | None = None) -> dict:
         """Store credential's reply to comment_id under its claim, naming
         model as its writer when it is not None, with the images images_of()
         gives, each {name, width, height}, as a reader's comment keeps them;
@@ -837,7 +838,10 @@ class Database:
         and not one credential republished the page at for this key (see
         record_publish), which stays true once the page moves on.
         The reply joins the comment's thread, the comment becomes answered
-        and the claim ends.
+        and the claim ends. With ask, the page's owner (page_of's `owner`)
+        gets it in its inbox as queue() puts it there, in the same
+        transaction: an ask is queued only with a reply that is stored, and
+        a page with no owner queues nothing.
         """
         with self._connect() as conn, _write(conn):
             stored = conn.execute(
@@ -872,6 +876,9 @@ class Database:
                 " WHERE id = ?", (ANSWERED, comment_id),
             )
             _record(conn, "reply", found, credential, handle, key)
+            if ask is not None and page.get("owner"):
+                _queue(conn, owner=page["owner"], page=found["page"], comment=comment_id,
+                       ask=ask)
             return _comment(_row(conn, cursor.lastrowid))
 
     def follow_up(self, root: int, *, credential: str, handle: str, key: str, text: str,
@@ -1226,14 +1233,7 @@ class Database:
         becomes this one (the reply that promised it is the one that stands);
         once done, nothing changes."""
         with self._connect() as conn, _write(conn):
-            conn.execute(
-                "INSERT INTO inbox (owner, page, comment, ask, created_at)"
-                " VALUES (?, ?, ?, ?, ?) ON CONFLICT (comment) DO UPDATE SET"
-                " ask = excluded.ask WHERE done_at IS NULL",
-                (owner, page, comment, ask, _now()),
-            )
-            row = conn.execute("SELECT * FROM inbox WHERE comment = ?", (comment,))
-            return _inbox_item(row.fetchone())
+            return _queue(conn, owner=owner, page=page, comment=comment, ask=ask)
 
     def inbox(self, owner: str, now: float) -> list[dict]:
         """owner's open items at now, oldest first: not done, and unclaimed
@@ -1468,6 +1468,19 @@ def _published(conn: sqlite3.Connection, comment_id: int, credential: str, key: 
         "SELECT 1 FROM audit WHERE action = 'publish' AND comment = ? AND credential = ?"
         " AND key = ? AND revision = ?", (comment_id, credential, key, revision),
     ).fetchone() is not None
+
+
+def _queue(conn: sqlite3.Connection, *, owner: str, page: str, comment: int,
+           ask: str) -> dict:
+    """Database.queue's work, in the caller's write transaction."""
+    conn.execute(
+        "INSERT INTO inbox (owner, page, comment, ask, created_at)"
+        " VALUES (?, ?, ?, ?, ?) ON CONFLICT (comment) DO UPDATE SET"
+        " ask = excluded.ask WHERE done_at IS NULL",
+        (owner, page, comment, ask, _now()),
+    )
+    row = conn.execute("SELECT * FROM inbox WHERE comment = ?", (comment,))
+    return _inbox_item(row.fetchone())
 
 
 def _insert_follow_up(conn: sqlite3.Connection, root: int, *, credential: str, handle: str,
