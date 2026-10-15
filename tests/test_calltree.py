@@ -6,7 +6,7 @@ from unittest import mock
 
 from lotuspod import calltree
 from lotuspod.markdown import to_body
-from tests.test_markdown import _TreeBuilder
+from tests.test_markdown import parse
 from tests.test_manifest_v2 import run_cli
 
 INFO = 'repo=wevial/lotuspod sha=43b4187318733fe6aa629aaedd462adbbb147d5d'
@@ -22,12 +22,6 @@ EXAMPLE = '''~ cmd_publish()             src/lotuspod/cli.py:1919
 └─ cmd_render()             src/lotuspod/cli.py:729'''
 GUIDES = ['', '├─ ', '├─ ', '│  └─ ', '│     └─ ', '│        ├─ ',
           '│        │  ├─ ', '│        │  └─ ', '│        └─ ', '└─ ']
-
-
-def parse(body):
-    parser = _TreeBuilder()
-    parser.feed(body)
-    return parser.root
 
 
 def nodes(root, cls):
