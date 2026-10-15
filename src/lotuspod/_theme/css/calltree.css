@@ -38,7 +38,7 @@
 .calltree-tree { white-space: pre; }
 .calltree-row[data-kind="text"] .calltree-tree { grid-column: 1 / -1; }
 .calltree-guide { color: var(--color-muted-lavender); }
-.calltree-mark { display: inline-block; width: 2ch; }
+.calltree-mark, .calltree-caret, .calltree-leaf { display: inline-block; width: 2ch; }
 .calltree .calltree-chip {
   justify-self: start;
   align-self: center;
@@ -76,10 +76,6 @@
 /* Folding (web/src/calltree.ts): a caret on each parent row, a spacer of
    its width on every other row, and the count a folded row shows. */
 .calltree-row[hidden] { display: none; }
-.calltree-caret, .calltree-leaf {
-  display: inline-block;
-  width: 2ch;
-}
 .calltree-caret {
   padding: 0;
   border: 0;
