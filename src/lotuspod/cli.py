@@ -203,7 +203,8 @@ MERMAID_ELK_DIR = "https://cdn.jsdelivr.net/npm/@mermaid-js/layout-elk@0.2.3/"
 # template writes, so a page rendered with them blank holds exactly the
 # template's own inline scripts.
 _AUTHORED_KEYS = ("title", "kicker", "date", "summary_block", "body", "outline_items", "revision",
-                  "labels", "label_tags", "refs_block")
+                  "labels", "label_tags", "refs_block", "intro_digest", "header_digest",
+                  "outline_digest")
 
 
 class _ScriptCollector(HTMLParser):
@@ -441,6 +442,16 @@ def theme_file_bytes(filename: str) -> bytes:
     if start is not None:
         parts = [*parts[:start], THEME_CLOSURE_OPEN, *parts[start:], THEME_CLOSURE_CLOSE]
     return b"".join(parts)
+
+
+def unit_digest(*parts: str) -> str:
+    """A content stamp with length framing to distinguish part boundaries."""
+    digest = hashlib.sha256()
+    for part in parts:
+        data = part.encode("utf-8")
+        digest.update(len(data).to_bytes(8, "big"))
+        digest.update(data)
+    return digest.hexdigest()[:16]
 
 
 def theme_hash() -> str:
@@ -781,7 +792,8 @@ def cmd_render(args: argparse.Namespace) -> int:
     if with_comments:
         body = comments.render_comments(body, args.name)
     # Last, so each section's box and forms fall inside its wrapper.
-    body, wrapped = sections.wrap_sections(body) if outline else (body, False)
+    body, wrapped, intro_digest = (sections.wrap_sections(body) if outline
+                                   else (body, False, unit_digest(body)))
     date = args.date or _dt.date.today().isoformat()
     # Publish stamps the time it ran; a bare render stamps nothing. The header
     # names the updated day only when it is not the created one.
@@ -795,6 +807,7 @@ def cmd_render(args: argparse.Namespace) -> int:
         "updated": updated,
         "updated_day": updated[:10] if updated[:10] != date else "",
         "summary_block": summary_block,
+        "intro_digest": intro_digest,
         **label_context(labels),
         "body": body,
         "refs_block": refs_block,
@@ -821,6 +834,11 @@ def cmd_render(args: argparse.Namespace) -> int:
         "mermaid_dir": MERMAID_DIR,
         "mermaid_elk_dir": MERMAID_ELK_DIR,
     }
+    context["header_digest"] = unit_digest(*(context[key] for key in (
+        "kicker", "title", "date", "updated", "updated_day", "label_tags", "owner",
+        "summary_block",
+    )))
+    context["outline_digest"] = unit_digest(context["outline_items"])
     html = render_page(context)
 
     out_dir.mkdir(parents=True, exist_ok=True)

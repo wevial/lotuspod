@@ -370,5 +370,5 @@ def mark_refs(body: str, refs: dict[str, dict], as_of: str = "") -> tuple[str, s
     pieces.append(body[cursor:])
     cards = "\n".join(card(key, refs[key], card_id_, as_of) for key, card_id_ in ids.items())
     # The template writes the block straight after the body's section.
-    block = f'\n      <div class="{CARDS_CLASS}">\n{cards}\n</div>'
+    block = f'\n      <div class="{CARDS_CLASS}" data-digest="{cli.unit_digest(cards)}">\n{cards}\n</div>'
     return "".join(pieces), block, list(ids)
