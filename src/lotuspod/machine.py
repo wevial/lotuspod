@@ -75,7 +75,8 @@ in owner's inbox and 409 settled once it is done, and done 409 not_claimed
 without the credential's current claim and its token. Done with text needs
 idempotencyKey too, and posts it as a follow-up does, in the same
 transaction as the claim's check and the close, so a session whose claim
-has lapsed posts nothing; a key names the reply of one item only.
+has lapsed posts nothing. A key already naming a message in another
+thread is refused 409 key_reused, and nothing is stored or closed.
 
 POST /v1/media takes one image as its body, with Content-Type image/png,
 image/jpeg, image/webp or image/gif, and answers {name, url, width, height}
@@ -236,6 +237,7 @@ _REFUSED = {
     "claimed": HTTPStatus.CONFLICT,
     "not_claimed": HTTPStatus.CONFLICT,
     "revision_mismatch": HTTPStatus.CONFLICT,
+    "key_reused": HTTPStatus.CONFLICT,
 }
 # Seconds a socket connection may sit idle.
 REQUEST_TIMEOUT = 30

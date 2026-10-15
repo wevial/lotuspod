@@ -143,22 +143,32 @@ class LapsedDoneTests(InboxTestCase):
 
 
 class DoneTests(InboxTestCase):
-    def test_one_key_names_each_item_s_own_reply(self):
-        done = {}
-        for text, ask in (("Please file a ticket.", "file it"),
-                          ("Please change the page.", "change it")):
-            row, item = self.queue(text, ask)
-            rc, claimed = self.claim("one", item["id"])
-            self.assertEqual(rc, 0, claimed)
-            rc, closed = self.inbox("one", "done", str(item["id"]), "--owner", "operator",
-                                    "--claim", claimed["claimToken"], "--key", "same",
-                                    "--text", f"Done: {ask}.")
-            self.assertEqual(rc, 0, closed)
-            done[row["id"]] = closed["reply"]
-        for root, reply in done.items():
-            self.assertEqual(reply["parent"], root)
-            [thread] = [t for t in self.threads("ops") if t["root"]["id"] == root]
-            self.assertEqual([r["id"] for r in thread["replies"]], [reply["id"]])
+    def test_a_key_used_in_another_thread_closes_nothing(self):
+        first, one = self.queue("Please file a ticket.", "file it")
+        second, two = self.queue("Please change the page.", "change it")
+        rc, claimed = self.claim("one", one["id"])
+        self.assertEqual(rc, 0, claimed)
+        rc, closed = self.inbox("one", "done", str(one["id"]), "--owner", "operator",
+                                "--claim", claimed["claimToken"], "--key", "same",
+                                "--text", "Filed.")
+        self.assertEqual(rc, 0, closed)
+        self.assertEqual(closed["reply"]["parent"], first["id"])
+        # A follow-up of its own under the key the next done names.
+        rc, out, err = run_cli("comments", "follow-up", str(second["id"]), "--key", "other",
+                               "--text", "Looking.", "--json", "--socket",
+                               str(self.socket_path), "--credential", str(self.creds["one"]))
+        self.assertEqual(rc, 0, out + err)
+        rc, claimed = self.claim("one", two["id"])
+        self.assertEqual(rc, 0, claimed)
+        argv = ("done", str(two["id"]), "--owner", "operator", "--claim",
+                claimed["claimToken"])
+        self.assertEqual(self.inbox("one", *argv, "--key", "same", "--text", "Changed."),
+                         (1, {"error": "key_reused"}))
+        # The item stays open: a retry with the key of a message already in its own thread posts it once.
+        rc, closed = self.inbox("one", *argv, "--key", "other", "--text", "Looking.")
+        self.assertEqual(rc, 0, closed)
+        [thread] = [t for t in self.threads("ops") if t["root"]["id"] == second["id"]]
+        self.assertEqual([r["text"] for r in thread["replies"]], ["Looking."])
 
     def test_a_new_ask_for_the_same_comment_replaces_an_open_item_s(self):
         row, item = self.queue("Please file a ticket.", "old task A")

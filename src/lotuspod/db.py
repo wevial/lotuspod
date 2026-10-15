@@ -298,7 +298,8 @@ class Refused(Exception):
     unknown_comment, unknown_thread, unknown_page, settled, not_routed,
     claimed, not_claimed or revision_mismatch; a dismissal or its undo,
     already_dismissed or not_dismissed; an inbox item's claim or done,
-    unknown_item, settled, claimed or not_claimed. Nothing is stored."""
+    unknown_item, settled, claimed, not_claimed or key_reused. Nothing is
+    stored."""
 
     def __init__(self, error: str) -> None:
         super().__init__(error)
@@ -1271,20 +1272,27 @@ class Database:
         """Close owner's inbox item item_id under credential's current claim;
         the item, and the reply stored or None. With reply, {key, text}, the
         text is first added to the item's thread as follow_up adds it, as
-        owner, under the key "inbox-ID-KEY", so a key names one item's reply;
-        both happen in one transaction with the claim's check, or neither.
+        owner, under its key; both happen in one transaction with the
+        claim's check, or neither. A key credential used before gives back
+        the reply stored with it when that reply is in the item's thread.
         Refused unknown_item as claim_item is, settled once it is done,
-        not_claimed without that claim and its token, and as follow_up is."""
+        not_claimed without that claim and its token, key_reused when the
+        key names a message in another thread, and as follow_up is."""
         with self._connect() as conn, _write(conn):
             found = _held_item(conn, item_id, owner, credential, token_hash, clock())
             stored = None
             if reply is not None:
                 comment = _row(conn, found["comment"])
                 root = comment["parent"] or comment["id"]
+                used = conn.execute(
+                    "SELECT id, parent FROM comments WHERE reply_credential = ?"
+                    " AND reply_key = ?", (credential, reply["key"]),
+                ).fetchone()
+                if used is not None and (used["parent"] or used["id"]) != root:
+                    raise Refused("key_reused")
                 stored = _insert_follow_up(
-                    conn, root, credential=credential, handle=owner,
-                    key=f"inbox-{item_id}-{reply['key']}", text=reply["text"],
-                    revision=None, reopen=False, page_of=page_of)
+                    conn, root, credential=credential, handle=owner, key=reply["key"],
+                    text=reply["text"], revision=None, reopen=False, page_of=page_of)
             conn.execute(
                 "UPDATE inbox SET done_at = ?, claim_hash = NULL, claim_expires = NULL"
                 " WHERE id = ?", (_now(), found["id"]),

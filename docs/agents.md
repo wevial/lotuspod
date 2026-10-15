@@ -458,8 +458,9 @@ expires it lapses and the item is listed again. `done` closes it under the
 claim, for good; with `--text` (or `--text-file`) and `--key`, it first adds
 the text to the reader's thread as a follow-up from the handle (which also
 needs `reply`). The reply and the close happen together with the claim's
-check, or not at all: a session whose claim lapsed posts nothing, and a
-key names one item's reply only. An item another handle owns is 404
+check, or not at all: a session whose claim lapsed posts nothing. A key
+the credential already used in another thread is refused 409 `key_reused`,
+and the item stays open. An item another handle owns is 404
 `unknown_item`, a closed one 409 `settled`, and `done` without the current
 claim 409 `not_claimed`.
 
