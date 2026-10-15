@@ -39,9 +39,7 @@
     if (!stamp || !stamp.content.trim() || !line || !main) {
       return;
     }
-    var named = document.querySelector("[data-page]");
-    var page = named ? named.dataset.page :
-      decodeURIComponent(location.pathname.split("/").pop()).replace(/\.html$/, "");
+    var page = pageName();
     var title = document.querySelector(".artifact-title");
     var own = stamp.content.trim();
 

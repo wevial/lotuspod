@@ -26,6 +26,7 @@ import sys
 import tempfile
 import threading
 import time
+import unicodedata
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
@@ -505,6 +506,105 @@ class TextTests(PullTestCase):
         rc, out, _err = self.agent("show", "nowhere", "--json")
         self.assertNotEqual(rc, 0)
         self.assertEqual(json.loads(out), {"error": "unknown_page"})
+
+
+class ControlCharacterTests(PullTestCase):
+    """No command an agent runs without --json prints a control character
+    other than a line break or a tab, whatever a reader sent."""
+
+    TEXT = "line one\u001b[2J\u001b[H\nline two\u009b31m\rend\u0007"
+
+    def control(self, text: str) -> set[str]:
+        return {c for c in text if unicodedata.category(c) == "Cc" and c not in "\n\t"}
+
+    def test_a_comment_s_control_characters_never_reach_the_terminal(self):
+        self.pull("hermes")
+        self.comment(self.TEXT)
+        rc, out, err = self.agent("pull", "--owner", "hermes")
+        self.assertEqual(rc, 0, err)
+        self.assertEqual(self.control(out), set())
+        self.assertIn("line one [2J [H\nline two 31m end \n", out)
+
+    def markdown(self, *argv: str) -> str:
+        rc, out, err = self.agent(*argv)
+        self.assertEqual(rc, 0, err)
+        self.assertEqual(self.control(out), set())
+        return out
+
+    def json_items(self, owner: str = "hermes") -> list[dict]:
+        return self.pull(owner)
+
+    def test_comment_and_reply_texts_print_as_spaces_in_pull_and_show(self):
+        self.pull("hermes")
+        root = self.comment(self.TEXT)
+        reply = self.reply(root["id"], self.TEXT)
+        shown = "line one [2J [H\nline two 31m end "
+        pulled = self.markdown("pull", "--owner", "hermes")
+        self.assertIn(f"```\n{shown}\n```\n", pulled)
+        listed = self.markdown("show", "plan")
+        self.assertEqual(listed.count(f"```\n{shown}\n```\n"), 2)
+        texts = {item["comment"]["id"]: item["comment"]["text"] for item in self.json_items()}
+        self.assertEqual(texts, {root["id"]: self.TEXT, reply["id"]: self.TEXT})
+        rc, out, err = self.agent("show", "plan", "--json")
+        self.assertEqual(rc, 0, err)
+        [thread] = json.loads(out)["threads"]
+        self.assertEqual([thread["root"]["text"], thread["replies"][0]["text"]],
+                         [self.TEXT, self.TEXT])
+        self.assertEqual(thread["replies"][0]["id"], reply["id"])
+
+    def test_a_passage_s_control_characters_print_as_spaces(self):
+        self.pull("hermes")
+        quote = {"exact": "may\u001b[2J freeze", "prefix": "The pond\u001b[2J ", "suffix": "."}
+        self.comment("Freeze how hard?", quote=quote)
+        out = self.markdown("pull", "--owner", "hermes")
+        self.assertNotIn("\u001b", out)
+        passages = PassageTests.PASSAGE.findall(out)
+        self.assertEqual(len(passages), 2)
+        for _on, _marks, exact, _around_marks, around in passages:
+            self.assertEqual(exact, "may [2J freeze")
+            self.assertEqual(around, "The pond [2J may [2J freeze.")
+        [item] = [item for item in self.json_items() if item["kind"] == "comment"]
+        self.assertEqual(item["comment"]["quote"], quote)
+
+    def test_an_answer_s_note_prints_as_spaces_in_pull_and_answers(self):
+        note = "warm\u001b]0;owned\u0007 enough"
+        self.pull("hermes")
+        self.answer(note=note)
+        out = self.markdown("pull", "--owner", "hermes")
+        rc, listed, err = run_cli("answers", "plan", "--db", str(self.db_path),
+                                  "--out-dir", str(self.out_dir))
+        self.assertEqual(rc, 0, err)
+        self.assertEqual(self.control(listed), set())
+        for text in (out, listed):
+            self.assertFalse({"\u001b", "\u0007"} & set(text))
+            self.assertIn("warm ]0;owned  enough", text)
+        items = self.json_items()
+        [item] = [item for item in items if item["kind"] == "answer"]
+        self.assertEqual(item["answer"]["note"], note)
+        [thread] = [item for item in items if item["kind"] == "comment"]
+        self.assertEqual(thread["comment"]["text"], note)
+        rc, raw, err = run_cli("answers", "plan", "--json", "--db", str(self.db_path),
+                               "--out-dir", str(self.out_dir))
+        self.assertEqual(rc, 0, err)
+        self.assertEqual(json.loads(raw)["questions"]["decision-1"]["current"]["note"], note)
+
+    def test_a_section_title_s_control_characters_print_as_spaces(self):
+        source = self.work / "pond.html"
+        source.write_text("<!doctype html><html><head><title>Pond</title></head><body>"
+                          "<h1>Pond</h1><h2 id=\"pond\">Pond\u001b[2J</h2><p>Cold.</p>"
+                          "<h2 id=\"shore\">Shore</h2><p>Reeds.</p>"
+                          "</body></html>", encoding="utf-8")
+        rc, _out, err = run_cli("publish", str(source), "--out-dir", str(self.out_dir),
+                                "--local", "--owner", "hermes", "--credential", str(self.desk))
+        self.assertEqual(rc, 0, err)
+        self.pull("hermes")
+        self.comment("Cold enough?", page="pond", section="pond")
+        out = self.markdown("pull", "--owner", "hermes")
+        self.assertNotIn("\u001b", out)
+        [heading] = [line for line in out.splitlines() if line.startswith("## 1. Comment")]
+        self.assertIn("Pond [2J", heading)
+        [item] = [item for item in self.json_items() if item["kind"] == "comment"]
+        self.assertEqual(item["comment"]["sectionTitle"], "Pond\u001b[2J")
 
 
 class ResolvedThreadTests(PullTestCase):
