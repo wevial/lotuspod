@@ -436,8 +436,8 @@ function Sheet({ page, the, questions, groups, marks }: SheetProps) {
 
 // Each question in page order, under the nearest h2 before its form, and
 // one group per h2 asking one.
-function questionsOf(page: Page, the: Answering, body: Element): { questions: Question[]; groups: Group[] } {
-  const headings = all<HTMLElement>("h2", body);
+function questionsOf(page: Page, the: Answering): { questions: Question[]; groups: Group[] } {
+  const headings = all<HTMLElement>("h2", document.querySelector("section.artifact-body")!);
   const questions = page.forms.map((form): Question => {
     let heading: HTMLElement | null = null;
     for (const h2 of headings) {
@@ -514,8 +514,7 @@ function markUp(marks: Map<HTMLElement, Marks>, questions: Question[]): void {
 // state. The forms in read are those an earlier draw picked defaults on.
 function draw(page: Page, the: Answering, tools: HTMLElement, marks: Map<HTMLElement, Marks>,
   read: WeakSet<HTMLFormElement>): void {
-  const body = document.querySelector("section.artifact-body")!;
-  const { questions, groups } = questionsOf(page, the, body);
+  const { questions, groups } = questionsOf(page, the);
   markUp(marks, questions);
 
   // A default picked once the answers are read, so the read never takes
