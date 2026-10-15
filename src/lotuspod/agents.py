@@ -102,7 +102,7 @@ def _run(args: argparse.Namespace, method: str, target: str, text, body: object 
         payload = _ask(args, method, target, body)
     except _Failed as exc:
         return _refused(args, exc)
-    print(json.dumps(payload, indent=2) if args.json else text(payload))
+    print(json.dumps(payload, indent=2) if args.json else printable(text(payload)))
     return 0
 
 
@@ -146,6 +146,13 @@ def moved(comment: dict, revision: str) -> str:
         return f"revision {comment['revision'] or 'unknown'}; the page is still at that revision"
     return (f"revision {comment['revision'] or 'unknown'}; "
             f"the page is now at revision {revision or 'unknown'}")
+
+
+def printable(text: str) -> str:
+    """text with each control character but a line break or a tab a space:
+    whatever a reader sent, markdown output never drives the terminal."""
+    return "".join(" " if unicodedata.category(char) == "Cc" and char not in "\n\t" else char
+                   for char in text)
 
 
 def one_line(text: str) -> str:

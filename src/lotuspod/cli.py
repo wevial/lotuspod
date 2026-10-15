@@ -2755,7 +2755,7 @@ def cmd_answers(args: argparse.Namespace) -> int:
     out_dir = Path(args.out_dir) if args.out_dir else DEFAULT_OUTPUT_DIR
     page = out_dir / f"{name}.html"
     forms = decisions.read_forms(page.read_text(encoding="utf-8")) if page.is_file() else {}
-    print(answers_text(name, questions, forms))
+    print(agents.printable(answers_text(name, questions, forms)))
     return 0
 
 
