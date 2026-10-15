@@ -211,9 +211,24 @@ async function fits(page: Page, when: string) {
       height, bar: px(top).height, width: window.innerWidth,
       barScroll: top.scrollWidth, barClient: top.clientWidth,
       button: one('button.artifact-archive'), next: one('a.artifact-review-next'),
-      count: one('.artifact-review-count'),
+      count: one('.artifact-review-count'), wrapper: one('span.artifact-archive-bar'),
+      title: (() => {
+        const node = top.querySelector('.artifact-topbar-title') as HTMLElement;
+        const style = getComputedStyle(node);
+        return { display: style.display, overflow: style.textOverflow, width: px(node).width,
+          cut: node.scrollWidth > node.clientWidth };
+      })(),
     };
   });
+  // The archive bar is a box of its own holding the button, right beside Next open.
+  expect(sizes.wrapper.left, `${when}: the archive bar holds the button`).toBeLessThanOrEqual(sizes.button.left);
+  expect(sizes.wrapper.right, `${when}: the archive bar holds the button`).toBeGreaterThanOrEqual(sizes.button.right);
+  expect(sizes.next.left - sizes.wrapper.right, `${when}: the two bars sit side by side`).toBeLessThan(24);
+  // The title gives way to its ellipsis; it is not taken away.
+  expect(sizes.title.display, `${when}: the title stays`).not.toBe('none');
+  expect(sizes.title.width, `${when}: the title keeps room for its ellipsis`).toBeGreaterThan(0);
+  expect(sizes.title.overflow).toBe('ellipsis');
+  expect(sizes.title.cut, `${when}: the long title is cut short`).toBe(true);
   expect(sizes.bar, `${when}: .artifact-topbar is --topbar-height tall`).toBeCloseTo(sizes.height, 0);
   expect(sizes.barScroll, `${when}: nothing overflows the top bar`).toBeLessThanOrEqual(sizes.barClient);
   for (const [name, part] of Object.entries({ button: sizes.button, next: sizes.next, count: sizes.count })) {

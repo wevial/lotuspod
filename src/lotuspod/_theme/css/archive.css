@@ -61,16 +61,21 @@
 }
 
 .artifact-archive-bar {
-  /* Its button and status line are the top bar's own flex items, so the
-     line can give way to the room the bar has left. */
-  display: contents;
+  /* A grid of the button and the status line: the line's column runs from
+     nothing to its whole text, so the bar shrinks as far as the button and
+     no further, its line giving way first. */
+  align-items: baseline;
+  display: grid;
+  flex: 0 1000 auto;
+  grid-template-columns: max-content minmax(0, max-content);
+  margin-left: auto;
 }
 
-/* The review sheet's bar keeps its own margin-left: auto; after the archive
-   button, that margin would split the free room between the two, so it
-   sits right beside it instead. */
-.artifact-archive-bar ~ .artifact-review-bar {
-  margin-left: 0;
+/* The review sheet's bar keeps its own margin-left: auto. With both drawn,
+   the title takes the free room, so neither margin has any to split and
+   the two sit side by side at the right. */
+.artifact-topbar:has(.artifact-archive-bar ~ .artifact-review-bar) .artifact-topbar-title {
+  flex-grow: 1;
 }
 
 .artifact-archive {
@@ -85,7 +90,7 @@
   font-family: var(--font-body);
   font-size: 0.8rem;
   line-height: 1.4;
-  margin: 0 0 0 auto;
+  margin: 0;
   padding: 0.1rem 0.75rem;
 }
 
@@ -105,10 +110,9 @@
    its title. */
 .artifact-archive-status {
   color: var(--color-muted-lavender);
-  flex: 0 1000 auto;
   font-family: var(--font-body);
   font-size: 0.8rem;
-  margin-left: 0.1rem;
+  margin-left: 0.6rem;
   max-width: 22rem;
   min-width: 0;
   overflow: hidden;
@@ -117,7 +121,7 @@
 }
 
 .artifact-archive-status:empty {
-  margin-left: -0.5rem;
+  margin-left: 0;
 }
 
 /* With the review sheet's bar beside it, at any width, the title gives way
@@ -125,6 +129,7 @@
    stay whole. With no question open the count has nothing to give way. */
 .artifact-topbar:has(.artifact-archive-bar ~ .artifact-review-bar) .artifact-topbar-title {
   flex-shrink: 1000;
+  min-width: 1.5em;
 }
 
 .artifact-archive-bar ~ .artifact-review-bar {
@@ -146,17 +151,19 @@
     font-size: 0.75rem;
   }
 
-  /* Narrow, the title leaves while Next open shows, and the brand gives
-     way to an ellipsis too. */
-  .artifact-topbar:has(.artifact-archive-bar ~ .artifact-review-bar .artifact-review-next:not([hidden])) .artifact-topbar-sep,
-  .artifact-topbar:has(.artifact-archive-bar ~ .artifact-review-bar .artifact-review-next:not([hidden])) .artifact-topbar-title {
-    display: none;
-  }
-
+  /* Narrow, the brand gives way to an ellipsis too. */
   .artifact-topbar:has(.artifact-archive-bar ~ .artifact-review-bar) .artifact-topbar-brand {
     flex: 0 4 auto;
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+}
+
+/* Narrower than the title bar holds the title's ellipsis beside both
+   controls (review-sheet.css), the title gives way to nothing first. */
+@media (max-width: 22rem) {
+  .artifact-topbar:has(.artifact-archive-bar ~ .artifact-review-bar) .artifact-topbar-title {
+    min-width: 0;
   }
 }
