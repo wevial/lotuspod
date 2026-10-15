@@ -17,6 +17,8 @@ interface PageLive {
   // Show one line in the banner's place for a few seconds: what a swap
   // changed.
   note(text: string): void;
+  // Reload the page now, keeping where the reader was and what they wrote.
+  reload(): void;
 }
 declare const live: PageLive;
 

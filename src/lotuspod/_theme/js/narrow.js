@@ -492,6 +492,7 @@
       return {
         view: view, opener: held.opener, anchor: held.anchor,
         writing: group && !group.holder.hidden ? group : null,
+        scroll: held.kind ? holderOf(held.kind).body.scrollTop : 0,
       };
     };
 
@@ -549,6 +550,10 @@
           newest ? the.anchorOf(newest) : anchor, taken.still);
       } else {
         hold(panel.mode, view, opener, anchor, taken.still);
+      }
+      // Over a swap, it is scrolled where the reader left it.
+      if (taken.still && held.kind) {
+        holderOf(held.kind).body.scrollTop = taken.scroll || 0;
       }
     };
 

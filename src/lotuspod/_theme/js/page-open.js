@@ -40,6 +40,7 @@
   var SIGNED_OUT = "You are signed out. Reload the page to sign in.";
   var STALE = "This question has changed since the page loaded. Reload it.";
   var STALE_PAGE = "This page has changed since it loaded. Reload it to comment on this passage.";
+  var STALE_SECTION = "This page has changed since it loaded. Reload it to comment.";
   var STALE_QUESTION = "This page has changed since it loaded. Reload it to ask about this decision.";
   var NO_QUESTION = "Write your question in the note, then press Ask.";
   var PASSAGE_GONE = "The words you selected have changed since. Your comment is kept here, on the section.";

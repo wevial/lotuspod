@@ -1263,7 +1263,7 @@ test.describe('signed in', () => {
       group(page, 'Risks').getByRole('button', { name: 'Comment', exact: true }).click(),
     ]);
     expect(posted.status()).toBe(201);
-    expect(posted.request().postDataJSON()).toMatchObject({ page: name, section: 'risks' });
+    expect(posted.request().postDataJSON()).toMatchObject({ page: name, section: 'risks', revision: second });
     const row = await posted.json();
     expect(row).toMatchObject({ section: 'risks', revision: second });
     await expect(group(page, 'Risks').locator(`li.artifact-comments-entry[data-thread="${row.id}"]`)).toHaveCount(1);
@@ -1434,6 +1434,85 @@ test.describe('signed in', () => {
     await expect(banner(page).node).toContainText(NEWER);
     await expect(page.locator('div.artifact-section-body[data-section="risks"]')).not.toContainText(RISKY);
     expect(await revisionOf(page)).toBe(first);
+    expect(errors).toEqual([]);
+  });
+
+  test('a removed section held back while its form holds a draft reloads on Update, the draft kept', async ({ page }) => {
+    const errors = watchErrors(page);
+    const name = 'live-page-comments-held-draft';
+    publish(name, sectioned(name, pond()));
+    await stopClock(page);
+    await open(page, name);
+    const toggle = page.locator('.artifact-body > h2#risks button.artifact-section-toggle');
+    await toggle.focus();
+
+    publish(name, sectioned(name, pond({ Risks: { heading: 'Hazards' } })));
+    await page.clock.runFor(CHECK);
+    const bar = page.locator('div.artifact-section-body[data-section="risks"] div.artifact-swap-held');
+    await expect(bar).toContainText('This section was removed');
+    await box(page, 'risks').locator('summary').click();
+    const field = page.locator('.artifact-comments-panel').getByRole('textbox', { name: 'Comment on Risks' });
+    await expect(field).toBeFocused();
+    const UNSENT = 'What cracks first, the pump or the pipe?';
+    await field.fill(UNSENT);
+
+    const loaded = page.waitForEvent('load');
+    await bar.getByRole('button', { name: 'Update' }).click();
+    await loaded;
+    await expect(box(page, 'risks')).toHaveCount(0);
+    // Kept in a section's form, saying why, as after any reload.
+    const form = page.locator('.artifact-comments-panel form.artifact-comment-form').filter({
+      has: page.locator('.artifact-comment-status', { hasText: 'Where you were writing has changed since.' }),
+    });
+    await expect(form.locator('textarea')).toBeVisible();
+    await expect(form.locator('textarea')).toHaveValue(UNSENT);
+    expect(errors).toEqual([]);
+  });
+
+  test('a republish that turns comments on falls back to the banner', async ({ page }) => {
+    const errors = watchErrors(page);
+    const name = 'live-page-comments-on';
+    const first = publish(name, sectioned(name, pond()), '--no-comments');
+    await openPlain(page, name);
+    publish(name, sectioned(name, pond({ Risks: { paragraphs: [RISKY] } })));
+    await page.clock.runFor(CHECK);
+    await expect(banner(page).node).toContainText(NEWER);
+    await expect(page.locator('details.artifact-comment')).toHaveCount(0);
+    expect(await revisionOf(page)).toBe(first);
+    expect(errors).toEqual([]);
+  });
+
+  test('passages number in page order after a swap moves the text before them', async ({ page, request }) => {
+    const errors = watchErrors(page);
+    const name = 'live-page-comments-numbers';
+    const first = publish(name, sectioned(name, pond()));
+    const response = await request.post('/api/comments', {
+      headers: SIGNED_IN,
+      data: {
+        page: name, section: 'next-steps', text: 'Which heater?', revision: first,
+        quote: { exact: 'Order a heater before the frost.', prefix: '', suffix: '' },
+      },
+    });
+    expect(response.status()).toBe(201);
+    await stopClock(page);
+    await open(page, name);
+    await expect(page.locator('.artifact-passage-number')).toHaveText(['1']);
+
+    const long = Array.from({ length: 12 }, (_, n) => `Finding ${n + 1}: the pond froze early and stayed frozen for weeks.`);
+    const second = publish(name, sectioned(name, pond({ Findings: { paragraphs: long } })));
+    await page.clock.runFor(CHECK);
+    await expect.poll(() => revisionOf(page)).toBe(second);
+    await expect(banner(page).node).toHaveCount(0);
+
+    const field = await selectPassage(page, 'The pump may crack', 8);
+    await field.fill('Which pump?');
+    const [posted] = await Promise.all([
+      page.waitForResponse((r) => new URL(r.url()).pathname === '/api/comments' && r.request().method() === 'POST'),
+      page.locator('form.artifact-passage-form button[type="submit"]').click(),
+    ]);
+    expect(posted.status()).toBe(201);
+    await expect(page.locator('.artifact-passage-number')).toHaveText(['1', '2']);
+    await expect(page.locator('div.artifact-section-body[data-section="risks"] .artifact-passage-number')).toHaveText('1');
     expect(errors).toEqual([]);
   });
 });

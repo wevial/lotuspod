@@ -489,12 +489,12 @@
       return sync(thread);
     }
 
-    function failure(response, payload) {
+    function failure(response, payload, stale) {
       if (response.status === 401) {
         return SIGNED_OUT;
       }
       if (response.status === 409 && payload && payload.error === "stale_page") {
-        return STALE_PAGE;
+        return stale || STALE_PAGE;
       }
       var error = payload && payload.error ? String(payload.error) : "status " + response.status;
       return "Not saved (" + error + "). Try again.";
@@ -526,7 +526,7 @@
         });
         var payload = await json(response);
         if (response.status !== 201 || !payload) {
-          status.textContent = failure(response, payload);
+          status.textContent = failure(response, payload, body.quote ? STALE_PAGE : STALE_SECTION);
           return null;
         }
         status.textContent = "";
@@ -884,6 +884,19 @@
           open.form.querySelector(".artifact-comment-status").textContent = over;
         }
         return true;
+      };
+
+      // A swap moved the page's text: each drawn thread's words start where
+      // its highlight now does, so the threads number in page order.
+      api.moved = function () {
+        var model = null;
+        shown.forEach(function (thread) {
+          if (article && thread.spot && thread.marks.length) {
+            model = model || textModel(article);
+            var start = offsetOf(model, thread.marks[0], 0);
+            thread.spot = { start: start, end: start + thread.spot.end - thread.spot.start };
+          }
+        });
       };
 
       if (!article) {
@@ -3031,9 +3044,11 @@
         if (!mine) {
           return;
         }
-        var row = await post(form, {
-          page: page, section: mine.dataset.section, text: form.elements.text.value,
-        });
+        var fields = { page: page, section: mine.dataset.section, text: form.elements.text.value };
+        if (revision() !== null) {
+          fields.revision = revision();
+        }
+        var row = await post(form, fields);
         mine = boxWith(form);
         if (row) {
           add({ root: row, replies: [] });
@@ -3056,6 +3071,7 @@
     // the page no longer has, and a section added takes back its own.
     document.addEventListener(SWAPPED, function (event) {
       var units = event.detail.units;
+      passages.moved();
       var olds = [];
       var news = [];
       units.forEach(function (unit) {

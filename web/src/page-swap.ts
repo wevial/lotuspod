@@ -25,10 +25,13 @@
 // or sections, when their shared sections moved, when the references changed,
 // when the outline changed on a page with decision forms (whose review marks
 // sit on its links), when a changed part, old or new, holds a feature not yet
-// mounted on new markup or a passage's highlight (SWAP_UNMOUNTED), or when a
-// section the swap would take away is one any test registered with
-// refuseSwap refuses (js/comments.js's: its form holds text not sent). A swap
-// that throws partway has the page reload.
+// mounted on new markup or a passage's highlight (SWAP_UNMOUNTED), when one
+// copy takes comments and the other does not, or when a section the swap
+// would take away, held back or not, is one any test registered with
+// refuseSwap refuses (js/comments.js's: its form holds text not sent). A
+// held section's Update that would take away one a test refuses reloads the
+// page instead, so its text is kept. A swap that throws partway has the page
+// reload.
 
 // What a swapped part may not hold yet, old or new: each later ticket mounts
 // one and takes it off. The open page's passage highlights, a thread's or an
@@ -137,6 +140,8 @@ function pageSwap(): void {
 
   const brought = (node: Node): Node => document.importNode(node, true);
 
+  const refused = (part: Part): boolean => SWAP_REFUSALS.some((test) => test([part.heading, part.wrapper]));
+
   // The open page's node, or null, given the new page's text in place of
   // its children; the nodes taken out and put in.
   function retext(old: Element | null, fresh: Element | null, place: (node: Node) => void) {
@@ -242,6 +247,10 @@ function pageSwap(): void {
     if (digestOf(document.querySelector(".artifact-ref-cards")) !== digestOf(doc.querySelector(".artifact-ref-cards"))) {
       return null;
     }
+    // Comments turned on or off: the comments page is set up once, at load.
+    if (!document.querySelector("details.artifact-comment") !== !doc.querySelector("details.artifact-comment")) {
+      return null;
+    }
 
     // What changed, each as the open page has it and as the new one does.
     const header = document.querySelector<HTMLElement>("header.artifact-header");
@@ -285,11 +294,8 @@ function pageSwap(): void {
     const introHeld = introChanged && (heldIntro !== null || holds(intro));
     const sectionHeld = new Set([...removed, ...changed.map((part) => byId.get(part.id)!)]
       .filter((part) => held.has(part.id) || holds([part.heading, part.wrapper])).map((part) => part.id));
-    // A section taken away that a test refuses to lose, unless it is held.
-    if (removed.some((part) => !sectionHeld.has(part.id) &&
-      SWAP_REFUSALS.some((test) => test([part.heading, part.wrapper])))) {
-      return null;
-    }
+    // A section taken away, held back or not, that a test refuses to lose.
+    if (removed.some(refused)) return null;
     // The first section heading at or below the title bar, and its top.
     const line = document.querySelector(".artifact-topbar")?.getBoundingClientRect().bottom ?? 0;
     const anchorAt = parts.findIndex((part) => part.heading.getBoundingClientRect().top >= line);
@@ -493,6 +499,12 @@ function pageSwap(): void {
     const at = parts.findIndex((part) => part.id === id);
     if (at < 0) return;
     const old = parts[at]!;
+    // A section taken away that a test refuses to lose is reloaded away,
+    // what it holds kept over the reload.
+    if (!entry.fresh && refused(old)) {
+      live.reload();
+      return;
+    }
     const unit = entry.fresh ? applyChanged(old, entry.fresh) : applyRemoved(old);
     swapped(live.revision(), [unit]);
     const heading = entry.fresh ? unit.after[0] as HTMLElement : (parts[at + 1] ?? parts[at - 1])?.heading;

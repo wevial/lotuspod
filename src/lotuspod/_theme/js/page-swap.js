@@ -41,6 +41,7 @@ function pageSwap() {
   };
   const unmounted = (nodes) => nodes.some((node) => node instanceof Element && (node.matches(SWAP_UNMOUNTED) || node.querySelector(SWAP_UNMOUNTED) !== null));
   const brought = (node) => document.importNode(node, true);
+  const refused = (part) => SWAP_REFUSALS.some((test) => test([part.heading, part.wrapper]));
   function retext(old, fresh, place) {
     const before = [];
     const after = [];
@@ -142,6 +143,9 @@ function pageSwap() {
     if (digestOf(document.querySelector(".artifact-ref-cards")) !== digestOf(doc.querySelector(".artifact-ref-cards"))) {
       return null;
     }
+    if (!document.querySelector("details.artifact-comment") !== !doc.querySelector("details.artifact-comment")) {
+      return null;
+    }
     const header = document.querySelector("header.artifact-header");
     const freshHeader = doc.querySelector("header.artifact-header");
     const headerChanged = digestOf(header) !== digestOf(freshHeader);
@@ -176,9 +180,8 @@ function pageSwap() {
     };
     const introHeld = introChanged && (heldIntro !== null || holds(intro));
     const sectionHeld = new Set([...removed, ...changed.map((part) => byId.get(part.id))].filter((part) => held.has(part.id) || holds([part.heading, part.wrapper])).map((part) => part.id));
-    if (removed.some((part) => !sectionHeld.has(part.id) && SWAP_REFUSALS.some((test) => test([part.heading, part.wrapper])))) {
+    if (removed.some(refused))
       return null;
-    }
     const line = document.querySelector(".artifact-topbar")?.getBoundingClientRect().bottom ?? 0;
     const anchorAt = parts.findIndex((part) => part.heading.getBoundingClientRect().top >= line);
     const anchorTop = anchorAt >= 0 ? parts[anchorAt].heading.getBoundingClientRect().top : 0;
@@ -355,6 +358,10 @@ function pageSwap() {
     if (at < 0)
       return;
     const old = parts[at];
+    if (!entry.fresh && refused(old)) {
+      live.reload();
+      return;
+    }
     const unit = entry.fresh ? applyChanged(old, entry.fresh) : applyRemoved(old);
     swapped(live.revision(), [unit]);
     const heading = entry.fresh ? unit.after[0] : (parts[at + 1] ?? parts[at - 1])?.heading;
