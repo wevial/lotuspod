@@ -1,10 +1,14 @@
 """Parsed HTML witnesses for the static calltree fence."""
+import io
 import subprocess
 import sys
+import tempfile
 import unittest
+from unittest import mock
 
-from lotuspod import calltree
+from lotuspod import calltree, refs
 from lotuspod.markdown import to_body
+from tests.test_manifest_v2 import run_cli
 from tests.test_markdown import parse
 
 INFO = 'repo=wevial/lotuspod sha=43b4187318733fe6aa629aaedd462adbbb147d5d'
@@ -74,6 +78,16 @@ class CalltreeTests(unittest.TestCase):
         self.assertEqual(rows[1].elements[0].elements, [])
         self.assertEqual(rows[2].attrs['data-depth'], '1')
         self.assertEqual(nodes(root, 'calltree-summary')[0].text(), '1 changed · 1 new · across 1 file')
+        with tempfile.TemporaryDirectory() as directory, mock.patch('sys.stdin', io.StringIO(source)):
+            rc, _, err = run_cli('render', '--markdown', '-', '--name', 'tree', '--title', 'Tree',
+                                 '--out-dir', directory)
+        self.assertEqual(rc, 0, err)
+
+    def test_refs_leave_calltree_text(self):
+        body = to_body('```calltree\nworker() HOLO-175.py:12\nSee HOLO-175 for details\n```\n\nHOLO-175\n')
+        marked = refs.mark_refs(body, {'HOLO-175': {'title': 'Ticket'}})[0]
+        self.assertEqual(marked.count('artifact-ref"'), 1)
+        self.assertIn(body.split('</div></div>')[0], marked)
 
     def test_long_malformed_guides_do_not_stall(self):
         bad = '─' * 100_000 + ' x'

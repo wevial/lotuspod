@@ -9,7 +9,7 @@ with one line naming the key and the field.
 
 `mark_refs()` runs on the body after the decision forms are drawn and before
 the outline. Each whole-word mention of a key the file holds, in text outside
-SKIP, becomes a `button.artifact-ref` spliced in at the parser's offsets, so
+SKIP or a `div.calltree`, becomes a `button.artifact-ref` spliced in at the parser's offsets, so
 the rest of the body stays byte for byte as written. One card per key used
 goes in a `div.artifact-ref-cards` the template writes after the body, never
 in it, so no passage, section or comment box takes in a card's text. Each
@@ -197,6 +197,8 @@ class _TextFinder(HTMLParser):
             if char == "\n":
                 self._line_starts.append(index + 1)
         self._stack: list[str] = []
+        # Whether each open element is skipped, beside self._stack.
+        self._skipped: list[bool] = []
         self._skip = 0
         # False after a tag that ends a word: a block, or a skipped element.
         self._joined = False
@@ -224,8 +226,12 @@ class _TextFinder(HTMLParser):
             return
         if tag == "h2" and not explicit:
             self._heading = []
+        # A calltree fence's text is code drawn as a tree: read as written.
+        skipped = tag in SKIP or (tag == "div" and "calltree" in next(
+            (v or "" for k, v in attrs if k == "class"), "").split())
         self._stack.append(tag)
-        if tag in SKIP:
+        self._skipped.append(skipped)
+        if skipped:
             self._skip += 1
 
     def handle_startendtag(self, tag: str, attrs: list) -> None:
@@ -244,7 +250,7 @@ class _TextFinder(HTMLParser):
         if tag in self._stack:
             while True:
                 closed = self._stack.pop()
-                if closed in SKIP:
+                if self._skipped.pop():
                     self._skip -= 1
                 if closed == tag:
                     break
