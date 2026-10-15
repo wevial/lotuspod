@@ -560,7 +560,9 @@ class Api:
     readers who may; without it the archive route's POST answers 503.
     catalog() is a lookup like pages over one read of the site, which the
     seen and activity routes take once per request for every name they
-    look up; without it they use pages."""
+    look up; without it they use pages. A lookup with a names() method
+    gives the activity route its names from the same read, in place of
+    names()."""
 
     def __init__(self, database: db.Database, pages: Callable[[str], Page | None],
                  window: float = routing.DEFAULT_WINDOW,
@@ -694,7 +696,8 @@ class Api:
             str(actor.get("email") or ""), start, end, listed, MAX_EVENTS + 1)
         truncated = False
         if self.history is not None:
-            recent = self.history.recent(utc_time(start), utc_time(end), list(self.names()))
+            names = getattr(lookup, "names", self.names)
+            recent = self.history.recent(utc_time(start), utc_time(end), list(names()))
             older = older or recent.older
             truncated = recent.truncated
             for change in recent.changes:

@@ -102,6 +102,13 @@ class CatalogTestCase(unittest.TestCase):
         self.assertEqual(status, 200, payload)
         return payload
 
+    def reads(self, path: str) -> int:
+        """How many times one request for path reads the allow-list."""
+        with mock.patch.object(cli, "serve_allow_list", wraps=cli.serve_allow_list) as read:
+            status, _ = self.ask("GET", path)
+        self.assertEqual(status, 200)
+        return read.call_count
+
     def timed(self, path: str) -> float:
         start = time.perf_counter()
         status, _ = self.ask("GET", path)
@@ -118,6 +125,13 @@ class SeenTests(CatalogTestCase):
         self.assertEqual(status, 200)
         self.assertEqual(len(answer["pages"]), 400)
         self.assertEqual(answer, self.uncatalogued("/api/seen"))
+
+    def test_seen_reads_the_allow_list_once(self) -> None:
+        self.grow(50)
+        self.assertEqual(self.reads("/api/seen"), 1)
+
+    def test_seen_of_a_reader_who_opened_nothing_reads_no_page(self) -> None:
+        self.assertEqual(self.reads("/api/seen"), 0)
 
     def test_seen_time_grows_linearly(self) -> None:
         self.grow(50)
@@ -149,6 +163,24 @@ class ActivityTests(CatalogTestCase):
         self.assertNotIn(page_name(7), named)
         self.assertIn(page_name(8), named)
         self.assertEqual(answer, self.uncatalogued("/api/activity", query))
+
+    def test_activity_reads_the_allow_list_once(self) -> None:
+        self.grow(50)
+        self.database.add_comment(page=page_name(3), section="page", section_title="Page",
+                                  revision=self.revision, text="A note.", quote=None,
+                                  actor=ACTOR)
+        self.assertEqual(self.reads("/api/activity"), 1)
+
+
+class CatalogTests(CatalogTestCase):
+
+    def test_a_page_hidden_after_the_read_is_not_served(self) -> None:
+        self.grow(2)
+        lookup = cli.api_catalog(self.out_dir)
+        self.assertIsNotNone(lookup(page_name(0)))
+        run_cli("render", "--name", page_name(1), "--title", "Private", "--hidden",
+                "--body", BODY, "--out-dir", str(self.out_dir))
+        self.assertIsNone(lookup(page_name(1)))
 
 
 if __name__ == "__main__":
