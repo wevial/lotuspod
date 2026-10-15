@@ -51,9 +51,13 @@
       forms.set(box, box.querySelector("form.artifact-comment-form"));
     }
     boxes.forEach(enlist);
-    decisions.forEach(function (form) {
-      questions.set(form.dataset.question, form);
-    });
+    function ask() {
+      questions.clear();
+      decisions.forEach(function (form) {
+        questions.set(form.dataset.question, form);
+      });
+    }
+    ask();
 
     // The text of a form's part, its whitespace collapsed.
     function words(form, selector) {
@@ -1855,7 +1859,10 @@
         made.head.setAttribute("aria-expanded", opened ? "true" : "false");
         made.read.setAttribute("aria-expanded", opened ? "true" : "false");
         var decision = decisionOf(thread);
-        var leadKey = (decision ? "decision " : "") + passages.key(thread);
+        // A decision's name and words are in the key, so a question a swap
+        // reworded is drawn as it now reads.
+        var leadKey = (decision ? "decision " + decision.name + "\n" + decision.question + "\n" : "") +
+          passages.key(thread);
         if (leadKey !== made.leadKey) {
           made.leadKey = leadKey;
           var quoted = Boolean(thread.root.quote);
@@ -2632,6 +2639,11 @@
         unlit();
       };
 
+      // A decision form a swap took away: its chip went with its section.
+      api.forget = function (form) {
+        decisionChips.delete(form);
+      };
+
       // The box at boxes[at] is added.
       api.mount = function (box, at) {
         mount(box, at);
@@ -3132,13 +3144,16 @@
     // the panel stays open, and one in a popover or the sheet opens again;
     // a section's form, with what is written in it, stays its section's.
     // Threads on a section taken away are listed with those on sections
-    // the page no longer has, and a section added takes back its own. The
-    // passages of the parts swapped are found again in the new text, and
-    // numbered in page order. A passage composer whose words went with a
-    // part (one held back, applied by its Update) opens again on them where
-    // the new text has them; else, like the text in the form of a section
-    // taken away, what was written goes to a section's form saying why, as
-    // after a reload.
+    // the page no longer has, and a section added takes back its own. Each
+    // decision form taken out or put in leaves or joins the decisions, in
+    // page order, a new one with its Ask, and a thread on a question the
+    // page no longer asks is drawn as on a reload. The passages of the
+    // parts swapped are found again in the new text, and numbered in page
+    // order. A passage composer whose words went with a part (one held
+    // back, applied by its Update) opens again on them where the new text
+    // has them; else, like the text in the form of a section taken away,
+    // what was written goes to a section's form saying why, as after a
+    // reload.
     document.addEventListener(SWAPPED, function (event) {
       var units = event.detail.units;
       swappedTo = event.detail.revision;
@@ -3148,6 +3163,8 @@
       var unsent = [];
       var olds = [];
       var news = [];
+      var gone = [];
+      var fresh = [];
       units.forEach(function (unit) {
         if (unit.kind === "header") {
           // The swap gave the tab the new revision's title.
@@ -3155,7 +3172,21 @@
         }
         olds.push.apply(olds, boxesIn(unit.before).filter(function (box) { return boxes.indexOf(box) >= 0; }));
         news.push.apply(news, boxesIn(unit.after));
+        gone.push.apply(gone, decisionsIn(unit.before).filter(function (form) {
+          return decisions.indexOf(form) >= 0;
+        }));
+        fresh.push.apply(fresh, decisionsIn(unit.after));
       });
+      gone.forEach(function (form) {
+        decisions.splice(decisions.indexOf(form), 1);
+        panel.forget(form);
+      });
+      decisions.push.apply(decisions, fresh);
+      decisions.sort(function (a, b) {
+        return a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1;
+      });
+      ask();
+      fresh.forEach(askAbout);
       if (olds.length || news.length) {
         remount(olds, news, unsent);
       } else {
@@ -3254,6 +3285,20 @@
             found.push(node);
           }
           found.push.apply(found, all("details.artifact-comment", node));
+        }
+      });
+      return found;
+    }
+
+    // The decision forms among some nodes and in them.
+    function decisionsIn(nodes) {
+      var found = [];
+      nodes.forEach(function (node) {
+        if (node instanceof Element) {
+          if (node.matches("form.artifact-decision[data-question]")) {
+            found.push(node);
+          }
+          found.push.apply(found, all("form.artifact-decision[data-question]", node));
         }
       });
       return found;

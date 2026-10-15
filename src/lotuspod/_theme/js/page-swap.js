@@ -1,11 +1,12 @@
 // Built from web/src/page-swap.ts by web/build.ts. Edit that file, not this one.
-const SWAP_UNMOUNTED = "form.artifact-decision, pre.mermaid, button.artifact-ref, table";
-const SWAP_HOLDS = [];
+const SWAP_UNMOUNTED = "pre.mermaid, button.artifact-ref, table";
+var SWAP_HOLDS;
 function holdSwap(test) {
-  SWAP_HOLDS.push(test);
+  (SWAP_HOLDS ??= []).push(test);
 }
 function pageSwap() {
   const ADDED = "div.artifact-answered, .artifact-comments-changed";
+  const DECISION = "form.artifact-decision";
   const HELD = "div.artifact-swap-held";
   const CHANGED_TEXT = "This section changed";
   const REMOVED_TEXT = "This section was removed";
@@ -166,12 +167,16 @@ function pageSwap() {
     ].filter((node) => node !== null);
     if (unmounted(touched))
       return null;
-    if (outlineChanged && (document.querySelector("form.artifact-decision") || doc.querySelector("form.artifact-decision"))) {
+    const sheet = document.querySelector("div.artifact-review-bar") !== null;
+    const decided = (nodes) => nodes.some((node) => node instanceof Element && (node.matches(DECISION) || node.querySelector(DECISION) !== null));
+    if ((sheet || answering === null) && decided(touched))
+      return null;
+    if (sheet && outlineChanged && (document.querySelector(DECISION) || doc.querySelector(DECISION))) {
       return null;
     }
     const holds = (nodes, gone) => {
       const elements = nodes.filter((node) => node instanceof Element);
-      return SWAP_HOLDS.map((test) => test(elements, gone)).some(Boolean);
+      return (SWAP_HOLDS ?? []).map((test) => test(elements, gone)).some(Boolean);
     };
     const introHeld = introChanged && (heldIntro !== null || holds(intro, false));
     const sectionHeld = new Set([...removed, ...changed.map((part) => byId.get(part.id))].filter((part) => holds([part.heading, part.wrapper], !freshIds.has(part.id)) || held.has(part.id)).map((part) => part.id));
