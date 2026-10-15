@@ -328,13 +328,17 @@ function pageSwap() {
       part.wrapper.prepend(entry.bar);
       held.set(part.id, entry);
     }
+    foldSection.mark(part.wrapper, true);
     entry.fresh = fresh;
     entry.text.textContent = fresh ? CHANGED_TEXT : REMOVED_TEXT;
   }
   function unholdSection(id) {
     const entry = held.get(id);
+    const wrapper = entry?.bar.parentElement;
+    if (wrapper)
+      foldSection.mark(wrapper, false);
     if (entry)
-      unbar(entry.bar, entry.bar.parentElement?.previousElementSibling ?? undefined);
+      unbar(entry.bar, wrapper?.previousElementSibling ?? undefined);
     held.delete(id);
   }
   function updateSection(id) {

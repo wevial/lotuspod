@@ -565,6 +565,18 @@
       label();
     }
 
+    // Mark the section whose body is wrapper "changed" while it is folded, as
+    // a newer revision changes it while a swap holds it back, or clear the
+    // mark when changed is false.
+    later.mark = function (wrapper, changed) {
+      sections.forEach(function (section) {
+        if (section.wrapper === wrapper) {
+          section.changed = Boolean(changed) && folded(section);
+          tally(section);
+        }
+      });
+    };
+
     // Forget the section whose body is wrapper, as a newer revision takes it
     // away or replaces it.
     later.drop = function (wrapper) {

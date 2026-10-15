@@ -37,6 +37,8 @@ declare function linkTab(link: Element): void;
 // away.
 interface FoldSection {
   (heading: HTMLElement, wrapper: HTMLElement, id: string | number, fold?: boolean, changed?: boolean): void;
+  // Mark a folded section "changed", or clear the mark.
+  mark(wrapper: HTMLElement, changed: boolean): void;
   drop(wrapper: HTMLElement): void;
 }
 declare const foldSection: FoldSection;

@@ -472,6 +472,52 @@ test.describe('signed in', () => {
     expect(errors).toEqual([]);
   });
 
+  test('a folded section whose button keeps the focus is held, its heading saying "changed"', async ({ page }) => {
+    const errors = watchErrors(page);
+    const name = 'live-page-folded-held';
+    publish(name, sectioned('Live page folded held', pond()), '--no-comments');
+    await openPlain(page, name);
+    const toggle = page.locator('.artifact-body > h2#next-steps button.artifact-section-toggle');
+    const mark = toggle.locator('.artifact-section-mark');
+    const wrapper = page.locator('div.artifact-section-body[data-section="next-steps"]');
+    await toggle.click();
+    await expect(toggle).toBeFocused();
+
+    publish(name, sectioned('Live page folded held', pond({
+      'Next steps': { paragraphs: ['Order two heaters.'] },
+    })), '--no-comments');
+    await page.clock.runFor(CHECK);
+    await expect(mark).toBeVisible();
+    await expect(mark).toHaveText('changed');
+    await toggle.click();
+    await expect(mark).toBeHidden();
+    await expect(wrapper.locator('div.artifact-swap-held')).toContainText('This section changed');
+    await expect(wrapper).not.toContainText('Order two heaters.');
+    await wrapper.getByRole('button', { name: 'Update' }).click();
+    await expect(wrapper).toContainText('Order two heaters.');
+    await expect(toggle).toBeFocused();
+    expect(errors).toEqual([]);
+  });
+
+  test('a held section updated while the banner shows draws no status line beside it', async ({ page }) => {
+    const errors = watchErrors(page);
+    const name = 'live-page-held-banner';
+    const { wrapper, bar } = await holdRisks(page, name);
+    await page.clock.runFor(6000);
+    // A table is not swapped yet: this revision falls back to the banner.
+    publish(name, sectioned(name, pond({
+      Findings: { paragraphs: ['The pond froze early this year.', '| Pump | Heater |\n|---|---|\n| off | on |'] },
+      Risks: { paragraphs: ['The pump will crack unless it is lifted out first.'] },
+    })), '--no-comments');
+    await page.clock.runFor(CHECK);
+    await expect(banner(page).node).toContainText(NEWER);
+    await bar.getByRole('button', { name: 'Update' }).click();
+    await expect(wrapper('risks')).toContainText('lifted out first');
+    await expect(page.locator('.artifact-live-page-note')).toHaveCount(0);
+    await expect(banner(page).node).toBeVisible();
+    expect(errors).toEqual([]);
+  });
+
   // A page whose Risks section holds the focus as a republish changes it and
   // Findings: Risks is held back.
   async function holdRisks(page: Page, name: string) {

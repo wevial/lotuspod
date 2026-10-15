@@ -26,7 +26,8 @@
   // opened; live.previous() is a promise of the revision that route answers
   // the reader last opened the page at, null the first time or on any failure.
   // live.note(text) shows one line in the banner's place for NOTED ms, as a
-  // swap says what it changed; a banner shown takes it away.
+  // swap says what it changed; a banner shown takes it away, and none shows
+  // beside one.
   function livePage() {
     var REVISION = "/api/revision";
     var SEEN = "/api/seen";
@@ -135,6 +136,10 @@
 
     live.note = function (text) {
       unnote();
+      // Never beside the banner, which already says the page is behind.
+      if (region.querySelector(".artifact-live-page-banner")) {
+        return;
+      }
       note = element("div", "artifact-live-page-note", text);
       region.appendChild(note);
       noting = setTimeout(unnote, NOTED);

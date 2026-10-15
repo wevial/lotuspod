@@ -456,13 +456,17 @@ function pageSwap(): void {
       part.wrapper.prepend(entry.bar);
       held.set(part.id, entry);
     }
+    // Folded, its bar does not show: its heading says it changed.
+    foldSection.mark(part.wrapper, true);
     entry.fresh = fresh;
     entry.text.textContent = fresh ? CHANGED_TEXT : REMOVED_TEXT;
   }
 
   function unholdSection(id: string): void {
     const entry = held.get(id);
-    if (entry) unbar(entry.bar, entry.bar.parentElement?.previousElementSibling ?? undefined);
+    const wrapper = entry?.bar.parentElement;
+    if (wrapper) foldSection.mark(wrapper, false);
+    if (entry) unbar(entry.bar, wrapper?.previousElementSibling ?? undefined);
     held.delete(id);
   }
 
