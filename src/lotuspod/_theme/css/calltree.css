@@ -3,7 +3,6 @@
   background: var(--color-deep-night);
   border: 1px solid var(--code-edge);
   border-radius: var(--radius-block);
-  box-sizing: border-box;
   color: var(--color-pale-lavender);
   font-family: var(--font-mono);
   font-size: 0.8125rem;
@@ -20,7 +19,6 @@
 .calltree-head {
   position: sticky;
   left: 0;
-  box-sizing: border-box;
   padding: 0.75rem 1rem;
   border-bottom: 1px solid var(--code-edge);
   background: var(--color-deep-night);
