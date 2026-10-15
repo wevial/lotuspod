@@ -110,6 +110,8 @@ class TintTests(unittest.TestCase):
         night = COLORS["night"]
         surface = COLORS["surface"]
         pairs = {
+            "pale_sky on mint_tint": (COLORS["pale_sky"], over(STRUCTURE["mint_tint"], COLORS["deep_night"])),
+            "pale_sky on amber_tint": (COLORS["pale_sky"], over(STRUCTURE["amber_tint"], COLORS["deep_night"])),
             "pale_sky on header_tint": (COLORS["pale_sky"], over(STRUCTURE["header_tint"], night)),
             "pale_sky on code_chip over night": (COLORS["pale_sky"], over(STRUCTURE["code_chip"], night)),
             "pale_sky on code_chip over surface": (COLORS["pale_sky"], over(STRUCTURE["code_chip"], surface)),

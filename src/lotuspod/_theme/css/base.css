@@ -47,6 +47,8 @@
   --header-tint: #23263a;
   --header-rule: rgba(134, 184, 255, 0.4);
   --code-chip: rgba(134, 184, 255, 0.13);
+  --mint-tint: rgba(146, 217, 181, 0.12);
+  --amber-tint: rgba(235, 197, 127, 0.12);
   --code-edge: rgba(134, 184, 255, 0.22);
   --quote-band: rgba(134, 184, 255, 0.06);
   --quote-rule: rgba(134, 184, 255, 0.6);

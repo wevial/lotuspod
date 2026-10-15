@@ -1,0 +1,83 @@
+"""Render a calltree fence as static, escaped HTML."""
+
+import html
+import re
+from urllib.parse import quote
+
+_LINE = re.compile(r"^([│├└─ ]*)(?:([+~])\s+)?(\S+)\s+(\S+):(\d+)\s*$")
+_PREFIX = re.compile(r"^[│├└─ ]*")
+_REPO = re.compile(r"[A-Za-z0-9._-]+/[A-Za-z0-9._-]+")
+_SHA = re.compile(r"[A-Fa-f0-9]{7,40}")
+
+
+def render(lines: list[str], info: list[str]) -> str:
+    """Draw raw fence lines; malformed lines remain visible text, never parents."""
+    options = dict(word.split("=", 1) for word in info if "=" in word)
+    repo, sha = options.get("repo", ""), options.get("sha", "")
+    linked = bool(_REPO.fullmatch(repo) and _SHA.fullmatch(sha))
+    rows, stack, roots = [], [], []
+    counts = {"new": 0, "changed": 0}
+    paths = set()
+    previous_depth = -1
+    for line in lines:
+        if not line.strip():
+            continue
+        prefix = _PREFIX.match(line).group()
+        # Round three-column steps and cap jumps. Only parsed rows can
+        # supply parents, even when a malformed line has deeper indentation.
+        depth = min((len(prefix) + 1) // 3, previous_depth + 1, len(stack))
+        previous_depth = depth
+        match = _LINE.fullmatch(line)
+        if not match:
+            rows.append({"depth": depth, "text": line.rstrip()})
+            continue
+        _, marker, name, path, number = match.groups()
+        kind = {"+": "new", "~": "changed"}.get(marker, "context")
+        if kind in counts:
+            counts[kind] += 1
+        paths.add(path)
+        stack = stack[:depth]
+        siblings = stack[-1]["children"] if stack else roots
+        row = dict(depth=depth, marker=marker, name=name, path=path,
+                   number=number, kind=kind, children=[], ancestors=stack[:], siblings=siblings)
+        siblings.append(row)
+        stack.append(row)
+        rows.append(row)
+
+    files = len(paths)
+    out = ['<div class="calltree"><div class="calltree-head">',
+           '<span class="calltree-summary">',
+           f'<span class="calltree-changed">{counts["changed"]} changed</span> · ',
+           f'<span class="calltree-new">{counts["new"]} new</span> · across ',
+           f'{files} {"file" if files == 1 else "files"}</span>',
+           '<span class="calltree-legend"><span class="calltree-new">+ new</span> · ',
+           '<span class="calltree-changed">~ changed</span> · dimmed = context</span>',
+           '</div><div class="calltree-rows">']
+    for row in rows:
+        depth = row["depth"]
+        if "text" in row:
+            out.append(f'<div class="calltree-row" data-depth="{depth}" data-kind="text">'
+                       f'<span class="calltree-tree">{html.escape(row["text"])}</span></div>')
+            continue
+        guide = ""
+        if depth:
+            guide = "".join("   " if a["siblings"][-1] is a else "│  "
+                            for a in row["ancestors"][1:])
+            guide += "└─ " if row["siblings"][-1] is row else "├─ "
+        kind, path, number = row["kind"], row["path"], row["number"]
+        mark = (f'<span aria-hidden="true">{row["marker"]}</span>'
+                f'<span class="calltree-sr">{kind} </span>') if row["marker"] else " "
+        title = html.escape(f"{path}:{number}")
+        chip = f'{html.escape(path.rsplit("/", 1)[-1])}<span class="calltree-ln">:{number}</span>'
+        attrs = f'class="calltree-chip" title="{title}"'
+        if linked:
+            url = html.escape(f"https://github.com/{repo}/blob/{sha}/{quote(path, safe='/')}#L{number}")
+            chip = f'<a {attrs} href="{url}">{chip}</a>'
+        else:
+            chip = f'<span {attrs}>{chip}</span>'
+        out.append(f'<div class="calltree-row" data-depth="{depth}" data-kind="{kind}">'
+                   f'<span class="calltree-tree"><span class="calltree-guide">{guide}</span>'
+                   f'<span class="calltree-mark">{mark}</span>'
+                   f'<span class="calltree-name">{html.escape(row["name"])}</span></span>{chip}</div>')
+    out.append('</div></div>')
+    return "".join(out)
