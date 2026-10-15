@@ -6,9 +6,10 @@ A reader's comment no agent has taken up yet is routed to one handle:
 - A comment whose text starts with `@HANDLE` (a handle in any case, then
   whitespace, punctuation or the end) goes to HANDLE and only ever to it;
   `@responder` names the default responder.
-- Otherwise, on a page whose owner was listening when the comment arrived,
-  it goes to the owner until the owner window has passed since it arrived.
-- Otherwise it goes to the default responder, `responder`.
+- Otherwise it goes to the default responder, `responder`, on a page with
+  an owner too, whether or not the owner is listening. The responder
+  answers it, and queues what asks the owner to act in that owner's inbox
+  (lotuspod.responder, lotuspod.db).
 
 A handle is listening when its last pull is within the window. A comment is
 `pending` while the handle it is routed to is listening, else `unavailable`;
@@ -20,8 +21,7 @@ as the handle's that took it: `claimed` while the claim is current,
 that has expired simply lapses: the comment is routed again, as if never
 claimed.
 
-`route()` is a pure function of the comment (which keeps its page's owner and
-that owner's last pull as it arrived, and its claim), the last-pull times,
+`route()` is a pure function of the comment (its text and its claim), the last-pull times,
 the window, the clock and whether the responder is paused, so the threads
 routes, the pull and the claim all agree. A thread's resolution plays no
 part: a comment in a resolved thread is routed as any other.
@@ -38,8 +38,7 @@ from typing import Mapping
 from lotuspod import db
 
 RESPONDER = "responder"
-# Seconds: how long a pull keeps a handle listening, and how long a page's
-# listening owner holds a comment before the responder gets it.
+# Seconds: how long a pull keeps a handle listening.
 DEFAULT_WINDOW = 300
 PENDING = db.PENDING
 UNAVAILABLE = "unavailable"
@@ -100,33 +99,17 @@ def route(comment: Mapping, pulls: Mapping[str, float], window: float,
         return None
     state = PENDING if lapsed(comment, now) else comment["state"]
     if state != PENDING:
-        return comment["claim"]["handle"] or _routed(comment, window, now), state
-    handle = _routed(comment, window, now)
+        return comment["claim"]["handle"] or _routed(comment), state
+    handle = _routed(comment)
     if handle == RESPONDER and paused:
         return handle, PAUSED
     return handle, PENDING if listening(handle, pulls, window, now) else UNAVAILABLE
 
 
-def arrival_owner(comment: Mapping, window: float) -> str:
-    """The page's owner when a reader's comment with no mention arrived
-    while it was listening, so the comment was routed to it then; "" otherwise."""
-    if mention(comment["text"]) is not None:
-        return ""
-    arrival = comment["arrival"]
-    pulled = seconds(arrival["ownerPull"])
-    if not arrival["owner"] or pulled is None:
-        return ""
-    return arrival["owner"] if seconds(comment["createdAt"]) - pulled <= window else ""
-
-
-def _routed(comment: Mapping, window: float, now: float) -> str:
-    """The handle a comment no agent has taken up is routed to."""
-    handle = mention(comment["text"])
-    if handle is None:
-        owner = arrival_owner(comment, window)
-        owner_held = owner and now - seconds(comment["createdAt"]) < window
-        handle = owner if owner_held else RESPONDER
-    return handle
+def _routed(comment: Mapping) -> str:
+    """The handle a comment no agent has taken up is routed to: the one it
+    mentions, else the responder."""
+    return mention(comment["text"]) or RESPONDER
 
 
 def last_pulls(database: db.Database) -> dict[str, float]:

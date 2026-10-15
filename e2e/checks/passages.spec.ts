@@ -954,7 +954,7 @@ test.describe('signed in', () => {
       expect(value, `the capture fixture names ${name}`).toBeTruthy();
     }
     const seen = await watch(page);
-    // hermes pulls first, so it is listening and the comment waits for it.
+    // hermes pulls first, so it is listening and the comment, naming it, waits for it.
     hermes('pull', '--owner', OWNER);
     const ids = new Set<number>();
     await ownThreads(page, ids);
@@ -963,7 +963,7 @@ test.describe('signed in', () => {
     await drag(page, HEATER);
     await pill(page).click();
     const open = panel(page).group('Findings').locator('.artifact-passage-composer');
-    await open.locator('textarea').fill('Which side of the pump is the heater?');
+    await open.locator('textarea').fill('@hermes Which side of the pump is the heater?');
     await open.getByRole('button', { name: 'Comment', exact: true }).click();
     await expect.poll(() => ids.size).toBe(1);
     const [id] = [...ids];

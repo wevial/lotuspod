@@ -38,12 +38,151 @@ test('scripts load without console errors or CSP violations', async ({ page }) =
   await seen.clean();
 });
 
+const NAMES = ['cmd_publish()', 'publish_config()', 'to_body()', '_walk()', '_convert()',
+  'render()', 'parse_line()', 'source_url()', '_inline()', 'cmd_render()'];
+const PARENTS = ['cmd_publish()', 'to_body()', '_walk()', '_convert()', 'render()'];
+
+function rowOf(page: Page, name: string) {
+  return page.locator('.calltree').first().locator('.calltree-row')
+    .filter({ has: page.locator('.calltree-name', { hasText: name }) }).first();
+}
+
+async function visibleNames(page: Page) {
+  return page.locator('.calltree').first().locator('.calltree-row:visible .calltree-name').allTextContents();
+}
+
+test.describe('folding', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto(URL);
+    await expect(page.locator('.calltree').first().locator('.calltree-caret')).toHaveCount(5);
+  });
+
+  test('each parent row has a caret, open, and every row shows', async ({ page }) => {
+    const tree = page.locator('.calltree').first();
+    for (const name of NAMES) {
+      const caret = rowOf(page, name).locator('.calltree-caret');
+      if (PARENTS.includes(name)) {
+        await expect(caret).toHaveAccessibleName(`Fold ${name}`);
+        await expect(caret).toHaveAttribute('aria-expanded', 'true');
+        await expect(caret).toHaveAttribute('type', 'button');
+      } else {
+        await expect(caret).toHaveCount(0);
+        await expect(rowOf(page, name).locator('.calltree-leaf')).toHaveCount(1);
+      }
+    }
+    expect(await visibleNames(page)).toEqual(NAMES);
+    await expect(tree.locator('.calltree-folded:visible')).toHaveCount(0);
+    // Carets and spacers are as wide, so names stay in line.
+    const caret = (await rowOf(page, '_walk()').locator('.calltree-caret').boundingBox())!;
+    const leaf = (await rowOf(page, 'publish_config()').locator('.calltree-leaf').boundingBox())!;
+    expect(Math.abs(caret.width - leaf.width)).toBeLessThan(0.5);
+    // The second block's text row is no parent and not counted.
+    await expect(page.locator('.calltree').nth(1).locator('.calltree-caret')).toHaveCount(1);
+    await expect(page.locator('.calltree').nth(1).locator('.calltree-fold-all')).toHaveCount(0);
+  });
+
+  test('a caret folds and opens its row, by click and by Enter', async ({ page }) => {
+    const walk = page.getByRole('button', { name: 'Fold _walk()' });
+    await walk.click();
+    expect(await visibleNames(page)).toEqual(['cmd_publish()', 'publish_config()', 'to_body()', '_walk()', 'cmd_render()']);
+    await expect(rowOf(page, '_walk()').locator('.calltree-folded')).toBeVisible();
+    await expect(rowOf(page, '_walk()').locator('.calltree-folded')).toHaveText('5 inside · 1 changed · 3 new');
+    const open = rowOf(page, '_walk()').locator('.calltree-caret');
+    await expect(open).toHaveAttribute('aria-expanded', 'false');
+    await expect(open).toHaveAccessibleName('Open _walk()');
+    await open.click();
+    expect(await visibleNames(page)).toEqual(NAMES);
+    await expect(rowOf(page, '_walk()').locator('.calltree-folded')).toBeHidden();
+    await expect(open).toHaveAccessibleName('Fold _walk()');
+
+    const convert = rowOf(page, '_convert()').locator('.calltree-caret');
+    await convert.focus();
+    await page.keyboard.press('Enter');
+    await expect(convert).toHaveAttribute('aria-expanded', 'false');
+    await expect(convert).toHaveAccessibleName('Open _convert()');
+    expect(await visibleNames(page)).toEqual(['cmd_publish()', 'publish_config()', 'to_body()', '_walk()', '_convert()', 'cmd_render()']);
+    await expect(rowOf(page, '_convert()').locator('.calltree-folded')).toHaveText('4 inside · 3 new');
+  });
+
+  test('opening a row keeps a folded descendant folded', async ({ page }) => {
+    await page.getByRole('button', { name: 'Fold render()' }).click();
+    await page.getByRole('button', { name: 'Fold _walk()' }).click();
+    await page.getByRole('button', { name: 'Open _walk()' }).click();
+    for (const name of ['_convert()', 'render()', '_inline()']) await expect(rowOf(page, name)).toBeVisible();
+    for (const name of ['parse_line()', 'source_url()']) await expect(rowOf(page, name)).toBeHidden();
+    await expect(rowOf(page, 'render()').locator('.calltree-folded')).toHaveText('2 inside · 2 new');
+  });
+
+  test('Fold all folds every level under the roots, and Open all opens them', async ({ page }) => {
+    const all = page.locator('.calltree').first().locator('.calltree-head .calltree-fold-all');
+    await expect(all).toHaveText('Fold all');
+    await all.click();
+    expect(await visibleNames(page)).toEqual(['cmd_publish()', 'publish_config()', 'to_body()', 'cmd_render()']);
+    await expect(rowOf(page, 'to_body()').locator('.calltree-folded')).toHaveText('6 inside · 1 changed · 3 new');
+    await expect(rowOf(page, 'cmd_publish()').locator('.calltree-caret')).toHaveAttribute('aria-expanded', 'true');
+    await expect(all).toHaveText('Open all');
+    await all.click();
+    expect(await visibleNames(page)).toEqual(NAMES);
+    await expect(page.locator('.calltree').first().locator('.calltree-folded:visible')).toHaveCount(0);
+    await expect(all).toHaveText('Fold all');
+  });
+
+  test('a focused caret and Fold all show a lavender ring', async ({ page }) => {
+    for (const control of [rowOf(page, '_walk()').locator('.calltree-caret'),
+      page.locator('.calltree').first().locator('.calltree-fold-all')]) {
+      await control.focus();
+      await expect(control).toHaveCSS('outline-style', 'solid');
+      await expect(control).toHaveCSS('outline-color', 'rgb(183, 156, 244)');
+    }
+  });
+
+  test('a tree a page swap brings in folds too', async ({ page }) => {
+    await page.evaluate(async () => {
+      const fresh = new DOMParser().parseFromString(await (await fetch(location.href)).text(), 'text/html');
+      document.querySelector('.calltree')!.replaceWith(document.adoptNode(fresh.querySelector('.calltree')!));
+      document.dispatchEvent(new CustomEvent('lotuspod:swapped', { detail: { revision: '', units: [] } }));
+    });
+    const tree = page.locator('.calltree').first();
+    await expect(tree.locator('.calltree-caret')).toHaveCount(5);
+    await expect(tree.locator('.calltree-fold-all')).toHaveCount(1);
+    await expect(page.locator('.calltree').nth(1).locator('.calltree-caret')).toHaveCount(1);
+    await page.getByRole('button', { name: 'Fold _walk()' }).click();
+    await expect(rowOf(page, '_walk()').locator('.calltree-folded')).toHaveText('5 inside · 1 changed · 3 new');
+  });
+});
+
+test('a passage quote leaves out the folded count and Fold all', async ({ page }) => {
+  // capture-calltree takes no comments, so the unlinked tree is set into
+  // the passages page and mounted as a swap would bring it in.
+  await page.goto('/capture-passages.html?standalone');
+  await expect(page.locator('.artifact-body details.artifact-comment')).toHaveCount(3);
+  const selected = await page.evaluate(async () => {
+    const fresh = new DOMParser().parseFromString(await (await fetch('/capture-calltree.html')).text(), 'text/html');
+    const tree = document.adoptNode(fresh.querySelectorAll('.calltree')[1]);
+    document.querySelector('.artifact-section-body')!.prepend(tree);
+    document.dispatchEvent(new CustomEvent('lotuspod:swapped', { detail: { revision: '', units: [] } }));
+    const name = tree.querySelector('.calltree-name')!.firstChild!;
+    const line = tree.querySelector('.calltree-ln')!.firstChild as Text;
+    document.getSelection()!.setBaseAndExtent(name, 0, line, line.data.length);
+    return String(document.getSelection());
+  });
+  expect(selected).not.toContain('inside');
+  await expect(page.locator('.calltree-folded')).toHaveCount(1);
+  await expect(page.locator('button.artifact-passage-pill')).toBeVisible();
+  await page.keyboard.press('Control+Alt+KeyM');
+  const open = page.locator('.artifact-passage-composer');
+  await expect(open.locator('.artifact-passage-quote')).toHaveText('entry()main.py:10');
+  await page.keyboard.press('Escape');
+});
+
 test.describe('without JavaScript', () => {
   test.use({ javaScriptEnabled: false });
   test('all rows, marker colors and chips render statically', async ({ page }) => {
     await page.goto(URL);
     const tree = page.locator('.calltree').first();
     await expect(tree.locator('.calltree-row')).toHaveCount(10);
+    await expect(tree.locator('.calltree-row:visible')).toHaveCount(10);
+    await expect(page.locator('.calltree-caret, .calltree-fold-all')).toHaveCount(0);
     await expect(tree.locator('.calltree-summary')).toHaveText('3 changed · 3 new · across 3 files');
     await expect(tree.locator('[data-kind="new"] .calltree-mark').first()).toHaveCSS('color', 'rgb(146, 217, 181)');
     await expect(tree.locator('[data-kind="changed"] .calltree-mark').first()).toHaveCSS('color', 'rgb(235, 197, 127)');

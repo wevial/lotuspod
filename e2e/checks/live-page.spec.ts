@@ -38,7 +38,7 @@ function run(...args: string[]) {
   });
 }
 
-// hermes pulls, so it is listening and a new comment waits for it.
+// hermes pulls, so it is listening and a new comment naming it waits for it.
 function listen() {
   JSON.parse(run('comments', 'pull', '--owner', OWNER, '--json', '--socket', SOCKET,
     '--credential', HERMES));
@@ -765,7 +765,7 @@ test.describe('signed in', () => {
     const name = 'live-page-poll';
     listen();
     publish(name, source('Live page poll', 'first'));
-    const root = await comment(request, name, 'findings', 'Which heater?');
+    const root = await comment(request, name, 'findings', '@hermes Which heater?');
     expect(root.state).toBe('pending');
     const asked: string[] = [];
     page.on('request', (sent) => {

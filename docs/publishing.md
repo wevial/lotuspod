@@ -54,9 +54,11 @@ Render wraps everything from just after each section's `<h2>` to the next one
 `data-section` is the heading's id, after the comment boxes are placed, so a
 section's box and decision forms fold with it; the intro before the first
 `<h2>` is never wrapped. Render stamps content digests on the header (including
-publish time), outline, each section (heading plus content, including boxes
-and forms), and reference cards; the body's intro digest covers the prose
-before the first wrapped heading, or the whole body when no sections are wrapped.
+the day it shows as updated, but not the publish time, so the same source
+published twice stamps the same digest), outline, each section (heading plus
+content, including boxes and forms), and reference cards; the body's intro
+digest covers the prose before the first wrapped heading, or the whole body
+when no sections are wrapped.
 These stamps describe render's markup before scripts change it and are not yet
 read by the browser. The page script then turns each heading's text into a
 button with a caret: pressing it hides the section (`hidden="until-found"`)
@@ -236,6 +238,10 @@ order. With both a valid GitHub repository and a commit of 7–40 hex
 characters (0–9, a–f), file:line chips link to source lines; otherwise they are
 plain chips. A summary counts changed and new functions and distinct files, and
 a legend explains the markers and dimmed context rows. A line that doesn't parse shows as text.
+With the page script, a caret folds any function with calls under it, and the
+folded row counts what it hides ("5 inside · 1 changed · 3 new"); Fold all
+folds every level under the roots, and Open all opens them again. Without
+scripts the tree shows in full.
 
 Images, links, bare URLs and calltree fences are Lotuspod's own, outside
 the subset its reference converter takes. Everything from a

@@ -35,7 +35,8 @@ const PYTHON = ENV.LOTUSPOD_TEST_PYTHON ?? '';
 // This checkout's package, whatever lotuspod is installed.
 const SRC = path.resolve(__dirname, '..', '..', 'src');
 
-const COMMENT = 'Which heater fits beside the pump?';
+// It names hermes, so it waits for hermes, not the responder.
+const COMMENT = '@hermes Which heater fits beside the pump?';
 const NOTE = 'Submerged keeps the outlet free.';
 const REVISED = 'Fit a submerged heater before the first frost, clear of the pump outlet.';
 const REPLY = 'A submerged heater: the page now says where it goes.';

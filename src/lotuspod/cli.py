@@ -104,6 +104,7 @@ def load_tokens() -> dict:
 # element's text verbatim, so render leaves it alone and only decides from its
 # presence whether the page needs the drawing script at all.
 _MERMAID_BLOCK = re.compile(r'<pre\b[^>]*\bclass="[^"]*\bmermaid\b')
+_CALLTREE_BLOCK = re.compile(r'<div\b[^>]*\bclass="(?:[^"]*\s)?calltree[\s"]')
 
 
 class _LinkFinder(HTMLParser):
@@ -131,6 +132,11 @@ def has_link(body: str) -> bool:
 
 def has_mermaid_block(body: str) -> bool:
     return _MERMAID_BLOCK.search(body) is not None
+
+
+def has_calltree_block(body: str) -> bool:
+    """Whether body holds a calltree block, which the page script folds."""
+    return _CALLTREE_BLOCK.search(body) is not None
 
 
 def mermaid_theme_variables(tokens: dict) -> str:
@@ -370,6 +376,8 @@ THEME_SOURCES = {
         "js/diagram-cards.js",
         "js/diagram-view.js",
         "js/ref-cards.js",
+        # Built from web/src/calltree.ts: it folds calltree blocks.
+        "js/calltree.js",
         "js/archive.js",
         # The islands, bundled from web/src/islands/main.tsx: last, so they run
         # once every source above has, through the closure's names.
@@ -826,19 +834,21 @@ def cmd_render(args: argparse.Namespace) -> int:
         "mermaid": has_mermaid_block(body),
         # A page stamped with a revision notices when it is published again,
         # a link off the site opens in a new tab, a diagram can be expanded
-        # to fill the window, and a listed page loaded on its own opens in
-        # the index's tabs.
+        # to fill the window, a calltree block folds, and a listed page
+        # loaded on its own opens in the index's tabs.
         "page_script_needed": (not args.hidden or has_decisions or with_comments or wrapped
                                or has_node_tables or bool(refs_block)
                                or bool(getattr(args, "revision", "")) or has_link(body)
-                               or has_mermaid_block(body)),
+                               or has_mermaid_block(body) or has_calltree_block(body)),
         "page_script": PAGE_SCRIPT,
         "mermaid_theme_variables": mermaid_theme_variables(tokens),
         "mermaid_dir": MERMAID_DIR,
         "mermaid_elk_dir": MERMAID_ELK_DIR,
     }
+    # The header changes with the day it names as updated, not with the second
+    # publish ran, so the same source published twice stamps the same digest.
     context["header_digest"] = unit_digest(*(context[key] for key in (
-        "kicker", "title", "date", "updated", "updated_day", "label_tags", "owner",
+        "kicker", "title", "date", "updated_day", "label_tags", "owner",
         "summary_block",
     )))
     context["outline_digest"] = unit_digest(context["outline_items"])
@@ -3117,6 +3127,7 @@ def build_parser() -> argparse.ArgumentParser:
     audit.set_defaults(func=cmd_audit)
 
     agents.add_parser(sub)
+    agents.add_inbox_parser(sub)
     responder.add_parser(sub)
     backup.add_parser(sub)
     archive.add_parser(sub)

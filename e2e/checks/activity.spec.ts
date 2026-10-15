@@ -215,10 +215,10 @@ test.describe('signed in', () => {
     await catchUp(request);
     publish(A, source('Activity check A', 'A heater keeps a hole in the ice.'), '--label', LABEL);
     publish(B, source('Activity check B', 'The heater shares the pump outlet.'));
-    // hermes listens, so the comment waits for it.
+    // hermes listens, so the comment, naming it, waits for it.
     hermes('pull', '--owner', OWNER);
     const posted = await request.post(COMMENTS, {
-      headers: SIGNED_IN, data: { page: B, section: 'heater', text: 'Which outlet does it share?' },
+      headers: SIGNED_IN, data: { page: B, section: 'heater', text: '@hermes Which outlet does it share?' },
     });
     expect(posted.status()).toBe(201);
     const { id: thread } = (await posted.json()) as Row;
@@ -344,10 +344,10 @@ test.describe('signed in', () => {
     expect(versions.length).toBe(2);
     const older = versions[1].commit;
 
-    // hermes listens, so the comment waits for it.
+    // hermes listens, so the comment, naming it, waits for it.
     hermes('pull', '--owner', OWNER);
     const posted = await request.post(COMMENTS, {
-      headers: SIGNED_IN, data: { page: C, section: 'heater', text: 'How deep does it sit?' },
+      headers: SIGNED_IN, data: { page: C, section: 'heater', text: '@hermes How deep does it sit?' },
     });
     expect(posted.status()).toBe(201);
     const { id: thread } = (await posted.json()) as Row;

@@ -70,10 +70,10 @@ async function catchUp(request: APIRequestContext) {
 // thread's id and the reply's.
 async function answered(request: APIRequestContext, text: string) {
   await catchUp(request);
-  // hermes listens, so the comment waits for it.
+  // hermes listens, and the comment names it, so it waits for it.
   hermes('pull', '--owner', OWNER);
   const posted = await request.post(COMMENTS, {
-    headers: SIGNED_IN, data: { page: NAME, section: SECTION, text },
+    headers: SIGNED_IN, data: { page: NAME, section: SECTION, text: `@${OWNER} ${text}` },
   });
   expect(posted.status()).toBe(201);
   const { id } = (await posted.json()) as Row;
@@ -213,11 +213,11 @@ test.describe('signed in', () => {
     test.setTimeout(120_000);
     const errors = watchErrors(page);
     await catchUp(request);
-    // hermes listens, so the comment waits for it, and the page keeps
-    // reading the threads while the panel is folded.
+    // hermes listens, and the comment names it, so it waits for it, and the
+    // page keeps reading the threads while the panel is folded.
     hermes('pull', '--owner', OWNER);
     const posted = await request.post(COMMENTS, {
-      headers: SIGNED_IN, data: { page: NAME, section: SECTION, text: 'Does the pump need a cover?' },
+      headers: SIGNED_IN, data: { page: NAME, section: SECTION, text: '@hermes Does the pump need a cover?' },
     });
     expect(posted.status()).toBe(201);
     const { id: thread } = (await posted.json()) as Row;
@@ -291,7 +291,7 @@ test.describe('signed in', () => {
       expect(posted.status()).toBe(201);
       return ((await posted.json()) as Row).id;
     };
-    const mine = await start(SECTION, 'Should the pump come out for winter?');
+    const mine = await start(SECTION, '@hermes Should the pump come out for winter?');
     const other = await start('findings', 'How thick does the ice get?');
 
     await openPage(page);

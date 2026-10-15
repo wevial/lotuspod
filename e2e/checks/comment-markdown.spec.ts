@@ -469,9 +469,9 @@ test.describe('signed in', () => {
   test("hermes's reply in markdown is drawn as markdown", async ({ page, request }) => {
     test.setTimeout(120_000);
     const seen = await watch(page);
-    // hermes pulls first, so it is listening and the comment waits for it.
+    // hermes pulls first, so it is listening and the comment, naming it, waits for it.
     hermes('pull', '--owner', OWNER);
-    const root = await post(request, 'frogs', 'Is the **pond** ready for winter?');
+    const root = await post(request, 'frogs', '@hermes Is the **pond** ready for winter?');
     await page.goto(`${PAGE}?standalone`);
     await open(page, 'frogs');
     const node = page.locator(`.artifact-comment-thread[data-thread="${root.id}"]`);
@@ -495,7 +495,7 @@ test.describe('signed in', () => {
     test.setTimeout(120_000);
     const seen = await watch(page);
     hermes('pull', '--owner', OWNER);
-    const root = await post(request, 'pond', 'What does the pond look like now?');
+    const root = await post(request, 'pond', '@hermes What does the pond look like now?');
     await page.goto(`${PAGE}?standalone`);
     await open(page, 'pond');
     const node = page.locator(`.artifact-comment-thread[data-thread="${root.id}"]`);
