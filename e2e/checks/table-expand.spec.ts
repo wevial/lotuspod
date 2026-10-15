@@ -145,14 +145,11 @@ async function sideways(page: Page) {
 }
 
 // Every top-level block of the body, a section's blocks standing in for its
-// wrapper, in page order, each top from the body's own top (what the scripts
-// add to the header above it, the Archive button and the page's comment box,
-// is not the buttons'), the button holders left out; whether each is a
-// section's comment box.
+// wrapper, in page order and in page coordinates, the button holders left
+// out; whether each is a section's comment box.
 function blocks(page: Page) {
   return page.evaluate(() => {
     const body = document.querySelector('.artifact-body')!;
-    const start = body.getBoundingClientRect().top;
     const ledger = body.querySelector('table');
     const found: {
       name: string; ledger: boolean; comment: boolean;
@@ -166,7 +163,7 @@ function blocks(page: Page) {
         found.push({
           name: `${node.tagName} ${found.length}`, ledger: node === ledger,
           comment: node.matches('details.artifact-comment'),
-          left: rect.left, top: rect.top - start, width: rect.width, height: rect.height,
+          left: rect.left, top: rect.top + window.scrollY, width: rect.width, height: rect.height,
         });
       }
     }
