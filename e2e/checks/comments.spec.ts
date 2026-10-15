@@ -11,7 +11,7 @@ test.use({ viewport: MEDIUM });
 // The capture fixture's comments page: three sections, each ending in a
 // comment box, owned by hermes. The fixture names an assertion its site
 // accepts; sending it is being signed in. hermes pulls on the fixture's agent
-// socket first, so it is listening and a new comment waits for it.
+// socket first, so it is listening and a new comment naming it waits for it.
 const PAGE = '/capture-comments.html';
 const THREADS = (url: URL) => url.pathname === '/api/comments';
 const ASSERTION = process.env.LOTUSPOD_TEST_ASSERTION ?? '';
@@ -236,7 +236,7 @@ test.describe('signed in', () => {
     await open(page, 'risks');
     await expect(risks.text).toBeFocused();
 
-    await risks.text.fill('This step is out of order.');
+    await risks.text.fill('@hermes This step is out of order.');
     await risks.comment.click();
     await expect(risks.threads).toHaveCount(1);
     const thread = risks.threads.first();
@@ -245,7 +245,7 @@ test.describe('signed in', () => {
       const mine = thread.locator('.artifact-comment-item--reader');
       await expect(mine).toHaveCount(1);
       await expect(mine.locator('.artifact-comment-author')).toHaveText(READER);
-      await expect(mine.locator('.artifact-comment-text')).toHaveText('This step is out of order.');
+      await expect(mine.locator('.artifact-comment-text')).toHaveText('@hermes This step is out of order.');
       // The page names the reader, never by their address.
       expect(await page.locator('body').textContent()).not.toContain('@example.com');
       const typing = thread.locator('.artifact-comment-typing--pending');

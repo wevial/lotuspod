@@ -89,7 +89,7 @@ function hermes(action: string, ...args: string[]) {
   return JSON.parse(run(['comments', action, ...args, '--json', '--socket', SOCKET, '--credential', HERMES]));
 }
 
-// hermes pulls, so it is listening and a new comment waits for it.
+// hermes pulls, so it is listening and a new comment naming it waits for it.
 function listen() {
   return hermes('pull', '--owner', OWNER);
 }
@@ -251,7 +251,8 @@ test.describe('signed in', () => {
     await expect(first.chip).toHaveCount(0);
 
     const sent = record(page);
-    const words = 'Does the floating one survive a hard frost?';
+    // It names hermes, so it waits for hermes, not the responder.
+    const words = '@hermes Does the floating one survive a hard frost?';
     await ask(page, 'decision-1', words);
     await expect.poll(() => ids.size).toBe(2);
     const id = [...ids].find((each) => each !== own.id)!;
@@ -333,7 +334,7 @@ test.describe('signed in', () => {
     await ownThreads(page, ids);
     await load(page);
     const first = decision(page, 'decision-1');
-    await ask(page, 'decision-1', 'Does the floating one need a stand?');
+    await ask(page, 'decision-1', '@hermes Does the floating one need a stand?');
     await expect.poll(() => ids.size).toBe(1);
     const [id] = [...ids];
     const mine = entry(page, id);
@@ -359,7 +360,7 @@ test.describe('signed in', () => {
 
     // The reader replies from the thread's composer: it waits for hermes again.
     await mine.item.getByRole('button', { name: 'Reply', exact: true }).click();
-    await mine.item.locator('form.artifact-comment-reply textarea[name="text"]').fill('And in a gale?');
+    await mine.item.locator('form.artifact-comment-reply textarea[name="text"]').fill('@hermes And in a gale?');
     await mine.item.getByRole('button', { name: 'Send' }).click();
     await expect(mine.readers).toHaveCount(2);
     await expect(mine.waiting).toHaveText(`Checking for a reply from ${OWNER}`);

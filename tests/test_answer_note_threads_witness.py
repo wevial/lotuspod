@@ -1,6 +1,6 @@
 """Witness: a reader's note on a saved answer opens a thread on that
 decision. The answer's 201 body carries the note's comment, routed to the
-page's owner; the owner's real `lotuspod comments pull` has the comment, in
+page's owner when it names it; the owner's real `lotuspod comments pull` has the comment, in
 a thread on the decision, and the answer pointing to it, so the note is
 printed once. The owner claims and replies with the real commands and the
 reader reads the reply; a later note joins the same thread, and reopens it
@@ -30,12 +30,15 @@ Which model runs at night.
 | 1 | Which model? | Sonnet / Opus |
 | 2 | Run it nightly? | Yes / No |
 """
-NOTE = "Why not Sonnet for nightly runs?"
+# A note that names the page's owner, so its comment is routed to it.
+NOTE = "@hermes Why not Sonnet for nightly runs?"
+# A note that names no one, so its comment is routed to the responder.
+PLAIN = "Why not Sonnet for nightly runs?"
 
 
 class NoteSite(Site):
     """The page published as hermes and served; with listening, hermes has
-    pulled, so the reader's comments are routed to it."""
+    pulled, so the reader's comments that name it wait for it."""
 
     listening = True
 
@@ -142,13 +145,12 @@ class AnswerNoteThreadsWitness(NoteSite):
         self.assertNotIn("The answer's note:", out)
 
 
-class NoteBeforeTheOwnerListensWitness(NoteSite):
-    """A note saved before hermes ever pulled goes to the responder."""
-
-    listening = False
+class NoteWithoutMentionWitness(NoteSite):
+    """A note that names no one goes to the responder, though hermes, the
+    page's owner, is listening."""
 
     def test_the_answer_does_not_tell_the_owner_to_claim_it(self):
-        answer = self.answer("opus", NOTE)
+        answer = self.answer("opus", PLAIN)
         self.assertEqual(answer["comment"]["owner"], "responder")
         out = self.text_pull()
         [line] = [line for line in out.splitlines() if line.startswith("- Note: comment")]

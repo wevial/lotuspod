@@ -55,9 +55,9 @@ Cloudflare Access](operating.md#who-is-reading-cloudflare-access),
 The page script posts the comment to `/api/comments`, and serve stores it in
 SQLite with the verified reader as its actor ([Answers and
 comments](comments.md#answers-and-comments)). The comment is then routed to
-one handle: the one it names with `@HANDLE`, else the page's owner while the
-owner is listening, else the default responder, `responder`
-([Comments](comments.md#comments)). While the comment is `pending` or
+one handle: the one it names with `@HANDLE`, else the default responder,
+`responder`, which queues what asks the page's owner to act in that owner's
+inbox ([Comments](comments.md#comments)). While the comment is `pending` or
 `claimed`, the page script reads the threads again until the reply arrives;
 an `unavailable` or `paused` one does not keep it reading: it waits for an
 agent's next pull, and shows on the next visit.
