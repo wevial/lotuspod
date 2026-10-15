@@ -1,5 +1,7 @@
 """Parsed HTML witnesses for the static calltree fence."""
 import io
+import subprocess
+import sys
 import tempfile
 import unittest
 from unittest import mock
@@ -79,3 +81,22 @@ class CalltreeTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory, mock.patch('sys.stdin', io.StringIO(source)):
             rc, _, err = run_cli('render', '--markdown', '-', '--name', 'tree', '--title', 'Tree', '--out-dir', directory)
         self.assertEqual(rc, 0, err)
+
+    def test_long_malformed_guides_do_not_stall(self):
+        bad = '─' * 100_000 + ' x'
+        source = f'```calltree\n~ root() x:1\n{bad}\n+ child() x:2\n```'
+        # Isolate the deadline so a regex regression cannot hang the suite.
+        result = subprocess.run(
+            [sys.executable, '-c',
+             'import sys; from lotuspod.markdown import to_body; '
+             'sys.stdout.write(to_body(sys.stdin.read()))'],
+            input=source, capture_output=True, text=True, timeout=5,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        root = parse(result.stdout)
+        rows = nodes(root, 'calltree-row')
+        self.assertEqual([row.attrs['data-kind'] for row in rows],
+                         ['changed', 'text', 'new'])
+        self.assertEqual(rows[1].text(), bad)
+        self.assertEqual(nodes(root, 'calltree-summary')[0].text(),
+                         '1 changed · 1 new · across 1 file')

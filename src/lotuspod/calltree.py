@@ -4,7 +4,7 @@ import html
 import re
 from urllib.parse import quote
 
-_LINE = re.compile(r"^([│├└─ ]*)(?:([+~])\s+)?(\S+)\s+(\S+):(\d+)\s*$")
+_LINE = re.compile(r"(?:([+~])\s+)?(\S+)\s+(\S+):(\d+)\s*$")
 _PREFIX = re.compile(r"^[│├└─ ]*")
 _REPO = re.compile(r"[A-Za-z0-9._-]+/[A-Za-z0-9._-]+")
 _SHA = re.compile(r"[A-Fa-f0-9]{7,40}")
@@ -27,11 +27,13 @@ def render(lines: list[str], info: list[str]) -> str:
         # supply parents, even when a malformed line has deeper indentation.
         depth = min((len(prefix) + 1) // 3, previous_depth + 1, len(stack))
         previous_depth = depth
-        match = _LINE.fullmatch(line)
+        # Consume guides only once: allowing the name to backtrack into the
+        # prefix makes malformed guide-heavy lines take quadratic time.
+        match = _LINE.fullmatch(line, len(prefix))
         if not match:
             rows.append({"depth": depth, "text": line.rstrip()})
             continue
-        _, marker, name, path, number = match.groups()
+        marker, name, path, number = match.groups()
         kind = {"+": "new", "~": "changed"}.get(marker, "context")
         if kind in counts:
             counts[kind] += 1
