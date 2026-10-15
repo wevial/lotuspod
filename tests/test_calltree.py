@@ -6,9 +6,10 @@ import tempfile
 import unittest
 from unittest import mock
 
-from lotuspod import calltree, refs
+from tests.test_manifest_v2 import TempDirTestCase, run_cli
+
+from lotuspod import calltree, cli, refs
 from lotuspod.markdown import to_body
-from tests.test_manifest_v2 import run_cli
 from tests.test_markdown import parse
 
 INFO = 'repo=wevial/lotuspod sha=43b4187318733fe6aa629aaedd462adbbb147d5d'
@@ -130,3 +131,21 @@ class CalltreeTests(unittest.TestCase):
                                      ['a.py:1', 'a.py:2'])
                     self.assertEqual(nodes(root, 'calltree-summary')[0].text(),
                                      '0 changed · 0 new · across 1 file')
+
+
+class CalltreePageScriptTests(TempDirTestCase):
+    def test_a_hidden_page_with_a_calltree_loads_the_page_script_and_one_without_does_not(self):
+        """LOTUS-167: the page script folds a calltree block, so a hidden page
+        whose only feature is an unlinked calltree fence loads it, and the
+        same page without the fence doesn't."""
+        fence = '```calltree\n~ root() src/a.py:1\n└─ + child() src/a.py:2\n```\n'
+        for name, source, loads in (('tree', f'Plain text.\n\n{fence}', True),
+                                    ('plain', 'Plain text.\n', False)):
+            with self.subTest(name=name):
+                with mock.patch('sys.stdin', io.StringIO(source)):
+                    rc, _, err = run_cli('render', '--markdown', '-', '--name', name, '--title', 'T',
+                                         '--out-dir', str(self.out_dir), '--date', '2026-01-02',
+                                         '--hidden')
+                self.assertEqual(rc, 0, err)
+                page = (self.out_dir / f'{name}.html').read_text(encoding='utf-8')
+                self.assertEqual(f'<script src="{cli.PAGE_SCRIPT}?v=' in page, loads)
