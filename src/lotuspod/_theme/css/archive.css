@@ -2,8 +2,10 @@
 /* An archived page (lotuspod.archive): a banner under the title bar saying
    when it was archived and what superseded it, styled as an old version's
    banner is (versions.css); its decision forms and comment controls
-   disabled; and for an owner, an Archive or Unarchive button in the header
-   (js/archive.js). */
+   disabled; and for an owner, an Archive or Unarchive button at the right
+   of the top bar (js/archive.js), before the review sheet's bar when both
+   are drawn. The top bar takes no room in flow, so the button moves nothing
+   when it arrives. */
 .artifact-archived-banner {
   align-items: center;
   background: color-mix(in srgb, var(--color-amber) 10%, var(--color-surface));
@@ -58,6 +60,21 @@
   pointer-events: none;
 }
 
+.artifact-archive-bar {
+  align-items: baseline;
+  display: flex;
+  flex: none;
+  margin-left: auto;
+  max-width: 100%;
+}
+
+/* The review sheet's bar keeps its own margin-left: auto; after the archive
+   bar, that margin would split the free room between the two, so it sits
+   right beside it instead. */
+.artifact-archive-bar ~ .artifact-review-bar {
+  margin-left: 0;
+}
+
 .artifact-archive {
   appearance: none;
   background: none;
@@ -65,10 +82,13 @@
   border-radius: var(--radius-pill);
   color: var(--color-pale-lavender);
   cursor: pointer;
+  flex: none;
   font: inherit;
-  font-size: 0.85rem;
-  margin: 0.5rem 0 0;
-  padding: 0.15rem 0.85rem;
+  font-family: var(--font-body);
+  font-size: 0.8rem;
+  line-height: 1.4;
+  margin: 0;
+  padding: 0.1rem 0.75rem;
 }
 
 .artifact-archive:hover,
@@ -82,8 +102,61 @@
   opacity: 0.6;
 }
 
+/* Empty, the live region takes no width; a message longer than the bar
+   holds ends in an ellipsis, its whole text in its title. */
 .artifact-archive-status {
   color: var(--color-muted-lavender);
-  font-size: 0.85rem;
-  margin-left: 0.75rem;
+  font-family: var(--font-body);
+  font-size: 0.8rem;
+  margin-left: 0.6rem;
+  max-width: 22rem;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.artifact-archive-status:empty {
+  margin-left: 0;
+}
+
+@media (max-width: 40rem) {
+  .artifact-archive {
+    font-size: 0.75rem;
+    padding-inline: 0.5rem;
+  }
+
+  .artifact-archive-status {
+    font-size: 0.75rem;
+    max-width: 9rem;
+  }
+
+  /* With the review sheet's bar beside it, the title gives way first (and
+     leaves while Next open shows), then the brand and Next open's words to
+     an ellipsis; the button and the count stay whole. */
+  .artifact-topbar:has(.artifact-archive-bar ~ .artifact-review-bar) .artifact-topbar-title {
+    flex-shrink: 1000;
+  }
+
+  .artifact-topbar:has(.artifact-archive-bar ~ .artifact-review-bar .artifact-review-next:not([hidden])) .artifact-topbar-sep,
+  .artifact-topbar:has(.artifact-archive-bar ~ .artifact-review-bar .artifact-review-next:not([hidden])) .artifact-topbar-title {
+    display: none;
+  }
+
+  .artifact-topbar:has(.artifact-archive-bar ~ .artifact-review-bar) .artifact-topbar-brand {
+    flex: 0 4 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .artifact-archive-bar ~ .artifact-review-bar {
+    flex: 0 1 auto;
+    min-width: 0;
+  }
+
+  /* With no question open the count alone has nothing to give way. */
+  .artifact-archive-bar ~ .artifact-review-bar:not(:has(.artifact-review-next:not([hidden]))) {
+    flex: none;
+  }
 }

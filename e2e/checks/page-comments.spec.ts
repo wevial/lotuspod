@@ -122,13 +122,12 @@ test.describe('signed in', () => {
     const risks = box(page, 'risks');
     await expect(page.locator('header.artifact-header > details.artifact-comment[data-section=""]'))
       .toHaveCount(1);
-    // Right after the date line, the owner's Archive control after it.
-    const archive = page.locator('header.artifact-header > button.artifact-archive');
+    // Right after the date line; the owner's Archive control is in the top bar, not the header.
+    const archive = page.locator('.artifact-topbar > span.artifact-archive-bar > button.artifact-archive');
     await expect(archive).toHaveText('Archive');
+    await expect(page.locator('header.artifact-header button.artifact-archive')).toHaveCount(0);
     expect(await whole.details.evaluate((node) =>
       node.previousElementSibling?.classList.contains('artifact-meta'))).toBe(true);
-    expect(await archive.evaluate((node) =>
-      node.previousElementSibling?.matches('details.artifact-comment[data-section=""]'))).toBe(true);
     await expect(whole.chip).toHaveText('No comments · Comment on this page');
     await expect(goals.chip).toHaveText('No comments · Comment');
 
