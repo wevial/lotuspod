@@ -53,7 +53,12 @@ Render wraps everything from just after each section's `<h2>` to the next one
 (or the end of the body) in one `<div class="artifact-section-body">` whose
 `data-section` is the heading's id, after the comment boxes are placed, so a
 section's box and decision forms fold with it; the intro before the first
-`<h2>` is never wrapped. The page script then turns each heading's text into a
+`<h2>` is never wrapped. Render stamps content digests on the header (including
+publish time), outline, each section (heading plus content, including boxes
+and forms), and reference cards; the body's intro digest covers the prose
+before the first wrapped heading, or the whole body when no sections are wrapped.
+These stamps describe render's markup before scripts change it and are not yet
+read by the browser. The page script then turns each heading's text into a
 button with a caret: pressing it hides the section (`hidden="until-found"`)
 and pressing it again shows it. Everything starts open; the page remembers in
 the browser's `localStorage` which sections the reader folded, and a "Collapse

@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import html
 
+from lotuspod import cli
 from lotuspod.comments import MIN_SECTIONS, _SectionFinder
 
 WRAPPER_CLASS = "artifact-section-body"
@@ -59,8 +60,8 @@ class _TopSections(_SectionFinder):
                 pass
 
 
-def wrap_sections(body: str) -> tuple[str, bool]:
-    """The body with each section's content wrapped, and whether it was."""
+def wrap_sections(body: str) -> tuple[str, bool, str]:
+    """The wrapped body, whether it was wrapped, and its intro digest."""
     finder = _TopSections(body)
     finder.feed(body)
     finder.close()
@@ -68,17 +69,18 @@ def wrap_sections(body: str) -> tuple[str, bool]:
     if len(headings) < MIN_SECTIONS or not all(
         heading["id"] and heading.get("top") and "end" in heading for heading in headings
     ):
-        return body, False
+        return body, False, cli.unit_digest(body)
     ends = [heading["start"] for heading in headings[1:]] + [len(body)]
     pieces: list[str] = [body[:headings[0]["start"]]]
     for heading, end in zip(headings, ends):
         content = body[heading["end"]:end]
         pieces.append(body[heading["start"]:heading["end"]])
         pieces.append(
-            f'\n<div class="{WRAPPER_CLASS}" data-section="{html.escape(heading["id"])}">'
+            f'\n<div class="{WRAPPER_CLASS}" data-section="{html.escape(heading["id"])}"'
+            f' data-digest="{cli.unit_digest(body[heading["start"]:heading["end"]], content)}">'
         )
         pieces.append(content)
         if not content.endswith("\n"):
             pieces.append("\n")
         pieces.append("</div>\n")
-    return "".join(pieces), True
+    return "".join(pieces), True, cli.unit_digest(pieces[0])
