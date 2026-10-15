@@ -24,8 +24,7 @@
       var status = element("span", "artifact-archive-status");
       status.setAttribute("role", "status");
       var bar = element("span", "artifact-archive-bar");
-      bar.appendChild(button);
-      bar.appendChild(status);
+      bar.append(button, status);
       top.insertBefore(bar, top.querySelector(":scope > .artifact-review-bar"));
 
       function say(text) {
