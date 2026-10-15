@@ -307,6 +307,18 @@ class DoneTests(InboxTestCase):
         self.assertEqual(self.inbox("one", *argv, "--key", "ticket-1", "--text", "Again."),
                          (1, {"error": "settled"}))
 
+    def test_a_reply_through_done_notifies_one_comment_change(self):
+        _row, item = self.queue("Please file a ticket.", "file a ticket for X")
+        rc, claimed = self.claim("one", item["id"])
+        self.assertEqual(rc, 0, claimed)
+        notified = []
+        self.sockets.routes.changed = lambda what, page: notified.append((what, page))
+        rc, done = self.inbox("one", "done", str(item["id"]), "--owner", "operator",
+                              "--claim", claimed["claimToken"], "--key", "ticket-1",
+                              "--text", "Filed as LOTUS-9.")
+        self.assertEqual(rc, 0, done)
+        self.assertEqual(notified, [("comment", "ops")])
+
     def test_another_handle_reads_and_takes_nothing(self):
         _row, item = self.queue("Please file a ticket.", "file a ticket for X")
         rc, refused = self.inbox(str(self.claude), "pull", "--owner", "operator")

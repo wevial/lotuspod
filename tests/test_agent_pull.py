@@ -180,6 +180,7 @@ class PullTestCase(unittest.TestCase):
             patcher.stop()
         self.assertTrue(started, output.getvalue())
         self.port = made["port"].server_address[1]
+        self.sockets = made["socket"]
 
         def stop() -> None:
             made["port"].shutdown()

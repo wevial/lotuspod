@@ -685,6 +685,8 @@ class Routes:
         found, stored = self.database.finish_item(
             item_id, owner=owner, credential=name, token_hash=token, clock=self.clock,
             reply=reply, page_of=self._current)
+        if stored is not None:
+            self.changed("comment", stored["page"])
         reply = None if stored is None else self._shown(stored)
         # The claim's expiry may be shown, never its credential.
         return {"item": {**found, "claim": {"expiresAt": found["claim"]["expiresAt"]}},
