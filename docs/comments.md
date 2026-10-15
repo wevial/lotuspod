@@ -256,7 +256,8 @@ stays where it was in the window. A changed or removed section, or the intro,
 holding the focus is held back: it keeps its old text under a bar reading
 "This section changed" (or "This section was removed") with an Update button,
 which swaps it in and moves the focus to its heading, while the rest of the
-page swaps; a later publish that brings back its text takes the bar away. It does not
+page swaps; it stays held until then, and a later publish that brings back
+its text takes the bar away. It does not
 swap, and shows the banner as below, when the theme or the page's policy
 changed, when either copy holds a comments box (any page that takes
 comments), or when a changed part, as it was or as it is now, holds a

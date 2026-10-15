@@ -1,5 +1,9 @@
 // Built from web/src/page-swap.ts by web/build.ts. Edit that file, not this one.
 const SWAP_UNMOUNTED = "details.artifact-comment, form.artifact-decision, pre.mermaid, button.artifact-ref, table";
+const SWAP_HOLDS = [];
+function holdSwap(test) {
+  SWAP_HOLDS.push(test);
+}
 function pageSwap() {
   const ADDED = "div.artifact-answered, .artifact-comments-changed";
   const HELD = "div.artifact-swap-held";
@@ -166,11 +170,11 @@ function pageSwap() {
       return null;
     }
     const holds = (nodes) => {
-      const focused = document.activeElement;
-      return focused !== null && focused !== document.body && nodes.some((node) => node.contains(focused));
+      const elements = nodes.filter((node) => node instanceof Element);
+      return SWAP_HOLDS.some((test) => test(elements));
     };
-    const introHeld = introChanged && holds(intro);
-    const sectionHeld = new Set([...removed, ...changed.map((part) => byId.get(part.id))].filter((part) => holds([part.heading, part.wrapper])).map((part) => part.id));
+    const introHeld = introChanged && (heldIntro !== null || holds(intro));
+    const sectionHeld = new Set([...removed, ...changed.map((part) => byId.get(part.id))].filter((part) => held.has(part.id) || holds([part.heading, part.wrapper])).map((part) => part.id));
     const line = document.querySelector(".artifact-topbar")?.getBoundingClientRect().bottom ?? 0;
     const anchorAt = parts.findIndex((part) => part.heading.getBoundingClientRect().top >= line);
     const anchorTop = anchorAt >= 0 ? parts[anchorAt].heading.getBoundingClientRect().top : 0;
@@ -247,11 +251,6 @@ function pageSwap() {
     }
     swapHead(doc);
     swapped(revision, units);
-    const count = units.filter((unit) => unit.kind === "intro" || unit.kind === "section").length;
-    if (count)
-      live.note(`Page updated · ${count} ${count === 1 ? "section" : "sections"} changed`);
-    else if (units.length)
-      live.note("Page updated");
     return revision;
   }
   function applyIntro(body, intro, freshIntro, digest) {
@@ -298,6 +297,11 @@ function pageSwap() {
       setTimeout(() => shown.forEach((node) => node.classList.remove(TINTED)), TINT);
     }
     document.dispatchEvent(new CustomEvent(SWAPPED, { detail: { revision, units } }));
+    const count = units.filter((unit) => unit.kind === "intro" || unit.kind === "section").length;
+    if (count)
+      live.note(`Page updated · ${count} ${count === 1 ? "section" : "sections"} changed`);
+    else if (units.length)
+      live.note("Page updated");
   }
   function heldBar(update) {
     const bar = element("div", "artifact-swap-held");
@@ -310,7 +314,13 @@ function pageSwap() {
     bar.append(text, dot, button);
     return { bar, text };
   }
-  const toggleOf = (heading) => heading?.querySelector("button.artifact-section-toggle") ?? null;
+  const toggleOf = (heading) => heading?.querySelector("button.artifact-section-toggle, a[href]") ?? null;
+  function unbar(bar, heading) {
+    const focused = bar.contains(document.activeElement);
+    bar.remove();
+    if (focused)
+      toggleOf(heading)?.focus();
+  }
   function holdSection(part, fresh) {
     let entry = held.get(part.id);
     if (!entry) {
@@ -322,7 +332,9 @@ function pageSwap() {
     entry.text.textContent = fresh ? CHANGED_TEXT : REMOVED_TEXT;
   }
   function unholdSection(id) {
-    held.get(id)?.bar.remove();
+    const entry = held.get(id);
+    if (entry)
+      unbar(entry.bar, entry.bar.parentElement?.previousElementSibling ?? undefined);
     held.delete(id);
   }
   function updateSection(id) {
@@ -345,13 +357,16 @@ function pageSwap() {
       const made = heldBar(updateIntro);
       made.text.textContent = CHANGED_TEXT;
       body.prepend(made.bar);
-      heldIntro = { bar: made.bar, fresh, digest };
+      heldIntro = { ...made, fresh, digest };
     }
     heldIntro.fresh = fresh;
     heldIntro.digest = digest;
   }
   function unholdIntro() {
-    heldIntro?.bar.remove();
+    if (heldIntro) {
+      const body = bodyOf(document);
+      unbar(heldIntro.bar, body ? partsOf(body)[0]?.heading : undefined);
+    }
     heldIntro = null;
   }
   function updateIntro() {
@@ -363,6 +378,10 @@ function pageSwap() {
     swapped(live.revision(), [applyIntro(body, introOf(body, parts), entry.fresh, entry.digest)]);
     toggleOf(parts[0]?.heading)?.focus();
   }
+  holdSwap((nodes) => {
+    const focused = document.activeElement;
+    return focused !== null && focused !== document.body && nodes.some((node) => node.contains(focused));
+  });
   live.swapWith(swap);
 }
 pageSwap();

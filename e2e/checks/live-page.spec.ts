@@ -503,8 +503,27 @@ test.describe('signed in', () => {
 
   test('a changed section holding the focus is held back under a bar until Update', async ({ page }) => {
     const errors = watchErrors(page);
-    const { swaps, wrapper, toggle, bar } = await holdRisks(page, 'live-page-held');
+    const name = 'live-page-held';
+    const { swaps, wrapper, toggle, bar } = await holdRisks(page, name);
+    // Held until Update, wherever the focus goes and whatever else changes.
+    await toggle.blur();
+    await page.clock.runFor(6000);
+    await expect(page.locator('.artifact-live-page-note')).toHaveCount(0);
+    const third = publish(name, sectioned(name, pond({
+      Findings: { paragraphs: ['The pond froze early this year.'] },
+      Risks: { paragraphs: ['The pump will crack unless it is lifted out first.'] },
+      'Next steps': { paragraphs: ['Order two heaters.'] },
+    })), '--no-comments');
+    await page.clock.runFor(CHECK);
+    await expect.poll(() => revisionOf(page)).toBe(third);
+    await expect(wrapper('next-steps')).toContainText('Order two heaters.');
+    await expect(bar).toContainText('This section changed');
+    await expect(wrapper('risks')).toContainText('The pump may crack in the ice.');
+    await page.clock.runFor(6000);
+    await expect(page.locator('.artifact-live-page-note')).toHaveCount(0);
+
     await bar.getByRole('button', { name: 'Update' }).click();
+    await expect(page.locator('.artifact-live-page-note')).toHaveText('Page updated · 1 section changed');
     await expect(wrapper('risks')).toContainText('The pump will crack unless it is lifted out first.');
     await expect(wrapper('risks')).not.toContainText('The pump may crack in the ice.');
     await expect(page.locator('div.artifact-swap-held')).toHaveCount(0);
@@ -512,6 +531,7 @@ test.describe('signed in', () => {
     await expect(wrapper('risks')).toHaveClass(/\bartifact-swapped\b/);
     expect((await swaps()).filter((unit) => unit.kind === 'section')).toEqual([
       { kind: 'section', id: 'findings', change: 'changed' },
+      { kind: 'section', id: 'next-steps', change: 'changed' },
       { kind: 'section', id: 'risks', change: 'changed' },
     ]);
     expect(errors).toEqual([]);
@@ -520,7 +540,9 @@ test.describe('signed in', () => {
   test('a held section is current again once a republish brings back its text', async ({ page }) => {
     const errors = watchErrors(page);
     const name = 'live-page-held-back';
-    const { wrapper, bar } = await holdRisks(page, name);
+    const { wrapper, toggle, bar } = await holdRisks(page, name);
+    // The bar's own button has the focus as it goes.
+    await bar.getByRole('button', { name: 'Update' }).focus();
     const before = await wrapper('risks').evaluate((node) => {
       const copy = node.cloneNode(true) as HTMLElement;
       copy.querySelector('.artifact-swap-held')!.remove();
@@ -533,6 +555,7 @@ test.describe('signed in', () => {
     await expect.poll(() => revisionOf(page)).toBe(third);
     await expect(bar).toHaveCount(0);
     expect(await wrapper('risks').innerHTML()).toBe(before);
+    await expect(toggle).toBeFocused();
     expect(errors).toEqual([]);
   });
 

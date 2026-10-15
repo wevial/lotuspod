@@ -12,9 +12,9 @@
 // bar stays where it was in the window, as do the next one kept when the swap
 // takes it away and the new one when it replaces it.
 //
-// A changed or removed part holding the reader's focus stays as it is, under
-// a bar saying so with an Update button, which applies the part's newest
-// nodes as a swap would.
+// A changed or removed part any test registered with holdSwap holds (the
+// swap's own: the focus is in it) stays as it is, under a bar saying so with
+// an Update button, which applies the part's newest nodes as a swap would.
 // The page still takes the new revision; a later swap replaces the kept nodes
 // when the part changed again, and takes the bar away when it is back to the
 // open page's digest.
@@ -31,6 +31,17 @@
 // What a swapped part may not hold yet, old or new: each later ticket mounts
 // one and takes it off.
 const SWAP_UNMOUNTED = "details.artifact-comment, form.artifact-decision, pre.mermaid, button.artifact-ref, table";
+
+// Each test a changed or removed part, as the open page has it, is put to
+// before a swap: a part any test holds is kept as it is under a bar until the
+// reader presses its Update (holdSwap).
+const SWAP_HOLDS: ((nodes: readonly Element[]) => boolean)[] = [];
+
+// Hold back from a swap each part whose nodes (a section's heading and
+// wrapper, or the intro's) test says to.
+function holdSwap(test: (nodes: readonly Element[]) => boolean): void {
+  SWAP_HOLDS.push(test);
+}
 
 function pageSwap(): void {
   // What the page script adds to the body outside any part, left where it is.
@@ -58,6 +69,7 @@ function pageSwap(): void {
   }
   interface HeldIntro {
     bar: HTMLElement;
+    text: HTMLElement;
     fresh: Node[];
     digest: string;
   }
@@ -252,15 +264,17 @@ function pageSwap(): void {
       return null;
     }
 
-    // Each changed or removed part, as the open page has it, that holds the
-    // reader's focus: kept as it is, its new nodes kept for the reader's Update.
+    // Each changed or removed part, as the open page has it, that a test
+    // holds back: kept as it is, its new nodes kept for the reader's Update.
     const holds = (nodes: Node[]): boolean => {
-      const focused = document.activeElement;
-      return focused !== null && focused !== document.body && nodes.some((node) => node.contains(focused));
+      const elements = nodes.filter((node): node is Element => node instanceof Element);
+      return SWAP_HOLDS.some((test) => test(elements));
     };
-    const introHeld = introChanged && holds(intro);
+    // A part held already stays held until its Update, or until its text
+    // is the open page's again.
+    const introHeld = introChanged && (heldIntro !== null || holds(intro));
     const sectionHeld = new Set([...removed, ...changed.map((part) => byId.get(part.id)!)]
-      .filter((part) => holds([part.heading, part.wrapper])).map((part) => part.id));
+      .filter((part) => held.has(part.id) || holds([part.heading, part.wrapper])).map((part) => part.id));
     // The first section heading at or below the title bar, and its top.
     const line = document.querySelector(".artifact-topbar")?.getBoundingClientRect().bottom ?? 0;
     const anchorAt = parts.findIndex((part) => part.heading.getBoundingClientRect().top >= line);
@@ -348,9 +362,6 @@ function pageSwap(): void {
     }
     swapHead(doc);
     swapped(revision, units);
-    const count = units.filter((unit) => unit.kind === "intro" || unit.kind === "section").length;
-    if (count) live.note(`Page updated \u00b7 ${count} ${count === 1 ? "section" : "sections"} changed`);
-    else if (units.length) live.note("Page updated");
     return revision;
   }
 
@@ -391,7 +402,8 @@ function pageSwap(): void {
   }
 
   // What follows once parts are applied, by a swap or an Update: their
-  // links, a brief tint on what came in, and the event naming them.
+  // links, a brief tint on what came in, the event naming them, and the
+  // status line saying how many sections changed.
   function swapped(revision: string, units: SwappedUnit[]): void {
     const shown = units.filter((unit) => unit.kind === "intro" || unit.kind === "section")
       .flatMap((unit) => unit.after)
@@ -405,6 +417,9 @@ function pageSwap(): void {
       setTimeout(() => shown.forEach((node) => node.classList.remove(TINTED)), TINT);
     }
     document.dispatchEvent(new CustomEvent(SWAPPED, { detail: { revision, units } }));
+    const count = units.filter((unit) => unit.kind === "intro" || unit.kind === "section").length;
+    if (count) live.note(`Page updated \u00b7 ${count} ${count === 1 ? "section" : "sections"} changed`);
+    else if (units.length) live.note("Page updated");
   }
 
   // The bar over a part held back: what changed, and Update.
@@ -420,10 +435,17 @@ function pageSwap(): void {
     return { bar, text };
   }
 
-  // The fold button of a section's heading, for the focus once Update has
-  // taken its own away.
+  // The fold button of a section's heading, or its link when it has none,
+  // for the focus once a bar has taken its own away.
   const toggleOf = (heading: Element | undefined) =>
-    heading?.querySelector<HTMLElement>("button.artifact-section-toggle") ?? null;
+    heading?.querySelector<HTMLElement>("button.artifact-section-toggle, a[href]") ?? null;
+
+  // Take a bar away, the focus it holds going to heading.
+  function unbar(bar: HTMLElement, heading: Element | undefined): void {
+    const focused = bar.contains(document.activeElement);
+    bar.remove();
+    if (focused) toggleOf(heading)?.focus();
+  }
 
   // Keep part as it is, the new page's part kept for Update (null for one
   // the new revision took away).
@@ -439,7 +461,8 @@ function pageSwap(): void {
   }
 
   function unholdSection(id: string): void {
-    held.get(id)?.bar.remove();
+    const entry = held.get(id);
+    if (entry) unbar(entry.bar, entry.bar.parentElement?.previousElementSibling ?? undefined);
     held.delete(id);
   }
 
@@ -462,14 +485,17 @@ function pageSwap(): void {
       const made = heldBar(updateIntro);
       made.text.textContent = CHANGED_TEXT;
       body.prepend(made.bar);
-      heldIntro = { bar: made.bar, fresh, digest };
+      heldIntro = { ...made, fresh, digest };
     }
     heldIntro.fresh = fresh;
     heldIntro.digest = digest;
   }
 
   function unholdIntro(): void {
-    heldIntro?.bar.remove();
+    if (heldIntro) {
+      const body = bodyOf(document);
+      unbar(heldIntro.bar, body ? partsOf(body)[0]?.heading : undefined);
+    }
     heldIntro = null;
   }
 
@@ -482,6 +508,11 @@ function pageSwap(): void {
     toggleOf(parts[0]?.heading)?.focus();
   }
 
+  // The reader's focus is not swapped out from under them.
+  holdSwap((nodes) => {
+    const focused = document.activeElement;
+    return focused !== null && focused !== document.body && nodes.some((node) => node.contains(focused));
+  });
   live.swapWith(swap);
 }
 
