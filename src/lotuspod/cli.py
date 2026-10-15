@@ -357,6 +357,8 @@ THEME_SOURCES = {
         "js/narrow.js",
         "js/attachments.js",
         "js/live-page.js",
+        # Built from web/src/page-swap.ts: it registers its swap with live.
+        "js/page-swap.js",
         "js/comment-markdown.js",
         "js/comments.js",
         "js/panel-resize.js",

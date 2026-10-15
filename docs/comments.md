@@ -238,7 +238,21 @@ carries a revision, so it loads the page script, `lotuspod-page.js`, even
 with no comments, decisions or sections. It compares the
 `lotuspod:revision` it was rendered at with the revision each read of its
 threads carries, and asks `/api/revision` every 60 seconds and at once when
-its tab is seen again. Once they differ, a banner fixed over the top of the
+its tab is seen again. Once they differ, the page first fetches the new
+revision and swaps in only the parts whose digests (see
+[Publishing](publishing.md)) changed: the header's text, the outline's links,
+the intro, and each changed, added or removed section. Everything else stays
+as it was, the scroll position and the folded sections with it; a swapped
+section stays folded if the one it replaces was, and an added one starts open
+unless the reader folded it before. The page then shows the new revision
+without a reload, and a later publish is noticed the same way. It does not
+swap, and shows the banner as below, when the theme or the page's policy
+changed, when either copy holds a comments box (any page that takes
+comments), or when a changed part, as it was or as it is now, holds a
+decision form, a diagram, a reference card or a table; nor when the outline
+or the sections came or went, the sections both copies have moved, or the
+references changed. A swap that fails partway reloads the page. Otherwise a
+banner fixed over the top of the
 window, which moves no text and is announced politely, reads "A newer version
 of this page is available" with a Reload button. Reload brings the new
 revision back at the same place in its text, with the comments thread that was
@@ -254,7 +268,10 @@ reader comes back; with one, or an image still uploading, it waits, the
 banner showing.
 
 Once per load, an open page with a `lotuspod:revision` posts it to
-`/api/seen`; a signed-out reader's 401, or any failure, shows nothing. The
+`/api/seen`, and posts each revision a swap brings in the same way, unless it
+is framed in an index tab not shown: that tab keeps its "new version" dot
+until the reader opens it. A signed-out reader's 401, or any failure, shows
+nothing. The
 index reads `/api/seen` to mark the pages republished since the reader last
 opened them, and its tabs to mark the open pods republished or commented on
 since (see [Index](publishing.md#index)). Agents are not readers: the

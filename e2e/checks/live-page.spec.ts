@@ -58,6 +58,64 @@ function source(title: string, edition: string, paragraphs = 2) {
   return lines.join('\n');
 }
 
+// A page's markdown with the sections named, in order, each with its
+// paragraphs: what a check that swaps changes one part of at a time.
+function sectioned(title: string, sections: [string, string[]][], intro = 'The pond, in winter.') {
+  const lines = [`# ${title}`, '', intro, ''];
+  for (const [heading, paragraphs] of sections) {
+    lines.push(`## ${heading}`, '');
+    for (const paragraph of paragraphs) lines.push(paragraph, '');
+  }
+  return lines.join('\n');
+}
+
+const POND: [string, string[]][] = [
+  ['Findings', ['The pond freezes in January.', 'The pump stops with it.']],
+  ['Risks', ['The pump may crack in the ice.', 'The fish need air under it.']],
+  ['Next steps', ['Order a heater before the frost.', 'Lift the pump out in December.']],
+];
+
+// POND with one section's paragraphs, or its heading, changed.
+function pond(change: Record<string, { heading?: string; paragraphs?: string[] }> = {}) {
+  return POND.map(([heading, paragraphs]): [string, string[]] =>
+    [change[heading]?.heading ?? heading, change[heading]?.paragraphs ?? paragraphs]);
+}
+
+// Open a page that takes no comments, its clock stopped, once its script has
+// run; the number of loads and navigations from then on.
+async function openPlain(page: Page, name: string) {
+  await stopClock(page);
+  await page.goto(`/${name}.html?standalone`);
+  await expect(page.locator('html')).toHaveAttribute('lang', 'en');
+  const moved = { count: 0 };
+  page.on('load', () => { moved.count += 1; });
+  page.on('framenavigated', (frame) => {
+    if (frame === page.mainFrame()) moved.count += 1;
+  });
+  await page.evaluate(() => { (window as any).__stayed = 'this page'; });
+  return moved;
+}
+
+// The swapped events the page sends, as {kind, id, change}.
+async function watchSwaps(page: Page) {
+  await page.addInitScript(() => {
+    const seen: { kind: string; id: string; change: string }[] = [];
+    (window as any).__swaps = seen;
+    document.addEventListener('lotuspod:swapped', (event) => {
+      for (const unit of (event as CustomEvent).detail.units) {
+        seen.push({ kind: unit.kind, id: unit.id, change: unit.change });
+      }
+    });
+  });
+  return () => page.evaluate(() => (window as any).__swaps as { kind: string; id: string; change: string }[]);
+}
+
+function headings(page: Page) {
+  return page.locator('.artifact-body > h2').evaluateAll((nodes) =>
+    nodes.map((node) => node.querySelector('.artifact-section-toggle')?.firstChild?.textContent?.trim()
+      ?? node.textContent!.trim()));
+}
+
 // hermes publishes markdown as the page name, with any extra options; the
 // revision it is now at.
 function publish(name: string, markdown: string, ...extra: string[]): string {
@@ -200,24 +258,242 @@ test.describe('signed in', () => {
     expect(errors).toEqual([]);
   });
 
-  test('a published page with no comments, decisions or sections notices a republish too', async ({ page }) => {
+  test('a published page with no comments, decisions or sections swaps in its new text without a reload', async ({ page }) => {
     const errors = watchErrors(page);
     const name = 'live-page-plain';
     const NOTE = (edition: string) => `# Live page plain\n\nEdition: ${edition}. One note, no sections.\n`;
     const first = publish(name, NOTE('first'), '--no-comments');
-    await stopClock(page);
-    await page.goto(`/${name}.html?standalone`);
+    const moved = await openPlain(page, name);
     expect(await revisionOf(page)).toBe(first);
     await expect(page.locator('details.artifact-comment, form.artifact-decision, h2')).toHaveCount(0);
 
     const second = publish(name, NOTE('second'), '--no-comments');
     await page.clock.runFor(CHECK);
-    await expect(banner(page).node).toContainText(NEWER);
-    const loaded = page.waitForEvent('load');
-    await banner(page).reload.click();
-    await loaded;
-    expect(await revisionOf(page)).toBe(second);
     await expect(page.locator('.artifact-body')).toContainText('Edition: second.');
+    await expect(page.locator('.artifact-body')).not.toContainText('Edition: first.');
+    expect(await revisionOf(page)).toBe(second);
+    await expect(banner(page).node).toHaveCount(0);
+    expect(moved.count).toBe(0);
+    expect(await page.evaluate(() => (window as any).__stayed)).toBe('this page');
+    expect(errors).toEqual([]);
+  });
+
+  test('a republish that changes one section swaps in only that section, its folds and nodes kept', async ({ page }) => {
+    const errors = watchErrors(page);
+    const name = 'live-page-swap';
+    const first = publish(name, sectioned('Live page swap', pond()), '--no-comments');
+    const moved = await openPlain(page, name);
+    expect(await revisionOf(page)).toBe(first);
+    const body = page.locator('.artifact-body');
+    const wrapper = (id: string) => body.locator(`> div.artifact-section-body[data-section="${id}"]`);
+    const toggle = (id: string) => body.locator(`> h2#${id} button.artifact-section-toggle`);
+    // Marked, so the same nodes are known after the swap.
+    for (const node of [wrapper('findings'), wrapper('next-steps'), page.locator('header.artifact-header')]) {
+      await node.evaluate((element) => { (element as any).__kept = true; });
+    }
+    await toggle('next-steps').click();
+    await expect(wrapper('next-steps')).toHaveAttribute('hidden', 'until-found');
+
+    const CHANGED = 'The pump will crack unless it is lifted out first.';
+    const second = publish(name, sectioned('Live page swap', pond({
+      Risks: { paragraphs: [CHANGED, 'The fish need air under it.'] },
+    })), '--no-comments');
+    expect(second).not.toBe(first);
+    await page.clock.runFor(CHECK);
+
+    await expect(wrapper('risks')).toContainText(CHANGED);
+    await expect(wrapper('risks')).not.toContainText('The pump may crack in the ice.');
+    await expect(banner(page).node).toHaveCount(0);
+    expect(await revisionOf(page)).toBe(second);
+    expect(moved.count).toBe(0);
+    expect(await page.evaluate(() => (window as any).__stayed)).toBe('this page');
+    for (const node of [wrapper('findings'), wrapper('next-steps'), page.locator('header.artifact-header')]) {
+      expect(await node.evaluate((element) => (element as any).__kept)).toBe(true);
+    }
+    expect(await wrapper('risks').evaluate((element) => (element as any).__kept)).toBeUndefined();
+
+    // The reader's fold is kept, and the swapped section folds as any other.
+    await expect(wrapper('next-steps')).toHaveAttribute('hidden', 'until-found');
+    await expect(toggle('risks')).toHaveAttribute('aria-expanded', 'true');
+    await toggle('risks').click();
+    await expect(wrapper('risks')).toHaveAttribute('hidden', 'until-found');
+    await expect(toggle('risks')).toHaveAttribute('aria-expanded', 'false');
+    await toggle('risks').click();
+    await expect(wrapper('risks')).not.toHaveAttribute('hidden');
+    const every = page.locator('nav.artifact-outline button.artifact-sections-all');
+    await expect(every).toHaveText('Collapse all');
+    await every.click();
+    for (const id of ['findings', 'risks', 'next-steps']) {
+      await expect(wrapper(id)).toHaveAttribute('hidden', 'until-found');
+    }
+    await expect(every).toHaveText('Expand all');
+    expect(errors).toEqual([]);
+  });
+
+  test('a republish that renames a section and adds one swaps them in order, the header\'s text with them', async ({ page }) => {
+    const errors = watchErrors(page);
+    const swaps = await watchSwaps(page);
+    const name = 'live-page-renamed-swap';
+    publish(name, sectioned('Live page renamed swap', pond()), '--no-comments', '--summary', 'The first summary.');
+    const moved = await openPlain(page, name);
+    const line = page.locator('header.artifact-header .artifact-meta');
+    await expect(line.locator('a.artifact-versions-link')).toHaveCount(1);
+
+    const sections = pond({ Risks: { heading: 'Hazards' } });
+    sections.push(['Costs', ['A heater costs forty pounds.']]);
+    const second = publish(name, sectioned('Live page renamed and costed', sections), '--no-comments',
+      '--summary', 'The second summary.');
+    await page.clock.runFor(CHECK);
+
+    await expect.poll(() => headings(page)).toEqual(['Findings', 'Hazards', 'Next steps', 'Costs']);
+    expect(await revisionOf(page)).toBe(second);
+    const outline = page.locator('ol.artifact-outline-list a');
+    await expect(outline).toHaveText(['Findings', 'Hazards', 'Next steps', 'Costs']);
+    await expect(page.locator('ol.artifact-outline-list')).not.toContainText('Risks');
+    expect((await swaps()).filter((unit) => unit.kind === 'section')).toEqual([
+      { kind: 'section', id: 'risks', change: 'removed' },
+      { kind: 'section', id: 'hazards', change: 'added' },
+      { kind: 'section', id: 'costs', change: 'added' },
+    ]);
+
+    await expect(page.locator('h1.artifact-title')).toHaveText('Live page renamed and costed');
+    await expect(page.locator('.artifact-topbar-title')).toHaveText('Live page renamed and costed');
+    expect(await page.title()).toBe('Live page renamed and costed · Lotuspod');
+    await expect(page.locator('header.artifact-header .artifact-summary')).toHaveText('The second summary.');
+    await expect(line.locator('a.artifact-versions-link')).toHaveCount(1);
+    // The new sections fold as any other.
+    await page.locator('h2#costs button.artifact-section-toggle').click();
+    await expect(page.locator('div.artifact-section-body[data-section="costs"]')).toHaveAttribute('hidden', 'until-found');
+    await expect(banner(page).node).toHaveCount(0);
+    expect(moved.count).toBe(0);
+    expect(errors).toEqual([]);
+  });
+
+  test('a fetched copy with another theme falls back to the banner, the body untouched', async ({ page }) => {
+    const errors = watchErrors(page);
+    const name = 'live-page-theme';
+    const first = publish(name, sectioned('Live page theme', pond()), '--no-comments');
+    await page.route((url) => url.pathname === `/${name}.html`, async (route) => {
+      if (route.request().resourceType() !== 'fetch') {
+        await route.continue();
+        return;
+      }
+      const response = await route.fetch();
+      const text = (await response.text()).replace(/lotuspod\.css\?v=[0-9a-f]+/, 'lotuspod.css?v=000000000000');
+      await route.fulfill({ response, body: text });
+    });
+    await openPlain(page, name);
+    const before = await page.locator('.artifact-body').innerHTML();
+
+    publish(name, sectioned('Live page theme', pond({ Risks: { paragraphs: ['A new risk.'] } })), '--no-comments');
+    await page.clock.runFor(CHECK);
+    await expect(banner(page).node).toContainText(NEWER);
+    expect(await page.locator('.artifact-body').innerHTML()).toBe(before);
+    expect(await revisionOf(page)).toBe(first);
+    expect(errors).toEqual([]);
+  });
+
+  test('a republish in another render variant falls back to the banner, the layout untouched', async ({ page }) => {
+    const errors = watchErrors(page);
+    const name = 'live-page-variant';
+    // Publish's own default is report.
+    const first = publish(name, sectioned('Live page variant', pond()), '--no-comments', '--variant', 'article');
+    await openPlain(page, name);
+    const before = await page.locator('.artifact-body').innerHTML();
+
+    // The revision is the source's: the variant comes with a new intro.
+    publish(name, sectioned('Live page variant', pond(), 'The pond, in a report.'), '--no-comments',
+      '--variant', 'report');
+    await page.clock.runFor(CHECK);
+    await expect(banner(page).node).toContainText(NEWER);
+    await expect(page.locator('main.artifact')).not.toHaveClass(/artifact--report/);
+    expect(await page.evaluate(() => fetch(location.href, { cache: 'reload' }).then((r) => r.text())))
+      .toContain('artifact--report');
+    expect(await page.locator('.artifact-body').innerHTML()).toBe(before);
+    expect(await revisionOf(page)).toBe(first);
+    expect(errors).toEqual([]);
+  });
+
+  test('a republish that changes the outline of a page with a decision falls back to the banner', async ({ page }) => {
+    const errors = watchErrors(page);
+    const name = 'live-page-decision-outline';
+    const plan: [string, string[]] = ['Decisions for the maintainer', ['One question for the maintainer.',
+      '| # | Question | Options | Default | Why it matters |\n|---|---|---|---|---|\n' +
+      '| D1 | Which heater? | Small / Large | Small | The pond is deep. |']];
+    const first = publish(name, sectioned('Live page decision outline', [plan, ...pond()]), '--no-comments');
+    await openPlain(page, name);
+    await expect(page.locator('form.artifact-decision')).toHaveCount(1);
+
+    publish(name, sectioned('Live page decision outline', [plan, ...pond({ Risks: { heading: 'Hazards' } })]),
+      '--no-comments');
+    await page.clock.runFor(CHECK);
+    await expect(banner(page).node).toContainText(NEWER);
+    await expect(page.locator('ol.artifact-outline-list')).toContainText('Risks');
+    expect(await revisionOf(page)).toBe(first);
+    expect(errors).toEqual([]);
+  });
+
+  test('a swap that leaves no section to fold hides the outline\'s fold-all button', async ({ page }) => {
+    const errors = watchErrors(page);
+    const name = 'live-page-linked-headings';
+    publish(name, sectioned('Live page linked headings', pond()), '--no-comments');
+    await openPlain(page, name);
+    const every = page.locator('nav.artifact-outline button.artifact-sections-all');
+    await expect(every).toHaveText('Collapse all');
+
+    const linked = pond().map(([heading, paragraphs]): [string, string[]] =>
+      [`[${heading}](#${heading.toLowerCase().replace(/ /g, '-')})`, paragraphs]);
+    const second = publish(name, sectioned('Live page linked headings', linked), '--no-comments');
+    await page.clock.runFor(CHECK);
+    await expect.poll(() => revisionOf(page)).toBe(second);
+    await expect(banner(page).node).toHaveCount(0);
+    await expect(page.locator('button.artifact-section-toggle')).toHaveCount(0);
+    await expect(every).toBeHidden();
+    expect(errors).toEqual([]);
+  });
+
+  test('a framed page that swaps in a tab not shown keeps its "new version" dot until its tab is opened', async ({ page }) => {
+    const errors = watchErrors(page);
+    const one = { name: 'live-page-tab-one', title: 'Live page tab one' };
+    const two = { name: 'live-page-tab-two', title: 'Live page tab two' };
+    for (const pod of [one, two]) publish(pod.name, sectioned(pod.title, pond()), '--no-comments');
+    await stopClock(page);
+    const recorded = (name: string) => page.waitForResponse((response) =>
+      new URL(response.url()).pathname === '/api/seen' && response.request().method() === 'POST' &&
+      response.request().postDataJSON()?.page === name);
+    const opened = Promise.all([recorded(one.name), recorded(two.name)]);
+    await page.goto(`/index.html#tabs=${one.name},${two.name}&on=${two.name}`);
+    await opened;
+    const strip = page.getByRole('group', { name: 'Open pods' });
+    const tab = (pod: { name: string }) => strip.locator(`.pod-tab[data-page="${pod.name}"]`);
+    const framed = (pod: { title: string }) => page.frameLocator(`iframe.pod-frame[title="${pod.title}"]`);
+    await expect(tab(two).locator('button.pod-tab-title')).toHaveAttribute('aria-current', 'page');
+
+    const posted: string[] = [];
+    page.on('request', (sent) => {
+      if (new URL(sent.url()).pathname === '/api/seen' && sent.method() === 'POST') {
+        posted.push(sent.postDataJSON()?.page);
+      }
+    });
+    const CHANGED = 'The pump will crack unless it is lifted out first.';
+    const second = publish(one.name, sectioned(one.title, pond({ Risks: { paragraphs: [CHANGED] } })), '--no-comments');
+    await page.clock.runFor(CHECK);
+    const risks = framed(one).locator('div.artifact-section-body[data-section="risks"]');
+    await expect(risks).toContainText(CHANGED);
+    await expect(framed(one).locator('meta[name="lotuspod:revision"]')).toHaveAttribute('content', second);
+    expect(posted).toEqual([]);
+
+    const read = page.waitForResponse((response) =>
+      new URL(response.url()).pathname === '/api/seen' && response.request().method() === 'GET');
+    await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+    await read;
+    const dot = tab(one).locator('.pod-tab-dot');
+    await expect(dot).toHaveText('new version');
+
+    const marked = recorded(one.name);
+    await tab(one).locator('button.pod-tab-title').click();
+    expect((await marked).request().postDataJSON()?.revision).toBe(second);
+    await expect(dot).toHaveCount(0);
     expect(errors).toEqual([]);
   });
 

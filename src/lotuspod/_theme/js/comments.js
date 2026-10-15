@@ -10,8 +10,11 @@
     var page = boxes[0].dataset.page;
     var tag = document.querySelector('meta[name="lotuspod:owner"]');
     var owner = tag ? tag.content : "";
-    var stamp = document.querySelector('meta[name="lotuspod:revision"]');
-    var revision = stamp ? stamp.content : null;
+    // The revision the page shows now, which a swap moves on
+    // (js/live-page.js); null on a page with none.
+    function revision() {
+      return live.revision() || null;
+    }
     var article = document.querySelector(".artifact-body");
     // Maps, not objects: a section id is the author's and may be any name,
     // "__proto__" included.
@@ -682,8 +685,8 @@
       // only in its title.
       function why() {
         var node = element("span", "artifact-passage-why", " · this passage has changed since");
-        if (revision) {
-          node.title = "Changed in revision " + revision;
+        if (revision()) {
+          node.title = "Changed in revision " + revision();
         }
         return node;
       }
@@ -1075,8 +1078,8 @@
           var fields = {
             page: page, section: found.box.dataset.section, text: field.value, quote: found.quote,
           };
-          if (revision !== null) {
-            fields.revision = revision;
+          if (revision() !== null) {
+            fields.revision = revision();
           }
           var row = await post(form, fields);
           if (!row) {
@@ -2955,8 +2958,8 @@
           return;
         }
         var body = { page: page, question: form.dataset.question, text: text };
-        if (revision !== null) {
-          body.revision = revision;
+        if (revision() !== null) {
+          body.revision = revision();
         }
         button.disabled = true;
         say("Sending your question...");
