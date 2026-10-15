@@ -557,7 +557,10 @@ class Api:
     of the pages serve answers, archived ones left out, whose versions the
     activity route reads. archive(name, archived, superseded_by) archives or
     unarchives a page (lotuspod.archive.set_archived), and owners are the
-    readers who may; without it the archive route's POST answers 503."""
+    readers who may; without it the archive route's POST answers 503.
+    catalog() is a lookup like pages over one read of the site, which the
+    seen and activity routes take once per request for every name they
+    look up; without it they use pages."""
 
     def __init__(self, database: db.Database, pages: Callable[[str], Page | None],
                  window: float = routing.DEFAULT_WINDOW,
@@ -568,8 +571,10 @@ class Api:
                  names: Callable[[], Sequence[str]] = tuple,
                  archive: Callable[[str, bool, str | None], tuple] | None = None,
                  owners: frozenset[str] = frozenset(),
-                 changed: Callable[[str, str], None] = lambda what, page: None) -> None:
+                 changed: Callable[[str, str], None] = lambda what, page: None,
+                 catalog: Callable[[], Callable[[str], Page | None]] | None = None) -> None:
         self.changed = changed
+        self.catalog = catalog
         self.database = database
         self.pages = pages
         self.window = window
@@ -666,13 +671,18 @@ class Api:
         except (ValueError, OverflowError, OSError):
             raise Refusal(HTTPStatus.BAD_REQUEST, "invalid_query") from None
 
+    def _lookup(self) -> Callable[[str], Page | None]:
+        """One request's page lookup: the catalog's, else pages."""
+        return self.catalog() if self.catalog is not None else self.pages
+
     def _activity(self, query: str, actor: Mapping) -> dict:
         start, end = self._window(query)
         found: dict[str, Page | None] = {}
+        lookup = self._lookup()
 
         def served(name: str) -> Page | None:
             if name not in found:
-                found[name] = self.pages(name)
+                found[name] = lookup(name)
             return found[name]
 
         # An archived page is left out, every event of it.
@@ -967,10 +977,11 @@ class Api:
         reader = str(actor.get("email") or "")
         views = self.database.page_views(reader)
         unread = self.database.unread(reader)
+        lookup = self._lookup()
         pages = {}
         for name in sorted(views.keys() | unread.keys()):
             # A page serve no longer answers, hidden or gone, is left out.
-            page = self.pages(name)
+            page = lookup(name)
             # A page without comment boxes counts no unread replies, and is
             # left out when the reader never opened it.
             count = len(unread.get(name, [])) if page is not None and page.comment_sections else 0

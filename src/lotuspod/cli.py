@@ -2144,12 +2144,16 @@ def served_page_names(out_dir: Path) -> list[str]:
                   and not archive.is_archived(out_dir, file[:-len(".html")]))
 
 
-def api_page(out_dir: Path, name: str) -> api.Page | None:
+def api_page(out_dir: Path, name: str,
+             allowed: frozenset[str] | None = None) -> api.Page | None:
     """The page serve answers as NAME.html, as /api records it; None when
-    serve would not answer it."""
+    serve would not answer it. allowed is serve_allow_list(out_dir) when
+    the caller has read it already."""
+    if allowed is None:
+        allowed = serve_allow_list(out_dir)
     # The allow-list holds bare file names only, so no name reaches past it.
     file = f"{name}.html"
-    if not is_page_name(file) or file not in serve_allow_list(out_dir):
+    if not is_page_name(file) or file not in allowed:
         return None
     try:
         page_html = (out_dir / file).read_text(encoding="utf-8")
@@ -2178,6 +2182,20 @@ def api_page(out_dir: Path, name: str) -> api.Page | None:
                     title=extract_meta(page_html, name)["title"],
                     archived=record.get("archivedAt", ""),
                     superseded_by=record.get("supersededBy") or "")
+
+
+def api_catalog(out_dir: Path) -> Callable[[str], api.Page | None]:
+    """api_page over one read of the allow-list, keeping each page it
+    builds: for one /api request that looks up many names."""
+    allowed = serve_allow_list(out_dir)
+    found: dict[str, api.Page | None] = {}
+
+    def page(name: str) -> api.Page | None:
+        if name not in found:
+            found[name] = api_page(out_dir, name, allowed)
+        return found[name]
+
+    return page
 
 
 def agent_page(out_dir: Path, page: api.Page) -> dict:
@@ -2592,6 +2610,7 @@ def _make_server(out_dir: Path, host: str, port: int,
         routes = api.Api(db.Database(db_path), partial(api_page, out_dir), window,
                          media_dir=media.media_dir(out_dir), max_image_bytes=max_image_bytes,
                          history=history, names=partial(served_page_names, out_dir),
+                         catalog=partial(api_catalog, out_dir),
                          archive=partial(archive.set_archived, out_dir),
                          owners=verifier.config.owners if verifier is not None else frozenset(),
                          changed=events.changed)
