@@ -272,7 +272,8 @@ function pageSwap(): void {
     // holds back: kept as it is, its new nodes kept for the reader's Update.
     const holds = (nodes: Node[], gone: boolean): boolean => {
       const elements = nodes.filter((node): node is Element => node instanceof Element);
-      return SWAP_HOLDS.some((test) => test(elements, gone));
+      // Every test sees the part, so each knows what the swap holds.
+      return SWAP_HOLDS.map((test) => test(elements, gone)).some(Boolean);
     };
     // A part held already stays held until its Update, or until its text
     // is the open page's again.

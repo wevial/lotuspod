@@ -171,7 +171,7 @@ function pageSwap() {
     }
     const holds = (nodes, gone) => {
       const elements = nodes.filter((node) => node instanceof Element);
-      return SWAP_HOLDS.some((test) => test(elements, gone));
+      return SWAP_HOLDS.map((test) => test(elements, gone)).some(Boolean);
     };
     const introHeld = introChanged && (heldIntro !== null || holds(intro, false));
     const sectionHeld = new Set([...removed, ...changed.map((part) => byId.get(part.id))].filter((part) => held.has(part.id) || holds([part.heading, part.wrapper], !freshIds.has(part.id))).map((part) => part.id));

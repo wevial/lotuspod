@@ -924,14 +924,18 @@
       };
 
       // The open composer whose words a swap took out, closed, with what
-      // api.writing kept of it to open again (api.reopen); else null. Its
-      // marks left with the old text, so they stay as they are.
+      // api.writing kept of it to open again (api.reopen), its box, and
+      // the post it is sending, if any (saving: its row, or null when not
+      // saved); else null. Its marks left with the old text, so they stay
+      // as they are.
       api.swept = function () {
         if (!open || !open.marks.length || open.marks[0].isConnected) {
           return null;
         }
         var kept = api.writing();
         var mine = open;
+        kept.box = mine.box;
+        kept.saving = mine.saving || null;
         mine.holder.remove();
         open = null;
         panel.dropped(mine);
@@ -1135,7 +1139,10 @@
           if (revision() !== null) {
             fields.revision = revision();
           }
-          var row = await post(form, fields);
+          // A swap that takes the words away meanwhile waits for it.
+          mine.saving = post(form, fields);
+          var row = await mine.saving;
+          mine.saving = null;
           if (!row) {
             return;
           }
@@ -3151,8 +3158,20 @@
       unsent.forEach(function (each) {
         moved = rehome(each, PLACE_GONE);
       });
-      if (writing && !passages.reopen(writing) && worth(writing)) {
-        moved = rehome(writing, PASSAGE_GONE);
+      if (writing && places.has(writing.box)) {
+        writing.index = places.get(writing.box);
+      }
+      places.clear();
+      if (writing && writing.saving) {
+        // Sent already: kept only if it is not saved.
+        writing.saving.then(function (row) {
+          var box = row ? null : rewrite(writing);
+          if (box) {
+            panel.reopen({ section: box.dataset.section, writing: true });
+          }
+        });
+      } else if (writing) {
+        moved = rewrite(writing) || moved;
       }
       if (moved) {
         panel.reopen({ section: moved.dataset.section, writing: true });
@@ -3161,6 +3180,16 @@
         focused.focus({ preventScroll: true });
       }
     });
+
+    // A passage composer a swap took the words of opens again on them
+    // where the page still has them; else what was written goes to a
+    // section's form, saying why: that box, else null.
+    function rewrite(writing) {
+      if (passages.reopen(writing) || !worth(writing)) {
+        return null;
+      }
+      return rehome(writing, PASSAGE_GONE);
+    }
 
     // Mount the boxes a swap brought in (news) in place of those it took
     // out (olds): what was written in the form of each taken away for good
@@ -3240,16 +3269,27 @@
       panel.replace(old, box);
     }
 
+    // Where in the boxes, once it is taken away, each box a swap took away
+    // was: a section added while it was held back that took its place
+    // under a new name, which a swap puts just before it, else the next
+    // (the index a reload finds it at). And for each section taken away
+    // and held back, the boxes added since.
+    var places = new Map();
+    var since = new Map();
+
     // A section taken away takes its box and form with it; its threads say
     // which section they were on. What its form holds not sent, to go where
-    // the section was: the box before it, where a section that took its
-    // place under a new name was put; else null.
+    // the section was; else null.
     function dropBox(old) {
       var at = boxes.indexOf(old);
+      var added = since.get(old);
+      since.delete(old);
+      var place = at > 0 && added && added.has(boxes[at - 1]) ? at - 1 : at;
+      places.set(old, place);
       var form = forms.get(old);
       var each = { field: form.elements.text, images: attached.get(form) };
       var unsent = holding(each) ? {
-        section: old.dataset.section, index: Math.max(at - 1, 0), text: each.field.value,
+        section: old.dataset.section, index: place, text: each.field.value,
         images: each.images.kept(),
       } : null;
       boxes.splice(at, 1);
@@ -3276,6 +3316,7 @@
       });
       at = at < 0 ? boxes.length : at;
       boxes.splice(at, 0, box);
+      since.forEach(function (added) { added.add(box); });
       enlist(box);
       wire(box);
       panel.mount(box, at);
@@ -3295,6 +3336,13 @@
     // sent, until the reader's Update: then the SWAPPED handler above keeps
     // what was written.
     holdSwap(function (nodes, removed) {
+      if (removed) {
+        boxes.forEach(function (box) {
+          if (nodes.some(function (node) { return node.contains(box); })) {
+            since.set(box, new Set());
+          }
+        });
+      }
       if (passages.writes(nodes)) {
         return true;
       }
