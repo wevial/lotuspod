@@ -516,6 +516,8 @@
       }
       if (every) {
         every.textContent = sections.every(folded) ? "Expand all" : "Collapse all";
+        // A swap may take away every section that folds.
+        every.hidden = !sections.length;
       }
     }
 

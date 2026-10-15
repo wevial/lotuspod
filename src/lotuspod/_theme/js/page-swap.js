@@ -7,6 +7,7 @@ function pageSwap() {
     const link = doc.querySelector('link[rel="stylesheet"][href*="?v="]');
     return /[?&]v=([^&#]*)/.exec(link?.getAttribute("href") ?? "")?.[1] ?? "";
   };
+  const variantOf = (doc) => Array.from(doc.querySelector("main.artifact")?.classList ?? []).filter((name) => name.startsWith("artifact--") && name !== "artifact--versions").sort().join(" ");
   const policyOf = (doc) => doc.querySelector('meta[http-equiv="Content-Security-Policy"]')?.getAttribute("content") ?? "";
   const digestOf = (node, name = "data-digest") => node ? node.getAttribute(name) : null;
   const bodyOf = (doc) => doc.querySelector("section.artifact-body[data-intro-digest]");
@@ -102,8 +103,9 @@ function pageSwap() {
     const revision = doc.querySelector('meta[name="lotuspod:revision"]')?.content.trim() ?? "";
     if (!revision || revision === live.revision())
       return null;
-    if (themeOf(doc) !== themeOf(document) || policyOf(doc) !== policyOf(document))
+    if (themeOf(doc) !== themeOf(document) || policyOf(doc) !== policyOf(document) || variantOf(doc) !== variantOf(document)) {
       return null;
+    }
     const body = bodyOf(document);
     const freshBody = bodyOf(doc);
     if (!body || !freshBody)
@@ -153,6 +155,9 @@ function pageSwap() {
     ].filter((node) => node !== null);
     if (unmounted(touched))
       return null;
+    if (outlineChanged && (document.querySelector("form.artifact-decision") || doc.querySelector("form.artifact-decision"))) {
+      return null;
+    }
     const units = [];
     const inBody = [];
     if (headerChanged && header && freshHeader) {

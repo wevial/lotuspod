@@ -9,12 +9,13 @@
 // changed.
 //
 // The page falls back to the banner or a reload (the swap answers null,
-// nothing touched) when its theme or policy changed, when either copy
-// predates the digests, when the two differ in having an outline or sections,
-// when their shared sections moved, when the references changed, when either
-// holds a comment box, or when a changed part, old or new, holds a feature not
-// yet mounted on new markup (SWAP_UNMOUNTED). A swap that throws partway has
-// the page reload.
+// nothing touched) when its theme, policy or render variant changed, when
+// either copy predates the digests, when the two differ in having an outline
+// or sections, when their shared sections moved, when the references changed,
+// when either holds a comment box, when the outline changed on a page with
+// decision forms (whose review marks sit on its links), or when a changed
+// part, old or new, holds a feature not yet mounted on new markup
+// (SWAP_UNMOUNTED). A swap that throws partway has the page reload.
 
 // What a swapped part may not hold yet, old or new: each later ticket mounts
 // one and takes it off.
@@ -37,6 +38,13 @@ function pageSwap(): void {
     const link = doc.querySelector<HTMLLinkElement>('link[rel="stylesheet"][href*="?v="]');
     return /[?&]v=([^&#]*)/.exec(link?.getAttribute("href") ?? "")?.[1] ?? "";
   };
+
+  // The render variant main.artifact names (artifact--report, ...), leaving
+  // out the class js/versions.js toggles while its view shows.
+  const variantOf = (doc: Document): string =>
+    Array.from(doc.querySelector("main.artifact")?.classList ?? [])
+      .filter((name) => name.startsWith("artifact--") && name !== "artifact--versions")
+      .sort().join(" ");
 
   const policyOf = (doc: Document): string =>
     doc.querySelector('meta[http-equiv="Content-Security-Policy"]')?.getAttribute("content") ?? "";
@@ -157,7 +165,10 @@ function pageSwap(): void {
     const doc = new DOMParser().parseFromString(text, "text/html");
     const revision = doc.querySelector<HTMLMetaElement>('meta[name="lotuspod:revision"]')?.content.trim() ?? "";
     if (!revision || revision === live.revision()) return null;
-    if (themeOf(doc) !== themeOf(document) || policyOf(doc) !== policyOf(document)) return null;
+    if (themeOf(doc) !== themeOf(document) || policyOf(doc) !== policyOf(document) ||
+      variantOf(doc) !== variantOf(document)) {
+      return null;
+    }
     const body = bodyOf(document);
     const freshBody = bodyOf(doc);
     if (!body || !freshBody) return null;
@@ -203,6 +214,11 @@ function pageSwap(): void {
       }),
     ].filter((node): node is Node => node !== null);
     if (unmounted(touched)) return null;
+    // The review sheet marks the outline's links of sections with questions,
+    // and draws no marks on links swapped in yet.
+    if (outlineChanged && (document.querySelector("form.artifact-decision") || doc.querySelector("form.artifact-decision"))) {
+      return null;
+    }
 
     // Applied from here on: a throw has the page reload.
     const units: SwappedUnit[] = [];

@@ -393,6 +393,65 @@ test.describe('signed in', () => {
     expect(errors).toEqual([]);
   });
 
+  test('a republish in another render variant falls back to the banner, the layout untouched', async ({ page }) => {
+    const errors = watchErrors(page);
+    const name = 'live-page-variant';
+    // Publish's own default is report.
+    const first = publish(name, sectioned('Live page variant', pond()), '--no-comments', '--variant', 'article');
+    await openPlain(page, name);
+    const before = await page.locator('.artifact-body').innerHTML();
+
+    // The revision is the source's: the variant comes with a new intro.
+    publish(name, sectioned('Live page variant', pond(), 'The pond, in a report.'), '--no-comments',
+      '--variant', 'report');
+    await page.clock.runFor(CHECK);
+    await expect(banner(page).node).toContainText(NEWER);
+    await expect(page.locator('main.artifact')).not.toHaveClass(/artifact--report/);
+    expect(await page.evaluate(() => fetch(location.href, { cache: 'reload' }).then((r) => r.text())))
+      .toContain('artifact--report');
+    expect(await page.locator('.artifact-body').innerHTML()).toBe(before);
+    expect(await revisionOf(page)).toBe(first);
+    expect(errors).toEqual([]);
+  });
+
+  test('a republish that changes the outline of a page with a decision falls back to the banner', async ({ page }) => {
+    const errors = watchErrors(page);
+    const name = 'live-page-decision-outline';
+    const plan: [string, string[]] = ['Decisions for the maintainer', ['One question for the maintainer.',
+      '| # | Question | Options | Default | Why it matters |\n|---|---|---|---|---|\n' +
+      '| D1 | Which heater? | Small / Large | Small | The pond is deep. |']];
+    const first = publish(name, sectioned('Live page decision outline', [plan, ...pond()]), '--no-comments');
+    await openPlain(page, name);
+    await expect(page.locator('form.artifact-decision')).toHaveCount(1);
+
+    publish(name, sectioned('Live page decision outline', [plan, ...pond({ Risks: { heading: 'Hazards' } })]),
+      '--no-comments');
+    await page.clock.runFor(CHECK);
+    await expect(banner(page).node).toContainText(NEWER);
+    await expect(page.locator('ol.artifact-outline-list')).toContainText('Risks');
+    expect(await revisionOf(page)).toBe(first);
+    expect(errors).toEqual([]);
+  });
+
+  test('a swap that leaves no section to fold hides the outline\'s fold-all button', async ({ page }) => {
+    const errors = watchErrors(page);
+    const name = 'live-page-linked-headings';
+    publish(name, sectioned('Live page linked headings', pond()), '--no-comments');
+    await openPlain(page, name);
+    const every = page.locator('nav.artifact-outline button.artifact-sections-all');
+    await expect(every).toHaveText('Collapse all');
+
+    const linked = pond().map(([heading, paragraphs]): [string, string[]] =>
+      [`[${heading}](#${heading.toLowerCase().replace(/ /g, '-')})`, paragraphs]);
+    const second = publish(name, sectioned('Live page linked headings', linked), '--no-comments');
+    await page.clock.runFor(CHECK);
+    await expect.poll(() => revisionOf(page)).toBe(second);
+    await expect(banner(page).node).toHaveCount(0);
+    await expect(page.locator('button.artifact-section-toggle')).toHaveCount(0);
+    await expect(every).toBeHidden();
+    expect(errors).toEqual([]);
+  });
+
   test('a framed page that swaps in a tab not shown keeps its "new version" dot until its tab is opened', async ({ page }) => {
     const errors = watchErrors(page);
     const one = { name: 'live-page-tab-one', title: 'Live page tab one' };
