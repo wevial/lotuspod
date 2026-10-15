@@ -1,8 +1,8 @@
 import { expect, test, type Page } from '@playwright/test';
 
 // The capture fixture's calltree page (tests/capture_site.py): its first
-// section holds the ticket's example fence, linked to GitHub, its second an
-// unlinked fence with one line that doesn't parse.
+// section holds a fence linked to GitHub, its second an unlinked fence with
+// one line that doesn't parse.
 const URL = '/capture-calltree.html?standalone';
 const SIGNED_IN = { 'Cf-Access-Jwt-Assertion': process.env.LOTUSPOD_TEST_ASSERTION ?? '' };
 test.use({ viewport: { width: 1280, height: 800 }, extraHTTPHeaders: SIGNED_IN });
