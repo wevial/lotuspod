@@ -54,7 +54,8 @@ export interface Answering {
   // Post the form's answer in its turn: true once saved, false when refused,
   // with why in the form's status.
   save(form: HTMLFormElement): Promise<boolean>;
-  // True once the page's answers are read, set before ANSWERED is sent.
+  // True once the page's answers are read, set before ANSWERED is sent;
+  // after a swap, whether its read of them was.
   read: boolean;
 }
 
@@ -70,8 +71,10 @@ declare function linkedTo(name: string, first?: boolean): string | null;
 // js/page-open.js: an archived page takes no new comment, reply or answer.
 declare const ARCHIVED: boolean;
 // js/page-open.js: the page events. ANSWERED is sent on the document once
-// the page's read of answers has finished, SAVED on a decision form once an
-// answer to it is saved, DRAWN on a comment box when rows are drawn into it.
+// the page's read of answers has finished, and again once each read after a
+// swap that changed a decision form is drawn; SAVED on a decision form once
+// an answer to it is saved, DRAWN on a comment box when rows are drawn into
+// it.
 declare const ANSWERED: string;
 declare const SAVED: string;
 declare const DRAWN: string;

@@ -1,8 +1,8 @@
 // Built from web/src/page-swap.ts by web/build.ts. Edit that file, not this one.
-const SWAP_UNMOUNTED = "form.artifact-decision, pre.mermaid, button.artifact-ref, table, mark.artifact-passage";
-const SWAP_HOLDS = [];
+const SWAP_UNMOUNTED = "pre.mermaid, button.artifact-ref, table, mark.artifact-passage";
+var SWAP_HOLDS;
 function holdSwap(test) {
-  SWAP_HOLDS.push(test);
+  (SWAP_HOLDS ??= []).push(test);
 }
 const SWAP_REFUSALS = [];
 function refuseSwap(test) {
@@ -10,6 +10,7 @@ function refuseSwap(test) {
 }
 function pageSwap() {
   const ADDED = "div.artifact-answered, .artifact-comments-changed";
+  const DECISION = "form.artifact-decision";
   const HELD = "div.artifact-swap-held";
   const CHANGED_TEXT = "This section changed";
   const REMOVED_TEXT = "This section was removed";
@@ -171,17 +172,28 @@ function pageSwap() {
     ].filter((node) => node !== null);
     if (unmounted(touched))
       return null;
-    if (outlineChanged && (document.querySelector("form.artifact-decision") || doc.querySelector("form.artifact-decision"))) {
+    const decided = (nodes) => nodes.some((node) => node instanceof Element && (node.matches(DECISION) || node.querySelector(DECISION) !== null));
+    if (answering === null && decided(touched))
       return null;
-    }
     const holds = (nodes) => {
       const elements = nodes.filter((node) => node instanceof Element);
-      return SWAP_HOLDS.some((test) => test(elements));
+      return (SWAP_HOLDS ?? []).some((test) => test(elements));
     };
     const introHeld = introChanged && (heldIntro !== null || holds(intro));
     const sectionHeld = new Set([...removed, ...changed.map((part) => byId.get(part.id))].filter((part) => held.has(part.id) || holds([part.heading, part.wrapper])).map((part) => part.id));
     if (removed.some(refused))
       return null;
+    const swapsForm = decided([
+      ...introChanged && !introHeld ? [...intro, ...freshIntro] : [],
+      ...[...removed, ...added].filter((part) => !sectionHeld.has(part.id)).flatMap((part) => [part.heading, part.wrapper]),
+      ...changed.filter((part) => !sectionHeld.has(part.id)).flatMap((part) => {
+        const old = byId.get(part.id);
+        return [old.heading, old.wrapper, part.heading, part.wrapper];
+      })
+    ]);
+    if (document.querySelector("div.artifact-review-bar") && outlineChanged && !swapsForm && (document.querySelector(DECISION) || doc.querySelector(DECISION))) {
+      return null;
+    }
     const line = document.querySelector(".artifact-topbar")?.getBoundingClientRect().bottom ?? 0;
     const anchorAt = parts.findIndex((part) => part.heading.getBoundingClientRect().top >= line);
     const anchorTop = anchorAt >= 0 ? parts[anchorAt].heading.getBoundingClientRect().top : 0;
