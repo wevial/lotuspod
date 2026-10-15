@@ -49,9 +49,13 @@
       forms.set(box, box.querySelector("form.artifact-comment-form"));
     }
     boxes.forEach(enlist);
-    decisions.forEach(function (form) {
-      questions.set(form.dataset.question, form);
-    });
+    function ask() {
+      questions.clear();
+      decisions.forEach(function (form) {
+        questions.set(form.dataset.question, form);
+      });
+    }
+    ask();
 
     // The text of a form's part, its whitespace collapsed.
     function words(form, selector) {
@@ -2586,6 +2590,11 @@
         unlit();
       };
 
+      // A decision form a swap took away: its chip went with its section.
+      api.forget = function (form) {
+        decisionChips.delete(form);
+      };
+
       // The box at boxes[at] is added.
       api.mount = function (box, at) {
         mount(box, at);
@@ -3071,12 +3080,17 @@
     // the panel stays open, and one in a popover or the sheet opens again;
     // a section's form, with what is written in it, stays its section's.
     // Threads on a section taken away are listed with those on sections
-    // the page no longer has, and a section added takes back its own.
+    // the page no longer has, and a section added takes back its own. Each
+    // decision form taken out or put in leaves or joins the decisions, in
+    // page order, a new one with its Ask, and a thread on a question the
+    // page no longer asks is drawn as on a reload.
     document.addEventListener(SWAPPED, function (event) {
       var units = event.detail.units;
       passages.moved();
       var olds = [];
       var news = [];
+      var gone = [];
+      var fresh = [];
       units.forEach(function (unit) {
         if (unit.kind === "header") {
           // The swap gave the tab the new revision's title.
@@ -3084,9 +3098,27 @@
         }
         olds.push.apply(olds, boxesIn(unit.before).filter(function (box) { return boxes.indexOf(box) >= 0; }));
         news.push.apply(news, boxesIn(unit.after));
+        gone.push.apply(gone, decisionsIn(unit.before).filter(function (form) {
+          return decisions.indexOf(form) >= 0;
+        }));
+        fresh.push.apply(fresh, decisionsIn(unit.after));
       });
+      gone.forEach(function (form) {
+        decisions.splice(decisions.indexOf(form), 1);
+        panel.forget(form);
+      });
+      decisions.push.apply(decisions, fresh);
+      decisions.sort(function (a, b) {
+        return a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1;
+      });
+      ask();
+      fresh.forEach(askAbout);
       if (!olds.length && !news.length) {
-        showUnread();
+        if (gone.length || fresh.length) {
+          refresh();
+        } else {
+          showUnread();
+        }
         return;
       }
       news.sort(function (a, b) {
@@ -3130,6 +3162,20 @@
             found.push(node);
           }
           found.push.apply(found, all("details.artifact-comment", node));
+        }
+      });
+      return found;
+    }
+
+    // The decision forms among some nodes and in them.
+    function decisionsIn(nodes) {
+      var found = [];
+      nodes.forEach(function (node) {
+        if (node instanceof Element) {
+          if (node.matches("form.artifact-decision[data-question]")) {
+            found.push(node);
+          }
+          found.push.apply(found, all("form.artifact-decision[data-question]", node));
         }
       });
       return found;
