@@ -128,7 +128,8 @@
   margin: 0.5rem 0 0;
 }
 
-/* The status chip: its tone's color, or a hairline for one still waiting. */
+/* The status chip: its tone's color, or for one still waiting a hairline
+   border and muted ink. */
 .artifact-ref-chip {
   background: color-mix(in srgb, var(--ref-tone) 14%, var(--color-surface));
   border: 1px solid var(--ref-tone);
@@ -142,6 +143,7 @@
 
 .artifact-ref-card[data-tone="waiting"] .artifact-ref-chip {
   background: var(--color-surface);
+  color: var(--color-muted-lavender);
 }
 
 .artifact-ref-card-updated,

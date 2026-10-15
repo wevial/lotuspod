@@ -452,7 +452,8 @@ The file is one object with one field, `refs`, mapping each KEY to an ENTRY:
 - An ENTRY has `title` (required, at most 200 characters), and may have
   `project`, `status` and `summary` (text of at most 60, 40 and 400
   characters), `tone` (`merged`, `review`, `progress` or `waiting`, the
-  default, which colours the status chip mint, amber, orchid or a hairline),
+  default, which colours the status chip mint, amber, orchid or, for
+  `waiting`, muted lavender text in a hairline border),
   `updated` (an ISO 8601 time), and `pr` and `board`, each `{"text", "href"}`
   with an `http` or `https` href.
 
