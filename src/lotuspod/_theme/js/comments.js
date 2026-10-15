@@ -3089,6 +3089,9 @@
       return found;
     }
 
+    // The post each form for a new thread is sending: its row, or null.
+    var sending = new Map();
+
     // A box's form for a new thread takes images, sends on Cmd+Enter and
     // posts a thread on the section of the box it is now the form of.
     function wire(box) {
@@ -3105,7 +3108,11 @@
         if (revision() !== null) {
           fields.revision = revision();
         }
-        var row = await post(form, fields);
+        // A swap that takes the section away meanwhile waits for it.
+        var saving = post(form, fields);
+        sending.set(form, saving);
+        var row = await saving;
+        sending.delete(form);
         mine = boxWith(form);
         if (row) {
           add({ root: row, replies: [] });
@@ -3156,7 +3163,17 @@
       }
       var moved = null;
       unsent.forEach(function (each) {
-        moved = rehome(each, PLACE_GONE);
+        if (!each.saving) {
+          moved = rehome(each, PLACE_GONE);
+          return;
+        }
+        // Sent already: kept only if it is not saved.
+        each.saving.then(function (row) {
+          var box = row ? null : rehome(each, PLACE_GONE);
+          if (box) {
+            panel.reopen({ section: box.dataset.section, writing: true });
+          }
+        });
       });
       if (writing && places.has(writing.box)) {
         writing.index = places.get(writing.box);
@@ -3290,7 +3307,7 @@
       var each = { field: form.elements.text, images: attached.get(form) };
       var unsent = holding(each) ? {
         section: old.dataset.section, index: place, text: each.field.value,
-        images: each.images.kept(),
+        images: each.images.kept(), saving: sending.get(form) || null,
       } : null;
       boxes.splice(at, 1);
       if (sections.get(old.dataset.section) === old) {
@@ -3336,13 +3353,18 @@
     // sent, until the reader's Update: then the SWAPPED handler above keeps
     // what was written.
     holdSwap(function (nodes, removed) {
-      if (removed) {
-        boxes.forEach(function (box) {
-          if (nodes.some(function (node) { return node.contains(box); })) {
-            since.set(box, new Set());
-          }
-        });
-      }
+      // Counted from when a swap first takes it away; a section that is
+      // only changed is not taken away.
+      boxes.forEach(function (box) {
+        if (!nodes.some(function (node) { return node.contains(box); })) {
+          return;
+        }
+        if (!removed) {
+          since.delete(box);
+        } else if (!since.has(box)) {
+          since.set(box, new Set());
+        }
+      });
       if (passages.writes(nodes)) {
         return true;
       }

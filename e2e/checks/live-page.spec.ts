@@ -1590,6 +1590,83 @@ test.describe('signed in', () => {
     expect(errors).toEqual([]);
   });
 
+  test('a held section renamed by a later republish keeps its draft in the renamed section\'s form on Update', async ({ page }) => {
+    const errors = watchErrors(page);
+    const name = 'live-page-comments-held-renamed';
+    publish(name, sectioned(name, pond()));
+    await stopClock(page);
+    await open(page, name);
+    await box(page, 'risks').locator('summary').click();
+    const field = page.locator('.artifact-comments-panel').getByRole('textbox', { name: 'Comment on Risks' });
+    const UNSENT = 'What cracks first, the pump or the pipe?';
+    await field.fill(UNSENT);
+    await page.locator('.artifact-body > h2#risks button.artifact-section-toggle').focus();
+
+    publish(name, sectioned(name, pond({ Risks: { paragraphs: [RISKY] } })));
+    await page.clock.runFor(CHECK);
+    const bar = page.locator('div.artifact-section-body[data-section="risks"] div.artifact-swap-held');
+    await expect(bar).toContainText('This section changed');
+    const renamed = publish(name, sectioned(name, pond({ Risks: { heading: 'Hazards', paragraphs: [RISKY] } })));
+    await page.clock.runFor(CHECK);
+    await expect.poll(() => revisionOf(page)).toBe(renamed);
+    await expect(bar).toContainText('This section was removed');
+
+    await bar.getByRole('button', { name: 'Update' }).click();
+    await expect(box(page, 'risks')).toHaveCount(0);
+    const form = page.locator('.artifact-comments-panel form.artifact-comment-form')
+      .filter({ has: page.getByRole('textbox', { name: 'Comment on Hazards', includeHidden: true }) });
+    await expect(form.locator('textarea')).toHaveValue(UNSENT);
+    await expect(form.locator('.artifact-comment-status')).toHaveText(
+      'Where you were writing has changed since. Your text is kept here.');
+    await expect(page.locator('.artifact-comments-panel').getByRole('textbox', { name: 'Comment on Next steps', includeHidden: true }))
+      .toHaveValue('');
+    expect(errors).toEqual([]);
+  });
+
+  test('a section comment still sending when its section is taken away is saved once, not kept as a draft', async ({ page }) => {
+    const errors = watchErrors(page);
+    const name = 'live-page-comments-sending-section';
+    publish(name, sectioned(name, pond()));
+    await stopClock(page);
+    await open(page, name);
+    await box(page, 'risks').locator('summary').click();
+    const field = page.locator('.artifact-comments-panel').getByRole('textbox', { name: 'Comment on Risks' });
+    await field.fill('What cracks first, the pump or the pipe?');
+
+    // The site saves it at once; its answer waits until the section is updated.
+    let release!: () => void;
+    const released = new Promise<void>((resolve) => { release = resolve; });
+    const posts: number[] = [];
+    await page.route((url) => url.pathname === '/api/comments', async (route) => {
+      if (route.request().method() !== 'POST') {
+        await route.fallback();
+        return;
+      }
+      const response = await route.fetch();
+      posts.push(response.status());
+      await released;
+      await route.fulfill({ response });
+    });
+    await field.press('ControlOrMeta+Enter');
+    await expect.poll(() => posts).toEqual([201]);
+
+    publish(name, sectioned(name, pond({ Risks: { heading: 'Hazards' } })));
+    await page.clock.runFor(CHECK);
+    const bar = page.locator('div.artifact-section-body[data-section="risks"] div.artifact-swap-held');
+    await expect(bar).toContainText('This section was removed');
+    await bar.getByRole('button', { name: 'Update' }).click();
+    await expect(box(page, 'risks')).toHaveCount(0);
+    release();
+
+    await expect(page.locator('.artifact-comments-panel .artifact-comments-entry')).toHaveCount(1);
+    const hazards = page.locator('.artifact-comments-panel form.artifact-comment-form')
+      .filter({ has: page.getByRole('textbox', { name: 'Comment on Hazards', includeHidden: true }) });
+    await expect(hazards.locator('textarea')).toHaveValue('');
+    await expect(hazards.locator('.artifact-comment-status')).toHaveText('');
+    expect(posts).toEqual([201]);
+    expect(errors).toEqual([]);
+  });
+
   test('a republish that turns comments on falls back to the banner', async ({ page }) => {
     const errors = watchErrors(page);
     const name = 'live-page-comments-on';

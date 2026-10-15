@@ -276,10 +276,11 @@ function pageSwap(): void {
       return SWAP_HOLDS.map((test) => test(elements, gone)).some(Boolean);
     };
     // A part held already stays held until its Update, or until its text
-    // is the open page's again.
+    // is the open page's again; the tests still see it, as it may have been
+    // taken away since.
     const introHeld = introChanged && (heldIntro !== null || holds(intro, false));
     const sectionHeld = new Set([...removed, ...changed.map((part) => byId.get(part.id)!)]
-      .filter((part) => held.has(part.id) || holds([part.heading, part.wrapper], !freshIds.has(part.id)))
+      .filter((part) => holds([part.heading, part.wrapper], !freshIds.has(part.id)) || held.has(part.id))
       .map((part) => part.id));
     // The first section heading at or below the title bar, and its top.
     const line = document.querySelector(".artifact-topbar")?.getBoundingClientRect().bottom ?? 0;

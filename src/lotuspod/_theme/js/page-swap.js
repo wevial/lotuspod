@@ -174,7 +174,7 @@ function pageSwap() {
       return SWAP_HOLDS.map((test) => test(elements, gone)).some(Boolean);
     };
     const introHeld = introChanged && (heldIntro !== null || holds(intro, false));
-    const sectionHeld = new Set([...removed, ...changed.map((part) => byId.get(part.id))].filter((part) => held.has(part.id) || holds([part.heading, part.wrapper], !freshIds.has(part.id))).map((part) => part.id));
+    const sectionHeld = new Set([...removed, ...changed.map((part) => byId.get(part.id))].filter((part) => holds([part.heading, part.wrapper], !freshIds.has(part.id)) || held.has(part.id)).map((part) => part.id));
     const line = document.querySelector(".artifact-topbar")?.getBoundingClientRect().bottom ?? 0;
     const anchorAt = parts.findIndex((part) => part.heading.getBoundingClientRect().top >= line);
     const anchorTop = anchorAt >= 0 ? parts[anchorAt].heading.getBoundingClientRect().top : 0;
