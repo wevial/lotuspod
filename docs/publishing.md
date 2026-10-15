@@ -198,7 +198,8 @@ The converter (`lotuspod.markdown.to_body`) takes a small subset of markdown:
   dropped.
 - `` `code spans` `` and `**bold**`.
 - Fenced code: a `mermaid` fence becomes a `<pre class="mermaid">` diagram
-  block, any other fence a `<pre><code>` block.
+  block, a `calltree` fence a static call tree, and any other fence a
+  `<pre><code>` block.
 - Images: a line that is only `![ALT](SRC)`, at the top level or in a
   blockquote, becomes a figure - a lazy `img` with the image's width and
   height, inside a link to the full image - and stops a paragraph. The
@@ -222,10 +223,24 @@ The converter (`lotuspod.markdown.to_body`) takes a small subset of markdown:
   around a URL closes outside it. One in a code span, a fence, a link (a
   refused one included) or an image reference is not linked again.
 
-Images, links and bare URLs are Lotuspod's own, outside the subset its
-reference converter takes. Everything from a `## Concrete commands` heading
-on is left out of the page, which keeps host-only commands off published
-pages. Reference-style links and task lists are not converted.
+A `calltree` fence takes tree guides or spaces, an optional `+` (new) or `~`
+(changed) marker followed by whitespace, a name without spaces, and `PATH:LINE`:
+
+```calltree repo=wevial/lotuspod sha=43b4187
+~ publish() src/cli.py:10
+└─ + render() src/calltree.py:18
+```
+
+The optional `repo=OWNER/NAME` and `sha=COMMIT` words can appear in either
+order. With both a valid GitHub repository and a commit of 7–40 hex
+characters (0–9, a–f), file:line chips link to source lines; otherwise they are
+plain chips. A summary counts changed and new functions and distinct files, and
+a legend explains the markers and dimmed context rows. A line that doesn't parse shows as text.
+
+Images, links, bare URLs and calltree fences are Lotuspod's own, outside
+the subset its reference converter takes. Everything from a
+`## Concrete commands` heading on is left out of the page, which keeps
+host-only commands off published pages. Reference-style links and task lists are not converted.
 
 With the page script, a link in the page body - from markdown or HTML alike,
 and not naming a `target` of its own - opens in the same tab when it points

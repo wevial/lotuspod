@@ -336,6 +336,7 @@ THEME_SOURCES = {
         "css/live-page.css",
         "css/prose.css",
         "css/ref-cards.css",
+        "css/calltree.css",
         "css/diagram-cards.css",
         "css/diagram-view.css",
         "css/report.css",
