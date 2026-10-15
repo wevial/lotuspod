@@ -242,6 +242,36 @@ test.describe('signed in', () => {
     expect(errors).toEqual([]);
   });
 
+  test('a swap while the first activity read is under way asks for Recent activity again once it answers', async ({ page }) => {
+    const errors = watchErrors(page);
+    const name = 'index-refresh-starting';
+    // The index's first activity read held until the rows are swapped in.
+    let release = () => {};
+    const held = new Promise<void>((resolve) => { release = resolve; });
+    let first = true;
+    await page.route((url) => url.pathname === ACTIVITY, async (route) => {
+      if (!first) return route.continue();
+      first = false;
+      const response = await route.fetch();
+      await held;
+      await route.fulfill({ response });
+    });
+    await openIndex(page, '/#activity');
+
+    publish(name, 'Index refresh starting', 'A page published while the activity read was held.');
+    await nextRead(page);
+    await expect(rowLink(page, name)).toHaveText('Index refresh starting');
+    const again = page.waitForResponse((response) =>
+      new URL(response.url()).pathname === ACTIVITY && response.request().resourceType() === 'fetch');
+    release();
+    await again;
+
+    const group = page.locator(`section.index-activity-page[data-page="${name}"]`);
+    await expect(group).toBeVisible();
+    await expect(group).toContainText('published the page');
+    expect(errors).toEqual([]);
+  });
+
   test('the tabs stay as they were, and a new pod opens in a third tab', async ({ page }) => {
     const errors = watchErrors(page);
     const name = 'index-refresh-tabs';

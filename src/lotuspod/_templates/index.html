@@ -776,8 +776,13 @@
       });
       activityView.tabIndex = -1;
 
+      // While the first read is under way; asked again (askAgain) meanwhile,
+      // it is asked again once that read has answered.
+      let starting = true;
+      let startAgain = false;
       const startActivity = async () => {
         const answer = await askActivity(null);
+        starting = false;
         if (!answer) return;
         feed = answer;
         controls.hidden = false;
@@ -786,6 +791,7 @@
         window.addEventListener("popstate", showView);
         showActivity();
         showView();
+        if (startAgain) askAgain();
       };
 
       search.addEventListener("input", filter);
@@ -813,7 +819,10 @@
       // when the route does not answer. Show older pressed meanwhile reaches
       // further back: asked again over the days it shows now.
       const askAgain = async () => {
-        if (!feed) return;
+        if (!feed) {
+          if (starting) startAgain = true;
+          return;
+        }
         const until = feed.from;
         const fresh = await askActivity(null);
         while (fresh && fresh.older && fresh.from > until) {
