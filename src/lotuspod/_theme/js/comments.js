@@ -871,9 +871,10 @@
 
       // Open a composer again on the words kept, where the page still has
       // them, holding the text and images kept; false when it has them no
-      // more.
+      // more, or when another composer is open: one the reader opened
+      // since is never closed for it.
       api.reopen = function (kept) {
-        if (ARCHIVED || !article || !kept.quote || typeof kept.quote.exact !== "string") {
+        if (open || ARCHIVED || !article || !kept.quote || typeof kept.quote.exact !== "string") {
           return false;
         }
         var model = textModel(article);
@@ -3230,8 +3231,9 @@
     });
 
     // A passage composer a swap took the words of opens again on them
-    // where the page still has them; else what was written goes to a
-    // section's form, saying why: that box, else null.
+    // where the page still has them and no other composer is open; else
+    // what was written goes to a section's form, saying why: that box,
+    // else null.
     function rewrite(writing) {
       if (passages.reopen(writing) || !worth(writing)) {
         return null;
@@ -3323,6 +3325,12 @@
       }
       forms.delete(old);
       forms.set(box, form);
+      // A section added since one was held back stays added since it.
+      since.forEach(function (added) {
+        if (added.delete(old)) {
+          added.add(box);
+        }
+      });
       shown.forEach(function (thread) {
         if (thread.box === old) {
           thread.box = box;
