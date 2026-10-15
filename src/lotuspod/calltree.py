@@ -18,7 +18,6 @@ def render(lines: list[str], info: list[str]) -> str:
     rows, stack, roots = [], [], []
     counts = {"new": 0, "changed": 0}
     paths = set()
-    previous_depth = -1
     for line in lines:
         if not line.strip():
             continue
@@ -34,10 +33,9 @@ def render(lines: list[str], info: list[str]) -> str:
                 match = _LINE.fullmatch(line, name_start)
                 if match:
                     prefix = prefix[:name_start]
-        # Round three-column steps and cap jumps. Only parsed rows can
-        # supply parents, even when a malformed line has deeper indentation.
-        depth = min((len(prefix) + 1) // 3, previous_depth + 1, len(stack))
-        previous_depth = depth
+        # Round three-column steps and cap jumps at one below the last parsed
+        # row. Malformed lines never supply parents or move that cap.
+        depth = min((len(prefix) + 1) // 3, len(stack))
         if not match:
             rows.append({"depth": depth, "text": line.rstrip()})
             continue

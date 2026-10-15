@@ -232,10 +232,10 @@ A `calltree` fence takes tree guides or spaces, an optional `+` (new) or `~`
 ```
 
 The optional `repo=OWNER/NAME` and `sha=COMMIT` words can appear in either
-order. With both a valid GitHub repository and a 7–40 digit hexadecimal commit,
-file:line chips link to source lines; otherwise they are plain chips. A summary
-counts changed and new functions and distinct files, and a legend explains the
-markers and dimmed context rows. A line that doesn't parse shows as text.
+order. With both a valid GitHub repository and a commit of 7–40 hex
+characters (0–9, a–f), file:line chips link to source lines; otherwise they are
+plain chips. A summary counts changed and new functions and distinct files, and
+a legend explains the markers and dimmed context rows. A line that doesn't parse shows as text.
 
 Images, links, bare URLs and calltree fences are Lotuspod's own, outside
 the subset its reference converter takes. Everything from a

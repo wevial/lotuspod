@@ -77,6 +77,10 @@ class CalltreeTests(unittest.TestCase):
         self.assertEqual(rows[1].text(), bad)
         self.assertEqual(rows[1].elements[0].elements, [])
         self.assertEqual(rows[2].attrs['data-depth'], '1')
+        lines = ['root() x:1', '   child() x:2', '      grandchild() x:3', 'bad line', '         leaf() x:4']
+        rows = nodes(parse(calltree.render(lines, [])), 'calltree-row')
+        self.assertEqual([n.attrs['data-depth'] for n in rows], ['0', '1', '2', '0', '3'])
+        self.assertEqual(nodes(rows[4], 'calltree-guide')[0].text(), '      └─ ')
         self.assertEqual(nodes(root, 'calltree-summary')[0].text(), '1 changed · 1 new · across 1 file')
         with tempfile.TemporaryDirectory() as directory, mock.patch('sys.stdin', io.StringIO(source)):
             rc, _, err = run_cli('render', '--markdown', '-', '--name', 'tree', '--title', 'Tree',
