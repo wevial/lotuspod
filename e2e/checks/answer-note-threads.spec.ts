@@ -101,7 +101,7 @@ test.describe('signed in', () => {
     hermes('pull', '--owner', 'hermes');
 
     const errors = watch(page);
-    await page.goto(`/${NAME}.html`);
+    await page.goto(`/${NAME}.html?standalone`);
     const model = decision(page, 'decision-1');
     await expect(model.chip).toHaveCount(0);
     await model.option('Opus').check();
@@ -160,7 +160,7 @@ test.describe('signed in', () => {
     const name = `${NAME}-retry`;
     publish(name);
     const errors = watch(page);
-    await page.goto(`/${name}.html`);
+    await page.goto(`/${name}.html?standalone`);
     const model = decision(page, 'decision-1');
     // The first read of the comments after the save fails.
     let saved = false;
