@@ -7,10 +7,13 @@
   // is below follows its new height, and the table's top is kept where it was
   // in the window. The button sits in the table's bottom margin and takes no
   // room. The choice is kept per table for the session, and is set aside
-  // while the room is too small for it to matter.
-  function tableExpand(body, tables) {
-    // Each page's expanded tables are kept under this, its path and the
-    // table's index.
+  // while the room is too small for it to matter. A table a swap brings in
+  // (web/src/page-swap.ts) gets its button as one at load, and takes the
+  // choice of the one it replaces at the same place in its section.
+  function tableExpand(body) {
+    // Each page's expanded tables are kept under this, its path, the table's
+    // position among its section's tables and the section's id ("" for the
+    // intro).
     var KEPT = "lotuspod:table-expanded:" + location.pathname + ":";
     // How much more room than a table takes is worth a button, in rem.
     var MORE = 4;
@@ -24,29 +27,59 @@
       return id;
     }
 
-    function kept(index) {
+    // Where a table is kept: its place in its section, which a swap
+    // elsewhere does not shift.
+    function placeOf(table) {
+      var parent = table.parentElement;
+      var section = parent === body ? "" : parent.getAttribute("data-section");
+      return all(":scope > table", parent).indexOf(table) + ":" + section;
+    }
+
+    // Whether a table is top-level: in the body, or in a section's wrapper
+    // in it.
+    function topLevel(table) {
+      var parent = table.parentElement;
+      return parent === body ||
+        (parent.parentElement === body && parent.classList.contains("artifact-section-body"));
+    }
+
+    // The choices made on this load, by place, for a table that replaces
+    // one where storage refuses them.
+    var chosen = {};
+
+    function kept(place) {
+      if (Object.prototype.hasOwnProperty.call(chosen, place)) {
+        return chosen[place];
+      }
       try {
-        return sessionStorage.getItem(KEPT + index) === "1";
+        return sessionStorage.getItem(KEPT + place) === "1";
       } catch (ignored) {
         return false;
       }
     }
 
     function keep(entry) {
+      chosen[entry.place] = entry.expanded;
       try {
         if (entry.expanded) {
-          sessionStorage.setItem(KEPT + entry.index, "1");
+          sessionStorage.setItem(KEPT + entry.place, "1");
         } else {
-          sessionStorage.removeItem(KEPT + entry.index);
+          sessionStorage.removeItem(KEPT + entry.place);
         }
       } catch (ignored) {
         // Storage refused: the table still expands, only unremembered.
       }
     }
 
-    var entries = tables.map(function (table, index) {
+    var entries = [];
+    // How many tables have had an id given, so a new one is named after
+    // them.
+    var named = 0;
+
+    function add(table) {
+      named += 1;
       if (!table.id) {
-        table.id = freeId("table-" + (index + 1));
+        table.id = freeId("table-" + named);
       }
       var holder = element("div", "artifact-table-expand");
       holder.hidden = true;
@@ -55,12 +88,15 @@
       button.setAttribute("aria-controls", table.id);
       holder.appendChild(button);
       table.after(holder);
-      var entry = { table: table, index: index, holder: holder, button: button, expanded: kept(index) };
+      var place = placeOf(table);
+      var entry = { table: table, place: place, holder: holder, button: button, expanded: kept(place) };
       button.addEventListener("click", function () {
         toggle(entry);
       });
-      return entry;
-    });
+      entries.push(entry);
+    }
+
+    all("table", body).filter(topLevel).forEach(add);
 
     // The width each table takes at the reading default and whether it
     // scrolls there, measured on a copy of it set straight in the body, out
@@ -127,6 +163,34 @@
       });
     }
 
+    // A swap drops the tables it took out, with their buttons, and adds the
+    // top-level ones it put in.
+    document.addEventListener(SWAPPED, function (event) {
+      var before = [];
+      var after = [];
+      event.detail.units.forEach(function (unit) {
+        before = before.concat(unit.before);
+        after = after.concat(unit.after);
+      });
+      entries = entries.filter(function (entry) {
+        var gone = before.some(function (node) {
+          return node === entry.table || node.contains(entry.table);
+        });
+        if (gone) {
+          entry.holder.remove();
+        }
+        return !gone;
+      });
+      after.forEach(function (node) {
+        if (!(node instanceof Element)) {
+          return;
+        }
+        var tables = node.matches("table") ? [node] : all("table", node);
+        tables.filter(topLevel).forEach(add);
+      });
+      fit();
+    });
+
     fit();
     window.addEventListener("resize", fit);
     if (aside && window.ResizeObserver) {
@@ -138,7 +202,6 @@
   }
 
   var expandBody = document.querySelector(".artifact-body");
-  var expandTables = expandBody ? all(":scope > table, :scope > .artifact-section-body > table", expandBody) : [];
-  if (expandTables.length) {
-    tableExpand(expandBody, expandTables);
+  if (expandBody) {
+    tableExpand(expandBody);
   }

@@ -133,6 +133,29 @@ function publish(name: string, markdown: string, ...extra: string[]): string {
   }
 }
 
+// A markdown table wider than an article's column, so it scrolls in it at 1440
+// by 900, its first cell naming what.
+function ledger(what: string) {
+  const columns = ['Item', 'Week', 'Depth', 'Ice', 'Water', 'Pump', 'Heater', 'Fish', 'Weather', 'Notes'];
+  const row = (cells: string[]) => `| ${cells.join(' | ')} |`;
+  return [
+    row(columns),
+    row(columns.map(() => '---')),
+    row(columns.map((column, n) => (n ? `${column} reading, kept by the shed door` : what))),
+  ].join('\n');
+}
+
+// A refs file (REFS_FILE's shape in tests/capture_site.py) naming HOLO-175
+// with title; its path.
+function refsFile(title: string) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lotuspod-live-page-refs-'));
+  const file = path.join(dir, 'refs.json');
+  fs.writeFileSync(file, JSON.stringify({ refs: { 'HOLO-175': {
+    title, project: 'Holophyte', status: 'In review', tone: 'review',
+  } } }), 'utf-8');
+  return file;
+}
+
 // The reader's new thread on a section, stored through the comments route.
 async function comment(request: APIRequestContext, name: string, section: string, text: string) {
   const response = await request.post('/api/comments', {
@@ -547,11 +570,11 @@ test.describe('signed in', () => {
     const name = 'live-page-held-banner';
     const { wrapper, bar } = await holdRisks(page, name);
     await page.clock.runFor(6000);
-    // A table is not swapped yet: this revision falls back to the banner.
+    // Comments turned on: this revision falls back to the banner.
     publish(name, sectioned(name, pond({
-      Findings: { paragraphs: ['The pond froze early this year.', '| Pump | Heater |\n|---|---|\n| off | on |'] },
+      Findings: { paragraphs: ['The pond froze early this year.', 'The ice was thick by noon.'] },
       Risks: { paragraphs: ['The pump will crack unless it is lifted out first.'] },
-    })), '--no-comments');
+    })));
     await page.clock.runFor(CHECK);
     await expect(banner(page).node).toContainText(NEWER);
     await bar.getByRole('button', { name: 'Update' }).click();
@@ -728,6 +751,240 @@ test.describe('signed in', () => {
     await expect(banner(page).node).toHaveCount(0);
     await expect(page.locator('button.artifact-section-toggle')).toHaveCount(0);
     await expect(every).toBeHidden();
+    expect(errors).toEqual([]);
+  });
+
+  test('a swapped section\'s table gets its Expand button, and a table in its place keeps the reader\'s choice', async ({ page }) => {
+    const errors = watchErrors(page);
+    const swaps = await watchSwaps(page);
+    const name = 'live-page-tables';
+    // An article's column is narrower than its room at 1440: a wide table
+    // scrolls in it and gets a button.
+    const ARTICLE = ['--no-comments', '--variant', 'article'];
+    const tabled = (findings: string, risks: string) => sectioned('Live page tables', pond({
+      Findings: { paragraphs: ['The pond freezes in January.', ledger(findings)] },
+      Risks: { paragraphs: ['The pump may crack in the ice.', ledger(risks)] },
+    }));
+    publish(name, tabled('January', 'Pump'), ...ARTICLE);
+    await openPlain(page, name);
+    const table = (id: string) => page.locator(`.artifact-section-body[data-section="${id}"] > table`);
+    const button = (id: string) =>
+      page.locator(`.artifact-section-body[data-section="${id}"] > .artifact-table-expand > button`);
+    await expect(button('findings')).toBeVisible();
+    await button('risks').click();
+    await expect(table('risks')).toHaveClass(/artifact-table--expanded/);
+    await table('risks').evaluate((node) => { (node as any).__kept = true; });
+
+    const second = publish(name, tabled('February', 'Pump'), ...ARTICLE);
+    await page.clock.runFor(CHECK);
+    await expect.poll(() => revisionOf(page)).toBe(second);
+    await expect(banner(page).node).toHaveCount(0);
+    expect((await swaps()).filter((unit) => unit.kind === 'section'))
+      .toEqual([{ kind: 'section', id: 'findings', change: 'changed' }]);
+    await expect(table('findings')).toContainText('February');
+    await expect(button('findings')).toHaveCount(1);
+    await expect(button('findings')).toHaveText('Expand');
+    await button('findings').click();
+    await expect(table('findings')).toHaveClass(/artifact-table--expanded/);
+    await expect(button('findings')).toHaveText('Collapse');
+    expect(await table('risks').evaluate((node) => (node as any).__kept)).toBe(true);
+    await expect(table('risks')).toHaveClass(/artifact-table--expanded/);
+
+    // Risks' table changed: the new one is shown as the reader left the old.
+    const third = publish(name, tabled('February', 'Heater'), ...ARTICLE);
+    await page.clock.runFor(CHECK);
+    await expect.poll(() => revisionOf(page)).toBe(third);
+    await expect(banner(page).node).toHaveCount(0);
+    await expect(table('risks')).toContainText('Heater');
+    expect(await table('risks').evaluate((node) => (node as any).__kept)).toBeUndefined();
+    await expect(table('risks')).toHaveClass(/artifact-table--expanded/);
+    await expect(button('risks')).toHaveCount(1);
+    await expect(button('risks')).toHaveText('Collapse');
+    await expect(page.locator('.artifact-table-expand')).toHaveCount(2);
+    expect(errors).toEqual([]);
+  });
+
+  test('a held reference\'s card carried over takes a free id when a new heading has its own', async ({ page }) => {
+    const errors = watchErrors(page);
+    const name = 'live-page-refs-held-id';
+    const refs = refsFile('Story follow-ups become proposals');
+    publish(name, sectioned('Live page refs held id', pond({
+      Risks: { paragraphs: ['The pump may crack in the ice, as HOLO-175 says.'] },
+    })), '--no-comments', '--refs', refs);
+    await openPlain(page, name);
+    const ref = page.locator('.artifact-body button.artifact-ref[data-ref="HOLO-175"]');
+    const id = await ref.getAttribute('aria-controls');
+    await ref.focus();
+
+    // A new section whose heading's id is the card's.
+    const second = publish(name, sectioned('Live page refs held id', [
+      ...pond({ Risks: { paragraphs: ['The pump will crack unless it is lifted out first.'] } }),
+      ['Ref HOLO 175', ['The heater ticket, in brief.']],
+    ]), '--no-comments', '--refs', refs);
+    await page.clock.runFor(CHECK);
+    await expect.poll(() => revisionOf(page)).toBe(second);
+    await expect(banner(page).node).toHaveCount(0);
+    await expect(page.locator(`.artifact-body > h2#${id}`)).toHaveCount(1);
+    await expect(page.locator('.artifact-section-body[data-section="risks"] div.artifact-swap-held'))
+      .toContainText('This section changed');
+    expect(await page.evaluate(() => {
+      const ids = Array.from(document.querySelectorAll('[id]'), (node) => node.id);
+      return ids.filter((one, at) => ids.indexOf(one) !== at);
+    })).toEqual([]);
+
+    await ref.blur();
+    const card = page.locator('.artifact-ref-card');
+    await ref.hover();
+    await expect(card).toBeVisible();
+    await expect(card.locator('.artifact-ref-card-title')).toHaveText('Story follow-ups become proposals');
+    expect(await ref.getAttribute('aria-controls')).toBe(await card.getAttribute('id'));
+    await ref.click();
+    await expect(ref).toHaveAttribute('aria-expanded', 'true');
+    expect(errors).toEqual([]);
+  });
+
+  test('a table a swap puts in place of an expanded one is expanded where storage is refused', async ({ page }) => {
+    const errors = watchErrors(page);
+    const name = 'live-page-tables-unkept';
+    const ARTICLE = ['--no-comments', '--variant', 'article'];
+    const tabled = (risks: string) => sectioned('Live page tables unkept', pond({
+      Risks: { paragraphs: ['The pump may crack in the ice.', ledger(risks)] },
+    }));
+    await page.addInitScript(() => {
+      Object.defineProperty(window, 'sessionStorage', {
+        get() { throw new DOMException('Storage is refused', 'SecurityError'); },
+      });
+    });
+    publish(name, tabled('Pump'), ...ARTICLE);
+    await openPlain(page, name);
+    expect(await page.evaluate(() => { try { sessionStorage.length; return 'kept'; } catch { return 'refused'; } }))
+      .toBe('refused');
+    const table = page.locator('.artifact-section-body[data-section="risks"] > table');
+    const button = page.locator('.artifact-section-body[data-section="risks"] > .artifact-table-expand > button');
+    await button.click();
+    await expect(table).toHaveClass(/artifact-table--expanded/);
+    await table.evaluate((node) => { (node as any).__kept = true; });
+    // Focus left in Risks would hold it back.
+    await button.blur();
+
+    const second = publish(name, tabled('Ladder'), ...ARTICLE);
+    await page.clock.runFor(CHECK);
+    await expect.poll(() => revisionOf(page)).toBe(second);
+    await expect(banner(page).node).toHaveCount(0);
+    await expect(table).toContainText('Ladder');
+    expect(await table.evaluate((node) => (node as any).__kept)).toBeUndefined();
+    await expect(table).toHaveClass(/artifact-table--expanded/);
+    await expect(button).toHaveText('Collapse');
+    expect(errors).toEqual([]);
+  });
+
+  test('a swapped section\'s reference opens its new card, the cards swapped with it', async ({ page }) => {
+    const errors = watchErrors(page);
+    const swaps = await watchSwaps(page);
+    const name = 'live-page-refs';
+    const named = (risk: string) => sectioned('Live page refs', pond({
+      Risks: { paragraphs: [`${risk} See HOLO-175.`, 'The fish need air under it.'] },
+    }));
+    publish(name, named('The pump may crack in the ice.'), '--no-comments',
+      '--refs', refsFile('Story follow-ups become proposals'));
+    await openPlain(page, name);
+    const ref = page.locator('.artifact-body button.artifact-ref[data-ref="HOLO-175"]');
+
+    const second = publish(name, named('The pump will crack unless it is lifted out.'), '--no-comments',
+      '--refs', refsFile('Follow-ups are filed as proposals'));
+    await page.clock.runFor(CHECK);
+    await expect.poll(() => revisionOf(page)).toBe(second);
+    await expect(banner(page).node).toHaveCount(0);
+    expect(await swaps()).toEqual(expect.arrayContaining([
+      { kind: 'section', id: 'risks', change: 'changed' },
+      { kind: 'refs', id: '', change: 'changed' },
+    ]));
+    await expect(page.locator('.artifact-body')).toContainText('lifted out');
+    await expect(ref).toHaveClass(/artifact-ref--live/);
+
+    const cards = page.locator('.artifact-ref-card');
+    await expect(cards).toHaveCount(1);
+    const card = cards.first();
+    await ref.hover();
+    await expect(card).toBeVisible();
+    await expect(card.locator('.artifact-ref-card-title')).toHaveText('Follow-ups are filed as proposals');
+    await expect(card.locator('.artifact-ref-card-close')).toHaveCount(1);
+    await expect(card.locator('.artifact-ref-card-pinned')).toHaveCount(1);
+    await expect(card.locator('.artifact-ref-card-close')).toBeHidden();
+    await ref.click();
+    await expect(ref).toHaveAttribute('aria-expanded', 'true');
+    await expect(card).toHaveClass(/artifact-ref-card--pinned/);
+    await expect(card.locator('.artifact-ref-card-close')).toBeVisible();
+    await expect(card.locator('.artifact-ref-card-asof')).toContainText('pinned, Esc closes');
+    await page.keyboard.press('Escape');
+    await expect(card).toBeHidden();
+    await expect(ref).toBeFocused();
+    expect(errors).toEqual([]);
+  });
+
+  test('a reference a republish adds to a page that named none opens its card', async ({ page }) => {
+    const errors = watchErrors(page);
+    const name = 'live-page-refs-added';
+    const refs = refsFile('Story follow-ups become proposals');
+    publish(name, sectioned('Live page refs added', pond()), '--no-comments', '--refs', refs);
+    await openPlain(page, name);
+    await expect(page.locator('.artifact-ref-cards, button.artifact-ref')).toHaveCount(0);
+
+    const second = publish(name, sectioned('Live page refs added', pond({
+      Risks: { paragraphs: ['The pump may crack in the ice, as HOLO-175 says.'] },
+    })), '--no-comments', '--refs', refs);
+    await page.clock.runFor(CHECK);
+    await expect.poll(() => revisionOf(page)).toBe(second);
+    await expect(banner(page).node).toHaveCount(0);
+    expect(await page.locator('.artifact-body + .artifact-ref-cards').count()).toBe(1);
+    const ref = page.locator('.artifact-body button.artifact-ref[data-ref="HOLO-175"]');
+    const card = page.locator('.artifact-ref-card');
+    await ref.hover();
+    await expect(card).toBeVisible();
+    await expect(card.locator('.artifact-ref-card-title')).toHaveText('Story follow-ups become proposals');
+    await page.mouse.move(5, 5);
+    await expect(card).toBeHidden();
+
+    await ref.focus();
+    await expect(card).toBeVisible();
+    await page.keyboard.press('Enter');
+    await expect(ref).toHaveAttribute('aria-expanded', 'true');
+    await expect(card.locator('.artifact-ref-card-close')).toBeVisible();
+    expect(errors).toEqual([]);
+  });
+
+  test('a reference in a section held back keeps its card when a republish names it nowhere else', async ({ page }) => {
+    const errors = watchErrors(page);
+    const name = 'live-page-refs-held';
+    const refs = refsFile('Story follow-ups become proposals');
+    publish(name, sectioned('Live page refs held', pond({
+      Risks: { paragraphs: ['The pump may crack in the ice, as HOLO-175 says.'] },
+    })), '--no-comments', '--refs', refs);
+    await openPlain(page, name);
+    const ref = page.locator('.artifact-body button.artifact-ref[data-ref="HOLO-175"]');
+    await ref.focus();
+
+    const second = publish(name, sectioned('Live page refs held', pond({
+      Findings: { paragraphs: ['The pond froze early this year.'] },
+      Risks: { paragraphs: ['The pump will crack unless it is lifted out first.'] },
+    })), '--no-comments', '--refs', refs);
+    await page.clock.runFor(CHECK);
+    await expect.poll(() => revisionOf(page)).toBe(second);
+    await expect(banner(page).node).toHaveCount(0);
+    await expect(page.locator('.artifact-section-body[data-section="risks"] div.artifact-swap-held'))
+      .toContainText('This section changed');
+    await expect(ref).toBeFocused();
+
+    await ref.blur();
+    const card = page.locator('.artifact-ref-card');
+    await expect(card).toBeHidden();
+    await ref.hover();
+    await expect(card).toBeVisible();
+    await expect(card.locator('.artifact-ref-card-title')).toHaveText('Story follow-ups become proposals');
+    await ref.click();
+    await expect(ref).toHaveAttribute('aria-expanded', 'true');
+    await expect(card.locator('.artifact-ref-card-close')).toHaveCount(1);
+    await expect(card.locator('.artifact-ref-card-close')).toBeVisible();
     expect(errors).toEqual([]);
   });
 
