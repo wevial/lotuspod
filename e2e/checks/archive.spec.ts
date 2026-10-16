@@ -71,7 +71,7 @@ test.describe('archived', () => {
     publish(NAME);
 
     // Published just now, the page has a group in Recent activity, which the
-    // index shows when the address picks it; the reload keeps it.
+    // index opens on at #activity, as the address picks it; the reload keeps it.
     await page.goto('/#activity');
     await expect(group(page, NAME)).toHaveCount(1);
 

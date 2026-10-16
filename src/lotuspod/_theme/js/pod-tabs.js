@@ -33,7 +33,9 @@
 //
 // Each time the listing shows again, the index's own script is told
 // ("lotuspod:listing"), so it reads its marks and counts again, as when the
-// browser brings the index back from its back-forward cache.
+// browser brings the index back from its back-forward cache. When the
+// listing's rows are swapped in ("lotuspod:rows", js/index-refresh.js), the
+// pods are read from them again and each open tab takes its pod's title.
 //
 // A tab that is not active shows a dot from the seen route: amber ("new
 // version") when its pod was published again since this reader last opened
@@ -78,12 +80,17 @@
   const MAC = /^Mac/.test(navigator.platform);
   const FRAGMENT = /^#tabs=([^&]*)(?:&on=([^&]*)(?:&at=([^&]*))?)?(?:&view=activity)?$/;
 
-  // Each pod the listing has: its title and its link, by name.
+  // Each pod the listing has: its title and its link, by name. Read again
+  // whenever the listing's rows are swapped in ("lotuspod:rows").
   const pods = new Map();
-  for (const row of document.querySelectorAll(".index-table tbody tr[data-page]")) {
-    const link = row.cells[0] ? row.cells[0].querySelector("a[href]") : null;
-    if (link) pods.set(row.dataset.page, { title: link.textContent.trim(), href: link.getAttribute("href") });
-  }
+  const readPods = () => {
+    pods.clear();
+    for (const row of document.querySelectorAll(".index-table tbody tr[data-page]")) {
+      const link = row.cells[0] ? row.cells[0].querySelector("a[href]") : null;
+      if (link) pods.set(row.dataset.page, { title: link.textContent.trim(), href: link.getAttribute("href") });
+    }
+  };
+  readPods();
 
   // The directory the index is served from, where every pod sits beside it.
   const root = new URL(".", location.href).pathname;
@@ -717,6 +724,21 @@
     focusTab(find(name));
   });
   document.addEventListener("click", (event) => follow(event, null));
+  // The listing's rows swapped in (js/index-refresh.js): its pods read again,
+  // a pod open in a tab but no longer listed kept as it was, and each open
+  // tab titled with its pod's title. The strip, the active tab, the frames
+  // and the dots stay as they are.
+  document.addEventListener("lotuspod:rows", () => {
+    const was = new Map(pods);
+    readPods();
+    for (const pod of open) {
+      if (!pods.has(pod.name)) pods.set(pod.name, was.get(pod.name));
+      const { title } = pods.get(pod.name);
+      pod.title.querySelector(".pod-tab-name").textContent = title;
+      pod.tab.querySelector(".pod-tab-close").setAttribute("aria-label", `Close ${title}`);
+      pod.frame.title = title;
+    }
+  });
   document.addEventListener("lotuspod:view", () => {
     if (open.length) write();
   });

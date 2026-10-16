@@ -269,7 +269,7 @@ class DeclaredOrderTests(ThemeCopyTestCase):
         in the index script, and its styles just after css/pod-tabs.css."""
         styles = cli.THEME_SOURCES[STYLESHEET]
         self.assertEqual(cli.THEME_SOURCES[cli.INDEX_SCRIPT],
-                         ("js/pod-tabs.js", "js/pod-finder.js"))
+                         ("js/pod-tabs.js", "js/pod-finder.js", "js/index-refresh.js"))
         self.assertEqual(styles.index("css/pod-finder.css"), styles.index("css/pod-tabs.css") + 1)
         problems = source_problems(cli.THEME_DIR, cli.THEME_SOURCES)
         self.assertEqual(problems, [], "\n".join(problems))

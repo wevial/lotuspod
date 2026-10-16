@@ -785,6 +785,20 @@ line, which releases it; the Labels menu and the search still apply on top.
 When the route answers anything but 200 (signed out, or the demo site, whose
 stand-in answers 404), there are no marks and no toggle.
 
+The listing refreshes in place while the index is open. While it is shown
+(no tab active, see [Pods in tabs](#pods-in-tabs)) and the window is seen,
+the index reads its own page again every 60 seconds, at once when the window
+is seen again, and each time the listing shows again over the tabs; while a
+tab is active it reads nothing. When the rows differ from the ones shown, as
+after a `lotuspod publish` of a new page or a republish with a new title,
+date, summary or labels, the new rows take their place with no reload, and
+the marks, the counts and Recent activity are asked again. The search, the
+labels checked (a new label listed unchecked, one no row carries any more
+dropped), the toggles, the sort, the view and the open tabs stay as the
+reader left them, each open tab taking its pod's new title, and focus on a
+row's title link stays on that page's link. An index going from no page to
+some, or back, loads again.
+
 ### Recent activity
 
 Signed in to `lotuspod serve`, the index also asks `/api/activity` (see
