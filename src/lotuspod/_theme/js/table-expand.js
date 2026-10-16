@@ -31,7 +31,7 @@
     // elsewhere does not shift.
     function placeOf(table) {
       var parent = table.parentElement;
-      var section = parent === body ? "" : parent.getAttribute("data-section") || "";
+      var section = parent === body ? "" : parent.getAttribute("data-section");
       return all(":scope > table", parent).indexOf(table) + ":" + section;
     }
 
@@ -40,7 +40,7 @@
     function topLevel(table) {
       var parent = table.parentElement;
       return parent === body ||
-        (parent && parent.parentElement === body && parent.classList.contains("artifact-section-body"));
+        (parent.parentElement === body && parent.classList.contains("artifact-section-body"));
     }
 
     function kept(place) {
