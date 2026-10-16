@@ -85,9 +85,8 @@ async function watch(page: Page) {
   };
 }
 
-// The run's one reader may make 20 uploads in any ten minutes (lotuspod.api's
-// UPLOAD_LIMIT), and the other checks spend them; these answer the page's
-// uploads as the site does for bytes it holds already. The capture fixture
+// These checks make many uploads as the run's one reader; they answer the
+// page's uploads as the site does for bytes it holds already. The capture fixture
 // stores every fixture image for its images page, so the thumbnails and the
 // comments naming them are the site's own.
 async function stored(page: Page) {

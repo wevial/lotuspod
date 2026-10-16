@@ -141,6 +141,9 @@ test.describe('signed in', () => {
   test('a pod published while a search is typed is listed and shown, the search kept', async ({ page }) => {
     const errors = watchErrors(page);
     const name = 'index-refresh-heron';
+    // A page another check rendered is on the site but not yet in the index,
+    // and the publish below would list it too: the index lists them first.
+    run('index', '--out-dir', OUT);
     await openIndex(page);
     const loads = watchLoads(page);
     await page.evaluate(() => { (window as any).__stayed = true; });
