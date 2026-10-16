@@ -2137,25 +2137,39 @@ def serve_allow_list(out_dir: Path) -> frozenset[str]:
     return frozenset(allowed)
 
 
-def served_page_names(out_dir: Path) -> list[str]:
-    """The names of the pages serve answers, archived ones left out, in order."""
-    return sorted(file[:-len(".html")] for file in serve_allow_list(out_dir)
+def served_page_names(out_dir: Path, allowed: frozenset[str] | None = None) -> list[str]:
+    """The names of the pages serve answers, archived ones left out, in order.
+    allowed is serve_allow_list(out_dir) when the caller has read it already."""
+    if allowed is None:
+        allowed = serve_allow_list(out_dir)
+    return sorted(file[:-len(".html")] for file in allowed
                   if file.endswith(".html") and is_page_name(file)
                   and not archive.is_archived(out_dir, file[:-len(".html")]))
 
 
-def api_page(out_dir: Path, name: str) -> api.Page | None:
+def api_page(out_dir: Path, name: str,
+             allowed: frozenset[str] | None = None) -> api.Page | None:
     """The page serve answers as NAME.html, as /api records it; None when
-    serve would not answer it."""
+    serve would not answer it. allowed is serve_allow_list(out_dir) when
+    the caller has read it already."""
+    if allowed is None:
+        allowed = serve_allow_list(out_dir)
     # The allow-list holds bare file names only, so no name reaches past it.
     file = f"{name}.html"
-    if not is_page_name(file) or file not in serve_allow_list(out_dir):
+    if not is_page_name(file) or file not in allowed:
         return None
     try:
+        # The allow-list may have been read before the page was replaced
+        # by a link, which serve_allow_list never lists.
+        if (out_dir / file).is_symlink():
+            return None
         page_html = (out_dir / file).read_text(encoding="utf-8")
         revision = page_revision(out_dir, name)
         record = archive.read_record(out_dir, name) or {}
     except (OSError, UnicodeDecodeError, RuntimeError):
+        return None
+    # The allow-list may have been read before the page was published hidden.
+    if not extract_visibility(page_html):
         return None
     parser = _H2Collector(page_html)
     parser.feed(page_html)
@@ -2178,6 +2192,36 @@ def api_page(out_dir: Path, name: str) -> api.Page | None:
                     title=extract_meta(page_html, name)["title"],
                     archived=record.get("archivedAt", ""),
                     superseded_by=record.get("supersededBy") or "")
+
+
+class _Catalog:
+    """api_page and served_page_names over one read of the allow-list, made
+    at the first lookup, keeping each page it builds."""
+
+    def __init__(self, out_dir: Path) -> None:
+        self.out_dir = out_dir
+        self._allowed: frozenset[str] | None = None
+        self._found: dict[str, api.Page | None] = {}
+
+    def _allow_list(self) -> frozenset[str]:
+        if self._allowed is None:
+            self._allowed = serve_allow_list(self.out_dir)
+        return self._allowed
+
+    def __call__(self, name: str) -> api.Page | None:
+        if name not in self._found:
+            self._found[name] = api_page(self.out_dir, name, self._allow_list())
+        return self._found[name]
+
+    def names(self) -> list[str]:
+        return served_page_names(self.out_dir, self._allow_list())
+
+
+def api_catalog(out_dir: Path) -> Callable[[str], api.Page | None]:
+    """A lookup like api_page for one /api request that looks up many names:
+    it reads the allow-list once, and only when a name is looked up. Its
+    names() is served_page_names over the same read."""
+    return _Catalog(out_dir)
 
 
 def agent_page(out_dir: Path, page: api.Page) -> dict:
@@ -2592,6 +2636,7 @@ def _make_server(out_dir: Path, host: str, port: int,
         routes = api.Api(db.Database(db_path), partial(api_page, out_dir), window,
                          media_dir=media.media_dir(out_dir), max_image_bytes=max_image_bytes,
                          history=history, names=partial(served_page_names, out_dir),
+                         catalog=partial(api_catalog, out_dir),
                          archive=partial(archive.set_archived, out_dir),
                          owners=verifier.config.owners if verifier is not None else frozenset(),
                          changed=events.changed)

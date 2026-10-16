@@ -178,11 +178,13 @@ async function press(page: Page, label: string) {
   const answered = page.waitForResponse((response) =>
     new URL(response.url()).pathname === '/api/archive' && response.request().method() === 'POST');
   const loaded = page.waitForEvent('load');
+  // The reloaded page asks for its record before `load`, so the wait starts here.
+  const read = page.waitForResponse((response) =>
+    new URL(response.url()).pathname === '/api/archive' && response.request().method() === 'GET');
   await button.click();
   expect((await answered).status()).toBe(200);
   await loaded;
-  await page.waitForResponse((response) =>
-    new URL(response.url()).pathname === '/api/archive' && response.request().method() === 'GET');
+  await read;
   await settle(page);
 }
 
