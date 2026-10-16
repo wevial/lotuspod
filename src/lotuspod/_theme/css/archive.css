@@ -73,9 +73,13 @@
 
 /* The review sheet's bar keeps its own margin-left: auto. With both drawn,
    the title takes the free room, so neither margin has any to split and
-   the two sit side by side at the right. */
+   the two sit side by side at the right. At any width, the title gives way
+   next, then Next open's words to an ellipsis; the button and the count
+   stay whole. With no question open the count has nothing to give way. */
 .artifact-topbar:has(.artifact-archive-bar ~ .artifact-review-bar) .artifact-topbar-title {
   flex-grow: 1;
+  flex-shrink: 1000;
+  min-width: 1.5em;
 }
 
 .artifact-archive {
@@ -120,14 +124,6 @@
 
 .artifact-archive-status:empty {
   margin-left: 0;
-}
-
-/* With the review sheet's bar beside it, at any width, the title gives way
-   next, then Next open's words to an ellipsis; the button and the count
-   stay whole. With no question open the count has nothing to give way. */
-.artifact-topbar:has(.artifact-archive-bar ~ .artifact-review-bar) .artifact-topbar-title {
-  flex-shrink: 1000;
-  min-width: 1.5em;
 }
 
 .artifact-archive-bar ~ .artifact-review-bar {
