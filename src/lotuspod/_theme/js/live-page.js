@@ -2,14 +2,15 @@
   // The page's revision while it is open (lotuspod:revision). The page learns
   // the revision its page is now published at from each read of its threads
   // (live.seen, which the comments page calls) and from the revision route,
-  // every CHECK ms and at once when the page is seen again. Once that is not
-  // its own, the swap web/src/page-swap.ts registers (live.swapWith) is tried
-  // first: it swaps in only the parts the new revision changed and answers
-  // the revision the page now shows, which becomes its own (live.revision),
-  // so a later publish is noticed too; a swap that throws partway reloads the
-  // page. When it answers null, or none is registered, a banner fixed over
-  // the top of the window offers a reload; a
-  // hidden page with no unsent text in a composer reloads itself, so it is
+  // every CHECK ms, at once when the page is seen again, and at once on a
+  // tick from serve's stream (js/live-events.js) that it was published again,
+  // or a resync. Once that is not its own, the swap web/src/page-swap.ts
+  // registers (live.swapWith) is tried first: it swaps in only the parts the
+  // new revision changed and answers the revision the page now shows, which
+  // becomes its own (live.revision), so a later publish is noticed too; a
+  // swap that throws partway reloads the page. When it answers null, or none
+  // is registered, a banner fixed over the top of the window offers a reload;
+  // a hidden page with no unsent text in a composer reloads itself, so it is
   // current when the reader comes back. Before a reload the page keeps where
   // the reader was, per page in sessionStorage: the scroll position, kept
   // from the top of the page's text (div.artifact-main) so a box drawn above
@@ -294,6 +295,14 @@
 
     document.addEventListener("visibilitychange", function () {
       if (!hidden() && timer) {
+        check();
+      }
+    });
+    // A tick from serve's stream (js/live-events.js) that this page was
+    // published again, or that the stream missed some, checks at once.
+    document.addEventListener("lotuspod:change", function (event) {
+      var tick = event.detail;
+      if (timer && (tick.what === "resync" || (tick.what === "publish" && tick.page === page))) {
         check();
       }
     });

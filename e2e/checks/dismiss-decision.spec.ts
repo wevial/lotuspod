@@ -162,14 +162,16 @@ test.describe('signed in', () => {
     try {
       const other = await context.newPage();
       const otherErrors = watch(other);
+      const archive = other.waitForResponse((response) =>
+        new URL(response.url()).pathname === '/api/archive');
       await other.goto(`/${NAME}.html?standalone`);
       const nightly = decision(other, 'decision-2');
       await expect(nightly.form).toHaveClass(/\bartifact-decision--dismissed\b/);
       await expect(nightly.saved).toHaveText('Dismissed');
       await expect(nightly.undo).toHaveCount(0);
       await expect(parts(other).count).toHaveText('1 to answer · Respond');
-      // The archive route has answered by the time the page is idle.
-      await other.waitForLoadState('networkidle');
+      // The archive route has answered.
+      await archive;
       await expect(other.locator('button.artifact-decision-dismiss')).toHaveCount(0);
       expect(otherErrors).toEqual([]);
     } finally {

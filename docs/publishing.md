@@ -132,7 +132,10 @@ page and the focus back on its Expand button. A flowchart's node cards (below)
 work in the view as on the page, and on a touch screen, where the Expand button
 is always shown, one finger drags the diagram and two pinch to zoom about the
 point between them. Without scripting, and on an old version, the diagram
-stays as it is on the page.
+stays as it is on the page. A page open when it is published again draws a
+changed diagram in place, with its Expand button, without a reload; a section
+whose diagram is open in the view is held back, under "This section changed"
+and an Update button, until the reader updates it.
 
 A flowchart (source starting `flowchart` or `graph`) can be followed by a
 Nodes table, which the page script turns into a card for each box. Put an
@@ -165,8 +168,10 @@ box, or a hovered or focused one, has its arrows drawn in cyan above the
 boxes while the rest dim. The heading and table are hidden only when every
 row names a box the diagram draws; otherwise they stay, and the boxes that
 matched still get cards. Without scripting the page shows the heading and
-table as written. Mermaid's `click` directive is not used: it needs the
-`loose` security level, and the page keeps Mermaid's default, `strict`.
+table as written. A republished diagram's boxes get their cards from its new
+table in place, and the old diagram's boxes are let go. Mermaid's `click`
+directive is not used: it needs the `loose` security level, and the page keeps
+Mermaid's default, `strict`.
 
 Pass `--variant report` for a long technical report. The page keeps the same
 markup with one class more, `artifact--report` on the `main` element, and the

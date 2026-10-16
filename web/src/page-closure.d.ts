@@ -68,8 +68,19 @@ interface SwappedDetail {
 // js/page-open.js: sent on the document once a swap is applied.
 declare const SWAPPED: "lotuspod:swapped";
 
+// The diagrams (pre.mermaid) a swap brought in, for the template's start-up
+// module to draw.
+interface DiagramsDetail {
+  nodes: HTMLElement[];
+}
+
+// js/page-open.js: sent on the document once a swap is applied, naming the
+// diagrams it brought in, when it brought in any.
+declare const DIAGRAMS: "lotuspod:diagrams";
+
 interface DocumentEventMap {
   "lotuspod:swapped": CustomEvent<SwappedDetail>;
+  "lotuspod:diagrams": CustomEvent<DiagramsDetail>;
 }
 
 // web/src/page-swap.ts: hold back from a swap each part whose nodes (a

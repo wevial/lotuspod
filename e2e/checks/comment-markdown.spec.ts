@@ -355,6 +355,10 @@ test.describe('signed in', () => {
 
   test('a page with no comments and no sections opens its links off the site in a new tab', async ({ page }) => {
     const seen = await watch(page);
+    // The archive route answered, once the page's scripts have run: serve's
+    // stream stays open, so the network is never idle.
+    const recorded = page.waitForResponse((response) =>
+      new URL(response.url()).pathname === '/api/archive');
     await page.goto(`/${PLAIN}.html?standalone`);
     const body = page.locator('.artifact-body');
     const away = body.locator('a[href="https://example.com/plain"]');
@@ -364,7 +368,7 @@ test.describe('signed in', () => {
     await expect(protocol).toHaveAttribute('target', '_blank');
     await expect(protocol).toHaveAttribute('rel', 'noopener noreferrer');
     await expect(body.locator('a[href="#top"]')).not.toHaveAttribute('target');
-    await page.waitForLoadState('networkidle');
+    await recorded;
     await seen.clean();
   });
 
@@ -397,7 +401,6 @@ test.describe('signed in', () => {
     expect(await exact(strong)).toBe('<b>x</b>');
     await expect(bubble(page, roots.bold).locator('b')).toHaveCount(0);
 
-    await page.waitForLoadState('networkidle');
     expect(await page.evaluate(() => (window as any).__pwned)).toBeUndefined();
     await seen.clean();
   });

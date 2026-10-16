@@ -7,6 +7,8 @@
 // /api/ is answered here, from this browser's localStorage, in the shapes
 // and status codes lotuspod.api answers; every other request goes to the
 // browser's own fetch unchanged. Nothing written here leaves the browser.
+// It replaces window.EventSource too: a same-origin /api/ stream, serve's
+// /api/events, never connects, so the page keeps its polling.
 //
 // The visitor is the reader `you`. A comment they write waits for the agent
 // `demo-agent`, and once it has waited REPLY_AFTER ms, the next read of the
@@ -546,6 +548,45 @@
     }
     return Promise.resolve(handle(method, url, ""));
   };
+
+  // Nothing serves /api/events here, so a same-origin /api/ stream is a
+  // stand-in that never connects and sends nothing: the page keeps its
+  // polling, and no request leaves it. Any other URL gets the browser's own.
+  var OriginalEventSource = window.EventSource;
+
+  function apiURL(input) {
+    try {
+      var url = new URL(String(input), location.href);
+      return url.origin === location.origin && url.pathname.indexOf("/api/") === 0 ? url : null;
+    } catch (ignored) {
+      return null;
+    }
+  }
+
+  function StandInEventSource(input, init) {
+    var url = apiURL(input);
+    if (!url && typeof OriginalEventSource === "function") {
+      return new OriginalEventSource(input, init);
+    }
+    var target = new EventTarget();
+    target.url = url ? url.href : String(input);
+    target.withCredentials = Boolean(init && init.withCredentials);
+    target.readyState = 0;
+    target.onopen = null;
+    target.onmessage = null;
+    target.onerror = null;
+    target.close = function () {
+      target.readyState = 2;
+    };
+    Object.setPrototypeOf(target, StandInEventSource.prototype);
+    return target;
+  }
+  StandInEventSource.prototype = Object.create(EventTarget.prototype);
+  StandInEventSource.prototype.constructor = StandInEventSource;
+  StandInEventSource.CONNECTING = 0;
+  StandInEventSource.OPEN = 1;
+  StandInEventSource.CLOSED = 2;
+  window.EventSource = StandInEventSource;
 
   // "Reset demo": every KEY key removed, then the page loaded again.
   function reset() {
