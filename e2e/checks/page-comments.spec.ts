@@ -151,7 +151,8 @@ test.describe('signed in', () => {
     await expect(page.locator('details.artifact-comment > summary.artifact-comment-chip'))
       .toHaveCount(await boxes.count());
     const after = await top();
-    expect(Math.abs(after - before), `main column top moved from ${before} to ${after}`).toBeLessThanOrEqual(0.5);
+    // Still collect the observer evidence when the measured top has moved.
+    expect.soft(Math.abs(after - before), `main column top moved from ${before} to ${after}`).toBeLessThanOrEqual(0.5);
     await page.evaluate(() => new Promise<void>((resolve) =>
       requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
     expect(await page.evaluate(() => {
@@ -159,7 +160,7 @@ test.describe('signed in', () => {
       const header = document.querySelector('header.artifact-header')!;
       return ((window as any).__commentShiftSources as Node[]).some((node) =>
         main.contains(node) || header.contains(node));
-    })).toBe(false);
+    }), 'no layout shift names the main column or header').toBe(false);
   });
 
   test("with scripts off the page's box sits under the title and the main column starts where it does with scripts", async ({ page, browser }) => {
