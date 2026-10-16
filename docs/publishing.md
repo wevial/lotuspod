@@ -552,7 +552,11 @@ ssh as `COMMAND archive --local --out-dir=OUT_DIR [--superseded-by=NEXT]
 NAME` (or `unarchive`), each argument quoted, and exits with ssh's status;
 `--out-dir` with a configured host is refused before ssh. An owner can also
 archive a page from the browser, through `/api/archive` (see [Answers and
-comments](comments.md#answers-and-comments)).
+comments](comments.md#answers-and-comments)): served to one of the `[access]`
+owners, a page shows an Archive button, or Unarchive on an archived page, at
+the right of its top bar, with a line beside it saying why when a press is
+not saved. The top bar is fixed and takes no room in the page, so the page
+does not move when the button arrives.
 
 `lotuspod serve` answers an archived page marked as archived, from memory, so
 the page file and its versions stay as published. Its head gains `<meta

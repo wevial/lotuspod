@@ -6,7 +6,7 @@ import { expect, test, type APIRequestContext, type Page } from '@playwright/tes
 
 // An archived page opens with a banner under its title bar, keeps its
 // threads readable and takes no new comment, reply or answer; its owner gets
-// an Archive or Unarchive button in the header. The check publishes a page
+// an Archive or Unarchive button at the right of the top bar. The check publishes a page
 // with a decision and its successor on the capture fixture's site with a
 // real `lotuspod publish`, posts a thread and a reply on it, archives it
 // with a real `lotuspod archive --superseded-by`, and unarchives it when
@@ -24,6 +24,8 @@ const NEXT = 'archived-page-check-next';
 const NEXT_TITLE = 'Pond plan, the second';
 // A page whose body names NEXT in an authored data-page, before its own forms.
 const LINKED = 'archived-page-check-linked';
+// An open page with a decision, so its top bar draws the review sheet's bar too.
+const BAR = 'archived-page-check-bar';
 const CLOSED = 'Comments are closed: this page is archived.';
 const CLOSED_NOTE = 'Answering is closed: this page is archived.';
 const PARAGRAPH = 'The pond froze in January, and the pump stopped with it.';
@@ -105,7 +107,7 @@ function parts(page: Page) {
   const aside = page.locator('aside.artifact-comments-panel');
   return {
     banner: page.locator('div.artifact-archived-banner'),
-    button: page.locator('button.artifact-archive'),
+    button: page.locator('.artifact-topbar button.artifact-archive'),
     aside,
     opener: aside.locator('button.artifact-comments-opener'),
     fold: aside.getByRole('button', { name: 'Fold comments' }),
@@ -171,7 +173,7 @@ async function drag(page: Page, words: string) {
   await expect.poll(() => page.evaluate(() => String(document.getSelection()))).toBe(words);
 }
 
-// Press the header's button and let the page load again.
+// Press the top bar's button and let the page load again.
 async function press(page: Page, label: string) {
   const button = parts(page).button;
   await expect(button).toHaveText(label);
@@ -186,6 +188,58 @@ async function press(page: Page, label: string) {
   await loaded;
   await read;
   await settle(page);
+}
+
+// The top bar is --topbar-height tall, nothing in it overflows, and the
+// button, Next open and the count are each one line inside the window, the
+// button left of Next open.
+async function fits(page: Page, when: string) {
+  const sizes = await page.evaluate(() => {
+    const px = (node: Element) => node.getBoundingClientRect();
+    const top = document.querySelector('.artifact-topbar')!;
+    const probe = document.createElement('div');
+    probe.style.height = 'var(--topbar-height)';
+    document.body.appendChild(probe);
+    const height = probe.getBoundingClientRect().height;
+    probe.remove();
+    const one = (selector: string) => {
+      const node = top.querySelector(selector)!;
+      const box = px(node);
+      const line = parseFloat(getComputedStyle(node).lineHeight) ||
+        parseFloat(getComputedStyle(node).fontSize) * 1.4;
+      return { left: box.left, right: box.right, lines: node.getClientRects().length, tall: box.height, line };
+    };
+    return {
+      height, bar: px(top).height, width: window.innerWidth,
+      barScroll: top.scrollWidth, barClient: top.clientWidth,
+      button: one('button.artifact-archive'), next: one('a.artifact-review-next'),
+      count: one('.artifact-review-count'), wrapper: one('span.artifact-archive-bar'),
+      title: (() => {
+        const node = top.querySelector('.artifact-topbar-title') as HTMLElement;
+        const style = getComputedStyle(node);
+        return { display: style.display, overflow: style.textOverflow, width: px(node).width,
+          cut: node.scrollWidth > node.clientWidth };
+      })(),
+    };
+  });
+  // The archive bar is a box of its own holding the button, right beside Next open.
+  expect(sizes.wrapper.left, `${when}: the archive bar holds the button`).toBeLessThanOrEqual(sizes.button.left);
+  expect(sizes.wrapper.right, `${when}: the archive bar holds the button`).toBeGreaterThanOrEqual(sizes.button.right);
+  expect(sizes.next.left - sizes.wrapper.right, `${when}: the two bars sit side by side`).toBeLessThan(24);
+  // The title gives way to its ellipsis; it is not taken away.
+  expect(sizes.title.display, `${when}: the title stays`).not.toBe('none');
+  expect(sizes.title.width, `${when}: the title keeps room for its ellipsis`).toBeGreaterThan(0);
+  expect(sizes.title.overflow).toBe('ellipsis');
+  expect(sizes.title.cut, `${when}: the long title is cut short`).toBe(true);
+  expect(sizes.bar, `${when}: .artifact-topbar is --topbar-height tall`).toBeCloseTo(sizes.height, 0);
+  expect(sizes.barScroll, `${when}: nothing overflows the top bar`).toBeLessThanOrEqual(sizes.barClient);
+  for (const [name, part] of Object.entries({ button: sizes.button, next: sizes.next, count: sizes.count })) {
+    expect(part.left, `${when}: ${name} starts in the viewport`).toBeGreaterThanOrEqual(0);
+    expect(part.right, `${when}: ${name} ends in the viewport`).toBeLessThanOrEqual(sizes.width);
+    expect(part.lines, `${when}: ${name} is one box`).toBe(1);
+    expect(part.tall, `${when}: ${name} is one line`).toBeLessThan(part.line * 2);
+  }
+  expect(sizes.button.right, `${when}: the button is left of Next open`).toBeLessThanOrEqual(sizes.next.left);
 }
 
 let thread = 0;
@@ -314,21 +368,16 @@ test.describe.serial('an archived page', () => {
       expect(errors).toEqual([]);
     });
 
-    test('the owner unarchives it from the header, and archives it again', async ({ page }) => {
+    test('the owner unarchives it from the top bar, and archives it again', async ({ page }) => {
       const errors = await watch(page);
       await open(page);
       const side = parts(page);
       await expect(side.banner).toBeVisible();
       await expect(side.button).toHaveText('Unarchive');
-      // After the date line, and after the chip for the whole page under it.
-      expect(await side.button.evaluate((node) => {
-        let before = node.previousElementSibling;
-        if (before?.matches('details.artifact-comment[data-section=""]')) {
-          before = before.previousElementSibling;
-        }
-        return before?.classList.contains('artifact-meta') &&
-          node.parentElement?.matches('header.artifact-header');
-      })).toBe(true);
+      // At the right end of the top bar, its status line beside it.
+      expect(await side.button.evaluate((node) =>
+        node.parentElement?.matches('.artifact-topbar > span.artifact-archive-bar:last-child') &&
+        node.nextElementSibling?.matches('span.artifact-archive-status[role="status"]'))).toBe(true);
 
       await press(page, 'Unarchive');
       await expect(side.banner).toHaveCount(0);
@@ -369,5 +418,85 @@ test.describe.serial('an archived page', () => {
         await context.close();
       }
     }
+  });
+
+  // The top bar with the owner's button and the review sheet's bar both
+  // drawn, at the narrow width and just above where the narrow rules start,
+  // with a long open question; then with a long message beside the button
+  // after a press the site refuses.
+  for (const width of [360, 641]) {
+    test.describe(`signed in as its owner, ${width} px wide`, () => {
+      test.use({ extraHTTPHeaders: SIGNED_IN, viewport: { width, height: 780 } });
+
+      test('the top bar keeps its height with the button and the review bar both drawn', async ({ page }) => {
+        const errors = await watch(page);
+        publish(BAR, ['# A plan for the pond with a long title that the bar cuts short', '',
+          'Still open.', '', '## Decisions for the maintainer', '',
+          '| # | Question | Options | Default |', '|---|---|---|---|',
+          '| 1 | Which pump should we use during winter? | Solar / Mains | |', '']);
+        const read = page.waitForResponse((response) =>
+          new URL(response.url()).pathname === '/api/archive' && response.request().method() === 'GET');
+        await page.goto(`/${BAR}.html?standalone`);
+        await read;
+        const bar = page.locator('.artifact-topbar');
+        const button = parts(page).button;
+        const next = bar.locator('a.artifact-review-next');
+        const count = bar.locator('.artifact-review-count');
+        await expect(button).toHaveText('Archive');
+        await expect(next).toBeVisible();
+        await expect(count).toBeVisible();
+        await fits(page, 'drawn');
+
+        await page.route((url) => url.pathname === '/api/archive', (route) =>
+          route.request().method() === 'POST'
+            ? route.fulfill({ status: 500, json: { error: 'stale_page' } })
+            : route.continue());
+        await button.click();
+        const status = bar.locator('.artifact-archive-status');
+        const said = 'The page was not archived (stale_page). Try again.';
+        await expect(status).toHaveText(said);
+        await expect(status).toHaveAttribute('title', said);
+        await expect(button).toBeEnabled();
+        await fits(page, 'after a refused press');
+        expect(errors).toEqual([]);
+      });
+    });
+  }
+
+  // Last, so a failure here leaves the checks before it run.
+  test.describe('signed in as its owner, as the page loads', () => {
+    test.use({ extraHTTPHeaders: SIGNED_IN });
+
+    test('the button arrives in the top bar, and the page does not move when it does', async ({ page }) => {
+      const errors = await watch(page);
+      // Each shift's time, and when the button arrived. The page's comment
+      // chip, which the page script draws as it runs, can land just after
+      // the first paint on a slow load: a shift of its own, before the button.
+      await page.addInitScript(() => {
+        const w = window as any;
+        w.__shifts = [] as { value: number; at: number }[];
+        w.__arrived = null;
+        new PerformanceObserver((list) => {
+          for (const entry of list.getEntries()) w.__shifts.push({ value: (entry as any).value, at: entry.startTime });
+        }).observe({ type: 'layout-shift', buffered: true });
+        new MutationObserver((records, observer) => {
+          if (document.querySelector('button.artifact-archive')) {
+            w.__arrived = performance.now();
+            observer.disconnect();
+          }
+        }).observe(document, { childList: true, subtree: true });
+      });
+      await open(page);
+      const button = parts(page).button;
+      await expect(button).toHaveText('Unarchive');
+      // Two frames on, so a shift the button caused has been recorded.
+      await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
+      expect(await page.evaluate(() => {
+        const w = window as any;
+        return (w.__shifts as { value: number; at: number }[])
+          .filter((shift) => shift.at >= w.__arrived).map((shift) => shift.value);
+      }), 'no layout shift once the button is drawn').toEqual([]);
+      expect(errors).toEqual([]);
+    });
   });
 });
