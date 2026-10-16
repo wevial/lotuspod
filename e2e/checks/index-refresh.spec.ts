@@ -299,7 +299,8 @@ test.describe('signed in', () => {
 
     // Showing the listing asks for activity and seen (A), answered by the
     // server before the pod is published but held from the page; the next
-    // read swaps its row in and asks again (B), drawn first.
+    // read swaps its row in and asks again (B). Only one ask of each is in
+    // flight at a time, so B waits for A and is drawn after it.
     holding = new Set([ACTIVITY, '/api/seen']);
     const shown = indexRead(page);
     await home(page).click();
@@ -308,12 +309,13 @@ test.describe('signed in', () => {
 
     publish(name, 'Index refresh reversed', 'A page whose newer activity answer came first.');
     await nextRead(page);
-    const group = page.locator(`section.index-activity-page[data-page="${name}"]`);
-    await expect(group).toContainText('published the page');
-    const toggles = await page.locator('.index-controls button.index-toggle').allTextContents();
+    await expect(rowLink(page, name)).toHaveText('Index refresh reversed');
 
     release();
     await Promise.all(late);
+    const group = page.locator(`section.index-activity-page[data-page="${name}"]`);
+    await expect(group).toContainText('published the page');
+    const toggles = await page.locator('.index-controls button.index-toggle').allTextContents();
     await page.waitForTimeout(500);
     await expect(group).toContainText('published the page');
     expect(await page.locator('.index-controls button.index-toggle').allTextContents()).toEqual(toggles);
