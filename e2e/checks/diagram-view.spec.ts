@@ -454,24 +454,43 @@ test('the title skips an invisible heading before the diagram', async ({ page })
 });
 
 test('a diagram scrolled sideways in its block comes back scrolled as it was', async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 800 });
   const seen = await drawn(page);
   // Wider than its block, as a diagram drawn without useMaxWidth would be.
   await drawing(page).evaluate((svg) => {
     svg.setAttribute('width', '3000');
     svg.setAttribute('style', 'max-width: none;');
   });
-  await diagram(page).evaluate((pre) => { pre.scrollLeft = 350; });
-  expect(await diagram(page).evaluate((pre) => pre.scrollLeft)).toBe(350);
-  await diagram(page).hover();
-  await expand(page).click();
-  await expect(view(page).dialog).toBeVisible();
-  await page.keyboard.press('Escape');
-  await expect(view(page).dialog).toBeHidden();
-  // The dialog's close event, a task after it hides, puts the diagram back
-  // and the focus on its button last.
-  await expect(expand(page)).toBeFocused();
-  await expect(drawing(page)).toHaveCount(1);
-  await expect.poll(() => diagram(page).evaluate((pre) => pre.scrollLeft)).toBe(350);
+  await scrollToDiagram(page);
+  const range = await diagram(page).evaluate((pre) => pre.scrollWidth - pre.clientWidth);
+  expect(range).toBeGreaterThan(0);
+  const inCorner = async () => {
+    const pre = await where(diagram(page));
+    const button = await where(expand(page));
+    const right = pre.x + pre.width - button.x - button.width;
+    const top = button.y - pre.y;
+    return button.x >= pre.x && button.y + button.height <= pre.y + pre.height
+      && right >= 0 && right <= 16 && top >= 0 && top <= 16;
+  };
+  for (const scrolled of [Math.floor(range / 2), range]) {
+    await diagram(page).evaluate((pre, left) => { pre.scrollLeft = left; }, scrolled);
+    expect(await diagram(page).evaluate((pre) => pre.scrollLeft)).toBe(scrolled);
+    await expect.poll(inCorner).toBe(true);
+    expect(await diagram(page).evaluate((pre) => pre.scrollWidth - pre.clientWidth)).toBe(range);
+    const point = centre(await where(expand(page)));
+    expect(await expand(page).evaluate((button, point) =>
+      document.elementFromPoint(point.x, point.y) === button, point)).toBe(true);
+    await open(page);
+    await expect(view(page).svg).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(view(page).dialog).toBeHidden();
+    // The dialog's close event, a task after it hides, puts the diagram back
+    // and the focus on its button last.
+    await expect(expand(page)).toBeFocused();
+    await expect(drawing(page)).toHaveCount(1);
+    await expect.poll(() => diagram(page).evaluate((pre) => pre.scrollLeft)).toBe(scrolled);
+    await expect.poll(inCorner).toBe(true);
+  }
   await seen.clean();
 });
 
@@ -955,44 +974,5 @@ test.describe('an old version', () => {
     await expect(page.locator('pre.mermaid')).toContainText('A[Write] --> B[Publish]');
     await expect(page.getByRole('button', { name: 'Expand diagram' })).toHaveCount(0);
     await expect(page.locator('dialog')).toHaveCount(0);
-  });
-});
-
-test.describe('at 360 px wide', () => {
-  test.use({ viewport: { width: 360, height: 800 } });
-
-  test('a diagram wider than its block keeps its Expand button in its visible top right corner as it scrolls sideways', async ({ page }) => {
-    const seen = await drawn(page);
-    await drawing(page).evaluate((svg) => {
-      svg.setAttribute('width', '3000');
-      svg.setAttribute('style', 'max-width: none;');
-    });
-    await scrollToDiagram(page);
-    const range = await diagram(page).evaluate((pre) => pre.scrollWidth - pre.clientWidth);
-    expect(range).toBeGreaterThan(0);
-    const inCorner = async () => {
-      const pre = await where(diagram(page));
-      const button = await where(expand(page));
-      const right = pre.x + pre.width - button.x - button.width;
-      const top = button.y - pre.y;
-      return button.x >= pre.x && button.y + button.height <= pre.y + pre.height
-        && right >= 0 && right <= 16 && top >= 0 && top <= 16;
-    };
-    for (const scrolled of [Math.floor(range / 2), range]) {
-      await diagram(page).evaluate((pre, left) => { pre.scrollLeft = left; }, scrolled);
-      await expect.poll(inCorner).toBe(true);
-      expect(await diagram(page).evaluate((pre) => pre.scrollWidth - pre.clientWidth)).toBe(range);
-      const point = centre(await where(expand(page)));
-      expect(await expand(page).evaluate((button, point) =>
-        document.elementFromPoint(point.x, point.y) === button, point)).toBe(true);
-    }
-    await open(page);
-    await expect(view(page).svg).toBeVisible();
-    await page.keyboard.press('Escape');
-    await expect(view(page).dialog).toBeHidden();
-    await expect(drawing(page)).toHaveCount(1);
-    await expect.poll(() => diagram(page).evaluate((pre) => pre.scrollLeft)).toBe(range);
-    await expect.poll(inCorner).toBe(true);
-    await seen.clean();
   });
 });
