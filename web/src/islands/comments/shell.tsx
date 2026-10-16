@@ -3,7 +3,7 @@ import type { Page } from "../bridge";
 import type { Section, Shell, ShellHooks, Tally } from "./parts";
 
 // A detached root owns only its portal. The groups list stays empty in the
-// virtual tree: legacy groups and the resize handle are never Preact children.
+// virtual tree: thread-list roots and the resize handle are never Preact children.
 export function shell(page: Page, hooks: ShellHooks): Shell {
   const root = document.createElement("div");
   const panel = createRef<HTMLElement>();
