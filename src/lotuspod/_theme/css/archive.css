@@ -2,8 +2,10 @@
 /* An archived page (lotuspod.archive): a banner under the title bar saying
    when it was archived and what superseded it, styled as an old version's
    banner is (versions.css); its decision forms and comment controls
-   disabled; and for an owner, an Archive or Unarchive button in the header
-   (js/archive.js). */
+   disabled; and for an owner, an Archive or Unarchive button at the right
+   of the top bar (js/archive.js), before the review sheet's bar when both
+   are drawn. The top bar takes no room in flow, so the button moves nothing
+   when it arrives. */
 .artifact-archived-banner {
   align-items: center;
   background: color-mix(in srgb, var(--color-amber) 10%, var(--color-surface));
@@ -58,6 +60,28 @@
   pointer-events: none;
 }
 
+.artifact-archive-bar {
+  /* A grid of the button and the status line: the line's column runs from
+     nothing to its whole text, so the bar shrinks as far as the button and
+     no further, its line giving way first. */
+  align-items: baseline;
+  display: grid;
+  flex: 0 1000 auto;
+  grid-template-columns: max-content minmax(0, max-content);
+  margin-left: auto;
+}
+
+/* The review sheet's bar keeps its own margin-left: auto. With both drawn,
+   the title takes the free room, so neither margin has any to split and
+   the two sit side by side at the right. At any width, the title gives way
+   next, then Next open's words to an ellipsis; the button and the count
+   stay whole. With no question open the count has nothing to give way. */
+.artifact-topbar:has(.artifact-archive-bar ~ .artifact-review-bar) .artifact-topbar-title {
+  flex-grow: 1;
+  flex-shrink: 1000;
+  min-width: 1.5em;
+}
+
 .artifact-archive {
   appearance: none;
   background: none;
@@ -66,9 +90,11 @@
   color: var(--color-pale-lavender);
   cursor: pointer;
   font: inherit;
-  font-size: 0.85rem;
-  margin: 0.5rem 0 0;
-  padding: 0.15rem 0.85rem;
+  font-family: var(--font-body);
+  font-size: 0.8rem;
+  line-height: 1.4;
+  margin: 0;
+  padding: 0.1rem 0.75rem;
 }
 
 .artifact-archive:hover,
@@ -82,8 +108,56 @@
   opacity: 0.6;
 }
 
+/* Empty, the live region takes no width; a message longer than the bar
+   has room for gives way first, ending in an ellipsis, its whole text in
+   its title. */
 .artifact-archive-status {
   color: var(--color-muted-lavender);
-  font-size: 0.85rem;
-  margin-left: 0.75rem;
+  font-family: var(--font-body);
+  font-size: 0.8rem;
+  margin-left: 0.6rem;
+  max-width: 22rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.artifact-archive-status:empty {
+  margin-left: 0;
+}
+
+.artifact-archive-bar ~ .artifact-review-bar {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.artifact-archive-bar ~ .artifact-review-bar:not(:has(.artifact-review-next:not([hidden]))) {
+  flex: none;
+}
+
+@media (max-width: 40rem) {
+  .artifact-archive {
+    font-size: 0.75rem;
+    padding-inline: 0.5rem;
+  }
+
+  .artifact-archive-status {
+    font-size: 0.75rem;
+  }
+
+  /* Narrow, the brand gives way to an ellipsis too. */
+  .artifact-topbar:has(.artifact-archive-bar ~ .artifact-review-bar) .artifact-topbar-brand {
+    flex: 0 4 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+
+/* Narrower than the title bar holds the title's ellipsis beside both
+   controls (review-sheet.css), the title gives way to nothing first. */
+@media (max-width: 22rem) {
+  .artifact-topbar:has(.artifact-archive-bar ~ .artifact-review-bar) .artifact-topbar-title {
+    min-width: 0;
+  }
 }
