@@ -554,11 +554,11 @@ test.describe('signed in', () => {
     const name = 'live-page-held-banner';
     const { wrapper, bar } = await holdRisks(page, name);
     await page.clock.runFor(6000);
-    // A table is not swapped yet: this revision falls back to the banner.
+    // Comments turned on: this revision falls back to the banner.
     publish(name, sectioned(name, pond({
-      Findings: { paragraphs: ['The pond froze early this year.', '| Pump | Heater |\n|---|---|\n| off | on |'] },
+      Findings: { paragraphs: ['The pond froze early this year.', 'The ice was thick by noon.'] },
       Risks: { paragraphs: ['The pump will crack unless it is lifted out first.'] },
-    })), '--no-comments');
+    })));
     await page.clock.runFor(CHECK);
     await expect(banner(page).node).toContainText(NEWER);
     await bar.getByRole('button', { name: 'Update' }).click();
