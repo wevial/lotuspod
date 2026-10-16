@@ -3371,10 +3371,11 @@
     }
 
     // Where in the boxes, once it is taken away, each box a swap took away
-    // was: the first of the sections added while it was held back that
-    // took its place under new names, which a swap puts just before it,
-    // else the next (the index a reload finds it at). And for each section taken away
-    // and held back, the boxes added since.
+    // was: the section added while it was held back that took its place
+    // under a new name, which a swap puts just before it (several held back
+    // together take those added in order), else the next (the index a
+    // reload finds it at). And for each section taken away and held back,
+    // the boxes added since and not yet the place of one before it.
     var places = new Map();
     var since = new Map();
 
@@ -3385,10 +3386,30 @@
       var at = boxes.indexOf(old);
       var added = since.get(old);
       since.delete(old);
-      // Every section added just before it, the first of them in its place.
+      // The sections added just before it, among the others held back and
+      // taken away there, in order: as many of those before it, so many of
+      // the added are theirs, and the next is its place.
       var place = at;
-      while (place > 0 && added && added.has(boxes[place - 1])) {
-        place -= 1;
+      if (added) {
+        var run = [];
+        var before = 0;
+        for (var i = at - 1; i >= 0 && (added.has(boxes[i]) || since.has(boxes[i])); i -= 1) {
+          if (added.has(boxes[i])) {
+            run.unshift(boxes[i]);
+          } else {
+            before += 1;
+          }
+        }
+        if (before < run.length) {
+          var taken = run[before];
+          place = boxes.indexOf(taken);
+          // Not the place of any held back after it.
+          since.forEach(function (others, box) {
+            if (boxes.indexOf(box) > at) {
+              others.delete(taken);
+            }
+          });
+        }
       }
       places.set(old, place);
       var form = forms.get(old);

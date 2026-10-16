@@ -1208,6 +1208,54 @@ test.describe('signed in', () => {
     expect(errors).toEqual([]);
   });
 
+  for (const first of ['Risks', 'Next steps']) {
+    test(`comments on two sections renamed together each keep to their own section, ${first} updated first`, async ({ page }) => {
+      const errors = watchErrors(page);
+      const name = `live-page-renamed-two-${first === 'Risks' ? 'risks' : 'next'}-first`;
+      publish(name, source('Live page renamed two', 'first'));
+      await stopClock(page);
+      await open(page, name);
+      const panel = page.locator('.artifact-comments-panel');
+      const DRAFTS: Record<string, string> = {
+        Risks: 'What cracks first, the pump or the pipe?',
+        'Next steps': 'Who orders the heater?',
+      };
+      for (const [section, id] of [['Risks', 'risks'], ['Next steps', 'next-steps']]) {
+        await page.locator(`details.artifact-comment[data-section="${id}"] summary`).click();
+        const field = panel.getByRole('textbox', { name: `Comment on ${section}` });
+        await expect(field).toBeFocused();
+        await field.fill(DRAFTS[section]!);
+      }
+
+      const loads = watchLoads(page);
+      const second = publish(name, source('Live page renamed two', 'first')
+        .replace(/Risks/g, 'Hazards').replace(/Next steps/g, 'Actions'));
+      await page.clock.runFor(CHECK);
+      await expect.poll(() => revisionOf(page)).toBe(second);
+      const bars = {
+        Risks: page.locator('div.artifact-section-body[data-section="risks"] div.artifact-swap-held'),
+        'Next steps': page.locator('div.artifact-section-body[data-section="next-steps"] div.artifact-swap-held'),
+      };
+      await expect(bars.Risks).toContainText('This section was removed');
+      await expect(bars['Next steps']).toContainText('This section was removed');
+
+      const order = first === 'Risks' ? ['Risks', 'Next steps'] as const : ['Next steps', 'Risks'] as const;
+      for (const section of order) {
+        await bars[section].getByRole('button', { name: 'Update' }).click();
+        await expect(bars[section]).toHaveCount(0);
+      }
+      for (const [renamed, section] of [['Hazards', 'Risks'], ['Actions', 'Next steps']]) {
+        const form = panel.locator('form.artifact-comment-form')
+          .filter({ has: page.getByRole('textbox', { name: `Comment on ${renamed}`, includeHidden: true }) });
+        await expect(form.locator('textarea')).toHaveValue(DRAFTS[section]!);
+        await expect(form.locator('.artifact-comment-status')).toHaveText(
+          'Where you were writing has changed since. Your text is kept here.');
+      }
+      expect(loads.count).toBe(0);
+      expect(errors).toEqual([]);
+    });
+  }
+
   test('a hidden page with nothing unsent has reloaded itself before it is seen again', async ({ page }) => {
     const errors = watchErrors(page);
     const name = 'live-page-hidden';
