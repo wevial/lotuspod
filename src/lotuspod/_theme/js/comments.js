@@ -3624,11 +3624,14 @@
   }
 
   // A page with section boxes also takes threads on the whole page, section
-  // WHOLE_PAGE, which no box of its own carries: its box is a copy of the
-  // first, drawn under the page's title, and first among the boxes, so its
-  // threads are listed first. A page whose only box is "page" has its box
-  // for the whole page already.
+  // WHOLE_PAGE. Its box is served under the title, first among the boxes so
+  // its threads are listed first. Older pages need a copy of the first box.
+  // A page whose only box is "page" has its box for the whole page already.
   function pageBox(boxes) {
+    if (boxes[0].dataset.section === WHOLE_PAGE &&
+        boxes[0].parentNode.matches("header.artifact-header")) {
+      return boxes;
+    }
     var meta = document.querySelector("header.artifact-header .artifact-meta");
     var sectioned = boxes.some(function (box) { return box.dataset.section !== "page"; });
     if (!meta || !sectioned) {

@@ -250,7 +250,7 @@ class ServedSiteTests(CaptureSiteTestCase):
         status, page = seen["/capture-sections.html"]
         self.assertEqual(status, 200)
         self.assertEqual(page.count('<div class="artifact-section-body"'), 3)
-        self.assertEqual(page.count('<details class="artifact-comment" data-page="capture-sections"'), 3)
+        self.assertEqual(page.count('<details class="artifact-comment" data-page="capture-sections"'), 4)
         self.assertEqual(page.count('<form class="artifact-decision"'), 1)
         self.assertIn("frazil", page)
         self.assertIn("<pre><code>", page)
@@ -260,7 +260,7 @@ class ServedSiteTests(CaptureSiteTestCase):
         seen = self.fetch("/capture-palette.html")
         status, page = seen["/capture-palette.html"]
         self.assertEqual(status, 200)
-        self.assertEqual(page.count('<details class="artifact-comment" data-page="capture-palette"'), 4)
+        self.assertEqual(page.count('<details class="artifact-comment" data-page="capture-palette"'), 5)
         self.assertIn('<a href="capture-article.html">', page)
         self.assertIn("<code>lotuspod publish</code>", page)
         self.assertIn("<th>Month</th>", page)
@@ -292,7 +292,7 @@ class ServedSiteTests(CaptureSiteTestCase):
         self.assertEqual(status, 200)
         self.assertIn("Published by hermes", page)
         self.assertIn('<meta name="lotuspod:revision"', page)
-        self.assertEqual(page.count('<details class="artifact-comment" data-page="capture-passages"'), 3)
+        self.assertEqual(page.count('<details class="artifact-comment" data-page="capture-passages"'), 4)
         self.assertEqual(page.count('<form class="artifact-decision"'), 1)
         self.assertIn(
             "<p>The pond pump stops when the water freezes. The heater on the north wall keeps "
