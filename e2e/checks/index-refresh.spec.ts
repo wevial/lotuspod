@@ -270,6 +270,53 @@ test.describe('signed in', () => {
     expect(errors).toEqual([]);
   });
 
+  test('an older activity or seen answer arriving last does not take back the newer one', async ({ page }) => {
+    const errors = watchErrors(page);
+    const name = 'index-refresh-reversed';
+    // Answered as a site with nothing older than the last 7 days, so each
+    // ask is one read and none reaches further back.
+    let holding = new Set<string>();
+    let release = () => {};
+    const held = new Promise<void>((resolve) => { release = resolve; });
+    const late: Promise<unknown>[] = [];
+    await page.route((url) => url.pathname === ACTIVITY || url.pathname === '/api/seen', async (route) => {
+      const path = new URL(route.request().url()).pathname;
+      if (route.request().method() !== 'GET') return route.continue();
+      const response = await route.fetch();
+      const json = await response.json();
+      if (path === ACTIVITY) json.older = false;
+      if (!holding.delete(path)) return route.fulfill({ response, json });
+      late.push(held.then(() => route.fulfill({ response, json })));
+    });
+    const first = page.waitForResponse((response) => new URL(response.url()).pathname === ACTIVITY);
+    await openIndex(page);
+    await first;
+    await rowLink(page, ARTICLE.name).click();
+    await expect(page.locator('main.index')).toBeHidden();
+
+    // Showing the listing asks for activity and seen (A), answered by the
+    // server before the pod is published but held from the page; the next
+    // read swaps its row in and asks again (B), drawn first.
+    holding = new Set([ACTIVITY, '/api/seen']);
+    const shown = indexRead(page);
+    await home(page).click();
+    await shown;
+    await expect.poll(() => late.length).toBe(2);
+
+    publish(name, 'Index refresh reversed', 'A page whose newer activity answer came first.');
+    await nextRead(page);
+    const group = page.locator(`section.index-activity-page[data-page="${name}"]`);
+    await expect(group).toContainText('published the page');
+    const toggles = await page.locator('.index-controls button.index-toggle').allTextContents();
+
+    release();
+    await Promise.all(late);
+    await page.waitForTimeout(500);
+    await expect(group).toContainText('published the page');
+    expect(await page.locator('.index-controls button.index-toggle').allTextContents()).toEqual(toggles);
+    expect(errors).toEqual([]);
+  });
+
   test('the tabs stay as they were, and a new pod opens in a third tab', async ({ page }) => {
     const errors = watchErrors(page);
     const name = 'index-refresh-tabs';
