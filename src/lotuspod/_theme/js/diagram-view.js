@@ -449,23 +449,18 @@
   }
 
   var viewPres = all("pre.mermaid");
-  var viewMount = null;
   if (viewPres.length) {
-    viewMount = diagramView();
+    var viewMount = diagramView();
     viewPres.forEach(viewMount);
-  }
-  // The diagrams a swap brought in, on a page with none at load too.
-  document.addEventListener(SWAPPED, function (event) {
-    var pres = [];
-    event.detail.units.forEach(function (unit) {
-      unit.after.forEach(function (node) {
-        if (node instanceof Element) {
-          pres = pres.concat(node.matches("pre.mermaid") ? [node] : all("pre.mermaid", node));
-        }
+    // The diagrams a swap brought in: a page with none at load takes none in
+    // a swap, as its policy differs.
+    document.addEventListener(SWAPPED, function (event) {
+      event.detail.units.forEach(function (unit) {
+        unit.after.forEach(function (node) {
+          if (node instanceof Element) {
+            (node.matches("pre.mermaid") ? [node] : all("pre.mermaid", node)).forEach(viewMount);
+          }
+        });
       });
     });
-    if (pres.length) {
-      viewMount = viewMount || diagramView();
-      pres.forEach(viewMount);
-    }
-  });
+  }
