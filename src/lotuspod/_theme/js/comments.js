@@ -3191,6 +3191,9 @@
       swappedTo = event.detail.revision;
       var focused = document.activeElement;
       var writing = passages.swept();
+      if (writing && takenAt.has(writing.box)) {
+        writing.index = takenAt.get(writing.box);
+      }
       passages.moved();
       var unsent = [];
       var olds = [];
@@ -3238,10 +3241,6 @@
           }
         });
       });
-      if (writing && places.has(writing.box)) {
-        writing.index = places.get(writing.box);
-      }
-      places.clear();
       if (writing && writing.saving) {
         // Sent already: kept only if it is not saved.
         writing.saving.then(function (row) {
@@ -3356,12 +3355,7 @@
       }
       forms.delete(old);
       forms.set(box, form);
-      // A section added since one was held back stays added since it.
-      since.forEach(function (added) {
-        if (added.delete(old)) {
-          added.add(box);
-        }
-      });
+      takenAt.delete(old);
       shown.forEach(function (thread) {
         if (thread.box === old) {
           thread.box = box;
@@ -3370,62 +3364,17 @@
       panel.replace(old, box);
     }
 
-    // Where in the boxes, once it is taken away, each box a swap took away
-    // was: the section added while it was held back that took its place
-    // under a new name, which a swap puts just before it (several held back
-    // together take those added in order), else the next (the index a
-    // reload finds it at). And for each section taken away and held back,
-    // the boxes added since and not yet the place of one before it.
-    // And for each such section, how many taken away at once just before
-    // it, whose added boxes are still among its own.
-    var places = new Map();
-    var since = new Map();
-    var ahead = new Map();
+    // The index each section a swap took away had as it was taken away,
+    // while it is held back: where a reload would put what its form holds.
+    var takenAt = new Map();
 
     // A section taken away takes its box and form with it; its threads say
     // which section they were on. What its form holds not sent, to go where
-    // the section was; else null.
+    // the section was, as on a reload; else null.
     function dropBox(old) {
       var at = boxes.indexOf(old);
-      var added = since.get(old);
-      var skip = ahead.get(old) || 0;
-      since.delete(old);
-      ahead.delete(old);
-      // The sections added just before it, among the others held back and
-      // taken away there, in order: as many of those before it (each with
-      // those taken away at once just before it), so many of the added are
-      // theirs, and the next is its place.
-      var place = at;
-      var taken = null;
-      if (added) {
-        var run = [];
-        var before = skip;
-        for (var i = at - 1; i >= 0 && (added.has(boxes[i]) || since.has(boxes[i])); i -= 1) {
-          if (added.has(boxes[i])) {
-            run.unshift(boxes[i]);
-          } else {
-            before += 1 + (ahead.get(boxes[i]) || 0);
-          }
-        }
-        if (before < run.length) {
-          taken = run[before];
-          place = boxes.indexOf(taken);
-          // Not the place of any held back after it.
-          since.forEach(function (others, box) {
-            if (boxes.indexOf(box) > at) {
-              others.delete(taken);
-            }
-          });
-        }
-        // One taken away with no box of its own yet still has one among
-        // the added of the next held back with it: that one skips it, and
-        // those it skipped. One with a box ends the next one's added there.
-        var next = boxes[at + 1];
-        if (!taken && since.has(next)) {
-          ahead.set(next, (ahead.get(next) || 0) + skip + 1);
-        }
-      }
-      places.set(old, place);
+      var place = takenAt.has(old) ? takenAt.get(old) : at;
+      takenAt.delete(old);
       var form = forms.get(old);
       var each = { field: form.elements.text, images: attached.get(form) };
       var unsent = holding(each) ? {
@@ -3456,7 +3405,6 @@
       });
       at = at < 0 ? boxes.length : at;
       boxes.splice(at, 0, box);
-      since.forEach(function (added) { added.add(box); });
       enlist(box);
       wire(box);
       panel.mount(box, at);
@@ -3476,17 +3424,16 @@
     // sent, until the reader's Update: then the SWAPPED handler above keeps
     // what was written.
     holdSwap(function (nodes, removed) {
-      // Counted from when a swap first takes it away; a section that is
+      // Its index from when a swap first takes it away; a section that is
       // only changed is not taken away.
-      boxes.forEach(function (box) {
+      boxes.forEach(function (box, at) {
         if (!nodes.some(function (node) { return node.contains(box); })) {
           return;
         }
         if (!removed) {
-          since.delete(box);
-          ahead.delete(box);
-        } else if (!since.has(box)) {
-          since.set(box, new Set());
+          takenAt.delete(box);
+        } else if (!takenAt.has(box)) {
+          takenAt.set(box, at);
         }
       });
       if (passages.writes(nodes)) {
