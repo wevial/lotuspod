@@ -264,6 +264,22 @@ test.describe('signed in', () => {
             first: false, summary }] }],
       } });
     });
+    // Observe the real stream and row swap before publishing. The server's
+    // manifest poll sends publish followed by index, possibly after the read.
+    await page.addInitScript(() => {
+      const state = { published: '', indexed: '', rows: 0 };
+      (window as any).__weekRefresh = state;
+      document.addEventListener('lotuspod:change', (event) => {
+        const { what, page } = (event as CustomEvent).detail;
+        if (what === 'publish') state.published = page;
+        if (what === 'index') state.indexed = state.published;
+      });
+      document.addEventListener('lotuspod:rows', () => { state.rows += 1; });
+    });
+    const settled = async (name: string, rows: number) => {
+      await expect.poll(() => page.evaluate(() => (window as any).__weekRefresh))
+        .toMatchObject({ indexed: name, rows });
+    };
     await openIndex(page, '/#activity');
     const group = page.locator(`section.index-activity-page[data-page="${ARTICLE.name}"]`);
     await expect(group).toBeVisible();
@@ -272,6 +288,7 @@ test.describe('signed in', () => {
       asked.length = 0;
       publish(`index-refresh-weeks-${n}`, `Index refresh weeks ${n}`, 'A page published while one week is shown.');
       await nextRead(page);
+      await settled(`index-refresh-weeks-${n}`, n);
       // The newest summary lands only after the whole refresh chain merges.
       await expect.poll(async () => newest > opened &&
         (await group.textContent())?.includes(`ask ${newest}`)).toBe(true);
@@ -293,6 +310,7 @@ test.describe('signed in', () => {
     asked.length = 0;
     publish('index-refresh-weeks-4', 'Index refresh weeks 4', 'A page published while two weeks are shown.');
     await nextRead(page);
+    await settled('index-refresh-weeks-4', 4);
     await expect.poll(async () => newest > opened &&
       (await group.textContent())?.includes(`ask ${newest}`)).toBe(true);
     for (const { before, at } of asked) {
