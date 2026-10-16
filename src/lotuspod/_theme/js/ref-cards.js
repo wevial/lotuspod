@@ -173,21 +173,14 @@
         hide(false);
       }
       units.forEach(function (unit) {
-        if (unit.kind === "refs") {
-          unit.after.forEach(function (block) {
-            all(".artifact-ref-card", block).forEach(prepare);
-          });
-        }
-      });
-      units.forEach(function (unit) {
         unit.after.forEach(function (node) {
+          if (unit.kind === "refs") {
+            all(".artifact-ref-card", node).forEach(prepare);
+          }
           if (!(node instanceof Element) || !body.contains(node)) {
             return;
           }
-          if (node.matches(REF)) {
-            bind(node);
-          }
-          all(REF, node).forEach(bind);
+          (node.matches(REF) ? [node] : all(REF, node)).forEach(bind);
         });
       });
     });
