@@ -132,7 +132,7 @@ test('a box on an ELK diagram opens its node card', async ({ page }) => {
     Array.from(list.querySelectorAll('dt')).map((term) => [
       term.textContent, term.nextElementSibling?.textContent,
     ]));
-  expect(graph).toEqual([['Waits for', 'P1 (merged)'], ['Unblocks', 'B2 (open)']]);
+  expect(graph).toEqual([['Waits for', 'Write the ticket (merged)'], ['Unblocks', 'Allow it in the policy (open)']]);
   await seen.clean();
 });
 
