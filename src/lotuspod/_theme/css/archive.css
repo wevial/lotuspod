@@ -85,7 +85,6 @@
   border-radius: var(--radius-pill);
   color: var(--color-pale-lavender);
   cursor: pointer;
-  flex: none;
   font: inherit;
   font-family: var(--font-body);
   font-size: 0.8rem;
@@ -114,7 +113,6 @@
   font-size: 0.8rem;
   margin-left: 0.6rem;
   max-width: 22rem;
-  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
