@@ -99,15 +99,13 @@
         return;
       }
       var boxes = new Map();
+      var labels = new Map();
       all("g.node", svg).forEach(function (group) {
         var match = BOX_ID.exec(group.id);
         if (match && !boxes.has(match[1])) {
           boxes.set(match[1], group);
+          labels.set(match[1], text(group.querySelector(".nodeLabel")) || text(group) || match[1]);
         }
-      });
-      var labels = new Map();
-      boxes.forEach(function (group, id) {
-        labels.set(id, text(group.querySelector(".nodeLabel")) || text(group) || id);
       });
       // Each arrow's ends, and which way it points: an arrowhead at its end
       // points into `to`, one at its start into `from` (both for A <--> B,
