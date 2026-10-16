@@ -29,9 +29,11 @@ credential that exists and is not revoked:
                                         reader's POST /api/media stores them
                                         (needs reply)
     POST /v1/comments/ID/reply          {claimToken, idempotencyKey, text[,
-                                        revision, model, images]}: answer it
+                                        revision, model, images, ask]}: answer it
                                         under the claim, once per key (needs
-                                        reply)
+                                        reply); with ask, text (empty allowed)
+                                        is followed by a notice naming the
+                                        owner the ask was queued for
     POST /v1/comments/ID/release        {claimToken}: route it again (needs claim)
     POST /v1/comments/ID/fail           {claimToken, reason}: leave it failed
                                         (needs claim)
@@ -43,12 +45,43 @@ credential that exists and is not revoked:
                                         reopen, images]}: add a message to that
                                         thread with no claim, once per key
                                         (needs reply, as resolve does)
+    GET  /v1/inbox?owner=HANDLE         HANDLE's inbox: its open items and the
+                                        answers on its pages it has not
+                                        acknowledged (needs pull for HANDLE)
+    POST /v1/inbox/ID/claim             {owner}: take item ID up, for claim_sec
+                                        seconds (needs claim for owner)
+    POST /v1/inbox/ID/done              {owner, claimToken[, idempotencyKey,
+                                        text]}: close it under the claim, first
+                                        adding text to the comment's thread as a
+                                        follow-up when given (needs claim for
+                                        owner; reply too with text)
 
 A pull records that HANDLE is listening and takes nothing off the queue: the
-same items come back until they are claimed or acknowledged. A page's owner
-also reads the comments routed to it as they arrived that have since passed
-to the responder, until an agent takes them up; only the responder may claim
-them. The pull is the only way a page's kept source leaves the host's files.
+same items come back until they are claimed or acknowledged. The pull is
+the only way a page's kept source leaves the host's files.
+
+An inbox item is what the responder queued for a page's owner from a
+reader's comment it answered (lotuspod.responder): a reply's `ask`, 1 to
+MAX_ASK characters, goes into the page owner's inbox in the reply's own
+transaction, so a refused reply queues nothing, and a page with no owner
+queues nothing. An item is {kind: ask, id, owner, ask, createdAt,
+comment, thread, page}, the comment as the threads routes show it, the id
+of its thread's first comment, and the page {name, title, owner,
+revision}, its title and revision "" once serve no longer answers it. The
+inbox lists each item not done and not under a current claim, then each
+answer on HANDLE's pages it has not acknowledged, as the pull gives it,
+the page without its source; an answer leaves the inbox once acknowledged
+with POST /v1/answers/ID/ack. Reading the inbox records no pull. A claim
+answers {item, owner, claimToken, expiresAt}; it is refused 409 claimed
+while any claim on the item is current, the credential's own too, so two
+sessions never both act on one. Done answers {item, reply}, reply the
+follow-up stored or null. Both are refused 404 unknown_item for an item not
+in owner's inbox and 409 settled once it is done, and done 409 not_claimed
+without the credential's current claim and its token. Done with text needs
+idempotencyKey too, and posts it as a follow-up does, in the same
+transaction as the claim's check and the close, so a session whose claim
+has lapsed posts nothing. A key already naming a message in another
+thread is refused 409 key_reused, and nothing is stored or closed.
 
 POST /v1/media takes one image as its body, with Content-Type image/png,
 image/jpeg, image/webp or image/gif, and answers {name, url, width, height}
@@ -178,7 +211,8 @@ PULL = "/v1/pull"
 THREADS = "/v1/threads"
 MEDIA = "/v1/media"
 RECORD = "/v1/answers/record"
-ROUTES = (WHOAMI, CHECK, PULL, THREADS)
+INBOX = "/v1/inbox"
+ROUTES = (WHOAMI, CHECK, PULL, THREADS, INBOX)
 METHODS = ("GET", "HEAD")
 # POST /v1/answers/ID/ack
 _ACK = re.compile(r"/v1/answers/([1-9][0-9]{0,18})/ack")
@@ -186,25 +220,46 @@ _ACK = re.compile(r"/v1/answers/([1-9][0-9]{0,18})/ack")
 _COMMENT = re.compile(r"/v1/comments/([1-9][0-9]{0,18})/(claim|reply|release|fail)")
 # POST /v1/threads/ID/resolve, /reopen and /follow-up
 _THREAD = re.compile(r"/v1/threads/([1-9][0-9]{0,18})/(resolve|reopen|follow-up)")
+# POST /v1/inbox/ID/claim and /done
+_ITEM = re.compile(r"/v1/inbox/([1-9][0-9]{0,18})/(claim|done)")
 ACK_METHODS = ("POST",)
 # Characters of a claim token or an idempotency key, and of a failure's reason.
 MAX_KEY = 200
 MAX_REASON = 200
 # Characters of the model a reply names.
 MAX_MODEL = 40
+# Characters of the ask a reply queues for the page's owner.
+MAX_ASK = 300
 # Characters of where a recorded answer was given.
 MAX_SOURCE = 200
+
+
+def queued(answer: str, owner: str, ask: str) -> str:
+    """The reply to a comment whose ask is queued for owner, after answer,
+    shortened as it must be for the reply to fit api.MAX_TEXT; with no
+    owner, it says there is none to queue it for."""
+    said = (f"I've queued this for {owner}: {ask}" if owner
+            else f"This page has no owner I could queue this for: {ask}")
+    if not answer:
+        return said
+    # The answer gives way, so the reply stays within what the socket takes.
+    room = api.MAX_TEXT - len(said) - 2
+    if len(answer) > room:
+        answer = answer[:room - 1].rstrip() + "…"
+    return f"{answer}\n\n{said}"
 CLAIM_BYTES = 32
 # The HTTP status of each refusal a claim, reply, release, failure or resolution meets.
 _REFUSED = {
     "unknown_comment": HTTPStatus.NOT_FOUND,
     "unknown_thread": HTTPStatus.NOT_FOUND,
+    "unknown_item": HTTPStatus.NOT_FOUND,
     "unknown_page": HTTPStatus.NOT_FOUND,
     "not_routed": HTTPStatus.FORBIDDEN,
     "settled": HTTPStatus.CONFLICT,
     "claimed": HTTPStatus.CONFLICT,
     "not_claimed": HTTPStatus.CONFLICT,
     "revision_mismatch": HTTPStatus.CONFLICT,
+    "key_reused": HTTPStatus.CONFLICT,
 }
 # Seconds a socket connection may sit idle.
 REQUEST_TIMEOUT = 30
@@ -409,8 +464,9 @@ class Routes:
         ack = _ACK.fullmatch(path)
         acting = _COMMENT.fullmatch(path)
         resolving = _THREAD.fullmatch(path)
+        item = _ITEM.fullmatch(path)
         if (path not in ROUTES and path not in (MEDIA, RECORD) and ack is None
-                and acting is None and resolving is None):
+                and acting is None and resolving is None and item is None):
             return HTTPStatus.NOT_FOUND, {"error": "not_found"}, ()
         allowed = METHODS if path in ROUTES else ACK_METHODS
         if method not in allowed:
@@ -429,6 +485,11 @@ class Routes:
                 return HTTPStatus.OK, self._pull(credential, _query(query, ("owner",))["owner"]), ()
             if path == THREADS:
                 return HTTPStatus.OK, self._threads(credential, _query(query, ("page",))["page"]), ()
+            if path == INBOX:
+                return HTTPStatus.OK, self._inbox(credential, _query(query, ("owner",))["owner"]), ()
+            if item is not None:
+                return HTTPStatus.OK, self._item(credential, int(item.group(1)), item.group(2),
+                                                 headers, body), ()
             if path == MEDIA:
                 return HTTPStatus.OK, self._media(credential, headers, body), ()
             if path == RECORD:
@@ -489,11 +550,7 @@ class Routes:
         for comment in self.database.open_comments():
             routed = routing.route(comment, pulls, self.window, now, paused)
             # A current claim takes it off the queue; a lapsed one does not.
-            if routed is None or routed[1] not in routing.WAITING:
-                continue
-            # The owner it was routed to as it arrived still reads it, but
-            # does not hold it past the window.
-            if owner not in (routed[0], routing.arrival_owner(comment, self.window)):
+            if routed is None or routed[1] not in routing.WAITING or routed[0] != owner:
                 continue
             # A comment on a page serve no longer answers waits for it.
             page = page_of(comment["page"])
@@ -517,6 +574,14 @@ class Routes:
             if "question" in found["root"]:
                 item["decision"] = decision(page, found["root"]["question"])
             items.append(item)
+        items += self._answers(owner, page_of, item_page)
+        return {"owner": owner, "pulledAt": pulled_at, "items": items}
+
+    def _answers(self, owner: str, page_of: Callable[[str], api.Page | None],
+                 item_page: Callable[[api.Page], dict]) -> list[dict]:
+        """An item for each answer on owner's pages it has not acknowledged,
+        its page as item_page(page) shows it."""
+        items = []
         for found in self.database.unacknowledged_answers(owner):
             answer, kept = found["answer"], found["asked"]
             page = page_of(answer["page"])
@@ -558,7 +623,74 @@ class Routes:
             if found["comment"] is not None:
                 item["noteComment"] = found["comment"]
             items.append(item)
-        return {"owner": owner, "pulledAt": pulled_at, "items": items}
+        return items
+
+    def _inbox(self, credential: Mapping, owner: str) -> dict:
+        """owner's open inbox items, then its unacknowledged answers."""
+        _allow(credential, "pull", owner)
+        now = self.clock()
+        pages: dict[str, api.Page | None] = {}
+
+        def page_of(name: str) -> api.Page | None:
+            if name not in pages:
+                pages[name] = self._page(name)
+            return pages[name]
+
+        def brief(page: api.Page) -> dict:
+            return {"name": page.name, "title": page.title, "owner": page.owner,
+                    "revision": self.describe(page)["revision"]}
+
+        items = []
+        for found in self.database.inbox(owner, now):
+            comment = self.database.comment(found["comment"])
+            page = page_of(found["page"])
+            items.append({
+                "kind": "ask", "id": found["id"], "owner": owner, "ask": found["ask"],
+                "createdAt": found["createdAt"],
+                "comment": None if comment is None else self._located(self._shown(comment)),
+                "thread": None if comment is None else comment["parent"] or comment["id"],
+                "page": ({"name": found["page"], "title": "", "owner": owner, "revision": ""}
+                         if page is None else brief(page)),
+            })
+        items += self._answers(owner, page_of, brief)
+        return {"owner": owner, "items": items}
+
+    def _item(self, credential: Mapping, item_id: int, action: str,
+              headers: Message, body: api.Body | None) -> dict:
+        """Claim inbox item item_id, or close it, replying in its thread
+        first when the body has text."""
+        fields = _json_body(headers, body)
+        if not isinstance(fields.get("owner"), str):
+            raise api.Refusal(HTTPStatus.BAD_REQUEST, "invalid_body")
+        owner = fields["owner"]
+        _allow(credential, "claim", owner)
+        name = credential["name"]
+        if action == "claim":
+            api._keys(fields, {"owner"}, frozenset())
+            token = claim_token()
+            found = self.database.claim_item(item_id, owner=owner, credential=name,
+                                             token_hash=token_hash(token),
+                                             claim_sec=self.claim_sec, clock=self.clock)
+            return {"item": found["id"], "owner": owner, "claimToken": token,
+                    "expiresAt": found["claim"]["expiresAt"]}
+        api._keys(fields, {"owner", "claimToken"}, frozenset({"idempotencyKey", "text"}))
+        if ("text" in fields) != ("idempotencyKey" in fields):
+            raise api.Refusal(HTTPStatus.BAD_REQUEST, "invalid_body")
+        token = token_hash(api._text(fields["claimToken"], 1, MAX_KEY))
+        reply = None
+        if "text" in fields:
+            _allow(credential, "reply", owner)
+            reply = {"key": api._text(fields["idempotencyKey"], 1, MAX_KEY),
+                     "text": api._text(fields["text"], 1, api.MAX_TEXT)}
+        found, stored = self.database.finish_item(
+            item_id, owner=owner, credential=name, token_hash=token, clock=self.clock,
+            reply=reply, page_of=self._current)
+        if stored is not None:
+            self.changed("comment", stored["page"])
+        reply = None if stored is None else self._shown(stored)
+        # The claim's expiry may be shown, never its credential.
+        return {"item": {**found, "claim": {"expiresAt": found["claim"]["expiresAt"]}},
+                "reply": reply}
 
     def _threads(self, credential: Mapping, name: str) -> dict:
         if "pull" not in credential["operations"]:
@@ -662,7 +794,8 @@ class Routes:
                     "release": {"claimToken"},
                     "fail": {"claimToken", "reason"}}[action]
         api._keys(fields, required,
-                  frozenset({"revision", "model", "images"} if action == "reply" else ()))
+                  frozenset({"revision", "model", "images", "ask"}
+                            if action == "reply" else ()))
         token = token_hash(api._text(fields["claimToken"], 1, MAX_KEY))
         name = credential["name"]
         if action == "release":
@@ -677,7 +810,11 @@ class Routes:
             self.changed("comment", row["page"])
             return self._shown(row)
         key = api._text(fields["idempotencyKey"], 1, MAX_KEY)
-        text = api._text(fields["text"], 1, api.MAX_TEXT)
+        ask = fields.get("ask")
+        if ask is not None:
+            ask = api._text(ask, 1, MAX_ASK)
+        # With an ask, text is the answer before the queued notice, and may be empty.
+        text = api._text(fields["text"], 0 if ask is not None else 1, api.MAX_TEXT)
         revision = fields.get("revision")
         if revision is not None:
             revision = api._text(revision, 1, api.MAX_NAME)
@@ -685,9 +822,11 @@ class Routes:
         if "model" in fields and not is_model(model):
             raise api.Refusal(HTTPStatus.BAD_REQUEST, "invalid_body")
         images = self._images(fields)
+        notice = None if ask is None else (lambda owner: queued(text, owner, ask))
         row = self.database.reply(comment_id, credential=name, token_hash=token, key=key,
                                   text=text, revision=revision, model=model, clock=self.clock,
-                                  page_of=self._current, images_of=images)
+                                  page_of=self._current, images_of=images, ask=ask,
+                                  notice=notice)
         self.changed("comment", row["page"])
         return self._shown(row)
 
@@ -741,12 +880,13 @@ class Routes:
         return self._shown(row)
 
     def _current(self, name: str) -> dict | None:
-        """The page's revision, as a pull gives it, and its sections; None
-        when serve would not answer it."""
+        """The page's revision, as a pull gives it, its sections and its
+        owner; None when serve would not answer it."""
         page = self._page(name)
         if page is None:
             return None
-        return {"revision": self.describe(page)["revision"], "sections": page.sections}
+        return {"revision": self.describe(page)["revision"], "sections": page.sections,
+                "owner": page.owner}
 
     def _claim(self, credential: Mapping, comment_id: int) -> dict:
         found = self.database.comment(comment_id)

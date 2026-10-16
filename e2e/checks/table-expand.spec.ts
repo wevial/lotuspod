@@ -150,6 +150,9 @@ async function sideways(page: Page) {
 function blocks(page: Page) {
   return page.evaluate(() => {
     const body = document.querySelector('.artifact-body')!;
+    // From the body's top: the owner's header gains the Archive button and the
+    // whole-page comment chip with scripts, and the check is about the body.
+    const origin = body.getBoundingClientRect().top;
     const ledger = body.querySelector('table');
     const found: {
       name: string; ledger: boolean; comment: boolean;
@@ -163,7 +166,7 @@ function blocks(page: Page) {
         found.push({
           name: `${node.tagName} ${found.length}`, ledger: node === ledger,
           comment: node.matches('details.artifact-comment'),
-          left: rect.left, top: rect.top + window.scrollY, width: rect.width, height: rect.height,
+          left: rect.left, top: rect.top - origin, width: rect.width, height: rect.height,
         });
       }
     }

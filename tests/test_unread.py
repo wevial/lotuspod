@@ -127,9 +127,9 @@ class UnreadTestCase(ApiTestCase):
 
 class UnreadTests(UnreadTestCase):
     def test_a_reply_is_unread_for_the_thread_s_reader_alone_until_they_reply(self):
-        # hermes listens, so the comment waits for it.
+        # hermes listens, and the comment names it, so it waits for it.
         self.hermes("pull", "--owner", OWNER)
-        root = self.open_thread(A, "Is the heater enough?")
+        root = self.open_thread(A, "@hermes Is the heater enough?")
         answered = self.answer(root, "It is, down to minus ten.")
         self.assertEqual(answered["parent"], root["id"])
         self.assertEqual(self.unread(A), [answered["id"]])
@@ -164,7 +164,7 @@ class UnreadTests(UnreadTestCase):
     def test_a_resolved_thread_is_seen_and_stays_resolved(self):
         # The page opens a resolved thread to read and posts it seen.
         self.hermes("pull", "--owner", OWNER)
-        root = self.open_thread(A, "Is the heater enough?")
+        root = self.open_thread(A, "@hermes Is the heater enough?")
         answered = self.answer(root, "It is, down to minus ten.")
         status, got = self.ask("POST", "/api/comments",
                                {"page": "plan", "thread": root["id"], "resolved": True})

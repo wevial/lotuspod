@@ -14,6 +14,11 @@ interface PageLive {
   // The swap to try first once a newer revision is seen: the revision the
   // page then shows, or null to show the banner or reload as before.
   swapWith(swap: (revision: string) => Promise<string | null>): void;
+  // Show one line in the banner's place for a few seconds: what a swap
+  // changed.
+  note(text: string): void;
+  // Reload the page now, keeping where the reader was and what they wrote.
+  reload(): void;
 }
 declare const live: PageLive;
 
@@ -27,11 +32,18 @@ declare function all<E extends Element = HTMLElement>(selector: string, root?: P
 declare function json(response: Response): Promise<unknown>;
 // js/link-tab.js: a link off the site opens in a new tab.
 declare function linkTab(link: Element): void;
+// js/decisions.js: what reads and saves the page's decision forms, null on a
+// page that loaded with neither a form nor a comment box.
+declare const answering: object | null;
 
 // js/page-open.js: fold a section's wrapper under its heading's button, as
-// fold says (else as the reader left it), and forget one taken away.
+// fold says (else as the reader left it), marked "changed" while folded when
+// changed says a newer revision changed or added it, and forget one taken
+// away.
 interface FoldSection {
-  (heading: HTMLElement, wrapper: HTMLElement, id: string | number, fold?: boolean): void;
+  (heading: HTMLElement, wrapper: HTMLElement, id: string | number, fold?: boolean, changed?: boolean): void;
+  // Mark a folded section "changed", or clear the mark.
+  mark(wrapper: HTMLElement, changed: boolean): void;
   drop(wrapper: HTMLElement): void;
 }
 declare const foldSection: FoldSection;
@@ -59,3 +71,11 @@ declare const SWAPPED: "lotuspod:swapped";
 interface DocumentEventMap {
   "lotuspod:swapped": CustomEvent<SwappedDetail>;
 }
+
+// web/src/page-swap.ts: hold back from a swap each part whose nodes (a
+// section's heading and wrapper, or the intro's) test says to.
+declare function holdSwap(test: (nodes: readonly Element[]) => boolean): void;
+
+// web/src/page-swap.ts: fall back to the banner or a reload rather than take
+// away a section whose heading and wrapper test says to.
+declare function refuseSwap(test: (nodes: readonly Element[]) => boolean): void;

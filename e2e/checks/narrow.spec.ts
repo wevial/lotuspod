@@ -373,7 +373,7 @@ test.describe('signed in', () => {
       expect(value, `the capture fixture names ${name}`).toBeTruthy();
     }
     const seen = await watch(page);
-    // hermes pulls first, so it is listening and the comment waits for it.
+    // hermes pulls first, so it is listening and the comment, naming it, waits for it.
     hermes('pull', '--owner', OWNER);
     const ids = new Set<number>();
     await ownThreads(page, ids);
@@ -383,7 +383,8 @@ test.describe('signed in', () => {
     await risks.chip.click();
     const pop = popover(page);
     await expect(pop.field).toBeFocused();
-    const COMMENT = 'Will the frozen pump crack this winter?';
+    // It names hermes, so it waits for hermes, not the responder.
+    const COMMENT = '@hermes Will the pump crack?';
     await pop.field.fill(COMMENT);
     await pop.send.click();
     await expect(pop.threads).toHaveCount(1);

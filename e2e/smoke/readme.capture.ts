@@ -29,7 +29,8 @@ const OWNER = 'hermes';
 // The page names the reader by their address's part before the @.
 const READER = 'maintainer';
 
-const COMMENT = 'Can the first copy be checked by hand before the timer takes over?';
+// It names hermes, so it waits for hermes, not the responder.
+const COMMENT = '@hermes Can the first copy be checked by hand before the timer takes over?';
 const REPLY = 'Yes: the rollout runs the job once by hand and restores that copy before the timer is turned on.';
 const PASSAGE = 'opens the copy and reads it back';
 const PASSAGE_COMMENT = 'Does reading it back catch a copy cut short by a full disk?';
@@ -143,7 +144,7 @@ test('the README pictures: a section thread hermes answers, the decisions answer
     expect(value, `the capture run names ${name}`).toBeTruthy();
   }
   publish();
-  // hermes pulls first, so it is listening and the comment waits for it.
+  // hermes pulls first, so it is listening and the comment, naming it, waits for it.
   hermes('pull', '--owner', OWNER);
 
   const videos = fs.mkdtempSync(path.join(os.tmpdir(), 'lotuspod-readme-video-'));

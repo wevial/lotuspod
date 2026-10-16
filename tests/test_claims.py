@@ -95,7 +95,7 @@ class ExpiryTests(ClaimTestCase):
 
     def test_an_expired_claim_lapses_and_its_token_answers_nothing(self):
         self.pull("hermes")
-        comment = self.comment("Is the heater enough?")
+        comment = self.comment("@hermes Is the heater enough?")
         first = self.claim("hermes", comment["id"])
         rc, refused = self.act("hermes-two", "claim", str(comment["id"]))
         self.assertEqual((rc, refused), (1, {"error": "claimed"}))
@@ -113,7 +113,7 @@ class ExpiryTests(ClaimTestCase):
 
     def test_a_reply_whose_claim_expires_while_it_arrives_is_refused(self):
         self.pull("hermes")
-        comment = self.comment("Is the heater enough?")
+        comment = self.comment("@hermes Is the heater enough?")
         token = self.claim("hermes", comment["id"])
         body = json.dumps({"claimToken": token, "idempotencyKey": "slow-1",
                            "text": "Late."}).encode("utf-8")
@@ -141,7 +141,7 @@ class ExpiryTests(ClaimTestCase):
 class ReplyTests(ClaimTestCase):
     def test_a_retried_key_returns_the_stored_reply_and_a_new_key_is_refused(self):
         self.pull("hermes")
-        comment = self.comment("Is the heater enough?")
+        comment = self.comment("@hermes Is the heater enough?")
         self.assertEqual(self.row(comment["id"])["state"], "pending")
         token = self.claim("hermes", comment["id"])
         self.assertEqual((self.row(comment["id"])["state"], self.row(comment["id"])["owner"]),
@@ -168,7 +168,7 @@ class ReplyTests(ClaimTestCase):
 
     def test_a_reply_names_the_current_revision_or_none(self):
         self.pull("hermes")
-        comment = self.comment("Can you cut risk two?")
+        comment = self.comment("@hermes Can you cut risk two?")
         token = self.claim("hermes", comment["id"])
         rc, refused = self.send_reply("hermes", comment["id"], token, "rev-1", "Cut.",
                                       "--revision", "000000000000")
@@ -187,7 +187,7 @@ class ReplyTests(ClaimTestCase):
 
     def test_a_revision_is_checked_as_the_reply_is_decided(self):
         self.pull("hermes")
-        comment = self.comment("Can you cut risk two?")
+        comment = self.comment("@hermes Can you cut risk two?")
         token = self.claim("hermes", comment["id"])
         before = self.revision()
         credential = machine.read_token(self.creds["hermes"])
@@ -218,7 +218,7 @@ class ReplyTests(ClaimTestCase):
 
     def test_a_credential_without_reply_is_refused(self):
         self.pull("hermes")
-        comment = self.comment("Is the heater enough?")
+        comment = self.comment("@hermes Is the heater enough?")
         token = self.claim("mute", comment["id"])
         rc, refused = self.send_reply("mute", comment["id"], token, "k-1")
         self.assertEqual((rc, refused), (1, {"error": "operation_not_allowed"}))
@@ -232,7 +232,7 @@ class ReplyTests(ClaimTestCase):
 
     def test_a_claim_is_for_the_handle_the_comment_is_routed_to(self):
         self.pull("hermes")
-        comment = self.comment("Is the heater enough?")
+        comment = self.comment("@hermes Is the heater enough?")
         rc, refused = self.act("resp", "claim", str(comment["id"]))
         self.assertEqual((rc, refused), (1, {"error": "not_routed"}))
         rc, refused = self.act("hermes", "claim", "999")
@@ -254,7 +254,7 @@ class ModelTests(ClaimTestCase):
 
     def test_a_reply_through_the_cli_carries_its_model_everywhere_it_is_read(self):
         self.pull("hermes")
-        comment = self.comment("Is the heater enough?")
+        comment = self.comment("@hermes Is the heater enough?")
         token = self.claim("hermes", comment["id"])
         rc, reply = self.send_reply("hermes", comment["id"], token, "model-1", "It is.",
                                     "--model", "Claude Opus 5.5")
@@ -270,7 +270,7 @@ class ModelTests(ClaimTestCase):
 
     def test_a_reply_without_a_model_has_no_model_key(self):
         self.pull("hermes")
-        comment = self.comment("Is the heater enough?")
+        comment = self.comment("@hermes Is the heater enough?")
         token = self.claim("hermes", comment["id"])
         rc, reply = self.send_reply("hermes", comment["id"], token, "model-1", "It is.")
         self.assertEqual(rc, 0, reply)
@@ -289,7 +289,7 @@ class ModelTests(ClaimTestCase):
 
     def test_a_model_that_is_not_1_to_40_printable_characters_is_refused(self):
         self.pull("hermes")
-        comment = self.comment("Is the heater enough?")
+        comment = self.comment("@hermes Is the heater enough?")
         token = self.claim("hermes", comment["id"])
         for number, model in enumerate(("", "x" * 41, "Opus\n", " Opus", "Opus ", 5, None)):
             with self.subTest(model=model):
@@ -306,7 +306,7 @@ class ModelTests(ClaimTestCase):
 
     def test_a_retried_key_returns_the_model_first_stored(self):
         self.pull("hermes")
-        comment = self.comment("Is the heater enough?")
+        comment = self.comment("@hermes Is the heater enough?")
         token = self.claim("hermes", comment["id"])
         status, reply = self.socket_reply(comment["id"], token, {
             "idempotencyKey": "K", "text": "It is.", "model": "gpt-6-astra"})
@@ -321,7 +321,7 @@ class ModelTests(ClaimTestCase):
 class SettleTests(ClaimTestCase):
     def test_release_routes_it_again_and_fail_leaves_it_failed(self):
         self.pull("hermes")
-        released = self.comment("Is the heater enough?")
+        released = self.comment("@hermes Is the heater enough?")
         token = self.claim("hermes", released["id"])
         rc, row = self.act("hermes-two", "release", str(released["id"]), "--claim", token)
         self.assertEqual((rc, row), (1, {"error": "not_claimed"}))
@@ -331,7 +331,7 @@ class SettleTests(ClaimTestCase):
         self.assertEqual(self.row(released["id"])["state"], "pending")
         self.assertIn(released["id"], self.pulled_comments("hermes"))
 
-        failed = self.comment("What does the source say?", section="goals")
+        failed = self.comment("@hermes What does the source say?", section="goals")
         token = self.claim("hermes", failed["id"])
         rc, row = self.act("hermes", "fail", str(failed["id"]), "--claim", token,
                            "--reason", "source missing")
@@ -345,7 +345,7 @@ class SettleTests(ClaimTestCase):
         rc, refused = self.act("hermes", "claim", str(failed["id"]))
         self.assertEqual((rc, refused), (1, {"error": "settled"}))
 
-        other = self.comment("And the pump?")
+        other = self.comment("@hermes And the pump?")
         token = self.claim("hermes", other["id"])
         rc, refused = self.act("hermes", "fail", str(other["id"]), "--claim", token,
                                "--reason", "x" * 201)
@@ -364,7 +364,7 @@ class TokenTests(ClaimTestCase):
 
     def test_a_token_that_would_start_with_a_dash_does_not(self):
         self.pull("hermes")
-        comment = self.comment("Is the heater enough?")
+        comment = self.comment("@hermes Is the heater enough?")
         with self.dashed():
             token = self.claim("hermes", comment["id"])
         self.assertFalse(token.startswith("-"), token)
@@ -372,7 +372,7 @@ class TokenTests(ClaimTestCase):
 
     def test_a_reply_parses_such_a_token_after_dash_dash_claim(self):
         self.pull("hermes")
-        comment = self.comment("Is the heater enough?")
+        comment = self.comment("@hermes Is the heater enough?")
         with self.dashed():
             token = self.claim("hermes", comment["id"])
         rc, reply = self.send_reply("hermes", comment["id"], token, "dash-1", "It is.")
@@ -382,7 +382,7 @@ class TokenTests(ClaimTestCase):
 
     def test_no_token_starts_with_a_dash(self):
         self.pull("hermes")
-        comment = self.comment("Is the heater enough?")
+        comment = self.comment("@hermes Is the heater enough?")
         # Each claim of a credential's own current claim renews it with a new token.
         tokens = [self.claim("hermes", comment["id"]) for _ in range(2000)]
         self.assertEqual(len(set(tokens)), 2000)
@@ -398,7 +398,7 @@ class AuditTests(ClaimTestCase):
     def test_every_claim_reply_release_and_failure_is_listed_oldest_first(self):
         self.pull("hermes")
         self.pull("responder")
-        planned = self.comment("Is the heater enough?")
+        planned = self.comment("@hermes Is the heater enough?")
         loose = self.comment("Who reads this?", page="loose", section="one")
 
         token = self.claim("hermes", planned["id"])
@@ -443,8 +443,11 @@ class FollowUpTests(ClaimTestCase):
 
     def answered(self, name: str = "hermes", page: str = "plan",
                  section: str = "risks") -> tuple[dict, dict]:
-        """A reader's comment name has claimed and answered, and the reply."""
-        comment = self.comment("Is the heater enough?", page=page, section=section)
+        """A reader's comment name has claimed and answered, and the reply: on
+        plan it names hermes, so it is routed to hermes; elsewhere it names
+        no one, so it is routed to the responder."""
+        text = "@hermes Is the heater enough?" if page == "plan" else "Is the heater enough?"
+        comment = self.comment(text, page=page, section=section)
         token = self.claim(name, comment["id"])
         rc, reply = self.send_reply(name, comment["id"], token, f"{name}-{comment['id']}-1",
                                     "I'm asking the author; I'll post their answer here.")
@@ -610,7 +613,7 @@ class ImageTestCase(ClaimTestCase):
 class ImageReplyTests(ImageTestCase):
     def test_a_reply_through_the_cli_carries_its_images_everywhere_it_is_read(self):
         self.pull("hermes")
-        comment = self.comment("Is the heater enough?")
+        comment = self.comment("@hermes Is the heater enough?")
         token = self.claim("hermes", comment["id"])
         rc, reply = self.send_reply("hermes", comment["id"], token, "image-1", "See it.",
                                     "--image", str(CHART), "--image", str(FISH))
@@ -635,7 +638,7 @@ class ImageReplyTests(ImageTestCase):
 
     def test_a_follow_up_through_the_cli_carries_its_image(self):
         self.pull("hermes")
-        comment = self.comment("Is the heater enough?")
+        comment = self.comment("@hermes Is the heater enough?")
         token = self.claim("hermes", comment["id"])
         rc, reply = self.send_reply("hermes", comment["id"], token, "image-1", "I'll look.")
         self.assertEqual(rc, 0, reply)
@@ -649,7 +652,7 @@ class ImageReplyTests(ImageTestCase):
 
     def test_a_retried_key_answers_the_reply_first_stored_with_its_images(self):
         self.pull("hermes")
-        comment = self.comment("Is the heater enough?")
+        comment = self.comment("@hermes Is the heater enough?")
         token = self.claim("hermes", comment["id"])
         rc, reply = self.send_reply("hermes", comment["id"], token, "K", "See it.",
                                     "--image", str(CHART))
@@ -663,7 +666,7 @@ class ImageReplyTests(ImageTestCase):
 
     def test_a_retried_key_answers_its_message_though_its_image_has_left_the_store(self):
         self.pull("hermes")
-        comment = self.comment("Is the heater enough?")
+        comment = self.comment("@hermes Is the heater enough?")
         token = self.claim("hermes", comment["id"])
         status, uploaded = self.socket("hermes", "POST", machine.MEDIA, CHART.read_bytes(),
                                        "image/png")
@@ -691,7 +694,7 @@ class ImageReplyTests(ImageTestCase):
 
     def test_too_many_images_or_an_unreadable_file_uploads_nothing(self):
         self.pull("hermes")
-        comment = self.comment("Is the heater enough?")
+        comment = self.comment("@hermes Is the heater enough?")
         token = self.claim("hermes", comment["id"])
         for key, paths, error in (
                 ("five", (CHART, FISH, FROG, LILY, POND), "too_many_images"),
@@ -707,7 +710,7 @@ class ImageReplyTests(ImageTestCase):
 
     def test_a_message_naming_an_image_not_in_the_store_is_refused(self):
         self.pull("hermes")
-        comment = self.comment("Is the heater enough?")
+        comment = self.comment("@hermes Is the heater enough?")
         token = self.claim("hermes", comment["id"])
         absent = hashlib.sha256(b"never uploaded").hexdigest() + ".png"
         status, refused = self.socket("hermes", "POST", f"/v1/comments/{comment['id']}/reply",
@@ -772,7 +775,7 @@ class ImageRefusalTests(ImageTestCase):
         short = self.work / "short.png"
         short.write_bytes(CHART.read_bytes()[:2000])
         self.pull("hermes")
-        comment = self.comment("Is the heater enough?")
+        comment = self.comment("@hermes Is the heater enough?")
         token = self.claim("hermes", comment["id"])
         for path, error in ((LOGO, "unsupported_media_type"), (short, "invalid_image"),
                             (CHART, "body_too_large")):

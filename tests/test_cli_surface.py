@@ -33,7 +33,8 @@ REMOVED_PATHS = (
     "src/lotuspod/_theme/lotuspod-form.js",
 )
 COMMANDS = ("render", "manifest", "index", "serve", "publish", "credential", "answers",
-            "comments", "audit", "respond", "backup", "restore", "archive", "unarchive")
+            "comments", "audit", "respond", "backup", "restore", "archive", "unarchive",
+            "inbox")
 REMOVED_COMMANDS = ("export", "responses")
 
 

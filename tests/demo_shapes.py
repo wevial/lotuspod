@@ -221,7 +221,7 @@ def run(api: Api, agent_reply: Callable[[int], None], page_html: str) -> list[di
 
     ask("1. GET comments, none yet", "GET", comments_path + query)
     made = ask("2. POST a section comment", "POST", comments_path,
-               {"page": PAGE, "section": SECTION, "text": "Which lilies go in first?"})
+               {"page": PAGE, "section": SECTION, "text": "@hermes Which lilies go in first?"})
     ask("3. POST a passage comment, with a quote", "POST", comments_path,
         {"page": PAGE, "section": PASSAGE_SECTION, "text": "Is this algae a worry?",
          "quote": QUOTE, "revision": revision})
@@ -360,7 +360,7 @@ def record(env: dict) -> dict:
     """The document of shapes the capture site's serve answers."""
     site = Site(env)
     site.publish()
-    # hermes listens, so the reader's comments are routed to it.
+    # hermes listens, so the reader's comments that name it wait for it.
     site.agent("pull", "--owner", OWNER)
     return document(run(site.request, site.reply, site.page_html()))
 
