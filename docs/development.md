@@ -211,6 +211,17 @@ ffmpeg -loglevel error -y -i docs/images/loop.webm -vf "fps=10,mpdecimate=hi=64*
 A ticket's own spec goes in `e2e/capture`, which stays out of git; it has
 to live under `e2e/` for its `@playwright/test` import to resolve.
 
+`e2e/smoke/socket-pull.capture.ts` captures a reader's comment after verifying
+that Hermes receives it through a real socket pull. It writes
+`01-reader-comment-pulled.png`; the catalog unit tests separately verify
+the page-list read counts. Run it from the repository root:
+
+```sh
+CAPTURE_OUT="$(mktemp -d)" .venv/bin/python -m tests.capture_site \
+  e2e/node_modules/.bin/playwright test \
+  --config e2e/playwright.config.ts socket-pull.capture.ts
+```
+
 Browser checks run the same way, with `e2e/checks.config.ts` and the specs in
 `e2e/checks/` (among them `comments.spec.ts`, which posts and reads back
 comments on the fixture's comments page); `e2e/checks/policy.spec.ts` checks
