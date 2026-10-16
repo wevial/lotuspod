@@ -788,6 +788,41 @@ test.describe('signed in', () => {
     expect(errors).toEqual([]);
   });
 
+  test('a table a swap puts in place of an expanded one is expanded where storage is refused', async ({ page }) => {
+    const errors = watchErrors(page);
+    const name = 'live-page-tables-unkept';
+    const ARTICLE = ['--no-comments', '--variant', 'article'];
+    const tabled = (risks: string) => sectioned('Live page tables unkept', pond({
+      Risks: { paragraphs: ['The pump may crack in the ice.', ledger(risks)] },
+    }));
+    await page.addInitScript(() => {
+      Object.defineProperty(window, 'sessionStorage', {
+        get() { throw new DOMException('Storage is refused', 'SecurityError'); },
+      });
+    });
+    publish(name, tabled('Pump'), ...ARTICLE);
+    await openPlain(page, name);
+    expect(await page.evaluate(() => { try { sessionStorage.length; return 'kept'; } catch { return 'refused'; } }))
+      .toBe('refused');
+    const table = page.locator('.artifact-section-body[data-section="risks"] > table');
+    const button = page.locator('.artifact-section-body[data-section="risks"] > .artifact-table-expand > button');
+    await button.click();
+    await expect(table).toHaveClass(/artifact-table--expanded/);
+    await table.evaluate((node) => { (node as any).__kept = true; });
+    // Focus left in Risks would hold it back.
+    await button.blur();
+
+    const second = publish(name, tabled('Ladder'), ...ARTICLE);
+    await page.clock.runFor(CHECK);
+    await expect.poll(() => revisionOf(page)).toBe(second);
+    await expect(banner(page).node).toHaveCount(0);
+    await expect(table).toContainText('Ladder');
+    expect(await table.evaluate((node) => (node as any).__kept)).toBeUndefined();
+    await expect(table).toHaveClass(/artifact-table--expanded/);
+    await expect(button).toHaveText('Collapse');
+    expect(errors).toEqual([]);
+  });
+
   test('a swapped section\'s reference opens its new card, the cards swapped with it', async ({ page }) => {
     const errors = watchErrors(page);
     const swaps = await watchSwaps(page);
@@ -852,6 +887,49 @@ test.describe('signed in', () => {
     await ref.hover();
     await expect(card).toBeVisible();
     await expect(card.locator('.artifact-ref-card-title')).toHaveText('Story follow-ups become proposals');
+    await page.mouse.move(5, 5);
+    await expect(card).toBeHidden();
+
+    await ref.focus();
+    await expect(card).toBeVisible();
+    await page.keyboard.press('Enter');
+    await expect(ref).toHaveAttribute('aria-expanded', 'true');
+    await expect(card.locator('.artifact-ref-card-close')).toBeVisible();
+    expect(errors).toEqual([]);
+  });
+
+  test('a reference in a section held back keeps its card when a republish names it nowhere else', async ({ page }) => {
+    const errors = watchErrors(page);
+    const name = 'live-page-refs-held';
+    const refs = refsFile('Story follow-ups become proposals');
+    publish(name, sectioned('Live page refs held', pond({
+      Risks: { paragraphs: ['The pump may crack in the ice, as HOLO-175 says.'] },
+    })), '--no-comments', '--refs', refs);
+    await openPlain(page, name);
+    const ref = page.locator('.artifact-body button.artifact-ref[data-ref="HOLO-175"]');
+    await ref.focus();
+
+    const second = publish(name, sectioned('Live page refs held', pond({
+      Findings: { paragraphs: ['The pond froze early this year.'] },
+      Risks: { paragraphs: ['The pump will crack unless it is lifted out first.'] },
+    })), '--no-comments', '--refs', refs);
+    await page.clock.runFor(CHECK);
+    await expect.poll(() => revisionOf(page)).toBe(second);
+    await expect(banner(page).node).toHaveCount(0);
+    await expect(page.locator('.artifact-section-body[data-section="risks"] div.artifact-swap-held'))
+      .toContainText('This section changed');
+    await expect(ref).toBeFocused();
+
+    await ref.blur();
+    const card = page.locator('.artifact-ref-card');
+    await expect(card).toBeHidden();
+    await ref.hover();
+    await expect(card).toBeVisible();
+    await expect(card.locator('.artifact-ref-card-title')).toHaveText('Story follow-ups become proposals');
+    await ref.click();
+    await expect(ref).toHaveAttribute('aria-expanded', 'true');
+    await expect(card.locator('.artifact-ref-card-close')).toHaveCount(1);
+    await expect(card.locator('.artifact-ref-card-close')).toBeVisible();
     expect(errors).toEqual([]);
   });
 

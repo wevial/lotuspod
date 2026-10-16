@@ -262,12 +262,18 @@ function pageSwap() {
         unholdSection(id);
     }
     if (refsChanged) {
+      const cardIn = (block, id) => block?.querySelector(`#${CSS.escape(id)}`) ?? null;
+      const needed = new Set(all("button.artifact-ref[aria-controls]", body).map((ref) => ref.getAttribute("aria-controls") ?? ""));
+      const kept = Array.from(needed).filter((id) => id && !cardIn(freshRefs, id)).flatMap((id) => cardIn(refs, id) ?? []);
+      const block = freshRefs ? brought(freshRefs) : refs && kept.length ? refs.cloneNode(false) : null;
       const before = refs ? [refs] : [];
-      const after = freshRefs ? [brought(freshRefs)] : [];
+      const after = block ? [block] : [];
       refs?.remove();
-      if (after.length)
-        body.after(...after);
-      const change = !refs ? "added" : !freshRefs ? "removed" : "changed";
+      if (block) {
+        block.append(...kept);
+        body.after(block);
+      }
+      const change = !refs ? "added" : !block ? "removed" : "changed";
       units.push({ kind: "refs", id: "", change, before, after });
     }
     if (anchorAt >= 0) {

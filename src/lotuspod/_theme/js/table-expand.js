@@ -43,7 +43,14 @@
         (parent.parentElement === body && parent.classList.contains("artifact-section-body"));
     }
 
+    // The choices made on this load, by place, for a table that replaces
+    // one where storage refuses them.
+    var chosen = {};
+
     function kept(place) {
+      if (Object.prototype.hasOwnProperty.call(chosen, place)) {
+        return chosen[place];
+      }
       try {
         return sessionStorage.getItem(KEPT + place) === "1";
       } catch (ignored) {
@@ -52,6 +59,7 @@
     }
 
     function keep(entry) {
+      chosen[entry.place] = entry.expanded;
       try {
         if (entry.expanded) {
           sessionStorage.setItem(KEPT + entry.place, "1");

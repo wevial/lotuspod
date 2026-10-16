@@ -31,6 +31,10 @@
     }
 
     function prepare(card) {
+      // A card a swap carried over for a reference held back is set already.
+      if (card.querySelector(".artifact-ref-card-close")) {
+        return;
+      }
       all("time[datetime]", card).forEach(function (time) {
         time.textContent = when(time.getAttribute("datetime"));
       });

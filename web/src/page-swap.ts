@@ -397,12 +397,24 @@ function pageSwap(): void {
     }
 
     if (refsChanged) {
+      // A reference still on the page, in a part held back, keeps its card
+      // when the new block has none for it.
+      const cardIn = (block: Element | null, id: string) => block?.querySelector(`#${CSS.escape(id)}`) ?? null;
+      const needed = new Set(all("button.artifact-ref[aria-controls]", body)
+        .map((ref) => ref.getAttribute("aria-controls") ?? ""));
+      const kept = Array.from(needed).filter((id) => id && !cardIn(freshRefs, id))
+        .flatMap((id) => cardIn(refs, id) ?? []);
+      const block = freshRefs ? brought(freshRefs) as HTMLElement
+        : refs && kept.length ? refs.cloneNode(false) as HTMLElement : null;
       const before = refs ? [refs] : [];
-      const after = freshRefs ? [brought(freshRefs)] : [];
+      const after = block ? [block] : [];
       // The old block goes first, so the new cards keep their ids.
       refs?.remove();
-      if (after.length) body.after(...after);
-      const change = !refs ? "added" : !freshRefs ? "removed" : "changed";
+      if (block) {
+        block.append(...kept);
+        body.after(block);
+      }
+      const change = !refs ? "added" : !block ? "removed" : "changed";
       units.push({ kind: "refs", id: "", change, before, after });
     }
 
