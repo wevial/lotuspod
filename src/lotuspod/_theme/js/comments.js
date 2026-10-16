@@ -3392,8 +3392,9 @@
       since.delete(old);
       ahead.delete(old);
       // The sections added just before it, among the others held back and
-      // taken away there, in order: as many of those before it, so many of
-      // the added are theirs, and the next is its place.
+      // taken away there, in order: as many of those before it (each with
+      // those taken away at once just before it), so many of the added are
+      // theirs, and the next is its place.
       var place = at;
       var taken = null;
       if (added) {
@@ -3403,7 +3404,7 @@
           if (added.has(boxes[i])) {
             run.unshift(boxes[i]);
           } else {
-            before += 1;
+            before += 1 + (ahead.get(boxes[i]) || 0);
           }
         }
         if (before < run.length) {
@@ -3417,10 +3418,11 @@
           });
         }
         // One taken away with no box of its own yet still has one among
-        // the added of the next held back with it: that one skips it.
+        // the added of the next held back with it: that one skips it, and
+        // those it skipped. One with a box ends the next one's added there.
         var next = boxes[at + 1];
-        if (since.has(next)) {
-          ahead.set(next, (ahead.get(next) || 0) + skip + (taken ? 0 : 1));
+        if (!taken && since.has(next)) {
+          ahead.set(next, (ahead.get(next) || 0) + skip + 1);
         }
       }
       places.set(old, place);
