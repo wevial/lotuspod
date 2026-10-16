@@ -3,11 +3,13 @@
 import io
 import shutil
 from contextlib import redirect_stdout
+from email.message import Message
+from functools import partial
 from unittest import mock
 
 from tests.test_agent_pull import PullTestCase, run_cli
 from tests.test_inbox import InboxTestCase
-from lotuspod import archive, cli, db
+from lotuspod import archive, cli, db, machine
 
 
 def hide(case, name):
@@ -46,7 +48,8 @@ class PullCatalogTests(PullTestCase):
 
     def test_a_pull_answers_as_without_a_catalog(self):
         self.pull("hermes")
-        for page in ("plan-03", "plan-07"):
+        for n in range(20):
+            page = f"plan-{n:02d}"
             shutil.copyfile(self.out_dir / "plan.html", self.out_dir / f"{page}.html")
             self.comment("@hermes Is the heater enough?", page=page)
         self.answer(note="Before the frost.")
@@ -54,8 +57,17 @@ class PullCatalogTests(PullTestCase):
             archive.set_archived(self.out_dir, "plan-07", True)
         hide(self, "plan-03")
         items = self.pull("hermes")
-        with mock.patch.object(self.sockets.routes, "catalog", None):
-            self.assertEqual(items, self.pull("hermes"))
+        routes = machine.Routes(db.Database(self.db_path),
+                                pages=partial(cli.api_page, self.out_dir),
+                                describe=partial(cli.agent_page, self.out_dir))
+        headers = Message()
+        headers["Authorization"] = f"Bearer {machine.read_token(self.desk)}"
+        status, payload, _ = routes.answer("GET", "/v1/pull?owner=hermes", headers)
+        self.assertEqual(status, 200, payload)
+        self.assertEqual(items, payload["items"])
+        self.assertCountEqual(
+            [item["page"]["name"] for item in items if item["kind"] == "comment"],
+            [f"plan-{n:02d}" for n in range(20) if n != 3])
         self.assertNotIn("plan-03", [item["page"]["name"] for item in items])
         self.assertTrue(any(item["kind"] == "comment" and
                             item["page"]["name"] == "plan-07" for item in items))
