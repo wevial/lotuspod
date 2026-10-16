@@ -3059,8 +3059,12 @@
         var thread = each.thread ? shown.get(each.thread) : null;
         var box = !each.thread && typeof each.section === "string" ? sections.get(each.section) : null;
         if (each.why) {
-          // Waiting for a post when the page reloaded: still to say why.
-          moved = rehome(each, String(each.why));
+          // Waiting for a post when the page reloaded: a passage's composer
+          // opens again on its words where the page has them; else it goes
+          // where it was to go, still to say why.
+          if (!(each.quote && passages.reopen(each))) {
+            moved = rehome(each, String(each.why));
+          }
         } else if (thread) {
           thread.field.value = String(each.text || "");
           told(thread.field.form, attached.get(thread.field.form).restore(each.images));
@@ -3251,7 +3255,9 @@
           return;
         }
         // Sent already: kept only if it is not saved.
+        var held = pend(each, PLACE_GONE);
         each.saving.then(function (row) {
+          awaiting.delete(held);
           var box = row ? null : rehome(each, PLACE_GONE);
           if (box) {
             panel.reopen({ section: box.dataset.section, writing: true });
@@ -3260,7 +3266,9 @@
       });
       if (writing && writing.saving) {
         // Sent already: kept only if it is not saved.
+        var held = pend(writing, PASSAGE_GONE);
         writing.saving.then(function (row) {
+          awaiting.delete(held);
           var box = row ? null : rewrite(writing);
           if (box) {
             panel.reopen({ section: box.dataset.section, writing: true });
@@ -3276,6 +3284,19 @@
         focused.focus({ preventScroll: true });
       }
     });
+
+    // What a form or composer a swap took away holds while the post it is
+    // sending is not yet saved, kept over a reload meanwhile (awaiting) to
+    // go where rehome() would put it, saying why; that snapshot, for the
+    // caller to let go of once the post settles.
+    function pend(each, why) {
+      var held = {
+        section: each.section, index: each.index, text: each.text, from: each.from, images: each.images,
+        quote: each.quote, why: why,
+      };
+      awaiting.add(held);
+      return held;
+    }
 
     // A passage composer a swap took the words of opens again on them
     // where the page still has them and no other composer is open; else

@@ -1147,6 +1147,55 @@ test.describe('signed in', () => {
     expect(errors).toEqual([]);
   });
 
+  test('a comment still sending when Update takes its section away is kept over Reload', async ({ page }) => {
+    const errors = watchErrors(page);
+    const name = 'live-page-renamed-own-sending-reload';
+    publish(name, source('Live page renamed own sending reload', 'first'));
+    await stopClock(page);
+    await open(page, name);
+
+    // The Risks comment is still sending when Risks is updated, and when
+    // the reader reloads the page for a later revision.
+    await page.route((url) => url.pathname === '/api/comments', async (route) => {
+      if (route.request().method() !== 'POST') {
+        await route.fallback();
+      }
+    });
+    await page.locator('details.artifact-comment[data-section="risks"] summary').click();
+    const risks = page.locator('.artifact-comments-panel form.artifact-comment-form')
+      .filter({ has: page.getByRole('textbox', { name: 'Comment on Risks' }) });
+    const SENT = 'What cracks first, the pump or the pipe?';
+    await risks.locator('textarea').fill(SENT);
+    await risks.getByRole('button', { name: 'Comment' }).click();
+    await expect(risks.locator('.artifact-comment-status')).toHaveText('Saving...');
+
+    const second = publish(name, source('Live page renamed own sending reload', 'first').replace(/Risks/g, 'Hazards'));
+    await page.clock.runFor(CHECK);
+    await expect.poll(() => revisionOf(page)).toBe(second);
+    const bar = page.locator('div.artifact-section-body[data-section="risks"] div.artifact-swap-held');
+    await expect(bar).toContainText('This section was removed');
+    await bar.getByRole('button', { name: 'Update' }).click();
+    await expect(page.locator('details.artifact-comment[data-section="risks"]')).toHaveCount(0);
+
+    await fallBack(page, name);
+    const third = publish(name, source('Live page renamed own sending reload', 'second').replace(/Risks/g, 'Hazards'));
+    await page.clock.runFor(CHECK);
+    const shown = banner(page);
+    await expect(shown.reload).toBeVisible();
+    const loaded = page.waitForEvent('load');
+    await shown.reload.click();
+    await loaded;
+
+    expect(await revisionOf(page)).toBe(third);
+    const hazards = page.locator('.artifact-comments-panel form.artifact-comment-form')
+      .filter({ has: page.getByRole('textbox', { name: 'Comment on Hazards' }) });
+    await expect(hazards.locator('textarea')).toBeVisible();
+    await expect(hazards.locator('textarea')).toHaveValue(SENT);
+    await expect(hazards.locator('.artifact-comment-status')).toHaveText(
+      'Where you were writing has changed since. Your text is kept here.');
+    expect(errors).toEqual([]);
+  });
+
   test('an image still uploading to a section renamed since joins the form where the section was', async ({ page }) => {
     const errors = watchErrors(page);
     const name = 'live-page-renamed-uploading';
