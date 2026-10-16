@@ -1,5 +1,4 @@
 // Built from web/src/page-swap.ts by web/build.ts. Edit that file, not this one.
-const SWAP_UNMOUNTED = "pre.mermaid";
 var SWAP_HOLDS;
 function holdSwap(test) {
   (SWAP_HOLDS ??= []).push(test);
@@ -7,6 +6,7 @@ function holdSwap(test) {
 function pageSwap() {
   const ADDED = "div.artifact-answered, .artifact-comments-changed";
   const DECISION = "form.artifact-decision";
+  const DIAGRAM = "pre.mermaid";
   const HELD = "div.artifact-swap-held";
   const CHANGED_TEXT = "This section changed";
   const REMOVED_TEXT = "This section was removed";
@@ -36,7 +36,6 @@ function pageSwap() {
     }
     return nodes;
   };
-  const unmounted = (nodes) => nodes.some((node) => node instanceof Element && (node.matches(SWAP_UNMOUNTED) || node.querySelector(SWAP_UNMOUNTED) !== null));
   const brought = (node) => document.importNode(node, true);
   function retext(old, fresh, place) {
     const before = [];
@@ -165,8 +164,6 @@ function pageSwap() {
         return [old.heading, old.wrapper, part.heading, part.wrapper];
       })
     ].filter((node) => node !== null);
-    if (unmounted(touched))
-      return null;
     const decided = (nodes) => nodes.some((node) => node instanceof Element && (node.matches(DECISION) || node.querySelector(DECISION) !== null));
     if (answering === null && decided(touched))
       return null;
@@ -335,6 +332,9 @@ function pageSwap() {
       setTimeout(() => shown.forEach((node) => node.classList.remove(TINTED)), TINT);
     }
     document.dispatchEvent(new CustomEvent(SWAPPED, { detail: { revision, units } }));
+    const nodes = units.flatMap((unit) => unit.after).flatMap((node) => !(node instanceof Element) ? [] : node.matches(DIAGRAM) ? [node] : all(DIAGRAM, node));
+    if (nodes.length)
+      document.dispatchEvent(new CustomEvent(DIAGRAMS, { detail: { nodes } }));
     const count = units.filter((unit) => unit.kind === "intro" || unit.kind === "section").length;
     if (count)
       live.note(`Page updated · ${count} ${count === 1 ? "section" : "sections"} changed`);

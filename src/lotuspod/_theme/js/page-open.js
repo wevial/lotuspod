@@ -76,6 +76,10 @@
   // Sent on the document once a newer revision's changed parts are swapped
   // into the page (web/src/page-swap.ts), naming each.
   var SWAPPED = "lotuspod:swapped";
+  // Sent on the document after SWAPPED, naming the diagrams (pre.mermaid) the
+  // swap brought in, for the template's start-up module to draw: the same
+  // string as its listener's.
+  var DIAGRAMS = "lotuspod:diagrams";
   // Sent on a diagram's svg each time its view (js/diagram-view.js) moves or
   // zooms it, so an open node card (js/diagram-cards.js) follows its box.
   var MOVED = "lotuspod:diagram-moved";

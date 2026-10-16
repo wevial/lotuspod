@@ -63,6 +63,7 @@
       theme: "base",
       themeVariables: {{mermaid_theme_variables}}
     });
+    document.addEventListener("lotuspod:diagrams", (event) => mermaid.run({ nodes: event.detail.nodes }));
   </script>
 {{/mermaid}}{{#page_script_needed}}  <script src="{{page_script}}?v={{theme_hash}}" defer></script>
 {{/page_script_needed}}</body>
