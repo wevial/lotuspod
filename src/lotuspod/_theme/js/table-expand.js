@@ -88,7 +88,7 @@
       entries.push(entry);
     }
 
-    all(":scope > table, :scope > .artifact-section-body > table", body).forEach(add);
+    all("table", body).filter(topLevel).forEach(add);
 
     // The width each table takes at the reading default and whether it
     // scrolls there, measured on a copy of it set straight in the body, out

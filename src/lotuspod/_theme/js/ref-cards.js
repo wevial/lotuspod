@@ -15,6 +15,8 @@
     // edge, in px.
     var GAP = 6;
     var EDGE = 8;
+    // A reference that names its card.
+    var REF = "button.artifact-ref[aria-controls]";
     // The reference whose card shows, that card, and whether the reader
     // pinned it.
     var shown = null;
@@ -156,7 +158,7 @@
     }
 
     all(".artifact-ref-card").forEach(prepare);
-    all("button.artifact-ref[aria-controls]", body).forEach(bind);
+    all(REF, body).forEach(bind);
 
     document.addEventListener(SWAPPED, function (event) {
       var units = event.detail.units;
@@ -182,10 +184,10 @@
           if (!(node instanceof Element) || !body.contains(node)) {
             return;
           }
-          if (node.matches("button.artifact-ref[aria-controls]")) {
+          if (node.matches(REF)) {
             bind(node);
           }
-          all("button.artifact-ref[aria-controls]", node).forEach(bind);
+          all(REF, node).forEach(bind);
         });
       });
     });
