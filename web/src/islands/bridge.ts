@@ -1,7 +1,9 @@
+import type { Commenting } from "./comments/parts";
+
 // The one module that names what the legacy page script's sources share in
 // the closure the join wraps them in (THEME_CLOSURES in src/lotuspod/cli.py):
-// the bundle is joined last inside it, so these are the closure's own names,
-// which a minifier never renames. Each is read once, as the bundle loads, so
+// the bundle is joined after comments.js inside it, so these are the
+// closure's own names, which a minifier never renames. Each is read once, as the bundle loads, so
 // a name that does not exist throws on every page at once. Islands import
 // page, never the names.
 
@@ -59,6 +61,14 @@ export interface Answering {
   read: boolean;
 }
 
+// js/comments.js publishes the page start; the island supplies its parts.
+declare const commenting: Commenting | null;
+// js/page-open.js: shell text, storage keys and the whole-page section id.
+declare const CLOSED: string;
+declare const PANEL: string;
+declare const RESOLVED_SHOWN: string;
+declare const WHOLE_PAGE: string;
+
 // js/live-page.js.
 declare const live: Live;
 // js/decisions.js: the page's decision forms, in page order, and what reads
@@ -80,6 +90,11 @@ declare const SAVED: string;
 declare const DRAWN: string;
 
 export const page = Object.freeze({
+  commenting,
+  closed: CLOSED,
+  panelKey: PANEL,
+  resolvedShownKey: RESOLVED_SHOWN,
+  wholePage: WHOLE_PAGE,
   live,
   forms,
   answering,
