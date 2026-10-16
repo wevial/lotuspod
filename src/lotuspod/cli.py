@@ -807,8 +807,10 @@ def cmd_render(args: argparse.Namespace) -> int:
                                              getattr(args, "refs_as_of", ""))
     body, outline = (body, []) if args.no_outline else outline_body(body)
     # After the outline, so each box names its heading's id.
+    whole_page_box = ""
     if with_comments:
         body = comments.render_comments(body, args.name)
+        whole_page_box = comments.whole_page_box(body, args.name)
     # Last, so each section's box and forms fall inside its wrapper.
     body, wrapped, intro_digest = (sections.wrap_sections(body) if outline
                                    else (body, False, unit_digest(body)))
@@ -828,6 +830,7 @@ def cmd_render(args: argparse.Namespace) -> int:
         "intro_digest": intro_digest,
         **label_context(labels),
         "body": body,
+        "whole_page_box": whole_page_box,
         "refs_block": refs_block,
         "outline": outline,
         "outline_items": outline_html(outline),
