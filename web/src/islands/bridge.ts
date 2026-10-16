@@ -1,11 +1,9 @@
 import type { Commenting } from "./comments/parts";
 
-// The one module that names what the legacy page script's sources share in
-// the closure the join wraps them in (THEME_CLOSURES in src/lotuspod/cli.py):
-// the bundle is joined after comments.js inside it, so these are the
-// closure's own names, which a minifier never renames. Each is read once, as the bundle loads, so
-// a name that does not exist throws on every page at once. Islands import
-// page, never the names.
+// Islands reach the legacy closure only through page. The bundle follows
+// comments.js inside THEME_CLOSURES (src/lotuspod/cli.py); a minifier never
+// renames its free names. Reading each as the bundle loads makes a missing
+// name throw on every page at once.
 
 // What js/live-page.js keeps of the page's revision while it is open.
 export interface Live {
