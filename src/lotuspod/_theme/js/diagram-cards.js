@@ -546,22 +546,19 @@
     cardsMount = diagramCards();
     diagramPres.forEach(cardsMount.mount);
   }
-  // A swap lets go of the diagrams it took out, then mounts those it brought
-  // in, on a page with none at load too.
+  // A swap lets go of the diagrams it took out, then, as DIAGRAMS follows
+  // SWAPPED, mounts those it brought in, on a page with none at load too.
   document.addEventListener(SWAPPED, function (event) {
-    var before = [];
-    var pres = [];
-    event.detail.units.forEach(function (unit) {
-      before = before.concat(unit.before);
-      unit.after.forEach(function (node) {
-        if (node instanceof Element) {
-          pres = pres.concat(node.matches(CARDS_PRE) ? [node] : all(CARDS_PRE, node));
-        }
-      });
-    });
     if (cardsMount) {
+      var before = [];
+      event.detail.units.forEach(function (unit) {
+        before = before.concat(unit.before);
+      });
       cardsMount.drop(before);
     }
+  });
+  document.addEventListener(DIAGRAMS, function (event) {
+    var pres = event.detail.nodes.filter(function (pre) { return pre.matches(CARDS_PRE); });
     if (pres.length) {
       cardsMount = cardsMount || diagramCards();
       pres.forEach(cardsMount.mount);

@@ -454,13 +454,7 @@
     viewPres.forEach(viewMount);
     // The diagrams a swap brought in: a page with none at load takes none in
     // a swap, as its policy differs.
-    document.addEventListener(SWAPPED, function (event) {
-      event.detail.units.forEach(function (unit) {
-        unit.after.forEach(function (node) {
-          if (node instanceof Element) {
-            (node.matches("pre.mermaid") ? [node] : all("pre.mermaid", node)).forEach(viewMount);
-          }
-        });
-      });
+    document.addEventListener(DIAGRAMS, function (event) {
+      event.detail.nodes.forEach(viewMount);
     });
   }
