@@ -1,12 +1,8 @@
 // Built from web/src/page-swap.ts by web/build.ts. Edit that file, not this one.
-const SWAP_UNMOUNTED = "pre.mermaid, button.artifact-ref, table, mark.artifact-passage";
+const SWAP_UNMOUNTED = "pre.mermaid, button.artifact-ref, table";
 var SWAP_HOLDS;
 function holdSwap(test) {
   (SWAP_HOLDS ??= []).push(test);
-}
-const SWAP_REFUSALS = [];
-function refuseSwap(test) {
-  SWAP_REFUSALS.push(test);
 }
 function pageSwap() {
   const ADDED = "div.artifact-answered, .artifact-comments-changed";
@@ -42,7 +38,6 @@ function pageSwap() {
   };
   const unmounted = (nodes) => nodes.some((node) => node instanceof Element && (node.matches(SWAP_UNMOUNTED) || node.querySelector(SWAP_UNMOUNTED) !== null));
   const brought = (node) => document.importNode(node, true);
-  const refused = (part) => SWAP_REFUSALS.some((test) => test([part.heading, part.wrapper]));
   function retext(old, fresh, place) {
     const before = [];
     const after = [];
@@ -175,14 +170,12 @@ function pageSwap() {
     const decided = (nodes) => nodes.some((node) => node instanceof Element && (node.matches(DECISION) || node.querySelector(DECISION) !== null));
     if (answering === null && decided(touched))
       return null;
-    const holds = (nodes) => {
+    const holds = (nodes, gone) => {
       const elements = nodes.filter((node) => node instanceof Element);
-      return (SWAP_HOLDS ?? []).some((test) => test(elements));
+      return (SWAP_HOLDS ?? []).map((test) => test(elements, gone)).some(Boolean);
     };
-    const introHeld = introChanged && (heldIntro !== null || holds(intro));
-    const sectionHeld = new Set([...removed, ...changed.map((part) => byId.get(part.id))].filter((part) => held.has(part.id) || holds([part.heading, part.wrapper])).map((part) => part.id));
-    if (removed.some(refused))
-      return null;
+    const introHeld = introChanged && (heldIntro !== null || holds(intro, false));
+    const sectionHeld = new Set([...removed, ...changed.map((part) => byId.get(part.id))].filter((part) => holds([part.heading, part.wrapper], !freshIds.has(part.id)) || held.has(part.id)).map((part) => part.id));
     const swapsForm = decided([
       ...introChanged && !introHeld ? [...intro, ...freshIntro] : [],
       ...[...removed, ...added].filter((part) => !sectionHeld.has(part.id)).flatMap((part) => [part.heading, part.wrapper]),
@@ -370,10 +363,6 @@ function pageSwap() {
     if (at < 0)
       return;
     const old = parts[at];
-    if (!entry.fresh && refused(old) || unmounted([old.heading, old.wrapper])) {
-      live.reload();
-      return;
-    }
     const unit = entry.fresh ? applyChanged(old, entry.fresh) : applyRemoved(old);
     swapped(live.revision(), [unit]);
     const heading = entry.fresh ? unit.after[0] : (parts[at + 1] ?? parts[at - 1])?.heading;
@@ -402,12 +391,7 @@ function pageSwap() {
     if (!entry || !body)
       return;
     const parts = partsOf(body);
-    const intro = introOf(body, parts);
-    if (unmounted(intro)) {
-      live.reload();
-      return;
-    }
-    swapped(live.revision(), [applyIntro(body, intro, entry.fresh, entry.digest)]);
+    swapped(live.revision(), [applyIntro(body, introOf(body, parts), entry.fresh, entry.digest)]);
     toggleOf(parts[0]?.heading)?.focus();
   }
   holdSwap((nodes) => {
