@@ -13,8 +13,7 @@ form start no section: a box never lands inside a diagram or a form.
 
 `read_boxes()` reads the boxes back from a finished page, which is how the
 comments route knows which sections a page takes new threads on. A page
-with section boxes also takes threads on the whole page, section WHOLE_PAGE,
-with its box served in the header right after the date line.
+with section boxes also takes threads on the whole page, section WHOLE_PAGE.
 """
 
 from __future__ import annotations
@@ -25,8 +24,8 @@ from html.parser import HTMLParser
 BOX_CLASS = "artifact-comment"
 # The section of the one box a page with fewer than two h2 sections gets.
 PAGE_SECTION = "page"
-# The section of a thread on the whole page of a page with section boxes.
-# Its box is served in the header right after the date line.
+# The section of a thread on the whole page of a page with section boxes. No
+# box carries it: the page script draws that page's box under its title.
 WHOLE_PAGE = ""
 MIN_SECTIONS = 2
 
@@ -156,10 +155,3 @@ def read_boxes(page_html: str) -> list[str]:
     reader.feed(page_html)
     reader.close()
     return reader.sections
-
-
-def whole_page_box(body: str, page: str) -> str:
-    """The header box for a body with section comment boxes, or nothing."""
-    if any(section != PAGE_SECTION for section in read_boxes(body)):
-        return box(page, WHOLE_PAGE, "")
-    return ""

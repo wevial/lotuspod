@@ -193,7 +193,7 @@ test.describe('signed in', () => {
       const response = await route.fetch();
       const html = await response.text();
       const body = html.replace(/<details class="artifact-comment"[^>]*data-section="">[\s\S]*?<\/details>/, '');
-      expect(body).not.toBe(html);
+      expect(body).not.toMatch(/<details class="artifact-comment"[^>]*data-section=""/);
       await route.fulfill({ response, body });
     });
     await load(page, `/${name}.html`);
