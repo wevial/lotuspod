@@ -2960,7 +2960,7 @@
           }).concat(Array.from(awaiting, function (each) {
             return {
               section: each.section, index: each.index, text: String(each.text || ""),
-              images: each.from ? each.from.kept() : each.images, why: each.why,
+              images: each.from ? each.from.kept() : each.images, quote: each.quote, why: each.why,
             };
           })),
         };

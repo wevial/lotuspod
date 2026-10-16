@@ -1871,6 +1871,53 @@ test.describe('signed in', () => {
     expect(errors).toEqual([]);
   });
 
+  test('a passage comment still sending when its held section is updated opens again on its words over Reload', async ({ page }) => {
+    const errors = watchErrors(page);
+    const name = 'live-page-comments-sending-passage-reload';
+    publish(name, sectioned(name, pond()));
+    await stopClock(page);
+    await open(page, name);
+    const field = await selectPassage(page, 'The pump may crack', 8);
+    const SENT = 'Which pump is this?';
+    await field.fill(SENT);
+
+    // The words selected stay; a paragraph is added after them.
+    const KEPT = { Risks: { paragraphs: ['The pump may crack in the ice.', 'The fish need air under it.', RISKY] } };
+    publish(name, sectioned(name, pond(KEPT)));
+    await page.clock.runFor(CHECK);
+    const bar = page.locator('div.artifact-section-body[data-section="risks"] div.artifact-swap-held');
+    await expect(bar).toContainText('This section changed');
+
+    // The post is still sending when the section is updated, and when the
+    // reader reloads the page for a later revision.
+    await page.route((url) => url.pathname === '/api/comments', async (route) => {
+      if (route.request().method() !== 'POST') {
+        await route.fallback();
+      }
+    });
+    await page.locator('form.artifact-passage-form button[type="submit"]').click();
+    await bar.getByRole('button', { name: 'Update' }).click();
+    await expect(page.locator('div.artifact-section-body[data-section="risks"]')).toContainText(RISKY);
+
+    await fallBack(page, name);
+    const third = publish(name, sectioned(name, pond({ ...KEPT, Findings: { paragraphs: ['The pond thaws in March.'] } })));
+    await page.clock.runFor(CHECK);
+    const shown = banner(page);
+    await expect(shown.reload).toBeVisible();
+    const loaded = page.waitForEvent('load');
+    await shown.reload.click();
+    await loaded;
+
+    expect(await revisionOf(page)).toBe(third);
+    await expect(page.getByRole('textbox', { name: 'Comment on the selected words' })).toHaveValue(SENT);
+    await expect(page.locator('mark.artifact-passage--pending')).toHaveText('The pump');
+    const risks = page.locator('.artifact-comments-panel form.artifact-comment-form')
+      .filter({ has: page.getByRole('textbox', { name: 'Comment on Risks', includeHidden: true }) });
+    await expect(risks.locator('textarea')).toHaveValue('');
+    await expect(risks.locator('.artifact-comment-status')).toHaveText('');
+    expect(errors).toEqual([]);
+  });
+
   test('a held section renamed by a later republish keeps its draft whole in one form on Update', async ({ page }) => {
     const errors = watchErrors(page);
     const name = 'live-page-comments-held-renamed';
