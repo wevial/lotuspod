@@ -11,8 +11,14 @@
   // every row names a box the diagram draws, so nothing the author wrote
   // disappears. While a diagram is in its view (js/diagram-view.js), the
   // card opens inside the view's dialog and follows its box as the view
-  // moves; Esc there closes the card before the view.
-  function diagramCards(pres) {
+  // moves; Esc there closes the card before the view. A diagram a swap brings
+  // in (web/src/page-swap.ts) is bound once Mermaid has drawn it, as one at
+  // load is; one it takes out is let go, and its card closed.
+  //
+  // What it returns mounts one diagram's pre (mount) and lets go of each
+  // diagram whose pre is in the nodes a swap took out (drop); the card and
+  // the document's listeners are made once, on the first.
+  function diagramCards() {
     // Mermaid 11.4.1's ids: a box's group is flowchart-ID-N and an arrow's
     // path L_START_END_N, which the ELK layout prefixes with the svg's own id
     // and a dash. Every lookup stays inside its own svg.
@@ -85,11 +91,13 @@
     }
 
     function bind(pre, svg) {
-      var table = document.getElementById(pre.dataset.nodeTable);
-      if (!table) {
+      // The table render named: the one after the pre's Nodes heading. A
+      // section held back from a swap may keep a table of the same id.
+      var heading = pre.nextElementSibling;
+      var table = heading && heading.nextElementSibling;
+      if (!table || table.id !== pre.dataset.nodeTable) {
         return;
       }
-      var heading = table.previousElementSibling;
       var boxes = new Map();
       all("g.node", svg).forEach(function (group) {
         var match = BOX_ID.exec(group.id);
@@ -124,7 +132,7 @@
       var rows = every.filter(function (row) {
         return row !== head && row.parentNode !== table.tHead && starts(row, "TD");
       });
-      var diagram = { svg: svg, arrows: arrows, statuses: new Map(), overlays: [] };
+      var diagram = { pre: pre, svg: svg, arrows: arrows, statuses: new Map(), overlays: [] };
       diagrams.push(diagram);
       rows.forEach(function (row) {
         if (row.dataset.node && row.dataset.status) {
@@ -399,6 +407,10 @@
     }
 
     function open(box) {
+      // A box of a diagram a swap took out is let go.
+      if (diagrams.indexOf(box.diagram) < 0) {
+        return;
+      }
       if (!card) {
         build();
       }
@@ -486,16 +498,17 @@
     // window lets it be.
     window.addEventListener("scroll", place, { passive: true });
 
-    pres.forEach(function (pre) {
+    function mount(pre) {
       pre.addEventListener("scroll", place);
       var svg = pre.querySelector(":scope > svg");
       if (svg) {
         bind(pre, svg);
         return;
       }
-      // Mermaid draws on the window's load, after this script has run. It
-      // draws in a holder inside the pre, then sets the finished svg in the
-      // pre's place: an svg is drawn once it is the pre's own child.
+      // Mermaid draws on the window's load, after this script has run, or
+      // once a swap has brought the diagram in. It draws in a holder inside
+      // the pre, then sets the finished svg in the pre's place: an svg is
+      // drawn once it is the pre's own child.
       var watch = new MutationObserver(function () {
         var drawn = pre.querySelector(":scope > svg");
         if (drawn) {
@@ -504,10 +517,52 @@
         }
       });
       watch.observe(pre, { childList: true, subtree: true });
-    });
+    }
+
+    function drop(nodes) {
+      var gone = function (diagram) {
+        return nodes.some(function (node) {
+          return node === diagram.pre || node.contains(diagram.pre);
+        });
+      };
+      if (opened && gone(opened.diagram)) {
+        shut(false);
+      }
+      if (hovered && gone(hovered.diagram)) {
+        hovered = null;
+      }
+      if (focused && gone(focused.diagram)) {
+        focused = null;
+      }
+      diagrams = diagrams.filter(function (diagram) { return !gone(diagram); });
+      light();
+    }
+
+    return { mount: mount, drop: drop };
   }
 
-  var diagramPres = all("pre.mermaid[data-node-table]");
+  var CARDS_PRE = "pre.mermaid[data-node-table]";
+  var diagramPres = all(CARDS_PRE);
+  var cardsMount = null;
   if (diagramPres.length) {
-    diagramCards(diagramPres);
+    cardsMount = diagramCards();
+    diagramPres.forEach(cardsMount.mount);
   }
+  // A swap lets go of the diagrams it took out, then, as DIAGRAMS follows
+  // SWAPPED, mounts those it brought in, on a page with none at load too.
+  document.addEventListener(SWAPPED, function (event) {
+    if (cardsMount) {
+      var before = [];
+      event.detail.units.forEach(function (unit) {
+        before = before.concat(unit.before);
+      });
+      cardsMount.drop(before);
+    }
+  });
+  document.addEventListener(DIAGRAMS, function (event) {
+    var pres = event.detail.nodes.filter(function (pre) { return pre.matches(CARDS_PRE); });
+    if (pres.length) {
+      cardsMount = cardsMount || diagramCards();
+      pres.forEach(cardsMount.mount);
+    }
+  });

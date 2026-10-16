@@ -10,8 +10,14 @@
   // as MOVED, and a drag ends in no click, so it opens no node card. Fit (or
   // 0, or F) shows it whole again. The dialog's own Escape or its ✕ puts the
   // svg back in its pre, with every attribute the view changed restored, and
-  // the focus on its Expand button.
-  function diagramView(pres) {
+  // the focus on its Expand button. A diagram a swap brings in
+  // (web/src/page-swap.ts) gets its Expand button once Mermaid has drawn it,
+  // as one at load does, and a section whose diagram is open in the view is
+  // held back from a swap until the reader updates it.
+  //
+  // What it returns mounts one diagram's pre; the view itself is made once,
+  // on the first.
+  function diagramView() {
     // The room kept round the diagram at Fit, in px, and the zoom Fit stops at.
     var MARGIN = 24;
     var FIT_MOST = 2;
@@ -418,13 +424,20 @@
       pre.appendChild(expand);
     }
 
-    pres.forEach(function (pre) {
+    // The pre of a diagram open in the view stays in its section while its
+    // svg is in the dialog: that section is not swapped out from under it.
+    holdSwap(function (nodes) {
+      return shown !== null && nodes.some(function (node) { return node.contains(shown.pre); });
+    });
+
+    return function (pre) {
       if (pre.querySelector(":scope > svg")) {
         add(pre);
         return;
       }
-      // As in js/diagram-cards.js: Mermaid draws on the window's load, and a
-      // diagram is drawn once an svg is the pre's own child.
+      // As in js/diagram-cards.js: Mermaid draws on the window's load, or
+      // once a swap has brought the diagram in, and a diagram is drawn once
+      // an svg is the pre's own child.
       var watch = new MutationObserver(function () {
         if (pre.querySelector(":scope > svg")) {
           watch.disconnect();
@@ -432,10 +445,19 @@
         }
       });
       watch.observe(pre, { childList: true, subtree: true });
-    });
+    };
   }
 
   var viewPres = all("pre.mermaid");
+  var viewMount = null;
   if (viewPres.length) {
-    diagramView(viewPres);
+    viewMount = diagramView();
+    viewPres.forEach(viewMount);
   }
+  // The diagrams a swap brought in, on a page with none at load too: one
+  // whose diagram was only in a comment draws Mermaid, so its policy is the
+  // same.
+  document.addEventListener(DIAGRAMS, function (event) {
+    viewMount = viewMount || diagramView();
+    event.detail.nodes.forEach(viewMount);
+  });

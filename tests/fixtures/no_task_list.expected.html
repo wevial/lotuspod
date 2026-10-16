@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/mermaid@11.4.1/ https://cdn.jsdelivr.net/npm/@mermaid-js/layout-elk@0.2.3/ 'sha256-FiV6w9HY9NedXOhzMSvFacmnKZWpeITcrDi3g8htL9A='; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/mermaid@11.4.1/ https://cdn.jsdelivr.net/npm/@mermaid-js/layout-elk@0.2.3/ 'sha256-bvVM/DMvJMzeD5lZHYSxZBkGHcsrPdqenMNV30KDw80='; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Plain Page · Lotuspod</title>
   <meta name="generator" content="lotuspod theme lotus">
@@ -76,6 +76,7 @@
       theme: "base",
       themeVariables: {"background": "#16121f", "fontFamily": "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace", "lineColor": "#b79cf4", "primaryBorderColor": "#b79cf4", "primaryColor": "#1e1930", "primaryTextColor": "#d8cbfa", "secondaryBorderColor": "#b79cf4", "secondaryColor": "#272043", "secondaryTextColor": "#d8cbfa", "tertiaryBorderColor": "#b79cf4", "tertiaryColor": "#0d0a15", "tertiaryTextColor": "#d8cbfa", "textColor": "#d8cbfa"}
     });
+    document.addEventListener("lotuspod:diagrams", (event) => mermaid.run({ nodes: event.detail.nodes }));
   </script>
   <script src="lotuspod-page.js?v=THEME_HASH" defer></script>
 </body>

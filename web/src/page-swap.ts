@@ -7,9 +7,10 @@
 // scroll position and the folds. A section swapped in folds as the one it
 // replaces was; one added starts open unless the reader's kept folds name it.
 // Once applied, "lotuspod:swapped" (SWAPPED) tells the other page scripts what
-// changed, the parts brought in are tinted for a moment, and the banner's
-// status region says "Page updated", with how many sections changed (the
-// intro counting as one). The first section heading at or below the title
+// changed, "lotuspod:diagrams" (DIAGRAMS) has the template's start-up module
+// draw the diagrams brought in, the parts brought in are tinted for a moment,
+// and the banner's status region says "Page updated", with how many sections
+// changed (the intro counting as one). The first section heading at or below the title
 // bar stays where it was in the window, as do the next one kept when the swap
 // takes it away and the new one when it replaces it.
 //
@@ -17,8 +18,9 @@
 // swap's own: the focus is in it; js/comments.js's: an open passage
 // composer's words are in it, or it is a section taken away whose form holds
 // text not sent; js/decisions.js's: a decision form in it holds an answer not
-// saved) stays as it is, under a bar saying so with an Update button, which
-// applies the part's newest nodes as a swap would.
+// saved; js/diagram-view.js's: its diagram is open full-window) stays as it
+// is, under a bar saying so with an Update button, which applies the part's
+// newest nodes as a swap would.
 // The page still takes the new revision; a later swap replaces the kept nodes
 // when the part changed again, and takes the bar away when it is back to the
 // open page's digest.
@@ -30,14 +32,9 @@
 // shows and the outline changed on a page with decision forms (whose review
 // marks sit on its links) and no part swapped holds one,
 // when a changed part holds a decision form on a page that loaded with
-// neither a form nor a comment box, when a changed part, old or new, holds a
-// feature not yet mounted on new markup (SWAP_UNMOUNTED), or when one copy
-// takes comments and the other does not. A swap that throws partway has the
-// page reload.
-
-// What a swapped part may not hold yet, old or new: each later ticket mounts
-// one and takes it off.
-const SWAP_UNMOUNTED = "pre.mermaid";
+// neither a form nor a comment box, or when one copy takes comments and the
+// other does not (a page newly drawing diagrams, or no longer drawing any,
+// has a policy of its own). A swap that throws partway has the page reload.
 
 // Each test a changed or removed part, as the open page has it, is put to
 // before a swap: a part any test holds is kept as it is under a bar until the
@@ -57,6 +54,7 @@ function pageSwap(): void {
   // What the page script adds to the body outside any part, left where it is.
   const ADDED = "div.artifact-answered, .artifact-comments-changed";
   const DECISION = "form.artifact-decision";
+  const DIAGRAM = "pre.mermaid";
   // The bar over a part held back, which the intro leaves out.
   const HELD = "div.artifact-swap-held";
   const CHANGED_TEXT = "This section changed";
@@ -128,10 +126,6 @@ function pageSwap(): void {
     }
     return nodes;
   };
-
-  const unmounted = (nodes: Node[]): boolean =>
-    nodes.some((node) => node instanceof Element &&
-      (node.matches(SWAP_UNMOUNTED) || node.querySelector(SWAP_UNMOUNTED) !== null));
 
   const brought = (node: Node): Node => document.importNode(node, true);
 
@@ -269,7 +263,6 @@ function pageSwap(): void {
         return [old.heading, old.wrapper, part.heading, part.wrapper];
       }),
     ].filter((node): node is Node => node !== null);
-    if (unmounted(touched)) return null;
     // A page that loaded with neither a form nor a comment box has no
     // answering (js/decisions.js) to mount a form on.
     const decided = (nodes: Node[]): boolean => nodes.some((node) => node instanceof Element &&
@@ -467,8 +460,9 @@ function pageSwap(): void {
   }
 
   // What follows once parts are applied, by a swap or an Update: their
-  // links, a brief tint on what came in, the event naming them, and the
-  // status line saying how many sections changed.
+  // links, a brief tint on what came in, the event naming them, the
+  // diagrams they hold drawn, and the status line saying how many sections
+  // changed.
   function swapped(revision: string, units: SwappedUnit[]): void {
     const shown = units.filter((unit) => unit.kind === "intro" || unit.kind === "section")
       .flatMap((unit) => unit.after)
@@ -482,6 +476,9 @@ function pageSwap(): void {
       setTimeout(() => shown.forEach((node) => node.classList.remove(TINTED)), TINT);
     }
     document.dispatchEvent(new CustomEvent(SWAPPED, { detail: { revision, units } }));
+    const nodes = units.flatMap((unit) => unit.after).flatMap((node) => !(node instanceof Element) ? []
+      : node.matches(DIAGRAM) ? [node as HTMLElement] : all(DIAGRAM, node));
+    if (nodes.length) document.dispatchEvent(new CustomEvent(DIAGRAMS, { detail: { nodes } }));
     const count = units.filter((unit) => unit.kind === "intro" || unit.kind === "section").length;
     if (count) live.note(`Page updated \u00b7 ${count} ${count === 1 ? "section" : "sections"} changed`);
     else if (units.length) live.note("Page updated");
