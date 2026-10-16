@@ -6,7 +6,7 @@
   // and its threads open in the side panel, a popover or a bottom sheet
   // (sidePanel below), never in the box. A thread on a passage
   // (selectPassages below) is also drawn on its words.
-  function commentBoxes(boxes) {
+  function commentBoxes(boxes, parts) {
     var page = boxes[0].dataset.page;
     var tag = document.querySelector('meta[name="lotuspod:owner"]');
     var owner = tag ? tag.content : "";
@@ -1241,7 +1241,6 @@
       var column = document.querySelector(".artifact-body");
       var api = { wide: false, mode: null };
       var arranged = false;
-      var open = false;
       // The thread whose entry is open, if any.
       var current = null;
       // The resolved thread the reader opened to read, if any: a thread
@@ -1253,108 +1252,38 @@
       var groups = new Map();
       // Each decision's chip, by its form, once it has a thread.
       var decisionChips = new Map();
-      var dotsKey = null;
-      // Whether resolved threads are listed: hidden unless the reader shows
-      // them, for the page in this session.
-      var resolvedShown = false;
-      var resolvedKey = RESOLVED_SHOWN + location.pathname;
-
-      try {
-        open = localStorage.getItem(PANEL) === "open";
-      } catch (ignored) {
-        open = false;
-      }
-      try {
-        resolvedShown = sessionStorage.getItem(resolvedKey) === "1";
-      } catch (ignored) {
-        resolvedShown = false;
-      }
-
       function mute(node) {
         node.setAttribute("aria-hidden", "true");
         return node;
       }
 
-      var aside = element("aside", "artifact-comments-panel");
-      aside.setAttribute("aria-label", "Comments");
-      aside.hidden = true;
-
-      var rail = element("div", "artifact-comments-rail");
-      var opener = element("button", "artifact-comments-opener");
-      opener.type = "button";
-      opener.setAttribute("aria-label", "Comments");
-      opener.setAttribute("aria-controls", "artifact-comments-sheet");
-      opener.setAttribute("aria-describedby", "artifact-comments-count");
-      opener.appendChild(mute(element("span", "artifact-comments-icon")));
-      var badge = element("span", "artifact-comments-badge");
-      var dots = mute(element("ol", "artifact-comments-dots"));
-      rail.append(opener, badge, dots,
-        mute(element("span", "artifact-comments-rail-label", "Comments")));
-
-      var sheet = element("div", "artifact-comments-sheet");
-      sheet.id = "artifact-comments-sheet";
-      var head = element("header", "artifact-comments-head");
-      var count = element("p", "artifact-comments-count");
-      count.id = "artifact-comments-count";
-      var fold = element("button", "artifact-comments-fold");
-      fold.type = "button";
-      fold.setAttribute("aria-label", "Fold comments");
-      fold.appendChild(mute(element("span", "", "»")));
-      // Shows or hides the resolved threads; not drawn while there are none.
-      var showResolved = element("button", "artifact-comments-show-resolved");
-      showResolved.type = "button";
-      showResolved.hidden = true;
-      var tally = element("div", "artifact-comments-tally");
-      tally.append(count, showResolved);
-      head.append(element("h2", "artifact-comments-title", "Comments"), tally, fold);
-      var list = element("div", "artifact-comments-groups");
-      // The ways to start a thread: a button opening the form for the whole
-      // page, when the page has a box for it, and one opening a list of the
-      // page's sections, under a word saying when there are no threads.
-      var start = element("div", "artifact-comments-start");
-      var none = element("p", "artifact-comments-none", "No comments yet");
-      // The first box for the whole page: a page may repeat a section id.
-      function first(section) {
-        return boxes.filter(function (box) { return box.dataset.section === section; })[0];
-      }
-      var whole = first(WHOLE_PAGE) || first("page") || null;
-      var onPage = null;
-      if (whole) {
-        onPage = element("button", "artifact-comments-on-page", "Comment on this page");
-        onPage.type = "button";
-        onPage.disabled = ARCHIVED;
-        onPage.addEventListener("click", function () {
-          unpick(false);
-          if (groups.has(whole)) {
-            compose(groups.get(whole), true);
+      var shell = parts.shell({
+        opened: function () {
+          if (current) {
+            draw(current);
           }
-        });
+          showUnread();
+        },
+        resolvedChanged: function () {
+          if (!shell.resolvedShown() && current && current === toRead && resolved(current)) {
+            expand(null);
+          }
+          api.refresh();
+        },
+        compose: function (box) {
+          if (groups.has(box)) {
+            compose(groups.get(box), true);
+          }
+        },
+      });
+      var list = shell.list;
+
+      function shellSections() {
+        shell.sections(boxes.filter(function (box) { return groups.has(box); }).map(function (box) {
+          var made = groups.get(box);
+          return { box: box, title: made.heading.textContent, id: made.optionId, section: box.dataset.section };
+        }));
       }
-      var pick = element("button", "artifact-comments-pick", "Comment on a section");
-      pick.type = "button";
-      var choices = element("ul", "artifact-comments-choices");
-      choices.id = "artifact-comments-choices";
-      choices.setAttribute("role", "listbox");
-      choices.setAttribute("aria-label", "Sections");
-      choices.tabIndex = -1;
-      choices.hidden = true;
-      pick.setAttribute("aria-haspopup", "listbox");
-      pick.setAttribute("aria-expanded", "false");
-      pick.setAttribute("aria-controls", choices.id);
-      start.append(none);
-      if (onPage) {
-        start.appendChild(onPage);
-      }
-      start.append(pick, choices);
-      // An archived page takes no new thread: the panel says so above its
-      // threads, and its controls for one are disabled.
-      if (ARCHIVED) {
-        pick.disabled = true;
-        start.insertBefore(element("p", "artifact-comments-closed", CLOSED), none);
-      }
-      sheet.append(head, start, list);
-      aside.append(rail, sheet);
-      document.body.appendChild(aside);
 
       // The text of a box's section heading, without the mark a folded
       // heading ends in or the tag saying it changed.
@@ -1380,7 +1309,7 @@
         var heading = element("h3", "artifact-comments-group-title", name);
         node.append(heading, entries);
         list.appendChild(node);
-        var made = { node: node, heading: heading, entries: entries, box: box, toggle: null, holder: null };
+        var made = { optionId: index, node: node, heading: heading, entries: entries, box: box, toggle: null, holder: null };
         if (box) {
           var toggle = element("button", "artifact-comments-new",
             box.dataset.section === WHOLE_PAGE ? "Comment on this page" : "Comment on this section");
@@ -1428,14 +1357,7 @@
           list.insertBefore(made.node, (next || strays).node);
         }
         groups.set(box, made);
-        var option = element("li", "artifact-comments-choice", name);
-        option.id = "artifact-comments-choice-" + serial;
-        option.setAttribute("role", "option");
-        option.setAttribute("aria-selected", "false");
-        option.addEventListener("click", function () {
-          choose(boxes[Array.prototype.indexOf.call(choices.children, option)]);
-        });
-        choices.insertBefore(option, choices.children[at] || null);
+        shellSections();
         serial += 1;
         chipOn(box);
         if (arranged) {
@@ -1447,96 +1369,10 @@
       strays = group(CHANGED_GROUP, null, -1);
       strays.node.hidden = true;
 
-      // The option lit in the list of sections, or -1.
-      var active = -1;
-
-      function light(index) {
-        active = index;
-        all(":scope > li", choices).forEach(function (option, at) {
-          option.setAttribute("aria-selected", at === index ? "true" : "false");
-        });
-        if (index < 0) {
-          choices.removeAttribute("aria-activedescendant");
-          return;
-        }
-        var option = choices.children[index];
-        choices.setAttribute("aria-activedescendant", option.id);
-        if (option.offsetTop < choices.scrollTop) {
-          choices.scrollTop = option.offsetTop;
-        } else if (option.offsetTop + option.offsetHeight > choices.scrollTop + choices.clientHeight) {
-          choices.scrollTop = option.offsetTop + option.offsetHeight - choices.clientHeight;
-        }
-      }
-
-      // Close the list of sections; with focus, the focus goes back to its
-      // button.
-      function unpick(focus) {
-        if (choices.hidden) {
-          return;
-        }
-        choices.hidden = true;
-        pick.setAttribute("aria-expanded", "false");
-        light(-1);
-        if (focus) {
-          pick.focus({ preventScroll: true });
-        }
-      }
-
-      // A section chosen: its group shows with its form open.
-      function choose(box) {
-        unpick(false);
-        compose(groups.get(box), true);
-      }
-
-      pick.addEventListener("click", function () {
-        if (!choices.hidden) {
-          unpick(true);
-          return;
-        }
-        choices.hidden = false;
-        pick.setAttribute("aria-expanded", "true");
-        light(-1);
-        choices.focus({ preventScroll: true });
-      });
-      choices.addEventListener("keydown", function (event) {
-        var last = choices.children.length - 1;
-        if (event.key === "ArrowDown") {
-          light(Math.min(active + 1, last));
-        } else if (event.key === "ArrowUp") {
-          light(active < 0 ? last : Math.max(active - 1, 0));
-        } else if (event.key === "Home") {
-          light(0);
-        } else if (event.key === "End") {
-          light(last);
-        } else if (event.key === "Enter" || event.key === " ") {
-          if (active >= 0) {
-            choose(boxes[active]);
-          }
-        } else if (event.key === "Escape") {
-          // The panel would fold on it too.
-          event.stopPropagation();
-          unpick(true);
-        } else {
-          if (event.key === "Tab") {
-            unpick(false);
-          }
-          return;
-        }
-        event.preventDefault();
-      });
-      // A click outside the list closes it; the focus goes back to its
-      // button unless the click gave it to something else.
-      document.addEventListener("click", function (event) {
-        if (choices.hidden || start.contains(event.target)) {
-          return;
-        }
-        unpick(document.activeElement === document.body || start.contains(document.activeElement));
-      }, true);
-
       // Whether a group holds a thread that is listed: an open one, or a
       // resolved one while they are shown.
       function showing(made) {
-        return Boolean(resolvedShown ? made.entries.firstChild :
+        return Boolean(shell.resolvedShown() ? made.entries.firstChild :
           made.entries.querySelector(":scope > .artifact-comments-entry:not(.artifact-comments-entry--resolved)"));
       }
 
@@ -1552,7 +1388,7 @@
       // order, keeping the reader's place: the group at the top of the list
       // stays where it is.
       function tidy() {
-        none.hidden = shown.size > 0;
+        shell.empty(shown.size === 0);
         strays.node.hidden = !showing(strays);
         var changes = [];
         groups.forEach(function (made) {
@@ -1608,7 +1444,7 @@
       // that starts it again.
       function uncompose(made) {
         compose(made, false);
-        (made.box === whole ? onPage : pick).focus({ preventScroll: true });
+        shell.focus(made.box);
       }
 
       // Scroll the panel's list, never the page, until node is in view.
@@ -1619,84 +1455,6 @@
           list.scrollTop += inner.top - outer.top - 8;
         }
       }
-
-      function setOpen(show, remember) {
-        var was = open;
-        open = show;
-        // The thread open in it goes out of view or comes back into it,
-        // drawn once the caller has chosen which thread that is, so one
-        // only passing through is never taken as seen.
-        if (show !== was) {
-          queueMicrotask(function () {
-            if (current) {
-              draw(current);
-            }
-            showUnread();
-          });
-        }
-        aside.classList.toggle("artifact-comments-panel--open", show);
-        rail.hidden = show;
-        sheet.hidden = !show;
-        opener.setAttribute("aria-expanded", show ? "true" : "false");
-        if (remember) {
-          try {
-            localStorage.setItem(PANEL, show ? "open" : "folded");
-          } catch (ignored) {
-            // Storage refused: the panel still opens, only unremembered.
-          }
-        }
-      }
-      setOpen(open, false);
-
-      // Show or hide the resolved threads, and the groups holding only them.
-      function setResolvedShown(show, remember) {
-        resolvedShown = show;
-        aside.classList.toggle("artifact-comments-panel--resolved-shown", show);
-        showResolved.setAttribute("aria-pressed", show ? "true" : "false");
-        if (remember) {
-          try {
-            if (show) {
-              sessionStorage.setItem(resolvedKey, "1");
-            } else {
-              sessionStorage.removeItem(resolvedKey);
-            }
-          } catch (ignored) {
-            // Storage refused: the threads still show, only unremembered.
-          }
-        }
-      }
-      setResolvedShown(resolvedShown, false);
-
-      // The control's words, for the page's n resolved threads.
-      function labelResolved(n) {
-        showResolved.hidden = n === 0;
-        showResolved.textContent = resolvedShown ? "Hide resolved" : "Show resolved (" + n + ")";
-      }
-
-      showResolved.addEventListener("click", function () {
-        setResolvedShown(!resolvedShown, true);
-        // A resolved thread open to read is hidden with the rest: it closes.
-        if (!resolvedShown && current && current === toRead && resolved(current)) {
-          expand(null);
-        }
-        api.refresh();
-      });
-
-      rail.addEventListener("click", function () {
-        setOpen(true, true);
-        fold.focus({ preventScroll: true });
-      });
-      fold.addEventListener("click", function () {
-        setOpen(false, true);
-        opener.focus({ preventScroll: true });
-      });
-      aside.addEventListener("keydown", function (event) {
-        if (event.key === "Escape" && open) {
-          event.preventDefault();
-          setOpen(false, true);
-          opener.focus({ preventScroll: true });
-        }
-      });
 
       // The newest reader comment in a thread.
       function asked(thread) {
@@ -1802,10 +1560,9 @@
         var status = element("p", "artifact-comments-entry-status");
         status.setAttribute("role", "status");
         item.append(top, folded, body, status);
-        var dot = element("li", "artifact-comments-dot");
         thread.entry = {
           item: item, head: top, state: state, note: note, folded: folded, read: read, body: body,
-          resolve: resolve, reopen: reopen, status: status, dot: dot, key: "", marks: marks, words: words,
+          resolve: resolve, reopen: reopen, status: status, key: "", marks: marks, words: words,
           leadKey: null,
         };
         // Pointing at a passage's entry lights its words.
@@ -1851,7 +1608,7 @@
           current === thread || over.holds(thread);
         // Open in a folded panel, it is not in view: folding closes it, and
         // unfolding opens it again.
-        var viewed = opened && (over.holds(thread) || (api.wide && open));
+        var viewed = opened && (over.holds(thread) || (api.wide && shell.isOpen()));
         if (!moving && viewed !== thread.lit) {
           thread.lit = viewed;
           looked(thread, viewed);
@@ -2003,9 +1760,12 @@
             // A popover or the sheet shows no head: Resolve takes the focus.
             // A thread resolved in the panel while resolved ones are hidden
             // leaves the list: the control showing them takes it.
-            var gone = resolve && api.wide && !resolvedShown;
-            (gone ? showResolved : resolve ? made.reopen : api.wide ? made.head : made.resolve)
-              .focus({ preventScroll: true });
+            var gone = resolve && api.wide && !shell.resolvedShown();
+            if (gone) {
+              shell.focus("resolved");
+            } else {
+              (resolve ? made.reopen : api.wide ? made.head : made.resolve).focus({ preventScroll: true });
+            }
           }
         } catch (ignored) {
           made.status.textContent = "Not saved: the site did not answer. Try again.";
@@ -2176,8 +1936,8 @@
           }
         } else if (resolved(thread)) {
           // Listed with the resolved threads, its Reopen at hand.
-          setOpen(true, true);
-          setResolvedShown(true, true);
+          shell.setOpen(true, true);
+          shell.setResolvedShown(true, true);
           if (read) {
             toRead = thread;
             expand(thread);
@@ -2241,7 +2001,7 @@
 
       // A highlight: the panel opens at its thread.
       api.open = function (thread) {
-        setOpen(true, true);
+        shell.setOpen(true, true);
         expand(thread);
         thread.entry.head.focus({ preventScroll: true });
       };
@@ -2249,7 +2009,7 @@
       // A passage's composer: in its section's group, above the threads, with
       // the panel open.
       api.compose = function (box, holder) {
-        setOpen(true, true);
+        shell.setOpen(true, true);
         var made = groups.get(box);
         made.node.insertBefore(holder, made.entries);
         tidy();
@@ -2275,7 +2035,7 @@
       // A chip: the panel opens at its section's newest open thread, or at
       // its form for a new one, which an archived page has none of.
       function show(box) {
-        setOpen(true, true);
+        shell.setOpen(true, true);
         var newest = latest(unresolvedOf(box));
         if (newest) {
           expand(newest);
@@ -2413,26 +2173,15 @@
       api.refresh = function () {
         var threads = ordered();
         var unresolved = threads.filter(function (thread) { return !resolved(thread); });
-        badge.textContent = String(unresolved.length);
-        badge.hidden = unresolved.length === 0;
-        count.textContent = unresolved.length + " open · " +
-          (threads.length - unresolved.length) + " resolved";
-        labelResolved(threads.length - unresolved.length);
+        shell.refresh({
+          open: unresolved.map(function (thread) { return { id: thread.root.id, standing: standing(thread) }; }),
+          resolved: threads.length - unresolved.length,
+          none: shown.size === 0,
+        });
         threads.forEach(draw);
         groups.forEach(sort);
         sort(strays);
         tidy();
-        var key = unresolved.map(function (thread) { return thread.root.id; }).join(" ");
-        if (key !== dotsKey) {
-          dotsKey = key;
-          dots.replaceChildren.apply(dots, unresolved.map(function (thread) { return thread.entry.dot; }));
-        }
-        unresolved.forEach(function (thread) {
-          var name = "artifact-comments-dot artifact-comments-dot--" + standing(thread);
-          if (thread.entry.dot.className !== name) {
-            thread.entry.dot.className = name;
-          }
-        });
         boxes.forEach(chip);
         decisions.forEach(decisionChip);
         over.sync();
@@ -2474,7 +2223,7 @@
       // placed by its own (passages.place).
       function opened() {
         var none = { view: null, opener: null, anchor: null, writing: null };
-        if (!open) {
+        if (!shell.isOpen()) {
           return none;
         }
         var writing = null;
@@ -2522,7 +2271,7 @@
         var writing = taken.writing;
         api.mode = mode;
         api.wide = mode === "panel";
-        aside.hidden = !api.wide;
+        shell.hidden(!api.wide);
         over.mode(mode);
         var old = document.querySelector(".artifact-comments-changed");
         if (old) {
@@ -2533,10 +2282,10 @@
         if (!api.wide) {
           over.restore(taken);
         } else if (view && view.thread) {
-          setOpen(true, false);
+          shell.setOpen(true, false);
           expand(view.thread);
         } else if (writing) {
-          setOpen(true, false);
+          shell.setOpen(true, false);
         }
         if (writing) {
           compose(writing, true);
@@ -2576,7 +2325,7 @@
         }
         var writing = view.box && kept.writing && !ARCHIVED ? groups.get(view.box) : null;
         if (api.wide) {
-          setOpen(true, false);
+          shell.setOpen(true, false);
           if (view.thread) {
             expand(view.thread);
           }
@@ -2631,9 +2380,9 @@
         made.box = box;
         var name = title(box);
         made.heading.textContent = name;
-        choices.children[boxes.indexOf(box)].textContent = name;
+        shellSections();
         chipOn(box);
-        unlit();
+        shell.unlit();
       };
 
       // The box that was boxes[at] is taken away, with its group and option.
@@ -2641,8 +2390,8 @@
         var made = groups.get(old);
         groups.delete(old);
         made.node.remove();
-        choices.children[at].remove();
-        unlit();
+        shellSections();
+        shell.unlit();
       };
 
       // A decision form a swap took away: its chip went with its section.
@@ -2653,7 +2402,7 @@
       // The box at boxes[at] is added.
       api.mount = function (box, at) {
         mount(box, at);
-        unlit();
+        shell.unlit();
       };
 
       // Once the boxes have changed: the groups in page order, and the box
@@ -2662,15 +2411,8 @@
         var made = boxes.map(function (box) { return [box, groups.get(box)]; });
         groups.clear();
         made.forEach(function (pair) { groups.set(pair[0], pair[1]); });
-        whole = first(WHOLE_PAGE) || first("page") || null;
+        shellSections();
       };
-
-      // The list of sections lights none while its options move.
-      function unlit() {
-        if (!choices.hidden) {
-          light(-1);
-        }
-      }
 
       return api;
     }
@@ -3651,6 +3393,8 @@
   }
 
   var boxes = all("details.artifact-comment");
-  if (boxes.length) {
-    commentBoxes(pageBox(boxes));
-  }
+  var commenting = boxes.length ? {
+    start: function (parts) {
+      commentBoxes(pageBox(boxes), parts);
+    },
+  } : null;

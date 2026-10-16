@@ -370,6 +370,9 @@ THEME_SOURCES = {
         "js/page-swap.js",
         "js/comment-markdown.js",
         "js/comments.js",
+        # The islands start comments before later sources look for the panel
+        # and register their listeners. All bridge names are defined here.
+        "js/islands.js",
         "js/panel-resize.js",
         "js/tables.js",
         "js/table-expand.js",
@@ -382,9 +385,6 @@ THEME_SOURCES = {
         # Built from web/src/calltree.ts: it folds calltree blocks.
         "js/calltree.js",
         "js/archive.js",
-        # The islands, bundled from web/src/islands/main.tsx: last, so they run
-        # once every source above has, through the closure's names.
-        "js/islands.js",
     ),
     INDEX_SCRIPT: (
         "js/pod-tabs.js",
