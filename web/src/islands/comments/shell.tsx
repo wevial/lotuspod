@@ -6,6 +6,7 @@ import type { Section, Shell, ShellHooks, Tally } from "./parts";
 // virtual tree: legacy groups and the resize handle are never Preact children.
 export function shell(page: Page, hooks: ShellHooks): Shell {
   const root = document.createElement("div");
+  const panel = createRef<HTMLElement>();
   const list = createRef<HTMLDivElement>();
   const fold = createRef<HTMLButtonElement>();
   const opener = createRef<HTMLButtonElement>();
@@ -92,7 +93,7 @@ export function shell(page: Page, hooks: ShellHooks): Shell {
   // Synchronous renders let callers inspect layout and move groups immediately.
   function draw(): void {
     render(createPortal(
-      <aside class={`artifact-comments-panel${open ? " artifact-comments-panel--open" : ""}${resolvedShown ? " artifact-comments-panel--resolved-shown" : ""}`}
+      <aside ref={panel} class="artifact-comments-panel"
         aria-label="Comments" hidden={hidden} onKeyDown={event => {
           if (event.key === "Escape" && open) {
             event.preventDefault(); setOpen(false, true); focus("opener");
@@ -143,6 +144,9 @@ export function shell(page: Page, hooks: ShellHooks): Shell {
           <div ref={list} class="artifact-comments-groups" />
         </div>
       </aside>, document.body), root);
+    // Other scripts own modifiers such as --resizing. Update only ours.
+    panel.current!.classList.toggle("artifact-comments-panel--open", open);
+    panel.current!.classList.toggle("artifact-comments-panel--resolved-shown", resolvedShown);
   }
   draw();
   document.addEventListener("click", event => {
