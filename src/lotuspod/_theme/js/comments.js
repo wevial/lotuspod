@@ -2945,7 +2945,8 @@
     live.keep({
       unsent: function () {
         var passage = passages.writing();
-        return Boolean(passage && (passage.text.trim() || passage.held)) || composers().some(holding);
+        return Boolean(passage && (passage.text.trim() || passage.held)) || composers().some(holding) ||
+          awaiting.size > 0;
       },
       save: function () {
         return {
@@ -2956,7 +2957,12 @@
               thread: each.thread, section: each.section, index: each.index, text: each.field.value,
               images: each.images.kept(),
             };
-          }),
+          }).concat(Array.from(awaiting, function (each) {
+            return {
+              section: each.section, index: each.index, text: String(each.text || ""),
+              images: each.from ? each.from.kept() : each.images, why: each.why,
+            };
+          })),
         };
       },
     });
@@ -2992,6 +2998,11 @@
       }
     }
 
+    // What rehome() keeps for a form until the post it is sending is saved:
+    // held only here meanwhile, so kept over a reload too (why: what its
+    // form is to say). Each leaves once it joins a form.
+    var awaiting = new Set();
+
     // Text whose place is gone goes to the form for a new thread on its
     // section, else on the box at its index, else on the page's first,
     // saying why; that box. A form sending a post empties once it is saved,
@@ -3003,7 +3014,10 @@
       var form = forms.get(box);
       var saving = sending.get(form);
       if (saving) {
+        each.why = why;
+        awaiting.add(each);
         saving.then(function () {
+          awaiting.delete(each);
           var now = boxWith(form);
           if (!now) {
             now = rehome(each, why);
@@ -3044,7 +3058,10 @@
         }
         var thread = each.thread ? shown.get(each.thread) : null;
         var box = !each.thread && typeof each.section === "string" ? sections.get(each.section) : null;
-        if (thread) {
+        if (each.why) {
+          // Waiting for a post when the page reloaded: still to say why.
+          moved = rehome(each, String(each.why));
+        } else if (thread) {
           thread.field.value = String(each.text || "");
           told(thread.field.form, attached.get(thread.field.form).restore(each.images));
           // On an archived page the text is kept, folded away, for a reload
