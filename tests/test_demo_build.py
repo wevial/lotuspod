@@ -228,7 +228,7 @@ class BuiltSiteTests(unittest.TestCase):
         page = self.pages["try-it.html"]
         self.assertEqual(page.decision_forms, 2)
         self.assertGreaterEqual(len(page.h2_ids), 2)
-        self.assertEqual(page.comment_sections, page.h2_ids)
+        self.assertEqual(page.comment_sections, ["", *page.h2_ids])
 
     def test_the_headers_file_sets_three_headers_for_every_path(self):
         lines = (self.out / "_headers").read_text(encoding="utf-8").splitlines()

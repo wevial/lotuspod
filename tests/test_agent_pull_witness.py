@@ -353,7 +353,7 @@ class AgentPullWitness(Site):
     def test_the_owner_reads_claims_and_replies_and_the_reader_sees_the_reply(self):
         self.assertIn("hermes", "".join(self.page.owner_text))
         self.assertEqual(self.page.sections,
-                         ["findings", "risks", "decisions-for-the-maintainer"])
+                         ["", "findings", "risks", "decisions-for-the-maintainer"])
         self.assertEqual(len(self.page.forms), 1)
         self.assertEqual(self.pull(self.hermes, "hermes"), [])
 

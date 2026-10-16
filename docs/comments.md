@@ -421,8 +421,8 @@ section of a page with a comment box, and `render --comments` does the same
 (off by default for `render`; `publish --no-comments` turns it off). A section
 runs from its heading to the next h2 or the end of the body; a body with fewer
 than two h2 sections gets one box, for the whole page, at its end. A page
-with section boxes takes threads on the whole page too: the page script draws
-a box for it under the page's title (below). The pass
+with section boxes takes threads on the whole page too: the page is served
+with a box for it after its date line (below). The pass
 runs on the body's HTML after the outline pass, so markdown and HTML pages
 alike get it, and each box names its heading's id: `--comments` with
 `--no-outline` is refused (exit 1, nothing written). A heading inside a
@@ -451,10 +451,9 @@ the text: its summary is a chip (below) that opens its threads in the
 comments panel, a popover or a bottom sheet, as the window allows; a page
 read without the script keeps the plain box.
 
-A page with section boxes also has a box for the whole page, which the page
-script draws in the page's header, right after its date line: a copy of the
-first box with `data-section=""`, its field named "Comment on this page", and
-first among the page's boxes. Its chip reads "No comments · Comment on this
+A page with section boxes is also served with a box for the whole page in
+its header, right after its date line: the same markup as a section box with
+`data-section=""`, its field named "Comment on this page", and first among the page's boxes. Its chip reads "No comments · Comment on this
 page" while it has no thread. Its threads are stored with `section` `""`
 (`lotuspod.comments.WHOLE_PAGE`), which no heading's id can be, and
 `sectionTitle` `""`, and carry text and images only: never a quote or a

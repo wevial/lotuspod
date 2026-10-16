@@ -25,7 +25,8 @@
 {{#kicker}}      <p class="artifact-kicker">{{kicker}}</p>
 {{/kicker}}      <h1 class="artifact-title">{{title}}</h1>
       <p class="artifact-meta">Created <time datetime="{{date}}">{{date}}</time>{{#updated_day}} · Updated <time datetime="{{updated}}">{{updated_day}}</time>{{/updated_day}}{{label_tags}}</p>
-{{#owner}}      <p class="artifact-owner">Published by {{owner}}</p>
+{{#whole_page_box}}{{whole_page_box}}
+{{/whole_page_box}}{{#owner}}      <p class="artifact-owner">Published by {{owner}}</p>
 {{/owner}}      {{summary_block}}
     </header>
 
