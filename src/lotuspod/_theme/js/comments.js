@@ -3376,8 +3376,11 @@
     // together take those added in order), else the next (the index a
     // reload finds it at). And for each section taken away and held back,
     // the boxes added since and not yet the place of one before it.
+    // And for each such section, how many taken away at once just before
+    // it, whose added boxes are still among its own.
     var places = new Map();
     var since = new Map();
+    var ahead = new Map();
 
     // A section taken away takes its box and form with it; its threads say
     // which section they were on. What its form holds not sent, to go where
@@ -3385,14 +3388,17 @@
     function dropBox(old) {
       var at = boxes.indexOf(old);
       var added = since.get(old);
+      var skip = ahead.get(old) || 0;
       since.delete(old);
+      ahead.delete(old);
       // The sections added just before it, among the others held back and
       // taken away there, in order: as many of those before it, so many of
       // the added are theirs, and the next is its place.
       var place = at;
+      var taken = null;
       if (added) {
         var run = [];
-        var before = 0;
+        var before = skip;
         for (var i = at - 1; i >= 0 && (added.has(boxes[i]) || since.has(boxes[i])); i -= 1) {
           if (added.has(boxes[i])) {
             run.unshift(boxes[i]);
@@ -3401,7 +3407,7 @@
           }
         }
         if (before < run.length) {
-          var taken = run[before];
+          taken = run[before];
           place = boxes.indexOf(taken);
           // Not the place of any held back after it.
           since.forEach(function (others, box) {
@@ -3409,6 +3415,12 @@
               others.delete(taken);
             }
           });
+        }
+        // One taken away with no box of its own yet still has one among
+        // the added of the next held back with it: that one skips it.
+        var next = boxes[at + 1];
+        if (since.has(next)) {
+          ahead.set(next, (ahead.get(next) || 0) + skip + (taken ? 0 : 1));
         }
       }
       places.set(old, place);
@@ -3470,6 +3482,7 @@
         }
         if (!removed) {
           since.delete(box);
+          ahead.delete(box);
         } else if (!since.has(box)) {
           since.set(box, new Set());
         }

@@ -1256,6 +1256,40 @@ test.describe('signed in', () => {
     });
   }
 
+  test('a comment on the later of two sections renamed together keeps to its own section when the earlier goes at once', async ({ page }) => {
+    const errors = watchErrors(page);
+    const name = 'live-page-renamed-two-later-only';
+    publish(name, source('Live page renamed two', 'first'));
+    await stopClock(page);
+    await open(page, name);
+    const panel = page.locator('.artifact-comments-panel');
+    const draft = 'Who orders the heater?';
+    await page.locator('details.artifact-comment[data-section="next-steps"] summary').click();
+    const field = panel.getByRole('textbox', { name: 'Comment on Next steps' });
+    await expect(field).toBeFocused();
+    await field.fill(draft);
+
+    const loads = watchLoads(page);
+    const second = publish(name, source('Live page renamed two', 'first')
+      .replace(/Risks/g, 'Hazards').replace(/Next steps/g, 'Actions'));
+    await page.clock.runFor(CHECK);
+    await expect.poll(() => revisionOf(page)).toBe(second);
+    await expect(page.locator('div.artifact-section-body[data-section="risks"]')).toHaveCount(0);
+    const bar = page.locator('div.artifact-section-body[data-section="next-steps"] div.artifact-swap-held');
+    await expect(bar).toContainText('This section was removed');
+
+    await bar.getByRole('button', { name: 'Update' }).click();
+    await expect(bar).toHaveCount(0);
+    const form = (renamed: string) => panel.locator('form.artifact-comment-form')
+      .filter({ has: page.getByRole('textbox', { name: `Comment on ${renamed}`, includeHidden: true }) });
+    await expect(form('Actions').locator('textarea')).toHaveValue(draft);
+    await expect(form('Actions').locator('.artifact-comment-status')).toHaveText(
+      'Where you were writing has changed since. Your text is kept here.');
+    await expect(form('Hazards').locator('textarea')).toHaveValue('');
+    expect(loads.count).toBe(0);
+    expect(errors).toEqual([]);
+  });
+
   test('a hidden page with nothing unsent has reloaded itself before it is seen again', async ({ page }) => {
     const errors = watchErrors(page);
     const name = 'live-page-hidden';
