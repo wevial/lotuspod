@@ -145,8 +145,12 @@ async function watchReads(page: Page) {
   };
 }
 
-// The page's clock, paused at START: it moves only when moved.
+// The page's clock, paused at START: it moves only when moved. Serve's
+// stream (/api/events) is refused, so the threads are read only on the
+// schedule these checks count.
 async function stopClock(page: Page) {
+  await page.route((url) => url.pathname === '/api/events', (route) =>
+    route.fulfill({ status: 503, contentType: 'application/json', body: '{"error": "too_many_streams"}' }));
   await page.clock.install({ time: START });
   await page.clock.pauseAt(START + 1000);
 }

@@ -15,7 +15,25 @@ interface PodOpenDetail {
   href: string;
 }
 
+// The listing's rows were swapped for the index's as served again
+// (js/index-refresh.js): the index's own script and the tabs read them again.
+type RowsEvent = CustomEvent<null>;
+
 interface DocumentEventMap {
   "lotuspod:find": CustomEvent<PodFindDetail>;
   "lotuspod:open": CustomEvent<PodOpenDetail>;
+  "lotuspod:rows": RowsEvent;
+}
+
+// serve's change stream (/api/events), sent on the document by
+// js/live-events.js: what changed (comment, answer, publish or index, or
+// resync once a dropped stream opens again) and the page it names, null for
+// index and resync.
+interface LotuspodChangeDetail {
+  what: string;
+  page: string | null;
+}
+
+interface DocumentEventMap {
+  "lotuspod:change": CustomEvent<LotuspodChangeDetail>;
 }

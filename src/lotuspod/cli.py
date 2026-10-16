@@ -362,6 +362,9 @@ THEME_SOURCES = {
         "js/decisions.js",
         "js/narrow.js",
         "js/attachments.js",
+        # Built from web/src/live-events.ts: serve's change stream, which the
+        # sources after it listen to.
+        "js/live-events.js",
         "js/live-page.js",
         # Built from web/src/page-swap.ts: it registers its swap with live.
         "js/page-swap.js",
@@ -386,6 +389,10 @@ THEME_SOURCES = {
     INDEX_SCRIPT: (
         "js/pod-tabs.js",
         "js/pod-finder.js",
+        # Built from web/src/index-refresh.ts: it swaps in the listing's rows
+        # as the index is served again.
+        "js/index-refresh.js",
+        "js/live-events.js",
     ),
     OLD_VERSION_SCRIPT: (
         "js/shared.js",

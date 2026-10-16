@@ -268,9 +268,24 @@ class DeclaredOrderTests(ThemeCopyTestCase):
         their strip, so js/pod-finder.js is joined just after js/pod-tabs.js
         in the index script, and its styles just after css/pod-tabs.css."""
         styles = cli.THEME_SOURCES[STYLESHEET]
-        self.assertEqual(cli.THEME_SOURCES[cli.INDEX_SCRIPT],
+        self.assertEqual(cli.THEME_SOURCES[cli.INDEX_SCRIPT][:2],
                          ("js/pod-tabs.js", "js/pod-finder.js"))
         self.assertEqual(styles.index("css/pod-finder.css"), styles.index("css/pod-tabs.css") + 1)
+        problems = source_problems(cli.THEME_DIR, cli.THEME_SOURCES)
+        self.assertEqual(problems, [], "\n".join(problems))
+
+    def test_the_live_events_source_joins_the_page_and_index_scripts(self):
+        """LOTUS-177: serve's change stream, built from
+        web/src/live-events.ts, is joined just before js/live-page.js, whose
+        check its ticks run, and last in the index script, after
+        js/pod-finder.js and js/index-refresh.js; the old-version script
+        opens no stream."""
+        page = cli.THEME_SOURCES[cli.PAGE_SCRIPT]
+        self.assertEqual(page.index("js/live-events.js") + 1, page.index("js/live-page.js"))
+        self.assertEqual(cli.THEME_SOURCES[cli.INDEX_SCRIPT],
+                         ("js/pod-tabs.js", "js/pod-finder.js", "js/index-refresh.js",
+                          "js/live-events.js"))
+        self.assertNotIn("js/live-events.js", cli.THEME_SOURCES[cli.OLD_VERSION_SCRIPT])
         problems = source_problems(cli.THEME_DIR, cli.THEME_SOURCES)
         self.assertEqual(problems, [], "\n".join(problems))
 
