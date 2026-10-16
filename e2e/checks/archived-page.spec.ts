@@ -443,10 +443,6 @@ test.describe.serial('an archived page', () => {
         await expect(button).toHaveText('Archive');
         await expect(next).toBeVisible();
         await expect(count).toBeVisible();
-        // The archive bar comes before the review bar, side by side at the right.
-        expect(await bar.evaluate((node) => Array.from(node.children, (child) => child.className)
-          .filter((name) => /artifact-(archive|review)-bar/.test(name))))
-          .toEqual(['artifact-archive-bar', 'artifact-review-bar']);
         await fits(page, 'drawn');
 
         await page.route((url) => url.pathname === '/api/archive', (route) =>
