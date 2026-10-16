@@ -65,6 +65,29 @@ with open(sys.argv[1], "w", encoding="utf-8") as fh:
     json.dump(seen, fh)
 """
 
+# Uploads the frog GIF as the fixture's reader one more time than the site's
+# own limit allows, then records each upload's status.
+UPLOADS_COMMAND = """\
+import json, os, sys, urllib.error, urllib.request
+sys.path.insert(0, "src")
+from lotuspod import api
+frog = open("tests/fixtures/media/frog-140x100.gif", "rb").read()
+headers = {"Cf-Access-Jwt-Assertion": os.environ["LOTUSPOD_TEST_ASSERTION"],
+           "Content-Type": "image/gif"}
+statuses = []
+for _ in range(api.UPLOAD_LIMIT + 1):
+    request = urllib.request.Request(os.environ["LOTUSPOD_URL"] + "/api/media",
+                                     data=frog, headers=headers, method="POST")
+    try:
+        response = urllib.request.urlopen(request, timeout=10)
+    except urllib.error.HTTPError as exc:
+        response = exc
+    with response:
+        statuses.append(response.status)
+with open(sys.argv[1], "w", encoding="utf-8") as fh:
+    json.dump(statuses, fh)
+"""
+
 # Posts an answer to capture-decisions' first question, then records the
 # answer's status, the status of the page and of /lotuspod.sqlite3, and every
 # lotuspod.sqlite3 under the scratch directory (TMPDIR) while the site is served.
@@ -349,6 +372,15 @@ class TestAssertionTests(CaptureSiteTestCase):
             [200, "no-store", {"actor": {"kind": "human", "email": "heron@example.com"}}],
         )
         self.assertEqual(seen["without"], [401, "no-store", {"error": "signed_out"}])
+
+    def test_reader_may_upload_more_than_the_sites_own_limit(self):
+        proc = self.run_wrapper(
+            sys.executable, "-c", UPLOADS_COMMAND, str(self.record)
+        )
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        statuses = json.loads(self.record.read_text(encoding="utf-8"))
+        self.assertEqual(len(statuses), 21)
+        self.assertEqual(set(statuses), {201})
 
 
 class DatabaseTests(CaptureSiteTestCase):

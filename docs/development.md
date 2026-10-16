@@ -238,6 +238,18 @@ python -m tests.capture_site \
   npm --prefix e2e exec --no -- playwright test --config e2e/checks.config.ts
 ```
 
+The `e2e` workflow (`.github/workflows/e2e.yml`) runs that command on every
+pull request to main and every push to main, with `--reporter=github,list`
+so each failed check is annotated with its spec, line and title, and with
+`--forbid-only`, so a committed `test.only` fails the run instead of skipping
+the rest of the suite. It caches
+npm's downloads, keyed on `e2e/package-lock.json`, and Playwright's Chromium
+in `~/.cache/ms-playwright`, keyed on the installed `@playwright/test`
+version. It runs with one worker and no retries, so a check that fails once
+fails the run. When a check fails, its traces are uploaded as the
+`e2e-test-results` artifact, kept 7 days; open one with
+`npx playwright show-trace`.
+
 ## Demo
 
 The demo site at https://lotuspod.kovial.co/ is this README and the docs

@@ -306,10 +306,16 @@ test.describe('signed in', () => {
     await open(page, 'frogs');
     const images = node.locator('.artifact-comment-images img');
     await expect(images).toHaveCount(2);
-    const before = await images.evaluateAll((nodes) => nodes.map((img) => {
-      const box = img.getBoundingClientRect();
-      return { complete: (img as HTMLImageElement).complete, size: [box.width, box.height] };
-    }));
+    // Shifts are counted from here, the threads drawn and their bytes held:
+    // a page script that arrives after the first paint moves the page on its
+    // own, whatever the thumbnails do.
+    const before = await images.evaluateAll((nodes) => {
+      (window as any).__shifts = [];
+      return nodes.map((img) => {
+        const box = img.getBoundingClientRect();
+        return { complete: (img as HTMLImageElement).complete, size: [box.width, box.height] };
+      });
+    });
     expect(before.map((image) => image.complete)).toEqual([false, false]);
     expect(await natural(images.nth(0))).toEqual([140, 100]);
     expect(await natural(images.nth(1))).toEqual([240, 160]);

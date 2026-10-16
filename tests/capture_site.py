@@ -8,7 +8,10 @@ the command's code. The site trusts the test Access key
 (tests/fixtures/access/), and LOTUSPOD_TEST_ASSERTION holds an assertion it
 accepts, for a browser check to send as Cf-Access-Jwt-Assertion;
 LOTUSPOD_TEST_ASSERTION_SECOND holds one for a second reader (SECOND_READER),
-for a check that needs someone else's comment. Answers and
+for a check that needs someone else's comment. The whole browser suite
+runs as that one reader, so the site lets each reader make
+FIXTURE_UPLOAD_LIMIT uploads in api.UPLOAD_WINDOW rather than
+api.UPLOAD_LIMIT. Answers and
 comments go to a database in the same temporary directory, beside the
 rendered site and never in it. It never reads or writes the operator's
 artifacts/ and never binds the tailnet address.
@@ -73,7 +76,7 @@ from unittest import mock
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
-from lotuspod import access, cli, db, machine, media, routing  # noqa: E402
+from lotuspod import access, api, cli, db, machine, media, routing  # noqa: E402
 from tests import access_keys  # noqa: E402
 
 
@@ -99,6 +102,10 @@ OTHER = "claude-3f9a2c"
 OTHER_OPERATIONS = ("pull", "claim", "reply")
 # A second reader the site allows beside the maintainer.
 SECOND_READER = "heron@example.com"
+# The uploads each reader may make in api.UPLOAD_WINDOW: every browser check
+# uploads as the one reader, and the suite takes about that long, so the
+# site's own api.UPLOAD_LIMIT would refuse the later checks' uploads.
+FIXTURE_UPLOAD_LIMIT = 1000
 
 
 # The time publish stamps a page updated: later on SAMPLE_DATE, so a published
@@ -1071,6 +1078,8 @@ def main(argv: list[str] | None = None) -> int:
     wrote_css = False
     sockets = None
     socket_thread = None
+    upload_limit = mock.patch.object(api, "UPLOAD_LIMIT", FIXTURE_UPLOAD_LIMIT)
+    upload_limit.start()
     try:
         try:
             site.mkdir()
@@ -1125,6 +1134,7 @@ def main(argv: list[str] | None = None) -> int:
                 server.shutdown()
             server.server_close()
         shutil.rmtree(directory, ignore_errors=True)
+        upload_limit.stop()
 
 
 if __name__ == "__main__":
