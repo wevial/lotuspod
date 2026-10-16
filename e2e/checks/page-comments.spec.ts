@@ -105,6 +105,44 @@ async function threads(request: APIRequestContext, name: string) {
 test.describe('signed in', () => {
   test.use({ extraHTTPHeaders: SIGNED_IN });
 
+  test('the main column stays put while a slow page script draws the chip under the title', async ({ page, request }) => {
+    const name = `page-comments-slow-${test.info().repeatEachIndex}`;
+    publish(name, TWO);
+    const posted = await request.post('/api/comments', {
+      headers: SIGNED_IN, data: { page: name, section: '', text: QUESTION } });
+    expect(posted.status()).toBe(201);
+
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => { release = resolve; });
+    await page.route((url) => url.pathname === '/lotuspod-page.js', async (route) => {
+      await held;
+      await route.continue();
+    });
+    const main = page.locator('.artifact-main');
+    const top = () => main.evaluate((node) => node.getBoundingClientRect().top + scrollY);
+    let before: number;
+    try {
+      // A held deferred script prevents load, but lets the served page paint.
+      await page.goto(`/${name}.html?standalone`, { waitUntil: 'commit' });
+      await expect(main).toBeVisible();
+      await page.evaluate(async () => {
+        await document.fonts.ready;
+        await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+      });
+      before = await top();
+      expect.soft(await page.locator('header.artifact-header > p.artifact-meta + details.artifact-comment[data-section=""] > summary')
+        .allTextContents(), 'the served header contains the whole-page comment box').toEqual(['Comment']);
+    } finally {
+      release();
+    }
+    await expect(box(page, '').chip).toHaveText('1 comment · waiting');
+    const boxes = page.locator('details.artifact-comment');
+    await expect(page.locator('details.artifact-comment > summary.artifact-comment-chip'))
+      .toHaveCount(await boxes.count());
+    const after = await top();
+    expect(Math.abs(after - before), `main column top moved from ${before} to ${after}`).toBeLessThanOrEqual(0.5);
+  });
+
   test('a reader comments on the whole page from the chip under its title, and hermes answers', async ({ page, request }) => {
     test.setTimeout(120_000);
     for (const [name, value] of Object.entries({ ASSERTION, SOCKET, HERMES, OUT, PYTHON })) {
