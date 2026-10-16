@@ -1900,7 +1900,7 @@ test.describe('signed in', () => {
     await expect(page.locator('div.artifact-section-body[data-section="risks"]')).toContainText(RISKY);
 
     await fallBack(page, name);
-    const third = publish(name, sectioned(name, pond({ ...KEPT, Findings: { paragraphs: ['The pond thaws in March.'] } })));
+    const third = publish(name, sectioned(name, pond({ ...KEPT, 'Next steps': { paragraphs: ['Order a heater in October.'] } })));
     await page.clock.runFor(CHECK);
     const shown = banner(page);
     await expect(shown.reload).toBeVisible();
