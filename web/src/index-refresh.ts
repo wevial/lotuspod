@@ -53,8 +53,6 @@
   const same = (left: Map<string, string>, right: Map<string, string>) =>
     left.size === right.size && Array.from(left).every(([name, row]) => right.get(name) === row);
 
-  const shown = () => !main.hidden && document.visibilityState === "visible";
-
   // The answer's rows in place of the live ones, when they differ.
   const swap = (fresh: Document) => {
     const table = document.querySelector<HTMLTableElement>(".index-table");
@@ -89,7 +87,7 @@
   let reading = false;
   let again = false;
   const read = async () => {
-    if (!shown()) return;
+    if (main.hidden || document.visibilityState !== "visible") return;
     if (reading) {
       again = true;
       return;

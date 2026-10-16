@@ -23,7 +23,6 @@
     return found;
   };
   const same = (left, right) => left.size === right.size && Array.from(left).every(([name, row]) => right.get(name) === row);
-  const shown = () => !main.hidden && document.visibilityState === "visible";
   const swap = (fresh) => {
     const table = document.querySelector(".index-table");
     const answer = fresh.querySelector(".index-table");
@@ -60,7 +59,7 @@
   let reading = false;
   let again = false;
   const read = async () => {
-    if (!shown())
+    if (main.hidden || document.visibilityState !== "visible")
       return;
     if (reading) {
       again = true;

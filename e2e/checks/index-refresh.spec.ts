@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { expect, test, type Page, type Response } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 
 // The index keeps its listing fresh (lotuspod-index.js, from
 // web/src/index-refresh.ts): while the listing is shown it reads its own page
@@ -70,11 +70,9 @@ function watchErrors(page: Page) {
   return errors;
 }
 
-const isIndexRead = (response: Response) =>
-  new URL(response.url()).pathname === '/' && response.request().resourceType() === 'fetch';
-
 function indexRead(page: Page) {
-  return page.waitForResponse(isIndexRead);
+  return page.waitForResponse((response) =>
+    new URL(response.url()).pathname === '/' && response.request().resourceType() === 'fetch');
 }
 
 // Every load of the index's window after the first, counted: a fragment
