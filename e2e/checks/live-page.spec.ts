@@ -788,6 +788,45 @@ test.describe('signed in', () => {
     expect(errors).toEqual([]);
   });
 
+  test('a held reference\'s card carried over takes a free id when a new heading has its own', async ({ page }) => {
+    const errors = watchErrors(page);
+    const name = 'live-page-refs-held-id';
+    const refs = refsFile('Story follow-ups become proposals');
+    publish(name, sectioned('Live page refs held id', pond({
+      Risks: { paragraphs: ['The pump may crack in the ice, as HOLO-175 says.'] },
+    })), '--no-comments', '--refs', refs);
+    await openPlain(page, name);
+    const ref = page.locator('.artifact-body button.artifact-ref[data-ref="HOLO-175"]');
+    const id = await ref.getAttribute('aria-controls');
+    await ref.focus();
+
+    // A new section whose heading's id is the card's.
+    const second = publish(name, sectioned('Live page refs held id', [
+      ...pond({ Risks: { paragraphs: ['The pump will crack unless it is lifted out first.'] } }),
+      ['Ref HOLO 175', ['The heater ticket, in brief.']],
+    ]), '--no-comments', '--refs', refs);
+    await page.clock.runFor(CHECK);
+    await expect.poll(() => revisionOf(page)).toBe(second);
+    await expect(banner(page).node).toHaveCount(0);
+    await expect(page.locator(`.artifact-body > h2#${id}`)).toHaveCount(1);
+    await expect(page.locator('.artifact-section-body[data-section="risks"] div.artifact-swap-held'))
+      .toContainText('This section changed');
+    expect(await page.evaluate(() => {
+      const ids = Array.from(document.querySelectorAll('[id]'), (node) => node.id);
+      return ids.filter((one, at) => ids.indexOf(one) !== at);
+    })).toEqual([]);
+
+    await ref.blur();
+    const card = page.locator('.artifact-ref-card');
+    await ref.hover();
+    await expect(card).toBeVisible();
+    await expect(card.locator('.artifact-ref-card-title')).toHaveText('Story follow-ups become proposals');
+    expect(await ref.getAttribute('aria-controls')).toBe(await card.getAttribute('id'));
+    await ref.click();
+    await expect(ref).toHaveAttribute('aria-expanded', 'true');
+    expect(errors).toEqual([]);
+  });
+
   test('a table a swap puts in place of an expanded one is expanded where storage is refused', async ({ page }) => {
     const errors = watchErrors(page);
     const name = 'live-page-tables-unkept';

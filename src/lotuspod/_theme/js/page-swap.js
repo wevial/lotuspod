@@ -269,6 +269,17 @@ function pageSwap() {
       const before = refs ? [refs] : [];
       const after = block ? [block] : [];
       refs?.remove();
+      const taken = (id) => document.getElementById(id) !== null || cardIn(block, id) !== null;
+      for (const card of kept) {
+        const id = card.id;
+        if (!taken(id))
+          continue;
+        let free = `${id}-2`;
+        for (let n = 3;taken(free) || kept.some((other) => other.id === free); n += 1)
+          free = `${id}-${n}`;
+        card.id = free;
+        all(`button.artifact-ref[aria-controls="${CSS.escape(id)}"]`, body).forEach((ref) => ref.setAttribute("aria-controls", free));
+      }
       if (block) {
         block.append(...kept);
         body.after(block);

@@ -410,6 +410,18 @@ function pageSwap(): void {
       const after = block ? [block] : [];
       // The old block goes first, so the new cards keep their ids.
       refs?.remove();
+      // A carried card whose id the new revision gave to another node takes
+      // a free one, and its references follow it.
+      const taken = (id: string) => document.getElementById(id) !== null || cardIn(block, id) !== null;
+      for (const card of kept) {
+        const id = card.id;
+        if (!taken(id)) continue;
+        let free = `${id}-2`;
+        for (let n = 3; taken(free) || kept.some((other) => other.id === free); n += 1) free = `${id}-${n}`;
+        card.id = free;
+        all(`button.artifact-ref[aria-controls="${CSS.escape(id)}"]`, body)
+          .forEach((ref) => ref.setAttribute("aria-controls", free));
+      }
       if (block) {
         block.append(...kept);
         body.after(block);
