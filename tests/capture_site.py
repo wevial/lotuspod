@@ -579,7 +579,8 @@ The frog that sits on them.
 
 # Four flowcharts, each followed by a Nodes table the page script makes
 # cards of. The first table names every box but E; the second repeats node
-# id A, holds a subgraph, and has a row Z naming no box, so it stays shown;
+# id A, holds a subgraph and Y --> W with an empty label on W, and has a
+# row Z naming no box, so it stays shown;
 # the third has an arrow both ways, an arrow its linkStyle makes opaque, a
 # row too long for the window, and no thead; the fourth styles F with a
 # style line, G with a class line and J with :::, and leaves H unstyled.
@@ -606,7 +607,8 @@ NODE_CARDS_BODY = """\
   A --&gt; Y[Ship it]
   subgraph later [Later]
     P[Tidy the docs] --&gt; Q[Tag a release]
-  end</pre>
+  end
+  Y --&gt; W[" "]</pre>
 <h3>Nodes</h3>
 <table>
 <thead><tr><th>Node</th><th>Title</th><th>Status</th></tr></thead>

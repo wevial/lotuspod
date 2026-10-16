@@ -644,7 +644,7 @@ test("a box's card opens in the view beside it, on a click or from the keyboard"
   expect(await card(page).evaluate((node) => Boolean(node.closest('dialog[open]')))).toBe(true);
   const graph = await card(page).locator('dl.artifact-node-card-graph').evaluate((list) =>
     Array.from(list.querySelectorAll('dt')).map((term) => [term.textContent, term.nextElementSibling?.textContent]));
-  expect(graph[0]).toEqual(['Waits for', 'A (merged), E']);
+  expect(graph[0]).toEqual(['Waits for', 'Write the parser (merged), Pin Mermaid']);
   const close = card(page).getByRole('button', { name: 'Close' });
   const middle = centre(await where(close));
   expect(await close.evaluate((button, at) => document.elementFromPoint(at.x, at.y) === button, middle)).toBe(true);
@@ -955,5 +955,44 @@ test.describe('an old version', () => {
     await expect(page.locator('pre.mermaid')).toContainText('A[Write] --> B[Publish]');
     await expect(page.getByRole('button', { name: 'Expand diagram' })).toHaveCount(0);
     await expect(page.locator('dialog')).toHaveCount(0);
+  });
+});
+
+test.describe('at 360 px wide', () => {
+  test.use({ viewport: { width: 360, height: 800 } });
+
+  test('a diagram wider than its block keeps its Expand button in its visible top right corner as it scrolls sideways', async ({ page }) => {
+    const seen = await drawn(page);
+    await drawing(page).evaluate((svg) => {
+      svg.setAttribute('width', '3000');
+      svg.setAttribute('style', 'max-width: none;');
+    });
+    await scrollToDiagram(page);
+    const range = await diagram(page).evaluate((pre) => pre.scrollWidth - pre.clientWidth);
+    expect(range).toBeGreaterThan(0);
+    const inCorner = async () => {
+      const pre = await where(diagram(page));
+      const button = await where(expand(page));
+      const right = pre.x + pre.width - button.x - button.width;
+      const top = button.y - pre.y;
+      return button.x >= pre.x && button.y + button.height <= pre.y + pre.height
+        && right >= 0 && right <= 16 && top >= 0 && top <= 16;
+    };
+    for (const scrolled of [Math.floor(range / 2), range]) {
+      await diagram(page).evaluate((pre, left) => { pre.scrollLeft = left; }, scrolled);
+      await expect.poll(inCorner).toBe(true);
+      expect(await diagram(page).evaluate((pre) => pre.scrollWidth - pre.clientWidth)).toBe(range);
+      const point = centre(await where(expand(page)));
+      expect(await expand(page).evaluate((button, point) =>
+        document.elementFromPoint(point.x, point.y) === button, point)).toBe(true);
+    }
+    await open(page);
+    await expect(view(page).svg).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(view(page).dialog).toBeHidden();
+    await expect(drawing(page)).toHaveCount(1);
+    await expect.poll(() => diagram(page).evaluate((pre) => pre.scrollLeft)).toBe(range);
+    await expect.poll(inCorner).toBe(true);
+    await seen.clean();
   });
 });

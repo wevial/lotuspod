@@ -412,6 +412,9 @@
     }
 
     function add(pre) {
+      pre.addEventListener("scroll", function () {
+        pre.style.setProperty("--artifact-diagram-scroll", pre.scrollLeft + "px");
+      }, { passive: true });
       // Its icon is drawn by the stylesheet, so the pre's one svg stays the
       // diagram.
       var expand = button("artifact-diagram-expand", undefined, "Expand diagram");
