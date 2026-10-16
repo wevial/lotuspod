@@ -501,7 +501,8 @@ makes no card. `lotuspod render` takes no refs.
 On the page, hovering or focusing a reference shows its card under it; a
 click, Enter or Space pins it (with a ✕), a second click unpins it, and Esc,
 the ✕ or a click outside closes it. Without the page script a reference reads
-as plain text and no card shows.
+as plain text and no card shows. A page open when it is published again
+updates its references and their cards in place, without a reload.
 
 Publish keeps the entries the page used, and when they were taken, in
 `NAME.refs.json` beside the page, and commits it with the page. A republish

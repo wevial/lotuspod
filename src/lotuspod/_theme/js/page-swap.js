@@ -1,5 +1,5 @@
 // Built from web/src/page-swap.ts by web/build.ts. Edit that file, not this one.
-const SWAP_UNMOUNTED = "pre.mermaid, button.artifact-ref, table";
+const SWAP_UNMOUNTED = "pre.mermaid";
 var SWAP_HOLDS;
 function holdSwap(test) {
   (SWAP_HOLDS ??= []).push(test);
@@ -136,9 +136,6 @@ function pageSwap() {
 `) !== freshShared.join(`
 `))
       return null;
-    if (digestOf(document.querySelector(".artifact-ref-cards")) !== digestOf(doc.querySelector(".artifact-ref-cards"))) {
-      return null;
-    }
     if (!document.querySelector("details.artifact-comment") !== !doc.querySelector("details.artifact-comment")) {
       return null;
     }
@@ -148,6 +145,9 @@ function pageSwap() {
     const list = outline?.querySelector("ol.artifact-outline-list") ?? null;
     const freshList = freshOutline?.querySelector("ol.artifact-outline-list") ?? null;
     const outlineChanged = digestOf(outline) !== digestOf(freshOutline);
+    const refs = document.querySelector("div.artifact-ref-cards");
+    const freshRefs = doc.querySelector("div.artifact-ref-cards");
+    const refsChanged = digestOf(refs) !== digestOf(freshRefs);
     const introChanged = digestOf(body, "data-intro-digest") !== digestOf(freshBody, "data-intro-digest");
     const intro = introOf(body, parts);
     const freshIntro = introOf(freshBody, freshParts);
@@ -253,6 +253,32 @@ function pageSwap() {
     for (const id of Array.from(held.keys())) {
       if (!sectionHeld.has(id))
         unholdSection(id);
+    }
+    if (refsChanged) {
+      const cardIn = (block, id) => block?.querySelector(`#${CSS.escape(id)}`) ?? null;
+      const needed = new Set(all("button.artifact-ref[aria-controls]", body).map((ref) => ref.getAttribute("aria-controls") ?? ""));
+      const kept = Array.from(needed).filter((id) => id && !cardIn(freshRefs, id)).flatMap((id) => cardIn(refs, id) ?? []);
+      const block = freshRefs ? brought(freshRefs) : refs && kept.length ? refs.cloneNode(false) : null;
+      const before = refs ? [refs] : [];
+      const after = block ? [block] : [];
+      refs?.remove();
+      const taken = (id) => document.getElementById(id) !== null || cardIn(block, id) !== null;
+      for (const card of kept) {
+        const id = card.id;
+        if (!taken(id))
+          continue;
+        let free = `${id}-2`;
+        for (let n = 3;taken(free) || kept.some((other) => other.id === free); n += 1)
+          free = `${id}-${n}`;
+        card.id = free;
+        all(`button.artifact-ref[aria-controls="${CSS.escape(id)}"]`, body).forEach((ref) => ref.setAttribute("aria-controls", free));
+      }
+      if (block) {
+        block.append(...kept);
+        body.after(block);
+      }
+      const change = !refs ? "added" : !block ? "removed" : "changed";
+      units.push({ kind: "refs", id: "", change, before, after });
     }
     if (anchorAt >= 0) {
       const kept = parts.slice(anchorAt).find((part) => !gone.has(part.heading));

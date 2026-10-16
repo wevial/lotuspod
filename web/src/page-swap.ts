@@ -1,8 +1,9 @@
 // Lotuspod page script: once an open page learns it was published again
 // (js/live-page.js), it fetches the new revision and swaps in only the parts
 // whose digest render stamped (data-digest, data-intro-digest) changed: the
-// header's authored text, the outline's links, the intro, and each changed,
-// added or removed section. Every other node stays as it was, and with it the
+// header's authored text, the outline's links, the intro, each changed,
+// added or removed section, and the references block (div.artifact-ref-cards)
+// written after the body. Every other node stays as it was, and with it the
 // scroll position and the folds. A section swapped in folds as the one it
 // replaces was; one added starts open unless the reader's kept folds name it.
 // Once applied, "lotuspod:swapped" (SWAPPED) tells the other page scripts what
@@ -25,9 +26,9 @@
 // The page falls back to the banner or a reload (the swap answers null,
 // nothing touched) when its theme, policy or render variant changed, when
 // either copy predates the digests, when the two differ in having an outline
-// or sections, when their shared sections moved, when the references changed,
-// when the review sheet shows and the outline changed on a page with decision
-// forms (whose review marks sit on its links) and no part swapped holds one,
+// or sections, when their shared sections moved, when the review sheet
+// shows and the outline changed on a page with decision forms (whose review
+// marks sit on its links) and no part swapped holds one,
 // when a changed part holds a decision form on a page that loaded with
 // neither a form nor a comment box, when a changed part, old or new, holds a
 // feature not yet mounted on new markup (SWAP_UNMOUNTED), or when one copy
@@ -36,7 +37,7 @@
 
 // What a swapped part may not hold yet, old or new: each later ticket mounts
 // one and takes it off.
-const SWAP_UNMOUNTED = "pre.mermaid, button.artifact-ref, table";
+const SWAP_UNMOUNTED = "pre.mermaid";
 
 // Each test a changed or removed part, as the open page has it, is put to
 // before a swap: a part any test holds is kept as it is under a bar until the
@@ -236,9 +237,6 @@ function pageSwap(): void {
     const shared = parts.filter((part) => freshIds.has(part.id)).map((part) => part.id);
     const freshShared = freshParts.filter((part) => ids.has(part.id)).map((part) => part.id);
     if (shared.join("\n") !== freshShared.join("\n")) return null;
-    if (digestOf(document.querySelector(".artifact-ref-cards")) !== digestOf(doc.querySelector(".artifact-ref-cards"))) {
-      return null;
-    }
     // Comments turned on or off: the comments page is set up once, at load.
     if (!document.querySelector("details.artifact-comment") !== !doc.querySelector("details.artifact-comment")) {
       return null;
@@ -251,6 +249,9 @@ function pageSwap(): void {
     const list = outline?.querySelector("ol.artifact-outline-list") ?? null;
     const freshList = freshOutline?.querySelector("ol.artifact-outline-list") ?? null;
     const outlineChanged = digestOf(outline) !== digestOf(freshOutline);
+    const refs = document.querySelector<HTMLElement>("div.artifact-ref-cards");
+    const freshRefs = doc.querySelector<HTMLElement>("div.artifact-ref-cards");
+    const refsChanged = digestOf(refs) !== digestOf(freshRefs);
     const introChanged = digestOf(body, "data-intro-digest") !== digestOf(freshBody, "data-intro-digest");
     const intro = introOf(body, parts);
     const freshIntro = introOf(freshBody, freshParts);
@@ -379,6 +380,40 @@ function pageSwap(): void {
     // current once more.
     for (const id of Array.from(held.keys())) {
       if (!sectionHeld.has(id)) unholdSection(id);
+    }
+
+    if (refsChanged) {
+      // A reference still on the page, in a part held back, keeps its card
+      // when the new block has none for it.
+      const cardIn = (block: Element | null, id: string) => block?.querySelector(`#${CSS.escape(id)}`) ?? null;
+      const needed = new Set(all("button.artifact-ref[aria-controls]", body)
+        .map((ref) => ref.getAttribute("aria-controls") ?? ""));
+      const kept = Array.from(needed).filter((id) => id && !cardIn(freshRefs, id))
+        .flatMap((id) => cardIn(refs, id) ?? []);
+      const block = freshRefs ? brought(freshRefs) as HTMLElement
+        : refs && kept.length ? refs.cloneNode(false) as HTMLElement : null;
+      const before = refs ? [refs] : [];
+      const after = block ? [block] : [];
+      // The old block goes first, so the new cards keep their ids.
+      refs?.remove();
+      // A carried card whose id the new revision gave to another node takes
+      // a free one, and its references follow it.
+      const taken = (id: string) => document.getElementById(id) !== null || cardIn(block, id) !== null;
+      for (const card of kept) {
+        const id = card.id;
+        if (!taken(id)) continue;
+        let free = `${id}-2`;
+        for (let n = 3; taken(free) || kept.some((other) => other.id === free); n += 1) free = `${id}-${n}`;
+        card.id = free;
+        all(`button.artifact-ref[aria-controls="${CSS.escape(id)}"]`, body)
+          .forEach((ref) => ref.setAttribute("aria-controls", free));
+      }
+      if (block) {
+        block.append(...kept);
+        body.after(block);
+      }
+      const change = !refs ? "added" : !block ? "removed" : "changed";
+      units.push({ kind: "refs", id: "", change, before, after });
     }
 
     // The reader's place: the anchor heading, else the one that replaced it,
