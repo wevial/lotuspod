@@ -279,16 +279,24 @@ for a reworded question, each with its Ask (and Dismiss, for an owner) and its
 decision chip, and the Answered table is drawn again after the last section.
 A section holding a form whose answer was changed and not saved, or is still
 being saved, is held back under "This section changed" with Update, so the
-answer is never lost. It does not
-swap, and shows the banner as below, when the theme or the page's policy
-changed, when a changed or removed part holds a passage's highlight (a
-thread's, or the words an open passage comment is on), when a removed
-section's form for a new thread holds text or images not sent, when a changed
-part, as it was or as it is now, holds a diagram, a reference card or a table,
-or when it holds a decision form while the page shows the review sheet (a page
-that loaded with decision forms) or the page loaded with neither a decision
-form nor a comment box; nor when the outline or the sections came or
-went, the sections both copies have moved, or the references changed. A swap that fails partway reloads the page. Otherwise a
+answer is never lost. The passage threads of a swapped part are found again
+in its new text from their quotes, highlighted and numbered in page order as
+on a fresh load; one whose words are gone keeps its entry, its quote struck
+through, the note's title naming the revision it changed in. A changed or
+removed part holding the words an open passage comment is on, and a removed
+section whose form for a new thread holds text or images not sent, is held
+back with the bar too. Its Update opens the passage comment again on its
+words, text and images, where the new text still has them; else what was
+written goes to a form for a new thread, saying why, as after a reload
+(below), with any image still uploading, which joins it once uploaded; a
+form sending a comment takes it once that comment is saved. It does not swap, and shows the banner as below, when the theme or
+the page's policy changed, when a changed part, as it was or as it is now,
+holds a diagram, a reference card or a table, or when it holds a decision
+form while the page shows the review sheet (a page that loaded with decision
+forms) or the page loaded with neither a decision form nor a comment box; nor
+when the outline or the sections came or went, the sections both copies have
+moved, or the references changed. A swap that fails partway reloads the
+page. Otherwise a
 banner fixed over the top of the
 window, which moves no text and is announced politely, reads "A newer version
 of this page is available" with a Reload button. Reload brings the new

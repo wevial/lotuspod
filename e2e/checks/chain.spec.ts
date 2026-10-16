@@ -151,6 +151,7 @@ test.describe('the chain', () => {
     });
 
     let commentId = 0;
+    let noteId = 0;
     await test.step(`3. ${OTHER} is refused hermes's queue and gets nothing of its own`, () => {
       const theirs = pull(OTHER_CREDENTIAL, OWNER);
       expect(theirs.status).toBe(1);
@@ -160,7 +161,18 @@ test.describe('the chain', () => {
       expect(own.json.items).toEqual([]);
       const threads = agent(OTHER_CREDENTIAL, 'show', NAME);
       expect(threads.status, threads.stderr).toBe(0);
-      commentId = threads.json.threads[0].root.id;
+      // The note saved with the answer opened a thread on the decision before
+      // the heater comment was written. It names no handle, so it is the
+      // responder's, not hermes's.
+      const roots = threads.json.threads.map((thread: any) => thread.root);
+      const heater = roots.find((root: any) => root.text === COMMENT);
+      expect(heater, 'show lists the heater comment').toBeTruthy();
+      commentId = heater.id;
+      const note = roots.find((root: any) => root.question === 'decision-1');
+      expect(note, "show lists the note's thread on decision-1").toBeTruthy();
+      expect(note).toMatchObject({ text: NOTE, owner: 'responder' });
+      noteId = note.id;
+      expect(noteId).not.toBe(commentId);
       const claim = agent(OTHER_CREDENTIAL, 'claim', String(commentId));
       expect(claim.status).toBe(1);
       expect(claim.json).toEqual({ error: 'not_routed' });
@@ -182,9 +194,12 @@ test.describe('the chain', () => {
       const comment = items.find((item: any) => item.kind === 'comment').comment;
       expect(comment).toMatchObject({ id: commentId, section: 'heater', text: COMMENT,
         owner: OWNER, state: 'pending', actor: { kind: 'human', email: READER } });
+      // The note's comment waits for the responder, so it is not hermes's.
+      expect(items.filter((item: any) => item.kind === 'comment' && item.comment.id === noteId)).toEqual([]);
       const answer = items.find((item: any) => item.kind === 'answer');
       expect(answer.answer).toMatchObject({ question: 'decision-1', choice: 'submerged', note: NOTE,
         actor: { kind: 'human', email: READER } });
+      expect(answer.noteComment).toBe(noteId);
       expect(answer.question).toMatchObject({ text: 'Which heater?', label: 'Submerged' });
 
       const claim = agent(HERMES, 'claim', String(commentId));

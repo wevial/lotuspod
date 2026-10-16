@@ -501,7 +501,8 @@ makes no card. `lotuspod render` takes no refs.
 On the page, hovering or focusing a reference shows its card under it; a
 click, Enter or Space pins it (with a ✕), a second click unpins it, and Esc,
 the ✕ or a click outside closes it. Without the page script a reference reads
-as plain text and no card shows.
+as plain text and no card shows. A page open when it is published again
+updates its references and their cards in place, without a reload.
 
 Publish keeps the entries the page used, and when they were taken, in
 `NAME.refs.json` beside the page, and commits it with the page. A republish
@@ -551,7 +552,11 @@ ssh as `COMMAND archive --local --out-dir=OUT_DIR [--superseded-by=NEXT]
 NAME` (or `unarchive`), each argument quoted, and exits with ssh's status;
 `--out-dir` with a configured host is refused before ssh. An owner can also
 archive a page from the browser, through `/api/archive` (see [Answers and
-comments](comments.md#answers-and-comments)).
+comments](comments.md#answers-and-comments)): served to one of the `[access]`
+owners, a page shows an Archive button, or Unarchive on an archived page, at
+the right of its top bar, with a line beside it saying why when a press is
+not saved. The top bar is fixed and takes no room in the page, so the page
+does not move when the button arrives.
 
 `lotuspod serve` answers an archived page marked as archived, from memory, so
 the page file and its versions stay as published. Its head gains `<meta
@@ -779,6 +784,20 @@ keeps only the marked rows and adds the token "updated ✕" to the "Showing"
 line, which releases it; the Labels menu and the search still apply on top.
 When the route answers anything but 200 (signed out, or the demo site, whose
 stand-in answers 404), there are no marks and no toggle.
+
+The listing refreshes in place while the index is open. While it is shown
+(no tab active, see [Pods in tabs](#pods-in-tabs)) and the window is seen,
+the index reads its own page again every 60 seconds, at once when the window
+is seen again, and each time the listing shows again over the tabs; while a
+tab is active it reads nothing. When the rows differ from the ones shown, as
+after a `lotuspod publish` of a new page or a republish with a new title,
+date, summary or labels, the new rows take their place with no reload, and
+the marks, the counts and Recent activity are asked again. The search, the
+labels checked (a new label listed unchecked, one no row carries any more
+dropped), the toggles, the sort, the view and the open tabs stay as the
+reader left them, each open tab taking its pod's new title, and focus on a
+row's title link stays on that page's link. An index going from no page to
+some, or back, loads again.
 
 ### Recent activity
 

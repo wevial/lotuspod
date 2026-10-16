@@ -48,11 +48,11 @@ interface FoldSection {
 }
 declare const foldSection: FoldSection;
 
-// One part of the page a swap changed: the header, the outline, the intro or
-// a section (by its id; "" for any other part), with the nodes it took out,
-// detached, and put in.
+// One part of the page a swap changed: the header, the outline, the intro, a
+// section (by its id; "" for any other part) or the references block, with
+// the nodes it took out, detached, and put in.
 interface SwappedUnit {
-  kind: "header" | "outline" | "intro" | "section";
+  kind: "header" | "outline" | "intro" | "section" | "refs";
   id: string;
   change: "changed" | "added" | "removed";
   before: Node[];
@@ -73,9 +73,6 @@ interface DocumentEventMap {
 }
 
 // web/src/page-swap.ts: hold back from a swap each part whose nodes (a
-// section's heading and wrapper, or the intro's) test says to.
-declare function holdSwap(test: (nodes: readonly Element[]) => boolean): void;
-
-// web/src/page-swap.ts: fall back to the banner or a reload rather than take
-// away a section whose heading and wrapper test says to.
-declare function refuseSwap(test: (nodes: readonly Element[]) => boolean): void;
+// section's heading and wrapper, or the intro's) test says to, told whether
+// the new revision took the part away.
+declare function holdSwap(test: (nodes: readonly Element[], removed: boolean) => boolean): void;

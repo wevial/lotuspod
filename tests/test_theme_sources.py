@@ -278,11 +278,13 @@ class DeclaredOrderTests(ThemeCopyTestCase):
         """LOTUS-177: serve's change stream, built from
         web/src/live-events.ts, is joined just before js/live-page.js, whose
         check its ticks run, and last in the index script, after
-        js/pod-finder.js; the old-version script opens no stream."""
+        js/pod-finder.js and js/index-refresh.js; the old-version script
+        opens no stream."""
         page = cli.THEME_SOURCES[cli.PAGE_SCRIPT]
         self.assertEqual(page.index("js/live-events.js") + 1, page.index("js/live-page.js"))
         self.assertEqual(cli.THEME_SOURCES[cli.INDEX_SCRIPT],
-                         ("js/pod-tabs.js", "js/pod-finder.js", "js/live-events.js"))
+                         ("js/pod-tabs.js", "js/pod-finder.js", "js/index-refresh.js",
+                          "js/live-events.js"))
         self.assertNotIn("js/live-events.js", cli.THEME_SOURCES[cli.OLD_VERSION_SCRIPT])
         problems = source_problems(cli.THEME_DIR, cli.THEME_SOURCES)
         self.assertEqual(problems, [], "\n".join(problems))

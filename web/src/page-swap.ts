@@ -1,8 +1,9 @@
 // Lotuspod page script: once an open page learns it was published again
 // (js/live-page.js), it fetches the new revision and swaps in only the parts
 // whose digest render stamped (data-digest, data-intro-digest) changed: the
-// header's authored text, the outline's links, the intro, and each changed,
-// added or removed section. Every other node stays as it was, and with it the
+// header's authored text, the outline's links, the intro, each changed,
+// added or removed section, and the references block (div.artifact-ref-cards)
+// written after the body. Every other node stays as it was, and with it the
 // scroll position and the folds. A section swapped in folds as the one it
 // replaces was; one added starts open unless the reader's kept folds name it.
 // Once applied, "lotuspod:swapped" (SWAPPED) tells the other page scripts what
@@ -13,9 +14,11 @@
 // takes it away and the new one when it replaces it.
 //
 // A changed or removed part any test registered with holdSwap holds (the
-// swap's own: the focus is in it; js/decisions.js's: a decision form in it
-// holds an answer not saved) stays as it is, under a bar saying so with
-// an Update button, which applies the part's newest nodes as a swap would.
+// swap's own: the focus is in it; js/comments.js's: an open passage
+// composer's words are in it, or it is a section taken away whose form holds
+// text not sent; js/decisions.js's: a decision form in it holds an answer not
+// saved) stays as it is, under a bar saying so with an Update button, which
+// applies the part's newest nodes as a swap would.
 // The page still takes the new revision; a later swap replaces the kept nodes
 // when the part changed again, and takes the bar away when it is back to the
 // open page's digest.
@@ -23,46 +26,31 @@
 // The page falls back to the banner or a reload (the swap answers null,
 // nothing touched) when its theme, policy or render variant changed, when
 // either copy predates the digests, when the two differ in having an outline
-// or sections, when their shared sections moved, when the references changed,
-// when the review sheet shows and the outline changed on a page with decision
-// forms (whose review marks sit on its links) and no part swapped holds one,
+// or sections, when their shared sections moved, when the review sheet
+// shows and the outline changed on a page with decision forms (whose review
+// marks sit on its links) and no part swapped holds one,
 // when a changed part holds a decision form on a page that loaded with
 // neither a form nor a comment box, when a changed part, old or new, holds a
-// feature not yet mounted on new markup or a passage's highlight
-// (SWAP_UNMOUNTED), when one copy takes comments and the other does not, or
-// when a section the swap would take away, held back or not, is one any test
-// registered with refuseSwap refuses (js/comments.js's: its form holds text
-// not sent). A held section's Update that would take away one a test refuses,
-// or a held part's that would replace a passage's highlight, reloads the page
-// instead, so its text is kept. A swap that throws partway has the page
-// reload.
+// feature not yet mounted on new markup (SWAP_UNMOUNTED), or when one copy
+// takes comments and the other does not. A swap that throws partway has the
+// page reload.
 
 // What a swapped part may not hold yet, old or new: each later ticket mounts
-// one and takes it off. The open page's passage highlights, a thread's or an
-// open composer's, are not found again in new markup yet.
-const SWAP_UNMOUNTED = "pre.mermaid, button.artifact-ref, table, mark.artifact-passage";
+// one and takes it off.
+const SWAP_UNMOUNTED = "pre.mermaid";
 
 // Each test a changed or removed part, as the open page has it, is put to
 // before a swap: a part any test holds is kept as it is under a bar until the
 // reader presses its Update (holdSwap). A var with no value of its own, made
 // by the first test: js/decisions.js, joined before this source, registers
 // its test as it runs.
-var SWAP_HOLDS: ((nodes: readonly Element[]) => boolean)[] | undefined;
+var SWAP_HOLDS: ((nodes: readonly Element[], removed: boolean) => boolean)[] | undefined;
 
 // Hold back from a swap each part whose nodes (a section's heading and
-// wrapper, or the intro's) test says to.
-function holdSwap(test: (nodes: readonly Element[]) => boolean): void {
+// wrapper, or the intro's) test says to, told whether the new revision took
+// the part away.
+function holdSwap(test: (nodes: readonly Element[], removed: boolean) => boolean): void {
   (SWAP_HOLDS ??= []).push(test);
-}
-
-// Each test a section the swap would take away, as the open page has it, is
-// put to: one any test refuses has the whole page fall back (refuseSwap).
-const SWAP_REFUSALS: ((nodes: readonly Element[]) => boolean)[] = [];
-
-// Fall back to the banner or a reload rather than take away a section whose
-// heading and wrapper test says to.
-function refuseSwap(test: (nodes: readonly Element[]) => boolean): void {
-  SWAP_REFUSALS.push(test);
 }
 
 function pageSwap(): void {
@@ -146,8 +134,6 @@ function pageSwap(): void {
       (node.matches(SWAP_UNMOUNTED) || node.querySelector(SWAP_UNMOUNTED) !== null));
 
   const brought = (node: Node): Node => document.importNode(node, true);
-
-  const refused = (part: Part): boolean => SWAP_REFUSALS.some((test) => test([part.heading, part.wrapper]));
 
   // The open page's node, or null, given the new page's text in place of
   // its children; the nodes taken out and put in.
@@ -251,9 +237,6 @@ function pageSwap(): void {
     const shared = parts.filter((part) => freshIds.has(part.id)).map((part) => part.id);
     const freshShared = freshParts.filter((part) => ids.has(part.id)).map((part) => part.id);
     if (shared.join("\n") !== freshShared.join("\n")) return null;
-    if (digestOf(document.querySelector(".artifact-ref-cards")) !== digestOf(doc.querySelector(".artifact-ref-cards"))) {
-      return null;
-    }
     // Comments turned on or off: the comments page is set up once, at load.
     if (!document.querySelector("details.artifact-comment") !== !doc.querySelector("details.artifact-comment")) {
       return null;
@@ -266,6 +249,9 @@ function pageSwap(): void {
     const list = outline?.querySelector("ol.artifact-outline-list") ?? null;
     const freshList = freshOutline?.querySelector("ol.artifact-outline-list") ?? null;
     const outlineChanged = digestOf(outline) !== digestOf(freshOutline);
+    const refs = document.querySelector<HTMLElement>("div.artifact-ref-cards");
+    const freshRefs = doc.querySelector<HTMLElement>("div.artifact-ref-cards");
+    const refsChanged = digestOf(refs) !== digestOf(freshRefs);
     const introChanged = digestOf(body, "data-intro-digest") !== digestOf(freshBody, "data-intro-digest");
     const intro = introOf(body, parts);
     const freshIntro = introOf(freshBody, freshParts);
@@ -292,17 +278,18 @@ function pageSwap(): void {
 
     // Each changed or removed part, as the open page has it, that a test
     // holds back: kept as it is, its new nodes kept for the reader's Update.
-    const holds = (nodes: Node[]): boolean => {
+    const holds = (nodes: Node[], gone: boolean): boolean => {
       const elements = nodes.filter((node): node is Element => node instanceof Element);
-      return (SWAP_HOLDS ?? []).some((test) => test(elements));
+      // Every test sees the part, so each knows what the swap holds.
+      return (SWAP_HOLDS ?? []).map((test) => test(elements, gone)).some(Boolean);
     };
     // A part held already stays held until its Update, or until its text
-    // is the open page's again.
-    const introHeld = introChanged && (heldIntro !== null || holds(intro));
+    // is the open page's again; the tests still see it, as it may have been
+    // taken away since.
+    const introHeld = introChanged && (heldIntro !== null || holds(intro, false));
     const sectionHeld = new Set([...removed, ...changed.map((part) => byId.get(part.id)!)]
-      .filter((part) => held.has(part.id) || holds([part.heading, part.wrapper])).map((part) => part.id));
-    // A section taken away, held back or not, that a test refuses to lose.
-    if (removed.some(refused)) return null;
+      .filter((part) => holds([part.heading, part.wrapper], !freshIds.has(part.id)) || held.has(part.id))
+      .map((part) => part.id));
     // The review sheet draws again after the read of the answers that a
     // swap of a form starts, its marks on the outline's links with it; a
     // swap that brings in or takes out no form starts none, so while the
@@ -393,6 +380,40 @@ function pageSwap(): void {
     // current once more.
     for (const id of Array.from(held.keys())) {
       if (!sectionHeld.has(id)) unholdSection(id);
+    }
+
+    if (refsChanged) {
+      // A reference still on the page, in a part held back, keeps its card
+      // when the new block has none for it.
+      const cardIn = (block: Element | null, id: string) => block?.querySelector(`#${CSS.escape(id)}`) ?? null;
+      const needed = new Set(all("button.artifact-ref[aria-controls]", body)
+        .map((ref) => ref.getAttribute("aria-controls") ?? ""));
+      const kept = Array.from(needed).filter((id) => id && !cardIn(freshRefs, id))
+        .flatMap((id) => cardIn(refs, id) ?? []);
+      const block = freshRefs ? brought(freshRefs) as HTMLElement
+        : refs && kept.length ? refs.cloneNode(false) as HTMLElement : null;
+      const before = refs ? [refs] : [];
+      const after = block ? [block] : [];
+      // The old block goes first, so the new cards keep their ids.
+      refs?.remove();
+      // A carried card whose id the new revision gave to another node takes
+      // a free one, and its references follow it.
+      const taken = (id: string) => document.getElementById(id) !== null || cardIn(block, id) !== null;
+      for (const card of kept) {
+        const id = card.id;
+        if (!taken(id)) continue;
+        let free = `${id}-2`;
+        for (let n = 3; taken(free) || kept.some((other) => other.id === free); n += 1) free = `${id}-${n}`;
+        card.id = free;
+        all(`button.artifact-ref[aria-controls="${CSS.escape(id)}"]`, body)
+          .forEach((ref) => ref.setAttribute("aria-controls", free));
+      }
+      if (block) {
+        block.append(...kept);
+        body.after(block);
+      }
+      const change = !refs ? "added" : !block ? "removed" : "changed";
+      units.push({ kind: "refs", id: "", change, before, after });
     }
 
     // The reader's place: the anchor heading, else the one that replaced it,
@@ -522,13 +543,6 @@ function pageSwap(): void {
     const at = parts.findIndex((part) => part.id === id);
     if (at < 0) return;
     const old = parts[at]!;
-    // A section taken away that a test refuses to lose, or one holding a
-    // highlight since it was held, is reloaded away, what it holds kept
-    // over the reload.
-    if ((!entry.fresh && refused(old)) || unmounted([old.heading, old.wrapper])) {
-      live.reload();
-      return;
-    }
     const unit = entry.fresh ? applyChanged(old, entry.fresh) : applyRemoved(old);
     swapped(live.revision(), [unit]);
     const heading = entry.fresh ? unit.after[0] as HTMLElement : (parts[at + 1] ?? parts[at - 1])?.heading;
@@ -559,12 +573,7 @@ function pageSwap(): void {
     const body = bodyOf(document);
     if (!entry || !body) return;
     const parts = partsOf(body);
-    const intro = introOf(body, parts);
-    if (unmounted(intro)) {
-      live.reload();
-      return;
-    }
-    swapped(live.revision(), [applyIntro(body, intro, entry.fresh, entry.digest)]);
+    swapped(live.revision(), [applyIntro(body, introOf(body, parts), entry.fresh, entry.digest)]);
     toggleOf(parts[0]?.heading)?.focus();
   }
 

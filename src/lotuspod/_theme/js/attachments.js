@@ -144,7 +144,8 @@
   // sending() gives the stored names of those uploaded and holds the
   // composer while the comment naming them saves: nothing is attached or
   // removed until sent() takes them off once it is saved, or gives them
-  // back when it is not.
+  // back when it is not. pass() hands every image, uploaded or on its way,
+  // to another composer's attachments, as when a section's form goes.
   function attachments(form, field) {
     var status = form.querySelector(".artifact-comment-status");
     var box = element("div", "artifact-composer-box");
@@ -244,9 +245,8 @@
       update();
     }
 
-    async function upload(file) {
-      var item = slot();
-      var why;
+    // Upload file: its stored image, or null with why it was not taken.
+    async function send(file) {
       try {
         var response = await fetch(MEDIA, {
           method: "POST",
@@ -255,24 +255,41 @@
         });
         var payload = await json(response);
         if (response.status === 201 && payload && storedImage(payload)) {
-          if (items.some(function (other) { return other.name === payload.name; })) {
-            if (!item.gone) {
-              drop(item);
-              status.textContent = fileName(file) + " is attached already.";
-            }
-            return;
+          return { image: payload, why: "" };
+        }
+        return { image: null, why: uploadFailure(file, response, payload) };
+      } catch (ignored) {
+        return { image: null, why: fileName(file) + " was not attached: the site did not answer. Try again." };
+      }
+    }
+
+    // A place in the tray for file, filled once done (send's promise) is.
+    async function fill(file, done) {
+      var item = slot();
+      item.file = file;
+      item.done = done;
+      var result = await done;
+      if (result.image) {
+        if (items.some(function (other) { return other.name === result.image.name; })) {
+          if (!item.gone) {
+            drop(item);
+            status.textContent = fileName(file) + " is attached already.";
           }
-          shown(item, payload);
           return;
         }
-        why = uploadFailure(file, response, payload);
-      } catch (ignored) {
-        why = fileName(file) + " was not attached: the site did not answer. Try again.";
+        if (!item.gone) {
+          shown(item, result.image);
+        }
+        return;
       }
       if (!item.gone) {
         drop(item);
-        status.textContent = why;
+        status.textContent = result.why;
       }
+    }
+
+    function upload(file) {
+      fill(file, send(file));
     }
 
     // Files waiting for the cap are checked against it once it is read;
@@ -394,5 +411,30 @@
         }
         update();
       },
+      // Give to (another composer's attachments) the images uploaded and
+      // those still uploading or waiting for the cap, each joining it once
+      // uploaded; why some were not taken, else "".
+      pass: function (to) {
+        var over = to.restore(this.kept());
+        items.filter(function (item) { return !item.name && !item.gone; }).forEach(function (item) {
+          over = to.adopt(item.file, item.done) || over;
+        });
+        var files = queued;
+        queued = [];
+        if (files.length) {
+          to.take(files);
+        }
+        return over;
+      },
+      // An upload begun on another composer, its file and the promise of
+      // what the site said of it: why it was not taken, else "".
+      adopt: function (file, done) {
+        if (items.length >= MAX_IMAGES) {
+          return "A comment takes up to " + MAX_IMAGES + " images: the others were not kept.";
+        }
+        fill(file, done);
+        return "";
+      },
+      take: take,
     };
   }

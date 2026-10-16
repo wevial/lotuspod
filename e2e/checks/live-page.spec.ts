@@ -134,6 +134,29 @@ function publish(name: string, markdown: string, ...extra: string[]): string {
   }
 }
 
+// A markdown table wider than an article's column, so it scrolls in it at 1440
+// by 900, its first cell naming what.
+function ledger(what: string) {
+  const columns = ['Item', 'Week', 'Depth', 'Ice', 'Water', 'Pump', 'Heater', 'Fish', 'Weather', 'Notes'];
+  const row = (cells: string[]) => `| ${cells.join(' | ')} |`;
+  return [
+    row(columns),
+    row(columns.map(() => '---')),
+    row(columns.map((column, n) => (n ? `${column} reading, kept by the shed door` : what))),
+  ].join('\n');
+}
+
+// A refs file (REFS_FILE's shape in tests/capture_site.py) naming HOLO-175
+// with title; its path.
+function refsFile(title: string) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lotuspod-live-page-refs-'));
+  const file = path.join(dir, 'refs.json');
+  fs.writeFileSync(file, JSON.stringify({ refs: { 'HOLO-175': {
+    title, project: 'Holophyte', status: 'In review', tone: 'review',
+  } } }), 'utf-8');
+  return file;
+}
+
 // The reader's new thread on a section, stored through the comments route.
 async function comment(request: APIRequestContext, name: string, section: string, text: string) {
   const response = await request.post('/api/comments', {
@@ -234,15 +257,31 @@ async function setVisibility(page: Page, state: 'hidden' | 'visible') {
 // Paste the fish JPEG into a field, as the clipboard hands it to the page,
 // and wait for its upload to be answered.
 async function pasteFish(page: Page, field: Locator) {
-  const base64 = fs.readFileSync(FISH).toString('base64');
   const uploaded = page.waitForResponse((response) => new URL(response.url()).pathname === '/api/media');
+  await pasteFishOnly(field);
+  expect((await uploaded).status()).toBe(201);
+}
+
+// Paste the fish JPEG into a field, its upload left to answer when it may.
+async function pasteFishOnly(field: Locator) {
+  const base64 = fs.readFileSync(FISH).toString('base64');
   await field.evaluate((node, base64) => {
     const data = new DataTransfer();
     const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
     data.items.add(new File([bytes], 'fish.jpg', { type: 'image/jpeg' }));
     node.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }));
   }, base64);
-  expect((await uploaded).status()).toBe(201);
+}
+
+// Hold the page's uploads (/api/media) until the returned release is called.
+async function holdUploads(page: Page) {
+  let release!: () => void;
+  const released = new Promise<void>((resolve) => { release = resolve; });
+  await page.route((url) => url.pathname === '/api/media', async (route) => {
+    await released;
+    await route.continue();
+  });
+  return release;
 }
 
 // The thumbnails attached in a form: their /media/ paths, once drawn.
@@ -546,11 +585,11 @@ test.describe('signed in', () => {
     const name = 'live-page-held-banner';
     const { wrapper, bar } = await holdRisks(page, name);
     await page.clock.runFor(6000);
-    // A table is not swapped yet: this revision falls back to the banner.
+    // Comments turned on: this revision falls back to the banner.
     publish(name, sectioned(name, pond({
-      Findings: { paragraphs: ['The pond froze early this year.', '| Pump | Heater |\n|---|---|\n| off | on |'] },
+      Findings: { paragraphs: ['The pond froze early this year.', 'The ice was thick by noon.'] },
       Risks: { paragraphs: ['The pump will crack unless it is lifted out first.'] },
-    })), '--no-comments');
+    })));
     await page.clock.runFor(CHECK);
     await expect(banner(page).node).toContainText(NEWER);
     await bar.getByRole('button', { name: 'Update' }).click();
@@ -727,6 +766,240 @@ test.describe('signed in', () => {
     await expect(banner(page).node).toHaveCount(0);
     await expect(page.locator('button.artifact-section-toggle')).toHaveCount(0);
     await expect(every).toBeHidden();
+    expect(errors).toEqual([]);
+  });
+
+  test('a swapped section\'s table gets its Expand button, and a table in its place keeps the reader\'s choice', async ({ page }) => {
+    const errors = watchErrors(page);
+    const swaps = await watchSwaps(page);
+    const name = 'live-page-tables';
+    // An article's column is narrower than its room at 1440: a wide table
+    // scrolls in it and gets a button.
+    const ARTICLE = ['--no-comments', '--variant', 'article'];
+    const tabled = (findings: string, risks: string) => sectioned('Live page tables', pond({
+      Findings: { paragraphs: ['The pond freezes in January.', ledger(findings)] },
+      Risks: { paragraphs: ['The pump may crack in the ice.', ledger(risks)] },
+    }));
+    publish(name, tabled('January', 'Pump'), ...ARTICLE);
+    await openPlain(page, name);
+    const table = (id: string) => page.locator(`.artifact-section-body[data-section="${id}"] > table`);
+    const button = (id: string) =>
+      page.locator(`.artifact-section-body[data-section="${id}"] > .artifact-table-expand > button`);
+    await expect(button('findings')).toBeVisible();
+    await button('risks').click();
+    await expect(table('risks')).toHaveClass(/artifact-table--expanded/);
+    await table('risks').evaluate((node) => { (node as any).__kept = true; });
+
+    const second = publish(name, tabled('February', 'Pump'), ...ARTICLE);
+    await page.clock.runFor(CHECK);
+    await expect.poll(() => revisionOf(page)).toBe(second);
+    await expect(banner(page).node).toHaveCount(0);
+    expect((await swaps()).filter((unit) => unit.kind === 'section'))
+      .toEqual([{ kind: 'section', id: 'findings', change: 'changed' }]);
+    await expect(table('findings')).toContainText('February');
+    await expect(button('findings')).toHaveCount(1);
+    await expect(button('findings')).toHaveText('Expand');
+    await button('findings').click();
+    await expect(table('findings')).toHaveClass(/artifact-table--expanded/);
+    await expect(button('findings')).toHaveText('Collapse');
+    expect(await table('risks').evaluate((node) => (node as any).__kept)).toBe(true);
+    await expect(table('risks')).toHaveClass(/artifact-table--expanded/);
+
+    // Risks' table changed: the new one is shown as the reader left the old.
+    const third = publish(name, tabled('February', 'Heater'), ...ARTICLE);
+    await page.clock.runFor(CHECK);
+    await expect.poll(() => revisionOf(page)).toBe(third);
+    await expect(banner(page).node).toHaveCount(0);
+    await expect(table('risks')).toContainText('Heater');
+    expect(await table('risks').evaluate((node) => (node as any).__kept)).toBeUndefined();
+    await expect(table('risks')).toHaveClass(/artifact-table--expanded/);
+    await expect(button('risks')).toHaveCount(1);
+    await expect(button('risks')).toHaveText('Collapse');
+    await expect(page.locator('.artifact-table-expand')).toHaveCount(2);
+    expect(errors).toEqual([]);
+  });
+
+  test('a held reference\'s card carried over takes a free id when a new heading has its own', async ({ page }) => {
+    const errors = watchErrors(page);
+    const name = 'live-page-refs-held-id';
+    const refs = refsFile('Story follow-ups become proposals');
+    publish(name, sectioned('Live page refs held id', pond({
+      Risks: { paragraphs: ['The pump may crack in the ice, as HOLO-175 says.'] },
+    })), '--no-comments', '--refs', refs);
+    await openPlain(page, name);
+    const ref = page.locator('.artifact-body button.artifact-ref[data-ref="HOLO-175"]');
+    const id = await ref.getAttribute('aria-controls');
+    await ref.focus();
+
+    // A new section whose heading's id is the card's.
+    const second = publish(name, sectioned('Live page refs held id', [
+      ...pond({ Risks: { paragraphs: ['The pump will crack unless it is lifted out first.'] } }),
+      ['Ref HOLO 175', ['The heater ticket, in brief.']],
+    ]), '--no-comments', '--refs', refs);
+    await page.clock.runFor(CHECK);
+    await expect.poll(() => revisionOf(page)).toBe(second);
+    await expect(banner(page).node).toHaveCount(0);
+    await expect(page.locator(`.artifact-body > h2#${id}`)).toHaveCount(1);
+    await expect(page.locator('.artifact-section-body[data-section="risks"] div.artifact-swap-held'))
+      .toContainText('This section changed');
+    expect(await page.evaluate(() => {
+      const ids = Array.from(document.querySelectorAll('[id]'), (node) => node.id);
+      return ids.filter((one, at) => ids.indexOf(one) !== at);
+    })).toEqual([]);
+
+    await ref.blur();
+    const card = page.locator('.artifact-ref-card');
+    await ref.hover();
+    await expect(card).toBeVisible();
+    await expect(card.locator('.artifact-ref-card-title')).toHaveText('Story follow-ups become proposals');
+    expect(await ref.getAttribute('aria-controls')).toBe(await card.getAttribute('id'));
+    await ref.click();
+    await expect(ref).toHaveAttribute('aria-expanded', 'true');
+    expect(errors).toEqual([]);
+  });
+
+  test('a table a swap puts in place of an expanded one is expanded where storage is refused', async ({ page }) => {
+    const errors = watchErrors(page);
+    const name = 'live-page-tables-unkept';
+    const ARTICLE = ['--no-comments', '--variant', 'article'];
+    const tabled = (risks: string) => sectioned('Live page tables unkept', pond({
+      Risks: { paragraphs: ['The pump may crack in the ice.', ledger(risks)] },
+    }));
+    await page.addInitScript(() => {
+      Object.defineProperty(window, 'sessionStorage', {
+        get() { throw new DOMException('Storage is refused', 'SecurityError'); },
+      });
+    });
+    publish(name, tabled('Pump'), ...ARTICLE);
+    await openPlain(page, name);
+    expect(await page.evaluate(() => { try { sessionStorage.length; return 'kept'; } catch { return 'refused'; } }))
+      .toBe('refused');
+    const table = page.locator('.artifact-section-body[data-section="risks"] > table');
+    const button = page.locator('.artifact-section-body[data-section="risks"] > .artifact-table-expand > button');
+    await button.click();
+    await expect(table).toHaveClass(/artifact-table--expanded/);
+    await table.evaluate((node) => { (node as any).__kept = true; });
+    // Focus left in Risks would hold it back.
+    await button.blur();
+
+    const second = publish(name, tabled('Ladder'), ...ARTICLE);
+    await page.clock.runFor(CHECK);
+    await expect.poll(() => revisionOf(page)).toBe(second);
+    await expect(banner(page).node).toHaveCount(0);
+    await expect(table).toContainText('Ladder');
+    expect(await table.evaluate((node) => (node as any).__kept)).toBeUndefined();
+    await expect(table).toHaveClass(/artifact-table--expanded/);
+    await expect(button).toHaveText('Collapse');
+    expect(errors).toEqual([]);
+  });
+
+  test('a swapped section\'s reference opens its new card, the cards swapped with it', async ({ page }) => {
+    const errors = watchErrors(page);
+    const swaps = await watchSwaps(page);
+    const name = 'live-page-refs';
+    const named = (risk: string) => sectioned('Live page refs', pond({
+      Risks: { paragraphs: [`${risk} See HOLO-175.`, 'The fish need air under it.'] },
+    }));
+    publish(name, named('The pump may crack in the ice.'), '--no-comments',
+      '--refs', refsFile('Story follow-ups become proposals'));
+    await openPlain(page, name);
+    const ref = page.locator('.artifact-body button.artifact-ref[data-ref="HOLO-175"]');
+
+    const second = publish(name, named('The pump will crack unless it is lifted out.'), '--no-comments',
+      '--refs', refsFile('Follow-ups are filed as proposals'));
+    await page.clock.runFor(CHECK);
+    await expect.poll(() => revisionOf(page)).toBe(second);
+    await expect(banner(page).node).toHaveCount(0);
+    expect(await swaps()).toEqual(expect.arrayContaining([
+      { kind: 'section', id: 'risks', change: 'changed' },
+      { kind: 'refs', id: '', change: 'changed' },
+    ]));
+    await expect(page.locator('.artifact-body')).toContainText('lifted out');
+    await expect(ref).toHaveClass(/artifact-ref--live/);
+
+    const cards = page.locator('.artifact-ref-card');
+    await expect(cards).toHaveCount(1);
+    const card = cards.first();
+    await ref.hover();
+    await expect(card).toBeVisible();
+    await expect(card.locator('.artifact-ref-card-title')).toHaveText('Follow-ups are filed as proposals');
+    await expect(card.locator('.artifact-ref-card-close')).toHaveCount(1);
+    await expect(card.locator('.artifact-ref-card-pinned')).toHaveCount(1);
+    await expect(card.locator('.artifact-ref-card-close')).toBeHidden();
+    await ref.click();
+    await expect(ref).toHaveAttribute('aria-expanded', 'true');
+    await expect(card).toHaveClass(/artifact-ref-card--pinned/);
+    await expect(card.locator('.artifact-ref-card-close')).toBeVisible();
+    await expect(card.locator('.artifact-ref-card-asof')).toContainText('pinned, Esc closes');
+    await page.keyboard.press('Escape');
+    await expect(card).toBeHidden();
+    await expect(ref).toBeFocused();
+    expect(errors).toEqual([]);
+  });
+
+  test('a reference a republish adds to a page that named none opens its card', async ({ page }) => {
+    const errors = watchErrors(page);
+    const name = 'live-page-refs-added';
+    const refs = refsFile('Story follow-ups become proposals');
+    publish(name, sectioned('Live page refs added', pond()), '--no-comments', '--refs', refs);
+    await openPlain(page, name);
+    await expect(page.locator('.artifact-ref-cards, button.artifact-ref')).toHaveCount(0);
+
+    const second = publish(name, sectioned('Live page refs added', pond({
+      Risks: { paragraphs: ['The pump may crack in the ice, as HOLO-175 says.'] },
+    })), '--no-comments', '--refs', refs);
+    await page.clock.runFor(CHECK);
+    await expect.poll(() => revisionOf(page)).toBe(second);
+    await expect(banner(page).node).toHaveCount(0);
+    expect(await page.locator('.artifact-body + .artifact-ref-cards').count()).toBe(1);
+    const ref = page.locator('.artifact-body button.artifact-ref[data-ref="HOLO-175"]');
+    const card = page.locator('.artifact-ref-card');
+    await ref.hover();
+    await expect(card).toBeVisible();
+    await expect(card.locator('.artifact-ref-card-title')).toHaveText('Story follow-ups become proposals');
+    await page.mouse.move(5, 5);
+    await expect(card).toBeHidden();
+
+    await ref.focus();
+    await expect(card).toBeVisible();
+    await page.keyboard.press('Enter');
+    await expect(ref).toHaveAttribute('aria-expanded', 'true');
+    await expect(card.locator('.artifact-ref-card-close')).toBeVisible();
+    expect(errors).toEqual([]);
+  });
+
+  test('a reference in a section held back keeps its card when a republish names it nowhere else', async ({ page }) => {
+    const errors = watchErrors(page);
+    const name = 'live-page-refs-held';
+    const refs = refsFile('Story follow-ups become proposals');
+    publish(name, sectioned('Live page refs held', pond({
+      Risks: { paragraphs: ['The pump may crack in the ice, as HOLO-175 says.'] },
+    })), '--no-comments', '--refs', refs);
+    await openPlain(page, name);
+    const ref = page.locator('.artifact-body button.artifact-ref[data-ref="HOLO-175"]');
+    await ref.focus();
+
+    const second = publish(name, sectioned('Live page refs held', pond({
+      Findings: { paragraphs: ['The pond froze early this year.'] },
+      Risks: { paragraphs: ['The pump will crack unless it is lifted out first.'] },
+    })), '--no-comments', '--refs', refs);
+    await page.clock.runFor(CHECK);
+    await expect.poll(() => revisionOf(page)).toBe(second);
+    await expect(banner(page).node).toHaveCount(0);
+    await expect(page.locator('.artifact-section-body[data-section="risks"] div.artifact-swap-held'))
+      .toContainText('This section changed');
+    await expect(ref).toBeFocused();
+
+    await ref.blur();
+    const card = page.locator('.artifact-ref-card');
+    await expect(card).toBeHidden();
+    await ref.hover();
+    await expect(card).toBeVisible();
+    await expect(card.locator('.artifact-ref-card-title')).toHaveText('Story follow-ups become proposals');
+    await ref.click();
+    await expect(ref).toHaveAttribute('aria-expanded', 'true');
+    await expect(card.locator('.artifact-ref-card-close')).toHaveCount(1);
+    await expect(card.locator('.artifact-ref-card-close')).toBeVisible();
     expect(errors).toEqual([]);
   });
 
@@ -930,17 +1203,17 @@ test.describe('signed in', () => {
     expect(errors).toEqual([]);
   });
 
-  // Select the first `length` characters of the paragraph holding `words`
-  // and open the passage composer on them.
-  async function selectPassage(page: Page, words: string, length: number) {
-    await page.locator('.artifact-body p', { hasText: words }).evaluate((paragraph, length) => {
+  // Select `length` characters of the paragraph holding `words`, from its
+  // first or from `from`, and open the passage composer on them.
+  async function selectPassage(page: Page, words: string, length: number, from = 0) {
+    await page.locator('.artifact-body p', { hasText: words }).evaluate((paragraph, [length, from]) => {
       const range = document.createRange();
-      range.setStart(paragraph.firstChild!, 0);
-      range.setEnd(paragraph.firstChild!, length);
+      range.setStart(paragraph.firstChild!, from);
+      range.setEnd(paragraph.firstChild!, from + length);
       const selection = document.getSelection()!;
       selection.removeAllRanges();
       selection.addRange(range);
-    }, length);
+    }, [length, from]);
     await page.keyboard.press('Control+Alt+m');
     const field = page.getByRole('textbox', { name: 'Comment on the selected words' });
     await expect(field).toBeFocused();
@@ -976,19 +1249,27 @@ test.describe('signed in', () => {
     publish(name, source('Live page passage gone', 'first'));
     await stopClock(page);
     await open(page, name);
+    const loads = watchLoads(page);
     const field = await selectPassage(page, 'Risks, paragraph 1', 18);
     const UNSENT = 'Which pump is this?';
     await field.fill(UNSENT);
 
-    const second = publish(name, source('Live page passage gone', 'second')
+    // Only Risks changes: the swap holds it back, the composer as it was.
+    const second = publish(name, source('Live page passage gone', 'first')
       .replace('Risks, paragraph 1:', 'Risks, first point:'));
     await page.clock.runFor(CHECK);
-    const loaded = page.waitForEvent('load');
-    await banner(page).reload.click();
-    await loaded;
+    await expect.poll(() => revisionOf(page)).toBe(second);
+    const risks = page.locator('div.artifact-section-body[data-section="risks"]');
+    const bar = risks.locator('div.artifact-swap-held');
+    await expect(bar).toContainText('This section changed');
+    await expect(risks).toContainText('Risks, paragraph 1:');
+    await expect(field).toHaveValue(UNSENT);
+    await expect(page.locator('mark.artifact-passage--pending')).toHaveText('Risks, paragraph 1');
+    await expect(banner(page).node).toHaveCount(0);
 
-    expect(await revisionOf(page)).toBe(second);
-    await expect(page.locator('.artifact-body')).toContainText('Risks, first point:');
+    await bar.getByRole('button', { name: 'Update' }).click();
+    await expect(risks).toContainText('Risks, first point:');
+    await expect(bar).toHaveCount(0);
     await expect(page.locator('mark.artifact-passage--pending')).toHaveCount(0);
     const form = page.locator('.artifact-comments-panel form.artifact-comment-form')
       .filter({ has: page.getByRole('textbox', { name: 'Comment on Risks' }) });
@@ -996,6 +1277,8 @@ test.describe('signed in', () => {
     await expect(form.locator('textarea')).toHaveValue(UNSENT);
     await expect(form.locator('.artifact-comment-status')).toHaveText(
       'The words you selected have changed since. Your comment is kept here, on the section.');
+    await expect(page.locator('.artifact-passage-composer')).toHaveCount(0);
+    expect(loads.count).toBe(0);
     expect(errors).toEqual([]);
   });
 
@@ -1011,13 +1294,16 @@ test.describe('signed in', () => {
     const UNSENT = 'What cracks first, the pump or the pipe?';
     await risks.fill(UNSENT);
 
-    const second = publish(name, source('Live page renamed', 'second').replace(/Risks/g, 'Hazards'));
+    const loads = watchLoads(page);
+    const second = publish(name, source('Live page renamed', 'first').replace(/Risks/g, 'Hazards'));
     await page.clock.runFor(CHECK);
-    const loaded = page.waitForEvent('load');
-    await banner(page).reload.click();
-    await loaded;
+    await expect.poll(() => revisionOf(page)).toBe(second);
+    const bar = page.locator('div.artifact-section-body[data-section="risks"] div.artifact-swap-held');
+    await expect(bar).toContainText('This section was removed');
+    await expect(risks).toHaveValue(UNSENT);
+    await expect(banner(page).node).toHaveCount(0);
 
-    expect(await revisionOf(page)).toBe(second);
+    await bar.getByRole('button', { name: 'Update' }).click();
     await expect(page.locator('details.artifact-comment[data-section="risks"]')).toHaveCount(0);
     const form = page.locator('.artifact-comments-panel form.artifact-comment-form')
       .filter({ has: page.getByRole('textbox', { name: 'Comment on Hazards' }) });
@@ -1025,6 +1311,272 @@ test.describe('signed in', () => {
     await expect(form.locator('textarea')).toHaveValue(UNSENT);
     await expect(form.locator('.artifact-comment-status')).toHaveText(
       'Where you were writing has changed since. Your text is kept here.');
+    expect(loads.count).toBe(0);
+    expect(errors).toEqual([]);
+  });
+
+  test('a comment on a section renamed since joins the form where the section was after a post it is sending there', async ({ page }) => {
+    const errors = watchErrors(page);
+    const name = 'live-page-renamed-sending';
+    publish(name, source('Live page renamed sending', 'first'));
+    await stopClock(page);
+    await open(page, name);
+    await page.locator('details.artifact-comment[data-section="risks"] summary').click();
+    const risks = page.locator('.artifact-comments-panel').getByRole('textbox', { name: 'Comment on Risks' });
+    const UNSENT = 'What cracks first, the pump or the pipe?';
+    await risks.fill(UNSENT);
+
+    const loads = watchLoads(page);
+    const second = publish(name, source('Live page renamed sending', 'first').replace(/Risks/g, 'Hazards'));
+    await page.clock.runFor(CHECK);
+    await expect.poll(() => revisionOf(page)).toBe(second);
+    const bar = page.locator('div.artifact-section-body[data-section="risks"] div.artifact-swap-held');
+    await expect(bar).toContainText('This section was removed');
+
+    // A Hazards comment is sending when Risks is updated.
+    let release!: () => void;
+    const released = new Promise<void>((resolve) => { release = resolve; });
+    await page.route((url) => url.pathname === '/api/comments', async (route) => {
+      if (route.request().method() !== 'POST') {
+        await route.fallback();
+        return;
+      }
+      await released;
+      await route.continue();
+    });
+    await page.locator('details.artifact-comment[data-section="hazards"] summary').click();
+    const form = page.locator('.artifact-comments-panel form.artifact-comment-form')
+      .filter({ has: page.getByRole('textbox', { name: 'Comment on Hazards' }) });
+    const SENT = 'Is the pipe lagged?';
+    await form.locator('textarea').fill(SENT);
+    await form.getByRole('button', { name: 'Comment' }).click();
+    await expect(form.locator('.artifact-comment-status')).toHaveText('Saving...');
+    await bar.getByRole('button', { name: 'Update' }).click();
+    await expect(page.locator('details.artifact-comment[data-section="risks"]')).toHaveCount(0);
+
+    const [posted] = await Promise.all([
+      page.waitForResponse((r) => new URL(r.url()).pathname === '/api/comments' && r.request().method() === 'POST'),
+      release(),
+    ]);
+    expect(posted.status()).toBe(201);
+    expect(posted.request().postDataJSON().text).toBe(SENT);
+    await expect(form.locator('textarea')).toBeVisible();
+    await expect(form.locator('textarea')).toHaveValue(UNSENT);
+    await expect(form.locator('.artifact-comment-status')).toHaveText(
+      'Where you were writing has changed since. Your text is kept here.');
+    expect(loads.count).toBe(0);
+    expect(errors).toEqual([]);
+  });
+
+  test('a comment waiting on a post sending in the form where its section was is kept over Reload', async ({ page }) => {
+    const errors = watchErrors(page);
+    const name = 'live-page-renamed-sending-reload';
+    publish(name, source('Live page renamed sending reload', 'first'));
+    await stopClock(page);
+    await open(page, name);
+    await page.locator('details.artifact-comment[data-section="risks"] summary').click();
+    const risks = page.locator('.artifact-comments-panel').getByRole('textbox', { name: 'Comment on Risks' });
+    const UNSENT = 'What cracks first, the pump or the pipe?';
+    await risks.fill(UNSENT);
+
+    const second = publish(name, source('Live page renamed sending reload', 'first').replace(/Risks/g, 'Hazards'));
+    await page.clock.runFor(CHECK);
+    await expect.poll(() => revisionOf(page)).toBe(second);
+    const bar = page.locator('div.artifact-section-body[data-section="risks"] div.artifact-swap-held');
+    await expect(bar).toContainText('This section was removed');
+
+    // A Hazards comment is still sending when Risks is updated, and when
+    // the reader reloads the page for a later revision.
+    await page.route((url) => url.pathname === '/api/comments', async (route) => {
+      if (route.request().method() !== 'POST') {
+        await route.fallback();
+      }
+    });
+    await page.locator('details.artifact-comment[data-section="hazards"] summary').click();
+    const form = page.locator('.artifact-comments-panel form.artifact-comment-form')
+      .filter({ has: page.getByRole('textbox', { name: 'Comment on Hazards' }) });
+    const SENT = 'Is the pipe lagged?';
+    await form.locator('textarea').fill(SENT);
+    await form.getByRole('button', { name: 'Comment' }).click();
+    await expect(form.locator('.artifact-comment-status')).toHaveText('Saving...');
+    await bar.getByRole('button', { name: 'Update' }).click();
+    await expect(page.locator('details.artifact-comment[data-section="risks"]')).toHaveCount(0);
+
+    await fallBack(page, name);
+    const third = publish(name, source('Live page renamed sending reload', 'second').replace(/Risks/g, 'Hazards'));
+    await page.clock.runFor(CHECK);
+    const shown = banner(page);
+    await expect(shown.reload).toBeVisible();
+    const loaded = page.waitForEvent('load');
+    await shown.reload.click();
+    await loaded;
+
+    expect(await revisionOf(page)).toBe(third);
+    await expect(form.locator('textarea')).toBeVisible();
+    await expect(form.locator('textarea')).toHaveValue(SENT + '\n\n' + UNSENT);
+    await expect(form.locator('.artifact-comment-status')).toHaveText(
+      'Where you were writing has changed since. Your text is kept here.');
+    expect(errors).toEqual([]);
+  });
+
+  test('a comment still sending when Update takes its section away is kept over Reload', async ({ page }) => {
+    const errors = watchErrors(page);
+    const name = 'live-page-renamed-own-sending-reload';
+    publish(name, source('Live page renamed own sending reload', 'first'));
+    await stopClock(page);
+    await open(page, name);
+
+    // The Risks comment is still sending when Risks is updated, and when
+    // the reader reloads the page for a later revision.
+    await page.route((url) => url.pathname === '/api/comments', async (route) => {
+      if (route.request().method() !== 'POST') {
+        await route.fallback();
+      }
+    });
+    await page.locator('details.artifact-comment[data-section="risks"] summary').click();
+    const risks = page.locator('.artifact-comments-panel form.artifact-comment-form')
+      .filter({ has: page.getByRole('textbox', { name: 'Comment on Risks' }) });
+    const SENT = 'What cracks first, the pump or the pipe?';
+    await risks.locator('textarea').fill(SENT);
+    await risks.getByRole('button', { name: 'Comment' }).click();
+    await expect(risks.locator('.artifact-comment-status')).toHaveText('Saving...');
+
+    const second = publish(name, source('Live page renamed own sending reload', 'first').replace(/Risks/g, 'Hazards'));
+    await page.clock.runFor(CHECK);
+    await expect.poll(() => revisionOf(page)).toBe(second);
+    const bar = page.locator('div.artifact-section-body[data-section="risks"] div.artifact-swap-held');
+    await expect(bar).toContainText('This section was removed');
+    await bar.getByRole('button', { name: 'Update' }).click();
+    await expect(page.locator('details.artifact-comment[data-section="risks"]')).toHaveCount(0);
+
+    await fallBack(page, name);
+    const third = publish(name, source('Live page renamed own sending reload', 'second').replace(/Risks/g, 'Hazards'));
+    await page.clock.runFor(CHECK);
+    const shown = banner(page);
+    await expect(shown.reload).toBeVisible();
+    const loaded = page.waitForEvent('load');
+    await shown.reload.click();
+    await loaded;
+
+    expect(await revisionOf(page)).toBe(third);
+    const hazards = page.locator('.artifact-comments-panel form.artifact-comment-form')
+      .filter({ has: page.getByRole('textbox', { name: 'Comment on Hazards' }) });
+    await expect(hazards.locator('textarea')).toBeVisible();
+    await expect(hazards.locator('textarea')).toHaveValue(SENT);
+    await expect(hazards.locator('.artifact-comment-status')).toHaveText(
+      'Where you were writing has changed since. Your text is kept here.');
+    expect(errors).toEqual([]);
+  });
+
+  test('an image still uploading to a section renamed since joins the form where the section was', async ({ page }) => {
+    const errors = watchErrors(page);
+    const name = 'live-page-renamed-uploading';
+    publish(name, source('Live page renamed uploading', 'first'));
+    await stopClock(page);
+    await open(page, name);
+    await page.locator('details.artifact-comment[data-section="risks"] summary').click();
+    const risks = page.locator('.artifact-comments-panel').getByRole('textbox', { name: 'Comment on Risks' });
+    const UNSENT = 'What cracks first, the pump or the pipe?';
+    await risks.fill(UNSENT);
+    const release = await holdUploads(page);
+    await pasteFishOnly(risks);
+    await expect(page.locator('.artifact-attach-item--loading')).toHaveCount(1);
+
+    const loads = watchLoads(page);
+    const second = publish(name, source('Live page renamed uploading', 'first').replace(/Risks/g, 'Hazards'));
+    await page.clock.runFor(CHECK);
+    await expect.poll(() => revisionOf(page)).toBe(second);
+    const bar = page.locator('div.artifact-section-body[data-section="risks"] div.artifact-swap-held');
+    await expect(bar).toContainText('This section was removed');
+    await bar.getByRole('button', { name: 'Update' }).click();
+
+    const form = page.locator('.artifact-comments-panel form.artifact-comment-form')
+      .filter({ has: page.getByRole('textbox', { name: 'Comment on Hazards' }) });
+    await expect(form.locator('textarea')).toHaveValue(UNSENT);
+    await expect(form.locator('.artifact-attach-item--loading')).toHaveCount(1);
+    const [uploaded] = await Promise.all([
+      page.waitForResponse((r) => new URL(r.url()).pathname === '/api/media'),
+      release(),
+    ]);
+    expect(uploaded.status()).toBe(201);
+    await expect(form.locator('.artifact-attach-item img')).toHaveCount(1);
+    const attached = await attachedIn(form);
+    expect(attached[0]).toMatch(MEDIA_URL);
+    await expect(form.locator('.artifact-comment-status')).toHaveText(
+      'Where you were writing has changed since. Your text is kept here.');
+    expect(loads.count).toBe(0);
+    expect(errors).toEqual([]);
+  });
+
+  test('an image still uploading to a passage comment whose words changed joins its section\'s form', async ({ page }) => {
+    const errors = watchErrors(page);
+    const name = 'live-page-passage-uploading';
+    publish(name, source('Live page passage uploading', 'first'));
+    await stopClock(page);
+    await open(page, name);
+    const field = await selectPassage(page, 'Risks, paragraph 1', 18);
+    const UNSENT = 'Which pump is this?';
+    await field.fill(UNSENT);
+    const release = await holdUploads(page);
+    await pasteFishOnly(field);
+    await expect(page.locator('form.artifact-passage-form .artifact-attach-item--loading')).toHaveCount(1);
+
+    const loads = watchLoads(page);
+    const second = publish(name, source('Live page passage uploading', 'first')
+      .replace('Risks, paragraph 1:', 'Risks, first point:'));
+    await page.clock.runFor(CHECK);
+    await expect.poll(() => revisionOf(page)).toBe(second);
+    const bar = page.locator('div.artifact-section-body[data-section="risks"] div.artifact-swap-held');
+    await expect(bar).toContainText('This section changed');
+    await bar.getByRole('button', { name: 'Update' }).click();
+
+    const form = page.locator('.artifact-comments-panel form.artifact-comment-form')
+      .filter({ has: page.getByRole('textbox', { name: 'Comment on Risks' }) });
+    await expect(form.locator('textarea')).toHaveValue(UNSENT);
+    await expect(form.locator('.artifact-attach-item--loading')).toHaveCount(1);
+    const [uploaded] = await Promise.all([
+      page.waitForResponse((r) => new URL(r.url()).pathname === '/api/media'),
+      release(),
+    ]);
+    expect(uploaded.status()).toBe(201);
+    await expect(form.locator('.artifact-attach-item img')).toHaveCount(1);
+    expect((await attachedIn(form))[0]).toMatch(MEDIA_URL);
+    await expect(form.locator('.artifact-comment-status')).toHaveText(
+      'The words you selected have changed since. Your comment is kept here, on the section.');
+    expect(loads.count).toBe(0);
+    expect(errors).toEqual([]);
+  });
+
+  test('a comment on a section renamed along with the next is kept in the form where the section was', async ({ page }) => {
+    const errors = watchErrors(page);
+    const name = 'live-page-renamed-both';
+    publish(name, source('Live page renamed both', 'first'));
+    await stopClock(page);
+    await open(page, name);
+    await page.locator('details.artifact-comment[data-section="risks"] summary').click();
+    const risks = page.locator('.artifact-comments-panel').getByRole('textbox', { name: 'Comment on Risks' });
+    await expect(risks).toBeFocused();
+    const UNSENT = 'What cracks first, the pump or the pipe?';
+    await risks.fill(UNSENT);
+
+    const loads = watchLoads(page);
+    const second = publish(name, source('Live page renamed both', 'first')
+      .replace(/Risks/g, 'Hazards').replace(/Next steps/g, 'Actions'));
+    await page.clock.runFor(CHECK);
+    await expect.poll(() => revisionOf(page)).toBe(second);
+    const bar = page.locator('div.artifact-section-body[data-section="risks"] div.artifact-swap-held');
+    await expect(bar).toContainText('This section was removed');
+
+    await bar.getByRole('button', { name: 'Update' }).click();
+    await expect(page.locator('details.artifact-comment[data-section="risks"]')).toHaveCount(0);
+    const form = page.locator('.artifact-comments-panel form.artifact-comment-form')
+      .filter({ has: page.getByRole('textbox', { name: 'Comment on Hazards' }) });
+    await expect(form.locator('textarea')).toHaveValue(UNSENT);
+    await expect(form.locator('.artifact-comment-status')).toHaveText(
+      'Where you were writing has changed since. Your text is kept here.');
+    await expect(page.locator('.artifact-comments-panel')
+      .getByRole('textbox', { name: 'Comment on Actions', includeHidden: true })).toHaveValue('');
+    expect(loads.count).toBe(0);
     expect(errors).toEqual([]);
   });
 
@@ -1428,7 +1980,7 @@ test.describe('signed in', () => {
     expect(errors).toEqual([]);
   });
 
-  test('a passage highlighted in a section a republish changes falls back to the banner', async ({ page, request }) => {
+  test('a passage highlighted in a section a republish changes is highlighted again in its new text', async ({ page, request }) => {
     const errors = watchErrors(page);
     const name = 'live-page-comments-passage';
     const first = publish(name, sectioned(name, pond()));
@@ -1444,15 +1996,17 @@ test.describe('signed in', () => {
     await open(page, name);
     await expect(page.locator('mark.artifact-passage')).toHaveText('The pump may crack in the ice.');
 
-    publish(name, sectioned(name, pond({ Risks: { paragraphs: [RISKY, 'The pump may crack in the ice.'] } })));
+    const second = publish(name, sectioned(name, pond({ Risks: { paragraphs: [RISKY, 'The pump may crack in the ice.'] } })));
     await page.clock.runFor(CHECK);
-    await expect(banner(page).node).toContainText(NEWER);
-    await expect(page.locator('div.artifact-section-body[data-section="risks"]')).not.toContainText(RISKY);
-    expect(await revisionOf(page)).toBe(first);
+    await expect.poll(() => revisionOf(page)).toBe(second);
+    await expect(banner(page).node).toHaveCount(0);
+    await expect(page.locator('div.artifact-section-body[data-section="risks"]')).toContainText(RISKY);
+    await expect(page.locator('mark.artifact-passage')).toHaveText('The pump may crack in the ice.');
+    await expect(page.locator('.artifact-passage-number')).toHaveText(['1']);
     expect(errors).toEqual([]);
   });
 
-  test('a removed section held back while its form holds a draft reloads on Update, the draft kept', async ({ page }) => {
+  test('a removed section held back while its form holds a draft keeps the draft on Update', async ({ page }) => {
     const errors = watchErrors(page);
     const name = 'live-page-comments-held-draft';
     publish(name, sectioned(name, pond()));
@@ -1471,16 +2025,386 @@ test.describe('signed in', () => {
     const UNSENT = 'What cracks first, the pump or the pipe?';
     await field.fill(UNSENT);
 
-    const loaded = page.waitForEvent('load');
+    const loads = watchLoads(page);
     await bar.getByRole('button', { name: 'Update' }).click();
-    await loaded;
     await expect(box(page, 'risks')).toHaveCount(0);
-    // Kept in a section's form, saying why, as after any reload.
+    expect(loads.count).toBe(0);
+    // Kept in a section's form, saying why, as after a reload.
     const form = page.locator('.artifact-comments-panel form.artifact-comment-form').filter({
       has: page.locator('.artifact-comment-status', { hasText: 'Where you were writing has changed since.' }),
     });
     await expect(form.locator('textarea')).toBeVisible();
     await expect(form.locator('textarea')).toHaveValue(UNSENT);
+    expect(errors).toEqual([]);
+  });
+
+  test('a section removed while its form holds a draft keeps the draft where it was, in the next section, on Update', async ({ page }) => {
+    const errors = watchErrors(page);
+    const name = 'live-page-comments-removed-draft';
+    publish(name, sectioned(name, pond()));
+    await stopClock(page);
+    await open(page, name);
+    await box(page, 'risks').locator('summary').click();
+    const field = page.locator('.artifact-comments-panel').getByRole('textbox', { name: 'Comment on Risks' });
+    await expect(field).toBeFocused();
+    const UNSENT = 'What cracks first, the pump or the pipe?';
+    await field.fill(UNSENT);
+
+    const loads = watchLoads(page);
+    publish(name, sectioned(name, pond().filter(([heading]) => heading !== 'Risks')));
+    await page.clock.runFor(CHECK);
+    const bar = page.locator('div.artifact-section-body[data-section="risks"] div.artifact-swap-held');
+    await expect(bar).toContainText('This section was removed');
+    await bar.getByRole('button', { name: 'Update' }).click();
+    await expect(box(page, 'risks')).toHaveCount(0);
+    // Where a reload puts it: the box now in Risks' place.
+    const form = page.locator('.artifact-comments-panel form.artifact-comment-form')
+      .filter({ has: page.getByRole('textbox', { name: 'Comment on Next steps' }) });
+    await expect(form.locator('textarea')).toHaveValue(UNSENT);
+    await expect(form.locator('.artifact-comment-status')).toHaveText(
+      'Where you were writing has changed since. Your text is kept here.');
+    const findings = page.locator('.artifact-comments-panel').getByRole('textbox', { name: 'Comment on Findings', includeHidden: true });
+    await expect(findings).toHaveValue('');
+    expect(loads.count).toBe(0);
+    expect(errors).toEqual([]);
+  });
+
+  test('a passage comment in a section renamed with its words changed is kept in the renamed section\'s form', async ({ page }) => {
+    const errors = watchErrors(page);
+    const name = 'live-page-comments-renamed-passage';
+    publish(name, sectioned(name, pond()));
+    await stopClock(page);
+    await open(page, name);
+    const field = await selectPassage(page, 'The pump may crack', 8);
+    const UNSENT = 'Which pump is this?';
+    await field.fill(UNSENT);
+
+    const loads = watchLoads(page);
+    publish(name, sectioned(name, pond({ Risks: { heading: 'Hazards', paragraphs: [RISKY] } })));
+    await page.clock.runFor(CHECK);
+    const bar = page.locator('div.artifact-section-body[data-section="risks"] div.artifact-swap-held');
+    await expect(bar).toContainText('This section was removed');
+    await expect(field).toHaveValue(UNSENT);
+    await bar.getByRole('button', { name: 'Update' }).click();
+    await expect(box(page, 'risks')).toHaveCount(0);
+    await expect(page.locator('mark.artifact-passage--pending')).toHaveCount(0);
+    const form = page.locator('.artifact-comments-panel form.artifact-comment-form')
+      .filter({ has: page.getByRole('textbox', { name: 'Comment on Hazards' }) });
+    await expect(form.locator('textarea')).toHaveValue(UNSENT);
+    await expect(form.locator('.artifact-comment-status')).toHaveText(
+      'The words you selected have changed since. Your comment is kept here, on the section.');
+    await expect(page.locator('.artifact-comments-panel').getByRole('textbox', { name: 'Comment on Next steps', includeHidden: true }))
+      .toHaveValue('');
+    expect(loads.count).toBe(0);
+    expect(errors).toEqual([]);
+  });
+
+  test('a passage comment still sending when its held section is updated is saved once, not kept as a draft', async ({ page }) => {
+    const errors = watchErrors(page);
+    const name = 'live-page-comments-sending-passage';
+    publish(name, sectioned(name, pond()));
+    await stopClock(page);
+    await open(page, name);
+    const field = await selectPassage(page, 'The pump may crack', 8);
+    const SENT = 'Which pump is this?';
+    await field.fill(SENT);
+
+    publish(name, sectioned(name, pond({ Risks: { paragraphs: [RISKY, 'The fish need air under it.'] } })));
+    await page.clock.runFor(CHECK);
+    const bar = page.locator('div.artifact-section-body[data-section="risks"] div.artifact-swap-held');
+    await expect(bar).toContainText('This section changed');
+
+    // The post waits until the section is updated.
+    let release!: () => void;
+    const released = new Promise<void>((resolve) => { release = resolve; });
+    const posts: number[] = [];
+    await page.route((url) => url.pathname === '/api/comments', async (route) => {
+      if (route.request().method() !== 'POST') {
+        await route.fallback();
+        return;
+      }
+      await released;
+      const response = await route.fetch();
+      posts.push(response.status());
+      await route.fulfill({ response });
+    });
+    await page.locator('form.artifact-passage-form button[type="submit"]').click();
+    await bar.getByRole('button', { name: 'Update' }).click();
+    await expect(page.locator('div.artifact-section-body[data-section="risks"]')).toContainText(RISKY);
+    release();
+
+    await expect(page.locator('.artifact-comments-panel .artifact-comments-entry')).toHaveCount(1);
+    expect(posts).toEqual([201]);
+    await expect(page.locator('.artifact-passage-composer')).toHaveCount(0);
+    const risks = page.locator('.artifact-comments-panel form.artifact-comment-form')
+      .filter({ has: page.getByRole('textbox', { name: 'Comment on Risks', includeHidden: true }) });
+    await expect(risks.locator('textarea')).toHaveValue('');
+    await expect(risks.locator('.artifact-comment-status')).toHaveText('');
+    expect(errors).toEqual([]);
+  });
+
+  test('a passage comment still sending when its held section is updated opens again on its words over Reload', async ({ page }) => {
+    const errors = watchErrors(page);
+    const name = 'live-page-comments-sending-passage-reload';
+    publish(name, sectioned(name, pond()));
+    await stopClock(page);
+    await open(page, name);
+    const field = await selectPassage(page, 'The pump may crack', 8);
+    const SENT = 'Which pump is this?';
+    await field.fill(SENT);
+
+    // The words selected stay; a paragraph is added after them.
+    const KEPT = { Risks: { paragraphs: ['The pump may crack in the ice.', 'The fish need air under it.', RISKY] } };
+    publish(name, sectioned(name, pond(KEPT)));
+    await page.clock.runFor(CHECK);
+    const bar = page.locator('div.artifact-section-body[data-section="risks"] div.artifact-swap-held');
+    await expect(bar).toContainText('This section changed');
+
+    // The post is still sending when the section is updated, and when the
+    // reader reloads the page for a later revision.
+    await page.route((url) => url.pathname === '/api/comments', async (route) => {
+      if (route.request().method() !== 'POST') {
+        await route.fallback();
+      }
+    });
+    await page.locator('form.artifact-passage-form button[type="submit"]').click();
+    await bar.getByRole('button', { name: 'Update' }).click();
+    await expect(page.locator('div.artifact-section-body[data-section="risks"]')).toContainText(RISKY);
+
+    await fallBack(page, name);
+    const third = publish(name, sectioned(name, pond({ ...KEPT, 'Next steps': { paragraphs: ['Order a heater in October.'] } })));
+    await page.clock.runFor(CHECK);
+    const shown = banner(page);
+    await expect(shown.reload).toBeVisible();
+    const loaded = page.waitForEvent('load');
+    await shown.reload.click();
+    await loaded;
+
+    expect(await revisionOf(page)).toBe(third);
+    await expect(page.getByRole('textbox', { name: 'Comment on the selected words' })).toHaveValue(SENT);
+    await expect(page.locator('mark.artifact-passage--pending')).toHaveText('The pump');
+    const risks = page.locator('.artifact-comments-panel form.artifact-comment-form')
+      .filter({ has: page.getByRole('textbox', { name: 'Comment on Risks', includeHidden: true }) });
+    await expect(risks.locator('textarea')).toHaveValue('');
+    await expect(risks.locator('.artifact-comment-status')).toHaveText('');
+    expect(errors).toEqual([]);
+  });
+
+  test('a held section renamed by a later republish keeps its draft whole in one form on Update', async ({ page }) => {
+    const errors = watchErrors(page);
+    const name = 'live-page-comments-held-renamed';
+    publish(name, sectioned(name, pond()));
+    await stopClock(page);
+    await open(page, name);
+    await box(page, 'risks').locator('summary').click();
+    const field = page.locator('.artifact-comments-panel').getByRole('textbox', { name: 'Comment on Risks' });
+    const UNSENT = 'What cracks first, the pump or the pipe?';
+    await field.fill(UNSENT);
+    await page.locator('.artifact-body > h2#risks button.artifact-section-toggle').focus();
+
+    publish(name, sectioned(name, pond({ Risks: { paragraphs: [RISKY] } })));
+    await page.clock.runFor(CHECK);
+    const bar = page.locator('div.artifact-section-body[data-section="risks"] div.artifact-swap-held');
+    await expect(bar).toContainText('This section changed');
+    const renamed = publish(name, sectioned(name, pond({ Risks: { heading: 'Hazards', paragraphs: [RISKY] } })));
+    await page.clock.runFor(CHECK);
+    await expect.poll(() => revisionOf(page)).toBe(renamed);
+    await expect(bar).toContainText('This section was removed');
+
+    await bar.getByRole('button', { name: 'Update' }).click();
+    await expect(box(page, 'risks')).toHaveCount(0);
+    // Where a reload would put it: whole, in one form, saying why.
+    const forms = page.locator('.artifact-comments-panel form.artifact-comment-form');
+    await expect.poll(() => forms.locator('textarea').evaluateAll((fields, text) =>
+      fields.filter((field) => (field as HTMLTextAreaElement).value.includes(text)).length, UNSENT)).toBe(1);
+    const form = forms.filter({ has: page.locator('.artifact-comment-status', { hasText: 'Where you were writing' }) });
+    await expect(form).toHaveCount(1);
+    await expect(form.locator('textarea')).toHaveValue(UNSENT);
+    await expect(form.locator('.artifact-comment-status')).toHaveText(
+      'Where you were writing has changed since. Your text is kept here.');
+    expect(errors).toEqual([]);
+  });
+
+  test('a held section renamed and then changed again keeps its draft whole in one form on Update', async ({ page }) => {
+    const errors = watchErrors(page);
+    const name = 'live-page-comments-renamed-changed';
+    publish(name, sectioned(name, pond()));
+    await stopClock(page);
+    await open(page, name);
+    await box(page, 'risks').locator('summary').click();
+    const field = page.locator('.artifact-comments-panel').getByRole('textbox', { name: 'Comment on Risks' });
+    const UNSENT = 'What cracks first, the pump or the pipe?';
+    await field.fill(UNSENT);
+
+    publish(name, sectioned(name, pond({ Risks: { heading: 'Hazards' } })));
+    await page.clock.runFor(CHECK);
+    const bar = page.locator('div.artifact-section-body[data-section="risks"] div.artifact-swap-held');
+    await expect(bar).toContainText('This section was removed');
+    // Hazards, added in its place, changes again before the reader's Update.
+    const changed = publish(name, sectioned(name, pond({ Risks: { heading: 'Hazards', paragraphs: [RISKY] } })));
+    await page.clock.runFor(CHECK);
+    await expect.poll(() => revisionOf(page)).toBe(changed);
+    await expect(page.locator('div.artifact-section-body[data-section="hazards"]')).toContainText(RISKY);
+    await expect(bar).toContainText('This section was removed');
+
+    await bar.getByRole('button', { name: 'Update' }).click();
+    await expect(box(page, 'risks')).toHaveCount(0);
+    // Where a reload would put it: whole, in one form, saying why.
+    const forms = page.locator('.artifact-comments-panel form.artifact-comment-form');
+    await expect.poll(() => forms.locator('textarea').evaluateAll((fields, text) =>
+      fields.filter((field) => (field as HTMLTextAreaElement).value.includes(text)).length, UNSENT)).toBe(1);
+    const form = forms.filter({ has: page.locator('.artifact-comment-status', { hasText: 'Where you were writing' }) });
+    await expect(form).toHaveCount(1);
+    await expect(form.locator('textarea')).toHaveValue(UNSENT);
+    await expect(form.locator('.artifact-comment-status')).toHaveText(
+      'Where you were writing has changed since. Your text is kept here.');
+    expect(errors).toEqual([]);
+  });
+
+  test('a passage comment that fails to send after its held section is updated leaves a composer opened since as it is', async ({ page }) => {
+    const errors = watchErrors(page);
+    const name = 'live-page-comments-failed-passage';
+    publish(name, sectioned(name, pond()));
+    await stopClock(page);
+    await open(page, name);
+    const first = await selectPassage(page, 'The pump may crack', 8);
+    const SENT = 'Which pump is this?';
+    await first.fill(SENT);
+
+    // Its words stay; the paragraph after them changes.
+    publish(name, sectioned(name, pond({ Risks: { paragraphs: ['The pump may crack in the ice.', 'The fish need air all winter.'] } })));
+    await page.clock.runFor(CHECK);
+    const bar = page.locator('div.artifact-section-body[data-section="risks"] div.artifact-swap-held');
+    await expect(bar).toContainText('This section changed');
+
+    // The post waits until another composer is open, then fails.
+    let release!: () => void;
+    const released = new Promise<void>((resolve) => { release = resolve; });
+    let failed = 0;
+    await page.route((url) => url.pathname === '/api/comments', async (route) => {
+      if (route.request().method() !== 'POST') {
+        await route.fallback();
+        return;
+      }
+      await released;
+      failed += 1;
+      await route.fulfill({ status: 500, contentType: 'application/json', body: '{"error":"down"}' });
+    });
+    await page.locator('form.artifact-passage-form button[type="submit"]').click();
+    await bar.getByRole('button', { name: 'Update' }).click();
+    await expect(page.locator('div.artifact-section-body[data-section="risks"]')).toContainText('The fish need air all winter.');
+
+    const second = await selectPassage(page, 'The pond freezes', 8);
+    const LATER = 'How thick does it get?';
+    await second.fill(LATER);
+    release();
+    await expect.poll(() => failed).toBe(1);
+
+    const risks = page.locator('.artifact-comments-panel form.artifact-comment-form')
+      .filter({ has: page.getByRole('textbox', { name: 'Comment on Risks', includeHidden: true }) });
+    await expect(risks.locator('textarea')).toHaveValue(SENT);
+    await expect(risks.locator('.artifact-comment-status')).toHaveText(
+      'The words you selected have changed since. Your comment is kept here, on the section.');
+    await expect(page.locator('.artifact-passage-composer')).toHaveCount(1);
+    await expect(second).toHaveValue(LATER);
+    await expect(page.locator('mark.artifact-passage--pending')).toHaveText('The pond');
+    // The failed post is logged by the browser; nothing else is.
+    expect(errors.filter((error) => !error.includes('status of 500'))).toEqual([]);
+  });
+
+  test('a passage comment saved after its held section is updated is highlighted on its own words, not on others where they were', async ({ page }) => {
+    const errors = watchErrors(page);
+    const name = 'live-page-comments-moved-passage';
+    // Words far enough into their paragraph that what comes before them
+    // can grow and leave their context as it is.
+    const LEAD = 'Ice forms first along the edges, thick by the new year. ';
+    const WORDS = `${LEAD}The pump may crack.`;
+    publish(name, sectioned(name, pond({ Risks: { paragraphs: [WORDS, POND[1][1][1]] } })));
+    await stopClock(page);
+    await open(page, name);
+    const field = await selectPassage(page, WORDS, 'The pump'.length, LEAD.length);
+    await field.fill('Which pump is this?');
+
+    // The same words, ahead of them, where they were; theirs move on.
+    const AHEAD = `${LEAD}The pump hums all winter long. `;
+    publish(name, sectioned(name, pond({ Risks: { paragraphs: [AHEAD + WORDS, POND[1][1][1]] } })));
+    await page.clock.runFor(CHECK);
+    const bar = page.locator('div.artifact-section-body[data-section="risks"] div.artifact-swap-held');
+    await expect(bar).toContainText('This section changed');
+
+    // The post waits until the reader has updated the section.
+    let release!: () => void;
+    const released = new Promise<void>((resolve) => { release = resolve; });
+    let posted = 0;
+    await page.route((url) => url.pathname === '/api/comments', async (route) => {
+      if (route.request().method() !== 'POST') {
+        await route.fallback();
+        return;
+      }
+      await released;
+      posted += 1;
+      await route.fallback();
+    });
+    await page.locator('form.artifact-passage-form button[type="submit"]').click();
+    await bar.getByRole('button', { name: 'Update' }).click();
+    const risks = page.locator('div.artifact-section-body[data-section="risks"]');
+    await expect(risks).toContainText(AHEAD);
+    release();
+    await expect.poll(() => posted).toBe(1);
+
+    const mark = risks.locator('mark.artifact-passage');
+    await expect(mark).toHaveText('The pump');
+    // Its own words, after the others, not the others where they were.
+    expect(await mark.evaluate((node) => {
+      const range = document.createRange();
+      range.selectNodeContents(node.closest('p')!);
+      range.setEnd(node, 0);
+      return range.toString().length;
+    })).toBe(AHEAD.length + LEAD.length);
+    expect(errors).toEqual([]);
+  });
+
+  test('a section comment still sending when its section is taken away is saved once, not kept as a draft', async ({ page }) => {
+    const errors = watchErrors(page);
+    const name = 'live-page-comments-sending-section';
+    publish(name, sectioned(name, pond()));
+    await stopClock(page);
+    await open(page, name);
+    await box(page, 'risks').locator('summary').click();
+    const field = page.locator('.artifact-comments-panel').getByRole('textbox', { name: 'Comment on Risks' });
+    await field.fill('What cracks first, the pump or the pipe?');
+
+    // The site saves it at once; its answer waits until the section is updated.
+    let release!: () => void;
+    const released = new Promise<void>((resolve) => { release = resolve; });
+    const posts: number[] = [];
+    await page.route((url) => url.pathname === '/api/comments', async (route) => {
+      if (route.request().method() !== 'POST') {
+        await route.fallback();
+        return;
+      }
+      const response = await route.fetch();
+      posts.push(response.status());
+      await released;
+      await route.fulfill({ response });
+    });
+    await field.press('ControlOrMeta+Enter');
+    await expect.poll(() => posts).toEqual([201]);
+
+    publish(name, sectioned(name, pond({ Risks: { heading: 'Hazards' } })));
+    await page.clock.runFor(CHECK);
+    const bar = page.locator('div.artifact-section-body[data-section="risks"] div.artifact-swap-held');
+    await expect(bar).toContainText('This section was removed');
+    await bar.getByRole('button', { name: 'Update' }).click();
+    await expect(box(page, 'risks')).toHaveCount(0);
+    release();
+
+    await expect(page.locator('.artifact-comments-panel .artifact-comments-entry')).toHaveCount(1);
+    const hazards = page.locator('.artifact-comments-panel form.artifact-comment-form')
+      .filter({ has: page.getByRole('textbox', { name: 'Comment on Hazards', includeHidden: true }) });
+    await expect(hazards.locator('textarea')).toHaveValue('');
+    await expect(hazards.locator('.artifact-comment-status')).toHaveText('');
+    expect(posts).toEqual([201]);
     expect(errors).toEqual([]);
   });
 
@@ -1531,7 +2455,7 @@ test.describe('signed in', () => {
     expect(errors).toEqual([]);
   });
 
-  test('Update on a held section holding a passage composer reloads, the composer kept', async ({ page }) => {
+  test('Update on a held section holding a passage composer opens it again on its words', async ({ page }) => {
     const errors = watchErrors(page);
     const name = 'live-page-comments-held-passage';
     publish(name, sectioned(name, pond()));
@@ -1551,10 +2475,10 @@ test.describe('signed in', () => {
     const UNSENT = 'Which pump is this?';
     await field.fill(UNSENT);
 
-    const loaded = page.waitForEvent('load');
+    const loads = watchLoads(page);
     await bar.getByRole('button', { name: 'Update' }).click();
-    await loaded;
     await expect(page.locator('div.artifact-section-body[data-section="risks"]')).toContainText(RISKY);
+    expect(loads.count).toBe(0);
     await expect(field).toHaveValue(UNSENT);
     await expect(page.locator('mark.artifact-passage--pending')).toHaveText('The pump');
     expect(errors).toEqual([]);
