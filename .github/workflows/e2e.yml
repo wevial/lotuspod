@@ -48,7 +48,7 @@ jobs:
         if: steps.browsers.outputs.cache-hit == 'true'
         run: npm --prefix e2e exec --no -- playwright install-deps chromium
       - name: browser checks
-        run: python -m tests.capture_site npm --prefix e2e exec --no -- playwright test --config e2e/checks.config.ts --reporter=github,list --trace=retain-on-failure
+        run: python -m tests.capture_site npm --prefix e2e exec --no -- playwright test --config e2e/checks.config.ts --reporter=github,list --trace=retain-on-failure --forbid-only
       - name: upload traces
         if: failure()
         uses: actions/upload-artifact@v4

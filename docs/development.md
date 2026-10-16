@@ -240,7 +240,9 @@ python -m tests.capture_site \
 
 The `e2e` workflow (`.github/workflows/e2e.yml`) runs that command on every
 pull request to main and every push to main, with `--reporter=github,list`
-so each failed check is annotated with its spec, line and title. It caches
+so each failed check is annotated with its spec, line and title, and with
+`--forbid-only`, so a committed `test.only` fails the run instead of skipping
+the rest of the suite. It caches
 npm's downloads, keyed on `e2e/package-lock.json`, and Playwright's Chromium
 in `~/.cache/ms-playwright`, keyed on the installed `@playwright/test`
 version. It runs with one worker and no retries, so a check that fails once
