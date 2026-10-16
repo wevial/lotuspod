@@ -1,3 +1,7 @@
+import { execFileSync } from 'node:child_process';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
 
 // The capture fixture's review sheet page: four sections, "Who reviews"
@@ -331,7 +335,8 @@ test.describe('signed in', () => {
 
   test('a form answered only to an earlier wording gets its default picked on the form and in the panel', async ({ page }) => {
     firstRepeatOnly();
-    await page.route((url) => url.pathname === '/api/answers', (route) =>
+    const reads = (url: URL) => url.pathname === '/api/answers';
+    await page.route(reads, (route) =>
       route.request().method() === 'GET'
         ? route.fulfill({ json: { page: 'capture-review-sheet', questions: {
           'decision-d1': { current: {
@@ -358,7 +363,8 @@ test.describe('signed in', () => {
     firstRepeatOnly();
     const before = (await stored(request))['decision-d1'].current.choice;
     const other = before === 'codex' ? 'Claude Opus' : 'Codex';
-    await page.route((url) => url.pathname === '/api/answers', (route) =>
+    const reads = (url: URL) => url.pathname === '/api/answers';
+    await page.route(reads, (route) =>
       route.request().method() === 'POST' && route.request().postDataJSON().question === 'decision-d1'
         ? route.fulfill({ status: 409, json: { error: 'stale_version' } })
         : route.continue());
@@ -381,7 +387,8 @@ test.describe('signed in', () => {
   test('a failed read of the answers draws no sheet and picks no default', async ({ page, request }) => {
     firstRepeatOnly();
     const before = (await stored(request))['decision-d1'].current;
-    await page.route((url) => url.pathname === '/api/answers', (route) =>
+    const reads = (url: URL) => url.pathname === '/api/answers';
+    await page.route(reads, (route) =>
       route.request().method() === 'GET' ? route.fulfill({ status: 503, body: '' }) : route.continue());
     await page.goto(`${PAGE}?standalone`);
     const the = sheet(page);
@@ -402,7 +409,8 @@ test.describe('signed in', () => {
     test.use({ viewport: { width: 360, height: 740 } });
 
     test('the count and Next open fit the title bar and the panel takes the full width', async ({ page }) => {
-      await page.route((url) => url.pathname === '/api/answers', (route) =>
+      const reads = (url: URL) => url.pathname === '/api/answers';
+    await page.route(reads, (route) =>
         route.request().method() === 'GET'
           ? route.fulfill({ json: { page: 'capture-review-sheet', questions: {} } })
           : route.continue());
@@ -426,7 +434,8 @@ test.describe('signed in', () => {
       test.use({ viewport: { width, height: 640 } });
 
       test('the count and Next open stay inside the window', async ({ page }) => {
-        await page.route((url) => url.pathname === '/api/answers', (route) =>
+        const reads = (url: URL) => url.pathname === '/api/answers';
+    await page.route(reads, (route) =>
           route.request().method() === 'GET'
             ? route.fulfill({ json: { page: 'capture-review-sheet', questions: {} } })
             : route.continue());
@@ -446,7 +455,8 @@ test.describe('signed in', () => {
     test.use({ viewport: { width: 280, height: 640 } });
 
     test('Next open ends in an ellipsis when narrow and shows whole when wide', async ({ page }) => {
-      await page.route((url) => url.pathname === '/api/answers', (route) =>
+      const reads = (url: URL) => url.pathname === '/api/answers';
+    await page.route(reads, (route) =>
         route.request().method() === 'GET'
           ? route.fulfill({ json: { page: 'capture-review-sheet', questions: {} } })
           : route.continue());
@@ -484,7 +494,8 @@ test.describe('signed in', () => {
     });
 
     test('with no question open the title stays and the count fits', async ({ page }) => {
-      await page.route((url) => url.pathname === '/api/answers', (route) =>
+      const reads = (url: URL) => url.pathname === '/api/answers';
+    await page.route(reads, (route) =>
         route.request().method() === 'GET'
           ? route.fulfill({ json: { page: 'capture-review-sheet', questions: {} } })
           : route.continue());
@@ -513,5 +524,282 @@ test.describe('without JavaScript', () => {
     await expect(page.locator('form.artifact-decision')).toHaveCount(QUESTIONS.length);
     for (const radio of await page.locator('input[name="choice"]').all()) await expect(radio).not.toBeChecked();
     await expect(page.locator('.artifact-review-bar, .artifact-review-panel')).toHaveCount(0);
+  });
+});
+
+// A page that is published again while its sheet is drawn: each check
+// publishes a page of its own with a real `lotuspod publish`, as
+// live-page.spec.ts does, and drives the page's clock, which asks for the
+// page's revision every 60 seconds.
+const ENV = process.env;
+const HERMES = ENV.LOTUSPOD_TEST_CREDENTIAL_HERMES ?? '';
+const OUT = ENV.LOTUSPOD_TEST_OUT ?? '';
+const PYTHON = ENV.LOTUSPOD_TEST_PYTHON ?? '';
+const SRC = path.resolve(__dirname, '..', '..', 'src');
+const CHECK = 60_000;
+const START = Date.parse('2026-10-02T12:00:00Z');
+
+// A question's row: its #, words, options and default ('' for none).
+type Row = [string, string, string, string];
+// A section: its heading, and the rows of a decisions table under it, if
+// any: an h2 "Decisions for the maintainer" is its own, any other h2 gets
+// an h3 of that name.
+type Part = [string, Row[]];
+
+const HEATER: Row = ['1', 'Which heater?', 'Small / Large', ''];
+const PUMP: Row = ['2', 'Lift the pump out?', 'Yes / No', ''];
+const NET: Row = ['3', 'Net the pond?', 'Yes / No', ''];
+const FISH: Row = ['4', 'Move the fish indoors?', 'Yes / No', ''];
+const DECISIONS = 'Decisions for the maintainer';
+
+function markdown(title: string, parts: Part[]) {
+  const lines = [`# ${title}`, '', 'The pond, in winter.', ''];
+  for (const [heading, rows] of parts) {
+    lines.push(`## ${heading}`, '', `What we know about ${heading.toLowerCase()}.`, '');
+    if (!rows.length) continue;
+    if (heading !== DECISIONS) lines.push(`### ${DECISIONS}`, '');
+    lines.push('| # | Question | Options | Default |', '| --- | --- | --- | --- |');
+    for (const row of rows) lines.push(`| ${row.join(' | ')} |`);
+    lines.push('');
+  }
+  return lines.join('\n');
+}
+
+function publish(name: string, parts: Part[]): string {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lotuspod-review-sheet-'));
+  try {
+    const file = path.join(dir, `${name}.md`);
+    fs.writeFileSync(file, markdown(name, parts), 'utf-8');
+    const said = execFileSync(PYTHON, ['-m', 'lotuspod', 'publish', file, '--local', '--out-dir', OUT,
+      '--owner', 'hermes', '--credential', HERMES], {
+      encoding: 'utf-8', env: { ...ENV, PYTHONPATH: SRC }, stdio: ['ignore', 'pipe', 'pipe'], timeout: 60_000,
+    });
+    const revision = /at revision ([0-9a-f]{12})/.exec(said)?.[1] ?? '';
+    expect(revision, said).not.toBe('');
+    return revision;
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+// A page name of the check's own, one per repeat: the site keeps answers.
+function named(slug: string) {
+  return `review-sheet-swap-${slug}-${test.info().repeatEachIndex}`;
+}
+
+// Publish the page, open it with its clock stopped and wait for its sheet;
+// the number of loads and navigations from then on.
+async function openPublished(page: Page, name: string, parts: Part[]) {
+  publish(name, parts);
+  await page.clock.install({ time: START });
+  await page.clock.pauseAt(START + 1000);
+  await page.goto(`/${name}.html?standalone`);
+  await expect(page.locator('button.artifact-review-count')).toBeVisible();
+  const moved = { count: 0 };
+  page.on('load', () => { moved.count += 1; });
+  page.on('framenavigated', (frame) => {
+    if (frame === page.mainFrame()) moved.count += 1;
+  });
+  return moved;
+}
+
+// Publish the page again and let the 60-second check swap it in.
+async function republish(page: Page, name: string, parts: Part[]) {
+  const revision = publish(name, parts);
+  await page.clock.runFor(CHECK);
+  await expect.poll(() => page.locator('meta[name="lotuspod:revision"]').getAttribute('content')).toBe(revision);
+  await expect(page.locator('.artifact-live-page-banner')).toHaveCount(0);
+}
+
+test.describe('signed in, published again', () => {
+  test.use({ extraHTTPHeaders: SIGNED_IN, viewport: { width: 1440, height: 900 } });
+
+  test('a question a republish adds is counted and marked in place', async ({ page }) => {
+    const seen = await watch(page);
+    const name = named('added');
+    const moved = await openPublished(page, name, [['Findings', []], [DECISIONS, [HEATER, PUMP, NET]]]);
+    const the = sheet(page);
+    await expect(the.count).toHaveText('3 to answer · Respond');
+    await expect(the.heading(DECISIONS).locator('.artifact-review-open')).toHaveText('3 open');
+    await expect(the.outline(DECISIONS).locator('.artifact-review-outline')).toHaveText('3 open');
+
+    await republish(page, name, [['Findings', []], [DECISIONS, [HEATER, PUMP, NET, FISH]]]);
+    await expect(the.form('decision-4')).toHaveCount(1);
+    await expect(the.count).toHaveText('4 to answer · Respond');
+    await expect(the.heading(DECISIONS).locator('.artifact-review-open')).toHaveText('4 open');
+    await expect(the.outline(DECISIONS).locator('.artifact-review-outline')).toHaveText('4 open');
+    await expect(the.heading(DECISIONS).locator('.artifact-review-open')).toHaveCount(1);
+    await expect(the.outline(DECISIONS).locator('.artifact-review-outline')).toHaveCount(1);
+    expect(moved.count).toBe(0);
+    expect(seen.errors).toEqual([]);
+  });
+
+  test('the Respond panel stays open as a republish takes a question away', async ({ page }) => {
+    const seen = await watch(page);
+    const name = named('removed');
+    await openPublished(page, name, [['Findings', []], [DECISIONS, [HEATER, PUMP, NET, FISH]]]);
+    const the = sheet(page);
+    await the.count.click();
+    await expect(the.panel).toBeVisible();
+    await expect(page.locator('li.artifact-review-entry')).toHaveCount(4);
+
+    await republish(page, name, [['Findings', []], [DECISIONS, [HEATER, NET, FISH]]]);
+    await expect(the.form('decision-2')).toHaveCount(0);
+    await expect(the.panel).toBeVisible();
+    await expect(page.locator('li.artifact-review-entry')).toHaveCount(3);
+    expect(await page.locator('li.artifact-review-entry').evaluateAll((items) =>
+      items.map((item) => (item as HTMLElement).dataset.question))).toEqual(['decision-1', 'decision-3', 'decision-4']);
+    await expect(the.tally).toHaveText('3 to answer · 0 changed · 3 in all');
+    await expect(the.count).toHaveText('3 to answer · Respond');
+    expect(seen.errors).toEqual([]);
+  });
+
+  test('a section a republish adds is marked, and one whose questions went is not', async ({ page }) => {
+    const seen = await watch(page);
+    const name = named('sections');
+    const HOLE: Row = ['H1', 'Keep a hole in the ice?', 'Yes / No', ''];
+    const LILY: Row = ['S1', 'Plant lilies?', 'Yes / No', ''];
+    await openPublished(page, name, [['Heater', [HOLE]], [DECISIONS, [PUMP]]]);
+    const the = sheet(page);
+    await expect(the.count).toHaveText('2 to answer · Respond');
+    await expect(the.heading('Heater').locator('.artifact-review-open')).toHaveText('1 open');
+    await expect(the.outline('Heater').locator('.artifact-review-outline')).toHaveText('1 open');
+
+    await republish(page, name, [['Heater', []], [DECISIONS, [PUMP]], ['Spring', [LILY]]]);
+    await expect(the.form('decision-s1')).toHaveCount(1);
+    await expect(the.count).toHaveText('2 to answer · Respond');
+    await expect(the.heading('Spring').locator('.artifact-review-open')).toHaveText('1 open');
+    await expect(the.outline('Spring').locator('.artifact-review-outline')).toHaveText('1 open');
+    await expect(the.heading(DECISIONS).locator('.artifact-review-open')).toHaveText('1 open');
+    await expect(the.outline(DECISIONS).locator('.artifact-review-outline')).toHaveText('1 open');
+    await expect(the.heading('Heater').locator('.artifact-review-open')).toHaveCount(0);
+    await expect(the.outline('Heater').locator('.artifact-review-outline')).toHaveCount(0);
+    await the.count.click();
+    await expect(the.groups.locator('.artifact-review-group-title')).toHaveText([DECISIONS, 'Spring']);
+    expect(seen.errors).toEqual([]);
+  });
+
+  test('Next open keeps its place by question when a republish adds one before it', async ({ page }) => {
+    const seen = await watch(page);
+    const name = named('next');
+    await openPublished(page, name, [[DECISIONS, [HEATER, PUMP, NET, FISH]]]);
+    const the = sheet(page);
+    for (const question of ['decision-1', 'decision-2', 'decision-3']) {
+      await the.next.click();
+      await expect(the.form(question).locator('input').first()).toBeFocused();
+    }
+    // The focus in the section would hold it back.
+    await page.locator('h1.artifact-title').click();
+
+    const POND: Row = ['2b', 'Drain the pond?', 'Yes / No', ''];
+    await republish(page, name, [[DECISIONS, [HEATER, PUMP, POND, NET, FISH]]]);
+    await expect(the.form('decision-2b')).toHaveCount(1);
+    await expect(the.count).toHaveText('5 to answer · Respond');
+    await expect(the.next).toContainText('Move the fish indoors?');
+    await the.next.click();
+    await expect(the.form('decision-4').locator('input').first()).toBeFocused();
+    expect(seen.errors).toEqual([]);
+  });
+
+  test('an answer saved stays counted, and a reworded question gets its default picked', async ({ page }) => {
+    const seen = await watch(page);
+    const name = named('reworded');
+    const NETTED: Row = ['3', 'Net the pond?', 'Yes / No', 'Yes'];
+    await openPublished(page, name, [[DECISIONS, [HEATER, PUMP, NETTED]]]);
+    const the = sheet(page);
+    await expect(the.form('decision-3').getByRole('radio', { name: 'Yes' })).toBeChecked();
+    await expect(the.count).toHaveText('2 to answer · Respond');
+    // The first answered, and the third's default saved with it, so no
+    // pick holds the section back.
+    await the.count.click();
+    await the.entry('decision-1').option('Large').click();
+    await the.save.click();
+    await expect(the.outcome).toContainText('Saved at');
+    await expect(the.count).toHaveText('1 to answer · Respond');
+    await the.close.click();
+    await page.locator('h1.artifact-title').click();
+
+    await republish(page, name, [[DECISIONS, [HEATER, PUMP, ['3', 'Net the whole pond?', 'Yes / No', 'Yes']]]]);
+    await expect(the.form('decision-3').locator('.artifact-decision-text')).toHaveText('Net the whole pond?');
+    await expect(the.count).toHaveText('1 to answer · Respond');
+    await expect(the.form('decision-3').getByRole('radio', { name: 'Yes' })).toBeChecked();
+    await expect(the.form('decision-3').locator('.artifact-decision-unsaved')).toBeVisible();
+    await the.count.click();
+    await expect(the.entry('decision-1').state).toHaveText('Changed');
+    await expect(the.entry('decision-1').unsaved).toBeHidden();
+    await expect(the.entry('decision-3').state).toHaveText('Default');
+    await expect(the.entry('decision-3').unsaved).toBeVisible();
+    await expect(the.save).toHaveText('Save 1 answer');
+    expect(seen.errors).toEqual([]);
+  });
+
+  test('a swap whose read of the answers fails leaves its forms out, so no default is saved over an answer', async ({ page, request }) => {
+    const seen = await watch(page);
+    const name = named('failed-read');
+    const NETTED: Row = ['3', 'Net the pond?', 'Yes / No', 'Yes'];
+    await openPublished(page, name, [['Findings', []], [DECISIONS, [HEATER, NETTED]]]);
+    const the = sheet(page);
+    const form = the.form('decision-3');
+    await form.getByRole('radio', { name: 'No' }).check();
+    await form.getByRole('button', { name: 'Save answer' }).click();
+    await expect(form.locator('.artifact-decision-saved-line')).toContainText('No');
+    await expect(the.count).toHaveText('1 to answer · Respond');
+    await page.locator('h1.artifact-title').click();
+
+    const reads = (url: URL) => url.pathname === '/api/answers';
+    await page.route(reads, (route) =>
+      route.request().method() === 'GET' ? route.fulfill({ status: 503, body: '' }) : route.fallback());
+    await republish(page, name, [['Findings', []], [DECISIONS, [HEATER, PUMP, NETTED]]]);
+    await expect(the.form('decision-2')).toHaveCount(1);
+    await expect(form.getByRole('radio', { name: 'Yes' })).not.toBeChecked();
+    await expect(the.count).toBeHidden();
+    await expect(the.next).toBeHidden();
+    await expect(the.heading(DECISIONS).locator('.artifact-review-open')).toHaveCount(0);
+
+    // The next read that succeeds draws them, the answer as saved.
+    await page.unroute(reads);
+    await republish(page, name, [['Findings', []], [DECISIONS, [HEATER, PUMP, NETTED, FISH]]]);
+    await expect(the.count).toHaveText('3 to answer · Respond');
+    await the.count.click();
+    await expect(the.entry('decision-3').option('No')).toHaveAttribute('aria-pressed', 'true');
+    await expect(the.entry('decision-3').unsaved).toBeHidden();
+    const answers = await request.get(`/api/answers?page=${name}`, { headers: SIGNED_IN });
+    expect((await answers.json()).questions['decision-3'].current.choice).toBe('no');
+    expect(seen.errors.filter((error) => !error.includes('503'))).toEqual([]);
+  });
+
+  test('the focus on a panel option follows its question to another section, and stays on its option', async ({ page }) => {
+    const seen = await watch(page);
+    const name = named('moved');
+    await openPublished(page, name, [['Heater', [NET]], [DECISIONS, [PUMP]]]);
+    const the = sheet(page);
+    await the.count.click();
+    await the.entry('decision-3').option('No').focus();
+
+    await republish(page, name, [['Heater', []], [DECISIONS, [PUMP]],
+      ['Spring', [['3', 'Net the pond?', 'Yes / Maybe / No', '']]]]);
+    await expect(the.entry('decision-3').option('Maybe')).toHaveCount(1);
+    await expect(the.panel).toBeVisible();
+    await expect(the.entry('decision-3').option('No')).toBeFocused();
+    expect(seen.errors).toEqual([]);
+  });
+
+  test('the panel stays open, its focus on Close, as a republish takes the last question away', async ({ page }) => {
+    const seen = await watch(page);
+    const name = named('last');
+    await openPublished(page, name, [['Findings', []], [DECISIONS, [HEATER]]]);
+    const the = sheet(page);
+    await the.count.click();
+    await the.entry('decision-1').option('Large').focus();
+
+    await republish(page, name, [['Findings', []], [DECISIONS, []]]);
+    await expect(the.form('decision-1')).toHaveCount(0);
+    await expect(the.panel).toBeVisible();
+    await expect(page.locator('li.artifact-review-entry')).toHaveCount(0);
+    await expect(the.tally).toHaveText('All answered · 0 changed · 0 in all');
+    await expect(the.close).toBeFocused();
+    await expect(the.count).toBeHidden();
+    await expect(the.heading(DECISIONS).locator('.artifact-review-open')).toHaveCount(0);
+    expect(seen.errors).toEqual([]);
   });
 });

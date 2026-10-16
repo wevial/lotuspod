@@ -21,7 +21,8 @@ const PYTHON = ENV.LOTUSPOD_TEST_PYTHON ?? '';
 // This checkout's package, whatever lotuspod is installed.
 const SRC = path.resolve(__dirname, '..', '..', 'src');
 const NAME = 'answer-note-threads-check';
-const NOTE = 'Why not Sonnet for nightly runs?';
+// It names hermes, so its thread waits for hermes, not the responder.
+const NOTE = '@hermes Why not Sonnet for nightly runs?';
 const REPLY = 'Sonnet is slower at night.';
 const MARKDOWN = ['# Model choice', '', 'Which model runs at night.', '',
   '## Decisions for the maintainer', '',
@@ -96,11 +97,11 @@ test.describe('signed in', () => {
       expect(value, `the capture fixture names ${name}`).toBeTruthy();
     }
     publish();
-    // hermes is listening, so the note waits for it.
+    // hermes is listening, so the note, naming it, waits for it.
     hermes('pull', '--owner', 'hermes');
 
     const errors = watch(page);
-    await page.goto(`/${NAME}.html`);
+    await page.goto(`/${NAME}.html?standalone`);
     const model = decision(page, 'decision-1');
     await expect(model.chip).toHaveCount(0);
     await model.option('Opus').check();
@@ -159,7 +160,7 @@ test.describe('signed in', () => {
     const name = `${NAME}-retry`;
     publish(name);
     const errors = watch(page);
-    await page.goto(`/${name}.html`);
+    await page.goto(`/${name}.html?standalone`);
     const model = decision(page, 'decision-1');
     // The first read of the comments after the save fails.
     let saved = false;

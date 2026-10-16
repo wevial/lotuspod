@@ -63,3 +63,86 @@
   cursor: progress;
   opacity: 0.7;
 }
+
+/* What a swap changed (web/src/page-swap.ts): one line in the banner's place
+   for a few seconds, taking no room either. */
+.artifact-live-page-note {
+  background: var(--color-surface);
+  border: 1px solid color-mix(in srgb, var(--color-sky) 40%, transparent);
+  border-radius: var(--radius-pill);
+  box-shadow: 0 10px 28px rgba(13, 10, 21, 0.55);
+  color: var(--color-pale-sky);
+  font-family: var(--font-body);
+  font-size: 0.875rem;
+  line-height: 1.35;
+  margin: 0 auto;
+  max-width: calc(100vw - 1rem);
+  padding: 0.4rem 1rem;
+  width: max-content;
+}
+
+/* A part a swap brought in: a soft tint that fades over the 2 seconds the
+   class stays, shown without the fade when motion is reduced. */
+.artifact-swapped {
+  animation: artifact-swapped 2s ease-out forwards;
+}
+
+@keyframes artifact-swapped {
+  from {
+    background-color: color-mix(in srgb, var(--color-sky) 16%, transparent);
+  }
+  to {
+    background-color: transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .artifact-swapped {
+    animation: none;
+    background-color: color-mix(in srgb, var(--color-sky) 16%, transparent);
+  }
+}
+
+/* A part held back from a swap while the reader is in it: a bar at its top,
+   over its old text, with Update. */
+.artifact-swap-held {
+  align-items: center;
+  background: color-mix(in srgb, var(--color-amber) 12%, var(--color-surface));
+  border: 1px solid color-mix(in srgb, var(--color-amber) 50%, transparent);
+  border-radius: var(--radius-block);
+  color: var(--color-white);
+  display: flex;
+  flex-wrap: wrap;
+  font-family: var(--font-body);
+  font-size: 0.875rem;
+  gap: 0.35rem 0.6rem;
+  line-height: 1.35;
+  margin: 0 0 1rem;
+  padding: 0.4rem 0.45rem 0.4rem 0.9rem;
+}
+
+.artifact-swap-held-dot {
+  color: var(--color-muted-lavender);
+}
+
+.artifact-swap-update {
+  appearance: none;
+  background: var(--color-amber);
+  border: 0;
+  border-radius: var(--radius-pill);
+  color: var(--color-deep-night);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 600;
+  margin: 0;
+  padding: 0.2rem 0.8rem;
+}
+
+.artifact-swap-update:hover {
+  background: var(--color-pale-rose);
+}
+
+.artifact-swap-update:focus-visible {
+  outline: 2px solid var(--color-amber);
+  outline-offset: 2px;
+}

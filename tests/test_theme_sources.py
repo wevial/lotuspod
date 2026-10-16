@@ -213,11 +213,12 @@ class DeclaredOrderTests(ThemeCopyTestCase):
     def test_the_ref_cards_sources_are_declared(self):
         """LOTUS-100: the cards' script uses when() and linkTab(), so it is
         joined after js/page-open.js and js/link-tab.js, last but for
-        js/archive.js and js/islands.js; its styles just after
-        css/prose.css."""
+        js/calltree.js (LOTUS-167), js/archive.js and js/islands.js; its
+        styles just after css/prose.css."""
         styles = cli.THEME_SOURCES[STYLESHEET]
         script = cli.THEME_SOURCES[cli.PAGE_SCRIPT]
-        self.assertEqual(script[-3:], ("js/ref-cards.js", "js/archive.js", "js/islands.js"))
+        self.assertEqual(script[-4:], ("js/ref-cards.js", "js/calltree.js", "js/archive.js",
+                                       "js/islands.js"))
         self.assertGreater(script.index("js/ref-cards.js"), script.index("js/link-tab.js"))
         self.assertEqual(styles.index("css/ref-cards.css"), styles.index("css/prose.css") + 1)
         problems = source_problems(cli.THEME_DIR, cli.THEME_SOURCES)

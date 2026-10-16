@@ -9,8 +9,9 @@ import { expect, test, type Page, type Route } from '@playwright/test';
 // listing every listed pod, filtered by the words typed, the pods this
 // reader opened most recently first under "Recent". Enter opens the chosen
 // pod in a tab, and Cmd/Ctrl+Enter or a Cmd/Ctrl-click a browser tab.
-// Signed in, the checks read as the fixture's second reader, who opens no
-// page in any check before these, so "Recent" holds only what they open.
+// Signed in, the checks read as the fixture's second reader, whom other
+// checks earlier in the run may sign in as too, so "Recent" holds what they
+// open here first, then whatever this reader opened before.
 // A published page, stamped with its revision, records its own opening on
 // load; the tabs record a rendered page's, which has no stamp, at "".
 const WIDE = { width: 1280, height: 800 };
@@ -191,13 +192,26 @@ test.describe('signed in', () => {
     const errors = await watch(page);
     await recordKeys(page);
     await openIndex(page);
+    // Other checks in the run sign in as this reader too, and the pods they
+    // opened are Recent as well, after these two, newest first.
+    const answer = await page.request.get(SEEN);
+    expect(answer.status()).toBe(200);
+    const seenBefore: Record<string, { seenAt?: unknown }> = (await answer.json()).pages ?? {};
+    const seenAt = (pod: Pod) => {
+      const at = seenBefore[pod.name]?.seenAt;
+      return typeof at === 'string' ? at : '';
+    };
     // Rendered, never published: no revision stamp, recorded at "".
     expect(await openRecorded(page, CHECKLIST)).toBe('');
     expect(await openRecorded(page, ARTICLE)).toBe('');
     // Opened at their own revision, neither reads as a new version.
     await expect(strip(page).locator('.pod-tab-dot')).toHaveCount(0);
     const pods = await listed(page);
-    const others = pods.filter((pod) => pod.name !== ARTICLE.name && pod.name !== CHECKLIST.name);
+    const opened = pods.filter((pod) => pod.name !== ARTICLE.name && pod.name !== CHECKLIST.name);
+    const earlier = opened.filter((pod) => seenAt(pod))
+      .sort((a, b) => (seenAt(a) < seenAt(b) ? 1 : seenAt(a) > seenAt(b) ? -1 : 0));
+    const recent = [ARTICLE, CHECKLIST, ...earlier];
+    const others = opened.filter((pod) => !seenAt(pod));
     expect(others.length).toBeGreaterThan(2);
 
     await find(page);
@@ -206,11 +220,11 @@ test.describe('signed in', () => {
     await expect(headings(page)).toHaveText(['Recent', 'Other pods']);
     const groups = finder(page).getByRole('group');
     await expect(groups).toHaveCount(2);
-    await expect(groups.nth(0).locator('.pod-finder-title')).toHaveText([ARTICLE.title, CHECKLIST.title]);
+    await expect(groups.nth(0).locator('.pod-finder-title')).toHaveText(recent.map((pod) => pod.title));
     await expect(groups.nth(1).locator('.pod-finder-title')).toHaveText(others.map((pod) => pod.title));
     // The headings come before their options.
     const order = await listbox(page).locator('.pod-finder-heading, .pod-finder-title').allTextContents();
-    expect(order).toEqual(['Recent', ARTICLE.title, CHECKLIST.title, 'Other pods',
+    expect(order).toEqual(['Recent', ...recent.map((pod) => pod.title), 'Other pods',
       ...others.map((pod) => pod.title)]);
     await expect(input(page)).toHaveAttribute('aria-controls', (await listbox(page).getAttribute('id')) ?? '');
     expect(await selectedName(page)).toBe(ARTICLE.name);

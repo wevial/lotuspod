@@ -522,7 +522,7 @@ test.describe('signed in', () => {
       expect(value, `the capture fixture names ${name}`).toBeTruthy();
     }
     const seen = await watch(page);
-    // hermes pulls first, so it is listening and the comment waits for it.
+    // hermes pulls first, so it is listening and the comment, naming it, waits for it.
     hermes('pull', '--owner', OWNER);
     const ids = new Set<number>();
     await ownThreads(page, ids);
@@ -534,7 +534,7 @@ test.describe('signed in', () => {
     const before = await spot(paragraph);
     await findings.chip.click();
     const group = side.group('Findings');
-    await group.locator('textarea[name="text"]').fill('Does the pump need a heater of its own?');
+    await group.locator('textarea[name="text"]').fill('@hermes Does the pump need a heater of its own?');
     await group.getByRole('button', { name: 'Comment', exact: true }).click();
     await expect.poll(() => ids.size).toBe(1);
     const [id] = [...ids];
@@ -575,7 +575,7 @@ test.describe('signed in', () => {
     test.setTimeout(120_000);
     const seen = await watch(page);
     hermes('pull', '--owner', OWNER);
-    const asked = await post(request, 'findings', 'Is the outlet on its own fuse?');
+    const asked = await post(request, 'findings', '@hermes Is the outlet on its own fuse?');
     const other = await post(request, 'risks', 'What if the heater fails too?');
     const claim = hermes('claim', String(asked.id));
     hermes('reply', String(asked.id), `--claim=${claim.claimToken}`, '--key', `panel-resolve-${asked.id}`,

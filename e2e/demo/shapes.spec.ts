@@ -72,7 +72,7 @@ test('the shim answers the script in the shapes serve gives', async ({ page }) =
 
   await ask('1. GET comments, none yet', 'GET', comments + query);
   const made = await ask('2. POST a section comment', 'POST', comments,
-    { page: PAGE, section: SECTION, text: 'Which lilies go in first?' });
+    { page: PAGE, section: SECTION, text: '@hermes Which lilies go in first?' });
   await ask('3. POST a passage comment, with a quote', 'POST', comments,
     { page: PAGE, section: PASSAGE_SECTION, text: 'Is this algae a worry?', quote: QUOTE, revision });
   await ask('4. GET comments', 'GET', comments + query);

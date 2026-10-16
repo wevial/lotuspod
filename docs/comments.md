@@ -245,13 +245,41 @@ the intro, and each changed, added or removed section. Everything else stays
 as it was, the scroll position and the folded sections with it; a swapped
 section stays folded if the one it replaces was, and an added one starts open
 unless the reader folded it before. The page then shows the new revision
-without a reload, and a later publish is noticed the same way. It does not
+without a reload, and a later publish is noticed the same way. A line in the
+banner's place, which moves no text and is announced politely, says "Page
+updated · 2 sections changed" (the intro counting as a section; just "Page
+updated" when only the header or outline changed) and goes after 6 seconds;
+each changed or added section is tinted for 2 seconds (without the fade when
+the reader asks for reduced motion), and a folded one says "changed" on its
+heading until it is opened. The first section heading below the title bar
+stays where it was in the window. A changed or removed section, or the intro,
+holding the focus is held back: it keeps its old text under a bar reading
+"This section changed" (or "This section was removed") with an Update button,
+which swaps it in and moves the focus to its heading, while the rest of the
+page swaps; it stays held until then, and a later publish that brings back
+its text takes the bar away. A page with comments updates in place too: a
+swapped section's comment box keeps its threads, its chip and its group in
+the comments panel, a thread open in the panel, a popover or the bottom sheet
+stays open, and a comment or reply not yet sent stays in its composer, text
+and images. Threads on a section the new revision removed or renamed are
+listed under "Sections that have changed", as a fresh load lists them, and
+an added section gets its own group. Decision forms update in place too: a
+swapped section's forms are drawn from the stored answers as a reload draws
+them, folded to a saved answer or open with "Answered to an earlier wording"
+for a reworded question, each with its Ask (and Dismiss, for an owner) and its
+decision chip, and the Answered table is drawn again after the last section.
+A section holding a form whose answer was changed and not saved, or is still
+being saved, is held back under "This section changed" with Update, so the
+answer is never lost. It does not
 swap, and shows the banner as below, when the theme or the page's policy
-changed, when either copy holds a comments box (any page that takes
-comments), or when a changed part, as it was or as it is now, holds a
-decision form, a diagram, a reference card or a table; nor when the outline
-or the sections came or went, the sections both copies have moved, or the
-references changed. A swap that fails partway reloads the page. Otherwise a
+changed, when a changed or removed part holds a passage's highlight (a
+thread's, or the words an open passage comment is on), when a removed
+section's form for a new thread holds text or images not sent, when a changed
+part, as it was or as it is now, holds a diagram, a reference card or a table,
+or when it holds a decision form while the page shows the review sheet (a page
+that loaded with decision forms) or the page loaded with neither a decision
+form nor a comment box; nor when the outline or the sections came or
+went, the sections both copies have moved, or the references changed. A swap that fails partway reloads the page. Otherwise a
 banner fixed over the top of the
 window, which moves no text and is announced politely, reads "A newer version
 of this page is available" with a Reload button. Reload brings the new
@@ -694,10 +722,12 @@ by one rule that the threads routes and the agents' pull share:
   `claude-3f9a2c`, while `email@claude-3f9a2c` names nobody. `@responder`
   names the default responder. To re-route, write a new comment naming
   someone else.
-- A comment with no mention, on a page whose owner was listening when it
-  arrived, is routed to the owner until the owner window has passed since it
-  arrived. After that, or when the owner was not listening, or when the page
-  has no owner, it is routed to `responder`.
+- A comment with no mention is routed to `responder`, on a page with an
+  owner too, whether or not the owner is listening. The responder answers
+  what the page and its thread can answer, and puts what asks the owner to
+  act in the owner's inbox (see [The owner
+  inbox](agents.md#the-owner-inbox)), replying "I've queued this for
+  OWNER: …".
 - A handle is listening when its last pull (see [the pull
   loop](agents.md#agents-the-pull-loop)) is within the owner
   window: 300 seconds, or what `serve --owner-window SECONDS` or the config's
