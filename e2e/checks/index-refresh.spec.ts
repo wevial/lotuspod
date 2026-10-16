@@ -243,6 +243,43 @@ test.describe('signed in', () => {
     expect(errors).toEqual([]);
   });
 
+  test('Recent activity keeps one week when it refreshes', async ({ page }) => {
+    const week = 7 * 24 * 60 * 60 * 1000;
+    const asked: (string | null)[] = [];
+    let newest = 0;
+    await page.route((url) => url.pathname === ACTIVITY, (route) => {
+      const before = new URL(route.request().url()).searchParams.get('before');
+      asked.push(before);
+      // Use real time: the browser's stopped clock would hide the gap
+      // between the previous week's start and the refreshed week's start.
+      const to = before ? Date.parse(before) : Date.now();
+      const at = new Date(to - 1000).toISOString();
+      const summary = before ? 'an older week' : `ask ${++newest}`;
+      return route.fulfill({ json: {
+        from: new Date(to - week).toISOString(), to: new Date(to).toISOString(),
+        older: true, truncated: false,
+        pages: [{ page: ARTICLE.name, title: ARTICLE.title, latest: at,
+          events: [{ kind: 'version', at, commit: at, revision: 'r1', actor: null,
+            first: false, summary }] }],
+      } });
+    });
+    await openIndex(page, '/#activity');
+    const group = page.locator(`section.index-activity-page[data-page="${ARTICLE.name}"]`);
+    await expect(group).toBeVisible();
+    const opened = newest;
+    asked.length = 0;
+
+    publish('index-refresh-weeks-1', 'Index refresh weeks 1', 'A page published while one week is shown.');
+    await nextRead(page);
+    // The newest summary lands only after the whole refresh chain merges.
+    await expect.poll(async () => newest > opened &&
+      (await group.textContent())?.includes(`ask ${newest}`)).toBe(true);
+
+    expect.soft(asked.filter((before) => before !== null)).toEqual([]);
+    await expect.soft(page.locator('.index-count')).toHaveText('1 page with activity in the last 7 days');
+    await expect.soft(group.locator('li.index-activity-event')).toHaveCount(1);
+  });
+
   test('a swap while the first activity read is under way asks for Recent activity again once it answers', async ({ page }) => {
     const errors = watchErrors(page);
     const name = 'index-refresh-starting';
