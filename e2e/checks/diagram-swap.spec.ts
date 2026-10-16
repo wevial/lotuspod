@@ -77,13 +77,13 @@ function run(...args: string[]) {
   });
 }
 
-// hermes publishes markdown as the page name, taking no comments; the
-// revision it is now at.
-function publish(name: string, markdown: string): string {
+// hermes publishes markdown (or, given 'html', a page body) as the page
+// name, taking no comments; the revision it is now at.
+function publish(name: string, text: string, format: 'md' | 'html' = 'md'): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lotuspod-diagram-swap-'));
   try {
-    const file = path.join(dir, `${name}.md`);
-    fs.writeFileSync(file, markdown, 'utf-8');
+    const file = path.join(dir, `${name}.${format}`);
+    fs.writeFileSync(file, text, 'utf-8');
     const said = run('publish', file, '--local', '--out-dir', OUT, '--owner', OWNER,
       '--credential', HERMES, '--no-comments');
     const revision = /at revision ([0-9a-f]{12})/.exec(said)?.[1] ?? '';
@@ -280,5 +280,73 @@ test("a republish adding the page's first diagram falls back to the banner", asy
   await expect(page.locator('.artifact-live-page-banner')).toContainText(NEWER);
   expect(await page.locator('.artifact-body').innerHTML()).toBe(before);
   expect(await revisionOf(page)).toBe(first);
+  await seen.clean();
+});
+
+test("a swapped diagram's cards read its own table, not a held section's of the same id", async ({ page }) => {
+  const seen = await watch(page);
+  const name = 'diagram-swap-cards-held';
+  // Two diagram sections: the second's table is nodes-table-2 until the
+  // first is taken away, when it is nodes-table, as the held first's is.
+  const doc = (sections: [string, string[]][]) => [
+    '# Diagram swap cards held', '', 'The plan, as it stands.', '',
+    ...sections.flatMap(([heading, body]) => [`## ${heading}`, '', ...body, '']),
+    '## Notes', '', 'Diagrams are drawn by the pinned Mermaid.', '',
+  ].join('\n');
+  const first: [string, string[]] = ['Draft', noded('A[Write] --> B[Publish]', [
+    ['A', 'Write the draft', 'merged'], ['B', 'Publish the draft', 'waiting'],
+  ])];
+  const flow = (title: string, status: string): [string, string[]] => ['Flow', noded('A[Plan] --> B[Ship]', [
+    ['A', title, status], ['B', 'Ship it', 'open'],
+  ])];
+  publish(name, doc([first, flow('Plan the flow', 'waiting')]));
+  await openPage(page, name);
+  const draft = wrapper(page, 'draft').locator('pre.mermaid');
+  await expect(draft.getByRole('button', { name: 'Expand diagram' })).toHaveCount(1);
+  await expect(box(page, 'A')).toHaveAttribute('role', 'button');
+  await draft.getByRole('button', { name: 'Expand diagram' }).click();
+  await expect(view(page).dialog).toBeVisible();
+
+  const second = publish(name, doc([flow('Plan the new flow', 'ready')]));
+  await check(page);
+  await expect.poll(() => revisionOf(page)).toBe(second);
+  await expect(wrapper(page, 'draft').locator('div.artifact-swap-held')).toHaveCount(1);
+  await expect(page.locator('table#nodes-table')).toHaveCount(2);
+  await page.keyboard.press('Escape');
+  await expect(view(page).dialog).toBeHidden();
+  await expect(box(page, 'A')).toHaveAttribute('aria-label', 'Plan, ready');
+  await expect(wrapper(page, 'flow').locator('table')).toBeHidden();
+  await box(page, 'A').click();
+  const card = page.locator(CARD);
+  await expect(card).toContainText('Plan the new flow');
+  await expect(card).toContainText('ready');
+  await seen.clean();
+});
+
+test("a diagram a swap brings to a page whose only one was in a comment gets its Expand button", async ({ page }) => {
+  const seen = await watch(page);
+  const name = 'diagram-swap-commented';
+  // A page body whose diagram is only in a comment: the page still draws
+  // Mermaid, so its policy stays when a real one comes.
+  const body = (flow: string) => [
+    '<h1>Diagram swap commented</h1>', '<p>The plan, as it stands.</p>',
+    '<h2>Goals</h2>', '<p>Ship the page script that swaps sections in place.</p>',
+    '<h2>Flow</h2>', '<!-- <pre class="mermaid">flowchart LR</pre> -->', flow,
+    '<h2>Notes</h2>', '<p>Diagrams are drawn by the pinned Mermaid.</p>', '',
+  ].join('\n');
+  publish(name, body('<p>The flow is still to be drawn.</p>'), 'html');
+  const moved = await openPage(page, name);
+  await expect(page.locator('pre.mermaid')).toHaveCount(0);
+
+  const second = publish(name, body('<pre class="mermaid">flowchart LR\n  A[Write] --> B[Publish]</pre>'), 'html');
+  await check(page);
+  await expect.poll(() => revisionOf(page)).toBe(second);
+  await expect(page.locator('.artifact-live-page-banner')).toHaveCount(0);
+  expect(moved.count).toBe(0);
+  await expect(diagram(page).locator(':scope > svg')).toContainText('Publish');
+  await expect(expand(page)).toHaveCount(1);
+  await expand(page).click();
+  await expect(view(page).svg).toContainText('Publish');
+  await page.keyboard.press('Escape');
   await seen.clean();
 });

@@ -91,11 +91,13 @@
     }
 
     function bind(pre, svg) {
-      var table = document.getElementById(pre.dataset.nodeTable);
-      if (!table) {
+      // The table render named: the one after the pre's Nodes heading. A
+      // section held back from a swap may keep a table of the same id.
+      var heading = pre.nextElementSibling;
+      var table = heading && heading.nextElementSibling;
+      if (!table || table.id !== pre.dataset.nodeTable) {
         return;
       }
-      var heading = table.previousElementSibling;
       var boxes = new Map();
       all("g.node", svg).forEach(function (group) {
         var match = BOX_ID.exec(group.id);

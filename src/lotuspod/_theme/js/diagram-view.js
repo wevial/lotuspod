@@ -449,12 +449,15 @@
   }
 
   var viewPres = all("pre.mermaid");
+  var viewMount = null;
   if (viewPres.length) {
-    var viewMount = diagramView();
+    viewMount = diagramView();
     viewPres.forEach(viewMount);
-    // The diagrams a swap brought in: a page with none at load takes none in
-    // a swap, as its policy differs.
-    document.addEventListener(DIAGRAMS, function (event) {
-      event.detail.nodes.forEach(viewMount);
-    });
   }
+  // The diagrams a swap brought in, on a page with none at load too: one
+  // whose diagram was only in a comment draws Mermaid, so its policy is the
+  // same.
+  document.addEventListener(DIAGRAMS, function (event) {
+    viewMount = viewMount || diagramView();
+    event.detail.nodes.forEach(viewMount);
+  });
