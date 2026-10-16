@@ -25,6 +25,7 @@ const SRC = path.resolve(__dirname, '..', '..', 'src');
 const OWNER = 'hermes';
 const NEWER = 'A newer version of this page is available';
 const CHECK = 60_000;
+const EVENTS = '/api/events';
 const START = Date.parse('2026-10-02T12:00:00Z');
 const FISH = path.resolve(__dirname, '..', '..', 'tests', 'fixtures', 'media', 'fish-320x240.jpg');
 const MEDIA_URL = /^\/media\/[0-9a-f]{64}\.jpg$/;
@@ -165,20 +166,34 @@ async function comment(request: APIRequestContext, name: string, section: string
   return (await response.json()) as { id: number; state: string };
 }
 
-// Errors the page throws or logs.
+// Errors the page throws or logs, but for serve's stream refused (refuse).
 function watchErrors(page: Page) {
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
   page.on('console', (message) => {
-    if (message.type() === 'error') errors.push(message.text());
+    if (message.type() === 'error' && !REFUSED(message)) errors.push(message.text());
   });
   return errors;
 }
 
-// The page's clock, paused at START: it moves only when moved.
+// Chromium's console error for the stream answered 503.
+function REFUSED(message: { text(): string; location(): { url: string } }) {
+  return new URL(message.location().url || 'about:blank', 'http://x').pathname === EVENTS &&
+    message.text().includes('503');
+}
+
+// The page's clock, paused at START: it moves only when moved. Serve's
+// stream (/api/events) is refused, so a republish or a reply reaches the
+// page only through the checks the clock drives, which these checks time.
 async function stopClock(page: Page) {
+  await refuse(page);
   await page.clock.install({ time: START });
   await page.clock.pauseAt(START + 1000);
+}
+
+async function refuse(page: Page) {
+  await page.route((url) => url.pathname === EVENTS, (route) =>
+    route.fulfill({ status: 503, contentType: 'application/json', body: '{"error": "too_many_streams"}' }));
 }
 
 // Open the page and let its first read of the threads come back.

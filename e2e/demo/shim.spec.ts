@@ -250,6 +250,28 @@ test('a page loaded directly opens in the demo index as its tab, the landing pag
   seen.clean();
 });
 
+test('a demo page and the demo index send no request to /api/events, a stand-in stream never connecting', async ({ context, page }) => {
+  const seen = watch(context, page);
+  const streams: string[] = [];
+  context.on('request', (request) => {
+    if (new URL(request.url()).pathname === '/api/events') streams.push(request.url());
+  });
+  await load(page, TRY_IT);
+  await page.goto(`${TRY_IT}#the-pond-today`);
+  await expect(page).toHaveURL(/\/pages\.html#tabs=try-it&on=try-it$/);
+  await expect(page.locator('iframe.pod-frame')).toHaveCount(1);
+  await page.waitForTimeout(500);
+  // The index holds the stand-in stream, still connecting and never open.
+  expect(await page.evaluate(() => {
+    const source = new EventSource('/api/events');
+    const state = source.readyState;
+    source.close();
+    return [state, document.documentElement.hasAttribute('data-lotuspod-events')];
+  })).toEqual([0, true]);
+  expect(streams, 'no request reaches /api/events').toEqual([]);
+  seen.clean();
+});
+
 test('a passage comment is highlighted and gets its reply', async ({ context, page }) => {
   const seen = watch(context, page);
   await load(page, TRY_IT);

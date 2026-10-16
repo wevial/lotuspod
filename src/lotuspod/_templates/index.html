@@ -418,10 +418,36 @@
         showActivity();
       };
 
+      // At most one read of ask in flight, and one more asked after it
+      // however many callers ask meanwhile, so answers are drawn in the
+      // order they were asked: a read can take seconds on a busy serve, and
+      // a pile of them would hold the browser's connections the open tabs'
+      // pages load on.
+      const single = (ask) => {
+        let flying = null;
+        let queued = null;
+        const run = () => {
+          if (!flying) {
+            flying = ask().finally(() => {
+              flying = null;
+            });
+            return flying;
+          }
+          if (!queued) {
+            queued = flying.then(() => {
+              queued = null;
+              return run();
+            });
+          }
+          return queued;
+        };
+        return run;
+      };
+
       // Asked again as the listing shows or its rows swap, the answers can
       // arrive out of order: only the latest asked is shown.
       let seenAsked = 0;
-      const askSeen = async () => {
+      const askSeen = single(async () => {
         const asked = ++seenAsked;
         let pages = null;
         try {
@@ -435,7 +461,7 @@
         }
         if (asked !== seenAsked) return;
         showSeen(pages);
-      };
+      });
 
       // The Recent activity view: the activity route's pages, each a group
       // with a header row and its events, newest first. It is built with
@@ -826,7 +852,7 @@
       // before an earlier ask has answered, only the latest is shown, so an
       // older answer never takes back a page the newer one listed.
       let againAsked = 0;
-      const askAgain = async () => {
+      const askAgain = single(async () => {
         if (!feed) {
           if (starting) startAgain = true;
           return;
@@ -846,7 +872,7 @@
         }
         feed = fresh;
         showActivity();
-      };
+      });
 
       // Back from a page through the back-forward cache, the index is the one
       // it was: ask again, so a page just read loses its mark, its count and
@@ -859,6 +885,16 @@
       // So does showing the listing again over the open tabs
       // (lotuspod-index.js): a page just read there loses its mark too.
       document.addEventListener("lotuspod:listing", () => {
+        askSeen();
+        askAgain();
+      });
+      // And so does a tick from serve's stream (lotuspod-index.js) that a
+      // page was published or commented on, or the listing rebuilt; one
+      // while a tab hides the listing asks nothing, as the listing asks
+      // again as it shows.
+      document.addEventListener("lotuspod:change", (event) => {
+        if (document.querySelector("main.index")?.hidden) return;
+        if (!["publish", "index", "comment", "resync"].includes(event.detail.what)) return;
         askSeen();
         askAgain();
       });

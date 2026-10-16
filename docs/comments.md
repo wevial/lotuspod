@@ -237,9 +237,18 @@ An open page notices when it is published again: every published page
 carries a revision, so it loads the page script, `lotuspod-page.js`, even
 with no comments, decisions or sections. It compares the
 `lotuspod:revision` it was rendered at with the revision each read of its
-threads carries, and asks `/api/revision` every 60 seconds and at once when
-its tab is seen again. Once they differ, the page first fetches the new
-revision and swaps in only the parts whose digests (see
+threads carries, and asks `/api/revision` at once when serve's stream
+(`/api/events`) says the page was published again, at once when its tab is
+seen again, and every 60 seconds as the fallback for a stream refused,
+dropped or blocked. Each browser tab holds one stream: a page opened on its
+own, or the index for every pod open in its tabs. A tick that the page's
+comments or answers changed reads its threads at once too (once the tab is
+seen again, when it is hidden), and one that a page was published or
+commented on, or the listing rebuilt, has the index read its marks and its
+tabs' dots again. A dropped stream is opened again, after 2 seconds doubling
+up to a minute when serve refused it, and once open again the page runs both
+checks, since it may have missed a tick. Once a revision it learns is not
+its own, the page first fetches it and swaps in only the parts whose digests (see
 [Publishing](publishing.md)) changed: the header's text, the outline's links,
 the intro, and each changed, added or removed section. Everything else stays
 as it was, the scroll position and the folded sections with it; a swapped
