@@ -255,13 +255,12 @@ test.describe('signed in', () => {
       const from = new Date(to - week).toISOString();
       asked.push({ before, at: Date.now(), from });
       const at = new Date(to - 1000).toISOString();
-      const summary = before ? 'an older week' : `ask ${++newest}`;
       return route.fulfill({ json: {
         from, to: new Date(to).toISOString(),
         older: true, truncated: false,
         pages: [{ page: ARTICLE.name, title: ARTICLE.title, latest: at,
           events: [{ kind: 'version', at, commit: at, revision: 'r1', actor: null,
-            first: false, summary }] }],
+            first: false, summary: before ? 'an older week' : `ask ${++newest}` }] }],
       } });
     });
     // Observe the real stream and row swap before publishing. The server's
