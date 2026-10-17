@@ -22,9 +22,7 @@ export function passages(page: Page, bridge: PassagesBridge): Passages {
   const { element, textModel, offsetOf, pieces, locate, wrap, unwrap } = page;
   const { apart: APART, maxExact: MAX_EXACT, context: CONTEXT, still: STILL, coarse: COARSE, archived: ARCHIVED } = page;
   var api = {} as Passages;
-  // The thread the pointer is on, on the page and in the panel.
   var pointed: Record<"page" | "entry", Thread | null> = { page: null, entry: null };
-  // The open composer: its holder, the marks on its words and its box.
   var open: OpenPassage | null = null;
   // Where a thread just posted from a selection starts in the page's
   // text, so its words are those selected even where they occur twice.
@@ -196,7 +194,6 @@ export function passages(page: Page, bridge: PassagesBridge): Passages {
     });
   };
 
-  // Put the open composer where the window has room for it.
   api.place = function () {
     if (!open) {
       return;
@@ -280,7 +277,6 @@ export function passages(page: Page, bridge: PassagesBridge): Passages {
     hints.clear();
   };
 
-  // Whether the open composer's words are in any of nodes.
   api.writes = function (nodes) {
     return open !== null && open.marks.some(function (mark) {
       return nodes.some(function (node) { return node.contains(mark); });
@@ -327,7 +323,6 @@ export function passages(page: Page, bridge: PassagesBridge): Passages {
     return parent !== null && article!.contains(parent) && !parent.closest(APART);
   }
 
-  // The first section box after a boundary point.
   function boxAfter(node: Node, offset: number) {
     var point = document.createRange();
     point.setStart(node, offset);
@@ -493,7 +488,6 @@ export function passages(page: Page, bridge: PassagesBridge): Passages {
     }
   });
 
-  // The thread whose highlight or number a node is in, if any.
   function threadAt(node: EventTarget | null) {
     var drawn = node instanceof Element &&
       node.closest<HTMLElement>("mark.artifact-passage[data-thread], .artifact-passage-number");
