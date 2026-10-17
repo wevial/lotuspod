@@ -63,11 +63,8 @@ export function replies(page: Page, bridge: RepliesBridge) {
   // Draw the replies to the reader outside the chips: each thread's marks,
   // the badge ending the header's date line and the tab's title.
   function showUnread() {
-    const threads: Thread[] = [];
-    shown.forEach(thread => {
-      markUnread(thread);
-      threads.push(thread);
-    });
+    const threads = [...shown.values()];
+    threads.forEach(markUnread);
     const n = unreadIn(threads);
     document.title = n > 0 ? "(" + n + ") " + tabTitle : tabTitle;
     if (!dateLine) return;
