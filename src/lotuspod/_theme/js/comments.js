@@ -1,31 +1,10 @@
 
   // The comment boxes (lotuspod.comments): one per section, or one for the
-  // page. Threads come from the comments route; each is shown in the box of
-  // its section, or, when the page no longer has that section, in a list at
-  // the end of the body. With the page script each box is a chip instead,
-  // and its threads open in the side panel, a popover or a bottom sheet
-  // (the placement island), never in the box. A thread on a passage
-  // (the passages part) is also drawn on its words.
+  // page. The threads, and the reads that fill them, are the islands' store
+  // (web/src/islands/comments/store.ts); this keeps the replies to the
+  // reader, the decisions' Ask, what is kept over a reload and swaps, and
+  // reaches the threads through the store.
   function commentBoxes(boxes, parts) {
-    var page = boxes[0].dataset.page;
-    var tag = document.querySelector('meta[name="lotuspod:owner"]');
-    var owner = tag ? tag.content : "";
-    // The revision the page shows now, which a swap moves on
-    // (js/live-page.js); null on a page with none. While a swap's SWAPPED
-    // is handled, live.revision() is still the one before it.
-    var swappedTo = "";
-    function revision() {
-      return swappedTo || live.revision() || null;
-    }
-    var article = document.querySelector(".artifact-body");
-    // Maps, not objects: a section id is the author's and may be any name,
-    // "__proto__" included.
-    var sections = new Map();
-    var shown = new Map();
-    // Each box's form for a new thread, wherever it is shown.
-    var forms = new Map();
-    // Each composer's attachments, by its form.
-    var attached = new Map();
     // Replies to the reader: the ids the comments route last named
     // `unread`, each thread's mark as this page last knew it, and the
     // comments of each open thread that were unread as it opened, which
@@ -41,64 +20,28 @@
     var dateLine = document.querySelector("header.artifact-header .artifact-meta");
     var newBadge = null;
 
-    // The page's decision forms, in page order, and each by its question.
+    // The page's decision forms, in page order.
     var decisions = all("form.artifact-decision[data-question]");
-    var questions = new Map();
 
-    // A box joins the page's: by its section, and its form for a new thread.
-    function enlist(box) {
-      sections.set(box.dataset.section, box);
-      forms.set(box, box.querySelector("form.artifact-comment-form"));
-    }
-    boxes.forEach(enlist);
-    function ask() {
-      questions.clear();
-      decisions.forEach(function (form) {
-        questions.set(form.dataset.question, form);
-      });
-    }
-    ask();
-
-    // The text of a form's part, its whitespace collapsed.
-    function words(form, selector) {
-      var node = form.querySelector(selector);
-      return node ? node.textContent.replace(/\s+/g, " ").trim() : "";
-    }
-
-    // The decision a thread asks about: its form, its number ("" for none),
-    // its question and what it is called; null for any other thread, and
-    // for one on a decision the page no longer asks.
-    function decisionOf(thread) {
-      var question = thread.root.question;
-      var form = question !== undefined && question !== null ? questions.get(String(question)) : null;
-      if (!form) {
-        return null;
-      }
-      var number = words(form, ".artifact-decision-number");
-      return {
-        form: form, number: number, question: words(form, ".artifact-decision-text"),
-        name: number ? "Decision " + number : "Decision",
-      };
-    }
-
-    var threadRows = parts.thread({
-      owner: owner, page: page, checking: function () { return checking; },
-      counted: counted, opening: opening, label: function (thread, row) { composer.label(thread, row); },
+    var store = parts.store({
+      boxes: boxes, decisions: decisions, counted: counted, opening: opening, unreadIn: unreadIn,
+      readTo: readTo, looked: looked, showUnread: showUnread, named: named, restore: restore,
+      boxWith: boxWith,
     });
-    var agent = threadRows.agent;
-    var author = threadRows.author;
-    var routed = threadRows.routed;
-    var rows = threadRows.rows;
-    var sync = threadRows.sync;
-    var merge = threadRows.merge;
-    var markUnread = threadRows.markUnread;
+    var page = store.page;
+    var sections = store.sections;
+    var shown = store.shown;
+    var forms = store.forms;
+    var attached = store.attached;
+    var rows = store.rows;
+    var markUnread = store.markUnread;
+    var refresh = store.refresh;
 
-    var composer = parts.composer({
-      page: page, revision: revision, attached: attached, forms: forms,
-      sending: new Map(), boxWith: boxWith, rows: rows, agent: agent, routed: routed,
-      readTo: readTo, merge: merge, posted: posted, add: add, shown: shown,
-      placement: function () { return panel; },
-    });
+    // A read named the comments unread to the reader, or named none.
+    function named(ids) {
+      tracked = Array.isArray(ids);
+      unread = new Set(tracked ? ids : []);
+    }
 
     // Whether a comment counts as unread: the route named it, and neither
     // a mark this page posted nor the reader's own reply since has read it.
@@ -185,268 +128,6 @@
       }
     }
 
-    // A thread waits while any reader comment in it has no answer yet.
-    function waits(thread) {
-      return rows(thread).some(function (entry) {
-        return !agent(entry) && (entry.state === "pending" || entry.state === "claimed");
-      });
-    }
-
-    // The threads of a section's box, oldest first.
-    function threadsOf(box) {
-      var found = [];
-      shown.forEach(function (thread) {
-        if (thread.box === box) {
-          found.push(thread);
-        }
-      });
-      return found.sort(function (a, b) { return a.root.id - b.root.id; });
-    }
-
-    // The list at the end of the body for threads on sections the page no
-    // longer has.
-    function changed() {
-      var list = document.querySelector(".artifact-comments-changed");
-      if (!list) {
-        list = element("section", "artifact-comments-changed");
-        list.appendChild(element("h2", "", CHANGED));
-        (document.querySelector(".artifact-body") || document.body).appendChild(list);
-      }
-      return list;
-    }
-
-    // Show a thread as read: a new one lands in its section's box, a known
-    // one takes what it does not show yet. True when anything was drawn.
-    function add(entry) {
-      var root = entry.root;
-      if (!root) {
-        return false;
-      }
-      var known = shown.get(root.id);
-      if (known) {
-        var moved = Boolean(entry.resolution) && resolved(known) !== Boolean(entry.resolution.resolved);
-        if (entry.resolution) {
-          known.resolution = entry.resolution;
-        }
-        return merge(known, [root].concat(entry.replies || [])) || moved;
-      }
-      var list = element("ol", "artifact-comment-list");
-      list.setAttribute("aria-live", "polite");
-      var thread = {
-        root: root, replies: [], list: list,
-        resolution: entry.resolution || null, entry: null,
-        // Whether it is open.
-        lit: false,
-        // A passage thread's words: undefined until looked for, null when
-        // not found; its highlights, its number node and its number.
-        spot: undefined, marks: [], number: null, n: 0, head: null, headKey: null,
-      };
-      var node = element("div", "artifact-comment-thread");
-      node.dataset.thread = String(root.id);
-      thread.node = node;
-      var box = boxFor(root);
-      thread.box = box;
-      if (!box) {
-        node.appendChild(whereFrom(root));
-      }
-      if (root.quote) {
-        // Headed by its quote in a box; the panel's entry says it instead.
-        thread.head = element("p", "artifact-passage-head");
-        node.appendChild(thread.head);
-      }
-      node.appendChild(list);
-      Object.assign(thread, composer.reply(thread, node));
-      shown.set(root.id, thread);
-      watch(node);
-      merge(thread, entry.replies || []);
-      put(thread);
-      return true;
-    }
-
-    // The box a thread's first comment is on, or null when the page no
-    // longer has its section. A thread on the whole page of a page that has
-    // kept only its "page" box (republished with fewer sections) is that
-    // box's, and a thread on that "page" box is the whole page's once the
-    // page has sections.
-    function boxFor(root) {
-      return sections.get(root.section) ||
-        (root.section === WHOLE_PAGE && sections.get("page")) ||
-        (root.section === "page" && sections.get(WHOLE_PAGE)) || null;
-    }
-
-    // The line a thread on a section the page no longer has starts with.
-    function whereFrom(root) {
-      return element("p", "artifact-comment-section",
-        "On " + String(root.sectionTitle || root.section || "an earlier section"));
-    }
-
-    function resolved(thread) {
-      return Boolean(thread.resolution && thread.resolution.resolved);
-    }
-
-    // Show a thread in its entry, where the window has room for it.
-    function put(thread) {
-      panel.put(thread);
-    }
-
-    // Draw what the threads say outside them: the passages' highlights, the
-    // panel, the chips, what a popover or the sheet holds and the replies
-    // to the reader.
-    function refresh() {
-      passages.update();
-      panel.refresh();
-      showUnread();
-    }
-
-    // The checks for replies: while a thread waits, or the reader has a
-    // thread in view (an agent may add to one it answered), and the page is
-    // seen, read the threads again FIRST after the last read, each gap half
-    // again as long as the one before up to LAST, and the first gap again
-    // after any change or a comment the reader posts.
-    var FIRST = 3000;
-    var LAST = 30000;
-    var gap = FIRST;
-    var last = 0;
-    var timer = null;
-    var reading = false;
-    // A note's thread not read yet (noted below), and how many notes were
-    // saved: only a read begun after the newest finds its thread.
-    var owed = false;
-    var notes = 0;
-    // The read in flight is followed by the first gap.
-    var fresh = false;
-    // False once a read finds the reader signed out.
-    var checking = true;
-    // The thread nodes in view, in a box, the panel, a popover or the sheet.
-    var viewed = new Set();
-    var viewing = typeof IntersectionObserver === "function"
-      ? new IntersectionObserver(function (changes) {
-        changes.forEach(function (change) {
-          if (change.isIntersecting) {
-            viewed.add(change.target);
-          } else {
-            viewed.delete(change.target);
-          }
-        });
-        plan();
-      })
-      : null;
-
-    function watch(node) {
-      if (viewing) {
-        viewing.observe(node);
-      }
-    }
-
-    // Whether anything calls for another read: a note saved with an
-    // answer calls for one until a read finds its thread.
-    function wanted() {
-      return viewed.size > 0 || owed || Boolean(waiting());
-    }
-
-    function waiting() {
-      var found = null;
-      shown.forEach(function (thread) {
-        if (!found && waits(thread)) {
-          found = thread;
-        }
-      });
-      return found;
-    }
-
-    function hidden() {
-      return document.visibilityState === "hidden";
-    }
-
-    function plan() {
-      clearTimeout(timer);
-      timer = null;
-      if (reading || !checking || hidden() || !wanted()) {
-        return;
-      }
-      timer = setTimeout(read, Math.max(0, last + gap - Date.now()));
-    }
-
-    function signedOut() {
-      checking = false;
-      clearTimeout(timer);
-      timer = null;
-      var first = waiting();
-      if (first) {
-        // A box's form may be folded away: the thread says it.
-        var status = first.node.querySelector(":scope > .artifact-comment-status");
-        if (!status) {
-          status = element("p", "artifact-comment-status");
-          status.setAttribute("role", "status");
-          first.node.appendChild(status);
-        }
-        status.textContent = SIGNED_OUT;
-      }
-      shown.forEach(sync);
-      refresh();
-    }
-
-    async function read() {
-      timer = null;
-      reading = true;
-      last = Date.now();
-      var touched = false;
-      var asOf = notes;
-      try {
-        var response = await fetch(COMMENTS + "?page=" + encodeURIComponent(page));
-        if (response.status === 401) {
-          reading = false;
-          settleImageCap(null, SIGNED_OUT);
-          signedOut();
-          restore();
-          return;
-        }
-        var payload = response.status === 200 ? await json(response) : null;
-        if (payload && typeof payload.maxImageBytes === "number") {
-          settleImageCap(payload.maxImageBytes);
-        } else {
-          settleImageCap(null, NO_CAP);
-        }
-        if (payload) {
-          owed = owed && asOf !== notes;
-          tracked = Array.isArray(payload.unread);
-          unread = new Set(tracked ? payload.unread : []);
-          (payload.threads || []).forEach(function (entry) {
-            if (add(entry)) {
-              touched = true;
-            }
-          });
-          live.seen(payload && payload.revision);
-        }
-      } catch (ignored) {
-        // A failed read keeps the schedule.
-        settleImageCap(null, NO_CAP);
-      }
-      reading = false;
-      refresh();
-      restore();
-      if (!linked || relink) {
-        // A link followed before the first read is no reload's fragment.
-        openLinked(!relink);
-        linked = true;
-        relink = false;
-      }
-      gap = touched || fresh ? FIRST : Math.min(gap * 1.5, LAST);
-      fresh = false;
-      if (again) {
-        again = false;
-        // A hidden page reads it once it is seen again.
-        if (hidden()) {
-          ticked = true;
-        } else {
-          fresh = true;
-          read();
-          return;
-        }
-      }
-      plan();
-    }
-
     // Each composer of a section's form or a thread's reply, with what it
     // is kept by over a reload: its thread, its section and where the
     // section's box is among the page's.
@@ -477,14 +158,14 @@
     // still uploading is unsent too, so a hidden page waits for the reader.
     live.keep({
       unsent: function () {
-        var passage = passages.writing();
+        var passage = store.passages.writing();
         return Boolean(passage && (passage.text.trim() || passage.held)) || composers().some(holding) ||
           awaiting.size > 0;
       },
       save: function () {
         return {
-          open: panel.held(),
-          passage: passages.writing(),
+          open: store.panel.held(),
+          passage: store.passages.writing(),
           texts: composers().filter(holding).map(function (each) {
             return {
               thread: each.thread, section: each.section, index: each.index, text: each.field.value,
@@ -559,7 +240,7 @@
             var said = form.querySelector(".artifact-comment-status").textContent;
             land(form, each, said ? said + " " + why : why);
           }
-          panel.reopen({ section: now.dataset.section, writing: true });
+          store.panel.reopen({ section: now.dataset.section, writing: true });
         });
         return box;
       }
@@ -595,7 +276,7 @@
           // Waiting for a post when the page reloaded: a passage's composer
           // opens again on its words where the page has them; else it goes
           // where it was to go, still to say why.
-          if (!(each.quote && passages.reopen(each))) {
+          if (!(each.quote && store.passages.reopen(each))) {
             moved = rehome(each, String(each.why));
           }
         } else if (thread) {
@@ -613,100 +294,17 @@
         }
       });
       if (was.open && typeof was.open === "object") {
-        panel.reopen(was.open);
+        store.panel.reopen(was.open);
       }
       var passage = was.passage && typeof was.passage === "object" ? was.passage : null;
-      if (passage && !passages.reopen(passage) && worth(passage)) {
+      if (passage && !store.passages.reopen(passage) && worth(passage)) {
         moved = rehome(passage, PASSAGE_GONE);
       }
       if (moved) {
-        panel.reopen({ section: moved.dataset.section, writing: true });
+        store.panel.reopen({ section: moved.dataset.section, writing: true });
       }
       live.place();
     }
-
-    // The reader posted a comment: check again from the first gap.
-    function posted() {
-      if (!checking) {
-        checking = true;
-        shown.forEach(sync);
-      }
-      gap = FIRST;
-      last = Date.now();
-      fresh = reading;
-      refresh();
-      plan();
-    }
-
-    // #thread=ID, a link from the index's Recent activity, opens the thread
-    // whose first comment is ID (panel.reach) once the first read has drawn
-    // the threads, and again on each hashchange after the threads are read
-    // again, so a reply since is among what it marks seen; one before the
-    // first read waits for it. An ID no thread here has, or not a number,
-    // opens nothing.
-    var linked = false;
-    var relink = false;
-    function openLinked(first) {
-      var id = linkedTo("thread", first);
-      var thread = id !== null && /^[1-9][0-9]*$/.test(id) ? shown.get(Number(id)) : null;
-      if (thread) {
-        panel.reach(thread);
-      }
-    }
-    window.addEventListener("hashchange", function () {
-      if (linkedTo("thread") === null) {
-        return;
-      }
-      relink = true;
-      if (linked && !reading) {
-        clearTimeout(timer);
-        fresh = true;
-        read();
-      }
-    });
-
-    document.addEventListener("visibilitychange", function () {
-      if (hidden()) {
-        clearTimeout(timer);
-        timer = null;
-      } else if (ticked && checking) {
-        ticked = false;
-        readNow();
-      } else if (!timer && !reading && checking && wanted()) {
-        fresh = true;
-        read();
-      }
-    });
-
-    // Read the threads at once, or once more after the read in flight, which
-    // may have missed what called for this one.
-    function readNow() {
-      if (reading) {
-        again = true;
-        return;
-      }
-      clearTimeout(timer);
-      fresh = true;
-      read();
-    }
-
-    // A tick from serve's stream (js/live-events.js) that this page's
-    // threads or answers changed, or that the stream missed some, reads the
-    // threads at once; one while the page is hidden is read once it is seen
-    // again. Signed out, nothing is read.
-    var ticked = false;
-    document.addEventListener("lotuspod:change", function (event) {
-      var tick = event.detail;
-      if (!checking || !(tick.what === "resync" ||
-          ((tick.what === "comment" || tick.what === "answer") && tick.page === page))) {
-        return;
-      }
-      if (hidden()) {
-        ticked = true;
-        return;
-      }
-      readNow();
-    });
 
     // The box whose form for a new thread form is: a swap gives a section's
     // new box the form of the box it replaced.
@@ -721,8 +319,8 @@
     }
 
     // The post each form for a new thread is sending: its row, or null.
-    var sending = composer.sending;
-    function wire(box) { return composer.wire(box); }
+    var sending = store.composer.sending;
+    function wire(box) { return store.composer.wire(box); }
     boxes.forEach(wire);
 
     // A swap (web/src/page-swap.ts) brought in a newer revision's parts:
@@ -744,13 +342,13 @@
     // reload.
     document.addEventListener(SWAPPED, function (event) {
       var units = event.detail.units;
-      swappedTo = event.detail.revision;
+      store.swapped(event.detail.revision);
       var focused = document.activeElement;
-      var writing = passages.swept();
+      var writing = store.passages.swept();
       if (writing && takenAt.has(writing.box)) {
         writing.index = takenAt.get(writing.box);
       }
-      passages.moved();
+      store.passages.moved();
       var unsent = [];
       var olds = [];
       var news = [];
@@ -770,13 +368,13 @@
       });
       gone.forEach(function (form) {
         decisions.splice(decisions.indexOf(form), 1);
-        panel.forget(form);
+        store.panel.forget(form);
       });
       decisions.push.apply(decisions, fresh);
       decisions.sort(function (a, b) {
         return a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1;
       });
-      ask();
+      store.ask();
       fresh.forEach(askAbout);
       if (olds.length || news.length) {
         remount(olds, news, unsent);
@@ -795,7 +393,7 @@
           awaiting.delete(held);
           var box = row ? null : rehome(each, PLACE_GONE);
           if (box) {
-            panel.reopen({ section: box.dataset.section, writing: true });
+            store.panel.reopen({ section: box.dataset.section, writing: true });
           }
         });
       });
@@ -806,14 +404,14 @@
           awaiting.delete(held);
           var box = row ? null : rewrite(writing);
           if (box) {
-            panel.reopen({ section: box.dataset.section, writing: true });
+            store.panel.reopen({ section: box.dataset.section, writing: true });
           }
         });
       } else if (writing) {
         moved = rewrite(writing) || moved;
       }
       if (moved) {
-        panel.reopen({ section: moved.dataset.section, writing: true });
+        store.panel.reopen({ section: moved.dataset.section, writing: true });
       }
       if (focused && focused !== document.body && focused.isConnected && document.activeElement !== focused) {
         focused.focus({ preventScroll: true });
@@ -838,7 +436,7 @@
     // what was written goes to a section's form, saying why: that box,
     // else null.
     function rewrite(writing) {
-      if (passages.reopen(writing) || !worth(writing)) {
+      if (store.passages.reopen(writing) || !worth(writing)) {
         return null;
       }
       return rehome(writing, PASSAGE_GONE);
@@ -862,7 +460,7 @@
           added.push(box);
         }
       });
-      var taken = panel.take(olds.concat(replaced.map(function (pair) { return pair[0]; })));
+      var taken = store.panel.take(olds.concat(replaced.map(function (pair) { return pair[0]; })));
       replaced.forEach(function (pair) { replaceBox(pair[0], pair[1]); });
       olds.forEach(function (old) {
         var each = dropBox(old);
@@ -871,13 +469,13 @@
         }
       });
       added.forEach(addBox);
-      panel.remounted();
+      store.panel.remounted();
       var order = boxes.map(function (box) { return [box, forms.get(box)]; });
       forms.clear();
       order.forEach(function (pair) { forms.set(pair[0], pair[1]); });
-      shown.forEach(put);
+      shown.forEach(store.put);
       refresh();
-      panel.give(taken);
+      store.panel.give(taken);
       refresh();
     }
 
@@ -934,7 +532,7 @@
           thread.box = box;
         }
       });
-      panel.replace(old, box);
+      store.panel.replace(old, box);
     }
 
     // The index each section a swap took away had as it was taken away,
@@ -963,10 +561,10 @@
       shown.forEach(function (thread) {
         if (thread.box === old) {
           thread.box = null;
-          thread.node.insertBefore(whereFrom(thread.root), thread.node.firstChild);
+          thread.node.insertBefore(store.whereFrom(thread.root), thread.node.firstChild);
         }
       });
-      panel.unmount(old, at);
+      store.panel.unmount(old, at);
       return unsent;
     }
 
@@ -978,11 +576,11 @@
       });
       at = at < 0 ? boxes.length : at;
       boxes.splice(at, 0, box);
-      enlist(box);
+      store.enlist(box);
       wire(box);
-      panel.mount(box, at);
+      store.panel.mount(box, at);
       shown.forEach(function (thread) {
-        if (!thread.box && boxFor(thread.root) === box) {
+        if (!thread.box && store.boxFor(thread.root) === box) {
           thread.box = box;
           var line = thread.node.querySelector(":scope > .artifact-comment-section");
           if (line) {
@@ -1009,7 +607,7 @@
           takenAt.set(box, at);
         }
       });
-      if (passages.writes(nodes)) {
+      if (store.passages.writes(nodes)) {
         return true;
       }
       return removed && boxes.some(function (box) {
@@ -1035,14 +633,12 @@
     // to one: the threads are read again at once, so its chip shows it. A
     // read already in flight may have missed it, and is followed by another;
     // one that fails is tried again after the schedule's first gap.
-    var again = false;
     function noted(event) {
       if (!event.detail.comment) {
         return;
       }
-      owed = true;
-      notes += 1;
-      readNow();
+      store.owe();
+      store.readNow();
     }
 
     // Each decision's Ask, beside "Save answer": the note's text posted as
@@ -1073,8 +669,8 @@
           return;
         }
         var body = { page: page, question: form.dataset.question, text: text };
-        if (revision() !== null) {
-          body.revision = revision();
+        if (store.revision() !== null) {
+          body.revision = store.revision();
         }
         button.disabled = true;
         say("Sending your question...");
@@ -1101,9 +697,9 @@
             // The card marks itself as its note now reads.
             note.dispatchEvent(new Event("input", { bubbles: true }));
           }
-          add({ root: payload, replies: [] });
-          posted();
-          panel.asked(shown.get(payload.id));
+          store.add({ root: payload, replies: [] });
+          store.posted();
+          store.panel.asked(shown.get(payload.id));
         } catch (ignored) {
           say("Your question was not sent: the site did not answer. Try again.");
         } finally {
@@ -1111,22 +707,8 @@
         }
       });
     }
-
-    var passages = parts.passages({
-      article: article, boxes: boxes, shown: shown, resolved: resolved,
-      revision: revision, attached: attached, composer: composer,
-      placement: function () { return panel; },
-    });
-    var panel = parts.placement({
-      all: all, boxes: boxes, shown: shown, forms: forms, decisions: decisions,
-      rows: rows, resolved: resolved, agent: agent, routed: routed,
-      threadsOf: threadsOf, decisionOf: decisionOf, passages: passages,
-      imageWords: imageWords, looked: looked, refresh: refresh, failure: composer.failure, json: json,
-      page: page, sections: sections, showUnread: showUnread, changed: changed, author: author, unreadIn: unreadIn,
-    });
     decisions.forEach(askAbout);
-    panel.arrange();
-    read();
+    store.start();
   }
 
   // A page with section boxes also takes threads on the whole page, section
