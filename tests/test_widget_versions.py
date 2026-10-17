@@ -6,8 +6,8 @@ from tests.test_publish_witness import parse
 from tests.test_versions_witness import VersionsWitness, PAGE, OTHER, DATES
 
 
-def live(text, sizing='height=240'):
-    return ('```html live title="Pond forecast" ' + sizing + '\n'
+def live(text):
+    return ('```html live title="Pond forecast" height=240\n'
             '<output></output><script>document.querySelector("output").textContent = "'
             + text + '";</script>\n```')
 
