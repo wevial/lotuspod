@@ -96,16 +96,28 @@ declare function commentMarkdown(node: HTMLDivElement, text: string): HTMLDivEle
 declare function commentImages(row: CommentRow): HTMLUListElement | null;
 declare function when(stamp: string | undefined): string;
 
-declare function json(response: Response): Promise<(CommentRow & CommentPayload) | null>;
+declare function json<T = CommentRow & CommentPayload>(response: Response): Promise<T | null>;
 declare function attachments(form: HTMLFormElement, field: HTMLTextAreaElement): Attachments;
 declare const SIGNED_OUT: string;
 declare const STALE_PAGE: string;
 declare const STALE_SECTION: string;
+// js/page-open.js: the heading of the list of threads on sections the page
+// no longer has.
+declare const CHANGED: string;
+// js/attachments.js: what the comments route's read said of the image cap,
+// bytes or null with why, and why no cap was read.
+declare function settleImageCap(bytes: number | null, why?: string): void;
+declare const NO_CAP: string;
+// js/attachments.js: "1 image" or "N images", what a comment of images alone
+// says in a list.
+declare function imageWords(row: CommentRow): string;
+// js/page-open.js: the elements selector matches in node, else the page.
+declare function all(selector: string, node?: HTMLElement): HTMLElement[];
 
 export const page = Object.freeze({
   element, textModel, offsetOf, pieces, locate, wrap, unwrap,
   apart: APART, maxExact: MAX_EXACT, context: CONTEXT, still: STILL, coarse: COARSE,
-  attachments, json,
+  attachments, json, settleImageCap, noCap: NO_CAP, imageWords, all, changed: CHANGED,
   signedOut: SIGNED_OUT, stalePage: STALE_PAGE, staleSection: STALE_SECTION,
   commentMarkdown, commentImages, when,
   commenting,
@@ -143,6 +155,7 @@ export interface CommentRow {
   section?: string;
   quote?: { exact?: string; prefix?: string; suffix?: string } | null;
   question?: string | number | null;
+  sectionTitle?: string;
   text?: string;
   state?: string;
 }
@@ -219,6 +232,25 @@ export interface NarrowBridge extends Pick<import("./comments/parts").ThreadList
   unfold(target: HTMLElement): void;
   barBottom(): number;
   standsFor(box: HTMLElement): HTMLElement | null;
+}
+
+// What the store reaches comments.js by: the boxes and decision forms,
+// which swaps change in place, and the unread replies, drafts and the
+// box a form stands for, which comments.js still owns.
+export interface StoreBridge {
+  boxes: HTMLElement[];
+  decisions: HTMLFormElement[];
+  counted(thread: Thread, row: CommentRow): boolean;
+  opening: Map<number, Set<number>>;
+  unreadIn(threads: Thread[]): number;
+  readTo(thread: Thread, id: number): void;
+  looked(thread: Thread, open: boolean): void;
+  showUnread(): void;
+  // A read named the comments unread to the reader, or did not.
+  named(unread: unknown): void;
+  // Give back what was kept over a reload, once the threads are read.
+  restore(): void;
+  boxWith(form: HTMLFormElement): HTMLElement | null;
 }
 
 export interface ThreadBridge {

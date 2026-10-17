@@ -78,12 +78,29 @@ truth: the sheet draws from them on each form's `input`, `change` and
 `answering.save()`, one question at a time in page order. Preact holds only
 the sheet's own state: the panel open, a Save under way, what it did, and
 the question Next open last jumped to, which a swap keeps. The bundle, Preact with it, stays at most
-37,000 bytes gzipped; it uses Preact and its hooks, with `createPortal` from
+42,000 bytes gzipped; it uses Preact and its hooks, with `createPortal` from
 `preact/compat` for independently owned DOM targets.
 
 The comments island (`web/src/islands/comments/index.ts`) mounts after the
 review sheet and starts the bridge's typed `commenting` object, null on pages
-without comment boxes. It supplies the placement, thread, composer and passages factories declared in `parts.ts`.
+without comment boxes. It supplies the one factory declared in `parts.ts`, the
+store (`comments/store.ts`), which holds the thread state: the sections,
+boxes' forms, threads and attachments by form, all Maps, and the revision the
+page shows, which a swap moves on. It adds a thread or merges what a read
+brings (true when anything was drawn), keeps the list at the end of the body
+for sections the page no longer has, and reads `/api/comments` while a thread
+waits or one is in view, each gap half again as long as the last, from 3 up to
+30 seconds; at once on a tick from serve's stream or when the page is seen
+again, never once signed out. Each read settles the image cap, tells
+`live.seen` its revision, draws the parts, then gives back what was kept over
+a reload, then, the first time, opens a `#thread=ID` link. The store creates
+the thread, composer, passages and placement parts and hands them its state
+directly; its start draws the passages and the panel, arranges them and makes
+the first read. comments.js keeps the unread replies, a decision's Ask, drafts
+over a reload, swaps and `pageBox`, and reaches the threads through the store
+(`add`, `posted`, `readNow`, `refresh`, the Maps); the store reaches those
+through its bridge. The bridge supplies `settleImageCap`, `NO_CAP`, `CHANGED`,
+`imageWords` and `all`.
 Placement creates the shell, thread-list and chips parts.
 The shell draws the panel frame, rail, tally and start controls. The thread-list
 part draws section groups, changed-section threads, entry heads and resolution

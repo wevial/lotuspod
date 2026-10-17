@@ -1,4 +1,4 @@
-import type { PlacementBridge, Thread, ThreadBridge } from "../bridge";
+import type { Thread } from "../bridge";
 import type { threadList } from "./thread-list";
 
 export interface Section {
@@ -38,10 +38,35 @@ export interface ComposerHandles {
   images: import('../bridge').Attachments;
 }
 export interface Parts {
-  passages(bridge: import("../bridge").PassagesBridge): Passages;
-  composer(bridge: import('../bridge').ComposerBridge): ReturnType<typeof import('./composer').composers>;
-  thread(bridge: ThreadBridge): ReturnType<typeof import("./thread").threadRows>;
-  placement(bridge: PlacementBridge): Placement;
+  store(bridge: import("../bridge").StoreBridge): Store;
+}
+// The comment threads and the reads that fill them (comments/store.ts),
+// as comments.js reaches them: its drafts, swaps and unread replies.
+export interface Store {
+  readonly page: string;
+  readonly sections: Map<string, HTMLElement>;
+  readonly shown: Map<number, Thread>;
+  readonly forms: Map<HTMLElement, HTMLFormElement>;
+  readonly attached: Map<HTMLFormElement, import("../bridge").Attachments>;
+  readonly composer: Pick<ReturnType<typeof import("./composer").composers>, "sending" | "wire">;
+  readonly panel: Placement;
+  readonly passages: Passages;
+  rows(thread: Thread): import("../bridge").CommentRow[];
+  markUnread(thread: Thread): void;
+  revision(): string | null;
+  // A swap moved the page on to revision to.
+  swapped(to: string): void;
+  enlist(box: HTMLElement): void;
+  ask(): void;
+  add(entry: { root: import("../bridge").CommentRow; replies: import("../bridge").CommentRow[] }): boolean;
+  boxFor(root: import("../bridge").CommentRow): HTMLElement | null;
+  whereFrom(root: import("../bridge").CommentRow): HTMLParagraphElement;
+  put(thread: Thread): void;
+  refresh(): void;
+  posted(): void;
+  readNow(): void;
+  owe(): void;
+  start(): void;
 }
 export interface Commenting {
   start(parts: Parts): void;
