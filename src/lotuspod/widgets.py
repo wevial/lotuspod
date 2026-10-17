@@ -57,9 +57,7 @@ class Templates(HTMLParser):
     def __init__(self, text: str):
         super().__init__(convert_charrefs=False)
         self.text = text
-        self.offsets = [0]
-        for match in re.finditer('\n', text):
-            self.offsets.append(match.end())
+        self.offsets = [0, *(match.end() for match in re.finditer('\n', text))]
         self.blocks = []
         self.active = None
         self.depth = 0
@@ -106,10 +104,9 @@ class Frames(HTMLParser):
 def render(body: str, name: str) -> tuple[str, dict[str, bytes], list[str]]:
     # Prepare every byte before the caller writes anything.
     from .cli import collect_scripts, script_hash
-    blocks = Templates(body).blocks
     files, warnings, ids, replacements = {}, [], set(), []
     total = 0
-    for number, (start, end, attrs, source, line) in enumerate(blocks, 1):
+    for number, (start, end, attrs, source, line) in enumerate(Templates(body).blocks, 1):
         title = attrs.get('data-title') or ''
         ident = identifier(attrs.get('data-id') or '', title, number)
         line = attrs.get('data-line', line)
