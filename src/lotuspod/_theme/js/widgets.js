@@ -45,6 +45,7 @@ function installWidgetBridge() {
       const close = () => {
         if (!figure.classList.contains("artifact-live--expanded"))
           return;
+        state.expanded = false;
         figure.classList.remove("artifact-live--expanded");
         expand.textContent = "Expand";
         expand.setAttribute("aria-expanded", "false");
@@ -54,6 +55,7 @@ function installWidgetBridge() {
         if (figure.classList.contains("artifact-live--expanded"))
           close();
         else {
+          state.expanded = true;
           figure.classList.add("artifact-live--expanded");
           expand.textContent = "Close";
           expand.setAttribute("aria-expanded", "true");
@@ -122,14 +124,14 @@ function installWidgetBridge() {
       return;
     state.accepted.push(now);
     if (kind === "resize") {
-      if (frame.hasAttribute("data-height-fixed"))
+      if (state.expanded || frame.hasAttribute("data-height-fixed"))
         return;
       state.height = data.height;
       if (!state.pending) {
         state.pending = true;
         requestAnimationFrame(() => {
           state.pending = false;
-          if (!state.paused)
+          if (!state.paused && !state.expanded)
             frame.height = String(state.height);
         });
       }

@@ -8,6 +8,7 @@ interface WidgetState {
   height?: number;
   pending: boolean;
   paused?: boolean;
+  expanded?: boolean;
 }
 // Render calls this in the head before parsing any widget frames. The deferred
 // page bundle only declares it: startup must not depend on that download.
@@ -52,6 +53,7 @@ function installWidgetBridge(): void {
       };
       const close = (): void => {
         if (!figure.classList.contains("artifact-live--expanded")) return;
+        state.expanded = false;
         figure.classList.remove("artifact-live--expanded");
         expand.textContent = "Expand";
         expand.setAttribute("aria-expanded", "false");
@@ -60,6 +62,7 @@ function installWidgetBridge(): void {
       expand.addEventListener("click", () => {
         if (figure.classList.contains("artifact-live--expanded")) close();
         else {
+          state.expanded = true;
           figure.classList.add("artifact-live--expanded");
           expand.textContent = "Close";
           expand.setAttribute("aria-expanded", "true");
@@ -119,13 +122,14 @@ function installWidgetBridge(): void {
     if (state.accepted.length >= 60) return;
     state.accepted.push(now);
     if (kind === "resize") {
-      if (frame.hasAttribute("data-height-fixed")) return;
+      // Expanded viewport measurements must not replace the normal height.
+      if (state.expanded || frame.hasAttribute("data-height-fixed")) return;
       state.height = data.height as number;
       if (!state.pending) {
         state.pending = true;
         requestAnimationFrame(() => {
           state.pending = false;
-          if (!state.paused) frame.height = String(state.height);
+          if (!state.paused && !state.expanded) frame.height = String(state.height);
         });
       }
       return;
