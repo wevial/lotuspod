@@ -43,13 +43,10 @@ async function arm(page: Page) {
     }, { once: true }));
   });
 }
-async function check(page: Page) {
-  await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
-}
 async function swap(page: Page, name: string, content: string) {
   await arm(page);
   publish(name, content);
-  await check(page);
+  await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
   return page.evaluate(() => (window as any).swapped);
 }
 async function open(page: Page, name: string, content = doc()) {
@@ -157,7 +154,7 @@ test('adding the first widget keeps the policy reload fallback', async ({ page }
   await page.goto(`/${name}.html?standalone`);
   await page.evaluate(() => { (window as any).originalDocument = true; });
   publish(name, doc());
-  await check(page);
+  await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
   await page.locator('.artifact-live-page-reload').click();
   await expect(figure(page).locator('.artifact-live-badge')).toHaveText('Live');
   expect(await page.evaluate(() => (window as any).originalDocument)).toBeUndefined();
