@@ -31,7 +31,14 @@ export interface Shell {
   unlit(): void;
   focus(control: "fold" | "opener" | "resolved" | HTMLElement): void;
 }
+export interface ComposerHandles {
+  field: HTMLTextAreaElement;
+  form: HTMLFormElement;
+  unfold(open: boolean): void;
+  images: import('../bridge').Attachments;
+}
 export interface Parts {
+  composer(bridge: import('../bridge').ComposerBridge): ReturnType<typeof import('./composer').composers>;
   thread(bridge: ThreadBridge): ReturnType<typeof import("./thread").threadRows>;
   placement(bridge: PlacementBridge): Placement;
 }
