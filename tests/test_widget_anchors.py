@@ -235,6 +235,15 @@ class PullAndPromptTests(AnchorCase):
         self.assertIn("The block has changed since this comment", prompt)
         self.assertIn(agents.fence(CHANGED), prompt)
 
+    def test_the_state_is_shown_exactly_as_sent(self):
+        state = "  at\u00a06  workers  "
+        status, row = self.post({"section": "throughput", "text": "@hermes Odd.",
+                                 "widget": self.anchor(state=state)})
+        self.assertEqual(status, 201, row)
+        line = f"On the block {TITLE} (`churn`), {state}\n"
+        self.assertIn(line, self.markdown_pull())
+        self.assertIn(line, responder.prompt(self.item(row["id"])))
+
     def test_a_thread_without_a_block_has_no_block_lines(self):
         status, row = self.post({"section": "throughput", "text": "@hermes Plain."})
         self.assertEqual(status, 201, row)
@@ -283,6 +292,30 @@ class SourceTests(AnchorCase):
         block = cli.api_page(self.out_dir, "churn").widgets["churn"]
         self.assertEqual((block.title, block.section), (TITLE, "throughput"))
         self.assertNotEqual(block.hash, "a" * 12)
+
+
+    def test_a_frame_in_a_noscript_is_not_a_block(self):
+        decoy = ('<noscript><iframe class="artifact-widget" data-widget="churn" '
+                 'src="churn.w-aaaaaaaaaaaa.html" title="Decoy"></iframe></noscript>')
+        page = self.out_dir / "churn.html"
+        served = page.read_text(encoding="utf-8")
+        page.write_text(served.replace("<p>How merges go.</p>", decoy + "<p>How merges go.</p>"),
+                        encoding="utf-8")
+        self.assertIn(decoy, page.read_text(encoding="utf-8"))
+        block = cli.api_page(self.out_dir, "churn").widgets["churn"]
+        self.assertEqual((block.title, block.section, block.hash),
+                         (TITLE, "throughput", self.block_hash()))
+
+    def test_a_div_in_a_template_opens_no_section(self):
+        inert = "<template><div>inert</template>"
+        page = self.out_dir / "churn.html"
+        served = page.read_text(encoding="utf-8")
+        page.write_text(served.replace("<p>Merges an hour.</p>", "<p>Merges an hour.</p>" + inert),
+                        encoding="utf-8")
+        self.assertIn(inert, page.read_text(encoding="utf-8"))
+        widgets = cli.api_page(self.out_dir, "churn").widgets
+        self.assertEqual((widgets["churn"].section, widgets["lag"].section),
+                         ("throughput", "latency"))
 
 
 class SchemaTests(unittest.TestCase):

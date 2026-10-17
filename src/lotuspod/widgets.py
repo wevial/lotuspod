@@ -151,7 +151,9 @@ class PageWidgets(HTMLParser):
     """A served page's live blocks: each frame's data-widget id to its
     file's hash, its title and the data-section of the section wrapper it
     sits in (lotuspod.sections), "" outside every wrapper. A frame inside a
-    template is inert, and not one of them."""
+    template or a noscript is inert, and not one of them, and a div inside a
+    template opens no section."""
+    CDATA_CONTENT_ELEMENTS = Templates.CDATA_CONTENT_ELEMENTS
 
     def __init__(self, text: str):
         super().__init__()
@@ -168,6 +170,8 @@ class PageWidgets(HTMLParser):
         classes = (attrs.get('class') or '').split()
         if tag == 'template':
             self._templates += 1
+        elif self._templates:
+            return
         elif tag == 'div':
             if self._section is not None:
                 self._depth += 1
@@ -184,7 +188,7 @@ class PageWidgets(HTMLParser):
     def handle_endtag(self, tag):
         if tag == 'template' and self._templates:
             self._templates -= 1
-        elif tag == 'div' and self._section is not None:
+        elif tag == 'div' and self._section is not None and not self._templates:
             self._depth -= 1
             if not self._depth:
                 self._section = None

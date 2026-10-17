@@ -258,8 +258,9 @@ def block_lines(item: dict) -> list[str]:
         return []
     ident = one_line(anchor["id"])
     name = f"{one_line(block['title'])} (`{ident}`)" if block["title"] else f"`{ident}`"
-    state = one_line(anchor["state"])
-    # The state is a phrase as the widget sent it, "at 6 workers".
+    # The state as the widget sent it, a phrase such as "at 6 workers": the
+    # route took no control character, so it is one line already.
+    state = anchor["state"]
     lines = [f"On the block {name}" + (f", {state}" if state else ""), ""]
     if block["status"] == "changed":
         lines += ["The block has changed since this comment", ""]
