@@ -107,6 +107,15 @@ answer as the answers route gives it with the reader's address, or null, and
 whether the page still asks it; when it does not, text, context and options
 are empty. An item for any other thread has no `decision`.
 
+A pulled comment in a thread anchored to a live block (the reader's
+comments route) also carries `widget`, the anchor {id, hash, state} as its
+first comment keeps it, and `block`: {title, source, status}, the block's
+title on the page now, its lines as written in the page's kept source
+(NAME.md or NAME.body.html; "" when none is kept), and `status`, `current`
+while the block's widget file hash is the anchor's, `changed` once it is
+another, and `removed`, its title and source "", once the page has no block
+of that id. An item for any other thread has neither.
+
 A pulled answer's `question` also carries `context`: the page's context for
 the question while it asks it at the answer's version, and "" when
 `reworded` is true. The context is not kept with the answer.
@@ -195,7 +204,7 @@ from http import HTTPStatus
 from pathlib import Path
 from typing import Callable, Mapping
 
-from lotuspod import api, db, media, routing
+from lotuspod import api, db, media, routing, widgets
 
 OPERATIONS = ("pull", "claim", "reply", "publish")
 # An owner handle, and a credential's name: 1 to 63 lower-case letters,
@@ -577,6 +586,9 @@ class Routes:
             }
             if "question" in found["root"]:
                 item["decision"] = decision(page, found["root"]["question"])
+            if found["root"].get("widget"):
+                item["widget"] = found["root"]["widget"]
+                item["block"] = block(page, item_page(page), found["root"]["widget"])
             items.append(item)
         items += self._answers(owner, page_of, item_page)
         return {"owner": owner, "pulledAt": pulled_at, "items": items}
@@ -927,6 +939,20 @@ def _json_body(headers: Message, body: api.Body | None) -> dict:
     if (headers.get("Content-Type") or "").split(";", 1)[0].strip().lower() != "application/json":
         raise api.Refusal(HTTPStatus.UNSUPPORTED_MEDIA_TYPE, "unsupported_media_type")
     return api._json_object(body.read(api.MAX_BODY))
+
+
+def block(page: api.Page, shown: Mapping, anchor: Mapping) -> dict:
+    """The live block a thread is anchored to, {title, source, status}, on
+    page as shown (describe(page)): its title and its lines in the kept
+    source, "" when it has none, and `current`, `changed` since the anchor's
+    hash, or `removed` from the page, with no title nor source."""
+    found = page.widgets.get(anchor["id"])
+    if found is None:
+        return {"title": "", "source": "", "status": "removed"}
+    source = widgets.block_source(shown["source"], shown["sourceFile"].endswith(".md"),
+                                  anchor["id"]) if shown["sourceFile"] else ""
+    return {"title": found.title, "source": source,
+            "status": "current" if found.hash == anchor["hash"] else "changed"}
 
 
 def _allow_op(credential: Mapping, operation: str) -> None:

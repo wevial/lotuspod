@@ -61,6 +61,11 @@ thread on its decision: the comment keeps `answer`, {id, choice, label} of
 the answer whose note it holds, which no other comment carries. Each later
 note to the same question is a reply in the newest thread one opened.
 
+A thread may be anchored to a live block on its page: its first comment
+keeps `widget`, {id, hash, state}, the block's id, its widget file's hash
+and the state label the reader's widget showed. Every comment row carries
+`widget`, null on every other comment.
+
 Each reader's last visit to each page is kept too: one row per reader, by
 the address Access verified, and page, holding the revision they last
 opened the page at, so it holds on any device they read from. So is how far
@@ -94,7 +99,7 @@ from typing import Callable, Iterator, Mapping, Sequence
 from lotuspod import media
 
 DEFAULT_NAME = "lotuspod.sqlite3"
-SCHEMA_VERSION = 16
+SCHEMA_VERSION = 17
 # Seconds a connection waits for another writer before giving up.
 BUSY_TIMEOUT = 30
 # The state of a reader's comment until an agent takes it up.
@@ -278,6 +283,10 @@ _SCHEMA = {1: (
         done_at TEXT
     )""",
     "CREATE INDEX inbox_by_owner ON inbox(owner, done_at, id)",
+), 17: (
+    # The live block a thread is anchored to, on its first comment only, as
+    # JSON {id, hash, state}; NULL on every other comment.
+    "ALTER TABLE comments ADD COLUMN widget TEXT",
 )}
 # The settings row that holds whether the responder is paused.
 _PAUSED = "responder_paused"
@@ -390,6 +399,7 @@ def _comment(row: sqlite3.Row) -> dict:
         "parent": row["parent"],
         "text": row["text"],
         "quote": None if row["quote"] is None else json.loads(row["quote"]),
+        "widget": None if row["widget"] is None else json.loads(row["widget"]),
         "images": _images(row["images"]),
         "actor": _actor(row["actor"]),
         "createdAt": row["created_at"],
@@ -663,16 +673,18 @@ class Database:
 
     def add_comment(self, *, page: str, section: str, section_title: str, revision: str,
                     text: str, quote: Mapping | None, actor: Mapping, owner: str = "",
-                    images: Sequence[Mapping] = (), question: str | None = None) -> dict:
+                    images: Sequence[Mapping] = (), question: str | None = None,
+                    widget: Mapping | None = None) -> dict:
         """Store a comment opening a new thread on section of a page owned
         by owner ("" when it has none), with its images, each {name, width,
-        height}; with question, the thread is on that decision, in section."""
+        height}; with question, the thread is on that decision, in section;
+        with widget, {id, hash, state}, it is on that live block."""
         with self._connect() as conn, _write(conn):
             return _insert_comment(
                 conn, page=page, section=section, section_title=section_title,
                 revision=revision, parent=None, text=text,
                 quote=None if quote is None else _dump(quote), actor=actor, owner=owner,
-                images=images, question=question,
+                images=images, question=question, widget=widget,
             )
 
     def add_reply(self, *, page: str, parent: int, revision: str,
@@ -1532,7 +1544,7 @@ def _insert_comment(conn: sqlite3.Connection, *, page: str, section: str,
                     section_title: str, revision: str, parent: int | None, text: str,
                     quote: str | None, actor: Mapping, owner: str,
                     images: Sequence[Mapping] = (), question: str | None = None,
-                    answer: Mapping | None = None) -> dict:
+                    answer: Mapping | None = None, widget: Mapping | None = None) -> dict:
     # The owner's last pull as the comment arrives, read under the write lock.
     pulled = None
     if owner:
@@ -1541,10 +1553,10 @@ def _insert_comment(conn: sqlite3.Connection, *, page: str, section: str,
     cursor = conn.execute(
         "INSERT INTO comments (page, section, section_title, revision, parent, text,"
         " quote, actor, created_at, state, arrival_owner, arrival_pull, images, question,"
-        " answer) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        " answer, widget) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (page, section, section_title, revision, parent, text, quote,
          _dump(actor), _now(), PENDING, owner, pulled, _stored_images(images), question,
-         None if answer is None else _dump(answer)),
+         None if answer is None else _dump(answer), None if widget is None else _dump(widget)),
     )
     row = conn.execute("SELECT * FROM comments WHERE id = ?", (cursor.lastrowid,))
     return _comment(row.fetchone())

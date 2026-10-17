@@ -147,6 +147,80 @@ class Frames(HTMLParser):
             self.sources.append(attrs.get('src', ''))
 
 
+class PageWidgets(HTMLParser):
+    """A served page's live blocks: each frame's data-widget id to its
+    file's hash, its title and the data-section of the section wrapper it
+    sits in (lotuspod.sections), "" outside every wrapper."""
+
+    def __init__(self, text: str):
+        super().__init__()
+        self.found: dict[str, tuple[str, str, str]] = {}
+        self._section = None
+        self._depth = 0
+        if re.search(r'<iframe\b', text, re.IGNORECASE):
+            self.feed(text)
+            self.close()
+
+    def handle_starttag(self, tag, attrs):
+        attrs = dict(attrs)
+        classes = (attrs.get('class') or '').split()
+        if tag == 'div':
+            if self._section is not None:
+                self._depth += 1
+            elif 'artifact-section-body' in classes:
+                self._section = attrs.get('data-section') or ''
+                self._depth = 1
+        elif tag == 'iframe' and 'artifact-widget' in classes:
+            ident = attrs.get('data-widget') or ''
+            named = re.search(r'\.w-([0-9a-f]{12})\.html\Z', attrs.get('src') or '')
+            if ident and named and ident not in self.found:
+                self.found[ident] = (named.group(1), attrs.get('title') or '',
+                                     self._section or '')
+
+    def handle_endtag(self, tag):
+        if tag == 'div' and self._section is not None:
+            self._depth -= 1
+            if not self._depth:
+                self._section = None
+
+
+def block_source(source: str, markdown_source: bool, ident: str) -> str:
+    """The lines of the live block ident as written in a page's kept source,
+    markdown or HTML, found as render() finds it; "" when it has none."""
+    lines = source.split('\n')
+    body = source
+    if markdown_source:
+        from . import markdown
+        # Only where each block is matters, not how an image is drawn.
+        sizes = {image.src: (0, 0) for image in markdown.images(source)}
+        try:
+            body = markdown.to_body(source, sizes)
+        except (RuntimeError, ValueError):
+            return ''
+    try:
+        blocks = Templates(body).blocks
+    except RuntimeError:
+        return ''
+    for number, (start, end, attrs, content, line) in enumerate(blocks, 1):
+        if identifier(attrs.get('data-id') or '', attrs.get('data-title') or '', number) != ident:
+            continue
+        if markdown_source:
+            # A fence's template keeps the line of its opening fence and its
+            # code lines, one empty line for an empty fence; the closing
+            # fence follows them. Markup written as a template has no line.
+            if not attrs.get('data-line'):
+                return ''
+            first = int(attrs['data-line'])
+            code = content.count('\n')
+            if code == 1 and re.sub(r'^(?: {0,3}> ?)*', '', ''.join(lines[first:first + 1])).startswith('```'):
+                code = 0
+            return '\n'.join(lines[first - 1:first + code + 1])
+        first = source.count('\n', 0, start)
+        last = source.count('\n', 0, end)
+        return '\n'.join(lines[first:last + 1])
+    return ''
+
+
 class DocumentHead(HTMLParser):
     """Locate structural tags without matching strings inside scripts/comments."""
     CDATA_CONTENT_ELEMENTS = Templates.CDATA_CONTENT_ELEMENTS

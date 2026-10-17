@@ -58,7 +58,9 @@ saying there is no one to queue it for. The line's room is not counted
 against the reply's length.
 The prompt always gives the comment to answer in full, whatever of its
 thread the bounded thread leaves out, and, for a thread on a decision, the
-decision's question, its options and its current answer. The test-only fault point
+decision's question, its options and its current answer, and, for a thread
+on a live block, the block's title, state and source, as `comments pull`
+gives them. The test-only fault point
 LOTUSPOD_RESPONDER_CRASH_AFTER=publish exits right after a republish.
 
 Before its first pass the responder waits for serve to answer on the socket,
@@ -381,6 +383,7 @@ def prompt(item: dict, copied: Collection[str] | None = None) -> str:
     ]
     if item.get("decision"):
         lines += _decision(item["decision"])
+    lines += agents.block_lines(item)
     if comment.get("quote"):
         lines += [f"The reader highlighted a passage of this section on "
                   f"{agents.moved(comment, page['revision'])}. Answer about that passage.", "",

@@ -1,0 +1,290 @@
+"""A comment thread anchored to a live block: the comments route checks and
+stores `widget`, {id, hash, state}, threads answer it, and an agent's pull
+and the default responder's prompt name the block by its title and state
+with its source, saying when it has changed or left the page.
+
+serve runs on a thread with the test Access key trusted, as in
+tests.test_agent_pull; the reader posts over its port and agents use the
+commands through its socket.
+
+Run from the repo root:
+
+    python -m unittest tests.test_widget_anchors -v
+"""
+
+from __future__ import annotations
+
+import json
+import re
+import sqlite3
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+
+from lotuspod import agents, cli, comments, db, responder  # noqa: E402
+from tests.test_agent_pull import PullTestCase, run_cli  # noqa: E402
+
+TITLE = "Merge churn by worker count"
+STATE = "at 6 workers"
+# The block's line as the ticket writes it: "On the block TITLE (`ID`), at STATE".
+LINE = f"On the block {TITLE} (`churn`), at {STATE}"
+BLOCK = """\
+```html live id=churn title="Merge churn by worker count"
+<p id="out">at 1 worker</p>
+<script>document.getElementById("out").textContent = "at 6 workers";</script>
+```"""
+CHANGED = BLOCK.replace('"at 6 workers"', '"at " + 6 + " workers"')
+LAG = """\
+```html live id=lag title=Lag
+<p>Lag</p>
+```"""
+
+
+def churn(block: str) -> str:
+    return (f"# Merge throughput\n\nHow merges go.\n\n## Throughput\n\nMerges an hour.\n\n"
+            f"{block}\n\n## Latency\n\nSlow enough.\n\n{LAG}\n")
+
+
+class AnchorCase(PullTestCase):
+    """plan and loose as PullTestCase has them, and a page `churn` owned by
+    hermes, published with --comments: block `churn` in section
+    throughput, block `lag` in section latency."""
+
+    def prepare(self) -> None:
+        self.publish_churn(churn(BLOCK))
+
+    def publish_churn(self, text: str) -> None:
+        source = self.work / "churn.md"
+        source.write_text(text, encoding="utf-8")
+        rc, _out, err = run_cli("publish", str(source), "--out-dir", str(self.out_dir),
+                                "--local", "--comments", "--owner", "hermes",
+                                "--credential", str(self.desk))
+        self.assertEqual(rc, 0, err)
+
+    def block_hash(self, ident: str = "churn") -> str:
+        page = (self.out_dir / "churn.html").read_text(encoding="utf-8")
+        frame = re.search(r'<iframe class="artifact-widget" src="churn\.w-([0-9a-f]{12})\.html"'
+                          rf'[^>]*data-widget="{ident}"', page)
+        return frame.group(1)
+
+    def anchor(self, **changes) -> dict:
+        return {"id": "churn", "hash": self.block_hash(), "state": STATE, **changes}
+
+    def post(self, body: dict) -> tuple[int, dict]:
+        return self.reader("POST", "/api/comments", {"page": "churn", **body})
+
+    def stored(self) -> int:
+        with sqlite3.connect(self.db_path) as conn:
+            return conn.execute("SELECT COUNT(*) FROM comments").fetchone()[0]
+
+    def anchored(self) -> dict:
+        status, row = self.post({"section": "throughput", "text": "@hermes This number is off.",
+                                 "widget": self.anchor()})
+        self.assertEqual(status, 201, row)
+        return row
+
+    def markdown_pull(self) -> str:
+        rc, out, err = self.agent("pull", "--owner", "hermes")
+        self.assertEqual(rc, 0, out + err)
+        return out
+
+    def item(self, comment_id: int) -> dict:
+        [found] = [item for item in self.pull("hermes")
+                   if item["kind"] == "comment" and item["comment"]["id"] == comment_id]
+        return found
+
+
+class RouteTests(AnchorCase):
+    def test_a_thread_on_a_block_carries_its_anchor_and_its_replies_none(self):
+        anchor = self.anchor()
+        row = self.anchored()
+        self.assertEqual(row["widget"], anchor)
+        status, reply = self.post({"parent": row["id"], "text": "Which step?"})
+        self.assertEqual(status, 201, reply)
+        self.assertIsNone(reply["widget"])
+
+        [thread] = self.threads("churn")
+        self.assertEqual(thread["root"]["id"], row["id"])
+        self.assertEqual(thread["root"]["widget"], anchor)
+        self.assertEqual([r["widget"] for r in thread["replies"]], [None])
+
+    def test_a_thread_without_a_block_answers_widget_null(self):
+        status, row = self.post({"section": "throughput", "text": "Plain."})
+        self.assertEqual(status, 201, row)
+        self.assertIsNone(row["widget"])
+        self.assertIsNone(self.threads("churn")[0]["root"]["widget"])
+
+    def test_an_empty_state_is_kept(self):
+        status, row = self.post({"section": "throughput", "text": "Hm.",
+                                 "widget": self.anchor(state="")})
+        self.assertEqual(status, 201, row)
+        self.assertEqual(row["widget"]["state"], "")
+
+    def test_each_bad_anchor_is_refused_and_stores_nothing(self):
+        root = self.anchored()
+        before = self.stored()
+        text = {"section": "throughput", "text": "Off."}
+        quote = {"exact": "Merges an hour.", "prefix": "", "suffix": ""}
+        cases = [
+            ("extra key", {**text, "widget": {**self.anchor(), "step": 6}},
+             400, "invalid_body"),
+            ("11 digits", {**text, "widget": self.anchor(hash=self.block_hash()[:11])},
+             400, "invalid_body"),
+            ("81 characters", {**text, "widget": self.anchor(state="x" * 81)},
+             400, "invalid_body"),
+            ("newline", {**text, "widget": self.anchor(state="at 6\nworkers")},
+             400, "invalid_body"),
+            ("beside a quote", {**text, "quote": quote, "widget": self.anchor()},
+             400, "invalid_body"),
+            ("on a reply", {"parent": root["id"], "text": "Off.", "widget": self.anchor()},
+             400, "invalid_body"),
+            ("unknown id", {**text, "widget": self.anchor(id="nope")},
+             400, "unknown_widget"),
+            ("another section", {"section": "latency", "text": "Off.",
+                                 "widget": self.anchor()},
+             400, "unknown_widget"),
+            ("another hash", {**text, "widget": self.anchor(hash="0" * 12)},
+             409, "stale_widget"),
+        ]
+        for name, body, code, error in cases:
+            with self.subTest(name):
+                status, payload = self.post(body)
+                self.assertEqual((status, payload), (code, {"error": error}))
+                self.assertEqual(self.stored(), before)
+        [thread] = self.threads("churn")
+        self.assertEqual(thread["replies"], [])
+
+    def test_a_block_s_section_is_its_wrapper_s_or_the_page_s(self):
+        page = cli.api_page(self.out_dir, "churn")
+        self.assertEqual({ident: (block.title, block.section)
+                          for ident, block in page.widgets.items()},
+                         {"churn": (TITLE, "throughput"), "lag": ("Lag", "latency")})
+        self.assertEqual(page.widgets["churn"].hash, self.block_hash())
+        # Before the first heading: the whole page.
+        self.publish_churn(churn(BLOCK).replace("How merges go.\n", "How merges go.\n\n" + LAG
+                                                 .replace("lag", "intro") + "\n"))
+        page = cli.api_page(self.out_dir, "churn")
+        self.assertEqual(page.widgets["intro"].section, comments.WHOLE_PAGE)
+        # A page whose only box is `page`.
+        self.publish_churn(f"# Merge throughput\n\n{BLOCK}\n")
+        page = cli.api_page(self.out_dir, "churn")
+        self.assertEqual(page.widgets["churn"].section, comments.PAGE_SECTION)
+        status, row = self.post({"section": comments.PAGE_SECTION, "text": "Off.",
+                                 "widget": self.anchor()})
+        self.assertEqual(status, 201, row)
+        # A page with no blocks has none.
+        self.assertEqual(cli.api_page(self.out_dir, "plan").widgets, {})
+
+
+class PullAndPromptTests(AnchorCase):
+    def test_the_pull_names_the_block_its_state_and_its_source(self):
+        anchor = self.anchor()
+        row = self.anchored()
+        kept = (self.out_dir / "churn.md").read_text(encoding="utf-8")
+        self.assertIn(BLOCK, kept)
+
+        item = self.item(row["id"])
+        self.assertEqual(item["widget"], anchor)
+        self.assertEqual(item["block"], {"title": TITLE, "source": BLOCK, "status": "current"})
+
+        text = self.markdown_pull()
+        self.assertIn(LINE, text)
+        self.assertIn(agents.fence(BLOCK), text)
+        self.assertNotIn("The block has changed", text)
+        self.assertNotIn("no longer on the page", text)
+
+    def test_a_changed_block_and_a_removed_one_are_said_so(self):
+        row = self.anchored()
+        self.publish_churn(churn(CHANGED))
+        item = self.item(row["id"])
+        self.assertEqual(item["block"], {"title": TITLE, "source": CHANGED, "status": "changed"})
+        text = self.markdown_pull()
+        self.assertIn(LINE, text)
+        self.assertIn("The block has changed since this comment", text)
+        self.assertIn(agents.fence(CHANGED), text)
+
+        self.publish_churn(churn("No block here."))
+        item = self.item(row["id"])
+        self.assertEqual(item["block"], {"title": "", "source": "", "status": "removed"})
+        text = self.markdown_pull()
+        self.assertIn("The block is no longer on the page", text)
+        self.assertNotIn("The block has changed", text)
+        self.assertNotIn(agents.fence(CHANGED), text.split("## Source of")[0])
+
+    def test_an_empty_state_leaves_out_its_words(self):
+        status, row = self.post({"section": "throughput", "text": "@hermes Odd.",
+                                 "widget": self.anchor(state="")})
+        self.assertEqual(status, 201, row)
+        text = self.markdown_pull()
+        self.assertIn(f"On the block {TITLE} (`churn`)\n", text)
+
+    def test_the_responder_s_prompt_names_the_block_as_the_pull_does(self):
+        row = self.anchored()
+        item = self.item(row["id"])
+        prompt = responder.prompt(item)
+        self.assertIn(LINE, prompt)
+        self.assertIn(agents.fence(BLOCK), prompt)
+        section = prompt.split("### The thread it belongs to")[0]
+        self.assertIn(agents.fence(BLOCK), section)
+
+        self.publish_churn(churn(CHANGED))
+        prompt = responder.prompt(self.item(row["id"]))
+        self.assertIn("The block has changed since this comment", prompt)
+        self.assertIn(agents.fence(CHANGED), prompt)
+
+    def test_a_thread_without_a_block_has_no_block_lines(self):
+        status, row = self.post({"section": "throughput", "text": "@hermes Plain."})
+        self.assertEqual(status, 201, row)
+        item = self.item(row["id"])
+        self.assertNotIn("widget", item)
+        self.assertNotIn("block", item)
+        self.assertNotIn("On the block", self.markdown_pull())
+        self.assertNotIn("On the block", responder.prompt(item))
+
+
+class SchemaTests(unittest.TestCase):
+    def setUp(self) -> None:
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.path = Path(tmp.name) / db.DEFAULT_NAME
+
+    def main_database(self) -> None:
+        """A database at main's schema, one below this one's, with comments."""
+        database = db.Database(self.path)
+        root = database.add_comment(page="plan", section="risks", section_title="Risks",
+                                    revision="r1", text="First.", quote=None,
+                                    actor={"kind": "human", "email": "a@example.com"})
+        database.add_reply(page="plan", parent=root["id"], revision="r1",
+                           sections={"risks": "Risks"}, text="Second.",
+                           actor={"kind": "human", "email": "a@example.com"})
+        with sqlite3.connect(self.path) as conn:
+            conn.execute("ALTER TABLE comments DROP COLUMN widget")
+            conn.execute(f"PRAGMA user_version = {db.SCHEMA_VERSION - 1}")
+
+    def test_main_s_database_migrates_and_its_comments_answer_widget_null(self):
+        self.main_database()
+        with sqlite3.connect(self.path) as conn:
+            columns = [row[1] for row in conn.execute("PRAGMA table_info(comments)")]
+        self.assertNotIn("widget", columns)
+        [thread] = db.Database(self.path).threads("plan")
+        self.assertIsNone(thread["root"]["widget"])
+        self.assertEqual([row["widget"] for row in thread["replies"]], [None])
+        with sqlite3.connect(self.path) as conn:
+            self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0],
+                             db.SCHEMA_VERSION)
+            self.assertEqual(conn.execute(
+                "SELECT COUNT(*) FROM comments WHERE widget IS NOT NULL").fetchone()[0], 0)
+
+    def test_a_newer_database_is_refused(self):
+        self.main_database()
+        with sqlite3.connect(self.path) as conn:
+            conn.execute(f"PRAGMA user_version = {db.SCHEMA_VERSION + 1}")
+        with self.assertRaises(sqlite3.DatabaseError):
+            db.Database(self.path).threads("plan")
+
+
+if __name__ == "__main__":
+    unittest.main()
