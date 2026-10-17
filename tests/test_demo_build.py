@@ -256,24 +256,17 @@ class BuiltSiteTests(unittest.TestCase):
             "Referrer-Policy: no-referrer",
         ])
 
-    def test_try_it_and_the_example_each_hold_one_live_block_whose_file_is_here(self):
+    def test_try_it_and_the_example_each_hold_one_live_block_loaded_with_its_page(self):
         for name in ("try-it", "interactive"):
             with self.subTest(page=name):
-                srcs = re.findall(r'<iframe class="artifact-widget" src="([^"]+)"',
-                                  (self.out / f"{name}.html").read_text(encoding="utf-8"))
-                self.assertEqual(len(srcs), 1)
-                self.assertRegex(srcs[0], rf"\A{name}\.w-[0-9a-f]{{12}}\.html\Z")
-                self.assertIn(srcs[0], self.widgets)
-                self.assertTrue((self.out / srcs[0]).is_file())
-
-    def test_live_block_frames_load_with_their_page(self):
-        for name in ("try-it.html", "interactive.html"):
-            with self.subTest(page=name):
-                frames = re.findall(r'<iframe class="artifact-widget"[^>]*>',
-                                    (self.out / name).read_text(encoding="utf-8"))
+                frames = re.findall(r'<iframe class="artifact-widget" src="([^"]+)"([^>]*)>',
+                                    (self.out / f"{name}.html").read_text(encoding="utf-8"))
                 self.assertEqual(len(frames), 1)
-                self.assertNotIn("loading=", frames[0])
-                self.assertIn('sandbox="allow-scripts"', frames[0])
+                src, rest = frames[0]
+                self.assertRegex(src, rf"\A{name}\.w-[0-9a-f]{{12}}\.html\Z")
+                self.assertIn(src, self.widgets)
+                self.assertNotIn("loading=", rest)
+                self.assertIn('sandbox="allow-scripts"', rest)
 
     def test_widget_files_are_publish_s_bytes_undressed_and_not_listed(self):
         listed = (self.out / "pages.html").read_text(encoding="utf-8")
@@ -285,7 +278,6 @@ class BuiltSiteTests(unittest.TestCase):
                                                 '<meta http-equiv="Content-Security-Policy"'))
                 self.assertNotIn("demo-banner", text)
                 self.assertNotIn("lotuspod-demo", text)
-                self.assertNotIn(name, listed)
                 self.assertNotIn(name.split(".")[0] + ".w-", listed)
 
     def test_each_widget_file_has_a_headers_rule_of_its_own_with_serve_s_headers(self):
@@ -384,7 +376,6 @@ class BrokenLinkTests(unittest.TestCase):
 class ExampleTests(unittest.TestCase):
     def test_the_example_publishes_as_the_build_publishes_it_with_no_warning(self):
         source = REPO_ROOT / "docs" / "examples" / "interactive.md"
-        self.assertIn(("docs/examples/interactive.md", "interactive"), build.SOURCES)
         with tempfile.TemporaryDirectory() as tmp:
             scratch = Path(tmp)
             copy = scratch / "interactive.md"

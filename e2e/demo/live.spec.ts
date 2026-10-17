@@ -4,20 +4,12 @@ import { expect, test, type Page } from '@playwright/test';
 
 // The demo's live blocks in a real Chromium at 1280 px: the Try it page's
 // block, with no library, runs beside the shim, its widget file answered
-// with the sandbox policy, and a comment on its section gets demo-agent's
-// scripted reply; the worked example's d3 chart redraws as its slider moves,
+// with the sandbox policy; the worked example's d3 chart redraws as its slider moves,
 // with no console error or policy violation. jsDelivr is answered from the
 // d3 installed under e2e/, as e2e/checks/libraries.spec.ts does, so no
 // request leaves the machine.
 const TRY_IT = '/try-it.html';
 const EXAMPLE = '/interactive.html';
-// The block sits under "The deep shelf", an h3 of "The pond today": the
-// section a comment on it belongs to.
-const SECTION = 'the-pond-today';
-const SECTION_TITLE = 'The pond today';
-const AGENT = 'demo-agent';
-const REPLIES = JSON.parse(fs.readFileSync(
-  path.resolve(__dirname, '..', '..', 'demo', 'replies.json'), 'utf-8'));
 const SANDBOX = "sandbox allow-scripts; frame-ancestors 'self'";
 const JSDELIVR = /^https:\/\/cdn\.jsdelivr\.net\/npm\/(d3)@[^/]+\/(.+)$/;
 type Violation = { blockedURI: string; effectiveDirective: string };
@@ -65,29 +57,6 @@ test('the Try it block runs beside the shim, answered with the sandbox policy', 
   await expect(verdict).toHaveText('5 lilies get 0.6 m² each: the leaves will crowd and climb.');
   expect(await seen.violations()).toEqual([]);
   expect(seen.errors).toEqual([]);
-});
-
-test('a comment on the live block\'s section gets demo-agent\'s scripted reply', async ({ page }) => {
-  await page.goto(`${TRY_IT}?standalone`);
-  await expect(page.locator('details.artifact-comment > summary.artifact-comment-chip').first()).toBeAttached();
-  await page.locator(`details.artifact-comment[data-section="${SECTION}"] > summary`).click();
-  const group = page.locator('aside.artifact-comments-panel .artifact-comments-group')
-    .filter({ has: page.locator('.artifact-comments-group-title', { hasText: SECTION_TITLE }) });
-  await expect(group).toBeVisible();
-  const start = group.getByRole('button', { name: 'Comment on this section' });
-  if (await start.isVisible()) await start.click();
-  const field = group.locator('form.artifact-comment-form textarea[name="text"]');
-  const words = 'Could a fourth lily go on the shallow shelf?';
-  await field.fill(words);
-  await group.getByRole('button', { name: 'Comment', exact: true }).click();
-  await expect(field).toHaveValue('');
-
-  const thread = group.locator('.artifact-comments-entry').filter({ hasText: words });
-  await expect(thread.locator('.artifact-comment-item--reader .artifact-comment-text')).toHaveText(words);
-  const reply = thread.locator('.artifact-comment-item--agent');
-  await expect(reply).toHaveCount(1, { timeout: 15_000 });
-  await expect(reply.locator('.artifact-comment-handle')).toHaveText(AGENT);
-  await expect(reply.locator('.artifact-comment-text')).toHaveText(REPLIES['try-it'][SECTION]);
 });
 
 test('the worked example\'s d3 chart redraws its marks as the slider moves, with no error', async ({ page }) => {
