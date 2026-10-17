@@ -847,12 +847,10 @@
       filter();
       askSeen();
       startActivity();
-      // As many weeks as the view shows, asked again up to now, so each
-      // reply's unread flag is the route's word now; kept as they were when
-      // the route does not answer. Show older answered meanwhile adds a week:
-      // asked again for that many weeks. Asked again
-      // before an earlier ask has answered, only the latest is shown, so an
-      // older answer never takes back a page the newer one listed.
+      // Refresh the shown weeks up to now so unread flags are current; keep
+      // the previous feed if any read fails. If Show older adds a week during
+      // the refresh, restart for the new span; only the latest refresh may
+      // replace the feed, so an older answer cannot take back a newer page.
       let againAsked = 0;
       const askAgain = single(async () => {
         if (!feed) {
