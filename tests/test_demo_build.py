@@ -8,10 +8,14 @@ anchor landing, the page list moved to pages.html with / redirecting to the
 README's page, the demo banner first in every body, the Try it page's forms
 and comment boxes, the static host's headers, no noindex, scripts only from
 the site or the Mermaid directory, and the demo shim (lotuspod-demo.js, with
-demo/replies.json in it) loaded from every head before the page script. It
+demo/replies.json in it) loaded from every head before the page script; and
+the widget files of the Try it page's and the worked example's live blocks,
+copied as publish wrote them, listed nowhere, each named in a `_headers` rule
+of its own with the headers serve gives a widget file, the example published
+with no warning. It
 also witnesses that a link to no file fails the build, that a page published
 outside the build, the theme's sources and serve's allow-list hold none of
-the demo, that `--serve` answers over HTTP, and that `--serve -- CMD` runs
+the demo, that `--serve` answers over HTTP, a widget file with its headers, and that `--serve -- CMD` runs
 CMD against the site with its request log and exits with CMD's code.
 
 Run from the repo root:
@@ -44,10 +48,10 @@ SRC_DIR = REPO_ROOT / "src"
 sys.path.insert(0, str(SRC_DIR))
 
 from demo import build  # noqa: E402
-from lotuspod import cli  # noqa: E402
+from lotuspod import cli, widgets  # noqa: E402
 
 PAGES = ("readme.html", "publishing.html", "comments.html", "agents.html", "operating.html",
-         "development.html", "architecture.html", "try-it.html")
+         "development.html", "architecture.html", "try-it.html", "interactive.html")
 BANNER_TEXT = ("Demo: what you write stays in this browser. "
                "Replies are scripted; no AI model runs.")
 ABSOLUTE = re.compile(r"^(?:[a-z][a-z0-9+.-]*:|//)", re.IGNORECASE)
@@ -148,7 +152,9 @@ class BuiltSiteTests(unittest.TestCase):
                               cwd=REPO_ROOT, capture_output=True, text=True)
         if done.returncode != 0:
             raise AssertionError(f"the build failed: {done.stderr}")
-        cls.pages = {path.name: read_page(path) for path in sorted(cls.out.glob("*.html"))}
+        cls.widgets = sorted(path.name for path in cls.out.glob("*.w-*.html"))
+        cls.pages = {path.name: read_page(path) for path in sorted(cls.out.glob("*.html"))
+                     if path.name not in cls.widgets}
 
     @classmethod
     def tearDownClass(cls) -> None:
@@ -230,14 +236,68 @@ class BuiltSiteTests(unittest.TestCase):
         self.assertGreaterEqual(len(page.h2_ids), 2)
         self.assertEqual(page.comment_sections, ["", *page.h2_ids])
 
+    def rules(self) -> dict[str, list[str]]:
+        """_headers as each rule's path and its header lines, in order."""
+        rules: dict[str, list[str]] = {}
+        for line in (self.out / "_headers").read_text(encoding="utf-8").splitlines():
+            if line.startswith("/"):
+                self.assertNotIn(line, rules)
+                rules[line] = []
+            else:
+                rules[list(rules)[-1]].append(line.strip())
+        return rules
+
     def test_the_headers_file_sets_three_headers_for_every_path(self):
-        lines = (self.out / "_headers").read_text(encoding="utf-8").splitlines()
-        self.assertEqual(lines[0], "/*")
-        self.assertEqual([line.strip() for line in lines[1:]], [
+        rules = self.rules()
+        self.assertEqual(list(rules)[0], "/*")
+        self.assertEqual(rules["/*"], [
             "Content-Security-Policy: frame-ancestors 'self'",
             "X-Content-Type-Options: nosniff",
             "Referrer-Policy: no-referrer",
         ])
+
+    def test_try_it_and_the_example_each_hold_one_live_block_whose_file_is_here(self):
+        for name in ("try-it", "interactive"):
+            with self.subTest(page=name):
+                srcs = re.findall(r'<iframe class="artifact-widget" src="([^"]+)"',
+                                  (self.out / f"{name}.html").read_text(encoding="utf-8"))
+                self.assertEqual(len(srcs), 1)
+                self.assertRegex(srcs[0], rf"\A{name}\.w-[0-9a-f]{{12}}\.html\Z")
+                self.assertIn(srcs[0], self.widgets)
+                self.assertTrue((self.out / srcs[0]).is_file())
+
+    def test_live_block_frames_load_with_their_page(self):
+        for name in ("try-it.html", "interactive.html"):
+            with self.subTest(page=name):
+                frames = re.findall(r'<iframe class="artifact-widget"[^>]*>',
+                                    (self.out / name).read_text(encoding="utf-8"))
+                self.assertEqual(len(frames), 1)
+                self.assertNotIn("loading=", frames[0])
+                self.assertIn('sandbox="allow-scripts"', frames[0])
+
+    def test_widget_files_are_publish_s_bytes_undressed_and_not_listed(self):
+        listed = (self.out / "pages.html").read_text(encoding="utf-8")
+        self.assertGreaterEqual(len(self.widgets), 2)
+        for name in self.widgets:
+            with self.subTest(widget=name):
+                text = (self.out / name).read_text(encoding="utf-8")
+                self.assertTrue(text.startswith("<!doctype html><html><head>"
+                                                '<meta http-equiv="Content-Security-Policy"'))
+                self.assertNotIn("demo-banner", text)
+                self.assertNotIn("lotuspod-demo", text)
+                self.assertNotIn(name, listed)
+                self.assertNotIn(name.split(".")[0] + ".w-", listed)
+
+    def test_each_widget_file_has_a_headers_rule_of_its_own_with_serve_s_headers(self):
+        rules = self.rules()
+        self.assertEqual(build.WIDGET_HEADERS, widgets.HEADERS[:2])
+        self.assertEqual(list(rules)[1:], [f"/{name}" for name in self.widgets])
+        for name in self.widgets:
+            with self.subTest(widget=name):
+                self.assertEqual(rules[f"/{name}"], [
+                    "Content-Security-Policy: sandbox allow-scripts; frame-ancestors 'self'",
+                    "Permissions-Policy: " + dict(widgets.HEADERS)["Permissions-Policy"],
+                ])
 
     def test_no_file_says_noindex(self):
         for path in self.out.rglob("*"):
@@ -319,6 +379,32 @@ class BrokenLinkTests(unittest.TestCase):
                 code = build.main(["--out", str(Path(tmp) / "site")])
             self.assertNotEqual(code, 0)
             self.assertIn("docs/no-such-source.md", stderr.getvalue())
+
+
+class ExampleTests(unittest.TestCase):
+    def test_the_example_publishes_as_the_build_publishes_it_with_no_warning(self):
+        source = REPO_ROOT / "docs" / "examples" / "interactive.md"
+        self.assertIn(("docs/examples/interactive.md", "interactive"), build.SOURCES)
+        with tempfile.TemporaryDirectory() as tmp:
+            scratch = Path(tmp)
+            copy = scratch / "interactive.md"
+            copy.write_text(build.rewrite_links(source.read_text(encoding="utf-8"),
+                                                "docs/examples/interactive.md", REPO_ROOT,
+                                                dict(build.SOURCES)), encoding="utf-8")
+            printed = build.publish(copy, source.parent, "interactive", scratch / "site", scratch)
+            self.assertNotIn("warning", printed.lower())
+            (widget,) = (scratch / "site").glob("interactive.w-*.html")
+            self.assertIn('<script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/',
+                          widget.read_text(encoding="utf-8"))
+
+    def test_a_block_with_no_title_prints_the_warning_the_check_looks_for(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            scratch = Path(tmp)
+            copy = scratch / "bare.md"
+            copy.write_text("# Bare\n\n## One\n\n```html live\n<p>Hi</p>\n```\n",
+                            encoding="utf-8")
+            printed = build.publish(copy, scratch, "bare", scratch / "site", scratch)
+            self.assertIn("warning: widget widget-1", printed)
 
 
 class OutsideTheBuildTests(unittest.TestCase):
@@ -411,6 +497,24 @@ class ServeTests(unittest.TestCase):
         self.assertEqual(done.returncode, 7, done.stderr)
         self.assertEqual(done.stdout.splitlines(),
                          ["GET /lotuspod-demo.js", "GET /api/comments?page=try-it"])
+
+    def test_serve_answers_a_widget_file_with_the_widget_headers_and_a_page_without(self):
+        script = (
+            "import os, re, urllib.request\n"
+            "url = os.environ['LOTUSPOD_URL']\n"
+            "page = urllib.request.urlopen(url + 'try-it.html')\n"
+            "assert page.headers['Content-Security-Policy'] is None\n"
+            "name = re.search(r'src=\"(try-it\\.w-[0-9a-f]{12}\\.html)\"', page.read().decode()).group(1)\n"
+            "widget = urllib.request.urlopen(url + name)\n"
+            "print(widget.headers['Content-Security-Policy'])\n"
+            "print(widget.headers['Permissions-Policy'])\n"
+        )
+        done = subprocess.run(
+            [sys.executable, "-m", "demo.build", "--serve", "--", sys.executable, "-c", script],
+            cwd=REPO_ROOT, capture_output=True, text=True, timeout=120,
+        )
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(done.stdout.splitlines(), [value for _, value in build.WIDGET_HEADERS])
 
     def test_a_command_without_serve_is_refused(self):
         stderr = io.StringIO()

@@ -289,19 +289,9 @@ the first `<h1>` of an HTML one (which is taken out of the body, so the page
 does not show it twice); `--title` overrides both, and a page with no title is
 refused. An HTML body gets the same section ids and outline as a markdown one.
 
-```sh
-lotuspod publish mock.html --live --notes notes.md
-```
-
-`--live` publishes an HTML document in a sandboxed frame, titled from `--title`,
-its `<title>`, or its page name. `--notes FILE.md` adds markdown below it and
-requires `--live`; notes resolve their files from their own directory.
-A live fence accepts `file=PATH`, for example `html live file=parts/panel.html
-title="Panel" height=full`. Files must stay inside the source directory (or
-`--base`), be UTF-8, at most 2 MB, and contain no line starting with three
-backticks. Publish inlines them in the kept markdown and the source sent over
-SSH. `height=full` starts at the viewport height below the top bar, then resizes
-with the document. External resources remain subject to the widget policy.
+`--live` publishes a whole HTML document, such as a mock-up, as a page that
+is one live block, and `--notes` adds markdown below it: see
+[Whole HTML pages](#whole-html-pages).
 
 The source is kept byte for byte as `NAME.md`, or `NAME.body.html` for an HTML
 body. Both are sources, not pages: the manifest and the index leave them out,
@@ -1287,6 +1277,180 @@ In the "Answered" table a saved checklist is one row, with an empty `#`, the
 legend as its Question and the summary as its Answer, the note under it. Its
 "change" opens the card as the card's own does.
 
+## Interactive pages
+
+A live block is a small HTML page of its own inside a pod: a chart, a slider,
+a mock-up, with its scripts running. Publish writes each block to a file of
+its own beside the page, a widget file named `NAME.w-HASH.html`, and the page
+shows it in a sandboxed frame. A sandboxed frame is one the browser runs as a
+stranger to the site: its scripts run, but it cannot read the page around it,
+the reader's session or anything the site keeps. A worked example, a pod with
+a live d3 chart, notes and a decision, is
+[An interactive pod](examples/interactive.md).
+
+### Writing a live block
+
+In a markdown page, a live block is a fenced block whose first line is three
+backticks followed by `html live`, then any library names and options; its
+lines up to the closing three backticks are the block's HTML. The first lines
+of three blocks, after their backticks:
+
+```text
+html live title="Lilies on the deep shelf"
+html live d3 id=churn title="Merge churn" height=320
+html live title="Panel" height=full file=parts/panel.html
+```
+
+The README has [a whole one](../README.md#interactive-pages). The options are
+words `KEY=VALUE`, each given once; a value with spaces is quoted:
+
+| Option | What it does |
+| --- | --- |
+| `title` | The name shown above the frame and given to it for screen readers. A block with none is published, and publish prints a warning naming it. |
+| `id` | The block's id on the page, unique there. Without it the id is the title's slug, or `widget-N` for the Nth block. |
+| `height` | The frame's height in pixels, a whole number up to 10000, kept as given; or `full`, which starts at the window's height below the top bar. Without it the frame starts at 360 pixels. Unless a number is given, the frame then follows the height of the block's content. |
+| `file` | Takes the block's HTML from a file instead of the fence's lines. The path is relative to the page's source and must stay inside its directory (or `--base`); the file must be UTF-8, at most 2 MB, with no line starting with three backticks. Publish writes the file's text into the kept source, and into the source sent over SSH. |
+
+Any other option, or a library name not listed below, is refused, naming the
+block and its line, and nothing is written.
+
+In an HTML page body, the same block is a `template` element with the class
+`lotuspod-live`, its options as `data-` attributes and the libraries in
+`data-libs`, separated by spaces:
+
+```html
+<template class="lotuspod-live" data-id="churn" data-title="Merge churn" data-height="320" data-libs="d3">
+  <svg id="chart" width="600" height="300"></svg>
+  <script>d3.select('#chart').append('circle').attr('cx', 40).attr('cy', 40).attr('r', 20);</script>
+</template>
+```
+
+A block whose HTML starts with `<!doctype` or `<html` is a whole document and
+is kept as written, with the frame's policy and the bridge script (see
+[Messages a widget may send](#messages-a-widget-may-send)) put first in its
+head. Any other block is put in the body of a document publish writes around
+it.
+
+### Libraries
+
+A block may load pinned chart libraries, named after `html live` (or in
+`data-libs`). Each is loaded from jsDelivr at a fixed version, checked against
+its hash, before the block's own scripts, and sets one global:
+
+| Name | Library | Global |
+| --- | --- | --- |
+| `d3` | d3 7.9.0 | `d3` |
+| `plot` | Observable Plot 0.6.17, which loads d3 first | `Plot` |
+| `chartjs` | Chart.js 4.4.8 | `Chart` |
+| `mermaid` | Mermaid 11.4.1 | `mermaid` |
+
+A block that names a library may not load any other script: a `script`
+element with a `src` (or an SVG script with an `href`) is refused, and so is
+a `<![CDATA[` section. A block with no library runs only its own inline
+scripts.
+
+### Whole HTML pages
+
+```sh
+lotuspod publish mock.html --live --notes notes.md
+```
+
+`--live` publishes an HTML document, such as a mock-up, as a pod that is one
+live block, at `height=full`. The pod is titled from `--title`, the
+document's `<title>`, or the page name. `--notes FILE.md` adds markdown below
+the block, which takes comments, decisions and images as any page does; it
+requires `--live`, and the notes find their files from their own directory.
+The document follows the same rules as a block's `file=`.
+
+### The frame's chrome
+
+Above each frame is a bar, the chrome, which the page draws, not the block:
+
+- The block's title, and a badge: "loading" until the block has loaded, then
+  "Live", or "1 error" (or "N errors") once its scripts throw. Hovering the
+  badge shows the last error.
+- **Expand** fills the window below the top bar with the frame; **Close**, or
+  Escape, puts it back.
+- **Open alone** opens the widget file in a new tab, still sandboxed.
+- **Pause** stops the block: the frame is emptied, so its scripts stop, and
+  a note says so. **Resume** loads it again from the beginning.
+
+Over the first block of a page a line reads "Sandboxed: this block can't see
+the page or your comments". When a page is republished while a reader has it
+open, a block whose HTML is unchanged keeps running, with whatever the reader
+had done in it.
+
+### What a widget cannot do
+
+A widget is the running block. Serve answers its file with
+`Content-Security-Policy: sandbox allow-scripts; frame-ancestors 'self'`, the
+page frames it with `sandbox="allow-scripts"`, and the file carries its own
+policy. So a widget has:
+
+- **No network.** It cannot fetch, open a socket or load anything from
+  elsewhere: scripts are its own inline ones and the pinned libraries, and
+  images and fonts are `data:` URLs only. It holds no forms that send, no
+  frames of its own, and no camera, microphone, location or clipboard.
+- **No page.** It cannot read or change the page around it, open a window or
+  move the reader to another page.
+- **No session.** It runs as a stranger to the site, so it sends no cookies
+  and cannot call the site's API as the reader.
+- **No storage that outlives the frame.** `localStorage`, `sessionStorage` and
+  IndexedDB are refused. What it keeps lives in its scripts' variables, and is
+  gone when the frame reloads, pauses or is republished with new HTML.
+- **Nothing sent into it.** The page never posts a message into the frame,
+  so no comment, answer or reader's name reaches it.
+
+### Messages a widget may send
+
+Each widget file starts with a small bridge script that tells the page how
+the block is doing, with `parent.postMessage`. A widget may send the same
+messages itself. Each is an object with exactly the keys shown; any other
+message is ignored, and so is any beyond 60 a second from one frame.
+
+| Message | Keys | Sent by the bridge | What the page does |
+| --- | --- | --- | --- |
+| `lotuspod:resize` | `type`, `height`: a whole number from 0 to 10000 | when the document's height changes | sets the frame to that height, unless `height` gave a number or the block is expanded or paused |
+| `lotuspod:ready` | `type` | when the document has loaded | shows "Live" on the badge |
+| `lotuspod:error` | `type`, `message`: at most 200 characters | for each uncaught error or rejected promise | counts it on the badge, with the message on hover |
+| `lotuspod:escape` | `type` | when Escape is pressed in the frame | closes Expand |
+
+### Theme variables
+
+Every widget gets the lotus theme's tokens as CSS variables on `:root`, named
+`--lotus-` and the token's group and name: `--lotus-color-lavender`,
+`--lotus-color-muted-lavender`, `--lotus-font-body`, `--lotus-type-ink`,
+`--lotus-structure-hairline` and the rest of `tokens.json` (see
+[Theme](#theme)). Its body starts with no margin, the body font, the page's
+ink color and a transparent background, so a block sits on the page as the
+prose does.
+
+### Limits
+
+| What | Limit |
+| --- | --- |
+| A block's HTML | 256 KB; 2 MB for a whole document |
+| All the blocks of a page | 2 MB |
+| Blocks on a page | 20 |
+| `height` | `full`, or a whole number from 0 to 10000 |
+| Messages from one frame | 60 a second |
+| An error message | 200 characters |
+
+A block over a limit is refused, naming it and its line, and nothing is
+written.
+
+### Habits
+
+- **Use `addEventListener`.** An inline handler attribute such as
+  `onclick="..."` does not run in a widget; give the element an id and add
+  the listener from a script.
+- **Put data inline as JSON.** A widget cannot fetch, so write its data into
+  a `<script type="application/json" id="data">` element and read it with
+  `JSON.parse(document.getElementById('data').textContent)`.
+- **Keep focus visible.** Keys pressed in a frame never reach the page, so a
+  reader working by keyboard needs to see where focus is inside it: keep the
+  focus outline on controls, or draw your own.
+
 ## What a page may run
 
 Every artifact page carries a Content-Security-Policy meta tag at the top of
@@ -1300,6 +1464,9 @@ decision forms, comment boxes or folding sections also loads the site's page
 script, `lotuspod-page.js`. Styles may be
 inline, since Mermaid sets them so; images come from the site or `data:`
 URLs; plugins, `<base>` and forms posting elsewhere are refused.
+
+A live block runs in a frame under a policy of its own, not the page's: see
+[Interactive pages](#interactive-pages).
 
 A script written into a page body is never hashed, so it does not run, and
 neither does an inline event handler such as `onclick`. `render` and
