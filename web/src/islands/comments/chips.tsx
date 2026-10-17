@@ -75,7 +75,8 @@ export function chips(page: Page, bridge: ChipsBridge) {
     render(drawn.content, node);
   }
 
-  // A passage counts on its section; placement may use its mark instead.
+  // A passage or a live block's thread counts on its section; placement
+  // may use its mark or its block instead.
   function anchor(thread: Thread): HTMLElement | null {
     const target = anchorOf(thread.root);
     switch (target.kind) {
@@ -84,6 +85,7 @@ export function chips(page: Page, bridge: ChipsBridge) {
         return (decision && decisions.get(decision.form)) || thread.box?.querySelector("summary") || null;
       }
       case "passage":
+      case "block":
       case "section":
       case "page": return thread.box?.querySelector("summary") || null;
       default: { const missing: never = target; return missing; }
@@ -96,6 +98,7 @@ export function chips(page: Page, bridge: ChipsBridge) {
       switch (target.kind) {
         case "decision": return bridge.decisionOf(thread)?.form === form;
         case "passage":
+        case "block":
         case "section":
         case "page": return false;
         default: { const missing: never = target; return missing; }
@@ -153,6 +156,8 @@ export function chips(page: Page, bridge: ChipsBridge) {
       decisions.delete(form);
     },
     refresh() {
+      // A line drawn before the threads are read would say there are none.
+      if (!bridge.settled()) return;
       bridge.boxes.forEach(box => {
         const threads = bridge.threadsOf(box);
         paint(box.querySelector("summary")!, "artifact-comment-summary",

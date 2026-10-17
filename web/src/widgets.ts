@@ -38,7 +38,8 @@ function installWidgetBridge(): void {
       if (state.height !== undefined && !state.paused && !state.expanded && !frame.hasAttribute("data-height-fixed")) {
         frame.height = String(state.height);
       }
-      if (chrome.querySelector("button")) return;
+      // The page bundle's Comment (commentChrome) may come first.
+      if (chrome.querySelector(".artifact-live-expand")) return;
       // Only fresh chrome needs tint: a carried figure already has buttons.
       // Keep this duration and class aligned with page-swap's part tint.
       if (event.type === "lotuspod:swapped") {
@@ -165,10 +166,51 @@ function installWidgetBridge(): void {
   });
 }
 
+// Set by the comments island (web/src/islands/bridge.ts) before the page
+// bundle reaches this source; never given a value here, so that stays.
+var startComment: ((request: { anchor: BlockAnchor }) => void) | undefined;
+
+// Each live block's pin, which the comments island numbers with the block's
+// open threads, and its Comment button, after the title and badge, on a page
+// that takes new comments: as the page bundle runs and on each swap, the
+// head's chrome before or after it.
+function commentChrome(): void {
+  document.querySelectorAll<HTMLElement>("figure.artifact-live[data-widget]").forEach((figure) => {
+    const frame = figure.querySelector<HTMLIFrameElement>("iframe.artifact-widget");
+    const badge = figure.querySelector<HTMLElement>(".artifact-live-badge");
+    if (!frame || !badge || figure.querySelector(":scope > .artifact-live-pin")) return;
+    const pin = document.createElement("span");
+    pin.className = "artifact-live-pin";
+    pin.setAttribute("role", "button");
+    pin.tabIndex = 0;
+    pin.hidden = true;
+    figure.append(pin);
+    const start = startComment;
+    if (!start) return;
+    const comment = document.createElement("button");
+    comment.type = "button";
+    comment.className = "artifact-live-comment";
+    comment.textContent = "Comment";
+    badge.after(comment);
+    comment.addEventListener("click", () => {
+      // An expanded block would cover its composer: it closes first.
+      if (figure.classList.contains("artifact-live--expanded")) {
+        figure.querySelector<HTMLButtonElement>(".artifact-live-expand")?.click();
+      }
+      // The file the block shows, also while it is paused.
+      const source = frame.dataset.pausedSource || frame.getAttribute("src") || "";
+      const hash = /\.w-([0-9a-f]{12})\.html$/.exec(source)?.[1] || "";
+      start({anchor: {kind: "block", id: figure.dataset.widget!, hash, state: ""}});
+    });
+  });
+}
+
 // This source also runs alone in the head for early bridge messages. The
 // deferred page bundle supplies holdSwap and registers this test once.
 if (typeof holdSwap === "function") {
   holdSwap((nodes) => nodes.some((node) =>
     node.matches("figure.artifact-live--expanded") ||
     node.querySelector("figure.artifact-live--expanded") !== null));
+  commentChrome();
+  document.addEventListener("lotuspod:swapped", commentChrome);
 }

@@ -25,7 +25,7 @@ function installWidgetBridge() {
       if (state.height !== undefined && !state.paused && !state.expanded && !frame.hasAttribute("data-height-fixed")) {
         frame.height = String(state.height);
       }
-      if (chrome.querySelector("button"))
+      if (chrome.querySelector(".artifact-live-expand"))
         return;
       if (event.type === "lotuspod:swapped") {
         const TINTED = "artifact-swapped";
@@ -168,6 +168,39 @@ function installWidgetBridge() {
     frame.dispatchEvent(new CustomEvent(WIDGET, { detail: { kind, message } }));
   });
 }
+var startComment;
+function commentChrome() {
+  document.querySelectorAll("figure.artifact-live[data-widget]").forEach((figure) => {
+    const frame = figure.querySelector("iframe.artifact-widget");
+    const badge = figure.querySelector(".artifact-live-badge");
+    if (!frame || !badge || figure.querySelector(":scope > .artifact-live-pin"))
+      return;
+    const pin = document.createElement("span");
+    pin.className = "artifact-live-pin";
+    pin.setAttribute("role", "button");
+    pin.tabIndex = 0;
+    pin.hidden = true;
+    figure.append(pin);
+    const start = startComment;
+    if (!start)
+      return;
+    const comment = document.createElement("button");
+    comment.type = "button";
+    comment.className = "artifact-live-comment";
+    comment.textContent = "Comment";
+    badge.after(comment);
+    comment.addEventListener("click", () => {
+      if (figure.classList.contains("artifact-live--expanded")) {
+        figure.querySelector(".artifact-live-expand")?.click();
+      }
+      const source = frame.dataset.pausedSource || frame.getAttribute("src") || "";
+      const hash = /\.w-([0-9a-f]{12})\.html$/.exec(source)?.[1] || "";
+      start({ anchor: { kind: "block", id: figure.dataset.widget, hash, state: "" } });
+    });
+  });
+}
 if (typeof holdSwap === "function") {
   holdSwap((nodes) => nodes.some((node) => node.matches("figure.artifact-live--expanded") || node.querySelector("figure.artifact-live--expanded") !== null));
+  commentChrome();
+  document.addEventListener("lotuspod:swapped", commentChrome);
 }

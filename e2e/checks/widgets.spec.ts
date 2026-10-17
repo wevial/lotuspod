@@ -154,6 +154,8 @@ fetch('/api/whoami').then(() => note('fetch FAILED'), () => note('fetch blocked'
   await page.locator('details.artifact-comment[data-section="watch-the-pond"] summary').click();
   // The page's authenticated comment flow remains available beside the widget.
   await page.getByRole('textbox', {name: 'Comment on Watch the pond', exact: true}).fill('The pond widget is isolated.');
-  await page.getByRole('button', {name: 'Comment', exact: true}).click();
+  // The composer's own Comment, not the block chrome's.
+  await page.locator('form.artifact-comment-form').filter({has: page.getByRole('textbox', {name: 'Comment on Watch the pond', exact: true})})
+    .getByRole('button', {name: 'Comment', exact: true}).click();
   await expect(page.locator('.artifact-comment-text').filter({hasText: 'The pond widget is isolated.'})).toBeVisible();
 });
