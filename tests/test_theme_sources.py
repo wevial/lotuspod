@@ -191,6 +191,12 @@ class DeclaredOrderTests(ThemeCopyTestCase):
         problems = source_problems(cli.THEME_DIR, cli.THEME_SOURCES)
         self.assertEqual(problems, [], "\n".join(problems))
 
+    def test_widget_sources_follow_tables_and_calltree(self):
+        styles = cli.THEME_SOURCES[STYLESHEET]
+        script = cli.THEME_SOURCES[cli.PAGE_SCRIPT]
+        self.assertEqual(styles.index("css/widgets.css"), styles.index("css/table-expand.css") + 1)
+        self.assertEqual(script.index("js/widgets.js"), script.index("js/calltree.js") + 1)
+
     def test_the_image_viewer_sources_are_declared(self):
         """LOTUS-56: the image viewer's script is joined after
         js/page-open.js, inside the closure, and its styles are declared in
@@ -212,12 +218,12 @@ class DeclaredOrderTests(ThemeCopyTestCase):
 
     def test_the_ref_cards_sources_are_declared(self):
         """LOTUS-100: the cards' script uses when() and linkTab(), so it is
-        joined after js/page-open.js and js/link-tab.js, last but for
-        js/calltree.js (LOTUS-167) and js/archive.js; its
+        joined after js/page-open.js and js/link-tab.js, before
+        js/calltree.js (LOTUS-167), js/widgets.js and js/archive.js; its
         styles just after css/prose.css."""
         styles = cli.THEME_SOURCES[STYLESHEET]
         script = cli.THEME_SOURCES[cli.PAGE_SCRIPT]
-        self.assertEqual(script[-3:], ("js/ref-cards.js", "js/calltree.js", "js/archive.js"))
+        self.assertEqual(script[-4:], ("js/ref-cards.js", "js/calltree.js", "js/widgets.js", "js/archive.js"))
         self.assertGreater(script.index("js/ref-cards.js"), script.index("js/link-tab.js"))
         self.assertEqual(styles.index("css/ref-cards.css"), styles.index("css/prose.css") + 1)
         problems = source_problems(cli.THEME_DIR, cli.THEME_SOURCES)

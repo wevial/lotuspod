@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+
 import argparse
 import base64
 import configparser
@@ -40,7 +41,7 @@ import importlib.resources as _res
 
 from lotuspod import (access, agents, api, archive, backup, comments, db, decisions,
                       machine, markdown, media, node_tables, refs, responder, routing,
-                      sections, versions)
+                      sections, versions, widgets)
 from lotuspod import events as event_streams
 
 _PKG = "lotuspod"
@@ -282,6 +283,8 @@ def page_policy(page_html: str, own_scripts: set[str]) -> str:
         "base-uri 'none'",
         "form-action 'self'",
     )
+    if widgets.Frames(page_html).sources:
+        directives += ("frame-src 'self'",)
     return "; ".join(directives)
 
 
@@ -347,6 +350,7 @@ THEME_SOURCES = {
         "css/diagram-view.css",
         "css/report.css",
         "css/table-expand.css",
+        "css/widgets.css",
         "css/image-viewer.css",
         "css/index.css",
         "css/pod-tabs.css",
@@ -384,6 +388,7 @@ THEME_SOURCES = {
         "js/ref-cards.js",
         # Built from web/src/calltree.ts: it folds calltree blocks.
         "js/calltree.js",
+        "js/widgets.js",
         "js/archive.js",
     ),
     INDEX_SCRIPT: (
@@ -797,6 +802,7 @@ def cmd_render(args: argparse.Namespace) -> int:
                 why = f"names no image stored in {store_dir}"
             raise RuntimeError(f"image {line.src} in {label}: {why}; nothing written")
         body = markdown.to_body(text, sizes)
+    body, widget_files, widget_warnings = widgets.render(body, args.name)
     body, has_node_tables = node_tables.mark_node_tables(body)
     # Before the outline, so the forms sit inside their section.
     body, has_decisions = decisions.render_decisions(body, args.name)
@@ -847,7 +853,7 @@ def cmd_render(args: argparse.Namespace) -> int:
         # to fill the window, a calltree block folds, and a listed page
         # loaded on its own opens in the index's tabs.
         "page_script_needed": (not args.hidden or has_decisions or with_comments or wrapped
-                               or has_node_tables or bool(refs_block)
+                               or bool(widget_files) or has_node_tables or bool(refs_block)
                                or bool(getattr(args, "revision", "")) or has_link(body)
                                or has_mermaid_block(body) or has_calltree_block(body)),
         "page_script": PAGE_SCRIPT,
@@ -869,7 +875,14 @@ def cmd_render(args: argparse.Namespace) -> int:
 
     sync_theme_css(out_dir)
 
+    for filename, data in widget_files.items():
+        write_atomic(out_dir / filename, data)
     write_atomic(out_path, html.encode("utf-8"))
+    for stale in out_dir.glob(f"{args.name}.w-*.html"):
+        if stale.name not in widget_files:
+            stale.unlink()
+    for warning in widget_warnings:
+        print(warning, file=sys.stderr)
     # Publish keeps the entries the page used beside it; a page that uses
     # none keeps no file.
     if page_refs is not None:
@@ -963,6 +976,7 @@ def is_page_name(name: str) -> bool:
     """Whether a *.html name in the output directory is an artifact page."""
     return (
         name != INDEX_FILE
+        and not widgets.WIDGET_NAME.fullmatch(name)
         and not name.startswith(".")
         and not name.endswith(BODY_SOURCE_SUFFIX)
     )
@@ -1290,12 +1304,15 @@ class _H1Collector(HTMLParser):
 def html_title(body: str) -> tuple[str, str]:
     """(the first h1's text, the body without that h1); ("", body) when none."""
     parser = _H1Collector(body)
-    parser.feed(body)
+    parser.feed(widgets.without_templates(body))
     parser.close()
     if parser.start is None or parser.end is None:
         return "", body
     title = " ".join("".join(parser.text).split())
-    return title, body[:parser.start] + body[parser.end:]
+    # Widget diagnostics use source lines even when the title spans lines.
+    gap = ("\n" * body[parser.start:parser.end].count("\n")
+           if widgets.Templates(body).blocks else "")
+    return title, body[:parser.start] + gap + body[parser.end:]
 
 
 @contextmanager
@@ -1822,7 +1839,7 @@ class _ImgCollector(HTMLParser):
 
 def html_images(body: str) -> _ImgCollector:
     parser = _ImgCollector(body)
-    parser.feed(body)
+    parser.feed(widgets.without_templates(body))
     parser.close()
     return parser
 
@@ -2035,6 +2052,7 @@ def cmd_publish(args: argparse.Namespace) -> int:
         raise RuntimeError(
             f"{label} has no title: give it a first '# ' line or h1, or pass --title"
         )
+    widgets.render(body, name)  # validate before creating or writing the site
     revision = source_revision(data)
 
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -2139,11 +2157,16 @@ def serve_allow_list(out_dir: Path) -> frozenset[str]:
         try:
             if page.is_symlink():
                 continue
-            visible = extract_visibility(page.read_text(encoding="utf-8"))
+            page_text = page.read_text(encoding="utf-8")
+            visible = extract_visibility(page_text)
         except (OSError, UnicodeDecodeError):
             continue
         if visible:
             allowed.add(page.name)
+            for src in widgets.Frames(page_text).sources:
+                if (widgets.WIDGET_NAME.fullmatch(src) and src.startswith(page.stem + ".w-")
+                        and "/" not in src and not (out_dir / src).is_symlink()):
+                    allowed.add(src)
     return frozenset(allowed)
 
 
@@ -2557,6 +2580,7 @@ class _AllowListHandler(SimpleHTTPRequestHandler):
     def send_head(self):
         # Denial never reaches the file system: were a file ever to sit at
         # the sentinel's name, it would still not be served.
+        self._widget_response = False
         target = self.translate_path(self.path)
         if target == str(self.root / _DENY_PATH_NAME):
             self.send_error(HTTPStatus.NOT_FOUND, "File not found")
@@ -2575,6 +2599,7 @@ class _AllowListHandler(SimpleHTTPRequestHandler):
             self._media_type = media.CONTENT_TYPES[stored.suffix[1:]]
         else:
             self._page_response, self._media_type = target.endswith(".html"), ""
+        self._widget_response = bool(widgets.WIDGET_NAME.fullmatch(stored.name))
         return super().send_head()
 
     def send_error(self, *args, **kwargs):
@@ -2588,7 +2613,7 @@ class _AllowListHandler(SimpleHTTPRequestHandler):
 
     def end_headers(self):
         if self._page_response:
-            for header, value in _PAGE_HEADERS:
+            for header, value in (widgets.HEADERS if getattr(self, "_widget_response", False) else _PAGE_HEADERS):
                 self.send_header(header, value)
         if self._media_type:
             for header, value in _MEDIA_HEADERS:
