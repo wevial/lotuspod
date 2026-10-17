@@ -41,12 +41,8 @@ export function threadList(page: Page, shell: Shell, bridge: ThreadListBridge) {
     return (copy.textContent || "").replace(/\s+/g, " ").trim() || "This page";
   }
 
-  // A group: a section's heading, its threads, and for a section the
-  // page has, the control that opens the box's form here. The panel
-  // never draws that control; a popover or the sheet does. In the panel
-  // the form has a Cancel, and Escape in it does the same: the form
-  // folds, keeping what was typed, and the focus goes back to the
-  // control that starts one.
+  // Only a popover or sheet shows the group's compose control; the panel
+  // starts forms through the shell and returns focus there on Cancel or Escape.
   function group(name: string, box: HTMLElement | null, index: number): Group {
     const node = document.createElement("section");
     node.className = "artifact-comments-group";
@@ -96,9 +92,7 @@ export function threadList(page: Page, shell: Shell, bridge: ThreadListBridge) {
       Boolean(made.node.querySelector(".artifact-passage-composer"));
   }
 
-  // List the groups that are busy, each in its place in the page's
-  // order, keeping the reader's place: the group at the top of the list
-  // stays where it is.
+  // Keep the reader's place: the group at the top of the list stays where it is.
   function tidy() {
     shell.empty(bridge.shown.size === 0);
     strays.node.hidden = !showing(strays);
@@ -124,9 +118,7 @@ export function threadList(page: Page, shell: Shell, bridge: ThreadListBridge) {
     }
   }
 
-  // Unfold or fold a group's form for a new thread; unfolded, its field
-  // has focus. In the panel one form is open at a time: another left
-  // empty folds. An archived page unfolds none.
+  // Opening a panel form folds other empty forms, keeping drafts intact.
   function compose(made: Group, show: boolean) {
     if (show && page.archived) {
       return;
@@ -179,7 +171,6 @@ export function threadList(page: Page, shell: Shell, bridge: ThreadListBridge) {
     return found;
   }
 
-  // Where a thread stands: answered, writing, waiting or failed.
   function standing(thread: Thread) {
     switch (asked(thread).state) {
       case "claimed":
@@ -357,7 +348,6 @@ export function threadList(page: Page, shell: Shell, bridge: ThreadListBridge) {
     }
   }
 
-  // Resolve a thread, or reopen it.
   async function settle(thread: Thread, resolve: boolean) {
     var made = entry(thread);
     var control = resolve ? made.resolve : made.reopen;
