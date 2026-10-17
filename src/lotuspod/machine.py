@@ -427,7 +427,8 @@ class Routes:
     included; window is routing's owner window, and claim_sec how long a
     claim lasts. media_dir is the media store comments' images are found
     in, and max_image_bytes the largest image it takes; without one, no
-    image has a path and none is taken.
+    image has a path and none is taken. catalog, when supplied, makes a
+    fresh page lookup for each pull or inbox request.
     """
 
     def __init__(self, database: db.Database,
@@ -438,8 +439,10 @@ class Routes:
                  claim_sec: float = routing.DEFAULT_CLAIM,
                  media_dir: Path | None = None,
                  max_image_bytes: int = media.DEFAULT_MAX_BYTES,
-                 changed: Callable[[str, str], None] = lambda what, page: None) -> None:
+                 changed: Callable[[str, str], None] = lambda what, page: None,
+                 catalog: Callable[[], Callable[[str], api.Page | None]] | None = None) -> None:
         self.changed = changed
+        self.catalog = catalog
         self.database = database
         self.media_dir = media_dir
         self.max_image_bytes = max_image_bytes
@@ -516,6 +519,7 @@ class Routes:
 
     def _pull(self, credential: Mapping, owner: str) -> dict:
         _allow(credential, "pull", owner)
+        lookup = self.catalog() if self.catalog is not None else self.pages
         pulled_at = self.database.record_pull(owner)
         pulls = routing.last_pulls(self.database)
         paused = self.database.responder_paused()
@@ -526,7 +530,7 @@ class Routes:
 
         def page_of(name: str) -> api.Page | None:
             if name not in pages:
-                pages[name] = self._page(name)
+                pages[name] = lookup(name) if isinstance(name, str) else None
             return pages[name]
 
         def item_page(page: api.Page) -> dict:
@@ -628,12 +632,13 @@ class Routes:
     def _inbox(self, credential: Mapping, owner: str) -> dict:
         """owner's open inbox items, then its unacknowledged answers."""
         _allow(credential, "pull", owner)
+        lookup = self.catalog() if self.catalog is not None else self.pages
         now = self.clock()
         pages: dict[str, api.Page | None] = {}
 
         def page_of(name: str) -> api.Page | None:
             if name not in pages:
-                pages[name] = self._page(name)
+                pages[name] = lookup(name) if isinstance(name, str) else None
             return pages[name]
 
         def brief(page: api.Page) -> dict:
@@ -1021,10 +1026,12 @@ class SocketServer(socketserver.ThreadingMixIn, socketserver.UnixStreamServer):
                  claim_sec: float = routing.DEFAULT_CLAIM,
                  media_dir: Path | None = None,
                  max_image_bytes: int = media.DEFAULT_MAX_BYTES,
-                 changed: Callable[[str, str], None] = lambda what, page: None) -> None:
+                 changed: Callable[[str, str], None] = lambda what, page: None,
+                 catalog: Callable[[], Callable[[str], api.Page | None]] | None = None) -> None:
         self.path = Path(path)
         self.routes = Routes(database, pages, describe, window, claim_sec=claim_sec,
-                             media_dir=media_dir, max_image_bytes=max_image_bytes, changed=changed)
+                             media_dir=media_dir, max_image_bytes=max_image_bytes, changed=changed,
+                             catalog=catalog)
         self._inode: int | None = None
         clear_stale(self.path)
         # Never, even briefly, readable or writable by anyone else.

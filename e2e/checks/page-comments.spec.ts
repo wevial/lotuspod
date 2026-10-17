@@ -105,6 +105,103 @@ async function threads(request: APIRequestContext, name: string) {
 test.describe('signed in', () => {
   test.use({ extraHTTPHeaders: SIGNED_IN });
 
+  test('the main column stays put while a slow page script draws the chip under the title', async ({ page, request }) => {
+    const name = `page-comments-slow-${test.info().repeatEachIndex}`;
+    publish(name, TWO);
+    const posted = await request.post('/api/comments', {
+      headers: SIGNED_IN, data: { page: name, section: '', text: QUESTION } });
+    expect(posted.status()).toBe(201);
+
+    await page.addInitScript(() => {
+      const sources: Node[] = [];
+      (window as any).__commentShiftSources = sources;
+      new PerformanceObserver((list) => {
+        for (const entry of list.getEntries()) {
+          for (const source of (entry as any).sources ?? []) {
+            if (source.node) sources.push(source.node);
+          }
+        }
+      }).observe({ type: 'layout-shift', buffered: true });
+    });
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => { release = resolve; });
+    await page.route((url) => url.pathname === '/lotuspod-page.js', async (route) => {
+      await held;
+      await route.continue();
+    });
+    const main = page.locator('.artifact-main');
+    const top = () => main.evaluate((node) => node.getBoundingClientRect().top + scrollY);
+    let before: number;
+    try {
+      // A held deferred script prevents load, but lets the served page paint.
+      await page.goto(`/${name}.html?standalone`, { waitUntil: 'commit' });
+      await expect(main).toBeVisible();
+      await page.evaluate(async () => {
+        await document.fonts.ready;
+        await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+      });
+      before = await top();
+      expect.soft(await page.locator('header.artifact-header > p.artifact-meta + details.artifact-comment[data-section=""] > summary')
+        .allTextContents(), 'the served header contains the whole-page comment box').toEqual(['Comment']);
+    } finally {
+      release();
+    }
+    await expect(box(page, '').chip).toHaveText('1 comment · waiting');
+    const boxes = page.locator('details.artifact-comment');
+    await expect(page.locator('details.artifact-comment > summary.artifact-comment-chip'))
+      .toHaveCount(await boxes.count());
+    const after = await top();
+    // Still collect the observer evidence when the measured top has moved.
+    expect.soft(Math.abs(after - before), `main column top moved from ${before} to ${after}`).toBeLessThanOrEqual(0.5);
+    await page.evaluate(() => new Promise<void>((resolve) =>
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+    expect(await page.evaluate(() => {
+      const main = document.querySelector('.artifact-main')!;
+      const header = document.querySelector('header.artifact-header')!;
+      return ((window as any).__commentShiftSources as Node[]).some((node) =>
+        main.contains(node) || header.contains(node));
+    }), 'no layout shift names the main column or header').toBe(false);
+  });
+
+  test("with scripts off the page's box sits under the title and the main column starts where it does with scripts", async ({ page, browser }) => {
+    const name = `page-comments-no-script-${test.info().repeatEachIndex}`;
+    publish(name, TWO);
+    await load(page, `/${name}.html`);
+    await page.evaluate(() => document.fonts.ready);
+    const scriptedTop = await page.locator('.artifact-main')
+      .evaluate((node) => node.getBoundingClientRect().top + scrollY);
+    const context = await browser.newContext({ javaScriptEnabled: false, viewport: WIDE,
+      extraHTTPHeaders: SIGNED_IN });
+    try {
+      const plain = await context.newPage();
+      await plain.goto(new URL(`/${name}.html?standalone`, page.url()).href);
+      await expect(plain.locator('header.artifact-header > p.artifact-meta + details.artifact-comment[data-section=""] > summary'))
+        .toHaveText('Comment');
+      await plain.evaluate(() => document.fonts.ready);
+      const plainTop = await plain.locator('.artifact-main')
+        .evaluate((node) => node.getBoundingClientRect().top + scrollY);
+      expect(Math.abs(plainTop - scriptedTop)).toBeLessThanOrEqual(0.5);
+    } finally {
+      await context.close();
+    }
+  });
+
+  test('a page served without its header box still gets one drawn after the date line', async ({ page }) => {
+    const name = `page-comments-legacy-${test.info().repeatEachIndex}`;
+    publish(name, TWO);
+    await page.route((url) => url.pathname === `/${name}.html`, async (route) => {
+      const response = await route.fetch();
+      const html = await response.text();
+      const body = html.replace(/<details class="artifact-comment"[^>]*data-section="">[\s\S]*?<\/details>/, '');
+      expect(body).not.toMatch(/<details class="artifact-comment"[^>]*data-section=""/);
+      await route.fulfill({ response, body });
+    });
+    await load(page, `/${name}.html`);
+    await expect(page.locator('header.artifact-header details.artifact-comment[data-section=""]')).toHaveCount(1);
+    await expect(page.locator('header.artifact-header > p.artifact-meta + details.artifact-comment[data-section=""] > summary'))
+      .toHaveText('No comments · Comment on this page');
+  });
+
   test('a reader comments on the whole page from the chip under its title, and hermes answers', async ({ page, request }) => {
     test.setTimeout(120_000);
     for (const [name, value] of Object.entries({ ASSERTION, SOCKET, HERMES, OUT, PYTHON })) {

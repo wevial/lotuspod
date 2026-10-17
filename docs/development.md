@@ -45,9 +45,9 @@ bundles `web/src/islands/main.tsx` with its imports and Preact (pinned in
 `web/package.json` as a dependency) with `Bun.build` into
 `src/lotuspod/_theme/js/islands.js`, after its marker line, as one minified
 IIFE for the browser with no source map, JSX through Preact's automatic
-runtime. `THEME_SOURCES` declares it as the page script's last source, so the
-join puts it inside the shared closure just before its close: it runs once
-every legacy source has, and never on a pod that goes to the index
+runtime. `THEME_SOURCES` declares it directly after comments.js inside the shared
+closure: comments start before later sources find the panel and register
+their listeners, and never on a pod that goes to the index
 (`js/open-in-tabs.js`). Neither the index script nor the old-version script
 has it. The islands reach the legacy page only through
 `web/src/islands/bridge.ts`, the one module that names the closure's
@@ -60,7 +60,7 @@ throws on every page at once. A minifier never renames a free name, so the
 bridge's reads stay the closure's own. An island imports `page`, never the
 names. `main.tsx` mounts each island it lists, handing it `page`.
 
-The one island so far is the review sheet (`web/src/islands/review-sheet.tsx`):
+The first island is the review sheet (`web/src/islands/review-sheet.tsx`):
 the title bar's open-question count and Next open, the "N open" marks on
 headings and outline links, and the Respond panel. Once `ANSWERED` is first
 sent, and only when `answering.read` is true and the page is not archived, it
@@ -78,8 +78,17 @@ truth: the sheet draws from them on each form's `input`, `change` and
 `answering.save()`, one question at a time in page order. Preact holds only
 the sheet's own state: the panel open, a Save under way, what it did, and
 the question Next open last jumped to, which a swap keeps. The bundle, Preact with it, stays at most
-16,000 bytes gzipped; it uses plain Preact and its hooks, not
+15,000 bytes gzipped; it uses plain Preact and its hooks, not
 `preact/compat`.
+
+The comments island (`web/src/islands/comments/index.ts`) mounts after the
+review sheet and starts the bridge's typed `commenting` object, null on pages
+without comment boxes. It supplies the shell factory declared in `parts.ts`.
+The shell draws the panel frame, rail, tally and start controls; comments.js
+still owns the groups and threads inside its empty groups list. Synchronous
+renders preserve immediate layout reads. The bridge also supplies `CLOSED`,
+`PANEL`, `RESOLVED_SHOWN` and `WHOLE_PAGE`; the shell keeps storage and listbox
+state and calls page hooks to compose or refresh threads.
 
 ```sh
 bun install --cwd web --frozen-lockfile
@@ -210,6 +219,17 @@ ffmpeg -loglevel error -y -i docs/images/loop.webm -vf "fps=10,mpdecimate=hi=64*
 
 A ticket's own spec goes in `e2e/capture`, which stays out of git; it has
 to live under `e2e/` for its `@playwright/test` import to resolve.
+
+`e2e/smoke/socket-pull.capture.ts` captures a reader's comment after verifying
+that Hermes receives it through a real socket pull. It writes
+`01-reader-comment-pulled.png`; the catalog unit tests separately verify
+the page-list read counts. Run it from the repository root:
+
+```sh
+CAPTURE_OUT="$(mktemp -d)" .venv/bin/python -m tests.capture_site \
+  e2e/node_modules/.bin/playwright test \
+  --config e2e/playwright.config.ts socket-pull.capture.ts
+```
 
 Browser checks run the same way, with `e2e/checks.config.ts` and the specs in
 `e2e/checks/` (among them `comments.spec.ts`, which posts and reads back

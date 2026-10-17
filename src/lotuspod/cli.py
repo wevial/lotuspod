@@ -370,6 +370,9 @@ THEME_SOURCES = {
         "js/page-swap.js",
         "js/comment-markdown.js",
         "js/comments.js",
+        # The islands start comments before later sources look for the panel
+        # and register their listeners. All bridge names are defined here.
+        "js/islands.js",
         "js/panel-resize.js",
         "js/tables.js",
         "js/table-expand.js",
@@ -382,9 +385,6 @@ THEME_SOURCES = {
         # Built from web/src/calltree.ts: it folds calltree blocks.
         "js/calltree.js",
         "js/archive.js",
-        # The islands, bundled from web/src/islands/main.tsx: last, so they run
-        # once every source above has, through the closure's names.
-        "js/islands.js",
     ),
     INDEX_SCRIPT: (
         "js/pod-tabs.js",
@@ -807,8 +807,10 @@ def cmd_render(args: argparse.Namespace) -> int:
                                              getattr(args, "refs_as_of", ""))
     body, outline = (body, []) if args.no_outline else outline_body(body)
     # After the outline, so each box names its heading's id.
+    whole_page_box = ""
     if with_comments:
         body = comments.render_comments(body, args.name)
+        whole_page_box = comments.whole_page_box(body, args.name)
     # Last, so each section's box and forms fall inside its wrapper.
     body, wrapped, intro_digest = (sections.wrap_sections(body) if outline
                                    else (body, False, unit_digest(body)))
@@ -828,6 +830,7 @@ def cmd_render(args: argparse.Namespace) -> int:
         "intro_digest": intro_digest,
         **label_context(labels),
         "body": body,
+        "whole_page_box": whole_page_box,
         "refs_block": refs_block,
         "outline": outline,
         "outline_items": outline_html(outline),
@@ -2712,6 +2715,7 @@ def cmd_serve(args: argparse.Namespace) -> int:
     try:
         sockets = machine.SocketServer(
             socket_path, db.Database(db_path), pages=partial(api_page, out_dir),
+            catalog=partial(api_catalog, out_dir),
             describe=partial(agent_page, out_dir), window=window, claim_sec=claim_sec,
             media_dir=media.media_dir(out_dir), max_image_bytes=image_cap,
             changed=server.events.changed,
