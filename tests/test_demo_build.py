@@ -489,23 +489,24 @@ class ServeTests(unittest.TestCase):
         self.assertEqual(done.stdout.splitlines(),
                          ["GET /lotuspod-demo.js", "GET /api/comments?page=try-it"])
 
-    def test_serve_answers_a_widget_file_with_the_widget_headers_and_a_page_without(self):
+    def test_serve_answers_a_widget_file_however_spelled_with_its_headers_and_a_page_without(self):
         script = (
             "import os, re, urllib.request\n"
             "url = os.environ['LOTUSPOD_URL']\n"
             "page = urllib.request.urlopen(url + 'try-it.html')\n"
             "assert page.headers['Content-Security-Policy'] is None\n"
             "name = re.search(r'src=\"(try-it\\.w-[0-9a-f]{12}\\.html)\"', page.read().decode()).group(1)\n"
-            "widget = urllib.request.urlopen(url + name)\n"
-            "print(widget.headers['Content-Security-Policy'])\n"
-            "print(widget.headers['Permissions-Policy'])\n"
+            "for spelling in (name, name.replace('.html', '%2ehtml'), name.replace('try-it', 'try%2Dit')):\n"
+            "    widget = urllib.request.urlopen(url + spelling)\n"
+            "    print(widget.headers['Content-Security-Policy'])\n"
+            "    print(widget.headers['Permissions-Policy'])\n"
         )
         done = subprocess.run(
             [sys.executable, "-m", "demo.build", "--serve", "--", sys.executable, "-c", script],
             cwd=REPO_ROOT, capture_output=True, text=True, timeout=120,
         )
         self.assertEqual(done.returncode, 0, done.stderr)
-        self.assertEqual(done.stdout.splitlines(), [value for _, value in build.WIDGET_HEADERS])
+        self.assertEqual(done.stdout.splitlines(), [value for _, value in build.WIDGET_HEADERS] * 3)
 
     def test_a_command_without_serve_is_refused(self):
         stderr = io.StringIO()

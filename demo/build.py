@@ -405,7 +405,9 @@ class _Handler(SimpleHTTPRequestHandler):
         return True
 
     def end_headers(self) -> None:
-        if WIDGET_NAME.fullmatch(self.path.split("?")[0].lstrip("/")):
+        # The file this request is answered from, as the server resolves it,
+        # so no spelling of a widget's path (%2e for a dot) misses the headers.
+        if WIDGET_NAME.fullmatch(Path(self.translate_path(self.path)).name):
             for key, value in WIDGET_HEADERS:
                 self.send_header(key, value)
         super().end_headers()

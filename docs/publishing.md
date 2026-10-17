@@ -1387,10 +1387,14 @@ A widget is the running block. Serve answers its file with
 page frames it with `sandbox="allow-scripts"`, and the file carries its own
 policy. So a widget has:
 
-- **No network.** It cannot fetch, open a socket or load anything from
-  elsewhere: scripts are its own inline ones and the pinned libraries, and
-  images and fonts are `data:` URLs only. It holds no forms that send, no
-  frames of its own, and no camera, microphone, location or clipboard.
+- **No network but its own frame's address.** It cannot fetch, open a
+  socket or load anything from elsewhere: scripts are its own inline ones and
+  the pinned libraries, and images and fonts are `data:` URLs only. It holds
+  no forms that send, no frames of its own, and no camera, microphone,
+  location or clipboard. It can still move its own frame to another address,
+  and that address can carry what the block holds; since nothing of the
+  page or the reader reaches a widget, what it can send is only what its
+  author wrote into it.
 - **No page.** It cannot read or change the page around it, open a window or
   move the reader to another page.
 - **No session.** It runs as a stranger to the site, so it sends no cookies
