@@ -81,189 +81,17 @@
       };
     }
 
-    // An agent's handle when an agent wrote the row; "" for anyone else. Only
-    // the verified actor's kind says a row is an agent's, never an address.
-    function agent(row) {
-      var actor = row && row.actor;
-      if (!actor || actor.kind !== "agent") {
-        return "";
-      }
-      return actor.handle ? String(actor.handle) : "agent";
-    }
-
-    // Who wrote a row that is not an agent's: a reader's name, else a handle.
-    function author(row) {
-      var actor = row && row.actor;
-      if (actor && actor.name) {
-        return String(actor.name);
-      }
-      return actor && actor.handle ? String(actor.handle) : "someone";
-    }
-
-    // The agent a reader's comment is routed to, else the page's owner.
-    function routed(row) {
-      return row.owner ? String(row.owner) : owner || "an agent";
-    }
-
-    // A mark drawn by the stylesheet: no text, hidden from assistive technology.
-    function mark(kind) {
-      var node = element("span", "artifact-comment-mark artifact-comment-mark--" + kind);
-      node.setAttribute("aria-hidden", "true");
-      if (kind === "dots") {
-        node.append(element("i"), element("i"), element("i"));
-      }
-      return node;
-    }
-
-    // A row: an avatar, then a column of a name line and what is said.
-    function row(className, avatar, avatarText) {
-      var item = element("li", "artifact-comment-row " + className);
-      var face = element("span", "artifact-comment-avatar " + avatar, avatarText);
-      face.setAttribute("aria-hidden", "true");
-      item.appendChild(face);
-      var column = element("div", "artifact-comment-col");
-      item.appendChild(column);
-      return { item: item, column: column };
-    }
-
-    // An agent's name line: the handle in the mono voice, its AGENT tag,
-    // and the model the reply names as its writer, when it names one.
-    function agentName(handle, model) {
-      var by = element("p", "artifact-comment-by");
-      by.appendChild(element("span", "artifact-comment-handle", handle));
-      by.appendChild(document.createTextNode(" "));
-      by.appendChild(element("span", "artifact-comment-agent", "AGENT"));
-      if (model) {
-        by.appendChild(document.createTextNode(" "));
-        by.appendChild(element("span", "artifact-comment-model", String(model)));
-      }
-      return by;
-    }
-
-    function comment(entry) {
-      var handle = agent(entry);
-      var name = handle || author(entry);
-      var drawn = handle
-        ? row("artifact-comment-item artifact-comment-item--agent", "artifact-comment-avatar--agent",
-          name.charAt(0).toUpperCase())
-        : row("artifact-comment-item artifact-comment-item--reader", "",
-          name.slice(0, 2).toUpperCase());
-      var by;
-      if (handle) {
-        by = agentName(handle, entry.model);
-      } else {
-        by = element("p", "artifact-comment-by");
-        by.appendChild(element("span", "artifact-comment-author", name));
-      }
-      var time = element("time", "artifact-comment-time", when(entry.createdAt));
-      time.dateTime = String(entry.createdAt || "");
-      by.appendChild(document.createTextNode(" "));
-      by.appendChild(time);
-      drawn.column.appendChild(by);
-      if (entry.answer && typeof entry.answer === "object") {
-        drawn.column.appendChild(element("p", "artifact-comment-answered",
-          "Answered: " + String(entry.answer.label || entry.answer.choice || "")));
-      }
-      var said = commentMarkdown(element("div", "artifact-comment-text"), String(entry.text || ""));
-      // A passage's highlight is described by its thread's first comment.
-      said.id = "artifact-comment-text-" + entry.id;
-      drawn.column.appendChild(said);
-      var images = commentImages(entry);
-      if (images) {
-        said.hidden = !entry.text;
-        drawn.column.appendChild(images);
-      }
-      return drawn.item;
-    }
-
-    // The centred line after an agent's reply that revised the page.
-    function revised(entry) {
-      var line = element("li", "artifact-comment-event");
-      var text = element("span");
-      text.appendChild(document.createTextNode(agent(entry) + " "));
-      var link = element("a", "", "revised the page \u2192 revision ");
-      link.href = encodeURIComponent(page) + ".html";
-      link.appendChild(element("code", "", String(entry.revision)));
-      text.appendChild(link);
-      line.appendChild(text);
-      return line;
-    }
-
-    // A centred system line: a title behind its mark, then what follows.
-    function notice(state, kind, title, lines) {
-      var line = element("li", "artifact-comment-notice artifact-comment-notice--" + state);
-      line.dataset.state = state;
-      line.setAttribute("role", "note");
-      var head = element("p", "artifact-comment-notice-title");
-      head.appendChild(mark(kind));
-      head.appendChild(element("span", "", title));
-      line.appendChild(head);
-      lines.forEach(function (text) {
-        line.appendChild(element("p", "artifact-comment-notice-text", text));
-      });
-      return line;
-    }
-
-    // A system line that only restates a state: the thread's live region
-    // does not read it out.
-    function quiet(line) {
-      line.setAttribute("aria-hidden", "true");
-      return line;
-    }
-
-    // What a reader's comment's state draws after it; null for none.
-    function after(entry) {
-      var handle = routed(entry);
-      switch (entry.state) {
-        case "unavailable":
-          return quiet(notice("unavailable", "hollow", handle + " is offline",
-            ["Your comment goes to " + handle + " when it checks in again."]));
-        case "paused":
-          return quiet(notice("paused", "pause", "The responder is paused",
-            ["Your comment waits until it is resumed."]));
-        case "failed":
-          return notice("failed", "bang", handle + " couldn't answer", [
-            entry.reason ? String(entry.reason) : "No reason given",
-            "To send it again, write a new comment.",
-          ]);
-        default:
-          return null;
-      }
-    }
-
-    // The typing bubble a thread ends in while its newest reader comment has
-    // no answer yet; null for none. It only restates the state, so the
-    // thread's live region does not read it out.
-    function typing(entry) {
-      var handle = routed(entry);
-      var drawn;
-      var bubble;
-      if (entry.state === "pending") {
-        drawn = row("artifact-comment-typing artifact-comment-typing--pending",
-          "artifact-comment-avatar--ghost", handle.charAt(0).toUpperCase());
-        bubble = element("p", "artifact-comment-bubble artifact-comment-bubble--ghost",
-          (checking ? "Checking for a reply from " : "Waiting for ") + handle);
-        bubble.appendChild(mark("dots"));
-      } else if (entry.state === "claimed") {
-        drawn = row("artifact-comment-typing artifact-comment-typing--claimed",
-          "artifact-comment-avatar--agent", handle.charAt(0).toUpperCase());
-        var by = agentName(handle);
-        by.appendChild(document.createTextNode(" is writing"));
-        drawn.column.appendChild(by);
-        bubble = element("p", "artifact-comment-bubble artifact-comment-bubble--typing");
-        bubble.appendChild(mark("dots"));
-        bubble.appendChild(element("span", "artifact-comment-sr", handle + " is writing a reply"));
-      } else {
-        return null;
-      }
-      drawn.item.setAttribute("aria-hidden", "true");
-      drawn.column.appendChild(bubble);
-      return drawn.item;
-    }
-
-    function rows(thread) {
-      return [thread.root].concat(thread.replies);
-    }
+    var threadRows = parts.thread({
+      owner: owner, page: page, checking: function () { return checking; },
+      counted: counted, opening: opening, label: label,
+    });
+    var agent = threadRows.agent;
+    var author = threadRows.author;
+    var routed = threadRows.routed;
+    var rows = threadRows.rows;
+    var sync = threadRows.sync;
+    var merge = threadRows.merge;
+    var markUnread = threadRows.markUnread;
 
     // Whether a comment counts as unread: the route named it, and neither
     // a mark this page posted nor the reader's own reply since has read it.
@@ -282,48 +110,6 @@
     // reader's own reply.
     function readTo(thread, id) {
       seenTo.set(thread.root.id, Math.max(seenTo.get(thread.root.id) || 0, id));
-    }
-
-    // Mark a thread's unread comments, each with a "New" tag before its
-    // byline, and put the divider above the first.
-    function markUnread(thread) {
-      var held = opening.get(thread.root.id);
-      var first = null;
-      rows(thread).forEach(function (entry) {
-        var drawn = thread.drawn.get(entry.id);
-        if (!drawn) {
-          return;
-        }
-        var marked = counted(thread, entry) || Boolean(held && held.has(entry.id));
-        if (marked && !first) {
-          first = drawn.item;
-        }
-        if (drawn.item.classList.contains("artifact-comment--unread") === marked) {
-          return;
-        }
-        drawn.item.classList.toggle("artifact-comment--unread", marked);
-        var by = drawn.item.querySelector(".artifact-comment-by");
-        if (marked) {
-          by.insertBefore(element("span", "artifact-comment-new", "New"), by.firstChild);
-        } else {
-          by.querySelector(".artifact-comment-new").remove();
-        }
-      });
-      if (!first) {
-        if (thread.divider) {
-          thread.divider.remove();
-        }
-        return;
-      }
-      if (!thread.divider) {
-        // The tags say it to assistive technology; the line only shows it.
-        thread.divider = element("li", "artifact-comment-divider");
-        thread.divider.setAttribute("aria-hidden", "true");
-        thread.divider.appendChild(element("span", "", "New since you last looked"));
-      }
-      if (thread.divider.nextSibling !== first) {
-        thread.list.insertBefore(thread.divider, first);
-      }
     }
 
     // Draw the replies to the reader outside the chips: each thread's
@@ -397,102 +183,6 @@
       return rows(thread).some(function (entry) {
         return !agent(entry) && (entry.state === "pending" || entry.state === "claimed");
       });
-    }
-
-    // What a row draws after it, as a key: a mark is drawn again only when
-    // its key changes.
-    function markKey(entry) {
-      if (agent(entry)) {
-        return entry.revision ? "revision " + entry.revision : "";
-      }
-      return [entry.state, routed(entry), entry.reason || ""].join("\n");
-    }
-
-    // Draw what a thread does not show yet, in place: each comment once, by
-    // id, and a mark after it or the typing bubble at its end only when what
-    // that says has changed. Nothing drawn is moved, so the thread's live
-    // region reads out only what is new. The box is told how many comments
-    // and replies were drawn. True when anything was drawn.
-    function sync(thread) {
-      var list = thread.list;
-      var at = null;
-      var newest = null;
-      var touched = false;
-      var count = 0;
-      function place(node) {
-        list.insertBefore(node, at ? at.nextSibling : list.firstChild);
-        at = node;
-      }
-      rows(thread).forEach(function (entry) {
-        var drawn = thread.drawn.get(entry.id);
-        if (drawn) {
-          at = drawn.item;
-        } else {
-          drawn = { item: comment(entry), mark: null, key: "" };
-          thread.drawn.set(entry.id, drawn);
-          place(drawn.item);
-          touched = true;
-          count += 1;
-        }
-        if (!agent(entry)) {
-          newest = entry;
-        }
-        var key = markKey(entry);
-        if (key !== drawn.key) {
-          if (drawn.mark) {
-            drawn.mark.remove();
-          }
-          drawn.mark = agent(entry) ? (entry.revision ? revised(entry) : null) : after(entry);
-          drawn.key = key;
-          touched = true;
-        }
-        if (drawn.mark) {
-          if (drawn.mark.parentNode) {
-            at = drawn.mark;
-          } else {
-            place(drawn.mark);
-          }
-        }
-      });
-      var waitKey = newest ? [newest.state, routed(newest), checking].join("\n") : "";
-      if (waitKey !== thread.waitKey) {
-        if (thread.typing) {
-          thread.typing.remove();
-        }
-        thread.typing = newest && typing(newest);
-        if (thread.typing) {
-          list.appendChild(thread.typing);
-        }
-        thread.waitKey = waitKey;
-        touched = true;
-      }
-      label(thread, newest || thread.root);
-      if (count && thread.box) {
-        thread.box.dispatchEvent(new CustomEvent(DRAWN, { bubbles: true, detail: { rows: count } }));
-      }
-      return touched;
-    }
-
-    // Take rows into a thread by id: a new one is added, a known one takes
-    // the copy just read. True when anything was drawn.
-    function merge(thread, entries) {
-      entries.forEach(function (entry) {
-        if (!entry) {
-          return;
-        }
-        if (entry.id === thread.root.id) {
-          thread.root = entry;
-          return;
-        }
-        var known = thread.replies.findIndex(function (reply) { return reply.id === entry.id; });
-        if (known < 0) {
-          thread.replies.push(entry);
-        } else {
-          thread.replies[known] = entry;
-        }
-      });
-      thread.replies.sort(function (a, b) { return a.id - b.id; });
-      return sync(thread);
     }
 
     function failure(response, payload, stale) {
@@ -1435,10 +1125,10 @@
       var list = element("ol", "artifact-comment-list");
       list.setAttribute("aria-live", "polite");
       var thread = {
-        root: root, replies: [], list: list, drawn: new Map(), typing: null, waitKey: null,
+        root: root, replies: [], list: list,
         resolution: entry.resolution || null, entry: null,
-        // Whether it is open, and the line above its first unread comment.
-        lit: false, divider: null,
+        // Whether it is open.
+        lit: false,
         // A passage thread's words: undefined until looked for, null when
         // not found; its highlights, its number node and its number.
         spot: undefined, marks: [], number: null, n: 0, head: null, headKey: null,

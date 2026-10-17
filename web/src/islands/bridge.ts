@@ -92,7 +92,12 @@ declare const ANSWERED: string;
 declare const SAVED: string;
 declare const DRAWN: string;
 
+declare function commentMarkdown(node: HTMLDivElement, text: string): HTMLDivElement;
+declare function commentImages(row: CommentRow): HTMLUListElement | null;
+declare function when(stamp: string | undefined): string;
+
 export const page = Object.freeze({
+  commentMarkdown, commentImages, when,
   commenting,
   room: ROOM,
   popover: POPOVER,
@@ -117,6 +122,14 @@ export type Page = typeof page;
 // polling, passages and swaps update; it does not keep a second thread store.
 export interface CommentRow {
   id: number;
+  actor?: { kind?: string; handle?: string; name?: string };
+  owner?: string;
+  model?: string;
+  createdAt?: string;
+  revision?: string | number;
+  reason?: string;
+  answer?: { label?: string; choice?: string } | null;
+  images?: unknown[];
   section?: string;
   quote?: { exact?: string; prefix?: string; suffix?: string } | null;
   question?: string | number | null;
@@ -125,6 +138,7 @@ export interface CommentRow {
 }
 export interface Resolution { resolved: boolean }
 export interface Thread {
+  list: HTMLOListElement;
   root: CommentRow;
   replies: CommentRow[];
   resolution: Resolution | null;
@@ -208,4 +222,13 @@ export interface NarrowBridge extends Pick<import("./comments/parts").ThreadList
   unfold(target: HTMLElement): void;
   barBottom(): number;
   standsFor(box: HTMLElement): HTMLElement | null;
+}
+
+export interface ThreadBridge {
+  owner: string;
+  page: string;
+  checking(): boolean;
+  counted(thread: Thread, row: CommentRow): boolean;
+  opening: Map<number, Set<number>>;
+  label(thread: Thread, row: CommentRow): void;
 }

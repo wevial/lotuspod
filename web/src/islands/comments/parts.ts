@@ -1,7 +1,7 @@
-import type { PlacementBridge, Thread } from "../bridge";
+import type { PlacementBridge, Thread, ThreadBridge } from "../bridge";
 import type { threadList } from "./thread-list";
 
-// Only migrated parts belong here. The page still owns thread bodies.
+// Only migrated parts belong here.
 export interface Section {
   box: HTMLElement;
   title: string;
@@ -33,6 +33,7 @@ export interface Shell {
   focus(control: "fold" | "opener" | "resolved" | HTMLElement): void;
 }
 export interface Parts {
+  thread(bridge: ThreadBridge): ReturnType<typeof import("./thread").threadRows>;
   placement(bridge: PlacementBridge): Placement;
 }
 export interface Commenting {
