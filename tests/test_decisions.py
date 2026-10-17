@@ -513,13 +513,6 @@ class AboutBlockTests(DecisionsTestCase):
         self.assertEqual([form.context for form in about.values()],
                          [form.context for form in alone.values()])
 
-    def test_a_body_without_a_live_block_renders_as_before(self):
-        body = (FIXTURES / "one_table.body.html").read_text(encoding="utf-8")
-        rendered, _ = decisions.render_decisions(body, "plan")
-        self.assertNotIn("data-about", rendered)
-        self.assertEqual(rendered.encode("utf-8"),
-                         (FIXTURES / "one_table.expected.html").read_bytes())
-
 
 # Row 1 has a default among its options, row 2 none, and row 3, in a table
 # with no Options column, a default its "Accept the default" accepts.

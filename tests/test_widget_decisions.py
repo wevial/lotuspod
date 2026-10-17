@@ -141,11 +141,10 @@ class AboutTests(DecisionsTestCase):
             self.assertEqual(form["about"], [])
         self.assertEqual(decision_links(found, "merge-churn-by-worker-count"), [])
 
-    def test_a_table_after_a_paragraph_that_follows_the_block_is_not_about_it(self):
-        self.assertAboutNothing(page_text(between="\nThe chart above.\n\n"))
-
-    def test_a_table_after_a_heading_is_not_about_the_block(self):
-        self.assertAboutNothing(page_text(between="\n### Decisions for the maintainer\n\n"))
+    def test_a_table_after_a_paragraph_or_heading_that_follows_the_block_is_not_about_it(self):
+        for between in ("\nThe chart above.\n\n", "\n### Decisions for the maintainer\n\n"):
+            with self.subTest(between=between):
+                self.assertAboutNothing(page_text(between=between))
 
     def test_a_checklist_table_is_never_about_the_block(self):
         self.assertAboutNothing(page_text(table=CHECKLIST, heading="Checklist for the maintainer"))
