@@ -121,7 +121,8 @@ flowchart LR
 
 A page with a diagram block also loads the page script. Once Mermaid has
 drawn a diagram, an Expand button sits in its top right corner, shown while
-the pointer is over the diagram or the button has keyboard focus. It opens the
+the pointer is over the diagram or the button has keyboard focus. The button
+stays in the corner as a wide diagram scrolls sideways. It opens the
 diagram in a view that fills the window, with a top bar naming the nearest
 heading before the diagram (else the page title), zoom out (−), the zoom in
 percent, zoom in (+), Fit and ✕. Drag the diagram, scroll with two fingers or
@@ -163,7 +164,8 @@ Render only marks the diagram, heading, table and rows with attributes. Once
 Mermaid has drawn the diagram, each listed box is a button: a click, Enter or
 Space opens one card beside it with the box's label, its row's other columns,
 the row's first link, and what it waits for and unblocks, read from the
-diagram's own arrows. ✕, Esc or a click outside closes it. The open card's
+diagram's own arrows and named by the boxes' labels (or their ids when a label
+is empty). ✕, Esc or a click outside closes it. The open card's
 box, or a hovered or focused one, has its arrows drawn in cyan above the
 boxes while the rest dim. The heading and table are hidden only when every
 row names a box the diagram draws; otherwise they stay, and the boxes that

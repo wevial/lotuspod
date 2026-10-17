@@ -99,10 +99,12 @@
         return;
       }
       var boxes = new Map();
+      var labels = new Map();
       all("g.node", svg).forEach(function (group) {
         var match = BOX_ID.exec(group.id);
         if (match && !boxes.has(match[1])) {
           boxes.set(match[1], group);
+          labels.set(match[1], text(group.querySelector(".nodeLabel")) || text(group) || match[1]);
         }
       });
       // Each arrow's ends, and which way it points: an arrowhead at its end
@@ -132,7 +134,7 @@
       var rows = every.filter(function (row) {
         return row !== head && row.parentNode !== table.tHead && starts(row, "TD");
       });
-      var diagram = { pre: pre, svg: svg, arrows: arrows, statuses: new Map(), overlays: [] };
+      var diagram = { pre: pre, svg: svg, arrows: arrows, labels: labels, statuses: new Map(), overlays: [] };
       diagrams.push(diagram);
       rows.forEach(function (row) {
         if (row.dataset.node && row.dataset.status) {
@@ -165,7 +167,7 @@
     function listen(box) {
       var group = box.group;
       var status = box.row.dataset.status;
-      box.label = text(group.querySelector(".nodeLabel")) || text(group) || box.id;
+      box.label = box.diagram.labels.get(box.id);
       group.classList.add("artifact-node");
       // A box styled in Mermaid itself (style, class or :::) keeps that look:
       // Mermaid 11.4.1 writes it on the shape's style, empty otherwise.
@@ -291,7 +293,8 @@
       }
       return ids.map(function (id) {
         var status = diagram.statuses.get(id);
-        return status ? id + " (" + status + ")" : id;
+        var label = diagram.labels.get(id);
+        return status ? label + " (" + status + ")" : label;
       }).join(", ");
     }
 

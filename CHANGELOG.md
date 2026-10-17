@@ -4,6 +4,62 @@ All notable changes to Lotuspod are recorded here, newest first, in the
 Keep a Changelog style. Each version's section, headed
 `## X.Y.Z - YYYY-MM-DD`, becomes the notes of its GitHub release.
 
+## 0.5.0 - 2026-10-16
+
+- An open page updates in place when a new revision is published, where it
+  used to show a "newer version" banner or reload. Only the changed header,
+  outline, intro, sections and references are swapped, and the reader keeps
+  their scroll, folds and focus. A status line says how many sections
+  changed, and each changed section is tinted for a moment.
+- The swap works on commented pages, keeping threads, chips, the panel and
+  unsent text, and finds passage highlights again in the new text. Decision
+  forms are wired and answered as on a reload, with unsaved answers held
+  back, and the review sheet's count, marks and Respond panel follow the
+  questions the page now asks. Swapped tables get their Expand buttons,
+  references their cards, and Mermaid diagrams are drawn again. A section
+  the reader is writing in, or whose diagram is open full-window, waits
+  until they are done.
+- `lotuspod serve` pushes changes over an Access-verified `/api/events`
+  stream. Open pages and the index run their checks at once on each tick, so
+  a reply or a republish shows within a second or two; the 60-second check
+  stays as the fallback.
+- The index refreshes its listing and Recent activity in place after a
+  publish, keeping search, filters, view and open tabs.
+- Open pod tabs can be dragged into a new order, or moved with
+  Alt+Shift+arrows, and the order is kept in the address. A link to another
+  pod clicked inside a framed pod, including one copied from the index's
+  address bar, opens that pod as a tab.
+- A `calltree` fence draws as a call tree, with a summary, a legend and
+  file:line chips that link to GitHub when the fence names a repo and a sha.
+  Its rows fold, saying what is hidden, and Fold all / Open all fold the
+  whole tree.
+- A comment that mentions no handle goes to the default responder, on an
+  owner's pages too. When it asks the owner to do something, the responder answers
+  what it can and queues the rest in the owner's durable inbox, saying so in
+  its reply.
+- The comments panel can start a whole-page comment, a form opened in it
+  closes with Cancel or Escape, and Cmd/Ctrl+Enter sends.
+- A comment the responder was answering when it was stopped, as on a
+  deploy, is released and answered after the restart instead of failed.
+- Theme scripts are built from TypeScript with Bun, with a CI check that the
+  committed JS is fresh, and the pod finder is the first one converted.
+  Pages carry a Preact islands entry: the review sheet, and the comments
+  panel's shell, groups and entries, are now drawn by islands, with no change
+  a reader sees.
+- A wide diagram's Expand button stays in view as it scrolls sideways, and a
+  box's "Waits for" and "Unblocks" lists name boxes by their labels.
+- Pages stop shifting down on load: the owner's Archive button sits in the
+  top bar, and the whole-page comment box is served under the title.
+- Serve reads its page list once per request, so `/api/seen`,
+  `/api/activity`, agent pulls and the owner's inbox stay fast on big sites.
+- Smaller fixes: Recent activity keeps its week count steady when it
+  refreshes; `comments pull`, `comments show` and `answers` print no terminal
+  control characters from reader text; a page takes its name from its
+  address, not from a `data-page` in its body, and an old version's banner
+  sits on the page's real main; a thread on a one-section page's box shows in
+  the whole-page box once the page has sections; and a reference card's
+  "waiting" chip text meets WCAG AA contrast.
+
 ## 0.4.0 - 2026-10-09
 
 - The index opens pods in tabs, with dots for a new version or a new reply,
