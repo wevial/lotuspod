@@ -95,6 +95,10 @@ reload and swap hooks. Its bridge reads the live boxes and chip nodes and hands
 entries, group toggles and form holders are independent render roots, so narrow.js
 can move them without Preact moving them back. Synchronous renders preserve
 immediate layout reads. Entry leads and status words retain separate redraw keys.
+On resize, placement takes the open view before changing modes, suppresses
+thread opening and closing while moving it, then restores the focused field.
+Across swaps, it reads the page-owned boxes and sections map to find replacement
+anchors; the page still owns drafts and the swap itself.
 `comments/anchor.ts` interprets each first comment as a page, section, passage or
 decision anchor. Mark, words and rank each exhaustively handle that union, so a
 future kind must be handled in all three places and in placement's exhaustive
