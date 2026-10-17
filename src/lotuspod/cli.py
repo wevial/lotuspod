@@ -2563,8 +2563,7 @@ class _AllowListHandler(SimpleHTTPRequestHandler):
         """A listed version's widget, sandboxed and never stored."""
         if self._reader() is None:
             return None
-        stem = name.rsplit(".w-", 1)[0]
-        data = (self.history.widget_version(stem, commit, name)
+        data = (self.history.widget_version(name.rsplit(".w-", 1)[0], commit, name)
                 if self.history is not None else None)
         if data is None:
             self.send_error(HTTPStatus.NOT_FOUND, "File not found")
