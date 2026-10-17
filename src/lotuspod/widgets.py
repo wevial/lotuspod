@@ -147,6 +147,31 @@ class Frames(HTMLParser):
             self.sources.append(attrs.get('src', ''))
 
 
+class DocumentHead(HTMLParser):
+    """Locate structural tags without matching strings inside scripts/comments."""
+    CDATA_CONTENT_ELEMENTS = Templates.CDATA_CONTENT_ELEMENTS
+
+    def __init__(self, source):
+        super().__init__()
+        self.offsets = [0, *(m.end() for m in re.finditer('\n', source))]
+        self.head = None
+        self.html = None
+        self.started = False
+        self.feed(source)
+
+    def handle_starttag(self, tag, attrs):
+        line, col = self.getpos()
+        end = self.offsets[line - 1] + col + len(self.get_starttag_text())
+        # A late head is ignored by HTML's parser. Treat that as an implicit
+        # head so even malformed documents get the policy before any scripts.
+        if tag == 'head' and not self.started:
+            self.head = end
+        if tag == 'html' and not self.started and self.html is None:
+            self.html = end
+        else:
+            self.started = True
+
+
 def render(body: str, name: str) -> tuple[str, dict[str, bytes], list[str]]:
     # Prepare every byte before the caller writes anything.
     from .cli import collect_scripts, script_hash
@@ -173,16 +198,17 @@ def render(body: str, name: str) -> tuple[str, dict[str, bytes], list[str]]:
         ids.add(ident)
         size = len(source.encode('utf-8'))
         total += size
-        if size > 256 * 1024:
-            fail('source exceeds 256 KB')
+        full = bool(re.match(r'\s*(?:<!doctype\b|<html\b)', source, re.IGNORECASE))
+        if size > (2 * 1024 * 1024 if full else 256 * 1024):
+            fail('source exceeds 2 MB' if full else 'source exceeds 256 KB')
         if total > 2 * 1024 * 1024:
             fail('page widgets exceed 2 MB')
         if number > 20:
             fail('more than 20 widgets')
         height = attrs.get('data-height')
-        if 'data-height' in attrs and (height is None or not re.fullmatch(r'[0-9]+', height)
+        if 'data-height' in attrs and height != 'full' and (height is None or not re.fullmatch(r'[0-9]+', height)
                                        or len(height.lstrip('0')) > 5 or int(height.lstrip('0') or '0') > 10000):
-            fail('height must be a whole number from 0 to 10000')
+            fail('height must be full or a whole number from 0 to 10000')
         if not title:
             warnings.append(f'warning: {label} has no title')
         bridge = (THEME / 'widget-frame.js').read_text(encoding='utf-8')
@@ -194,11 +220,28 @@ def render(body: str, name: str) -> tuple[str, dict[str, bytes], list[str]]:
         script_sources = [script_hash(s) for s in collect_scripts(content).inline]
         script_sources.extend(library.url for library in selected)
         policy = "default-src 'none'; script-src " + ' '.join(script_sources) + "; style-src 'unsafe-inline'; img-src data:; font-src data:; connect-src 'none'; form-action 'none'; base-uri 'none'; frame-src 'none'"
-        document = ('<!doctype html><html><head><meta http-equiv="Content-Security-Policy" content="' + html.escape(policy, quote=True) + '">' + tags + '<meta charset="utf-8"><style>' + variables() + 'body { margin: 0; font-family: var(--lotus-font-body); color: var(--lotus-type-ink); background: transparent; color-scheme: dark; }\n</style></head><body>' + content + '</body></html>\n').encode('utf-8')
+        head = ('<meta http-equiv="Content-Security-Policy" content="' + html.escape(policy, quote=True) + '">'
+                '<meta charset="utf-8"><style>' + variables() +
+                'body { margin: 0; font-family: var(--lotus-font-body); color: var(--lotus-type-ink); background: transparent; color-scheme: dark; }\n</style>' + tags)
+        if full:
+            head += f'<script>{bridge}</script>'
+            structure = DocumentHead(source)
+            if structure.head is not None:
+                point = structure.head
+                document = source[:point] + head + source[point:]
+            else:
+                point = structure.html
+                if point is None:
+                    declaration = re.match(r'\s*<!doctype[^>]*>', source, re.IGNORECASE)
+                    point = declaration.end() if declaration else 0
+                document = source[:point] + '<head>' + head + '</head>' + source[point:]
+        else:
+            document = '<!doctype html><html><head>' + head + '</head><body>' + content + '</body></html>\n'
+        document = document.encode('utf-8')
         filename = f'{name}.w-{hashlib.sha256(document).hexdigest()[:12]}.html'
         files[filename] = document
-        fixed = ' data-height-fixed="true"' if height is not None else ''
-        frame = f'<iframe class="artifact-widget" src="{html.escape(filename)}" sandbox="allow-scripts" allow="" referrerpolicy="no-referrer" loading="lazy" title="{html.escape(title or ident)}" data-widget="{html.escape(ident)}" height="{height or "360"}"{fixed}></iframe>'
+        fixed = ' data-height-fixed="true"' if height is not None and height != 'full' else (' data-height-full="true"' if height == 'full' else '')
+        frame = f'<iframe class="artifact-widget" src="{html.escape(filename)}" sandbox="allow-scripts" allow="" referrerpolicy="no-referrer" loading="lazy" title="{html.escape(title or ident)}" data-widget="{html.escape(ident)}" height="{height if height and height != "full" else "360"}"{fixed}></iframe>'
         chrome = (f'<div class="artifact-live-chrome"><span class="artifact-live-title">{html.escape(title or ident)}</span>'
                   '<span class="artifact-live-badge">loading</span>'
                   f'<a class="artifact-live-open" href="{html.escape(filename)}" target="_blank" rel="noopener noreferrer">Open alone</a></div>')

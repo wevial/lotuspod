@@ -18,6 +18,10 @@ function installWidgetBridge() {
       if (!frame || !chrome || !badge)
         return;
       const state = stateFor(frame);
+      if (frame.hasAttribute("data-height-full") && state.height === undefined) {
+        const bar = document.querySelector(".artifact-topbar");
+        frame.height = String(Math.max(0, Math.ceil(window.innerHeight - (bar?.getBoundingClientRect().height ?? 0))));
+      }
       if (state.height !== undefined && !state.paused && !state.expanded && !frame.hasAttribute("data-height-fixed")) {
         frame.height = String(state.height);
       }
