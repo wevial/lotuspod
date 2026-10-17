@@ -26,10 +26,9 @@ class LibraryTests(TempDirTestCase):
 
     def assert_libraries(self, document, names):
         expected = [libraries.LIBRARIES[name] for name in names]
-        head = document.split('</head>')[0]
-        tags = Elements(head).of('script')
-        self.assertEqual(tags, [dict(src=lib.url, integrity=lib.integrity,
-                                     crossorigin='anonymous') for lib in expected])
+        self.assertEqual(Elements(document.split('</head>')[0]).of('script'),
+                         [dict(src=lib.url, integrity=lib.integrity,
+                               crossorigin='anonymous') for lib in expected])
         for lib in expected:
             self.assertLess(document.index('Content-Security-Policy'), document.index(lib.url + '"'))
             self.assertLess(document.index(lib.url + '"'), document.index((Path(cli.__file__).parent / '_theme/widget-frame.js').read_text()))

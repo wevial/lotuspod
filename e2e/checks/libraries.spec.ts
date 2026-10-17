@@ -31,10 +31,9 @@ test('three libraries draw charts in separate frames without errors', async ({ p
   await expect(plot.locator('#plot svg')).toBeVisible();
   await expect(plot.locator('#plot svg rect')).toHaveCount(7);
   await expect(chart.locator('canvas')).toBeVisible();
-  expect(await chart.locator('canvas').evaluate(canvas => {
-    const instance = (window as any).Chart.getChart(canvas);
-    return instance.getDatasetMeta(0).data.length;
-  })).toBe(7);
+  expect(await chart.locator('canvas').evaluate(canvas =>
+    (window as any).Chart.getChart(canvas).getDatasetMeta(0).data.length
+  )).toBe(7);
   expect(await chart.locator('canvas').evaluate((canvas: HTMLCanvasElement) =>
     canvas.getContext('2d')!.getImageData(0, 0, canvas.width, canvas.height).data.some(value => value !== 0)
   )).toBe(true);
