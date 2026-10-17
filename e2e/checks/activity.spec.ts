@@ -237,7 +237,7 @@ test.describe('signed in', () => {
       await expect(pages).toHaveAttribute('aria-pressed', 'false');
       await expect(page.locator('.index-table')).toBeHidden();
       await expect(page.locator('.index-activity')).toBeVisible();
-      expect((await shownGroups(page)).slice(0, 2)).toEqual([A, B]);
+      await expect.poll(async () => (await shownGroups(page)).slice(0, 2)).toEqual([A, B]);
       await expect(page.locator('.index-count')).toHaveText(/^\d+ pages? with activity in the last 7 days$/);
 
       const a = group(page, A);
@@ -268,7 +268,8 @@ test.describe('signed in', () => {
         '--key', `activity-${thread}`, '--text', 'The one by the steps.');
       expect(reply.parent).toBe(thread);
       await openIndex(page, true);
-      expect((await shownGroups(page)).slice(0, 2)).toEqual([B, A]);
+      // The response can arrive before its groups have been drawn.
+      await expect.poll(async () => (await shownGroups(page)).slice(0, 2)).toEqual([B, A]);
       await expect(b.locator('.index-activity-unread')).toHaveText('1 new reply to you');
       await expect(b.locator('.index-activity-count')).toHaveText('3 events');
       const replied = b.locator('li.index-activity-event').first();
