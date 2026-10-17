@@ -310,6 +310,10 @@ function pageSwap() {
       const title = old.querySelector(".artifact-live-title");
       if (title)
         title.textContent = fresh.querySelector(".artifact-live-title")?.textContent ?? "";
+      old.querySelector(".artifact-live-note")?.remove();
+      const note = fresh.querySelector(".artifact-live-note");
+      if (note)
+        frame.before(note);
       if (frame.hasAttribute("data-height-fixed") || freshFrame.hasAttribute("data-height-fixed")) {
         frame.height = freshFrame.height;
       }

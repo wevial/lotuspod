@@ -96,6 +96,29 @@ test('unchanged widgets keep their frame, runtime and chrome through section and
 });
 
 for (const intro of [false, true]) {
+  test(`carried widgets reconcile the sandbox explanation in the ${intro ? 'intro' : 'section'}`, async ({ page }) => {
+    const name = `widget-swap-note-${intro ? 'intro' : 'section'}`;
+    const survivor = widget().replace('live title=', 'live id=survivor title=');
+    const first = widget().replace('live title=', 'live id=first title=');
+    const content = (both: boolean) => doc(undefined, undefined, 1, intro)
+      .replace(widget(), both ? `${first}\n\n${survivor}` : survivor);
+    await open(page, name, content(false));
+    const original = await page.locator('iframe.artifact-widget').elementHandle();
+    const start = await output(page).getAttribute('data-started');
+    const count = await ticks(page);
+
+    await swap(page, name, content(true));
+    await expect(page.locator('.artifact-live-note')).toHaveCount(1);
+    await expect(page.locator('figure[data-widget="first"] .artifact-live-note')).toContainText('Sandboxed:');
+    await expect(page.locator('figure[data-widget="survivor"] .artifact-live-note')).toHaveCount(0);
+
+    await swap(page, name, content(false));
+    await expect(page.locator('.artifact-live-note')).toHaveCount(1);
+    await expect(figure(page).locator('.artifact-live-note')).toHaveText("Sandboxed: this block can't see the page or your comments");
+    expect(await original!.evaluate(node => node === document.querySelector('iframe.artifact-widget'))).toBe(true);
+    await kept(page, start, count);
+  });
+
   test(`running widgets restore automatic height in the ${intro ? 'intro' : 'section'}`, async ({ page }) => {
     const name = `widget-swap-auto-height-${intro ? 'intro' : 'section'}`;
     const content = (fixed: boolean) => doc(undefined, undefined, 1, intro)

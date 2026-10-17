@@ -450,6 +450,11 @@ function pageSwap(): void {
       frame.title = freshFrame.title;
       const title = old.querySelector(".artifact-live-title");
       if (title) title.textContent = fresh.querySelector(".artifact-live-title")?.textContent ?? "";
+      // The sandbox explanation belongs to the first published widget,
+      // which can change when widgets are added, removed or reordered.
+      old.querySelector(".artifact-live-note")?.remove();
+      const note = fresh.querySelector(".artifact-live-note");
+      if (note) frame.before(note);
       // Preserve a measured auto height on prose-only swaps. Switching to
       // or from an explicit height applies the new published size instead;
       // the widget bridge restores cached auto measurements on SWAPPED.
