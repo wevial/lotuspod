@@ -1,7 +1,8 @@
 import type { Page } from "../bridge";
-import { threadList } from "./thread-list";
-import { shell } from "./shell";
+import { placement } from "./placement";
+
+import { threadRows } from "./thread";
 
 export function comments(page: Page): void {
-  page.commenting?.start({ shell: hooks => shell(page, hooks), threadList: (shell, bridge) => threadList(page, shell, bridge) });
+  page.commenting?.start({ thread: bridge => threadRows(page, bridge), placement: bridge => placement(page, bridge) });
 }

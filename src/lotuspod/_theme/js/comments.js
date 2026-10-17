@@ -4,7 +4,7 @@
   // its section, or, when the page no longer has that section, in a list at
   // the end of the body. With the page script each box is a chip instead,
   // and its threads open in the side panel, a popover or a bottom sheet
-  // (sidePanel below), never in the box. A thread on a passage
+  // (the placement island), never in the box. A thread on a passage
   // (selectPassages below) is also drawn on its words.
   function commentBoxes(boxes, parts) {
     var page = boxes[0].dataset.page;
@@ -81,189 +81,17 @@
       };
     }
 
-    // An agent's handle when an agent wrote the row; "" for anyone else. Only
-    // the verified actor's kind says a row is an agent's, never an address.
-    function agent(row) {
-      var actor = row && row.actor;
-      if (!actor || actor.kind !== "agent") {
-        return "";
-      }
-      return actor.handle ? String(actor.handle) : "agent";
-    }
-
-    // Who wrote a row that is not an agent's: a reader's name, else a handle.
-    function author(row) {
-      var actor = row && row.actor;
-      if (actor && actor.name) {
-        return String(actor.name);
-      }
-      return actor && actor.handle ? String(actor.handle) : "someone";
-    }
-
-    // The agent a reader's comment is routed to, else the page's owner.
-    function routed(row) {
-      return row.owner ? String(row.owner) : owner || "an agent";
-    }
-
-    // A mark drawn by the stylesheet: no text, hidden from assistive technology.
-    function mark(kind) {
-      var node = element("span", "artifact-comment-mark artifact-comment-mark--" + kind);
-      node.setAttribute("aria-hidden", "true");
-      if (kind === "dots") {
-        node.append(element("i"), element("i"), element("i"));
-      }
-      return node;
-    }
-
-    // A row: an avatar, then a column of a name line and what is said.
-    function row(className, avatar, avatarText) {
-      var item = element("li", "artifact-comment-row " + className);
-      var face = element("span", "artifact-comment-avatar " + avatar, avatarText);
-      face.setAttribute("aria-hidden", "true");
-      item.appendChild(face);
-      var column = element("div", "artifact-comment-col");
-      item.appendChild(column);
-      return { item: item, column: column };
-    }
-
-    // An agent's name line: the handle in the mono voice, its AGENT tag,
-    // and the model the reply names as its writer, when it names one.
-    function agentName(handle, model) {
-      var by = element("p", "artifact-comment-by");
-      by.appendChild(element("span", "artifact-comment-handle", handle));
-      by.appendChild(document.createTextNode(" "));
-      by.appendChild(element("span", "artifact-comment-agent", "AGENT"));
-      if (model) {
-        by.appendChild(document.createTextNode(" "));
-        by.appendChild(element("span", "artifact-comment-model", String(model)));
-      }
-      return by;
-    }
-
-    function comment(entry) {
-      var handle = agent(entry);
-      var name = handle || author(entry);
-      var drawn = handle
-        ? row("artifact-comment-item artifact-comment-item--agent", "artifact-comment-avatar--agent",
-          name.charAt(0).toUpperCase())
-        : row("artifact-comment-item artifact-comment-item--reader", "",
-          name.slice(0, 2).toUpperCase());
-      var by;
-      if (handle) {
-        by = agentName(handle, entry.model);
-      } else {
-        by = element("p", "artifact-comment-by");
-        by.appendChild(element("span", "artifact-comment-author", name));
-      }
-      var time = element("time", "artifact-comment-time", when(entry.createdAt));
-      time.dateTime = String(entry.createdAt || "");
-      by.appendChild(document.createTextNode(" "));
-      by.appendChild(time);
-      drawn.column.appendChild(by);
-      if (entry.answer && typeof entry.answer === "object") {
-        drawn.column.appendChild(element("p", "artifact-comment-answered",
-          "Answered: " + String(entry.answer.label || entry.answer.choice || "")));
-      }
-      var said = commentMarkdown(element("div", "artifact-comment-text"), String(entry.text || ""));
-      // A passage's highlight is described by its thread's first comment.
-      said.id = "artifact-comment-text-" + entry.id;
-      drawn.column.appendChild(said);
-      var images = commentImages(entry);
-      if (images) {
-        said.hidden = !entry.text;
-        drawn.column.appendChild(images);
-      }
-      return drawn.item;
-    }
-
-    // The centred line after an agent's reply that revised the page.
-    function revised(entry) {
-      var line = element("li", "artifact-comment-event");
-      var text = element("span");
-      text.appendChild(document.createTextNode(agent(entry) + " "));
-      var link = element("a", "", "revised the page \u2192 revision ");
-      link.href = encodeURIComponent(page) + ".html";
-      link.appendChild(element("code", "", String(entry.revision)));
-      text.appendChild(link);
-      line.appendChild(text);
-      return line;
-    }
-
-    // A centred system line: a title behind its mark, then what follows.
-    function notice(state, kind, title, lines) {
-      var line = element("li", "artifact-comment-notice artifact-comment-notice--" + state);
-      line.dataset.state = state;
-      line.setAttribute("role", "note");
-      var head = element("p", "artifact-comment-notice-title");
-      head.appendChild(mark(kind));
-      head.appendChild(element("span", "", title));
-      line.appendChild(head);
-      lines.forEach(function (text) {
-        line.appendChild(element("p", "artifact-comment-notice-text", text));
-      });
-      return line;
-    }
-
-    // A system line that only restates a state: the thread's live region
-    // does not read it out.
-    function quiet(line) {
-      line.setAttribute("aria-hidden", "true");
-      return line;
-    }
-
-    // What a reader's comment's state draws after it; null for none.
-    function after(entry) {
-      var handle = routed(entry);
-      switch (entry.state) {
-        case "unavailable":
-          return quiet(notice("unavailable", "hollow", handle + " is offline",
-            ["Your comment goes to " + handle + " when it checks in again."]));
-        case "paused":
-          return quiet(notice("paused", "pause", "The responder is paused",
-            ["Your comment waits until it is resumed."]));
-        case "failed":
-          return notice("failed", "bang", handle + " couldn't answer", [
-            entry.reason ? String(entry.reason) : "No reason given",
-            "To send it again, write a new comment.",
-          ]);
-        default:
-          return null;
-      }
-    }
-
-    // The typing bubble a thread ends in while its newest reader comment has
-    // no answer yet; null for none. It only restates the state, so the
-    // thread's live region does not read it out.
-    function typing(entry) {
-      var handle = routed(entry);
-      var drawn;
-      var bubble;
-      if (entry.state === "pending") {
-        drawn = row("artifact-comment-typing artifact-comment-typing--pending",
-          "artifact-comment-avatar--ghost", handle.charAt(0).toUpperCase());
-        bubble = element("p", "artifact-comment-bubble artifact-comment-bubble--ghost",
-          (checking ? "Checking for a reply from " : "Waiting for ") + handle);
-        bubble.appendChild(mark("dots"));
-      } else if (entry.state === "claimed") {
-        drawn = row("artifact-comment-typing artifact-comment-typing--claimed",
-          "artifact-comment-avatar--agent", handle.charAt(0).toUpperCase());
-        var by = agentName(handle);
-        by.appendChild(document.createTextNode(" is writing"));
-        drawn.column.appendChild(by);
-        bubble = element("p", "artifact-comment-bubble artifact-comment-bubble--typing");
-        bubble.appendChild(mark("dots"));
-        bubble.appendChild(element("span", "artifact-comment-sr", handle + " is writing a reply"));
-      } else {
-        return null;
-      }
-      drawn.item.setAttribute("aria-hidden", "true");
-      drawn.column.appendChild(bubble);
-      return drawn.item;
-    }
-
-    function rows(thread) {
-      return [thread.root].concat(thread.replies);
-    }
+    var threadRows = parts.thread({
+      owner: owner, page: page, checking: function () { return checking; },
+      counted: counted, opening: opening, label: label,
+    });
+    var agent = threadRows.agent;
+    var author = threadRows.author;
+    var routed = threadRows.routed;
+    var rows = threadRows.rows;
+    var sync = threadRows.sync;
+    var merge = threadRows.merge;
+    var markUnread = threadRows.markUnread;
 
     // Whether a comment counts as unread: the route named it, and neither
     // a mark this page posted nor the reader's own reply since has read it.
@@ -282,48 +110,6 @@
     // reader's own reply.
     function readTo(thread, id) {
       seenTo.set(thread.root.id, Math.max(seenTo.get(thread.root.id) || 0, id));
-    }
-
-    // Mark a thread's unread comments, each with a "New" tag before its
-    // byline, and put the divider above the first.
-    function markUnread(thread) {
-      var held = opening.get(thread.root.id);
-      var first = null;
-      rows(thread).forEach(function (entry) {
-        var drawn = thread.drawn.get(entry.id);
-        if (!drawn) {
-          return;
-        }
-        var marked = counted(thread, entry) || Boolean(held && held.has(entry.id));
-        if (marked && !first) {
-          first = drawn.item;
-        }
-        if (drawn.item.classList.contains("artifact-comment--unread") === marked) {
-          return;
-        }
-        drawn.item.classList.toggle("artifact-comment--unread", marked);
-        var by = drawn.item.querySelector(".artifact-comment-by");
-        if (marked) {
-          by.insertBefore(element("span", "artifact-comment-new", "New"), by.firstChild);
-        } else {
-          by.querySelector(".artifact-comment-new").remove();
-        }
-      });
-      if (!first) {
-        if (thread.divider) {
-          thread.divider.remove();
-        }
-        return;
-      }
-      if (!thread.divider) {
-        // The tags say it to assistive technology; the line only shows it.
-        thread.divider = element("li", "artifact-comment-divider");
-        thread.divider.setAttribute("aria-hidden", "true");
-        thread.divider.appendChild(element("span", "", "New since you last looked"));
-      }
-      if (thread.divider.nextSibling !== first) {
-        thread.list.insertBefore(thread.divider, first);
-      }
     }
 
     // Draw the replies to the reader outside the chips: each thread's
@@ -397,102 +183,6 @@
       return rows(thread).some(function (entry) {
         return !agent(entry) && (entry.state === "pending" || entry.state === "claimed");
       });
-    }
-
-    // What a row draws after it, as a key: a mark is drawn again only when
-    // its key changes.
-    function markKey(entry) {
-      if (agent(entry)) {
-        return entry.revision ? "revision " + entry.revision : "";
-      }
-      return [entry.state, routed(entry), entry.reason || ""].join("\n");
-    }
-
-    // Draw what a thread does not show yet, in place: each comment once, by
-    // id, and a mark after it or the typing bubble at its end only when what
-    // that says has changed. Nothing drawn is moved, so the thread's live
-    // region reads out only what is new. The box is told how many comments
-    // and replies were drawn. True when anything was drawn.
-    function sync(thread) {
-      var list = thread.list;
-      var at = null;
-      var newest = null;
-      var touched = false;
-      var count = 0;
-      function place(node) {
-        list.insertBefore(node, at ? at.nextSibling : list.firstChild);
-        at = node;
-      }
-      rows(thread).forEach(function (entry) {
-        var drawn = thread.drawn.get(entry.id);
-        if (drawn) {
-          at = drawn.item;
-        } else {
-          drawn = { item: comment(entry), mark: null, key: "" };
-          thread.drawn.set(entry.id, drawn);
-          place(drawn.item);
-          touched = true;
-          count += 1;
-        }
-        if (!agent(entry)) {
-          newest = entry;
-        }
-        var key = markKey(entry);
-        if (key !== drawn.key) {
-          if (drawn.mark) {
-            drawn.mark.remove();
-          }
-          drawn.mark = agent(entry) ? (entry.revision ? revised(entry) : null) : after(entry);
-          drawn.key = key;
-          touched = true;
-        }
-        if (drawn.mark) {
-          if (drawn.mark.parentNode) {
-            at = drawn.mark;
-          } else {
-            place(drawn.mark);
-          }
-        }
-      });
-      var waitKey = newest ? [newest.state, routed(newest), checking].join("\n") : "";
-      if (waitKey !== thread.waitKey) {
-        if (thread.typing) {
-          thread.typing.remove();
-        }
-        thread.typing = newest && typing(newest);
-        if (thread.typing) {
-          list.appendChild(thread.typing);
-        }
-        thread.waitKey = waitKey;
-        touched = true;
-      }
-      label(thread, newest || thread.root);
-      if (count && thread.box) {
-        thread.box.dispatchEvent(new CustomEvent(DRAWN, { bubbles: true, detail: { rows: count } }));
-      }
-      return touched;
-    }
-
-    // Take rows into a thread by id: a new one is added, a known one takes
-    // the copy just read. True when anything was drawn.
-    function merge(thread, entries) {
-      entries.forEach(function (entry) {
-        if (!entry) {
-          return;
-        }
-        if (entry.id === thread.root.id) {
-          thread.root = entry;
-          return;
-        }
-        var known = thread.replies.findIndex(function (reply) { return reply.id === entry.id; });
-        if (known < 0) {
-          thread.replies.push(entry);
-        } else {
-          thread.replies[known] = entry;
-        }
-      });
-      thread.replies.sort(function (a, b) { return a.id - b.id; });
-      return sync(thread);
     }
 
     function failure(response, payload, stale) {
@@ -1226,116 +916,14 @@
       return api;
     }
 
-    // The side panel (layout C of docs/design/margin-comments-mockup.html),
-    // shown while the window leaves ROOM right of the reading column: fixed
-    // to the window's right edge, folded to a rail of one dot per open thread
-    // or open with every thread listed under its section's heading, one
-    // entry open at a time. A thread's node is moved into its entry, never
-    // drawn twice, so its live reads, composer and live region go on as they
-    // were. Each box's summary is a chip saying where its section's open
-    // threads stand, which opens them here: a box never opens, and nothing
-    // in the column moves when the panel or a thread changes. Without that
-    // room the entries stay in their groups out of sight, and one at a time
-    // is moved into a popover or the bottom sheet (js/narrow.js).
-    function sidePanel() {
-      var column = document.querySelector(".artifact-body");
-      var api = { wide: false, mode: null };
-      var arranged = false;
-      // While the threads move to another layout (api.arrange), none opens
-      // or closes: one open in the old place is open in the new.
-      var moving = false;
-
+    // Chips still draw here. Placement supplies their opening actions and
+    // reads their nodes as anchors, including the chips made after a swap.
+    function chips(threadList, chipped, reach) {
       // Each decision's chip, by its form, once it has a thread.
       var decisionChips = new Map();
       function mute(node) {
         node.setAttribute("aria-hidden", "true");
         return node;
-      }
-
-      var shell = parts.shell({
-        opened: function () {
-          if (threadList.current) {
-            threadList.draw(threadList.current);
-          }
-          showUnread();
-        },
-        resolvedChanged: function () {
-          if (!shell.resolvedShown() && threadList.current && threadList.current === threadList.toRead && resolved(threadList.current)) {
-            threadList.expand(null);
-          }
-          api.refresh();
-        },
-        compose: function (box) {
-          if (groups.has(box)) {
-            threadList.compose(groups.get(box), true);
-          }
-        },
-      });
-
-      var threadList = parts.threadList(shell, {
-        all: all,
-        boxes: boxes, shown: shown, forms: forms, decisions: decisions,
-        rows: rows, resolved: resolved, agent: agent, routed: routed,
-        threadsOf: threadsOf, decisionOf: decisionOf, passages: passages,
-        imageWords: imageWords, looked: looked, refresh: refresh, failure: failure, json: json,
-        page: page, wide: function () { return api.wide; },
-        moving: function () { return moving; },
-        holds: function (thread) { return over.holds(thread); },
-        uncover: function (node) { over.uncover(node); }, bring: bring,
-      });
-      var groups = threadList.groups;
-      boxes.forEach(function (box) { chipOn(box); });
-      api.refresh = function () {
-        threadList.refresh();
-        boxes.forEach(chip);
-        decisions.forEach(decisionChip);
-        over.sync();
-      };
-
-      function mount(box, at) {
-        threadList.mount(box, at);
-        chipOn(box);
-        if (arranged) house(box);
-      }
-
-      // A thread's highlight, else its decision's chip, else its section's.
-      function anchorOf(thread) {
-        var decision = decisionOf(thread);
-        return thread.marks[0] || (decision && decisionChips.get(decision.form)) ||
-          (thread.box && thread.box.querySelector("summary")) || null;
-      }
-
-      // Open the section a node is in through its heading's button, if it is
-      // folded.
-      function unfold(target) {
-        var wrapper = target.closest(".artifact-section-body");
-        if (wrapper && wrapper.hasAttribute("hidden")) {
-          var heading = wrapper.previousElementSibling;
-          var button = heading && heading.querySelector("button.artifact-section-toggle");
-          if (button) {
-            button.click();
-          }
-        }
-      }
-
-      // Where the title bar ends, in the window.
-      function barBottom() {
-        var bar = document.querySelector(".artifact-topbar");
-        return bar ? Math.max(0, bar.getBoundingClientRect().bottom) : 0;
-      }
-
-      // Bring a thread's highlight, else its chip, into the window, opening
-      // its section first if it is folded.
-      function bring(thread) {
-        var target = anchorOf(thread);
-        if (!target) {
-          return;
-        }
-        unfold(target);
-        var rect = target.getBoundingClientRect();
-        if (rect.top < barBottom() || rect.bottom > window.innerHeight) {
-          target.scrollIntoView({ block: "center" });
-        }
       }
 
       function face(text, agentFace) {
@@ -1471,138 +1059,6 @@
         reach(thread, decisionChips.get(form), false);
       }
 
-      // A thread opened from outside its entry: in a popover under opener or
-      // in the sheet; in the panel as a highlight opens it, or, resolved,
-      // listed with the resolved threads and its entry in view. With read, a
-      // resolved thread is also opened to read, as its dashed line opens it.
-      function reach(thread, opener, read) {
-        if (!api.wide) {
-          over.show({ thread: thread }, opener);
-          if (read && resolved(thread)) {
-            threadList.toRead = thread;
-            threadList.expand(thread);
-          }
-        } else if (resolved(thread)) {
-          // Listed with the resolved threads, its Reopen at hand.
-          shell.setOpen(true, true);
-          shell.setResolvedShown(true, true);
-          if (read) {
-            threadList.toRead = thread;
-            threadList.expand(thread);
-          }
-          api.refresh();
-          threadList.reveal(thread.entry.item);
-          thread.entry.reopen.focus({ preventScroll: true });
-        } else {
-          api.open(thread);
-        }
-      }
-
-      // A link to a thread (#thread=ID): it opens as its highlight, else its
-      // chip, would open it, a resolved one opened to read. Already open in
-      // view, its replies since are seen, as on opening it, and its entry is
-      // brought into the panel's view.
-      api.reach = function (thread) {
-        if (thread.lit) {
-          looked(thread, true);
-          if (api.wide) {
-            threadList.reveal(thread.entry.item);
-          }
-          return;
-        }
-        reach(thread, anchorOf(thread), true);
-      };
-
-      // A thread just asked about a decision: its entry opens in the panel,
-      // else it opens in a popover under the decision's chip or in the sheet.
-      api.asked = function (thread) {
-        if (!thread) {
-          return;
-        }
-        if (api.wide) {
-          api.open(thread);
-        } else {
-          over.show({ thread: thread }, anchorOf(thread));
-        }
-      };
-
-      // The box's form for a new thread posted one: the form folds, and in
-      // the panel the new thread's entry opens; a popover shows it among its
-      // section's threads, and the sheet moves on to it.
-      api.posted = function (box, thread) {
-        if (!thread) {
-          return;
-        }
-        var made = groups.get(box);
-        var focused = made.holder.contains(document.activeElement)
-          || document.activeElement === document.body;
-        threadList.compose(made, false);
-        if (api.wide) {
-          threadList.expand(thread);
-          if (focused) {
-            thread.entry.head.focus({ preventScroll: true });
-          }
-          return;
-        }
-        over.posted(thread, focused);
-      };
-
-      // A highlight: the panel opens at its thread.
-      api.open = function (thread) {
-        shell.setOpen(true, true);
-        threadList.expand(thread);
-        thread.entry.head.focus({ preventScroll: true });
-      };
-
-      // A passage's composer: in its section's group, above the threads, with
-      // the panel open.
-      api.compose = function (box, holder) {
-        shell.setOpen(true, true);
-        var made = groups.get(box);
-        made.node.insertBefore(holder, made.entries);
-        threadList.tidy();
-        threadList.reveal(holder);
-      };
-
-      // A thread was posted from a passage's composer: its entry opens, or
-      // it opens in a popover under its words or in the sheet.
-      api.started = function (thread, focused) {
-        if (!thread) {
-          return;
-        }
-        if (api.wide) {
-          threadList.expand(thread);
-          if (focused) {
-            thread.entry.head.focus({ preventScroll: true });
-          }
-          return;
-        }
-        over.started(thread, focused);
-      };
-
-      // A chip: the panel opens at its section's newest open thread, or at
-      // its form for a new one, which an archived page has none of.
-      function show(box) {
-        shell.setOpen(true, true);
-        var newest = threadList.latest(threadList.unresolvedOf(box));
-        if (newest) {
-          threadList.expand(newest);
-          newest.entry.head.focus({ preventScroll: true });
-        } else if (!ARCHIVED) {
-          threadList.compose(groups.get(box), true);
-        }
-      }
-
-      // A chip opens its section's threads in the panel, a popover or the
-      // sheet, never in its box.
-      function chipped(box) {
-        if (api.wide) {
-          show(box);
-        } else {
-          over.chip(box);
-        }
-      }
-
       // A box's summary is its chip, and the box itself never opens.
       function chipOn(box) {
         var summaryNode = box.querySelector("summary");
@@ -1628,286 +1084,15 @@
         });
       }
 
-      // Show a thread where it belongs: its entry in its group, or in the
-      // popover or sheet holding it, with its node in the entry; without
-      // the panel, a thread on a section the page no longer has is in the
-      // list at the end of the body unless it is held.
-      api.put = function (thread) {
-        var made = threadList.entry(thread);
-        var keep = over.holds(thread);
-        if (!api.wide && !thread.box && !keep) {
-          var listed = changed();
-          if (thread.node.parentNode !== listed) {
-            listed.appendChild(thread.node);
-          }
-        } else if (thread.node.parentNode !== made.body) {
-          made.body.appendChild(thread.node);
-        }
-        if (keep) {
-          if (made.item.parentNode !== over.entries()) {
-            over.entries().appendChild(made.item);
-          }
-        } else {
-          var target = thread.box ? groups.get(thread.box) : threadList.strays;
-          if (made.item.parentNode !== target.entries) {
-            target.entries.appendChild(made.item);
-            threadList.sort(target);
-          }
-        }
-        threadList.draw(thread);
-        threadList.strays.node.hidden = !threadList.showing(threadList.strays);
+      return {
+        nodes: decisionChips,
+        mute: mute,
+        mount: chipOn,
+        refresh: function () {
+          boxes.forEach(chip);
+          decisions.forEach(decisionChip);
+        },
       };
-
-      // Without room for the panel, one thing at a time opens over the text,
-      // in a popover or the bottom sheet (overText in js/narrow.js).
-      var over = overText({
-        panel: api, groups: groups, passages: passages, mute: mute,
-        compose: threadList.compose, threadsOf: threadsOf, unresolvedOf: threadList.unresolvedOf, resolved: resolved,
-        ordered: threadList.ordered,
-        latest: threadList.latest, standing: threadList.standing, routed: routed, asked: threadList.asked, said: threadList.said, tick: threadList.tick,
-        title: threadList.title, opening: threadList.opening, anchorOf: anchorOf, unfold: unfold, barBottom: barBottom,
-        decisionOf: decisionOf, standsFor: standsFor,
-      });
-      api.show = over.show;
-      api.passage = over.passage;
-      api.dropped = function (mine) {
-        over.dropped(mine);
-        threadList.tidy();
-      };
-
-      // The box that now stands for box's section: box, the box a swap
-      // replaced it with, or null when the page no longer has it.
-      function standsFor(box) {
-        return groups.has(box) ? box : sections.get(box.dataset.section) || null;
-      }
-
-      // Whether a thread is open: in the panel, a popover or the sheet.
-      api.lit = function (thread) {
-        return (api.wide && threadList.current === thread) || over.holds(thread);
-      };
-
-      // Whether the window leaves ROOM right of the reading column at its
-      // full measure: a panel widened into the column narrows it
-      // (css/base.css), which must not change where the threads live. The
-      // measure is read from a probe set in the column's font, out of sight
-      // and outside the column, so it is no part of the page's text.
-      var probe = element("div");
-      probe.setAttribute("aria-hidden", "true");
-      probe.style.cssText = "position: absolute; left: 0; top: 0; height: 0; visibility: hidden; pointer-events: none";
-      function roomy() {
-        if (!column) {
-          return false;
-        }
-        var rem = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
-        var style = getComputedStyle(column);
-        ["fontFamily", "fontSize", "fontStyle", "fontWeight", "fontStretch"].forEach(function (name) {
-          probe.style[name] = style[name];
-        });
-        probe.style.width = style.getPropertyValue("--measure-prose") || "66ch";
-        document.body.appendChild(probe);
-        var measure = probe.getBoundingClientRect().width;
-        probe.remove();
-        var left = column.getBoundingClientRect().left;
-        var holder = column.parentElement;
-        var edge = holder.getBoundingClientRect().right -
-          (parseFloat(getComputedStyle(holder).paddingRight) || 0) -
-          (parseFloat(getComputedStyle(holder).borderRightWidth) || 0);
-        var right = left + Math.min(measure, edge - left);
-        return document.documentElement.clientWidth - right >= ROOM * rem;
-      }
-
-      // What the open panel shows, to open again in a popover or the sheet
-      // (over.restore) when the window narrows: a section's form being
-      // written in, else the open entry's thread. A passage's composer is
-      // placed by its own (passages.place).
-      function opened() {
-        var none = { view: null, opener: null, anchor: null, writing: null };
-        if (!shell.isOpen()) {
-          return none;
-        }
-        var writing = null;
-        groups.forEach(function (made) {
-          if (made.holder && !made.holder.hidden) {
-            writing = made;
-          }
-        });
-        if (writing) {
-          var chipNode = writing.box.querySelector("summary");
-          return { view: { box: writing.box }, opener: chipNode, anchor: chipNode, writing: writing };
-        }
-        if (threadList.current && (!resolved(threadList.current) || threadList.current === threadList.toRead)) {
-          var anchor = anchorOf(threadList.current);
-          return { view: { thread: threadList.current }, opener: anchor, anchor: anchor, writing: null };
-        }
-        return none;
-      }
-
-      // A box's form for a new thread lives in its group's holder, never in
-      // the box, which stays closed.
-      function house(box) {
-        box.open = false;
-        var holder = groups.get(box).holder;
-        holder.insertBefore(forms.get(box), holder.firstChild);
-      }
-
-      // Show the threads in the panel, or else open them in a popover or the
-      // sheet, as the window allows. What is open moves to the new place.
-      api.arrange = function () {
-        var mode = roomy() ? "panel" : window.matchMedia(POPOVER).matches ? "popover" : "sheet";
-        if (arranged && mode === api.mode) {
-          over.refit();
-          return;
-        }
-        if (!arranged) {
-          boxes.forEach(house);
-        }
-        arranged = true;
-        moving = true;
-        // Moving a field takes its focus away: it is given back after.
-        var focused = document.activeElement;
-        var taken = api.wide ? opened() : over.take();
-        var view = taken.view;
-        var writing = taken.writing;
-        api.mode = mode;
-        api.wide = mode === "panel";
-        shell.hidden(!api.wide);
-        over.mode(mode);
-        var old = document.querySelector(".artifact-comments-changed");
-        if (old) {
-          old.hidden = api.wide;
-        }
-        shown.forEach(put);
-        refresh();
-        if (!api.wide) {
-          over.restore(taken);
-        } else if (view && view.thread) {
-          shell.setOpen(true, false);
-          threadList.expand(view.thread);
-        } else if (writing) {
-          shell.setOpen(true, false);
-        }
-        if (writing) {
-          threadList.compose(writing, true);
-        }
-        // In its new place, a thread opens or closes as it now stands.
-        moving = false;
-        refresh();
-        // A passage's composer goes where the window now has room for it.
-        passages.place();
-        if (focused && focused !== document.body && focused.isConnected && document.activeElement !== focused) {
-          focused.focus({ preventScroll: true });
-        }
-      };
-
-      // What is open, to open again after a reload (api.reopen): a thread by
-      // its first comment's id, or a section and whether its form is being
-      // written in; null for nothing, or a passage's composer.
-      api.held = function () {
-        var taken = api.wide ? opened() : over.peek();
-        var view = taken.view;
-        if (view && view.thread) {
-          return { thread: view.thread.root.id };
-        }
-        if (view && view.box) {
-          return { section: view.box.dataset.section, writing: Boolean(taken.writing) };
-        }
-        return null;
-      };
-
-      // Open again what api.held kept, where the window now has room for it.
-      api.reopen = function (kept) {
-        var thread = shown.get(kept.thread);
-        var box = typeof kept.section === "string" ? sections.get(kept.section) : null;
-        var view = thread && !resolved(thread) ? { thread: thread } : box ? { box: box } : null;
-        if (!view) {
-          return;
-        }
-        var writing = view.box && kept.writing && !ARCHIVED ? groups.get(view.box) : null;
-        if (api.wide) {
-          shell.setOpen(true, false);
-          if (view.thread) {
-            threadList.expand(view.thread);
-          }
-        } else {
-          var anchor = view.thread ? anchorOf(view.thread) : view.box.querySelector("summary");
-          over.restore({ view: view, opener: anchor, anchor: anchor, writing: writing });
-        }
-        if (writing) {
-          threadList.compose(writing, true);
-        }
-      };
-
-      // A swap is about to change the boxes olds: what a popover or the
-      // sheet holds on one of them is taken (over.take), to open again once
-      // they have changed (api.give). Until then no thread opens or closes.
-      api.take = function (olds) {
-        moving = true;
-        if (api.wide) {
-          return null;
-        }
-        var held = over.peek();
-        var view = held.view;
-        if (!view || view.passage) {
-          return null;
-        }
-        var on = view.box || (view.thread && view.thread.box);
-        var gone = held.anchor && !held.anchor.isConnected;
-        return olds.indexOf(on) >= 0 || gone ? over.take() : null;
-      };
-
-      // The swap has changed the boxes: what api.take took opens again where
-      // it was (over.restore), on the box that replaced its own, and a form
-      // being written in stays open.
-      api.give = function (taken) {
-        if (taken && taken.view) {
-          taken.still = true;
-          over.restore(taken);
-          if (taken.writing && groups.get(taken.writing.box) === taken.writing && over.peek().view) {
-            threadList.compose(taken.writing, true);
-          }
-        }
-        moving = false;
-      };
-
-      // The box old is replaced by box, which takes its place among the
-      // boxes: old's group and option are box's, its title drawn from its
-      // new heading.
-      api.replace = function (old, box) {
-        threadList.replace(old, box);
-        chipOn(box);
-        shell.unlit();
-      };
-
-      // The box that was boxes[at] is taken away, with its group and option.
-      api.unmount = function (old, at) {
-        var made = groups.get(old);
-        groups.delete(old);
-        made.node.remove();
-        threadList.shellSections();
-        shell.unlit();
-      };
-
-      // A decision form a swap took away: its chip went with its section.
-      api.forget = function (form) {
-        decisionChips.delete(form);
-      };
-
-      // The box at boxes[at] is added.
-      api.mount = function (box, at) {
-        mount(box, at);
-        shell.unlit();
-      };
-
-      // Once the boxes have changed: the groups in page order, and the box
-      // for the whole page as it now stands.
-      api.remounted = function () {
-        var made = boxes.map(function (box) { return [box, groups.get(box)]; });
-        groups.clear();
-        made.forEach(function (pair) { groups.set(pair[0], pair[1]); });
-        threadList.shellSections();
-      };
-
-      return api;
     }
 
     // The list at the end of the body for threads on sections the page no
@@ -1940,10 +1125,10 @@
       var list = element("ol", "artifact-comment-list");
       list.setAttribute("aria-live", "polite");
       var thread = {
-        root: root, replies: [], list: list, drawn: new Map(), typing: null, waitKey: null,
+        root: root, replies: [], list: list,
         resolution: entry.resolution || null, entry: null,
-        // Whether it is open, and the line above its first unread comment.
-        lit: false, divider: null,
+        // Whether it is open.
+        lit: false,
         // A passage thread's words: undefined until looked for, null when
         // not found; its highlights, its number node and its number.
         spot: undefined, marks: [], number: null, n: 0, head: null, headKey: null,
@@ -2851,10 +2036,15 @@
     }
 
     var passages = selectPassages();
-    var panel = sidePanel();
+    var panel = parts.placement({
+      all: all, boxes: boxes, shown: shown, forms: forms, decisions: decisions,
+      rows: rows, resolved: resolved, agent: agent, routed: routed,
+      threadsOf: threadsOf, decisionOf: decisionOf, passages: passages,
+      imageWords: imageWords, looked: looked, refresh: refresh, failure: failure, json: json,
+      page: page, sections: sections, showUnread: showUnread, changed: changed, chips: chips,
+    });
     decisions.forEach(askAbout);
     panel.arrange();
-    window.addEventListener("resize", panel.arrange);
     read();
   }
 
