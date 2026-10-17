@@ -289,3 +289,114 @@ test('an archived page and a page without comments give the block no Comment', a
   await expect(block(page).comment).toHaveCount(0);
   expect(errors).toEqual([]);
 });
+
+// A page whose first section holds two blocks, earlier then later.
+function pair() {
+  return ['# Pair study', '', 'Two blocks in one section.', '',
+    '## Churn', '', 'Reruns grow with the number of workers.', '',
+    '```html live id=earlier title="Earlier block" height=80', '<p>Earlier.</p>', '```', '',
+    'Between the blocks.', '',
+    '```html live id=churn title="' + TITLE + '" height=80', '<p>Later.</p>', '```', '',
+    '## Notes', '', 'Nothing else yet.', ''].join('\n');
+}
+
+// The page with the block churn in section heading, its body as doc(1)'s.
+function moved(heading: string) {
+  return ['# Merge study', '', 'How merges go as workers are added.', '',
+    `## ${heading}`, '', 'Reruns grow with the number of workers.', '',
+    '```html live id=churn title="' + TITLE + '" height=160',
+    "<p>Six workers: 21 merged a day, version 1.</p><script>document.body.dataset.version = '1';</script>",
+    '```', '',
+    '## Notes', '', 'Nothing else yet.', '',
+    '```html live id=tally title="Merged so far" height=120', '<p>Merged so far: 120.</p>', '```', ''].join('\n');
+}
+
+test('a block Comment pressed over its section\'s open sheet, then moved to the panel, still sends its widget', async ({ page }) => {
+  const name = `block-comments-narrow-${test.info().repeatEachIndex}`;
+  publish(name, doc(1));
+  const errors = watch(page);
+  await page.setViewportSize({ width: 600, height: 900 });
+  await load(page, name);
+  const live = block(page);
+  // The section's chip opens its empty form in the sheet first.
+  await page.locator('details.artifact-comment[data-section="churn"] > summary').click();
+  await expect(page.locator('form.artifact-comment-form textarea[name="text"]:visible')).toBeFocused();
+  await expect(page.locator('.artifact-comment-on')).toHaveCount(0);
+  await live.comment.click();
+  await expect(page.locator('.artifact-comment-on:visible')).toHaveText(WORDS);
+  const field = page.locator('form.artifact-comment-form textarea[name="text"]:visible');
+  await expect(field).toBeFocused();
+  await field.fill(QUESTION);
+
+  // The window widens: the form and its block go to the panel.
+  await page.setViewportSize(WIDE);
+  const churn = panel(page).group('Churn');
+  const form = churn.locator('form.artifact-comment-form');
+  await expect(churn.locator('.artifact-comment-on')).toHaveText(WORDS);
+  await expect(form.locator('textarea[name="text"]')).toHaveValue(QUESTION);
+  const sent = posting(page);
+  await form.getByRole('button', { name: 'Comment', exact: true }).click();
+  expect((await sent).postDataJSON().widget).toEqual({ id: 'churn', hash: await hashOf(page), state: '' });
+  await expect(live.pin).toHaveText('1');
+  expect(errors).toEqual([]);
+});
+
+test('block threads list in their blocks\' order, and an expanded block closes for its Comment', async ({ page }) => {
+  const name = `block-comments-pair-${test.info().repeatEachIndex}`;
+  publish(name, pair());
+  const errors = watch(page);
+  await load(page, name);
+  const churn = panel(page).group('Churn');
+  const form = churn.locator('form.artifact-comment-form');
+  const later = block(page);
+  const earlier = page.locator('figure[data-widget="earlier"]');
+
+  // The later block is commented on first, from its expanded frame.
+  await later.figure.getByRole('button', { name: 'Expand', exact: true }).click();
+  await expect(later.figure).toHaveClass(/artifact-live--expanded/);
+  await later.comment.click();
+  await expect(later.figure).not.toHaveClass(/artifact-live--expanded/);
+  await expect(form.locator('textarea[name="text"]')).toBeFocused();
+  await form.locator('textarea[name="text"]').fill('On the later one');
+  let sent = posting(page);
+  await form.getByRole('button', { name: 'Comment', exact: true }).click();
+  await sent;
+  await expect(churn.locator('.artifact-comments-entry')).toHaveCount(1);
+
+  await earlier.locator('.artifact-live-chrome').getByRole('button', { name: 'Comment', exact: true }).click();
+  await form.locator('textarea[name="text"]').fill('On the earlier one');
+  sent = posting(page);
+  await form.getByRole('button', { name: 'Comment', exact: true }).click();
+  await sent;
+  await expect(churn.locator('.artifact-comments-entry-head .artifact-comments-entry-words'))
+    .toHaveText(['On Earlier block', WORDS]);
+  expect(errors).toEqual([]);
+});
+
+test('a block republished in another section, its own gone, takes its thread with it', async ({ page }) => {
+  const name = `block-comments-moved-${test.info().repeatEachIndex}`;
+  publish(name, moved('Old'));
+  const errors = watch(page);
+  await load(page, name);
+  const live = block(page);
+  const side = panel(page);
+  const form = side.group('Old').locator('form.artifact-comment-form');
+  await live.comment.click();
+  await form.locator('textarea[name="text"]').fill(QUESTION);
+  const sent = posting(page);
+  await form.getByRole('button', { name: 'Comment', exact: true }).click();
+  await sent;
+  await expect(live.pin).toHaveText('1');
+
+  await swap(page, name, moved('New'));
+  const entry = side.group('New').locator('.artifact-comments-entry');
+  await expect(entry).toHaveCount(1);
+  await expect(entry.locator('.artifact-comments-entry-head .artifact-comments-entry-words')).toHaveText(WORDS);
+  await expect(block(page).pin).toHaveText('1');
+  await expect(block(page).pin).toBeVisible();
+
+  await load(page, name);
+  await expect(side.group('New').locator('.artifact-comments-entry')).toHaveCount(1);
+  await expect(block(page).pin).toHaveText('1');
+  expect(errors).toEqual([]);
+});

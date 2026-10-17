@@ -190,6 +190,9 @@ function commentChrome() {
     comment.textContent = "Comment";
     badge.after(comment);
     comment.addEventListener("click", () => {
+      if (figure.classList.contains("artifact-live--expanded")) {
+        figure.querySelector(".artifact-live-expand")?.click();
+      }
       const source = frame.dataset.pausedSource || frame.getAttribute("src") || "";
       const hash = /\.w-([0-9a-f]{12})\.html$/.exec(source)?.[1] || "";
       start({ anchor: { kind: "block", id: figure.dataset.widget, hash, state: "" } });

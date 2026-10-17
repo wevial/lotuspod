@@ -134,8 +134,15 @@ export function threadList(page: Page, shell: Shell, bridge: ThreadListBridge) {
     }
     made.holder.hidden = !show;
     made.toggle.setAttribute("aria-expanded", show ? "true" : "false");
-    // A form folded, however, is no longer on a live block.
-    if (!show && made.box) bridge.unblock(made.box);
+    // A form folded is no longer on a live block, unless it opens again
+    // at once: a popover, the sheet or the panel moving it (a new view, a
+    // new width, a swap) folds it and opens it in the same task.
+    if (!show && made.box) {
+      const box = made.box;
+      queueMicrotask(() => {
+        if (made.holder.hidden && made.box === box) bridge.unblock(box);
+      });
+    }
     tidy();
     if (show) {
       if (bridge.wide()) {
@@ -423,8 +430,11 @@ export function threadList(page: Page, shell: Shell, bridge: ThreadListBridge) {
     switch (anchor.kind) {
       case "passage": return thread.n ? [0, thread.n, 0] : [1, thread.root.id, 0];
       case "block": {
+        // Between the passages around it, in the order of the page's blocks.
+        const frames = page.all("iframe.artifact-widget");
         const frame = frameOf(anchor.id);
-        return frame ? [0, numberBefore(frame) + 0.5, thread.root.id] : [1, thread.root.id, 0];
+        return frame ? [0, numberBefore(frame) + (frames.indexOf(frame) + 1) / (frames.length + 1), thread.root.id]
+          : [1, thread.root.id, 0];
       }
       case "decision": {
         const decision = bridge.decisionOf(thread);

@@ -193,6 +193,10 @@ function commentChrome(): void {
     comment.textContent = "Comment";
     badge.after(comment);
     comment.addEventListener("click", () => {
+      // An expanded block would cover its composer: it closes first.
+      if (figure.classList.contains("artifact-live--expanded")) {
+        figure.querySelector<HTMLButtonElement>(".artifact-live-expand")?.click();
+      }
       // The file the block shows, also while it is paused.
       const source = frame.dataset.pausedSource || frame.getAttribute("src") || "";
       const hash = /\.w-([0-9a-f]{12})\.html$/.exec(source)?.[1] || "";

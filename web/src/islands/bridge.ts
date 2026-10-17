@@ -231,6 +231,8 @@ export interface PlacementBridge extends Omit<ThreadListBridge,
   changed(): HTMLElement;
   author(row: CommentRow): string;
   unreadIn(threads: Thread[]): number;
+  // Whether the page's first read of its threads has finished.
+  settled(): boolean;
 }
 
 // The object narrow.js consumes. It retains ownership of its surfaces and
@@ -313,7 +315,7 @@ export interface ComposerBridge {
 // Chips read live stores and delegate opening to placement.
 export interface ChipsBridge extends Pick<PlacementBridge,
   "boxes" | "decisions" | "shown" | "threadsOf" | "decisionOf" | "resolved" |
-  "rows" | "author" | "agent" | "routed" | "unreadIn"> {
+  "rows" | "author" | "agent" | "routed" | "unreadIn" | "settled"> {
   list: Pick<import("./comments/parts").ThreadList, "latest" | "standing" | "asked" | "plural">;
   chipped(box: HTMLElement): void;
   reach(thread: Thread, opener: HTMLElement | null, read: boolean): void;

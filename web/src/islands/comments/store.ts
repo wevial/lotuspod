@@ -1,5 +1,5 @@
 import type { CommentRow, Decision, Page, Resolution, StartComment, StoreBridge, Thread } from "../bridge";
-import { anchorOf, blockStanding, blockTitle, frameOf } from "./anchor";
+import { anchorOf, blockTitle, frameOf } from "./anchor";
 import type { Passages, Placement, Store } from "./parts";
 import { composers } from "./composer";
 import { passages as makePassages } from "./passages";
@@ -52,6 +52,8 @@ export function store(page: Page, bridge: StoreBridge): Store {
   let last = 0;
   let timer: number | undefined;
   let reading = false;
+  // Until the first read has finished, a chip keeps its served line.
+  let settled = false;
   // A note's thread not read yet (owe), and how many notes were saved:
   // only a read begun after the newest finds its thread.
   let owed = false;
@@ -187,10 +189,23 @@ export function store(page: Page, bridge: StoreBridge): Store {
   // the whole page's once the page has sections.
   function boxFor(root: CommentRow) {
     const anchor = anchorOf(root);
-    if (anchor.kind === "block" && blockStanding(anchor) === "gone") return null;
-    return (root.section !== undefined && sections.get(root.section)) ||
-      (root.section === page.wholePage && sections.get("page")) ||
-      (root.section === "page" && sections.get(page.wholePage)) || null;
+    if (anchor.kind === "block") {
+      // The section the block is in now, which a republish may have moved.
+      const frame = frameOf(anchor.id);
+      return frame ? boxOn(sectionOf(frame)) : null;
+    }
+    return boxOn(root.section);
+  }
+
+  function boxOn(section: string | undefined) {
+    return (section !== undefined && sections.get(section)) ||
+      (section === page.wholePage && sections.get("page")) ||
+      (section === "page" && sections.get(page.wholePage)) || null;
+  }
+
+  // The section a live block's frame is in, else the whole page.
+  function sectionOf(frame: HTMLIFrameElement) {
+    return frame.closest<HTMLElement>(".artifact-section-body")?.dataset.section ?? page.wholePage;
   }
 
   // The line a thread on a section the page no longer has starts with.
@@ -227,8 +242,7 @@ export function store(page: Page, bridge: StoreBridge): Store {
   // A live block's Comment: its section's form opens, on the block.
   const startOn: StartComment = ({ anchor }) => {
     const frame = frameOf(anchor.id);
-    const wrapper = frame?.closest<HTMLElement>(".artifact-section-body");
-    const box = frame && boxFor({ id: 0, section: wrapper ? wrapper.dataset.section : page.wholePage });
+    const box = frame && boxOn(sectionOf(frame));
     if (!frame || !box) return;
     composer.block(forms.get(box)!, anchor, blockTitle(anchor));
     const figure = frame.closest("figure");
@@ -316,6 +330,7 @@ export function store(page: Page, bridge: StoreBridge): Store {
       const response = await fetch(page.commentsURL + "?page=" + encodeURIComponent(name));
       if (response.status === 401) {
         reading = false;
+        settled = true;
         page.settleImageCap(null, page.signedOut);
         signedOut();
         bridge.restore();
@@ -340,6 +355,7 @@ export function store(page: Page, bridge: StoreBridge): Store {
       page.settleImageCap(null, page.noCap);
     }
     reading = false;
+    settled = true;
     refresh();
     bridge.restore();
     if (!linked || relink) {
@@ -464,7 +480,7 @@ export function store(page: Page, bridge: StoreBridge): Store {
         rows, resolved, agent, routed, threadsOf, decisionOf, passages,
         imageWords: page.imageWords, looked: bridge.looked, refresh, failure: composer.failure, json: page.json,
         page: name, sections, showUnread: bridge.showUnread, changed, author, unreadIn: bridge.unreadIn,
-        unblock: box => composer.unblock(forms.get(box)),
+        unblock: box => composer.unblock(forms.get(box)), settled: () => settled,
       });
       panel.arrange();
       page.startComment(startOn);

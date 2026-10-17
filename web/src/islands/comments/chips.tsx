@@ -156,6 +156,8 @@ export function chips(page: Page, bridge: ChipsBridge) {
       decisions.delete(form);
     },
     refresh() {
+      // A line drawn before the threads are read would say there are none.
+      if (!bridge.settled()) return;
       bridge.boxes.forEach(box => {
         const threads = bridge.threadsOf(box);
         paint(box.querySelector("summary")!, "artifact-comment-summary",
