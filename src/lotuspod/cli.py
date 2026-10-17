@@ -1957,26 +1957,37 @@ def live_file(path: str, base: Path | None, line: int) -> str:
 
 def send_live_files(raw: str, base: Path | None) -> str:
     """Inline file fences before transport, retaining other fences verbatim."""
-    lines = re.findall(r'[^\n]*\n|[^\n]+$', normalized(raw))
-    result = []
-    i = 0
-    while i < len(lines):
-        row = lines[i]
-        # Match the converter's fence boundary, including quoted blocks.
-        prefix = re.match(r'^(?: {0,3}> ?)*', row)[0]
-        fence = row[len(prefix):]
-        if not fence.startswith('```'):
-            result.append(row)
+    # Preserve original line endings outside rewritten blocks.
+    lines = re.findall(r'[^\r\n]*(?:\r\n|\r|\n)|[^\r\n]+$', raw)
+    replacements = {}
+
+    def scan(rows: list[str], offset: int = 0) -> None:
+        i = 0
+        while i < len(rows):
+            row = rows[i]
+            # Match _convert: quote runs recurse only outside fences.
+            # Quote markers inside a fence are literal code.
+            if re.match(r'^ {0,3}>', row):
+                start = i
+                inner = []
+                while i < len(rows) and re.match(r'^ {0,3}>', rows[i]):
+                    inner.append(re.sub(r'^ {0,3}> ?', '', rows[i]))
+                    i += 1
+                scan(inner, offset + start)
+                continue
+            if not row.startswith('```'):
+                i += 1
+                continue
+            start = i
             i += 1
-            continue
-        start = i
-        i += 1
-        while i < len(lines) and not re.sub(r'^(?: {0,3}> ?)*', '', lines[i]).startswith('```'):
-            i += 1
-        i = min(i + 1, len(lines))
-        if fence[3:].split()[:2] != ['html', 'live']:
-            result.extend(lines[start:i])
-            continue
+            while i < len(rows) and not rows[i].startswith('```'):
+                i += 1
+            i = min(i + 1, len(rows))
+            if row[3:].split()[:2] == ['html', 'live']:
+                rewrite(row, offset + start, offset + i)
+
+    def rewrite(fence: str, start: int, end: int) -> None:
+        prefix = lines[start][:len(lines[start]) - len(fence)]
         try:
             lexer = shlex.shlex(fence[3:], posix=True)
             lexer.whitespace += ''.join(char for char in set(fence) if char.isspace())
@@ -1987,15 +1998,26 @@ def send_live_files(raw: str, base: Path | None) -> str:
             raise RuntimeError(f'live block at line {start + 1}: {exc}; nothing written') from None
         paths = [word[5:] for word in words[2:] if word.startswith('file=')]
         if not paths:
-            result.extend(lines[start:i])
-            continue
+            return
         if len(paths) != 1:
             raise RuntimeError(f'live block at line {start + 1}, file {paths}: duplicate file option; nothing written')
         source = live_file(paths[0], base, start + 1)
         info = shlex.join([word for word in words if not word.startswith('file=')])
-        result.append(prefix + '```' + info + '\n')
-        result.extend(prefix + line + '\n' for line in normalized(source).removesuffix('\n').split('\n'))
-        result.append(prefix + '```\n')
+        block = [prefix + '```' + info + '\n']
+        block.extend(prefix + line + '\n' for line in normalized(source).removesuffix('\n').split('\n'))
+        block.append(prefix + '```\n')
+        replacements[start] = (end, ''.join(block))
+
+    scan(lines)
+    result = []
+    i = 0
+    while i < len(lines):
+        if i in replacements:
+            i, block = replacements[i]
+            result.append(block)
+        else:
+            result.append(lines[i])
+            i += 1
     return ''.join(result)
 
 

@@ -104,6 +104,46 @@ class LivePages(unittest.TestCase):
             self.assertIn('Notes', text)
             self.assertIn('Keep this prose.', text)
 
+    def test_literal_quote_markers_do_not_close_fences(self):
+        for prefix in ['', '> ', '> > ']:
+            with self.subTest(prefix=prefix):
+                raw = '# Example\n\n' + ''.join(prefix + row + '\n' for row in [
+                    '```text', '> ```', '```html live file=missing.html', '```'])
+                source = self.tmp / 'example.md'
+                source.write_bytes(raw.encode())
+                done = self.publish(source, '--local', '--out-dir', str(self.out))
+                self.assertEqual(done.returncode, 0, done.stderr)
+                self.assertEqual((self.out / 'example.md').read_bytes(), raw.encode())
+
+    def test_unclosed_quoted_fence_stops_at_quote_boundary(self):
+        (self.tmp / 'panel.html').write_text('<p>Panel</p>')
+        source = self.tmp / 'boundary.md'
+        source.write_text('# Boundary\n> ```text\n> literal\n'
+                          '```html live file=panel.html\n```\n')
+        done = self.publish(source, '--local', '--out-dir', str(self.out))
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertIn('<p>Panel</p>', (self.out / 'boundary.md').read_text())
+        self.assertNotIn('file=', (self.out / 'boundary.md').read_text())
+
+    def test_source_bytes_survive_local_and_remote_publish(self):
+        (self.tmp / 'panel.html').write_text('<p>Panel</p>')
+        for remote in [False, True]:
+            for block in [False, True]:
+                with self.subTest(remote=remote, block=block):
+                    before = b'# Pond\r\n\r\nStill water.\r\n'
+                    after = b'\r\n## Notes\rLast line without newline'
+                    raw = before
+                    expected = before
+                    if block:
+                        raw += b'```html live file=panel.html\r\n```\r\n' + after
+                        expected += b'```html live\n<p>Panel</p>\n```\n' + after
+                    source = self.tmp / 'pond.md'
+                    source.write_bytes(raw)
+                    options = [] if remote else ['--local', '--out-dir', str(self.out)]
+                    done = self.publish(source, *options)
+                    self.assertEqual(done.returncode, 0, done.stderr)
+                    self.assertEqual((self.out / 'pond.md').read_bytes(), expected)
+
     def test_explicit_source_wins_over_base_and_svg_title(self):
         source = self.source()
         source.write_text(DOCUMENT.replace('</body>', '<svg><title>Pump icon</title></svg></body>'))
