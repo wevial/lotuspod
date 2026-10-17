@@ -78,6 +78,14 @@
   color: var(--color-pale-lavender);
 }
 
+/* The live block a question is about, when its table follows one. */
+.artifact-body .artifact-decision-about {
+  color: var(--color-lavender);
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  margin: 0 0 0.3em;
+}
+
 .artifact-decision-options {
   display: grid;
   gap: 0.1rem;

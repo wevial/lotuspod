@@ -362,6 +362,42 @@ def render(body: str, name: str) -> tuple[str, dict[str, bytes], list[str]]:
     return body, files, warnings
 
 
+class AboutForms(HTMLParser):
+    """The decision forms about a live block (lotuspod.decisions), in page
+    order: each data-about id to its forms' data-question ids."""
+
+    def __init__(self, text: str):
+        super().__init__()
+        self.found: dict[str, list[str]] = {}
+        if 'data-about=' in text:
+            self.feed(text)
+            self.close()
+
+    def handle_starttag(self, tag, attrs):
+        attrs = dict(attrs)
+        if (tag == 'form' and 'artifact-decision' in (attrs.get('class') or '').split()
+                and attrs.get('data-about') and attrs.get('data-question')):
+            self.found.setdefault(attrs['data-about'], []).append(attrs['data-question'])
+
+
+def link_decisions(body: str) -> str:
+    """The body with a link in the chrome of each live block that decision
+    forms are about: "N decisions", to the first of them as #question=ID.
+    Run after lotuspod.decisions, on the figures render() drew."""
+    for ident, questions in AboutForms(body).found.items():
+        head = f'<figure class="artifact-live" data-widget="{html.escape(ident)}"><div class="artifact-live-chrome">'
+        start = body.find(head)
+        if start < 0:
+            continue
+        # The chrome holds no div: its first end tag closes it.
+        end = body.index('</div>', start + len(head))
+        count = len(questions)
+        link = (f'<a class="artifact-live-decisions" href="#question={html.escape(questions[0])}">'
+                f'{count} {"decision" if count == 1 else "decisions"}</a>')
+        body = body[:end] + link + body[end:]
+    return body
+
+
 def without_templates(text: str) -> str:
     """Hide widget markup from source readers, preserving offsets and lines."""
     for start, end, _, _, _ in reversed(Templates(text).blocks):

@@ -9,7 +9,9 @@
 // on a swap, only a form the swap brought in.
 // The title bar ends in "Next open: QUESTION ↓", which jumps to the next
 // open question, and "N to answer · Respond", which opens the Respond
-// panel: every question under its section's heading, its options as
+// panel: every question under its section's heading (one whose form is
+// about a live block, data-about, under the block's title, right after
+// its section's group), its options as
 // pressed buttons (a checklist's as checkboxes), its state, and one Save
 // that posts each answer whose shown choice or note is not stored, in page
 // order. A page whose answers could not be read gets no sheet, and nor
@@ -168,7 +170,8 @@ function jump(form: HTMLFormElement): void {
 }
 
 interface Group {
-  // The heading's id, "" for the questions before the first h2.
+  // The heading's id, "" for the questions before the first h2; for a
+  // live block's group, "about:" and the block's id.
   key: string;
   title: string;
   questions: Question[];
@@ -179,7 +182,8 @@ interface SheetProps {
   the: Answering;
   questions: Question[];
   // One group per section asking a question, in page order, under its
-  // title; a question before the first h2 is under the page's title.
+  // title; a question before the first h2 is under the page's title. The
+  // questions about a live block are under its title, after their section's.
   groups: Group[];
   marks: Map<HTMLElement, Marks>;
 }
@@ -444,7 +448,8 @@ function Sheet({ page, the, questions, groups, marks }: SheetProps) {
 }
 
 // Each question in page order, under the nearest h2 before its form, and
-// one group per h2 asking one.
+// one group per h2 asking one, each followed by one per live block its
+// questions are about. The heading stays the h2's, which the marks count.
 function questionsOf(page: Page, the: Answering,
   asks: (form: HTMLFormElement) => boolean): { questions: Question[]; groups: Group[] } {
   const headings = all<HTMLElement>("h2", document.querySelector("section.artifact-body")!);
@@ -466,21 +471,42 @@ function questionsOf(page: Page, the: Answering,
     return question;
   });
 
-  const groups = new Map<HTMLElement | null, Group>();
+  const sections = new Map<HTMLElement | null, { own: Group; blocks: Map<string, Group> }>();
   for (const question of questions) {
-    let group = groups.get(question.heading);
-    if (!group) {
-      group = {
-        key: question.heading?.id ?? "",
-        title: question.heading ? headingTitle(question.heading) :
-          words(document.querySelector(".artifact-title")),
-        questions: [],
+    let section = sections.get(question.heading);
+    if (!section) {
+      section = {
+        own: {
+          key: question.heading?.id ?? "",
+          title: question.heading ? headingTitle(question.heading) :
+            words(document.querySelector(".artifact-title")),
+          questions: [],
+        },
+        blocks: new Map(),
       };
-      groups.set(question.heading, group);
+      sections.set(question.heading, section);
     }
-    group.questions.push(question);
+    const about = question.form.dataset.about;
+    if (!about) {
+      section.own.questions.push(question);
+      continue;
+    }
+    let block = section.blocks.get(about);
+    if (!block) {
+      const figure = document.querySelector(`figure.artifact-live[data-widget="${CSS.escape(about)}"]`);
+      block = { key: "about:" + about, title: words(figure?.querySelector(".artifact-live-title") ?? null) || about, questions: [] };
+      section.blocks.set(about, block);
+    }
+    block.questions.push(question);
   }
-  return { questions, groups: Array.from(groups.values()) };
+  const groups: Group[] = [];
+  for (const { own, blocks } of sections.values()) {
+    if (own.questions.length) {
+      groups.push(own);
+    }
+    groups.push(...blocks.values());
+  }
+  return { questions, groups };
 }
 
 // The marks drawn so far, for their keys.
@@ -576,20 +602,39 @@ function draw(page: Page, the: Answering, tools: HTMLElement, marks: Map<HTMLEle
 // A link followed before the answers are drawn is no reload's fragment,
 // and one after waits for every other hashchange listener, such as the
 // versions view's (js/versions.js), which may still hide the text.
+// A live block's "N decisions" (lotuspod.widgets) is such a link to the
+// first question about it, which then also takes the focus, as jump() gives
+// it, pressed again once it is the address too.
 export function reviewSheet(page: Page): void {
   const the = page.answering;
   if (!the || !page.forms.length) {
     return;
   }
+  // The question a block's link was last pressed for, until it is followed.
+  let focusing: string | null = null;
   function toQuestion(first: boolean): void {
     const id = page.linkedTo("question", first);
     const form = page.forms.find((each) => each.dataset.question === id);
+    const focus = !first && id !== null && id === focusing;
+    focusing = null;
     if (form) {
-      place(form);
+      (focus ? jump : place)(form);
     }
   }
   let drawnAnswers = false;
   let followed = false;
+  document.addEventListener("click", (event) => {
+    const link = event.target instanceof Element ? event.target.closest("a.artifact-live-decisions") : null;
+    if (!link || event.defaultPrevented) {
+      return;
+    }
+    const href = link.getAttribute("href") ?? "";
+    focusing = href.startsWith("#question=") ? decodeURIComponent(href.slice("#question=".length)) : null;
+    if (href === location.hash && drawnAnswers) {
+      event.preventDefault();
+      toQuestion(false);
+    }
+  });
   window.addEventListener("hashchange", () => {
     followed = true;
     if (drawnAnswers) {

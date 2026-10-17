@@ -486,6 +486,41 @@ class FormTests(DecisionsTestCase):
         self.assertEqual(first.label("maybe"), "maybe")
 
 
+# A live block right before a decisions table, which is then about it.
+LIVE_BLOCK = """\
+```html live title="Merge churn by worker count"
+<p>A chart.</p>
+```
+"""
+
+
+class AboutBlockTests(DecisionsTestCase):
+    def test_a_table_about_a_block_asks_as_it_does_without_it(self):
+        about = read(self.render_markdown("plan", PLAN.replace(TABLE, LIVE_BLOCK + "\n" + TABLE)))
+        alone = read(self.render_markdown("plan", PLAN))
+        self.assertEqual([form["attrs"].get("data-about") for form in about.forms],
+                         ["merge-churn-by-worker-count"] * 2)
+        for key in ("data-question", "data-version", "data-default"):
+            with self.subTest(key=key):
+                self.assertEqual([form["attrs"][key] for form in about.forms],
+                                 [form["attrs"][key] for form in alone.forms])
+
+    def test_the_about_line_is_not_read_back_as_context(self):
+        about = decisions.read_forms(
+            self.render_markdown("plan", PLAN.replace(TABLE, LIVE_BLOCK + "\n" + TABLE)))
+        alone = decisions.read_forms(self.render_markdown("plan", PLAN))
+        self.assertEqual(about, alone)
+        self.assertEqual([form.context for form in about.values()],
+                         [form.context for form in alone.values()])
+
+    def test_a_body_without_a_live_block_renders_as_before(self):
+        body = (FIXTURES / "one_table.body.html").read_text(encoding="utf-8")
+        rendered, _ = decisions.render_decisions(body, "plan")
+        self.assertNotIn("data-about", rendered)
+        self.assertEqual(rendered.encode("utf-8"),
+                         (FIXTURES / "one_table.expected.html").read_bytes())
+
+
 # Row 1 has a default among its options, row 2 none, and row 3, in a table
 # with no Options column, a default its "Accept the default" accepts.
 DEFAULTS = """\
