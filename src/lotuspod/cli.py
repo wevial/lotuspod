@@ -1904,16 +1904,23 @@ class _DocumentTitle(HTMLParser):
     def __init__(self, source: str):
         super().__init__()
         self.active = False
+        self.done = False
+        self.foreign = 0
         self.title = ''
         self.feed(source)
 
     def handle_starttag(self, tag, attrs):
-        if tag == 'title':
+        if tag in {'svg', 'math'}:
+            self.foreign += 1
+        if tag == 'title' and not self.foreign and not self.done:
             self.active = True
 
     def handle_endtag(self, tag):
-        if tag == 'title':
+        if tag in {'svg', 'math'}:
+            self.foreign = max(0, self.foreign - 1)
+        if tag == 'title' and self.active:
             self.active = False
+            self.done = True
 
     def handle_data(self, data):
         if self.active:
@@ -1941,7 +1948,7 @@ def live_file(path: str, base: Path | None, line: int) -> str:
             source = data.decode('utf-8')
         except UnicodeDecodeError:
             raise ValueError('not UTF-8') from None
-        if any(row.startswith('```') for row in normalized(source).splitlines()):
+        if any(row.startswith('```') for row in normalized(source).split('\n')):
             raise ValueError('contains a line starting with three backticks')
         return source
     except (OSError, ValueError) as exc:
@@ -1950,7 +1957,7 @@ def live_file(path: str, base: Path | None, line: int) -> str:
 
 def send_live_files(raw: str, base: Path | None) -> str:
     """Inline file fences before transport, retaining other fences verbatim."""
-    lines = raw.splitlines(keepends=True)
+    lines = re.findall(r'[^\n]*\n|[^\n]+$', normalized(raw))
     result = []
     i = 0
     while i < len(lines):
@@ -1964,7 +1971,7 @@ def send_live_files(raw: str, base: Path | None) -> str:
             continue
         start = i
         i += 1
-        while i < len(lines) and not lines[i][len(prefix):].startswith('```'):
+        while i < len(lines) and not re.sub(r'^(?: {0,3}> ?)*', '', lines[i]).startswith('```'):
             i += 1
         i = min(i + 1, len(lines))
         if fence[3:].split()[:2] != ['html', 'live']:
@@ -1987,7 +1994,7 @@ def send_live_files(raw: str, base: Path | None) -> str:
         source = live_file(paths[0], base, start + 1)
         info = shlex.join([word for word in words if not word.startswith('file=')])
         result.append(prefix + '```' + info + '\n')
-        result.extend(prefix + line + '\n' for line in normalized(source).splitlines())
+        result.extend(prefix + line + '\n' for line in normalized(source).removesuffix('\n').split('\n'))
         result.append(prefix + '```\n')
     return ''.join(result)
 
@@ -2003,10 +2010,12 @@ def prepare_publish(args: argparse.Namespace, fmt: str, name: str, raw: str,
         if fmt != 'html' or args.source == '-':
             raise RuntimeError('--live requires an HTML file; nothing written')
         filename = Path(args.source).name
-        source = live_file(filename, base, 3)
-        title = args.title if args.title is not None else ' '.join(_DocumentTitle(source).title.split()) or name
+        source_base_dir = Path(args.source).parent
+        source = live_file(filename, source_base_dir, 3)
+        document_title = ' '.join(_DocumentTitle(source).title.split()) or name
+        title = ' '.join((args.title if args.title is not None else document_title).split())
         raw = '# ' + title + '\n\n```html live file=' + shlex.quote(filename) + ' height=full title=' + shlex.quote(title) + '\n```\n'
-        raw = send_live_files(raw, base)
+        raw = send_live_files(raw, source_base_dir)
         images = {}
         if args.notes:
             notes = Path(args.notes)

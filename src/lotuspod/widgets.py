@@ -171,6 +171,27 @@ class DocumentHead(HTMLParser):
         else:
             self.started = True
 
+    def handle_data(self, data):
+        # Only a BOM at byte zero is an encoding signature. Elsewhere it
+        # is body text, just like non-ASCII whitespace.
+        if self.getpos() == (1, 0):
+            data = data.removeprefix('\ufeff')
+        if data.strip(' \t\r\n\f'):
+            self.started = True
+
+    def handle_endtag(self, tag):
+        self.started = True
+
+    def handle_decl(self, decl):
+        if not decl.lower().startswith('doctype '):
+            self.started = True
+
+    def unknown_decl(self, data):
+        self.started = True
+
+    def handle_pi(self, data):
+        self.started = True
+
 
 def render(body: str, name: str) -> tuple[str, dict[str, bytes], list[str]]:
     # Prepare every byte before the caller writes anything.
@@ -196,9 +217,10 @@ def render(body: str, name: str) -> tuple[str, dict[str, bytes], list[str]]:
         if ident in ids:
             fail('duplicate id')
         ids.add(ident)
-        size = len(source.encode('utf-8'))
+        full = bool(re.match(r'\ufeff?[ \t\r\n\f]*(?:<!doctype\b|<html\b)', source, re.IGNORECASE))
+        # The closing fence needs a newline separator outside the file budget.
+        size = len((source.removesuffix('\n') if full else source).encode('utf-8'))
         total += size
-        full = bool(re.match(r'\s*(?:<!doctype\b|<html\b)', source, re.IGNORECASE))
         if size > (2 * 1024 * 1024 if full else 256 * 1024):
             fail('source exceeds 2 MB' if full else 'source exceeds 256 KB')
         if total > 2 * 1024 * 1024:
@@ -230,7 +252,7 @@ def render(body: str, name: str) -> tuple[str, dict[str, bytes], list[str]]:
             if point is None:
                 point = structure.html
                 if point is None:
-                    declaration = re.match(r'\s*<!doctype[^>]*>', source, re.IGNORECASE)
+                    declaration = re.match(r'\ufeff?[ \t\r\n\f]*<!doctype[^>]*>', source, re.IGNORECASE)
                     point = declaration.end() if declaration else 0
                 head = '<head>' + head + '</head>'
             document = source[:point] + head + source[point:]

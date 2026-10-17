@@ -26,10 +26,10 @@ Confirm the overnight schedule with the field team.
 | --- | --- | --- |
 | D1 | Run overnight? | Yes / No |
 `;
-function publish(name: string, text?: string) {
+function publish(name: string, text?: string, source = document) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'live-pages-'));
   try {
-    fs.writeFileSync(path.join(dir, name + '.html'), document);
+    fs.writeFileSync(path.join(dir, name + '.html'), source);
     fs.writeFileSync(path.join(dir, 'notes.md'), text ?? '');
     execFileSync(env.LOTUSPOD_TEST_PYTHON!, ['-m', 'lotuspod', 'publish', path.join(dir, name + '.html'), '--live', '--local', '--out-dir', env.LOTUSPOD_TEST_OUT!, '--owner', 'hermes', '--credential', env.LOTUSPOD_TEST_CREDENTIAL_HERMES!, '--comments', ...(text === undefined ? [] : ['--notes', path.join(dir, 'notes.md')])], {env: {...env, PYTHONPATH: path.resolve(__dirname, '../../src')}});
   } finally { fs.rmSync(dir, {recursive: true, force: true}); }
@@ -72,4 +72,26 @@ test('whole document runs below page chrome, comments post, notes swap preserves
   expect(await frame.evaluate(node => node === (window as any).keptFrame)).toBe(true);
   await expect(inner.locator('#status')).toHaveText('Running · 1');
   expect(errors).toEqual([]);
+});
+
+
+test('a late head cannot bypass the widget policy', async ({page}) => {
+  const requests: string[] = [];
+  // Playwright emits request events even for CSP-blocked requests. Routing
+  // observes only requests that actually reach the network layer.
+  await page.route('https://policy-probe.invalid/**', route => {
+    requests.push(route.request().url());
+    return route.abort();
+  });
+  const blocked = page.waitForEvent('requestfailed', request => request.url().includes('policy-probe.invalid'));
+  publish('live-policy', undefined, `<!doctype html><html>text<head><title>Policy probe</title></head><body>
+    <img src="https://policy-probe.invalid/image" onerror="document.body.dataset.escaped='yes'">
+    <button onclick="document.body.dataset.escaped='yes'">Probe</button></body></html>`);
+  await page.goto('/live-policy.html?standalone');
+  const inner = page.frameLocator('iframe.artifact-widget');
+  await inner.getByRole('button', {name: 'Probe'}).click();
+  await expect(inner.locator('body')).not.toHaveAttribute('data-escaped', 'yes');
+  expect(await inner.locator('head > :first-child').getAttribute('http-equiv')).toBe('Content-Security-Policy');
+  expect((await blocked).failure()?.errorText).toMatch(/^(?:csp|net::ERR_BLOCKED_BY_CSP)$/);
+  expect(requests).toEqual([]);
 });
