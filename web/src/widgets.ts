@@ -4,7 +4,8 @@ interface WidgetState {
   ready: boolean;
   errors: number;
   lastError: string;
-  // The widget's latest lotuspod.state() label; "" before the first.
+  // The widget's latest lotuspod.state() label; "" before the first, and
+  // again as each new document's bridge opens with "".
   label: string;
   accepted: number[];
   height?: number;
@@ -146,7 +147,7 @@ function installWidgetBridge(): void {
         break;
       case "lotuspod:state":
         if (keys !== "label,type" || typeof data.label !== "string" || data.label.length > 80 ||
-            /[\u0000-\u001f\u007f-\u009f]/.test(data.label)) return;
+            !data.label.isWellFormed() || /[\u0000-\u001f\u007f-\u009f]/.test(data.label)) return;
         kind = "state";
         break;
       case "lotuspod:ready":
@@ -178,7 +179,11 @@ function installWidgetBridge(): void {
     }
     const message = kind === "error" ? data.message as string : kind === "state" ? data.label as string : "";
     if (kind === "ready") state.ready = true;
-    if (kind === "state") state.label = message;
+    if (kind === "state") {
+      // The same label again, such as each new document's "", changes nothing.
+      if (state.label === message) return;
+      state.label = message;
+    }
     if (kind === "error") {
       state.errors++;
       state.lastError = message;

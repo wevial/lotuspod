@@ -109,8 +109,10 @@ class WidgetTests(TempDirTestCase):
         scripts = cli.collect_scripts(document).inline
         bridge = scripts[0]
         self.assertEqual(bridge, (widgets.THEME / 'widget-frame.js').read_text())
-        self.assertIn('window.lotuspod = {state: function (label) {', bridge)
-        self.assertIn('post({type: "lotuspod:state", label: String(label).slice(0, 80)});', bridge)
+        self.assertIn('window.lotuspod = {state: state};', bridge)
+        self.assertIn('post({type: "lotuspod:state", label: String(label).slice(0, 80).replace(/[\\uD800-\\uDBFF]$/, "")});', bridge)
+        # Each new document opens with no state, so a reload keeps none.
+        self.assertIn('window.lotuspod = {state: state};\n  state("");', bridge)
         self.assertEqual(scripts[1], 'lotuspod.state("at 6 workers");')
         hashes = directives(read_page(document).policies[0])['script-src']
         self.assertEqual(hashes, [cli.script_hash(script) for script in scripts])

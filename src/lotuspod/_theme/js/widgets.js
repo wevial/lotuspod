@@ -137,7 +137,7 @@ function installWidgetBridge() {
         kind = "error";
         break;
       case "lotuspod:state":
-        if (keys !== "label,type" || typeof data.label !== "string" || data.label.length > 80 || /[\u0000-\u001f\u007f-\u009f]/.test(data.label))
+        if (keys !== "label,type" || typeof data.label !== "string" || data.label.length > 80 || !data.label.isWellFormed() || /[\u0000-\u001f\u007f-\u009f]/.test(data.label))
           return;
         kind = "state";
         break;
@@ -177,8 +177,11 @@ function installWidgetBridge() {
     const message = kind === "error" ? data.message : kind === "state" ? data.label : "";
     if (kind === "ready")
       state.ready = true;
-    if (kind === "state")
+    if (kind === "state") {
+      if (state.label === message)
+        return;
       state.label = message;
+    }
     if (kind === "error") {
       state.errors++;
       state.lastError = message;

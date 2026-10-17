@@ -8,7 +8,7 @@ import { expect, test, type Page, type Request } from '@playwright/test';
 // its own as hermes on the capture fixture's site with a real `lotuspod
 // publish`: its first section holds the block "churn", whose slider calls
 // lotuspod.state() as it moves. The chrome shows the label, refuses what the
-// bridge's rules refuse, and forgets it across Pause and Resume; a comment
+// bridge's rules refuse, and forgets it across Pause and Resume and a reload; a comment
 // started from the block keeps the label it had then, and hermes's real
 // `lotuspod comments pull` says it. The run shares one database, so each
 // repeat publishes a page of its own name.
@@ -156,5 +156,30 @@ test('a widget names where the reader is, the chrome shows it, and a comment fro
   await slider.fill('4');
   await expect(where).toHaveText('at 4 workers');
   await expect(where).toBeVisible();
+
+  // A label cut to 80 characters keeps a surrogate pair whole, and the page
+  // drops a label holding half of one, which the route would refuse.
+  await inner.locator('body').evaluate(() => (window as any).lotuspod.state('x'.repeat(79) + '\u{1F408}'));
+  await expect(where).toHaveText('x'.repeat(79));
+  await page.evaluate(() => {
+    (window as any).flushed = new Promise<void>((resolve) => window.addEventListener('message', (event) => {
+      if (event.data && event.data.type === 'check:flushed') resolve();
+    }));
+  });
+  await inner.locator('body').evaluate(() => {
+    parent.postMessage({ type: 'lotuspod:state', label: 'at \uD83D' }, '*');
+    parent.postMessage({ type: 'check:flushed' }, '*');
+  });
+  await page.evaluate(() => (window as any).flushed);
+  await expect(where).toHaveText('x'.repeat(79));
+
+  // The frame reloads: the new document names no state until its widget does.
+  await slider.fill('6');
+  await expect(where).toHaveText('at 6 workers');
+  await inner.locator('body').evaluate(() => location.reload());
+  await expect(where).toBeHidden();
+  await expect(slider).toHaveValue('1');
+  await slider.fill('5');
+  await expect(where).toHaveText('at 5 workers');
   expect(errors).toEqual([]);
 });
