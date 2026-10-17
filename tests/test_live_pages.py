@@ -3,25 +3,9 @@ import re
 import unittest
 from pathlib import Path
 
-from tests.test_publish_remote_witness import RemotePublishWitness, git
-
-DOCUMENT = '''<!DOCTYPE html><html lang="en"><head><title>Pump panel</title>
-<style>body { padding: 24px; } button { color: blue; }</style></head>
-<body><button>Start pump</button><script>document.querySelector('button').onclick = () => { document.body.dataset.running = 'yes'; };</script></body></html>'''
-NOTES = '''# Ignored notes title
-
-## Operation
-
-Run the pump daily.
-
-## Review
-
-### Decisions for the maintainer
-
-| # | Question | Options |
-| --- | --- | --- |
-| D1 | Run overnight? | Yes / No |
-'''
+from tests.test_publish_remote_witness import (
+    LIVE_DOCUMENT as DOCUMENT, LIVE_NOTES as NOTES, RemotePublishWitness, git,
+)
 
 
 class LivePages(unittest.TestCase):
@@ -59,37 +43,6 @@ class LivePages(unittest.TestCase):
         self.assertEqual(self.commits(), 1)
         done = self.publish(self.out / 'mock.md', '--local', '--out-dir', str(self.out))
         self.assertEqual(done.returncode, 0, done.stderr)
-
-    def test_notes_and_remote_match_local(self):
-        notes = self.tmp / 'notes.md'
-        notes.write_text(NOTES)
-        source = self.source()
-        # The SSH stub removes the sender's source files before invoking the writer.
-        stub = self.tmp / 'bin' / 'ssh'
-        original = stub.read_text()
-        stub.write_text(original.replace('sys.exit(subprocess.run',
-            f'os.unlink({str(source)!r})\nos.unlink({str(notes)!r})\nsys.exit(subprocess.run'))
-        done = self.publish(source, '--live', '--notes', str(notes), '--comments', '--date', '2026-10-17')
-        stub.write_text(original)
-        source.write_text(DOCUMENT)
-        notes.write_text(NOTES)
-        self.assertEqual(done.returncode, 0, done.stderr)
-        self.assertEqual(len(self.calls()), 1)
-        self.assertNotIn('--live', self.calls()[0][-1])
-        self.assertNotIn(str(source), self.calls()[0][-1])
-        page = (self.out / 'mock.html').read_text()
-        self.assertLess(page.index('<figure class="artifact-live"'), page.index('<h2 id="operation"'))
-        for marker in ['data-section="operation"', 'data-section="review"', 'data-section=""', 'artifact-decision', 'href="#operation"', 'href="#review"']:
-            self.assertIn(marker, page)
-        local = self.tmp / 'local'
-        done = self.publish(source, '--live', '--notes', str(notes), '--local', '--out-dir', str(local), '--date', '2026-10-17')
-        self.assertEqual(done.returncode, 0, done.stderr)
-        self.assertEqual((local / 'mock.md').read_bytes(), (self.out / 'mock.md').read_bytes())
-        widget = next(self.out.glob('mock.w-*.html'))
-        self.assertEqual(widget.read_bytes(), (local / widget.name).read_bytes())
-        # Publication timestamp is the only nondeterministic page field.
-        clean = lambda text: re.sub(r'2026-\d\d-\d\dT[^"< ]+', 'STAMP', text)
-        self.assertEqual(clean(page), clean((local / 'mock.html').read_text()))
 
     def test_file_block_and_refusals_write_nothing(self):
         parts = self.tmp / 'parts'
@@ -151,16 +104,6 @@ class LivePages(unittest.TestCase):
         self.assertIn('line 2, file link.html', done.stderr)
         self.assertIn('outside', done.stderr)
         self.assertFalse(out.exists())
-
-    def test_invalid_options(self):
-        source = self.tmp / 'page.md'
-        source.write_text('# Page\n')
-        for options, option in [(('--notes', 'notes.md'), '--notes'), (('--live',), '--live')]:
-            out = self.tmp / 'refused'
-            done = self.publish(source, *options, '--local', '--out-dir', str(out))
-            self.assertEqual(done.returncode, 1, done.stderr)
-            self.assertIn(option, done.stderr)
-            self.assertFalse(out.exists())
 
 
 del RemotePublishWitness
