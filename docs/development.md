@@ -78,12 +78,12 @@ truth: the sheet draws from them on each form's `input`, `change` and
 `answering.save()`, one question at a time in page order. Preact holds only
 the sheet's own state: the panel open, a Save under way, what it did, and
 the question Next open last jumped to, which a swap keeps. The bundle, Preact with it, stays at most
-32,000 bytes gzipped; it uses plain Preact and its hooks, not
-`preact/compat`.
+37,000 bytes gzipped; it uses Preact and its hooks, with `createPortal` from
+`preact/compat` for independently owned DOM targets.
 
 The comments island (`web/src/islands/comments/index.ts`) mounts after the
 review sheet and starts the bridge's typed `commenting` object, null on pages
-without comment boxes. It supplies the placement, thread and composer factories declared in `parts.ts`.
+without comment boxes. It supplies the placement, thread, composer and passages factories declared in `parts.ts`.
 Placement creates the shell, thread-list and chips parts.
 The shell draws the panel frame, rail, tally and start controls. The thread-list
 part draws section groups, changed-section threads, entry heads and resolution
@@ -119,7 +119,15 @@ Its bridge supplies attachments and status words, the current revision and box,
 and the page's thread and placement callbacks. Reply siblings use a portal;
 passage holders are movable render roots. Textareas remain uncontrolled so drafts
 can read and restore their values directly. Section and passage posts expose
-their pending promises to swaps; passage marks and opening remain page-owned.
+their pending promises to swaps.
+The passages part (`comments/passages.tsx`) owns selection validation, the Comment
+pill and its shortcut, passage highlights and numbering, hover lighting, and
+finding words again after a swap. It reads passage quotes through the typed anchor.
+The bridge supplies the text-model helpers and passage constants; highlights wrap
+and unwrap author text imperatively, while the pill alone renders through a portal
+into the body. The composer part draws the movable passage composer. Drafts and
+swaps remain in comments.js and call the part's writing, reopen, swept, moved and
+writes handles; moved still runs before swaps replace the boxes.
 `comments/anchor.ts` interprets each first comment as a page, section, passage or
 decision anchor. Mark, words and rank each exhaustively handle that union, so a
 future kind must be handled in all three places and in placement's exhaustive

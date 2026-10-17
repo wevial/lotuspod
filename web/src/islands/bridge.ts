@@ -103,6 +103,8 @@ declare const STALE_PAGE: string;
 declare const STALE_SECTION: string;
 
 export const page = Object.freeze({
+  element, textModel, offsetOf, pieces, locate, wrap, unwrap,
+  apart: APART, maxExact: MAX_EXACT, context: CONTEXT, still: STILL, coarse: COARSE,
   attachments, json,
   signedOut: SIGNED_OUT, stalePage: STALE_PAGE, staleSection: STALE_SECTION,
   commentMarkdown, commentImages, when,
@@ -153,6 +155,10 @@ export interface Thread {
   box: HTMLElement | null;
   node: HTMLDivElement;
   n: number;
+  spot?: TextSpot | null;
+  number?: HTMLButtonElement | null;
+  head?: HTMLElement;
+  headKey?: string;
   marks: HTMLElement[];
   lit: boolean;
   entry: import("./comments/parts").Entry | null;
@@ -172,13 +178,7 @@ export interface ThreadListBridge {
   routed(row: CommentRow): string;
   threadsOf(box: HTMLElement): Thread[];
   decisionOf(thread: Thread): Decision | null;
-  passages: {
-    said(thread: Thread): HTMLElement[];
-    key(thread: Thread): string;
-    point(thread: Thread | null, where: "entry"): void;
-    detached(thread: Thread): boolean;
-    shine(thread: Thread): void;
-  };
+  passages: Pick<import("./comments/parts").Passages, "said" | "key" | "point" | "detached" | "shine">;
   imageWords(row: CommentRow): string;
   looked(thread: Thread, viewed: boolean): void;
   refresh(): void;
@@ -195,10 +195,7 @@ export interface ThreadListBridge {
 export interface PlacementBridge extends Omit<ThreadListBridge,
   "wide" | "moving" | "holds" | "uncover" | "bring" | "passages"> {
   sections: Map<string, HTMLElement>;
-  passages: ThreadListBridge["passages"] & {
-    place(): void;
-    cancel(mine: import("./comments/parts").Passage): void;
-  };
+  passages: ThreadListBridge["passages"] & Pick<import("./comments/parts").Passages, "place" | "cancel">;
   showUnread(): void;
   changed(): HTMLElement;
   author(row: CommentRow): string;
@@ -271,3 +268,32 @@ export interface ChipsBridge extends Pick<PlacementBridge,
   chipped(box: HTMLElement): void;
   reach(thread: Thread, opener: HTMLElement | null, read: boolean): void;
 }
+
+export type PassageQuote = NonNullable<CommentRow["quote"]>;
+export interface TextSpot { start: number; end: number }
+export interface TextModel { text: string; nodes: Text[]; spots: Map<Node, Int32Array> }
+declare function textModel(root: HTMLElement | null): TextModel;
+declare function offsetOf(model: TextModel, container: Node, offset: number): number;
+declare function pieces(model: TextModel, start: number, end: number): { node: Text; from: number; to: number }[];
+declare function locate(model: TextModel, quote: PassageQuote): TextSpot | null;
+declare function wrap(root: HTMLElement | null, start: number, end: number, make: () => HTMLElement): HTMLElement[];
+declare function unwrap(wrappers: HTMLElement[]): void;
+declare const APART: string;
+declare const MAX_EXACT: number;
+declare const CONTEXT: number;
+declare const STILL: number;
+declare const COARSE: string;
+
+export interface PassagesBridge {
+  article: HTMLElement | null;
+  boxes: HTMLElement[];
+  shown: Map<number, Thread>;
+  resolved(thread: Thread): boolean;
+  revision(): string | null;
+  attached: Map<HTMLFormElement, Attachments>;
+  composer: Pick<ReturnType<typeof import('./comments/composer').composers>, 'passage'>;
+  placement(): import('./comments/parts').Placement;
+}
+
+// shared.js: the imperative DOM helper, also used by page-owned UI.
+declare function element<K extends keyof HTMLElementTagNameMap>(tag: K, className: string, text?: string): HTMLElementTagNameMap[K];
