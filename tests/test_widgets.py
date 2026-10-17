@@ -56,6 +56,10 @@ class WidgetTests(TempDirTestCase):
             'style-src': ["'unsafe-inline'"], 'img-src': ['data:'], 'font-src': ['data:'],
             'connect-src': ["'none'"], 'form-action': ["'none'"], 'base-uri': ["'none'"], 'frame-src': ["'none'"],
         })
+        bridge = cli.collect_scripts(page).inline[0]
+        self.assertIn('installWidgetBridge();', bridge)
+        self.assertLess(page.index(bridge), page.index('</head>'))
+        self.assertIn(cli.script_hash(bridge), directives(read_page(page).policies[0])['script-src'])
         self.assertIn('&lt;button&gt;plain&lt;/button&gt;', page)
         self.assertEqual(Elements(document).tags[1][0], 'head')
         self.assertEqual(Elements(document).tags[2][0], 'meta')

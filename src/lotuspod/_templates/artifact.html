@@ -13,7 +13,8 @@
 {{/updated}}{{#labels}}  <meta name="lotuspod:labels" content="{{labels}}">
 {{/labels}}  <link rel="icon" type="image/svg+xml" href="favicon.svg">
   <link rel="stylesheet" href="lotuspod.css?v={{theme_hash}}">
-</head>
+{{#widget_bridge}}  <script>{{widget_bridge}}</script>
+{{/widget_bridge}}</head>
 <body>
   <main class="artifact{{variant_class}}" id="top">
     <div class="artifact-topbar">

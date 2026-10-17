@@ -82,6 +82,47 @@ test('widget script, theme, resize and strictly validated messages', async ({pag
   expect(errors).toEqual(['Pond error']);
 });
 
+test('startup messages arrive while the deferred page script is held back', async ({page}) => {
+  publish('widget-startup', '<style>html { height: 900px; }</style><p>Ready before the page bundle.</p>');
+  await page.addInitScript(() => {
+    (window as any).widgetEvents = [];
+    new MutationObserver(() => {
+      document.querySelectorAll('iframe.artifact-widget').forEach(frame => {
+        if ((frame as any).watching) return;
+        (frame as any).watching = true;
+        frame.addEventListener('lotuspod:widget', event => (window as any).widgetEvents.push((event as CustomEvent).detail));
+      });
+    }).observe(document, {childList: true, subtree: true});
+  });
+  let release!: () => void;
+  const delivery = new Promise<void>(resolve => { release = resolve; });
+  let requested!: () => void;
+  const request = new Promise<void>(resolve => { requested = resolve; });
+  await page.route('**/lotuspod-page.js?*', async route => {
+    requested();
+    await delivery;
+    await route.continue();
+  });
+  try {
+    await page.goto('/widget-startup.html?standalone', {waitUntil: 'commit'});
+    await request;
+    const frame = page.locator('iframe.artifact-widget');
+    await frame.scrollIntoViewIfNeeded();
+    await expect(frame).toHaveAttribute('height', '900');
+    await expect.poll(() => page.evaluate(() => (window as any).widgetEvents)).toEqual([{kind: 'ready', message: ''}]);
+  } finally {
+    release();
+  }
+  await page.waitForLoadState('load');
+  // Loading the page bundle must not install a second receiver.
+  await page.frameLocator('iframe.artifact-widget').locator('body').evaluate(() => {
+    parent.postMessage({type: 'lotuspod:error', message: 'after delivery'}, '*');
+  });
+  await expect.poll(() => page.evaluate(() => (window as any).widgetEvents)).toEqual([
+    {kind: 'ready', message: ''}, {kind: 'error', message: 'after delivery'},
+  ]);
+});
+
 test('opaque origin blocks page, storage, network, popups and top navigation; comments still post', async ({page, context}) => {
   publish('widget-isolation', `<div id="results"></div><script>
 const results = document.querySelector('#results');
