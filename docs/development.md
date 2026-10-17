@@ -295,7 +295,24 @@ python -m tests.capture_site \
   npm --prefix e2e exec --no -- playwright test --config e2e/checks.config.ts
 ```
 
-The `e2e` workflow (`.github/workflows/e2e.yml`) runs that command on every
+To repeat a check that republishes a fixture page, start a fresh capture site
+for each attempt. Playwright's `--repeat-each` shares the site's database and
+published files across repetitions. In the decision Ask stale-page check,
+the first attempt publishes replacement text; later attempts publish the
+same bytes, so the revision stays the same and Ask succeeds with HTTP 201
+instead of exercising HTTP 409 `stale_page`. Repeat that check with:
+
+```sh
+for attempt in $(seq 1 10); do
+  python -m tests.capture_site \
+    npm --prefix e2e exec --no -- playwright test --config e2e/checks.config.ts \
+    e2e/checks/decision-threads.spec.ts \
+    --grep 'a page published again since it loaded keeps the question and says to reload' \
+    --reporter=line || exit 1
+done
+```
+
+The `e2e` workflow (`.github/workflows/e2e.yml`) runs the full checks on every
 pull request to main and every push to main, with `--reporter=github,list`
 so each failed check is annotated with its spec, line and title, and with
 `--forbid-only`, so a committed `test.only` fails the run instead of skipping
