@@ -1,4 +1,5 @@
-import type { CommentRow, Decision, Page, Resolution, StoreBridge, Thread } from "../bridge";
+import type { CommentRow, Decision, Page, Resolution, StartComment, StoreBridge, Thread } from "../bridge";
+import { anchorOf, blockStanding, blockTitle, frameOf } from "./anchor";
 import type { Passages, Placement, Store } from "./parts";
 import { composers } from "./composer";
 import { passages as makePassages } from "./passages";
@@ -180,11 +181,13 @@ export function store(page: Page, bridge: StoreBridge): Store {
   }
 
   // The box a thread's first comment is on, or null when the page no
-  // longer has its section. A thread on the whole page of a page that has
-  // kept only its "page" box (republished with fewer sections) is that
-  // box's, and a thread on that "page" box is the whole page's once the
-  // page has sections.
+  // longer has its section, or the live block it is on. A thread on the
+  // whole page of a page that has kept only its "page" box (republished
+  // with fewer sections) is that box's, and a thread on that "page" box is
+  // the whole page's once the page has sections.
   function boxFor(root: CommentRow) {
+    const anchor = anchorOf(root);
+    if (anchor.kind === "block" && blockStanding(anchor) === "gone") return null;
     return (root.section !== undefined && sections.get(root.section)) ||
       (root.section === page.wholePage && sections.get("page")) ||
       (root.section === "page" && sections.get(page.wholePage)) || null;
@@ -204,6 +207,33 @@ export function store(page: Page, bridge: StoreBridge): Store {
   function put(thread: Thread) {
     panel!.put(thread);
   }
+
+  // A swap may take away the live block a thread is on, or bring it back:
+  // the thread goes to the list of those on what the page no longer has,
+  // or back to its section's box.
+  function rehome() {
+    shown.forEach(thread => {
+      if (anchorOf(thread.root).kind !== "block") return;
+      const box = boxFor(thread.root);
+      if (box === thread.box) return;
+      thread.box = box;
+      const line = thread.node.querySelector(":scope > .artifact-comment-section");
+      if (!box && !line) thread.node.insertBefore(whereFrom(thread.root), thread.node.firstChild);
+      if (box && line) line.remove();
+      put(thread);
+    });
+  }
+
+  // A live block's Comment: its section's form opens, on the block.
+  const startOn: StartComment = ({ anchor }) => {
+    const frame = frameOf(anchor.id);
+    const wrapper = frame?.closest<HTMLElement>(".artifact-section-body");
+    const box = frame && boxFor({ id: 0, section: wrapper ? wrapper.dataset.section : page.wholePage });
+    if (!frame || !box) return;
+    composer.block(forms.get(box)!, anchor, blockTitle(anchor));
+    const figure = frame.closest("figure");
+    panel!.write(box, figure?.querySelector<HTMLElement>(".artifact-live-comment") || frame);
+  };
 
   // Draw what the threads say outside them: the passages' highlights, the
   // panel, the chips, what a popover or the sheet holds and the replies
@@ -434,8 +464,17 @@ export function store(page: Page, bridge: StoreBridge): Store {
         rows, resolved, agent, routed, threadsOf, decisionOf, passages,
         imageWords: page.imageWords, looked: bridge.looked, refresh, failure: composer.failure, json: page.json,
         page: name, sections, showUnread: bridge.showUnread, changed, author, unreadIn: bridge.unreadIn,
+        unblock: box => composer.unblock(forms.get(box)),
       });
       panel.arrange();
+      page.startComment(startOn);
+      // After every listener of the swap has run, comments.js's and the
+      // live blocks' chrome among them.
+      document.addEventListener(page.events.swapped, () => queueMicrotask(() => {
+        composer.swapped();
+        rehome();
+        refresh();
+      }));
       read();
     },
   };

@@ -1,13 +1,17 @@
 import { render } from "preact";
 import { createPortal } from "preact/compat";
-import type { CommentPayload, CommentRow, ComposerBridge, Page, Thread } from "../bridge";
+import type { CommentPayload, CommentRow, ComposerBridge, Page, Thread, Widget } from "../bridge";
 import type { ComposerHandles } from "./parts";
+import { frameOf } from "./anchor";
 
 type Quote = NonNullable<CommentRow["quote"]>;
-interface Body { page: string; text: string; parent?: number; section?: string; revision?: string; quote?: Quote; images?: string[] }
+interface Body { page: string; text: string; parent?: number; section?: string; revision?: string; quote?: Quote; widget?: Widget; images?: string[] }
 
 export function composers(page: Page, bridge: ComposerBridge) {
   const replies = new WeakMap<Thread, ComposerHandles & { toggle: HTMLButtonElement }>();
+  // The live block a section's form for a new thread is on, with the line
+  // above its field that says so, while a block's Comment holds it open.
+  const blocks = new Map<HTMLFormElement, { widget: Widget; line: HTMLParagraphElement }>();
   function failure(response: Response, payload: CommentPayload | null, stale = page.stalePage): string {
     if (response.status === 401) return page.signedOut;
     if (response.status === 409 && payload?.error === "stale_page") return stale;
@@ -115,6 +119,29 @@ export function composers(page: Page, bridge: ComposerBridge) {
     bridge.posted();
     return bridge.shown.get(row.id);
   }
+  // A section's form for a new thread is on the live block widget, titled
+  // title, until it folds or posts.
+  function block(form: HTMLFormElement, widget: Widget, title: string) {
+    unblock(form);
+    const line = document.createElement("p");
+    line.className = "artifact-comment-on";
+    render(<>{"On "}<span class="artifact-comment-on-block">{title}</span></>, line);
+    fieldOf(form).before(line);
+    blocks.set(form, { widget: { id: widget.id, hash: widget.hash, state: widget.state }, line });
+  }
+  function unblock(form: HTMLFormElement | undefined) {
+    const held = form && blocks.get(form);
+    if (!held) return;
+    render(null, held.line);
+    held.line.remove();
+    blocks.delete(form!);
+  }
+  // A swap took away the block a form is on.
+  function swapped() {
+    blocks.forEach((held, form) => {
+      if (!frameOf(held.widget.id)) unblock(form);
+    });
+  }
   function wire(box: HTMLElement) {
     const form = bridge.forms.get(box)!;
     const handles = wireField(form);
@@ -122,12 +149,16 @@ export function composers(page: Page, bridge: ComposerBridge) {
       event.preventDefault();
       let mine = bridge.boxWith(form);
       if (!mine) return;
-      const saving = post(form, fields(mine, handles.field));
+      const body = fields(mine, handles.field);
+      const on = blocks.get(form);
+      if (on) body.widget = { ...on.widget };
+      const saving = post(form, body);
       bridge.sending.set(form, saving);
       const row = await saving;
       bridge.sending.delete(form);
       mine = bridge.boxWith(form);
       if (row) {
+        if (on && blocks.get(form) === on) unblock(form);
         const thread = stored(row);
         if (mine) bridge.placement().posted(mine, thread);
       }
@@ -157,5 +188,5 @@ export function composers(page: Page, bridge: ComposerBridge) {
     });
     return handles;
   }
-  return { reply, wire, passage, label, failure, sending: bridge.sending };
+  return { reply, wire, passage, label, failure, block, unblock, swapped, sending: bridge.sending };
 }

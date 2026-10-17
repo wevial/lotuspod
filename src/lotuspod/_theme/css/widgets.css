@@ -140,6 +140,38 @@
   font: 0.875rem/1.6 var(--lotus-font-mono);
 }
 .artifact-live-paused[hidden] { display: none; }
+/* The number of open comment threads on the block, on its top right corner. */
+.artifact-live-pin {
+  position: absolute;
+  top: 0.25rem;
+  right: 0.25rem;
+  z-index: 2;
+  min-width: 1.125rem;
+  height: 1.125rem;
+  padding: 0 0.25rem;
+  box-sizing: border-box;
+  border-radius: var(--lotus-radius-chip);
+  background: var(--lotus-color-lavender);
+  color: var(--lotus-color-deep-night);
+  font: 600 0.6875rem/1.125rem var(--lotus-font-mono);
+  text-align: center;
+  cursor: pointer;
+}
+.artifact-live-pin[hidden] { display: none; }
+.artifact-live:has(> .artifact-live-pin:not([hidden])) > .artifact-live-chrome { padding-right: 1.75rem; }
+/* A comment thread on a live block: its entry's title, the line above the
+   form for a new one, and the line under its first comment once the block
+   has changed. */
+.artifact-comments-entry-block,
+.artifact-comment-on-block {
+  font-weight: 600;
+}
+.artifact-comment-on {
+  margin: 0 0 0.5rem;
+  color: var(--lotus-color-muted-lavender);
+  font-size: 0.875rem;
+}
+.artifact-comment-on-block { color: var(--lotus-color-pale-lavender); }
 figure.artifact-live.artifact-live--expanded {
   position: fixed;
   inset: var(--topbar-height) 0 0;
@@ -166,4 +198,11 @@ figure.artifact-live.artifact-live--expanded {
   .artifact-live-expand { grid-row: 2; grid-column: 1; justify-self: start; }
   .artifact-live-open { grid-row: 2; grid-column: 2; }
   .artifact-live-pause { grid-row: 2; grid-column: 3; justify-self: end; }
+  .artifact-live-chrome:has(> .artifact-live-comment) { grid-template-columns: auto 1fr auto auto; }
+  .artifact-live-chrome:has(> .artifact-live-comment) .artifact-live-title { grid-column: 1 / 4; }
+  .artifact-live-chrome:has(> .artifact-live-comment) .artifact-live-badge { grid-column: 4; }
+  .artifact-live-comment { grid-row: 2; grid-column: 1; justify-self: start; }
+  .artifact-live-chrome:has(> .artifact-live-comment) .artifact-live-expand { grid-column: 2; justify-self: center; }
+  .artifact-live-chrome:has(> .artifact-live-comment) .artifact-live-open { grid-column: 3; }
+  .artifact-live-chrome:has(> .artifact-live-comment) .artifact-live-pause { grid-column: 4; }
 }

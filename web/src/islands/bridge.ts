@@ -83,6 +83,9 @@ declare const answering: Answering | null;
 declare function linkedTo(name: string, first?: boolean): string | null;
 // js/page-open.js: an archived page takes no new comment, reply or answer.
 declare const ARCHIVED: boolean;
+// web/src/widgets.ts: what a live block's Comment button calls, set here
+// once the comments island can start a thread on a block.
+declare var startComment: StartComment | undefined;
 // js/page-open.js: the page events. ANSWERED is sent on the document once
 // the page's read of answers has finished, and again once each read after a
 // swap that changed a decision form is drawn; SAVED on a decision form once
@@ -91,6 +94,8 @@ declare const ARCHIVED: boolean;
 declare const ANSWERED: string;
 declare const SAVED: string;
 declare const DRAWN: string;
+// js/page-open.js: sent on the document once a swap is applied.
+declare const SWAPPED: string;
 
 declare function commentMarkdown(node: HTMLDivElement, text: string): HTMLDivElement;
 declare function commentImages(row: CommentRow): HTMLUListElement | null;
@@ -135,10 +140,20 @@ export const page = Object.freeze({
   answering,
   linkedTo,
   archived: ARCHIVED,
-  events: Object.freeze({ answered: ANSWERED, saved: SAVED, drawn: DRAWN }),
+  // Publish start as what a live block's Comment calls (startComment), on
+  // a page that takes new comments; an archived page's blocks have none.
+  startComment(start: StartComment): void {
+    if (!ARCHIVED) startComment = start;
+  },
+  events: Object.freeze({ answered: ANSWERED, saved: SAVED, drawn: DRAWN, swapped: SWAPPED }),
 });
 
 export type Page = typeof page;
+
+// A live block's address as a thread's first comment stores it (widget):
+// its id, its widget file's hash and the state its widget showed.
+export interface Widget { id: string; hash: string; state: string }
+export type StartComment = (request: { anchor: { kind: "block" } & Widget }) => void;
 
 // State still owned by comments.js. The list reads the same objects that
 // polling, passages and swaps update; it does not keep a second thread store.
@@ -155,6 +170,7 @@ export interface CommentRow {
   section?: string;
   quote?: { exact?: string; prefix?: string; suffix?: string } | null;
   question?: string | number | null;
+  widget?: Widget | null;
   sectionTitle?: string;
   text?: string;
   state?: string;
@@ -195,6 +211,8 @@ export interface ThreadListBridge {
   imageWords(row: CommentRow): string;
   looked(thread: Thread, viewed: boolean): void;
   refresh(): void;
+  // The box's form for a new thread is no longer on a live block.
+  unblock(box: HTMLElement): void;
   failure(response: Response, payload: CommentPayload | null): string;
   json(response: Response): Promise<CommentPayload | null>;
   wide(): boolean;

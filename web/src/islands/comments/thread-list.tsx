@@ -1,7 +1,7 @@
 import { Component, createRef, render } from "preact";
 import type { Page, Thread, ThreadListBridge } from "../bridge";
 import type { Shell, Group, Entry } from "./parts";
-import { anchorOf } from "./anchor";
+import { anchorOf, blockTitle, frameOf } from "./anchor";
 
 // Each movable container is its own root. Thread bodies and forms are
 // inserted by the page, never represented as children in the virtual tree.
@@ -128,11 +128,14 @@ export function threadList(page: Page, shell: Shell, bridge: ThreadListBridge) {
         if (other !== made && !other.holder.hidden && !field(other.box!).value) {
           other.holder.hidden = true;
           other.toggle.setAttribute("aria-expanded", "false");
+          bridge.unblock(other.box!);
         }
       });
     }
     made.holder.hidden = !show;
     made.toggle.setAttribute("aria-expanded", show ? "true" : "false");
+    // A form folded, however, is no longer on a live block.
+    if (!show && made.box) bridge.unblock(made.box);
     tidy();
     if (show) {
       if (bridge.wide()) {
@@ -223,6 +226,7 @@ export function threadList(page: Page, shell: Shell, bridge: ThreadListBridge) {
       case "passage": return thread.n ? String(thread.n) : "";
       case "decision": return bridge.decisionOf(thread) ? "?" : "§";
       case "page": case "section": return "§";
+      case "block": return "▣";
       default: { const missing: never = anchor; return missing; }
     }
   }
@@ -240,6 +244,8 @@ export function threadList(page: Page, shell: Shell, bridge: ThreadListBridge) {
           : opening(thread.root.text || bridge.imageWords(thread.root))}</span>;
       }
       case "page": case "section": return <span class="artifact-comments-entry-words">{opening(thread.root.text || bridge.imageWords(thread.root))}</span>;
+      case "block": return <span class="artifact-comments-entry-words">{"On "}
+        <span class="artifact-comments-entry-block">{blockTitle(anchor)}</span>{anchor.state ? " · " + anchor.state : ""}</span>;
       default: { const missing: never = anchor; return missing; }
     }
   }
@@ -296,12 +302,14 @@ export function threadList(page: Page, shell: Shell, bridge: ThreadListBridge) {
       bridge.looked(thread, viewed);
     }
     const decision = bridge.decisionOf(thread);
-    const leadKey = (decision ? "decision " + decision.name + "\n" + decision.question + "\n" : "") + bridge.passages.key(thread);
-    const key = [standing(thread), bridge.routed(asked(thread)), thread.replies.length].join("\n");
     const anchor = anchorOf(thread.root);
+    const leadKey = (decision ? "decision " + decision.name + "\n" + decision.question + "\n" : "") +
+      (anchor.kind === "block" ? "block " + blockTitle(anchor) + "\n" : "") + bridge.passages.key(thread);
+    const key = [standing(thread), bridge.routed(asked(thread)), thread.replies.length].join("\n");
     item.classList.toggle("artifact-comments-entry--resolved", done);
     item.classList.toggle("artifact-comments-entry--open", opened);
     item.classList.toggle("artifact-comments-entry--passage", anchor.kind === "passage");
+    item.classList.toggle("artifact-comments-entry--block", anchor.kind === "block");
     item.classList.toggle("artifact-comments-entry--detached", bridge.passages.detached(thread));
     item.classList.toggle("artifact-comments-entry--decision", Boolean(decision));
     const head = createRef<HTMLButtonElement>(), body = createRef<HTMLDivElement>();
@@ -405,13 +413,19 @@ export function threadList(page: Page, shell: Shell, bridge: ThreadListBridge) {
     return found.concat(rest.sort(function (a, b) { return a.root.id - b.root.id; }));
   }
 
-  // Where a thread is listed in its group: its passages by number, then
-  // its resolved passages, then its decisions' threads in the decisions'
-  // order, then its § threads, each oldest first.
+  // Where a thread is listed in its group: its passages by number, with
+  // its live blocks' threads among them where each block sits, then its
+  // resolved passages and the threads on blocks the page no longer has,
+  // then its decisions' threads in the decisions' order, then its §
+  // threads, each oldest first.
   function rank(thread: Thread): [number, number, number] {
     const anchor = anchorOf(thread.root);
     switch (anchor.kind) {
       case "passage": return thread.n ? [0, thread.n, 0] : [1, thread.root.id, 0];
+      case "block": {
+        const frame = frameOf(anchor.id);
+        return frame ? [0, numberBefore(frame) + 0.5, thread.root.id] : [1, thread.root.id, 0];
+      }
       case "decision": {
         const decision = bridge.decisionOf(thread);
         return decision ? [2, bridge.decisions.indexOf(decision.form), thread.root.id] : [3, 0, thread.root.id];
@@ -419,6 +433,19 @@ export function threadList(page: Page, shell: Shell, bridge: ThreadListBridge) {
       case "page": case "section": return [3, 0, thread.root.id];
       default: { const missing: never = anchor; return missing; }
     }
+  }
+
+  // The number of the last passage drawn before node in the page, 0 for
+  // none.
+  function numberBefore(node: Element): number {
+    let found = 0;
+    bridge.shown.forEach(other => {
+      const mark = other.marks[0];
+      if (other.n && mark && node.compareDocumentPosition(mark) & Node.DOCUMENT_POSITION_PRECEDING) {
+        found = Math.max(found, other.n);
+      }
+    });
+    return found;
   }
 
   // Put a group's entries in order, moving only those out of place.
