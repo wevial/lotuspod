@@ -116,6 +116,16 @@ function installWidgetBridge() {
       updateLabel();
     });
   };
+  document.addEventListener("load", (event) => {
+    const frame = event.target;
+    if (!(frame instanceof HTMLIFrameElement) || !frame.matches("iframe.artifact-widget"))
+      return;
+    const state = stateFor(frame);
+    if (!state.label)
+      return;
+    state.label = "";
+    frame.dispatchEvent(new CustomEvent(WIDGET, { detail: { kind: "state", message: "" } }));
+  }, true);
   document.addEventListener("DOMContentLoaded", initialize);
   document.addEventListener("lotuspod:swapped", initialize);
   window.addEventListener("message", (event) => {
@@ -153,13 +163,6 @@ function installWidgetBridge() {
     const state = stateFor(frame);
     if (state.paused)
       return;
-    if (kind === "state" && !data.label) {
-      if (state.label) {
-        state.label = "";
-        frame.dispatchEvent(new CustomEvent(WIDGET, { detail: { kind, message: "" } }));
-      }
-      return;
-    }
     const now = performance.now();
     state.accepted = state.accepted.filter((time) => now - time < 1000);
     if (state.accepted.length >= 60)

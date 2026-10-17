@@ -182,15 +182,33 @@ test('a widget names where the reader is, the chrome shows it, and a comment fro
   await slider.fill('5');
   await expect(where).toHaveText('at 5 workers');
 
-  // The old document spends the frame's 60 messages a second and reloads at
-  // once: the new document's opening "" still clears the label.
+  // The old document spends the frame's 60 messages a second: a "" is held
+  // to the quota like any state, yet the reload still clears the label.
   await slider.fill('7');
   await expect(where).toHaveText('at 7 workers');
+  await page.evaluate(() => {
+    (window as any).spent = new Promise<void>((resolve) => window.addEventListener('message', (event) => {
+      if (event.data && event.data.type === 'check:spent') resolve();
+    }));
+  });
   await inner.locator('body').evaluate(() => {
     for (let i = 0; i < 70; i++) parent.postMessage({ type: 'lotuspod:resize', height: 120 }, '*');
-    location.reload();
+    parent.postMessage({ type: 'lotuspod:state', label: '' }, '*');
+    parent.postMessage({ type: 'check:spent' }, '*');
   });
+  await page.evaluate(() => (window as any).spent);
+  await expect(where).toHaveText('at 7 workers');
+  await inner.locator('body').evaluate(() => location.reload());
   await expect(where).toBeHidden({ timeout: 900 });
   await expect(slider).toHaveValue('1');
+  await expect(where).toBeHidden();
+
+  // Nor does a document without the bridge keep the one before's label.
+  await page.waitForTimeout(1100);
+  await slider.fill('2');
+  await expect(where).toHaveText('at 2 workers');
+  await inner.locator('body').evaluate(() => { location.href = 'about:blank'; });
+  await expect(inner.locator('input')).toHaveCount(0);
+  await expect(where).toBeHidden();
   expect(errors).toEqual([]);
 });

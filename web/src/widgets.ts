@@ -126,6 +126,19 @@ function installWidgetBridge(): void {
       updateLabel();
     });
   };
+  // Each document the frame loads names no state until its widget does,
+  // whatever messages the quota let through: the frame's own load event
+  // clears the label, also for a document without the bridge. A label the
+  // new document names before the page sees its load is cleared with it,
+  // which leaves the block with no state rather than a stale one.
+  document.addEventListener("load", (event) => {
+    const frame = event.target;
+    if (!(frame instanceof HTMLIFrameElement) || !frame.matches("iframe.artifact-widget")) return;
+    const state = stateFor(frame);
+    if (!state.label) return;
+    state.label = "";
+    frame.dispatchEvent(new CustomEvent<WidgetDetail>(WIDGET, {detail: {kind: "state", message: ""}}));
+  }, true);
   document.addEventListener("DOMContentLoaded", initialize);
   document.addEventListener("lotuspod:swapped", initialize);
   window.addEventListener("message", (event: MessageEvent<unknown>) => {
@@ -159,15 +172,6 @@ function installWidgetBridge(): void {
     }
     const state = stateFor(frame);
     if (state.paused) return;
-    // A "" only clears the label, each new document's bridge opening with
-    // one: outside the quota, so a burst before a reload cannot keep the old.
-    if (kind === "state" && !data.label) {
-      if (state.label) {
-        state.label = "";
-        frame.dispatchEvent(new CustomEvent<WidgetDetail>(WIDGET, {detail: {kind, message: ""}}));
-      }
-      return;
-    }
     const now = performance.now();
     state.accepted = state.accepted.filter((time) => now - time < 1000);
     if (state.accepted.length >= 60) return;
