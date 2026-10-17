@@ -150,13 +150,15 @@ class Frames(HTMLParser):
 class PageWidgets(HTMLParser):
     """A served page's live blocks: each frame's data-widget id to its
     file's hash, its title and the data-section of the section wrapper it
-    sits in (lotuspod.sections), "" outside every wrapper."""
+    sits in (lotuspod.sections), "" outside every wrapper. A frame inside a
+    template is inert, and not one of them."""
 
     def __init__(self, text: str):
         super().__init__()
         self.found: dict[str, tuple[str, str, str]] = {}
         self._section = None
         self._depth = 0
+        self._templates = 0
         if re.search(r'<iframe\b', text, re.IGNORECASE):
             self.feed(text)
             self.close()
@@ -164,13 +166,15 @@ class PageWidgets(HTMLParser):
     def handle_starttag(self, tag, attrs):
         attrs = dict(attrs)
         classes = (attrs.get('class') or '').split()
-        if tag == 'div':
+        if tag == 'template':
+            self._templates += 1
+        elif tag == 'div':
             if self._section is not None:
                 self._depth += 1
             elif 'artifact-section-body' in classes:
                 self._section = attrs.get('data-section') or ''
                 self._depth = 1
-        elif tag == 'iframe' and 'artifact-widget' in classes:
+        elif tag == 'iframe' and 'artifact-widget' in classes and not self._templates:
             ident = attrs.get('data-widget') or ''
             named = re.search(r'\.w-([0-9a-f]{12})\.html\Z', attrs.get('src') or '')
             if ident and named and ident not in self.found:
@@ -178,7 +182,9 @@ class PageWidgets(HTMLParser):
                                      self._section or '')
 
     def handle_endtag(self, tag):
-        if tag == 'div' and self._section is not None:
+        if tag == 'template' and self._templates:
+            self._templates -= 1
+        elif tag == 'div' and self._section is not None:
             self._depth -= 1
             if not self._depth:
                 self._section = None
@@ -186,20 +192,24 @@ class PageWidgets(HTMLParser):
 
 def block_source(source: str, markdown_source: bool, ident: str) -> str:
     """The lines of the live block ident as written in a page's kept source,
-    markdown or HTML, found as render() finds it; "" when it has none."""
+    markdown or HTML, found as publish finds it: its line endings made
+    newlines, and an HTML source's first h1 left out; "" when it has none,
+    or when the source no longer reads."""
+    from .cli import html_title, normalized
+    source = normalized(source)
     lines = source.split('\n')
-    body = source
-    if markdown_source:
-        from . import markdown
-        # Only where each block is matters, not how an image is drawn.
-        sizes = {image.src: (0, 0) for image in markdown.images(source)}
-        try:
-            body = markdown.to_body(source, sizes)
-        except (RuntimeError, ValueError):
-            return ''
     try:
+        if markdown_source:
+            from . import markdown
+            # Only where each block is matters, not how an image is drawn.
+            sizes = {image.src: (0, 0) for image in markdown.images(source)}
+            body = markdown.to_body(source, sizes)
+        else:
+            # Without its h1, as render() numbers the blocks; the h1's lines
+            # are kept as empty lines, so every line stays where it was.
+            body = html_title(source)[1]
         blocks = Templates(body).blocks
-    except RuntimeError:
+    except (RuntimeError, ValueError):
         return ''
     for number, (start, end, attrs, content, line) in enumerate(blocks, 1):
         if identifier(attrs.get('data-id') or '', attrs.get('data-title') or '', number) != ident:
@@ -215,8 +225,8 @@ def block_source(source: str, markdown_source: bool, ident: str) -> str:
             if code == 1 and re.sub(r'^(?: {0,3}> ?)*', '', ''.join(lines[first:first + 1])).startswith('```'):
                 code = 0
             return '\n'.join(lines[first - 1:first + code + 1])
-        first = source.count('\n', 0, start)
-        last = source.count('\n', 0, end)
+        first = body.count('\n', 0, start)
+        last = body.count('\n', 0, end)
         return '\n'.join(lines[first:last + 1])
     return ''
 

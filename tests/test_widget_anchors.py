@@ -29,7 +29,10 @@ from tests.test_agent_pull import PullTestCase, run_cli  # noqa: E402
 
 TITLE = "Merge churn by worker count"
 STATE = "at 6 workers"
-# The block's line as the ticket writes it: "On the block TITLE (`ID`), at STATE".
+# The block's line in the ticket's format, "On the block TITLE (`ID`), at
+# STATE", with the state kept as sent. With the ticket's state "at 6 workers"
+# that reads "at at 6 workers", not the wording criterion C4 quotes; the
+# format is kept and the mismatch is reported, not worked around.
 LINE = f"On the block {TITLE} (`churn`), at {STATE}"
 BLOCK = """\
 ```html live id=churn title="Merge churn by worker count"
@@ -56,9 +59,9 @@ class AnchorCase(PullTestCase):
     def prepare(self) -> None:
         self.publish_churn(churn(BLOCK))
 
-    def publish_churn(self, text: str) -> None:
-        source = self.work / "churn.md"
-        source.write_text(text, encoding="utf-8")
+    def publish_churn(self, text: str, suffix: str = ".md") -> None:
+        source = self.work / f"churn{suffix}"
+        source.write_bytes(text.encode("utf-8"))
         rc, _out, err = run_cli("publish", str(source), "--out-dir", str(self.out_dir),
                                 "--local", "--comments", "--owner", "hermes",
                                 "--credential", str(self.desk))
@@ -243,6 +246,46 @@ class PullAndPromptTests(AnchorCase):
         self.assertNotIn("block", item)
         self.assertNotIn("On the block", self.markdown_pull())
         self.assertNotIn("On the block", responder.prompt(item))
+
+
+class SourceTests(AnchorCase):
+    """The block is found in the kept source as publish found it."""
+
+    def test_a_source_with_other_line_endings_still_pulls(self):
+        self.publish_churn("# Churn\n\n## Throughput\n\n"
+                           "```html live id=churn title=Churn\r<p>x</p>\r```\n\n"
+                           "## Latency\n\nMore.\n")
+        status, row = self.post({"section": "throughput", "text": "@hermes Off.",
+                                 "widget": self.anchor(state="")})
+        self.assertEqual(status, 201, row)
+        self.assertEqual(self.item(row["id"])["block"],
+                         {"title": "Churn", "source": "```html live id=churn title=Churn\n"
+                                                      "<p>x</p>\n```",
+                          "status": "current"})
+        self.assertIn("On the block Churn (`churn`)\n", self.markdown_pull())
+
+    def test_an_html_source_numbers_its_blocks_without_its_h1(self):
+        visible = '<template class="lotuspod-live"><p>visible widget</p></template>'
+        self.publish_churn('<h1>Churn<template class="lotuspod-live"><p>heading widget</p>'
+                           f'</template></h1>\n<p>Intro.</p>\n{visible}\n', ".html")
+        [ident] = cli.api_page(self.out_dir, "churn").widgets
+        status, row = self.post({"section": comments.PAGE_SECTION, "text": "@hermes Off.",
+                                 "widget": {"id": ident, "hash": self.block_hash(ident),
+                                            "state": ""}})
+        self.assertEqual(status, 201, row)
+        self.assertEqual(self.item(row["id"])["block"]["source"], visible)
+
+    def test_a_frame_in_a_template_is_not_a_block(self):
+        decoy = ('<template><iframe class="artifact-widget" data-widget="churn" '
+                 'src="churn.w-aaaaaaaaaaaa.html" title="Decoy"></iframe></template>')
+        page = self.out_dir / "churn.html"
+        served = page.read_text(encoding="utf-8")
+        page.write_text(served.replace("<p>How merges go.</p>", decoy + "<p>How merges go.</p>"),
+                        encoding="utf-8")
+        self.assertIn(decoy, page.read_text(encoding="utf-8"))
+        block = cli.api_page(self.out_dir, "churn").widgets["churn"]
+        self.assertEqual((block.title, block.section), (TITLE, "throughput"))
+        self.assertNotEqual(block.hash, "a" * 12)
 
 
 class SchemaTests(unittest.TestCase):
