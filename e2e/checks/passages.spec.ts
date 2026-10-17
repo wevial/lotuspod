@@ -4,11 +4,6 @@ import os from 'node:os';
 import path from 'node:path';
 import { expect, test, type APIRequestContext, type Locator, type Page } from '@playwright/test';
 
-// Finish intercepted requests before Playwright disposes their responses.
-test.afterEach(async ({ page }) => {
-  await page.unrouteAll({ behavior: 'wait' });
-});
-
 // Comments on passages: the capture fixture's passages page, words selected
 // in it, the Comment pill, the composer, and each thread's words drawn as a
 // numbered highlight, found again on a new revision or kept with its quote

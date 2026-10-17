@@ -110,9 +110,6 @@ test.describe('signed in', () => {
   });
 
   test('a page published twice lists two versions and opens the older one read-only', async ({ page }) => {
-    // This scenario publishes twice and exercises repeated full-page history
-    // navigations, the tab shell, and the old-version menu in one session.
-    test.slow();
     const errors = watchErrors(page);
     const name = 'versions-check';
     publish(name, source('Versions check', 'first'));

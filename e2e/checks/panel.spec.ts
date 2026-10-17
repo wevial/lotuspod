@@ -2,11 +2,6 @@ import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { expect, test, type APIRequestContext, type Locator, type Page } from '@playwright/test';
 
-// Finish intercepted requests before Playwright disposes their responses.
-test.afterEach(async ({ page }) => {
-  await page.unrouteAll({ behavior: 'wait' });
-});
-
 // The side panel a wide window gets: the capture fixture's comments page at
 // 1440 pixels, its threads in an aside folded to a rail of status dots, each
 // section's box a one-line chip, and threads resolved and reopened. Most

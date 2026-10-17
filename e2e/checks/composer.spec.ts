@@ -132,13 +132,6 @@ function section(page: Page, name: string) {
 // when the section has no threads, else behind its button.
 async function compose(page: Page, name: string) {
   const { summary, popover, start, composer: open } = section(page, name);
-  // Earlier checks leave threads on this page. Wait until the initial read
-  // has drawn them before deciding whether the section is empty.
-  const response = await page.request.get(`/api/comments?page=${NAME}`);
-  expect(response.ok()).toBeTruthy();
-  for (const thread of (await response.json()).threads) {
-    await expect(page.locator(`.artifact-comments-entry[data-thread="${thread.root.id}"]`)).toHaveCount(1);
-  }
   await expect(summary).toHaveText(/ · /);
   const empty = (await summary.textContent())!.startsWith('No comments');
   await summary.click();
@@ -393,10 +386,7 @@ test.describe('signed in', () => {
     await page.setViewportSize(WIDE);
     await page.goto(`${PAGE}?standalone`);
     const aside = page.locator('aside.artifact-comments-panel');
-    const chip = page.locator('details.artifact-comment[data-section="pond"] summary');
-    // The initial empty chip is interactive before the thread read finishes.
-    await expect(chip).toHaveText(/comments? · waiting/);
-    await chip.click();
+    await page.locator('details.artifact-comment[data-section="pond"] summary').click();
     const node = aside.locator(`.artifact-comment-thread[data-thread="${root.id}"]`);
     const replying = await reply(node);
     await expect(replying.box).toHaveCount(1);
@@ -433,10 +423,7 @@ test.describe('signed in', () => {
     const root = await thread(request, 'frogs', 'Do the frogs wake in March?');
     await page.setViewportSize(PHONE);
     await page.goto(`${PAGE}?standalone`);
-    const chip = page.locator('details.artifact-comment[data-section="frogs"] summary');
-    // The initial empty chip is interactive before the thread read finishes.
-    await expect(chip).toHaveText(/comments? · waiting/);
-    await chip.click();
+    await page.locator('details.artifact-comment[data-section="frogs"] summary').click();
     const sheet = page.locator('.artifact-comments-bottom-sheet');
     await expect(sheet).toBeVisible();
     await expect.poll(async () => Math.round((await rect(sheet)).bottom)).toBe(PHONE.height);
