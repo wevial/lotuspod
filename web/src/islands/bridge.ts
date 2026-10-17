@@ -96,14 +96,28 @@ declare function commentMarkdown(node: HTMLDivElement, text: string): HTMLDivEle
 declare function commentImages(row: CommentRow): HTMLUListElement | null;
 declare function when(stamp: string | undefined): string;
 
-declare function json(response: Response): Promise<(CommentRow & CommentPayload) | null>;
+declare function json<T = CommentRow & CommentPayload>(response: Response): Promise<T | null>;
 declare function attachments(form: HTMLFormElement, field: HTMLTextAreaElement): Attachments;
 declare const SIGNED_OUT: string;
 declare const STALE_PAGE: string;
 declare const STALE_SECTION: string;
+// js/page-open.js: the heading of the list of threads on sections the page
+// no longer has.
+declare const CHANGED: string;
+// js/attachments.js: what the comments route's read said of the image cap,
+// bytes or null with why, and why no cap was read.
+declare function settleImageCap(bytes: number | null, why?: string): void;
+declare const NO_CAP: string;
+// js/attachments.js: "1 image" or "N images", what a comment of images alone
+// says in a list.
+declare function imageWords(row: CommentRow): string;
+// js/page-open.js: the elements selector matches in node, else the page.
+declare function all(selector: string, node?: HTMLElement): HTMLElement[];
 
 export const page = Object.freeze({
-  attachments, json,
+  element, textModel, offsetOf, pieces, locate, wrap, unwrap,
+  apart: APART, maxExact: MAX_EXACT, context: CONTEXT, still: STILL, coarse: COARSE,
+  attachments, json, settleImageCap, noCap: NO_CAP, imageWords, all, changed: CHANGED,
   signedOut: SIGNED_OUT, stalePage: STALE_PAGE, staleSection: STALE_SECTION,
   commentMarkdown, commentImages, when,
   commenting,
@@ -141,6 +155,7 @@ export interface CommentRow {
   section?: string;
   quote?: { exact?: string; prefix?: string; suffix?: string } | null;
   question?: string | number | null;
+  sectionTitle?: string;
   text?: string;
   state?: string;
 }
@@ -153,6 +168,10 @@ export interface Thread {
   box: HTMLElement | null;
   node: HTMLDivElement;
   n: number;
+  spot?: TextSpot | null;
+  number?: HTMLButtonElement | null;
+  head?: HTMLElement;
+  headKey?: string;
   marks: HTMLElement[];
   lit: boolean;
   entry: import("./comments/parts").Entry | null;
@@ -172,13 +191,7 @@ export interface ThreadListBridge {
   routed(row: CommentRow): string;
   threadsOf(box: HTMLElement): Thread[];
   decisionOf(thread: Thread): Decision | null;
-  passages: {
-    said(thread: Thread): HTMLElement[];
-    key(thread: Thread): string;
-    point(thread: Thread | null, where: "entry"): void;
-    detached(thread: Thread): boolean;
-    shine(thread: Thread): void;
-  };
+  passages: Pick<import("./comments/parts").Passages, "said" | "key" | "point" | "detached" | "shine">;
   imageWords(row: CommentRow): string;
   looked(thread: Thread, viewed: boolean): void;
   refresh(): void;
@@ -195,10 +208,7 @@ export interface ThreadListBridge {
 export interface PlacementBridge extends Omit<ThreadListBridge,
   "wide" | "moving" | "holds" | "uncover" | "bring" | "passages"> {
   sections: Map<string, HTMLElement>;
-  passages: ThreadListBridge["passages"] & {
-    place(): void;
-    cancel(mine: import("./comments/parts").Passage): void;
-  };
+  passages: ThreadListBridge["passages"] & Pick<import("./comments/parts").Passages, "place" | "cancel">;
   showUnread(): void;
   changed(): HTMLElement;
   author(row: CommentRow): string;
@@ -222,6 +232,25 @@ export interface NarrowBridge extends Pick<import("./comments/parts").ThreadList
   unfold(target: HTMLElement): void;
   barBottom(): number;
   standsFor(box: HTMLElement): HTMLElement | null;
+}
+
+// What the store reaches comments.js by: the boxes and decision forms,
+// which swaps change in place, and the unread replies, drafts and the
+// box a form stands for, which comments.js still owns.
+export interface StoreBridge {
+  boxes: HTMLElement[];
+  decisions: HTMLFormElement[];
+  counted(thread: Thread, row: CommentRow): boolean;
+  opening: Map<number, Set<number>>;
+  unreadIn(threads: Thread[]): number;
+  readTo(thread: Thread, id: number): void;
+  looked(thread: Thread, open: boolean): void;
+  showUnread(): void;
+  // A read named the comments unread to the reader, or did not.
+  named(unread: unknown): void;
+  // Give back what was kept over a reload, once the threads are read.
+  restore(): void;
+  boxWith(form: HTMLFormElement): HTMLElement | null;
 }
 
 export interface ThreadBridge {
@@ -271,3 +300,32 @@ export interface ChipsBridge extends Pick<PlacementBridge,
   chipped(box: HTMLElement): void;
   reach(thread: Thread, opener: HTMLElement | null, read: boolean): void;
 }
+
+export type PassageQuote = NonNullable<CommentRow["quote"]>;
+export interface TextSpot { start: number; end: number }
+export interface TextModel { text: string; nodes: Text[]; spots: Map<Node, Int32Array> }
+declare function textModel(root: HTMLElement | null): TextModel;
+declare function offsetOf(model: TextModel, container: Node, offset: number): number;
+declare function pieces(model: TextModel, start: number, end: number): { node: Text; from: number; to: number }[];
+declare function locate(model: TextModel, quote: PassageQuote): TextSpot | null;
+declare function wrap(root: HTMLElement | null, start: number, end: number, make: () => HTMLElement): HTMLElement[];
+declare function unwrap(wrappers: HTMLElement[]): void;
+declare const APART: string;
+declare const MAX_EXACT: number;
+declare const CONTEXT: number;
+declare const STILL: number;
+declare const COARSE: string;
+
+export interface PassagesBridge {
+  article: HTMLElement | null;
+  boxes: HTMLElement[];
+  shown: Map<number, Thread>;
+  resolved(thread: Thread): boolean;
+  revision(): string | null;
+  attached: Map<HTMLFormElement, Attachments>;
+  composer: Pick<ReturnType<typeof import('./comments/composer').composers>, 'passage'>;
+  placement(): import('./comments/parts').Placement;
+}
+
+// shared.js: the imperative DOM helper, also used by page-owned UI.
+declare function element<K extends keyof HTMLElementTagNameMap>(tag: K, className: string, text?: string): HTMLElementTagNameMap[K];
