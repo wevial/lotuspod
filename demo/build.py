@@ -290,9 +290,7 @@ def dress(page: str, name: str, commit: str) -> str:
                 f'  <script src="{DEMO_JS}"></script>\n</head>')
     page = once(page, "<body>", f"<body>\n{banner(commit)}")
     # A lazy frame has no address until it scrolls near the window, nor while
-    # its page waits in a tab of the page list; the demo loads each widget
-    # with its page, so every frame of a demo page has its address once the
-    # page has loaded, as the demo's checks of a page's frames expect.
+    # its page waits in a tab of the page list, and the demo's checks expect one.
     page = WIDGET_FRAME_LAZY.sub(r"\1", page)
     if name != PAGES_FILE:
         page = once(page, BRAND_LINK, BRAND_LINK.replace(INDEX_FILE, PAGES_FILE))
