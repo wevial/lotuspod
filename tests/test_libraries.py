@@ -112,7 +112,11 @@ class LibraryTests(TempDirTestCase):
         for tag in (f'<script src="{url}"></script>',
                     f'<SCRIPT SRC="{url}" integrity="sha384-wrong"></SCRIPT>',
                     f'<script src="{url.replace("https:", "")}"></script>',
-                    f'<script src="{url}"/>'):
+                    f'<script src="{url}"/>',
+                    f'<svg><script href="{url}"></script></svg>',
+                    f'<svg><script xlink:href="{url}"></script></svg>',
+                    f'<svg><SCRIPT HREF="{url}"></SCRIPT></svg>',
+                    f'<svg><script XLINK:HREF="{url}"/></svg>'):
             for suffix in ('md', 'html'):
                 with self.subTest(tag=tag, suffix=suffix):
                     source = (f'# Charts\n```html live d3\n{tag}\n```' if suffix == 'md' else

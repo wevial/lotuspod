@@ -115,7 +115,9 @@ class InlineScriptsOnly(HTMLParser):
     CDATA_CONTENT_ELEMENTS = Templates.CDATA_CONTENT_ELEMENTS
 
     def handle_starttag(self, tag, attrs):
-        if tag == 'script' and any(key == 'src' for key, _ in attrs):
+        # SVG scripts use href (or the legacy xlink:href), bypassing the
+        # generated library tag's integrity check just like an authored src.
+        if tag == 'script' and any(key in {'src', 'href', 'xlink:href'} for key, _ in attrs):
             raise ValueError('external script tags are not allowed in library widgets; '
                              'declare libraries with live fence names or data-libs instead')
 
