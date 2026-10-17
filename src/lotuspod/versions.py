@@ -11,8 +11,9 @@ version of the page. They are read at request time, with nothing stored:
 From each blob only its lotuspod:revision, lotuspod:visible and
 lotuspod:owner are kept, in memory by blob id: a blob never changes. A list
 runs at most two git processes, and one once its blobs are known; an old
-version's HTML runs at most two. A version is listed only when its own page
-was visible, at most MAX_VERSIONS of them, and a directory that is not the
+version's HTML runs at most two. A historical widget runs at most three:
+version()'s two, then one cat-file process for its bytes, which are never kept.
+A version is listed only when its own page was visible, at most MAX_VERSIONS of them, and a directory that is not the
 top of its own repository has none. The whole history of the page is read,
 so the version before the oldest one listed is known too.
 
@@ -53,6 +54,8 @@ from dataclasses import dataclass
 from html.parser import HTMLParser
 from pathlib import Path
 from typing import Callable
+
+from . import widgets
 
 # The versions of one page a list holds, newest first.
 MAX_VERSIONS = 200
@@ -578,14 +581,36 @@ class History:
                 return version, behind, text
         return None
 
+    def widget_version(self, name: str, commit: str, filename: str) -> bytes | None:
+        """A widget named by a listed page version, read at that same commit.
+
+        The page establishes membership; neither today's files nor another
+        commit can supply the bytes. Widget bytes are never cached.
+        """
+        if (not widgets.WIDGET_NAME.fullmatch(filename)
+                or not filename.startswith(name + ".w-")
+                or any(char in filename for char in "/\\\n\r")):
+            return None
+        found = self.version(name, commit)
+        if found is None or filename not in widgets.Frames(found[2]).sources:
+            return None
+        objects = self._object_bytes([f"{commit}:{filename}"])
+        return objects[0] if objects else None
+
     def _objects(self, names: list[str]) -> list[str | None] | None:
         """Each named object's text, None for one git does not have; None
         when git failed."""
+        objects = self._object_bytes(names)
+        return ([data.decode("utf-8", "replace") if data is not None else None
+                 for data in objects] if objects is not None else None)
+
+    def _object_bytes(self, names: list[str]) -> list[bytes | None] | None:
+        """Read named blobs in one process without decoding or retaining them."""
         asked = "".join(f"{name}\n" for name in names).encode("utf-8")
         out = self._git("cat-file", "--batch", data=asked)
         if out is None:
             return None
-        texts: list[str | None] = []
+        texts: list[bytes | None] = []
         at = 0
         while at < len(out) and len(texts) < len(names):
             end = out.find(b"\n", at)
@@ -593,9 +618,9 @@ class History:
                 break
             header = out[at:end].split()
             at = end + 1
-            if len(header) == 3 and header[2].isdigit():
+            if len(header) == 3 and header[1] == b"blob" and header[2].isdigit():
                 size = int(header[2])
-                texts.append(out[at:at + size].decode("utf-8", "replace"))
+                texts.append(out[at:at + size])
                 at += size + 1
             else:
                 # NAME missing, or ambiguous.
@@ -656,6 +681,11 @@ class Places(HTMLParser):
         self.main: tuple[int, int] | None = None
         self.topbar_end: int | None = None
         self.fieldsets: list[tuple[int, int]] = []
+        self.widget_tags: list[tuple[int, int, str, list, str]] = []
+        self.badges: list[tuple[int, int]] = []
+        self.scripts: list[tuple[int, int]] = []
+        self._badge: int | None = None
+        self._script: int | None = None
         # The title bar's divs open; whether a decision form is open, its
         # fieldsets open and where its first one's tag name ends.
         self._bar = 0
@@ -672,6 +702,15 @@ class Places(HTMLParser):
     def handle_starttag(self, tag, attrs):
         at = self._at()
         classes = (dict(attrs).get("class") or "").split()
+        if tag == "script":
+            self._script = at
+        if tag == "span" and "artifact-live-badge" in classes:
+            self._badge = at + len(self.get_starttag_text() or "")
+        attribute = ("src" if tag == "iframe" and "artifact-widget" in classes else
+                     "href" if tag == "a" and "artifact-live-open" in classes else "")
+        if attribute:
+            self.widget_tags.append((at, at + len(self.get_starttag_text() or ""),
+                                     tag, attrs, attribute))
         if tag == "main" and self.main is None:
             self.main = (at, at + len(self.get_starttag_text() or ""))
         elif tag == "div":
@@ -689,6 +728,12 @@ class Places(HTMLParser):
     def handle_endtag(self, tag):
         at = self._at()
         end = self._html.find(">", at) + 1
+        if tag == "script" and self._script is not None:
+            self.scripts.append((self._script, end))
+            self._script = None
+        if tag == "span" and self._badge is not None:
+            self.badges.append((self._badge, at))
+            self._badge = None
         if tag == "head" and self.head_end is None:
             self.head_end = at
         elif tag == "div" and self._bar:
@@ -724,6 +769,21 @@ def old_page(page_html: str, name: str, version: Version, behind: int,
     """An earlier version's HTML as serve answers it, ending in one script
     element: script, the old-version script's address, allowed by nonce, the
     answer's own; no other script in the page carries it."""
+    places = Places(page_html)
+    edits = [(start, end, "") for start, end in places.scripts]
+    edits += [(start, end, "Old version") for start, end in places.badges]
+    for start, end, tag, attrs, attribute in places.widget_tags:
+        value = dict(attrs).get(attribute) or ""
+        if widgets.WIDGET_NAME.fullmatch(value) and value.startswith(name + ".w-"):
+            rewritten = [(key, value + "?version=" + version.commit if key == attribute else val)
+                         for key, val in attrs]
+            markup = "<" + tag + "".join(
+                " " + key + (f'="{html.escape(val, quote=True)}"' if val is not None else "")
+                for key, val in rewritten) + ">"
+            edits.append((start, end, markup))
+    # Removing the blocked scripts avoids CSP console errors; the response
+    # policy still permits only the version menu script added below.
+    page_html = edited(page_html, edits)
     current = html.escape(urllib.parse.quote(f"{name}.html"))
     page_html = _disable_forms(page_html, (
         '<p class="artifact-version-note">Answering is off on old versions. '
