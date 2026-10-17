@@ -201,16 +201,8 @@ export interface PlacementBridge extends Omit<ThreadListBridge,
   };
   showUnread(): void;
   changed(): HTMLElement;
-  chips(
-    list: import("./comments/parts").ThreadList,
-    chipped: (box: HTMLElement) => void,
-    reach: (thread: Thread, opener: HTMLElement | null, read: boolean) => void,
-  ): {
-    nodes: Map<HTMLFormElement, HTMLButtonElement>;
-    mute(node: HTMLElement): HTMLElement;
-    mount(box: HTMLElement): void;
-    refresh(): void;
-  };
+  author(row: CommentRow): string;
+  unreadIn(threads: Thread[]): number;
 }
 
 // The object narrow.js consumes. It retains ownership of its surfaces and
@@ -269,4 +261,13 @@ export interface ComposerBridge {
   add(entry: { root: CommentRow; replies: CommentRow[] }): void;
   shown: Map<number, Thread>;
   placement(): import('./comments/parts').Placement;
+}
+
+// Chips read live stores and delegate opening to placement.
+export interface ChipsBridge extends Pick<PlacementBridge,
+  "boxes" | "decisions" | "shown" | "threadsOf" | "decisionOf" | "resolved" |
+  "rows" | "author" | "agent" | "routed" | "unreadIn"> {
+  list: Pick<import("./comments/parts").ThreadList, "latest" | "standing" | "asked" | "plural">;
+  chipped(box: HTMLElement): void;
+  reach(thread: Thread, opener: HTMLElement | null, read: boolean): void;
 }

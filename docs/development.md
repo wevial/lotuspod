@@ -78,24 +78,24 @@ truth: the sheet draws from them on each form's `input`, `change` and
 `answering.save()`, one question at a time in page order. Preact holds only
 the sheet's own state: the panel open, a Save under way, what it did, and
 the question Next open last jumped to, which a swap keeps. The bundle, Preact with it, stays at most
-30,000 bytes gzipped; it uses plain Preact and its hooks, not
+32,000 bytes gzipped; it uses plain Preact and its hooks, not
 `preact/compat`.
 
 The comments island (`web/src/islands/comments/index.ts`) mounts after the
 review sheet and starts the bridge's typed `commenting` object, null on pages
 without comment boxes. It supplies the placement, thread and composer factories declared in `parts.ts`.
-Placement creates the shell and thread-list parts.
+Placement creates the shell, thread-list and chips parts.
 The shell draws the panel frame, rail, tally and start controls. The thread-list
 part draws section groups, changed-section threads, entry heads and resolution
 controls. Its typed bridge reads the page's thread objects and passage helpers;
-comments.js still owns thread containers, drafts and chips. The thread part
+comments.js still owns thread containers and drafts. The thread part
 (`comments/thread.tsx`) owns each list’s rows, notices, typing bubble and unread
 marks. Its typed bridge reads unread state and checking, and supplies the shared
 markdown, image and time helpers. Stable keyed comments keep their first row
 snapshot; ref callbacks attach markdown and images once. Status keys replace
 only changed marks, and synchronous renders preserve live-region row identity.
 The placement part owns panel, popover and sheet selection, resize focus preservation, and the
-reload and swap hooks. Its bridge reads the live boxes and chip nodes and hands
+reload and swap hooks. Its bridge reads the live boxes and thread stores and hands
 `narrow.js` a typed object; narrow.js still draws the popover and sheet. Movable
 entries, group toggles and form holders are independent render roots, so narrow.js
 can move them without Preact moving them back. Synchronous renders preserve
@@ -104,6 +104,14 @@ On resize, placement takes the open view before changing modes, suppresses
 thread opening and closing while moving it, then restores the focused field.
 Across swaps, it reads the page-owned boxes and sections map to find replacement
 anchors; the page still owns drafts and the swap itself.
+The chips part (`comments/chips.tsx`) draws section, whole-page and decision
+chips synchronously. Served summaries are emptied once before rendering; decision
+buttons are independent roots after their forms. A keyed line replaces changed
+status text together, preserving the chip’s layout-shift behavior. It wires served summaries and
+box toggles with listeners and delegates opening to placement. Its bridge reads
+thread and unread state, list status helpers and thread author helpers. A typed
+anchor switch selects each thread's chip, with passages counted on their section.
+Swaps mount new boxes and forget removed decision forms through the part.
 The composer part (`comments/composer.tsx`) draws reply controls and passage
 composers and wires the served section forms without redrawing them. All three
 use one send path for attachments, Cmd/Ctrl+Enter, posting and refusal status.

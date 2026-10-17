@@ -3,6 +3,7 @@ import type { Placement, Group, Taken, Mode } from "./parts";
 import { shell as makeShell } from "./shell";
 import { threadList as makeThreadList } from "./thread-list";
 import { anchorOf as threadAnchor } from "./anchor";
+import { chips as makeChips } from "./chips";
 
 // Placement owns no thread rendering: movable nodes stay in their existing
 // independent roots, while narrow.js owns the popover and sheet surfaces.
@@ -44,8 +45,7 @@ export function placement(page: Page, bridge: PlacementBridge): Placement {
     uncover: function (node) { over.uncover(node); }, bring: bring,
   });
   var groups = threadList.groups;
-  var chips = bridge.chips(threadList, chipped, reach);
-  var decisionChips = chips.nodes;
+  var chips = makeChips(page, { ...bridge, list: threadList, chipped, reach });
   boxes.forEach(chips.mount);
   api.refresh = function () {
     threadList.refresh();
@@ -63,18 +63,12 @@ export function placement(page: Page, bridge: PlacementBridge): Placement {
   function anchorOf(thread: Thread): HTMLElement | null {
     const anchor = threadAnchor(thread.root);
     switch (anchor.kind) {
-      case "passage": return thread.marks[0] || sectionChip(thread);
-      case "decision": {
-        const decision = decisionOf(thread);
-        return (decision && decisionChips.get(decision.form)) || sectionChip(thread);
-      }
+      case "passage": return thread.marks[0] || chips.anchor(thread);
+      case "decision":
       case "page":
-      case "section": return sectionChip(thread);
+      case "section": return chips.anchor(thread);
       default: { const never: never = anchor; return never; }
     }
-  }
-  function sectionChip(thread: Thread): HTMLElement | null {
-    return thread.box?.querySelector("summary") || null;
   }
 
   function unfold(target: HTMLElement) {
@@ -494,7 +488,7 @@ export function placement(page: Page, bridge: PlacementBridge): Placement {
 
   // A decision form a swap took away: its chip went with its section.
   api.forget = function (form) {
-    decisionChips.delete(form);
+    chips.forget(form);
   };
 
   api.mount = function (box, at) {
