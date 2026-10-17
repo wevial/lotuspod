@@ -159,6 +159,15 @@ function installWidgetBridge(): void {
     }
     const state = stateFor(frame);
     if (state.paused) return;
+    // A "" only clears the label, each new document's bridge opening with
+    // one: outside the quota, so a burst before a reload cannot keep the old.
+    if (kind === "state" && !data.label) {
+      if (state.label) {
+        state.label = "";
+        frame.dispatchEvent(new CustomEvent<WidgetDetail>(WIDGET, {detail: {kind, message: ""}}));
+      }
+      return;
+    }
     const now = performance.now();
     state.accepted = state.accepted.filter((time) => now - time < 1000);
     if (state.accepted.length >= 60) return;
@@ -180,7 +189,7 @@ function installWidgetBridge(): void {
     const message = kind === "error" ? data.message as string : kind === "state" ? data.label as string : "";
     if (kind === "ready") state.ready = true;
     if (kind === "state") {
-      // The same label again, such as each new document's "", changes nothing.
+      // The same label again changes nothing.
       if (state.label === message) return;
       state.label = message;
     }

@@ -153,6 +153,13 @@ function installWidgetBridge() {
     const state = stateFor(frame);
     if (state.paused)
       return;
+    if (kind === "state" && !data.label) {
+      if (state.label) {
+        state.label = "";
+        frame.dispatchEvent(new CustomEvent(WIDGET, { detail: { kind, message: "" } }));
+      }
+      return;
+    }
     const now = performance.now();
     state.accepted = state.accepted.filter((time) => now - time < 1000);
     if (state.accepted.length >= 60)
