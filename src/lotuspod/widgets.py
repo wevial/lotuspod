@@ -54,6 +54,10 @@ def fence(info: str, source: str, line: int, number: int) -> str:
 
 
 class Templates(HTMLParser):
+    # Widgets enable scripts, so noscript contents are raw text. Extending the
+    # raw-text tags also supports Python versions without scripting=True.
+    CDATA_CONTENT_ELEMENTS = (*HTMLParser.CDATA_CONTENT_ELEMENTS, 'noscript')
+
     def __init__(self, text: str):
         super().__init__(convert_charrefs=False)
         self.text = text

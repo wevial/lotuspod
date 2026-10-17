@@ -115,6 +115,31 @@ class WidgetTests(TempDirTestCase):
         self.assertEqual(cli.html_images(body).images, [])
         self.assertEqual(self.publish(body)[0], 0)
 
+    def test_noscript_text_preserves_widget_template_boundaries(self):
+        content = '<noscript></template></noscript><h2>Private heading</h2>\n' + SOURCE
+        template = '<template class="lotuspod-live" data-title="Clock">' + content + '</template>'
+        sources = {
+            'html': '<h1>Pond</h1><h2>One</h2>' + template + '<h2>Two</h2>',
+            'md': '# Pond\n\n## One\n\n```html live title="Clock"\n' + content + '```\n\n## Two\n',
+        }
+        for suffix, source in sources.items():
+            with self.subTest(source=suffix):
+                body = markdown.to_body(source) if suffix == 'md' else source
+                rendered, files, _ = widgets.render(body, 'pond')
+                self.assertEqual(len(files), 1)
+                self.assertIn(content, next(iter(files.values())).decode())
+                self.assertNotIn('Private heading', rendered)
+                self.assertNotIn('Private heading', widgets.without_templates(body))
+                rc, _, error = self.publish(source, suffix, '--comments')
+                self.assertEqual(rc, 0, error)
+                page, frame = self.frame()
+                self.assertIn(content, (self.out_dir / frame['src']).read_text())
+                self.assertNotIn('Private heading', page)
+                self.assertEqual(len(Elements(page).of('h2')), 2)
+                self.assertEqual([a['data-section'] for a in Elements(page).of('details')
+                                  if 'artifact-comment' in a.get('class', '') and a.get('data-section')],
+                                 ['one', 'two'])
+
     def test_refused_fence_names_its_resolved_id_and_source_line(self):
         for options, ident in [('d3', 'widget-2'), ('colour=red id=clock', 'clock'),
                                ('colour=red title="Pond clock"', 'pond-clock')]:
