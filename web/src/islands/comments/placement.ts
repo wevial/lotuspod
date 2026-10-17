@@ -59,8 +59,7 @@ export function placement(page: Page, bridge: PlacementBridge): Placement {
     if (arranged) house(box);
   }
 
-  // Every anchor kind names its element here. A detached passage falls
-  // back to its section chip, just as it does in the legacy placement.
+  // A detached passage falls back to its section chip.
   function anchorOf(thread: Thread): HTMLElement | null {
     const anchor = threadAnchor(thread.root);
     switch (anchor.kind) {
@@ -78,8 +77,6 @@ export function placement(page: Page, bridge: PlacementBridge): Placement {
     return thread.box?.querySelector("summary") || null;
   }
 
-  // Open the section a node is in through its heading's button, if it is
-  // folded.
   function unfold(target: HTMLElement) {
     var wrapper = target.closest(".artifact-section-body");
     if (wrapper && wrapper.hasAttribute("hidden")) {
@@ -91,7 +88,6 @@ export function placement(page: Page, bridge: PlacementBridge): Placement {
     }
   }
 
-  // Where the title bar ends, in the window.
   function barBottom() {
     var bar = document.querySelector(".artifact-topbar");
     return bar ? Math.max(0, bar.getBoundingClientRect().bottom) : 0;
@@ -123,7 +119,6 @@ export function placement(page: Page, bridge: PlacementBridge): Placement {
         threadList.expand(thread);
       }
     } else if (resolved(thread)) {
-      // Listed with the resolved threads, its Reopen at hand.
       shell.setOpen(true, true);
       shell.setResolvedShown(true, true);
       if (read) {
@@ -187,7 +182,6 @@ export function placement(page: Page, bridge: PlacementBridge): Placement {
     over.posted(thread, focused);
   };
 
-  // A highlight: the panel opens at its thread.
   api.open = function (thread) {
     shell.setOpen(true, true);
     threadList.expand(thread);
@@ -296,7 +290,6 @@ export function placement(page: Page, bridge: PlacementBridge): Placement {
     return groups.has(box) ? box : sections.get(box.dataset.section!) || null;
   }
 
-  // Whether a thread is open: in the panel, a popover or the sheet.
   api.lit = function (thread) {
     return (api.wide && threadList.current === thread) || over.holds(thread);
   };
@@ -407,7 +400,6 @@ export function placement(page: Page, bridge: PlacementBridge): Placement {
     // In its new place, a thread opens or closes as it now stands.
     moving = false;
     refresh();
-    // A passage's composer goes where the window now has room for it.
     passages.place();
     if (focused instanceof HTMLElement && focused !== document.body && focused.isConnected && document.activeElement !== focused) {
       focused.focus({ preventScroll: true });
@@ -429,7 +421,6 @@ export function placement(page: Page, bridge: PlacementBridge): Placement {
     return null;
   };
 
-  // Open again what api.held kept, where the window now has room for it.
   api.reopen = function (kept) {
     var thread = kept.thread === undefined ? undefined : shown.get(kept.thread);
     var box = typeof kept.section === "string" ? sections.get(kept.section) : null;
@@ -493,7 +484,6 @@ export function placement(page: Page, bridge: PlacementBridge): Placement {
     shell.unlit();
   };
 
-  // The box that was boxes[at] is taken away, with its group and option.
   api.unmount = function (old, at) {
     var made = groups.get(old)!;
     groups.delete(old);
@@ -507,7 +497,6 @@ export function placement(page: Page, bridge: PlacementBridge): Placement {
     decisionChips.delete(form);
   };
 
-  // The box at boxes[at] is added.
   api.mount = function (box, at) {
     mount(box, at);
     shell.unlit();
