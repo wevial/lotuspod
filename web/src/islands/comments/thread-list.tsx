@@ -211,9 +211,6 @@ export function threadList(page: Page, shell: Shell, bridge: ThreadListBridge) {
     return words.length > 80 ? words.slice(0, 80).replace(/\s\S*$/, "") + "…" : words;
   }
 
-  function Tick() {
-    return <span class="artifact-comments-tick" aria-hidden="true">✓</span>;
-  }
   function tick(): HTMLSpanElement {
     const root = document.createElement("div");
     render(<Tick />, root);
@@ -473,4 +470,8 @@ export function threadList(page: Page, shell: Shell, bridge: ThreadListBridge) {
     get current() { return current; },
     get toRead() { return toRead; }, set toRead(value: Thread | null) { toRead = value; },
   };
+}
+
+export function Tick() {
+  return <span class="artifact-comments-tick" aria-hidden="true">✓</span>;
 }
