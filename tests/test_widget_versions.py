@@ -13,6 +13,25 @@ def live(text):
 
 
 class WidgetVersionsTests(VersionsWitness):
+    def test_authored_badge_script_does_not_corrupt_adjacent_content(self):
+        self.repository(self.out)
+        source = self.tmp / f'{PAGE}.html'
+        source.write_text('<h1>Pond plan</h1><span class="artifact-live-badge">'
+                          '<script>bad()</script>Loading</span><p>AFTER BADGE</p>')
+        done = self.cli('publish', str(source), '--local', '--out-dir', str(self.out))
+        self.assertEqual(done.returncode, 0, done.stderr)
+        commit = self.commits(self.out, PAGE)[0]
+        self.publish(PAGE, 'A newer page.', DATES[1])
+        self.start_server()
+
+        status, _, data = self.get(f'/{PAGE}.html?version={commit}')
+        self.assertEqual(status, 200)
+        root = parse(data.decode())
+        self.assertEqual(root.find('span', 'artifact-live-badge')[0].text(), 'Old version')
+        self.assertIn('<p>AFTER BADGE</p>', data.decode())
+        self.assertNotIn('bad()', data.decode())
+        self.assertEqual(len(root.find('script')), 1)
+
     def prepare(self):
         self.repository(self.out)
         saved = []

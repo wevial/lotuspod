@@ -770,8 +770,15 @@ def old_page(page_html: str, name: str, version: Version, behind: int,
     element: script, the old-version script's address, allowed by nonce, the
     answer's own; no other script in the page carries it."""
     places = Places(page_html)
-    edits = [(start, end, "") for start, end in places.scripts]
-    edits += [(start, end, "Old version") for start, end in places.badges]
+    # Authored badges can contain scripts or widget links. Reparse between
+    # transformations so replacing a parent never overlaps an edit to its
+    # contents, whose original offsets would then corrupt adjacent HTML.
+    page_html = edited(page_html, [(start, end, "") for start, end in places.scripts])
+    places = Places(page_html)
+    page_html = edited(page_html, [(start, end, "Old version")
+                                   for start, end in places.badges])
+    places = Places(page_html)
+    edits = []
     for start, end, tag, attrs, attribute in places.widget_tags:
         value = dict(attrs).get(attribute) or ""
         if widgets.WIDGET_NAME.fullmatch(value) and value.startswith(name + ".w-"):
