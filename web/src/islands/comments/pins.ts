@@ -24,6 +24,11 @@ export function pins(bridge: {
     if (wired.has(pin)) return;
     wired.add(pin);
     const open = () => {
+      // An expanded block would cover the panel and its thread: it closes first.
+      const figure = pin.closest<HTMLElement>("figure");
+      if (figure?.classList.contains("artifact-live--expanded")) {
+        figure.querySelector<HTMLButtonElement>(".artifact-live-expand")?.click();
+      }
       const first = openOn(id)[0];
       if (first) bridge.reach(first, pin);
     };

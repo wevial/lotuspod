@@ -199,6 +199,14 @@ test('a reader comments on a live block, hermes answers, and the thread follows 
   await expect(entry.locator('.artifact-comments-entry-body')).toBeHidden();
   await live.pin.click();
   await expect(entry.locator('.artifact-comments-entry-body')).toBeVisible();
+  // An expanded block closes for its pin, so the thread is not under it.
+  await entry.locator('.artifact-comments-entry-head').click();
+  await expect(entry.locator('.artifact-comments-entry-body')).toBeHidden();
+  await live.figure.getByRole('button', { name: 'Expand', exact: true }).click();
+  await expect(live.figure).toHaveClass(/artifact-live--expanded/);
+  await live.pin.click();
+  await expect(live.figure).not.toHaveClass(/artifact-live--expanded/);
+  await expect(entry.locator('.artifact-comments-entry-body')).toBeVisible();
 
   // The block's script changes under the same id: the thread stays on it.
   await swap(page, name, doc(2));
