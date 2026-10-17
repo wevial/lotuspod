@@ -139,7 +139,7 @@ function installWidgetBridge(): void {
         state.pending = true;
         requestAnimationFrame(() => {
           state.pending = false;
-          if (!state.paused && !state.expanded) frame.height = String(state.height);
+          if (!state.paused && !state.expanded && !frame.hasAttribute("data-height-fixed")) frame.height = String(state.height);
         });
       }
       return;

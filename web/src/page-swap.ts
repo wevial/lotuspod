@@ -443,6 +443,19 @@ function pageSwap(): void {
       });
       const parent = fresh.parentElement;
       if (!old || !parent?.moveBefore) continue;
+      // The file hash identifies the running code, not its published chrome
+      // or sizing options. Refresh those without touching runtime state/src.
+      const frame = old.querySelector<HTMLIFrameElement>("iframe.artifact-widget")!;
+      const freshFrame = fresh.querySelector<HTMLIFrameElement>("iframe.artifact-widget")!;
+      frame.title = freshFrame.title;
+      const title = old.querySelector(".artifact-live-title");
+      if (title) title.textContent = fresh.querySelector(".artifact-live-title")?.textContent ?? "";
+      // Preserve a measured auto height on prose-only swaps. Switching to
+      // or from an explicit height applies the new published size instead.
+      if (frame.hasAttribute("data-height-fixed") || freshFrame.hasAttribute("data-height-fixed")) {
+        frame.height = freshFrame.height;
+      }
+      frame.toggleAttribute("data-height-fixed", freshFrame.hasAttribute("data-height-fixed"));
       parent.moveBefore(old, fresh);
       available.delete(old);
       // An intro can hold a figure directly, so its event must name the

@@ -304,6 +304,16 @@ function pageSwap() {
       const parent = fresh.parentElement;
       if (!old || !parent?.moveBefore)
         continue;
+      const frame = old.querySelector("iframe.artifact-widget");
+      const freshFrame = fresh.querySelector("iframe.artifact-widget");
+      frame.title = freshFrame.title;
+      const title = old.querySelector(".artifact-live-title");
+      if (title)
+        title.textContent = fresh.querySelector(".artifact-live-title")?.textContent ?? "";
+      if (frame.hasAttribute("data-height-fixed") || freshFrame.hasAttribute("data-height-fixed")) {
+        frame.height = freshFrame.height;
+      }
+      frame.toggleAttribute("data-height-fixed", freshFrame.hasAttribute("data-height-fixed"));
       parent.moveBefore(old, fresh);
       available.delete(old);
       const at = after.indexOf(fresh);
