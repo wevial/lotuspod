@@ -50,7 +50,7 @@ import re
 from dataclasses import dataclass
 from typing import Callable, Mapping
 
-from . import calltree
+from . import calltree, widgets
 
 CUT = "\n## Concrete commands"
 
@@ -160,7 +160,7 @@ def with_sources(text: str, sources: Mapping[Image, str]) -> str:
 
 def _walk(text: str, figure: Callable[[Image], str]) -> list[str]:
     lines = text.split(CUT)[0].split("\n")
-    return _convert(lines, list(range(len(lines))), figure)
+    return _convert(lines, list(range(len(lines))), figure, [0])
 
 
 def _link(m: re.Match) -> str:
@@ -269,7 +269,7 @@ def _render_list(block: list[str]) -> str:
 
 
 def _convert(lines: list[str], numbers: list[int],
-             figure: Callable[[Image], str]) -> list[str]:
+             figure: Callable[[Image], str], live_count: list[int]) -> list[str]:
     """Body HTML blocks for markdown `lines`, whose indices in the source are
     `numbers`; a blockquote's inner lines go through the same conversion, so
     code blocks, lists, tables and images work inside. `figure` draws an
@@ -287,7 +287,7 @@ def _convert(lines: list[str], numbers: list[int],
                 inner.append(re.sub(r"^ {0,3}> ?", "", lines[i]))
                 inner_numbers.append(numbers[i])
                 i += 1
-            blocks = _convert(inner, inner_numbers, figure)
+            blocks = _convert(inner, inner_numbers, figure, live_count)
             out.append("<blockquote>" + "\n".join(blocks) + "</blockquote>")
             continue
         image = _IMAGE.fullmatch(line)
@@ -297,6 +297,7 @@ def _convert(lines: list[str], numbers: list[int],
             i += 1
             continue
         if line.startswith("```"):
+            fence_line = numbers[i] + 1
             lang = line[3:].strip()
             code = []
             i += 1
@@ -305,6 +306,10 @@ def _convert(lines: list[str], numbers: list[int],
                 i += 1
             i += 1  # the closing fence
             words = lang.split()
+            if words[:2] == ["html", "live"]:
+                live_count[0] += 1
+                out.append(widgets.fence(lang, "\n".join(code) + "\n", fence_line, live_count[0]))
+                continue
             if words and words[0] == "calltree":
                 out.append(calltree.render(code, words[1:]))
                 continue
