@@ -22,12 +22,20 @@ function installWidgetBridge(): void {
     }
     return state;
   };
-  const initialize = (): void => {
+  const initialize = (event: Event): void => {
     document.querySelectorAll<HTMLElement>("figure.artifact-live").forEach((figure) => {
       const frame = figure.querySelector<HTMLIFrameElement>("iframe.artifact-widget");
       const chrome = figure.querySelector<HTMLElement>(".artifact-live-chrome");
       const badge = figure.querySelector<HTMLElement>(".artifact-live-badge");
       if (!frame || !chrome || !badge || chrome.querySelector("button")) return;
+      // Only fresh chrome needs tint: a carried figure already has buttons.
+      // Keep this duration and class aligned with page-swap's part tint.
+      if (event.type === "lotuspod:swapped") {
+        const TINTED = "artifact-swapped";
+        const TINT = 2000;
+        chrome.classList.add(TINTED);
+        setTimeout(() => chrome.classList.remove(TINTED), TINT);
+      }
       const source = frame.getAttribute("src")!;
       const state = stateFor(frame);
       const expand = document.createElement("button");
@@ -80,6 +88,8 @@ function installWidgetBridge(): void {
           state.accepted = [];
           updateBadge();
         }
+        if (state.paused) frame.dataset.pausedSource = source;
+        else delete frame.dataset.pausedSource;
         frame.src = state.paused ? "about:blank" : source;
       });
       frame.addEventListener(WIDGET, (event) => {
@@ -142,4 +152,12 @@ function installWidgetBridge(): void {
     }
     frame.dispatchEvent(new CustomEvent<WidgetDetail>(WIDGET, {detail: {kind, message}}));
   });
+}
+
+// This source also runs alone in the head for early bridge messages. The
+// deferred page bundle supplies holdSwap and registers this test once.
+if (typeof holdSwap === "function") {
+  holdSwap((nodes) => nodes.some((node) =>
+    node.matches("figure.artifact-live--expanded") ||
+    node.querySelector("figure.artifact-live--expanded") !== null));
 }

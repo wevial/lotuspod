@@ -10,13 +10,19 @@ function installWidgetBridge() {
     }
     return state;
   };
-  const initialize = () => {
+  const initialize = (event) => {
     document.querySelectorAll("figure.artifact-live").forEach((figure) => {
       const frame = figure.querySelector("iframe.artifact-widget");
       const chrome = figure.querySelector(".artifact-live-chrome");
       const badge = figure.querySelector(".artifact-live-badge");
       if (!frame || !chrome || !badge || chrome.querySelector("button"))
         return;
+      if (event.type === "lotuspod:swapped") {
+        const TINTED = "artifact-swapped";
+        const TINT = 2000;
+        chrome.classList.add(TINTED);
+        setTimeout(() => chrome.classList.remove(TINTED), TINT);
+      }
       const source = frame.getAttribute("src");
       const state = stateFor(frame);
       const expand = document.createElement("button");
@@ -76,6 +82,10 @@ function installWidgetBridge() {
           state.accepted = [];
           updateBadge();
         }
+        if (state.paused)
+          frame.dataset.pausedSource = source;
+        else
+          delete frame.dataset.pausedSource;
         frame.src = state.paused ? "about:blank" : source;
       });
       frame.addEventListener(WIDGET, (event) => {
@@ -146,4 +156,7 @@ function installWidgetBridge() {
     }
     frame.dispatchEvent(new CustomEvent(WIDGET, { detail: { kind, message } }));
   });
+}
+if (typeof holdSwap === "function") {
+  holdSwap((nodes) => nodes.some((node) => node.matches("figure.artifact-live--expanded") || node.querySelector("figure.artifact-live--expanded") !== null));
 }
