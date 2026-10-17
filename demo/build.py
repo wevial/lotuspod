@@ -15,7 +15,12 @@ The published directory then becomes a static site in DIR: Lotuspod's page
 list moves to pages.html (and each page's topbar brand link with it), `/`
 redirects to the README's page, every page gets the demo banner and its
 stylesheet, and the static host's `_headers` and `_redirects` are written.
-Media is copied to DIR/media/, where the pages name it.
+Media is copied to DIR/media/, where the pages name it. Each widget file
+publish wrote for a live block (`PAGE.w-HASH.html`) is copied as it is, not
+dressed and not a page, and `_headers` names its path in a rule of its own
+with the headers serve gives a widget file, since the host's patterns allow
+one splat only; `--serve` answers widget files with the same headers. The
+frames that show them load with their page, not lazily.
 
 Every page also loads the demo shim (demo/shim.js, with demo/replies.json
 put in it) as lotuspod-demo.js, from its head, so before the page script: it
@@ -67,6 +72,7 @@ SOURCES = (
     ("docs/development.md", "development"),
     ("docs/architecture.md", "architecture"),
     ("demo/pages/try-it.md", "try-it"),
+    ("docs/examples/interactive.md", "interactive"),
 )
 SUMMARIES = {
     "readme": "What Lotuspod is, how it is laid out, and a quick start.",
@@ -77,6 +83,7 @@ SUMMARIES = {
     "development": "Tests, captures and how a change is checked.",
     "architecture": "How serve, the socket, SQLite, Access, the responder and publish fit.",
     "try-it": "A made-up plan to comment on, quote from and decide on.",
+    "interactive": "A worked example: a live d3 chart with notes and a decision.",
 }
 LANDING_PAGE = "readme"
 TRY_IT_PAGE = "try-it"
@@ -98,6 +105,17 @@ HEADERS = """\
   X-Content-Type-Options: nosniff
   Referrer-Policy: no-referrer
 """
+# A widget file publish writes for a live block, and the headers serve answers
+# it with (lotuspod.widgets.HEADERS, which the build cannot import: it runs
+# without the package installed). X-Content-Type-Options comes from "/*".
+WIDGET_NAME = re.compile(r".+\.w-[0-9a-f]{12}\.html\Z")
+WIDGET_HEADERS = (
+    ("Content-Security-Policy", "sandbox allow-scripts; frame-ancestors 'self'"),
+    ("Permissions-Policy", "camera=(), microphone=(), geolocation=(), clipboard-read=(), "
+                           "clipboard-write=(), display-capture=(), payment=(), usb=()"),
+)
+# The lazy loading publish gives a live block's frame, which the demo drops.
+WIDGET_FRAME_LAZY = re.compile(r'(<iframe class="artifact-widget" [^>]*?) loading="lazy"')
 REDIRECTS = f"""\
 / /{LANDING_PAGE}.html 302
 /{INDEX_FILE} /{LANDING_PAGE}.html 302
@@ -175,8 +193,9 @@ def short_commit(root: Path) -> str:
     return done.stdout.strip()
 
 
-def publish(copy: Path, base: Path, page: str, site: Path, scratch: Path) -> None:
-    """Publish copy as page into site with the real CLI, from src/, with no config."""
+def publish(copy: Path, base: Path, page: str, site: Path, scratch: Path) -> str:
+    """Publish copy as page into site with the real CLI, from src/, with no
+    config; what publish printed to stderr, where its warnings go."""
     home = scratch / "home"
     home.mkdir(exist_ok=True)
     env = {
@@ -194,6 +213,7 @@ def publish(copy: Path, base: Path, page: str, site: Path, scratch: Path) -> Non
     )
     if done.returncode != 0:
         raise BuildError(f"lotuspod publish of {page} failed:\n{done.stderr.strip()}")
+    return done.stderr
 
 
 class _Headings(HTMLParser):
@@ -259,8 +279,8 @@ def banner(commit: str) -> str:
 
 def dress(page: str, name: str, commit: str) -> str:
     """page as the demo shows it: its stylesheet linked, the shim loaded from
-    its head, the banner first in its body, and its brand link (if any) on
-    the page list."""
+    its head, the banner first in its body, its live blocks' frames loaded
+    with it, and its brand link (if any) on the page list."""
     def once(text: str, old: str, new: str) -> str:
         if text.count(old) != 1:
             raise BuildError(f"{name}: expected one {old!r}, found {text.count(old)}")
@@ -269,6 +289,9 @@ def dress(page: str, name: str, commit: str) -> str:
     page = once(page, "</head>", f'  <link rel="stylesheet" href="{DEMO_CSS}">\n'
                 f'  <script src="{DEMO_JS}"></script>\n</head>')
     page = once(page, "<body>", f"<body>\n{banner(commit)}")
+    # A lazy frame has no address until it scrolls near the window, nor while
+    # its page waits in a tab of the page list, and the demo's checks expect one.
+    page = WIDGET_FRAME_LAZY.sub(r"\1", page)
     if name != PAGES_FILE:
         page = once(page, BRAND_LINK, BRAND_LINK.replace(INDEX_FILE, PAGES_FILE))
     return page
@@ -288,6 +311,13 @@ def shim() -> str:
     if script.count(REPLIES_SLOT) != 1:
         raise BuildError(f"{SHIM.name}: expected one {REPLIES_SLOT!r}")
     return script.replace(REPLIES_SLOT, json.dumps(replies, ensure_ascii=True, indent=2))
+
+
+def headers(widgets: list[str]) -> str:
+    """_headers: the rule for every path, then one for each widget file by its
+    exact path, as the host matches one splat per rule."""
+    rule = "".join(f"  {key}: {value}\n" for key, value in WIDGET_HEADERS)
+    return HEADERS + "".join(f"/{name}\n{rule}" for name in widgets)
 
 
 def prepare_out(out: Path) -> None:
@@ -328,9 +358,13 @@ def build(out: Path, root: Path | None = None,
             publish(copy, base, page, site, scratch)
 
         prepare_out(out)
-        shown = []
+        shown, widgets = [], []
         for path in sorted(site.iterdir()):
             if path.name in NOT_SHOWN or path.suffix == ".md" or not path.is_file():
+                continue
+            if WIDGET_NAME.fullmatch(path.name):
+                shutil.copy2(path, out / path.name)
+                widgets.append(path.name)
                 continue
             if path.suffix != ".html":
                 shutil.copy2(path, out / path.name)
@@ -345,13 +379,14 @@ def build(out: Path, root: Path | None = None,
 
     shutil.copyfile(STYLESHEET, out / DEMO_CSS)
     (out / DEMO_JS).write_text(script, encoding="utf-8")
-    (out / "_headers").write_text(HEADERS, encoding="utf-8")
+    (out / "_headers").write_text(headers(widgets), encoding="utf-8")
     (out / "_redirects").write_text(REDIRECTS, encoding="utf-8")
     return shown
 
 
 class _Handler(SimpleHTTPRequestHandler):
-    """A static file server that answers / as the host's _redirects do.
+    """A static file server that answers / as the host's _redirects do, and
+    a widget file with the headers _headers gives it.
     With a log, each request is written there as `METHOD PATH`, not to stderr."""
 
     def __init__(self, *args, log=None, **kwargs) -> None:
@@ -368,6 +403,14 @@ class _Handler(SimpleHTTPRequestHandler):
         self.send_header("Content-Length", "0")
         self.end_headers()
         return True
+
+    def end_headers(self) -> None:
+        # The file this request is answered from, as the server resolves it,
+        # so no spelling of a widget's path (%2e for a dot) misses the headers.
+        if WIDGET_NAME.fullmatch(Path(self.translate_path(self.path)).name):
+            for key, value in WIDGET_HEADERS:
+                self.send_header(key, value)
+        super().end_headers()
 
     def do_GET(self) -> None:
         if not self._landing():

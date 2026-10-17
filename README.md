@@ -92,11 +92,37 @@ Comments and answers need the reader's routes, which sit behind Cloudflare
 Access: until the config has an `[access]` section they answer 503, and the
 page itself is served as usual.
 
+## Interactive pages
+
+A live block is a small HTML page of its own inside a page: a chart, a
+slider, a mock-up, with its scripts running. Write it as a fenced block whose
+first line is three backticks and `html live`, with a `title=`; here are its
+three lines, without the backticks that open and close it. It is safe to put
+on a page because it runs in a sandboxed frame: it cannot fetch or load
+anything from elsewhere, read the page around it, or see the reader's session
+or comments. It can still move its own frame to another address, carrying
+what the reader typed into it, so it is for showing things, not for asking
+for secrets.
+
+```text
+html live title="A counter"
+<button id="count" type="button">Pressed 0 times</button>
+<script>let n = 0; const button = document.getElementById('count'); button.addEventListener('click', () => { button.textContent = `Pressed ${++n} times`; });</script>
+```
+
+[Interactive pages](docs/publishing.md#interactive-pages) has the options,
+the pinned chart libraries, whole HTML pages with `publish --live`, and the
+limits; [the worked example](docs/examples/interactive.md) is a pod with a
+live d3 chart, notes and a decision.
+
 ## Where to read next
 
 - [Publishing pages](docs/publishing.md): for people publishing pages.
   Markdown and HTML pages, images, the manifest and the index, decision
-  tables and checklists, the template and the theme, and what a page may run.
+  tables and checklists, interactive pages, the template and the theme, and
+  what a page may run.
+- [An interactive pod](docs/examples/interactive.md): a worked example. A
+  live d3 chart with its data inline, the notes around it and a decision.
 - [Reading and answering pages](docs/comments.md): for readers and the people
   answering them. Answers and comments, the comments panel, the popover and
   bottom sheet, and comments on passages.
