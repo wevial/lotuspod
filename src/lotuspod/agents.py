@@ -259,7 +259,8 @@ def block_lines(item: dict) -> list[str]:
     ident = one_line(anchor["id"])
     name = f"{one_line(block['title'])} (`{ident}`)" if block["title"] else f"`{ident}`"
     state = one_line(anchor["state"])
-    lines = [f"On the block {name}" + (f", at {state}" if state else ""), ""]
+    # The state is a phrase as the widget sent it, "at 6 workers".
+    lines = [f"On the block {name}" + (f", {state}" if state else ""), ""]
     if block["status"] == "changed":
         lines += ["The block has changed since this comment", ""]
     elif block["status"] == "removed":

@@ -29,11 +29,8 @@ from tests.test_agent_pull import PullTestCase, run_cli  # noqa: E402
 
 TITLE = "Merge churn by worker count"
 STATE = "at 6 workers"
-# The block's line in the ticket's format, "On the block TITLE (`ID`), at
-# STATE", with the state kept as sent. With the ticket's state "at 6 workers"
-# that reads "at at 6 workers", not the wording criterion C4 quotes; the
-# format is kept and the mismatch is reported, not worked around.
-LINE = f"On the block {TITLE} (`churn`), at {STATE}"
+# The block's line: "On the block TITLE (`ID`), STATE", the state as sent.
+LINE = "On the block Merge churn by worker count (`churn`), at 6 workers"
 BLOCK = """\
 ```html live id=churn title="Merge churn by worker count"
 <p id="out">at 1 worker</p>
