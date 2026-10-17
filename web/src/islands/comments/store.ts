@@ -52,8 +52,11 @@ export function store(page: Page, bridge: StoreBridge): Store {
   let last = 0;
   let timer: number | undefined;
   let reading = false;
-  // Until the first read has finished, a chip keeps its served line.
+  // Until the first read has finished, a chip keeps its served line, so a
+  // section with threads never says "No comments"; a read slower than
+  // SLOW_MS draws the chips anyway, so the reader can still write.
   let settled = false;
+  const SLOW_MS = 1000;
   // A note's thread not read yet (owe), and how many notes were saved:
   // only a read begun after the newest finds its thread.
   let owed = false;
@@ -491,6 +494,11 @@ export function store(page: Page, bridge: StoreBridge): Store {
         rehome();
         refresh();
       }));
+      window.setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        refresh();
+      }, SLOW_MS);
       read();
     },
   };
