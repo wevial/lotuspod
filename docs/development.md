@@ -78,18 +78,23 @@ truth: the sheet draws from them on each form's `input`, `change` and
 `answering.save()`, one question at a time in page order. Preact holds only
 the sheet's own state: the panel open, a Save under way, what it did, and
 the question Next open last jumped to, which a swap keeps. The bundle, Preact with it, stays at most
-24,000 bytes gzipped; it uses plain Preact and its hooks, not
+27,000 bytes gzipped; it uses plain Preact and its hooks, not
 `preact/compat`.
 
 The comments island (`web/src/islands/comments/index.ts`) mounts after the
 review sheet and starts the bridge's typed `commenting` object, null on pages
-without comment boxes. It supplies the placement factory declared in `parts.ts`,
-which creates the shell and thread-list parts.
+without comment boxes. It supplies the placement and thread factories declared in `parts.ts`.
+Placement creates the shell and thread-list parts.
 The shell draws the panel frame, rail, tally and start controls. The thread-list
 part draws section groups, changed-section threads, entry heads and resolution
 controls. Its typed bridge reads the page's thread objects and passage helpers;
-comments.js still owns thread bodies, composers and chips. The placement part
-owns panel, popover and sheet selection, resize focus preservation, and the
+comments.js still owns thread containers, composers and chips. The thread part
+(`comments/thread.tsx`) owns each list’s rows, notices, typing bubble and unread
+marks. Its typed bridge reads unread state and checking, and supplies the shared
+markdown, image and time helpers. Stable keyed comments keep their first row
+snapshot; ref callbacks attach markdown and images once. Status keys replace
+only changed marks, and synchronous renders preserve live-region row identity.
+The placement part owns panel, popover and sheet selection, resize focus preservation, and the
 reload and swap hooks. Its bridge reads the live boxes and chip nodes and hands
 `narrow.js` a typed object; narrow.js still draws the popover and sheet. Movable
 entries, group toggles and form holders are independent render roots, so narrow.js
