@@ -78,7 +78,6 @@
   backdrop.append(dialog);
   document.body.append(backdrop);
   let seen = null;
-  const opened = new Map;
   let answered = false;
   const pending = new Set;
   let shown = [];
@@ -86,9 +85,7 @@
   let back = null;
   const seenAt = (pod) => {
     const entry = seen && Object.prototype.hasOwnProperty.call(seen, pod.name) ? seen[pod.name] : null;
-    const recorded = entry && typeof entry.seenAt === "string" ? entry.seenAt : null;
-    const local = opened.get(pod.name);
-    return local && (!recorded || local > recorded) ? local : recorded;
+    return entry && typeof entry.seenAt === "string" ? entry.seenAt : null;
   };
   const newest = (a, b) => {
     const left = seenAt(a);
@@ -274,7 +271,6 @@
       hide(true);
       return;
     }
-    opened.set(choice.pod.name, new Date().toISOString());
     hide(false);
     document.dispatchEvent(new CustomEvent("lotuspod:open", { detail: {
       name: choice.pod.name,
