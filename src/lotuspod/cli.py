@@ -1966,30 +1966,29 @@ def send_live_files(raw: str, base: Path | None) -> str:
         i += 1
         while i < len(lines) and not lines[i][len(prefix):].startswith('```'):
             i += 1
-        end = min(i + 1, len(lines))
-        if fence[3:].split()[:2] == ['html', 'live']:
-            try:
-                lexer = shlex.shlex(fence[3:], posix=True)
-                lexer.whitespace += ''.join(char for char in set(fence) if char.isspace())
-                lexer.whitespace_split = True
-                lexer.commenters = ''
-                words = list(lexer)
-            except ValueError as exc:
-                raise RuntimeError(f'live block at line {start + 1}: {exc}; nothing written') from None
-            paths = [word[5:] for word in words[2:] if word.startswith('file=')]
-            if paths:
-                if len(paths) != 1:
-                    raise RuntimeError(f'live block at line {start + 1}, file {paths}: duplicate file option; nothing written')
-                source = live_file(paths[0], base, start + 1)
-                info = shlex.join([word for word in words if not word.startswith('file=')])
-                result.append(prefix + '```' + info + '\n')
-                result.extend(prefix + line + '\n' for line in normalized(source).splitlines())
-                result.append(prefix + '```\n')
-            else:
-                result.extend(lines[start:end])
-        else:
-            result.extend(lines[start:end])
-        i = end
+        i = min(i + 1, len(lines))
+        if fence[3:].split()[:2] != ['html', 'live']:
+            result.extend(lines[start:i])
+            continue
+        try:
+            lexer = shlex.shlex(fence[3:], posix=True)
+            lexer.whitespace += ''.join(char for char in set(fence) if char.isspace())
+            lexer.whitespace_split = True
+            lexer.commenters = ''
+            words = list(lexer)
+        except ValueError as exc:
+            raise RuntimeError(f'live block at line {start + 1}: {exc}; nothing written') from None
+        paths = [word[5:] for word in words[2:] if word.startswith('file=')]
+        if not paths:
+            result.extend(lines[start:i])
+            continue
+        if len(paths) != 1:
+            raise RuntimeError(f'live block at line {start + 1}, file {paths}: duplicate file option; nothing written')
+        source = live_file(paths[0], base, start + 1)
+        info = shlex.join([word for word in words if not word.startswith('file=')])
+        result.append(prefix + '```' + info + '\n')
+        result.extend(prefix + line + '\n' for line in normalized(source).splitlines())
+        result.append(prefix + '```\n')
     return ''.join(result)
 
 

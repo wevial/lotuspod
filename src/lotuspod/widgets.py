@@ -226,15 +226,14 @@ def render(body: str, name: str) -> tuple[str, dict[str, bytes], list[str]]:
         if full:
             head += f'<script>{bridge}</script>'
             structure = DocumentHead(source)
-            if structure.head is not None:
-                point = structure.head
-                document = source[:point] + head + source[point:]
-            else:
+            point = structure.head
+            if point is None:
                 point = structure.html
                 if point is None:
                     declaration = re.match(r'\s*<!doctype[^>]*>', source, re.IGNORECASE)
                     point = declaration.end() if declaration else 0
-                document = source[:point] + '<head>' + head + '</head>' + source[point:]
+                head = '<head>' + head + '</head>'
+            document = source[:point] + head + source[point:]
         else:
             document = '<!doctype html><html><head>' + head + '</head><body>' + content + '</body></html>\n'
         document = document.encode('utf-8')
