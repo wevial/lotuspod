@@ -1,7 +1,6 @@
 import type { PlacementBridge, Thread, ThreadBridge } from "../bridge";
 import type { threadList } from "./thread-list";
 
-// Only migrated parts belong here.
 export interface Section {
   box: HTMLElement;
   title: string;
