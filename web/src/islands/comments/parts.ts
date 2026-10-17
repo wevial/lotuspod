@@ -38,6 +38,7 @@ export interface ComposerHandles {
   images: import('../bridge').Attachments;
 }
 export interface Parts {
+  passages(bridge: import("../bridge").PassagesBridge): Passages;
   composer(bridge: import('../bridge').ComposerBridge): ReturnType<typeof import('./composer').composers>;
   thread(bridge: ThreadBridge): ReturnType<typeof import("./thread").threadRows>;
   placement(bridge: PlacementBridge): Placement;
@@ -130,4 +131,31 @@ export interface Placement {
   show: Over["show"];
   passage: Over["passage"];
   dropped: Over["dropped"];
+}
+
+export interface PassageDraft {
+  quote?: import('../bridge').PassageQuote;
+  section?: string;
+  index?: number;
+  text?: string;
+  images?: unknown;
+  held?: boolean;
+  from?: import('../bridge').Attachments;
+  box?: HTMLElement;
+  saving?: Promise<import('../bridge').CommentRow | null> | null;
+}
+export interface Passages {
+  detached(thread: Thread): boolean;
+  said(thread: Thread): HTMLElement[];
+  key(thread: Thread): string;
+  shine(thread: Thread): void;
+  point(thread: Thread | null, where: 'page' | 'entry'): void;
+  update(): void;
+  place(): void;
+  cancel(mine: Passage): void;
+  writing(): PassageDraft | null;
+  reopen(kept: PassageDraft): boolean;
+  moved(): void;
+  writes(nodes: HTMLElement[]): boolean;
+  swept(): PassageDraft | null;
 }
