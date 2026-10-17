@@ -3,7 +3,10 @@
   "private": true,
   "dependencies": {
     "@mermaid-js/layout-elk": "0.2.3",
+    "@observablehq/plot": "0.6.17",
     "@playwright/test": "1.62.1",
+    "chart.js": "4.4.8",
+    "d3": "7.9.0",
     "mermaid": "11.4.1"
   }
 }

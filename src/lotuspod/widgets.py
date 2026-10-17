@@ -9,6 +9,8 @@ from pathlib import Path
 import re
 import shlex
 
+from . import libraries
+
 THEME = Path(__file__).parent / '_theme'
 WIDGET_NAME = re.compile(r'.+\.w-[0-9a-f]{12}\.html\Z')
 HEADERS = (
@@ -34,21 +36,36 @@ def identifier(explicit: str, title: str, number: int) -> str:
 
 def fence(info: str, source: str, line: int, number: int) -> str:
     try:
-        words = shlex.split(info)[2:]
+        lexer = shlex.shlex(info, posix=True)
+        # Match Markdown's Unicode whitespace without changing quoted titles.
+        lexer.whitespace += ''.join(char for char in set(info) if char.isspace())
+        lexer.whitespace_split = True
+        lexer.commenters = ''
+        words = list(lexer)[2:]
     except ValueError as exc:
         raise RuntimeError(f'widget widget-{number} at line {line}: {exc}') from exc
     options = {}
     refused = []
+    names = []
     for word in words:
         key, sep, value = word.partition('=')
-        if not sep or key not in {'id', 'title', 'height'} or key in options:
+        if not sep:
+            names.append(word)
+        elif key not in {'id', 'title', 'height'} or key in options:
             refused.append(word)
         else:
             options[key] = value
     if refused:
         ident = identifier(options.get('id', ''), options.get('title', ''), number)
         raise RuntimeError(f'widget {ident} at line {line}: unknown option {refused[0]}; '
-                           'libraries come with the next ticket; nothing written')
+                           'nothing written')
+    try:
+        libraries.resolve(names)
+    except ValueError as exc:
+        ident = identifier(options.get('id', ''), options.get('title', ''), number)
+        raise RuntimeError(f'widget {ident} at line {line}: {exc}; nothing written') from exc
+    if names:
+        options['libs'] = ' '.join(names)
     attrs = ''.join(f' data-{key}="{html.escape(value)}"' for key, value in options.items())
     return f'<template class="lotuspod-live" data-line="{line}"{attrs}>{source}</template>'
 
@@ -93,6 +110,27 @@ class Templates(HTMLParser):
                 self.active = None
 
 
+class InlineScriptsOnly(HTMLParser):
+    """Library widgets load external scripts only through generated SRI tags."""
+    CDATA_CONTENT_ELEMENTS = Templates.CDATA_CONTENT_ELEMENTS
+
+    def parse_html_declaration(self, i):
+        # HTMLParser hides marked sections through ]]>, but in HTML a browser
+        # treats <![CDATA[ as a bogus comment ending at the first >. Reject
+        # these declarations rather than hiding potentially executable tags.
+        # Check at the opener so incomplete marked sections are rejected too.
+        if self.rawdata.startswith('<![', i):
+            raise ValueError('CDATA and marked sections are not allowed in library widgets')
+        return super().parse_html_declaration(i)
+
+    def handle_starttag(self, tag, attrs):
+        # SVG scripts use href (or the legacy xlink:href), bypassing the
+        # generated library tag's integrity check just like an authored src.
+        if tag == 'script' and any(key in {'src', 'href', 'xlink:href'} for key, _ in attrs):
+            raise ValueError('external script tags are not allowed in library widgets; '
+                             'declare libraries with live fence names or data-libs instead')
+
+
 class Frames(HTMLParser):
     def __init__(self, text):
         super().__init__()
@@ -121,9 +159,15 @@ def render(body: str, name: str) -> tuple[str, dict[str, bytes], list[str]]:
         label = f'widget {ident} at line {line}'
         def fail(reason):
             raise RuntimeError(f'{label}: {reason}; nothing written')
-        unknown = set(attrs) - {'class', 'data-id', 'data-title', 'data-height', 'data-line'}
+        unknown = set(attrs) - {'class', 'data-id', 'data-title', 'data-height', 'data-line', 'data-libs'}
         if unknown:
             fail('unknown option ' + sorted(unknown)[0])
+        try:
+            selected = libraries.resolve((attrs.get('data-libs') or '').split())
+            if selected:
+                InlineScriptsOnly().feed(source)
+        except ValueError as exc:
+            fail(str(exc))
         if ident in ids:
             fail('duplicate id')
         ids.add(ident)
@@ -143,8 +187,14 @@ def render(body: str, name: str) -> tuple[str, dict[str, bytes], list[str]]:
             warnings.append(f'warning: {label} has no title')
         bridge = (THEME / 'widget-frame.js').read_text(encoding='utf-8')
         content = f'<script>{bridge}</script>' + source
-        policy = "default-src 'none'; script-src " + ' '.join(script_hash(s) for s in collect_scripts(content).inline) + "; style-src 'unsafe-inline'; img-src data:; font-src data:; connect-src 'none'; form-action 'none'; base-uri 'none'; frame-src 'none'"
-        document = ('<!doctype html><html><head><meta http-equiv="Content-Security-Policy" content="' + html.escape(policy, quote=True) + '"><meta charset="utf-8"><style>' + variables() + 'body { margin: 0; font-family: var(--lotus-font-body); color: var(--lotus-type-ink); background: transparent; color-scheme: dark; }\n</style></head><body>' + content + '</body></html>\n').encode('utf-8')
+        tags = ''.join(
+            f'<script src="{library.url}" integrity="{library.integrity}" crossorigin="anonymous"></script>'
+            for library in selected
+        )
+        script_sources = [script_hash(s) for s in collect_scripts(content).inline]
+        script_sources.extend(library.url for library in selected)
+        policy = "default-src 'none'; script-src " + ' '.join(script_sources) + "; style-src 'unsafe-inline'; img-src data:; font-src data:; connect-src 'none'; form-action 'none'; base-uri 'none'; frame-src 'none'"
+        document = ('<!doctype html><html><head><meta http-equiv="Content-Security-Policy" content="' + html.escape(policy, quote=True) + '">' + tags + '<meta charset="utf-8"><style>' + variables() + 'body { margin: 0; font-family: var(--lotus-font-body); color: var(--lotus-type-ink); background: transparent; color-scheme: dark; }\n</style></head><body>' + content + '</body></html>\n').encode('utf-8')
         filename = f'{name}.w-{hashlib.sha256(document).hexdigest()[:12]}.html'
         files[filename] = document
         fixed = ' data-height-fixed="true"' if height is not None else ''

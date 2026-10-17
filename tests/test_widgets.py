@@ -182,8 +182,16 @@ class WidgetTests(TempDirTestCase):
                                   if 'artifact-comment' in a.get('class', '') and a.get('data-section')],
                                  ['one', 'two'])
 
+    def test_pinned_fence_library_names_are_accepted(self):
+        for name in ('mermaid', 'd3', 'plot', 'chartjs'):
+            with self.subTest(library=name):
+                body = markdown.to_body(f'```html live {name} title="Chart"\nx\n```')
+                _, files, warnings = widgets.render(body, 'pond')
+                self.assertEqual(len(files), 1)
+                self.assertEqual(warnings, [])
+
     def test_refused_fence_names_its_resolved_id_and_source_line(self):
-        for options, ident in [('d3', 'widget-2'), ('colour=red id=clock', 'clock'),
+        for options, ident in [('three', 'widget-2'), ('colour=red id=clock', 'clock'),
                                ('colour=red title="Pond clock"', 'pond-clock')]:
             with self.subTest(options=options):
                 source = '```html live title="First"\nx\n```\n```html live ' + options + '\nx\n```'
@@ -218,7 +226,7 @@ class WidgetTests(TempDirTestCase):
             ('id=w-{i} title="Clock"', 'x', 21),
             ('id=w-{i} title="Clock"', 'x' * (240 * 1024), 9),
             ('id=bad colour=red', 'x', 1),
-            ('id=bad d3', 'x', 1),
+            ('id=bad three', 'x', 1),
             ('id=a', 'x', 2),
         ]
         for options, content, count in cases:
