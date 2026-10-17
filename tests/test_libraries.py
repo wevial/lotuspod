@@ -126,6 +126,19 @@ class LibraryTests(TempDirTestCase):
                     self.assertIn('external script tags are not allowed', err)
                     self.assertEqual(list(self.out_dir.iterdir()), [])
 
+    def test_cdata_cannot_hide_external_script(self):
+        url = libraries.LIBRARIES['d3'].url
+        for opener in ('<![CDATA[>', '<![CDATA[ >', '<![IGNORE[>'):
+            for suffix in ('md', 'html'):
+                with self.subTest(opener=opener, suffix=suffix):
+                    tag = f'{opener}<script src="{url}"></script>]]>'
+                    source = (f'# Charts\n```html live d3\n{tag}\n```' if suffix == 'md' else
+                              f'<h1>Charts</h1><template class="lotuspod-live" data-libs="d3">{tag}</template>')
+                    rc, _, err = self.publish(source, suffix)
+                    self.assertEqual(rc, 1)
+                    self.assertIn('CDATA and marked sections are not allowed', err)
+                    self.assertEqual(list(self.out_dir.iterdir()), [])
+
     def test_npm_versions(self):
         dependencies = json.loads((ROOT / 'e2e/package.json').read_text())['dependencies']
         for name, lib in libraries.LIBRARIES.items():

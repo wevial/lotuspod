@@ -114,6 +114,15 @@ class InlineScriptsOnly(HTMLParser):
     """Library widgets load external scripts only through generated SRI tags."""
     CDATA_CONTENT_ELEMENTS = Templates.CDATA_CONTENT_ELEMENTS
 
+    def parse_html_declaration(self, i):
+        # HTMLParser hides marked sections through ]]>, but in HTML a browser
+        # treats <![CDATA[ as a bogus comment ending at the first >. Reject
+        # these declarations rather than hiding potentially executable tags.
+        # Check at the opener so incomplete marked sections are rejected too.
+        if self.rawdata.startswith('<![', i):
+            raise ValueError('CDATA and marked sections are not allowed in library widgets')
+        return super().parse_html_declaration(i)
+
     def handle_starttag(self, tag, attrs):
         # SVG scripts use href (or the legacy xlink:href), bypassing the
         # generated library tag's integrity check just like an authored src.
