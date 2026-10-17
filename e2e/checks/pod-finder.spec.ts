@@ -261,6 +261,7 @@ test.describe('signed in', () => {
     expect(await selectedName(page)).toBe(names[2]);
     const third = (await listed(page)).find((pod) => pod.name === names[2]) as Pod;
 
+    const recorded = seenPost(page, third);
     await page.keyboard.press('Enter');
     await expect(finder(page)).toBeHidden();
     await expect(tabTitle(page, third)).toHaveAttribute('aria-current', 'page');
@@ -271,13 +272,14 @@ test.describe('signed in', () => {
     // The first of the other pods, newest update first, is a published one,
     // stamped: it records its own opening, and next time it comes first.
     await expect(framed(page, third).locator('meta[name="lotuspod:revision"]')).toHaveCount(1);
+    expect((await recorded).ok()).toBeTruthy();
     await expect.poll(async () => {
       const answer = await page.request.get(SEEN);
       return typeof (await answer.json()).pages?.[third.name]?.seenAt;
     }).toBe('string');
     await find(page);
     await expect(headings(page).first()).toHaveText('Recent');
-    expect((await optionNames(page))[0]).toBe(third.name);
+    await expect.poll(async () => (await optionNames(page))[0]).toBe(third.name);
     await expect(optionFor(page, third).locator('.pod-finder-open')).toHaveText('in a tab');
     expect(errors).toEqual([]);
   });

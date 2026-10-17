@@ -6,6 +6,7 @@ import threading
 import urllib.error
 import urllib.request
 from html.parser import HTMLParser
+from unittest.mock import patch
 
 from tests.test_manifest_v2 import TempDirTestCase, cli, run_cli
 from tests.test_page_policy import read_page, directives
@@ -28,6 +29,17 @@ class Elements(HTMLParser):
 
 
 class WidgetTests(TempDirTestCase):
+    def test_frame_scan_skips_pages_without_iframe_candidates(self):
+        with patch.object(widgets.Frames, 'feed') as feed:
+            self.assertEqual(widgets.Frames('<p>No frame</p>').sources, [])
+        feed.assert_not_called()
+        self.assertEqual(widgets.Frames(
+            '<!-- <iframe class="artifact-widget" src="comment.html"> -->'
+            '<script>"<iframe class=artifact-widget src=script.html>"</script>'
+            '<iframe src="ordinary.html"></iframe>'
+            '<IFRAME\nCLASS="artifact-widget" SRC="pond.w-123456abcdef.html"></IFRAME>'
+        ).sources, ['pond.w-123456abcdef.html'])
+
     def publish(self, text, suffix='html', *extra):
         source = self.out_dir.parent / (self.out_dir.name + '.' + suffix)
         self.addCleanup(source.unlink, missing_ok=True)

@@ -4,6 +4,11 @@ import os from 'node:os';
 import path from 'node:path';
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
 
+// Finish intercepted requests before Playwright disposes their responses.
+test.afterEach(async ({ page }) => {
+  await page.unrouteAll({ behavior: 'wait' });
+});
+
 // Questions about a decision: the capture fixture's decision threads page,
 // two sections, the second asking two questions. On a page that takes
 // comments each decision has an Ask beside "Save answer", which posts its

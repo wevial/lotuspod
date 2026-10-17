@@ -51,6 +51,10 @@ test('widget script, theme, resize and strictly validated messages', async ({pag
   const inner = page.frameLocator('iframe.artifact-widget');
   await expect.poll(() => page.evaluate(() => (window as any).widgetEvents.filter((e: any) => e.kind === 'ready').length)).toBe(1);
   await expect(inner.locator('#swatch')).toHaveCSS('color', 'rgb(183, 156, 244)');
+  // Ready can precede the first ResizeObserver delivery. Measure the widget
+  // after that resize, rather than comparing growth with the 360px fallback.
+  const initialHeight = await inner.locator('html').evaluate(node => Math.ceil(node.getBoundingClientRect().height));
+  await expect(frame).toHaveAttribute('height', String(initialHeight));
   const before = Number(await frame.getAttribute('height'));
   await inner.getByRole('button').click();
   await expect(inner.locator('#output')).toHaveText('A ripple moves across the pond.');

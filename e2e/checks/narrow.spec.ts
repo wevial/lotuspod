@@ -2,6 +2,11 @@ import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { expect, test, type Locator, type Page } from '@playwright/test';
 
+// Finish intercepted requests before Playwright disposes their responses.
+test.afterEach(async ({ page }) => {
+  await page.unrouteAll({ behavior: 'wait' });
+});
+
 // Windows without room for the comments panel: at 1024 pixels a thread opens
 // in a popover under its chip or highlight, over the text; at 360 pixels, a
 // phone, in a bottom sheet whose arrows step through every open thread on

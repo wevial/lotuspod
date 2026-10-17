@@ -97,7 +97,11 @@ class Frames(HTMLParser):
     def __init__(self, text):
         super().__init__()
         self.sources = []
-        self.feed(text)
+        # The serve allow list scans every visible page on each request. Most
+        # pages have no frames: avoid parsing their entire body in that case.
+        # This is only a prefilter; the parser still validates any candidates.
+        if re.search(r'<iframe\b', text, re.IGNORECASE):
+            self.feed(text)
 
     def handle_starttag(self, tag, attrs):
         attrs = dict(attrs)
