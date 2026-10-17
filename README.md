@@ -98,8 +98,11 @@ A live block is a small HTML page of its own inside a page: a chart, a
 slider, a mock-up, with its scripts running. Write it as a fenced block whose
 first line is three backticks and `html live`, with a `title=`; here are its
 three lines, without the backticks that open and close it. It is safe to put
-on a page because it runs in a sandboxed frame: it cannot reach the network,
-read the page around it, or see the reader's session or comments.
+on a page because it runs in a sandboxed frame: it cannot fetch or load
+anything from elsewhere, read the page around it, or see the reader's session
+or comments. It can still move its own frame to another address, carrying
+what the reader typed into it, so it is for showing things, not for asking
+for secrets.
 
 ```text
 html live title="A counter"

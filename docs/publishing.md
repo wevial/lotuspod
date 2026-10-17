@@ -1392,13 +1392,17 @@ policy. So a widget has:
   the pinned libraries, and images and fonts are `data:` URLs only. It holds
   no forms that send, no frames of its own, and no camera, microphone,
   location or clipboard. It can still move its own frame to another address,
-  and that address can carry what the block holds; since nothing of the
-  page or the reader reaches a widget, what it can send is only what its
-  author wrote into it.
+  and that address can carry anything the widget has at that moment: what
+  its author wrote, what it worked out, and what the reader typed or chose
+  in it. So a widget is safe for showing things, not for asking the reader
+  for anything they would not post on the page.
 - **No page.** It cannot read or change the page around it, open a window or
   move the reader to another page.
-- **No session.** It runs as a stranger to the site, so it sends no cookies
-  and cannot call the site's API as the reader.
+- **No session.** It runs as a stranger to the site, so its scripts cannot
+  read the site's cookies or call the site's API as the reader. The browser
+  still sends the site's cookies with the requests that load the widget's
+  frame, as it does for any file of the site; the sandbox keeps them out of
+  the widget's reach, not off the wire.
 - **No storage that outlives the frame.** `localStorage`, `sessionStorage` and
   IndexedDB are refused. What it keeps lives in its scripts' variables, and is
   gone when the frame reloads, pauses or is republished with new HTML.
