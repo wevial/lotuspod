@@ -318,11 +318,8 @@ def shim() -> str:
 def headers(widgets: list[str]) -> str:
     """_headers: the rule for every path, then one for each widget file by its
     exact path, as the host matches one splat per rule."""
-    rules = [HEADERS]
-    for name in widgets:
-        rules.append(f"/{name}\n" + "".join(f"  {key}: {value}\n"
-                                            for key, value in WIDGET_HEADERS))
-    return "".join(rules)
+    rule = "".join(f"  {key}: {value}\n" for key, value in WIDGET_HEADERS)
+    return HEADERS + "".join(f"/{name}\n{rule}" for name in widgets)
 
 
 def prepare_out(out: Path) -> None:
