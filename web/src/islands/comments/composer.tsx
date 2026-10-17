@@ -126,7 +126,7 @@ export function composers(page: Page, bridge: ComposerBridge) {
     const line = document.createElement("p");
     line.className = "artifact-comment-on";
     render(<>{"On "}<span class="artifact-comment-on-block">{title}</span></>, line);
-    fieldOf(form).before(line);
+    form.before(line);
     blocks.set(form, { widget: { id: widget.id, hash: widget.hash, state: widget.state }, line });
   }
   function unblock(form: HTMLFormElement | undefined) {

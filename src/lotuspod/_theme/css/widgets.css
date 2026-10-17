@@ -167,7 +167,7 @@
   font-weight: 600;
 }
 .artifact-comment-on {
-  margin: 0 0 0.5rem;
+  margin: 0.9em 0 -0.4em;
   color: var(--lotus-color-muted-lavender);
   font-size: 0.875rem;
 }

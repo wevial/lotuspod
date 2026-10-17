@@ -151,7 +151,7 @@ test('a reader comments on a live block, hermes answers, and the thread follows 
 
   await live.comment.click();
   const form = churn.locator('form.artifact-comment-form');
-  await expect(form.locator('.artifact-comment-on')).toHaveText(WORDS);
+  await expect(churn.locator('.artifact-comment-on')).toHaveText(WORDS);
   const field = form.locator('textarea[name="text"]');
   await expect(field).toBeFocused();
   await field.fill(QUESTION);
@@ -166,7 +166,7 @@ test('a reader comments on a live block, hermes answers, and the thread follows 
   await expect(entry).toHaveCount(1);
   await expect(entry.locator('.artifact-comments-entry-head .artifact-comments-entry-words')).toHaveText(WORDS);
   await expect(entry.locator('.artifact-comments-entry-head .artifact-comments-entry-mark')).toHaveText('▣');
-  await expect(form.locator('.artifact-comment-on')).toHaveCount(0);
+  await expect(churn.locator('.artifact-comment-on')).toHaveCount(0);
   await expect(live.pin).toBeVisible();
   await expect(live.pin).toHaveText('1');
   const id = Number(await entry.getAttribute('data-thread'));
@@ -246,15 +246,15 @@ test("Escape drops the block from the composer, and the section's own box then s
   const form = churn.locator('form.artifact-comment-form');
 
   await live.comment.click();
-  await expect(form.locator('.artifact-comment-on')).toHaveText(WORDS);
+  await expect(churn.locator('.artifact-comment-on')).toHaveText(WORDS);
   await expect(form.locator('textarea[name="text"]')).toBeFocused();
   await page.keyboard.press('Escape');
   await expect(form).toBeHidden();
-  await expect(form.locator('.artifact-comment-on')).toHaveCount(0);
+  await expect(churn.locator('.artifact-comment-on')).toHaveCount(0);
 
   await page.locator('details.artifact-comment[data-section="churn"] > summary').click();
   await expect(form).toBeVisible();
-  await expect(form.locator('.artifact-comment-on')).toHaveCount(0);
+  await expect(churn.locator('.artifact-comment-on')).toHaveCount(0);
   await form.locator('textarea[name="text"]').fill('A note on the section');
   const sent = posting(page);
   await form.getByRole('button', { name: 'Comment', exact: true }).click();
