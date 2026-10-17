@@ -78,15 +78,22 @@ truth: the sheet draws from them on each form's `input`, `change` and
 `answering.save()`, one question at a time in page order. Preact holds only
 the sheet's own state: the panel open, a Save under way, what it did, and
 the question Next open last jumped to, which a swap keeps. The bundle, Preact with it, stays at most
-15,000 bytes gzipped; it uses plain Preact and its hooks, not
+20,000 bytes gzipped; it uses plain Preact and its hooks, not
 `preact/compat`.
 
 The comments island (`web/src/islands/comments/index.ts`) mounts after the
 review sheet and starts the bridge's typed `commenting` object, null on pages
-without comment boxes. It supplies the shell factory declared in `parts.ts`.
-The shell draws the panel frame, rail, tally and start controls; comments.js
-still owns the groups and threads inside its empty groups list. Synchronous
-renders preserve immediate layout reads. The bridge also supplies `CLOSED`,
+without comment boxes. It supplies the shell and thread-list factories declared in `parts.ts`.
+The shell draws the panel frame, rail, tally and start controls. The thread-list
+part draws section groups, changed-section threads, entry heads and resolution
+controls. Its typed bridge reads the page's thread objects and passage helpers;
+comments.js still owns thread bodies, composers, chips and placement. Movable
+entries, group toggles and form holders are independent render roots, so narrow.js
+can move them without Preact moving them back. Synchronous renders preserve
+immediate layout reads. Entry leads and status words retain separate redraw keys.
+`comments/anchor.ts` interprets each first comment as a page, section, passage or
+decision anchor. Mark, words and rank each exhaustively handle that union, so a
+future kind must be handled in all three places. The bridge also supplies `CLOSED`,
 `PANEL`, `RESOLVED_SHOWN` and `WHOLE_PAGE`; the shell keeps storage and listbox
 state and calls page hooks to compose or refresh threads.
 

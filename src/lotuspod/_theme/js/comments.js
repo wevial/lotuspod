@@ -351,7 +351,7 @@
     }
 
     // A thread opened or closed, in the panel, a popover or the sheet, all
-    // of which draw it (sidePanel's draw). Opened, it posts its newest
+    // of which draw it (the thread-list part's draw). Opened, it posts its newest
     // comment's id as seen, and keeps any comments unread marked while it
     // stays open; closed, it marks only what is still unread.
     function looked(thread, open) {
@@ -1241,15 +1241,10 @@
       var column = document.querySelector(".artifact-body");
       var api = { wide: false, mode: null };
       var arranged = false;
-      // The thread whose entry is open, if any.
-      var current = null;
-      // The resolved thread the reader opened to read, if any: a thread
-      // resolved while open closes, unless it is this one.
-      var toRead = null;
       // While the threads move to another layout (api.arrange), none opens
       // or closes: one open in the old place is open in the new.
       var moving = false;
-      var groups = new Map();
+
       // Each decision's chip, by its form, once it has a thread.
       var decisionChips = new Map();
       function mute(node) {
@@ -1259,434 +1254,48 @@
 
       var shell = parts.shell({
         opened: function () {
-          if (current) {
-            draw(current);
+          if (threadList.current) {
+            threadList.draw(threadList.current);
           }
           showUnread();
         },
         resolvedChanged: function () {
-          if (!shell.resolvedShown() && current && current === toRead && resolved(current)) {
-            expand(null);
+          if (!shell.resolvedShown() && threadList.current && threadList.current === threadList.toRead && resolved(threadList.current)) {
+            threadList.expand(null);
           }
           api.refresh();
         },
         compose: function (box) {
           if (groups.has(box)) {
-            compose(groups.get(box), true);
+            threadList.compose(groups.get(box), true);
           }
         },
       });
-      var list = shell.list;
 
-      function shellSections() {
-        shell.sections(boxes.filter(function (box) { return groups.has(box); }).map(function (box) {
-          var made = groups.get(box);
-          return { box: box, title: made.heading.textContent, id: made.optionId, section: box.dataset.section };
-        }));
-      }
+      var threadList = parts.threadList(shell, {
+        all: all,
+        boxes: boxes, shown: shown, forms: forms, decisions: decisions,
+        rows: rows, resolved: resolved, agent: agent, routed: routed,
+        threadsOf: threadsOf, decisionOf: decisionOf, passages: passages,
+        imageWords: imageWords, looked: looked, refresh: refresh, failure: failure, json: json,
+        page: page, wide: function () { return api.wide; },
+        moving: function () { return moving; },
+        holds: function (thread) { return over.holds(thread); },
+        uncover: function (node) { over.uncover(node); }, bring: bring,
+      });
+      var groups = threadList.groups;
+      boxes.forEach(function (box) { chipOn(box); });
+      api.refresh = function () {
+        threadList.refresh();
+        boxes.forEach(chip);
+        decisions.forEach(decisionChip);
+        over.sync();
+      };
 
-      // The text of a box's section heading, without the mark a folded
-      // heading ends in or the tag saying it changed.
-      function title(box) {
-        var heading = document.getElementById(box.dataset.section);
-        if (!heading || heading.tagName !== "H2") {
-          return "This page";
-        }
-        var copy = heading.cloneNode(true);
-        all(".artifact-section-mark, .artifact-changed-tag, .artifact-review-open", copy).forEach(function (mark) { mark.remove(); });
-        return copy.textContent.replace(/\s+/g, " ").trim() || "This page";
-      }
-
-      // A group: a section's heading, its threads, and for a section the
-      // page has, the control that opens the box's form here. The panel
-      // never draws that control; a popover or the sheet does. In the panel
-      // the form has a Cancel, and Escape in it does the same: the form
-      // folds, keeping what was typed, and the focus goes back to the
-      // control that starts one.
-      function group(name, box, index) {
-        var node = element("section", "artifact-comments-group");
-        var entries = element("ol", "artifact-comments-entries");
-        var heading = element("h3", "artifact-comments-group-title", name);
-        node.append(heading, entries);
-        list.appendChild(node);
-        var made = { optionId: index, node: node, heading: heading, entries: entries, box: box, toggle: null, holder: null };
-        if (box) {
-          var toggle = element("button", "artifact-comments-new",
-            box.dataset.section === WHOLE_PAGE ? "Comment on this page" : "Comment on this section");
-          toggle.type = "button";
-          var holder = element("div", "artifact-comments-compose");
-          holder.id = "artifact-comments-compose-" + index;
-          holder.hidden = true;
-          toggle.setAttribute("aria-controls", holder.id);
-          toggle.setAttribute("aria-expanded", "false");
-          toggle.disabled = ARCHIVED;
-          toggle.addEventListener("click", function () { compose(made, holder.hidden); });
-          var cancel = element("button", "artifact-comments-cancel", "Cancel");
-          cancel.type = "button";
-          holder.appendChild(cancel);
-          cancel.addEventListener("click", function () { uncompose(made); });
-          holder.addEventListener("keydown", function (event) {
-            if (event.key === "Escape" && api.wide) {
-              // The panel would fold on it too.
-              event.preventDefault();
-              event.stopPropagation();
-              uncompose(made);
-            }
-          });
-          node.append(toggle, holder);
-          made.toggle = toggle;
-          made.holder = holder;
-        }
-        return made;
-      }
-
-      // The number in the ids of the next box's form holder and option: a
-      // box a swap adds takes one no box has had.
-      var serial = 0;
-      var strays = null;
-
-      // The box at boxes[at] joins the panel: its group, before the next
-      // box's (else before the strays), its option in the list of sections
-      // at the same place, and its chip.
       function mount(box, at) {
-        var name = title(box);
-        var made = group(name, box, serial);
-        made.node.hidden = true;
-        var next = groups.get(boxes[at + 1]);
-        if (next || strays) {
-          list.insertBefore(made.node, (next || strays).node);
-        }
-        groups.set(box, made);
-        shellSections();
-        serial += 1;
+        threadList.mount(box, at);
         chipOn(box);
-        if (arranged) {
-          house(box);
-        }
-      }
-
-      boxes.forEach(mount);
-      strays = group(CHANGED_GROUP, null, -1);
-      strays.node.hidden = true;
-
-      // Whether a group holds a thread that is listed: an open one, or a
-      // resolved one while they are shown.
-      function showing(made) {
-        return Boolean(shell.resolvedShown() ? made.entries.firstChild :
-          made.entries.querySelector(":scope > .artifact-comments-entry:not(.artifact-comments-entry--resolved)"));
-      }
-
-      // Whether a group is listed: it holds a listed thread, or a form open
-      // in it.
-      function busy(made) {
-        return showing(made) ||
-          (!made.holder.hidden && made.node.contains(made.holder)) ||
-          Boolean(made.node.querySelector(".artifact-passage-composer"));
-      }
-
-      // List the groups that are busy, each in its place in the page's
-      // order, keeping the reader's place: the group at the top of the list
-      // stays where it is.
-      function tidy() {
-        shell.empty(shown.size === 0);
-        strays.node.hidden = !showing(strays);
-        var changes = [];
-        groups.forEach(function (made) {
-          if (made.node.hidden === busy(made)) {
-            changes.push(made);
-          }
-        });
-        if (!changes.length) {
-          return;
-        }
-        var top = list.getBoundingClientRect().top;
-        var anchor = all(":scope > .artifact-comments-group:not([hidden])", list).filter(function (node) {
-          return node.getBoundingClientRect().bottom > top;
-        })[0];
-        var before = anchor ? anchor.getBoundingClientRect().top : 0;
-        changes.forEach(function (made) {
-          made.node.hidden = !made.node.hidden;
-        });
-        if (anchor) {
-          list.scrollTop += anchor.getBoundingClientRect().top - before;
-        }
-      }
-
-      // Unfold or fold a group's form for a new thread; unfolded, its field
-      // has focus. In the panel one form is open at a time: another left
-      // empty folds. An archived page unfolds none.
-      function compose(made, show) {
-        if (show && ARCHIVED) {
-          return;
-        }
-        if (show && api.wide) {
-          groups.forEach(function (other) {
-            if (other !== made && !other.holder.hidden && !forms.get(other.box).elements.text.value) {
-              other.holder.hidden = true;
-              other.toggle.setAttribute("aria-expanded", "false");
-            }
-          });
-        }
-        made.holder.hidden = !show;
-        made.toggle.setAttribute("aria-expanded", show ? "true" : "false");
-        tidy();
-        if (show) {
-          if (api.wide) {
-            reveal(made.holder);
-          } else {
-            over.uncover(made.holder);
-          }
-          forms.get(made.box).elements.text.focus({ preventScroll: true });
-        }
-      }
-
-      // Fold a group's form in the panel; the focus goes to the control
-      // that starts it again.
-      function uncompose(made) {
-        compose(made, false);
-        shell.focus(made.box);
-      }
-
-      // Scroll the panel's list, never the page, until node is in view.
-      function reveal(node) {
-        var outer = list.getBoundingClientRect();
-        var inner = node.getBoundingClientRect();
-        if (inner.top < outer.top || inner.bottom > outer.bottom) {
-          list.scrollTop += inner.top - outer.top - 8;
-        }
-      }
-
-      // The newest reader comment in a thread.
-      function asked(thread) {
-        var found = thread.root;
-        rows(thread).forEach(function (entry) {
-          if (!agent(entry)) {
-            found = entry;
-          }
-        });
-        return found;
-      }
-
-      // Where a thread stands: answered, writing, waiting or failed.
-      function standing(thread) {
-        switch (asked(thread).state) {
-          case "claimed":
-            return "writing";
-          case "failed":
-            return "failed";
-          case "pending":
-          case "unavailable":
-          case "paused":
-            return "waiting";
-          default:
-            return "answered";
-        }
-      }
-
-      // Of some threads, the one whose newest reader comment is newest.
-      function latest(threads) {
-        var found = null;
-        threads.forEach(function (thread) {
-          if (!found || asked(thread).id > asked(found).id) {
-            found = thread;
-          }
-        });
-        return found;
-      }
-
-      function unresolvedOf(box) {
-        return threadsOf(box).filter(function (thread) { return !resolved(thread); });
-      }
-
-      function plural(n, one, many) {
-        return n + " " + (n === 1 ? one : many);
-      }
-
-      // The first words of what a thread's first comment says.
-      function opening(text) {
-        var words = String(text || "").replace(/\s+/g, " ").trim();
-        return words.length > 80 ? words.slice(0, 80).replace(/\s\S*$/, "") + "…" : words;
-      }
-
-      function tick() {
-        return mute(element("span", "artifact-comments-tick", "✓"));
-      }
-
-      function entry(thread) {
-        if (thread.entry) {
-          return thread.entry;
-        }
-        var id = thread.root.id;
-        // A mark and words, filled in by draw: a passage's number and quote,
-        // or § and what the thread's first comment says.
-        var marks = [];
-        var words = [];
-        function lead() {
-          var mark = mute(element("span", "artifact-comments-entry-mark"));
-          var said = element("span", "artifact-comments-entry-words");
-          marks.push(mark);
-          words.push(said);
-          return [mark, said];
-        }
-        var item = element("li", "artifact-comments-entry");
-        item.dataset.thread = String(id);
-        var body = element("div", "artifact-comments-entry-body");
-        body.id = "artifact-comments-entry-" + id;
-        var top = element("button", "artifact-comments-entry-head");
-        top.type = "button";
-        top.setAttribute("aria-controls", body.id);
-        var state = element("span", "artifact-comments-entry-state");
-        top.append.apply(top, lead().concat([state]));
-        // Resolved, the line's words open the thread to read and close it
-        // again, as the head does; it stays resolved. Reopen is beside them.
-        var folded = element("div", "artifact-comments-entry-resolved");
-        var read = element("button", "artifact-comments-entry-read");
-        read.type = "button";
-        read.setAttribute("aria-controls", body.id);
-        read.append.apply(read, lead());
-        var reopen = element("button", "artifact-comments-reopen", "Reopen");
-        reopen.type = "button";
-        var done = element("span", "artifact-comments-entry-done");
-        done.append(tick(), " resolved · ", reopen);
-        folded.append(read, done);
-        var tools = element("div", "artifact-comments-entry-tools");
-        // Where the thread stands, beside Resolve: in a popover, which shows
-        // no head.
-        var note = element("span", "artifact-comments-entry-note");
-        var resolve = element("button", "artifact-comments-resolve", "Resolve");
-        resolve.type = "button";
-        tools.append(note, resolve);
-        body.appendChild(tools);
-        var status = element("p", "artifact-comments-entry-status");
-        status.setAttribute("role", "status");
-        item.append(top, folded, body, status);
-        thread.entry = {
-          item: item, head: top, state: state, note: note, folded: folded, read: read, body: body,
-          resolve: resolve, reopen: reopen, status: status, key: "", marks: marks, words: words,
-          leadKey: null,
-        };
-        // Pointing at a passage's entry lights its words.
-        item.addEventListener("mouseenter", function () { passages.point(thread, "entry"); });
-        item.addEventListener("mouseleave", function () { passages.point(null, "entry"); });
-        top.addEventListener("click", function () {
-          if (current === thread) {
-            expand(null);
-          } else {
-            expand(thread);
-            bring(thread);
-          }
-        });
-        // Open to read only while drawn so: a thread resolved elsewhere while
-        // open may still be current.
-        read.addEventListener("click", function () {
-          var was = current === thread && toRead === thread;
-          toRead = was ? null : thread;
-          if (was) {
-            expand(null);
-          } else {
-            expand(thread);
-            bring(thread);
-          }
-        });
-        resolve.addEventListener("click", function () { settle(thread, true); });
-        reopen.addEventListener("click", function () { settle(thread, false); });
-        return thread.entry;
-      }
-
-      // Draw an entry as its thread now stands: open, folded to its head, or
-      // resolved to one dashed line, under which it opens only when the
-      // reader opens it to read.
-      function draw(thread) {
-        var made = entry(thread);
-        var done = resolved(thread);
-        // Reopened, here or elsewhere, it is no longer open to read: resolved
-        // again, it folds as any thread does.
-        if (!done && toRead === thread) {
-          toRead = null;
-        }
-        var opened = done ? current === thread && toRead === thread :
-          current === thread || over.holds(thread);
-        // Open in a folded panel, it is not in view: folding closes it, and
-        // unfolding opens it again.
-        var viewed = opened && (over.holds(thread) || (api.wide && shell.isOpen()));
-        if (!moving && viewed !== thread.lit) {
-          thread.lit = viewed;
-          looked(thread, viewed);
-        }
-        made.item.classList.toggle("artifact-comments-entry--resolved", done);
-        made.item.classList.toggle("artifact-comments-entry--open", opened);
-        made.head.hidden = done;
-        made.folded.hidden = !done;
-        made.body.hidden = !opened;
-        made.resolve.hidden = done;
-        made.head.setAttribute("aria-expanded", opened ? "true" : "false");
-        made.read.setAttribute("aria-expanded", opened ? "true" : "false");
-        var decision = decisionOf(thread);
-        // A decision's name and words are in the key, so a question a swap
-        // reworded is drawn as it now reads.
-        var leadKey = (decision ? "decision " + decision.name + "\n" + decision.question + "\n" : "") +
-          passages.key(thread);
-        if (leadKey !== made.leadKey) {
-          made.leadKey = leadKey;
-          var quoted = Boolean(thread.root.quote);
-          made.item.classList.toggle("artifact-comments-entry--passage", quoted);
-          made.item.classList.toggle("artifact-comments-entry--detached", passages.detached(thread));
-          made.item.classList.toggle("artifact-comments-entry--decision", Boolean(decision));
-          made.marks.forEach(function (mark) {
-            mark.textContent = quoted ? (thread.n ? String(thread.n) : "") : decision ? "?" : "§";
-          });
-          made.words.forEach(function (words) {
-            if (quoted) {
-              words.replaceChildren.apply(words, passages.said(thread));
-            } else if (decision) {
-              words.replaceChildren(element("span", "artifact-comments-entry-kind", decision.name),
-                " · " + decision.question);
-            } else {
-              words.textContent = opening(thread.root.text || imageWords(thread.root));
-            }
-          });
-        }
-        var key = [standing(thread), routed(asked(thread)), thread.replies.length].join("\n");
-        if (key === made.key) {
-          return;
-        }
-        made.key = key;
-        [made.state, made.note].forEach(function (node) {
-          node.replaceChildren(said(thread), " · ",
-            element("span", "artifact-comments-entry-count",
-              plural(thread.replies.length, "reply", "replies")));
-        });
-      }
-
-      // Where a thread stands, in words: answered, or who it waits for.
-      function said(thread) {
-        var kind = standing(thread);
-        var handle = routed(asked(thread));
-        var node = element("span", "artifact-comments-entry-said artifact-comments-entry-said--" + kind);
-        if (kind === "answered") {
-          node.append(tick(), " Answered");
-        } else if (kind === "writing") {
-          node.textContent = handle + " is writing";
-        } else if (kind === "waiting") {
-          node.textContent = "Waiting for " + handle;
-        } else {
-          node.textContent = handle + " couldn't answer";
-        }
-        return node;
-      }
-
-      function expand(thread) {
-        var before = current;
-        current = thread;
-        if (before && before !== thread) {
-          draw(before);
-          passages.shine(before);
-        }
-        if (thread) {
-          draw(thread);
-          passages.shine(thread);
-          reveal(thread.entry.item);
-        }
+        if (arranged) house(box);
       }
 
       // A thread's highlight, else its decision's chip, else its section's.
@@ -1729,67 +1338,6 @@
         }
       }
 
-      // Resolve a thread, or reopen it.
-      async function settle(thread, resolve) {
-        var made = entry(thread);
-        var control = resolve ? made.resolve : made.reopen;
-        var focused = document.activeElement === control;
-        control.disabled = true;
-        made.status.textContent = "Saving...";
-        try {
-          var response = await fetch(COMMENTS, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ page: page, thread: thread.root.id, resolved: resolve }),
-          });
-          var payload = await json(response);
-          if (response.status !== 200 || !payload || !payload.resolution) {
-            made.status.textContent = failure(response, payload);
-            return;
-          }
-          made.status.textContent = "";
-          thread.resolution = payload.resolution;
-          if (resolve && current === thread) {
-            current = null;
-          }
-          if (!resolve) {
-            expand(thread);
-          }
-          refresh();
-          if (focused) {
-            // A popover or the sheet shows no head: Resolve takes the focus.
-            // A thread resolved in the panel while resolved ones are hidden
-            // leaves the list: the control showing them takes it.
-            var gone = resolve && api.wide && !shell.resolvedShown();
-            if (gone) {
-              shell.focus("resolved");
-            } else {
-              (resolve ? made.reopen : api.wide ? made.head : made.resolve).focus({ preventScroll: true });
-            }
-          }
-        } catch (ignored) {
-          made.status.textContent = "Not saved: the site did not answer. Try again.";
-        } finally {
-          control.disabled = false;
-        }
-      }
-
-      // Every thread in page order: each box's, oldest first, then those
-      // on sections the page no longer has.
-      function ordered() {
-        var found = [];
-        boxes.forEach(function (box) {
-          found.push.apply(found, threadsOf(box));
-        });
-        var rest = [];
-        shown.forEach(function (thread) {
-          if (!thread.box) {
-            rest.push(thread);
-          }
-        });
-        return found.concat(rest.sort(function (a, b) { return a.root.id - b.root.id; }));
-      }
-
       function face(text, agentFace) {
         var node = element("span", "artifact-comment-chip-face" +
           (agentFace ? " artifact-comment-chip-face--agent" : ""));
@@ -1801,12 +1349,12 @@
       // who wrote and answered, and its words, ending in how many replies
       // to the reader are unread when any are.
       function line(threads, fresh, act) {
-        var newest = latest(threads);
-        var kind = newest ? standing(newest) : "none";
+        var newest = threadList.latest(threads);
+        var kind = newest ? threadList.standing(newest) : "none";
         var faces = mute(element("span", "artifact-comment-chip-faces"));
         var parts = [];
         if (newest) {
-          var question = asked(newest);
+          var question = threadList.asked(newest);
           var handle = routed(question);
           faces.appendChild(face(author(question).charAt(0).toUpperCase(), false));
           if (kind === "writing") {
@@ -1815,7 +1363,7 @@
               handle + " is writing…");
           } else if (kind === "waiting") {
             var messages = threads.reduce(function (n, thread) { return n + rows(thread).length; }, 0);
-            parts.push(plural(messages, "comment", "comments"), " · ",
+            parts.push(threadList.plural(messages, "comment", "comments"), " · ",
               mute(element("span", "artifact-comment-chip-hollow")), "waiting");
           } else if (kind === "failed") {
             parts.push(mute(element("span", "artifact-comment-chip-bang")),
@@ -1833,9 +1381,9 @@
             });
             var answerer = answer ? agent(answer) : handle;
             faces.appendChild(face(answerer.charAt(0).toUpperCase(), true));
-            parts.push(plural(replies, "reply", "replies"), " · ",
+            parts.push(threadList.plural(replies, "reply", "replies"), " · ",
               element("span", "artifact-comment-chip-done"));
-            parts[parts.length - 1].append(tick(), " " + answerer + " answered");
+            parts[parts.length - 1].append(threadList.tick(), " " + answerer + " answered");
           }
         } else {
           faces.appendChild(element("span", "artifact-comment-chip-icon"));
@@ -1863,7 +1411,7 @@
       // A box's chip: where its section's open threads stand, in one line.
       function chip(box) {
         paint(box.querySelector("summary"), "artifact-comment-summary",
-          line(unresolvedOf(box), unreadIn(threadsOf(box)),
+          line(threadList.unresolvedOf(box), unreadIn(threadsOf(box)),
             box.dataset.section === WHOLE_PAGE ? "Comment on this page" : "Comment"));
       }
 
@@ -1915,8 +1463,8 @@
       // panel, a popover under the chip or the sheet.
       function openDecision(form) {
         var threads = threadsOn(form);
-        var thread = latest(threads.filter(function (each) { return !resolved(each); })) ||
-          latest(threads);
+        var thread = threadList.latest(threads.filter(function (each) { return !resolved(each); })) ||
+          threadList.latest(threads);
         if (!thread) {
           return;
         }
@@ -1931,19 +1479,19 @@
         if (!api.wide) {
           over.show({ thread: thread }, opener);
           if (read && resolved(thread)) {
-            toRead = thread;
-            expand(thread);
+            threadList.toRead = thread;
+            threadList.expand(thread);
           }
         } else if (resolved(thread)) {
           // Listed with the resolved threads, its Reopen at hand.
           shell.setOpen(true, true);
           shell.setResolvedShown(true, true);
           if (read) {
-            toRead = thread;
-            expand(thread);
+            threadList.toRead = thread;
+            threadList.expand(thread);
           }
           api.refresh();
-          reveal(thread.entry.item);
+          threadList.reveal(thread.entry.item);
           thread.entry.reopen.focus({ preventScroll: true });
         } else {
           api.open(thread);
@@ -1958,7 +1506,7 @@
         if (thread.lit) {
           looked(thread, true);
           if (api.wide) {
-            reveal(thread.entry.item);
+            threadList.reveal(thread.entry.item);
           }
           return;
         }
@@ -1988,9 +1536,9 @@
         var made = groups.get(box);
         var focused = made.holder.contains(document.activeElement)
           || document.activeElement === document.body;
-        compose(made, false);
+        threadList.compose(made, false);
         if (api.wide) {
-          expand(thread);
+          threadList.expand(thread);
           if (focused) {
             thread.entry.head.focus({ preventScroll: true });
           }
@@ -2002,7 +1550,7 @@
       // A highlight: the panel opens at its thread.
       api.open = function (thread) {
         shell.setOpen(true, true);
-        expand(thread);
+        threadList.expand(thread);
         thread.entry.head.focus({ preventScroll: true });
       };
 
@@ -2012,8 +1560,8 @@
         shell.setOpen(true, true);
         var made = groups.get(box);
         made.node.insertBefore(holder, made.entries);
-        tidy();
-        reveal(holder);
+        threadList.tidy();
+        threadList.reveal(holder);
       };
 
       // A thread was posted from a passage's composer: its entry opens, or
@@ -2023,7 +1571,7 @@
           return;
         }
         if (api.wide) {
-          expand(thread);
+          threadList.expand(thread);
           if (focused) {
             thread.entry.head.focus({ preventScroll: true });
           }
@@ -2036,12 +1584,12 @@
       // its form for a new one, which an archived page has none of.
       function show(box) {
         shell.setOpen(true, true);
-        var newest = latest(unresolvedOf(box));
+        var newest = threadList.latest(threadList.unresolvedOf(box));
         if (newest) {
-          expand(newest);
+          threadList.expand(newest);
           newest.entry.head.focus({ preventScroll: true });
         } else if (!ARCHIVED) {
-          compose(groups.get(box), true);
+          threadList.compose(groups.get(box), true);
         }
       }
 
@@ -2085,7 +1633,7 @@
       // the panel, a thread on a section the page no longer has is in the
       // list at the end of the body unless it is held.
       api.put = function (thread) {
-        var made = entry(thread);
+        var made = threadList.entry(thread);
         var keep = over.holds(thread);
         if (!api.wide && !thread.box && !keep) {
           var listed = changed();
@@ -2100,31 +1648,31 @@
             over.entries().appendChild(made.item);
           }
         } else {
-          var target = thread.box ? groups.get(thread.box) : strays;
+          var target = thread.box ? groups.get(thread.box) : threadList.strays;
           if (made.item.parentNode !== target.entries) {
             target.entries.appendChild(made.item);
-            sort(target);
+            threadList.sort(target);
           }
         }
-        draw(thread);
-        strays.node.hidden = !showing(strays);
+        threadList.draw(thread);
+        threadList.strays.node.hidden = !threadList.showing(threadList.strays);
       };
 
       // Without room for the panel, one thing at a time opens over the text,
       // in a popover or the bottom sheet (overText in js/narrow.js).
       var over = overText({
         panel: api, groups: groups, passages: passages, mute: mute,
-        compose: compose, threadsOf: threadsOf, unresolvedOf: unresolvedOf, resolved: resolved,
-        ordered: ordered,
-        latest: latest, standing: standing, routed: routed, asked: asked, said: said, tick: tick,
-        title: title, opening: opening, anchorOf: anchorOf, unfold: unfold, barBottom: barBottom,
+        compose: threadList.compose, threadsOf: threadsOf, unresolvedOf: threadList.unresolvedOf, resolved: resolved,
+        ordered: threadList.ordered,
+        latest: threadList.latest, standing: threadList.standing, routed: routed, asked: threadList.asked, said: threadList.said, tick: threadList.tick,
+        title: threadList.title, opening: threadList.opening, anchorOf: anchorOf, unfold: unfold, barBottom: barBottom,
         decisionOf: decisionOf, standsFor: standsFor,
       });
       api.show = over.show;
       api.passage = over.passage;
       api.dropped = function (mine) {
         over.dropped(mine);
-        tidy();
+        threadList.tidy();
       };
 
       // The box that now stands for box's section: box, the box a swap
@@ -2135,56 +1683,7 @@
 
       // Whether a thread is open: in the panel, a popover or the sheet.
       api.lit = function (thread) {
-        return (api.wide && current === thread) || over.holds(thread);
-      };
-
-      // Where a thread is listed in its group: its passages by number, then
-      // its resolved passages, then its decisions' threads in the decisions'
-      // order, then its § threads, each oldest first.
-      function rank(thread) {
-        if (thread.root.quote) {
-          return thread.n ? [0, thread.n, 0] : [1, thread.root.id, 0];
-        }
-        var decision = decisionOf(thread);
-        if (decision) {
-          return [2, decisions.indexOf(decision.form), thread.root.id];
-        }
-        return [3, 0, thread.root.id];
-      }
-
-      // Put a group's entries in order, moving only those out of place.
-      function sort(made) {
-        var threads = all(":scope > li", made.entries).map(function (item) {
-          return shown.get(Number(item.dataset.thread));
-        });
-        threads.sort(function (a, b) {
-          var left = rank(a);
-          var right = rank(b);
-          return left[0] - right[0] || left[1] - right[1] || left[2] - right[2];
-        });
-        threads.forEach(function (thread, index) {
-          var at = made.entries.children[index];
-          if (at !== thread.entry.item) {
-            made.entries.insertBefore(thread.entry.item, at);
-          }
-        });
-      }
-
-      api.refresh = function () {
-        var threads = ordered();
-        var unresolved = threads.filter(function (thread) { return !resolved(thread); });
-        shell.refresh({
-          open: unresolved.map(function (thread) { return { id: thread.root.id, standing: standing(thread) }; }),
-          resolved: threads.length - unresolved.length,
-          none: shown.size === 0,
-        });
-        threads.forEach(draw);
-        groups.forEach(sort);
-        sort(strays);
-        tidy();
-        boxes.forEach(chip);
-        decisions.forEach(decisionChip);
-        over.sync();
+        return (api.wide && threadList.current === thread) || over.holds(thread);
       };
 
       // Whether the window leaves ROOM right of the reading column at its
@@ -2236,9 +1735,9 @@
           var chipNode = writing.box.querySelector("summary");
           return { view: { box: writing.box }, opener: chipNode, anchor: chipNode, writing: writing };
         }
-        if (current && (!resolved(current) || current === toRead)) {
-          var anchor = anchorOf(current);
-          return { view: { thread: current }, opener: anchor, anchor: anchor, writing: null };
+        if (threadList.current && (!resolved(threadList.current) || threadList.current === threadList.toRead)) {
+          var anchor = anchorOf(threadList.current);
+          return { view: { thread: threadList.current }, opener: anchor, anchor: anchor, writing: null };
         }
         return none;
       }
@@ -2283,12 +1782,12 @@
           over.restore(taken);
         } else if (view && view.thread) {
           shell.setOpen(true, false);
-          expand(view.thread);
+          threadList.expand(view.thread);
         } else if (writing) {
           shell.setOpen(true, false);
         }
         if (writing) {
-          compose(writing, true);
+          threadList.compose(writing, true);
         }
         // In its new place, a thread opens or closes as it now stands.
         moving = false;
@@ -2327,14 +1826,14 @@
         if (api.wide) {
           shell.setOpen(true, false);
           if (view.thread) {
-            expand(view.thread);
+            threadList.expand(view.thread);
           }
         } else {
           var anchor = view.thread ? anchorOf(view.thread) : view.box.querySelector("summary");
           over.restore({ view: view, opener: anchor, anchor: anchor, writing: writing });
         }
         if (writing) {
-          compose(writing, true);
+          threadList.compose(writing, true);
         }
       };
 
@@ -2364,7 +1863,7 @@
           taken.still = true;
           over.restore(taken);
           if (taken.writing && groups.get(taken.writing.box) === taken.writing && over.peek().view) {
-            compose(taken.writing, true);
+            threadList.compose(taken.writing, true);
           }
         }
         moving = false;
@@ -2374,13 +1873,7 @@
       // boxes: old's group and option are box's, its title drawn from its
       // new heading.
       api.replace = function (old, box) {
-        var made = groups.get(old);
-        groups.delete(old);
-        groups.set(box, made);
-        made.box = box;
-        var name = title(box);
-        made.heading.textContent = name;
-        shellSections();
+        threadList.replace(old, box);
         chipOn(box);
         shell.unlit();
       };
@@ -2390,7 +1883,7 @@
         var made = groups.get(old);
         groups.delete(old);
         made.node.remove();
-        shellSections();
+        threadList.shellSections();
         shell.unlit();
       };
 
@@ -2411,7 +1904,7 @@
         var made = boxes.map(function (box) { return [box, groups.get(box)]; });
         groups.clear();
         made.forEach(function (pair) { groups.set(pair[0], pair[1]); });
-        shellSections();
+        threadList.shellSections();
       };
 
       return api;
