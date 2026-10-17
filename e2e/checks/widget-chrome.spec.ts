@@ -6,8 +6,6 @@ import { expect, test } from '@playwright/test';
 
 const env = process.env;
 test.use({ extraHTTPHeaders: { 'Cf-Access-Jwt-Assertion': env.LOTUSPOD_TEST_ASSERTION ?? '' } });
-const note = "Sandboxed: this block can't see the page or your comments";
-const paused = "Paused. The widget's scripts are stopped. Press Resume to start it again from the beginning.";
 const counter = `<style>body { padding: 24px; } output { display: block; font-size: 40px; }</style>
 <p>A clock that keeps its place in memory.</p><output>1</output><button>Keep counting</button>
 <script>let count = 1; setInterval(() => document.querySelector('output').textContent = String(++count), 300);</script>`;
@@ -57,7 +55,7 @@ test('served chrome, lifecycle, expansion and isolated Open alone', async ({page
     await expect(badge).not.toHaveAttribute('title');
     releaseWidget();
     await expect(badge).toHaveText('Live');
-    await expect(page.locator('.artifact-live-note')).toHaveText([note]);
+    await expect(page.locator('.artifact-live-note')).toHaveText(["Sandboxed: this block can't see the page or your comments"]);
     const errorFigure = page.locator('figure[data-widget="errors"]');
     await page.frameLocator('figure[data-widget="errors"] iframe').getByRole('button').click();
     await expect(errorFigure.locator('.artifact-live-badge')).toHaveText('2 errors');
@@ -97,7 +95,7 @@ test('served chrome, lifecycle, expansion and isolated Open alone', async ({page
     const heightBeforePause = await frame.evaluate(node => node.getBoundingClientRect().height);
     const widgetURL = new URL((await frame.getAttribute('src'))!, page.url()).href;
     await figure.getByRole('button', {name: 'Pause', exact: true}).click();
-    await expect(figure.locator('.artifact-live-paused')).toHaveText(paused);
+    await expect(figure.locator('.artifact-live-paused')).toHaveText("Paused. The widget's scripts are stopped. Press Resume to start it again from the beginning.");
     await expect(figure.locator('.artifact-live-paused')).toBeVisible();
     expect(await frame.evaluate(node => node.getBoundingClientRect().height)).toBe(heightBeforePause);
     await expect.poll(() => page.frames().some(item => item.url() === widgetURL)).toBe(false);
