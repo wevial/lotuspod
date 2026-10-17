@@ -47,12 +47,11 @@ ${COUNTER}
 | rollout | Roll out this week? | Yes / No |
 `;
 
-function publish(): string {
-  const name = `widget-decisions-${randomBytes(4).toString('hex')}`;
+function publish(name = `widget-decisions-${randomBytes(4).toString('hex')}`, source = SOURCE): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'widget-decisions-'));
   try {
     const file = path.join(dir, `${name}.md`);
-    fs.writeFileSync(file, SOURCE);
+    fs.writeFileSync(file, source);
     execFileSync(env.LOTUSPOD_TEST_PYTHON!, ['-m', 'lotuspod', 'publish', file, '--local', '--out-dir', env.LOTUSPOD_TEST_OUT!,
       '--owner', 'hermes', '--credential', env.LOTUSPOD_TEST_CREDENTIAL_HERMES!, '--comments'],
     { env: { ...env, PYTHONPATH: path.resolve(__dirname, '../../src') } });
@@ -160,5 +159,37 @@ test('an answer in the form saves, and the widget keeps running in the same fram
   expect(await inner.locator('html').getAttribute('data-continuity')).toBe(token);
   const now = await count();
   await expect.poll(count).toBeGreaterThan(now);
+  expect(errors).toEqual([]);
+});
+
+test('pressed while the block is expanded, the link closes it first', async ({ page }) => {
+  const errors = watch(page);
+  const the = await open(page);
+  await the.figure.getByRole('button', { name: 'Expand', exact: true }).click();
+  await expect(the.figure).toHaveClass(/artifact-live--expanded/);
+  await the.link.click();
+  await expect(the.figure).not.toHaveClass(/artifact-live--expanded/);
+  await expect(the.form('decision-workers')).toBeInViewport();
+  await expect(the.form('decision-workers').locator('input').first()).toBeFocused();
+  expect(errors).toEqual([]);
+});
+
+test('a swap that keeps the block running brings in its new decisions link', async ({ page }) => {
+  const errors = watch(page);
+  const the = await open(page);
+  const identity = await the.figure.locator('iframe.artifact-widget').evaluateHandle((node) => node);
+  await expect(the.link).toHaveText('2 decisions');
+  publish(the.name, SOURCE.replace('| workers | How many workers next week? | Two / Four / Eight |\n', ''));
+  await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+  // The default picked on "Keep one merge queue?" is not saved, so the
+  // section waits for its Update.
+  await page.getByRole('button', { name: 'Update', exact: true }).click();
+  await expect(the.form('decision-workers')).toHaveCount(0);
+  await expect(the.link).toHaveCount(1);
+  await expect(the.link).toHaveText('1 decision');
+  await expect(the.link).toHaveAttribute('href', '#question=decision-cadence');
+  expect(await identity.evaluate((node) => node === document.querySelector('figure[data-widget="churn"] iframe.artifact-widget'))).toBe(true);
+  await the.link.click();
+  await expect(the.form('decision-cadence').locator('input').first()).toBeFocused();
   expect(errors).toEqual([]);
 });

@@ -628,6 +628,10 @@ export function reviewSheet(page: Page): void {
     if (!link || event.defaultPrevented) {
       return;
     }
+    // An expanded block would cover the form: it closes first.
+    if (link.closest("figure.artifact-live--expanded")) {
+      link.closest("figure")?.querySelector<HTMLButtonElement>(".artifact-live-expand")?.click();
+    }
     const href = link.getAttribute("href") ?? "";
     focusing = href.startsWith("#question=") ? decodeURIComponent(href.slice("#question=".length)) : null;
     if (href === location.hash && drawnAnswers) {

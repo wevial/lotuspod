@@ -148,3 +148,14 @@ class AboutTests(DecisionsTestCase):
 
     def test_a_checklist_table_is_never_about_the_block(self):
         self.assertAboutNothing(page_text(table=CHECKLIST, heading="Checklist for the maintainer"))
+
+    def test_an_inert_form_in_a_template_is_not_counted(self):
+        from lotuspod import decisions, markdown, widgets
+        body, _, _ = widgets.render(markdown.to_body(page_text()), "churn")
+        body, _ = decisions.render_decisions(body, "churn")
+        ghost = ('<template><form class="artifact-decision" data-about="merge-churn-by-worker-count"'
+                 ' data-question="ghost"></form></template>')
+        found = parts(widgets.link_decisions(ghost + body))
+        links = decision_links(found, "merge-churn-by-worker-count")
+        self.assertEqual([(link["text"], link["attrs"]["href"]) for link in links],
+                         [("2 decisions", "#question=decision-workers")])

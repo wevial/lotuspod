@@ -364,18 +364,27 @@ def render(body: str, name: str) -> tuple[str, dict[str, bytes], list[str]]:
 
 class AboutForms(HTMLParser):
     """The decision forms about a live block (lotuspod.decisions), in page
-    order: each data-about id to its forms' data-question ids."""
+    order: each data-about id to its forms' data-question ids. A form inside
+    a template or a noscript is inert, and not one of them."""
+    CDATA_CONTENT_ELEMENTS = Templates.CDATA_CONTENT_ELEMENTS
 
     def __init__(self, text: str):
         super().__init__()
         self.found: dict[str, list[str]] = {}
+        self._templates = 0
         if 'data-about=' in text:
             self.feed(text)
             self.close()
 
+    def handle_endtag(self, tag):
+        if tag == 'template' and self._templates:
+            self._templates -= 1
+
     def handle_starttag(self, tag, attrs):
         attrs = dict(attrs)
-        if (tag == 'form' and 'artifact-decision' in (attrs.get('class') or '').split()
+        if tag == 'template':
+            self._templates += 1
+        elif (not self._templates and tag == 'form' and 'artifact-decision' in (attrs.get('class') or '').split()
                 and attrs.get('data-about') and attrs.get('data-question')):
             self.found.setdefault(attrs['data-about'], []).append(attrs['data-question'])
 
