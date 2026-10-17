@@ -245,7 +245,7 @@ test.describe('signed in', () => {
 
   test('Recent activity keeps the weeks it shows when it refreshes, and Show older adds one week', async ({ page }) => {
     const week = 7 * 24 * 60 * 60 * 1000;
-    const asked: { before: string | null; at: number }[] = [];
+    const asked: { before: string | null; at: number; from: string }[] = [];
     let newest = 0;
     await page.route((url) => url.pathname === ACTIVITY, (route) => {
       const before = new URL(route.request().url()).searchParams.get('before');
@@ -253,7 +253,7 @@ test.describe('signed in', () => {
       // between the previous week's start and the refreshed week's start.
       const to = before ? Date.parse(before) : Date.now();
       const from = new Date(to - week).toISOString();
-      asked.push({ before, at: Date.now() });
+      asked.push({ before, at: Date.now(), from });
       const at = new Date(to - 1000).toISOString();
       return route.fulfill({ json: {
         from, to: new Date(to).toISOString(),
@@ -297,8 +297,13 @@ test.describe('signed in', () => {
       await expect(group.locator('li.index-activity-event')).toHaveCount(1);
     }
 
+    const shownFrom = asked[asked.length - 1].from;
+    const requestsBeforeOlder = asked.length;
     await page.getByRole('button', { name: 'Show older', exact: true }).click();
     await expect(group.locator('li.index-activity-event')).toHaveCount(2);
+    expect(asked).toHaveLength(requestsBeforeOlder + 1);
+    expect(asked[requestsBeforeOlder].before).toBe(shownFrom);
+    await expect(page.locator('.index-count')).toHaveText('1 page with activity in the last 14 days');
 
     const opened = newest;
     asked.length = 0;
