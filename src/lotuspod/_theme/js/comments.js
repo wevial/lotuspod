@@ -83,7 +83,7 @@
 
     var threadRows = parts.thread({
       owner: owner, page: page, checking: function () { return checking; },
-      counted: counted, opening: opening, label: label,
+      counted: counted, opening: opening, label: function (thread, row) { composer.label(thread, row); },
     });
     var agent = threadRows.agent;
     var author = threadRows.author;
@@ -92,6 +92,13 @@
     var sync = threadRows.sync;
     var merge = threadRows.merge;
     var markUnread = threadRows.markUnread;
+
+    var composer = parts.composer({
+      page: page, revision: revision, attached: attached, forms: forms,
+      sending: new Map(), boxWith: boxWith, rows: rows, agent: agent, routed: routed,
+      readTo: readTo, merge: merge, posted: posted, add: add, shown: shown,
+      placement: function () { return panel; },
+    });
 
     // Whether a comment counts as unread: the route named it, and neither
     // a mark this page posted nor the reader's own reply since has read it.
@@ -183,153 +190,6 @@
       return rows(thread).some(function (entry) {
         return !agent(entry) && (entry.state === "pending" || entry.state === "claimed");
       });
-    }
-
-    function failure(response, payload, stale) {
-      if (response.status === 401) {
-        return SIGNED_OUT;
-      }
-      if (response.status === 409 && payload && payload.error === "stale_page") {
-        return stale || STALE_PAGE;
-      }
-      var error = payload && payload.error ? String(payload.error) : "status " + response.status;
-      return "Not saved (" + error + "). Try again.";
-    }
-
-    // Post body from form, with the images attached to it; the stored row,
-    // or null with the form told why. While it saves, the composer takes no
-    // other image and keeps those it sends.
-    async function post(form, body) {
-      var status = form.querySelector(".artifact-comment-status");
-      var button = form.querySelector('button[type="submit"]');
-      var images = attached.get(form);
-      if (images && images.busy()) {
-        status.textContent = "Wait until the images have uploaded.";
-        return null;
-      }
-      var names = images ? images.sending() : [];
-      if (names.length) {
-        body.images = names;
-      }
-      var saved = false;
-      button.disabled = true;
-      status.textContent = "Saving...";
-      try {
-        var response = await fetch(COMMENTS, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        });
-        var payload = await json(response);
-        if (response.status !== 201 || !payload) {
-          status.textContent = failure(response, payload, body.quote ? STALE_PAGE : STALE_SECTION);
-          return null;
-        }
-        status.textContent = "";
-        form.elements.text.value = "";
-        saved = true;
-        return payload;
-      } catch (ignored) {
-        status.textContent = "Not saved: the site did not answer. Try again.";
-        return null;
-      } finally {
-        if (images) {
-          images.sent(saved);
-        }
-        button.disabled = false;
-      }
-    }
-
-    // Cmd+Enter (Ctrl+Enter off macOS) in a composer's field sends it as
-    // its button does, unless the button is disabled: while it saves, or
-    // on an archived page. Enter alone still adds a line.
-    function sendOnEnter(form, field) {
-      field.addEventListener("keydown", function (event) {
-        if (event.key !== "Enter" || !(event.metaKey || event.ctrlKey) || event.isComposing) {
-          return;
-        }
-        event.preventDefault();
-        var button = form.querySelector('button[type="submit"]');
-        if (button && !button.disabled) {
-          form.requestSubmit(button);
-        }
-      });
-    }
-
-    // The composer's control: "Reply" once an agent has answered in the
-    // thread; before that the quieter "Add to your comment", its field
-    // saying the agent reads it with the comment.
-    function label(thread, entry) {
-      var answered = rows(thread).some(function (each) { return agent(each) !== ""; });
-      var name = answered ? "Reply" : "Add to your comment";
-      var hint = answered ? "" : "Add detail. " + routed(entry) + " reads it with your comment.";
-      if (thread.toggle.textContent !== name) {
-        thread.toggle.textContent = name;
-        thread.toggle.classList.toggle("artifact-comment-toggle--quiet", !answered);
-        thread.field.setAttribute("aria-label", name);
-      }
-      if (thread.field.placeholder !== hint) {
-        thread.field.placeholder = hint;
-      }
-    }
-
-    // A thread's composer: a control that unfolds the reply form, folded
-    // until clicked.
-    function replyForm(thread, node) {
-      var toggle = element("button", "artifact-comment-toggle");
-      toggle.type = "button";
-      var form = element("form", "artifact-comment-reply");
-      form.id = "artifact-comment-reply-" + thread.root.id;
-      toggle.setAttribute("aria-controls", form.id);
-      var text = element("textarea");
-      text.name = "text";
-      text.rows = 2;
-      text.maxLength = 4000;
-      text.required = true;
-      form.appendChild(text);
-      var actions = element("div", "artifact-comment-actions");
-      var button = element("button", "", "Send");
-      button.type = "submit";
-      actions.appendChild(button);
-      var status = element("p", "artifact-comment-status");
-      status.setAttribute("role", "status");
-      actions.appendChild(status);
-      form.appendChild(actions);
-      attached.set(form, attachments(form, text));
-      sendOnEnter(form, text);
-      thread.toggle = toggle;
-      thread.field = text;
-      thread.unfold = unfold;
-
-      function unfold(open) {
-        form.hidden = !open;
-        toggle.setAttribute("aria-expanded", open ? "true" : "false");
-      }
-      unfold(false);
-      toggle.disabled = ARCHIVED;
-      toggle.addEventListener("click", function () {
-        unfold(form.hidden);
-        if (!form.hidden) {
-          text.focus();
-        }
-      });
-      form.addEventListener("submit", async function (event) {
-        event.preventDefault();
-        var row = await post(form, { page: page, parent: thread.root.id, text: text.value });
-        if (row) {
-          var focused = form.contains(document.activeElement)
-            || document.activeElement === document.body;
-          unfold(false);
-          if (focused) {
-            toggle.focus();
-          }
-          readTo(thread, row.id);
-          merge(thread, [row]);
-          posted();
-        }
-      });
-      node.appendChild(toggle);
-      node.appendChild(form);
     }
 
     // The threads of a section's box, oldest first.
@@ -787,77 +647,22 @@
           close(open);
         }
         pill.hidden = true;
-        var holder = element("div", "artifact-passage-composer");
-        holder.appendChild(element("p", "artifact-passage-quote", found.quote.exact));
-        var form = element("form", "artifact-comment-form artifact-passage-form");
-        var field = element("textarea");
-        field.name = "text";
-        field.rows = 2;
-        field.maxLength = 4000;
-        field.required = true;
-        field.setAttribute("aria-label", "Comment on the selected words");
-        var actions = element("div", "artifact-comment-actions");
-        var send = element("button", "", "Comment");
-        send.type = "submit";
-        var status = element("p", "artifact-comment-status");
-        status.setAttribute("role", "status");
-        actions.append(send, status);
-        form.append(field, actions);
-        attached.set(form, attachments(form, field));
-        sendOnEnter(form, field);
-        var quit = element("button", "artifact-passage-cancel", "Cancel");
-        quit.type = "button";
-        holder.append(form, quit);
+        var handles = composer.passage(found.box, found.quote, function () { close(mine); }, function (row) {
+          // A swap may have moved the marks or removed the quoted words.
+          var start = marks.length && article.contains(marks[0]) ?
+            offsetOf(textModel(article), marks[0], 0) : null;
+          if (open === mine) close(mine);
+          if (start !== null) hints.set(row.id, start);
+        });
+        var field = handles.field;
         var marks = wrap(article, found.start, found.start + found.quote.exact.length, function () {
           return element("mark", "artifact-passage artifact-passage--pending");
         });
-        var mine = {
-          holder: holder, marks: marks, box: found.box, quote: found.quote, field: field, form: form,
-        };
+        var mine = Object.assign(handles, { marks: marks, box: found.box, quote: found.quote });
         open = mine;
         document.getSelection().removeAllRanges();
         api.place();
         field.focus({ preventScroll: true });
-
-        quit.addEventListener("click", function () { close(mine); });
-        holder.addEventListener("keydown", function (event) {
-          if (event.key === "Escape") {
-            // The panel would fold on it too.
-            event.preventDefault();
-            event.stopPropagation();
-            close(mine);
-          }
-        });
-        form.addEventListener("submit", async function (event) {
-          event.preventDefault();
-          var fields = {
-            page: page, section: found.box.dataset.section, text: field.value, quote: found.quote,
-          };
-          if (revision() !== null) {
-            fields.revision = revision();
-          }
-          // A swap that takes the words away meanwhile waits for it.
-          mine.saving = post(form, fields);
-          var row = await mine.saving;
-          mine.saving = null;
-          if (!row) {
-            return;
-          }
-          // Where the words start now: a swap since may have moved them, or
-          // taken their marks away, when the quote alone finds them.
-          var start = marks.length && article.contains(marks[0]) ?
-            offsetOf(textModel(article), marks[0], 0) : null;
-          var focused = holder.contains(document.activeElement) || document.activeElement === document.body;
-          if (open === mine) {
-            close(mine);
-          }
-          if (start !== null) {
-            hints.set(row.id, start);
-          }
-          add({ root: row, replies: [] });
-          posted();
-          panel.started(shown.get(row.id), focused);
-        });
       }
 
       pill.addEventListener("mousedown", function (event) {
@@ -1147,7 +952,7 @@
         node.appendChild(thread.head);
       }
       node.appendChild(list);
-      replyForm(thread, node);
+      Object.assign(thread, composer.reply(thread, node));
       shown.set(root.id, thread);
       watch(node);
       merge(thread, entry.replies || []);
@@ -1613,39 +1418,8 @@
     }
 
     // The post each form for a new thread is sending: its row, or null.
-    var sending = new Map();
-
-    // A box's form for a new thread takes images, sends on Cmd+Enter and
-    // posts a thread on the section of the box it is now the form of.
-    function wire(box) {
-      var form = forms.get(box);
-      attached.set(form, attachments(form, form.elements.text));
-      sendOnEnter(form, form.elements.text);
-      form.addEventListener("submit", async function (event) {
-        event.preventDefault();
-        var mine = boxWith(form);
-        if (!mine) {
-          return;
-        }
-        var fields = { page: page, section: mine.dataset.section, text: form.elements.text.value };
-        if (revision() !== null) {
-          fields.revision = revision();
-        }
-        // A swap that takes the section away meanwhile waits for it.
-        var saving = post(form, fields);
-        sending.set(form, saving);
-        var row = await saving;
-        sending.delete(form);
-        mine = boxWith(form);
-        if (row) {
-          add({ root: row, replies: [] });
-          posted();
-          if (mine) {
-            panel.posted(mine, shown.get(row.id));
-          }
-        }
-      });
-    }
+    var sending = composer.sending;
+    function wire(box) { return composer.wire(box); }
     boxes.forEach(wire);
 
     // A swap (web/src/page-swap.ts) brought in a newer revision's parts:
@@ -2040,7 +1814,7 @@
       all: all, boxes: boxes, shown: shown, forms: forms, decisions: decisions,
       rows: rows, resolved: resolved, agent: agent, routed: routed,
       threadsOf: threadsOf, decisionOf: decisionOf, passages: passages,
-      imageWords: imageWords, looked: looked, refresh: refresh, failure: failure, json: json,
+      imageWords: imageWords, looked: looked, refresh: refresh, failure: composer.failure, json: json,
       page: page, sections: sections, showUnread: showUnread, changed: changed, chips: chips,
     });
     decisions.forEach(askAbout);

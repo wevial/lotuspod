@@ -96,7 +96,15 @@ declare function commentMarkdown(node: HTMLDivElement, text: string): HTMLDivEle
 declare function commentImages(row: CommentRow): HTMLUListElement | null;
 declare function when(stamp: string | undefined): string;
 
+declare function json(response: Response): Promise<(CommentRow & CommentPayload) | null>;
+declare function attachments(form: HTMLFormElement, field: HTMLTextAreaElement): Attachments;
+declare const SIGNED_OUT: string;
+declare const STALE_PAGE: string;
+declare const STALE_SECTION: string;
+
 export const page = Object.freeze({
+  attachments, json,
+  signedOut: SIGNED_OUT, stalePage: STALE_PAGE, staleSection: STALE_SECTION,
   commentMarkdown, commentImages, when,
   commenting,
   room: ROOM,
@@ -231,4 +239,34 @@ export interface ThreadBridge {
   counted(thread: Thread, row: CommentRow): boolean;
   opening: Map<number, Set<number>>;
   label(thread: Thread, row: CommentRow): void;
+}
+
+export interface StoredImage { name: string; width: number; height: number }
+export interface Attachments {
+  kept(): StoredImage[];
+  busy(): boolean;
+  held(): boolean;
+  restore(images: unknown): string;
+  sending(): string[];
+  sent(saved: boolean): void;
+  pass(to: Attachments): string;
+  adopt(file: File, done: Promise<{ image: StoredImage | null; why: string }>): string;
+  take(files: File[]): void;
+}
+export interface ComposerBridge {
+  page: string;
+  revision(): string | null;
+  attached: Map<HTMLFormElement, Attachments>;
+  forms: Map<HTMLElement, HTMLFormElement>;
+  sending: Map<HTMLFormElement, Promise<CommentRow | null>>;
+  boxWith(form: HTMLFormElement): HTMLElement | null;
+  rows(thread: Thread): CommentRow[];
+  agent(row: CommentRow): string;
+  routed(row: CommentRow): string;
+  readTo(thread: Thread, id: number): void;
+  merge(thread: Thread, rows: CommentRow[]): void;
+  posted(): void;
+  add(entry: { root: CommentRow; replies: CommentRow[] }): void;
+  shown: Map<number, Thread>;
+  placement(): import('./comments/parts').Placement;
 }
