@@ -49,6 +49,23 @@ class LibraryTests(TempDirTestCase):
         self.assertEqual(rc, 0, err)
         self.assert_libraries(self.document(), ['d3'])
 
+    def test_mermaid_widget_keeps_page_policy_separate(self):
+        rc, _, err = self.publish(
+            '# Charts\n```mermaid\ngraph LR; A --> B\n```\n'
+            '```html live mermaid title="Diagram"\n'
+            '<pre class="mermaid">graph LR; C --> D</pre>\n'
+            '<script>mermaid.initialize({startOnLoad: true});</script>\n```')
+        self.assertEqual(rc, 0, err)
+        document = self.document()
+        self.assert_libraries(document, ['mermaid'])
+        page = (self.out_dir / 'charts.html').read_text()
+        page_sources = directives(read_page(page).policies[0])['script-src']
+        self.assertIn(cli.MERMAID_DIR, page_sources)
+        for library in libraries.LIBRARIES.values():
+            self.assertNotIn(library.url, page_sources)
+        widget_sources = directives(read_page(document).policies[0])['script-src']
+        self.assertNotIn(cli.MERMAID_DIR, widget_sources)
+
     def test_duplicate_and_transitive_library_loads_once(self):
         rc, _, err = self.publish('# Charts\n```html live d3 plot d3 title="Dots"\nx\n```')
         self.assertEqual(rc, 0, err)
