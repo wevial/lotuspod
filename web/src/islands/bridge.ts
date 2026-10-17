@@ -68,6 +68,9 @@ declare const RESOLVED_SHOWN: string;
 declare const WHOLE_PAGE: string;
 declare const CHANGED_GROUP: string;
 declare const COMMENTS: string;
+declare const ROOM: number;
+declare const POPOVER: string;
+declare function overText(the: NarrowBridge): import("./comments/parts").Over;
 
 // js/live-page.js.
 declare const live: Live;
@@ -91,6 +94,9 @@ declare const DRAWN: string;
 
 export const page = Object.freeze({
   commenting,
+  room: ROOM,
+  popover: POPOVER,
+  overText,
   closed: CLOSED,
   panelKey: PANEL,
   resolvedShownKey: RESOLVED_SHOWN,
@@ -125,6 +131,7 @@ export interface Thread {
   box: HTMLElement | null;
   node: HTMLDivElement;
   n: number;
+  marks: HTMLElement[];
   lit: boolean;
   entry: import("./comments/parts").Entry | null;
 }
@@ -160,4 +167,45 @@ export interface ThreadListBridge {
   holds(thread: Thread): boolean;
   uncover(node: HTMLElement): void;
   bring(thread: Thread): void;
+}
+
+// Placement reads live page-owned stores; swaps mutate these same maps.
+export interface PlacementBridge extends Omit<ThreadListBridge,
+  "wide" | "moving" | "holds" | "uncover" | "bring" | "passages"> {
+  sections: Map<string, HTMLElement>;
+  passages: ThreadListBridge["passages"] & {
+    place(): void;
+    cancel(mine: import("./comments/parts").Passage): void;
+  };
+  showUnread(): void;
+  changed(): HTMLElement;
+  chips(
+    list: import("./comments/parts").ThreadList,
+    chipped: (box: HTMLElement) => void,
+    reach: (thread: Thread, opener: HTMLElement | null, read: boolean) => void,
+  ): {
+    nodes: Map<HTMLFormElement, HTMLButtonElement>;
+    mute(node: HTMLElement): HTMLElement;
+    mount(box: HTMLElement): void;
+    refresh(): void;
+  };
+}
+
+// The object narrow.js consumes. It retains ownership of its surfaces and
+// moves the list's independent roots through this synchronous contract.
+export interface NarrowBridge extends Pick<import("./comments/parts").ThreadList,
+  "compose" | "unresolvedOf" | "ordered" | "latest" | "standing" | "asked" |
+  "said" | "tick" | "title" | "opening"> {
+  panel: import("./comments/parts").Placement;
+  groups: Map<HTMLElement, import("./comments/parts").Group>;
+  passages: PlacementBridge["passages"];
+  mute(node: HTMLElement): HTMLElement;
+  threadsOf: ThreadListBridge["threadsOf"];
+  resolved: ThreadListBridge["resolved"];
+  routed: ThreadListBridge["routed"];
+  decisionOf: ThreadListBridge["decisionOf"];
+  anchorOf(thread: Thread): HTMLElement | null;
+  unfold(target: HTMLElement): void;
+  barBottom(): number;
+  standsFor(box: HTMLElement): HTMLElement | null;
 }
