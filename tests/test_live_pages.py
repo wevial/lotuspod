@@ -120,7 +120,6 @@ class LivePages(unittest.TestCase):
         folder = self.tmp / 'notes'
         folder.mkdir()
         (folder / 'panel.html').write_text('<p>Notes widget</p>')
-        # A real image from the repository fixtures.
         (folder / 'dot.png').write_bytes((Path(__file__).parent / 'fixtures/media/padded-48x32-2000-bytes.png').read_bytes())
         notes = folder / 'notes.md'
         notes.write_text(NOTES + '\n![Dot](dot.png)\n\n```html live file=panel.html title=Notes\n```\n')
