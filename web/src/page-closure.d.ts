@@ -91,7 +91,8 @@ declare function holdSwap(test: (nodes: readonly Element[], removed: boolean) =>
 // web/src/widgets.ts: accepted notifications dispatched on the widget frame.
 declare var WIDGET: "lotuspod:widget";
 interface WidgetDetail {
-  kind: "ready" | "error" | "escape";
+  kind: "ready" | "error" | "escape" | "state";
+  // The error's message, or the state's label; "" for the others.
   message: string;
 }
 interface HTMLElementEventMap {

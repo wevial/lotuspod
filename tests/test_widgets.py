@@ -102,6 +102,22 @@ class WidgetTests(TempDirTestCase):
         self.assertEqual(Elements(document).tags[1][0], 'head')
         self.assertEqual(Elements(document).tags[2][0], 'meta')
 
+    def test_frame_bridge_defines_state(self):
+        body = markdown.to_body('```html live id=steps title="Steps"\n<script>lotuspod.state("at 6 workers");</script>\n```')
+        self.assertEqual(self.render('pond', '--body', body)[0], 0)
+        document = (self.out_dir / self.frame()[1]['src']).read_text()
+        scripts = cli.collect_scripts(document).inline
+        bridge = scripts[0]
+        self.assertEqual(bridge, (widgets.THEME / 'widget-frame.js').read_text())
+        self.assertIn('window.lotuspod = {state: state};', bridge)
+        self.assertIn('post({type: "lotuspod:state", label: String(label).slice(0, 80).replace(/[\\uD800-\\uDBFF]$/, "")});', bridge)
+        # Each new document opens with no state, so a reload keeps none.
+        self.assertIn('window.lotuspod = {state: state};\n  state("");', bridge)
+        self.assertEqual(scripts[1], 'lotuspod.state("at 6 workers");')
+        hashes = directives(read_page(document).policies[0])['script-src']
+        self.assertEqual(hashes, [cli.script_hash(script) for script in scripts])
+        self.assertEqual(len(set(hashes)), len(scripts))
+
     def test_publish_history_stability_and_cleanup(self):
         def git(*args):
             return subprocess.check_output(['git', '-C', str(self.out_dir), *args], text=True).strip()

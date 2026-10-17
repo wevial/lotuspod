@@ -145,7 +145,7 @@ test('a reader comments on a live block, hermes answers, and the thread follows 
 
   // The Comment follows the title and badge, and the pin waits for a thread.
   expect(await live.figure.locator('.artifact-live-chrome > *').evaluateAll((nodes) =>
-    nodes.map((node) => node.className))).toEqual(['artifact-live-title', 'artifact-live-badge',
+    nodes.map((node) => node.className))).toEqual(['artifact-live-title', 'artifact-live-badge', 'artifact-live-state',
     'artifact-live-comment', 'artifact-live-expand', 'artifact-live-open', 'artifact-live-pause']);
   await expect(live.pin).toBeHidden();
 
