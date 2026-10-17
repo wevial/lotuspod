@@ -70,6 +70,50 @@ class LivePages(unittest.TestCase):
                     self.assertIn(text, done.stderr)
                 self.assertFalse(out.exists())
 
+    def test_command_heading_inside_document_survives_publish_and_republish(self):
+        script = '<script>window.instructions = `\n## Concrete commands\nPress start\n`;</script>'
+        document = DOCUMENT.replace('</body>', script + '</body>')
+        source = self.source()
+        source.write_text(document)
+        notes = self.tmp / 'notes.md'
+        notes.write_text('## Notes\n\nVisible notes.\n\n## Concrete commands\nHidden commands.\n')
+        for remote in [False, True]:
+            for live in [False, True]:
+                with self.subTest(remote=remote, live=live):
+                    if live:
+                        page_source = source
+                        options = ['--live', '--notes', str(notes)]
+                    else:
+                        page_source = self.tmp / 'mock.md'
+                        page_source.write_text('# Pump panel\n\n```html live file=mock.html\n```\n' + notes.read_text())
+                        options = []
+                    destination = [] if remote else ['--local', '--out-dir', str(self.out)]
+                    done = self.publish(page_source, *options, *destination)
+                    self.assertEqual(done.returncode, 0, done.stderr)
+                    page = (self.out / 'mock.html').read_text()
+                    self.assertIn('Visible notes.', page)
+                    self.assertNotIn('Hidden commands.', page)
+                    kept = self.out / 'mock.md'
+                    self.assertIn(document, kept.read_text())
+                    widget_name = re.search(r'src="(mock\.w-[^"]+\.html)"', page).group(1)
+                    self.assertIn(script, (self.out / widget_name).read_text())
+                    done = self.publish(kept, '--local', '--out-dir', str(self.out))
+                    self.assertEqual(done.returncode, 0, done.stderr)
+                    self.assertIn(script, (self.out / widget_name).read_text())
+
+    def test_document_title_ignores_nested_templates(self):
+        source = self.source()
+        for title, expected in [('<title>Pump panel</title>', 'Pump panel'), ('', 'mock')]:
+            with self.subTest(title=title):
+                source.write_text('<!doctype html><html><head><template><template>'
+                                  '<title>Nested title</title></template><title>Template title</title>'
+                                  '</template>' + title + '</head><body>Panel</body></html>')
+                done = self.publish(source, '--live', '--local', '--out-dir', str(self.out))
+                self.assertEqual(done.returncode, 0, done.stderr)
+                self.assertTrue((self.out / 'mock.md').read_text().startswith('# ' + expected + '\n'))
+                self.assertIn('<h1 class="artifact-title">' + expected + '</h1>',
+                              (self.out / 'mock.html').read_text())
+
     def test_notes_files_resolve_from_notes_directory(self):
         folder = self.tmp / 'notes'
         folder.mkdir()

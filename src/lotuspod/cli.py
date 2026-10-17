@@ -1906,16 +1906,21 @@ class _DocumentTitle(HTMLParser):
         self.active = False
         self.done = False
         self.foreign = 0
+        self.templates = 0
         self.title = ''
         self.feed(source)
 
     def handle_starttag(self, tag, attrs):
+        if tag == 'template':
+            self.templates += 1
         if tag in {'svg', 'math'}:
             self.foreign += 1
-        if tag == 'title' and not self.foreign and not self.done:
+        if tag == 'title' and not self.foreign and not self.templates and not self.done:
             self.active = True
 
     def handle_endtag(self, tag):
+        if tag == 'template':
+            self.templates = max(0, self.templates - 1)
         if tag in {'svg', 'math'}:
             self.foreign = max(0, self.foreign - 1)
         if tag == 'title' and self.active:
