@@ -82,7 +82,9 @@ export function threadRows(page: Page, bridge: ThreadBridge) {
       if (!drawn) continue;
       const unread = value.unread.has(id);
       if (unread && !divided) {
-        children.push(<li key="divider" class="artifact-comment-divider" aria-hidden="true"><span>New since you last looked</span></li>);
+        // Replace the divider when its anchor changes. Reusing one key lets
+        // Preact move an existing comment around it in this polite live region.
+        children.push(<li key={"divider " + id} class="artifact-comment-divider" aria-hidden="true"><span>New since you last looked</span></li>);
         divided = true;
       }
       const item = comment(drawn, unread);
