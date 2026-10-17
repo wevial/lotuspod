@@ -4,6 +4,9 @@ interface WidgetState {
   ready: boolean;
   errors: number;
   lastError: string;
+  // The widget's latest lotuspod.state() label; "" before the first, and
+  // again as each new document's bridge opens with "".
+  label: string;
   accepted: number[];
   height?: number;
   pending: boolean;
@@ -17,7 +20,7 @@ function installWidgetBridge(): void {
   const stateFor = (frame: HTMLIFrameElement): WidgetState => {
     let state = widgetStates.get(frame);
     if (!state) {
-      state = {ready: false, errors: 0, lastError: "", accepted: [], pending: false};
+      state = {ready: false, errors: 0, lastError: "", label: "", accepted: [], pending: false};
       widgetStates.set(frame, state);
     }
     return state;
@@ -65,6 +68,14 @@ function installWidgetBridge(): void {
       placeholder.textContent = "Paused. The widget's scripts are stopped. Press Resume to start it again from the beginning.";
       placeholder.hidden = true;
       figure.append(placeholder);
+      // Widget text: only ever set as text.
+      const where = document.createElement("span");
+      where.className = "artifact-live-state";
+      badge.after(where);
+      const updateLabel = (): void => {
+        where.textContent = state.label;
+        where.hidden = !state.label;
+      };
       const updateBadge = (): void => {
         badge.textContent = state.errors ? `${state.errors} ${state.errors === 1 ? "error" : "errors"}` : state.ready ? "Live" : "loading";
         if (state.errors) badge.setAttribute("title", state.lastError);
@@ -92,6 +103,9 @@ function installWidgetBridge(): void {
         state.paused = !state.paused;
         placeholder.hidden = !state.paused;
         pause.textContent = state.paused ? "Resume" : "Pause";
+        // Stopped or started again, the widget is at no state it has named.
+        state.label = "";
+        updateLabel();
         if (!state.paused) {
           state.ready = false;
           state.errors = 0;
@@ -105,11 +119,26 @@ function installWidgetBridge(): void {
       });
       frame.addEventListener(WIDGET, (event) => {
         updateBadge();
+        updateLabel();
         if (event.detail.kind === "escape") close();
       });
       updateBadge();
+      updateLabel();
     });
   };
+  // Each document the frame loads names no state until its widget does,
+  // whatever messages the quota let through: the frame's own load event
+  // clears the label, also for a document without the bridge. A label the
+  // new document names before the page sees its load is cleared with it,
+  // which leaves the block with no state rather than a stale one.
+  document.addEventListener("load", (event) => {
+    const frame = event.target;
+    if (!(frame instanceof HTMLIFrameElement) || !frame.matches("iframe.artifact-widget")) return;
+    const state = stateFor(frame);
+    if (!state.label) return;
+    state.label = "";
+    frame.dispatchEvent(new CustomEvent<WidgetDetail>(WIDGET, {detail: {kind: "state", message: ""}}));
+  }, true);
   document.addEventListener("DOMContentLoaded", initialize);
   document.addEventListener("lotuspod:swapped", initialize);
   window.addEventListener("message", (event: MessageEvent<unknown>) => {
@@ -128,6 +157,11 @@ function installWidgetBridge(): void {
       case "lotuspod:error":
         if (keys !== "message,type" || typeof data.message !== "string" || data.message.length > 200) return;
         kind = "error";
+        break;
+      case "lotuspod:state":
+        if (keys !== "label,type" || typeof data.label !== "string" || data.label.length > 80 ||
+            !data.label.isWellFormed() || /[\u0000-\u001f\u007f-\u009f]/.test(data.label)) return;
+        kind = "state";
         break;
       case "lotuspod:ready":
       case "lotuspod:escape":
@@ -156,8 +190,13 @@ function installWidgetBridge(): void {
       }
       return;
     }
-    const message = kind === "error" ? data.message as string : "";
+    const message = kind === "error" ? data.message as string : kind === "state" ? data.label as string : "";
     if (kind === "ready") state.ready = true;
+    if (kind === "state") {
+      // The same label again changes nothing.
+      if (state.label === message) return;
+      state.label = message;
+    }
     if (kind === "error") {
       state.errors++;
       state.lastError = message;
@@ -191,7 +230,7 @@ function commentChrome(): void {
     comment.type = "button";
     comment.className = "artifact-live-comment";
     comment.textContent = "Comment";
-    badge.after(comment);
+    (figure.querySelector(".artifact-live-chrome > .artifact-live-state") ?? badge).after(comment);
     comment.addEventListener("click", () => {
       // An expanded block would cover its composer: it closes first.
       if (figure.classList.contains("artifact-live--expanded")) {
@@ -200,7 +239,9 @@ function commentChrome(): void {
       // The file the block shows, also while it is paused.
       const source = frame.dataset.pausedSource || frame.getAttribute("src") || "";
       const hash = /\.w-([0-9a-f]{12})\.html$/.exec(source)?.[1] || "";
-      start({anchor: {kind: "block", id: figure.dataset.widget!, hash, state: ""}});
+      // The label the widget showed as the reader pressed Comment.
+      const state = figure.querySelector(".artifact-live-chrome > .artifact-live-state")?.textContent ?? "";
+      start({anchor: {kind: "block", id: figure.dataset.widget!, hash, state}});
     });
   });
 }
