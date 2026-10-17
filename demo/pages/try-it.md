@@ -16,6 +16,35 @@ Two shelves run around the edge: a shallow one, a hand deep, for marginal
 plants, and a deep one, an arm deep, for the water lilies. The middle is deep
 enough that it will not freeze through in winter.
 
+### The deep shelf
+
+The block below is a live block: a small page of its own, run in a sandboxed
+frame. Move the slider to try how many lilies the deep shelf takes. A lily
+wants about a square metre of surface to itself, and the shelf has three.
+
+```html live id=deep-shelf title="Lilies on the deep shelf"
+<style>
+  body { padding: 12px 16px; box-sizing: border-box; }
+  label { display: flex; align-items: center; gap: 12px; }
+  input:focus-visible { outline: 2px solid var(--lotus-color-sky); outline-offset: 2px; }
+  p { margin: 10px 0 0; }
+</style>
+<label>Lilies <input id="lilies" type="range" min="1" max="6" step="1" value="3"></label>
+<p id="verdict"></p>
+<script>
+  const slider = document.getElementById('lilies');
+  function say() {
+    const lilies = Number(slider.value);
+    const each = Math.round(300 / lilies) / 100;
+    document.getElementById('verdict').textContent =
+      `${lilies} ${lilies === 1 ? 'lily gets' : 'lilies get'} ${each} m² each: ` +
+      (lilies <= 3 ? 'room to spread.' : 'the leaves will crowd and climb.');
+  }
+  slider.addEventListener('input', say);
+  say();
+</script>
+```
+
 ## What goes in
 
 Plants go in before any fish, so they can root and shade the water first.
