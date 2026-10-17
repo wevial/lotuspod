@@ -29,6 +29,32 @@ class Elements(HTMLParser):
 
 
 class WidgetTests(TempDirTestCase):
+    def test_served_chrome_for_two_markdown_widgets(self):
+        from xml.etree import ElementTree
+        body = markdown.to_body('```html live title="Pond & clock" id=clock\n<p>One</p>\n```\n\n'
+                                '```html live id=second\n<p>Two</p>\n```')
+        rendered, _, _ = widgets.render(body, 'pond')
+        root = ElementTree.fromstring('<main>' + rendered + '</main>')
+        figures = root.findall('.//figure')
+        self.assertEqual(len(figures), 2)
+        for figure, ident, title in zip(figures, ['clock', 'second'], ['Pond & clock', 'second']):
+            self.assertEqual(figure.attrib, {'class': 'artifact-live', 'data-widget': ident})
+            chrome = figure[0]
+            self.assertEqual(chrome.attrib['class'], 'artifact-live-chrome')
+            self.assertEqual([(node.attrib['class'], node.text) for node in chrome[:2]],
+                             [('artifact-live-title', title), ('artifact-live-badge', 'loading')])
+            frame = figure.find('iframe')
+            self.assertIsNotNone(frame)
+            self.assertEqual(chrome.find('a').attrib, {
+                'class': 'artifact-live-open', 'href': frame.attrib['src'],
+                'target': '_blank', 'rel': 'noopener noreferrer'})
+            self.assertEqual(chrome.find('a').text, 'Open alone')
+            self.assertEqual(chrome.findall('button'), [])
+        notes = root.findall('.//p[@class="artifact-live-note"]')
+        self.assertEqual(len(notes), 1)
+        self.assertIs(figures[0][1], notes[0])
+        self.assertEqual(notes[0].text, "Sandboxed: this block can't see the page or your comments")
+
     def test_frame_scan_skips_pages_without_iframe_candidates(self):
         with patch.object(widgets.Frames, 'feed') as feed:
             self.assertEqual(widgets.Frames('<p>No frame</p>').sources, [])
