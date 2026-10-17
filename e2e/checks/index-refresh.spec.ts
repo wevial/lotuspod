@@ -243,6 +243,82 @@ test.describe('signed in', () => {
     expect(errors).toEqual([]);
   });
 
+  test('Recent activity keeps the weeks it shows when it refreshes, and Show older adds one week', async ({ page }) => {
+    const week = 7 * 24 * 60 * 60 * 1000;
+    const asked: { before: string | null; at: number; from: string }[] = [];
+    let newest = 0;
+    await page.route((url) => url.pathname === ACTIVITY, (route) => {
+      const before = new URL(route.request().url()).searchParams.get('before');
+      // Use real time: the browser's stopped clock would hide the gap
+      // between the previous week's start and the refreshed week's start.
+      const to = before ? Date.parse(before) : Date.now();
+      const from = new Date(to - week).toISOString();
+      asked.push({ before, at: Date.now(), from });
+      const at = new Date(to - 1000).toISOString();
+      return route.fulfill({ json: {
+        from, to: new Date(to).toISOString(),
+        older: true,
+        pages: [{ page: ARTICLE.name, title: ARTICLE.title,
+          events: [{ kind: 'version', at, commit: at, actor: null,
+            first: false, summary: before ? 'an older week' : `ask ${++newest}` }] }],
+      } });
+    });
+    // Observe the real stream and row swap before publishing. The server's
+    // manifest poll sends publish followed by index, possibly after the read.
+    await page.addInitScript(() => {
+      const state = { published: '', indexed: '', rows: 0 };
+      (window as any).__weekRefresh = state;
+      document.addEventListener('lotuspod:change', (event) => {
+        const { what, page } = (event as CustomEvent).detail;
+        if (what === 'publish') state.published = page;
+        if (what === 'index') state.indexed = state.published;
+      });
+      document.addEventListener('lotuspod:rows', () => { state.rows += 1; });
+    });
+    const settled = async (name: string, rows: number) => {
+      await expect.poll(() => page.evaluate(() => (window as any).__weekRefresh))
+        .toMatchObject({ indexed: name, rows });
+    };
+    await openIndex(page, '/#activity');
+    const group = page.locator(`section.index-activity-page[data-page="${ARTICLE.name}"]`);
+    await expect(group).toBeVisible();
+    for (let n = 1; n <= 3; n += 1) {
+      const opened = newest;
+      asked.length = 0;
+      publish(`index-refresh-weeks-${n}`, `Index refresh weeks ${n}`, 'A page published while one week is shown.');
+      await nextRead(page);
+      await settled(`index-refresh-weeks-${n}`, n);
+      // The newest summary lands only after the whole refresh chain merges.
+      await expect.poll(async () => newest > opened &&
+        (await group.textContent())?.includes(`ask ${newest}`)).toBe(true);
+
+      expect(asked.filter(({ before }) => before !== null)).toEqual([]);
+      await expect(page.locator('.index-count')).toHaveText('1 page with activity in the last 7 days');
+      await expect(group.locator('li.index-activity-event')).toHaveCount(1);
+    }
+
+    const shownFrom = asked[asked.length - 1].from;
+    const requestsBeforeOlder = asked.length;
+    await page.getByRole('button', { name: 'Show older', exact: true }).click();
+    await expect(group.locator('li.index-activity-event')).toHaveCount(2);
+    expect(asked).toHaveLength(requestsBeforeOlder + 1);
+    expect(asked[requestsBeforeOlder].before).toBe(shownFrom);
+    await expect(page.locator('.index-count')).toHaveText('1 page with activity in the last 14 days');
+
+    const opened = newest;
+    asked.length = 0;
+    publish('index-refresh-weeks-4', 'Index refresh weeks 4', 'A page published while two weeks are shown.');
+    await nextRead(page);
+    await settled('index-refresh-weeks-4', 4);
+    await expect.poll(async () => newest > opened &&
+      (await group.textContent())?.includes(`ask ${newest}`)).toBe(true);
+    for (const { before, at } of asked) {
+      if (before !== null) expect(at - Date.parse(before)).toBeLessThanOrEqual(week + EVERY);
+    }
+    await expect(page.locator('.index-count')).toHaveText('1 page with activity in the last 14 days');
+    await expect(group.locator('li.index-activity-event')).toHaveCount(2);
+  });
+
   test('a swap while the first activity read is under way asks for Recent activity again once it answers', async ({ page }) => {
     const errors = watchErrors(page);
     const name = 'index-refresh-starting';

@@ -876,7 +876,7 @@ passes the label and toggle tests its row does, and the search matches its
 title, labels and events, an unread reply's "new, to you" included. When the filters leave no group, the view reads "No
 activity matches these filters." Nothing updates while the index is open; a
 reload or "Show older" asks again, and so does coming back to the index from
-the browser's back-forward cache, over the days the view already showed.
+the browser's back-forward cache, asking as many weeks as the view shows, up to now.
 
 ### Pods in tabs
 

@@ -1,4 +1,7 @@
-// Only migrated parts belong here. The page still owns groups and threads.
+import type { ThreadListBridge } from "../bridge";
+import type { threadList } from "./thread-list";
+
+// Only migrated parts belong here. The page still owns thread bodies.
 export interface Section {
   box: HTMLElement;
   title: string;
@@ -31,7 +34,26 @@ export interface Shell {
 }
 export interface Parts {
   shell(hooks: ShellHooks): Shell;
+  threadList(shell: Shell, bridge: ThreadListBridge): ReturnType<typeof threadList>;
 }
 export interface Commenting {
   start(parts: Parts): void;
+}
+
+export interface Group {
+  optionId: number;
+  node: HTMLElement;
+  heading: HTMLHeadingElement;
+  entries: HTMLOListElement;
+  box: HTMLElement | null;
+  toggle: HTMLButtonElement;
+  holder: HTMLDivElement;
+}
+export interface Entry {
+  item: HTMLLIElement;
+  head: HTMLButtonElement;
+  body: HTMLDivElement;
+  resolve: HTMLButtonElement;
+  reopen: HTMLButtonElement;
+  status: HTMLParagraphElement;
 }

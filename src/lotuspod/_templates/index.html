@@ -475,6 +475,7 @@
       let view = "pages";
       // The route's answers merged so far: {from, to, older, pages}.
       let feed = null;
+      let weeks = 1;
       // Each group as last built: {node, name, labels, text}.
       let groups = [];
       let viewButtons = [];
@@ -802,6 +803,7 @@
         older.disabled = false;
         if (!earlier) return;
         merge(feed, earlier);
+        weeks += 1;
         showActivity();
         if (older.hidden) activityView.focus();
       });
@@ -845,12 +847,10 @@
       filter();
       askSeen();
       startActivity();
-      // The days the view already shows, asked again from the newest, so
-      // each reply's unread flag is the route's word now; kept as they were
-      // when the route does not answer. Show older pressed meanwhile reaches
-      // further back: asked again over the days it shows now. Asked again
-      // before an earlier ask has answered, only the latest is shown, so an
-      // older answer never takes back a page the newer one listed.
+      // Refresh the shown weeks up to now so unread flags are current; keep
+      // the previous feed if any read fails. If Show older adds a week during
+      // the refresh, restart for the new span; only the latest refresh may
+      // replace the feed, so an older answer cannot take back a newer page.
       let againAsked = 0;
       const askAgain = single(async () => {
         if (!feed) {
@@ -858,15 +858,15 @@
           return;
         }
         const asked = ++againAsked;
-        const until = feed.from;
+        const shown = weeks;
         const fresh = await askActivity(null);
-        while (fresh && fresh.older && fresh.from > until) {
+        for (let read = 1; fresh && fresh.older && read < shown; read += 1) {
           const earlier = await askActivity(fresh.from);
           if (!earlier || asked !== againAsked) return;
           merge(fresh, earlier);
         }
         if (!fresh || asked !== againAsked) return;
-        if (feed.from < until) {
+        if (weeks !== shown) {
           askAgain();
           return;
         }

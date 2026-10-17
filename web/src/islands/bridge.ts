@@ -66,6 +66,8 @@ declare const CLOSED: string;
 declare const PANEL: string;
 declare const RESOLVED_SHOWN: string;
 declare const WHOLE_PAGE: string;
+declare const CHANGED_GROUP: string;
+declare const COMMENTS: string;
 
 // js/live-page.js.
 declare const live: Live;
@@ -93,6 +95,8 @@ export const page = Object.freeze({
   panelKey: PANEL,
   resolvedShownKey: RESOLVED_SHOWN,
   wholePage: WHOLE_PAGE,
+  changedGroup: CHANGED_GROUP,
+  commentsURL: COMMENTS,
   live,
   forms,
   answering,
@@ -102,3 +106,58 @@ export const page = Object.freeze({
 });
 
 export type Page = typeof page;
+
+// State still owned by comments.js. The list reads the same objects that
+// polling, passages and swaps update; it does not keep a second thread store.
+export interface CommentRow {
+  id: number;
+  section?: string;
+  quote?: { exact?: string; prefix?: string; suffix?: string } | null;
+  question?: string | number | null;
+  text?: string;
+  state?: string;
+}
+export interface Resolution { resolved: boolean }
+export interface Thread {
+  root: CommentRow;
+  replies: CommentRow[];
+  resolution: Resolution | null;
+  box: HTMLElement | null;
+  node: HTMLDivElement;
+  n: number;
+  lit: boolean;
+  entry: import("./comments/parts").Entry | null;
+}
+export interface Decision { form: HTMLFormElement; name: string; question: string }
+export interface CommentPayload { resolution?: Resolution; error?: unknown }
+export interface ThreadListBridge {
+  all(selector: string, node: HTMLElement): HTMLElement[];
+  boxes: HTMLElement[];
+  shown: Map<number, Thread>;
+  forms: Map<HTMLElement, HTMLFormElement>;
+  decisions: HTMLFormElement[];
+  page: string;
+  rows(thread: Thread): CommentRow[];
+  resolved(thread: Thread): boolean;
+  agent(row: CommentRow): string;
+  routed(row: CommentRow): string;
+  threadsOf(box: HTMLElement): Thread[];
+  decisionOf(thread: Thread): Decision | null;
+  passages: {
+    said(thread: Thread): HTMLElement[];
+    key(thread: Thread): string;
+    point(thread: Thread | null, where: "entry"): void;
+    detached(thread: Thread): boolean;
+    shine(thread: Thread): void;
+  };
+  imageWords(row: CommentRow): string;
+  looked(thread: Thread, viewed: boolean): void;
+  refresh(): void;
+  failure(response: Response, payload: CommentPayload | null): string;
+  json(response: Response): Promise<CommentPayload | null>;
+  wide(): boolean;
+  moving(): boolean;
+  holds(thread: Thread): boolean;
+  uncover(node: HTMLElement): void;
+  bring(thread: Thread): void;
+}
