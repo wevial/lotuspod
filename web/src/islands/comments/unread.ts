@@ -2,7 +2,7 @@ import type { CommentRow, Page, Saved, Thread } from "../bridge";
 import type { Placement } from "./parts";
 
 // What the unread replies and the Ask reach the store by.
-export interface RepliesBridge {
+interface RepliesBridge {
   page: string;
   shown: Map<number, Thread>;
   rows(thread: Thread): CommentRow[];
