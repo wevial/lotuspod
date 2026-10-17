@@ -96,6 +96,24 @@ test('unchanged widgets keep their frame, runtime and chrome through section and
 });
 
 for (const intro of [false, true]) {
+  test(`running widgets restore automatic height in the ${intro ? 'intro' : 'section'}`, async ({ page }) => {
+    const name = `widget-swap-auto-height-${intro ? 'intro' : 'section'}`;
+    const content = (fixed: boolean) => doc(undefined, undefined, 1, intro)
+      .replace('live title="Running clock"', `live id=clock title="Running clock"${fixed ? ' height=800' : ''}`)
+      .replace('<button>Keep my place', '<style>html, body { margin: 0; height: 700px; }</style><button>Keep my place');
+    await open(page, name, content(true));
+    const frame = page.locator('iframe.artifact-widget');
+    const original = await frame.elementHandle();
+    const start = await output(page).getAttribute('data-started');
+    const count = await ticks(page);
+    await expect(frame).toHaveAttribute('height', '800');
+    await swap(page, name, content(false));
+    await expect(frame).not.toHaveAttribute('data-height-fixed');
+    await expect(frame).toHaveAttribute('height', '700');
+    expect(await original!.evaluate(node => node === document.querySelector('iframe.artifact-widget'))).toBe(true);
+    await kept(page, start, count);
+  });
+
   test(`carried widgets apply published title and height changes in the ${intro ? 'intro' : 'section'}`, async ({ page }) => {
     const name = `widget-swap-metadata-${intro ? 'intro' : 'section'}`;
     const content = (title: string, height?: number) => doc(undefined, undefined, 1, intro)

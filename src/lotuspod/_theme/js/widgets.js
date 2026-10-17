@@ -15,7 +15,13 @@ function installWidgetBridge() {
       const frame = figure.querySelector("iframe.artifact-widget");
       const chrome = figure.querySelector(".artifact-live-chrome");
       const badge = figure.querySelector(".artifact-live-badge");
-      if (!frame || !chrome || !badge || chrome.querySelector("button"))
+      if (!frame || !chrome || !badge)
+        return;
+      const state = stateFor(frame);
+      if (state.height !== undefined && !state.paused && !state.expanded && !frame.hasAttribute("data-height-fixed")) {
+        frame.height = String(state.height);
+      }
+      if (chrome.querySelector("button"))
         return;
       if (event.type === "lotuspod:swapped") {
         const TINTED = "artifact-swapped";
@@ -24,7 +30,6 @@ function installWidgetBridge() {
         setTimeout(() => chrome.classList.remove(TINTED), TINT);
       }
       const source = frame.getAttribute("src");
-      const state = stateFor(frame);
       const expand = document.createElement("button");
       expand.type = "button";
       expand.className = "artifact-live-expand";
@@ -134,9 +139,11 @@ function installWidgetBridge() {
       return;
     state.accepted.push(now);
     if (kind === "resize") {
-      if (state.expanded || frame.hasAttribute("data-height-fixed"))
+      if (state.expanded)
         return;
       state.height = data.height;
+      if (frame.hasAttribute("data-height-fixed"))
+        return;
       if (!state.pending) {
         state.pending = true;
         requestAnimationFrame(() => {

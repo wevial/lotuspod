@@ -27,7 +27,14 @@ function installWidgetBridge(): void {
       const frame = figure.querySelector<HTMLIFrameElement>("iframe.artifact-widget");
       const chrome = figure.querySelector<HTMLElement>(".artifact-live-chrome");
       const badge = figure.querySelector<HTMLElement>(".artifact-live-badge");
-      if (!frame || !chrome || !badge || chrome.querySelector("button")) return;
+      if (!frame || !chrome || !badge) return;
+      const state = stateFor(frame);
+      // A carried frame may have lost its published fixed height. Its content
+      // need not resize again, so restore the last normal measurement now.
+      if (state.height !== undefined && !state.paused && !state.expanded && !frame.hasAttribute("data-height-fixed")) {
+        frame.height = String(state.height);
+      }
+      if (chrome.querySelector("button")) return;
       // Only fresh chrome needs tint: a carried figure already has buttons.
       // Keep this duration and class aligned with page-swap's part tint.
       if (event.type === "lotuspod:swapped") {
@@ -37,7 +44,6 @@ function installWidgetBridge(): void {
         setTimeout(() => chrome.classList.remove(TINTED), TINT);
       }
       const source = frame.getAttribute("src")!;
-      const state = stateFor(frame);
       const expand = document.createElement("button");
       expand.type = "button";
       expand.className = "artifact-live-expand";
@@ -133,8 +139,9 @@ function installWidgetBridge(): void {
     state.accepted.push(now);
     if (kind === "resize") {
       // Expanded viewport measurements must not replace the normal height.
-      if (state.expanded || frame.hasAttribute("data-height-fixed")) return;
+      if (state.expanded) return;
       state.height = data.height as number;
+      if (frame.hasAttribute("data-height-fixed")) return;
       if (!state.pending) {
         state.pending = true;
         requestAnimationFrame(() => {
