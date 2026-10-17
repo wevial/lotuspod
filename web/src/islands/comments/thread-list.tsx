@@ -187,7 +187,7 @@ export function threadList(page: Page, shell: Shell, bridge: ThreadListBridge) {
   }
 
   // Of some threads, the one whose newest reader comment is newest.
-  function latest(threads: Thread[]) {
+  function latest(threads: Thread[]): Thread | null {
     var found: Thread | null = null;
     threads.forEach(function (thread) {
       if (!found || asked(thread).id > asked(found).id) {

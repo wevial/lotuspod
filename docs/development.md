@@ -78,22 +78,31 @@ truth: the sheet draws from them on each form's `input`, `change` and
 `answering.save()`, one question at a time in page order. Preact holds only
 the sheet's own state: the panel open, a Save under way, what it did, and
 the question Next open last jumped to, which a swap keeps. The bundle, Preact with it, stays at most
-20,000 bytes gzipped; it uses plain Preact and its hooks, not
+24,000 bytes gzipped; it uses plain Preact and its hooks, not
 `preact/compat`.
 
 The comments island (`web/src/islands/comments/index.ts`) mounts after the
 review sheet and starts the bridge's typed `commenting` object, null on pages
-without comment boxes. It supplies the shell and thread-list factories declared in `parts.ts`.
+without comment boxes. It supplies the placement factory declared in `parts.ts`,
+which creates the shell and thread-list parts.
 The shell draws the panel frame, rail, tally and start controls. The thread-list
 part draws section groups, changed-section threads, entry heads and resolution
 controls. Its typed bridge reads the page's thread objects and passage helpers;
-comments.js still owns thread bodies, composers, chips and placement. Movable
+comments.js still owns thread bodies, composers and chips. The placement part
+owns panel, popover and sheet selection, resize focus preservation, and the
+reload and swap hooks. Its bridge reads the live boxes and chip nodes and hands
+`narrow.js` a typed object; narrow.js still draws the popover and sheet. Movable
 entries, group toggles and form holders are independent render roots, so narrow.js
 can move them without Preact moving them back. Synchronous renders preserve
 immediate layout reads. Entry leads and status words retain separate redraw keys.
+On resize, placement takes the open view before changing modes, suppresses
+thread opening and closing while moving it, then restores the focused field.
+Across swaps, it reads the page-owned boxes and sections map to find replacement
+anchors; the page still owns drafts and the swap itself.
 `comments/anchor.ts` interprets each first comment as a page, section, passage or
 decision anchor. Mark, words and rank each exhaustively handle that union, so a
-future kind must be handled in all three places. The bridge also supplies `CLOSED`,
+future kind must be handled in all three places and in placement's exhaustive
+anchor-to-element switch. The bridge also supplies `CLOSED`,
 `PANEL`, `RESOLVED_SHOWN` and `WHOLE_PAGE`; the shell keeps storage and listbox
 state and calls page hooks to compose or refresh threads.
 
