@@ -199,7 +199,12 @@ def render(body: str, name: str) -> tuple[str, dict[str, bytes], list[str]]:
         files[filename] = document
         fixed = ' data-height-fixed="true"' if height is not None else ''
         frame = f'<iframe class="artifact-widget" src="{html.escape(filename)}" sandbox="allow-scripts" allow="" referrerpolicy="no-referrer" loading="lazy" title="{html.escape(title or ident)}" data-widget="{html.escape(ident)}" height="{height or "360"}"{fixed}></iframe>'
-        replacements.append((start, end, frame))
+        chrome = (f'<div class="artifact-live-chrome"><span class="artifact-live-title">{html.escape(title or ident)}</span>'
+                  '<span class="artifact-live-badge">loading</span>'
+                  f'<a class="artifact-live-open" href="{html.escape(filename)}" target="_blank" rel="noopener noreferrer">Open alone</a></div>')
+        note = ('<p class="artifact-live-note">Sandboxed: this block can&#39;t see the page or your comments</p>'
+                if number == 1 else '')
+        replacements.append((start, end, f'<figure class="artifact-live" data-widget="{html.escape(ident)}">{chrome}{note}{frame}</figure>'))
     for start, end, frame in reversed(replacements):
         body = body[:start] + frame + body[end:]
     return body, files, warnings
