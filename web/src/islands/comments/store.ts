@@ -4,6 +4,7 @@ import { composers } from "./composer";
 import { passages as makePassages } from "./passages";
 import { placement as makePlacement } from "./placement";
 import { threadRows } from "./thread";
+import { replies as makeReplies } from "./unread";
 
 // A thread as the comments route gives it, or as a post adds one.
 interface Read { root?: CommentRow | null; replies?: CommentRow[] | null; resolution?: Resolution | null }
@@ -15,9 +16,9 @@ interface Tick { what?: string; page?: string }
 // The comment threads (lotuspod.comments) and the reads that fill them. One
 // per section, or one for the page. Threads come from the comments route;
 // each is shown in its section's group, or, when the page no longer has
-// that section, in a list at the end of the body. comments.js keeps the
-// unread replies, the decisions' Ask, drafts and swaps, and reaches these
-// through the part.
+// that section, in a list at the end of the body. The replies to the
+// reader and the decisions' Ask are the replies part's (comments/unread.ts).
+// comments.js keeps drafts and swaps, and reaches these through the part.
 export function store(page: Page, bridge: StoreBridge): Store {
   const { boxes, decisions } = bridge;
   const name = boxes[0].dataset.page || "";
@@ -71,16 +72,22 @@ export function store(page: Page, bridge: StoreBridge): Store {
   let panel: Placement | null = null;
   let passages: Passages | null = null;
 
+  const replies = makeReplies(page, {
+    page: name, shown, revision, refresh, add, posted, owe, readNow,
+    rows: thread => rows(thread), markUnread: thread => markUnread(thread),
+    placement: () => panel!,
+  });
+
   const threadPart = threadRows(page, {
     owner, page: name, checking: () => checking,
-    counted: bridge.counted, opening: bridge.opening, label: (thread, row) => composer.label(thread, row),
+    counted: replies.counted, opening: replies.opening, label: (thread, row) => composer.label(thread, row),
   });
   const { agent, author, routed, rows, sync, merge, markUnread } = threadPart;
 
   const composer = composers(page, {
     page: name, revision, attached, forms,
     sending: new Map(), boxWith: bridge.boxWith, rows, agent, routed,
-    readTo: bridge.readTo, merge, posted, add, shown,
+    readTo: replies.readTo, merge, posted, add, shown,
     placement: () => panel!,
   });
 
@@ -211,7 +218,7 @@ export function store(page: Page, bridge: StoreBridge): Store {
   function refresh() {
     passages!.update();
     panel!.refresh();
-    bridge.showUnread();
+    replies.showUnread();
   }
 
   // The thread nodes in view, in a box, the panel, a popover or the sheet.
@@ -299,7 +306,7 @@ export function store(page: Page, bridge: StoreBridge): Store {
       }
       if (payload) {
         owed = owed && asOf !== notes;
-        bridge.named(payload.unread);
+        replies.named(payload.unread);
         (payload.threads || []).forEach(entry => {
           if (add(entry)) touched = true;
         });
@@ -409,22 +416,24 @@ export function store(page: Page, bridge: StoreBridge): Store {
     readNow();
   });
 
+  // An answer saved with a note opens a thread on its decision, or adds to
+  // one: a read is called for until one begun after it finds it.
+  function owe() {
+    owed = true;
+    notes += 1;
+  }
+
   return {
-    page: name, sections, shown, forms, attached, composer, rows, markUnread,
+    sections, shown, forms, attached, composer,
     get panel() { return panel!; },
     get passages() { return passages!; },
-    revision,
     swapped(to) { swappedTo = to; },
-    enlist, ask, add, boxFor, whereFrom, put, refresh, posted, readNow,
-    // An answer saved with a note opens a thread on its decision, or adds
-    // to one: a read is called for until one begun after it finds it.
-    owe() {
-      owed = true;
-      notes += 1;
-    },
-    // The passages and the panel, the threads arranged as the window
-    // allows, and the first read.
+    retitle: replies.retitle, askAbout: replies.askAbout,
+    enlist, ask, boxFor, whereFrom, put, refresh,
+    // Each decision's Ask, the passages and the panel, the threads
+    // arranged as the window allows, and the first read.
     start() {
+      decisions.forEach(replies.askAbout);
       passages = makePassages(page, {
         article, boxes, shown, resolved, revision, attached, composer,
         placement: () => panel!,
@@ -432,8 +441,8 @@ export function store(page: Page, bridge: StoreBridge): Store {
       panel = makePlacement(page, {
         all: page.all, boxes, shown, forms, decisions,
         rows, resolved, agent, routed, threadsOf, decisionOf, passages,
-        imageWords: page.imageWords, looked: bridge.looked, refresh, failure: composer.failure, json: page.json,
-        page: name, sections, showUnread: bridge.showUnread, changed, author, unreadIn: bridge.unreadIn,
+        imageWords: page.imageWords, looked: replies.looked, refresh, failure: composer.failure, json: page.json,
+        page: name, sections, showUnread: replies.showUnread, changed, author, unreadIn: replies.unreadIn,
       });
       panel.arrange();
       read();

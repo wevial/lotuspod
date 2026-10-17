@@ -78,7 +78,7 @@ truth: the sheet draws from them on each form's `input`, `change` and
 `answering.save()`, one question at a time in page order. Preact holds only
 the sheet's own state: the panel open, a Save under way, what it did, and
 the question Next open last jumped to, which a swap keeps. The bundle, Preact with it, stays at most
-42,000 bytes gzipped; it uses Preact and its hooks, with `createPortal` from
+44,000 bytes gzipped; it uses Preact and its hooks, with `createPortal` from
 `preact/compat` for independently owned DOM targets.
 
 The comments island (`web/src/islands/comments/index.ts`) mounts after the
@@ -96,11 +96,23 @@ again, never once signed out. Each read settles the image cap, tells
 a reload, then, the first time, opens a `#thread=ID` link. The store creates
 the thread, composer, passages and placement parts and hands them its state
 directly; its start draws the passages and the panel, arranges them and makes
-the first read. comments.js keeps the unread replies, a decision's Ask, drafts
-over a reload, swaps and `pageBox`, and reaches the threads through the store
-(`add`, `posted`, `readNow`, `refresh`, the Maps); the store reaches those
-through its bridge. The bridge supplies `settleImageCap`, `NO_CAP`, `CHANGED`,
-`imageWords` and `all`.
+the first read. The store also creates the replies part
+(`comments/unread.ts`), which keeps the replies to the reader: the ids each
+read names `unread`, each thread's seen mark and the comments unread as it
+opened. It counts them for the shell, rows and chips, draws the tab title's
+"(N)" and the header's "N new replies to you", and, when the list opens a
+thread (`looked`), posts `/api/seen` with `page`, `thread` and `comment`; a
+route that names no `unread` (signed out, the demo) marks nothing and posts
+nothing. It gives each decision form its Ask, which posts the note to
+`/api/comments` as a question thread with `page`, `question`, `text` and
+`revision`, empties and folds the note unless it changed while sending, adds
+the thread and opens it (`asked`), and on `SAVED` with a comment reads the
+threads at once. comments.js keeps drafts over a reload, swaps and `pageBox`,
+and reaches the threads through the store (`refresh`, `retitle`, `askAbout`
+for a swap's decision forms, the Maps); the store reaches those through its
+bridge. The bridge supplies `settleImageCap`, `NO_CAP`, `CHANGED`,
+`NO_QUESTION`, `STALE_QUESTION`, `imageWords` and `all`, and types `SAVED`'s
+detail.
 Placement creates the shell, thread-list and chips parts.
 The shell draws the panel frame, rail, tally and start controls. The thread-list
 part draws section groups, changed-section threads, entry heads and resolution

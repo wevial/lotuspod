@@ -99,6 +99,10 @@ declare function when(stamp: string | undefined): string;
 declare function json<T = CommentRow & CommentPayload>(response: Response): Promise<T | null>;
 declare function attachments(form: HTMLFormElement, field: HTMLTextAreaElement): Attachments;
 declare const SIGNED_OUT: string;
+// js/page-open.js: what a decision's Ask says with no question in its note,
+// and when the page changed since it loaded.
+declare const NO_QUESTION: string;
+declare const STALE_QUESTION: string;
 declare const STALE_PAGE: string;
 declare const STALE_SECTION: string;
 // js/page-open.js: the heading of the list of threads on sections the page
@@ -119,6 +123,7 @@ export const page = Object.freeze({
   apart: APART, maxExact: MAX_EXACT, context: CONTEXT, still: STILL, coarse: COARSE,
   attachments, json, settleImageCap, noCap: NO_CAP, imageWords, all, changed: CHANGED,
   signedOut: SIGNED_OUT, stalePage: STALE_PAGE, staleSection: STALE_SECTION,
+  noQuestion: NO_QUESTION, staleQuestion: STALE_QUESTION,
   commentMarkdown, commentImages, when,
   commenting,
   room: ROOM,
@@ -160,6 +165,9 @@ export interface CommentRow {
   state?: string;
 }
 export interface Resolution { resolved: boolean }
+// What SAVED tells of an answer saved: the comment its note opened or
+// added to a thread with, if any.
+export interface Saved { comment?: unknown }
 export interface Thread {
   list: HTMLOListElement;
   root: CommentRow;
@@ -235,19 +243,11 @@ export interface NarrowBridge extends Pick<import("./comments/parts").ThreadList
 }
 
 // What the store reaches comments.js by: the boxes and decision forms,
-// which swaps change in place, and the unread replies, drafts and the
-// box a form stands for, which comments.js still owns.
+// which swaps change in place, and the drafts and the box a form stands
+// for, which comments.js still owns.
 export interface StoreBridge {
   boxes: HTMLElement[];
   decisions: HTMLFormElement[];
-  counted(thread: Thread, row: CommentRow): boolean;
-  opening: Map<number, Set<number>>;
-  unreadIn(threads: Thread[]): number;
-  readTo(thread: Thread, id: number): void;
-  looked(thread: Thread, open: boolean): void;
-  showUnread(): void;
-  // A read named the comments unread to the reader, or did not.
-  named(unread: unknown): void;
   // Give back what was kept over a reload, once the threads are read.
   restore(): void;
   boxWith(form: HTMLFormElement): HTMLElement | null;

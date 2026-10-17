@@ -1,132 +1,21 @@
 
   // The comment boxes (lotuspod.comments): one per section, or one for the
-  // page. The threads, and the reads that fill them, are the islands' store
-  // (web/src/islands/comments/store.ts); this keeps the replies to the
-  // reader, the decisions' Ask, what is kept over a reload and swaps, and
-  // reaches the threads through the store.
+  // page. The threads, the reads that fill them, the replies to the reader
+  // and the decisions' Ask are the islands' store
+  // (web/src/islands/comments/store.ts); this keeps what is kept over a
+  // reload and swaps, and reaches the threads through the store.
   function commentBoxes(boxes, parts) {
-    // Replies to the reader: the ids the comments route last named
-    // `unread`, each thread's mark as this page last knew it, and the
-    // comments of each open thread that were unread as it opened, which
-    // stay marked while it stays open; threads by their first comment's
-    // id. A route that names none (signed out, the demo) marks nothing.
-    var SEEN = "/api/seen";
-    var unread = new Set();
-    // Whether the route named any: only then is a thread opened posted.
-    var tracked = false;
-    var seenTo = new Map();
-    var opening = new Map();
-    var tabTitle = document.title;
-    var dateLine = document.querySelector("header.artifact-header .artifact-meta");
-    var newBadge = null;
-
     // The page's decision forms, in page order.
     var decisions = all("form.artifact-decision[data-question]");
 
     var store = parts.store({
-      boxes: boxes, decisions: decisions, counted: counted, opening: opening, unreadIn: unreadIn,
-      readTo: readTo, looked: looked, showUnread: showUnread, named: named, restore: restore,
-      boxWith: boxWith,
+      boxes: boxes, decisions: decisions, restore: restore, boxWith: boxWith,
     });
-    var page = store.page;
     var sections = store.sections;
     var shown = store.shown;
     var forms = store.forms;
     var attached = store.attached;
-    var rows = store.rows;
-    var markUnread = store.markUnread;
     var refresh = store.refresh;
-
-    // A read named the comments unread to the reader, or named none.
-    function named(ids) {
-      tracked = Array.isArray(ids);
-      unread = new Set(tracked ? ids : []);
-    }
-
-    // Whether a comment counts as unread: the route named it, and neither
-    // a mark this page posted nor the reader's own reply since has read it.
-    function counted(thread, entry) {
-      return unread.has(entry.id) && entry.id > (seenTo.get(thread.root.id) || 0);
-    }
-
-    // How many comments in some threads count as unread.
-    function unreadIn(threads) {
-      return threads.reduce(function (n, thread) {
-        return n + rows(thread).filter(function (entry) { return counted(thread, entry); }).length;
-      }, 0);
-    }
-
-    // The thread is read up to comment id: by a mark posted, or the
-    // reader's own reply.
-    function readTo(thread, id) {
-      seenTo.set(thread.root.id, Math.max(seenTo.get(thread.root.id) || 0, id));
-    }
-
-    // Draw the replies to the reader outside the chips: each thread's
-    // marks, the badge ending the header's date line and the tab's title.
-    function showUnread() {
-      var threads = [];
-      shown.forEach(function (thread) {
-        markUnread(thread);
-        threads.push(thread);
-      });
-      var n = unreadIn(threads);
-      document.title = n > 0 ? "(" + n + ") " + tabTitle : tabTitle;
-      if (!dateLine) {
-        return;
-      }
-      if (n > 0) {
-        newBadge = newBadge || element("span", "artifact-unread");
-        newBadge.textContent = (n === 1 ? "1 new reply" : n + " new replies") + " to you";
-        if (dateLine.lastChild !== newBadge) {
-          dateLine.appendChild(newBadge);
-        }
-      } else if (newBadge) {
-        newBadge.remove();
-      }
-    }
-
-    // A thread opened or closed, in the panel, a popover or the sheet, all
-    // of which draw it (the thread-list part's draw). Opened, it posts its newest
-    // comment's id as seen, and keeps any comments unread marked while it
-    // stays open; closed, it marks only what is still unread.
-    function looked(thread, open) {
-      if (!open) {
-        if (opening.delete(thread.root.id)) {
-          markUnread(thread);
-        }
-        return;
-      }
-      if (!tracked) {
-        return;
-      }
-      var fresh = rows(thread).filter(function (entry) { return counted(thread, entry); });
-      if (fresh.length) {
-        opening.set(thread.root.id, new Set(fresh.map(function (entry) { return entry.id; })));
-        markUnread(thread);
-      }
-      seeThread(thread);
-    }
-
-    // Post that the reader has seen a thread up to its newest comment; the
-    // counts drop once it is stored. A failure leaves them as they were.
-    async function seeThread(thread) {
-      var newest = rows(thread).reduce(function (n, entry) { return Math.max(n, entry.id); }, 0);
-      try {
-        var response = await fetch(SEEN, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ page: page, thread: thread.root.id, comment: newest }),
-        });
-        var payload = await json(response);
-        if (response.status === 200 && payload && typeof payload.comment === "number") {
-          readTo(thread, payload.comment);
-          refresh();
-        }
-      } catch (ignored) {
-        // Still unread, as if never opened.
-      }
-    }
 
     // Each composer of a section's form or a thread's reply, with what it
     // is kept by over a reload: its thread, its section and where the
@@ -357,7 +246,7 @@
       units.forEach(function (unit) {
         if (unit.kind === "header") {
           // The swap gave the tab the new revision's title.
-          tabTitle = document.title;
+          store.retitle();
         }
         olds.push.apply(olds, boxesIn(unit.before).filter(function (box) { return boxes.indexOf(box) >= 0; }));
         news.push.apply(news, boxesIn(unit.after));
@@ -375,7 +264,7 @@
         return a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1;
       });
       store.ask();
-      fresh.forEach(askAbout);
+      fresh.forEach(store.askAbout);
       if (olds.length || news.length) {
         remount(olds, news, unsent);
       } else {
@@ -617,97 +506,6 @@
       });
     });
 
-    // Why a question about a decision was not sent.
-    function unasked(response, payload) {
-      if (response.status === 401) {
-        return SIGNED_OUT;
-      }
-      if (response.status === 409 && payload && payload.error === "stale_page") {
-        return STALE_QUESTION;
-      }
-      var error = payload && payload.error ? String(payload.error) : "status " + response.status;
-      return "Your question was not sent (" + error + "). Try again.";
-    }
-
-    // An answer saved with a note opens a thread on its decision, or adds
-    // to one: the threads are read again at once, so its chip shows it. A
-    // read already in flight may have missed it, and is followed by another;
-    // one that fails is tried again after the schedule's first gap.
-    function noted(event) {
-      if (!event.detail.comment) {
-        return;
-      }
-      store.owe();
-      store.readNow();
-    }
-
-    // Each decision's Ask, beside "Save answer": the note's text posted as
-    // a question thread on the decision, which saves no answer. Sent, the
-    // note is emptied and folded, so it is never saved as the answer's note,
-    // and the thread opens where the window has room for it.
-    function askAbout(form) {
-      form.addEventListener(SAVED, noted);
-      var save = form.querySelector('button[type="submit"]');
-      var note = form.elements.note;
-      if (!save || !note) {
-        return;
-      }
-      var button = element("button", "artifact-decision-ask", "Ask");
-      button.type = "button";
-      save.parentNode.insertBefore(button, save.nextSibling);
-      var status = form.querySelector(".artifact-decision-status");
-      function say(text) {
-        if (status) {
-          status.textContent = text;
-        }
-      }
-      button.addEventListener("click", async function () {
-        var sent = note.value;
-        var text = sent.trim();
-        if (!text) {
-          say(NO_QUESTION);
-          return;
-        }
-        var body = { page: page, question: form.dataset.question, text: text };
-        if (store.revision() !== null) {
-          body.revision = store.revision();
-        }
-        button.disabled = true;
-        say("Sending your question...");
-        try {
-          var response = await fetch(COMMENTS, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(body),
-          });
-          var payload = await json(response);
-          if (response.status !== 201 || !payload) {
-            say(unasked(response, payload));
-            return;
-          }
-          say("");
-          // A note changed while the question was sending holds a question
-          // not yet sent: it stays, open, and the card keeps it unsaved.
-          if (note.value === sent) {
-            note.value = "";
-            var fold = note.closest("details");
-            if (fold) {
-              fold.open = false;
-            }
-            // The card marks itself as its note now reads.
-            note.dispatchEvent(new Event("input", { bubbles: true }));
-          }
-          store.add({ root: payload, replies: [] });
-          store.posted();
-          store.panel.asked(shown.get(payload.id));
-        } catch (ignored) {
-          say("Your question was not sent: the site did not answer. Try again.");
-        } finally {
-          button.disabled = false;
-        }
-      });
-    }
-    decisions.forEach(askAbout);
     store.start();
   }
 
