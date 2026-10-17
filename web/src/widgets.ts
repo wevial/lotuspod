@@ -22,14 +22,28 @@ function installWidgetBridge(): void {
     }
     return state;
   };
-  const initialize = (): void => {
+  const initialize = (event: Event): void => {
     document.querySelectorAll<HTMLElement>("figure.artifact-live").forEach((figure) => {
       const frame = figure.querySelector<HTMLIFrameElement>("iframe.artifact-widget");
       const chrome = figure.querySelector<HTMLElement>(".artifact-live-chrome");
       const badge = figure.querySelector<HTMLElement>(".artifact-live-badge");
-      if (!frame || !chrome || !badge || chrome.querySelector("button")) return;
-      const source = frame.getAttribute("src")!;
+      if (!frame || !chrome || !badge) return;
       const state = stateFor(frame);
+      // A carried frame may have lost its published fixed height. Its content
+      // need not resize again, so restore the last normal measurement now.
+      if (state.height !== undefined && !state.paused && !state.expanded && !frame.hasAttribute("data-height-fixed")) {
+        frame.height = String(state.height);
+      }
+      if (chrome.querySelector("button")) return;
+      // Only fresh chrome needs tint: a carried figure already has buttons.
+      // Keep this duration and class aligned with page-swap's part tint.
+      if (event.type === "lotuspod:swapped") {
+        const TINTED = "artifact-swapped";
+        const TINT = 2000;
+        chrome.classList.add(TINTED);
+        setTimeout(() => chrome.classList.remove(TINTED), TINT);
+      }
+      const source = frame.getAttribute("src")!;
       const expand = document.createElement("button");
       expand.type = "button";
       expand.className = "artifact-live-expand";
@@ -80,6 +94,8 @@ function installWidgetBridge(): void {
           state.accepted = [];
           updateBadge();
         }
+        if (state.paused) frame.dataset.pausedSource = source;
+        else delete frame.dataset.pausedSource;
         frame.src = state.paused ? "about:blank" : source;
       });
       frame.addEventListener(WIDGET, (event) => {
@@ -123,13 +139,14 @@ function installWidgetBridge(): void {
     state.accepted.push(now);
     if (kind === "resize") {
       // Expanded viewport measurements must not replace the normal height.
-      if (state.expanded || frame.hasAttribute("data-height-fixed")) return;
+      if (state.expanded) return;
       state.height = data.height as number;
+      if (frame.hasAttribute("data-height-fixed")) return;
       if (!state.pending) {
         state.pending = true;
         requestAnimationFrame(() => {
           state.pending = false;
-          if (!state.paused && !state.expanded) frame.height = String(state.height);
+          if (!state.paused && !state.expanded && !frame.hasAttribute("data-height-fixed")) frame.height = String(state.height);
         });
       }
       return;
@@ -142,4 +159,12 @@ function installWidgetBridge(): void {
     }
     frame.dispatchEvent(new CustomEvent<WidgetDetail>(WIDGET, {detail: {kind, message}}));
   });
+}
+
+// This source also runs alone in the head for early bridge messages. The
+// deferred page bundle supplies holdSwap and registers this test once.
+if (typeof holdSwap === "function") {
+  holdSwap((nodes) => nodes.some((node) =>
+    node.matches("figure.artifact-live--expanded") ||
+    node.querySelector("figure.artifact-live--expanded") !== null));
 }

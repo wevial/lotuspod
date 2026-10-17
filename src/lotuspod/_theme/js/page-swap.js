@@ -288,13 +288,56 @@ function pageSwap() {
     swapped(revision, units);
     return revision;
   }
+  function carryWidgets(before, after) {
+    if (!Element.prototype.moveBefore)
+      return;
+    const figures = (nodes) => nodes.flatMap((node) => !(node instanceof Element) ? [] : node.matches("figure.artifact-live") ? [node] : Array.from(node.querySelectorAll("figure.artifact-live")));
+    const available = new Set(figures(before));
+    for (const fresh of figures(after)) {
+      const source = fresh.querySelector("iframe.artifact-widget")?.getAttribute("src");
+      if (!source)
+        continue;
+      const old = Array.from(available).find((candidate) => {
+        const frame = candidate.querySelector("iframe.artifact-widget");
+        return candidate.getAttribute("data-widget") === fresh.getAttribute("data-widget") && (frame?.dataset.pausedSource ?? frame?.getAttribute("src")) === source;
+      });
+      const parent = fresh.parentElement;
+      if (!old || !parent?.moveBefore)
+        continue;
+      const frame = old.querySelector("iframe.artifact-widget");
+      const freshFrame = fresh.querySelector("iframe.artifact-widget");
+      frame.title = freshFrame.title;
+      const title = old.querySelector(".artifact-live-title");
+      if (title)
+        title.textContent = fresh.querySelector(".artifact-live-title")?.textContent ?? "";
+      old.querySelector(".artifact-live-note")?.remove();
+      const note = fresh.querySelector(".artifact-live-note");
+      if (note)
+        frame.before(note);
+      if (frame.hasAttribute("data-height-fixed") || freshFrame.hasAttribute("data-height-fixed")) {
+        frame.height = freshFrame.height;
+      }
+      frame.toggleAttribute("data-height-fixed", freshFrame.hasAttribute("data-height-fixed"));
+      parent.moveBefore(old, fresh);
+      available.delete(old);
+      const at = after.indexOf(fresh);
+      if (at >= 0)
+        after[at] = old;
+      const previous = before.indexOf(old);
+      if (previous >= 0)
+        before.splice(previous, 1);
+      fresh.remove();
+    }
+  }
   function applyIntro(body, intro, freshIntro, digest) {
     unholdIntro();
-    intro.forEach((node) => node.parentNode?.removeChild(node));
+    const before = [...intro];
     const after = freshIntro.map(brought);
     body.prepend(...after);
+    carryWidgets(before, after);
+    before.forEach((node) => node.parentNode?.removeChild(node));
     body.setAttribute("data-intro-digest", digest);
-    return { kind: "intro", id: "", change: "changed", before: intro, after };
+    return { kind: "intro", id: "", change: "changed", before, after };
   }
   function applyRemoved(part) {
     held.delete(part.id);
@@ -309,8 +352,11 @@ function pageSwap() {
     foldSection.drop(old.wrapper);
     const heading = brought(part.heading);
     const wrapper = brought(part.wrapper);
-    old.heading.replaceWith(heading);
-    old.wrapper.replaceWith(wrapper);
+    old.heading.before(heading);
+    old.wrapper.before(wrapper);
+    carryWidgets([old.heading, old.wrapper], [heading, wrapper]);
+    old.heading.remove();
+    old.wrapper.remove();
     foldSection(heading, wrapper, part.id, fold, true);
     return {
       kind: "section",

@@ -10,15 +10,26 @@ function installWidgetBridge() {
     }
     return state;
   };
-  const initialize = () => {
+  const initialize = (event) => {
     document.querySelectorAll("figure.artifact-live").forEach((figure) => {
       const frame = figure.querySelector("iframe.artifact-widget");
       const chrome = figure.querySelector(".artifact-live-chrome");
       const badge = figure.querySelector(".artifact-live-badge");
-      if (!frame || !chrome || !badge || chrome.querySelector("button"))
+      if (!frame || !chrome || !badge)
         return;
-      const source = frame.getAttribute("src");
       const state = stateFor(frame);
+      if (state.height !== undefined && !state.paused && !state.expanded && !frame.hasAttribute("data-height-fixed")) {
+        frame.height = String(state.height);
+      }
+      if (chrome.querySelector("button"))
+        return;
+      if (event.type === "lotuspod:swapped") {
+        const TINTED = "artifact-swapped";
+        const TINT = 2000;
+        chrome.classList.add(TINTED);
+        setTimeout(() => chrome.classList.remove(TINTED), TINT);
+      }
+      const source = frame.getAttribute("src");
       const expand = document.createElement("button");
       expand.type = "button";
       expand.className = "artifact-live-expand";
@@ -76,6 +87,10 @@ function installWidgetBridge() {
           state.accepted = [];
           updateBadge();
         }
+        if (state.paused)
+          frame.dataset.pausedSource = source;
+        else
+          delete frame.dataset.pausedSource;
         frame.src = state.paused ? "about:blank" : source;
       });
       frame.addEventListener(WIDGET, (event) => {
@@ -124,14 +139,16 @@ function installWidgetBridge() {
       return;
     state.accepted.push(now);
     if (kind === "resize") {
-      if (state.expanded || frame.hasAttribute("data-height-fixed"))
+      if (state.expanded)
         return;
       state.height = data.height;
+      if (frame.hasAttribute("data-height-fixed"))
+        return;
       if (!state.pending) {
         state.pending = true;
         requestAnimationFrame(() => {
           state.pending = false;
-          if (!state.paused && !state.expanded)
+          if (!state.paused && !state.expanded && !frame.hasAttribute("data-height-fixed"))
             frame.height = String(state.height);
         });
       }
@@ -146,4 +163,7 @@ function installWidgetBridge() {
     }
     frame.dispatchEvent(new CustomEvent(WIDGET, { detail: { kind, message } }));
   });
+}
+if (typeof holdSwap === "function") {
+  holdSwap((nodes) => nodes.some((node) => node.matches("figure.artifact-live--expanded") || node.querySelector("figure.artifact-live--expanded") !== null));
 }
