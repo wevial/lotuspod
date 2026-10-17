@@ -78,17 +78,17 @@ truth: the sheet draws from them on each form's `input`, `change` and
 `answering.save()`, one question at a time in page order. Preact holds only
 the sheet's own state: the panel open, a Save under way, what it did, and
 the question Next open last jumped to, which a swap keeps. The bundle, Preact with it, stays at most
-27,000 bytes gzipped; it uses plain Preact and its hooks, not
+30,000 bytes gzipped; it uses plain Preact and its hooks, not
 `preact/compat`.
 
 The comments island (`web/src/islands/comments/index.ts`) mounts after the
 review sheet and starts the bridge's typed `commenting` object, null on pages
-without comment boxes. It supplies the placement and thread factories declared in `parts.ts`.
+without comment boxes. It supplies the placement, thread and composer factories declared in `parts.ts`.
 Placement creates the shell and thread-list parts.
 The shell draws the panel frame, rail, tally and start controls. The thread-list
 part draws section groups, changed-section threads, entry heads and resolution
 controls. Its typed bridge reads the page's thread objects and passage helpers;
-comments.js still owns thread containers, composers and chips. The thread part
+comments.js still owns thread containers, drafts and chips. The thread part
 (`comments/thread.tsx`) owns each list’s rows, notices, typing bubble and unread
 marks. Its typed bridge reads unread state and checking, and supplies the shared
 markdown, image and time helpers. Stable keyed comments keep their first row
@@ -104,6 +104,14 @@ On resize, placement takes the open view before changing modes, suppresses
 thread opening and closing while moving it, then restores the focused field.
 Across swaps, it reads the page-owned boxes and sections map to find replacement
 anchors; the page still owns drafts and the swap itself.
+The composer part (`comments/composer.tsx`) draws reply controls and passage
+composers and wires the served section forms without redrawing them. All three
+use one send path for attachments, Cmd/Ctrl+Enter, posting and refusal status.
+Its bridge supplies attachments and status words, the current revision and box,
+and the page's thread and placement callbacks. Reply siblings use a portal;
+passage holders are movable render roots. Textareas remain uncontrolled so drafts
+can read and restore their values directly. Section and passage posts expose
+their pending promises to swaps; passage marks and opening remain page-owned.
 `comments/anchor.ts` interprets each first comment as a page, section, passage or
 decision anchor. Mark, words and rank each exhaustively handle that union, so a
 future kind must be handled in all three places and in placement's exhaustive
