@@ -432,7 +432,7 @@ def _checklist_form(page: str, checklist: dict) -> str:
     return "\n".join(lines)
 
 
-def _form(page: str, question: dict, about: dict | None = None) -> str:
+def _form(page: str, question: dict, about: dict | None) -> str:
     esc = html.escape
     default = f' data-default="{esc(question["picked"])}"' if question["picked"] else ""
     block = f' data-about="{esc(about["id"])}"' if about else ""
