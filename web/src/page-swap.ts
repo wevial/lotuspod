@@ -423,14 +423,67 @@ function pageSwap(): void {
     return revision;
   }
 
+  // Both trees must be connected before moveBefore: detaching a frame, even
+  // briefly, destroys its browsing context. Consume each match only once.
+  function carryWidgets(before: Node[], after: Node[]): void {
+    if (!Element.prototype.moveBefore) return;
+    const figures = (nodes: Node[]): Element[] => nodes.flatMap((node) =>
+      !(node instanceof Element) ? [] : node.matches("figure.artifact-live")
+        ? [node] : Array.from(node.querySelectorAll("figure.artifact-live")));
+    const available = new Set(figures(before));
+    for (const fresh of figures(after)) {
+      const source = fresh.querySelector("iframe.artifact-widget")?.getAttribute("src");
+      if (!source) continue;
+      const old = Array.from(available).find((candidate) => {
+        const frame = candidate.querySelector<HTMLIFrameElement>("iframe.artifact-widget");
+        // Pause navigates to about:blank; its saved source still identifies
+        // the block that Resume will run.
+        return candidate.getAttribute("data-widget") === fresh.getAttribute("data-widget") &&
+          (frame?.dataset.pausedSource ?? frame?.getAttribute("src")) === source;
+      });
+      const parent = fresh.parentElement;
+      if (!old || !parent?.moveBefore) continue;
+      // The file hash identifies the running code, not its published chrome
+      // or sizing options. Refresh those without touching runtime state/src.
+      const frame = old.querySelector<HTMLIFrameElement>("iframe.artifact-widget")!;
+      const freshFrame = fresh.querySelector<HTMLIFrameElement>("iframe.artifact-widget")!;
+      frame.title = freshFrame.title;
+      const title = old.querySelector(".artifact-live-title");
+      if (title) title.textContent = fresh.querySelector(".artifact-live-title")?.textContent ?? "";
+      // The sandbox explanation belongs to the first published widget,
+      // which can change when widgets are added, removed or reordered.
+      old.querySelector(".artifact-live-note")?.remove();
+      const note = fresh.querySelector(".artifact-live-note");
+      if (note) frame.before(note);
+      // Preserve a measured auto height on prose-only swaps. Switching to
+      // or from an explicit height applies the new published size instead;
+      // the widget bridge restores cached auto measurements on SWAPPED.
+      if (frame.hasAttribute("data-height-fixed") || freshFrame.hasAttribute("data-height-fixed")) {
+        frame.height = freshFrame.height;
+      }
+      frame.toggleAttribute("data-height-fixed", freshFrame.hasAttribute("data-height-fixed"));
+      parent.moveBefore(old, fresh);
+      available.delete(old);
+      // An intro can hold a figure directly, so its event must name the
+      // carried figure rather than the discarded fresh placeholder.
+      const at = after.indexOf(fresh);
+      if (at >= 0) after[at] = old;
+      const previous = before.indexOf(old);
+      if (previous >= 0) before.splice(previous, 1);
+      fresh.remove();
+    }
+  }
+
   // The intro's nodes taken out for the new ones.
   function applyIntro(body: HTMLElement, intro: Node[], freshIntro: Node[], digest: string): SwappedUnit {
     unholdIntro();
-    intro.forEach((node) => node.parentNode?.removeChild(node));
+    const before = [...intro];
     const after = freshIntro.map(brought);
     body.prepend(...after);
+    carryWidgets(before, after);
+    before.forEach((node) => node.parentNode?.removeChild(node));
     body.setAttribute("data-intro-digest", digest);
-    return { kind: "intro", id: "", change: "changed", before: intro, after };
+    return { kind: "intro", id: "", change: "changed", before, after };
   }
 
   function applyRemoved(part: Part): SwappedUnit {
@@ -449,9 +502,11 @@ function pageSwap(): void {
     foldSection.drop(old.wrapper);
     const heading = brought(part.heading) as HTMLElement;
     const wrapper = brought(part.wrapper) as HTMLElement;
-    // The old ones go first, so the new ones keep their ids.
-    old.heading.replaceWith(heading);
-    old.wrapper.replaceWith(wrapper);
+    old.heading.before(heading);
+    old.wrapper.before(wrapper);
+    carryWidgets([old.heading, old.wrapper], [heading, wrapper]);
+    old.heading.remove();
+    old.wrapper.remove();
     foldSection(heading, wrapper, part.id, fold, true);
     return {
       kind: "section", id: part.id, change: "changed",
