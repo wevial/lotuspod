@@ -213,12 +213,11 @@ class DeclaredOrderTests(ThemeCopyTestCase):
     def test_the_ref_cards_sources_are_declared(self):
         """LOTUS-100: the cards' script uses when() and linkTab(), so it is
         joined after js/page-open.js and js/link-tab.js, last but for
-        js/calltree.js (LOTUS-167), js/archive.js and js/islands.js; its
+        js/calltree.js (LOTUS-167) and js/archive.js; its
         styles just after css/prose.css."""
         styles = cli.THEME_SOURCES[STYLESHEET]
         script = cli.THEME_SOURCES[cli.PAGE_SCRIPT]
-        self.assertEqual(script[-4:], ("js/ref-cards.js", "js/calltree.js", "js/archive.js",
-                                       "js/islands.js"))
+        self.assertEqual(script[-3:], ("js/ref-cards.js", "js/calltree.js", "js/archive.js"))
         self.assertGreater(script.index("js/ref-cards.js"), script.index("js/link-tab.js"))
         self.assertEqual(styles.index("css/ref-cards.css"), styles.index("css/prose.css") + 1)
         problems = source_problems(cli.THEME_DIR, cli.THEME_SOURCES)
@@ -239,25 +238,27 @@ class DeclaredOrderTests(ThemeCopyTestCase):
 
     def test_the_archive_sources_are_declared(self):
         """LOTUS-118: the header's Archive button uses element(), json() and
-        SIGNED_OUT, so js/archive.js is joined after js/page-open.js, last
-        but for js/islands.js; its styles, the archived banner's among them,
+        SIGNED_OUT, so js/archive.js is joined after js/page-open.js, last;
+        its styles, the archived banner's among them,
         follow css/versions.css, whose old-version banner they match."""
         styles = cli.THEME_SOURCES[STYLESHEET]
         script = cli.THEME_SOURCES[cli.PAGE_SCRIPT]
-        self.assertEqual(script[-2:], ("js/archive.js", "js/islands.js"))
+        self.assertEqual(script[-1], "js/archive.js")
         self.assertEqual(styles.index("css/archive.css"), styles.index("css/versions.css") + 1)
         problems = source_problems(cli.THEME_DIR, cli.THEME_SOURCES)
         self.assertEqual(problems, [], "\n".join(problems))
 
     def test_the_review_sheet_is_an_island(self):
-        """LOTUS-157: the review sheet is drawn by the islands bundle, last,
-        after js/decisions.js, whose forms it reads: no script of its own is
-        declared, and its styles stay css/review-sheet.css."""
+        """LOTUS-157: the review sheet is drawn by the islands bundle, after
+        js/comments.js and js/decisions.js, whose forms it reads: no script of
+        its own is declared, and its styles stay css/review-sheet.css."""
         styles = cli.THEME_SOURCES[STYLESHEET]
         script = cli.THEME_SOURCES[cli.PAGE_SCRIPT]
         self.assertNotIn("js/review-sheet.js", script)
         self.assertFalse((cli.THEME_DIR / "js" / "review-sheet.js").exists())
-        self.assertEqual(script[-1], "js/islands.js")
+        self.assertEqual(script.index("js/islands.js"), script.index("js/comments.js") + 1)
+        self.assertNotIn("js/islands.js", cli.THEME_SOURCES[cli.INDEX_SCRIPT])
+        self.assertNotIn("js/islands.js", cli.THEME_SOURCES[cli.OLD_VERSION_SCRIPT])
         self.assertGreater(script.index("js/islands.js"), script.index("js/decisions.js"))
         self.assertIn("css/review-sheet.css", styles)
         problems = source_problems(cli.THEME_DIR, cli.THEME_SOURCES)
