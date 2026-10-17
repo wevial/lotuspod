@@ -2690,7 +2690,8 @@ class _AllowListHandler(SimpleHTTPRequestHandler):
         """The commit a request for the allow-listed file name asks for as
         ?version=COMMIT, checked later; None when it asks for none."""
         query = self.path.split("#", 1)[0].partition("?")[2]
-        if not query or not name.endswith(".html") or not is_page_name(name):
+        if (not query or not name.endswith(".html")
+                or not (is_page_name(name) or widgets.WIDGET_NAME.fullmatch(name))):
             return None
         fields = urllib.parse.parse_qs(query, keep_blank_values=True)
         if list(fields) != [_VERSION_QUERY] or len(fields[_VERSION_QUERY]) != 1:
@@ -2722,6 +2723,25 @@ class _AllowListHandler(SimpleHTTPRequestHandler):
         self.end_headers()
         return io.BytesIO(data)
 
+    def _serve_widget_version(self, name: str, commit: str):
+        """A listed version's widget, sandboxed and never stored."""
+        if self._reader() is None:
+            return None
+        data = (self.history.widget_version(name.rsplit(".w-", 1)[0], commit, name)
+                if self.history is not None else None)
+        if data is None:
+            self.send_error(HTTPStatus.NOT_FOUND, "File not found")
+            return None
+        self._page_response, self._media_type = False, ""
+        self.send_response(HTTPStatus.OK)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(data)))
+        for header, value in widgets.HEADERS:
+            self.send_header(header, value)
+        self.send_header("Cache-Control", "private, no-store")
+        self.end_headers()
+        return io.BytesIO(data)
+
     def _serve_archived(self, stored: Path):
         """The page at stored as archived_page() marks it, always a 200;
         None when it has no archive record, or one that cannot be read, so
@@ -2749,6 +2769,16 @@ class _AllowListHandler(SimpleHTTPRequestHandler):
         # Denial never reaches the file system: were a file ever to sit at
         # the sentinel's name, it would still not be served.
         self._widget_response = False
+        # Historical files may have been deleted. Validate the owning page
+        # through the ordinary allow list before consulting its history.
+        path = urllib.parse.unquote(self.path.split("?", 1)[0].split("#", 1)[0])
+        name = path.removeprefix("/")
+        if "/" not in name and widgets.WIDGET_NAME.fullmatch(name):
+            commit = self._version_asked(name)
+            owner = name.rsplit(".w-", 1)[0] + ".html"
+            if (commit is not None and is_page_name(owner)
+                    and self.translate_path("/" + owner) != str(self.root / _DENY_PATH_NAME)):
+                return self._serve_widget_version(name, commit)
         target = self.translate_path(self.path)
         if target == str(self.root / _DENY_PATH_NAME):
             self.send_error(HTTPStatus.NOT_FOUND, "File not found")
