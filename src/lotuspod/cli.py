@@ -817,6 +817,9 @@ def cmd_render(args: argparse.Namespace) -> int:
     if with_comments:
         body = comments.render_comments(body, args.name)
         whole_page_box = comments.whole_page_box(body, args.name)
+        if not whole_page_box and 'data-height-full="true"' in body:
+            whole_page_box = comments.box(args.name, comments.PAGE_SECTION, "")
+            body = body.replace(whole_page_box, '')
     # Last, so each section's box and forms fall inside its wrapper.
     body, wrapped, intro_digest = (sections.wrap_sections(body) if outline
                                    else (body, False, unit_digest(body)))
@@ -1583,7 +1586,8 @@ def publish_over_ssh(args: argparse.Namespace, config: dict[str, str]) -> int:
     publish_labels(args)
     refs_data = read_refs_file(args.refs)[0] if args.refs else None
     data = read_source(args, label)
-    raw, images = send_images(fmt, decoded(data, label), label, source_base(args), media_cap)
+    fmt, raw, images = prepare_publish(args, fmt, name, decoded(data, label), label)
+    data = raw.encode("utf-8")
     archive = bool(images) or refs_data is not None
     if archive:
         data = source_archive(raw.encode("utf-8"), images, refs_data)
@@ -1896,6 +1900,166 @@ def stored_image(src: str, store_dir: Path, sent: dict[str, media.Image]) -> med
     return image
 
 
+class _DocumentTitle(HTMLParser):
+    def __init__(self, source: str):
+        super().__init__()
+        self.active = False
+        self.done = False
+        self.foreign = 0
+        self.templates = 0
+        self.title = ''
+        self.feed(source)
+
+    def handle_starttag(self, tag, attrs):
+        if tag == 'template':
+            self.templates += 1
+        if tag in {'svg', 'math'}:
+            self.foreign += 1
+        if tag == 'title' and not self.foreign and not self.templates and not self.done:
+            self.active = True
+
+    def handle_endtag(self, tag):
+        if tag == 'template':
+            self.templates = max(0, self.templates - 1)
+        if tag in {'svg', 'math'}:
+            self.foreign = max(0, self.foreign - 1)
+        if tag == 'title' and self.active:
+            self.active = False
+            self.done = True
+
+    def handle_data(self, data):
+        if self.active:
+            self.title += data
+
+
+def live_file(path: str, base: Path | None, line: int) -> str:
+    """Read one bounded, contained UTF-8 file safe to put inside a fence."""
+    try:
+        if base is None:
+            raise ValueError('a file needs --base DIR from standard input')
+        root = base.resolve()
+        target = (root / path).resolve()
+        if path.startswith('/') or root not in target.parents:
+            raise ValueError("outside the source's directory")
+        if not target.exists():
+            raise ValueError('no such file')
+        if not target.is_file():
+            raise ValueError('not a regular file')
+        with target.open('rb') as stream:
+            data = stream.read(2 * 1024 * 1024 + 1)
+        if len(data) > 2 * 1024 * 1024:
+            raise ValueError('source exceeds 2 MB')
+        try:
+            source = data.decode('utf-8')
+        except UnicodeDecodeError:
+            raise ValueError('not UTF-8') from None
+        if any(row.startswith('```') for row in normalized(source).split('\n')):
+            raise ValueError('contains a line starting with three backticks')
+        return source
+    except (OSError, ValueError) as exc:
+        raise RuntimeError(f'live block at line {line}, file {path}: {exc}; nothing written') from None
+
+
+def send_live_files(raw: str, base: Path | None) -> str:
+    """Inline file fences before transport, retaining other fences verbatim."""
+    # Preserve original line endings outside rewritten blocks.
+    lines = re.findall(r'[^\r\n]*(?:\r\n|\r|\n)|[^\r\n]+$', raw)
+    replacements = {}
+
+    def scan(rows: list[str], offset: int = 0) -> None:
+        i = 0
+        while i < len(rows):
+            row = rows[i]
+            # Match _convert: quote runs recurse only outside fences.
+            # Quote markers inside a fence are literal code.
+            if re.match(r'^ {0,3}>', row):
+                start = i
+                inner = []
+                while i < len(rows) and re.match(r'^ {0,3}>', rows[i]):
+                    inner.append(re.sub(r'^ {0,3}> ?', '', rows[i]))
+                    i += 1
+                scan(inner, offset + start)
+                continue
+            if not row.startswith('```'):
+                i += 1
+                continue
+            start = i
+            i += 1
+            while i < len(rows) and not rows[i].startswith('```'):
+                i += 1
+            i = min(i + 1, len(rows))
+            if row[3:].split()[:2] == ['html', 'live']:
+                rewrite(row, offset + start, offset + i)
+
+    def rewrite(fence: str, start: int, end: int) -> None:
+        prefix = lines[start][:len(lines[start]) - len(fence)]
+        try:
+            lexer = shlex.shlex(fence[3:], posix=True)
+            lexer.whitespace += ''.join(char for char in set(fence) if char.isspace())
+            lexer.whitespace_split = True
+            lexer.commenters = ''
+            words = list(lexer)
+        except ValueError as exc:
+            raise RuntimeError(f'live block at line {start + 1}: {exc}; nothing written') from None
+        paths = [word[5:] for word in words[2:] if word.startswith('file=')]
+        if not paths:
+            return
+        if len(paths) != 1:
+            raise RuntimeError(f'live block at line {start + 1}, file {paths}: duplicate file option; nothing written')
+        source = live_file(paths[0], base, start + 1)
+        info = shlex.join([word for word in words if not word.startswith('file=')])
+        block = [prefix + '```' + info + '\n']
+        block.extend(prefix + line + '\n' for line in normalized(source).removesuffix('\n').split('\n'))
+        block.append(prefix + '```\n')
+        replacements[start] = (end, ''.join(block))
+
+    scan(lines)
+    result = []
+    i = 0
+    while i < len(lines):
+        if i in replacements:
+            i, block = replacements[i]
+            result.append(block)
+        else:
+            result.append(lines[i])
+            i += 1
+    return ''.join(result)
+
+
+def prepare_publish(args: argparse.Namespace, fmt: str, name: str, raw: str,
+                    label: str, stored: Callable[[str], media.Image] | None = None,
+                    ) -> tuple[str, str, dict[str, media.Image]]:
+    """Prepare the same self-contained source for local and SSH publishing."""
+    base = source_base(args)
+    if getattr(args, 'notes', None) and not getattr(args, 'live', False):
+        raise RuntimeError('--notes requires --live; nothing written')
+    if getattr(args, 'live', False):
+        if fmt != 'html' or args.source == '-':
+            raise RuntimeError('--live requires an HTML file; nothing written')
+        filename = Path(args.source).name
+        source_base_dir = Path(args.source).parent
+        source = live_file(filename, source_base_dir, 3)
+        document_title = ' '.join(_DocumentTitle(source).title.split()) or name
+        title = ' '.join((args.title if args.title is not None else document_title).split())
+        raw = '# ' + title + '\n\n```html live file=' + shlex.quote(filename) + ' height=full title=' + shlex.quote(title) + '\n```\n'
+        raw = send_live_files(raw, source_base_dir)
+        images = {}
+        if args.notes:
+            notes = Path(args.notes)
+            try:
+                text = decoded(notes.read_bytes(), str(notes))
+            except OSError as exc:
+                raise RuntimeError(f'--notes {notes}: {exc}; nothing written') from None
+            text = send_live_files(text, notes.parent)
+            text, images = send_images('markdown', text, str(notes), notes.parent, media_cap, stored)
+            raw += '\n' + text
+        return 'markdown', raw, images
+    if fmt == 'markdown':
+        raw = send_live_files(raw, base)
+    raw, images = send_images(fmt, raw, label, base, media_cap, stored)
+    return fmt, raw, images
+
+
 def send_images(fmt: str, raw: str, label: str, base: Path | None,
                 cap: Callable[[], int], stored: Callable[[str], media.Image] | None = None,
                 ) -> tuple[str, dict[str, media.Image]]:
@@ -2036,8 +2200,8 @@ def cmd_publish(args: argparse.Namespace) -> int:
                 given_refs = refs.check_refs(archived_refs)
         else:
             data = read_source(args, label)
-        raw, found = send_images(fmt, decoded(data, label), label, source_base(args),
-                                 media_cap, partial(stored_image, store_dir=store_dir, sent=sent))
+        fmt, raw, found = prepare_publish(args, fmt, name, decoded(data, label), label,
+                                          partial(stored_image, store_dir=store_dir, sent=sent))
     except ConfigError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return EXIT_CONFIG
@@ -3134,6 +3298,8 @@ def build_parser() -> argparse.ArgumentParser:
         help="standard input is a tar of the source and its images, as publish sends "
         "the writer host",
     )
+    publish.add_argument('--live', action='store_true', help='publish a whole HTML document as a live widget')
+    publish.add_argument('--notes', metavar='FILE', help='markdown notes below the --live document')
     publish.set_defaults(func=cmd_publish)
 
     serve = sub.add_parser(

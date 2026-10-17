@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -44,6 +45,25 @@ GARDEN = """\
 <h2>Path</h2>
 <p>Gravel.</p>
 """
+
+LIVE_DOCUMENT = '''<!DOCTYPE html><html lang="en"><head><title>Pump panel</title>
+<style>body { padding: 24px; } button { color: blue; }</style></head>
+<body><button>Start pump</button><script>document.querySelector('button').onclick = () => { document.body.dataset.running = 'yes'; };</script></body></html>'''
+LIVE_NOTES = '''# Ignored notes title
+
+## Operation
+
+Run the pump daily.
+
+## Review
+
+### Decisions for the maintainer
+
+| # | Question | Options |
+| --- | --- | --- |
+| D1 | Run overnight? | Yes / No |
+'''
+
 
 HOSTILE = "Q's \"plan\"; $(touch pwned) `touch pwned2`"
 

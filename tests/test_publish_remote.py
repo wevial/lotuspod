@@ -76,7 +76,11 @@ _UPDATED_STAMP_RE = re.compile(rb"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z")
 
 
 def unstamped(data: bytes) -> bytes:
-    return _UPDATED_STAMP_RE.sub(b"STAMP", data)
+    data = _UPDATED_STAMP_RE.sub(b"STAMP", data)
+    # The index also shows the updated time to minute precision. Publishes
+    # spanning a minute boundary must compare just like those within a minute.
+    return re.sub(rb'(<time datetime="STAMP">)\d{4}-\d{2}-\d{2} \d{2}:\d{2}(</time>)',
+                  rb'\1STAMP\2', data)
 
 
 class RemotePublishTestCase(unittest.TestCase):

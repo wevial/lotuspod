@@ -541,6 +541,11 @@ test.describe('signed in', () => {
     await unanswered(page);
     await load(page);
     const before = (await revisionOf(page))!;
+    // Keep the loaded document stale even if a live-update notification arrives
+    // before Ask. The real publish and comments API still use the new revision.
+    const loaded = fs.readFileSync(path.join(OUT, `${SLUG}.html`), 'utf-8');
+    await page.route((url) => url.pathname === PAGE, (route) =>
+      route.fulfill({ contentType: 'text/html', body: loaded }));
     const source = fs.readFileSync(path.join(path.dirname(OUT), `${SLUG}.md`), 'utf-8');
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lotuspod-decision-threads-'));
     try {
@@ -552,7 +557,11 @@ test.describe('signed in', () => {
       fs.rmSync(dir, { recursive: true, force: true });
     }
     const words = 'Will the heater be enough?';
+    const refused = page.waitForResponse((response) =>
+      response.request().method() === 'POST' && new URL(response.url()).pathname === '/api/comments');
     await ask(page, 'decision-1', words);
+    expect((await refused).status()).toBe(409);
+    expect(await revisionOf(page)).toBe(before);
     const first = decision(page, 'decision-1');
     await expect(first.status).toHaveText(STALE);
     await expect(first.note).toHaveValue(words);
