@@ -82,6 +82,23 @@ class WidgetTests(TempDirTestCase):
         self.assertEqual(self.publish('<h1>Pond</h1><p>No widget now.</p>')[0], 0)
         self.assertEqual(list(self.out_dir.glob('pond.w-*.html')), [])
 
+    def test_cleanup_matches_page_name_literally(self):
+        body = '<template class="lotuspod-live" data-title="Clock">x</template>'
+        self.assertEqual(self.render('pond', '--body', body)[0], 0)
+        page, frame = self.frame()
+        widget_path = self.out_dir / frame['src']
+        widget_bytes = widget_path.read_bytes()
+        for name in ['*', 'pon?', '[p]ond']:
+            with self.subTest(name=name):
+                self.assertEqual(self.render(name, '--body', body)[0], 0)
+                own_page = (self.out_dir / f'{name}.html').read_text()
+                own_widget = self.out_dir / Elements(own_page).of('iframe')[0]['src']
+                self.assertTrue(own_widget.exists())
+                self.assertEqual(self.render(name, '--body', '<p>Plain</p>')[0], 0)
+                self.assertFalse(own_widget.exists())
+                self.assertEqual(widget_path.read_bytes(), widget_bytes)
+                self.assertEqual((self.out_dir / 'pond.html').read_text(), page)
+
     def test_outline_comments_and_page_policy(self):
         source = '<h1>Pond</h1><h2>One</h2><template class="lotuspod-live" data-title="Clock"><h2>Private heading</h2>' + SOURCE + '</template><h2>Two</h2>'
         self.assertEqual(self.publish(source, 'html', '--comments')[0], 0)

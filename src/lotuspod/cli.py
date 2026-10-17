@@ -878,8 +878,9 @@ def cmd_render(args: argparse.Namespace) -> int:
     for filename, data in widget_files.items():
         write_atomic(out_dir / filename, data)
     write_atomic(out_path, html.encode("utf-8"))
-    for stale in out_dir.glob(f"{args.name}.w-*.html"):
-        if stale.name not in widget_files:
+    widget_name = re.compile(re.escape(args.name) + r"\.w-[0-9a-f]{12}\.html\Z")
+    for stale in out_dir.iterdir():
+        if widget_name.fullmatch(stale.name) and stale.name not in widget_files:
             stale.unlink()
     for warning in widget_warnings:
         print(warning, file=sys.stderr)
