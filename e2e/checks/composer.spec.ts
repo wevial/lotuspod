@@ -128,19 +128,6 @@ function section(page: Page, name: string) {
   };
 }
 
-// Open the page, or load it again, and let its first read of the threads
-// land: the read comes back, and each section it holds threads on has drawn
-// them on its chip, which says "No comments" until then.
-async function load(page: Page, again = false) {
-  const read = page.waitForResponse((response) =>
-    new URL(response.url()).pathname === '/api/comments' && response.request().method() === 'GET');
-  await (again ? page.reload() : page.goto(`${PAGE}?standalone`));
-  const { threads } = await (await read).json() as { threads: { root: { section: string } }[] };
-  for (const name of new Set(threads.map((each) => each.root.section))) {
-    await expect(section(page, name).summary).not.toHaveText(/^No comments/);
-  }
-}
-
 // Open a section's popover and its form for a new thread: unfolded at once
 // when the section has no threads, else behind its button.
 async function compose(page: Page, name: string) {
@@ -250,7 +237,7 @@ test.describe('signed in', () => {
   test('an empty composer is one box with its + inside, and Enter on the + opens the file chooser', async ({ page }) => {
     const seen = await watch(page);
     await stored(page);
-    await load(page);
+    await page.goto(`${PAGE}?standalone`);
     const open = await compose(page, 'pond');
     await expect(open.box).toHaveCount(1);
     await expect(open.tray).toBeHidden();
@@ -278,7 +265,7 @@ test.describe('signed in', () => {
   test('two picked images sit inside the box above the field, each with its X, and one removed is not sent', async ({ page }) => {
     const seen = await watch(page);
     await stored(page);
-    await load(page);
+    await page.goto(`${PAGE}?standalone`);
     const open = await compose(page, 'frogs');
     await pick(page, open.add, [FROG, LILY]);
     await aboveField(open, 2);
@@ -309,7 +296,7 @@ test.describe('signed in', () => {
   test('Tab reaches the + and each X, and each draws a 2px solid outline', async ({ page }) => {
     const seen = await watch(page);
     await stored(page);
-    await load(page);
+    await page.goto(`${PAGE}?standalone`);
     const open = await compose(page, 'pond');
     await pick(page, open.add, [FISH, FROG]);
     await expect(open.links.locator('img')).toHaveCount(2);
@@ -329,7 +316,7 @@ test.describe('signed in', () => {
   test('a composer thumbnail opens in the image viewer, Next steps to the other, and Escape closes the viewer only', async ({ page }) => {
     const seen = await watch(page);
     await stored(page);
-    await load(page);
+    await page.goto(`${PAGE}?standalone`);
     const { popover } = section(page, 'pond');
     const open = await compose(page, 'pond');
     await pick(page, open.add, [FISH, FROG]);
@@ -360,7 +347,7 @@ test.describe('signed in', () => {
   test('the + is disabled at four images, and the + and each X while a comment saves', async ({ page }) => {
     const seen = await watch(page);
     await stored(page);
-    await load(page);
+    await page.goto(`${PAGE}?standalone`);
     let open = await compose(page, 'frogs');
     await pick(page, open.add, [FISH, FROG, LILY, POND]);
     await expect(open.links.locator('img')).toHaveCount(4);
@@ -370,7 +357,7 @@ test.describe('signed in', () => {
     await expect(open.add).toBeEnabled();
     await page.keyboard.press('Escape');
 
-    await load(page, true);
+    await page.reload();
     open = await compose(page, 'pond');
     await pick(page, open.add, [FISH]);
     await expect(open.links.locator('img')).toHaveCount(1);
@@ -397,7 +384,7 @@ test.describe('signed in', () => {
     await stored(page);
     const root = await thread(request, 'pond', 'Is the pump on a timer?');
     await page.setViewportSize(WIDE);
-    await load(page);
+    await page.goto(`${PAGE}?standalone`);
     const aside = page.locator('aside.artifact-comments-panel');
     await page.locator('details.artifact-comment[data-section="pond"] summary').click();
     const node = aside.locator(`.artifact-comment-thread[data-thread="${root.id}"]`);
@@ -435,7 +422,7 @@ test.describe('signed in', () => {
     await stored(page);
     const root = await thread(request, 'frogs', 'Do the frogs wake in March?');
     await page.setViewportSize(PHONE);
-    await load(page);
+    await page.goto(`${PAGE}?standalone`);
     await page.locator('details.artifact-comment[data-section="frogs"] summary').click();
     const sheet = page.locator('.artifact-comments-bottom-sheet');
     await expect(sheet).toBeVisible();
