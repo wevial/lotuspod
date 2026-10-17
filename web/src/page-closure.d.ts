@@ -87,3 +87,13 @@ interface DocumentEventMap {
 // section's heading and wrapper, or the intro's) test says to, told whether
 // the new revision took the part away.
 declare function holdSwap(test: (nodes: readonly Element[], removed: boolean) => boolean): void;
+
+// web/src/widgets.ts: accepted notifications dispatched on the widget frame.
+declare var WIDGET: "lotuspod:widget";
+interface WidgetDetail {
+  kind: "ready" | "error" | "escape";
+  message: string;
+}
+interface HTMLElementEventMap {
+  "lotuspod:widget": CustomEvent<WidgetDetail>;
+}

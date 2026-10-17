@@ -1,0 +1,235 @@
+"""Live widget documents, publish transactions and serving boundaries."""
+import hashlib
+import json
+import subprocess
+import threading
+import urllib.error
+import urllib.request
+from html.parser import HTMLParser
+from unittest.mock import patch
+
+from tests.test_manifest_v2 import TempDirTestCase, cli, run_cli
+from tests.test_page_policy import read_page, directives
+from lotuspod import markdown, widgets
+
+SOURCE = '<button>Press</button>\n<style>button { color: red; }</style>\n<script>document.body.dataset.ran = "yes";</script>\n'
+
+
+class Elements(HTMLParser):
+    def __init__(self, text):
+        super().__init__()
+        self.tags = []
+        self.feed(text)
+
+    def handle_starttag(self, tag, attrs):
+        self.tags.append((tag, dict(attrs)))
+
+    def of(self, tag):
+        return [attrs for kind, attrs in self.tags if kind == tag]
+
+
+class WidgetTests(TempDirTestCase):
+    def test_frame_scan_skips_pages_without_iframe_candidates(self):
+        with patch.object(widgets.Frames, 'feed') as feed:
+            self.assertEqual(widgets.Frames('<p>No frame</p>').sources, [])
+        feed.assert_not_called()
+        self.assertEqual(widgets.Frames(
+            '<!-- <iframe class="artifact-widget" src="comment.html"> -->'
+            '<script>"<iframe class=artifact-widget src=script.html>"</script>'
+            '<iframe src="ordinary.html"></iframe>'
+            '<IFRAME\nCLASS="artifact-widget" SRC="pond.w-123456abcdef.html"></IFRAME>'
+        ).sources, ['pond.w-123456abcdef.html'])
+
+    def publish(self, text, suffix='html', *extra):
+        source = self.out_dir.parent / (self.out_dir.name + '.' + suffix)
+        self.addCleanup(source.unlink, missing_ok=True)
+        source.write_text(text)
+        return run_cli('publish', str(source), '--name', 'pond', '--local',
+                       '--out-dir', str(self.out_dir), *extra)
+
+    def frame(self):
+        page = (self.out_dir / 'pond.html').read_text()
+        return page, Elements(page).of('iframe')[0]
+
+    def test_markdown_document_policy_hash_and_plain_fence(self):
+        body = markdown.to_body('Paragraph.\n\n```html live title="Pond clock"\n' + SOURCE + '```\n\n```html\n<button>plain</button>\n```')
+        self.assertEqual(self.render('pond', '--body', body)[0], 0)
+        page, frame = self.frame()
+        for key, value in {'sandbox': 'allow-scripts', 'allow': '', 'referrerpolicy': 'no-referrer', 'loading': 'lazy', 'title': 'Pond clock', 'data-widget': 'pond-clock', 'height': '360'}.items():
+            self.assertEqual(frame[key], value)
+        data = (self.out_dir / frame['src']).read_bytes()
+        self.assertEqual(frame['src'], 'pond.w-' + hashlib.sha256(data).hexdigest()[:12] + '.html')
+        document = data.decode()
+        self.assertIn(SOURCE, document)
+        self.assertIn((widgets.THEME / 'widget-frame.js').read_text(), document)
+        policy = directives(read_page(document).policies[0])
+        self.assertEqual(policy, {
+            'default-src': ["'none'"], 'script-src': [cli.script_hash(s) for s in cli.collect_scripts(document).inline],
+            'style-src': ["'unsafe-inline'"], 'img-src': ['data:'], 'font-src': ['data:'],
+            'connect-src': ["'none'"], 'form-action': ["'none'"], 'base-uri': ["'none'"], 'frame-src': ["'none'"],
+        })
+        bridge = cli.collect_scripts(page).inline[0]
+        self.assertIn('installWidgetBridge();', bridge)
+        self.assertLess(page.index(bridge), page.index('</head>'))
+        self.assertIn(cli.script_hash(bridge), directives(read_page(page).policies[0])['script-src'])
+        self.assertIn('&lt;button&gt;plain&lt;/button&gt;', page)
+        self.assertEqual(Elements(document).tags[1][0], 'head')
+        self.assertEqual(Elements(document).tags[2][0], 'meta')
+
+    def test_publish_history_stability_and_cleanup(self):
+        def git(*args):
+            return subprocess.check_output(['git', '-C', str(self.out_dir), *args], text=True).strip()
+        git('init', '-q'); git('config', 'user.email', 'test@example.com'); git('config', 'user.name', 'Test')
+        source = '<h1>Pond</h1><p>Before</p><template class="lotuspod-live" data-id="clock" data-title="Clock" data-height="200">' + SOURCE + '</template>'
+        self.assertEqual(self.publish(source)[0], 0)
+        first = git('rev-parse', 'HEAD')
+        page, frame = self.frame()
+        self.assertEqual(frame['height'], '200')
+        self.assertEqual(frame['data-height-fixed'], 'true')
+        self.assertEqual(frame['data-widget'], 'clock')
+        self.assertIn(frame['src'], git('ls-tree', '--name-only', first))
+        self.assertIn('pond.body.html', git('ls-tree', '--name-only', first))
+        self.assertEqual(self.publish(source.replace('Before', 'After'))[0], 0)
+        self.assertEqual(self.frame()[1], frame)
+        self.assertEqual(self.publish(source.replace('yes', 'no'))[0], 0)
+        self.assertNotEqual(self.frame()[1]['src'], frame['src'])
+        self.assertFalse((self.out_dir / frame['src']).exists())
+        self.assertIn(SOURCE, git('show', first + ':' + frame['src']))
+        self.assertEqual(self.publish('<h1>Pond</h1><p>No widget now.</p>')[0], 0)
+        self.assertEqual(list(self.out_dir.glob('pond.w-*.html')), [])
+
+    def test_cleanup_matches_page_name_literally(self):
+        body = '<template class="lotuspod-live" data-title="Clock">x</template>'
+        self.assertEqual(self.render('pond', '--body', body)[0], 0)
+        page, frame = self.frame()
+        widget_path = self.out_dir / frame['src']
+        widget_bytes = widget_path.read_bytes()
+        for name in ['*', 'pon?', '[p]ond']:
+            with self.subTest(name=name):
+                self.assertEqual(self.render(name, '--body', body)[0], 0)
+                own_page = (self.out_dir / f'{name}.html').read_text()
+                own_widget = self.out_dir / Elements(own_page).of('iframe')[0]['src']
+                self.assertTrue(own_widget.exists())
+                self.assertEqual(self.render(name, '--body', '<p>Plain</p>')[0], 0)
+                self.assertFalse(own_widget.exists())
+                self.assertEqual(widget_path.read_bytes(), widget_bytes)
+                self.assertEqual((self.out_dir / 'pond.html').read_text(), page)
+
+    def test_outline_comments_and_page_policy(self):
+        source = '<h1>Pond</h1><h2>One</h2><template class="lotuspod-live" data-title="Clock"><h2>Private heading</h2>' + SOURCE + '</template><h2>Two</h2>'
+        self.assertEqual(self.publish(source, 'html', '--comments')[0], 0)
+        page, _ = self.frame()
+        self.assertEqual(len(Elements(page).of('h2')), 2)
+        self.assertNotIn('Private heading', page)
+        self.assertEqual(directives(read_page(page).policies[0])['frame-src'], ["'self'"])
+        self.assertNotIn('frame-src', cli.page_policy('<p>Plain</p>', set()))
+        self.assertEqual([a['data-section'] for a in Elements(page).of('details') if 'artifact-comment' in a.get('class', '') and a.get('data-section')], ['one', 'two'])
+
+    def test_html_source_readers_ignore_widget_headings_and_images(self):
+        body = '<template class="lotuspod-live" data-title="Clock"><h1>Inside</h1><img src="data:image/gif;base64,AAAA"></template><h1>Outside</h1>'
+        self.assertEqual(cli.html_title(body)[0], 'Outside')
+        self.assertEqual(cli.html_images(body).images, [])
+        self.assertEqual(self.publish(body)[0], 0)
+
+    def test_noscript_text_preserves_widget_template_boundaries(self):
+        content = '<noscript></template></noscript><h2>Private heading</h2>\n' + SOURCE
+        template = '<template class="lotuspod-live" data-title="Clock">' + content + '</template>'
+        sources = {
+            'html': '<h1>Pond</h1><h2>One</h2>' + template + '<h2>Two</h2>',
+            'md': '# Pond\n\n## One\n\n```html live title="Clock"\n' + content + '```\n\n## Two\n',
+        }
+        for suffix, source in sources.items():
+            with self.subTest(source=suffix):
+                body = markdown.to_body(source) if suffix == 'md' else source
+                rendered, files, _ = widgets.render(body, 'pond')
+                self.assertEqual(len(files), 1)
+                self.assertIn(content, next(iter(files.values())).decode())
+                self.assertNotIn('Private heading', rendered)
+                self.assertNotIn('Private heading', widgets.without_templates(body))
+                rc, _, error = self.publish(source, suffix, '--comments')
+                self.assertEqual(rc, 0, error)
+                page, frame = self.frame()
+                self.assertIn(content, (self.out_dir / frame['src']).read_text())
+                self.assertNotIn('Private heading', page)
+                self.assertEqual(len(Elements(page).of('h2')), 2)
+                self.assertEqual([a['data-section'] for a in Elements(page).of('details')
+                                  if 'artifact-comment' in a.get('class', '') and a.get('data-section')],
+                                 ['one', 'two'])
+
+    def test_refused_fence_names_its_resolved_id_and_source_line(self):
+        for options, ident in [('d3', 'widget-2'), ('colour=red id=clock', 'clock'),
+                               ('colour=red title="Pond clock"', 'pond-clock')]:
+            with self.subTest(options=options):
+                source = '```html live title="First"\nx\n```\n```html live ' + options + '\nx\n```'
+                with self.assertRaisesRegex(RuntimeError, f'widget {ident} at line 4'):
+                    markdown.to_body(source)
+
+    def test_render_refuses_invalid_html_before_writing(self):
+        body = '<template class="lotuspod-live" data-id="bad" colour="red">x</template>'
+        rc, _, error = self.render('pond', '--body', body)
+        self.assertEqual(rc, 1)
+        self.assertIn('widget bad at line 1', error)
+        self.assertEqual(list(self.out_dir.iterdir()), [])
+        rc, _, error = self.publish('<h1>\nPond\n</h1>\n' + body)
+        self.assertEqual(rc, 1)
+        self.assertIn('widget bad at line 4', error)
+        self.assertEqual(list(self.out_dir.iterdir()), [])
+
+    def test_variables_are_exact_and_complete(self):
+        tokens = json.loads((widgets.THEME / 'tokens.json').read_text())
+        expected = {f'--lotus-{ {"colors": "color", "fonts": "font", "radii": "radius"}.get(group, group)}-{key.replace("_", "-")}': value for group, values in tokens.items() if isinstance(values, dict) for key, value in values.items()}
+        _, files, _ = widgets.render('<template class="lotuspod-live" data-title="Clock">x</template>', 'pond')
+        import re
+        for text in [cli.theme_file_bytes('lotuspod.css').decode(), next(iter(files.values())).decode()]:
+            declarations = re.findall(r'(--lotus-[\w-]+): ([^;]+);', text)
+            self.assertEqual(dict(declarations), expected)
+            self.assertEqual(len(declarations), len(expected))
+
+    def test_limits_refuse_without_writes(self):
+        cases = [
+            ('id=huge', 'x' * (256 * 1024 + 1), 1),
+            ('id=total', 'x' * 1100000, 2),
+            ('id=w-{i} title="Clock"', 'x', 21),
+            ('id=w-{i} title="Clock"', 'x' * (240 * 1024), 9),
+            ('id=bad colour=red', 'x', 1),
+            ('id=bad d3', 'x', 1),
+            ('id=a', 'x', 2),
+        ]
+        for options, content, count in cases:
+            with self.subTest(options=options, count=count):
+                text = '# Pond\n' + ''.join('```html live ' + options.format(i=i) + '\n' + content + '\n```\n' for i in range(count))
+                rc, _, err = self.publish(text, 'md')
+                self.assertEqual(rc, 1, err)
+                self.assertIn('widget', err)
+                self.assertIn('line', err)
+                self.assertEqual(list(self.out_dir.iterdir()), [])
+        rc, _, err = self.publish('# Pond\n```html live id=untitled\nx\n```', 'md')
+        self.assertEqual(rc, 0, err)
+        self.assertEqual(err.count('warning:'), 1)
+        self.assertIn('untitled', err)
+
+    def test_serving_visible_referenced_widgets_only(self):
+        body = '<template class="lotuspod-live" data-title="Clock">x</template>'
+        self.assertEqual(self.render('pond', '--body', body)[0], 0)
+        self.assertEqual(self.render('hidden', '--body', body, '--hidden')[0], 0)
+        _, frame = self.frame()
+        hidden = widgets.Frames((self.out_dir / 'hidden.html').read_text()).sources[0]
+        stale = 'pond.w-000000000000.html'
+        (self.out_dir / stale).write_text('stale')
+        server = cli._make_server(self.out_dir, '127.0.0.1', 0)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(server.server_close); self.addCleanup(server.shutdown)
+        base = f'http://127.0.0.1:{server.server_address[1]}/'
+        with urllib.request.urlopen(base + frame['src']) as response:
+            self.assertEqual(response.status, 200)
+            for key, value in widgets.HEADERS:
+                self.assertEqual(response.headers[key], value)
+        for name in [hidden, stale]:
+            with self.assertRaises(urllib.error.HTTPError) as raised:
+                urllib.request.urlopen(base + name)
+            self.assertEqual(raised.exception.code, 404)
+        self.assertEqual(cli.served_page_names(self.out_dir), ['pond'])
+        for command in ['manifest', 'index']:
+            self.assertEqual(run_cli(command, '--out-dir', str(self.out_dir))[0], 0)
+        for name in ['manifest.json', 'index.html']:
+            self.assertNotIn('.w-', (self.out_dir / name).read_text())
