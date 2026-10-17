@@ -124,6 +124,9 @@
   // The seen route's pages as last answered 200, else null, and whether it
   // has answered since the finder opened.
   let seen: Seen | null = null;
+  // A choice opens its frame before that page's visit POST completes. Keep
+  // that visit locally so reopening the finder cannot restore an older order.
+  const opened = new Map<string, string>();
   let answered = false;
   // The reads this opening still waits on.
   const pending = new Set<Read>();
@@ -136,7 +139,9 @@
 
   const seenAt = (pod: Pod) => {
     const entry = seen && Object.prototype.hasOwnProperty.call(seen, pod.name) ? seen[pod.name] : null;
-    return entry && typeof entry.seenAt === "string" ? entry.seenAt : null;
+    const recorded = entry && typeof entry.seenAt === "string" ? entry.seenAt : null;
+    const local = opened.get(pod.name);
+    return local && (!recorded || local > recorded) ? local : recorded;
   };
 
   // The pods seen, newest first: only pods seen are sorted, so each has its
@@ -332,6 +337,7 @@
       hide(true);
       return;
     }
+    opened.set(choice.pod.name, new Date().toISOString());
     hide(false);
     document.dispatchEvent(new CustomEvent<PodOpenDetail>("lotuspod:open", { detail: {
       name: choice.pod.name, title: choice.pod.title, href: choice.pod.href,
