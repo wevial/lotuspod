@@ -19,6 +19,13 @@ Default cell names, or `accept` for a row with no Options column; it is not
 part of the version. A table with any row of fewer than two options is left
 exactly as written.
 
+A decisions table whose previous element in the body is a live block (a
+`figure.artifact-live`, as lotuspod.widgets renders one before this step),
+with only whitespace between them, is about that block: each of its forms
+carries `data-about`, the block's id, and an "About: TITLE" line under its
+question, TITLE the block's title, else its id. Neither is part of the
+version, nor read back as context.
+
 Under each h2 or h3 whose text is "Checklist for the maintainer" (any case),
 the first table before the next h2 (or the next decisions or checklist
 heading) whose header row has an "Item" column becomes one form of
@@ -75,6 +82,10 @@ ACCEPT = ("accept", "Accept the default")
 OTHER = ("other", "Something else")
 # The stylesheet draws the "· " before it.
 DEFAULT_MARK = "default"
+# A live block as lotuspod.widgets renders it, and its frame, whose title is
+# the block's title, else its id.
+LIVE_CLASS = "artifact-live"
+LIVE_FRAME_CLASS = "artifact-widget"
 
 # Tags that end a table cell left open, at the table's own depth.
 _CELL_ENDS = frozenset({"tr", "td", "th", "thead", "tbody", "tfoot"})
@@ -141,6 +152,12 @@ class _TableFinder(HTMLParser):
         self._depth = 0
         self._candidate: dict | None = None
         self._cell: dict | None = None
+        # The live block being read: its id, its title and its figures'
+        # depth; then the last one closed outside a table, with the offset
+        # just past its end, which a table starting after only whitespace
+        # is about.
+        self._live: dict | None = None
+        self._last_live: dict | None = None
         self.tables: list[dict] = []
 
     def _offset(self) -> int:
@@ -162,12 +179,21 @@ class _TableFinder(HTMLParser):
         self._candidate["rows"][-1].append(cell)
 
     def handle_starttag(self, tag: str, attrs: list) -> None:
+        classes = next((v for k, v in attrs if k == "class" and v), "").split()
         if tag == "pre":
-            classes = next((v for k, v in attrs if k == "class" and v), "").split()
             if self._mermaid_depth or "mermaid" in classes:
                 self._mermaid_depth += 1
         if self._mermaid_depth:
             return
+        if tag == "figure" and not self._depth:
+            if self._live is not None:
+                self._live["depth"] += 1
+            elif LIVE_CLASS in classes:
+                ident = next((v for k, v in attrs if k == "data-widget" and v), "")
+                self._live = {"id": ident, "title": "", "depth": 1}
+        elif (tag == "iframe" and self._live is not None and not self._live["title"]
+                and LIVE_FRAME_CLASS in classes):
+            self._live["title"] = next((v for k, v in attrs if k == "title" and v), "")
         if tag in ("h2", "h3") and not self._depth:
             if tag == "h2":
                 self._armed = None
@@ -175,8 +201,12 @@ class _TableFinder(HTMLParser):
         elif tag == "table":
             self._depth += 1
             if self._depth == 1 and self._armed:
-                self._candidate = {"start": self._offset(), "rows": [], "kind": self._armed,
-                                   "legend": self._legend}
+                start = self._offset()
+                last = self._last_live
+                about = (last if last is not None and last["id"]
+                         and not self._body[last["end"]:start].strip() else None)
+                self._candidate = {"start": start, "rows": [], "kind": self._armed,
+                                   "legend": self._legend, "about": about}
         elif self._depth == 1 and self._candidate is not None and tag in _CELL_ENDS:
             self._close_cell()
             if tag == "tr":
@@ -198,6 +228,12 @@ class _TableFinder(HTMLParser):
             return
         if self._mermaid_depth:
             return
+        if tag == "figure" and self._live is not None and not self._depth:
+            self._live["depth"] -= 1
+            if not self._live["depth"]:
+                live, self._live = self._live, None
+                self._last_live = {"id": live["id"], "title": live["title"] or live["id"],
+                                   "end": self._after_tag()}
         if tag in ("h2", "h3") and self._heading is not None:
             # An h2 opening has already ended any section in force.
             text = _text(self._heading)
@@ -395,13 +431,14 @@ def _checklist_form(page: str, checklist: dict) -> str:
     return "\n".join(lines)
 
 
-def _form(page: str, question: dict) -> str:
+def _form(page: str, question: dict, about: dict | None) -> str:
     esc = html.escape
     default = f' data-default="{esc(question["picked"])}"' if question["picked"] else ""
+    block = f' data-about="{esc(about["id"])}"' if about else ""
     lines = [
         f'<form class="{FORM_CLASS}" data-page="{esc(page)}" '
         f'data-question="{esc(question["id"])}" data-version="{esc(question["version"])}"'
-        f'{default}>',
+        f'{default}{block}>',
         "<fieldset>",
     ]
     number = question["number"]
@@ -410,6 +447,8 @@ def _form(page: str, question: dict) -> str:
         + (f'<span class="artifact-decision-number">{number}</span> ' if number else "")
         + f'<span class="artifact-decision-text">{question["question"]["html"]}</span></legend>'
     )
+    if about:
+        lines.append(f'<p class="artifact-decision-about">About: {esc(about["title"], quote=False)}</p>')
     for label, value in question["context"]:
         if label is not None:
             value = f'<span class="artifact-decision-context-label">{label}:</span> {value}'
@@ -459,7 +498,7 @@ def render_decisions(body: str, page: str) -> tuple[str, bool]:
             if not questions:
                 continue
             taken = ids
-            forms = "\n".join(_form(page, question) for question in questions)
+            forms = "\n".join(_form(page, question, table["about"]) for question in questions)
         blocks.append((table, f'<div class="artifact-decisions">\n{forms}\n</div>'))
     # Last first, so the spans before each replacement still hold.
     for table, block in reversed(blocks):

@@ -806,6 +806,8 @@ def cmd_render(args: argparse.Namespace) -> int:
     body, has_node_tables = node_tables.mark_node_tables(body)
     # Before the outline, so the forms sit inside their section.
     body, has_decisions = decisions.render_decisions(body, args.name)
+    # Once the forms say which block each is about, so its chrome counts them.
+    body = widgets.link_decisions(body)
     # After the forms, so no reference lands in a question or changes its
     # version; before the outline, so no heading's id is a card's.
     page_refs = getattr(args, "refs", None)

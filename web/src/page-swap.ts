@@ -455,6 +455,11 @@ function pageSwap(): void {
       old.querySelector(".artifact-live-note")?.remove();
       const note = fresh.querySelector(".artifact-live-note");
       if (note) frame.before(note);
+      // So are the decisions about it (lotuspod.widgets.link_decisions):
+      // their count and first question follow the page as published now.
+      old.querySelector(".artifact-live-chrome > .artifact-live-decisions")?.remove();
+      const decisions = fresh.querySelector(".artifact-live-chrome > .artifact-live-decisions");
+      if (decisions) old.querySelector(".artifact-live-chrome > .artifact-live-open")?.after(decisions);
       // Preserve a measured auto height on prose-only swaps. Switching to
       // or from an explicit height applies the new published size instead;
       // the widget bridge restores cached auto measurements on SWAPPED.

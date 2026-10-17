@@ -121,6 +121,11 @@
 .artifact-live-chrome a:hover {
   color: var(--lotus-color-pale-lavender);
 }
+/* The decisions about the block, which jumps to the first of them. */
+.artifact-live-chrome a.artifact-live-decisions {
+  color: var(--lotus-color-lavender);
+  white-space: nowrap;
+}
 .artifact-live > .artifact-live-note {
   grid-row: 2;
   margin: 0;
@@ -240,4 +245,21 @@ figure.artifact-live.artifact-live--expanded {
   }
   .artifact-live-comment { --live-control-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z'/%3E%3C/svg%3E"); }
   .artifact-live-open { --live-control-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M14 4h6v6M20 4l-9 9M18 14v6H4V6h6'/%3E%3C/svg%3E"); }
+  /* "N decisions" takes a cell of the controls' row, before Pause. */
+  .artifact-live-chrome:has(> .artifact-live-decisions) { grid-template-columns: 1fr auto auto 1fr; gap: 0 0.5rem; }
+  .artifact-live-chrome:has(> .artifact-live-decisions) .artifact-live-title { grid-column: 1 / 4; }
+  .artifact-live-chrome:has(> .artifact-live-decisions) .artifact-live-badge { grid-column: 4; }
+  .artifact-live-chrome:has(> .artifact-live-decisions) .artifact-live-state { grid-column: 3; }
+  .artifact-live-chrome:has(> .artifact-live-decisions):has(> .artifact-live-state:not([hidden])) .artifact-live-title { grid-column: 1 / 3; }
+  .artifact-live-chrome:has(> .artifact-live-decisions) .artifact-live-pause { grid-column: 4; }
+  .artifact-live-decisions { grid-row: 2; grid-column: 3; }
+  .artifact-live-chrome:has(> .artifact-live-comment):has(> .artifact-live-decisions) { grid-template-columns: auto 1fr auto auto auto; }
+  .artifact-live-chrome:has(> .artifact-live-comment):has(> .artifact-live-decisions) .artifact-live-title { grid-column: 1 / 5; }
+  .artifact-live-chrome:has(> .artifact-live-comment):has(> .artifact-live-decisions) .artifact-live-badge { grid-column: 5; }
+  .artifact-live-chrome:has(> .artifact-live-comment):has(> .artifact-live-decisions) .artifact-live-state { grid-column: 4; }
+  .artifact-live-chrome:has(> .artifact-live-comment):has(> .artifact-live-decisions):has(> .artifact-live-state:not([hidden])) .artifact-live-title { grid-column: 1 / 4; }
+  .artifact-live-chrome:has(> .artifact-live-comment):has(> .artifact-live-decisions) .artifact-live-expand { grid-column: 2; }
+  .artifact-live-chrome:has(> .artifact-live-comment):has(> .artifact-live-decisions) .artifact-live-open { grid-column: 3; }
+  .artifact-live-chrome:has(> .artifact-live-comment) .artifact-live-decisions { grid-column: 4; }
+  .artifact-live-chrome:has(> .artifact-live-comment):has(> .artifact-live-decisions) .artifact-live-pause { grid-column: 5; }
 }
