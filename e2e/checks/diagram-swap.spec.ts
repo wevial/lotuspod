@@ -258,7 +258,7 @@ test("a republished flowchart's new box opens its card from the new row, the old
   await expect(card).toContainText('Publish');
   await expect(card).toContainText('waiting');
   await expect(card).toContainText('Waits for');
-  await expect(card.locator('.artifact-node-card-graph')).toContainText('B (ready)');
+  await expect(card.locator('.artifact-node-card-graph')).toContainText('Review (ready)');
   await page.keyboard.press('Escape');
   await expect(card).toBeHidden();
 

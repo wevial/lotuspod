@@ -20,6 +20,7 @@ pre.mermaid:has(> .artifact-diagram-expand) {
   position: absolute;
   right: 0.5rem;
   top: 0.5rem;
+  transform: translateX(var(--artifact-diagram-scroll, 0px));
   transition: opacity 0.12s ease;
 }
 

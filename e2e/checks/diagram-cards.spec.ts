@@ -11,7 +11,8 @@ test.use({ viewport: { width: 1280, height: 800 }, extraHTTPHeaders: SIGNED_IN }
 // The capture fixture's node cards page: an opening paragraph, then a
 // flowchart (A --> B, E --> B, B --> C, A --> D) whose Nodes table lists A to
 // D and not E, then a second flowchart that repeats node id A, holds a
-// subgraph (P --> Q), and whose table has a row Z naming no box, and a third
+// subgraph (P --> Q) and Y --> W with an empty label on W, and whose table
+// has a row Z naming no box, and a third
 // (K <--> R, R --> S, S --> T styled opaque) whose table has no thead and a
 // row too long for the window, and a fourth (F --> G, G --> H, J --> H,
 // M --> H) that styles F with a style line, G with a class line and J with
@@ -171,7 +172,7 @@ test("a box's card sits beside it with its row and its arrows", async ({ page })
   const link = card(page).locator('.artifact-node-card-link a');
   await expect(link).toHaveAttribute('href', 'https://example.com/pull/12');
   await expect(link).toHaveText('#12');
-  expect(await graph(page)).toEqual([['Waits for', 'A (merged), E'], ['Unblocks', 'C (ready)']]);
+  expect(await graph(page)).toEqual([['Waits for', 'Write the parser (merged), Pin Mermaid'], ['Unblocks', 'Light the arrows (ready)']]);
   await expect(box(page, 'B')).toHaveAttribute('aria-expanded', 'true');
 
   await box(page, 'A').focus();
@@ -179,7 +180,7 @@ test("a box's card sits beside it with its row and its arrows", async ({ page })
   await expect(card(page).locator('h3')).toHaveText('Write the parser');
   await expect(page.locator('.artifact-node-card')).toHaveCount(1);
   await expect(page.locator('.artifact-node-card:visible')).toHaveCount(1);
-  expect(await graph(page)).toEqual([['Waits for', 'nothing'], ['Unblocks', 'B (open), D (waiting)']]);
+  expect(await graph(page)).toEqual([['Waits for', 'nothing'], ['Unblocks', 'Draw the cards (open), Color the boxes (waiting)']]);
 
   // C's row has no link: its empty PR cell is still a field, in its place.
   await box(page, 'C').focus();
@@ -365,14 +366,14 @@ test("a table naming a box the diagram lacks stays shown, and its boxes keep the
 
   await box(page, 'A', 1).click();
   await expect(card(page).locator('h3')).toHaveText('Answer the questions');
-  expect(await graph(page)).toEqual([['Waits for', 'X'], ['Unblocks', 'Y (waiting)']]);
+  expect(await graph(page)).toEqual([['Waits for', 'Read the plan'], ['Unblocks', 'Ship it (waiting)']]);
   await expect.poll(() => lit(page, 1)).toEqual(await arrows(page, ['L_X_A_0', 'L_A_Y_1'], 1));
   expect(await lit(page)).toEqual([]);
 
   // A box inside a subgraph: its arrow's copy keeps the subgraph's space.
   await box(page, 'P', 1).click();
   await expect(card(page).locator('h3')).toHaveText('Tidy the docs');
-  expect(await graph(page)).toEqual([['Waits for', 'nothing'], ['Unblocks', 'Q']]);
+  expect(await graph(page)).toEqual([['Waits for', 'nothing'], ['Unblocks', 'Tag a release']]);
   await away(page);
   const places = await diagram(page, 1).locator('svg').evaluate((svg) => {
     const box = (element: Element) => {
@@ -397,7 +398,7 @@ test('arrows point the way their heads do, a long card scrolls inside the window
 
   await box(page, 'K', 2).click();
   await expect(card(page).locator('dl.artifact-node-card-fields dt')).toHaveText(['Title', 'Status']);
-  expect(await graph(page)).toEqual([['Waits for', 'R (open)'], ['Unblocks', 'R (open)']]);
+  expect(await graph(page)).toEqual([['Waits for', 'Check the copy (open)'], ['Unblocks', 'Check the copy (open)']]);
   // The arrow its linkStyle makes opaque still dims.
   await away(page);
   const dimmed = await diagram(page, 2).locator('svg').evaluate((svg) =>
@@ -407,10 +408,10 @@ test('arrows point the way their heads do, a long card scrolls inside the window
   // The card covers the boxes beside K, so these open from the keyboard.
   await box(page, 'R', 2).focus();
   await page.keyboard.press('Enter');
-  expect(await graph(page)).toEqual([['Waits for', 'K (merged)'], ['Unblocks', 'K (merged), S (ready)']]);
+  expect(await graph(page)).toEqual([['Waits for', 'Keep the copy (merged)'], ['Unblocks', 'Keep the copy (merged), Note it (ready)']]);
   await box(page, 'S', 2).focus();
   await page.keyboard.press('Enter');
-  expect(await graph(page)).toEqual([['Waits for', 'R (open)'], ['Unblocks', 'T (waiting)']]);
+  expect(await graph(page)).toEqual([['Waits for', 'Check the copy (open)'], ['Unblocks', 'Write it up (waiting)']]);
 
   await box(page, 'T', 2).focus();
   await page.keyboard.press('Enter');
@@ -477,4 +478,15 @@ test.describe('without scripts', () => {
     await expect(page.locator('#nodes-table-2')).toBeVisible();
     await expect(page.locator('[tabindex]')).toHaveCount(0);
   });
+});
+
+test('a box with no label is named by its id in the cards that list it', async ({ page }) => {
+  const seen = await drawn(page);
+  await expect(box(page, 'W', 1).locator('.nodeLabel')).toHaveText('');
+  await box(page, 'Y', 1).click();
+  await expect(card(page).locator('h3')).toHaveText('Ship it');
+  expect(await graph(page)).toEqual([
+    ['Waits for', 'Answer the questions (open)'], ['Unblocks', 'W'],
+  ]);
+  await seen.clean();
 });
