@@ -159,7 +159,16 @@ def with_sources(text: str, sources: Mapping[Image, str]) -> str:
 
 
 def _walk(text: str, figure: Callable[[Image], str]) -> list[str]:
-    lines = text.split(CUT)[0].split("\n")
+    lines = text.split("\n")
+    fenced = False
+    for i, line in enumerate(lines):
+        if line.startswith("```"):
+            fenced = not fenced
+        elif not fenced and i and line.startswith(CUT[1:]):
+            # A heading inside a fence is literal content, including a
+            # JavaScript template literal in an inlined live document.
+            lines = lines[:i]
+            break
     return _convert(lines, list(range(len(lines))), figure, [0])
 
 

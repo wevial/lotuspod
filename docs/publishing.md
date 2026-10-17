@@ -289,6 +289,20 @@ the first `<h1>` of an HTML one (which is taken out of the body, so the page
 does not show it twice); `--title` overrides both, and a page with no title is
 refused. An HTML body gets the same section ids and outline as a markdown one.
 
+```sh
+lotuspod publish mock.html --live --notes notes.md
+```
+
+`--live` publishes an HTML document in a sandboxed frame, titled from `--title`,
+its `<title>`, or its page name. `--notes FILE.md` adds markdown below it and
+requires `--live`; notes resolve their files from their own directory.
+A live fence accepts `file=PATH`, for example `html live file=parts/panel.html
+title="Panel" height=full`. Files must stay inside the source directory (or
+`--base`), be UTF-8, at most 2 MB, and contain no line starting with three
+backticks. Publish inlines them in the kept markdown and the source sent over
+SSH. `height=full` starts at the viewport height below the top bar, then resizes
+with the document. External resources remain subject to the widget policy.
+
 The source is kept byte for byte as `NAME.md`, or `NAME.body.html` for an HTML
 body. Both are sources, not pages: the manifest and the index leave them out,
 and serve never answers for them.
