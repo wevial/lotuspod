@@ -456,7 +456,7 @@ class CommentTests(ApiTestCase):
             {key: root[key] for key in root if key not in ("id", "createdAt")},
             {"page": "plan", "section": "risks", "sectionTitle": "Risks",
              "revision": self.revision, "parent": None, "text": "What if it does?",
-             "quote": quote, "images": [], "actor": SHOWN,
+             "quote": quote, "widget": None, "images": [], "actor": SHOWN,
              # The page has no owner and the responder has never pulled.
              "state": "unavailable", "owner": "responder"},
         )
@@ -555,7 +555,7 @@ class CommentTests(ApiTestCase):
         self.assertEqual(
             {key: root[key] for key in root if key not in ("id", "createdAt")},
             {"page": "owned", "section": "", "sectionTitle": "", "revision": revision,
-             "parent": None, "text": "Is this plan current?", "quote": None, "images": [],
+             "parent": None, "text": "Is this plan current?", "quote": None, "widget": None, "images": [],
              "actor": SHOWN, "state": "unavailable", "owner": "responder"},
         )
         self.assertNotIn("question", root)
@@ -610,7 +610,7 @@ class DecisionThreadTests(ApiTestCase):
                     {key: root[key] for key in root if key not in ("id", "createdAt", "revision")},
                     {"page": page, "section": section, "sectionTitle": title,
                      "parent": None, "text": "I need more context.", "quote": None,
-                     "images": [], "actor": SHOWN, "question": "decision-1",
+                     "widget": None, "images": [], "actor": SHOWN, "question": "decision-1",
                      "state": "unavailable", "owner": "responder"},
                 )
                 self.assertEqual(root["revision"], self.page_revision(page))
@@ -681,7 +681,7 @@ class NoteThreadTests(ApiTestCase):
             {key: comment[key] for key in comment if key not in ("id", "createdAt")},
             {"page": "plan", "section": "decisions-for-the-maintainer",
              "sectionTitle": "Decisions for the maintainer", "revision": self.revision,
-             "parent": None, "text": "  Not before March.\n", "quote": None, "images": [],
+             "parent": None, "text": "  Not before March.\n", "quote": None, "widget": None, "images": [],
              "actor": SHOWN, "question": "decision-1",
              "answer": {"id": answer["id"], "choice": "no", "label": "No"},
              "state": "unavailable", "owner": "responder"})

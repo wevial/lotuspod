@@ -2387,8 +2387,16 @@ def api_page(out_dir: Path, name: str,
         for key, form in decisions.read_forms(page_html).items()
     }
     owner = page_owner(page_html)
+    boxes = frozenset(comments.read_boxes(page_html))
+    # A block outside every section's wrapper is on the whole page, or in
+    # the page's one box when that is its only box.
+    outside = comments.PAGE_SECTION if boxes == {comments.PAGE_SECTION} else comments.WHOLE_PAGE
+    page_widgets = {
+        ident: api.Widget(hash=hash_, title=title, section=section or outside)
+        for ident, (hash_, title, section) in widgets.PageWidgets(page_html).found.items()
+    }
     return api.Page(name=name, revision=revision, sections=sections, questions=questions,
-                    comment_sections=frozenset(comments.read_boxes(page_html)),
+                    comment_sections=boxes, widgets=page_widgets,
                     owner=owner if machine.is_handle(owner) else "",
                     title=extract_meta(page_html, name)["title"],
                     archived=record.get("archivedAt", ""),

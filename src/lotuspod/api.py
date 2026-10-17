@@ -8,7 +8,7 @@ the reader as actor. Ten routes:
                           {page, question, version, dismissed: true, reason}
                           or {page, question, dismissed: false}
     GET  /api/answers?page=NAME
-    POST /api/comments    {page, section, text[, quote][, revision][, images]},
+    POST /api/comments    {page, section, text[, quote | widget][, revision][, images]},
                           {page, section: "", text[, revision][, images]},
                           {page, question, text[, revision][, images]},
                           {page, parent, text[, images]} or {page, thread, resolved}
@@ -117,6 +117,19 @@ items in the page's order and `choice` "", its kept label the change summary
 the page has no box for, and 409 stale_page when it names a revision other
 than the page's, so a quote is never stored against words it was not taken from.
 
+A new thread on a section, or on the whole page, may be anchored to one of
+the page's live blocks (Page.widgets) with `widget`, {id, hash, state}: the
+block's id, the 12 lowercase hex digits of its widget file's hash, and up
+to MAX_STATE characters of plain text the widget showed, "" for none. After
+the checks above it is refused, with nothing stored, in this order: 400
+invalid_body for any other keys, a hash or state not of that shape, a state
+holding a control character, or a widget beside a quote (a widget beside a
+question, or on a reply, is a body not of its shape); 400 unknown_widget
+for an id the page has no block for, or a block in another section than the
+thread's; and 409 stale_widget for a hash other than the block's on the
+current revision. Every comment a route answers carries `widget`: the anchor
+as stored on a thread's first comment, null on every other comment.
+
 An answer's note also opens a thread on its decision when the page has a
 comment box after the decision's form: the note, not empty once trimmed and
 not the note of the answer it replaces, is stored as the reader's comment
@@ -189,10 +202,12 @@ from __future__ import annotations
 
 import datetime
 import json
+import re
 import socket
 import sqlite3
 import threading
 import time
+import unicodedata
 import urllib.parse
 from collections import deque
 from dataclasses import dataclass, field
@@ -223,6 +238,9 @@ MAX_TEXT = 4000
 MAX_EXACT = 500
 MAX_CONTEXT = 32
 MAX_REVISION = 100
+# Characters of a live block's state label.
+MAX_STATE = 80
+WIDGET_HASH = re.compile(r"[0-9a-f]{12}")
 # Characters of a dismissal's reason.
 MAX_REASON = 200
 # The images one comment may name.
@@ -312,6 +330,19 @@ def chosen(asked: Question, choice: str) -> str:
 
 
 @dataclass(frozen=True)
+class Widget:
+    """A live block as the page shows it."""
+
+    # Its widget file's hash, the 12 hex digits in the file's name.
+    hash: str
+    title: str
+    # The section it sits in, as Page.sections and comment_sections name it:
+    # its wrapper's section, "" before a sectioned page's first heading, and
+    # comments.PAGE_SECTION on a page whose only box is that one.
+    section: str
+
+
+@dataclass(frozen=True)
 class Page:
     """What a row records of the page it was written against."""
 
@@ -329,6 +360,8 @@ class Page:
     # When it was archived, and the page that replaces it; "" when not.
     archived: str = ""
     superseded_by: str = ""
+    # Its live blocks' ids to the blocks.
+    widgets: Mapping[str, Widget] = field(default_factory=dict)
 
 
 class Refusal(Exception):
@@ -445,6 +478,22 @@ def _quote(value: object) -> dict | None:
         "prefix": _text(value["prefix"], 0, MAX_CONTEXT),
         "suffix": _text(value["suffix"], 0, MAX_CONTEXT),
     }
+
+
+def _widget(value: object) -> dict:
+    """value as a live block's anchor, {id, hash, state}; Refusal for
+    anything else. The state is shown as text, so it holds no control
+    character."""
+    if not isinstance(value, dict):
+        raise _invalid()
+    _keys(value, {"id", "hash", "state"})
+    ident = _text(value["id"], 1, MAX_BODY)
+    hash_ = _text(value["hash"], 12, 12)
+    state = _text(value["state"], 0, MAX_STATE)
+    if not WIDGET_HASH.fullmatch(hash_) or any(
+            unicodedata.category(char) == "Cc" for char in state):
+        raise _invalid()
+    return {"id": ident, "hash": hash_, "state": state}
 
 
 def _checked(value: object) -> list[str]:
@@ -1049,7 +1098,8 @@ class Api:
                 raise Refusal(HTTPStatus.NOT_FOUND, "unknown_parent") from None
         if "question" in fields and "section" not in fields:
             return self._store_decision_thread(fields, names, least, actor)
-        _keys(fields, {"page", "section", "text"}, frozenset({"quote", "revision", "images"}))
+        _keys(fields, {"page", "section", "text"},
+              frozenset({"quote", "revision", "images", "widget"}))
         # A heading's id may be any length, and must match one of the page's
         # boxes exactly: the body's own limit is the only one it needs.
         # comments.WHOLE_PAGE, "", is the whole page, and matches no box.
@@ -1071,10 +1121,20 @@ class Api:
         if read is not None and read != page.revision:
             raise Refusal(HTTPStatus.CONFLICT, "stale_page")
         images = self._images(names)
+        widget = None
+        if "widget" in fields:
+            widget = _widget(fields["widget"])
+            if quote is not None:
+                raise _invalid()
+            block = page.widgets.get(widget["id"])
+            if block is None or block.section != section:
+                raise Refusal(HTTPStatus.BAD_REQUEST, "unknown_widget")
+            if block.hash != widget["hash"]:
+                raise Refusal(HTTPStatus.CONFLICT, "stale_widget")
         return self.database.add_comment(
             page=page.name, section=section, section_title=page.sections.get(section, ""),
             revision=page.revision, text=text, quote=quote, actor=actor, owner=page.owner,
-            images=images,
+            images=images, widget=widget,
         )
 
     def _store_decision_thread(self, fields: dict, names: list[str] | None, least: int,

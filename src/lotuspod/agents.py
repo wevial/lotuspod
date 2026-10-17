@@ -36,7 +36,9 @@ reader's text can end its fence and pass for the output around it. Each
 image a comment carries is a line under its text: its URL, its size, and
 the path of its file on this host, which an agent reads to see it. A thread
 on a decision names it: `pull` gives its question, its options and its
-current answer, and `show` heads the thread with its id.
+current answer, and `show` heads the thread with its id. A thread on a live
+block names it in `pull`: its title, id and state, whether it has changed or
+left the page since the comment, and its source fenced.
 
 A reply or follow-up attaches each --image file, in order: each is read and
 uploaded first, its type named by its extension, and the message names them.
@@ -247,6 +249,29 @@ def _message(row: dict, level: str) -> list[str]:
     return lines
 
 
+def block_lines(item: dict) -> list[str]:
+    """The lines naming the live block a pulled item's thread is anchored
+    to: its title, id and state, whether it has changed or gone since the
+    comment, and its source fenced; none for any other item."""
+    anchor, block = item.get("widget"), item.get("block")
+    if not anchor or not block:
+        return []
+    ident = one_line(anchor["id"])
+    name = f"{one_line(block['title'])} (`{ident}`)" if block["title"] else f"`{ident}`"
+    # The state as the widget sent it, a phrase such as "at 6 workers": the
+    # route took no control character, so it is one line already.
+    state = anchor["state"]
+    lines = [f"On the block {name}" + (f", {state}" if state else ""), ""]
+    if block["status"] == "changed":
+        lines += ["The block has changed since this comment", ""]
+    elif block["status"] == "removed":
+        lines += ["The block is no longer on the page", ""]
+    if block["source"] and block["status"] != "removed":
+        lines += ["The block's source, as the page's kept source has it now:", "",
+                  fence(block["source"]), ""]
+    return lines
+
+
 def _note_line(comment: int, routed: dict, owner: str) -> str:
     """The line pointing an answer item to the comment holding its note:
     to claim it only when this pull has it routed to owner."""
@@ -358,6 +383,7 @@ def pull_text(payload: dict) -> str:
                           *passage(comment["quote"], "The reader highlighted:")]
             else:
                 lines.append("")
+            lines += block_lines(item)
             take = f"- Claim: `lotuspod comments claim {comment['id']}`"
             # A note's comment is read once, in the thread below, under the
             # answer it came with.
