@@ -179,8 +179,8 @@ class _TableFinder(HTMLParser):
         self._candidate["rows"][-1].append(cell)
 
     def handle_starttag(self, tag: str, attrs: list) -> None:
+        classes = next((v for k, v in attrs if k == "class" and v), "").split()
         if tag == "pre":
-            classes = next((v for k, v in attrs if k == "class" and v), "").split()
             if self._mermaid_depth or "mermaid" in classes:
                 self._mermaid_depth += 1
         if self._mermaid_depth:
@@ -188,12 +188,11 @@ class _TableFinder(HTMLParser):
         if tag == "figure" and not self._depth:
             if self._live is not None:
                 self._live["depth"] += 1
-            elif LIVE_CLASS in next((v for k, v in attrs if k == "class" and v), "").split():
+            elif LIVE_CLASS in classes:
                 ident = next((v for k, v in attrs if k == "data-widget" and v), "")
                 self._live = {"id": ident, "title": "", "depth": 1}
         elif (tag == "iframe" and self._live is not None and not self._live["title"]
-                and LIVE_FRAME_CLASS in next((v for k, v in attrs if k == "class" and v),
-                                             "").split()):
+                and LIVE_FRAME_CLASS in classes):
             self._live["title"] = next((v for k, v in attrs if k == "title" and v), "")
         if tag in ("h2", "h3") and not self._depth:
             if tag == "h2":
