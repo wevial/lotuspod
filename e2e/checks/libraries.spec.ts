@@ -107,3 +107,24 @@ flowchart LR
   expect(await seen.violations()).toEqual([]);
   expect(seen.errors).toEqual([]);
 });
+
+test('changed bytes at a pinned URL fail integrity and do not execute', async ({ page }) => {
+  publish('library-integrity', `# Integrity
+\`\`\`html live d3 title="Checked library"
+<p id="ready">Loading</p>
+<script>document.querySelector('#ready').textContent = 'Ready';</script>
+\`\`\`
+`);
+  const seen = await watch(page);
+  await page.route('**/d3@*/dist/d3.min.js', route => route.fulfill({
+    contentType: 'text/javascript', headers: {'Access-Control-Allow-Origin': '*'},
+    body: 'window.substitutedLibraryRan = true;',
+  }));
+  await page.goto('/library-integrity.html?standalone');
+  const frame = page.frameLocator('iframe');
+  await expect(frame.locator('#ready')).toHaveText('Ready');
+  expect(await frame.locator('body').evaluate(() => (window as any).substitutedLibraryRan)).toBeUndefined();
+  expect(await seen.violations()).toEqual([]);
+  expect(seen.errors).toHaveLength(1);
+  expect(seen.errors[0]).toContain('integrity');
+});

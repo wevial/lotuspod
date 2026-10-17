@@ -7,6 +7,7 @@ class Library:
     package: str
     version: str
     file: str
+    global_name: str
     dependencies: tuple[str, ...]
     integrity: str
 
@@ -16,13 +17,13 @@ class Library:
 
 
 LIBRARIES = {
-    'mermaid': Library('mermaid', '11.4.1', 'dist/mermaid.min.js', (),
+    'mermaid': Library('mermaid', '11.4.1', 'dist/mermaid.min.js', 'mermaid', (),
         'sha384-rbtjAdnIQE/aQJGEgXrVUlMibdfTSa4PQju4HDhN3sR2PmaKFzhEafuePsl9H/9I'),
-    'd3': Library('d3', '7.9.0', 'dist/d3.min.js', (),
+    'd3': Library('d3', '7.9.0', 'dist/d3.min.js', 'd3', (),
         'sha384-CjloA8y00+1SDAUkjs099PVfnY2KmDC2BZnws9kh8D/lX1s46w6EPhpXdqMfjK6i'),
-    'plot': Library('@observablehq/plot', '0.6.17', 'dist/plot.umd.min.js', ('d3',),
+    'plot': Library('@observablehq/plot', '0.6.17', 'dist/plot.umd.min.js', 'Plot', ('d3',),
         'sha384-JUpn2GgRr0gxU0xOBd8D8P634jhRCwobtG8G2MMEkX1RnGJ7/FJNnuukpfT+H2w1'),
-    'chartjs': Library('chart.js', '4.4.8', 'dist/chart.umd.js', (),
+    'chartjs': Library('chart.js', '4.4.8', 'dist/chart.umd.js', 'Chart', (),
         'sha384-sitkSLEO56SJYRloHWybrHos3JVvByQSlOZYJ1HiExytjxUlVOernDbpQcOgwtW8'),
 }
 

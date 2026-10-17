@@ -36,7 +36,12 @@ def identifier(explicit: str, title: str, number: int) -> str:
 
 def fence(info: str, source: str, line: int, number: int) -> str:
     try:
-        words = shlex.split(info)[2:]
+        lexer = shlex.shlex(info, posix=True)
+        # Match Markdown's Unicode whitespace without changing quoted titles.
+        lexer.whitespace += ''.join(char for char in set(info) if char.isspace())
+        lexer.whitespace_split = True
+        lexer.commenters = ''
+        words = list(lexer)[2:]
     except ValueError as exc:
         raise RuntimeError(f'widget widget-{number} at line {line}: {exc}') from exc
     options = {}
@@ -105,6 +110,16 @@ class Templates(HTMLParser):
                 self.active = None
 
 
+class InlineScriptsOnly(HTMLParser):
+    """Library widgets load external scripts only through generated SRI tags."""
+    CDATA_CONTENT_ELEMENTS = Templates.CDATA_CONTENT_ELEMENTS
+
+    def handle_starttag(self, tag, attrs):
+        if tag == 'script' and any(key == 'src' for key, _ in attrs):
+            raise ValueError('external script tags are not allowed in library widgets; '
+                             'declare libraries with live fence names or data-libs instead')
+
+
 class Frames(HTMLParser):
     def __init__(self, text):
         super().__init__()
@@ -138,6 +153,8 @@ def render(body: str, name: str) -> tuple[str, dict[str, bytes], list[str]]:
             fail('unknown option ' + sorted(unknown)[0])
         try:
             selected = libraries.resolve((attrs.get('data-libs') or '').split())
+            if selected:
+                InlineScriptsOnly().feed(source)
         except ValueError as exc:
             fail(str(exc))
         if ident in ids:

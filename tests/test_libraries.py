@@ -83,6 +83,45 @@ class LibraryTests(TempDirTestCase):
                     self.assertIn(name, err)
                 self.assertEqual(list(self.out_dir.iterdir()), [])
 
+    def test_global_names(self):
+        self.assertEqual({name: lib.global_name for name, lib in libraries.LIBRARIES.items()},
+                         dict(mermaid='mermaid', d3='d3', plot='Plot', chartjs='Chart'))
+
+    def test_unicode_fence_whitespace(self):
+        for separator in ('\u00a0', '\u2003', '\t'):
+            with self.subTest(separator=repr(separator)):
+                rc, _, err = self.publish(
+                    f'# Charts\n```html{separator}live{separator}d3{separator}title="Two\u00a0words"\nx\n```')
+                self.assertEqual(rc, 0, err)
+                self.assert_libraries(self.document(), ['d3'])
+                page = (self.out_dir / 'charts.html').read_text()
+                self.assertEqual(Elements(page).of('iframe')[0]['title'], 'Two\u00a0words')
+
+    def test_unicode_unknown_library_writes_nothing(self):
+        for separator in ('\u00a0', '\u2003', '\t'):
+            with self.subTest(separator=repr(separator)):
+                rc, _, err = self.publish(f'# Charts\n```html live{separator}jquery\nx\n```')
+                self.assertEqual(rc, 1)
+                self.assertIn('unknown library jquery', err)
+                for name in libraries.LIBRARIES:
+                    self.assertIn(name, err)
+                self.assertEqual(list(self.out_dir.iterdir()), [])
+
+    def test_authored_external_script_cannot_bypass_integrity(self):
+        url = libraries.LIBRARIES['d3'].url
+        for tag in (f'<script src="{url}"></script>',
+                    f'<SCRIPT SRC="{url}" integrity="sha384-wrong"></SCRIPT>',
+                    f'<script src="{url.replace("https:", "")}"></script>',
+                    f'<script src="{url}"/>'):
+            for suffix in ('md', 'html'):
+                with self.subTest(tag=tag, suffix=suffix):
+                    source = (f'# Charts\n```html live d3\n{tag}\n```' if suffix == 'md' else
+                              f'<h1>Charts</h1><template class="lotuspod-live" data-libs="d3">{tag}</template>')
+                    rc, _, err = self.publish(source, suffix)
+                    self.assertEqual(rc, 1)
+                    self.assertIn('external script tags are not allowed', err)
+                    self.assertEqual(list(self.out_dir.iterdir()), [])
+
     def test_npm_versions(self):
         dependencies = json.loads((ROOT / 'e2e/package.json').read_text())['dependencies']
         for name, lib in libraries.LIBRARIES.items():
