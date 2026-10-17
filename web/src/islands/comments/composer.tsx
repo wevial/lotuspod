@@ -120,12 +120,12 @@ export function composers(page: Page, bridge: ComposerBridge) {
     return bridge.shown.get(row.id);
   }
   // A section's form for a new thread is on the live block widget, titled
-  // title, until it folds or posts.
+  // title, at the state it had then, until it folds or posts.
   function block(form: HTMLFormElement, widget: Widget, title: string) {
     unblock(form);
     const line = document.createElement("p");
     line.className = "artifact-comment-on";
-    render(<>{"On "}<span class="artifact-comment-on-block">{title}</span></>, line);
+    render(<>{"On "}<span class="artifact-comment-on-block">{title}</span>{widget.state ? " · " + widget.state : ""}</>, line);
     form.before(line);
     blocks.set(form, { widget: { id: widget.id, hash: widget.hash, state: widget.state }, line });
   }
