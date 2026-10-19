@@ -103,9 +103,8 @@ async function timeline(page: Page) {
       seen.push(moment);
       reading.push(response.json().then((body) => { moment.detail.revision = body.revision; }, () => {}));
     } else if (url.pathname === '/api/comments') {
-      const detail: any = { method: request.method(), status: response.status() };
-      if (request.method() === 'POST') detail.revision = request.postDataJSON()?.revision;
-      mark('comments answered', detail);
+      mark('comments answered',
+        { method: request.method(), status: response.status(), revision: request.postDataJSON()?.revision });
     }
   });
   await page.addInitScript((zero: number) => {
@@ -134,7 +133,7 @@ async function timeline(page: Page) {
       // The network's entries as of now, and the body reads they wait on;
       // an answer arriving after this stays out of the report.
       const kept = seen.slice();
-      await Promise.all(reading.slice());
+      await Promise.all(reading);
       const inPage: Moment[] = await page.evaluate(() => (window as any).__timeline ?? []).catch(() => []);
       const all = [...kept, ...inPage.map((moment) => ({ ...moment, kind: `page: ${moment.kind}` }))]
         .sort((a, b) => a.ms - b.ms);
