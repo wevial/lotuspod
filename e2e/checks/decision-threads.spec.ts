@@ -85,7 +85,6 @@ type Moment = { ms: number; kind: string; detail: unknown };
 async function timeline(page: Page) {
   const start = Date.now();
   const seen: Moment[] = [];
-  // Revision bodies still being read; write() waits for them.
   const reading: Promise<void>[] = [];
   const mark = (kind: string, detail: unknown = null) => seen.push({ ms: Date.now() - start, kind, detail });
   page.on('request', (request) => {
