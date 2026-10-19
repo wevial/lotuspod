@@ -85,6 +85,8 @@ type Moment = { ms: number; kind: string; detail: unknown };
 async function timeline(page: Page) {
   const start = Date.now();
   const seen: Moment[] = [];
+  // Revision bodies still being read; write() waits for them.
+  const reading: Promise<void>[] = [];
   const mark = (kind: string, detail: unknown = null) => seen.push({ ms: Date.now() - start, kind, detail });
   page.on('request', (request) => {
     const url = new URL(request.url());
@@ -99,7 +101,7 @@ async function timeline(page: Page) {
     } else if (url.pathname === '/api/revision') {
       const moment = { ms: Date.now() - start, kind: 'revision answered', detail: { status: response.status() } as any };
       seen.push(moment);
-      response.json().then((body) => { moment.detail.revision = body.revision; }, () => {});
+      reading.push(response.json().then((body) => { moment.detail.revision = body.revision; }, () => {}));
     } else if (url.pathname === '/api/comments') {
       const detail: any = { method: request.method(), status: response.status() };
       if (request.method() === 'POST') detail.revision = request.postDataJSON()?.revision;
@@ -129,6 +131,7 @@ async function timeline(page: Page) {
   return {
     mark,
     async write() {
+      await Promise.all(reading);
       const inPage: Moment[] = await page.evaluate(() => (window as any).__timeline ?? []).catch(() => []);
       const all = [...seen, ...inPage.map((moment) => ({ ...moment, kind: `page: ${moment.kind}` }))]
         .sort((a, b) => a.ms - b.ms);
