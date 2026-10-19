@@ -107,9 +107,8 @@ async function timeline(page: Page) {
     }
   });
   await page.addInitScript((zero: number) => {
-    const w = window as any;
     const moments: Moment[] = [];
-    w.__timeline = moments;
+    (window as any).__timeline = moments;
     const note = (kind: string, detail: unknown) => moments.push({ ms: Date.now() - zero, kind, detail });
     document.addEventListener('lotuspod:change', (event) => note('change', (event as CustomEvent).detail));
     document.addEventListener('lotuspod:swapped', (event) =>
@@ -119,8 +118,8 @@ async function timeline(page: Page) {
     const look = () => {
       const now = document.querySelector('meta[name="lotuspod:revision"]')?.getAttribute('content') ?? null;
       if (now !== revision) note('revision', { from: revision, to: (revision = now) });
-      const line = document.querySelector('form.artifact-decision[data-question="decision-1"] .artifact-decision-status');
-      const text = line ? line.textContent : null;
+      const text = document.querySelector('form.artifact-decision[data-question="decision-1"] .artifact-decision-status')
+        ?.textContent ?? null;
       if (text !== status) note('decision-1 status', { from: status, to: (status = text) });
     };
     new MutationObserver(look).observe(document, {
