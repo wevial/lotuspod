@@ -2,8 +2,9 @@ import type { Page, Thread, PlacementBridge } from "../bridge";
 import type { Placement, Group, Taken, Mode } from "./parts";
 import { shell as makeShell } from "./shell";
 import { threadList as makeThreadList } from "./thread-list";
-import { anchorOf as threadAnchor } from "./anchor";
+import { anchorOf as threadAnchor, frameOf } from "./anchor";
 import { chips as makeChips } from "./chips";
+import { pins as makePins } from "./pins";
 
 // Placement owns no thread rendering: movable nodes stay in their existing
 // independent roots, while narrow.js owns the popover and sheet surfaces.
@@ -47,9 +48,11 @@ export function placement(page: Page, bridge: PlacementBridge): Placement {
   var groups = threadList.groups;
   var chips = makeChips(page, { ...bridge, list: threadList, chipped, reach });
   boxes.forEach(chips.mount);
+  var pins = makePins({ shown, resolved, reach: function (thread, opener) { reach(thread, opener, false); } });
   api.refresh = function () {
     threadList.refresh();
     chips.refresh();
+    pins.refresh();
     over.sync();
   };
 
@@ -59,11 +62,13 @@ export function placement(page: Page, bridge: PlacementBridge): Placement {
     if (arranged) house(box);
   }
 
-  // A detached passage falls back to its section chip.
+  // A detached passage falls back to its section chip, as a thread on a
+  // live block the page no longer has does.
   function anchorOf(thread: Thread): HTMLElement | null {
     const anchor = threadAnchor(thread.root);
     switch (anchor.kind) {
       case "passage": return thread.marks[0] || chips.anchor(thread);
+      case "block": return (thread.box && frameOf(anchor.id)?.closest("figure")) || chips.anchor(thread);
       case "decision":
       case "page":
       case "section": return chips.anchor(thread);
@@ -180,6 +185,21 @@ export function placement(page: Page, bridge: PlacementBridge): Placement {
     shell.setOpen(true, true);
     threadList.expand(thread);
     thread.entry!.head.focus({ preventScroll: true });
+  };
+
+  // A live block's Comment: its section's form opens in the panel, else
+  // in a popover under opener or in the sheet.
+  api.write = function (box, opener) {
+    if (api.wide) {
+      shell.setOpen(true, true);
+    } else {
+      over.show({ box: box }, opener);
+      // The same Comment again closes its popover.
+      if (!over.peek().view) {
+        return;
+      }
+    }
+    threadList.compose(groups.get(box)!, true);
   };
 
   // A passage's composer: in its section's group, above the threads, with

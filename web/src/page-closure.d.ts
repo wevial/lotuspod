@@ -91,9 +91,24 @@ declare function holdSwap(test: (nodes: readonly Element[], removed: boolean) =>
 // web/src/widgets.ts: accepted notifications dispatched on the widget frame.
 declare var WIDGET: "lotuspod:widget";
 interface WidgetDetail {
-  kind: "ready" | "error" | "escape";
+  kind: "ready" | "error" | "escape" | "state";
+  // The error's message, or the state's label; "" for the others.
   message: string;
 }
 interface HTMLElementEventMap {
   "lotuspod:widget": CustomEvent<WidgetDetail>;
 }
+
+// A live block as a comment thread is anchored to it: its id, the 12 hex
+// digits of its widget file's hash and the state its widget showed.
+interface BlockAnchor {
+  kind: "block";
+  id: string;
+  hash: string;
+  state: string;
+}
+// web/src/islands/bridge.ts: open the form for a new thread on the block's
+// section, on the block. Declared by web/src/widgets.ts and set by the
+// comments island once it starts, on a page that takes new comments; else
+// undefined.
+declare var startComment: ((request: { anchor: BlockAnchor }) => void) | undefined;

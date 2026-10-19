@@ -5,7 +5,7 @@ function installWidgetBridge() {
   const stateFor = (frame) => {
     let state = widgetStates.get(frame);
     if (!state) {
-      state = { ready: false, errors: 0, lastError: "", accepted: [], pending: false };
+      state = { ready: false, errors: 0, lastError: "", label: "", accepted: [], pending: false };
       widgetStates.set(frame, state);
     }
     return state;
@@ -25,7 +25,7 @@ function installWidgetBridge() {
       if (state.height !== undefined && !state.paused && !state.expanded && !frame.hasAttribute("data-height-fixed")) {
         frame.height = String(state.height);
       }
-      if (chrome.querySelector("button"))
+      if (chrome.querySelector(".artifact-live-expand"))
         return;
       if (event.type === "lotuspod:swapped") {
         const TINTED = "artifact-swapped";
@@ -50,6 +50,13 @@ function installWidgetBridge() {
       placeholder.textContent = "Paused. The widget's scripts are stopped. Press Resume to start it again from the beginning.";
       placeholder.hidden = true;
       figure.append(placeholder);
+      const where = document.createElement("span");
+      where.className = "artifact-live-state";
+      badge.after(where);
+      const updateLabel = () => {
+        where.textContent = state.label;
+        where.hidden = !state.label;
+      };
       const updateBadge = () => {
         badge.textContent = state.errors ? `${state.errors} ${state.errors === 1 ? "error" : "errors"}` : state.ready ? "Live" : "loading";
         if (state.errors)
@@ -84,6 +91,8 @@ function installWidgetBridge() {
         state.paused = !state.paused;
         placeholder.hidden = !state.paused;
         pause.textContent = state.paused ? "Resume" : "Pause";
+        state.label = "";
+        updateLabel();
         if (!state.paused) {
           state.ready = false;
           state.errors = 0;
@@ -99,12 +108,24 @@ function installWidgetBridge() {
       });
       frame.addEventListener(WIDGET, (event) => {
         updateBadge();
+        updateLabel();
         if (event.detail.kind === "escape")
           close();
       });
       updateBadge();
+      updateLabel();
     });
   };
+  document.addEventListener("load", (event) => {
+    const frame = event.target;
+    if (!(frame instanceof HTMLIFrameElement) || !frame.matches("iframe.artifact-widget"))
+      return;
+    const state = stateFor(frame);
+    if (!state.label)
+      return;
+    state.label = "";
+    frame.dispatchEvent(new CustomEvent(WIDGET, { detail: { kind: "state", message: "" } }));
+  }, true);
   document.addEventListener("DOMContentLoaded", initialize);
   document.addEventListener("lotuspod:swapped", initialize);
   window.addEventListener("message", (event) => {
@@ -124,6 +145,11 @@ function installWidgetBridge() {
         if (keys !== "message,type" || typeof data.message !== "string" || data.message.length > 200)
           return;
         kind = "error";
+        break;
+      case "lotuspod:state":
+        if (keys !== "label,type" || typeof data.label !== "string" || data.label.length > 80 || !data.label.isWellFormed() || /[\u0000-\u001f\u007f-\u009f]/.test(data.label))
+          return;
+        kind = "state";
         break;
       case "lotuspod:ready":
       case "lotuspod:escape":
@@ -158,9 +184,14 @@ function installWidgetBridge() {
       }
       return;
     }
-    const message = kind === "error" ? data.message : "";
+    const message = kind === "error" ? data.message : kind === "state" ? data.label : "";
     if (kind === "ready")
       state.ready = true;
+    if (kind === "state") {
+      if (state.label === message)
+        return;
+      state.label = message;
+    }
     if (kind === "error") {
       state.errors++;
       state.lastError = message;
@@ -168,6 +199,40 @@ function installWidgetBridge() {
     frame.dispatchEvent(new CustomEvent(WIDGET, { detail: { kind, message } }));
   });
 }
+var startComment;
+function commentChrome() {
+  document.querySelectorAll("figure.artifact-live[data-widget]").forEach((figure) => {
+    const frame = figure.querySelector("iframe.artifact-widget");
+    const badge = figure.querySelector(".artifact-live-badge");
+    if (!frame || !badge || figure.querySelector(":scope > .artifact-live-pin"))
+      return;
+    const pin = document.createElement("span");
+    pin.className = "artifact-live-pin";
+    pin.setAttribute("role", "button");
+    pin.tabIndex = 0;
+    pin.hidden = true;
+    figure.append(pin);
+    const start = startComment;
+    if (!start)
+      return;
+    const comment = document.createElement("button");
+    comment.type = "button";
+    comment.className = "artifact-live-comment";
+    comment.textContent = "Comment";
+    (figure.querySelector(".artifact-live-chrome > .artifact-live-state") ?? badge).after(comment);
+    comment.addEventListener("click", () => {
+      if (figure.classList.contains("artifact-live--expanded")) {
+        figure.querySelector(".artifact-live-expand")?.click();
+      }
+      const source = frame.dataset.pausedSource || frame.getAttribute("src") || "";
+      const hash = /\.w-([0-9a-f]{12})\.html$/.exec(source)?.[1] || "";
+      const state = figure.querySelector(".artifact-live-chrome > .artifact-live-state")?.textContent ?? "";
+      start({ anchor: { kind: "block", id: figure.dataset.widget, hash, state } });
+    });
+  });
+}
 if (typeof holdSwap === "function") {
   holdSwap((nodes) => nodes.some((node) => node.matches("figure.artifact-live--expanded") || node.querySelector("figure.artifact-live--expanded") !== null));
+  commentChrome();
+  document.addEventListener("lotuspod:swapped", commentChrome);
 }

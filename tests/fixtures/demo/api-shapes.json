@@ -36,7 +36,8 @@
         "section": "string",
         "sectionTitle": "string",
         "state": "string",
-        "text": "string"
+        "text": "string",
+        "widget": "null"
       },
       "status": 201
     },
@@ -57,7 +58,8 @@
         "section": "string",
         "sectionTitle": "string",
         "state": "string",
-        "text": "string"
+        "text": "string",
+        "widget": "null"
       },
       "status": 201
     },
@@ -86,7 +88,8 @@
               "section": "string",
               "sectionTitle": "string",
               "state": "string",
-              "text": "string"
+              "text": "string",
+              "widget": "null"
             }
           }
         ],
@@ -119,7 +122,8 @@
                 "section": "string",
                 "sectionTitle": "string",
                 "state": "string",
-                "text": "string"
+                "text": "string",
+                "widget": "null"
               }
             ],
             "resolution": {"actor": "null", "at": "null", "resolved": "boolean"},
@@ -136,7 +140,8 @@
               "section": "string",
               "sectionTitle": "string",
               "state": "string",
-              "text": "string"
+              "text": "string",
+              "widget": "null"
             }
           }
         ],
@@ -161,7 +166,8 @@
         "section": "string",
         "sectionTitle": "string",
         "state": "string",
-        "text": "string"
+        "text": "string",
+        "widget": "null"
       },
       "status": 201
     },
@@ -203,7 +209,8 @@
         "section": "string",
         "sectionTitle": "string",
         "state": "string",
-        "text": "string"
+        "text": "string",
+        "widget": "null"
       },
       "status": 201
     },
@@ -239,7 +246,8 @@
                 "section": "string",
                 "sectionTitle": "string",
                 "state": "string",
-                "text": "string"
+                "text": "string",
+                "widget": "null"
               }
             ],
             "resolution": {
@@ -261,7 +269,8 @@
               "section": "string",
               "sectionTitle": "string",
               "state": "string",
-              "text": "string"
+              "text": "string",
+              "widget": "null"
             }
           }
         ],

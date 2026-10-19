@@ -146,6 +146,9 @@ export interface Placement {
   posted(box: HTMLElement, thread: Thread | undefined): void;
   started(thread: Thread | undefined, focused: boolean): void;
   open(thread: Thread): void;
+  // Open box's form for a new thread, as a live block's Comment does, from
+  // opener.
+  write(box: HTMLElement, opener: HTMLElement): void;
   compose(box: HTMLElement, holder: HTMLElement): void;
   put(thread: Thread): void;
   lit(thread: Thread): boolean;

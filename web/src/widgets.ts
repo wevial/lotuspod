@@ -4,6 +4,9 @@ interface WidgetState {
   ready: boolean;
   errors: number;
   lastError: string;
+  // The widget's latest lotuspod.state() label; "" before the first, and
+  // again as each new document's bridge opens with "".
+  label: string;
   accepted: number[];
   height?: number;
   pending: boolean;
@@ -17,7 +20,7 @@ function installWidgetBridge(): void {
   const stateFor = (frame: HTMLIFrameElement): WidgetState => {
     let state = widgetStates.get(frame);
     if (!state) {
-      state = {ready: false, errors: 0, lastError: "", accepted: [], pending: false};
+      state = {ready: false, errors: 0, lastError: "", label: "", accepted: [], pending: false};
       widgetStates.set(frame, state);
     }
     return state;
@@ -38,7 +41,8 @@ function installWidgetBridge(): void {
       if (state.height !== undefined && !state.paused && !state.expanded && !frame.hasAttribute("data-height-fixed")) {
         frame.height = String(state.height);
       }
-      if (chrome.querySelector("button")) return;
+      // The page bundle's Comment (commentChrome) may come first.
+      if (chrome.querySelector(".artifact-live-expand")) return;
       // Only fresh chrome needs tint: a carried figure already has buttons.
       // Keep this duration and class aligned with page-swap's part tint.
       if (event.type === "lotuspod:swapped") {
@@ -64,6 +68,14 @@ function installWidgetBridge(): void {
       placeholder.textContent = "Paused. The widget's scripts are stopped. Press Resume to start it again from the beginning.";
       placeholder.hidden = true;
       figure.append(placeholder);
+      // Widget text: only ever set as text.
+      const where = document.createElement("span");
+      where.className = "artifact-live-state";
+      badge.after(where);
+      const updateLabel = (): void => {
+        where.textContent = state.label;
+        where.hidden = !state.label;
+      };
       const updateBadge = (): void => {
         badge.textContent = state.errors ? `${state.errors} ${state.errors === 1 ? "error" : "errors"}` : state.ready ? "Live" : "loading";
         if (state.errors) badge.setAttribute("title", state.lastError);
@@ -91,6 +103,9 @@ function installWidgetBridge(): void {
         state.paused = !state.paused;
         placeholder.hidden = !state.paused;
         pause.textContent = state.paused ? "Resume" : "Pause";
+        // Stopped or started again, the widget is at no state it has named.
+        state.label = "";
+        updateLabel();
         if (!state.paused) {
           state.ready = false;
           state.errors = 0;
@@ -104,11 +119,26 @@ function installWidgetBridge(): void {
       });
       frame.addEventListener(WIDGET, (event) => {
         updateBadge();
+        updateLabel();
         if (event.detail.kind === "escape") close();
       });
       updateBadge();
+      updateLabel();
     });
   };
+  // Each document the frame loads names no state until its widget does,
+  // whatever messages the quota let through: the frame's own load event
+  // clears the label, also for a document without the bridge. A label the
+  // new document names before the page sees its load is cleared with it,
+  // which leaves the block with no state rather than a stale one.
+  document.addEventListener("load", (event) => {
+    const frame = event.target;
+    if (!(frame instanceof HTMLIFrameElement) || !frame.matches("iframe.artifact-widget")) return;
+    const state = stateFor(frame);
+    if (!state.label) return;
+    state.label = "";
+    frame.dispatchEvent(new CustomEvent<WidgetDetail>(WIDGET, {detail: {kind: "state", message: ""}}));
+  }, true);
   document.addEventListener("DOMContentLoaded", initialize);
   document.addEventListener("lotuspod:swapped", initialize);
   window.addEventListener("message", (event: MessageEvent<unknown>) => {
@@ -127,6 +157,11 @@ function installWidgetBridge(): void {
       case "lotuspod:error":
         if (keys !== "message,type" || typeof data.message !== "string" || data.message.length > 200) return;
         kind = "error";
+        break;
+      case "lotuspod:state":
+        if (keys !== "label,type" || typeof data.label !== "string" || data.label.length > 80 ||
+            !data.label.isWellFormed() || /[\u0000-\u001f\u007f-\u009f]/.test(data.label)) return;
+        kind = "state";
         break;
       case "lotuspod:ready":
       case "lotuspod:escape":
@@ -155,13 +190,59 @@ function installWidgetBridge(): void {
       }
       return;
     }
-    const message = kind === "error" ? data.message as string : "";
+    const message = kind === "error" ? data.message as string : kind === "state" ? data.label as string : "";
     if (kind === "ready") state.ready = true;
+    if (kind === "state") {
+      // The same label again changes nothing.
+      if (state.label === message) return;
+      state.label = message;
+    }
     if (kind === "error") {
       state.errors++;
       state.lastError = message;
     }
     frame.dispatchEvent(new CustomEvent<WidgetDetail>(WIDGET, {detail: {kind, message}}));
+  });
+}
+
+// Set by the comments island (web/src/islands/bridge.ts) before the page
+// bundle reaches this source; never given a value here, so that stays.
+var startComment: ((request: { anchor: BlockAnchor }) => void) | undefined;
+
+// Each live block's pin, which the comments island numbers with the block's
+// open threads, and its Comment button, after the title and badge, on a page
+// that takes new comments: as the page bundle runs and on each swap, the
+// head's chrome before or after it.
+function commentChrome(): void {
+  document.querySelectorAll<HTMLElement>("figure.artifact-live[data-widget]").forEach((figure) => {
+    const frame = figure.querySelector<HTMLIFrameElement>("iframe.artifact-widget");
+    const badge = figure.querySelector<HTMLElement>(".artifact-live-badge");
+    if (!frame || !badge || figure.querySelector(":scope > .artifact-live-pin")) return;
+    const pin = document.createElement("span");
+    pin.className = "artifact-live-pin";
+    pin.setAttribute("role", "button");
+    pin.tabIndex = 0;
+    pin.hidden = true;
+    figure.append(pin);
+    const start = startComment;
+    if (!start) return;
+    const comment = document.createElement("button");
+    comment.type = "button";
+    comment.className = "artifact-live-comment";
+    comment.textContent = "Comment";
+    (figure.querySelector(".artifact-live-chrome > .artifact-live-state") ?? badge).after(comment);
+    comment.addEventListener("click", () => {
+      // An expanded block would cover its composer: it closes first.
+      if (figure.classList.contains("artifact-live--expanded")) {
+        figure.querySelector<HTMLButtonElement>(".artifact-live-expand")?.click();
+      }
+      // The file the block shows, also while it is paused.
+      const source = frame.dataset.pausedSource || frame.getAttribute("src") || "";
+      const hash = /\.w-([0-9a-f]{12})\.html$/.exec(source)?.[1] || "";
+      // The label the widget showed as the reader pressed Comment.
+      const state = figure.querySelector(".artifact-live-chrome > .artifact-live-state")?.textContent ?? "";
+      start({anchor: {kind: "block", id: figure.dataset.widget!, hash, state}});
+    });
   });
 }
 
@@ -171,4 +252,6 @@ if (typeof holdSwap === "function") {
   holdSwap((nodes) => nodes.some((node) =>
     node.matches("figure.artifact-live--expanded") ||
     node.querySelector("figure.artifact-live--expanded") !== null));
+  commentChrome();
+  document.addEventListener("lotuspod:swapped", commentChrome);
 }

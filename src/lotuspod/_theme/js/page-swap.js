@@ -314,6 +314,10 @@ function pageSwap() {
       const note = fresh.querySelector(".artifact-live-note");
       if (note)
         frame.before(note);
+      old.querySelector(".artifact-live-chrome > .artifact-live-decisions")?.remove();
+      const decisions = fresh.querySelector(".artifact-live-chrome > .artifact-live-decisions");
+      if (decisions)
+        old.querySelector(".artifact-live-chrome > .artifact-live-open")?.after(decisions);
       if (frame.hasAttribute("data-height-fixed") || freshFrame.hasAttribute("data-height-fixed")) {
         frame.height = freshFrame.height;
       }

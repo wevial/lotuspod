@@ -433,18 +433,30 @@ class MigrationTests(unittest.TestCase):
             conn.execute("PRAGMA user_version = 15")
             conn.commit()
 
+            # Columns later migrations add, which the inbox's leaves alone.
+            later = {("comments", "widget")}
+
             def snapshot() -> dict:
                 tables = conn.execute(
-                    "SELECT name, sql FROM sqlite_master WHERE name NOT LIKE '%inbox%'"
+                    "SELECT name, type FROM sqlite_master WHERE name NOT LIKE '%inbox%'"
                     " ORDER BY name").fetchall()
-                return {name: (sql, conn.execute(f'SELECT * FROM "{name}"').fetchall()
-                               if sql and sql.startswith("CREATE TABLE") else None)
-                        for name, sql in tables}
+                shot = {}
+                for name, kind in tables:
+                    if kind != "table":
+                        shot[name] = None
+                        continue
+                    columns = [row[1] for row in conn.execute(f'PRAGMA table_info("{name}")')
+                               if (name, row[1]) not in later]
+                    listed = ", ".join(f'"{column}"' for column in columns)
+                    shot[name] = (columns,
+                                  conn.execute(f'SELECT {listed} FROM "{name}"').fetchall())
+                return shot
 
             before = snapshot()
             database = db.Database(path)
             self.assertEqual(database.inbox("operator", time.time()), [])
-            self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 16)
+            self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0],
+                             db.SCHEMA_VERSION)
             self.assertEqual(snapshot(), before)
             item = database.queue(owner="operator", page="ops", comment=1, ask="file it")
             self.assertEqual((item["id"], item["comment"], item["doneAt"]), (1, 1, None))

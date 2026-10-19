@@ -146,6 +146,7 @@
       parent: fields.parent,
       text: fields.text,
       quote: fields.quote || null,
+      widget: null,
       images: [],
       actor: fields.actor,
       createdAt: now(),
