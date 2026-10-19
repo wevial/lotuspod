@@ -131,9 +131,12 @@ async function timeline(page: Page) {
   return {
     mark,
     async write() {
-      await Promise.all(reading);
+      // The network's entries as of now, and the body reads they wait on;
+      // an answer arriving after this stays out of the report.
+      const kept = seen.slice();
+      await Promise.all(reading.slice());
       const inPage: Moment[] = await page.evaluate(() => (window as any).__timeline ?? []).catch(() => []);
-      const all = [...seen, ...inPage.map((moment) => ({ ...moment, kind: `page: ${moment.kind}` }))]
+      const all = [...kept, ...inPage.map((moment) => ({ ...moment, kind: `page: ${moment.kind}` }))]
         .sort((a, b) => a.ms - b.ms);
       const file = test.info().outputPath('timeline.json');
       fs.writeFileSync(file, JSON.stringify(all, null, 2), 'utf-8');
