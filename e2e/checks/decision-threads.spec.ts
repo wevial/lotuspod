@@ -75,6 +75,77 @@ async function watch(page: Page, answered: string[] = []) {
   };
 }
 
+type Moment = { ms: number; kind: string; detail: unknown };
+
+// What the page and the network did, in order, timed from here: the page's
+// own loads, the live-update stream, the revision checks, the comments the
+// page reads and posts, and on the page each live change, swap, change of
+// its revision and of decision-1's status line. A check adds its own steps
+// with mark(), and write() puts it all in the test's results.
+async function timeline(page: Page) {
+  const start = Date.now();
+  const seen: Moment[] = [];
+  const mark = (kind: string, detail: unknown = null) => seen.push({ ms: Date.now() - start, kind, detail });
+  page.on('request', (request) => {
+    const url = new URL(request.url());
+    if (url.pathname === PAGE) mark('page requested', url.pathname + url.search);
+    else if (url.pathname === '/api/events') mark('events opened', url.pathname + url.search);
+  });
+  page.on('response', (response) => {
+    const request = response.request();
+    const url = new URL(response.url());
+    if (url.pathname === PAGE) {
+      mark('page answered', { status: response.status() });
+    } else if (url.pathname === '/api/revision') {
+      const moment = { ms: Date.now() - start, kind: 'revision answered', detail: { status: response.status() } as any };
+      seen.push(moment);
+      response.json().then((body) => { moment.detail.revision = body.revision; }, () => {});
+    } else if (url.pathname === '/api/comments') {
+      const detail: any = { method: request.method(), status: response.status() };
+      if (request.method() === 'POST') detail.revision = request.postDataJSON()?.revision;
+      mark('comments answered', detail);
+    }
+  });
+  await page.addInitScript((zero: number) => {
+    const w = window as any;
+    const moments: Moment[] = [];
+    w.__timeline = moments;
+    const note = (kind: string, detail: unknown) => moments.push({ ms: Date.now() - zero, kind, detail });
+    document.addEventListener('lotuspod:change', (event) => note('change', (event as CustomEvent).detail));
+    document.addEventListener('lotuspod:swapped', (event) =>
+      note('swapped', { revision: (event as CustomEvent).detail?.revision }));
+    let revision: string | null = null;
+    let status: string | null = null;
+    const look = () => {
+      const now = document.querySelector('meta[name="lotuspod:revision"]')?.getAttribute('content') ?? null;
+      if (now !== revision) note('revision', { from: revision, to: (revision = now) });
+      const line = document.querySelector('form.artifact-decision[data-question="decision-1"] .artifact-decision-status');
+      const text = line ? line.textContent : null;
+      if (text !== status) note('decision-1 status', { from: status, to: (status = text) });
+    };
+    new MutationObserver(look).observe(document, {
+      subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['content'],
+    });
+  }, start);
+  return {
+    mark,
+    async write() {
+      const inPage: Moment[] = await page.evaluate(() => (window as any).__timeline ?? []).catch(() => []);
+      const all = [...seen, ...inPage.map((moment) => ({ ...moment, kind: `page: ${moment.kind}` }))]
+        .sort((a, b) => a.ms - b.ms);
+      const file = test.info().outputPath('timeline.json');
+      fs.writeFileSync(file, JSON.stringify(all, null, 2), 'utf-8');
+      await test.info().attach('timeline', { path: file, contentType: 'application/json' });
+    },
+  };
+}
+
+// The revision a published page's HTML carries.
+function publishedRevision(html: string) {
+  const meta = html.match(/<meta\s[^>]*name=["']lotuspod:revision["'][^>]*>/i)?.[0] ?? '';
+  return meta.match(/content=["']([^"']*)["']/i)?.[1] ?? null;
+}
+
 function run(args: string[]) {
   return execFileSync(PYTHON, ['-m', 'lotuspod', ...args], {
     encoding: 'utf-8',
@@ -535,39 +606,48 @@ test.describe('signed in', () => {
 
   test('a page published again since it loaded keeps the question and says to reload', async ({ page }) => {
     test.setTimeout(120_000);
+    // A failing run writes what happened, in order, into its results.
+    const line = await timeline(page);
     const seen = await watch(page, ['409 (Conflict)']);
-    const ids = new Set<number>();
-    await ownThreads(page, ids);
-    await unanswered(page);
-    await load(page);
-    const before = (await revisionOf(page))!;
-    // Keep the loaded document stale even if a live-update notification arrives
-    // before Ask. The real publish and comments API still use the new revision.
-    const loaded = fs.readFileSync(path.join(OUT, `${SLUG}.html`), 'utf-8');
-    await page.route((url) => url.pathname === PAGE, (route) =>
-      route.fulfill({ contentType: 'text/html', body: loaded }));
-    const source = fs.readFileSync(path.join(path.dirname(OUT), `${SLUG}.md`), 'utf-8');
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lotuspod-decision-threads-'));
     try {
-      const file = path.join(dir, `${SLUG}.md`);
-      fs.writeFileSync(file, source.replace('the pump stops with it.', 'the pump stops with it, every year.'), 'utf-8');
-      run(['publish', file, '--local', '--out-dir', OUT, '--comments', '--owner', OWNER,
-        '--credential', HERMES, '--expect-revision', before]);
-    } finally {
-      fs.rmSync(dir, { recursive: true, force: true });
+      const ids = new Set<number>();
+      await ownThreads(page, ids);
+      await unanswered(page);
+      await load(page);
+      const before = (await revisionOf(page))!;
+      // Keep the loaded document stale even if a live-update notification arrives
+      // before Ask. The real publish and comments API still use the new revision.
+      const loaded = fs.readFileSync(path.join(OUT, `${SLUG}.html`), 'utf-8');
+      await page.route((url) => url.pathname === PAGE, (route) =>
+        route.fulfill({ contentType: 'text/html', body: loaded }));
+      const source = fs.readFileSync(path.join(path.dirname(OUT), `${SLUG}.md`), 'utf-8');
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lotuspod-decision-threads-'));
+      try {
+        const file = path.join(dir, `${SLUG}.md`);
+        fs.writeFileSync(file, source.replace('the pump stops with it.', 'the pump stops with it, every year.'), 'utf-8');
+        run(['publish', file, '--local', '--out-dir', OUT, '--comments', '--owner', OWNER,
+          '--credential', HERMES, '--expect-revision', before]);
+      } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
+      line.mark('republished', { revision: publishedRevision(fs.readFileSync(path.join(OUT, `${SLUG}.html`), 'utf-8')) });
+      const words = 'Will the heater be enough?';
+      const refused = page.waitForResponse((response) =>
+        response.request().method() === 'POST' && new URL(response.url()).pathname === '/api/comments');
+      line.mark('ask');
+      await ask(page, 'decision-1', words);
+      expect((await refused).status()).toBe(409);
+      expect(await revisionOf(page)).toBe(before);
+      const first = decision(page, 'decision-1');
+      await expect(first.status).toHaveText(STALE);
+      await expect(first.note).toHaveValue(words);
+      expect(ids.size).toBe(0);
+      await expect(first.chip).toHaveCount(0);
+      await seen.clean();
+    } catch (error) {
+      await line.write();
+      throw error;
     }
-    const words = 'Will the heater be enough?';
-    const refused = page.waitForResponse((response) =>
-      response.request().method() === 'POST' && new URL(response.url()).pathname === '/api/comments');
-    await ask(page, 'decision-1', words);
-    expect((await refused).status()).toBe(409);
-    expect(await revisionOf(page)).toBe(before);
-    const first = decision(page, 'decision-1');
-    await expect(first.status).toHaveText(STALE);
-    await expect(first.note).toHaveValue(words);
-    expect(ids.size).toBe(0);
-    await expect(first.chip).toHaveCount(0);
-    await seen.clean();
   });
 });
 
