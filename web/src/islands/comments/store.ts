@@ -57,6 +57,9 @@ export function store(page: Page, bridge: StoreBridge): Store {
   // SLOW_MS draws the chips anyway, so the reader can still write.
   let settled = false;
   const SLOW_MS = 1000;
+  // Set on the root element once the first read has ended and drawn the
+  // chips (the SLOW_MS draw does not set it), so a check can wait for it.
+  const READ = "data-lotuspod-comments-read";
   // A note's thread not read yet (owe), and how many notes were saved:
   // only a read begun after the newest finds its thread.
   let owed = false;
@@ -336,6 +339,7 @@ export function store(page: Page, bridge: StoreBridge): Store {
         settled = true;
         page.settleImageCap(null, page.signedOut);
         signedOut();
+        document.documentElement.setAttribute(READ, "");
         bridge.restore();
         return;
       }
@@ -360,6 +364,7 @@ export function store(page: Page, bridge: StoreBridge): Store {
     reading = false;
     settled = true;
     refresh();
+    document.documentElement.setAttribute(READ, "");
     bridge.restore();
     if (!linked || relink) {
       // A link followed before the first read is no reload's fragment.

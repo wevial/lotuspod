@@ -93,7 +93,10 @@ waits or one is in view, each gap half again as long as the last, from 3 up to
 30 seconds; at once on a tick from serve's stream or when the page is seen
 again, never once signed out. Each read settles the image cap, tells
 `live.seen` its revision, draws the parts, then gives back what was kept over
-a reload, then, the first time, opens a `#thread=ID` link. The store creates
+a reload, then, the first time, opens a `#thread=ID` link. Once the first
+read has ended (answered or failed) and drawn the chips, the store sets
+`data-lotuspod-comments-read` on the root element, which the composer checks
+wait for; the draw after `SLOW_MS` does not set it. The store creates
 the thread, composer, passages and placement parts and hands them its state
 directly; its start draws the passages and the panel, arranges them and makes
 the first read. comments.js keeps the unread replies, a decision's Ask, drafts
