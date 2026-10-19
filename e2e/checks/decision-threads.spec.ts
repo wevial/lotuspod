@@ -139,7 +139,6 @@ async function timeline(page: Page) {
   };
 }
 
-// The revision a published page's HTML carries.
 function publishedRevision(html: string) {
   const meta = html.match(/<meta\s[^>]*name=["']lotuspod:revision["'][^>]*>/i)?.[0] ?? '';
   return meta.match(/content=["']([^"']*)["']/i)?.[1] ?? null;
