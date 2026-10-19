@@ -79,7 +79,7 @@ export function store(page: Page, bridge: StoreBridge): Store {
   let passages: Passages | null = null;
 
   const replies = makeReplies(page, {
-    page: name, shown, revision, refresh, add, posted, owe, readNow,
+    page: name, shown, revision, refresh, add, posted, owe,
     rows: thread => rows(thread), markUnread: thread => markUnread(thread),
     placement: () => panel!,
   });
@@ -466,10 +466,11 @@ export function store(page: Page, bridge: StoreBridge): Store {
   });
 
   // An answer saved with a note opens a thread on its decision, or adds to
-  // one: a read is called for until one begun after it finds it.
+  // one: a read is called for at once, and until one begun after it finds it.
   function owe() {
     owed = true;
     notes += 1;
+    readNow();
   }
 
   return {

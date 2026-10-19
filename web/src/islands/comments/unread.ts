@@ -12,7 +12,6 @@ interface RepliesBridge {
   add(entry: { root: CommentRow; replies: CommentRow[] }): boolean;
   posted(): void;
   owe(): void;
-  readNow(): void;
   placement(): Placement;
 }
 
@@ -130,7 +129,6 @@ export function replies(page: Page, bridge: RepliesBridge) {
   function noted(event: Event) {
     if (!(event as CustomEvent<Saved>).detail.comment) return;
     bridge.owe();
-    bridge.readNow();
   }
 
   // Each decision's Ask, beside "Save answer": the note's text posted as a
