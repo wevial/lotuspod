@@ -45,8 +45,8 @@ bundles `web/src/islands/main.tsx` with its imports and Preact (pinned in
 `web/package.json` as a dependency) with `Bun.build` into
 `src/lotuspod/_theme/js/islands.js`, after its marker line, as one minified
 IIFE for the browser with no source map, JSX through Preact's automatic
-runtime. `THEME_SOURCES` declares it directly after comments.js inside the shared
-closure: comments start before later sources find the panel and register
+runtime. `THEME_SOURCES` declares it directly after comment-markdown.js inside
+the shared closure: comments start before later sources find the panel and register
 their listeners, and never on a pod that goes to the index
 (`js/open-in-tabs.js`). Neither the index script nor the old-version script
 has it. The islands reach the legacy page only through
@@ -78,13 +78,14 @@ truth: the sheet draws from them on each form's `input`, `change` and
 `answering.save()`, one question at a time in page order. Preact holds only
 the sheet's own state: the panel open, a Save under way, what it did, and
 the question Next open last jumped to, which a swap keeps. The bundle, Preact with it, stays at most
-44,000 bytes gzipped; it uses Preact and its hooks, with `createPortal` from
+47,000 bytes gzipped; it uses Preact and its hooks, with `createPortal` from
 `preact/compat` for independently owned DOM targets.
 
 The comments island (`web/src/islands/comments/index.ts`) mounts after the
-review sheet and starts the bridge's typed `commenting` object, null on pages
-without comment boxes. It supplies the one factory declared in `parts.ts`, the
-store (`comments/store.ts`), which holds the thread state: the sections,
+review sheet and starts the page itself as it mounts, on a page with comment
+boxes: it reads the boxes, adds the whole page's box (`pageBox`) and starts
+the drafts part (`comments/drafts.ts`), which creates the store
+(`comments/store.ts`). The store holds the thread state: the sections,
 boxes' forms, threads and attachments by form, all Maps, and the revision the
 page shows, which a swap moves on. It adds a thread or merges what a read
 brings (true when anything was drawn), keeps the list at the end of the body
@@ -110,17 +111,26 @@ nothing. It gives each decision form its Ask, which posts the note to
 `/api/comments` as a question thread with `page`, `question`, `text` and
 `revision`, empties and folds the note unless it changed while sending, adds
 the thread and opens it (`asked`), and on `SAVED` with a comment reads the
-threads at once. comments.js keeps drafts over a reload, swaps and `pageBox`,
-and reaches the threads through the store (`refresh`, `retitle`, `askAbout`
-for a swap's decision forms, the Maps); the store reaches those through its
-bridge. The bridge supplies `settleImageCap`, `NO_CAP`, `CHANGED`,
-`NO_QUESTION`, `STALE_QUESTION`, `imageWords` and `all`, and types `SAVED`'s
-detail.
+threads at once. The drafts part keeps what is unsent over a reload
+(`live.keep`, `live.kept`, `live.place`): each composer's text and images,
+what was open and a passage composer's words; text whose place a new
+revision dropped goes to a section's form with `PLACE_GONE` or
+`PASSAGE_GONE` beside it. It handles `SWAPPED`, remounting the boxes a swap
+replaced, took away or added with their threads, forms and decision forms,
+and registers the `holdSwap` test that holds back a section whose form holds
+unsent text or whose words the open passage composer quotes. One map,
+`takenAt`, keeps the index a section had when a swap first took it away, for
+both paths. It reaches the threads through the store (`refresh`, `retitle`,
+`askAbout` for a swap's decision forms, the composer handles, the Maps); the
+store reaches its `restore` and `boxWith` through its bridge. The bridge
+supplies `holdSwap`, `PLACE_GONE`, `PASSAGE_GONE`, `settleImageCap`,
+`NO_CAP`, `CHANGED`, `NO_QUESTION`, `STALE_QUESTION`, `imageWords` and
+`all`, and types `SWAPPED`'s and `SAVED`'s detail.
 Placement creates the shell, thread-list and chips parts.
 The shell draws the panel frame, rail, tally and start controls. The thread-list
 part draws section groups, changed-section threads, entry heads and resolution
 controls. Its typed bridge reads the page's thread objects and passage helpers;
-comments.js still owns thread containers and drafts. The thread part
+the store owns thread containers and the drafts part owns drafts. The thread part
 (`comments/thread.tsx`) owns each list’s rows, notices, typing bubble and unread
 marks. Its typed bridge reads unread state and checking, and supplies the shared
 markdown, image and time helpers. Stable keyed comments keep their first row
@@ -135,7 +145,7 @@ immediate layout reads. Entry leads and status words retain separate redraw keys
 On resize, placement takes the open view before changing modes, suppresses
 thread opening and closing while moving it, then restores the focused field.
 Across swaps, it reads the page-owned boxes and sections map to find replacement
-anchors; the page still owns drafts and the swap itself.
+anchors; the drafts part owns drafts and `web/src/page-swap.ts` the swap itself.
 The chips part (`comments/chips.tsx`) draws section, whole-page and decision
 chips synchronously. Served summaries are emptied once before rendering; decision
 buttons are independent roots after their forms. A keyed line replaces changed
@@ -157,9 +167,9 @@ pill and its shortcut, passage highlights and numbering, hover lighting, and
 finding words again after a swap. It reads passage quotes through the typed anchor.
 The bridge supplies the text-model helpers and passage constants; highlights wrap
 and unwrap author text imperatively, while the pill alone renders through a portal
-into the body. The composer part draws the movable passage composer. Drafts and
-swaps remain in comments.js and call the part's writing, reopen, swept, moved and
-writes handles; moved still runs before swaps replace the boxes.
+into the body. The composer part draws the movable passage composer. The drafts
+part calls the part's writing, reopen, swept, moved and writes handles for drafts
+and swaps; moved still runs before swaps replace the boxes.
 `comments/anchor.ts` interprets each first comment as a page, section, passage or
 decision anchor. Mark, words and rank each exhaustively handle that union, so a
 future kind must be handled in all three places and in placement's exhaustive

@@ -218,7 +218,7 @@
       // The link and the version menu's button (js/version-menu.js) take
       // the slot the theme kept for them at the end of the line, so the
       // header does not move when they arrive; only the badge of replies to
-      // the reader (js/comments.js) comes after them.
+      // the reader (the comments island) comes after them.
       var current = versions.find(function (version) { return version.current; });
       var menu = versionMenu(versions, page, current ? current.commit : null,
         found ? found.since.commit : null);

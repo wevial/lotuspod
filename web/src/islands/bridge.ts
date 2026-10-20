@@ -1,7 +1,5 @@
-import type { Commenting } from "./comments/parts";
-
 // Islands reach the legacy closure only through page. The bundle follows
-// comments.js inside THEME_CLOSURES (src/lotuspod/cli.py); a minifier never
+// comment-markdown.js inside THEME_CLOSURES (src/lotuspod/cli.py); a minifier never
 // renames its free names. Reading each as the bundle loads makes a missing
 // name throw on every page at once.
 
@@ -59,8 +57,6 @@ export interface Answering {
   read: boolean;
 }
 
-// js/comments.js publishes the page start; the island supplies its parts.
-declare const commenting: Commenting | null;
 // js/page-open.js: shell text, storage keys and the whole-page section id.
 declare const CLOSED: string;
 declare const PANEL: string;
@@ -96,6 +92,13 @@ declare const SAVED: string;
 declare const DRAWN: string;
 // js/page-open.js: sent on the document once a swap is applied.
 declare const SWAPPED: string;
+// web/src/page-swap.ts: hold back from a swap each part whose nodes test
+// says to, told whether the new revision took the part away.
+declare function holdSwap(test: (nodes: readonly Element[], removed: boolean) => boolean): void;
+// js/page-open.js: what a draft whose place a new revision dropped says on
+// the form it went to: a passage's words gone, or any other place.
+declare const PASSAGE_GONE: string;
+declare const PLACE_GONE: string;
 
 declare function commentMarkdown(node: HTMLDivElement, text: string): HTMLDivElement;
 declare function commentImages(row: CommentRow): HTMLUListElement | null;
@@ -130,7 +133,9 @@ export const page = Object.freeze({
   signedOut: SIGNED_OUT, stalePage: STALE_PAGE, staleSection: STALE_SECTION,
   noQuestion: NO_QUESTION, staleQuestion: STALE_QUESTION,
   commentMarkdown, commentImages, when,
-  commenting,
+  holdSwap,
+  passageGone: PASSAGE_GONE,
+  placeGone: PLACE_GONE,
   room: ROOM,
   popover: POPOVER,
   overText,
@@ -160,7 +165,20 @@ export type Page = typeof page;
 export interface Widget { id: string; hash: string; state: string }
 export type StartComment = (request: { anchor: { kind: "block" } & Widget }) => void;
 
-// State still owned by comments.js. The list reads the same objects that
+// One part of the page a swap changed (web/src/page-swap.ts): the header,
+// the outline, the intro, a section or the references block, with the nodes
+// it took out, detached, and put in.
+export interface SwappedUnit {
+  kind: "header" | "outline" | "intro" | "section" | "refs";
+  id: string;
+  change: "changed" | "added" | "removed";
+  before: Node[];
+  after: Node[];
+}
+// SWAPPED's detail: the revision the page now shows, and each part changed.
+export interface Swapped { revision: string; units: SwappedUnit[] }
+
+// The thread state the parts share. The list reads the same objects that
 // polling, passages and swaps update; it does not keep a second thread store.
 export interface CommentRow {
   id: number;
@@ -262,9 +280,9 @@ export interface NarrowBridge extends Pick<import("./comments/parts").ThreadList
   standsFor(box: HTMLElement): HTMLElement | null;
 }
 
-// What the store reaches comments.js by: the boxes and decision forms,
-// which swaps change in place, and the drafts and the box a form stands
-// for, which comments.js still owns.
+// What the store reaches the drafts (comments/drafts.ts) by: the boxes and
+// decision forms, which swaps change in place, and the drafts and the box a
+// form stands for, which the drafts own.
 export interface StoreBridge {
   boxes: HTMLElement[];
   decisions: HTMLFormElement[];

@@ -125,7 +125,7 @@
   }
 
   // What the address's fragment gives name as #NAME=VALUE, decoded: a link
-  // from the index's Recent activity, #thread=ID (js/comments.js) or
+  // from the index's Recent activity, #thread=ID (the comments island) or
   // #question=ID (the review sheet, web/src/islands/review-sheet.tsx, reads
   // it through web/src/islands/bridge.ts). Null for any other fragment, and,
   // read as the page opens (first), for a page reloaded, by the reader or by

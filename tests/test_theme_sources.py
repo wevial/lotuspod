@@ -135,40 +135,41 @@ class DeclaredOrderTests(ThemeCopyTestCase):
 
     def test_the_popover_and_bottom_sheet_sources_are_declared_beside_the_comments(self):
         """LOTUS-37: the narrow script runs before the comments start, so it
-        is joined before js/comments.js; its styles win at equal specificity,
-        so they are joined after css/comments.css."""
+        is joined before js/islands.js, which starts them (LOTUS-206); its
+        styles win at equal specificity, so they are joined after css/comments.css."""
         styles = cli.THEME_SOURCES[STYLESHEET]
         script = cli.THEME_SOURCES[cli.PAGE_SCRIPT]
         self.assertIn("css/narrow.css", styles)
         self.assertIn("js/narrow.js", script)
         self.assertGreater(styles.index("css/narrow.css"), styles.index("css/comments.css"))
-        self.assertLess(script.index("js/narrow.js"), script.index("js/comments.js"))
+        self.assertLess(script.index("js/narrow.js"), script.index("js/islands.js"))
 
     def test_the_live_page_sources_are_declared_before_the_comments_script(self):
         """LOTUS-41: the comments' reads hand the live page each revision
-        they carry, so its script is joined before js/comments.js."""
+        they carry, so its script is joined before js/islands.js, which
+        reads them (LOTUS-206)."""
         styles = cli.THEME_SOURCES[STYLESHEET]
         script = cli.THEME_SOURCES[cli.PAGE_SCRIPT]
         self.assertIn("css/live-page.css", styles)
         self.assertIn("js/live-page.js", script)
-        self.assertLess(script.index("js/live-page.js"), script.index("js/comments.js"))
+        self.assertLess(script.index("js/live-page.js"), script.index("js/islands.js"))
         problems = source_problems(cli.THEME_DIR, cli.THEME_SOURCES)
         self.assertEqual(problems, [], "\n".join(problems))
 
     def test_the_tables_script_is_declared_after_the_comments_script(self):
         """LOTUS-49: a table's room is measured against the comments panel,
-        which the comments script makes, so js/tables.js is joined after
-        js/comments.js, inside the closure the join closes after the last
-        source."""
+        which the comments island makes, so js/tables.js is joined after
+        js/islands.js (LOTUS-206), inside the closure the join closes after
+        the last source."""
         script = cli.THEME_SOURCES[cli.PAGE_SCRIPT]
         self.assertIn("js/tables.js", script)
-        self.assertGreater(script.index("js/tables.js"), script.index("js/comments.js"))
+        self.assertGreater(script.index("js/tables.js"), script.index("js/islands.js"))
         problems = source_problems(cli.THEME_DIR, cli.THEME_SOURCES)
         self.assertEqual(problems, [], "\n".join(problems))
 
     def test_the_panel_resize_sources_are_declared_after_the_comments(self):
         """LOTUS-51: the resize handle is added to the panel the comments
-        script makes, so js/panel-resize.js is joined after js/comments.js,
+        island makes, so js/panel-resize.js is joined after js/islands.js,
         inside the closure; its styles override the panel's, so they are
         joined after css/comments.css."""
         styles = cli.THEME_SOURCES[STYLESHEET]
@@ -176,7 +177,7 @@ class DeclaredOrderTests(ThemeCopyTestCase):
         self.assertIn("css/panel-resize.css", styles)
         self.assertIn("js/panel-resize.js", script)
         self.assertGreater(styles.index("css/panel-resize.css"), styles.index("css/comments.css"))
-        self.assertGreater(script.index("js/panel-resize.js"), script.index("js/comments.js"))
+        self.assertGreater(script.index("js/panel-resize.js"), script.index("js/islands.js"))
         problems = source_problems(cli.THEME_DIR, cli.THEME_SOURCES)
         self.assertEqual(problems, [], "\n".join(problems))
 
@@ -210,10 +211,11 @@ class DeclaredOrderTests(ThemeCopyTestCase):
 
     def test_the_comment_markdown_script_is_declared_before_the_comments_script(self):
         """LOTUS-92: a bubble's text is drawn by js/comment-markdown.js, so it
-        is joined before js/comments.js, which calls it."""
+        is joined before js/islands.js, whose comments call it; the islands
+        follow it directly, in js/comments.js's old place (LOTUS-206)."""
         script = cli.THEME_SOURCES[cli.PAGE_SCRIPT]
         self.assertIn("js/comment-markdown.js", script)
-        self.assertLess(script.index("js/comment-markdown.js"), script.index("js/comments.js"))
+        self.assertEqual(script.index("js/islands.js"), script.index("js/comment-markdown.js") + 1)
         self.assertGreater(script.index("js/comment-markdown.js"), script.index("js/page-open.js"))
 
     def test_the_ref_cards_sources_are_declared(self):
@@ -256,13 +258,16 @@ class DeclaredOrderTests(ThemeCopyTestCase):
 
     def test_the_review_sheet_is_an_island(self):
         """LOTUS-157: the review sheet is drawn by the islands bundle, after
-        js/comments.js and js/decisions.js, whose forms it reads: no script of
+        js/comment-markdown.js and js/decisions.js, whose forms it reads (no
+        js/comments.js since LOTUS-206): no script of
         its own is declared, and its styles stay css/review-sheet.css."""
         styles = cli.THEME_SOURCES[STYLESHEET]
         script = cli.THEME_SOURCES[cli.PAGE_SCRIPT]
         self.assertNotIn("js/review-sheet.js", script)
         self.assertFalse((cli.THEME_DIR / "js" / "review-sheet.js").exists())
-        self.assertEqual(script.index("js/islands.js"), script.index("js/comments.js") + 1)
+        self.assertNotIn("js/comments.js", script)
+        self.assertFalse((cli.THEME_DIR / "js" / "comments.js").exists())
+        self.assertEqual(script.index("js/islands.js"), script.index("js/comment-markdown.js") + 1)
         self.assertNotIn("js/islands.js", cli.THEME_SOURCES[cli.INDEX_SCRIPT])
         self.assertNotIn("js/islands.js", cli.THEME_SOURCES[cli.OLD_VERSION_SCRIPT])
         self.assertGreater(script.index("js/islands.js"), script.index("js/decisions.js"))

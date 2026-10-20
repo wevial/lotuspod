@@ -188,5 +188,9 @@ export function composers(page: Page, bridge: ComposerBridge) {
     });
     return handles;
   }
-  return { reply, wire, passage, label, failure, block, unblock, swapped, sending: bridge.sending };
+  // A thread's reply composer.
+  function handles(thread: Thread) {
+    return replies.get(thread)!;
+  }
+  return { reply, wire, passage, label, failure, block, unblock, swapped, fieldOf, handles, sending: bridge.sending };
 }

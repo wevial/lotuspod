@@ -19,7 +19,8 @@ interface Tick { what?: string; page?: string }
 // each is shown in its section's group, or, when the page no longer has
 // that section, in a list at the end of the body. The replies to the
 // reader and the decisions' Ask are the replies part's (comments/unread.ts).
-// comments.js keeps drafts and swaps, and reaches these through the part.
+// The drafts (comments/drafts.ts) keep drafts and swaps, and reach these
+// through the part.
 export function store(page: Page, bridge: StoreBridge): Store {
   const { boxes, decisions } = bridge;
   const name = boxes[0].dataset.page || "";
@@ -502,8 +503,8 @@ export function store(page: Page, bridge: StoreBridge): Store {
       });
       panel.arrange();
       page.startComment(startOn);
-      // After every listener of the swap has run, comments.js's and the
-      // live blocks' chrome among them.
+      // After every listener of the swap has run, the drafts' and the live
+      // blocks' chrome among them.
       document.addEventListener(page.events.swapped, () => queueMicrotask(() => {
         composer.swapped();
         rehome();
