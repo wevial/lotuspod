@@ -144,13 +144,18 @@ export function composers(page: Page, bridge: ComposerBridge) {
   // A swap took away the block a form is on, or moved it to another
   // section (boxOf: the box of a frame's section): the form is no longer on
   // it. A form on a block the swap changed stays on the version the reader
-  // saw, which the route takes as an earlier version of the block, and says so.
+  // saw, which the route takes as an earlier version of the block, and says so
+  // until the form is no longer on it.
   function swapped(boxOf: (frame: HTMLIFrameElement) => HTMLElement | null) {
     blocks.forEach((held, form) => {
+      const status = form.querySelector<HTMLElement>(".artifact-comment-status")!;
       const frame = frameOf(held.widget.id);
-      if (!frame || boxOf(frame) !== bridge.boxWith(form)) { unblock(form); return; }
-      if (blockStanding(held.widget) !== "changed") return;
-      form.querySelector<HTMLElement>(".artifact-comment-status")!.textContent = page.blockChanged;
+      if (!frame || boxOf(frame) !== bridge.boxWith(form)) {
+        unblock(form);
+        if (status.textContent === page.blockChanged) status.textContent = "";
+        return;
+      }
+      if (blockStanding(held.widget) === "changed") status.textContent = page.blockChanged;
     });
   }
   function wire(box: HTMLElement) {

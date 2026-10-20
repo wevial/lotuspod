@@ -22,10 +22,11 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from lotuspod import agents, cli, comments, db, responder  # noqa: E402
+from lotuspod import agents, cli, comments, db, responder, versions  # noqa: E402
 from tests.test_agent_pull import PullTestCase, run_cli  # noqa: E402
 
 TITLE = "Merge churn by worker count"
@@ -205,6 +206,17 @@ class EarlierVersionTests(AnchorCase):
         # before the change.
         self.assertEqual(self.item(row["id"])["block"]["status"], "changed")
         self.assertIn("The block has changed since this comment", self.markdown_pull())
+
+    def test_a_hash_older_than_the_versions_a_list_holds_is_taken_too(self):
+        # A list holding only the newest version leaves the first one out.
+        with mock.patch.object(versions, "MAX_VERSIONS", 1):
+            status, payload = self.reader("GET", "/api/versions?page=churn")
+            self.assertEqual(status, 200, payload)
+            self.assertEqual(len(payload["versions"]), 1)
+            status, row = self.post({"section": "throughput", "text": "Off.",
+                                     "widget": self.anchor(hash=self.first)})
+        self.assertEqual(status, 201, row)
+        self.assertEqual(row["widget"]["hash"], self.first)
 
     def test_a_hash_the_block_never_had_is_still_refused(self):
         before = self.stored()

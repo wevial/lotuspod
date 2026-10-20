@@ -489,3 +489,30 @@ test("a block's form refused for a block the page changed says so in words and k
   expect(next).toBe(refusals.length);
   expect(errors).toEqual([]);
 });
+
+test("a block's form whose block a later swap takes away no longer says it stays on the block", async ({ page }) => {
+  const name = `block-comments-updated-gone-${test.info().repeatEachIndex}`;
+  publish(name, doc(1));
+  const errors = watch(page);
+  await load(page, name);
+  const churn = panel(page).group('Churn');
+  const form = churn.locator('form.artifact-comment-form');
+  const field = form.locator('textarea[name="text"]');
+  const status = form.locator('.artifact-comment-status');
+  await block(page).comment.click();
+  await field.fill(QUESTION);
+  await swap(page, name, doc(2));
+  await expect(status).toHaveText(BLOCK_CHANGED);
+
+  // The block leaves the page: the form is a comment on its section.
+  await swap(page, name, doc(0));
+  await expect(page.locator('figure[data-widget="churn"]')).toHaveCount(0);
+  await expect(churn.locator('.artifact-comment-on')).toHaveCount(0);
+  await expect(field).toHaveValue(QUESTION);
+  await expect(status).toHaveText('');
+  const sent = posting(page);
+  await form.getByRole('button', { name: 'Comment', exact: true }).click();
+  expect((await sent).postDataJSON().widget).toBeUndefined();
+  await expect(churn.locator('.artifact-comments-entry')).toHaveCount(1);
+  expect(errors).toEqual([]);
+});

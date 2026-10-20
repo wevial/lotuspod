@@ -13,9 +13,10 @@ lotuspod:owner are kept, in memory by blob id: a blob never changes. A list
 runs at most two git processes, and one once its blobs are known; an old
 version's HTML runs at most two. A historical widget runs at most three:
 version()'s two, then one cat-file process for its bytes, which are never kept.
-block_hashes() is the widget file hashes one live block had in the listed
-versions, for the comments route: version()'s list, then one cat-file
-process for the blobs whose blocks are not known yet, kept by blob id.
+block_hashes() is the widget file hashes one live block had in every visible
+version, for the comments route: a list's two git processes, then one
+cat-file process for the blobs whose blocks are not known yet, kept by blob
+id.
 A version is listed only when its own page was visible, at most MAX_VERSIONS of them, and a directory that is not the
 top of its own repository has none. The whole history of the page is read,
 so the version before the oldest one listed is known too.
@@ -604,12 +605,14 @@ class History:
 
     def block_hashes(self, name: str, ident: str) -> frozenset[str]:
         """The hashes of the widget files live block ident had in NAME's
-        listed versions, from the blobs whose blocks are not known yet, read
-        in one process; none outside a repository, or when git failed."""
+        visible versions, every one of them, not only the MAX_VERSIONS a
+        list holds, from the blobs whose blocks are not known yet, read in
+        one process; none outside a repository, or when git failed."""
         commits = self._commits(name)
-        listed, _ = self._versions(commits)
-        blobs = {commit: blob for commit, _, _, blob in commits}
-        wanted = [blobs[version.commit] for version in listed]
+        self._read([blob for _, _, _, blob in commits])
+        with self._lock:
+            wanted = [blob for _, _, _, blob in commits
+                      if blob in self._stamps and self._stamps[blob][1]]
         with self._lock:
             missing = [blob for blob in dict.fromkeys(wanted) if blob not in self._blocks]
         texts = self._objects(missing) if missing else None
