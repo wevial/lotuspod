@@ -2,7 +2,7 @@ import { render } from "preact";
 import { createPortal } from "preact/compat";
 import type { CommentPayload, CommentRow, ComposerBridge, Page, Thread, Widget } from "../bridge";
 import type { ComposerHandles } from "./parts";
-import { frameOf } from "./anchor";
+import { blockStanding, blockTitle, frameOf, hashOf, stateOf } from "./anchor";
 
 type Quote = NonNullable<CommentRow["quote"]>;
 interface Body { page: string; text: string; parent?: number; section?: string; revision?: string; quote?: Quote; widget?: Widget; images?: string[] }
@@ -14,7 +14,13 @@ export function composers(page: Page, bridge: ComposerBridge) {
   const blocks = new Map<HTMLFormElement, { widget: Widget; line: HTMLParagraphElement }>();
   function failure(response: Response, payload: CommentPayload | null, stale = page.stalePage): string {
     if (response.status === 401) return page.signedOut;
-    if (response.status === 409 && payload?.error === "stale_page") return stale;
+    const code = payload?.error;
+    if (response.status === 409 && code === "stale_page") return stale;
+    if (response.status === 400 && code === "unknown_section") return stale;
+    if ((response.status === 409 && code === "stale_widget") || (response.status === 400 && code === "unknown_widget")) {
+      return page.staleBlock;
+    }
+    if (response.status === 409 && code === "archived") return page.closed;
     const error = payload?.error ? String(payload.error) : "status " + response.status;
     return "Not saved (" + error + "). Try again.";
   }
@@ -136,10 +142,17 @@ export function composers(page: Page, bridge: ComposerBridge) {
     held.line.remove();
     blocks.delete(form!);
   }
-  // A swap took away the block a form is on.
-  function swapped() {
+  // A swap took away the block a form is on, or moved it to another
+  // section (boxOf: the box of a frame's section): the form is no longer on
+  // it. A swap that changed the block holds the form on its new version.
+  function swapped(boxOf: (frame: HTMLIFrameElement) => HTMLElement | null) {
     blocks.forEach((held, form) => {
-      if (!frameOf(held.widget.id)) unblock(form);
+      const frame = frameOf(held.widget.id);
+      if (!frame || boxOf(frame) !== bridge.boxWith(form)) { unblock(form); return; }
+      if (blockStanding(held.widget) !== "changed") return;
+      const widget = { id: held.widget.id, hash: hashOf(frame), state: stateOf(frame) };
+      block(form, widget, blockTitle(widget));
+      form.querySelector<HTMLElement>(".artifact-comment-status")!.textContent = page.blockChanged;
     });
   }
   function wire(box: HTMLElement) {

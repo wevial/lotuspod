@@ -99,6 +99,11 @@ declare function holdSwap(test: (nodes: readonly Element[], removed: boolean) =>
 // the form it went to: a passage's words gone, or any other place.
 declare const PASSAGE_GONE: string;
 declare const PLACE_GONE: string;
+// js/page-open.js: what a section's form on a live block says when a swap
+// changed the block under it, and when a send was refused for a block the
+// page has changed since it loaded.
+declare const BLOCK_CHANGED: string;
+declare const STALE_BLOCK: string;
 
 declare function commentMarkdown(node: HTMLDivElement, text: string): HTMLDivElement;
 declare function commentImages(row: CommentRow): HTMLUListElement | null;
@@ -136,6 +141,8 @@ export const page = Object.freeze({
   holdSwap,
   passageGone: PASSAGE_GONE,
   placeGone: PLACE_GONE,
+  blockChanged: BLOCK_CHANGED,
+  staleBlock: STALE_BLOCK,
   room: ROOM,
   popover: POPOVER,
   overText,

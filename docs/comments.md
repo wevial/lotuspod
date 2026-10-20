@@ -270,7 +270,13 @@ its text takes the bar away. A page with comments updates in place too: a
 swapped section's comment box keeps its threads, its chip and its group in
 the comments panel, a thread open in the panel, a popover or the bottom sheet
 stays open, and a comment or reply not yet sent stays in its composer, text
-and images. Threads on a section the new revision removed or renamed are
+and images. A section's form opened from a live block's Comment stays on the
+block while the block is still in that section: when the new revision changed
+the block's widget file, the form moves, text and images kept, to the block's
+new version (its file and the state its chrome shows now), redraws its "On"
+line and says "This block was updated since you started. Your comment is now
+on its new version."; a block the new revision took away or moved to another
+section leaves the form a comment on its section. Threads on a section the new revision removed or renamed are
 listed under "Sections that have changed", as a fresh load lists them, and
 an added section gets its own group. Decision forms update in place too: a
 swapped section's forms are drawn from the stored answers as a reload draws
@@ -696,6 +702,15 @@ either side of them (fewer at the text's edges) and the page's
 `lotuspod:revision`. Answered `409 stale_page`, the composer keeps its text
 and says "This page has changed since it loaded. Reload it to comment on this
 passage."
+
+A composer refused for a change to the page says so in words and keeps its
+text and images: 409 `stale_page` and 400 `unknown_section` say "This page has
+changed since it loaded. Reload it to comment." on a section's form (the
+passage line above on a passage composer); 409 `stale_widget` and 400
+`unknown_widget`, on a form on a live block, say "This block has changed
+since the page loaded. Reload the page to comment on its new version.", the
+form staying on the block; and 409 `archived` says "Comments are closed: this
+page is archived." Any other refusal says "Not saved (CODE). Try again."
 
 Each unresolved thread whose first comment quotes a passage is found in the
 page's text whenever it is read, on any revision: among the occurrences of

@@ -30,6 +30,9 @@ const QUESTION = 'Reruns look high';
 // thread hermes's credential may not claim: the reader asks hermes in it.
 const ASK = '@hermes Is it the shared migration file?';
 const REPLY = 'Mostly the shared migration file.';
+// js/page-open.js's BLOCK_CHANGED and STALE_BLOCK.
+const BLOCK_CHANGED = 'This block was updated since you started. Your comment is now on its new version.';
+const STALE_BLOCK = 'This block has changed since the page loaded. Reload the page to comment on its new version.';
 
 // A page whose first section holds the block, drawn as version says; none
 // at all when version is 0. Its second section keeps a block of its own, so
@@ -432,6 +435,7 @@ test("a block's form kept over a swap that changes the block moves to its new ve
   expect(hash).not.toBe(first);
   await expect(field).toHaveValue(QUESTION);
   await expect(churn.locator('.artifact-comment-on')).toHaveText(WORDS);
+  await expect(status).toHaveText(BLOCK_CHANGED);
 
   const sent = posting(page);
   const answered = page.waitForResponse((response) => new URL(response.url()).pathname === '/api/comments' &&
@@ -445,5 +449,39 @@ test("a block's form kept over a swap that changes the block moves to its new ve
   expect(response.status(), `the status reads "${said}"`).toBe(201);
   expect(body.widget).toEqual({ id: 'churn', hash, state: '' });
   await expect(churn.locator('.artifact-comments-entry')).toHaveCount(1);
+  expect(errors).toEqual([]);
+});
+
+test("a block's form refused for a block the page changed says so in words and keeps its text", async ({ page }) => {
+  const name = `block-comments-refused-${test.info().repeatEachIndex}`;
+  publish(name, doc(1));
+  const errors = watch(page);
+  const refusals = [{ status: 409, error: 'stale_widget' }, { status: 400, error: 'unknown_widget' }];
+  let next = 0;
+  await page.route((url) => url.pathname === '/api/comments', async (route) => {
+    if (route.request().method() !== 'POST') return route.fallback();
+    const refusal = refusals[next++];
+    await route.fulfill({ status: refusal.status, json: { error: refusal.error } });
+  });
+  await load(page, name);
+  const churn = panel(page).group('Churn');
+  const form = churn.locator('form.artifact-comment-form');
+  const field = form.locator('textarea[name="text"]');
+  const status = form.locator('.artifact-comment-status');
+  await block(page).comment.click();
+  await expect(churn.locator('.artifact-comment-on')).toHaveText(WORDS);
+  await field.fill(QUESTION);
+  for (const refusal of refusals) {
+    const sent = posting(page);
+    await form.getByRole('button', { name: 'Comment', exact: true }).click();
+    expect((await sent).postDataJSON().widget).toMatchObject({ id: 'churn' });
+    await expect(status).toHaveText(STALE_BLOCK);
+    await expect(field).toHaveValue(QUESTION);
+    await expect(churn.locator('.artifact-comment-on')).toHaveText(WORDS);
+    const said = await panel(page).aside.textContent();
+    expect(said).not.toContain('stale_widget');
+    expect(said).not.toContain('unknown_widget');
+  }
+  expect(next).toBe(refusals.length);
   expect(errors).toEqual([]);
 });

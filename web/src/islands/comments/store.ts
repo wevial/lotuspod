@@ -506,7 +506,7 @@ export function store(page: Page, bridge: StoreBridge): Store {
       // After every listener of the swap has run, the drafts' and the live
       // blocks' chrome among them.
       document.addEventListener(page.events.swapped, () => queueMicrotask(() => {
-        composer.swapped();
+        composer.swapped(frame => boxOn(sectionOf(frame)));
         rehome();
         refresh();
       }));
