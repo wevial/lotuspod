@@ -408,3 +408,42 @@ test('a block republished in another section, its own gone, takes its thread wit
   await expect(block(page).pin).toHaveText('1');
   expect(errors).toEqual([]);
 });
+
+test("a block's form kept over a swap that changes the block moves to its new version and sends it", async ({ page }) => {
+  const name = `block-comments-swapped-${test.info().repeatEachIndex}`;
+  publish(name, doc(1));
+  const errors = watch(page);
+  await load(page, name);
+  const first = await hashOf(page);
+  const churn = panel(page).group('Churn');
+  const form = churn.locator('form.artifact-comment-form');
+  const field = form.locator('textarea[name="text"]');
+  const status = form.locator('.artifact-comment-status');
+  await block(page).comment.click();
+  await expect(churn.locator('.artifact-comment-on')).toHaveText(WORDS);
+  await field.fill(QUESTION);
+
+  // The block's script changes under the same id while the form is open.
+  await swap(page, name, doc(2));
+  await expect(page.frameLocator('figure[data-widget="churn"] iframe').locator('body'))
+    .toHaveAttribute('data-version', '2');
+  const hash = await hashOf(page);
+  console.log(`frame's src before the send: first hash ${first}, now ${hash}`);
+  expect(hash).not.toBe(first);
+  await expect(field).toHaveValue(QUESTION);
+  await expect(churn.locator('.artifact-comment-on')).toHaveText(WORDS);
+
+  const sent = posting(page);
+  const answered = page.waitForResponse((response) => new URL(response.url()).pathname === '/api/comments' &&
+    response.request().method() === 'POST');
+  await form.getByRole('button', { name: 'Comment', exact: true }).click();
+  const body = (await sent).postDataJSON();
+  const response = await answered;
+  await expect(status).not.toHaveText('Saving...');
+  const said = (await status.count()) ? await status.textContent() : '';
+  console.log(`sent widget ${JSON.stringify(body.widget)}, answered ${response.status()}, status "${said}"`);
+  expect(response.status(), `the status reads "${said}"`).toBe(201);
+  expect(body.widget).toEqual({ id: 'churn', hash, state: '' });
+  await expect(churn.locator('.artifact-comments-entry')).toHaveCount(1);
+  expect(errors).toEqual([]);
+});
