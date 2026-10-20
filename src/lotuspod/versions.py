@@ -613,7 +613,6 @@ class History:
         with self._lock:
             wanted = [blob for _, _, _, blob in commits
                       if blob in self._stamps and self._stamps[blob][1]]
-        with self._lock:
             missing = [blob for blob in dict.fromkeys(wanted) if blob not in self._blocks]
         texts = self._objects(missing) if missing else None
         for blob, text in zip(missing, texts or []):
