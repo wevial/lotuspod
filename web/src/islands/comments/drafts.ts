@@ -64,19 +64,23 @@ export function drafts(page: Page, boxes: HTMLElement[]): void {
 
   // Each composer of a section's form or a thread's reply, with what it
   // is kept by over a reload: its thread, its section and where the
-  // section's box is among the page's.
+  // section's box is among the page's (for a section a swap holds back
+  // as it takes it away, where it was then, as a swap's Update keeps).
+  function placeOf(box: HTMLElement): number {
+    return takenAt.has(box) ? takenAt.get(box)! : boxes.indexOf(box);
+  }
   function composers(): Composing[] {
     const found: Composing[] = [];
     forms.forEach((form, box) => {
       found.push({
-        section: box.dataset.section, index: boxes.indexOf(box), field: fieldOf(form),
+        section: box.dataset.section, index: placeOf(box), field: fieldOf(form),
         images: attached.get(form)!,
       });
     });
     shown.forEach(thread => {
       const reply = handles(thread);
       found.push({
-        thread: thread.root.id, section: thread.root.section, index: boxes.indexOf(thread.box!),
+        thread: thread.root.id, section: thread.root.section, index: placeOf(thread.box!),
         field: reply.field, images: attached.get(reply.form)!,
       });
     });
