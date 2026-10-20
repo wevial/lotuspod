@@ -2,7 +2,7 @@ import { render } from "preact";
 import { createPortal } from "preact/compat";
 import type { CommentPayload, CommentRow, ComposerBridge, Page, Thread, Widget } from "../bridge";
 import type { ComposerHandles } from "./parts";
-import { blockStanding, frameOf } from "./anchor";
+import { blockStanding, frameOf, hashOf } from "./anchor";
 
 type Quote = NonNullable<CommentRow["quote"]>;
 interface Body { page: string; text: string; parent?: number; section?: string; revision?: string; quote?: Quote; widget?: Widget; images?: string[] }
@@ -11,7 +11,8 @@ export function composers(page: Page, bridge: ComposerBridge) {
   const replies = new WeakMap<Thread, ComposerHandles & { toggle: HTMLButtonElement }>();
   // The live block a section's form for a new thread is on, with the line
   // above its field that says so, while a block's Comment holds it open.
-  const blocks = new Map<HTMLFormElement, { widget: Widget; line: HTMLParagraphElement }>();
+  // seen: the hash of the block's file the page last showed beside the form.
+  const blocks = new Map<HTMLFormElement, { widget: Widget; line: HTMLParagraphElement; seen: string }>();
   function failure(response: Response, payload: CommentPayload | null, stale = page.stalePage): string {
     if (response.status === 401) return page.signedOut;
     const code = payload?.error;
@@ -132,7 +133,7 @@ export function composers(page: Page, bridge: ComposerBridge) {
     line.className = "artifact-comment-on";
     render(<>{"On "}<span class="artifact-comment-on-block">{title}</span>{widget.state ? " · " + widget.state : ""}</>, line);
     form.before(line);
-    blocks.set(form, { widget: { id: widget.id, hash: widget.hash, state: widget.state }, line });
+    blocks.set(form, { widget: { id: widget.id, hash: widget.hash, state: widget.state }, line, seen: widget.hash });
   }
   // A line about the block a form was on goes with it.
   function unblock(form: HTMLFormElement | undefined) {
@@ -148,14 +149,21 @@ export function composers(page: Page, bridge: ComposerBridge) {
   // section (boxOf: the box of a frame's section): the form is no longer on
   // it. A form on a block the swap changed stays on the version the reader
   // saw, which the route takes as an earlier version of the block, and says so
-  // until the form is no longer on it.
+  // until the form is no longer on it; a swap that leaves the block's file as
+  // it was leaves the form's status as it was.
   function swapped(boxOf: (frame: HTMLIFrameElement) => HTMLElement | null) {
     blocks.forEach((held, form) => {
       const frame = frameOf(held.widget.id);
-      if (!frame || boxOf(frame) !== bridge.boxWith(form)) unblock(form);
-      else if (blockStanding(held.widget) === "changed") {
-        form.querySelector<HTMLElement>(".artifact-comment-status")!.textContent = page.blockChanged;
+      if (!frame || boxOf(frame) !== bridge.boxWith(form)) {
+        unblock(form);
+        return;
       }
+      const now = hashOf(frame);
+      if (now === held.seen) return;
+      held.seen = now;
+      const status = form.querySelector<HTMLElement>(".artifact-comment-status")!;
+      if (blockStanding(held.widget) === "changed") status.textContent = page.blockChanged;
+      else if (status.textContent === page.blockChanged) status.textContent = "";
     });
   }
   function wire(box: HTMLElement) {

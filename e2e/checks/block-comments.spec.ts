@@ -491,6 +491,34 @@ test("a block's form refused for a block the page changed says so in words and k
   expect(errors).toEqual([]);
 });
 
+test("a block's form refused after the block changed keeps its refusal over a swap that leaves the block as it was", async ({ page }) => {
+  const name = `block-comments-updated-refused-${test.info().repeatEachIndex}`;
+  publish(name, doc(1));
+  const errors = watch(page);
+  await load(page, name);
+  const churn = panel(page).group('Churn');
+  const form = churn.locator('form.artifact-comment-form');
+  const field = form.locator('textarea[name="text"]');
+  const status = form.locator('.artifact-comment-status');
+  await block(page).comment.click();
+  await field.fill(QUESTION);
+  await swap(page, name, doc(2));
+  await expect(status).toHaveText(BLOCK_CHANGED);
+  await page.route((url) => url.pathname === '/api/comments', (route) =>
+    route.request().method() === 'POST'
+      ? route.fulfill({ status: 503, json: { error: 'storage_unavailable' } }) : route.fallback());
+  await form.getByRole('button', { name: 'Comment', exact: true }).click();
+  const refused = 'Not saved (storage_unavailable). Try again.';
+  await expect(status).toHaveText(refused);
+  // Only the Notes section changes.
+  await swap(page, name, doc(2).replace('Nothing else yet.', 'One more note.'));
+  await expect(page.getByText('One more note.', { exact: true })).toBeVisible();
+  await expect(status).toHaveText(refused);
+  await expect(field).toHaveValue(QUESTION);
+  await expect(churn.locator('.artifact-comment-on')).toHaveText(WORDS);
+  expect(errors).toEqual([]);
+});
+
 test("a block's form whose block a later swap takes away no longer says it stays on the block", async ({ page }) => {
   const name = `block-comments-updated-gone-${test.info().repeatEachIndex}`;
   publish(name, doc(1));

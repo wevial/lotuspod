@@ -885,6 +885,12 @@ def cmd_render(args: argparse.Namespace) -> int:
 
     for filename, data in widget_files.items():
         write_atomic(out_dir / filename, data)
+    # The outgoing page's hashes first, so a page published before they were
+    # kept keeps the ones it had.
+    try:
+        keep_block_hashes(out_dir, args.name, out_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError):
+        pass
     write_atomic(out_path, html.encode("utf-8"))
     keep_block_hashes(out_dir, args.name, html)
     widget_name = re.compile(re.escape(args.name) + r"\.w-[0-9a-f]{12}\.html\Z")

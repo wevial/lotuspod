@@ -266,6 +266,25 @@ class WithoutGitTests(AnchorCase):
         self.assertNotIn(f"churn{cli.BLOCKS_SUFFIX}", cli.serve_allow_list(self.out_dir))
 
 
+class UpgradeWithoutGitTests(AnchorCase):
+    """churn published with BLOCK as before its blocks' hashes were kept
+    beside it, on a site without git, then republished with CHANGED."""
+
+    def prepare(self) -> None:
+        self.publish_churn(churn(BLOCK))
+        self.first = self.block_hash()
+        (self.out_dir / f"churn{cli.BLOCKS_SUFFIX}").unlink()
+        self.publish_churn(churn(CHANGED))
+
+    def test_the_outgoing_page_s_hash_is_kept_at_the_republish(self):
+        self.assertFalse(cli.is_repository_top(self.out_dir))
+        self.assertEqual(cli.kept_block_hashes(self.out_dir, "churn")["churn"],
+                         [self.first, self.block_hash()])
+        self.check_stored_as_sent(self.first)
+
+    def test_a_hash_the_block_never_had_is_still_refused(self):
+        self.check_never_had_refused()
+
 class PullAndPromptTests(AnchorCase):
     def test_the_pull_names_the_block_its_state_and_its_source(self):
         anchor = self.anchor()
