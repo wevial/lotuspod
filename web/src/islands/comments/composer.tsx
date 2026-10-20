@@ -152,11 +152,8 @@ export function composers(page: Page, bridge: ComposerBridge) {
   function swapped(boxOf: (frame: HTMLIFrameElement) => HTMLElement | null) {
     blocks.forEach((held, form) => {
       const frame = frameOf(held.widget.id);
-      if (!frame || boxOf(frame) !== bridge.boxWith(form)) {
-        unblock(form);
-        return;
-      }
-      if (blockStanding(held.widget) === "changed") {
+      if (!frame || boxOf(frame) !== bridge.boxWith(form)) unblock(form);
+      else if (blockStanding(held.widget) === "changed") {
         form.querySelector<HTMLElement>(".artifact-comment-status")!.textContent = page.blockChanged;
       }
     });
