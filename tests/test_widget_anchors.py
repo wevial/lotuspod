@@ -211,7 +211,7 @@ class EarlierVersionTests(AnchorCase):
 
     def prepare(self) -> None:
         for argv in (["init", "-q", "-b", "main"], ["config", "user.name", "Anchor tests"],
-                     ["config", "user.email", "anchors@example.invalid"]):
+                     ["config", "user.email", "anchors@example.com"]):
             subprocess.run(["git", "-C", str(self.out_dir), *argv], check=True,
                            capture_output=True)
         self.publish_churn(churn(BLOCK))
