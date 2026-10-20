@@ -117,6 +117,13 @@ function panel(page: Page) {
   return { aside, group, strays: aside.locator('.artifact-comments-group').last() };
 }
 
+// The Churn group's form for a new thread in the comments panel.
+function churnForm(page: Page) {
+  const churn = panel(page).group('Churn');
+  const form = churn.locator('form.artifact-comment-form');
+  return { churn, form, field: form.locator('textarea[name="text"]'), status: form.locator('.artifact-comment-status') };
+}
+
 // The comment the page posts next, as the route receives it.
 function posting(page: Page): Promise<Request> {
   return page.waitForRequest((request) => new URL(request.url()).pathname === '/api/comments' &&
@@ -418,10 +425,7 @@ test("a block's form kept over a swap that changes the block stays on the versio
   const errors = watch(page);
   await load(page, name);
   const first = await hashOf(page);
-  const churn = panel(page).group('Churn');
-  const form = churn.locator('form.artifact-comment-form');
-  const field = form.locator('textarea[name="text"]');
-  const status = form.locator('.artifact-comment-status');
+  const { churn, form, field, status } = churnForm(page);
   await block(page).comment.click();
   await expect(churn.locator('.artifact-comment-on')).toHaveText(WORDS);
   await field.fill(QUESTION);
@@ -468,10 +472,7 @@ test("a block's form refused for a block the page changed says so in words and k
     await route.fulfill({ status: refusal.status, json: { error: refusal.error } });
   });
   await load(page, name);
-  const churn = panel(page).group('Churn');
-  const form = churn.locator('form.artifact-comment-form');
-  const field = form.locator('textarea[name="text"]');
-  const status = form.locator('.artifact-comment-status');
+  const { churn, form, field, status } = churnForm(page);
   await block(page).comment.click();
   await expect(churn.locator('.artifact-comment-on')).toHaveText(WORDS);
   await field.fill(QUESTION);
@@ -495,10 +496,7 @@ test("a block's form whose block a later swap takes away no longer says it stays
   publish(name, doc(1));
   const errors = watch(page);
   await load(page, name);
-  const churn = panel(page).group('Churn');
-  const form = churn.locator('form.artifact-comment-form');
-  const field = form.locator('textarea[name="text"]');
-  const status = form.locator('.artifact-comment-status');
+  const { churn, form, field, status } = churnForm(page);
   await block(page).comment.click();
   await field.fill(QUESTION);
   await swap(page, name, doc(2));
@@ -522,10 +520,7 @@ test("a block's form that Escape takes off the block no longer says it stays on 
   publish(name, doc(1));
   const errors = watch(page);
   await load(page, name);
-  const churn = panel(page).group('Churn');
-  const form = churn.locator('form.artifact-comment-form');
-  const field = form.locator('textarea[name="text"]');
-  const status = form.locator('.artifact-comment-status');
+  const { churn, form, field, status } = churnForm(page);
   await block(page).comment.click();
   await field.fill(QUESTION);
   await swap(page, name, doc(2));
@@ -555,10 +550,7 @@ test("a block's form refused for its block no longer says to reload once a swap 
     route.request().method() === 'POST'
       ? route.fulfill({ status: 409, json: { error: 'stale_widget' } }) : route.fallback());
   await load(page, name);
-  const churn = panel(page).group('Churn');
-  const form = churn.locator('form.artifact-comment-form');
-  const field = form.locator('textarea[name="text"]');
-  const status = form.locator('.artifact-comment-status');
+  const { churn, form, field, status } = churnForm(page);
   await block(page).comment.click();
   await field.fill(QUESTION);
   await form.getByRole('button', { name: 'Comment', exact: true }).click();

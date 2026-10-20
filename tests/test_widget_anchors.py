@@ -98,6 +98,30 @@ class AnchorCase(PullTestCase):
                    if item["kind"] == "comment" and item["comment"]["id"] == comment_id]
         return found
 
+    def check_stored_as_sent(self, first: str) -> None:
+        """A thread on first, a hash the block had before its current one."""
+        self.assertNotEqual(self.block_hash(), first)
+        status, row = self.post({"section": "throughput", "text": "@hermes This number is off.",
+                                 "widget": self.anchor(hash=first)})
+        self.assertEqual(status, 201, row)
+        self.assertEqual(row["widget"], self.anchor(hash=first))
+        [thread] = self.threads("churn")
+        self.assertEqual(thread["root"]["widget"]["hash"], first)
+        # The pull says the block has changed since, as for a thread stored
+        # before the change.
+        self.assertEqual(self.item(row["id"])["block"]["status"], "changed")
+        self.assertIn("The block has changed since this comment", self.markdown_pull())
+
+    def check_never_had_refused(self) -> None:
+        before = self.stored()
+        lag = self.block_hash("lag")
+        for name, hash_ in (("no file", "0" * 12), ("another block's", lag)):
+            with self.subTest(name):
+                status, payload = self.post({"section": "throughput", "text": "Off.",
+                                             "widget": self.anchor(hash=hash_)})
+                self.assertEqual((status, payload), (409, {"error": "stale_widget"}))
+        self.assertEqual(self.stored(), before)
+
 
 class RouteTests(AnchorCase):
     def test_a_thread_on_a_block_carries_its_anchor_and_its_replies_none(self):
@@ -198,17 +222,7 @@ class EarlierVersionTests(AnchorCase):
         (self.out_dir / f"churn{cli.BLOCKS_SUFFIX}").unlink()
 
     def test_a_hash_the_block_had_in_an_earlier_version_is_stored_as_sent(self):
-        self.assertNotEqual(self.block_hash(), self.first)
-        status, row = self.post({"section": "throughput", "text": "@hermes This number is off.",
-                                 "widget": self.anchor(hash=self.first)})
-        self.assertEqual(status, 201, row)
-        self.assertEqual(row["widget"], self.anchor(hash=self.first))
-        [thread] = self.threads("churn")
-        self.assertEqual(thread["root"]["widget"]["hash"], self.first)
-        # The pull says the block has changed since, as for a thread stored
-        # before the change.
-        self.assertEqual(self.item(row["id"])["block"]["status"], "changed")
-        self.assertIn("The block has changed since this comment", self.markdown_pull())
+        self.check_stored_as_sent(self.first)
 
     def test_a_hash_older_than_the_versions_a_list_holds_is_taken_too(self):
         # A list holding only the newest version leaves the first one out.
@@ -222,14 +236,7 @@ class EarlierVersionTests(AnchorCase):
         self.assertEqual(row["widget"]["hash"], self.first)
 
     def test_a_hash_the_block_never_had_is_still_refused(self):
-        before = self.stored()
-        lag = self.block_hash("lag")
-        for name, hash_ in (("no file", "0" * 12), ("another block's", lag)):
-            with self.subTest(name):
-                status, payload = self.post({"section": "throughput", "text": "Off.",
-                                             "widget": self.anchor(hash=hash_)})
-                self.assertEqual((status, payload), (409, {"error": "stale_widget"}))
-        self.assertEqual(self.stored(), before)
+        self.check_never_had_refused()
 
 
 class WithoutGitTests(AnchorCase):
@@ -247,27 +254,12 @@ class WithoutGitTests(AnchorCase):
         self.assertEqual((status, payload.get("versions")), (200, []))
 
     def test_a_hash_the_block_had_in_an_earlier_publish_is_stored_as_sent(self):
-        self.assertNotEqual(self.block_hash(), self.first)
         self.assertEqual(cli.api_page(self.out_dir, "churn").widgets["churn"].earlier,
                          {self.first, self.block_hash()})
-        status, row = self.post({"section": "throughput", "text": "@hermes This number is off.",
-                                 "widget": self.anchor(hash=self.first)})
-        self.assertEqual(status, 201, row)
-        self.assertEqual(row["widget"], self.anchor(hash=self.first))
-        [thread] = self.threads("churn")
-        self.assertEqual(thread["root"]["widget"]["hash"], self.first)
-        self.assertEqual(self.item(row["id"])["block"]["status"], "changed")
-        self.assertIn("The block has changed since this comment", self.markdown_pull())
+        self.check_stored_as_sent(self.first)
 
     def test_a_hash_the_block_never_had_is_still_refused(self):
-        before = self.stored()
-        lag = self.block_hash("lag")
-        for name, hash_ in (("no file", "0" * 12), ("another block's", lag)):
-            with self.subTest(name):
-                status, payload = self.post({"section": "throughput", "text": "Off.",
-                                             "widget": self.anchor(hash=hash_)})
-                self.assertEqual((status, payload), (409, {"error": "stale_widget"}))
-        self.assertEqual(self.stored(), before)
+        self.check_never_had_refused()
 
     def test_the_kept_hashes_are_never_served(self):
         self.assertTrue((self.out_dir / f"churn{cli.BLOCKS_SUFFIX}").is_file())
