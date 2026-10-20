@@ -15,13 +15,12 @@ export function composers(page: Page, bridge: ComposerBridge) {
   function failure(response: Response, payload: CommentPayload | null, stale = page.stalePage): string {
     if (response.status === 401) return page.signedOut;
     const code = payload?.error;
-    if (response.status === 409 && code === "stale_page") return stale;
-    if (response.status === 400 && code === "unknown_section") return stale;
+    if ((response.status === 409 && code === "stale_page") || (response.status === 400 && code === "unknown_section")) return stale;
     if ((response.status === 409 && code === "stale_widget") || (response.status === 400 && code === "unknown_widget")) {
       return page.staleBlock;
     }
     if (response.status === 409 && code === "archived") return page.closed;
-    const error = payload?.error ? String(payload.error) : "status " + response.status;
+    const error = code ? String(code) : "status " + response.status;
     return "Not saved (" + error + "). Try again.";
   }
   async function post(form: HTMLFormElement, body: Body): Promise<CommentRow | null> {

@@ -1132,18 +1132,14 @@ class Api:
             if block is None or block.section != section:
                 raise Refusal(HTTPStatus.BAD_REQUEST, "unknown_widget")
             if (block.hash != widget["hash"]
-                    and widget["hash"] not in self._earlier(page.name, widget["id"])):
+                    and (self.history is None
+                         or widget["hash"] not in self.history.block_hashes(page.name, widget["id"]))):
                 raise Refusal(HTTPStatus.CONFLICT, "stale_widget")
         return self.database.add_comment(
             page=page.name, section=section, section_title=page.sections.get(section, ""),
             revision=page.revision, text=text, quote=quote, actor=actor, owner=page.owner,
             images=images, widget=widget,
         )
-
-    def _earlier(self, name: str, ident: str) -> frozenset[str]:
-        """The hashes block ident had in the page's versions; none without
-        a history."""
-        return self.history.block_hashes(name, ident) if self.history is not None else frozenset()
 
     def _store_decision_thread(self, fields: dict, names: list[str] | None, least: int,
                                actor: Mapping) -> dict:
