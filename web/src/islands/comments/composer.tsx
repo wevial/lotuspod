@@ -134,12 +134,15 @@ export function composers(page: Page, bridge: ComposerBridge) {
     form.before(line);
     blocks.set(form, { widget: { id: widget.id, hash: widget.hash, state: widget.state }, line });
   }
+  // A line about the block a form was on goes with it.
   function unblock(form: HTMLFormElement | undefined) {
     const held = form && blocks.get(form);
     if (!held) return;
     render(null, held.line);
     held.line.remove();
     blocks.delete(form!);
+    const status = form!.querySelector<HTMLElement>(".artifact-comment-status")!;
+    if (status.textContent === page.blockChanged || status.textContent === page.staleBlock) status.textContent = "";
   }
   // A swap took away the block a form is on, or moved it to another
   // section (boxOf: the box of a frame's section): the form is no longer on
@@ -148,14 +151,14 @@ export function composers(page: Page, bridge: ComposerBridge) {
   // until the form is no longer on it.
   function swapped(boxOf: (frame: HTMLIFrameElement) => HTMLElement | null) {
     blocks.forEach((held, form) => {
-      const status = form.querySelector<HTMLElement>(".artifact-comment-status")!;
       const frame = frameOf(held.widget.id);
       if (!frame || boxOf(frame) !== bridge.boxWith(form)) {
         unblock(form);
-        if (status.textContent === page.blockChanged) status.textContent = "";
         return;
       }
-      if (blockStanding(held.widget) === "changed") status.textContent = page.blockChanged;
+      if (blockStanding(held.widget) === "changed") {
+        form.querySelector<HTMLElement>(".artifact-comment-status")!.textContent = page.blockChanged;
+      }
     });
   }
   function wire(box: HTMLElement) {

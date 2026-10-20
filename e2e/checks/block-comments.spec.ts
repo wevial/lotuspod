@@ -516,3 +516,63 @@ test("a block's form whose block a later swap takes away no longer says it stays
   await expect(churn.locator('.artifact-comments-entry')).toHaveCount(1);
   expect(errors).toEqual([]);
 });
+
+test("a block's form that Escape takes off the block no longer says it stays on the block", async ({ page }) => {
+  const name = `block-comments-updated-escape-${test.info().repeatEachIndex}`;
+  publish(name, doc(1));
+  const errors = watch(page);
+  await load(page, name);
+  const churn = panel(page).group('Churn');
+  const form = churn.locator('form.artifact-comment-form');
+  const field = form.locator('textarea[name="text"]');
+  const status = form.locator('.artifact-comment-status');
+  await block(page).comment.click();
+  await field.fill(QUESTION);
+  await swap(page, name, doc(2));
+  await expect(status).toHaveText(BLOCK_CHANGED);
+
+  await field.focus();
+  await page.keyboard.press('Escape');
+  await expect(form).toBeHidden();
+  await page.locator('details.artifact-comment[data-section="churn"] > summary').click();
+  await expect(form).toBeVisible();
+  await expect(churn.locator('.artifact-comment-on')).toHaveCount(0);
+  await expect(status).toHaveText('');
+  await field.fill('A note on the section');
+  const sent = posting(page);
+  await form.getByRole('button', { name: 'Comment', exact: true }).click();
+  expect('widget' in (await sent).postDataJSON()).toBe(false);
+  await expect(churn.locator('.artifact-comments-entry')).toHaveCount(1);
+  expect(errors).toEqual([]);
+});
+
+test("a block's form refused for its block no longer says to reload once a swap takes the block away", async ({ page }) => {
+  const name = `block-comments-stale-gone-${test.info().repeatEachIndex}`;
+  publish(name, doc(1));
+  const errors = watch(page);
+  const comments = (url: URL) => url.pathname === '/api/comments';
+  await page.route(comments, (route) =>
+    route.request().method() === 'POST'
+      ? route.fulfill({ status: 409, json: { error: 'stale_widget' } }) : route.fallback());
+  await load(page, name);
+  const churn = panel(page).group('Churn');
+  const form = churn.locator('form.artifact-comment-form');
+  const field = form.locator('textarea[name="text"]');
+  const status = form.locator('.artifact-comment-status');
+  await block(page).comment.click();
+  await field.fill(QUESTION);
+  await form.getByRole('button', { name: 'Comment', exact: true }).click();
+  await expect(status).toHaveText(STALE_BLOCK);
+  await page.unroute(comments);
+
+  await swap(page, name, doc(0));
+  await expect(page.locator('figure[data-widget="churn"]')).toHaveCount(0);
+  await expect(churn.locator('.artifact-comment-on')).toHaveCount(0);
+  await expect(field).toHaveValue(QUESTION);
+  await expect(status).toHaveText('');
+  const sent = posting(page);
+  await form.getByRole('button', { name: 'Comment', exact: true }).click();
+  expect('widget' in (await sent).postDataJSON()).toBe(false);
+  await expect(churn.locator('.artifact-comments-entry')).toHaveCount(1);
+  expect(errors).toEqual([]);
+});
