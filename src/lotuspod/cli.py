@@ -373,9 +373,9 @@ THEME_SOURCES = {
         # Built from web/src/page-swap.ts: it registers its swap with live.
         "js/page-swap.js",
         "js/comment-markdown.js",
-        "js/comments.js",
-        # The islands start comments before later sources look for the panel
-        # and register their listeners. All bridge names are defined here.
+        # The islands start the comments before later sources look for the
+        # panel and register their listeners. All bridge names are defined
+        # here.
         "js/islands.js",
         "js/panel-resize.js",
         "js/tables.js",

@@ -37,17 +37,15 @@ export interface ComposerHandles {
   unfold(open: boolean): void;
   images: import('../bridge').Attachments;
 }
-export interface Parts {
-  store(bridge: import("../bridge").StoreBridge): Store;
-}
 // The comment threads and the reads that fill them (comments/store.ts),
-// as comments.js reaches them: its drafts and swaps.
+// as the drafts reach them (comments/drafts.ts): drafts kept over a reload
+// and swaps.
 export interface Store {
   readonly sections: Map<string, HTMLElement>;
   readonly shown: Map<number, Thread>;
   readonly forms: Map<HTMLElement, HTMLFormElement>;
   readonly attached: Map<HTMLFormElement, import("../bridge").Attachments>;
-  readonly composer: Pick<ReturnType<typeof import("./composer").composers>, "sending" | "wire">;
+  readonly composer: Pick<ReturnType<typeof import("./composer").composers>, "sending" | "wire" | "fieldOf" | "handles">;
   readonly panel: Placement;
   readonly passages: Passages;
   // A swap moved the page on to revision to.
@@ -63,9 +61,6 @@ export interface Store {
   put(thread: Thread): void;
   refresh(): void;
   start(): void;
-}
-export interface Commenting {
-  start(parts: Parts): void;
 }
 
 export interface Group {

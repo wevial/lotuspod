@@ -2,7 +2,7 @@
 // holds one EventSource on /api/events, and each "change" it carries,
 // {what, page}, is sent on the document as "lotuspod:change", whose
 // listeners run the checks they already have at once (js/live-page.js,
-// js/comments.js, js/pod-tabs.js and the index's own script). Their
+// the comments island, js/pod-tabs.js and the index's own script). Their
 // schedules stay, so a stream refused, dropped or blocked leaves the page
 // as it was without it.
 //

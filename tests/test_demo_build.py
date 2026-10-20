@@ -426,7 +426,7 @@ class OutsideTheBuildTests(unittest.TestCase):
         demo = (REPO_ROOT / "demo").resolve()
         sources = [cli.THEME_DIR / source for files in cli.THEME_SOURCES.values()
                    for source in files]
-        self.assertIn("js/comments.js", cli.THEME_SOURCES[cli.PAGE_SCRIPT])
+        self.assertIn("js/islands.js", cli.THEME_SOURCES[cli.PAGE_SCRIPT])
         for source in sources:
             with self.subTest(source=str(source)):
                 self.assertTrue(source.is_file())

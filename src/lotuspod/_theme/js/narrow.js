@@ -8,9 +8,9 @@
   // view: a thread, a section's threads that no highlight opens with its
   // form for a new one, or a passage's composer. Its entries are moved in
   // from the panel's groups and back, never drawn twice, and shown as the
-  // panel shows them, Resolve included. The side panel (sidePanel in
-  // js/comments.js) makes it, and the comments page passes what it reads
-  // threads with as `the`.
+  // panel shows them, Resolve included. The comments island's placement
+  // (web/src/islands/comments/placement.ts) makes it, and passes what it
+  // reads threads with as `the`.
   function overText(the) {
     var panel = the.panel;
     var groups = the.groups;
