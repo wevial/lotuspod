@@ -31,7 +31,7 @@ const QUESTION = 'Reruns look high';
 const ASK = '@hermes Is it the shared migration file?';
 const REPLY = 'Mostly the shared migration file.';
 // js/page-open.js's BLOCK_CHANGED and STALE_BLOCK.
-const BLOCK_CHANGED = 'This block was updated since you started. Your comment is now on its new version.';
+const BLOCK_CHANGED = 'This block was updated since you started. Your comment stays on the version you saw.';
 const STALE_BLOCK = 'This block has changed since the page loaded. Reload the page to comment on its new version.';
 
 // A page whose first section holds the block, drawn as version says; none
@@ -412,7 +412,7 @@ test('a block republished in another section, its own gone, takes its thread wit
   expect(errors).toEqual([]);
 });
 
-test("a block's form kept over a swap that changes the block moves to its new version and sends it", async ({ page }) => {
+test("a block's form kept over a swap that changes the block stays on the version the reader saw and sends it", async ({ page }) => {
   const name = `block-comments-swapped-${test.info().repeatEachIndex}`;
   publish(name, doc(1));
   const errors = watch(page);
@@ -447,8 +447,43 @@ test("a block's form kept over a swap that changes the block moves to its new ve
   const said = (await status.count()) ? await status.textContent() : '';
   console.log(`sent widget ${JSON.stringify(body.widget)}, answered ${response.status()}, status "${said}"`);
   expect(response.status(), `the status reads "${said}"`).toBe(201);
-  expect(body.widget).toEqual({ id: 'churn', hash, state: '' });
-  await expect(churn.locator('.artifact-comments-entry')).toHaveCount(1);
+  // The hash the reader started on, an earlier version of the block.
+  expect(body.widget).toEqual({ id: 'churn', hash: first, state: '' });
+  const entry = churn.locator('.artifact-comments-entry');
+  await expect(entry).toHaveCount(1);
+  await expect(status).toHaveText('');
+  await expect(entry.locator('.artifact-comment-event--widget')).toHaveText('Widget changed since this comment');
+  expect(errors).toEqual([]);
+});
+
+test("a block's form sending a hash the block never had is refused, and says so in words", async ({ page }) => {
+  const name = `block-comments-never-${test.info().repeatEachIndex}`;
+  publish(name, doc(1));
+  const errors = watch(page);
+  // The page sends a hash no version of the block had; the route answers.
+  await page.route((url) => url.pathname === '/api/comments', async (route) => {
+    if (route.request().method() !== 'POST') return route.fallback();
+    const body = route.request().postDataJSON();
+    await route.fallback({ postData: JSON.stringify({ ...body, widget: { ...body.widget, hash: '0'.repeat(12) } }) });
+  });
+  await load(page, name);
+  const churn = panel(page).group('Churn');
+  const form = churn.locator('form.artifact-comment-form');
+  const field = form.locator('textarea[name="text"]');
+  const status = form.locator('.artifact-comment-status');
+  await block(page).comment.click();
+  await field.fill(QUESTION);
+  const answered = page.waitForResponse((response) => new URL(response.url()).pathname === '/api/comments' &&
+    response.request().method() === 'POST');
+  await form.getByRole('button', { name: 'Comment', exact: true }).click();
+  const response = await answered;
+  expect(response.status()).toBe(409);
+  expect(await response.json()).toEqual({ error: 'stale_widget' });
+  await expect(status).toHaveText(STALE_BLOCK);
+  await expect(field).toHaveValue(QUESTION);
+  await expect(churn.locator('.artifact-comment-on')).toHaveText(WORDS);
+  expect(await panel(page).aside.textContent()).not.toContain('stale_widget');
+  await expect(churn.locator('.artifact-comments-entry')).toHaveCount(0);
   expect(errors).toEqual([]);
 });
 

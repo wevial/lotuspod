@@ -17,6 +17,7 @@ from __future__ import annotations
 import json
 import re
 import sqlite3
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -177,6 +178,43 @@ class RouteTests(AnchorCase):
         self.assertEqual(status, 201, row)
         # A page with no blocks has none.
         self.assertEqual(cli.api_page(self.out_dir, "plan").widgets, {})
+
+
+class EarlierVersionTests(AnchorCase):
+    """The page's site is the top of its own git repository, so each publish
+    is a version of it: churn published with BLOCK, then with CHANGED."""
+
+    def prepare(self) -> None:
+        for argv in (["init", "-q", "-b", "main"], ["config", "user.name", "Anchor tests"],
+                     ["config", "user.email", "anchors@example.invalid"]):
+            subprocess.run(["git", "-C", str(self.out_dir), *argv], check=True,
+                           capture_output=True)
+        self.publish_churn(churn(BLOCK))
+        self.first = self.block_hash()
+        self.publish_churn(churn(CHANGED))
+
+    def test_a_hash_the_block_had_in_an_earlier_version_is_stored_as_sent(self):
+        self.assertNotEqual(self.block_hash(), self.first)
+        status, row = self.post({"section": "throughput", "text": "@hermes This number is off.",
+                                 "widget": self.anchor(hash=self.first)})
+        self.assertEqual(status, 201, row)
+        self.assertEqual(row["widget"], self.anchor(hash=self.first))
+        [thread] = self.threads("churn")
+        self.assertEqual(thread["root"]["widget"]["hash"], self.first)
+        # The pull says the block has changed since, as for a thread stored
+        # before the change.
+        self.assertEqual(self.item(row["id"])["block"]["status"], "changed")
+        self.assertIn("The block has changed since this comment", self.markdown_pull())
+
+    def test_a_hash_the_block_never_had_is_still_refused(self):
+        before = self.stored()
+        lag = self.block_hash("lag")
+        for name, hash_ in (("no file", "0" * 12), ("another block's", lag)):
+            with self.subTest(name):
+                status, payload = self.post({"section": "throughput", "text": "Off.",
+                                             "widget": self.anchor(hash=hash_)})
+                self.assertEqual((status, payload), (409, {"error": "stale_widget"}))
+        self.assertEqual(self.stored(), before)
 
 
 class PullAndPromptTests(AnchorCase):

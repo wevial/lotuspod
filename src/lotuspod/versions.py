@@ -13,6 +13,9 @@ lotuspod:owner are kept, in memory by blob id: a blob never changes. A list
 runs at most two git processes, and one once its blobs are known; an old
 version's HTML runs at most two. A historical widget runs at most three:
 version()'s two, then one cat-file process for its bytes, which are never kept.
+block_hashes() is the widget file hashes one live block had in the listed
+versions, for the comments route: version()'s list, then one cat-file
+process for the blobs whose blocks are not known yet, kept by blob id.
 A version is listed only when its own page was visible, at most MAX_VERSIONS of them, and a directory that is not the
 top of its own repository has none. The whole history of the page is read,
 so the version before the oldest one listed is known too.
@@ -357,6 +360,8 @@ class History:
         self._stamps: dict[str, tuple[str, bool, str]] = {}
         # (old blob, new blob) to the summary of the version the new one is.
         self._summaries: dict[tuple[str, str], str] = {}
+        # Blob ids to the live blocks' ids in them, each to its file's hash.
+        self._blocks: dict[str, dict[str, str]] = {}
         self._lock = threading.Lock()
 
     def _git(self, *argv: str, data: bytes | None = None) -> bytes | None:
@@ -596,6 +601,27 @@ class History:
             return None
         objects = self._object_bytes([f"{commit}:{filename}"])
         return objects[0] if objects else None
+
+    def block_hashes(self, name: str, ident: str) -> frozenset[str]:
+        """The hashes of the widget files live block ident had in NAME's
+        listed versions, from the blobs whose blocks are not known yet, read
+        in one process; none outside a repository, or when git failed."""
+        commits = self._commits(name)
+        listed, _ = self._versions(commits)
+        blobs = {commit: blob for commit, _, _, blob in commits}
+        wanted = [blobs[version.commit] for version in listed]
+        with self._lock:
+            missing = [blob for blob in dict.fromkeys(wanted) if blob not in self._blocks]
+        texts = self._objects(missing) if missing else None
+        for blob, text in zip(missing, texts or []):
+            if text is None:
+                continue
+            found = {key: hash_ for key, (hash_, _, _) in widgets.PageWidgets(text).found.items()}
+            with self._lock:
+                self._blocks[blob] = found
+        with self._lock:
+            return frozenset(self._blocks[blob][ident] for blob in wanted
+                             if ident in self._blocks.get(blob, {}))
 
     def _objects(self, names: list[str]) -> list[str | None] | None:
         """Each named object's text, None for one git does not have; None

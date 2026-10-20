@@ -272,10 +272,12 @@ the comments panel, a thread open in the panel, a popover or the bottom sheet
 stays open, and a comment or reply not yet sent stays in its composer, text
 and images. A section's form opened from a live block's Comment stays on the
 block while the block is still in that section: when the new revision changed
-the block's widget file, the form moves, text and images kept, to the block's
-new version (its file and the state its chrome shows now), redraws its "On"
-line and says "This block was updated since you started. Your comment is now
-on its new version."; a block the new revision took away or moved to another
+the block's widget file, the form keeps its text, images and "On" line, stays
+on the version of the block the reader saw and says "This block was updated
+since you started. Your comment stays on the version you saw." The route takes
+a thread on a hash the block had in an earlier version of the page, and the
+thread says "Widget changed since this comment" as one written before the
+change does; a block the new revision took away or moved to another
 section leaves the form a comment on its section. Threads on a section the new revision removed or renamed are
 listed under "Sections that have changed", as a fresh load lists them, and
 an added section gets its own group. Decision forms update in place too: a
@@ -707,7 +709,8 @@ A composer refused for a change to the page says so in words and keeps its
 text and images: 409 `stale_page` and 400 `unknown_section` say "This page has
 changed since it loaded. Reload it to comment." on a section's form (the
 passage line above on a passage composer); 409 `stale_widget` and 400
-`unknown_widget`, on a form on a live block, say "This block has changed
+`unknown_widget`, on a form on a live block (a hash the block never had, or a
+block the page no longer has there), say "This block has changed
 since the page loaded. Reload the page to comment on its new version.", the
 form staying on the block; and 409 `archived` says "Comments are closed: this
 page is archived." Any other refusal says "Not saved (CODE). Try again."

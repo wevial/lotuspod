@@ -2,7 +2,7 @@ import { render } from "preact";
 import { createPortal } from "preact/compat";
 import type { CommentPayload, CommentRow, ComposerBridge, Page, Thread, Widget } from "../bridge";
 import type { ComposerHandles } from "./parts";
-import { blockStanding, blockTitle, frameOf, hashOf, stateOf } from "./anchor";
+import { blockStanding, frameOf } from "./anchor";
 
 type Quote = NonNullable<CommentRow["quote"]>;
 interface Body { page: string; text: string; parent?: number; section?: string; revision?: string; quote?: Quote; widget?: Widget; images?: string[] }
@@ -144,14 +144,13 @@ export function composers(page: Page, bridge: ComposerBridge) {
   }
   // A swap took away the block a form is on, or moved it to another
   // section (boxOf: the box of a frame's section): the form is no longer on
-  // it. A swap that changed the block holds the form on its new version.
+  // it. A form on a block the swap changed stays on the version the reader
+  // saw, which the route takes as an earlier version of the block, and says so.
   function swapped(boxOf: (frame: HTMLIFrameElement) => HTMLElement | null) {
     blocks.forEach((held, form) => {
       const frame = frameOf(held.widget.id);
       if (!frame || boxOf(frame) !== bridge.boxWith(form)) { unblock(form); return; }
       if (blockStanding(held.widget) !== "changed") return;
-      const widget = { id: held.widget.id, hash: hashOf(frame), state: stateOf(frame) };
-      block(form, widget, blockTitle(widget));
       form.querySelector<HTMLElement>(".artifact-comment-status")!.textContent = page.blockChanged;
     });
   }

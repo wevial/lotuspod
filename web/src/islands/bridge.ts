@@ -100,7 +100,8 @@ declare function holdSwap(test: (nodes: readonly Element[], removed: boolean) =>
 declare const PASSAGE_GONE: string;
 declare const PLACE_GONE: string;
 // js/page-open.js: what a section's form on a live block says when a swap
-// changed the block under it, and when a send was refused for a block the
+// changed the block under it (the comment stays on the version the reader
+// saw), and when a send was refused for a block the
 // page has changed since it loaded.
 declare const BLOCK_CHANGED: string;
 declare const STALE_BLOCK: string;

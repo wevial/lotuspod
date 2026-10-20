@@ -34,12 +34,6 @@ export function hashOf(frame: HTMLIFrameElement): string {
   return /\.w-([0-9a-f]{12})\.html$/.exec(source)?.[1] || "";
 }
 
-// The label a frame's block shows in its chrome now, as its Comment reads
-// it (web/src/widgets.ts); "" for none.
-export function stateOf(frame: HTMLIFrameElement): string {
-  return frame.closest("figure")?.querySelector(".artifact-live-chrome > .artifact-live-state")?.textContent ?? "";
-}
-
 // What the page shows of a block a thread is on: the same widget file, a
 // changed one under the same id, or no block with its id.
 export function blockStanding(block: Widget): "current" | "changed" | "gone" {
