@@ -275,7 +275,9 @@ block while the block is still in that section: when the new revision changed
 the block's widget file, the form keeps its text, images and "On" line, stays
 on the version of the block the reader saw and says "This block was updated
 since you started. Your comment stays on the version you saw." The route takes
-a thread on a hash the block had in an earlier version of the page, and the
+a thread on a hash the block had in an earlier version of the page (kept at
+each visible publish in `NAME.blocks.json` beside the page, so a site without
+git history takes it too), and the
 thread says "Widget changed since this comment" as one written before the
 change does; a block the new revision took away or moved to another
 section leaves the form a comment on its section. Threads on a section the new revision removed or renamed are

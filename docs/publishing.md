@@ -522,6 +522,12 @@ keeps the labels; `--no-refs` removes the cards and the file. `--refs` and
 `--no-refs` together are a usage error (exit 2). Serve never answers
 `NAME.refs.json`.
 
+A visible publish of a page with live blocks adds each block's widget file
+hash to `NAME.blocks.json` beside the page, which keeps every hash each block
+id has had, and commits it with the page. The comments route takes a thread on
+a block at any of them (see [Comments](comments.md#comments)), with or without the
+site's git history. Serve never answers `NAME.blocks.json`.
+
 Over ssh, the refs file is read and checked on the sending machine, and goes
 as a member `refs.json` of the source archive, after `source`, so a page with
 a refs file is sent as an archive even with no image. The writer host takes

@@ -127,7 +127,8 @@ holding a control character, or a widget beside a quote (a widget beside a
 question, or on a reply, is a body not of its shape); 400 unknown_widget
 for an id the page has no block for, or a block in another section than the
 thread's; and 409 stale_widget for a hash the block has had in none of the
-page's versions (History.block_hashes()): a hash it had in an earlier one is
+page's visible publishes (Widget.earlier, kept beside the page) nor of its
+versions (History.block_hashes()): a hash it had in an earlier one is
 stored as sent, so the thread says the block changed since it, as it does
 for a thread stored before the block changed. Every comment a route answers carries `widget`: the anchor
 as stored on a thread's first comment, null on every other comment.
@@ -342,6 +343,9 @@ class Widget:
     # its wrapper's section, "" before a sectioned page's first heading, and
     # comments.PAGE_SECTION on a page whose only box is that one.
     section: str
+    # The hashes it had in the page's visible publishes, its own among them
+    # (cli.BLOCKS_SUFFIX); empty for a page published before they were kept.
+    earlier: frozenset[str] = frozenset()
 
 
 @dataclass(frozen=True)
@@ -1131,7 +1135,7 @@ class Api:
             block = page.widgets.get(widget["id"])
             if block is None or block.section != section:
                 raise Refusal(HTTPStatus.BAD_REQUEST, "unknown_widget")
-            if (block.hash != widget["hash"]
+            if (block.hash != widget["hash"] and widget["hash"] not in block.earlier
                     and (self.history is None
                          or widget["hash"] not in self.history.block_hashes(page.name, widget["id"]))):
                 raise Refusal(HTTPStatus.CONFLICT, "stale_widget")
