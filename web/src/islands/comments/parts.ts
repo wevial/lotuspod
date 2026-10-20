@@ -41,9 +41,8 @@ export interface Parts {
   store(bridge: import("../bridge").StoreBridge): Store;
 }
 // The comment threads and the reads that fill them (comments/store.ts),
-// as comments.js reaches them: its drafts, swaps and unread replies.
+// as comments.js reaches them: its drafts and swaps.
 export interface Store {
-  readonly page: string;
   readonly sections: Map<string, HTMLElement>;
   readonly shown: Map<number, Thread>;
   readonly forms: Map<HTMLElement, HTMLFormElement>;
@@ -51,21 +50,18 @@ export interface Store {
   readonly composer: Pick<ReturnType<typeof import("./composer").composers>, "sending" | "wire">;
   readonly panel: Placement;
   readonly passages: Passages;
-  rows(thread: Thread): import("../bridge").CommentRow[];
-  markUnread(thread: Thread): void;
-  revision(): string | null;
   // A swap moved the page on to revision to.
   swapped(to: string): void;
+  // A swap gave the tab a new title.
+  retitle(): void;
+  // A decision form a swap brought in takes its Ask.
+  askAbout(form: HTMLFormElement): void;
   enlist(box: HTMLElement): void;
   ask(): void;
-  add(entry: { root: import("../bridge").CommentRow; replies: import("../bridge").CommentRow[] }): boolean;
   boxFor(root: import("../bridge").CommentRow): HTMLElement | null;
   whereFrom(root: import("../bridge").CommentRow): HTMLParagraphElement;
   put(thread: Thread): void;
   refresh(): void;
-  posted(): void;
-  readNow(): void;
-  owe(): void;
   start(): void;
 }
 export interface Commenting {
