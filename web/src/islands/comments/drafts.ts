@@ -118,7 +118,7 @@ export function drafts(page: Page, boxes: HTMLElement[]): void {
             text: each.field.value, images: each.images.kept(),
           })),
           ...Array.from(awaiting, each => ({
-            section: each.section, index: each.index, text: String(each.text || ""),
+            section: each.section, index: each.index, widget: each.widget, text: String(each.text || ""),
             images: each.from ? each.from.kept() : each.images, quote: each.quote, why: each.why,
           })),
         ],
@@ -201,8 +201,10 @@ export function drafts(page: Page, boxes: HTMLElement[]): void {
     return box;
   }
 
-  // Join each to form, saying why.
+  // Join each to form, saying why. A form on a live block given text from
+  // elsewhere is on no block: its texts are never sent as one on it.
   function land(form: HTMLFormElement, each: Draft, why: string) {
+    unblock(form);
     const over = join(form, each);
     told(form, over ? why + " " + over : why);
   }
@@ -219,16 +221,30 @@ export function drafts(page: Page, boxes: HTMLElement[]): void {
 
   // Join each to the form of the box its live block is in now, holding the
   // form on the block as it was; that box, else null. A form that already
-  // holds another draft given back (two blocks a republish put in one
+  // holds a draft from another place (two blocks a republish put in one
   // section, or a section's own draft and a block's) is on no block: its
-  // texts are never sent as one comment on one of them.
+  // texts are never sent as one comment on one of them. A form sending a
+  // post empties once it is saved, so the draft joins it after (kept over
+  // a reload meanwhile), going where its block then is.
   function reblock(each: Draft, widget: Widget): HTMLElement | null {
-    const box = store.holdOn(widget);
+    const box = store.blockBox(widget);
     if (!box) return null;
     const form = forms.get(box)!;
+    const saving = sending.get(form);
+    if (saving) {
+      awaiting.add(each);
+      saving.then(() => {
+        awaiting.delete(each);
+        if (blockStanding(widget) === "gone") rehome(each, page.blockGone);
+        else if (!reblock(each, widget)) rehome(each, page.placeGone);
+      });
+      return box;
+    }
     const filled = holding({ field: fieldOf(form), images: attached.get(form)! });
+    const was = on(form);
+    store.holdOn(widget, true);
     const over = join(form, each);
-    if (filled) {
+    if (filled && !(was && was.id === widget.id && was.hash === widget.hash && was.state === widget.state)) {
       unmix(form, over);
     } else {
       told(form, [blockStanding(widget) === "changed" ? page.blockChanged : "", over].filter(Boolean).join(" "));
@@ -282,8 +298,6 @@ export function drafts(page: Page, boxes: HTMLElement[]): void {
         }
       } else if (widget && blockStanding(widget) === "gone") {
         moved = rehome(each, page.blockGone);
-        // Joined to a form on another block: never sent on that block.
-        unblock(forms.get(moved)!);
       } else if (widget && (held = reblock(each, widget))) {
         if (typeof each.section === "string") reblocked.set(each.section, held.dataset.section!);
       } else if (box) {

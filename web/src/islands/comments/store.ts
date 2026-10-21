@@ -257,14 +257,23 @@ export function store(page: Page, bridge: StoreBridge): Store {
   // draft kept over a reload opens the same way on the block it was on
   // (anchor: as it was then); the box, else null for a block the page has
   // no section for.
-  function holdOn(anchor: Widget): HTMLElement | null {
+  function holdOn(anchor: Widget, restoring = false): HTMLElement | null {
     const frame = frameOf(anchor.id);
-    const box = frame && boxOn(sectionOf(frame));
+    const box = blockBox(anchor);
     if (!frame || !box) return null;
     composer.block(forms.get(box)!, anchor, blockTitle(anchor));
-    const figure = frame.closest("figure");
-    panel!.write(box, figure?.querySelector<HTMLElement>(".artifact-live-comment") || frame);
+    // A narrow window shows one form at a time, and folding one takes it
+    // off its block: a form given back is held, not opened, there.
+    if (!restoring || panel!.wide) {
+      const figure = frame.closest("figure");
+      panel!.write(box, figure?.querySelector<HTMLElement>(".artifact-live-comment") || frame);
+    }
     return box;
+  }
+  // The box of the section a live block's frame is in now, else null.
+  function blockBox(anchor: Widget): HTMLElement | null {
+    const frame = frameOf(anchor.id);
+    return frame ? boxOn(sectionOf(frame)) : null;
   }
   const startOn: StartComment = ({ anchor }) => { holdOn(anchor); };
 
@@ -490,7 +499,7 @@ export function store(page: Page, bridge: StoreBridge): Store {
     get passages() { return passages!; },
     swapped(to) { swappedTo = to; },
     retitle: replies.retitle, askAbout: replies.askAbout,
-    enlist, ask, boxFor, whereFrom, put, refresh, holdOn,
+    enlist, ask, boxFor, whereFrom, put, refresh, holdOn, blockBox,
     // Each decision's Ask, the passages and the panel, the threads
     // arranged as the window allows, and the first read.
     start() {

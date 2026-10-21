@@ -60,9 +60,12 @@ export interface Store {
   whereFrom(root: import("../bridge").CommentRow): HTMLParagraphElement;
   put(thread: Thread): void;
   refresh(): void;
-  // A section's form opens on a live block, as its Comment opens it: that
-  // section's box, else null.
-  holdOn(anchor: import("../bridge").Widget): HTMLElement | null;
+  // A section's form opens on a live block, as its Comment opens it (one
+  // restoring a draft opens only on a wide window): that section's box,
+  // else null.
+  holdOn(anchor: import("../bridge").Widget, restoring?: boolean): HTMLElement | null;
+  // The box of the section a live block is in now, else null.
+  blockBox(anchor: import("../bridge").Widget): HTMLElement | null;
   start(): void;
 }
 

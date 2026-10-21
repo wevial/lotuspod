@@ -1002,3 +1002,146 @@ test("a block's unsent comment is still on its block after the browser reloads t
   await expect(churn.locator('.artifact-comment-on')).toHaveText(WORDS);
   expect(errors).toEqual([]);
 });
+
+// The next load's first read of the threads waits until the returned
+// function lets it go.
+async function holdFirstRead(page: Page) {
+  let release = () => {};
+  const held = new Promise<void>((resolve) => { release = resolve; });
+  let asked = false;
+  await page.route((url) => url.pathname === '/api/comments', async (route) => {
+    if (route.request().method() !== 'GET' || asked) {
+      await route.fallback();
+      return;
+    }
+    asked = true;
+    await held;
+    await route.fallback().catch(() => {});
+  });
+  return { asked: () => asked, release };
+}
+
+test("a block's draft given back while its form sends a post joins the form once the post is saved", async ({ page }) => {
+  const name = `block-comments-reload-sending-${test.info().repeatEachIndex}`;
+  publish(name, doc(1));
+  const errors = watch(page);
+  await load(page, name);
+  const first = await hashOf(page);
+  const { churn, form, field } = churnForm(page);
+  await block(page).comment.click();
+  await field.fill(QUESTION);
+
+  const read = await holdFirstRead(page);
+  // The post written after the reload is answered only once let go.
+  let answer = () => {};
+  const answering = new Promise<void>((resolve) => { answer = resolve; });
+  await page.route((url) => url.pathname === '/api/comments', async (route) => {
+    if (route.request().method() !== 'POST') {
+      await route.fallback();
+      return;
+    }
+    await answering;
+    await route.fallback().catch(() => {});
+  });
+  await page.reload();
+  await expect.poll(read.asked).toBe(true);
+  await block(page).comment.click();
+  await field.fill('Written after the reload');
+  const sent = posting(page);
+  await form.getByRole('button', { name: 'Comment', exact: true }).click();
+  expect((await sent).postDataJSON().text).toBe('Written after the reload');
+
+  read.release();
+  await expect(page.locator(':root')).toHaveAttribute('data-lotuspod-comments-read', /.*/);
+  answer();
+  await expect(field).toHaveValue(QUESTION);
+  await expect(churn.locator('.artifact-comment-on')).toHaveText(WORDS);
+  const { body } = await send(page);
+  expect(body.widget).toEqual({ id: 'churn', hash: first, state: '' });
+  await page.unrouteAll({ behavior: 'ignoreErrors' });
+  expect(errors).toEqual([]);
+});
+
+test("a block's draft given back to its form already written on the same block keeps the block", async ({ page }) => {
+  const name = `block-comments-reload-same-block-${test.info().repeatEachIndex}`;
+  publish(name, doc(1));
+  const errors = watch(page);
+  await load(page, name);
+  const first = await hashOf(page);
+  const { churn, field } = churnForm(page);
+  await block(page).comment.click();
+  await field.fill(QUESTION);
+
+  const read = await holdFirstRead(page);
+  await page.reload();
+  await expect.poll(read.asked).toBe(true);
+  await block(page).comment.click();
+  await field.fill('And since');
+  read.release();
+  await expect(field).toHaveValue(new RegExp(QUESTION));
+  await expect(field).toHaveValue(/And since/);
+  await expect(churn.locator('.artifact-comment-on')).toHaveText(WORDS);
+  const { body } = await send(page);
+  expect(body.widget).toEqual({ id: 'churn', hash: first, state: '' });
+  await page.unrouteAll({ behavior: 'ignoreErrors' });
+  expect(errors).toEqual([]);
+});
+
+test("a draft whose section is gone, given back to a form on a block, takes the form off its block", async ({ page }) => {
+  const name = `block-comments-reload-gone-section-${test.info().repeatEachIndex}`;
+  publish(name, doc(1));
+  const errors = watch(page);
+  await load(page, name);
+  const first = await hashOf(page);
+  const { churn, field } = churnForm(page);
+  await page.evaluate(({ key, first }) => {
+    const write = () => sessionStorage.setItem(key, JSON.stringify({ x: 0, y: 0, comments: {
+      open: { section: 'churn', writing: true },
+      texts: [
+        { section: 'churn', index: 1, text: 'On the block', images: [], widget: { id: 'churn', hash: first, state: '' } },
+        { section: 'gone', index: 1, text: 'On no block', images: [] },
+      ],
+    } }));
+    window.addEventListener('pagehide', write);
+    document.addEventListener('visibilitychange', write);
+  }, { key: KEPT + name, first });
+  await page.reload();
+  await expect(block(page).comment).toBeVisible();
+  await expect(field).toHaveValue(/On the block/);
+  await expect(field).toHaveValue(/On no block/);
+  await expect(churn.locator('.artifact-comment-on')).toHaveCount(0);
+  const { body } = await send(page);
+  expect(body).not.toHaveProperty('widget');
+  expect(errors).toEqual([]);
+});
+
+test("on a narrow window, drafts on two blocks both keep their blocks over a reload", async ({ page }) => {
+  const name = `block-comments-reload-narrow-two-${test.info().repeatEachIndex}`;
+  publish(name, doc(1));
+  const errors = watch(page);
+  await load(page, name);
+  const first = await hashOf(page);
+  await block(page).comment.click();
+  await churnForm(page).field.fill(QUESTION);
+  const { comment, form } = tally(page);
+  await comment.click();
+  await form.locator('textarea[name="text"]').fill('Since when?');
+
+  await page.setViewportSize({ width: 900, height: 900 });
+  await page.reload();
+  await expect(block(page).comment).toBeVisible();
+  const churned = page.locator('form.artifact-comment-form').filter({ has: page.locator('textarea[aria-label="Comment on Churn"]') });
+  await expect(churned.locator('textarea')).toHaveValue(QUESTION);
+  await expect(churned.locator('xpath=preceding-sibling::p[contains(@class, "artifact-comment-on")]')).toHaveText(WORDS);
+  const noted = page.locator('form.artifact-comment-form').filter({ has: page.locator('textarea[aria-label="Comment on Notes"]') });
+  await expect(noted.locator('textarea')).toHaveValue('Since when?');
+  await expect(noted.locator('xpath=preceding-sibling::p[contains(@class, "artifact-comment-on")]')).toHaveText('On Merged so far');
+
+  // Churn's own form opened again is still on the version written on.
+  await page.locator('details.artifact-comment[data-section="churn"] > summary').click();
+  await expect(churned.locator('textarea')).toBeVisible();
+  const sent = posting(page);
+  await churned.getByRole('button', { name: 'Comment', exact: true }).click();
+  expect((await sent).postDataJSON().widget).toEqual({ id: 'churn', hash: first, state: '' });
+  expect(errors).toEqual([]);
+});
