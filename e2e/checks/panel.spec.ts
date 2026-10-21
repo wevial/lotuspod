@@ -38,6 +38,12 @@ const START = Date.parse('2026-09-30T12:00:00Z');
 
 test.use({ viewport: WIDE });
 
+// The page polls /api/comments; a poll still in a route handler's route.fetch
+// when a check ends would otherwise fail that check with "Test ended".
+test.afterEach(async ({ page }) => {
+  await page.unrouteAll({ behavior: 'ignoreErrors' });
+});
+
 type Violation = { blockedURI: string; effectiveDirective: string };
 
 // Errors, policy violations and how many reads are in flight.

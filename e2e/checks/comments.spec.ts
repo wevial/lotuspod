@@ -8,6 +8,13 @@ import { expect, test, type Locator, type Page } from '@playwright/test';
 const MEDIUM = { width: 1024, height: 768 };
 test.use({ viewport: MEDIUM });
 
+// The page reads itself again when the site announces a change; a read still
+// in a route handler's route.fetch when a check ends would otherwise fail
+// that check with "Test ended".
+test.afterEach(async ({ page }) => {
+  await page.unrouteAll({ behavior: 'ignoreErrors' });
+});
+
 // The capture fixture's comments page: three sections, each ending in a
 // comment box, owned by hermes. The fixture names an assertion its site
 // accepts; sending it is being signed in. hermes pulls on the fixture's agent

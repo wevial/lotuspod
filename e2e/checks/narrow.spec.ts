@@ -39,6 +39,12 @@ const FLOODS_QUOTE = { exact: FLOODS, prefix: 'A cracked pump ', suffix: ' below
 
 test.use({ viewport: MEDIUM });
 
+// The page polls /api/comments; a poll still in a route handler's route.fetch
+// when a check ends would otherwise fail that check with "Test ended".
+test.afterEach(async ({ page }) => {
+  await page.unrouteAll({ behavior: 'ignoreErrors' });
+});
+
 type Violation = { blockedURI: string; effectiveDirective: string };
 
 // Errors, policy violations and how many reads are in flight.
