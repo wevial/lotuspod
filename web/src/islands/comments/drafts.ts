@@ -106,9 +106,6 @@ export function drafts(page: Page, boxes: HTMLElement[]): void {
         awaiting.size > 0;
     },
     save(): Saved {
-      // Reloaded again before what the last reload kept was given back:
-      // that is still what there is to keep.
-      if (kept) return kept;
       return {
         open: store.panel.held(),
         passage: store.passages.writing(),
@@ -213,14 +210,14 @@ export function drafts(page: Page, boxes: HTMLElement[]): void {
   }
 
   // Join each to the form of the box its live block is in now, holding the
-  // form on the block as it was; whether there is such a form.
-  function reblock(each: Draft, widget: Widget): boolean {
+  // form on the block as it was; that box, else null.
+  function reblock(each: Draft, widget: Widget): HTMLElement | null {
     const box = store.holdOn(widget);
-    if (!box) return false;
+    if (!box) return null;
     const form = forms.get(box)!;
     const over = join(form, each);
     told(form, [blockStanding(widget) === "changed" ? page.blockChanged : "", over].filter(Boolean).join(" "));
-    return true;
+    return box;
   }
 
   function worth(each: Draft) {
@@ -233,12 +230,17 @@ export function drafts(page: Page, boxes: HTMLElement[]): void {
     kept = null;
     if (!was) return;
     let moved: HTMLElement | null = null;
+    // The section each block draft was written in, by the section its
+    // block is in now: a form open where a draft was written opens where
+    // it is now, so reopening the old one folds no form off its block.
+    const reblocked = new Map<string, string>();
     (Array.isArray(was.texts) ? was.texts as unknown[] : []).forEach(found => {
       if (!found || typeof found !== "object" || !worth(found)) return;
       const each: Draft = found;
       const thread = each.thread ? shown.get(each.thread as number) : null;
       const box = !each.thread && typeof each.section === "string" ? sections.get(each.section) : null;
       const widget = each.thread ? undefined : widgetOf(each);
+      let held: HTMLElement | null = null;
       if (each.why) {
         // Waiting for a post when the page reloaded: a passage's composer
         // opens again on its words where the page has them; else it goes
@@ -257,8 +259,8 @@ export function drafts(page: Page, boxes: HTMLElement[]): void {
         }
       } else if (widget && blockStanding(widget) === "gone") {
         moved = rehome(each, page.blockGone);
-      } else if (widget && reblock(each, widget)) {
-        return;
+      } else if (widget && (held = reblock(each, widget))) {
+        if (typeof each.section === "string") reblocked.set(each.section, held.dataset.section!);
       } else if (box) {
         told(forms.get(box)!, join(forms.get(box)!, each));
       } else {
@@ -266,7 +268,9 @@ export function drafts(page: Page, boxes: HTMLElement[]): void {
       }
     });
     if (was.open && typeof was.open === "object") {
-      store.panel.reopen(was.open as Kept);
+      const open = was.open as Kept;
+      const now = typeof open.section === "string" ? reblocked.get(open.section) : undefined;
+      store.panel.reopen(now === undefined ? open : { ...open, section: now });
     }
     const passage = was.passage && typeof was.passage === "object" ? was.passage as PassageDraft : null;
     if (passage && !store.passages.reopen(passage) && worth(passage)) {

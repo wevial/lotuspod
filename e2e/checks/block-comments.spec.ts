@@ -786,3 +786,42 @@ test("a kept draft whose block is not a block's anchor reloads as its section's 
   }
   expect(errors).toEqual([]);
 });
+
+test("on a narrow window, a block's form reloaded onto a page that moved the block opens on it in its new section", async ({ page }) => {
+  await page.setViewportSize({ width: 900, height: 900 });
+  const name = `block-comments-reload-moved-${test.info().repeatEachIndex}`;
+  publish(name, doc(1));
+  const errors = watch(page);
+  await load(page, name);
+  const first = await hashOf(page);
+  await block(page).comment.click();
+  const form = page.locator('form.artifact-comment-form').filter({ has: page.getByRole('textbox', { name: 'Comment on Churn' }) });
+  await expect(form).toBeVisible();
+  await form.locator('textarea').fill(QUESTION);
+
+  // The block moves into Notes; Churn stays, and the page shows the banner.
+  const lines = doc(1).split('\n');
+  const start = lines.findIndex((line) => line.startsWith('```html live id=churn'));
+  const moved = lines.splice(start, 4);
+  const notes = lines.indexOf('Nothing else yet.');
+  lines.splice(notes + 2, 0, ...moved);
+  publish(name, third(lines.join('\n')));
+  await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+  const reload = page.locator('.artifact-live-page-banner').getByRole('button', { name: 'Reload' });
+  await expect(reload).toBeVisible();
+  const loaded = page.waitForEvent('load');
+  await reload.click();
+  await loaded;
+
+  await expect(page.locator('div.artifact-section-body[data-section="notes"] figure[data-widget="churn"]')).toHaveCount(1);
+  const held = page.locator('form.artifact-comment-form').filter({ has: page.getByRole('textbox', { name: 'Comment on Notes' }) });
+  await expect(held.locator('textarea')).toBeVisible();
+  await expect(held.locator('textarea')).toHaveValue(QUESTION);
+  await expect(held.locator('xpath=preceding-sibling::p[contains(@class, "artifact-comment-on")]')).toHaveText(WORDS);
+  const sent = posting(page);
+  await held.getByRole('button', { name: 'Comment', exact: true }).click();
+  const body = (await sent).postDataJSON();
+  expect(body.widget).toEqual({ id: 'churn', hash: first, state: '' });
+  expect(body.section).toBe('notes');
+  expect(errors).toEqual([]);
+});
