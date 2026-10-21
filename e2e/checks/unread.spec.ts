@@ -10,6 +10,12 @@ import { expect, test, type APIRequestContext, type Page } from '@playwright/tes
 const WIDE = { width: 1440, height: 900 };
 test.use({ viewport: WIDE });
 
+// The page polls /api/comments; a poll still in a route handler's route.fetch
+// when a check ends would otherwise fail that check with "Test ended".
+test.afterEach(async ({ page }) => {
+  await page.unrouteAll({ behavior: 'ignoreErrors' });
+});
+
 const PAGE = '/capture-comments.html';
 const NAME = 'capture-comments';
 const SECTION = 'next-steps';

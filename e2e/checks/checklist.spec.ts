@@ -16,6 +16,13 @@ const READER = 'maintainer';
 const ITEMS = { '1': 'Welcome email', '2': 'Weekly digest', '3': 'Renewal reminder', '4': 'Survey' };
 const CHANGED = 'On: Weekly digest · Off: Welcome email';
 
+// The page reads /api/answers in the background; a read still in a route
+// handler's route.fetch when a check ends would otherwise fail that check
+// with "Test ended".
+test.afterEach(async ({ page }) => {
+  await page.unrouteAll({ behavior: 'ignoreErrors' });
+});
+
 async function watch(page: Page) {
   const errors: string[] = [];
   page.on('console', (message) => {

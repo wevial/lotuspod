@@ -34,6 +34,13 @@ const ONE = ['# Pond note', '', 'A short note.', '',
 
 test.use({ viewport: WIDE });
 
+// The page reads itself again when the site announces a change; a read still
+// in a route handler's route.fetch when a check ends would otherwise fail
+// that check with "Test ended".
+test.afterEach(async ({ page }) => {
+  await page.unrouteAll({ behavior: 'ignoreErrors' });
+});
+
 function run(...args: string[]) {
   return execFileSync(PYTHON, ['-m', 'lotuspod', ...args], {
     encoding: 'utf-8',
