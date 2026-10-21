@@ -825,3 +825,85 @@ test("on a narrow window, a block's form reloaded onto a page that moved the blo
   expect(body.section).toBe('notes');
   expect(errors).toEqual([]);
 });
+
+test("a page left before the threads are first read keeps what the last reload kept, with what was written since", async ({ page }) => {
+  const name = `block-comments-reload-twice-${test.info().repeatEachIndex}`;
+  publish(name, doc(1));
+  const errors = watch(page);
+  await load(page, name);
+  const { field } = churnForm(page);
+  await block(page).comment.click();
+  await field.fill(QUESTION);
+
+  // The next load's first read of the threads waits until it is let go.
+  let release = () => {};
+  const held = new Promise<void>((resolve) => { release = resolve; });
+  let asked = false;
+  await page.route((url) => url.pathname === '/api/comments', async (route) => {
+    if (route.request().method() !== 'GET') {
+      await route.fallback();
+      return;
+    }
+    asked = true;
+    await held;
+    await route.abort().catch(() => {});
+  });
+  await page.reload();
+  await expect.poll(() => asked).toBe(true);
+  const notes = panel(page).group('Notes').locator('form.artifact-comment-form');
+  await page.locator('details.artifact-comment[data-section="notes"] > summary').click();
+  await expect(notes).toBeVisible();
+  await notes.locator('textarea[name="text"]').fill('Written before the first read');
+
+  // Kept again while that read still waits: the draft not yet given back
+  // with the one written since.
+  expect(await page.locator(':root').getAttribute('data-lotuspod-comments-read')).toBeNull();
+  await setVisibility(page, 'hidden');
+  const saved = await page.evaluate((key) => JSON.parse(sessionStorage.getItem(key) ?? 'null'), KEPT + name);
+  const texts: { text?: string; widget?: { id?: string } }[] = saved?.comments?.texts ?? [];
+  expect(texts.map((each) => each.text)).toEqual(expect.arrayContaining([QUESTION, 'Written before the first read']));
+  expect(texts.find((each) => each.text === QUESTION)?.widget?.id).toBe('churn');
+  release();
+  expect(errors).toEqual([]);
+});
+
+test("block drafts a republish puts in one section are given back on no block, saying so", async ({ page }) => {
+  const name = `block-comments-reload-merged-${test.info().repeatEachIndex}`;
+  publish(name, doc(1));
+  const errors = watch(page);
+  await load(page, name);
+  await block(page).comment.click();
+  await churnForm(page).field.fill(QUESTION);
+  await page.locator('figure[data-widget="tally"] .artifact-live-chrome')
+    .getByRole('button', { name: 'Comment', exact: true }).click();
+  const notes = panel(page).group('Notes');
+  const form = notes.locator('form.artifact-comment-form');
+  await expect(notes.locator('.artifact-comment-on')).toHaveText('On Merged so far');
+  await form.locator('textarea[name="text"]').fill('Since when?');
+
+  // Churn's block moves into Notes, beside tally.
+  const lines = doc(1).split('\n');
+  const start = lines.findIndex((line) => line.startsWith('```html live id=churn'));
+  const moved = lines.splice(start, 4);
+  lines.splice(lines.indexOf('Nothing else yet.') + 2, 0, ...moved);
+  publish(name, third(lines.join('\n')));
+  await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+  const reload = page.locator('.artifact-live-page-banner').getByRole('button', { name: 'Reload' });
+  await expect(reload).toBeVisible();
+  const loaded = page.waitForEvent('load');
+  await reload.click();
+  await loaded;
+
+  const field = form.locator('textarea[name="text"]');
+  await expect(field).toHaveValue(new RegExp(QUESTION));
+  await expect(field).toHaveValue(/Since when\?/);
+  await expect(notes.locator('.artifact-comment-on')).toHaveCount(0);
+  await expect(form.locator('.artifact-comment-status'))
+    .toHaveText('Where you were writing has changed since. Your text is kept here.');
+  const sent = posting(page);
+  await form.getByRole('button', { name: 'Comment', exact: true }).click();
+  const body = (await sent).postDataJSON();
+  expect(body).not.toHaveProperty('widget');
+  expect(body.section).toBe('notes');
+  expect(errors).toEqual([]);
+});

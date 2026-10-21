@@ -322,7 +322,10 @@ on that block, under its "On" line, in the form of the section the block is
 in now, still on the version of the block the reader saw (saying so, as
 after a swap, should the block have changed); where the page no longer has
 the block, it goes to its section's form, saying "The block you were
-commenting on was removed. Your comment is kept here, on the section." A
+commenting on was removed. Your comment is kept here, on the section."
+Comments a republish puts in one section's form, from two blocks or from a
+block and the section itself, are kept there on no block, saying where the
+reader was writing has changed. A
 comment
 written where the new revision has no place for it, on a section renamed or
 removed or on words that changed, opens in a form for a new thread on its

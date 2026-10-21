@@ -45,7 +45,7 @@ export interface Store {
   readonly shown: Map<number, Thread>;
   readonly forms: Map<HTMLElement, HTMLFormElement>;
   readonly attached: Map<HTMLFormElement, import("../bridge").Attachments>;
-  readonly composer: Pick<ReturnType<typeof import("./composer").composers>, "sending" | "wire" | "fieldOf" | "handles" | "on">;
+  readonly composer: Pick<ReturnType<typeof import("./composer").composers>, "sending" | "wire" | "fieldOf" | "handles" | "on" | "unblock">;
   readonly panel: Placement;
   readonly passages: Passages;
   // A swap moved the page on to revision to.

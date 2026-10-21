@@ -63,7 +63,7 @@ export function drafts(page: Page, boxes: HTMLElement[]): void {
 
   const store: Store = makeStore(page, { boxes, decisions, restore, boxWith });
   const { sections, shown, forms, attached, refresh } = store;
-  const { fieldOf, handles, on } = store.composer;
+  const { fieldOf, handles, on, unblock } = store.composer;
 
   // Each composer of a section's form or a thread's reply, with what it
   // is kept by over a reload: its thread, its section and where the
@@ -103,13 +103,16 @@ export function drafts(page: Page, boxes: HTMLElement[]): void {
     unsent() {
       const passage = store.passages.writing();
       return Boolean(passage && ((passage.text || "").trim() || passage.held)) || composers().some(holding) ||
-        awaiting.size > 0;
+        awaiting.size > 0 || pending().length > 0 || Boolean(kept && kept.passage);
     },
+    // What the last reload kept and the threads' first read has not yet
+    // given back is kept again, with what was written since.
     save(): Saved {
       return {
-        open: store.panel.held(),
-        passage: store.passages.writing(),
+        open: store.panel.held() || (kept ? kept.open : null),
+        passage: store.passages.writing() || (kept ? kept.passage : null),
         texts: [
+          ...pending(),
           ...composers().filter(holding).map(each => ({
             thread: each.thread, section: each.section, index: each.index, widget: each.widget,
             text: each.field.value, images: each.images.kept(),
@@ -137,6 +140,11 @@ export function drafts(page: Page, boxes: HTMLElement[]): void {
   // page no longer has the block, it goes to its section's form, saying so.
   // Images go with their text, up to MAX_IMAGES a composer.
   let kept = live.kept() as Saved | null;
+
+  // The texts kept before the reload, until they are given back.
+  function pending(): unknown[] {
+    return kept && Array.isArray(kept.texts) ? kept.texts as unknown[] : [];
+  }
 
   // Add each's text and images to form; why some images were not. Those
   // of a composer still on the page (each.from: its attachments, as a
@@ -210,14 +218,29 @@ export function drafts(page: Page, boxes: HTMLElement[]): void {
   }
 
   // Join each to the form of the box its live block is in now, holding the
-  // form on the block as it was; that box, else null.
+  // form on the block as it was; that box, else null. A form that already
+  // holds another draft given back (two blocks a republish put in one
+  // section, or a section's own draft and a block's) is on no block: its
+  // texts are never sent as one comment on one of them.
   function reblock(each: Draft, widget: Widget): HTMLElement | null {
     const box = store.holdOn(widget);
     if (!box) return null;
     const form = forms.get(box)!;
+    const filled = holding({ field: fieldOf(form), images: attached.get(form)! });
     const over = join(form, each);
-    told(form, [blockStanding(widget) === "changed" ? page.blockChanged : "", over].filter(Boolean).join(" "));
+    if (filled) {
+      unmix(form, over);
+    } else {
+      told(form, [blockStanding(widget) === "changed" ? page.blockChanged : "", over].filter(Boolean).join(" "));
+    }
     return box;
+  }
+
+  // A form given back drafts from more than one place: on no block, saying
+  // its text is kept here.
+  function unmix(form: HTMLFormElement, over: string) {
+    unblock(form);
+    told(form, over ? page.placeGone + " " + over : page.placeGone);
   }
 
   function worth(each: Draft) {
@@ -262,7 +285,10 @@ export function drafts(page: Page, boxes: HTMLElement[]): void {
       } else if (widget && (held = reblock(each, widget))) {
         if (typeof each.section === "string") reblocked.set(each.section, held.dataset.section!);
       } else if (box) {
-        told(forms.get(box)!, join(forms.get(box)!, each));
+        const form = forms.get(box)!;
+        const over = join(form, each);
+        if (on(form)) unmix(form, over);
+        else told(form, over);
       } else {
         moved = rehome(each, page.placeGone);
       }
