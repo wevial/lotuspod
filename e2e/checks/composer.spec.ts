@@ -78,8 +78,12 @@ async function watch(page: Page) {
     });
   });
   return {
-    async clean() {
-      expect(errors).toEqual([]);
+    // refused: the console lines of the refusals the check itself routed.
+    async clean(refused: string[] = []) {
+      const failed = /^Failed to load resource: the server responded with a status of /;
+      expect(errors.filter((each) => !failed.test(each))).toEqual([]);
+      expect(errors.filter((each) => failed.test(each))
+        .map((each) => each.replace(failed, ''))).toEqual(refused);
       expect(violations).toEqual([]);
     },
   };
@@ -498,5 +502,32 @@ test.describe('signed in', () => {
     await expect(open.add).toBeInViewport();
     await expect(open.add).toBeDisabled();
     await seen.clean();
+  });
+
+  test("a section's form refused for a page change says so in words, and any other refusal by its code", async ({ page }) => {
+    const seen = await watch(page);
+    const refusals = [
+      { status: 400, error: 'unknown_section', says: 'This page has changed since it loaded. Reload it to comment.' },
+      { status: 409, error: 'archived', says: 'Comments are closed: this page is archived.' },
+      { status: 400, error: 'invalid_body', says: 'Not saved (invalid_body). Try again.' },
+    ];
+    let next = 0;
+    await page.route((url) => url.pathname === '/api/comments', async (route) => {
+      if (route.request().method() !== 'POST') return route.fallback();
+      const refusal = refusals[next++];
+      await route.fulfill({ status: refusal.status, json: { error: refusal.error } });
+    });
+    await page.goto(`${PAGE}?standalone`);
+    await loaded(page);
+    const open = await compose(page, 'pond');
+    const text = 'Does the pump stop before the pond freezes?';
+    await open.field.fill(text);
+    for (const refusal of refusals) {
+      await open.send.click();
+      await expect(open.status).toHaveText(refusal.says);
+      await expect(open.field).toHaveValue(text);
+    }
+    expect(next).toBe(refusals.length);
+    await seen.clean(['400 (Bad Request)', '409 (Conflict)', '400 (Bad Request)']);
   });
 });

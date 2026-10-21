@@ -885,7 +885,14 @@ def cmd_render(args: argparse.Namespace) -> int:
 
     for filename, data in widget_files.items():
         write_atomic(out_dir / filename, data)
+    # The outgoing page's hashes first, so a page published before they were
+    # kept keeps the ones it had.
+    try:
+        keep_block_hashes(out_dir, args.name, out_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError):
+        pass
     write_atomic(out_path, html.encode("utf-8"))
+    keep_block_hashes(out_dir, args.name, html)
     widget_name = re.compile(re.escape(args.name) + r"\.w-[0-9a-f]{12}\.html\Z")
     for stale in out_dir.iterdir():
         if widget_name.fullmatch(stale.name) and stale.name not in widget_files:
@@ -979,6 +986,40 @@ BODY_SOURCE_SUFFIX = ".body.html"
 REFS_SUFFIX = ".refs.json"
 # The largest refs file publish reads, in bytes.
 REFS_MAX = 1 << 20
+# Each live block's widget file hashes over the page's visible publishes,
+# kept beside it, never served: the comments route takes a thread on any of
+# them, with or without the site's git history.
+BLOCKS_SUFFIX = ".blocks.json"
+
+
+def kept_block_hashes(out_dir: Path, name: str) -> dict[str, list[str]]:
+    """Each live block id to the hashes NAME.blocks.json keeps for it,
+    oldest first; {} when there is no file or it cannot be read."""
+    try:
+        kept = json.loads((out_dir / f"{name}{BLOCKS_SUFFIX}").read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, ValueError):
+        return {}
+    blocks = kept.get("blocks") if isinstance(kept, dict) else None
+    if not isinstance(blocks, dict):
+        return {}
+    return {ident: [hash_ for hash_ in hashes if isinstance(hash_, str)]
+            for ident, hashes in blocks.items() if isinstance(hashes, list)}
+
+
+def keep_block_hashes(out_dir: Path, name: str, page_html: str) -> None:
+    """Add the live blocks' hashes of NAME's page_html, when it is
+    visible, to NAME.blocks.json; a page that never had a block keeps no
+    file."""
+    found = widgets.PageWidgets(page_html).found
+    if not found or not extract_visibility(page_html):
+        return
+    blocks = kept_block_hashes(out_dir, name)
+    for ident, (hash_, _, _) in found.items():
+        hashes = blocks.setdefault(ident, [])
+        if hash_ not in hashes:
+            hashes.append(hash_)
+    write_atomic(out_dir / f"{name}{BLOCKS_SUFFIX}",
+                 (json.dumps({"blocks": blocks}, indent=2) + "\n").encode("utf-8"))
 
 
 def is_page_name(name: str) -> bool:
@@ -2314,7 +2355,8 @@ def serve_allow_list(out_dir: Path) -> frozenset[str]:
     over HTTP even though it lives in the served directory. Sources
     (NAME.body.html, like NAME.md), dotfiles and symbolic links are never
     pages, so they are never listed, and neither is a page's kept refs
-    (NAME.refs.json), which is no page either.
+    (NAME.refs.json) or block hashes (NAME.blocks.json), which are no
+    pages either.
     """
     allowed = {INDEX_FILE, *_SERVE_SUPPORT_FILES}
     try:
@@ -2393,8 +2435,10 @@ def api_page(out_dir: Path, name: str,
     # A block outside every section's wrapper is on the whole page, or in
     # the page's one box when that is its only box.
     outside = comments.PAGE_SECTION if boxes == {comments.PAGE_SECTION} else comments.WHOLE_PAGE
+    earlier = kept_block_hashes(out_dir, name)
     page_widgets = {
-        ident: api.Widget(hash=hash_, title=title, section=section or outside)
+        ident: api.Widget(hash=hash_, title=title, section=section or outside,
+                          earlier=frozenset(earlier.get(ident, ())))
         for ident, (hash_, title, section) in widgets.PageWidgets(page_html).found.items()
     }
     return api.Page(name=name, revision=revision, sections=sections, questions=questions,

@@ -45,6 +45,8 @@
   var NO_QUESTION = "Write your question in the note, then press Ask.";
   var PASSAGE_GONE = "The words you selected have changed since. Your comment is kept here, on the section.";
   var PLACE_GONE = "Where you were writing has changed since. Your text is kept here.";
+  var BLOCK_CHANGED = "This block was updated since you started. Your comment stays on the version you saw.";
+  var STALE_BLOCK = "This block has changed since the page loaded. Reload the page to comment on its new version.";
   var CHANGED = "Comments on sections that have changed";
   var CHANGED_GROUP = "Sections that have changed";
   // The section of a thread on the whole page (lotuspod.comments.WHOLE_PAGE).

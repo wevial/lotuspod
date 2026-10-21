@@ -30,6 +30,9 @@ const QUESTION = 'Reruns look high';
 // thread hermes's credential may not claim: the reader asks hermes in it.
 const ASK = '@hermes Is it the shared migration file?';
 const REPLY = 'Mostly the shared migration file.';
+// js/page-open.js's BLOCK_CHANGED and STALE_BLOCK.
+const BLOCK_CHANGED = 'This block was updated since you started. Your comment stays on the version you saw.';
+const STALE_BLOCK = 'This block has changed since the page loaded. Reload the page to comment on its new version.';
 
 // A page whose first section holds the block, drawn as version says; none
 // at all when version is 0. Its second section keeps a block of its own, so
@@ -112,6 +115,13 @@ function panel(page: Page) {
   const group = (title: string) => aside.locator('.artifact-comments-group')
     .filter({ has: page.locator(':scope > .artifact-comments-group-title', { hasText: title }) });
   return { aside, group, strays: aside.locator('.artifact-comments-group').last() };
+}
+
+// The Churn group's form for a new thread in the comments panel.
+function churnForm(page: Page) {
+  const churn = panel(page).group('Churn');
+  const form = churn.locator('form.artifact-comment-form');
+  return { churn, form, field: form.locator('textarea[name="text"]'), status: form.locator('.artifact-comment-status') };
 }
 
 // The comment the page posts next, as the route receives it.
@@ -406,5 +416,183 @@ test('a block republished in another section, its own gone, takes its thread wit
   await load(page, name);
   await expect(side.group('New').locator('.artifact-comments-entry')).toHaveCount(1);
   await expect(block(page).pin).toHaveText('1');
+  expect(errors).toEqual([]);
+});
+
+test("a block's form kept over a swap that changes the block stays on the version the reader saw and sends it", async ({ page }) => {
+  const name = `block-comments-swapped-${test.info().repeatEachIndex}`;
+  publish(name, doc(1));
+  const errors = watch(page);
+  await load(page, name);
+  const first = await hashOf(page);
+  const { churn, form, field, status } = churnForm(page);
+  await block(page).comment.click();
+  await expect(churn.locator('.artifact-comment-on')).toHaveText(WORDS);
+  await field.fill(QUESTION);
+
+  // The block's script changes under the same id while the form is open.
+  await swap(page, name, doc(2));
+  await expect(page.frameLocator('figure[data-widget="churn"] iframe').locator('body'))
+    .toHaveAttribute('data-version', '2');
+  const hash = await hashOf(page);
+  console.log(`frame's src before the send: first hash ${first}, now ${hash}`);
+  expect(hash).not.toBe(first);
+  await expect(field).toHaveValue(QUESTION);
+  await expect(churn.locator('.artifact-comment-on')).toHaveText(WORDS);
+  await expect(status).toHaveText(BLOCK_CHANGED);
+
+  const sent = posting(page);
+  const answered = page.waitForResponse((response) => new URL(response.url()).pathname === '/api/comments' &&
+    response.request().method() === 'POST');
+  await form.getByRole('button', { name: 'Comment', exact: true }).click();
+  const body = (await sent).postDataJSON();
+  const response = await answered;
+  await expect(status).not.toHaveText('Saving...');
+  const said = (await status.count()) ? await status.textContent() : '';
+  console.log(`sent widget ${JSON.stringify(body.widget)}, answered ${response.status()}, status "${said}"`);
+  expect(response.status(), `the status reads "${said}"`).toBe(201);
+  // The hash the reader started on, an earlier version of the block.
+  expect(body.widget).toEqual({ id: 'churn', hash: first, state: '' });
+  const entry = churn.locator('.artifact-comments-entry');
+  await expect(entry).toHaveCount(1);
+  await expect(status).toHaveText('');
+  await expect(entry.locator('.artifact-comment-event--widget')).toHaveText('Widget changed since this comment');
+  expect(errors).toEqual([]);
+});
+
+test("a block's form refused for a block the page changed says so in words and keeps its text", async ({ page }) => {
+  const name = `block-comments-refused-${test.info().repeatEachIndex}`;
+  publish(name, doc(1));
+  const errors = watch(page);
+  const refusals = [{ status: 409, error: 'stale_widget' }, { status: 400, error: 'unknown_widget' }];
+  let next = 0;
+  await page.route((url) => url.pathname === '/api/comments', async (route) => {
+    if (route.request().method() !== 'POST') return route.fallback();
+    const refusal = refusals[next++];
+    await route.fulfill({ status: refusal.status, json: { error: refusal.error } });
+  });
+  await load(page, name);
+  const { churn, form, field, status } = churnForm(page);
+  await block(page).comment.click();
+  await expect(churn.locator('.artifact-comment-on')).toHaveText(WORDS);
+  await field.fill(QUESTION);
+  for (const refusal of refusals) {
+    const sent = posting(page);
+    await form.getByRole('button', { name: 'Comment', exact: true }).click();
+    expect((await sent).postDataJSON().widget).toMatchObject({ id: 'churn' });
+    await expect(status).toHaveText(STALE_BLOCK);
+    await expect(field).toHaveValue(QUESTION);
+    await expect(churn.locator('.artifact-comment-on')).toHaveText(WORDS);
+    const said = await panel(page).aside.textContent();
+    expect(said).not.toContain('stale_widget');
+    expect(said).not.toContain('unknown_widget');
+  }
+  expect(next).toBe(refusals.length);
+  expect(errors).toEqual([]);
+});
+
+test("a block's form refused after the block changed keeps its refusal over a swap that leaves the block as it was", async ({ page }) => {
+  const name = `block-comments-updated-refused-${test.info().repeatEachIndex}`;
+  publish(name, doc(1));
+  const errors = watch(page);
+  await load(page, name);
+  const churn = panel(page).group('Churn');
+  const form = churn.locator('form.artifact-comment-form');
+  const field = form.locator('textarea[name="text"]');
+  const status = form.locator('.artifact-comment-status');
+  await block(page).comment.click();
+  await field.fill(QUESTION);
+  await swap(page, name, doc(2));
+  await expect(status).toHaveText(BLOCK_CHANGED);
+  await page.route((url) => url.pathname === '/api/comments', (route) =>
+    route.request().method() === 'POST'
+      ? route.fulfill({ status: 503, json: { error: 'storage_unavailable' } }) : route.fallback());
+  await form.getByRole('button', { name: 'Comment', exact: true }).click();
+  const refused = 'Not saved (storage_unavailable). Try again.';
+  await expect(status).toHaveText(refused);
+  // Only the Notes section changes.
+  await swap(page, name, doc(2).replace('Nothing else yet.', 'One more note.'));
+  await expect(page.getByText('One more note.', { exact: true })).toBeVisible();
+  await expect(status).toHaveText(refused);
+  await expect(field).toHaveValue(QUESTION);
+  await expect(churn.locator('.artifact-comment-on')).toHaveText(WORDS);
+  expect(errors).toEqual([]);
+});
+
+test("a block's form whose block a later swap takes away no longer says it stays on the block", async ({ page }) => {
+  const name = `block-comments-updated-gone-${test.info().repeatEachIndex}`;
+  publish(name, doc(1));
+  const errors = watch(page);
+  await load(page, name);
+  const { churn, form, field, status } = churnForm(page);
+  await block(page).comment.click();
+  await field.fill(QUESTION);
+  await swap(page, name, doc(2));
+  await expect(status).toHaveText(BLOCK_CHANGED);
+
+  // The block leaves the page: the form is a comment on its section.
+  await swap(page, name, doc(0));
+  await expect(page.locator('figure[data-widget="churn"]')).toHaveCount(0);
+  await expect(churn.locator('.artifact-comment-on')).toHaveCount(0);
+  await expect(field).toHaveValue(QUESTION);
+  await expect(status).toHaveText('');
+  const sent = posting(page);
+  await form.getByRole('button', { name: 'Comment', exact: true }).click();
+  expect((await sent).postDataJSON().widget).toBeUndefined();
+  await expect(churn.locator('.artifact-comments-entry')).toHaveCount(1);
+  expect(errors).toEqual([]);
+});
+
+test("a block's form that Escape takes off the block no longer says it stays on the block", async ({ page }) => {
+  const name = `block-comments-updated-escape-${test.info().repeatEachIndex}`;
+  publish(name, doc(1));
+  const errors = watch(page);
+  await load(page, name);
+  const { churn, form, field, status } = churnForm(page);
+  await block(page).comment.click();
+  await field.fill(QUESTION);
+  await swap(page, name, doc(2));
+  await expect(status).toHaveText(BLOCK_CHANGED);
+
+  await field.focus();
+  await page.keyboard.press('Escape');
+  await expect(form).toBeHidden();
+  await page.locator('details.artifact-comment[data-section="churn"] > summary').click();
+  await expect(form).toBeVisible();
+  await expect(churn.locator('.artifact-comment-on')).toHaveCount(0);
+  await expect(status).toHaveText('');
+  await field.fill('A note on the section');
+  const sent = posting(page);
+  await form.getByRole('button', { name: 'Comment', exact: true }).click();
+  expect('widget' in (await sent).postDataJSON()).toBe(false);
+  await expect(churn.locator('.artifact-comments-entry')).toHaveCount(1);
+  expect(errors).toEqual([]);
+});
+
+test("a block's form refused for its block no longer says to reload once a swap takes the block away", async ({ page }) => {
+  const name = `block-comments-stale-gone-${test.info().repeatEachIndex}`;
+  publish(name, doc(1));
+  const errors = watch(page);
+  const comments = (url: URL) => url.pathname === '/api/comments';
+  await page.route(comments, (route) =>
+    route.request().method() === 'POST'
+      ? route.fulfill({ status: 409, json: { error: 'stale_widget' } }) : route.fallback());
+  await load(page, name);
+  const { churn, form, field, status } = churnForm(page);
+  await block(page).comment.click();
+  await field.fill(QUESTION);
+  await form.getByRole('button', { name: 'Comment', exact: true }).click();
+  await expect(status).toHaveText(STALE_BLOCK);
+  await page.unroute(comments);
+
+  await swap(page, name, doc(0));
+  await expect(page.locator('figure[data-widget="churn"]')).toHaveCount(0);
+  await expect(churn.locator('.artifact-comment-on')).toHaveCount(0);
+  await expect(field).toHaveValue(QUESTION);
+  await expect(status).toHaveText('');
+  const sent = posting(page);
+  await form.getByRole('button', { name: 'Comment', exact: true }).click();
+  expect('widget' in (await sent).postDataJSON()).toBe(false);
+  await expect(churn.locator('.artifact-comments-entry')).toHaveCount(1);
   expect(errors).toEqual([]);
 });

@@ -17,14 +17,16 @@ from __future__ import annotations
 import json
 import re
 import sqlite3
+import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from lotuspod import agents, cli, comments, db, responder  # noqa: E402
+from lotuspod import agents, cli, comments, db, responder, versions  # noqa: E402
 from tests.test_agent_pull import PullTestCase, run_cli  # noqa: E402
 
 TITLE = "Merge churn by worker count"
@@ -95,6 +97,30 @@ class AnchorCase(PullTestCase):
         [found] = [item for item in self.pull("hermes")
                    if item["kind"] == "comment" and item["comment"]["id"] == comment_id]
         return found
+
+    def check_stored_as_sent(self, first: str) -> None:
+        """A thread on first, a hash the block had before its current one."""
+        self.assertNotEqual(self.block_hash(), first)
+        status, row = self.post({"section": "throughput", "text": "@hermes This number is off.",
+                                 "widget": self.anchor(hash=first)})
+        self.assertEqual(status, 201, row)
+        self.assertEqual(row["widget"], self.anchor(hash=first))
+        [thread] = self.threads("churn")
+        self.assertEqual(thread["root"]["widget"]["hash"], first)
+        # The pull says the block has changed since, as for a thread stored
+        # before the change.
+        self.assertEqual(self.item(row["id"])["block"]["status"], "changed")
+        self.assertIn("The block has changed since this comment", self.markdown_pull())
+
+    def check_never_had_refused(self) -> None:
+        before = self.stored()
+        lag = self.block_hash("lag")
+        for name, hash_ in (("no file", "0" * 12), ("another block's", lag)):
+            with self.subTest(name):
+                status, payload = self.post({"section": "throughput", "text": "Off.",
+                                             "widget": self.anchor(hash=hash_)})
+                self.assertEqual((status, payload), (409, {"error": "stale_widget"}))
+        self.assertEqual(self.stored(), before)
 
 
 class RouteTests(AnchorCase):
@@ -178,6 +204,86 @@ class RouteTests(AnchorCase):
         # A page with no blocks has none.
         self.assertEqual(cli.api_page(self.out_dir, "plan").widgets, {})
 
+
+class EarlierVersionTests(AnchorCase):
+    """The page's site is the top of its own git repository, so each publish
+    is a version of it: churn published with BLOCK, then with CHANGED."""
+
+    def prepare(self) -> None:
+        for argv in (["init", "-q", "-b", "main"], ["config", "user.name", "Anchor tests"],
+                     ["config", "user.email", "anchors@example.com"]):
+            subprocess.run(["git", "-C", str(self.out_dir), *argv], check=True,
+                           capture_output=True)
+        self.publish_churn(churn(BLOCK))
+        self.first = self.block_hash()
+        self.publish_churn(churn(CHANGED))
+        # As a page published before its blocks' hashes were kept beside it:
+        # only the history knows the first one.
+        (self.out_dir / f"churn{cli.BLOCKS_SUFFIX}").unlink()
+
+    def test_a_hash_the_block_had_in_an_earlier_version_is_stored_as_sent(self):
+        self.check_stored_as_sent(self.first)
+
+    def test_a_hash_older_than_the_versions_a_list_holds_is_taken_too(self):
+        # A list holding only the newest version leaves the first one out.
+        with mock.patch.object(versions, "MAX_VERSIONS", 1):
+            status, payload = self.reader("GET", "/api/versions?page=churn")
+            self.assertEqual(status, 200, payload)
+            self.assertEqual(len(payload["versions"]), 1)
+            status, row = self.post({"section": "throughput", "text": "Off.",
+                                     "widget": self.anchor(hash=self.first)})
+        self.assertEqual(status, 201, row)
+        self.assertEqual(row["widget"]["hash"], self.first)
+
+    def test_a_hash_the_block_never_had_is_still_refused(self):
+        self.check_never_had_refused()
+
+
+class WithoutGitTests(AnchorCase):
+    """The page's site is no git repository, so it has no versions: churn
+    published with BLOCK, then with CHANGED, its hashes kept beside it."""
+
+    def prepare(self) -> None:
+        self.publish_churn(churn(BLOCK))
+        self.first = self.block_hash()
+        self.publish_churn(churn(CHANGED))
+
+    def test_the_site_has_no_versions(self):
+        self.assertFalse(cli.is_repository_top(self.out_dir))
+        status, payload = self.reader("GET", "/api/versions?page=churn")
+        self.assertEqual((status, payload.get("versions")), (200, []))
+
+    def test_a_hash_the_block_had_in_an_earlier_publish_is_stored_as_sent(self):
+        self.assertEqual(cli.api_page(self.out_dir, "churn").widgets["churn"].earlier,
+                         {self.first, self.block_hash()})
+        self.check_stored_as_sent(self.first)
+
+    def test_a_hash_the_block_never_had_is_still_refused(self):
+        self.check_never_had_refused()
+
+    def test_the_kept_hashes_are_never_served(self):
+        self.assertTrue((self.out_dir / f"churn{cli.BLOCKS_SUFFIX}").is_file())
+        self.assertNotIn(f"churn{cli.BLOCKS_SUFFIX}", cli.serve_allow_list(self.out_dir))
+
+
+class UpgradeWithoutGitTests(AnchorCase):
+    """churn published with BLOCK as before its blocks' hashes were kept
+    beside it, on a site without git, then republished with CHANGED."""
+
+    def prepare(self) -> None:
+        self.publish_churn(churn(BLOCK))
+        self.first = self.block_hash()
+        (self.out_dir / f"churn{cli.BLOCKS_SUFFIX}").unlink()
+        self.publish_churn(churn(CHANGED))
+
+    def test_the_outgoing_page_s_hash_is_kept_at_the_republish(self):
+        self.assertFalse(cli.is_repository_top(self.out_dir))
+        self.assertEqual(cli.kept_block_hashes(self.out_dir, "churn")["churn"],
+                         [self.first, self.block_hash()])
+        self.check_stored_as_sent(self.first)
+
+    def test_a_hash_the_block_never_had_is_still_refused(self):
+        self.check_never_had_refused()
 
 class PullAndPromptTests(AnchorCase):
     def test_the_pull_names_the_block_its_state_and_its_source(self):

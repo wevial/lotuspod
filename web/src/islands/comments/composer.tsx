@@ -2,7 +2,7 @@ import { render } from "preact";
 import { createPortal } from "preact/compat";
 import type { CommentPayload, CommentRow, ComposerBridge, Page, Thread, Widget } from "../bridge";
 import type { ComposerHandles } from "./parts";
-import { frameOf } from "./anchor";
+import { blockStanding, frameOf, hashOf } from "./anchor";
 
 type Quote = NonNullable<CommentRow["quote"]>;
 interface Body { page: string; text: string; parent?: number; section?: string; revision?: string; quote?: Quote; widget?: Widget; images?: string[] }
@@ -11,11 +11,17 @@ export function composers(page: Page, bridge: ComposerBridge) {
   const replies = new WeakMap<Thread, ComposerHandles & { toggle: HTMLButtonElement }>();
   // The live block a section's form for a new thread is on, with the line
   // above its field that says so, while a block's Comment holds it open.
-  const blocks = new Map<HTMLFormElement, { widget: Widget; line: HTMLParagraphElement }>();
+  // seen: the hash of the block's file the page last showed beside the form.
+  const blocks = new Map<HTMLFormElement, { widget: Widget; line: HTMLParagraphElement; seen: string }>();
   function failure(response: Response, payload: CommentPayload | null, stale = page.stalePage): string {
     if (response.status === 401) return page.signedOut;
-    if (response.status === 409 && payload?.error === "stale_page") return stale;
-    const error = payload?.error ? String(payload.error) : "status " + response.status;
+    const code = payload?.error;
+    if ((response.status === 409 && code === "stale_page") || (response.status === 400 && code === "unknown_section")) return stale;
+    if ((response.status === 409 && code === "stale_widget") || (response.status === 400 && code === "unknown_widget")) {
+      return page.staleBlock;
+    }
+    if (response.status === 409 && code === "archived") return page.closed;
+    const error = code ? String(code) : "status " + response.status;
     return "Not saved (" + error + "). Try again.";
   }
   async function post(form: HTMLFormElement, body: Body): Promise<CommentRow | null> {
@@ -127,19 +133,37 @@ export function composers(page: Page, bridge: ComposerBridge) {
     line.className = "artifact-comment-on";
     render(<>{"On "}<span class="artifact-comment-on-block">{title}</span>{widget.state ? " · " + widget.state : ""}</>, line);
     form.before(line);
-    blocks.set(form, { widget: { id: widget.id, hash: widget.hash, state: widget.state }, line });
+    blocks.set(form, { widget: { id: widget.id, hash: widget.hash, state: widget.state }, line, seen: widget.hash });
   }
+  // A line about the block a form was on goes with it.
   function unblock(form: HTMLFormElement | undefined) {
     const held = form && blocks.get(form);
     if (!held) return;
     render(null, held.line);
     held.line.remove();
     blocks.delete(form!);
+    const status = form!.querySelector<HTMLElement>(".artifact-comment-status")!;
+    if (status.textContent === page.blockChanged || status.textContent === page.staleBlock) status.textContent = "";
   }
-  // A swap took away the block a form is on.
-  function swapped() {
+  // A swap took away the block a form is on, or moved it to another
+  // section (boxOf: the box of a frame's section): the form is no longer on
+  // it. A form on a block the swap changed stays on the version the reader
+  // saw, which the route takes as an earlier version of the block, and says so
+  // until the form is no longer on it; a swap that leaves the block's file as
+  // it was leaves the form's status as it was.
+  function swapped(boxOf: (frame: HTMLIFrameElement) => HTMLElement | null) {
     blocks.forEach((held, form) => {
-      if (!frameOf(held.widget.id)) unblock(form);
+      const frame = frameOf(held.widget.id);
+      if (!frame || boxOf(frame) !== bridge.boxWith(form)) {
+        unblock(form);
+        return;
+      }
+      const now = hashOf(frame);
+      if (now === held.seen) return;
+      held.seen = now;
+      const status = form.querySelector<HTMLElement>(".artifact-comment-status")!;
+      if (blockStanding(held.widget) === "changed") status.textContent = page.blockChanged;
+      else if (status.textContent === page.blockChanged) status.textContent = "";
     });
   }
   function wire(box: HTMLElement) {

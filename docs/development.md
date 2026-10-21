@@ -123,7 +123,8 @@ unsent text or whose words the open passage composer quotes. One map,
 both paths. It reaches the threads through the store (`refresh`, `retitle`,
 `askAbout` for a swap's decision forms, the composer handles, the Maps); the
 store reaches its `restore` and `boxWith` through its bridge. The bridge
-supplies `holdSwap`, `PLACE_GONE`, `PASSAGE_GONE`, `settleImageCap`,
+supplies `holdSwap`, `PLACE_GONE`, `PASSAGE_GONE`, `BLOCK_CHANGED`,
+`STALE_BLOCK`, `settleImageCap`,
 `NO_CAP`, `CHANGED`, `NO_QUESTION`, `STALE_QUESTION`, `imageWords` and
 `all`, and types `SWAPPED`'s and `SAVED`'s detail.
 Placement creates the shell, thread-list and chips parts.
