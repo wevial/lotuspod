@@ -33,6 +33,11 @@ const REPLY = 'Mostly the shared migration file.';
 // js/page-open.js's BLOCK_CHANGED and STALE_BLOCK.
 const BLOCK_CHANGED = 'This block was updated since you started. Your comment stays on the version you saw.';
 const STALE_BLOCK = 'This block has changed since the page loaded. Reload the page to comment on its new version.';
+// js/page-open.js's BLOCK_GONE.
+const BLOCK_GONE = 'The block you were commenting on was removed. Your comment is kept here, on the section.';
+// js/live-page.js's KEPT: what the page keeps over a reload, per page.
+const KEPT = 'lotuspod:reload:';
+const FISH = path.resolve(__dirname, '..', '..', 'tests', 'fixtures', 'media', 'fish-320x240.jpg');
 
 // A page whose first section holds the block, drawn as version says; none
 // at all when version is 0. Its second section keeps a block of its own, so
@@ -45,6 +50,13 @@ function doc(version: number) {
     '## Churn', '', 'Reruns grow with the number of workers.', '', ...block,
     '## Notes', '', 'Nothing else yet.', '',
     '```html live id=tally title="Merged so far" height=120', '<p>Merged so far: 120.</p>', '```', ''].join('\n');
+}
+
+// The page as markdown with a third section after Notes, which draws a
+// diagram: a page newly drawing diagrams has a policy of its own, so the
+// page shows the banner instead of a swap.
+function third(markdown: string) {
+  return markdown + ['## Later', '', 'More to come.', '', '```mermaid', 'graph LR', '  A --> B', '```', ''].join('\n');
 }
 
 test.use({ viewport: WIDE, extraHTTPHeaders: SIGNED_IN });
@@ -626,5 +638,154 @@ test("a block's form and a section's form keep their text, and the block's form 
   expect((await sent).postDataJSON().widget).toEqual({ id: 'churn', hash: first, state: '' });
   expect((await answered).status()).toBe(201);
   await expect(churn.locator('.artifact-comments-entry')).toHaveCount(1);
+  expect(errors).toEqual([]);
+});
+
+// The tab hidden or shown, as a browser says so.
+async function setVisibility(page: Page, state: 'hidden' | 'visible') {
+  await page.evaluate((state) => {
+    Object.defineProperty(document, 'visibilityState', { value: state, configurable: true });
+    Object.defineProperty(document, 'hidden', { value: state === 'hidden', configurable: true });
+    document.dispatchEvent(new Event('visibilitychange'));
+  }, state);
+}
+
+test("a block's form is kept while its tab is hidden, and no longer once the tab is shown again", async ({ page }) => {
+  const name = `block-comments-hidden-${test.info().repeatEachIndex}`;
+  publish(name, doc(1));
+  const errors = watch(page);
+  await load(page, name);
+  const { churn, field } = churnForm(page);
+  await block(page).comment.click();
+  await expect(churn.locator('.artifact-comment-on')).toHaveText(WORDS);
+  await field.fill(QUESTION);
+
+  await setVisibility(page, 'hidden');
+  const kept = await page.evaluate((key) => JSON.parse(sessionStorage.getItem(key) ?? 'null'), KEPT + name);
+  const texts = kept?.comments?.texts ?? [];
+  const draft = texts.find((each: { text?: string }) => each.text === QUESTION);
+  expect(draft, `the kept texts ${JSON.stringify(texts)} hold the Churn form's`).toBeTruthy();
+  expect(draft.widget.id).toBe('churn');
+
+  await setVisibility(page, 'visible');
+  expect(await page.evaluate((key) => sessionStorage.getItem(key), KEPT + name)).toBeNull();
+  expect(errors).toEqual([]);
+});
+
+// Publish doc(1), start a comment on the block with its text and one image,
+// publish the page again as next, and press the banner's Reload: the
+// frame's hash before the Reload.
+async function reloadOnto(page: Page, name: string, next: string) {
+  publish(name, doc(1));
+  await load(page, name);
+  const first = await hashOf(page);
+  const { churn, form, field } = churnForm(page);
+  await block(page).comment.click();
+  await expect(churn.locator('.artifact-comment-on')).toHaveText(WORDS);
+  await field.fill(QUESTION);
+  const [chooser] = await Promise.all([page.waitForEvent('filechooser'),
+    form.getByRole('button', { name: 'Add image', exact: true }).click()]);
+  await chooser.setFiles([FISH]);
+  await expect(form.locator('a.artifact-attach-link')).toHaveCount(1);
+
+  publish(name, next);
+  await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+  const reload = page.locator('.artifact-live-page-banner').getByRole('button', { name: 'Reload' });
+  await expect(reload).toBeVisible();
+  const loaded = page.waitForEvent('load');
+  await reload.click();
+  await loaded;
+  return first;
+}
+
+// Press the Churn form's Comment: what it posted, and the answer.
+async function send(page: Page) {
+  const { form } = churnForm(page);
+  const sent = posting(page);
+  const answered = page.waitForResponse((response) => new URL(response.url()).pathname === '/api/comments' &&
+    response.request().method() === 'POST');
+  await form.getByRole('button', { name: 'Comment', exact: true }).click();
+  return { body: (await sent).postDataJSON(), response: await answered };
+}
+
+test("a block's form with an image keeps its block over the banner's Reload", async ({ page }) => {
+  const name = `block-comments-banner-reload-${test.info().repeatEachIndex}`;
+  const errors = watch(page);
+  const first = await reloadOnto(page, name, third(doc(1)));
+  const { churn, form, field } = churnForm(page);
+  await expect(page.locator('details.artifact-comment[data-section="later"]')).toHaveCount(1);
+  await expect(churn.locator('.artifact-comment-on')).toHaveText(WORDS);
+  await expect(field).toHaveValue(QUESTION);
+  await expect(form.locator('li.artifact-attach-item')).toHaveCount(1);
+
+  const { body, response } = await send(page);
+  expect(body.widget).toEqual({ id: 'churn', hash: first, state: '' });
+  expect(body.images).toHaveLength(1);
+  expect(response.status()).toBe(201);
+  await expect(churn.locator('.artifact-comments-entry')).toHaveCount(1);
+  expect(errors).toEqual([]);
+});
+
+test("a block's form reloaded onto a changed block stays on the version the reader saw", async ({ page }) => {
+  const name = `block-comments-reload-changed-${test.info().repeatEachIndex}`;
+  const errors = watch(page);
+  const first = await reloadOnto(page, name, third(doc(2)));
+  const { churn, form, field, status } = churnForm(page);
+  await expect(page.frameLocator('figure[data-widget="churn"] iframe').locator('body'))
+    .toHaveAttribute('data-version', '2');
+  expect(await hashOf(page)).not.toBe(first);
+  await expect(churn.locator('.artifact-comment-on')).toHaveText(WORDS);
+  await expect(field).toHaveValue(QUESTION);
+  await expect(form.locator('li.artifact-attach-item')).toHaveCount(1);
+  await expect(status).toHaveText(BLOCK_CHANGED);
+
+  const { body, response } = await send(page);
+  expect(body.widget).toEqual({ id: 'churn', hash: first, state: '' });
+  expect(response.status()).toBe(201);
+  const entry = churn.locator('.artifact-comments-entry');
+  await expect(entry).toHaveCount(1);
+  await expect(entry.locator('.artifact-comment-event--widget')).toHaveText('Widget changed since this comment');
+  expect(errors).toEqual([]);
+});
+
+test("a block's form reloaded onto a page without the block goes to its section, saying so", async ({ page }) => {
+  const name = `block-comments-reload-gone-${test.info().repeatEachIndex}`;
+  const errors = watch(page);
+  await reloadOnto(page, name, third(doc(0)));
+  const { churn, form, field, status } = churnForm(page);
+  await expect(block(page).figure).toHaveCount(0);
+  await expect(field).toHaveValue(QUESTION);
+  await expect(form.locator('li.artifact-attach-item')).toHaveCount(1);
+  await expect(status).toHaveText(BLOCK_GONE);
+  await expect(churn.locator('.artifact-comment-on')).toHaveCount(0);
+
+  const { body, response } = await send(page);
+  expect(body).not.toHaveProperty('widget');
+  expect(body.section).toBe('churn');
+  expect(response.status()).toBe(201);
+  expect(errors).toEqual([]);
+});
+
+test("a kept draft whose block is not a block's anchor reloads as its section's draft", async ({ page }) => {
+  const name = `block-comments-reload-malformed-${test.info().repeatEachIndex}`;
+  publish(name, doc(1));
+  const errors = watch(page);
+  await load(page, name);
+  const { churn, field } = churnForm(page);
+  for (const widget of ['churn', { id: 'churn', hash: 'not-a-hash', state: '' }]) {
+    // Written as the page is left, after each time the page keeps its own.
+    await page.evaluate(({ key, widget }) => {
+      const write = () => sessionStorage.setItem(key, JSON.stringify({ x: 0, y: 0, comments: {
+        open: { section: 'churn', writing: true },
+        texts: [{ section: 'churn', index: 1, text: 'Kept as written', images: [], widget }],
+      } }));
+      window.addEventListener('pagehide', write);
+      document.addEventListener('visibilitychange', write);
+    }, { key: KEPT + name, widget });
+    await page.reload();
+    await expect(block(page).comment).toBeVisible();
+    await expect(field).toHaveValue('Kept as written');
+    await expect(churn.locator('.artifact-comment-on')).toHaveCount(0);
+  }
   expect(errors).toEqual([]);
 });

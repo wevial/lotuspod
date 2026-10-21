@@ -45,7 +45,7 @@ export interface Store {
   readonly shown: Map<number, Thread>;
   readonly forms: Map<HTMLElement, HTMLFormElement>;
   readonly attached: Map<HTMLFormElement, import("../bridge").Attachments>;
-  readonly composer: Pick<ReturnType<typeof import("./composer").composers>, "sending" | "wire" | "fieldOf" | "handles">;
+  readonly composer: Pick<ReturnType<typeof import("./composer").composers>, "sending" | "wire" | "fieldOf" | "handles" | "on">;
   readonly panel: Placement;
   readonly passages: Passages;
   // A swap moved the page on to revision to.
@@ -60,6 +60,9 @@ export interface Store {
   whereFrom(root: import("../bridge").CommentRow): HTMLParagraphElement;
   put(thread: Thread): void;
   refresh(): void;
+  // A section's form opens on a live block, as its Comment opens it: that
+  // section's box, else null.
+  holdOn(anchor: import("../bridge").Widget): HTMLElement | null;
   start(): void;
 }
 

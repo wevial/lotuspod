@@ -145,6 +145,12 @@ export function composers(page: Page, bridge: ComposerBridge) {
     const status = form!.querySelector<HTMLElement>(".artifact-comment-status")!;
     if (status.textContent === page.blockChanged || status.textContent === page.staleBlock) status.textContent = "";
   }
+  // The live block a section's form is on, as it was when the form was
+  // held on it; undefined for none.
+  function on(form: HTMLFormElement): Widget | undefined {
+    const held = blocks.get(form);
+    return held && { ...held.widget };
+  }
   // A swap took away the block a form is on, or moved it to another
   // section (boxOf: the box of a frame's section): the form is no longer on
   // it. A form on a block the swap changed stays on the version the reader
@@ -216,5 +222,5 @@ export function composers(page: Page, bridge: ComposerBridge) {
   function handles(thread: Thread) {
     return replies.get(thread)!;
   }
-  return { reply, wire, passage, label, failure, block, unblock, swapped, fieldOf, handles, sending: bridge.sending };
+  return { reply, wire, passage, label, failure, block, unblock, on, swapped, fieldOf, handles, sending: bridge.sending };
 }

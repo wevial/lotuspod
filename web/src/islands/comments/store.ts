@@ -1,4 +1,4 @@
-import type { CommentRow, Decision, Page, Resolution, StartComment, StoreBridge, Thread } from "../bridge";
+import type { CommentRow, Decision, Page, Resolution, StartComment, StoreBridge, Thread, Widget } from "../bridge";
 import { anchorOf, blockTitle, frameOf } from "./anchor";
 import type { Passages, Placement, Store } from "./parts";
 import { composers } from "./composer";
@@ -253,15 +253,20 @@ export function store(page: Page, bridge: StoreBridge): Store {
     });
   }
 
-  // A live block's Comment: its section's form opens, on the block.
-  const startOn: StartComment = ({ anchor }) => {
+  // A live block's Comment: its section's form opens, on the block. A
+  // draft kept over a reload opens the same way on the block it was on
+  // (anchor: as it was then); the box, else null for a block the page has
+  // no section for.
+  function holdOn(anchor: Widget): HTMLElement | null {
     const frame = frameOf(anchor.id);
     const box = frame && boxOn(sectionOf(frame));
-    if (!frame || !box) return;
+    if (!frame || !box) return null;
     composer.block(forms.get(box)!, anchor, blockTitle(anchor));
     const figure = frame.closest("figure");
     panel!.write(box, figure?.querySelector<HTMLElement>(".artifact-live-comment") || frame);
-  };
+    return box;
+  }
+  const startOn: StartComment = ({ anchor }) => { holdOn(anchor); };
 
   // Draw what the threads say outside them: the passages' highlights, the
   // panel, the chips, what a popover or the sheet holds and the replies
@@ -485,7 +490,7 @@ export function store(page: Page, bridge: StoreBridge): Store {
     get passages() { return passages!; },
     swapped(to) { swappedTo = to; },
     retitle: replies.retitle, askAbout: replies.askAbout,
-    enlist, ask, boxFor, whereFrom, put, refresh,
+    enlist, ask, boxFor, whereFrom, put, refresh, holdOn,
     // Each decision's Ask, the passages and the panel, the threads
     // arranged as the window allows, and the first read.
     start() {
