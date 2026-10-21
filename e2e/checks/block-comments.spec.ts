@@ -615,7 +615,7 @@ test("a block's form and a section's form keep their text, and the block's form 
   const errors = watch(page);
   await load(page, name);
   const first = await hashOf(page);
-  const { churn, form, field } = churnForm(page);
+  const { churn, field } = churnForm(page);
   await block(page).comment.click();
   await expect(churn.locator('.artifact-comment-on')).toHaveText(WORDS);
   await field.fill(QUESTION);
@@ -631,12 +631,9 @@ test("a block's form and a section's form keep their text, and the block's form 
   await expect(notes.locator('textarea[name="text"]')).toHaveValue('A note on the notes');
   await expect(churn.locator('.artifact-comment-on')).toHaveText(WORDS);
 
-  const sent = posting(page);
-  const answered = page.waitForResponse((response) => new URL(response.url()).pathname === '/api/comments' &&
-    response.request().method() === 'POST');
-  await form.getByRole('button', { name: 'Comment', exact: true }).click();
-  expect((await sent).postDataJSON().widget).toEqual({ id: 'churn', hash: first, state: '' });
-  expect((await answered).status()).toBe(201);
+  const { body, response } = await send(page);
+  expect(body.widget).toEqual({ id: 'churn', hash: first, state: '' });
+  expect(response.status()).toBe(201);
   await expect(churn.locator('.artifact-comments-entry')).toHaveCount(1);
   expect(errors).toEqual([]);
 });
