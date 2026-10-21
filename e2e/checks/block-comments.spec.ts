@@ -596,3 +596,35 @@ test("a block's form refused for its block no longer says to reload once a swap 
   await expect(churn.locator('.artifact-comments-entry')).toHaveCount(1);
   expect(errors).toEqual([]);
 });
+
+test("a block's form and a section's form keep their text, and the block's form its block, over a browser reload", async ({ page }) => {
+  const name = `block-comments-browser-reload-${test.info().repeatEachIndex}`;
+  publish(name, doc(1));
+  const errors = watch(page);
+  await load(page, name);
+  const first = await hashOf(page);
+  const { churn, form, field } = churnForm(page);
+  await block(page).comment.click();
+  await expect(churn.locator('.artifact-comment-on')).toHaveText(WORDS);
+  await field.fill(QUESTION);
+  const notes = panel(page).group('Notes').locator('form.artifact-comment-form');
+  await page.locator('details.artifact-comment[data-section="notes"] > summary').click();
+  await expect(notes).toBeVisible();
+  await notes.locator('textarea[name="text"]').fill('A note on the notes');
+
+  // The browser's own reload, not the banner's.
+  await page.reload();
+  await expect(block(page).comment).toBeVisible();
+  await expect(field).toHaveValue(QUESTION);
+  await expect(notes.locator('textarea[name="text"]')).toHaveValue('A note on the notes');
+  await expect(churn.locator('.artifact-comment-on')).toHaveText(WORDS);
+
+  const sent = posting(page);
+  const answered = page.waitForResponse((response) => new URL(response.url()).pathname === '/api/comments' &&
+    response.request().method() === 'POST');
+  await form.getByRole('button', { name: 'Comment', exact: true }).click();
+  expect((await sent).postDataJSON().widget).toEqual({ id: 'churn', hash: first, state: '' });
+  expect((await answered).status()).toBe(201);
+  await expect(churn.locator('.artifact-comments-entry')).toHaveCount(1);
+  expect(errors).toEqual([]);
+});
