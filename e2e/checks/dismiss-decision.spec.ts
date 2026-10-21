@@ -36,6 +36,13 @@ const DEFAULTS = ['# Pond heater', '', 'How the pond is heated.', '',
   '| 2 | Run it nightly? | Yes / No | |',
   '| 3 | Heat it in winter? | Yes / No | No |', ''].join('\n');
 
+// The page reads /api/answers in the background; a read still in a route
+// handler's route.fetch when a check ends would otherwise fail that check
+// with "Test ended".
+test.afterEach(async ({ page }) => {
+  await page.unrouteAll({ behavior: 'ignoreErrors' });
+});
+
 function publish(name = NAME, markdown = MARKDOWN) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lotuspod-dismiss-'));
   try {

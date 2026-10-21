@@ -12,6 +12,13 @@ const SIGNED_IN = { 'Cf-Access-Jwt-Assertion': ASSERTION };
 // The reader as a page names them: their address's part before the @.
 const READER = 'maintainer';
 
+// The page reads /api/answers in the background; a read still in a route
+// handler's route.fetch when a check ends would otherwise fail that check
+// with "Test ended".
+test.afterEach(async ({ page }) => {
+  await page.unrouteAll({ behavior: 'ignoreErrors' });
+});
+
 async function watch(page: Page) {
   const errors: string[] = [];
   page.on('console', (message) => {

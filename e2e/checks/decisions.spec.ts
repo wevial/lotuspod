@@ -59,6 +59,13 @@ const PUBLISHED_BEFORE = `<div class="artifact-decisions">
 </form>
 </div>`;
 
+// The page reads itself and /api/answers in the background; a read still in a
+// route handler's route.fetch when a check ends would otherwise fail that
+// check with "Test ended".
+test.afterEach(async ({ page }) => {
+  await page.unrouteAll({ behavior: 'ignoreErrors' });
+});
+
 type Violation = { blockedURI: string; effectiveDirective: string };
 
 async function watch(page: Page) {

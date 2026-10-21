@@ -2,6 +2,12 @@ import { expect, test, type Page } from '@playwright/test';
 import { charts, publish, routeLibraries, signedIn } from './libraries-fixture';
 
 test.use({ extraHTTPHeaders: signedIn });
+
+// A widget frame still loading through a route handler's route.fetch when a
+// check ends would otherwise fail that check with "Test ended".
+test.afterEach(async ({ page }) => {
+  await page.unrouteAll({ behavior: 'ignoreErrors' });
+});
 type Violation = { blockedURI: string; effectiveDirective: string };
 
 async function watch(page: Page) {

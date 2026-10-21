@@ -16,6 +16,13 @@ import { expect, test, type Page } from '@playwright/test';
 const WIDE = { width: 1280, height: 800 };
 test.use({ viewport: WIDE });
 
+// The index reads /api/activity, /api/seen and itself in the background; a
+// read still in a route handler's route.fetch when a check ends would
+// otherwise fail that check with "Test ended".
+test.afterEach(async ({ page }) => {
+  await page.unrouteAll({ behavior: 'ignoreErrors' });
+});
+
 const ENV = process.env;
 const ASSERTION = ENV.LOTUSPOD_TEST_ASSERTION ?? '';
 const SIGNED_IN = { 'Cf-Access-Jwt-Assertion': ASSERTION };

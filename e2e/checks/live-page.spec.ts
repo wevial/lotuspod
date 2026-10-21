@@ -8,6 +8,13 @@ import { expect, test, type APIRequestContext, type Locator, type Page } from '@
 const WIDE = { width: 1440, height: 900 };
 test.use({ viewport: WIDE });
 
+// The page reads /api/comments, /api/answers and itself in the background; a
+// read still in a route handler's route.fetch when a check ends would
+// otherwise fail that check with "Test ended".
+test.afterEach(async ({ page }) => {
+  await page.unrouteAll({ behavior: 'ignoreErrors' });
+});
+
 // An open page notices it was published again. Each check publishes a page
 // of its own on the capture fixture's site with a real `lotuspod publish`,
 // opens it, publishes it again to a new revision and drives the page's
