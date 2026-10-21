@@ -1,14 +1,16 @@
-import type { Attachments, Page, Swapped } from "../bridge";
+import type { Attachments, Page, Swapped, Widget } from "../bridge";
+import { blockStanding } from "./anchor";
 import type { Kept, PassageDraft, Store } from "./parts";
 import { store as makeStore } from "./store";
 
 // A composer's text and images not sent, as kept over a reload or a swap:
 // its thread, or its section and where the section's box is among the
-// page's; why its place is gone, once it is (what its form is to say).
-// What a reload kept is the page's storage, so each field is checked as it
-// is read.
+// page's; the live block a section's form was on; why its place is gone,
+// once it is (what its form is to say). What a reload kept is the page's
+// storage, so each field is checked as it is read.
 interface Draft extends PassageDraft {
   thread?: unknown;
+  widget?: unknown;
   why?: unknown;
 }
 // What save() keeps for a reload.
@@ -18,6 +20,7 @@ interface Composing {
   thread?: number;
   section?: string;
   index: number;
+  widget?: Widget;
   field: HTMLTextAreaElement;
   images: Attachments;
 }
@@ -60,12 +63,13 @@ export function drafts(page: Page, boxes: HTMLElement[]): void {
 
   const store: Store = makeStore(page, { boxes, decisions, restore, boxWith });
   const { sections, shown, forms, attached, refresh } = store;
-  const { fieldOf, handles } = store.composer;
+  const { fieldOf, handles, on, unblock } = store.composer;
 
   // Each composer of a section's form or a thread's reply, with what it
   // is kept by over a reload: its thread, its section and where the
   // section's box is among the page's (for a section a swap holds back
-  // as it takes it away, where it was then, as a swap's Update keeps).
+  // as it takes it away, where it was then, as a swap's Update keeps),
+  // and the live block a section's form is on.
   function placeOf(box: HTMLElement): number {
     return takenAt.has(box) ? takenAt.get(box)! : boxes.indexOf(box);
   }
@@ -73,7 +77,7 @@ export function drafts(page: Page, boxes: HTMLElement[]): void {
     const found: Composing[] = [];
     forms.forEach((form, box) => {
       found.push({
-        section: box.dataset.section, index: placeOf(box), field: fieldOf(form),
+        section: box.dataset.section, index: placeOf(box), widget: on(form), field: fieldOf(form),
         images: attached.get(form)!,
       });
     });
@@ -99,19 +103,22 @@ export function drafts(page: Page, boxes: HTMLElement[]): void {
     unsent() {
       const passage = store.passages.writing();
       return Boolean(passage && ((passage.text || "").trim() || passage.held)) || composers().some(holding) ||
-        awaiting.size > 0;
+        awaiting.size > 0 || pending().length > 0 || Boolean(kept && kept.passage);
     },
+    // What the last reload kept and the threads' first read has not yet
+    // given back is kept again, with what was written since.
     save(): Saved {
       return {
-        open: store.panel.held(),
-        passage: store.passages.writing(),
+        open: store.panel.held() || (kept ? kept.open : null),
+        passage: store.passages.writing() || (kept ? kept.passage : null),
         texts: [
+          ...pending(),
           ...composers().filter(holding).map(each => ({
-            thread: each.thread, section: each.section, index: each.index, text: each.field.value,
-            images: each.images.kept(),
+            thread: each.thread, section: each.section, index: each.index, widget: each.widget,
+            text: each.field.value, images: each.images.kept(),
           })),
           ...Array.from(awaiting, each => ({
-            section: each.section, index: each.index, text: String(each.text || ""),
+            section: each.section, index: each.index, widget: each.widget, text: String(each.text || ""),
             images: each.from ? each.from.kept() : each.images, quote: each.quote, why: each.why,
           })),
         ],
@@ -127,8 +134,17 @@ export function drafts(page: Page, boxes: HTMLElement[]): void {
   // words changed, a thread not read) is never lost: it goes to the form
   // for a new thread on its section, else on the box where its section
   // was, else on the page's first, which opens with the reason beside it.
+  // Text begun on a live block opens again on it, as its Comment opens it,
+  // in the form of the section the block is in now, still on the version
+  // the reader saw (saying so, should it have changed since); where the
+  // page no longer has the block, it goes to its section's form, saying so.
   // Images go with their text, up to MAX_IMAGES a composer.
   let kept = live.kept() as Saved | null;
+
+  // The texts kept before the reload, until they are given back.
+  function pending(): unknown[] {
+    return kept && Array.isArray(kept.texts) ? kept.texts as unknown[] : [];
+  }
 
   // Add each's text and images to form; why some images were not. Those
   // of a composer still on the page (each.from: its attachments, as a
@@ -185,10 +201,62 @@ export function drafts(page: Page, boxes: HTMLElement[]): void {
     return box;
   }
 
-  // Join each to form, saying why.
+  // Join each to form, saying why. A form on a live block given text from
+  // elsewhere is on no block: its texts are never sent as one on it.
   function land(form: HTMLFormElement, each: Draft, why: string) {
+    unblock(form);
     const over = join(form, each);
     told(form, over ? why + " " + over : why);
+  }
+
+  // A kept draft's live block, read as untrusted storage: else undefined.
+  function widgetOf(each: Draft): Widget | undefined {
+    const found = each.widget as Partial<Widget> | null | undefined;
+    if (!found || typeof found !== "object" || typeof found.id !== "string" || typeof found.state !== "string" ||
+        typeof found.hash !== "string" || !/^[0-9a-f]{12}$/.test(found.hash)) {
+      return undefined;
+    }
+    return { id: found.id, hash: found.hash, state: found.state };
+  }
+
+  // Join each to the form of the box its live block is in now, holding the
+  // form on the block as it was; that box, else null. A form that already
+  // holds a draft from another place (two blocks a republish put in one
+  // section, or a section's own draft and a block's) is on no block: its
+  // texts are never sent as one comment on one of them. A form sending a
+  // post empties once it is saved, so the draft joins it after (kept over
+  // a reload meanwhile), going where its block then is.
+  function reblock(each: Draft, widget: Widget): HTMLElement | null {
+    const box = store.blockBox(widget);
+    if (!box) return null;
+    const form = forms.get(box)!;
+    const saving = sending.get(form);
+    if (saving) {
+      awaiting.add(each);
+      saving.then(() => {
+        awaiting.delete(each);
+        if (blockStanding(widget) === "gone") rehome(each, page.blockGone);
+        else if (!reblock(each, widget)) rehome(each, page.placeGone);
+      });
+      return box;
+    }
+    const filled = holding({ field: fieldOf(form), images: attached.get(form)! });
+    const was = on(form);
+    store.holdOn(widget, true);
+    const over = join(form, each);
+    if (filled && !(was && was.id === widget.id && was.hash === widget.hash && was.state === widget.state)) {
+      unmix(form, over);
+    } else {
+      told(form, [blockStanding(widget) === "changed" ? page.blockChanged : "", over].filter(Boolean).join(" "));
+    }
+    return box;
+  }
+
+  // A form given back drafts from more than one place: on no block, saying
+  // its text is kept here.
+  function unmix(form: HTMLFormElement, over: string) {
+    unblock(form);
+    told(form, over ? page.placeGone + " " + over : page.placeGone);
   }
 
   function worth(each: Draft) {
@@ -201,11 +269,17 @@ export function drafts(page: Page, boxes: HTMLElement[]): void {
     kept = null;
     if (!was) return;
     let moved: HTMLElement | null = null;
+    // The section each block draft was written in, by the section its
+    // block is in now: a form open where a draft was written opens where
+    // it is now, so reopening the old one folds no form off its block.
+    const reblocked = new Map<string, string>();
     (Array.isArray(was.texts) ? was.texts as unknown[] : []).forEach(found => {
       if (!found || typeof found !== "object" || !worth(found)) return;
       const each: Draft = found;
       const thread = each.thread ? shown.get(each.thread as number) : null;
       const box = !each.thread && typeof each.section === "string" ? sections.get(each.section) : null;
+      const widget = each.thread ? undefined : widgetOf(each);
+      let held: HTMLElement | null = null;
       if (each.why) {
         // Waiting for a post when the page reloaded: a passage's composer
         // opens again on its words where the page has them; else it goes
@@ -222,14 +296,23 @@ export function drafts(page: Page, boxes: HTMLElement[]): void {
         if (!page.archived) {
           reply.unfold(true);
         }
+      } else if (widget && blockStanding(widget) === "gone") {
+        moved = rehome(each, page.blockGone);
+      } else if (widget && (held = reblock(each, widget))) {
+        if (typeof each.section === "string") reblocked.set(each.section, held.dataset.section!);
       } else if (box) {
-        told(forms.get(box)!, join(forms.get(box)!, each));
+        const form = forms.get(box)!;
+        const over = join(form, each);
+        if (on(form)) unmix(form, over);
+        else told(form, over);
       } else {
         moved = rehome(each, page.placeGone);
       }
     });
     if (was.open && typeof was.open === "object") {
-      store.panel.reopen(was.open as Kept);
+      const open = was.open as Kept;
+      const now = typeof open.section === "string" ? reblocked.get(open.section) : undefined;
+      store.panel.reopen(now === undefined ? open : { ...open, section: now });
     }
     const passage = was.passage && typeof was.passage === "object" ? was.passage as PassageDraft : null;
     if (passage && !store.passages.reopen(passage) && worth(passage)) {

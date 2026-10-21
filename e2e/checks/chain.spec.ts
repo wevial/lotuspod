@@ -230,6 +230,12 @@ test.describe('the chain', () => {
     });
 
     await test.step('5. after a reload the reader sees the reply, its revision link, the edit and the answer', async () => {
+      // A fresh load: what the page keeps as it is left goes, so it does not come back to where the reader was.
+      await page.evaluate(() => window.addEventListener('pagehide', () => {
+        for (const key of Object.keys(sessionStorage).filter((key) => key.startsWith('lotuspod:reload:'))) {
+          sessionStorage.removeItem(key);
+        }
+      }));
       await page.reload();
       const heater = box(page, 'heater');
       // The reply is the reader's to read: counted until its thread opens.

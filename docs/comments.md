@@ -313,7 +313,20 @@ of this page is available" with a Reload button. Reload brings the new
 revision back at the same place in its text, with the comments thread that was
 open open again and any comment or reply not yet sent back in its composer,
 its text and its uploaded images (kept per page in sessionStorage; where the
-browser keeps nothing, the page still reloads, at its top). A comment
+browser keeps nothing, the page still reloads, at its top). A reload of the
+page by the browser in the same tab (its reload button, or a mobile browser
+reloading a tab it put away) brings them back the same way: the page keeps
+them as it is left, and while its tab is hidden, and lets them go once the
+tab is shown again. A comment begun from a live block's Comment opens again
+on that block, under its "On" line, in the form of the section the block is
+in now, still on the version of the block the reader saw (saying so, as
+after a swap, should the block have changed); where the page no longer has
+the block, it goes to its section's form, saying "The block you were
+commenting on was removed. Your comment is kept here, on the section."
+Comments a republish puts in one section's form, from two blocks or from a
+block and the section itself, are kept there on no block, saying where the
+reader was writing has changed. A
+comment
 written where the new revision has no place for it, on a section renamed or
 removed or on words that changed, opens in a form for a new thread on its
 section, else on the section in the same place, else on the first, saying

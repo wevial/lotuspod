@@ -11,7 +11,8 @@
   // swap that throws partway reloads the page. When it answers null, or none
   // is registered, a banner fixed over the top of the window offers a reload;
   // a hidden page with no unsent text in a composer reloads itself, so it is
-  // current when the reader comes back. Before a reload the page keeps where
+  // current when the reader comes back. Before a reload, the banner's or the
+  // browser's (pagehide), and while its tab is hidden, the page keeps where
   // the reader was, per page in sessionStorage: the scroll position, kept
   // from the top of the page's text (div.artifact-main) so a box drawn above
   // it after the load moves nothing, and what
@@ -293,8 +294,42 @@
       }
     }
 
+    // Left by the browser's own reload, or by any other way, the page keeps
+    // the same as before the banner's Reload, which the next load of the
+    // page in this tab gets back; and so does a page whose tab is hidden, as
+    // a mobile browser may put it away without pagehide. A page shown again
+    // lives on: what it kept goes, so no later load brings back a comment
+    // the reader has sent since. Once left, the page keeps what it had as
+    // pagehide came: the tab hidden after it, the posts still sending are
+    // given up, which says less.
+    var left = false;
+    function unsave() {
+      try {
+        sessionStorage.removeItem(key);
+      } catch (ignored) {
+        // Storage refused: nothing was kept.
+      }
+    }
+    window.addEventListener("pagehide", function () {
+      left = true;
+      save();
+    });
+    window.addEventListener("pageshow", function (event) {
+      if (event.persisted) {
+        left = false;
+        unsave();
+      }
+    });
     document.addEventListener("visibilitychange", function () {
-      if (!hidden() && timer) {
+      if (hidden()) {
+        if (!left) {
+          save();
+        }
+        return;
+      }
+      left = false;
+      unsave();
+      if (timer) {
         check();
       }
     });

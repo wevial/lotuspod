@@ -118,14 +118,15 @@ export function threadList(page: Page, shell: Shell, bridge: ThreadListBridge) {
     }
   }
 
-  // Opening a panel form folds other empty forms, keeping drafts intact.
+  // Opening a panel form folds other forms with no text or images,
+  // keeping drafts intact.
   function compose(made: Group, show: boolean) {
     if (show && page.archived) {
       return;
     }
     if (show && bridge.wide()) {
       groups.forEach(function (other) {
-        if (other !== made && !other.holder.hidden && !field(other.box!).value) {
+        if (other !== made && !other.holder.hidden && !bridge.unsent(other.box!)) {
           other.holder.hidden = true;
           other.toggle.setAttribute("aria-expanded", "false");
           bridge.unblock(other.box!);

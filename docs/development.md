@@ -113,9 +113,11 @@ nothing. It gives each decision form its Ask, which posts the note to
 the thread and opens it (`asked`), and on `SAVED` with a comment reads the
 threads at once. The drafts part keeps what is unsent over a reload
 (`live.keep`, `live.kept`, `live.place`): each composer's text and images,
-what was open and a passage composer's words; text whose place a new
-revision dropped goes to a section's form with `PLACE_GONE` or
-`PASSAGE_GONE` beside it. It handles `SWAPPED`, remounting the boxes a swap
+what was open and a passage composer's words, and the live block a
+section's form is on (the composer's `on`), which opens the form on it again
+(the store's `holdOn`); text whose place a new
+revision dropped goes to a section's form with `PLACE_GONE`,
+`PASSAGE_GONE` or `BLOCK_GONE` beside it. It handles `SWAPPED`, remounting the boxes a swap
 replaced, took away or added with their threads, forms and decision forms,
 and registers the `holdSwap` test that holds back a section whose form holds
 unsent text or whose words the open passage composer quotes. One map,
@@ -123,7 +125,7 @@ unsent text or whose words the open passage composer quotes. One map,
 both paths. It reaches the threads through the store (`refresh`, `retitle`,
 `askAbout` for a swap's decision forms, the composer handles, the Maps); the
 store reaches its `restore` and `boxWith` through its bridge. The bridge
-supplies `holdSwap`, `PLACE_GONE`, `PASSAGE_GONE`, `BLOCK_CHANGED`,
+supplies `holdSwap`, `PLACE_GONE`, `PASSAGE_GONE`, `BLOCK_GONE`, `BLOCK_CHANGED`,
 `STALE_BLOCK`, `settleImageCap`,
 `NO_CAP`, `CHANGED`, `NO_QUESTION`, `STALE_QUESTION`, `imageWords` and
 `all`, and types `SWAPPED`'s and `SAVED`'s detail.

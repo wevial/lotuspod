@@ -1025,6 +1025,12 @@ test.describe('signed in', () => {
     await expect(page.locator(`.artifact-passage-number[data-thread="${asked.id}"]`)).toHaveText('1');
     await expect(side.fold).toBeVisible();
 
+    // A fresh load: what the page keeps as it is left goes, so it does not come back to where the reader was.
+    await page.evaluate(() => window.addEventListener('pagehide', () => {
+      for (const key of Object.keys(sessionStorage).filter((key) => key.startsWith('lotuspod:reload:'))) {
+        sessionStorage.removeItem(key);
+      }
+    }));
     await page.setViewportSize({ width: 1024, height: 768 });
     await page.reload();
     await settle(page);

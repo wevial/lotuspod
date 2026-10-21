@@ -254,6 +254,12 @@ test.describe('signed in', () => {
     const id = thread.root.id;
 
     // The reader is away while hermes answers, so the reply waits unread.
+    // A fresh load: what the page keeps as it is left goes, so it does not come back to where the reader was.
+    await page.evaluate(() => window.addEventListener('pagehide', () => {
+      for (const key of Object.keys(sessionStorage).filter((key) => key.startsWith('lotuspod:reload:'))) {
+        sessionStorage.removeItem(key);
+      }
+    }));
     await page.goto('about:blank');
     const claim = hermes('claim', String(id));
     expect(claim.handle).toBe(OWNER);

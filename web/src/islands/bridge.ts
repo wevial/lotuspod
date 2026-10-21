@@ -99,6 +99,9 @@ declare function holdSwap(test: (nodes: readonly Element[], removed: boolean) =>
 // the form it went to: a passage's words gone, or any other place.
 declare const PASSAGE_GONE: string;
 declare const PLACE_GONE: string;
+// js/page-open.js: what a comment begun on a live block says on its
+// section's form when the page reloaded without the block.
+declare const BLOCK_GONE: string;
 // js/page-open.js: what a section's form on a live block says when a swap
 // changed the block under it (the comment stays on the version the reader
 // saw), and when a send was refused for a block the
@@ -142,6 +145,7 @@ export const page = Object.freeze({
   holdSwap,
   passageGone: PASSAGE_GONE,
   placeGone: PLACE_GONE,
+  blockGone: BLOCK_GONE,
   blockChanged: BLOCK_CHANGED,
   staleBlock: STALE_BLOCK,
   room: ROOM,
@@ -247,6 +251,8 @@ export interface ThreadListBridge {
   refresh(): void;
   // The box's form for a new thread is no longer on a live block.
   unblock(box: HTMLElement): void;
+  // Whether the box's form for a new thread holds text or images.
+  unsent(box: HTMLElement): boolean;
   failure(response: Response, payload: CommentPayload | null): string;
   json(response: Response): Promise<CommentPayload | null>;
   wide(): boolean;
