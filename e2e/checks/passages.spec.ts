@@ -47,6 +47,12 @@ const FLOODS_ITEM = '<li>A cracked pump floods the bed below it.</li>';
 
 test.use({ viewport: WIDE });
 
+// The page polls /api/comments; a poll still in ownThreads' route.fetch when
+// a check ends would otherwise fail that check with "Test ended".
+test.afterEach(async ({ page }) => {
+  await page.unrouteAll({ behavior: 'ignoreErrors' });
+});
+
 type Violation = { blockedURI: string; effectiveDirective: string };
 
 // Errors, policy violations and how many reads are in flight. A status a
