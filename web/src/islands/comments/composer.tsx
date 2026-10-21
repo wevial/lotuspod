@@ -148,8 +148,7 @@ export function composers(page: Page, bridge: ComposerBridge) {
   // The live block a section's form is on, as it was when the form was
   // held on it; undefined for none.
   function on(form: HTMLFormElement): Widget | undefined {
-    const held = blocks.get(form);
-    return held && { ...held.widget };
+    return blocks.get(form)?.widget;
   }
   // A swap took away the block a form is on, or moved it to another
   // section (boxOf: the box of a frame's section): the form is no longer on
