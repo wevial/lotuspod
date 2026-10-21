@@ -325,11 +325,12 @@ test.describe.serial('an archived page', () => {
       const errors = await watch(page);
       await open(page);
       const draft = 'A reply written before the page was archived.';
+      // Written as the page is left, after the page keeps its own.
       await page.evaluate(([key, root, text]) => {
-        sessionStorage.setItem(key as string, JSON.stringify({ x: 0, y: 0, comments: {
+        window.addEventListener('pagehide', () => sessionStorage.setItem(key as string, JSON.stringify({ x: 0, y: 0, comments: {
           open: null, passage: null,
           texts: [{ thread: root, section: 'findings', index: 0, text, images: [] }],
-        } }));
+        } })));
       }, [`lotuspod:reload:${NAME}`, thread, draft] as const);
       await page.reload();
       await settle(page);

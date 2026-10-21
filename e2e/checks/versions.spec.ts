@@ -695,10 +695,11 @@ test.describe('signed in, what changed', () => {
     // A draft kept over a reload under the page's own name comes back.
     const section = await page.locator('details.artifact-comment').first().getAttribute('data-section');
     const draft = 'Which pump survives the frost?';
+    // Written as the page is left, after the page keeps its own.
     await page.evaluate(([key, section, text]) => {
-      sessionStorage.setItem(key, JSON.stringify({ x: 0, y: 0, comments: {
+      window.addEventListener('pagehide', () => sessionStorage.setItem(key, JSON.stringify({ x: 0, y: 0, comments: {
         open: null, passage: null, texts: [{ section, index: 0, text, images: [] }],
-      } }));
+      } })));
     }, [`lotuspod:reload:${name}`, section!, draft] as const);
     await page.reload();
     await expect(page.locator('.artifact-versions-link')).toBeVisible();
