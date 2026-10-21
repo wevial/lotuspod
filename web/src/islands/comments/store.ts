@@ -505,6 +505,10 @@ export function store(page: Page, bridge: StoreBridge): Store {
         imageWords: page.imageWords, looked: replies.looked, refresh, failure: composer.failure, json: page.json,
         page: name, sections, showUnread: replies.showUnread, changed, author, unreadIn: replies.unreadIn,
         unblock: box => composer.unblock(forms.get(box)), settled: () => settled,
+        unsent: box => {
+          const form = forms.get(box)!;
+          return composer.fieldOf(form).value !== "" || Boolean(attached.get(form)?.held());
+        },
       });
       panel.arrange();
       page.startComment(startOn);

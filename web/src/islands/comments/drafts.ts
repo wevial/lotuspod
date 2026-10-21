@@ -282,6 +282,8 @@ export function drafts(page: Page, boxes: HTMLElement[]): void {
         }
       } else if (widget && blockStanding(widget) === "gone") {
         moved = rehome(each, page.blockGone);
+        // Joined to a form on another block: never sent on that block.
+        unblock(forms.get(moved)!);
       } else if (widget && (held = reblock(each, widget))) {
         if (typeof each.section === "string") reblocked.set(each.section, held.dataset.section!);
       } else if (box) {

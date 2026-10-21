@@ -907,3 +907,82 @@ test("block drafts a republish puts in one section are given back on no block, s
   expect(body.section).toBe('notes');
   expect(errors).toEqual([]);
 });
+
+// The tally block's Comment, and the Notes group's form it opens.
+function tally(page: Page) {
+  const notes = panel(page).group('Notes');
+  return {
+    comment: page.locator('figure[data-widget="tally"] .artifact-live-chrome').getByRole('button', { name: 'Comment', exact: true }),
+    notes,
+    form: notes.locator('form.artifact-comment-form'),
+  };
+}
+
+test("a removed block's draft that joins a form on another block takes that form off its block", async ({ page }) => {
+  const name = `block-comments-reload-gone-joined-${test.info().repeatEachIndex}`;
+  publish(name, doc(1));
+  const errors = watch(page);
+  await load(page, name);
+  await block(page).comment.click();
+  await churnForm(page).field.fill(QUESTION);
+  const { comment, notes, form } = tally(page);
+  await comment.click();
+  await expect(notes.locator('.artifact-comment-on')).toHaveText('On Merged so far');
+  await form.locator('textarea[name="text"]').fill('Since when?');
+
+  // Churn's block moves into Notes, and tally goes.
+  const lines = doc(1).split('\n');
+  const start = lines.findIndex((line) => line.startsWith('```html live id=churn'));
+  const moved = lines.splice(start, 4);
+  const at = lines.findIndex((line) => line.startsWith('```html live id=tally'));
+  lines.splice(at, 3, ...moved);
+  publish(name, third(lines.join('\n')));
+  await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+  const reload = page.locator('.artifact-live-page-banner').getByRole('button', { name: 'Reload' });
+  await expect(reload).toBeVisible();
+  const loaded = page.waitForEvent('load');
+  await reload.click();
+  await loaded;
+
+  await expect(page.locator('div.artifact-section-body[data-section="notes"] figure[data-widget="churn"]')).toHaveCount(1);
+  await expect(page.locator('figure[data-widget="tally"]')).toHaveCount(0);
+  const field = form.locator('textarea[name="text"]');
+  await expect(field).toHaveValue(new RegExp(QUESTION));
+  await expect(field).toHaveValue(/Since when\?/);
+  await expect(notes.locator('.artifact-comment-on')).toHaveCount(0);
+  const sent = posting(page);
+  await form.getByRole('button', { name: 'Comment', exact: true }).click();
+  const body = (await sent).postDataJSON();
+  expect(body).not.toHaveProperty('widget');
+  expect(body.section).toBe('notes');
+  expect(errors).toEqual([]);
+});
+
+test("a block's form holding only an image keeps its block when another form opens, and over a reload", async ({ page }) => {
+  const name = `block-comments-reload-image-only-${test.info().repeatEachIndex}`;
+  publish(name, doc(1));
+  const errors = watch(page);
+  await load(page, name);
+  const first = await hashOf(page);
+  const { comment, notes, form } = tally(page);
+  await comment.click();
+  await form.locator('textarea[name="text"]').fill('Since when?');
+  const { churn, form: churned, field } = churnForm(page);
+  await block(page).comment.click();
+  await expect(churn.locator('.artifact-comment-on')).toHaveText(WORDS);
+  const [chooser] = await Promise.all([page.waitForEvent('filechooser'),
+    churned.getByRole('button', { name: 'Add image', exact: true }).click()]);
+  await chooser.setFiles([FISH]);
+  await expect(churned.locator('a.artifact-attach-link')).toHaveCount(1);
+
+  await page.reload();
+  await expect(block(page).comment).toBeVisible();
+  await expect(churned.locator('li.artifact-attach-item')).toHaveCount(1);
+  await expect(notes.locator('.artifact-comment-on')).toHaveText('On Merged so far');
+  await expect(churn.locator('.artifact-comment-on')).toHaveText(WORDS);
+  await field.fill(QUESTION);
+  const sent = posting(page);
+  await churned.getByRole('button', { name: 'Comment', exact: true }).click();
+  expect((await sent).postDataJSON().widget).toEqual({ id: 'churn', hash: first, state: '' });
+  expect(errors).toEqual([]);
+});

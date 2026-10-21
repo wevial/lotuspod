@@ -251,6 +251,8 @@ export interface ThreadListBridge {
   refresh(): void;
   // The box's form for a new thread is no longer on a live block.
   unblock(box: HTMLElement): void;
+  // Whether the box's form for a new thread holds text or images.
+  unsent(box: HTMLElement): boolean;
   failure(response: Response, payload: CommentPayload | null): string;
   json(response: Response): Promise<CommentPayload | null>;
   wide(): boolean;
