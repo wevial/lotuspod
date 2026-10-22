@@ -276,29 +276,25 @@ test('in Dawn a live block is a white card with a mint sandbox band, and an agen
   expect(errors).toEqual([]);
 });
 
+function shapeFill(page: Page, selector = 'pre.mermaid > svg g.node rect') {
+  return page.evaluate((selector) => {
+    const shape = document.querySelector(selector);
+    return shape ? getComputedStyle(shape).fill : null;
+  }, selector);
+}
+
 test('a diagram is drawn again in the other set on each press', async ({ page }) => {
   const errors = await watch(page);
   await page.goto(`${DIAGRAM}?standalone`);
-  const fill = () => page.evaluate(() => {
-    const shape = document.querySelector('pre.mermaid > svg g.node rect');
-    return shape ? getComputedStyle(shape).fill : null;
-  });
-  await expect.poll(fill).toBe(rgb(NIGHT.surface));
+  await expect.poll(() => shapeFill(page)).toBe(rgb(NIGHT.surface));
   await switchButton(page, 'Dawn').click();
-  await expect.poll(fill).toBe(rgb(DAWN.surface));
+  await expect.poll(() => shapeFill(page)).toBe(rgb(DAWN.surface));
   expect(await page.locator('pre.mermaid > svg').count()).toBe(1);
   await switchButton(page, 'Night').click();
-  await expect.poll(fill).toBe(rgb(NIGHT.surface));
+  await expect.poll(() => shapeFill(page)).toBe(rgb(NIGHT.surface));
   expect(await page.locator('pre.mermaid > svg').count()).toBe(1);
   expect(errors).toEqual([]);
 });
-
-function shapeFill(page: Page) {
-  return page.evaluate(() => {
-    const shape = document.querySelector('pre.mermaid > svg g.node rect');
-    return shape ? getComputedStyle(shape).fill : null;
-  });
-}
 
 test('a quick Dawn then Night settles in Night', async ({ page }) => {
   const errors = await watch(page);
@@ -323,10 +319,7 @@ test("a diagram's boxes still open their cards once it is drawn again", async ({
   const count = await boxes.count();
   expect(count).toBeGreaterThan(0);
   await switchButton(page, 'Dawn').click();
-  await expect.poll(() => page.evaluate(() => {
-    const shape = document.querySelector('pre.mermaid > svg g.node .label-container');
-    return shape ? getComputedStyle(shape).fill : null;
-  })).not.toBe(rgb(NIGHT.surface));
+  await expect.poll(() => shapeFill(page, 'pre.mermaid > svg g.node .label-container')).not.toBe(rgb(NIGHT.surface));
   await expect(boxes).toHaveCount(count);
   await boxes.first().click();
   await expect(page.locator('.artifact-node-card')).toBeVisible();
@@ -342,10 +335,7 @@ test('a diagram open in its view is drawn in the new theme there, and keeps it o
   await page.emulateMedia({ colorScheme: 'light' });
   await expect.poll(() => theme(page)).toBe('dawn');
   // Drawn again where it is shown, in the dialog.
-  await expect.poll(() => page.evaluate(() => {
-    const shape = document.querySelector('dialog.artifact-diagram-view svg g.node rect');
-    return shape ? getComputedStyle(shape).fill : null;
-  })).toBe(rgb(DAWN.surface));
+  await expect.poll(() => shapeFill(page, 'dialog.artifact-diagram-view svg g.node rect')).toBe(rgb(DAWN.surface));
   expect(await page.locator('dialog.artifact-diagram-view svg').count()).toBe(1);
   await page.keyboard.press('Escape');
   await expect(page.locator('dialog.artifact-diagram-view')).toBeHidden();
