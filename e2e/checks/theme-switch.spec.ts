@@ -202,39 +202,36 @@ function publishLive() {
 
 test.beforeAll(publishLive);
 
-test.describe('a live block', () => {
+test('a live block follows a press, a kept choice and a light system', async ({ page, browser }) => {
+  const errors = await watch(page);
+  await page.goto(`/${LIVE}.html?standalone`);
+  const label = page.locator('figure.artifact-live .artifact-live-state');
+  await expect(label).toHaveText(`night ${NIGHT.night}`);
+  await switchButton(page, 'Dawn').click();
+  await expect(label).toHaveText(`dawn ${DAWN.night}`);
 
-  test('follows a press, a kept choice and a light system', async ({ page, browser }) => {
-    const errors = await watch(page);
-    await page.goto(`/${LIVE}.html?standalone`);
-    const label = page.locator('figure.artifact-live .artifact-live-state');
-    await expect(label).toHaveText(`night ${NIGHT.night}`);
-    await switchButton(page, 'Dawn').click();
-    await expect(label).toHaveText(`dawn ${DAWN.night}`);
+  // Dawn kept, the system dark: the frame is told as it opens.
+  await page.reload();
+  await expect(label).toHaveText(`dawn ${DAWN.night}`);
+  expect(await pressed(page)).toEqual([['Night', 'false'], ['Dawn', 'true'], ['Auto', 'false']]);
+  await switchButton(page, 'Night').click();
+  await expect(label).toHaveText(`night ${NIGHT.night}`);
+  expect(errors).toEqual([]);
 
-    // Dawn kept, the system dark: the frame is told as it opens.
-    await page.reload();
-    await expect(label).toHaveText(`dawn ${DAWN.night}`);
-    expect(await pressed(page)).toEqual([['Night', 'false'], ['Dawn', 'true'], ['Auto', 'false']]);
-    await switchButton(page, 'Night').click();
-    await expect(label).toHaveText(`night ${NIGHT.night}`);
-    expect(errors).toEqual([]);
-
-    // Auto, nothing kept, on a light system.
-    const light = await browser.newContext({ viewport: WIDE, colorScheme: 'light', extraHTTPHeaders: SIGNED_IN });
-    try {
-      const other = await light.newPage();
-      const otherErrors = await watch(other);
-      await other.goto(`/${LIVE}.html?standalone`);
-      expect(await theme(other)).toBe('dawn');
-      expect(await pressed(other)).toEqual([['Night', 'false'], ['Dawn', 'false'], ['Auto', 'true']]);
-      await expect(other.locator('figure.artifact-live .artifact-live-state')).toHaveText(`dawn ${DAWN.night}`);
-      await other.unrouteAll({ behavior: 'ignoreErrors' });
-      expect(otherErrors).toEqual([]);
-    } finally {
-      await light.close();
-    }
-  });
+  // Auto, nothing kept, on a light system.
+  const light = await browser.newContext({ viewport: WIDE, colorScheme: 'light', extraHTTPHeaders: SIGNED_IN });
+  try {
+    const other = await light.newPage();
+    const otherErrors = await watch(other);
+    await other.goto(`/${LIVE}.html?standalone`);
+    expect(await theme(other)).toBe('dawn');
+    expect(await pressed(other)).toEqual([['Night', 'false'], ['Dawn', 'false'], ['Auto', 'true']]);
+    await expect(other.locator('figure.artifact-live .artifact-live-state')).toHaveText(`dawn ${DAWN.night}`);
+    await other.unrouteAll({ behavior: 'ignoreErrors' });
+    expect(otherErrors).toEqual([]);
+  } finally {
+    await light.close();
+  }
 });
 
 test('in Dawn a live block is a white card with a mint sandbox band, and an agent replies on the paper', async ({ page }) => {
