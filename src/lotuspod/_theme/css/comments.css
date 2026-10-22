@@ -555,6 +555,21 @@
   grid-row: 1;
 }
 
+/* In Dawn the field sits on the deeper paper, apart from the white card
+   around it: the form's frame, or the one box the page script draws
+   (attachments.css). */
+:root[data-theme="dawn"] :is(.artifact-comment-form, .artifact-comment-reply)::before,
+:root[data-theme="dawn"] :is(.artifact-comment-form, .artifact-comment-reply) .artifact-composer-box {
+  background: var(--color-deep-night);
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="night"]) :is(.artifact-comment-form, .artifact-comment-reply)::before,
+  :root:not([data-theme="night"]) :is(.artifact-comment-form, .artifact-comment-reply) .artifact-composer-box {
+    background: var(--color-deep-night);
+  }
+}
+
 .artifact-comment-form:has(textarea:focus-visible)::before,
 .artifact-comment-reply:has(textarea:focus-visible)::before {
   border-color: var(--color-lavender);

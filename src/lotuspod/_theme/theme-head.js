@@ -15,10 +15,7 @@
   } catch (error) {
     choice = "auto";
   }
-  var CHOICES = ["night", "dawn", "auto"];
-  var NAMES = {night: "Night", dawn: "Dawn", auto: "Auto"};
   var buttons = [];
-  var cycle = null;
 
   function resolved() {
     if (choice !== "auto") return choice;
@@ -34,11 +31,6 @@
     buttons.forEach(function (button) {
       button.setAttribute("aria-pressed", String(button.getAttribute("data-theme-choice") === choice));
     });
-    if (cycle) {
-      cycle.textContent = NAMES[choice].charAt(0);
-      cycle.setAttribute("aria-label", "Theme: " + NAMES[choice]);
-      cycle.title = "Theme: " + NAMES[choice];
-    }
     if (changed) document.dispatchEvent(new CustomEvent("lotuspod:theme", {detail: {theme: theme}}));
   }
 
@@ -50,31 +42,19 @@
   document.addEventListener("DOMContentLoaded", function () {
     var group = document.querySelector(".artifact-theme-switch");
     if (!group) return;
-    function choose(value) {
-      choice = value;
-      try {
-        if (choice === "auto") window.localStorage.removeItem(KEY);
-        else window.localStorage.setItem(KEY, choice);
-      } catch (error) {
-        // Not kept: the choice holds on this page only.
-      }
-      apply();
-    }
     buttons = Array.prototype.slice.call(group.querySelectorAll("button[data-theme-choice]"));
     buttons.forEach(function (button) {
       button.addEventListener("click", function () {
-        choose(button.getAttribute("data-theme-choice"));
+        choice = button.getAttribute("data-theme-choice");
+        try {
+          if (choice === "auto") window.localStorage.removeItem(KEY);
+          else window.localStorage.setItem(KEY, choice);
+        } catch (error) {
+          // Not kept: the choice holds on this page only.
+        }
+        apply();
       });
     });
-    // A narrow bar beside the review sheet's controls shows one button in
-    // place of the three (theme-switch.css): it names the choice and steps
-    // to the next, Night, Dawn, Auto.
-    cycle = group.querySelector(".artifact-theme-cycle");
-    if (cycle) {
-      cycle.addEventListener("click", function () {
-        choose(CHOICES[(CHOICES.indexOf(choice) + 1) % CHOICES.length]);
-      });
-    }
     apply();
     group.hidden = false;
   });

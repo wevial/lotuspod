@@ -1577,10 +1577,7 @@ and full-window overlays' colours. `base.css` declares Dawn under
 
 A reader picks the theme with the Night / Dawn / Auto switch at the right of
 a page's title bar; Auto, the default, follows the system's
-`prefers-color-scheme`. In a title bar 24rem wide or less that also holds
-the review sheet's controls, the switch is one button showing the
-choice's initial (named "Theme: Night" and so on), which steps through Night,
-Dawn and Auto. The choice is kept in the reader's browser under the
+`prefers-color-scheme`. The choice is kept in the reader's browser under the
 `localStorage` key `lotuspod:theme` (`night` or `dawn`; Auto removes it). The
 head script, `theme-head.js`, inlined in the template's head and allowed by
 its hash, sets the resolved theme as `data-theme` on `html` before the body
