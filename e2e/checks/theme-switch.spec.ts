@@ -246,7 +246,6 @@ test('in Dawn a live block is a white card with a mint sandbox band, and an agen
   await switchButton(page, 'Dawn').click();
   expect(await fill(figure)).toBe(rgb(DAWN.surface));
   expect(await fill(note)).toBe(DAWN_STRUCTURE.mint_tint);
-  // Its badge: no fill, a mint outline.
   const badge = figure.locator('.artifact-live-badge');
   await expect(badge).toHaveText('Live');
   expect(await fill(badge)).toBe('rgba(0, 0, 0, 0)');
