@@ -395,27 +395,33 @@ test('a widget opened alone follows the system as it changes', async ({ page }) 
   expect(errors).toEqual([]);
 });
 
-test('beside the review sheet on a phone every switch button stays in the window', async ({ page }) => {
+test('beside the review sheet on a phone the switch is one button in the window that steps through the choices', async ({ page }) => {
   const errors = await watch(page);
   for (const width of [375, 320, 280]) {
     await page.setViewportSize({ width, height: 700 });
     await page.goto(`${DECISIONS}?standalone`);
     await expect(page.locator('.artifact-review-bar')).toBeVisible();
-    for (const name of ['Night', 'Dawn', 'Auto'] as const) {
-      const button = switchButton(page, name);
-      await expect(button).toBeVisible();
-      const box = (await button.boundingBox())!;
-      expect(box.x, `${name} at ${width}`).toBeGreaterThanOrEqual(0);
-      expect(box.x + box.width, `${name} at ${width}`).toBeLessThanOrEqual(width);
-      const bar = (await page.locator('.artifact-topbar').boundingBox())!;
-      expect(box.y + box.height, `${name} at ${width}`).toBeLessThanOrEqual(bar.y + bar.height);
-    }
+    const group = page.getByRole('group', { name: 'Theme' });
+    await expect(group.getByRole('button')).toHaveCount(1);
+    const button = group.getByRole('button', { name: 'Theme: Auto' });
+    await expect(button).toBeVisible();
+    const box = (await button.boundingBox())!;
+    expect(box.x, `at ${width}`).toBeGreaterThanOrEqual(0);
+    expect(box.x + box.width, `at ${width}`).toBeLessThanOrEqual(width);
+    const bar = (await page.locator('.artifact-topbar').boundingBox())!;
+    expect(box.y + box.height, `at ${width}`).toBeLessThanOrEqual(bar.y + bar.height);
     const count = (await page.locator('.artifact-review-count').boundingBox())!;
     expect(count.x + count.width).toBeLessThanOrEqual(width);
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
-    await switchButton(page, 'Dawn').click();
+    await button.click();
+    await expect(group.getByRole('button', { name: 'Theme: Night' })).toHaveAttribute('title', 'Theme: Night');
+    await group.getByRole('button').click();
+    await expect(group.getByRole('button', { name: 'Theme: Dawn' })).toHaveText('D');
     expect(await theme(page)).toBe('dawn');
-    await switchButton(page, 'Auto').click();
+    expect(await stored(page)).toBe('dawn');
+    await group.getByRole('button').click();
+    await expect(group.getByRole('button', { name: 'Theme: Auto' })).toBeVisible();
+    expect(await stored(page)).toBeNull();
   }
   expect(errors).toEqual([]);
 });

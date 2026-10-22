@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/mermaid@11.4.1/ https://cdn.jsdelivr.net/npm/@mermaid-js/layout-elk@0.2.3/ 'sha256-yoSLl6+rAJiio3R2qWc+n+JjKvJcyiXFytiQ0qXtytE=' 'sha256-1fqmYYvxyxHfLrQCMuGxGKkFb4bMVttQk6klSiSsCnM='; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/mermaid@11.4.1/ https://cdn.jsdelivr.net/npm/@mermaid-js/layout-elk@0.2.3/ 'sha256-rxvmP3+SpRCNGG+d2XvBhb1n/LTjNz3ZzKHOUTccJ4U=' 'sha256-1fqmYYvxyxHfLrQCMuGxGKkFb4bMVttQk6klSiSsCnM='; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Plain Page · Lotuspod</title>
   <meta name="generator" content="lotuspod theme lotus">
@@ -26,7 +26,10 @@
   } catch (error) {
     choice = "auto";
   }
+  var CHOICES = ["night", "dawn", "auto"];
+  var NAMES = {night: "Night", dawn: "Dawn", auto: "Auto"};
   var buttons = [];
+  var cycle = null;
 
   function resolved() {
     if (choice !== "auto") return choice;
@@ -42,6 +45,11 @@
     buttons.forEach(function (button) {
       button.setAttribute("aria-pressed", String(button.getAttribute("data-theme-choice") === choice));
     });
+    if (cycle) {
+      cycle.textContent = NAMES[choice].charAt(0);
+      cycle.setAttribute("aria-label", "Theme: " + NAMES[choice]);
+      cycle.title = "Theme: " + NAMES[choice];
+    }
     if (changed) document.dispatchEvent(new CustomEvent("lotuspod:theme", {detail: {theme: theme}}));
   }
 
@@ -53,19 +61,31 @@
   document.addEventListener("DOMContentLoaded", function () {
     var group = document.querySelector(".artifact-theme-switch");
     if (!group) return;
+    function choose(value) {
+      choice = value;
+      try {
+        if (choice === "auto") window.localStorage.removeItem(KEY);
+        else window.localStorage.setItem(KEY, choice);
+      } catch (error) {
+        // Not kept: the choice holds on this page only.
+      }
+      apply();
+    }
     buttons = Array.prototype.slice.call(group.querySelectorAll("button[data-theme-choice]"));
     buttons.forEach(function (button) {
       button.addEventListener("click", function () {
-        choice = button.getAttribute("data-theme-choice");
-        try {
-          if (choice === "auto") window.localStorage.removeItem(KEY);
-          else window.localStorage.setItem(KEY, choice);
-        } catch (error) {
-          // Not kept: the choice holds on this page only.
-        }
-        apply();
+        choose(button.getAttribute("data-theme-choice"));
       });
     });
+    // A narrow bar beside the review sheet's controls shows one button in
+    // place of the three (theme-switch.css): it names the choice and steps
+    // to the next, Night, Dawn, Auto.
+    cycle = group.querySelector(".artifact-theme-cycle");
+    if (cycle) {
+      cycle.addEventListener("click", function () {
+        choose(CHOICES[(CHOICES.indexOf(choice) + 1) % CHOICES.length]);
+      });
+    }
     apply();
     group.hidden = false;
   });
@@ -81,6 +101,7 @@
         <button type="button" class="artifact-theme-option" data-theme-choice="night" aria-label="Night" aria-pressed="false">N<span class="artifact-theme-more">ight</span></button>
         <button type="button" class="artifact-theme-option" data-theme-choice="dawn" aria-label="Dawn" aria-pressed="false">D<span class="artifact-theme-more">awn</span></button>
         <button type="button" class="artifact-theme-option" data-theme-choice="auto" aria-label="Auto" aria-pressed="false">A<span class="artifact-theme-more">uto</span></button>
+        <button type="button" class="artifact-theme-cycle" aria-label="Theme: Auto" title="Theme: Auto">A</button>
       </div>
     </div>
 

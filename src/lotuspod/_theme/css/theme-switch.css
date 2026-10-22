@@ -82,49 +82,82 @@
   }
 }
 
-/* Narrower still, the switch keeps its place beside the review sheet's
-   controls, and the brand and its separator leave the bar to make room for
-   it; while Next open shows, so does the title. */
-@media (min-width: 22.0625rem) and (max-width: 24rem) {
-  .artifact-topbar:has(.artifact-review-bar) {
-    padding-inline: 0.5rem;
-  }
-
-  .artifact-topbar:has(.artifact-review-bar) .artifact-topbar-brand,
-  .artifact-topbar:has(.artifact-review-bar) .artifact-topbar-sep,
-  .artifact-topbar:has(.artifact-review-next:not([hidden])) .artifact-topbar-title {
-    display: none;
-  }
+/* Narrower still, beside the review sheet's controls (and the archive
+   button with them) the three buttons give way to one, the choice's
+   initial, which steps to the next choice (theme-head.js), so the bar keeps
+   its one line and the title its room. The archive button alone leaves room
+   for all three, and keying on it would redraw the switch when it arrives. */
+.artifact-theme-cycle {
+  display: none;
 }
 
-/* Narrower than one line holds them all, the bar grows a second line under
-   the review sheet's controls for the switch, its three buttons sharing the
-   line with their words again. The page, the panels and the frames reserve
-   the bar's height by --topbar-height or measure it, so all follow. */
-@media (max-width: 22rem) {
-  :root:has(.artifact-topbar .artifact-review-bar) {
-    --topbar-height: 4.75rem;
-  }
-
-  /* Out of the first line's flow, which lays out as it would without it. */
+@media (max-width: 24rem) {
   .artifact-topbar:has(.artifact-review-bar) .artifact-theme-switch {
-    bottom: 0.45rem;
-    display: flex;
-    left: 0.5rem;
-    margin: 0;
-    position: absolute;
-    right: 0.5rem;
+    border: 0;
+    margin-left: 0;
+    padding: 0;
   }
 
   .artifact-topbar:has(.artifact-review-bar) .artifact-theme-option {
-    flex: 1;
+    display: none;
   }
 
-  .artifact-topbar:has(.artifact-review-bar) .artifact-theme-more {
-    clip-path: none;
-    height: auto;
-    overflow: visible;
-    position: static;
-    width: auto;
+  .artifact-topbar:has(.artifact-review-bar) .artifact-theme-cycle {
+    background: none;
+    border: 1px solid var(--hairline-strong);
+    border-radius: var(--radius-pill);
+    color: var(--color-lavender);
+    cursor: pointer;
+    display: block;
+    font: inherit;
+    font-family: var(--font-body);
+    font-size: 0.75rem;
+    line-height: 1.4;
+    margin: 0;
+    padding: 0.1rem 0.4rem;
+  }
+
+  .artifact-topbar:has(.artifact-review-bar) .artifact-theme-cycle:hover {
+    border-color: var(--color-lavender);
+    color: var(--color-white);
+  }
+
+  .artifact-topbar:has(.artifact-review-bar) .artifact-theme-cycle:focus-visible {
+    outline: 2px solid var(--color-lavender);
+    outline-offset: 2px;
+  }
+
+  /* And while Next open shows, the bar's gaps and its buttons' padding
+     tighten, so Next open's words keep room for their ellipsis. */
+  .artifact-topbar:has(.artifact-review-next:not([hidden])):has(.artifact-theme-cycle) {
+    column-gap: 0.35rem;
+  }
+
+  .artifact-topbar:has(.artifact-review-next:not([hidden])) .artifact-theme-cycle,
+  .artifact-topbar:has(.artifact-review-next:not([hidden])):has(.artifact-theme-cycle) .artifact-archive {
+    padding-inline: 0.3rem;
+  }
+}
+
+/* Narrower than the title's ellipsis has room (archive.css, review-sheet.css),
+   the brand and its separator leave the bar beside both controls, or beside
+   the review sheet's count with no question open, so the one button has its
+   room; the title stays while no question is open, and Next open keeps its
+   words' ellipsis while one is. */
+@media (max-width: 22rem) {
+  .artifact-topbar:has(.artifact-archive-bar ~ .artifact-review-bar) .artifact-topbar-brand,
+  .artifact-topbar:has(.artifact-archive-bar ~ .artifact-review-bar) .artifact-topbar-sep,
+  .artifact-topbar:has(.artifact-review-bar):not(:has(.artifact-review-next:not([hidden]))) .artifact-topbar-brand,
+  .artifact-topbar:has(.artifact-review-bar):not(:has(.artifact-review-next:not([hidden]))) .artifact-topbar-sep {
+    display: none;
+  }
+
+  /* Beside the review sheet's controls alone, with a question open, the
+     brand gives way to an ellipsis, as it does beside both (archive.css). */
+  .artifact-topbar:has(.artifact-review-bar) .artifact-topbar-brand {
+    flex: 0 4 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 }

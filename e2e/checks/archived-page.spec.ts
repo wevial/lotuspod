@@ -447,6 +447,21 @@ test.describe.serial('an archived page', () => {
         await expect(next).toBeVisible();
         await expect(count).toBeVisible();
         await fits(page, 'drawn');
+        if (width === 360) {
+          // The theme switch is one button here, naming the choice and
+          // stepping to the next: Auto, Night, Dawn.
+          const theme = page.getByRole('group', { name: 'Theme' });
+          await expect(theme.getByRole('button')).toHaveCount(1);
+          const cycle = theme.getByRole('button', { name: 'Theme: Auto' });
+          await cycle.click();
+          await expect(theme.getByRole('button', { name: 'Theme: Night' })).toBeVisible();
+          await theme.getByRole('button').click();
+          await expect(theme.getByRole('button', { name: 'Theme: Dawn' })).toHaveText('D');
+          await expect(page.locator('html')).toHaveAttribute('data-theme', 'dawn');
+          await fits(page, 'in Dawn');
+          await theme.getByRole('button').click();
+          await expect(page.locator('html')).toHaveAttribute('data-theme', 'night');
+        }
 
         await page.route((url) => url.pathname === '/api/archive', (route) =>
           route.request().method() === 'POST'
