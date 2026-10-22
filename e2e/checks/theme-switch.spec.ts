@@ -313,7 +313,6 @@ test("a diagram's boxes still open their cards once it is drawn again", async ({
   const boxes = page.locator('pre.mermaid').first().locator('g.artifact-node[role="button"]');
   await expect(boxes.first()).toBeVisible();
   const count = await boxes.count();
-  expect(count).toBeGreaterThan(0);
   await switchButton(page, 'Dawn').click();
   await expect.poll(() => shapeFill(page, 'pre.mermaid > svg g.node .label-container')).not.toBe(rgb(NIGHT.surface));
   await expect(boxes).toHaveCount(count);
