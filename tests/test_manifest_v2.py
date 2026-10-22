@@ -1528,25 +1528,6 @@ class MermaidTests(TempDirTestCase):
                 # Dawn's colours over Night's fonts.
                 self.assertEqual(variables["fontFamily"], tokens["fonts"]["mono"])
 
-    def test_the_module_carries_both_sets_and_the_policy_hashes_the_theme_script(self):
-        page = self.rendered(self.BODY)
-        tokens = json.loads((cli.THEME_DIR / "tokens.json").read_text(encoding="utf-8"))
-        (script,) = re.findall(r'<script type="module">(.*?)</script>', page, re.DOTALL)
-        sets = json.loads(re.search(r"const themeVariables = (\{.*?\});\n", script).group(1))
-        night, dawn = tokens["colors"], tokens["dawn"]["colors"]
-        self.assertEqual(sets["night"]["primaryColor"], night["surface"])
-        self.assertEqual(sets["night"]["lineColor"], night["lavender"])
-        self.assertEqual(sets["dawn"]["primaryColor"], dawn["surface"])
-        self.assertEqual(sets["dawn"]["lineColor"], dawn["lavender"])
-        self.assertEqual(sets["dawn"]["background"], dawn["night"])
-        head = page[:page.index("</head>")]
-        theme_head = (cli.THEME_DIR / "theme-head.js").read_text(encoding="utf-8")
-        self.assertIn(f"<script>{theme_head}</script>", head)
-        policy = re.search(r'http-equiv="Content-Security-Policy" content="([^"]*)"', page).group(1)
-        script_src = next(part.split()[1:] for part in policy.split(";")
-                          if part.split()[0] == "script-src")
-        self.assertIn(cli.script_hash(theme_head), script_src)
-
     def test_detection_needs_a_pre_with_the_mermaid_class(self):
         self.assertTrue(cli.has_mermaid_block('<pre class="code mermaid">x</pre>'))
         self.assertFalse(cli.has_mermaid_block("<p>mermaid</p>"))

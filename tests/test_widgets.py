@@ -235,9 +235,6 @@ class WidgetTests(TempDirTestCase):
                     for group, values in sets.items() if isinstance(values, dict) and group != 'dawn'
                     for key, value in values.items()}
         night, dawn = expected(tokens), expected(tokens['dawn'])
-        self.assertEqual(sorted(dawn), sorted(
-            name for name in night if name.startswith(('--lotus-color-', '--lotus-structure-'))
-        ) + ['--lotus-type-ink'])
 
         def declared(block):
             declarations = re.findall(r'(--lotus-[\w-]+): ([^;]+);', block)

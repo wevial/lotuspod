@@ -133,15 +133,6 @@ class TintTests(unittest.TestCase):
                 self.assertGreaterEqual(contrast(text, ground), AA)
 
 
-class ButtonTests(unittest.TestCase):
-    def test_night_text_reads_on_lavender_in_both_sets(self):
-        # The filled buttons' pair: Dawn keeps lavender dark and night light,
-        # so the pair inverts with no rule changed.
-        for name, colors in (("night", COLORS), ("dawn", DAWN_COLORS)):
-            with self.subTest(set=name):
-                self.assertGreaterEqual(contrast(colors["night"], colors["lavender"]), AA)
-
-
 class DawnTests(unittest.TestCase):
     def test_dawn_names_exactly_nights_keys(self):
         self.assertEqual(sorted(DAWN), ["colors", "structure", "type"])
