@@ -562,6 +562,15 @@
       cardsMount.drop(before);
     }
   });
+  // A diagram drawn again in the other theme has new boxes: its old ones,
+  // and any card open on them, are let go, and the new ones bound.
+  document.addEventListener(REDRAWN, function (event) {
+    var pre = event.detail.pre;
+    if (cardsMount && pre.matches(CARDS_PRE)) {
+      cardsMount.drop([pre]);
+      cardsMount.mount(pre);
+    }
+  });
   document.addEventListener(DIAGRAMS, function (event) {
     var pres = event.detail.nodes.filter(function (pre) { return pre.matches(CARDS_PRE); });
     if (pres.length) {

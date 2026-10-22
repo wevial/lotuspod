@@ -1456,7 +1456,9 @@ body's `color-scheme` follows. A sandboxed frame's `prefers-color-scheme`
 follows the system only, so a reader's own choice reaches the block through
 the message alone. A block that reads the variables follows the page with
 nothing more; one drawing on a canvas reads `window.lotuspod.theme` (`night`
-or `dawn`) and draws again on the `lotuspod:theme` event on its `document`.
+or `dawn`) and draws again on the `lotuspod:theme` event on its `document`. A
+widget file opened alone follows the system, and its
+`window.lotuspod.theme` and event follow it as the system changes.
 
 ### Limits
 

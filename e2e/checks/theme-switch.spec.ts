@@ -13,6 +13,10 @@ import { expect, test, type Page } from '@playwright/test';
 const PAGE = '/capture-palette.html';
 const SLUG = 'capture-palette';
 const DIAGRAM = '/capture-diagram.html';
+// A flowchart whose boxes open cards, and the decisions page, whose title bar
+// also holds the review sheet's controls.
+const CARDS = '/capture-node-cards.html';
+const DECISIONS = '/capture-decisions.html';
 const KEY = 'lotuspod:theme';
 const ENV = process.env;
 const SIGNED_IN = { 'Cf-Access-Jwt-Assertion': ENV.LOTUSPOD_TEST_ASSERTION ?? '' };
@@ -196,8 +200,9 @@ function publishLive() {
   }
 }
 
+test.beforeAll(publishLive);
+
 test.describe('a live block', () => {
-  test.beforeAll(publishLive);
 
   test('follows a press, a kept choice and a light system', async ({ page, browser }) => {
     const errors = await watch(page);
@@ -246,6 +251,103 @@ test('a diagram is drawn again in the other set on each press', async ({ page })
   await switchButton(page, 'Night').click();
   await expect.poll(fill).toBe(rgb(NIGHT.surface));
   expect(await page.locator('pre.mermaid > svg').count()).toBe(1);
+  expect(errors).toEqual([]);
+});
+
+function shapeFill(page: Page) {
+  return page.evaluate(() => {
+    const shape = document.querySelector('pre.mermaid > svg g.node rect');
+    return shape ? getComputedStyle(shape).fill : null;
+  });
+}
+
+test('a quick Dawn then Night settles in Night', async ({ page }) => {
+  const errors = await watch(page);
+  await page.goto(`${DIAGRAM}?standalone`);
+  await expect.poll(() => shapeFill(page)).toBe(rgb(NIGHT.surface));
+  await switchButton(page, 'Dawn').click();
+  await switchButton(page, 'Night').click();
+  await switchButton(page, 'Dawn').click();
+  await switchButton(page, 'Night').click();
+  await page.waitForTimeout(1500);
+  expect(await theme(page)).toBe('night');
+  expect(await shapeFill(page)).toBe(rgb(NIGHT.surface));
+  expect(await page.locator('pre.mermaid > svg').count()).toBe(1);
+  expect(errors).toEqual([]);
+});
+
+test("a diagram's boxes still open their cards once it is drawn again", async ({ page }) => {
+  const errors = await watch(page);
+  await page.goto(`${CARDS}?standalone`);
+  const boxes = page.locator('pre.mermaid').first().locator('g.artifact-node[role="button"]');
+  await expect(boxes.first()).toBeVisible();
+  const count = await boxes.count();
+  expect(count).toBeGreaterThan(0);
+  await switchButton(page, 'Dawn').click();
+  await expect.poll(() => page.evaluate(() => {
+    const shape = document.querySelector('pre.mermaid > svg g.node .label-container');
+    return shape ? getComputedStyle(shape).fill : null;
+  })).not.toBe(rgb(NIGHT.surface));
+  await expect(boxes).toHaveCount(count);
+  await boxes.first().click();
+  await expect(page.locator('.artifact-node-card')).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
+test('a diagram open in its view is drawn in the new theme once it is closed', async ({ page }) => {
+  const errors = await watch(page);
+  await page.goto(`${DIAGRAM}?standalone`);
+  await expect.poll(() => shapeFill(page)).toBe(rgb(NIGHT.surface));
+  await page.locator('pre.mermaid').getByRole('button', { name: 'Expand diagram' }).click();
+  await expect(page.locator('dialog.artifact-diagram-view')).toBeVisible();
+  await page.emulateMedia({ colorScheme: 'light' });
+  await expect.poll(() => theme(page)).toBe('dawn');
+  await page.keyboard.press('Escape');
+  await expect(page.locator('dialog.artifact-diagram-view')).toBeHidden();
+  await expect.poll(() => shapeFill(page)).toBe(rgb(DAWN.surface));
+  expect(await page.locator('pre.mermaid > svg').count()).toBe(1);
+  expect(errors).toEqual([]);
+});
+
+test('a widget opened alone follows the system as it changes', async ({ page }) => {
+  const errors = await watch(page);
+  await page.goto(`/${LIVE}.html?standalone`);
+  const file = await page.locator('iframe.artifact-widget').getAttribute('src');
+  await page.addInitScript(() => {
+    document.addEventListener('lotuspod:theme', (event) => {
+      (window as any).heard = (event as CustomEvent).detail.theme;
+    });
+  });
+  await page.goto(`/${file}`);
+  expect(await page.evaluate(() => (window as any).lotuspod.theme)).toBe('night');
+  await page.emulateMedia({ colorScheme: 'light' });
+  await expect.poll(() => page.evaluate(() => (window as any).lotuspod.theme)).toBe('dawn');
+  expect(await page.evaluate(() => (window as any).heard)).toBe('dawn');
+  expect(errors).toEqual([]);
+});
+
+test('beside the review sheet on a phone every switch button stays in the window', async ({ page }) => {
+  const errors = await watch(page);
+  for (const width of [375, 320, 280]) {
+    await page.setViewportSize({ width, height: 700 });
+    await page.goto(`${DECISIONS}?standalone`);
+    await expect(page.locator('.artifact-review-bar')).toBeVisible();
+    for (const name of ['Night', 'Dawn', 'Auto'] as const) {
+      const button = switchButton(page, name);
+      await expect(button).toBeVisible();
+      const box = (await button.boundingBox())!;
+      expect(box.x, `${name} at ${width}`).toBeGreaterThanOrEqual(0);
+      expect(box.x + box.width, `${name} at ${width}`).toBeLessThanOrEqual(width);
+      const bar = (await page.locator('.artifact-topbar').boundingBox())!;
+      expect(box.y + box.height, `${name} at ${width}`).toBeLessThanOrEqual(bar.y + bar.height);
+    }
+    const count = (await page.locator('.artifact-review-count').boundingBox())!;
+    expect(count.x + count.width).toBeLessThanOrEqual(width);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+    await switchButton(page, 'Dawn').click();
+    expect(await theme(page)).toBe('dawn');
+    await switchButton(page, 'Auto').click();
+  }
   expect(errors).toEqual([]);
 });
 

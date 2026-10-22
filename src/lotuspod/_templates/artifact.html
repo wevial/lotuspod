@@ -22,9 +22,9 @@
       <a class="artifact-topbar-brand" href="index.html">Lotuspod</a><span class="artifact-topbar-sep">:</span>
       <a class="artifact-topbar-title" href="#top">{{title}}</a>
       <div class="artifact-theme-switch" role="group" aria-label="Theme" hidden>
-        <button type="button" class="artifact-theme-option" data-theme-choice="night" aria-pressed="false">N<span class="artifact-theme-more">ight</span></button>
-        <button type="button" class="artifact-theme-option" data-theme-choice="dawn" aria-pressed="false">D<span class="artifact-theme-more">awn</span></button>
-        <button type="button" class="artifact-theme-option" data-theme-choice="auto" aria-pressed="false">A<span class="artifact-theme-more">uto</span></button>
+        <button type="button" class="artifact-theme-option" data-theme-choice="night" aria-label="Night" aria-pressed="false">N<span class="artifact-theme-more">ight</span></button>
+        <button type="button" class="artifact-theme-option" data-theme-choice="dawn" aria-label="Dawn" aria-pressed="false">D<span class="artifact-theme-more">awn</span></button>
+        <button type="button" class="artifact-theme-option" data-theme-choice="auto" aria-label="Auto" aria-pressed="false">A<span class="artifact-theme-more">uto</span></button>
       </div>
     </div>
 
@@ -71,16 +71,20 @@
     // draw, and a switch of theme (theme-head.js) draws every kept one again
     // with the other set, putting the new svg where the old one stands.
     const themeVariables = {{mermaid_theme_variables}};
+    const current = () => document.documentElement.dataset.theme === "dawn" ? "dawn" : "night";
     const settings = () => ({
       startOnLoad: true,
       theme: "base",
-      themeVariables: themeVariables[document.documentElement.dataset.theme === "dawn" ? "dawn" : "night"]
+      themeVariables: themeVariables[current()]
     });
     const sources = new WeakMap();
+    // The theme each kept diagram was last drawn in, or is about to be.
+    const drawnIn = new WeakMap();
     let kept = [];
     const keep = (nodes) => nodes.forEach((pre) => {
       if (!sources.has(pre)) {
         sources.set(pre, pre.textContent);
+        drawnIn.set(pre, current());
         kept.push(pre);
       }
     });
@@ -90,12 +94,40 @@
       keep(event.detail.nodes);
       mermaid.run({ nodes: event.detail.nodes });
     });
+    // One redraw at a time, and only for the latest switch: a press while
+    // one is drawing leaves the next to draw in the theme pressed last.
+    let drawing = Promise.resolve();
+    let generation = 0;
+    const waiting = new WeakSet();
+    const queue = (pre) => {
+      const mine = generation;
+      drawing = drawing.then(() => redraw(pre, mine)).catch(() => {});
+    };
     // Drawn off to the side, out of sight, so the diagram on the page stays
-    // until its new svg takes its place. A diagram not drawn yet is drawn in
-    // the new theme as it is; one open in the diagram view keeps its colours.
-    const redraw = async (pre) => {
+    // until its new svg takes its place; js/diagram-cards.js is told, to
+    // bind the new boxes. A diagram not drawn yet is drawn in the new theme
+    // as it is. One open in the diagram view, its svg out of its pre, is
+    // drawn again once the view puts the svg back.
+    const redraw = async (pre, mine) => {
+      if (mine !== generation || !pre.isConnected || drawnIn.get(pre) === current()) return;
       const drawn = pre.querySelector(":scope > svg");
-      if (!drawn) return;
+      if (!drawn) {
+        if (pre.hasAttribute("data-processed") && !waiting.has(pre)) {
+          waiting.add(pre);
+          const back = new MutationObserver(() => {
+            if (!pre.querySelector(":scope > svg")) return;
+            back.disconnect();
+            waiting.delete(pre);
+            queue(pre);
+          });
+          back.observe(pre, { childList: true });
+        } else if (!pre.hasAttribute("data-processed")) {
+          drawnIn.set(pre, current());
+        }
+        return;
+      }
+      const theme = current();
+      mermaid.initialize(settings());
       const draft = document.createElement("pre");
       draft.className = "mermaid";
       draft.style.cssText = "position: absolute; left: 0; top: 0; visibility: hidden;";
@@ -107,12 +139,17 @@
         draft.remove();
       }
       const svg = draft.querySelector(":scope > svg");
-      if (svg && drawn.parentNode === pre) drawn.replaceWith(svg);
+      const now = pre.querySelector(":scope > svg");
+      if (mine !== generation || !svg || !now) return;
+      now.replaceWith(svg);
+      drawnIn.set(pre, theme);
+      document.dispatchEvent(new CustomEvent("lotuspod:diagram-redrawn", { detail: { pre } }));
     };
     document.addEventListener("lotuspod:theme", () => {
+      generation++;
       mermaid.initialize(settings());
       kept = kept.filter((pre) => pre.isConnected);
-      kept.forEach(redraw);
+      kept.forEach(queue);
     });
   </script>
 {{/mermaid}}{{#page_script_needed}}  <script src="{{page_script}}?v={{theme_hash}}" defer></script>
