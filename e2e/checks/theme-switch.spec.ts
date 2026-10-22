@@ -200,6 +200,18 @@ const ASKS = [
   '</script>',
 ].join('\n');
 
+// A block that fills the bridge's limit as it opens, then names its theme:
+// a document loaded again while the limit is full still learns it.
+const REFILL = 'theme-switch-refill';
+const FILLS = [
+  '<script>',
+  'for (var i = 0; i < 100; i++) window.lotuspod.state("filling " + i);',
+  'setTimeout(function () {',
+  '  setInterval(function () { window.lotuspod.state("theme " + window.lotuspod.theme); }, 300);',
+  '}, 1200);',
+  '</script>',
+].join('\n');
+
 // A diagram whose box holds a line break, written in its source as HTML.
 const BREAK = 'theme-switch-break';
 
@@ -208,6 +220,8 @@ function publishLive() {
     '```html live title="Theme reader"', BLOCK, '```', '']);
   publish(FLOOD, ['# Asks in a block', '', '## The block', '', 'A block that asks too often.', '',
     '```html live title="Asker"', ASKS, '```', '']);
+  publish(REFILL, ['# Refills in a block', '', '## The block', '', 'A block that fills the limit.', '',
+    '```html live title="Refiller"', FILLS, '```', '']);
   publish(BREAK, ['# A broken label', '', '## The diagram', '', 'Two lines in one box.', '',
     '```mermaid', 'flowchart LR', '  A["Hello<br/>World"] --> B[two]', '```', '']);
 }
@@ -444,7 +458,34 @@ test('a block asking for the theme over and over is told no more often than the 
   await expect(label).toHaveText(/^told \d+$/, { timeout: 5000 });
   const told = Number((await label.textContent())!.split(' ')[1]);
   expect(told).toBeGreaterThan(0);
-  expect(told).toBeLessThanOrEqual(60);
+  // 60 in the first second, and the one owed once it is over.
+  expect(told).toBeLessThanOrEqual(61);
+  expect(errors).toEqual([]);
+});
+
+test('a block loaded again while the limit is full still learns the theme', async ({ page }) => {
+  const errors = await watch(page);
+  await page.goto(`/${REFILL}.html?standalone`);
+  const label = page.locator('figure.artifact-live .artifact-live-state');
+  await expect(label).toHaveText('theme night', { timeout: 5000 });
+  await switchButton(page, 'Dawn').click();
+  await expect(label).toHaveText('theme dawn', { timeout: 5000 });
+  // Loaded twice in quick succession: the second document opens while the
+  // first one's fill still holds the limit.
+  await page.locator('iframe.artifact-widget').evaluate(async (frame: HTMLIFrameElement) => {
+    const loaded = () => new Promise((done) => frame.addEventListener('load', done, { once: true }));
+    const src = frame.src;
+    frame.src = 'about:blank';
+    await loaded();
+    frame.src = src;
+    await loaded();
+    await new Promise((done) => setTimeout(done, 100));
+    frame.src = 'about:blank';
+    await loaded();
+    frame.src = src;
+    await loaded();
+  });
+  await expect(label).toHaveText('theme dawn', { timeout: 5000 });
   expect(errors).toEqual([]);
 });
 

@@ -1436,7 +1436,7 @@ the page, with exactly these keys:
 
 | Message | Keys | Sent by the page | What the bridge does |
 | --- | --- | --- | --- |
-| `lotuspod:theme` | `type`, `theme`: `night` or `dawn` | as each document the frame loads opens (its bridge's first state), and to every frame when the reader's theme changes | sets `data-lotus-theme` on its `html`, keeps it in `window.lotuspod.theme` and, when it changed, sends `lotuspod:theme` on its `document` |
+| `lotuspod:theme` | `type`, `theme`: `night` or `dawn` | as each document the frame loads opens (its bridge's first state; once the frame's 60 a second allow it, if that state came beyond them), and to every frame when the reader's theme changes | sets `data-lotus-theme` on its `html`, keeps it in `window.lotuspod.theme` and, when it changed, sends `lotuspod:theme` on its `document` |
 
 ### Theme variables
 

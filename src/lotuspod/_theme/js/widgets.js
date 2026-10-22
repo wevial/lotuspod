@@ -177,8 +177,19 @@ function installWidgetBridge() {
       return;
     const now = performance.now();
     state.accepted = state.accepted.filter((time) => now - time < 1000);
-    if (state.accepted.length >= 60)
+    if (state.accepted.length >= 60) {
+      if (kind === "state" && data.label === "" && !state.themeOwed) {
+        state.themeOwed = true;
+        setTimeout(() => {
+          state.themeOwed = false;
+          if (state.paused)
+            return;
+          state.accepted.push(performance.now());
+          postTheme(frame);
+        }, 1000 - (now - state.accepted[0]));
+      }
       return;
+    }
     state.accepted.push(now);
     if (kind === "state" && data.label === "")
       postTheme(frame);

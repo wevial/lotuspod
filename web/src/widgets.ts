@@ -12,6 +12,9 @@ interface WidgetState {
   pending: boolean;
   paused?: boolean;
   expanded?: boolean;
+  // A document opened while the limit was full: it is told the theme once
+  // the oldest message leaves the window.
+  themeOwed?: boolean;
 }
 // Render calls this in the head before parsing any widget frames. The deferred
 // page bundle only declares it: startup must not depend on that download.
@@ -187,7 +190,20 @@ function installWidgetBridge(): void {
     if (state.paused) return;
     const now = performance.now();
     state.accepted = state.accepted.filter((time) => now - time < 1000);
-    if (state.accepted.length >= 60) return;
+    if (state.accepted.length >= 60) {
+      // A new document still learns the theme, late and once however often
+      // it asks, within the same limit.
+      if (kind === "state" && data.label === "" && !state.themeOwed) {
+        state.themeOwed = true;
+        setTimeout(() => {
+          state.themeOwed = false;
+          if (state.paused) return;
+          state.accepted.push(performance.now());
+          postTheme(frame);
+        }, 1000 - (now - state.accepted[0]));
+      }
+      return;
+    }
     state.accepted.push(now);
     // A document's bridge opens with no state: it is told the theme, within
     // the same limit as every other message, so a frame cannot ask for more.
