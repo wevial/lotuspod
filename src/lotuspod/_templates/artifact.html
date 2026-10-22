@@ -103,8 +103,8 @@
       const mine = generation;
       drawing = drawing.then(() => redraw(pre, mine)).catch(() => {});
     };
-    // A diagram open in the diagram view has its svg out of its pre: it is
-    // drawn again once the view puts the svg back.
+    // A diagram whose svg is out of its pre, and not taken by the view, is
+    // drawn again once the svg is back.
     const later = (pre) => {
       if (waiting.has(pre)) return;
       waiting.add(pre);
@@ -117,16 +117,15 @@
       back.observe(pre, { childList: true });
     };
     // Drawn off to the side, out of sight, so the diagram on the page stays
-    // until its new svg takes its place; js/diagram-cards.js is told, to
-    // bind the new boxes. A diagram not drawn yet is drawn in the new theme
-    // as it is. One opened in the view while its new svg was being drawn
-    // waits, as one already open does.
+    // until its new svg takes its place. The new svg is then announced
+    // (lotuspod:diagram-redrawn): js/diagram-cards.js binds its boxes, and
+    // for a diagram open in the diagram view, its svg in the dialog,
+    // js/diagram-view.js puts the new svg there and claims the event. A
+    // diagram not drawn yet is drawn in the new theme as it is.
     const redraw = async (pre, mine) => {
       if (mine !== generation || !pre.isConnected || drawnIn.get(pre) === current()) return;
-      const drawn = pre.querySelector(":scope > svg");
-      if (!drawn) {
-        if (pre.hasAttribute("data-processed")) later(pre);
-        else drawnIn.set(pre, current());
+      if (!pre.hasAttribute("data-processed")) {
+        drawnIn.set(pre, current());
         return;
       }
       const theme = current();
@@ -142,15 +141,13 @@
         draft.remove();
       }
       const svg = draft.querySelector(":scope > svg");
-      const now = pre.querySelector(":scope > svg");
       if (mine !== generation || !svg) return;
-      if (!now) {
-        later(pre);
-        return;
-      }
-      now.replaceWith(svg);
-      drawnIn.set(pre, theme);
-      document.dispatchEvent(new CustomEvent("lotuspod:diagram-redrawn", { detail: { pre } }));
+      const now = pre.querySelector(":scope > svg");
+      if (now) now.replaceWith(svg);
+      const placed = new CustomEvent("lotuspod:diagram-redrawn", { detail: { pre, svg }, cancelable: true });
+      document.dispatchEvent(placed);
+      if (now || placed.defaultPrevented) drawnIn.set(pre, theme);
+      else later(pre);
     };
     document.addEventListener("lotuspod:theme", () => {
       generation++;

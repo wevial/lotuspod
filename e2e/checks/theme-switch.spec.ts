@@ -249,6 +249,11 @@ test('in Dawn a live block is a white card with a mint sandbox band, and an agen
   await switchButton(page, 'Dawn').click();
   expect(await fill(figure)).toBe(rgb(DAWN.surface));
   expect(await fill(note)).toBe(DAWN_STRUCTURE.mint_tint);
+  // Its badge: no fill, a mint outline.
+  const badge = figure.locator('.artifact-live-badge');
+  await expect(badge).toHaveText('Live');
+  expect(await fill(badge)).toBe('rgba(0, 0, 0, 0)');
+  expect(await badge.evaluate((node) => getComputedStyle(node).boxShadow)).toBe(`${rgb(DAWN.mint)} 0px 0px 0px 1px inset`);
 
   // A thread on the palette page: the reader's question and hermes's reply.
   const at = { page: SLUG, section: 'links-and-code', sectionTitle: 'Links and code', revision: '', quote: null,
@@ -328,7 +333,7 @@ test("a diagram's boxes still open their cards once it is drawn again", async ({
   expect(errors).toEqual([]);
 });
 
-test('a diagram open in its view is drawn in the new theme once it is closed', async ({ page }) => {
+test('a diagram open in its view is drawn in the new theme there, and keeps it once closed', async ({ page }) => {
   const errors = await watch(page);
   await page.goto(`${DIAGRAM}?standalone`);
   await expect.poll(() => shapeFill(page)).toBe(rgb(NIGHT.surface));
@@ -336,6 +341,12 @@ test('a diagram open in its view is drawn in the new theme once it is closed', a
   await expect(page.locator('dialog.artifact-diagram-view')).toBeVisible();
   await page.emulateMedia({ colorScheme: 'light' });
   await expect.poll(() => theme(page)).toBe('dawn');
+  // Drawn again where it is shown, in the dialog.
+  await expect.poll(() => page.evaluate(() => {
+    const shape = document.querySelector('dialog.artifact-diagram-view svg g.node rect');
+    return shape ? getComputedStyle(shape).fill : null;
+  })).toBe(rgb(DAWN.surface));
+  expect(await page.locator('dialog.artifact-diagram-view svg').count()).toBe(1);
   await page.keyboard.press('Escape');
   await expect(page.locator('dialog.artifact-diagram-view')).toBeHidden();
   await expect.poll(() => shapeFill(page)).toBe(rgb(DAWN.surface));

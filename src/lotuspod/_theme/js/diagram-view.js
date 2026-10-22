@@ -427,6 +427,31 @@
       pre.appendChild(expand);
     }
 
+    // A diagram open in the view drawn again in the reader's other theme:
+    // the new svg takes the old one's place in the dialog, at the same zoom
+    // and position, and is the one put back in the pre on closing.
+    document.addEventListener(REDRAWN, function (event) {
+      var fresh = event.detail.svg;
+      if (!shown || shown.pre !== event.detail.pre || fresh.isConnected) {
+        return;
+      }
+      var old = shown.svg;
+      shown.saved = shown.saved.map(function (at) {
+        return at[0] === old ? [fresh, at[1], fresh.getAttribute(at[1])] : at;
+      });
+      ["viewBox", "width", "height", "style"].forEach(function (name) {
+        var value = old.getAttribute(name);
+        if (value === null) {
+          fresh.removeAttribute(name);
+        } else {
+          fresh.setAttribute(name, value);
+        }
+      });
+      old.replaceWith(fresh);
+      shown.svg = fresh;
+      event.preventDefault();
+    });
+
     // The pre of a diagram open in the view stays in its section while its
     // svg is in the dialog: that section is not swapped out from under it.
     holdSwap(function (nodes) {
