@@ -20,14 +20,25 @@ HEADERS = (
 )
 
 
-def variables() -> str:
+def variables(attribute: str = 'data-lotus-theme') -> str:
+    """The tokens as --lotus-* declarations: Night on :root, and the dawn set
+    where attribute on the root names dawn, or the system is light and it
+    names no night. A widget file keys them on data-lotus-theme, which its
+    bridge sets from the page's message; the stylesheet on the page's
+    data-theme."""
     tokens = json.loads((THEME / 'tokens.json').read_text(encoding='utf-8'))
     singular = {'colors': 'color', 'fonts': 'font', 'radii': 'radius'}
-    return ':root {\n' + ''.join(
-        f'  --lotus-{singular.get(group, group)}-{name.replace("_", "-")}: {value};\n'
-        for group, values in tokens.items() if isinstance(values, dict)
-        for name, value in values.items()
-    ) + '}\n'
+
+    def declarations(sets: dict, indent: str) -> str:
+        return ''.join(
+            f'{indent}--lotus-{singular.get(group, group)}-{name.replace("_", "-")}: {value};\n'
+            for group, values in sets.items() if isinstance(values, dict) and group != 'dawn'
+            for name, value in values.items()
+        )
+    return (':root {\n' + declarations(tokens, '  ') + '}\n'
+            f':root[{attribute}="dawn"] {{\n' + declarations(tokens['dawn'], '  ') + '}\n'
+            '@media (prefers-color-scheme: light) {\n'
+            f'  :root:not([{attribute}="night"]) {{\n' + declarations(tokens['dawn'], '    ') + '  }\n}\n')
 
 
 def identifier(explicit: str, title: str, number: int) -> str:
@@ -332,7 +343,9 @@ def render(body: str, name: str) -> tuple[str, dict[str, bytes], list[str]]:
         policy = "default-src 'none'; script-src " + ' '.join(script_sources) + "; style-src 'unsafe-inline'; img-src data:; font-src data:; connect-src 'none'; form-action 'none'; base-uri 'none'; frame-src 'none'"
         head = ('<meta http-equiv="Content-Security-Policy" content="' + html.escape(policy, quote=True) + '">'
                 '<meta charset="utf-8"><style>' + variables() +
-                'body { margin: 0; font-family: var(--lotus-font-body); color: var(--lotus-type-ink); background: transparent; color-scheme: dark; }\n</style>' + tags)
+                'body { margin: 0; font-family: var(--lotus-font-body); color: var(--lotus-type-ink); background: transparent; color-scheme: dark; }\n'
+                ':root[data-lotus-theme="dawn"] body { color-scheme: light; }\n'
+                '@media (prefers-color-scheme: light) {\n  :root:not([data-lotus-theme="night"]) body { color-scheme: light; }\n}\n</style>' + tags)
         if full:
             head += f'<script>{bridge}</script>'
             structure = DocumentHead(source)
@@ -419,4 +432,6 @@ if __name__ == '__main__':
     # PYTHONPATH=src python -m lotuspod.widgets
     stylesheet = THEME / 'css/widgets.css'
     styles = stylesheet.read_text(encoding='utf-8')
-    stylesheet.write_text(variables() + styles[styles.index('}') + 2:], encoding='utf-8')
+    # The generated declarations hold no blank line: the rules start after
+    # the first one.
+    stylesheet.write_text(variables('data-theme') + styles[styles.index('\n\n') + 1:], encoding='utf-8')

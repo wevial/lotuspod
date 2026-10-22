@@ -109,10 +109,10 @@ class WidgetTests(TempDirTestCase):
         scripts = cli.collect_scripts(document).inline
         bridge = scripts[0]
         self.assertEqual(bridge, (widgets.THEME / 'widget-frame.js').read_text())
-        self.assertIn('window.lotuspod = {state: state};', bridge)
+        self.assertIn('window.lotuspod = {state: state, theme: theme};', bridge)
         self.assertIn('post({type: "lotuspod:state", label: String(label).slice(0, 80).replace(/[\\uD800-\\uDBFF]$/, "")});', bridge)
         # Each new document opens with no state, so a reload keeps none.
-        self.assertIn('window.lotuspod = {state: state};\n  state("");', bridge)
+        self.assertIn('window.lotuspod = {state: state, theme: theme};\n  state("");', bridge)
         self.assertEqual(scripts[1], 'lotuspod.state("at 6 workers");')
         hashes = directives(read_page(document).policies[0])['script-src']
         self.assertEqual(hashes, [cli.script_hash(script) for script in scripts])
@@ -226,14 +226,44 @@ class WidgetTests(TempDirTestCase):
         self.assertEqual(list(self.out_dir.iterdir()), [])
 
     def test_variables_are_exact_and_complete(self):
-        tokens = json.loads((widgets.THEME / 'tokens.json').read_text())
-        expected = {f'--lotus-{ {"colors": "color", "fonts": "font", "radii": "radius"}.get(group, group)}-{key.replace("_", "-")}': value for group, values in tokens.items() if isinstance(values, dict) for key, value in values.items()}
-        _, files, _ = widgets.render('<template class="lotuspod-live" data-title="Clock">x</template>', 'pond')
         import re
-        for text in [cli.theme_file_bytes('lotuspod.css').decode(), next(iter(files.values())).decode()]:
-            declarations = re.findall(r'(--lotus-[\w-]+): ([^;]+);', text)
-            self.assertEqual(dict(declarations), expected)
-            self.assertEqual(len(declarations), len(expected))
+        tokens = json.loads((widgets.THEME / 'tokens.json').read_text())
+        singular = {"colors": "color", "fonts": "font", "radii": "radius"}
+
+        def expected(sets):
+            return {f'--lotus-{singular.get(group, group)}-{key.replace("_", "-")}': value
+                    for group, values in sets.items() if isinstance(values, dict) and group != 'dawn'
+                    for key, value in values.items()}
+        night, dawn = expected(tokens), expected(tokens['dawn'])
+        self.assertEqual(sorted(dawn), sorted(
+            name for name in night if name.startswith(('--lotus-color-', '--lotus-structure-'))
+        ) + ['--lotus-type-ink'])
+
+        def declared(block):
+            declarations = re.findall(r'(--lotus-[\w-]+): ([^;]+);', block)
+            self.assertEqual(len(declarations), len(dict(declarations)))
+            return dict(declarations)
+        _, files, _ = widgets.render('<template class="lotuspod-live" data-title="Clock">x</template>', 'pond')
+        for text, attribute in [(cli.theme_file_bytes('lotuspod.css').decode(), 'data-theme'),
+                                (next(iter(files.values())).decode(), 'data-lotus-theme')]:
+            with self.subTest(attribute=attribute):
+                blocks = {
+                    'night': re.findall(r'(?m)(?:^|<style>):root \{\n(.*?)^\}', text, re.DOTALL),
+                    'dawn': re.findall(rf'(?m)^:root\[{attribute}="dawn"\] \{{\n(.*?)^\}}', text, re.DOTALL),
+                    'system': re.findall(r'(?m)^@media \(prefers-color-scheme: light\) \{\n'
+                                         rf'  :root:not\(\[{attribute}="night"\]\) \{{\n(.*?)^  \}}\n\}}',
+                                         text, re.DOTALL),
+                }
+                # The served stylesheet's base.css declares its own --color-*
+                # blocks with the same selectors: the --lotus-* ones are those
+                # holding any.
+                blocks = {key: [block for block in found if '--lotus-' in block] for key, found in blocks.items()}
+                self.assertEqual([len(found) for found in blocks.values()], [1, 1, 1])
+                self.assertEqual(declared(blocks['night'][0]), night)
+                self.assertEqual(declared(blocks['dawn'][0]), dawn)
+                self.assertEqual(declared(blocks['system'][0]), dawn)
+                # Nowhere else.
+                self.assertEqual(len(re.findall(r'--lotus-[\w-]+: ', text)), len(night) + 2 * len(dawn))
 
     def test_limits_refuse_without_writes(self):
         cases = [

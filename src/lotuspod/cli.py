@@ -141,28 +141,35 @@ def has_calltree_block(body: str) -> bool:
 
 
 def mermaid_theme_variables(tokens: dict) -> str:
-    """Mermaid `themeVariables` for its `base` theme, serialised from the tokens.
+    """Mermaid `themeVariables` for its `base` theme, serialised from the
+    tokens: one set for Night ("night") and one for Dawn ("dawn"), Dawn's
+    from the dawn colours over Night's fonts.
 
     One source for the palette: the diagram takes the same surface, lavender
     and night the stylesheet does, instead of Mermaid's default white.
+    Mermaid writes them into the drawing as literal colours, so the page's
+    module draws with the set its theme names and draws again on a switch.
     """
-    colors, fonts = tokens["colors"], tokens["fonts"]
-    variables = {
-        "background": colors["night"],
-        "fontFamily": fonts["mono"],
-        "lineColor": colors["lavender"],
-        "primaryBorderColor": colors["lavender"],
-        "primaryColor": colors["surface"],
-        "primaryTextColor": colors["pale_lavender"],
-        "secondaryBorderColor": colors["lavender"],
-        "secondaryColor": colors["glow"],
-        "secondaryTextColor": colors["pale_lavender"],
-        "tertiaryBorderColor": colors["lavender"],
-        "tertiaryColor": colors["deep_night"],
-        "tertiaryTextColor": colors["pale_lavender"],
-        "textColor": colors["pale_lavender"],
-    }
-    return json.dumps(variables, sort_keys=True)
+    fonts = tokens["fonts"]
+
+    def variables(colors: dict) -> dict:
+        return {
+            "background": colors["night"],
+            "fontFamily": fonts["mono"],
+            "lineColor": colors["lavender"],
+            "primaryBorderColor": colors["lavender"],
+            "primaryColor": colors["surface"],
+            "primaryTextColor": colors["pale_lavender"],
+            "secondaryBorderColor": colors["lavender"],
+            "secondaryColor": colors["glow"],
+            "secondaryTextColor": colors["pale_lavender"],
+            "tertiaryBorderColor": colors["lavender"],
+            "tertiaryColor": colors["deep_night"],
+            "tertiaryTextColor": colors["pale_lavender"],
+            "textColor": colors["pale_lavender"],
+        }
+    return json.dumps({"night": variables(tokens["colors"]),
+                       "dawn": variables(tokens["dawn"]["colors"])}, sort_keys=True)
 
 
 def _resolve_sections(template: str, context: dict) -> str:
@@ -357,6 +364,7 @@ THEME_SOURCES = {
         "css/pod-finder.css",
         "css/versions.css",
         "css/archive.css",
+        "css/theme-switch.css",
     ),
     PAGE_SCRIPT: (
         "js/open-in-tabs.js",
@@ -864,8 +872,11 @@ def cmd_render(args: argparse.Namespace) -> int:
         "widget_bridge": ("(function () {\n"
                           + (THEME_DIR / "js/widgets.js").read_text(encoding="utf-8")
                           + "\ninstallWidgetBridge();\n})();" if widget_files else ""),
+        # Sets the reader's theme before the body parses, and wires the
+        # title bar's switch.
+        "theme_head": (THEME_DIR / "theme-head.js").read_text(encoding="utf-8"),
         "page_script": PAGE_SCRIPT,
-        "mermaid_theme_variables": mermaid_theme_variables(tokens),
+        "mermaid_theme_variables": mermaid_theme_variables(tokens) if has_mermaid_block(body) else "",
         "mermaid_dir": MERMAID_DIR,
         "mermaid_elk_dir": MERMAID_ELK_DIR,
     }

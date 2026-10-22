@@ -48,10 +48,94 @@
   --lotus-structure-reader-avatar: #3e2c3e;
   --lotus-structure-highlight: rgba(244, 163, 201, 0.2);
   --lotus-structure-highlight-line: rgba(244, 163, 201, 0.7);
+  --lotus-structure-shadow: rgba(13, 10, 21, 0.55);
+  --lotus-structure-scrim: rgba(13, 10, 21, 0.88);
   --lotus-radius-chip: 4px;
   --lotus-radius-block: 8px;
   --lotus-radius-card: 14px;
   --lotus-radius-pill: 999px;
+}
+:root[data-theme="dawn"] {
+  --lotus-color-night: #f6f3fb;
+  --lotus-color-deep-night: #ece7f5;
+  --lotus-color-surface: #ffffff;
+  --lotus-color-glow: #e7defa;
+  --lotus-color-lavender: #6544c2;
+  --lotus-color-pale-lavender: #47367f;
+  --lotus-color-muted-lavender: #5f5878;
+  --lotus-color-white: #1c1730;
+  --lotus-color-sky: #2154b3;
+  --lotus-color-pale-sky: #1d4688;
+  --lotus-color-rose: #a82d66;
+  --lotus-color-pale-rose: #86224f;
+  --lotus-color-mint: #1b6c33;
+  --lotus-color-amber: #785a08;
+  --lotus-color-orchid: #86379d;
+  --lotus-color-cyan: #0b6a80;
+  --lotus-type-ink: rgba(28, 23, 48, 0.88);
+  --lotus-structure-hairline: rgba(71, 54, 127, 0.16);
+  --lotus-structure-hairline-strong: rgba(71, 54, 127, 0.32);
+  --lotus-structure-row-tint: rgba(71, 54, 127, 0.04);
+  --lotus-structure-code-surface: rgba(71, 54, 127, 0.07);
+  --lotus-structure-quote-tint: rgba(101, 68, 194, 0.07);
+  --lotus-structure-header-tint: #e5e9f6;
+  --lotus-structure-header-rule: rgba(33, 84, 179, 0.4);
+  --lotus-structure-code-chip: rgba(33, 84, 179, 0.09);
+  --lotus-structure-mint-tint: rgba(27, 108, 51, 0.12);
+  --lotus-structure-amber-tint: rgba(120, 90, 8, 0.12);
+  --lotus-structure-code-edge: rgba(33, 84, 179, 0.22);
+  --lotus-structure-quote-band: rgba(33, 84, 179, 0.06);
+  --lotus-structure-quote-rule: rgba(33, 84, 179, 0.6);
+  --lotus-structure-link-line: rgba(33, 84, 179, 0.45);
+  --lotus-structure-reader-tint: #f8e7ef;
+  --lotus-structure-reader-line: rgba(168, 45, 102, 0.4);
+  --lotus-structure-reader-avatar: #f1d3e1;
+  --lotus-structure-highlight: rgba(168, 45, 102, 0.16);
+  --lotus-structure-highlight-line: rgba(168, 45, 102, 0.7);
+  --lotus-structure-shadow: rgba(71, 54, 127, 0.14);
+  --lotus-structure-scrim: rgba(246, 243, 251, 0.85);
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="night"]) {
+    --lotus-color-night: #f6f3fb;
+    --lotus-color-deep-night: #ece7f5;
+    --lotus-color-surface: #ffffff;
+    --lotus-color-glow: #e7defa;
+    --lotus-color-lavender: #6544c2;
+    --lotus-color-pale-lavender: #47367f;
+    --lotus-color-muted-lavender: #5f5878;
+    --lotus-color-white: #1c1730;
+    --lotus-color-sky: #2154b3;
+    --lotus-color-pale-sky: #1d4688;
+    --lotus-color-rose: #a82d66;
+    --lotus-color-pale-rose: #86224f;
+    --lotus-color-mint: #1b6c33;
+    --lotus-color-amber: #785a08;
+    --lotus-color-orchid: #86379d;
+    --lotus-color-cyan: #0b6a80;
+    --lotus-type-ink: rgba(28, 23, 48, 0.88);
+    --lotus-structure-hairline: rgba(71, 54, 127, 0.16);
+    --lotus-structure-hairline-strong: rgba(71, 54, 127, 0.32);
+    --lotus-structure-row-tint: rgba(71, 54, 127, 0.04);
+    --lotus-structure-code-surface: rgba(71, 54, 127, 0.07);
+    --lotus-structure-quote-tint: rgba(101, 68, 194, 0.07);
+    --lotus-structure-header-tint: #e5e9f6;
+    --lotus-structure-header-rule: rgba(33, 84, 179, 0.4);
+    --lotus-structure-code-chip: rgba(33, 84, 179, 0.09);
+    --lotus-structure-mint-tint: rgba(27, 108, 51, 0.12);
+    --lotus-structure-amber-tint: rgba(120, 90, 8, 0.12);
+    --lotus-structure-code-edge: rgba(33, 84, 179, 0.22);
+    --lotus-structure-quote-band: rgba(33, 84, 179, 0.06);
+    --lotus-structure-quote-rule: rgba(33, 84, 179, 0.6);
+    --lotus-structure-link-line: rgba(33, 84, 179, 0.45);
+    --lotus-structure-reader-tint: #f8e7ef;
+    --lotus-structure-reader-line: rgba(168, 45, 102, 0.4);
+    --lotus-structure-reader-avatar: #f1d3e1;
+    --lotus-structure-highlight: rgba(168, 45, 102, 0.16);
+    --lotus-structure-highlight-line: rgba(168, 45, 102, 0.7);
+    --lotus-structure-shadow: rgba(71, 54, 127, 0.14);
+    --lotus-structure-scrim: rgba(246, 243, 251, 0.85);
+  }
 }
 
 .artifact-live {

@@ -8,7 +8,7 @@
    of keys ends the dialog. */
 .pod-finder-backdrop {
   align-items: flex-start;
-  background: rgba(13, 10, 21, 0.72);
+  background: var(--scrim);
   box-sizing: border-box;
   display: flex;
   inset: 0;
@@ -26,7 +26,7 @@
   background: var(--color-surface);
   border: 1px solid var(--hairline-strong);
   border-radius: var(--radius-card);
-  box-shadow: 0 24px 60px rgba(13, 10, 21, 0.6);
+  box-shadow: 0 24px 60px var(--shadow);
   color: var(--color-muted-lavender);
   display: flex;
   flex-direction: column;

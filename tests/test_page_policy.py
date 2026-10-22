@@ -36,6 +36,10 @@ DIAGRAM = '<p>A diagram.</p>\n<pre class="mermaid">graph TD; A --> B</pre>\n'
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
+# The head's theme script (theme-head.js), which every artifact page carries
+# inline and its policy allows by hash.
+THEME_HEAD = (REPO_ROOT / "src" / "lotuspod" / "_theme" / "theme-head.js").read_text(encoding="utf-8")
+
 INLINE_SCRIPT = '<script>document.title = "ran";</script>'
 REMOTE_SCRIPT = '<script src="https://scripts.example.com/widget.js"></script>'
 HANDLER_BUTTON = '<button type="button" onclick="document.title = \'clicked\'">Press</button>'
@@ -118,7 +122,7 @@ class PolicyTagTests(PolicyTestCase):
     def test_a_page_without_scripts_or_diagram_runs_only_the_sites_files(self):
         page, err = self.render_body("prose", PROSE)
         policy = self.policy_of(page)
-        self.assertEqual(policy["script-src"], ["'self'"])
+        self.assertEqual(policy["script-src"], ["'self'", sha256_source(THEME_HEAD)])
         self.assertEqual(policy["default-src"], ["'self'"])
         self.assertEqual(policy["object-src"], ["'none'"])
         self.assertEqual(policy["base-uri"], ["'none'"])
@@ -126,20 +130,21 @@ class PolicyTagTests(PolicyTestCase):
         self.assertEqual(policy["img-src"], ["'self'", "data:"])
         self.assertEqual(policy["connect-src"], ["'self'"])
         self.assertEqual(policy["form-action"], ["'self'"])
-        self.assertEqual(read_page(page).inline_scripts, [])
+        self.assertEqual([script["text"] for script in read_page(page).inline_scripts], [THEME_HEAD])
         self.assertNotIn("will not run", err)
 
     def test_a_diagram_page_allows_mermaid_and_the_hash_of_its_start_up_module(self):
         page, _ = self.render_body("diagram", DIAGRAM)
         scripts = read_page(page).inline_scripts
-        self.assertEqual(len(scripts), 1)
-        (module,) = scripts
+        self.assertEqual(len(scripts), 2)
+        theme, module = scripts
+        self.assertEqual(theme["text"], THEME_HEAD)
         self.assertEqual(module["attrs"].get("type"), "module")
         self.assertIn(MERMAID_DIR, module["text"])
 
         script_src = self.policy_of(page)["script-src"]
         hashes = [source for source in script_src if source.startswith("'sha256-")]
-        self.assertEqual(hashes, [sha256_source(module["text"])])
+        self.assertEqual(hashes, [sha256_source(THEME_HEAD), sha256_source(module["text"])])
         self.assertEqual(sorted(script_src), sorted(["'self'", MERMAID_DIR, MERMAID_ELK_DIR, *hashes]))
 
 
@@ -160,10 +165,10 @@ class BodyScriptTests(PolicyTestCase):
                 self.assertIn(markup, page)
 
         policy = self.policy_of(page)
-        self.assertEqual(policy["script-src"], ["'self'"])
+        self.assertEqual(policy["script-src"], ["'self'", sha256_source(THEME_HEAD)])
         allowed = " ".join(" ".join(sources) for sources in policy.values())
         self.assertNotIn("example.com", allowed)
-        self.assertNotIn("sha256-", allowed)
+        self.assertEqual(allowed.count("sha256-"), 1)
 
         lines = [line for line in (out + err).splitlines() if "will not run" in line]
         self.assertEqual(len(lines), 1, out + err)
@@ -175,8 +180,9 @@ class BodyScriptTests(PolicyTestCase):
         script_src = self.policy_of(page)["script-src"]
         body_script = 'document.title = "ran";'
         self.assertNotIn(sha256_source(body_script), script_src)
+        # The head's theme script and the start-up module.
         self.assertEqual(
-            len([source for source in script_src if source.startswith("'sha256-")]), 1
+            len([source for source in script_src if source.startswith("'sha256-")]), 2
         )
         self.assertIn("1 script will not run", err)
 

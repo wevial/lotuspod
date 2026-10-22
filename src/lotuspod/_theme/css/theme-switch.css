@@ -1,0 +1,92 @@
+/* The theme switch at the right end of the title bar: Night, Dawn and Auto
+   as three buttons in one pill, the pressed one filled lavender with night
+   text, the filled buttons' pair. The head script (theme-head.js) reveals it;
+   a page whose head script does not run keeps it hidden. Visually it stays
+   last in the bar, after the controls the page script adds there. */
+.artifact-theme-switch {
+  align-self: center;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-pill);
+  display: inline-flex;
+  flex: none;
+  gap: 0.1rem;
+  margin: -0.2rem 0 -0.2rem auto;
+  order: 1;
+  padding: 0.15rem;
+}
+
+.artifact-theme-switch[hidden] {
+  display: none;
+}
+
+/* Beside the archive or review bar, which take the free room first. */
+.artifact-topbar:has(.artifact-archive-bar, .artifact-review-bar) .artifact-theme-switch {
+  margin-left: 0.25rem;
+}
+
+.artifact-theme-option {
+  background: none;
+  border: 0;
+  border-radius: var(--radius-pill);
+  color: var(--color-muted-lavender);
+  cursor: pointer;
+  font: inherit;
+  font-family: var(--font-body);
+  font-size: 0.8rem;
+  line-height: 1.4;
+  margin: 0;
+  padding: 0.15rem 0.7rem;
+  position: relative;
+}
+
+.artifact-theme-option:hover {
+  color: var(--color-white);
+}
+
+.artifact-theme-option[aria-pressed="true"] {
+  background: var(--color-lavender);
+  color: var(--color-night);
+}
+
+.artifact-theme-option:focus-visible {
+  outline: 2px solid var(--color-lavender);
+  outline-offset: 2px;
+}
+
+@media (max-width: 40rem) {
+  .artifact-theme-option {
+    font-size: 0.75rem;
+    padding-inline: 0.5rem;
+  }
+
+  /* Beside the review sheet's controls a phone's bar has no room for the
+     words: each button shows its initial, and keeps its whole name for a
+     screen reader. */
+  .artifact-topbar:has(.artifact-review-bar) .artifact-theme-more {
+    clip-path: inset(50%);
+    height: 1px;
+    overflow: hidden;
+    position: absolute;
+    white-space: nowrap;
+    width: 1px;
+  }
+
+  .artifact-topbar:has(.artifact-review-bar) .artifact-theme-switch {
+    gap: 0;
+    padding: 0.1rem;
+  }
+
+  .artifact-topbar:has(.artifact-review-bar) .artifact-theme-option {
+    min-width: 1.4rem;
+    padding-inline: 0.3rem;
+  }
+}
+
+/* Narrower still, the review sheet's controls keep the bar and the switch
+   leaves it: the choice holds on every page of the site, so it is made on
+   one without them. */
+@media (max-width: 24rem) {
+  .artifact-topbar:has(.artifact-review-bar) .artifact-theme-switch {
+    display: none;
+  }
+}

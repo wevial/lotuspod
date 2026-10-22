@@ -141,6 +141,22 @@ function installWidgetBridge(): void {
   }, true);
   document.addEventListener("DOMContentLoaded", initialize);
   document.addEventListener("lotuspod:swapped", initialize);
+  // The one message the page posts into a frame: the reader's theme, as the
+  // head script (theme-head.js) set it on the root, for the frame's bridge
+  // to set on its own. A sandboxed frame's prefers-color-scheme follows the
+  // system alone, so a reader's Night or Dawn reaches it only this way: as
+  // each document the frame loads opens (its bridge's opening state) and on
+  // each switch.
+  const postTheme = (frame: HTMLIFrameElement): void => {
+    const theme = document.documentElement.getAttribute("data-theme");
+    if (theme !== "night" && theme !== "dawn") return;
+    frame.contentWindow?.postMessage({type: "lotuspod:theme", theme}, "*");
+  };
+  document.addEventListener("lotuspod:theme", () => {
+    document.querySelectorAll<HTMLIFrameElement>("iframe.artifact-widget").forEach((frame) => {
+      if (!stateFor(frame).paused) postTheme(frame);
+    });
+  });
   window.addEventListener("message", (event: MessageEvent<unknown>) => {
     const frame = Array.from(document.querySelectorAll<HTMLIFrameElement>("iframe.artifact-widget"))
       .find((candidate) => candidate.contentWindow === event.source);
@@ -172,6 +188,8 @@ function installWidgetBridge(): void {
     }
     const state = stateFor(frame);
     if (state.paused) return;
+    // A document's bridge opens with no state: it is told the theme.
+    if (kind === "state" && data.label === "") postTheme(frame);
     const now = performance.now();
     state.accepted = state.accepted.filter((time) => now - time < 1000);
     if (state.accepted.length >= 60) return;

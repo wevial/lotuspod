@@ -14,12 +14,18 @@
 {{/labels}}  <link rel="icon" type="image/svg+xml" href="favicon.svg">
   <link rel="stylesheet" href="lotuspod.css?v={{theme_hash}}">
 {{#widget_bridge}}  <script>{{widget_bridge}}</script>
-{{/widget_bridge}}</head>
+{{/widget_bridge}}  <script>{{theme_head}}</script>
+</head>
 <body>
   <main class="artifact{{variant_class}}" id="top">
     <div class="artifact-topbar">
       <a class="artifact-topbar-brand" href="index.html">Lotuspod</a><span class="artifact-topbar-sep">:</span>
       <a class="artifact-topbar-title" href="#top">{{title}}</a>
+      <div class="artifact-theme-switch" role="group" aria-label="Theme" hidden>
+        <button type="button" class="artifact-theme-option" data-theme-choice="night" aria-pressed="false">N<span class="artifact-theme-more">ight</span></button>
+        <button type="button" class="artifact-theme-option" data-theme-choice="dawn" aria-pressed="false">D<span class="artifact-theme-more">awn</span></button>
+        <button type="button" class="artifact-theme-option" data-theme-choice="auto" aria-pressed="false">A<span class="artifact-theme-more">uto</span></button>
+      </div>
     </div>
 
     <header class="artifact-header" data-digest="{{header_digest}}">
@@ -60,12 +66,54 @@
         return layouts.find((layout) => layout.name === "elk").loader();
       }
     }]);
-    mermaid.initialize({
+    // Night's and Dawn's variables. Mermaid writes them into each drawing as
+    // literal colours, so each diagram's source is kept before its first
+    // draw, and a switch of theme (theme-head.js) draws every kept one again
+    // with the other set, putting the new svg where the old one stands.
+    const themeVariables = {{mermaid_theme_variables}};
+    const settings = () => ({
       startOnLoad: true,
       theme: "base",
-      themeVariables: {{mermaid_theme_variables}}
+      themeVariables: themeVariables[document.documentElement.dataset.theme === "dawn" ? "dawn" : "night"]
     });
-    document.addEventListener("lotuspod:diagrams", (event) => mermaid.run({ nodes: event.detail.nodes }));
+    const sources = new WeakMap();
+    let kept = [];
+    const keep = (nodes) => nodes.forEach((pre) => {
+      if (!sources.has(pre)) {
+        sources.set(pre, pre.textContent);
+        kept.push(pre);
+      }
+    });
+    keep(Array.from(document.querySelectorAll("pre.mermaid")));
+    mermaid.initialize(settings());
+    document.addEventListener("lotuspod:diagrams", (event) => {
+      keep(event.detail.nodes);
+      mermaid.run({ nodes: event.detail.nodes });
+    });
+    // Drawn off to the side, out of sight, so the diagram on the page stays
+    // until its new svg takes its place. A diagram not drawn yet is drawn in
+    // the new theme as it is; one open in the diagram view keeps its colours.
+    const redraw = async (pre) => {
+      const drawn = pre.querySelector(":scope > svg");
+      if (!drawn) return;
+      const draft = document.createElement("pre");
+      draft.className = "mermaid";
+      draft.style.cssText = "position: absolute; left: 0; top: 0; visibility: hidden;";
+      draft.textContent = sources.get(pre);
+      document.body.append(draft);
+      try {
+        await mermaid.run({ nodes: [draft], suppressErrors: true });
+      } finally {
+        draft.remove();
+      }
+      const svg = draft.querySelector(":scope > svg");
+      if (svg && drawn.parentNode === pre) drawn.replaceWith(svg);
+    };
+    document.addEventListener("lotuspod:theme", () => {
+      mermaid.initialize(settings());
+      kept = kept.filter((pre) => pre.isConnected);
+      kept.forEach(redraw);
+    });
   </script>
 {{/mermaid}}{{#page_script_needed}}  <script src="{{page_script}}?v={{theme_hash}}" defer></script>
 {{/page_script_needed}}</body>

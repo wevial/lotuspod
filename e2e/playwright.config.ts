@@ -10,6 +10,9 @@ export default defineConfig({
   reporter: 'line',
   use: {
     baseURL: process.env.LOTUSPOD_URL,
+    // A dark system, so a page left on Auto reads in Night, the theme these
+    // were written against; a check of Dawn asks for it.
+    colorScheme: 'dark',
     viewport: { width: 1280, height: 800 },
   },
   projects: [

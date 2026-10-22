@@ -130,7 +130,7 @@
   background: var(--color-glow);
   border-left: 1px solid var(--hairline-strong);
   bottom: 0;
-  box-shadow: -10px 0 30px rgba(13, 10, 21, 0.55);
+  box-shadow: -10px 0 30px var(--shadow);
   color: var(--body-ink);
   display: flex;
   flex-direction: column;

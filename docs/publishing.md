@@ -1412,8 +1412,10 @@ policy. So a widget has:
 - **No storage that outlives the frame.** `localStorage`, `sessionStorage` and
   IndexedDB are refused. What it keeps lives in its scripts' variables, and is
   gone when the frame reloads, pauses or is republished with new HTML.
-- **Nothing sent into it.** The page never posts a message into the frame,
-  so no comment, answer or reader's name reaches it.
+- **Nothing sent into it but the theme.** The one message the page posts
+  into the frame is `lotuspod:theme`, naming the reader's theme (see
+  [Theme variables](#theme-variables)), so no comment, answer or reader's
+  name reaches it.
 
 ### Messages a widget may send
 
@@ -1429,6 +1431,13 @@ message is ignored, and so is any beyond 60 a second from one frame.
 | `lotuspod:error` | `type`, `message`: at most 200 characters | for each uncaught error or rejected promise | counts it on the badge, with the message on hover |
 | `lotuspod:escape` | `type` | when Escape is pressed in the frame | closes Expand |
 
+The page posts one message into a frame, and the bridge takes it only from
+the page, with exactly these keys:
+
+| Message | Keys | Sent by the page | What the bridge does |
+| --- | --- | --- | --- |
+| `lotuspod:theme` | `type`, `theme`: `night` or `dawn` | as each document the frame loads opens (its bridge's first state), and to every frame when the reader's theme changes | sets `data-lotus-theme` on its `html`, keeps it in `window.lotuspod.theme` and, when it changed, sends `lotuspod:theme` on its `document` |
+
 ### Theme variables
 
 Every widget gets the lotus theme's tokens as CSS variables on `:root`, named
@@ -1438,6 +1447,16 @@ Every widget gets the lotus theme's tokens as CSS variables on `:root`, named
 [Theme](#theme)). Its body starts with no margin, the body font, the page's
 ink color and a transparent background, so a block sits on the page as the
 prose does.
+
+Night's values are on `:root`. Dawn's, from the `dawn` set, apply under
+`:root[data-lotus-theme="dawn"]`, which the bridge sets from the page's
+`lotuspod:theme` message, and under the system fallback: on a light system
+(`prefers-color-scheme: light`) unless `data-lotus-theme` is `night`. The
+body's `color-scheme` follows. A sandboxed frame's `prefers-color-scheme`
+follows the system only, so a reader's own choice reaches the block through
+the message alone. A block that reads the variables follows the page with
+nothing more; one drawing on a canvas reads `window.lotuspod.theme` (`night`
+or `dawn`) and draws again on the `lotuspod:theme` event on its `document`.
 
 ### Limits
 
@@ -1494,7 +1513,8 @@ version of a page keeps `frame-ancestors 'none'`.
 
 `src/lotuspod/_templates/artifact.html` uses `{{placeholder}}` substitution with the context:
 `title`, `kicker`, `date`, `summary_block`, `body`, `theme_name`, `theme_hash`,
-plus the `mermaid` section flag with its `mermaid_theme_variables`, `mermaid_dir` and
+`theme_head` (the head's theme script), plus the `mermaid` section flag with its
+`mermaid_theme_variables` (Night's and Dawn's), `mermaid_dir` and
 `mermaid_elk_dir`,
 the `page_script_needed` section flag (decision forms, comment boxes or folding
 sections) with
@@ -1543,7 +1563,27 @@ agents. Beside it, one colour per job:
   rule.
 
 `tests/test_palette.py` checks every text colour at 4.5:1 or more on `night`
-and `surface`, and text on the tints.
+and `surface`, and text on the tints, in both sets.
+
+Night is the theme above; `tokens.json`'s `dawn` set is a light Dawn with
+exactly Night's `colors`, `structure` keys and `type.ink`, light values on the
+same hues, keeping `lavender` dark and `night` light so the filled buttons'
+pair inverts with no rule changed. `shadow` and `scrim` are the box shadows'
+and full-window overlays' colours. `base.css` declares Dawn under
+`:root[data-theme="dawn"]` and, for a light system, under
+`@media (prefers-color-scheme: light)` unless `data-theme` is `night`.
+
+A reader picks the theme with the Night / Dawn / Auto switch at the right of
+a page's title bar; Auto, the default, follows the system's
+`prefers-color-scheme`. The choice is kept in the reader's browser under the
+`localStorage` key `lotuspod:theme` (`night` or `dawn`; Auto removes it). The
+head script, `theme-head.js`, inlined in the template's head and allowed by
+its hash, sets the resolved theme as `data-theme` on `html` before the body
+parses, so the first paint is already in it; it follows a system change while
+the choice is Auto, and sends `lotuspod:theme` (`{theme}`) on the `document`
+each time the resolved theme changes, for live blocks and diagrams, which are
+drawn again in the other set. The index and an earlier version's page carry
+no switch and follow the system through the stylesheet alone.
 
 A top-level table keeps the reading layout's width and scrolls inside itself
 when it is wider. Where the window has at least 4rem of free width beside such

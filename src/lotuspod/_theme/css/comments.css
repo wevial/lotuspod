@@ -993,7 +993,7 @@
   background: var(--color-surface);
   border: 1px solid var(--hairline-strong);
   border-radius: var(--radius-block);
-  box-shadow: 0 8px 22px rgba(13, 10, 21, 0.5);
+  box-shadow: 0 8px 22px var(--shadow);
   left: 0.75rem;
   list-style: none;
   margin: 0;
@@ -1329,7 +1329,7 @@
   background: var(--color-surface);
   border: 1px solid color-mix(in srgb, var(--color-lavender) 60%, transparent);
   border-radius: var(--radius-pill);
-  box-shadow: 0 8px 22px rgba(13, 10, 21, 0.5);
+  box-shadow: 0 8px 22px var(--shadow);
   color: var(--color-white);
   cursor: pointer;
   display: inline-flex;

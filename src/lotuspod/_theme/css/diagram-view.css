@@ -76,7 +76,7 @@ html.artifact-diagram-view-open {
 }
 
 .artifact-diagram-view::backdrop {
-  background: rgba(13, 10, 21, 0.88);
+  background: var(--scrim);
 }
 
 .artifact-diagram-view-bar {

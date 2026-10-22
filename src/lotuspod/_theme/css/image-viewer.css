@@ -25,7 +25,7 @@
 }
 
 .artifact-image-viewer::backdrop {
-  background: rgba(13, 10, 21, 0.88);
+  background: var(--scrim);
 }
 
 .artifact-image-viewer-figure {
