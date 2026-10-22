@@ -262,7 +262,11 @@ test('in Dawn a live block is a white card with a mint sandbox band, and an agen
   const agent = page.locator('.artifact-comment-thread[data-thread="9001"] .artifact-comment-item--agent .artifact-comment-text');
   await expect(agent).toBeVisible();
   expect(await agent.evaluate((node) => getComputedStyle(node).backgroundColor)).toBe(rgb(DAWN.night));
+  // The open thread around it is a white card.
+  const entry = page.locator('.artifact-comments-entry--open').filter({ has: agent });
+  expect(await entry.evaluate((node) => getComputedStyle(node).backgroundColor)).toBe(rgb(DAWN.surface));
   await switchButton(page, 'Night').click();
+  expect(await entry.evaluate((node) => getComputedStyle(node).backgroundColor)).toBe(rgb(NIGHT.night));
   expect(await agent.evaluate((node) => getComputedStyle(node).backgroundColor)).toBe(rgb(NIGHT.surface));
   expect(errors).toEqual([]);
 });
@@ -332,6 +336,30 @@ test('a diagram open in its view is drawn in the new theme once it is closed', a
   await expect(page.locator('dialog.artifact-diagram-view')).toBeVisible();
   await page.emulateMedia({ colorScheme: 'light' });
   await expect.poll(() => theme(page)).toBe('dawn');
+  await page.keyboard.press('Escape');
+  await expect(page.locator('dialog.artifact-diagram-view')).toBeHidden();
+  await expect.poll(() => shapeFill(page)).toBe(rgb(DAWN.surface));
+  expect(await page.locator('pre.mermaid > svg').count()).toBe(1);
+  expect(errors).toEqual([]);
+});
+
+test('a diagram expanded while it is being drawn again is drawn in the new theme once closed', async ({ page }) => {
+  const errors = await watch(page);
+  await page.goto(`${DIAGRAM}?standalone`);
+  await expect.poll(() => shapeFill(page)).toBe(rgb(NIGHT.surface));
+  // Expanded as the new drawing starts, out of sight at the end of the
+  // body, before Mermaid can finish it.
+  await page.evaluate(() => {
+    const started = new MutationObserver(() => {
+      if (!document.querySelector('body > pre.mermaid')) return;
+      started.disconnect();
+      (document.querySelector('.artifact-body pre.mermaid .artifact-diagram-expand') as HTMLElement).click();
+    });
+    started.observe(document.body, { childList: true });
+    (document.querySelector('.artifact-theme-option[data-theme-choice="dawn"]') as HTMLElement).click();
+  });
+  await expect(page.locator('dialog.artifact-diagram-view')).toBeVisible();
+  await page.waitForTimeout(1000);
   await page.keyboard.press('Escape');
   await expect(page.locator('dialog.artifact-diagram-view')).toBeHidden();
   await expect.poll(() => shapeFill(page)).toBe(rgb(DAWN.surface));

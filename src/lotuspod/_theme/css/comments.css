@@ -1083,6 +1083,18 @@
   border-color: var(--hairline-strong);
 }
 
+/* In Dawn an open thread is a white card in the panel, its agent's replies
+   on the paper inside it. */
+:root[data-theme="dawn"] .artifact-comments-entry--open {
+  background: var(--color-surface);
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="night"]) .artifact-comments-entry--open {
+    background: var(--color-surface);
+  }
+}
+
 .artifact-comments-entry-head,
 .artifact-comments-entry-resolved {
   display: grid;
