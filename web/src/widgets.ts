@@ -185,12 +185,13 @@ function installWidgetBridge(): void {
     }
     const state = stateFor(frame);
     if (state.paused) return;
-    // A document's bridge opens with no state: it is told the theme.
-    if (kind === "state" && data.label === "") postTheme(frame);
     const now = performance.now();
     state.accepted = state.accepted.filter((time) => now - time < 1000);
     if (state.accepted.length >= 60) return;
     state.accepted.push(now);
+    // A document's bridge opens with no state: it is told the theme, within
+    // the same limit as every other message, so a frame cannot ask for more.
+    if (kind === "state" && data.label === "") postTheme(frame);
     if (kind === "resize") {
       // Expanded viewport measurements must not replace the normal height.
       if (state.expanded) return;

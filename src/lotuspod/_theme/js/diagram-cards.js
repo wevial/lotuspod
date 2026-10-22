@@ -541,7 +541,7 @@
       light();
     }
 
-    return { mount: mount, drop: drop };
+    return { mount: mount, drop: drop, bind: bind };
   }
 
   var CARDS_PRE = "pre.mermaid[data-node-table]";
@@ -566,9 +566,19 @@
   // and any card open on them, are let go, and the new ones bound.
   document.addEventListener(REDRAWN, function (event) {
     var pre = event.detail.pre;
+    var svg = event.detail.svg;
     if (cardsMount && pre.matches(CARDS_PRE)) {
       cardsMount.drop([pre]);
-      cardsMount.mount(pre);
+      // Once the event is done: the new svg is in the pre, or in the diagram
+      // view's dialog for a diagram open there (js/diagram-view.js), where
+      // the pre's watch would never see it.
+      queueMicrotask(function () {
+        if (svg.isConnected) {
+          cardsMount.bind(pre, svg);
+        } else {
+          cardsMount.mount(pre);
+        }
+      });
     }
   });
   document.addEventListener(DIAGRAMS, function (event) {

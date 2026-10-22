@@ -175,13 +175,13 @@ function installWidgetBridge() {
     const state = stateFor(frame);
     if (state.paused)
       return;
-    if (kind === "state" && data.label === "")
-      postTheme(frame);
     const now = performance.now();
     state.accepted = state.accepted.filter((time) => now - time < 1000);
     if (state.accepted.length >= 60)
       return;
     state.accepted.push(now);
+    if (kind === "state" && data.label === "")
+      postTheme(frame);
     if (kind === "resize") {
       if (state.expanded)
         return;

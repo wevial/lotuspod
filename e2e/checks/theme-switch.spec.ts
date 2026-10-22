@@ -186,12 +186,37 @@ const BLOCK = [
   '</script>',
 ].join('\n');
 
+// A block that asks for the theme a thousand times at once, and names how
+// many answers came: the bridge's limit of 60 a second holds for them too.
+const FLOOD = 'theme-switch-flood';
+const ASKS = [
+  '<script>',
+  'var told = 0;',
+  'window.addEventListener("message", function (event) {',
+  '  if (event.data && event.data.type === "lotuspod:theme") told++;',
+  '});',
+  'for (var i = 0; i < 1000; i++) parent.postMessage({type: "lotuspod:state", label: ""}, "*");',
+  'setTimeout(function () { window.lotuspod.state("told " + told); }, 1500);',
+  '</script>',
+].join('\n');
+
+// A diagram whose box holds a line break, written in its source as HTML.
+const BREAK = 'theme-switch-break';
+
 function publishLive() {
+  publish(LIVE, ['# Theme in a block', '', '## The block', '', 'A block that names its theme.', '',
+    '```html live title="Theme reader"', BLOCK, '```', '']);
+  publish(FLOOD, ['# Asks in a block', '', '## The block', '', 'A block that asks too often.', '',
+    '```html live title="Asker"', ASKS, '```', '']);
+  publish(BREAK, ['# A broken label', '', '## The diagram', '', 'Two lines in one box.', '',
+    '```mermaid', 'flowchart LR', '  A["Hello<br/>World"] --> B[two]', '```', '']);
+}
+
+function publish(slug: string, lines: string[]) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'theme-switch-'));
   try {
-    const file = path.join(dir, `${LIVE}.md`);
-    fs.writeFileSync(file, ['# Theme in a block', '', '## The block', '', 'A block that names its theme.', '',
-      '```html live title="Theme reader"', BLOCK, '```', ''].join('\n'));
+    const file = path.join(dir, `${slug}.md`);
+    fs.writeFileSync(file, lines.join('\n'));
     execFileSync(ENV.LOTUSPOD_TEST_PYTHON!, ['-m', 'lotuspod', 'publish', file, '--local', '--out-dir',
       ENV.LOTUSPOD_TEST_OUT!, '--owner', 'hermes', '--credential', ENV.LOTUSPOD_TEST_CREDENTIAL_HERMES!],
     { env: { ...ENV, PYTHONPATH: path.resolve(__dirname, '..', '..', 'src') } });
@@ -360,6 +385,58 @@ test('a diagram expanded while it is being drawn again is drawn in the new theme
   await expect(page.locator('dialog.artifact-diagram-view')).toBeHidden();
   await expect.poll(() => shapeFill(page)).toBe(rgb(DAWN.surface));
   expect(await page.locator('pre.mermaid > svg').count()).toBe(1);
+  expect(errors).toEqual([]);
+});
+
+test('a diagram drawn again keeps the line break its source writes as HTML', async ({ page }) => {
+  const errors = await watch(page);
+  // Markdown escapes the break; a page rendered from an HTML body (lotuspod
+  // render --body) carries it as an element in the pre, as served here.
+  await page.route((url) => url.pathname === `/${BREAK}.html`, async (route) => {
+    const response = await route.fetch();
+    const body = (await response.text()).replace('Hello&lt;br/&gt;World', 'Hello<br/>World');
+    await route.fulfill({ response, body });
+  });
+  await page.goto(`/${BREAK}.html?standalone`);
+  const labels = () => page.evaluate(() => Array.from(
+    document.querySelectorAll('pre.mermaid > svg g.node .nodeLabel'), (node) => node.innerHTML));
+  await expect.poll(() => shapeFill(page)).toBe(rgb(NIGHT.surface));
+  const before = await labels();
+  expect(before.filter((label) => label.includes('<br>'))).toHaveLength(1);
+  await switchButton(page, 'Dawn').click();
+  await expect.poll(() => shapeFill(page)).toBe(rgb(DAWN.surface));
+  await expect.poll(labels).toEqual(before);
+  expect(errors).toEqual([]);
+});
+
+test("a diagram open in its view keeps its boxes' cards once drawn again there", async ({ page }) => {
+  const errors = await watch(page);
+  await page.goto(`${CARDS}?standalone`);
+  const pre = page.locator('pre.mermaid').first();
+  await expect(pre.locator('g.artifact-node[role="button"]').first()).toBeVisible();
+  const count = await pre.locator('g.artifact-node[role="button"]').count();
+  await pre.getByRole('button', { name: 'Expand diagram' }).click();
+  const view = page.locator('dialog.artifact-diagram-view');
+  await expect(view).toBeVisible();
+  await page.emulateMedia({ colorScheme: 'light' });
+  await expect.poll(() => theme(page)).toBe('dawn');
+  await expect.poll(() => shapeFill(page, 'dialog.artifact-diagram-view svg g.node .label-container'))
+    .not.toBe(rgb(NIGHT.surface));
+  const boxes = view.locator('g.artifact-node[role="button"]');
+  await expect(boxes).toHaveCount(count);
+  await boxes.first().click();
+  await expect(page.locator('.artifact-node-card')).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
+test('a block asking for the theme over and over is told no more often than the limit', async ({ page }) => {
+  const errors = await watch(page);
+  await page.goto(`/${FLOOD}.html?standalone`);
+  const label = page.locator('figure.artifact-live .artifact-live-state');
+  await expect(label).toHaveText(/^told \d+$/, { timeout: 5000 });
+  const told = Number((await label.textContent())!.split(' ')[1]);
+  expect(told).toBeGreaterThan(0);
+  expect(told).toBeLessThanOrEqual(60);
   expect(errors).toEqual([]);
 });
 

@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/mermaid@11.4.1/ https://cdn.jsdelivr.net/npm/@mermaid-js/layout-elk@0.2.3/ 'sha256-rxvmP3+SpRCNGG+d2XvBhb1n/LTjNz3ZzKHOUTccJ4U=' 'sha256-1fqmYYvxyxHfLrQCMuGxGKkFb4bMVttQk6klSiSsCnM='; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/mermaid@11.4.1/ https://cdn.jsdelivr.net/npm/@mermaid-js/layout-elk@0.2.3/ 'sha256-rxvmP3+SpRCNGG+d2XvBhb1n/LTjNz3ZzKHOUTccJ4U=' 'sha256-2NqqFEGuvrQJJuKrjRGAYx0pwxQQey6K/CjqhQJ5d0g='; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Plain Page · Lotuspod</title>
   <meta name="generator" content="lotuspod theme lotus">
@@ -176,7 +176,7 @@
     let kept = [];
     const keep = (nodes) => nodes.forEach((pre) => {
       if (!sources.has(pre)) {
-        sources.set(pre, pre.textContent);
+        sources.set(pre, pre.innerHTML);
         drawnIn.set(pre, current());
         kept.push(pre);
       }
@@ -226,7 +226,7 @@
       const draft = document.createElement("pre");
       draft.className = "mermaid";
       draft.style.cssText = "position: absolute; left: 0; top: 0; visibility: hidden;";
-      draft.textContent = sources.get(pre);
+      draft.innerHTML = sources.get(pre);
       document.body.append(draft);
       try {
         await mermaid.run({ nodes: [draft], suppressErrors: true });

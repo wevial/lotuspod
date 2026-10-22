@@ -84,7 +84,7 @@
     let kept = [];
     const keep = (nodes) => nodes.forEach((pre) => {
       if (!sources.has(pre)) {
-        sources.set(pre, pre.textContent);
+        sources.set(pre, pre.innerHTML);
         drawnIn.set(pre, current());
         kept.push(pre);
       }
@@ -134,7 +134,7 @@
       const draft = document.createElement("pre");
       draft.className = "mermaid";
       draft.style.cssText = "position: absolute; left: 0; top: 0; visibility: hidden;";
-      draft.textContent = sources.get(pre);
+      draft.innerHTML = sources.get(pre);
       document.body.append(draft);
       try {
         await mermaid.run({ nodes: [draft], suppressErrors: true });
