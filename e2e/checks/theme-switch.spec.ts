@@ -237,6 +237,36 @@ test.describe('a live block', () => {
   });
 });
 
+test('in Dawn a live block is a white card with a mint sandbox band, and an agent replies on the paper', async ({ page }) => {
+  const errors = await watch(page);
+  await page.goto(`/${LIVE}.html?standalone`);
+  const figure = page.locator('figure.artifact-live');
+  const note = figure.locator('.artifact-live-note');
+  const fill = (target: typeof figure) => target.evaluate((node) => getComputedStyle(node).backgroundColor);
+  await switchButton(page, 'Night').click();
+  expect(await fill(figure)).toBe(rgb(NIGHT.night));
+  expect(await fill(note)).toBe('rgba(0, 0, 0, 0)');
+  await switchButton(page, 'Dawn').click();
+  expect(await fill(figure)).toBe(rgb(DAWN.surface));
+  expect(await fill(note)).toBe(DAWN_STRUCTURE.mint_tint);
+
+  // A thread on the palette page: the reader's question and hermes's reply.
+  const at = { page: SLUG, section: 'links-and-code', sectionTitle: 'Links and code', revision: '', quote: null,
+    createdAt: '2026-10-06T17:54:00.000Z', state: 'answered' };
+  const root = { ...at, id: 9001, parent: null, text: 'Is the link right?', actor: { kind: 'human', name: 'maintainer' } };
+  const reply = { ...at, id: 9002, parent: 9001, text: 'It is.', actor: { kind: 'agent', handle: 'hermes' } };
+  await page.route((url) => url.pathname === '/api/comments', (route) =>
+    route.fulfill({ json: { page: SLUG, threads: [{ root, replies: [reply] }] } }));
+  await page.goto(`${PAGE}?standalone`);
+  await page.locator('details.artifact-comment[data-section="links-and-code"] summary').click();
+  const agent = page.locator('.artifact-comment-thread[data-thread="9001"] .artifact-comment-item--agent .artifact-comment-text');
+  await expect(agent).toBeVisible();
+  expect(await agent.evaluate((node) => getComputedStyle(node).backgroundColor)).toBe(rgb(DAWN.night));
+  await switchButton(page, 'Night').click();
+  expect(await agent.evaluate((node) => getComputedStyle(node).backgroundColor)).toBe(rgb(NIGHT.surface));
+  expect(errors).toEqual([]);
+});
+
 test('a diagram is drawn again in the other set on each press', async ({ page }) => {
   const errors = await watch(page);
   await page.goto(`${DIAGRAM}?standalone`);

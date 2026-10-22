@@ -149,6 +149,26 @@
   background: var(--lotus-color-night);
 }
 
+/* In Dawn the block is a white card on the lavender paper, its sandbox
+   note on a mint band. */
+:root[data-theme="dawn"] .artifact-live {
+  background: var(--lotus-color-surface);
+}
+
+:root[data-theme="dawn"] .artifact-live > .artifact-live-note {
+  background: var(--lotus-structure-mint-tint);
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="night"]) .artifact-live {
+    background: var(--lotus-color-surface);
+  }
+
+  :root:not([data-theme="night"]) .artifact-live > .artifact-live-note {
+    background: var(--lotus-structure-mint-tint);
+  }
+}
+
 .artifact-body > .artifact-live,
 .artifact-section-body > .artifact-live {
   width: var(--measure-full);

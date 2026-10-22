@@ -294,6 +294,18 @@
   border-radius: var(--radius-card) var(--radius-card) var(--radius-chip) var(--radius-card);
 }
 
+/* In Dawn an agent's reply sits on the lavender paper, apart from the white
+   panel, as the reader's sits on rose. */
+:root[data-theme="dawn"] :is(.artifact-body, .artifact-comments-panel, .artifact-comments-held) .artifact-comment-item--agent .artifact-comment-text {
+  background: var(--color-night);
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="night"]) :is(.artifact-body, .artifact-comments-panel, .artifact-comments-held) .artifact-comment-item--agent .artifact-comment-text {
+    background: var(--color-night);
+  }
+}
+
 :is(.artifact-body, .artifact-comments-panel, .artifact-comments-held) .artifact-comment-bubble--typing {
   align-items: center;
   align-self: flex-start;
