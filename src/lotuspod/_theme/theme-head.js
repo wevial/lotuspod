@@ -6,7 +6,6 @@
   // as data-theme on the root while the head parses, so the first paint is
   // already in it. Storage that refuses or throws reads as Auto.
   var KEY = "lotuspod:theme";
-  var EVENT = "lotuspod:theme";
   var root = document.documentElement;
   var light = window.matchMedia("(prefers-color-scheme: light)");
   var choice = "auto";
@@ -32,7 +31,7 @@
     buttons.forEach(function (button) {
       button.setAttribute("aria-pressed", String(button.getAttribute("data-theme-choice") === choice));
     });
-    if (changed) document.dispatchEvent(new CustomEvent(EVENT, {detail: {theme: theme}}));
+    if (changed) document.dispatchEvent(new CustomEvent("lotuspod:theme", {detail: {theme: theme}}));
   }
 
   root.setAttribute("data-theme", resolved());
