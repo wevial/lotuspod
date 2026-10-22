@@ -5,9 +5,10 @@ answers the packaged page script decision forms load.
 The markup is witnessed by parsing it, never by matching strings. A page
 without a task list is held byte for byte to tests/fixtures/
 no_task_list.expected.html, captured from the renderer as it stood before
-forms existed and re-captured with the page policy tag. The fixture holds
-THEME_HASH where the page names the theme's hash, so a theme edit never
-re-captures it.
+forms existed and re-captured with the page policy tag, then with the
+theme switch, its head script and the two themes' diagram variables. The
+fixture holds THEME_HASH where the page names the theme's hash, so a theme
+edit never re-captures it.
 
 Run from the repo root:
 
@@ -40,7 +41,8 @@ TWO_ITEMS = (
 
 
 class _PageReader(HTMLParser):
-    """Read a page's forms, scripts and every list item with its inputs."""
+    """Read a page's forms, the scripts it loads (not the theme's inline head
+    script) and every list item with its inputs."""
 
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
@@ -53,7 +55,7 @@ class _PageReader(HTMLParser):
         attrs = dict(attrs)
         if tag == "form":
             self.forms += 1
-        elif tag == "script":
+        elif tag == "script" and attrs.get("src"):
             self.scripts += 1
         elif tag in ("ul", "ol"):
             self.lists.append({"tag": tag, "attrs": attrs, "items": []})
