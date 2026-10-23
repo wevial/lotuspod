@@ -58,8 +58,8 @@ from html.parser import HTMLParser
 from pathlib import Path
 from typing import Callable
 
-from . import widgets
-from .core import WIDGET_NAME, git_environment
+from lotuspod import widgets
+from lotuspod.core import WIDGET_NAME, git_environment
 
 # The versions of one page a list holds, newest first.
 MAX_VERSIONS = 200

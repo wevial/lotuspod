@@ -22,7 +22,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from lotuspod import cli, core, publish, responder, site_index  # noqa: E402
+from lotuspod import cli, core, publish, responder  # noqa: E402
+from lotuspod.features.index import listing  # noqa: E402
 
 POND = "# Pond\n\nStill water.\n\n## Fish\n\nThree.\n"
 
@@ -252,7 +253,7 @@ class IndexLabelsTests(LabelsCase):
         self.assertEqual(len(parsed.rows), len(pages))
         updated = [row["updated"] for row in parsed.rows]
         self.assertEqual(updated, sorted(updated, reverse=True))
-        artifacts, _ = site_index.collect_artifacts(self.out_dir)
+        artifacts, _ = listing.collect_artifacts(self.out_dir)
         self.assertEqual([row["title"] for row in parsed.rows],
                          [entry["title"] for entry in artifacts])
         by_title = {row["title"]: row for row in parsed.rows}

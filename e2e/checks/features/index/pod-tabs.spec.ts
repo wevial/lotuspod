@@ -23,10 +23,10 @@ const HERMES = ENV.LOTUSPOD_TEST_CREDENTIAL_HERMES ?? '';
 const OUT = ENV.LOTUSPOD_TEST_OUT ?? '';
 const PYTHON = ENV.LOTUSPOD_TEST_PYTHON ?? '';
 // This checkout's package, whatever lotuspod is installed.
-const SRC = path.resolve(__dirname, '..', '..', 'src');
+const SRC = path.resolve(__dirname, '..', '..', '..', '..', 'src');
 const SEEN = '/api/seen';
 const TOKENS = JSON.parse(fs.readFileSync(
-  path.resolve(__dirname, '..', '..', 'src', 'lotuspod', 'core', 'theme', 'tokens.json'), 'utf-8'));
+  path.resolve(__dirname, '..', '..', '..', '..', 'src', 'lotuspod', 'core', 'theme', 'tokens.json'), 'utf-8'));
 const COLORS: Record<string, string> = TOKENS.colors;
 
 const ARTICLE = { name: 'capture-article', title: 'Capture article' };

@@ -379,7 +379,8 @@ class StandardInputTests(PublishTestCase):
         (hook / "sitecustomize.py").write_text(
             "import datetime, sys, types\n"
             f"sys.path.insert(0, {str(SRC_DIR)!r})\n"
-            "from lotuspod import publish, render, site_index\n"
+            "from lotuspod import publish, render\n"
+            "from lotuspod.features.index import listing\n"
             "class _Moment(datetime.datetime):\n"
             "    @classmethod\n"
             "    def now(cls, tz=None):\n"
@@ -387,7 +388,7 @@ class StandardInputTests(PublishTestCase):
             "clock = types.ModuleType('datetime')\n"
             "clock.__dict__.update(vars(datetime))\n"
             "clock.datetime = _Moment\n"
-            "render._dt = publish._dt = site_index._dt = clock\n",
+            "render._dt = publish._dt = listing._dt = clock\n",
             encoding="utf-8",
         )
         env = dict(os.environ, PYTHONPATH=os.pathsep.join((str(hook), str(SRC_DIR))))

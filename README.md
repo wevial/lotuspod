@@ -64,9 +64,11 @@ lotuspod/
 │   │   ├── theme/         # tokens.json (colors, fonts, radii), base.css, favicon.svg
 │   │   └── ts/            # the scripts every page script shares: shared.js, link-tab.js
 │   ├── store/db.py        # serve's database
-│   ├── features/          # the feature slices, filled one move at a time
-│   ├── _templates/index.html  # index-page template
-│   └── _theme/            # css/, js/; the served lotuspod.css is core/theme/base.css and css/ joined in order
+│   ├── features/          # the feature slices, filled one move at a time: Python at a slice's root, ts/, theme/, templates/
+│   │   ├── history/       # page versions and the archive (`archive`, `unarchive`)
+│   │   ├── index/         # the site's listing (`manifest`, `index`); templates/index.html, the index-page template
+│   │   └── backup/        # `backup` and `restore`
+│   └── _theme/            # css/, js/; the served lotuspod.css is core/theme/base.css, css/ and the slices' theme/ joined in order
 ├── artifacts/             # rendered output (gitignored)
 └── lotuspod-media/        # markdown pages' images and the images readers attach to comments, beside artifacts/ (gitignored)
 ```

@@ -12,7 +12,7 @@ signs itself.
 
 Run from the repo root:
 
-    python -m unittest tests.test_archive -v
+    python -m unittest tests.features.history.test_archive -v
 """
 
 from __future__ import annotations
@@ -32,7 +32,7 @@ from tests import test_activity_witness as activity_witness
 from tests import test_publish_remote as publish_remote
 from tests.test_answers_witness import READER, assertion
 
-REPO = Path(__file__).resolve().parents[1]
+REPO = Path(__file__).resolve().parents[3]
 SRC = REPO / "src"
 TIMEOUT = 120
 STAMP = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z")

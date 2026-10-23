@@ -1,8 +1,9 @@
 """Test suite for the theme's sources: the stylesheet, the page script, the
 index script and the old-version script are written as one source file per
 feature
-(src/lotuspod/_theme/css/ and src/lotuspod/_theme/js/, and the shared ones in
-src/lotuspod/core/theme/ and src/lotuspod/core/ts/), and render joins each
+(src/lotuspod/_theme/css/ and src/lotuspod/_theme/js/, the shared ones in
+src/lotuspod/core/theme/ and src/lotuspod/core/ts/, and a slice's in its
+features/SLICE/theme/ and features/SLICE/ts/), and render joins each
 served file's sources in the order core.THEME_SOURCES declares into the one
 file serve answers. The page script and the old-version script each run as
 one strict function: the join opens it before their shared sources and
@@ -30,7 +31,8 @@ from lotuspod import core, serve_files  # after test_manifest_v2, which puts src
 
 STYLESHEET = "lotuspod.css"
 # The files under the package that are only declared sources.
-SOURCE_GLOBS = ("_theme/css/**/*", "_theme/js/**/*", "core/ts/**/*", "core/theme/*.css")
+SOURCE_GLOBS = ("_theme/css/**/*", "_theme/js/**/*", "core/ts/**/*", "core/theme/*.css",
+                "features/*/ts/**/*.js", "features/*/theme/*.css")
 
 
 # The closure the join wraps the page script's and the old-version script's
@@ -226,7 +228,7 @@ class DeclaredOrderTests(ThemeCopyTestCase):
         styles just after css/prose.css."""
         styles = core.THEME_SOURCES[STYLESHEET]
         script = core.THEME_SOURCES[core.PAGE_SCRIPT]
-        self.assertEqual(script[-4:], ("_theme/js/ref-cards.js", "_theme/js/calltree.js", "_theme/js/widgets.js", "_theme/js/archive.js"))
+        self.assertEqual(script[-4:], ("_theme/js/ref-cards.js", "_theme/js/calltree.js", "_theme/js/widgets.js", "features/history/ts/archive.js"))
         self.assertGreater(script.index("_theme/js/ref-cards.js"), script.index("core/ts/link-tab.js"))
         self.assertEqual(styles.index("_theme/css/ref-cards.css"), styles.index("_theme/css/prose.css") + 1)
         problems = source_problems(core.THEME_ROOT, core.THEME_SOURCES)
@@ -238,8 +240,8 @@ class DeclaredOrderTests(ThemeCopyTestCase):
         styles follow css/index.css, which they draw over."""
         styles = core.THEME_SOURCES[STYLESHEET]
         self.assertEqual(core.INDEX_SCRIPT, "lotuspod-index.js")
-        self.assertEqual(core.THEME_SOURCES[core.INDEX_SCRIPT][0], "_theme/js/pod-tabs.js")
-        self.assertEqual(styles.index("_theme/css/pod-tabs.css"), styles.index("_theme/css/index.css") + 1)
+        self.assertEqual(core.THEME_SOURCES[core.INDEX_SCRIPT][0], "features/index/ts/pod-tabs.js")
+        self.assertEqual(styles.index("features/index/theme/pod-tabs.css"), styles.index("features/index/theme/index.css") + 1)
         self.assertIn(core.INDEX_SCRIPT, core.THEME_FILES)
         self.assertIn(core.INDEX_SCRIPT, serve_files.serve_allow_list(self.out_dir))
         problems = source_problems(core.THEME_ROOT, core.THEME_SOURCES)
@@ -252,8 +254,8 @@ class DeclaredOrderTests(ThemeCopyTestCase):
         follow css/versions.css, whose old-version banner they match."""
         styles = core.THEME_SOURCES[STYLESHEET]
         script = core.THEME_SOURCES[core.PAGE_SCRIPT]
-        self.assertEqual(script[-1], "_theme/js/archive.js")
-        self.assertEqual(styles.index("_theme/css/archive.css"), styles.index("_theme/css/versions.css") + 1)
+        self.assertEqual(script[-1], "features/history/ts/archive.js")
+        self.assertEqual(styles.index("features/history/theme/archive.css"), styles.index("features/history/theme/versions.css") + 1)
         problems = source_problems(core.THEME_ROOT, core.THEME_SOURCES)
         self.assertEqual(problems, [], "\n".join(problems))
 
@@ -282,8 +284,8 @@ class DeclaredOrderTests(ThemeCopyTestCase):
         in the index script, and its styles just after css/pod-tabs.css."""
         styles = core.THEME_SOURCES[STYLESHEET]
         self.assertEqual(core.THEME_SOURCES[core.INDEX_SCRIPT][:2],
-                         ("_theme/js/pod-tabs.js", "_theme/js/pod-finder.js"))
-        self.assertEqual(styles.index("_theme/css/pod-finder.css"), styles.index("_theme/css/pod-tabs.css") + 1)
+                         ("features/index/ts/pod-tabs.js", "features/index/ts/pod-finder.js"))
+        self.assertEqual(styles.index("features/index/theme/pod-finder.css"), styles.index("features/index/theme/pod-tabs.css") + 1)
         problems = source_problems(core.THEME_ROOT, core.THEME_SOURCES)
         self.assertEqual(problems, [], "\n".join(problems))
 
@@ -296,7 +298,7 @@ class DeclaredOrderTests(ThemeCopyTestCase):
         page = core.THEME_SOURCES[core.PAGE_SCRIPT]
         self.assertEqual(page.index("_theme/js/live-events.js") + 1, page.index("_theme/js/live-page.js"))
         self.assertEqual(core.THEME_SOURCES[core.INDEX_SCRIPT],
-                         ("_theme/js/pod-tabs.js", "_theme/js/pod-finder.js", "_theme/js/index-refresh.js",
+                         ("features/index/ts/pod-tabs.js", "features/index/ts/pod-finder.js", "_theme/js/index-refresh.js",
                           "_theme/js/live-events.js"))
         self.assertNotIn("_theme/js/live-events.js", core.THEME_SOURCES[core.OLD_VERSION_SCRIPT])
         problems = source_problems(core.THEME_ROOT, core.THEME_SOURCES)
@@ -309,8 +311,8 @@ class DeclaredOrderTests(ThemeCopyTestCase):
         reads, shows or posts comments or answers is in it."""
         script = core.THEME_SOURCES[core.OLD_VERSION_SCRIPT]
         self.assertEqual(core.OLD_VERSION_SCRIPT, "lotuspod-old-version.js")
-        self.assertEqual(script, ("core/ts/shared.js", "_theme/js/version-menu.js",
-                                  "_theme/js/old-version.js"))
+        self.assertEqual(script, ("core/ts/shared.js", "features/history/ts/version-menu.js",
+                                  "features/history/ts/old-version.js"))
         page = core.THEME_SOURCES[core.PAGE_SCRIPT]
         self.assertEqual(page[:3], ("_theme/js/open-in-tabs.js", "_theme/js/page-open.js", "core/ts/shared.js"))
         problems = source_problems(core.THEME_ROOT, core.THEME_SOURCES)

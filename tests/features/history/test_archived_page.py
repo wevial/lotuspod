@@ -10,7 +10,7 @@ Access assertions the test signs itself.
 
 Run from the repo root:
 
-    python -m unittest tests.test_archived_page -v
+    python -m unittest tests.features.history.test_archived_page -v
 """
 
 from __future__ import annotations

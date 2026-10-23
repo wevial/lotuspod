@@ -1534,7 +1534,8 @@ structural hairlines/tints (table rules, code and quote surfaces), and radii;
 `k` as `--color-k`, a `structure` key `k` as `--k`, underscores as dashes).
 Edit the CSS to restyle all artifacts.
 A feature's CSS goes in its own file in `src/lotuspod/_theme/css/` and its JS in
-`src/lotuspod/_theme/js/`, and each new file takes one line in the declared
+`src/lotuspod/_theme/js/` (a feature slice's in its own
+`src/lotuspod/features/SLICE/theme/` and `ts/`), and each new file takes one line in the declared
 order (`THEME_SOURCES` in `src/lotuspod/core/__init__.py`), which render joins into the one
 `lotuspod.css`, `lotuspod-page.js`, `lotuspod-index.js` and
 `lotuspod-old-version.js` it serves. `lotuspod-page.js` and
@@ -1544,7 +1545,8 @@ function before them and closes it after the last (`THEME_CLOSURES` in
 `core/__init__.py`). A new source is a complete script that parses on its own, never
 one that opens or closes the function.
 A script converted to TypeScript lives in `web/src/`, and its built file, the
-one `THEME_SOURCES` names, under `src/lotuspod/_theme/js/` (see
+one `THEME_SOURCES` names, under `src/lotuspod/_theme/js/`; a slice's lives in
+its `ts/`, built beside it (see
 [Theme build](development.md#theme-build)).
 Pages address the stylesheet and page script, and the index its script, by a
 hash of the theme files, so there is no version to raise.

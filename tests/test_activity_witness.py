@@ -9,7 +9,7 @@ the real `lotuspod serve`, run on a thread of this process so its clock can
 be held (the Api's, as tests.test_api holds it), with its agents' socket:
 hermes replies through it with real `lotuspod comments` commands. The test
 reaches the port with Access assertions it signs itself
-(tests.test_answers_witness). The git processes lotuspod.versions starts are
+(tests.test_answers_witness). The git processes lotuspod.features.history.versions starts are
 counted while each still runs through the real subprocess.
 """
 
@@ -30,12 +30,13 @@ from pathlib import Path
 from unittest import mock
 
 from tests.test_answers_witness import AUDIENCE, ISSUER, READER, assertion, git
-from tests.test_versions_witness import VersionsWitness
+from tests.features.history.test_versions_witness import VersionsWitness
 
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "src"))
 
-from lotuspod import api, cli, decisions, machine, versions  # noqa: E402
+from lotuspod import api, cli, decisions, machine  # noqa: E402
+from lotuspod.features.history import versions  # noqa: E402
 
 # A second reader the site lets in.
 OTHER = "other@example.com"

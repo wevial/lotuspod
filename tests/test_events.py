@@ -10,7 +10,9 @@ import unittest
 from unittest import mock
 from pathlib import Path
 
-from lotuspod import access, archive, cli, core, events, site_index
+from lotuspod import access, cli, core, events
+from lotuspod.features.history import archive
+from lotuspod.features.index import commands as index_commands
 from tests import access_keys as keys
 
 
@@ -104,7 +106,7 @@ class EventsTest(unittest.TestCase):
         self.render_pages(hub)
         subscription = hub.open()
         original_index = (hub.out_dir / core.INDEX_FILE).read_bytes()
-        rebuild = site_index.cmd_index
+        rebuild = index_commands.cmd_index
 
         def paused_index(args):
             # Archive, like publish, replaces the manifest before rebuilding
@@ -114,7 +116,7 @@ class EventsTest(unittest.TestCase):
             self.assertEqual((hub.out_dir / core.INDEX_FILE).read_bytes(), original_index)
             return rebuild(args)
 
-        with mock.patch.object(site_index, "cmd_index", side_effect=paused_index):
+        with mock.patch.object(index_commands, "cmd_index", side_effect=paused_index):
             archive.set_archived(hub.out_dir, "pond", True)
         self.assertEqual(subscription.get(timeout=2), events.frame("publish", "pond"))
         self.assertEqual(subscription.get(timeout=2), events.frame("index", None))

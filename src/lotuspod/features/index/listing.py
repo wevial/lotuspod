@@ -1,23 +1,18 @@
-"""manifest and index: the site's listing of its visible pages."""
+"""The site's listing of its visible pages, and the index page built from it."""
 
 from __future__ import annotations
 
-import argparse
 import datetime as _dt
 import html
-import json
 from pathlib import Path
 
-from lotuspod import archive, core
-from lotuspod.core import (DEFAULT_OUTPUT_DIR, INDEX_FILE, MANIFEST_FILE, commit_output,
-                           extract_meta, _git, is_page_name, is_repository_top, load_tokens,
-                           package_path, render_template, sync_theme_css, theme_hash, write_atomic)
+from lotuspod import core
+from lotuspod.core import (extract_meta, _git, is_page_name, is_repository_top, load_tokens,
+                           package_path, render_template, theme_hash)
+from lotuspod.features.history import archive
 
 
-INDEX_TEMPLATE_PATH = package_path("_templates", "index.html")
-
-
-MANIFEST_VERSION = 2
+INDEX_TEMPLATE_PATH = package_path("features", "index", "templates", "index.html")
 
 
 # How git log marks each commit's line among the file names it lists: a
@@ -76,32 +71,6 @@ def collect_artifacts(out_dir: Path) -> tuple[list[dict], int]:
             meta["supersededBy"] = record["supersededBy"] or ""
     visible.sort(key=lambda m: m["updated"], reverse=True)
     return visible, len(metas) - len(visible)
-
-
-def _hidden_note(hidden: int) -> str:
-    return f", {hidden} not visible" if hidden else ""
-
-
-def cmd_manifest(args: argparse.Namespace) -> int:
-    out_dir = Path(args.out_dir) if args.out_dir else DEFAULT_OUTPUT_DIR
-    if not out_dir.is_dir():
-        raise FileNotFoundError(f"artifacts directory not found: {out_dir}")
-
-    artifacts, hidden = collect_artifacts(out_dir)
-    sync_theme_css(out_dir)
-
-    manifest_path = out_dir / MANIFEST_FILE
-    write_atomic(
-        manifest_path,
-        (
-            json.dumps({"version": MANIFEST_VERSION, "artifacts": artifacts}, indent=2)
-            + "\n"
-        ).encode("utf-8"),
-    )
-    print(f"wrote {manifest_path} ({len(artifacts)} artifacts{_hidden_note(hidden)})")
-    if getattr(args, "commit", True):
-        commit_output(out_dir, "manifest")
-    return 0
 
 
 _INDEX_EMPTY_BLOCK = (
@@ -186,22 +155,3 @@ def render_index(artifacts: list[dict]) -> str:
         "theme_hash": theme_hash(),
     }
     return render_template(context, INDEX_TEMPLATE_PATH)
-
-
-def cmd_index(args: argparse.Namespace) -> int:
-    out_dir = Path(args.out_dir) if args.out_dir else DEFAULT_OUTPUT_DIR
-    if not out_dir.is_dir():
-        raise FileNotFoundError(f"artifacts directory not found: {out_dir}")
-
-    artifacts, hidden = collect_artifacts(out_dir)
-
-    sync_theme_css(out_dir)
-
-    out_path = out_dir / INDEX_FILE
-    write_atomic(out_path, render_index(artifacts).encode("utf-8"))
-    print(
-        f"wrote {out_path} ({len(artifacts)} artifacts{_hidden_note(hidden)})"
-    )
-    if getattr(args, "commit", True):
-        commit_output(out_dir, "index")
-    return 0

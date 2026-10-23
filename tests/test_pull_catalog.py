@@ -9,7 +9,8 @@ from unittest import mock
 
 from tests.test_agent_pull import PullTestCase, run_cli
 from tests.test_inbox import InboxTestCase
-from lotuspod import archive, cli, machine, serve_files
+from lotuspod import cli, machine, serve_files
+from lotuspod.features.history import archive
 from lotuspod.store import db
 
 

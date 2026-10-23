@@ -13,12 +13,13 @@ import sys
 from functools import partial
 from pathlib import Path
 
-from lotuspod import core, machine, markdown, media, refs, site_index, widgets
+from lotuspod import core, machine, markdown, media, refs, widgets
 from lotuspod.core import (DEFAULT_OUTPUT_DIR, DEFAULT_REMOTE_COMMAND, EXIT_CONFIG,
                            EXIT_REVISION_CONFLICT, INDEX_FILE, _KEPT_SOURCE_SUFFIX, ConfigError,
                            commit_output, config_path, extract_meta, html_title, markdown_title,
                            normalized, page_revision, publish_config, publish_lock,
                            source_revision, write_atomic)
+from lotuspod.features.index import commands as index_commands
 from lotuspod.publish_sources import (NO_REFS, REFS_MEMBER, decoded, media_cap,
                                       prepare_publish, read_source_archive, resolve_images,
                                       source_archive, stored_image)
@@ -352,8 +353,8 @@ def cmd_publish(args: argparse.Namespace) -> int:
                 # A page republished from the other kind keeps one source.
                 (out_dir / f"{name}{suffix}").unlink(missing_ok=True)
         steps = argparse.Namespace(out_dir=str(out_dir), commit=False)
-        site_index.cmd_manifest(steps)
-        site_index.cmd_index(steps)
+        index_commands.cmd_manifest(steps)
+        index_commands.cmd_index(steps)
         commit_output(out_dir, f"publish {name}")
     print(f"published {name} at revision {revision}")
     return 0

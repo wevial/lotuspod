@@ -10,7 +10,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { type CallExpression, type Identifier, type Node, type StringLiteral, SyntaxKind } from "typescript/unstable/ast";
 import { API } from "typescript/unstable/async";
 
-import { build, ISLANDS_MARKER, marker, outDir, unparsed } from "./build";
+import { build, ISLANDS_MARKER, marker, outDir, sliceMarker, unparsed } from "./build";
 
 const SOURCE = `// Counts the pods a reader has open.
 interface Pod {
@@ -100,6 +100,25 @@ test("a marked file whose source is gone is deleted, and a hand-written one is u
   expect(await build(web)).toEqual({ written: [], removed: [join(out, "gone.js")] });
   expect(existsSync(join(out, "gone.js"))).toBe(false);
   expect(readFileSync(join(out, "shared.js"), "utf8")).toBe(HAND_WRITTEN);
+});
+
+test("a slice's source is written beside it as its JS, after a marker naming it", async () => {
+  const slice = join(root, "src", "lotuspod", "features", "pods", "ts");
+  mkdirSync(slice, { recursive: true });
+  writeFileSync(join(slice, "pod-count.ts"), SOURCE);
+  expect(await build(web)).toEqual({ written: [join(slice, "pod-count.js")], removed: [] });
+  expect(readFileSync(join(slice, "pod-count.js"), "utf8")).toBe(sliceMarker("pods", "pod-count") + STRIPPED);
+  expect(sliceMarker("pods", "pod-count")).toContain("src/lotuspod/features/pods/ts/pod-count.ts");
+  expect(readdirSync(out)).toEqual([]);
+});
+
+test("a slice's marked file whose source is gone is deleted, and a hand-written one is untouched", async () => {
+  const slice = join(root, "src", "lotuspod", "features", "pods", "ts");
+  mkdirSync(slice, { recursive: true });
+  writeFileSync(join(slice, "gone.js"), sliceMarker("pods", "gone") + STRIPPED);
+  writeFileSync(join(slice, "tabs.js"), HAND_WRITTEN);
+  expect(await build(web)).toEqual({ written: [], removed: [join(slice, "gone.js")] });
+  expect(readFileSync(join(slice, "tabs.js"), "utf8")).toBe(HAND_WRITTEN);
 });
 
 test("another Bun exits non-zero before writing anything, naming both versions", () => {
