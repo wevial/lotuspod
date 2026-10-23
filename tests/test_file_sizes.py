@@ -77,12 +77,10 @@ def measure(root: Path) -> dict[str, int]:
         return {}
     out = subprocess.run(["wc", "-l", "--", *paths], cwd=root, check=True,
                          capture_output=True, text=True).stdout
-    counts = {}
-    for line in out.splitlines():
-        count, name = line.strip().split(None, 1)
-        if name in paths:
-            counts[name] = int(count)
-    return counts
+    # wc prints one line per file in the order given, then a total; it quotes
+    # an odd name, so pair counts with paths by position, not by the name.
+    lines = out.splitlines()[:len(paths)]
+    return {path: int(line.split(None, 1)[0]) for path, line in zip(paths, lines)}
 
 
 def violations(root: Path, pinned: dict[str, int]) -> list[str]:
@@ -177,6 +175,10 @@ class WalkTest(unittest.TestCase):
         self.assertEqual(violations(self.root, self.PINS),
                          ["src/js/written.js: 1400 lines, past its cap of 1000"])
 
+    def test_counts_a_file_whose_name_wc_quotes(self):
+        self.write("src/has\nnewline.py", 1001)
+        self.assertIn("src/has\nnewline.py: 1001 lines, past its cap of 1000",
+                      violations(self.root, self.PINS))
 
 
 if __name__ == "__main__":
