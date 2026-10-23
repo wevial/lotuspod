@@ -16,10 +16,41 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  e2e:
-    name: e2e
+  scope:
+    name: scope
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 5
+    outputs:
+      run: ${{ steps.scope.outputs.run }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: scope
+        id: scope
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            python ci/e2e_scope.py "$PR_BASE_SHA" HEAD >> "$GITHUB_OUTPUT"
+          else
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  e2e-shard:
+    name: e2e-shard (${{ matrix.shard }}/4)
+    needs: scope
+    if: needs.scope.outputs.run == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -48,11 +79,33 @@ jobs:
         if: steps.browsers.outputs.cache-hit == 'true'
         run: npm --prefix e2e exec --no -- playwright install-deps chromium
       - name: browser checks
-        run: python -m tests.capture_site npm --prefix e2e exec --no -- playwright test --config e2e/checks.config.ts --reporter=github,list --trace=retain-on-failure --forbid-only
+        run: python -m tests.capture_site npm --prefix e2e exec --no -- playwright test --config e2e/checks.config.ts --reporter=github,list --trace=retain-on-failure --forbid-only --shard=${{ matrix.shard }}/4
       - name: upload traces
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: e2e-test-results
+          name: e2e-test-results-${{ matrix.shard }}
           path: e2e/test-results/
           retention-days: 7
+
+  e2e:
+    name: e2e
+    needs: [scope, e2e-shard]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: verdict
+        env:
+          SCOPE: ${{ needs.scope.result }}
+          RUN: ${{ needs.scope.outputs.run }}
+          SHARDS: ${{ needs.e2e-shard.result }}
+        run: |
+          echo "scope: $SCOPE, run: ${RUN:-none}, shards: $SHARDS"
+          [ "$SCOPE" = "success" ] || exit 1
+          [ "$SHARDS" = "success" ] && exit 0
+          if [ "$RUN" = "false" ] && [ "$SHARDS" = "skipped" ]; then
+            echo "docs-only change: the shards were skipped"
+            exit 0
+          fi
+          exit 1

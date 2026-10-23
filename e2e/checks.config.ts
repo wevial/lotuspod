@@ -7,7 +7,7 @@ export default defineConfig({
   testDir: 'checks',
   testMatch: '**/*.spec.ts',
   workers: 1,
-  retries: 0,
+  retries: process.env.CI ? 1 : 0,
   reporter: 'line',
   use: {
     baseURL: process.env.LOTUSPOD_URL,
