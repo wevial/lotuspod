@@ -29,6 +29,7 @@ from __future__ import annotations
 import collections
 import difflib
 import io
+import json
 import os
 import re
 import subprocess
@@ -128,7 +129,7 @@ class Tree:
                                    if line)
 
     def playwright_titles(self, playwright: Path, stylesheet: bytes) -> collections.Counter:
-        """(file, title) for every e2e config's --list titles. The checks read the joined
+        """(spec path from the root, title) for every e2e config's --list titles. The checks read the joined
         stylesheet from the theme, where tests.capture_site writes it while
         they run, so it is written there for the listing too."""
         css = self.root / "src" / "lotuspod" / "_theme" / "lotuspod.css"
@@ -142,10 +143,11 @@ class Tree:
                 if done.returncode != 0:
                     raise RuntimeError(f"{self.label}: playwright --list {config.name} failed:\n"
                                        f"{done.stdout}{done.stderr}")
+                test_dir = self.test_dir(playwright, config)
                 for line in done.stdout.splitlines():
                     listed = LISTED.match(line)
                     if listed:
-                        titles[(listed.group(2),
+                        titles[(f"{test_dir}/{listed.group(2)}",
                                 f"{config.name} {listed.group(1)} › {listed.group(3)}")] += 1
         finally:
             if kept is None:
@@ -154,18 +156,21 @@ class Tree:
                 css.write_bytes(kept)
         return titles
 
+    def test_dir(self, playwright: Path, config: Path) -> str:
+        """The config's testDir from the root, which --list's spec paths are
+        relative to, as Playwright's JSON report gives it."""
+        done = self.run(str(playwright), "test", "--config", str(config), "--list",
+                        "--reporter=json", cwd=self.root / "e2e")
+        if done.returncode != 0:
+            raise RuntimeError(f"{self.label}: playwright --list {config.name} failed:\n"
+                               f"{done.stdout}{done.stderr}")
+        root_dir = Path(json.loads(done.stdout)["config"]["rootDir"]).resolve()
+        return root_dir.relative_to(self.root.resolve()).as_posix()
+
 
 def unmarked(data: bytes) -> bytes:
     """data with each build marker's SOURCE cut to its file name."""
     return MARKER.sub(lambda m: m.group(1) + m.group(2).rsplit(b"/", 1)[-1] + m.group(3), data)
-
-
-def in_tree(files: set[str], path: str) -> bool:
-    """Whether the tree whose tracked files are files has the test file at
-    path: a unittest module's path from the root, or a Playwright spec's from
-    its config's testDir under e2e/."""
-    return path in files or any(name.startswith("e2e/") and name.endswith("/" + path)
-                                for name in files)
 
 
 def multiset_differences(kind: str, before: collections.Counter, after: collections.Counter,
@@ -181,7 +186,7 @@ def multiset_differences(kind: str, before: collections.Counter, after: collecti
         old[name] += count
     for (path, name), count in after.items():
         new[name] += count
-        if not in_tree(base_files, path):
+        if path not in base_files:
             added[name] += count
             added_in[name].add(path)
     lines, allowed = [], []

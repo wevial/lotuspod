@@ -169,15 +169,12 @@ def bound_names(target: ast.expr) -> set[str]:
     return set()
 
 
-def exports(package_dir: Path, name: str) -> set[str]:
-    """The names the package's __init__.py binds at its top level itself (an
-    annotation alone binds none), and does not delete again: a `from X import
-    name` of one of them takes that name, not a submodule."""
-    path = package_dir.parent.joinpath(*name.split("."), "__init__.py")
-    if not path.is_file():
-        return set()
-    bound = set()
-    for node in ast.parse(path.read_text(encoding="utf-8"), str(path)).body:
+def surely_bound(body: list[ast.stmt]) -> set[str]:
+    """The names a run of module-level statements binds on every path through
+    it: a branch of an if, a try's handler or a loop that may not run binds
+    a name only when every other path binds it too."""
+    bound: set[str] = set()
+    for node in body:
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
             bound.add(node.name)
         elif isinstance(node, ast.Assign) or isinstance(node, ast.AnnAssign) and node.value:
@@ -185,9 +182,42 @@ def exports(package_dir: Path, name: str) -> set[str]:
             bound |= set().union(*map(bound_names, targets))
         elif isinstance(node, (ast.Import, ast.ImportFrom)):
             bound |= {alias.asname or alias.name.split(".")[0] for alias in node.names}
-        elif isinstance(node, ast.Delete):
-            bound -= set().union(*map(bound_names, node.targets))
+        elif isinstance(node, ast.If):
+            bound |= surely_bound(node.body) & surely_bound(node.orelse)
+        elif isinstance(node, (ast.Try, ast.TryStar)):
+            paths = [surely_bound(node.body + node.orelse)]
+            paths += [surely_bound(handler.body) for handler in node.handlers]
+            bound |= set.intersection(*paths) | surely_bound(node.finalbody)
+        elif isinstance(node, (ast.With, ast.AsyncWith)):
+            bound |= surely_bound(node.body)
     return bound
+
+
+def maybe_deleted(body: list[ast.stmt]) -> set[str]:
+    """The names any module-level del, on any path, unbinds."""
+    deleted: set[str] = set()
+    for node in body:
+        if isinstance(node, ast.Delete):
+            deleted |= set().union(*map(bound_names, node.targets))
+        elif not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            for field in ("body", "orelse", "finalbody", "handlers", "cases"):
+                for child in getattr(node, field, []):
+                    deleted |= maybe_deleted(child.body if isinstance(
+                        child, (ast.ExceptHandler, ast.match_case)) else [child])
+    return deleted
+
+
+def exports(package_dir: Path, name: str) -> set[str]:
+    """The names the package's __init__.py surely binds at its top level
+    itself (an annotation alone binds none) and no del there may unbind: a
+    `from X import name` of one of them takes that name, not a submodule.
+    A name bound on only some paths, or deleted on any, is not counted, so
+    the import is held to the slice rule as the submodule it may load."""
+    path = package_dir.parent.joinpath(*name.split("."), "__init__.py")
+    if not path.is_file():
+        return set()
+    body = ast.parse(path.read_text(encoding="utf-8"), str(path)).body
+    return surely_bound(body) - maybe_deleted(body)
 
 
 def imports(package_dir: Path, path: Path) -> list[tuple[int, str]]:
@@ -454,6 +484,22 @@ class CheckerTests(unittest.TestCase):
         self.write("features/b/__init__.py", "from . import inner\ndel inner\n")
         self.assert_reported("features/a/user.py", "from lotuspod.features.b import inner\n",
                              "lotuspod.features.b.inner")
+
+    def test_a_name_an_init_may_delete_is_not_an_export(self):
+        self.write("features/b/__init__.py", "inner = None\nif True:\n    del inner\n")
+        self.assert_reported("features/a/user.py", "from lotuspod.features.b import inner\n",
+                             "lotuspod.features.b.inner")
+
+    def test_a_name_an_init_binds_on_some_paths_only_is_not_an_export(self):
+        self.write("features/b/__init__.py", "import os\nif os.name:\n    inner = None\n")
+        self.assert_reported("features/a/user.py", "from lotuspod.features.b import inner\n",
+                             "lotuspod.features.b.inner")
+
+    def test_a_name_an_init_binds_on_every_path_through_a_try_is_an_export(self):
+        self.write("features/b/__init__.py", "try:\n    from .inner import run as inner\n"
+                   "except ImportError:\n    inner = None\n")
+        self.write("features/a/user.py", "from lotuspod.features.b import inner\n")
+        self.assertEqual(self.found(), [])
 
     def test_a_name_an_init_only_indexes_or_reaches_is_not_an_export(self):
         self.write("features/b/__init__.py",

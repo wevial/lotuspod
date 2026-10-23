@@ -2,7 +2,7 @@
 // WEB/package.json and WEB/src beside src/lotuspod/_theme/js.
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -378,17 +378,18 @@ async function importedFiles(files: readonly string[]): Promise<Map<string, (str
   }));
 }
 
-// The file a relative specifier names, as TypeScript resolves it: a `.js`,
-// `.mjs` or `.cjs` specifier's TypeScript source, as written, with a script
-// suffix, or a directory's index.
+// The file a relative specifier names, as Bun resolves it: the file as
+// written, else a `.js`, `.mjs` or `.cjs` specifier's TypeScript source, the
+// path with a script suffix, or a directory's index; a symlink's target.
 function resolveSpecifier(from: string, specifier: string): string {
   const base = resolve(dirname(from), specifier);
   const emitted: Record<string, string[]> = { ".js": [".ts", ".tsx"], ".mjs": [".mts"], ".cjs": [".cts"] };
   const suffix = Object.keys(emitted).find((js) => base.endsWith(js));
   const sources = suffix ? emitted[suffix]!.map((ts) => base.slice(0, -suffix.length) + ts) : [];
-  const candidates = [...sources, base, ...SCRIPT_SUFFIXES.map((suffix) => base + suffix),
+  const candidates = [base, ...sources, ...SCRIPT_SUFFIXES.map((suffix) => base + suffix),
     ...SCRIPT_SUFFIXES.map((suffix) => join(base, `index${suffix}`))];
-  return candidates.find((path) => existsSync(path) && statSync(path).isFile()) ?? base;
+  const found = candidates.find((path) => existsSync(path) && statSync(path).isFile());
+  return found ? realpathSync(found) : base;
 }
 
 // Where a file under root sits: core's scripts, a slice's (and whether it is
@@ -411,6 +412,9 @@ async function sliceImportProblems(root: string, edges: readonly (readonly [stri
   if (!existsSync(features)) {
     return [];
   }
+  // A file the specifier names resolves to its real path, so it is placed
+  // under root's; one that does not exist is placed under root as written.
+  const real = realpathSync(root);
   const allowed = new Set(edges.map(([from, to]) => `${from} ${to}`));
   const problems: string[] = [];
   const files = readdirSync(features, { recursive: true, encoding: "utf8" })
@@ -434,7 +438,7 @@ async function sliceImportProblems(root: string, edges: readonly (readonly [stri
         continue;
       }
       const target = resolveSpecifier(file, local);
-      const place = placeOf(root, target);
+      const place = placeOf(existsSync(target) ? real : root, target);
       if (place.core || place.slice === own || place.entry) {
         continue;
       }
@@ -571,6 +575,22 @@ describe("the slice rule over fixture slices a and b and core", () => {
     expect(await sliceImportProblems(lotuspod, [])).toEqual([]);
     write("features/a/ts/use.ts", 'import { inner } from "../../b/ts/inner.js";\n');
     expect(await sliceImportProblems(lotuspod, [])).toHaveLength(1);
+  });
+
+  test("a .js specifier naming a file that exists names that file, not the .ts beside it", async () => {
+    write("features/b/ts/index.js", "export const hidden = 4;\n");
+    write("features/a/ts/use.ts", 'import { hidden } from "../../b/ts/index.js";\n');
+    const problems = await sliceImportProblems(lotuspod, []);
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toContain(PAST_B);
+  });
+
+  test("a symlink in a to a file of b other than its public entry fails as b's file", async () => {
+    symlinkSync(join("..", "..", "b", "ts", "inner.ts"), join(lotuspod, "features", "a", "ts", "linked.ts"));
+    write("features/a/ts/use.ts", 'import { inner } from "./linked";\n');
+    const problems = (await sliceImportProblems(lotuspod, [])).filter((line) => line.startsWith(join("features", "a", "ts", "use.ts")));
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toContain(PAST_B);
   });
 
   test("only the islands' bridge.ts reaches a classic script outside core and the slices", async () => {
