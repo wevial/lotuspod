@@ -872,8 +872,6 @@ def cmd_render(args: argparse.Namespace) -> int:
         "widget_bridge": ("(function () {\n"
                           + (THEME_DIR / "js/widgets.js").read_text(encoding="utf-8")
                           + "\ninstallWidgetBridge();\n})();" if widget_files else ""),
-        # Sets the reader's theme before the body parses, and wires the
-        # title bar's switch.
         "theme_head": (THEME_DIR / "theme-head.js").read_text(encoding="utf-8"),
         "page_script": PAGE_SCRIPT,
         "mermaid_theme_variables": mermaid_theme_variables(tokens) if has_mermaid_block(body) else "",
