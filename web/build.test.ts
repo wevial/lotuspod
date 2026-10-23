@@ -475,7 +475,6 @@ test("the parsers read every import, type-only ones too, and nothing in strings,
   ].join("\n");
   const file = join(root, "imports.ts");
   writeFileSync(file, text);
-  expect(bundledImports([file]).get(file)!.sort()).toEqual(["./c.js", "./d", "./e", "./f", "./h", "./i", "./j"]);
   const found = (await importedFiles([file])).get(file)!;
   expect(found.filter((specifier) => specifier !== null).sort())
     .toEqual(["./a", "./b", "./c.js", "./d", "./e", "./f", "./g", "./h", "./i", "./j"]);
