@@ -369,12 +369,21 @@ The `e2e` workflow (`.github/workflows/e2e.yml`) runs the full checks on every
 pull request to main and every push to main, with `--reporter=github,list`
 so each failed check is annotated with its spec, line and title, and with
 `--forbid-only`, so a committed `test.only` fails the run instead of skipping
-the rest of the suite. It caches
+the rest of the suite. It splits the checks across four shards with
+Playwright's `--shard=N/4`, one `e2e-shard (N/4)` job each, and each shard
+serves its own copy of the sample site; one job named `e2e` reports their
+combined result. Each shard caches
 npm's downloads, keyed on `e2e/package-lock.json`, and Playwright's Chromium
 in `~/.cache/ms-playwright`, keyed on the installed `@playwright/test`
-version. It runs with one worker and no retries, so a check that fails once
-fails the run. When a check fails, its traces are uploaded as the
-`e2e-test-results` artifact, kept 7 days; open one with
+version. Each shard runs with one worker, and `e2e/checks.config.ts` retries
+a failed check once when `CI` is set (never locally). A check that passes
+only on its retry is reported as flaky: the list output prints `N flaky`
+with each such check, and the `Playwright Run Summary` notice on the run's
+summary page names them. A pull request whose changes are all docs (under
+`docs/`, a `.md` file at the root or under `deploy/`, or `LICENSE`, as
+`ci/e2e_scope.py` decides) skips the shards, and `e2e` passes; a push to
+main always runs them. When a check fails, each failing shard uploads its
+traces as the `e2e-test-results-N` artifact, kept 7 days; open one with
 `npx playwright show-trace`.
 
 ## Demo
