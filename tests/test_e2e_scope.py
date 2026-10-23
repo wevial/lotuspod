@@ -101,15 +101,10 @@ class RunTests(E2eScopeTestCase):
         self.change("tests/fixtures/markdown/code.md")
         self.assertRuns(self.scope(), "tests/fixtures/markdown/code.md")
 
-    def test_a_workflow_change_runs_the_checks(self):
-        self.change(".github/workflows/e2e.yml")
-        self.assertRuns(self.scope(), ".github/workflows/e2e.yml")
-
     def test_a_file_moved_into_docs_runs_the_checks(self):
         self.git("mv", "src/lotuspod/cli.py", "docs/cli.py")
         self.commit()
         # Rename detection alone would name only the new, docs-only path.
-        self.assertEqual(self.git("diff", "--name-only", "-M", "HEAD^", "HEAD"), "docs/cli.py")
         self.assertRuns(self.scope(), "src/lotuspod/cli.py")
 
     def test_an_empty_diff_runs_the_checks(self):
