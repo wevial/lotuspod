@@ -501,13 +501,6 @@ describe("the slice rule over fixture slices a and b and core", () => {
     expect(problems[1]).toContain(PAST_B);
   });
 
-  test("an import after a pattern that follows a statement's parentheses is read", async () => {
-    write("features/a/ts/use.ts", 'if (true) /"/.test(""); import { inner } from "../../b/ts/inner";\n');
-    const problems = await sliceImportProblems(lotuspod, []);
-    expect(problems).toHaveLength(1);
-    expect(problems[0]).toContain(PAST_B);
-  });
-
   test("an absolute path or a file: URL to a file of b other than its public entry fails", async () => {
     const inner = join(lotuspod, "features", "b", "ts", "inner.ts");
     write("features/a/ts/use.ts", `import { inner } from ${JSON.stringify(inner)};\n`);

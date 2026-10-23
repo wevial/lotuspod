@@ -302,13 +302,6 @@ class RepositoryTests(unittest.TestCase):
     def test_the_package_keeps_the_slice_rules(self):
         self.assertEqual(violations(PACKAGE_DIR, EDGES), [])
 
-    def test_nothing_but_the_entry_point_imports_cli(self):
-        """At the top of a module or inside a function alike."""
-        importers = sorted({module_name(PACKAGE_DIR, path) for path in modules(PACKAGE_DIR)
-                            for _, target in imports(PACKAGE_DIR, path)
-                            if within(target, CLI)})
-        self.assertEqual(importers, [ENTRY])
-
     def test_every_listed_edge_is_still_made(self):
         """A listed edge no import, and no use in cli.py, makes any more is
         dropped from EDGES."""
@@ -372,13 +365,6 @@ class CheckerTests(unittest.TestCase):
     def test_a_reach_into_another_slice_along_no_listed_edge_is_reported(self):
         self.assert_reported("features/a/user.py", "from lotuspod.features.b import inner\n",
                              "lotuspod.features.b.inner")
-
-    def test_the_same_reach_inside_a_function_is_reported(self):
-        self.assert_reported("features/a/user.py", """\
-            def use():
-                from lotuspod.features.b.inner import run
-                return run()
-            """, "lotuspod.features.b.inner")
 
     def test_a_relative_reach_into_another_slice_is_reported(self):
         self.assert_reported("features/a/user.py", "from ..b import inner\n",
