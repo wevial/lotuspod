@@ -49,7 +49,7 @@ PINNED = {
     "src/lotuspod/store/db.py": 1562,
     "tests/test_agent_pull.py": 1688,
     "tests/test_api.py": 1552,
-    "tests/test_manifest_v2.py": 2017,
+    "tests/test_manifest_v2.py": 1755,
 }
 
 

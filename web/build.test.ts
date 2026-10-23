@@ -283,6 +283,18 @@ test("check fails naming an orphaned built file it deleted", () => {
   expect(stderr).toContain(" D src/lotuspod/_theme/js/gone.js");
 });
 
+test("check fails naming the scripts of a slice's ts/ deleted whole", () => {
+  git("init", "-q");
+  const slice = join(root, "src", "lotuspod", "features", "pods", "ts");
+  mkdirSync(slice, { recursive: true });
+  writeFileSync(join(slice, "tabs.js"), HAND_WRITTEN);
+  commitAll();
+  rmSync(slice, { recursive: true });
+  const { exitCode, stderr } = check();
+  expect(exitCode).toBe(1);
+  expect(stderr).toContain(" D src/lotuspod/features/pods/ts/tabs.js");
+});
+
 test("check fails naming each hand-written file that does not parse on its own", () => {
   git("init", "-q");
   writeFileSync(join(out, "closure-open.js"), "// Opens the closure.\n(function () {\n  \"use strict\";\n");

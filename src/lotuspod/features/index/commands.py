@@ -9,7 +9,9 @@ from pathlib import Path
 
 from lotuspod.core import (DEFAULT_OUTPUT_DIR, INDEX_FILE, MANIFEST_FILE, commit_output,
                            sync_theme_css, write_atomic)
-from lotuspod.features.index.listing import collect_artifacts, render_index
+# The listing imports the archive, which imports this module: only names used
+# at call time are read from it.
+from lotuspod.features.index import listing
 
 
 MANIFEST_VERSION = 2
@@ -24,7 +26,7 @@ def cmd_manifest(args: argparse.Namespace) -> int:
     if not out_dir.is_dir():
         raise FileNotFoundError(f"artifacts directory not found: {out_dir}")
 
-    artifacts, hidden = collect_artifacts(out_dir)
+    artifacts, hidden = listing.collect_artifacts(out_dir)
     sync_theme_css(out_dir)
 
     manifest_path = out_dir / MANIFEST_FILE
@@ -46,12 +48,12 @@ def cmd_index(args: argparse.Namespace) -> int:
     if not out_dir.is_dir():
         raise FileNotFoundError(f"artifacts directory not found: {out_dir}")
 
-    artifacts, hidden = collect_artifacts(out_dir)
+    artifacts, hidden = listing.collect_artifacts(out_dir)
 
     sync_theme_css(out_dir)
 
     out_path = out_dir / INDEX_FILE
-    write_atomic(out_path, render_index(artifacts).encode("utf-8"))
+    write_atomic(out_path, listing.render_index(artifacts).encode("utf-8"))
     print(
         f"wrote {out_path} ({len(artifacts)} artifacts{_hidden_note(hidden)})"
     )

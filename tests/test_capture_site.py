@@ -496,10 +496,10 @@ class TeardownTests(CaptureSiteTestCase):
         (hook / "sitecustomize.py").write_text(
             "import os, sys\n"
             f"sys.path.insert(0, {str(REPO_ROOT / 'src')!r})\n"
-            "from lotuspod import cli\n"
+            "from lotuspod.features.index import commands\n"
             "def _fail(args):\n"
             "    raise RuntimeError('index broken')\n"
-            "cli.cmd_index = _fail\n",
+            "commands.cmd_index = _fail\n",
             encoding="utf-8",
         )
         env = dict(os.environ, TMPDIR=str(self.scratch), PYTHONPATH=str(hook))

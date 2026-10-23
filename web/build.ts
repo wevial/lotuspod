@@ -261,7 +261,8 @@ async function main(args: string[]): Promise<number> {
     }
     // What git sees differ under the output directories once built: modified,
     // deleted or new. Empty when the committed JS is fresh.
-    const outputs = [outDir(webDir), ...sliceScriptDirs(webDir).map((dir) => `:(glob)${relative(webDir, dir)}/**/*.js`)];
+    // Every slice's ts/, so a directory deleted whole shows too.
+    const outputs = [outDir(webDir), `:(glob)${relative(webDir, featuresDir(webDir))}/*/ts/**/*.js`];
     const stale = git(webDir, ["status", "--porcelain", "--untracked-files=all", "--", ...outputs]);
     if (!stale) {
       console.log("theme build is fresh");
