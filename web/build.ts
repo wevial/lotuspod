@@ -95,7 +95,7 @@ function checkBun(webDir: string): void {
 // export. A directive shows as the one difference between the source's JS and
 // the JS of the source with each "use strict" renamed to the probe, which the
 // transpiler keeps, renamed back; comments and strings strip alike in both.
-function strip(transpiler: Bun.Transpiler, label: string, built: string, source: string): string {
+function strip(transpiler: Bun.Transpiler, label: string, source: string): string {
   const stripped = transpiler.transformSync(source);
   const probed = transpiler.transformSync(source.replaceAll(USE_STRICT, USE_STRICT_PROBE));
   if (probed.replaceAll(USE_STRICT_PROBE, USE_STRICT) !== stripped) {
@@ -106,7 +106,7 @@ function strip(transpiler: Bun.Transpiler, label: string, built: string, source:
   } catch (error) {
     throw new BuildError(`${label}: its JS is not a classic script, as render joins it (${(error as Error).message}); a source has no import or export`);
   }
-  return built + stripped;
+  return markerOf(label) + stripped;
 }
 
 // The JS of the islands entry and everything it imports, Preact among them,
@@ -145,7 +145,7 @@ export async function build(webDir: string): Promise<BuildResult> {
   const names = sourceNames(srcDir);
   const transpiler = new Bun.Transpiler({ loader: "ts", target: "browser" });
   const result: BuildResult = { written: [], removed: [] };
-  const builds = names.map((name) => strip(transpiler, `web/src/${name}.ts`, marker(name),
+  const builds = names.map((name) => strip(transpiler, `web/src/${name}.ts`,
     readFileSync(join(srcDir, `${name}.ts`), "utf8")));
   // Each slice's sources, built beside themselves; every one is stripped
   // before anything is written.
@@ -156,7 +156,7 @@ export async function build(webDir: string): Promise<BuildResult> {
       dir,
       names: sliceNames,
       builds: sliceNames.map((name) => strip(transpiler, `src/lotuspod/features/${slice}/ts/${name}.ts`,
-        sliceMarker(slice, name), readFileSync(join(dir, `${name}.ts`), "utf8"))),
+        readFileSync(join(dir, `${name}.ts`), "utf8"))),
     };
   });
   const islands = await bundle(srcDir);
@@ -170,47 +170,36 @@ export async function build(webDir: string): Promise<BuildResult> {
   if (names.length) {
     mkdirSync(out, { recursive: true });
   }
+  if (existsSync(out)) {
+    write(out, names, builds, MARKER_PREFIX, result);
+  }
+  for (const slice of slices) {
+    write(slice.dir, slice.names, slice.builds, SLICE_MARKER_PREFIX, result);
+  }
+  return result;
+}
+
+// Writes each build into dir as its name's JS where it differs, then deletes
+// each JS file there that starts with markerPrefix and whose source is gone.
+function write(dir: string, names: string[], builds: string[], markerPrefix: string, result: BuildResult): void {
   for (const [index, name] of names.entries()) {
     const built = builds[index]!;
-    const target = join(out, `${name}.js`);
+    const target = join(dir, `${name}.js`);
     if (!existsSync(target) || readFileSync(target, "utf8") !== built) {
       writeFileSync(target, built);
       result.written.push(target);
     }
   }
-  if (existsSync(out)) {
-    for (const file of readdirSync(out).sort()) {
-      const target = join(out, file);
-      if (!file.endsWith(".js") || names.includes(basename(file, ".js"))) {
-        continue;
-      }
-      if (readFileSync(target, "utf8").startsWith(MARKER_PREFIX)) {
-        rmSync(target);
-        result.removed.push(target);
-      }
+  for (const file of readdirSync(dir).sort()) {
+    const target = join(dir, file);
+    if (!file.endsWith(".js") || names.includes(basename(file, ".js"))) {
+      continue;
+    }
+    if (readFileSync(target, "utf8").startsWith(markerPrefix)) {
+      rmSync(target);
+      result.removed.push(target);
     }
   }
-  for (const slice of slices) {
-    for (const [index, name] of slice.names.entries()) {
-      const built = slice.builds[index]!;
-      const target = join(slice.dir, `${name}.js`);
-      if (!existsSync(target) || readFileSync(target, "utf8") !== built) {
-        writeFileSync(target, built);
-        result.written.push(target);
-      }
-    }
-    for (const file of readdirSync(slice.dir).sort()) {
-      const target = join(slice.dir, file);
-      if (!file.endsWith(".js") || slice.names.includes(basename(file, ".js"))) {
-        continue;
-      }
-      if (readFileSync(target, "utf8").startsWith(SLICE_MARKER_PREFIX)) {
-        rmSync(target);
-        result.removed.push(target);
-      }
-    }
-  }
-  return result;
 }
 
 // Each JS file under the output directory, at any depth, built or written by
