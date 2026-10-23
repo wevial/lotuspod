@@ -36,6 +36,9 @@ def pinned_version(root: Path) -> str:
 def shard_image(root: Path) -> str:
     """The `e2e-shard` job's container image in the e2e workflow under root."""
     text = (root / ".github" / "workflows" / "e2e.yml").read_text(encoding="utf-8")
+    # Drop comment lines and trailing comments, so a commented-out image is not read.
+    text = re.sub(r"^[ \t]*#.*\n", "", text, flags=re.MULTILINE)
+    text = re.sub(r"[ \t]+#.*$", "", text, flags=re.MULTILINE)
     job = re.search(r"^  e2e-shard:[ \t]*\n((?:    .*\n|[ \t]*\n)*)", text, re.MULTILINE)
     if job is None:
         raise AssertionError("no `e2e-shard` job in the e2e workflow")
@@ -114,6 +117,14 @@ class E2eImageTestCase(unittest.TestCase):
             '    container: {{image: "mcr.microsoft.com/playwright:v{image}-jammy"}}\n')
         root = self.scratch("1.62.1", "1.62.0", workflow)
         self.assertEqual(shard_image(root), "mcr.microsoft.com/playwright:v1.62.0-jammy")
+        self.assertIn("1.62.0", image_mismatch(root))
+
+    def test_commented_out_image_is_ignored(self) -> None:
+        workflow = WORKFLOW.replace(
+            "    container:\n",
+            "    container:\n      # image: mcr.microsoft.com/playwright:v1.62.1-noble\n")
+        root = self.scratch("1.62.1", "1.62.0", workflow)
+        self.assertEqual(shard_image(root), "mcr.microsoft.com/playwright:v1.62.0-noble")
         self.assertIn("1.62.0", image_mismatch(root))
 
     def test_missing_container_fails(self) -> None:
