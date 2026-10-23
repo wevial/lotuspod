@@ -407,16 +407,17 @@ async function sliceImportProblems(root: string, edges: readonly (readonly [stri
       }
       const target = resolveSpecifier(file, local);
       const place = placeOf(root, target);
-      let why = "";
       if (place.core || place.slice === own || place.entry) {
         continue;
-      } else if (place.slice === null) {
+      }
+      let why: string;
+      if (place.slice === null) {
         if (relative(features, file).split(sep).slice(1).join("/") === "ts/islands/bridge.ts") continue;
         why = "only the islands' bridge.ts reaches the classic scripts outside core and the slices";
-      } else if (!allowed.has(`${own} ${place.slice}`)) {
-        why = `slice ${own} reaches past slice ${place.slice}'s ts/index.ts along no listed edge`;
-      } else {
+      } else if (allowed.has(`${own} ${place.slice}`)) {
         continue;
+      } else {
+        why = `slice ${own} reaches past slice ${place.slice}'s ts/index.ts along no listed edge`;
       }
       problems.push(`${relative(root, file)}: imports ${specifier} (${relative(root, target)}): ${why}`);
     }

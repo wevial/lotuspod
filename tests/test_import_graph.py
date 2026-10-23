@@ -226,9 +226,7 @@ def problem(importer: str, target: str, edges: set[tuple[str, str]]) -> str | No
     own, other = slice_of(importer), slice_of(target)
     if own is None or other is None or other == own:
         return None
-    if target == f"{FEATURES}.{other}":
-        return None
-    if (own, other) in edges:
+    if target == f"{FEATURES}.{other}" or (own, other) in edges:
         return None
     return (f"slice {own} reaches past slice {other}'s __init__.py along no listed edge; "
             f"import it from {FEATURES}.{other}")
@@ -331,8 +329,6 @@ class RepositoryTests(unittest.TestCase):
 class CheckerTests(unittest.TestCase):
     """The checker over fixture packages written into a temporary directory."""
 
-    EDGE = ("a", "b")
-
     def setUp(self) -> None:
         self.package = Path(self.enterContext(tempfile.TemporaryDirectory())) / PACKAGE
         self.write("__init__.py", "")
@@ -403,7 +399,7 @@ class CheckerTests(unittest.TestCase):
                 from lotuspod.features.b.inner import run
                 return run()
             """)
-        self.assertEqual(self.found([self.EDGE]), [])
+        self.assertEqual(self.found([("a", "b")]), [])
         self.assertEqual(len(self.found([("b", "a")])), 2)
 
     def test_a_slice_importing_another_slices_exports_passes(self):

@@ -232,13 +232,11 @@ def main() -> int:
             diff = difflib.unified_diff((old or "").splitlines(), (new or "").splitlines(),
                                         "merge base", "working tree", lineterm="", n=1)
             differences.append(f"`{command} --help` reads differently:\n" + "\n".join(diff))
-    added = []
     for kind in ("unittest", "playwright"):
         lines, allowed = multiset_differences(kind, before[kind], after[kind], base_files)
         differences += lines
-        added += allowed
-    for line in added:
-        print(line)
+        for line in allowed:
+            print(line)
     if differences:
         for line in differences:
             print(line)
