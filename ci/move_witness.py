@@ -39,7 +39,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SERVED = ("lotuspod.css", "lotuspod-page.js", "lotuspod-index.js")
-MARKER = re.compile(r"^(// Built from )(\S+)( by web/build\.ts\..*)$", re.M)
+MARKER = re.compile(rb"^(// Built from )(\S+)( by web/build\.ts\..*)$", re.M)
 # The positional line argparse prints for a command's subcommands.
 SUBCOMMANDS = re.compile(r"^  \{([a-z][\w-]*(?:,[a-z][\w-]*)*)\}", re.M)
 # A Playwright --list line: [project] › FILE:LINE:COLUMN › titles.
@@ -96,14 +96,14 @@ class Tree:
     def lotuspod(self, *argv: str) -> subprocess.CompletedProcess:
         return self.run(sys.executable, "-m", "lotuspod", *argv)
 
-    def served(self, out_dir: Path) -> dict[str, str]:
-        """Each served file's text after one page is rendered here."""
+    def served(self, out_dir: Path) -> dict[str, bytes]:
+        """Each served file's bytes after one page is rendered here."""
         done = self.lotuspod("render", "--name", "witness", "--title", "Witness",
                              "--date", "2026-01-02", "--body", PAGE_BODY,
                              "--out-dir", str(out_dir))
         if done.returncode != 0:
             raise RuntimeError(f"{self.label}: lotuspod render failed: {done.stderr.strip()}")
-        return {name: (out_dir / name).read_text(encoding="utf-8") for name in SERVED}
+        return {name: (out_dir / name).read_bytes() for name in SERVED}
 
     def helps(self) -> dict[str, str]:
         """`lotuspod ... --help` text by command, for every subcommand."""
@@ -127,13 +127,13 @@ class Tree:
         return collections.Counter(tuple(line.split(" ", 1)) for line in done.stdout.splitlines()
                                    if line)
 
-    def playwright_titles(self, playwright: Path, stylesheet: str) -> collections.Counter:
+    def playwright_titles(self, playwright: Path, stylesheet: bytes) -> collections.Counter:
         """(file, title) for every e2e config's --list titles. The checks read the joined
         stylesheet from the theme, where tests.capture_site writes it while
         they run, so it is written there for the listing too."""
         css = self.root / "src" / "lotuspod" / "_theme" / "lotuspod.css"
         kept = css.read_bytes() if css.exists() else None
-        css.write_text(stylesheet, encoding="utf-8")
+        css.write_bytes(stylesheet)
         titles: collections.Counter = collections.Counter()
         try:
             for config in sorted((self.root / "e2e").glob("*.config.ts")):
@@ -155,9 +155,9 @@ class Tree:
         return titles
 
 
-def unmarked(text: str) -> str:
-    """text with each build marker's SOURCE cut to its file name."""
-    return MARKER.sub(lambda m: m.group(1) + m.group(2).rsplit("/", 1)[-1] + m.group(3), text)
+def unmarked(data: bytes) -> bytes:
+    """data with each build marker's SOURCE cut to its file name."""
+    return MARKER.sub(lambda m: m.group(1) + m.group(2).rsplit(b"/", 1)[-1] + m.group(3), data)
 
 
 def in_tree(files: set[str], path: str) -> bool:
@@ -225,7 +225,7 @@ def main() -> int:
         old, new = unmarked(before["served"][name]), unmarked(after["served"][name])
         if old != new:
             at = next((i for i, (a, b) in enumerate(zip(old, new)) if a != b), min(len(old), len(new)))
-            differences.append(f"served {name}: differs from the merge base's from character {at}")
+            differences.append(f"served {name}: differs from the merge base's from byte {at}")
     for command in sorted(set(before["helps"]) | set(after["helps"])):
         old, new = before["helps"].get(command), after["helps"].get(command)
         if old != new:

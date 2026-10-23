@@ -1363,7 +1363,7 @@ class OutlineTests(TempDirTestCase):
 
     def test_outline_reaches_the_template_context(self):
         with mock.patch.object(
-            cli, "render_template", wraps=core.render_template
+            render, "render_template", wraps=core.render_template
         ) as render_template:
             self.rendered(self.TWO_H2)
         context = render_template.call_args.args[0]
@@ -1374,7 +1374,7 @@ class OutlineTests(TempDirTestCase):
 
     def test_no_outline_passes_an_empty_outline(self):
         with mock.patch.object(
-            cli, "render_template", wraps=core.render_template
+            render, "render_template", wraps=core.render_template
         ) as render_template:
             self.rendered(self.TWO_H2, "--no-outline")
         self.assertEqual(render_template.call_args.args[0]["outline"], [])
@@ -1518,7 +1518,7 @@ class MermaidTests(TempDirTestCase):
 
     def test_the_flag_and_palette_reach_the_template_context(self):
         with mock.patch.object(
-            cli, "render_template", wraps=core.render_template
+            render, "render_template", wraps=core.render_template
         ) as render_template:
             self.rendered(self.BODY)
         context = render_template.call_args.args[0]

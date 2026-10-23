@@ -15,11 +15,13 @@ a function, is checked against the rules:
 A module still flat in src/lotuspod/ is checked only for the cli rule, and a
 slice may still import one.
 
-EDGES is a ratchet: it starts at the cross-slice edges main's imports make,
+EDGES is a ratchet: it starts at the cross-slice edges main's code makes,
 by TARGET_TREE, one (from, to) slice pair a line. An entry can only be
 removed, never added: once a slice reaches the other only through its public
 edge, the entry goes. TARGET_TREE names the slice each flat module moves
-into, so an edge still made by flat modules counts as made.
+into, so an edge still made by flat modules counts as made; CLI_FUNCTIONS
+names the slice each function cli.py still holds moves into, so an edge made
+by a use inside one of them counts too.
 
 Run from the repo root:
 
@@ -53,56 +55,89 @@ TARGET_TREE = {
     "api": "serve",
     "archive": "history",
     "backup": "backup",
-    "calltree": "publish",
+    "calltree": "blocks",
     "comments": "comments",
     "decisions": "decisions",
-    "events": "serve",
+    "events": "live",
     "libraries": "widgets",
     "machine": "agents",
     "markdown": "publish",
-    "media": "media",
-    "node_tables": "publish",
+    "media": "publish",
+    "node_tables": "blocks",
     "publish": "publish",
     "publish_sources": "publish",
-    "refs": "publish",
+    "refs": "blocks",
     "render": "publish",
     "responder": "agents",
-    "routing": "comments",
-    "sections": "comments",
+    "routing": "agents",
+    "sections": "publish",
     "serve_files": "serve",
     "site_index": "index",
     "versions": "history",
     "widgets": "widgets",
 }
 
+# The slice each function and class cli.py still holds moves into. One of
+# them using a name another slice owns makes an edge, as an import does; the
+# parser and main stay with the entry point.
+CLI_FUNCTIONS = {
+    "_AllowListHandler": "serve",
+    "_Catalog": "serve",
+    "_make_server": "serve",
+    "_stop_serving": "serve",
+    "access_verifier": "serve",
+    "agent_page": "agents",
+    "answers_text": "decisions",
+    "api_catalog": "serve",
+    "api_page": "serve",
+    "claim_seconds": "serve",
+    "cmd_answers": "decisions",
+    "cmd_audit": "serve",
+    "cmd_credential_create": "serve",
+    "cmd_credential_list": "serve",
+    "cmd_credential_revoke": "serve",
+    "cmd_serve": "serve",
+    "owner_window": "serve",
+    "resolve_serve_host": "serve",
+    "serve_socket_path": "serve",
+    "served_page_names": "serve",
+}
+
 # Each import that reaches past another slice's __init__.py into its modules
 # is allowed only along one of these (from, to) edges. Only ever remove one.
+# Each names the import or call site on main (f388140) that made it first.
 EDGES = (
-    ("agents", "comments"),
-    ("agents", "media"),
-    ("agents", "publish"),
-    ("agents", "serve"),
-    ("agents", "widgets"),
-    ("backup", "media"),
-    ("backup", "serve"),
-    ("decisions", "comments"),
-    ("decisions", "serve"),
-    ("history", "index"),
-    ("history", "serve"),
-    ("history", "widgets"),
-    ("index", "history"),
-    ("publish", "agents"),
-    ("publish", "comments"),
-    ("publish", "decisions"),
-    ("publish", "index"),
-    ("publish", "media"),
-    ("publish", "serve"),
-    ("publish", "widgets"),
-    ("serve", "comments"),
-    ("serve", "history"),
-    ("serve", "media"),
-    ("serve", "widgets"),
-    ("widgets", "publish"),
+    ("agents", "comments"),  # agents.py:60 imports comments
+    ("agents", "publish"),  # agents.py:60 imports media
+    ("agents", "serve"),  # agents.py:60 imports api
+    ("agents", "widgets"),  # machine.py:207 imports widgets
+    ("backup", "publish"),  # backup.py:43 imports media
+    ("backup", "serve"),  # backup.py:409 calls cli.serve_db_path
+    ("decisions", "agents"),  # cli.py:3170, answers_text, uses agents
+    ("decisions", "comments"),  # decisions.py:56 imports comments
+    ("decisions", "publish"),  # cli.py:3189, cmd_answers, uses publish's _PAGE_NAME
+    ("decisions", "serve"),  # decisions.py:56 imports api
+    ("history", "index"),  # archive.py:188 calls cli.cmd_manifest
+    ("history", "serve"),  # archive.py:40 imports api
+    ("history", "widgets"),  # versions.py:62 imports widgets
+    ("index", "history"),  # cli.py:1109, collect_artifacts, calls archive.read_record
+    ("live", "history"),  # events.py:54 imports archive
+    ("live", "serve"),  # events.py:57 calls cli.serve_allow_list
+    ("publish", "agents"),  # cli.py:744, check_owner, calls machine.is_handle
+    ("publish", "blocks"),  # markdown.py:53 imports calltree
+    ("publish", "comments"),  # sections.py:23 imports comments
+    ("publish", "decisions"),  # cli.py:816, cmd_render, calls decisions.render_decisions
+    ("publish", "index"),  # cli.py:2342, cmd_publish, calls cmd_manifest
+    ("publish", "serve"),  # cli.py:757, check_owner, calls serve_db_path
+    ("publish", "widgets"),  # markdown.py:53 imports widgets
+    ("serve", "agents"),  # api.py:222 imports routing
+    ("serve", "comments"),  # api.py:222 imports comments
+    ("serve", "decisions"),  # cli.py:2440, api_page, calls decisions.read_forms
+    ("serve", "history"),  # api.py:222 imports versions
+    ("serve", "live"),  # cli.py:2583, _AllowListHandler, uses events
+    ("serve", "publish"),  # api.py:222 imports media
+    ("serve", "widgets"),  # cli.py:2387, serve_allow_list, calls widgets.Frames
+    ("widgets", "publish"),  # widgets.py:218 imports markdown
 )
 
 
@@ -121,9 +156,28 @@ def is_module(package_dir: Path, name: str) -> bool:
     return path.with_suffix(".py").is_file() or path.is_dir()
 
 
+def exports(package_dir: Path, name: str) -> set[str]:
+    """The names the package's __init__.py binds at its top level itself: a
+    `from X import name` of one of them takes that name, not a submodule."""
+    path = package_dir.parent.joinpath(*name.split("."), "__init__.py")
+    if not path.is_file():
+        return set()
+    bound = set()
+    for node in ast.parse(path.read_text(encoding="utf-8"), str(path)).body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            bound.add(node.name)
+        elif isinstance(node, (ast.Assign, ast.AnnAssign)):
+            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+            bound |= {target.id for target in targets if isinstance(target, ast.Name)}
+        elif isinstance(node, (ast.Import, ast.ImportFrom)):
+            bound |= {alias.asname or alias.name.split(".")[0] for alias in node.names}
+    return bound
+
+
 def imports(package_dir: Path, path: Path) -> list[tuple[int, str]]:
     """(line, module) for each import the module at path makes, at any depth:
-    `from X import name` imports X.name when that is a module, else X."""
+    `from X import name` imports X.name when that is a module X's __init__.py
+    does not bind a name over, else X."""
     tree = ast.parse(path.read_text(encoding="utf-8"), str(path))
     name = module_name(package_dir, path)
     package = name if path.name == "__init__.py" else name.rpartition(".")[0]
@@ -138,9 +192,10 @@ def imports(package_dir: Path, path: Path) -> list[tuple[int, str]]:
                                 + ([node.module] if node.module else []))
             else:
                 base = node.module or ""
+            bound = exports(package_dir, base)
             for alias in node.names:
                 target = f"{base}.{alias.name}"
-                found.append((node.lineno, target if alias.name != "*"
+                found.append((node.lineno, target if alias.name != "*" and alias.name not in bound
                               and is_module(package_dir, target) else base))
     return found
 
@@ -217,6 +272,34 @@ def made_edges(package_dir: Path, tree: dict[str, str]) -> dict[tuple[str, str],
     return made
 
 
+def call_edges(package_dir: Path, tree: dict[str, str],
+               functions: dict[str, str]) -> dict[tuple[str, str], str]:
+    """Each cross-slice edge cli.py's functions make, with one use that makes
+    it: a function or class in functions using a name bound to a flat module
+    in tree, or to another of functions, whose slice is not its own."""
+    path = package_dir / "cli.py"
+    tree_ast = ast.parse(path.read_text(encoding="utf-8"), str(path))
+    owner = {}
+    for node in tree_ast.body:
+        if isinstance(node, ast.ImportFrom) and not node.level and node.module:
+            for alias in node.names:
+                flat = alias.name if node.module == PACKAGE else node.module[len(PACKAGE) + 1:]
+                if within(node.module, PACKAGE) and flat in tree:
+                    owner[alias.asname or alias.name] = tree[flat]
+    owner.update(functions)
+    made: dict[tuple[str, str], str] = {}
+    for node in tree_ast.body:
+        own = functions.get(getattr(node, "name", ""))
+        if own is None:
+            continue
+        for used in ast.walk(node):
+            other = owner.get(used.id) if isinstance(used, ast.Name) else None
+            if other and other != own:
+                made.setdefault((own, other), f"lotuspod/cli.py:{used.lineno}: "
+                                              f"{node.name} uses {used.id}")
+    return made
+
+
 class RepositoryTests(unittest.TestCase):
     def test_the_package_keeps_the_slice_rules(self):
         self.assertEqual(violations(PACKAGE_DIR, EDGES), [])
@@ -229,9 +312,17 @@ class RepositoryTests(unittest.TestCase):
         self.assertEqual(importers, [ENTRY])
 
     def test_every_listed_edge_is_still_made(self):
-        """A listed edge no import makes any more is dropped from EDGES."""
-        made = made_edges(PACKAGE_DIR, TARGET_TREE)
+        """A listed edge no import, and no use in cli.py, makes any more is
+        dropped from EDGES."""
+        made = made_edges(PACKAGE_DIR, TARGET_TREE) | call_edges(PACKAGE_DIR, TARGET_TREE,
+                                                                 CLI_FUNCTIONS)
         self.assertEqual(sorted(set(EDGES) - set(made)), [])
+
+    def test_every_mapped_cli_function_is_in_cli(self):
+        """A function a move takes out of cli.py is dropped from CLI_FUNCTIONS."""
+        defined = {node.name for node in ast.parse((PACKAGE_DIR / "cli.py").read_text()).body
+                   if isinstance(node, (ast.FunctionDef, ast.ClassDef))}
+        self.assertEqual(sorted(set(CLI_FUNCTIONS) - defined), [])
 
     def test_the_edges_are_listed_once_each_in_order(self):
         self.assertEqual(list(EDGES), sorted(set(EDGES)))
@@ -350,6 +441,30 @@ class CheckerTests(unittest.TestCase):
         made = made_edges(self.package, {"flat_user": "b", "flat": "a"})
         self.assertEqual(sorted(made), [("a", "b"), ("b", "a")])
         self.assertIn("lotuspod.features.a.user imports lotuspod.features.b.inner", made[("a", "b")])
+
+    def test_a_name_an_init_binds_is_an_export_not_a_module(self):
+        self.write("features/b/__init__.py", "from .inner import run as inner\n")
+        self.write("features/a/user.py", "from lotuspod.features.b import inner\n")
+        self.assertEqual(self.found(), [])
+
+    def test_call_edges_name_one_use_for_each(self):
+        self.write("cli.py", """\
+            from lotuspod import flat
+            from lotuspod.flat_user import helper
+
+            def serving():
+                return flat.x, helper, owned()
+
+            def owned():
+                return flat.y
+
+            def main():
+                return serving()
+            """)
+        made = call_edges(self.package, {"flat": "a", "flat_user": "c"},
+                          {"serving": "b", "owned": "a"})
+        self.assertEqual(sorted(made), [("b", "a"), ("b", "c")])
+        self.assertIn("lotuspod/cli.py:5: serving uses flat", made[("b", "a")])
 
 
 if __name__ == "__main__":

@@ -4,7 +4,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { basename, dirname, join, relative, resolve, sep } from "node:path";
+import { dirname, join, relative, resolve, sep } from "node:path";
 
 import { SyntaxKind } from "typescript/unstable/ast";
 import { createScanner } from "typescript/unstable/ast/scanner";
@@ -294,8 +294,9 @@ test("a file nested under the output directory that does not parse is named", ()
 // The slice rule for the scripts under src/lotuspod: a file under a slice's
 // ts/ (features/SLICE/ts/) imports core/ts/, its own slice, another slice's
 // public entry (its ts/index.ts), or another slice's other files only along
-// an edge in TS_EDGES; the islands' bridge.ts is the only file that reaches
-// the classic scripts outside core and the slices. The imports are read with
+// an edge in TS_EDGES; the islands' bridge (a slice's ts/islands/bridge.ts)
+// is the only file that reaches the classic scripts outside core and the
+// slices. The imports are read with
 // TypeScript's own scanner, type-only ones among them.
 //
 // TS_EDGES is a ratchet, as EDGES in tests/test_import_graph.py is: one
@@ -341,11 +342,13 @@ function importedFiles(text: string): string[] {
   return found;
 }
 
-// The file a relative specifier names, as TypeScript resolves it: as
-// written, with a script suffix, or a directory's index.
+// The file a relative specifier names, as TypeScript resolves it: a `.js`
+// specifier's .ts or .tsx source, as written, with a script suffix, or a
+// directory's index.
 function resolveSpecifier(from: string, specifier: string): string {
   const base = resolve(dirname(from), specifier);
-  const candidates = [base, ...SCRIPT_SUFFIXES.map((suffix) => base + suffix),
+  const sources = base.endsWith(".js") ? [".ts", ".tsx"].map((suffix) => base.slice(0, -3) + suffix) : [];
+  const candidates = [...sources, base, ...SCRIPT_SUFFIXES.map((suffix) => base + suffix),
     ...SCRIPT_SUFFIXES.map((suffix) => join(base, `index${suffix}`))];
   return candidates.find((path) => existsSync(path) && statSync(path).isFile()) ?? base;
 }
@@ -389,7 +392,7 @@ function sliceImportProblems(root: string, edges: readonly (readonly [string, st
       if (place.core || place.slice === own || place.entry) {
         continue;
       } else if (place.slice === null) {
-        if (basename(file) === "bridge.ts") continue;
+        if (relative(features, file).split(sep).slice(1).join("/") === "ts/islands/bridge.ts") continue;
         why = "only the islands' bridge.ts reaches the classic scripts outside core and the slices";
       } else if (!allowed.has(`${own} ${place.slice}`)) {
         why = `slice ${own} reaches past slice ${place.slice}'s ts/index.ts along no listed edge`;
@@ -464,12 +467,22 @@ describe("the slice rule over fixture slices a and b and core", () => {
     expect(sliceImportProblems(lotuspod, [["a", "b"]])).toEqual([]);
   });
 
-  test("only a bridge.ts reaches a classic script outside core and the slices", () => {
-    write("features/a/ts/bridge.ts", 'import "../../../_theme/js/page-open.js";\n');
+  test("a .js specifier names its .ts source, so b's public entry so named passes", () => {
+    write("features/a/ts/use.ts", 'import { inner } from "../../b/ts/index.js";\n');
     expect(sliceImportProblems(lotuspod, [])).toEqual([]);
+    write("features/a/ts/use.ts", 'import { inner } from "../../b/ts/inner.js";\n');
+    expect(sliceImportProblems(lotuspod, [])).toHaveLength(1);
+  });
+
+  test("only the islands' bridge.ts reaches a classic script outside core and the slices", () => {
+    write("features/a/ts/islands/bridge.ts", 'import "../../../../_theme/js/page-open.js";\n');
+    expect(sliceImportProblems(lotuspod, [])).toEqual([]);
+    write("features/a/ts/bridge.ts", 'import "../../../_theme/js/page-open.js";\n');
     write("features/a/ts/use.ts", 'import "../../../_theme/js/page-open.js";\n');
     const problems = sliceImportProblems(lotuspod, []);
-    expect(problems).toHaveLength(1);
-    expect(problems[0]).toContain("only the islands' bridge.ts reaches the classic scripts");
+    expect(problems).toHaveLength(2);
+    for (const problem of problems) {
+      expect(problem).toContain("only the islands' bridge.ts reaches the classic scripts");
+    }
   });
 });
