@@ -311,9 +311,8 @@ const SCRIPT_SUFFIXES = [".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", "
 // `import("x")` and `require("x")`. A type-only import is erased first, as
 // Bun erases it before it bundles.
 function bundledImports(files: readonly string[]): Map<string, string[]> {
-  const transpilers = { ts: new Bun.Transpiler({ loader: "ts" }), tsx: new Bun.Transpiler({ loader: "tsx" }) };
   return new Map(files.map((file) => {
-    const transpiler = /\.[jt]sx$/.test(file) ? transpilers.tsx : transpilers.ts;
+    const transpiler = new Bun.Transpiler({ loader: /\.[jt]sx$/.test(file) ? "tsx" : "ts" });
     return [file, transpiler.scanImports(readFileSync(file, "utf8")).map((found) => found.path)];
   }));
 }
@@ -373,9 +372,9 @@ async function importedFiles(files: readonly string[]): Promise<Map<string, (str
   const bundled = bundledImports(files);
   const typed = await typedImports(files);
   return new Map(files.map((file) => {
-    const read = bundled.get(file)!;
-    const unread = typed.get(file)!.filter((specifier) => specifier === null);
-    return [file, [...new Set([...read, ...typed.get(file)!.filter((specifier) => specifier !== null)]), ...unread]];
+    const specifiers = typed.get(file)!;
+    return [file, [...new Set([...bundled.get(file)!, ...specifiers.filter((specifier) => specifier !== null)]),
+      ...specifiers.filter((specifier) => specifier === null)]];
   }));
 }
 
