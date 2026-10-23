@@ -124,6 +124,8 @@ class RepositoryTest(unittest.TestCase):
 
 
 class WalkTest(unittest.TestCase):
+    PINS = {"src/big.py": 1001, "tests/test_big.py": 1501}
+
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.root = Path(self.tmp.name)
@@ -152,32 +154,29 @@ class WalkTest(unittest.TestCase):
         ])
 
     def test_reports_a_file_past_its_pin(self):
-        pinned = {"src/big.py": 1001, "tests/test_big.py": 1501}
-        self.assertEqual(violations(self.root, pinned), [])
+        self.assertEqual(violations(self.root, self.PINS), [])
         self.write("src/big.py", 1002)
-        self.assertEqual(violations(self.root, pinned),
+        self.assertEqual(violations(self.root, self.PINS),
                          ["src/big.py: 1002 lines, past its pin of 1001"])
 
     def test_reports_a_pin_far_above_its_file(self):
-        pinned = {"src/big.py": 1200, "tests/test_big.py": 1501}
+        pinned = {**self.PINS, "src/big.py": 1200}
         self.assertEqual(violations(self.root, pinned), [
             "src/big.py: 1001 lines, its pin of 1200 is more than 150 above it",
         ])
 
     def test_reports_a_stale_pin(self):
-        pinned = {"src/big.py": 1001, "tests/test_big.py": 1501}
         self.write("src/big.py", 990)
-        self.assertEqual(violations(self.root, pinned), [
+        self.assertEqual(violations(self.root, self.PINS), [
             "src/big.py: 990 lines, at or under its cap of 1000;"
             " its pin of 1001 is stale",
         ])
 
     def test_skips_a_built_file(self):
-        pinned = {"src/big.py": 1001, "tests/test_big.py": 1501}
         self.write("src/js/built.js", 1400, first="// Built from web/src/built.ts"
                    " by web/build.ts. Edit that file, not this one.")
         self.write("src/js/written.js", 1400)
-        self.assertEqual(violations(self.root, pinned),
+        self.assertEqual(violations(self.root, self.PINS),
                          ["src/js/written.js: 1400 lines, past its cap of 1000"])
 
     def test_skips_a_built_file_whose_source_moved(self):
