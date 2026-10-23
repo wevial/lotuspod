@@ -46,38 +46,24 @@ jobs:
     needs: scope
     if: needs.scope.outputs.run == 'true'
     runs-on: ubuntu-latest
+    container:
+      image: mcr.microsoft.com/playwright:v1.62.1-noble
     timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
         shard: [1, 2, 3, 4]
     steps:
+      - name: git
+        run: command -v git || (apt-get update && apt-get install -y --no-install-recommends git)
       - uses: actions/checkout@v4
+      - name: trust the workspace
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
       - run: pip install -e .
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-          cache: npm
-          cache-dependency-path: e2e/package-lock.json
       - run: npm --prefix e2e ci --no-audit --no-fund
-      - name: playwright version
-        id: playwright
-        run: echo "version=$(node -p "require('./e2e/node_modules/@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
-      - name: browser cache
-        id: browsers
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
-      - name: install chromium
-        if: steps.browsers.outputs.cache-hit != 'true'
-        run: npm --prefix e2e exec --no -- playwright install --with-deps chromium
-      - name: install chromium's system packages
-        if: steps.browsers.outputs.cache-hit == 'true'
-        run: npm --prefix e2e exec --no -- playwright install-deps chromium
       - name: browser checks
         run: python -m tests.capture_site npm --prefix e2e exec --no -- playwright test --config e2e/checks.config.ts --reporter=github,list --trace=retain-on-failure --forbid-only --shard=${{ matrix.shard }}/4
       - name: upload traces
