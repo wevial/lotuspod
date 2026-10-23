@@ -47,12 +47,36 @@ def shard_image(root: Path) -> str:
     inline, nested = container.group(1).strip(), container.group(2)
     # Only `container.image` itself, not a key nested deeper such as `env.base_image`.
     image = (re.search(r"^      image:[ \t]*[\"']?([^\"'\s]+)", nested, re.MULTILINE)
-             or re.search(r"^\{\s*image:\s*[\"']?([^\"'\s,}]+)", inline)
-             or re.search(r",\s*image:\s*[\"']?([^\"'\s,}]+)", inline)
              or re.fullmatch(r"[\"']?([^\"'\s{]+)[\"']?", inline))
-    if image is None:
-        raise AssertionError("the `e2e-shard` container names no image")
-    return image.group(1)
+    if image is not None:
+        return image.group(1)
+    if inline.startswith("{"):
+        for entry in top_level_entries(inline):
+            own = re.fullmatch(r"image:\s*[\"']?([^\"'\s]+?)[\"']?", entry)
+            if own:
+                return own.group(1)
+    raise AssertionError("the `e2e-shard` container names no image")
+
+
+def top_level_entries(mapping: str) -> list[str]:
+    """The entries of an inline `{...}` mapping, without those of mappings nested in it."""
+    entries, depth, quote, start = [], 0, "", 1
+    for index, char in enumerate(mapping):
+        if quote:
+            quote = "" if char == quote else quote
+        elif char in "\"'":
+            quote = char
+        elif char in "{[":
+            depth += 1
+        elif char in "}]":
+            depth -= 1
+            if depth == 0:
+                entries.append(mapping[start:index].strip())
+                break
+        elif char == "," and depth == 1:
+            entries.append(mapping[start:index].strip())
+            start = index + 1
+    return entries
 
 
 def image_mismatch(root: Path) -> str | None:
@@ -126,6 +150,15 @@ class E2eImageTestCase(unittest.TestCase):
             "    container:\n",
             "    container:\n      env:\n"
             "        base_image: mcr.microsoft.com/playwright:v1.62.1-noble\n")
+        root = self.scratch("1.62.1", "1.61.0", workflow)
+        self.assertEqual(shard_image(root), "mcr.microsoft.com/playwright:v1.61.0-noble")
+        self.assertIn("1.61.0", image_mismatch(root))
+
+    def test_inline_nested_image_key_is_ignored(self) -> None:
+        workflow = WORKFLOW.replace(
+            "    container:\n      image: mcr.microsoft.com/playwright:v{image}-noble\n",
+            "    container: {{env: {{FOO: x, image: mcr.microsoft.com/playwright:v1.62.1-noble}},"
+            " image: mcr.microsoft.com/playwright:v{image}-noble}}\n")
         root = self.scratch("1.62.1", "1.61.0", workflow)
         self.assertEqual(shard_image(root), "mcr.microsoft.com/playwright:v1.61.0-noble")
         self.assertIn("1.61.0", image_mismatch(root))
