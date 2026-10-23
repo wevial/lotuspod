@@ -127,9 +127,9 @@ class WalkTest(unittest.TestCase):
     PINS = {"src/big.py": 1001, "tests/test_big.py": 1501}
 
     def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
-        self.root = Path(self.tmp.name)
-        self.addCleanup(self.tmp.cleanup)
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.root = Path(tmp.name)
         self.git("init", "-q")
         self.write("src/big.py", 1001)
         self.write("src/style.css", 1000)
