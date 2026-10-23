@@ -58,11 +58,111 @@
   --reader-avatar: #3e2c3e;
   --highlight: rgba(244, 163, 201, 0.2);
   --highlight-line: rgba(244, 163, 201, 0.7);
+  --shadow: rgba(13, 10, 21, 0.55);
+  --scrim: rgba(13, 10, 21, 0.88);
 
   --radius-chip: 4px;
   --radius-block: 8px;
   --radius-card: 14px;
   --radius-pill: 999px;
+
+  color-scheme: dark;
+}
+
+/* Dawn: the same tokens with light values (tokens.json's dawn set), on the
+   reader's choice, which the head script (theme-head.js) sets as data-theme
+   on the root. A page whose head script does not run (an earlier version's,
+   the index) follows a light system through the media query instead. */
+:root[data-theme="dawn"] {
+  --color-night: #f6f3fb;
+  --color-deep-night: #ece7f5;
+  --color-surface: #ffffff;
+  --color-glow: #e7defa;
+  --color-lavender: #6544c2;
+  --color-pale-lavender: #47367f;
+  --color-muted-lavender: #5f5878;
+  --color-white: #1c1730;
+  --color-sky: #2154b3;
+  --color-pale-sky: #1d4688;
+  --color-rose: #a82d66;
+  --color-pale-rose: #86224f;
+  --color-mint: #1b6c33;
+  --color-amber: #785a08;
+  --color-orchid: #86379d;
+  --color-cyan: #0b6a80;
+
+  --body-ink: rgba(28, 23, 48, 0.88);
+
+  --hairline: rgba(71, 54, 127, 0.16);
+  --hairline-strong: rgba(71, 54, 127, 0.32);
+  --row-tint: rgba(71, 54, 127, 0.04);
+  --code-surface: rgba(71, 54, 127, 0.07);
+  --quote-tint: rgba(101, 68, 194, 0.07);
+  --header-tint: #e5e9f6;
+  --header-rule: rgba(33, 84, 179, 0.4);
+  --code-chip: rgba(33, 84, 179, 0.09);
+  --mint-tint: rgba(27, 108, 51, 0.12);
+  --amber-tint: rgba(120, 90, 8, 0.12);
+  --code-edge: rgba(33, 84, 179, 0.22);
+  --quote-band: rgba(33, 84, 179, 0.06);
+  --quote-rule: rgba(33, 84, 179, 0.6);
+  --link-line: rgba(33, 84, 179, 0.45);
+  --reader-tint: #f8e7ef;
+  --reader-line: rgba(168, 45, 102, 0.4);
+  --reader-avatar: #f1d3e1;
+  --highlight: rgba(168, 45, 102, 0.16);
+  --highlight-line: rgba(168, 45, 102, 0.7);
+  --shadow: rgba(71, 54, 127, 0.14);
+  --scrim: rgba(246, 243, 251, 0.85);
+
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="night"]) {
+    --color-night: #f6f3fb;
+    --color-deep-night: #ece7f5;
+    --color-surface: #ffffff;
+    --color-glow: #e7defa;
+    --color-lavender: #6544c2;
+    --color-pale-lavender: #47367f;
+    --color-muted-lavender: #5f5878;
+    --color-white: #1c1730;
+    --color-sky: #2154b3;
+    --color-pale-sky: #1d4688;
+    --color-rose: #a82d66;
+    --color-pale-rose: #86224f;
+    --color-mint: #1b6c33;
+    --color-amber: #785a08;
+    --color-orchid: #86379d;
+    --color-cyan: #0b6a80;
+
+    --body-ink: rgba(28, 23, 48, 0.88);
+
+    --hairline: rgba(71, 54, 127, 0.16);
+    --hairline-strong: rgba(71, 54, 127, 0.32);
+    --row-tint: rgba(71, 54, 127, 0.04);
+    --code-surface: rgba(71, 54, 127, 0.07);
+    --quote-tint: rgba(101, 68, 194, 0.07);
+    --header-tint: #e5e9f6;
+    --header-rule: rgba(33, 84, 179, 0.4);
+    --code-chip: rgba(33, 84, 179, 0.09);
+    --mint-tint: rgba(27, 108, 51, 0.12);
+    --amber-tint: rgba(120, 90, 8, 0.12);
+    --code-edge: rgba(33, 84, 179, 0.22);
+    --quote-band: rgba(33, 84, 179, 0.06);
+    --quote-rule: rgba(33, 84, 179, 0.6);
+    --link-line: rgba(33, 84, 179, 0.45);
+    --reader-tint: #f8e7ef;
+    --reader-line: rgba(168, 45, 102, 0.4);
+    --reader-avatar: #f1d3e1;
+    --highlight: rgba(168, 45, 102, 0.16);
+    --highlight-line: rgba(168, 45, 102, 0.7);
+    --shadow: rgba(71, 54, 127, 0.14);
+    --scrim: rgba(246, 243, 251, 0.85);
+
+    color-scheme: light;
+  }
 }
 
 * {
@@ -161,7 +261,7 @@ body {
   background: var(--color-surface);
   border: 1px solid var(--hairline);
   border-radius: var(--radius-card);
-  box-shadow: 0 10px 30px rgba(13, 10, 21, 0.55);
+  box-shadow: 0 10px 30px var(--shadow);
   padding: 2.25rem 2rem 1.75rem;
 }
 

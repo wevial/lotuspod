@@ -84,6 +84,12 @@
   // string as its listener's) and js/diagram-view.js and
   // js/diagram-cards.js to mount.
   var DIAGRAMS = "lotuspod:diagrams";
+  // Sent on the document by the template's start-up module with a diagram's
+  // svg drawn again in the reader's other theme (detail.svg), in its pre
+  // (detail.pre) when the old svg was there, for js/diagram-cards.js to bind
+  // the new boxes. When the diagram is open in its view, js/diagram-view.js
+  // puts the new svg there and cancels the event.
+  var REDRAWN = "lotuspod:diagram-redrawn";
   // Sent on a diagram's svg each time its view (js/diagram-view.js) moves or
   // zooms it, so an open node card (js/diagram-cards.js) follows its box.
   var MOVED = "lotuspod:diagram-moved";

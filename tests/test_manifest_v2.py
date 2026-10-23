@@ -423,9 +423,10 @@ class ArtifactTopbarTests(TempDirTestCase):
             text = history.show("afec6b8", f"src/lotuspod/_theme/{filename}", repo=repo)
             (previous / filename).write_text(text, encoding="utf-8")
         # afec6b8 predates the favicon (KO-244) and the page, index and old-version
-        # scripts; the copy step needs them present.
+        # scripts; the copy step needs them present, and the page its head's
+        # theme script.
         for filename in ("favicon.svg", cli.PAGE_SCRIPT, cli.INDEX_SCRIPT,
-                         cli.OLD_VERSION_SCRIPT):
+                         cli.OLD_VERSION_SCRIPT, "theme-head.js"):
             (previous / filename).write_bytes(cli.theme_file_bytes(filename))
 
         after = self.rendered()
@@ -1501,9 +1502,10 @@ class MermaidTests(TempDirTestCase):
     def test_a_page_without_a_diagram_block_never_mentions_mermaid(self):
         page = self.rendered("<p>Plain prose.</p><h2>A</h2><p>x</p><h2>B</h2><p>y</p>")
         self.assertNotIn("mermaid", page)
-        # The one script is the page script, which folds the two sections.
+        # The head's theme script, then the page script, which folds the two
+        # sections.
         self.assertEqual(re.findall(r"<script[^>]*>", page),
-                         [f'<script src="{cli.PAGE_SCRIPT}?v={stylesheet_hash(page)}" defer>'])
+                         ["<script>", f'<script src="{cli.PAGE_SCRIPT}?v={stylesheet_hash(page)}" defer>'])
 
     def test_the_flag_and_palette_reach_the_template_context(self):
         with mock.patch.object(
@@ -1512,14 +1514,19 @@ class MermaidTests(TempDirTestCase):
             self.rendered(self.BODY)
         context = render_template.call_args.args[0]
         self.assertTrue(context["mermaid"])
-        variables = json.loads(context["mermaid_theme_variables"])
+        sets = json.loads(context["mermaid_theme_variables"])
         tokens = json.loads((cli.THEME_DIR / "tokens.json").read_text(encoding="utf-8"))
-        self.assertEqual(variables["primaryColor"], tokens["colors"]["surface"])
-        self.assertEqual(variables["lineColor"], tokens["colors"]["lavender"])
-        self.assertEqual(variables["primaryBorderColor"], tokens["colors"]["lavender"])
-        self.assertEqual(variables["primaryTextColor"], tokens["colors"]["pale_lavender"])
-        self.assertEqual(variables["background"], tokens["colors"]["night"])
-        self.assertEqual(variables["fontFamily"], tokens["fonts"]["mono"])
+        self.assertEqual(sorted(sets), ["dawn", "night"])
+        for name, colors in (("night", tokens["colors"]), ("dawn", tokens["dawn"]["colors"])):
+            with self.subTest(set=name):
+                variables = sets[name]
+                self.assertEqual(variables["primaryColor"], colors["surface"])
+                self.assertEqual(variables["lineColor"], colors["lavender"])
+                self.assertEqual(variables["primaryBorderColor"], colors["lavender"])
+                self.assertEqual(variables["primaryTextColor"], colors["pale_lavender"])
+                self.assertEqual(variables["background"], colors["night"])
+                # Dawn's colours over Night's fonts.
+                self.assertEqual(variables["fontFamily"], tokens["fonts"]["mono"])
 
     def test_detection_needs_a_pre_with_the_mermaid_class(self):
         self.assertTrue(cli.has_mermaid_block('<pre class="code mermaid">x</pre>'))
@@ -1689,9 +1696,10 @@ class OutlineSideRenderTests(TempDirTestCase):
                                 repo=repo)
             (previous / filename).write_text(text, encoding="utf-8")
         # 175406f predates the favicon (KO-244) and the page, index and old-version
-        # scripts; the copy step needs them present.
+        # scripts; the copy step needs them present, and the page its head's
+        # theme script.
         for filename in ("favicon.svg", cli.PAGE_SCRIPT, cli.INDEX_SCRIPT,
-                         cli.OLD_VERSION_SCRIPT):
+                         cli.OLD_VERSION_SCRIPT, "theme-head.js"):
             (previous / filename).write_bytes(cli.theme_file_bytes(filename))
 
         after = self.rendered()

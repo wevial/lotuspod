@@ -294,6 +294,18 @@
   border-radius: var(--radius-card) var(--radius-card) var(--radius-chip) var(--radius-card);
 }
 
+/* In Dawn an agent's reply sits on the lavender paper, apart from the white
+   panel, as the reader's sits on rose. */
+:root[data-theme="dawn"] :is(.artifact-body, .artifact-comments-panel, .artifact-comments-held) .artifact-comment-item--agent .artifact-comment-text {
+  background: var(--color-night);
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="night"]) :is(.artifact-body, .artifact-comments-panel, .artifact-comments-held) .artifact-comment-item--agent .artifact-comment-text {
+    background: var(--color-night);
+  }
+}
+
 :is(.artifact-body, .artifact-comments-panel, .artifact-comments-held) .artifact-comment-bubble--typing {
   align-items: center;
   align-self: flex-start;
@@ -541,6 +553,21 @@
   content: "";
   grid-column: 1 / -1;
   grid-row: 1;
+}
+
+/* In Dawn the field sits on the deeper paper, apart from the white card
+   around it: the form's frame, or the one box the page script draws
+   (attachments.css). */
+:root[data-theme="dawn"] :is(.artifact-comment-form, .artifact-comment-reply)::before,
+:root[data-theme="dawn"] :is(.artifact-comment-form, .artifact-comment-reply) .artifact-composer-box {
+  background: var(--color-deep-night);
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="night"]) :is(.artifact-comment-form, .artifact-comment-reply)::before,
+  :root:not([data-theme="night"]) :is(.artifact-comment-form, .artifact-comment-reply) .artifact-composer-box {
+    background: var(--color-deep-night);
+  }
 }
 
 .artifact-comment-form:has(textarea:focus-visible)::before,
@@ -993,7 +1020,7 @@
   background: var(--color-surface);
   border: 1px solid var(--hairline-strong);
   border-radius: var(--radius-block);
-  box-shadow: 0 8px 22px rgba(13, 10, 21, 0.5);
+  box-shadow: 0 8px 22px var(--shadow);
   left: 0.75rem;
   list-style: none;
   margin: 0;
@@ -1071,6 +1098,18 @@
   border-color: var(--hairline-strong);
 }
 
+/* In Dawn an open thread is a white card in the panel, its agent's replies
+   on the paper inside it. */
+:root[data-theme="dawn"] .artifact-comments-entry--open {
+  background: var(--color-surface);
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="night"]) .artifact-comments-entry--open {
+    background: var(--color-surface);
+  }
+}
+
 .artifact-comments-entry-head,
 .artifact-comments-entry-resolved {
   display: grid;
@@ -1128,6 +1167,11 @@
   color: var(--color-muted-lavender);
   font-size: 0.9em;
   grid-column: 2;
+}
+
+/* An answered thread's whole "✓ Answered · 1 reply" line is mint. */
+.artifact-comments-entry-state:has(.artifact-comments-entry-said--answered) {
+  color: var(--color-mint);
 }
 
 .artifact-comments-tick {
@@ -1329,7 +1373,7 @@
   background: var(--color-surface);
   border: 1px solid color-mix(in srgb, var(--color-lavender) 60%, transparent);
   border-radius: var(--radius-pill);
-  box-shadow: 0 8px 22px rgba(13, 10, 21, 0.5);
+  box-shadow: 0 8px 22px var(--shadow);
   color: var(--color-white);
   cursor: pointer;
   display: inline-flex;

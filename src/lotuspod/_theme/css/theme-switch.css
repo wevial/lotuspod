@@ -1,0 +1,215 @@
+/* The theme switch at the right end of the title bar: Night, Dawn and Auto
+   as three buttons in one pill, the pressed one filled lavender with night
+   text, the filled buttons' pair. The head script (theme-head.js) reveals it;
+   a page whose head script does not run keeps it hidden. Visually it stays
+   last in the bar, after the controls the page script adds there. */
+.artifact-theme-switch {
+  align-self: center;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-pill);
+  display: inline-flex;
+  flex: none;
+  gap: 0.1rem;
+  margin: -0.2rem 0 -0.2rem auto;
+  order: 1;
+  padding: 0.15rem;
+}
+
+.artifact-theme-switch[hidden] {
+  display: none;
+}
+
+/* Beside the archive or review bar, which take the free room first. */
+.artifact-topbar:has(.artifact-archive-bar, .artifact-review-bar) .artifact-theme-switch {
+  margin-left: 0.25rem;
+}
+
+.artifact-theme-option {
+  background: none;
+  border: 0;
+  border-radius: var(--radius-pill);
+  color: var(--color-muted-lavender);
+  cursor: pointer;
+  font: inherit;
+  font-family: var(--font-body);
+  font-size: 0.8rem;
+  line-height: 1.4;
+  margin: 0;
+  padding: 0.15rem 0.7rem;
+  position: relative;
+}
+
+.artifact-theme-option:hover {
+  color: var(--color-white);
+}
+
+.artifact-theme-option[aria-pressed="true"] {
+  background: var(--color-lavender);
+  color: var(--color-night);
+}
+
+.artifact-theme-option:focus-visible {
+  outline: 2px solid var(--color-lavender);
+  outline-offset: 2px;
+}
+
+@media (max-width: 40rem) {
+  .artifact-theme-option {
+    font-size: 0.75rem;
+    padding-inline: 0.5rem;
+  }
+
+  /* Beside the review sheet's controls a phone's bar has no room for the
+     words: each button shows its initial, its aria-label keeping its whole
+     name. */
+  .artifact-topbar:has(.artifact-review-bar) .artifact-theme-more {
+    clip-path: inset(50%);
+    height: 1px;
+    overflow: hidden;
+    position: absolute;
+    white-space: nowrap;
+    width: 1px;
+  }
+
+  .artifact-topbar:has(.artifact-review-bar) .artifact-theme-switch {
+    gap: 0;
+    padding: 0.1rem;
+  }
+
+  .artifact-topbar:has(.artifact-review-bar) .artifact-theme-option {
+    min-width: 1.4rem;
+    padding-inline: 0.3rem;
+  }
+}
+
+/* Narrower still, beside the review sheet's controls (and the archive
+   button with them), the three initials draw closer, so the bar keeps its
+   one line and the title its room. */
+@media (max-width: 24rem) {
+  .artifact-topbar:has(.artifact-review-bar) .artifact-theme-switch {
+    margin-left: 0;
+    padding: 0.05rem;
+  }
+
+  .artifact-topbar:has(.artifact-review-bar) .artifact-theme-option {
+    min-width: 1.15rem;
+    padding-inline: 0.2rem;
+  }
+
+  /* And while Next open shows, the bar's gaps and the archive button's
+     padding tighten, so Next open's words keep room for their ellipsis. */
+  .artifact-topbar:has(.artifact-review-next:not([hidden])):has(.artifact-theme-switch) {
+    column-gap: 0.35rem;
+  }
+
+  .artifact-topbar:has(.artifact-review-next:not([hidden])):has(.artifact-theme-switch) .artifact-archive {
+    padding-inline: 0.3rem;
+  }
+}
+
+/* Narrower than the title's ellipsis has room (archive.css, review-sheet.css),
+   the brand and its separator leave the bar beside both controls, or beside
+   the review sheet's count with no question open, so the switch has its
+   room; the title stays while no question is open, and Next open keeps its
+   words' ellipsis while one is. */
+@media (max-width: 22rem) {
+  .artifact-topbar:has(.artifact-archive-bar ~ .artifact-review-bar) .artifact-topbar-brand,
+  .artifact-topbar:has(.artifact-archive-bar ~ .artifact-review-bar) .artifact-topbar-sep,
+  .artifact-topbar:has(.artifact-review-bar):not(:has(.artifact-review-next:not([hidden]))) .artifact-topbar-brand,
+  .artifact-topbar:has(.artifact-review-bar):not(:has(.artifact-review-next:not([hidden]))) .artifact-topbar-sep {
+    display: none;
+  }
+
+  /* Beside the review sheet's controls alone, with a question open, the
+     brand gives way to an ellipsis, as it does beside both (archive.css). */
+  .artifact-topbar:has(.artifact-review-bar) .artifact-topbar-brand {
+    flex: 0 4 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+
+/* Narrower than 320 px, where one line cannot hold them all, the bar grows
+   a second line under the review sheet's controls for the switch, its three
+   buttons sharing the line with their words again. The page, the panels and the frames reserve
+   the bar's height by --topbar-height or measure it, so all follow. */
+@media (max-width: 19.9375rem) {
+  :root:has(.artifact-topbar .artifact-review-bar) {
+    --topbar-height: 4.75rem;
+  }
+
+  /* Out of the first line's flow, which lays out as it would without it. */
+  .artifact-topbar:has(.artifact-review-bar) .artifact-theme-switch {
+    bottom: 0.45rem;
+    display: flex;
+    left: 0.5rem;
+    margin: 0;
+    position: absolute;
+    right: 0.5rem;
+  }
+
+  .artifact-topbar:has(.artifact-review-bar) .artifact-theme-option {
+    flex: 1;
+  }
+
+  .artifact-topbar:has(.artifact-review-bar) .artifact-theme-more {
+    clip-path: none;
+    height: auto;
+    overflow: visible;
+    position: static;
+    width: auto;
+  }
+}
+
+/* Beside the archive button alone, the words fit down to 352 px; narrower,
+   the buttons show their initials as beside the review sheet's controls,
+   and narrower than 320 px the switch takes a second line. */
+@media (max-width: 22rem) {
+  .artifact-topbar:has(.artifact-archive-bar):not(:has(.artifact-review-bar)) .artifact-theme-more {
+    clip-path: inset(50%);
+    height: 1px;
+    overflow: hidden;
+    position: absolute;
+    white-space: nowrap;
+    width: 1px;
+  }
+
+  .artifact-topbar:has(.artifact-archive-bar):not(:has(.artifact-review-bar)) .artifact-theme-switch {
+    gap: 0;
+    margin-left: 0;
+    padding: 0.1rem;
+  }
+
+  .artifact-topbar:has(.artifact-archive-bar):not(:has(.artifact-review-bar)) .artifact-theme-option {
+    min-width: 1.4rem;
+    padding-inline: 0.3rem;
+  }
+}
+
+@media (max-width: 19.9375rem) {
+  :root:has(.artifact-topbar .artifact-archive-bar):not(:has(.artifact-topbar .artifact-review-bar)) {
+    --topbar-height: 4.75rem;
+  }
+
+  .artifact-topbar:has(.artifact-archive-bar):not(:has(.artifact-review-bar)) .artifact-theme-switch {
+    bottom: 0.45rem;
+    display: flex;
+    left: 0.5rem;
+    margin: 0;
+    position: absolute;
+    right: 0.5rem;
+  }
+
+  .artifact-topbar:has(.artifact-archive-bar):not(:has(.artifact-review-bar)) .artifact-theme-option {
+    flex: 1;
+  }
+
+  .artifact-topbar:has(.artifact-archive-bar):not(:has(.artifact-review-bar)) .artifact-theme-more {
+    clip-path: none;
+    height: auto;
+    overflow: visible;
+    position: static;
+    width: auto;
+  }
+}

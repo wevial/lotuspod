@@ -17,7 +17,7 @@
   background: var(--color-surface);
   border: 1px solid color-mix(in srgb, var(--color-sky) 60%, transparent);
   border-radius: var(--radius-pill);
-  box-shadow: 0 10px 28px rgba(13, 10, 21, 0.55);
+  box-shadow: 0 10px 28px var(--shadow);
   color: var(--color-white);
   display: flex;
   flex-wrap: wrap;
@@ -70,7 +70,7 @@
   background: var(--color-surface);
   border: 1px solid color-mix(in srgb, var(--color-sky) 40%, transparent);
   border-radius: var(--radius-pill);
-  box-shadow: 0 10px 28px rgba(13, 10, 21, 0.55);
+  box-shadow: 0 10px 28px var(--shadow);
   color: var(--color-pale-sky);
   font-family: var(--font-body);
   font-size: 0.875rem;

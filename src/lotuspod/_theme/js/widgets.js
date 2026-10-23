@@ -128,6 +128,18 @@ function installWidgetBridge() {
   }, true);
   document.addEventListener("DOMContentLoaded", initialize);
   document.addEventListener("lotuspod:swapped", initialize);
+  const postTheme = (frame) => {
+    const theme = document.documentElement.getAttribute("data-theme");
+    if (theme !== "night" && theme !== "dawn")
+      return;
+    frame.contentWindow?.postMessage({ type: "lotuspod:theme", theme }, "*");
+  };
+  document.addEventListener("lotuspod:theme", () => {
+    document.querySelectorAll("iframe.artifact-widget").forEach((frame) => {
+      if (!stateFor(frame).paused)
+        postTheme(frame);
+    });
+  });
   window.addEventListener("message", (event) => {
     const frame = Array.from(document.querySelectorAll("iframe.artifact-widget")).find((candidate) => candidate.contentWindow === event.source);
     if (!frame || !event.data || typeof event.data !== "object" || Array.isArray(event.data))
@@ -165,9 +177,22 @@ function installWidgetBridge() {
       return;
     const now = performance.now();
     state.accepted = state.accepted.filter((time) => now - time < 1000);
-    if (state.accepted.length >= 60)
+    if (state.accepted.length >= 60) {
+      if (kind === "state" && data.label === "" && !state.themeOwed) {
+        state.themeOwed = true;
+        setTimeout(() => {
+          state.themeOwed = false;
+          if (state.paused)
+            return;
+          state.accepted.push(performance.now());
+          postTheme(frame);
+        }, 1000 - (now - state.accepted[0]));
+      }
       return;
+    }
     state.accepted.push(now);
+    if (kind === "state" && data.label === "")
+      postTheme(frame);
     if (kind === "resize") {
       if (state.expanded)
         return;

@@ -113,7 +113,9 @@ CHECKLIST_TABLE = CHECKLIST.split("### Checklist for the maintainer\n\n", 1)[1]
 
 
 class _Page(HTMLParser):
-    """A page's decision forms, with their inputs, plus its tables and scripts."""
+    """A page's decision forms, with their inputs, plus its tables and the
+    scripts it loads (an inline script, the theme's head script, has no src
+    and is not listed)."""
 
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
@@ -133,8 +135,8 @@ class _Page(HTMLParser):
         classes = attrs.get("class", "").split()
         if tag == "table":
             self.tables += 1
-        elif tag == "script":
-            self.scripts.append(attrs.get("src", ""))
+        elif tag == "script" and attrs.get("src"):
+            self.scripts.append(attrs["src"])
         elif tag == "form":
             self._form = {"attrs": attrs, "radios": [], "checkboxes": [], "labels": [],
                           "notes": 0,

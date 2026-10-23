@@ -22,7 +22,7 @@
 .artifact-comments-popover {
   border: 1px solid color-mix(in srgb, var(--color-lavender) 60%, transparent);
   border-radius: var(--radius-card);
-  box-shadow: 0 14px 34px rgba(13, 10, 21, 0.55);
+  box-shadow: 0 14px 34px var(--shadow);
   position: absolute;
   width: min(24rem, calc(100vw - 1rem));
   z-index: 2;
@@ -46,7 +46,7 @@
   border-radius: 1.25rem 1.25rem 0 0;
   border-top: 1px solid var(--hairline-strong);
   bottom: 0;
-  box-shadow: 0 -12px 32px rgba(13, 10, 21, 0.5);
+  box-shadow: 0 -12px 32px var(--shadow);
   left: 0;
   max-height: 60vh;
   position: fixed;

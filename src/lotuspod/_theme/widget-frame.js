@@ -17,7 +17,34 @@
   // comment started from the block: cut to 80 characters, never inside a
   // surrogate pair. A new document names none until its widget does.
   function state(label) { post({type: "lotuspod:state", label: String(label).slice(0, 80).replace(/[\uD800-\uDBFF]$/, "")}); }
-  window.lotuspod = {state: state};
+  // The reader's theme, "night" or "dawn": the system's until the page
+  // names it, which it does as this document opens (its opening state) and
+  // on each switch; a file opened alone keeps following the system. Only
+  // the page may name it, in exactly this form. The root's data-lotus-theme
+  // picks the --lotus-* set, and a widget drawing on a canvas hears
+  // lotuspod:theme on the document to draw again.
+  var system = window.matchMedia("(prefers-color-scheme: light)");
+  var theme = system.matches ? "dawn" : "night";
+  var named = false;
+  function take(next) {
+    if (next === theme) return;
+    theme = next;
+    if (window.lotuspod) window.lotuspod.theme = theme;
+    document.dispatchEvent(new CustomEvent("lotuspod:theme", {detail: {theme: theme}}));
+  }
+  system.addEventListener("change", function () {
+    if (!named) take(system.matches ? "dawn" : "night");
+  });
+  window.addEventListener("message", function (event) {
+    var data = event.data;
+    if (event.source !== parent || !data || typeof data !== "object" || Array.isArray(data) ||
+        Object.keys(data).sort().join(",") !== "theme,type" || data.type !== "lotuspod:theme" ||
+        (data.theme !== "night" && data.theme !== "dawn")) return;
+    named = true;
+    document.documentElement.setAttribute("data-lotus-theme", data.theme);
+    take(data.theme);
+  });
+  window.lotuspod = {state: state, theme: theme};
   state("");
   window.addEventListener("keydown", function (event) {
     if (event.key === "Escape") post({type: "lotuspod:escape"});

@@ -211,7 +211,9 @@
       var change = element("button", "artifact-decision-change", "change");
       change.type = "button";
       change.addEventListener("click", function () { unfold(form); });
-      line.append(check, " Saved · ", element("strong", "", label(form, answer)),
+      var saved = element("span", "artifact-decision-saved-mark");
+      saved.append(check, " Saved");
+      line.append(saved, " · ", element("strong", "", label(form, answer)),
         " · ", change);
       var parts = [line];
       if (answer.source) {
