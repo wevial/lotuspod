@@ -101,6 +101,10 @@ class RunTests(E2eScopeTestCase):
         self.change("tests/fixtures/markdown/code.md")
         self.assertRuns(self.scope(), "tests/fixtures/markdown/code.md")
 
+    def test_a_workflow_change_runs_the_checks(self):
+        self.change(".github/workflows/e2e.yml")
+        self.assertRuns(self.scope(), ".github/workflows/e2e.yml")
+
     def test_a_file_moved_into_docs_runs_the_checks(self):
         self.git("mv", "src/lotuspod/cli.py", "docs/cli.py")
         self.commit()
