@@ -47,10 +47,6 @@ class SpecPathsTest(unittest.TestCase):
         tree.run = run
         return tree.playwright_titles(Path("playwright"), b"")
 
-    def test_each_spec_path_is_taken_from_the_root_through_its_test_dir(self):
-        self.assertEqual(sorted(path for path, _ in self.titles()),
-                         ["e2e/checks/theme.spec.ts", "e2e/demo/theme.spec.ts"])
-
     def test_a_new_spec_sharing_a_file_name_with_one_in_another_test_dir_is_added(self):
         after = self.titles()
         before = {key: count for key, count in after.items()

@@ -470,36 +470,24 @@ class CheckerTests(unittest.TestCase):
         self.assertEqual(sorted(made), [("a", "b"), ("b", "a")])
         self.assertIn("lotuspod.features.a.user imports lotuspod.features.b.inner", made[("a", "b")])
 
-    def test_a_name_an_init_binds_is_an_export_not_a_module(self):
-        self.write("features/b/__init__.py", "from .inner import run as inner\n")
+    def test_a_name_an_init_binds_on_every_path_is_an_export_not_a_module(self):
         self.write("features/a/user.py", "from lotuspod.features.b import inner\n")
-        self.assertEqual(self.found(), [])
+        for init in ("from .inner import run as inner\n",
+                     "from .inner import run\ninner, other = run, 0\n",
+                     "try:\n    from .inner import run as inner\nexcept ImportError:\n    inner = None\n"):
+            with self.subTest(init=init):
+                self.write("features/b/__init__.py", init)
+                self.assertEqual(self.found(), [])
 
-    def test_a_name_an_init_unpacks_is_an_export(self):
-        self.write("features/b/__init__.py", "from .inner import run\ninner, other = run, 0\n")
-        self.write("features/a/user.py", "from lotuspod.features.b import inner\n")
-        self.assertEqual(self.found(), [])
-
-    def test_a_name_an_init_deletes_is_not_an_export(self):
-        self.write("features/b/__init__.py", "from . import inner\ndel inner\n")
-        self.assert_reported("features/a/user.py", "from lotuspod.features.b import inner\n",
-                             "lotuspod.features.b.inner")
-
-    def test_a_name_an_init_may_delete_is_not_an_export(self):
-        self.write("features/b/__init__.py", "inner = None\nif True:\n    del inner\n")
-        self.assert_reported("features/a/user.py", "from lotuspod.features.b import inner\n",
-                             "lotuspod.features.b.inner")
-
-    def test_a_name_an_init_binds_on_some_paths_only_is_not_an_export(self):
-        self.write("features/b/__init__.py", "import os\nif os.name:\n    inner = None\n")
-        self.assert_reported("features/a/user.py", "from lotuspod.features.b import inner\n",
-                             "lotuspod.features.b.inner")
-
-    def test_a_name_an_init_binds_on_every_path_through_a_try_is_an_export(self):
-        self.write("features/b/__init__.py", "try:\n    from .inner import run as inner\n"
-                   "except ImportError:\n    inner = None\n")
-        self.write("features/a/user.py", "from lotuspod.features.b import inner\n")
-        self.assertEqual(self.found(), [])
+    def test_a_name_an_init_may_leave_unbound_is_not_an_export(self):
+        for init in ("from . import inner\ndel inner\n",
+                     "inner = None\nif True:\n    del inner\n",
+                     "import os\nif os.name:\n    inner = None\n",
+                     "inner: object\n"):
+            with self.subTest(init=init):
+                self.write("features/b/__init__.py", init)
+                self.assert_reported("features/a/user.py", "from lotuspod.features.b import inner\n",
+                                     "lotuspod.features.b.inner")
 
     def test_a_name_an_init_only_indexes_or_reaches_is_not_an_export(self):
         self.write("features/b/__init__.py",
@@ -507,11 +495,6 @@ class CheckerTests(unittest.TestCase):
         self.assert_reported("features/a/user.py", "from lotuspod.features.b import inner\n",
                              "lotuspod.features.b.inner")
         self.assertEqual(exports(self.package, "lotuspod.features.b"), {"registry", "rest"})
-
-    def test_a_name_an_init_only_annotates_is_not_an_export(self):
-        self.write("features/b/__init__.py", "inner: object\n")
-        self.assert_reported("features/a/user.py", "from lotuspod.features.b import inner\n",
-                             "lotuspod.features.b.inner")
 
     def test_call_edges_name_one_use_for_each(self):
         self.write("cli.py", """\
