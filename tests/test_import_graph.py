@@ -157,9 +157,9 @@ def is_module(package_dir: Path, name: str) -> bool:
 
 
 def exports(package_dir: Path, name: str) -> set[str]:
-    """The names the package's __init__.py binds at its top level itself, and
-    does not delete again: a `from X import name` of one of them takes that
-    name, not a submodule."""
+    """The names the package's __init__.py binds at its top level itself (an
+    annotation alone binds none), and does not delete again: a `from X import
+    name` of one of them takes that name, not a submodule."""
     path = package_dir.parent.joinpath(*name.split("."), "__init__.py")
     if not path.is_file():
         return set()
@@ -167,7 +167,7 @@ def exports(package_dir: Path, name: str) -> set[str]:
     for node in ast.parse(path.read_text(encoding="utf-8"), str(path)).body:
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
             bound.add(node.name)
-        elif isinstance(node, (ast.Assign, ast.AnnAssign)):
+        elif isinstance(node, ast.Assign) or isinstance(node, ast.AnnAssign) and node.value:
             targets = node.targets if isinstance(node, ast.Assign) else [node.target]
             bound |= {name.id for target in targets for name in ast.walk(target)
                       if isinstance(name, ast.Name)}
@@ -441,6 +441,11 @@ class CheckerTests(unittest.TestCase):
 
     def test_a_name_an_init_deletes_is_not_an_export(self):
         self.write("features/b/__init__.py", "from . import inner\ndel inner\n")
+        self.assert_reported("features/a/user.py", "from lotuspod.features.b import inner\n",
+                             "lotuspod.features.b.inner")
+
+    def test_a_name_an_init_only_annotates_is_not_an_export(self):
+        self.write("features/b/__init__.py", "inner: object\n")
         self.assert_reported("features/a/user.py", "from lotuspod.features.b import inner\n",
                              "lotuspod.features.b.inner")
 
