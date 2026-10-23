@@ -14,7 +14,9 @@ LOTUSPOD_CONFIG naming a missing file:
   depth;
 - the discovered test names: unittest's Class.method ids and Playwright's
   `--list` titles for each e2e/*.config.ts, each without its file path, as
-  multisets.
+  multisets. A name may be discovered more often here than at the merge base
+  only by as many times as test files the merge base lacks declare it, so a
+  move ticket may add a test module; those names are listed.
 
 Prints each difference and exits 1, else prints the counts it compared and
 exits 0. Every move ticket runs it from the repo root:
@@ -41,7 +43,7 @@ MARKER = re.compile(r"^(// Built from )(\S+)( by web/build\.ts\..*)$", re.M)
 # The positional line argparse prints for a command's subcommands.
 SUBCOMMANDS = re.compile(r"^  \{([a-z][\w-]*(?:,[a-z][\w-]*)*)\}", re.M)
 # A Playwright --list line: [project] › FILE:LINE:COLUMN › titles.
-LISTED = re.compile(r"^\s*(\[[^\]]+\]) › \S+:\d+:\d+ › (.+)$")
+LISTED = re.compile(r"^\s*(\[[^\]]+\]) › (\S+):\d+:\d+ › (.+)$")
 PAGE_BODY = ('<h2>One</h2><p>A <a href="https://example.com/">link</a>.</p>'
              "<h2>Two</h2><p>The second section.</p>")
 UNITTEST_NAMES = """
@@ -55,7 +57,8 @@ def tests(suite):
             yield test
 
 for test in tests(unittest.defaultTestLoader.discover("tests", top_level_dir=".")):
-    print(f"{type(test).__name__}.{test._testMethodName}")
+    module = type(test).__module__.replace(".", "/") + ".py"
+    print(f"{module} {type(test).__name__}.{test._testMethodName}")
 """
 
 
@@ -117,13 +120,15 @@ class Tree:
         return found
 
     def unittest_names(self) -> collections.Counter:
+        """(file, Class.method) for each discovered test."""
         done = self.run(sys.executable, "-c", UNITTEST_NAMES)
         if done.returncode != 0:
             raise RuntimeError(f"{self.label}: unittest discovery failed: {done.stderr.strip()}")
-        return collections.Counter(done.stdout.split())
+        return collections.Counter(tuple(line.split(" ", 1)) for line in done.stdout.splitlines()
+                                   if line)
 
     def playwright_titles(self, playwright: Path, stylesheet: str) -> collections.Counter:
-        """Every e2e config's --list titles. The checks read the joined
+        """(file, title) for every e2e config's --list titles. The checks read the joined
         stylesheet from the theme, where tests.capture_site writes it while
         they run, so it is written there for the listing too."""
         css = self.root / "src" / "lotuspod" / "_theme" / "lotuspod.css"
@@ -140,7 +145,8 @@ class Tree:
                 for line in done.stdout.splitlines():
                     listed = LISTED.match(line)
                     if listed:
-                        titles[f"{config.name} {listed.group(1)} › {listed.group(2)}"] += 1
+                        titles[(listed.group(2),
+                                f"{config.name} {listed.group(1)} › {listed.group(3)}")] += 1
         finally:
             if kept is None:
                 css.unlink()
@@ -154,14 +160,40 @@ def unmarked(text: str) -> str:
     return MARKER.sub(lambda m: m.group(1) + m.group(2).rsplit("/", 1)[-1] + m.group(3), text)
 
 
-def multiset_differences(kind: str, before: collections.Counter,
-                         after: collections.Counter) -> list[str]:
-    lines = []
-    for name in sorted(set(before) | set(after)):
-        if before[name] != after[name]:
-            lines.append(f"{kind}: {name!r} is discovered {before[name]} time(s) at the merge "
-                         f"base and {after[name]} time(s) here")
-    return lines
+def in_tree(files: set[str], path: str) -> bool:
+    """Whether the tree whose tracked files are files has the test file at
+    path: a unittest module's path from the root, or a Playwright spec's from
+    its config's testDir under e2e/."""
+    return path in files or any(name.startswith("e2e/") and name.endswith("/" + path)
+                                for name in files)
+
+
+def multiset_differences(kind: str, before: collections.Counter, after: collections.Counter,
+                         base_files: set[str]) -> tuple[list[str], list[str]]:
+    """The differences between before's and after's names, each counted
+    without its file, and the names after adds from test files the merge
+    base lacks, which are allowed."""
+    old: collections.Counter = collections.Counter()
+    new: collections.Counter = collections.Counter()
+    added: collections.Counter = collections.Counter()
+    added_in: dict[str, set[str]] = collections.defaultdict(set)
+    for (_, name), count in before.items():
+        old[name] += count
+    for (path, name), count in after.items():
+        new[name] += count
+        if not in_tree(base_files, path):
+            added[name] += count
+            added_in[name].add(path)
+    lines, allowed = [], []
+    for name in sorted(set(old) | set(new)):
+        if old[name] == new[name]:
+            continue
+        if old[name] < new[name] <= old[name] + added[name]:
+            allowed.append(f"{kind}: {name!r} is added by {', '.join(sorted(added_in[name]))}")
+        else:
+            lines.append(f"{kind}: {name!r} is discovered {old[name]} time(s) at the merge "
+                         f"base and {new[name]} time(s) here")
+    return lines, allowed
 
 
 def main() -> int:
@@ -173,6 +205,7 @@ def main() -> int:
         scratch = Path(scratch)
         base_root = scratch / "base"
         base = extract_merge_base(base_root)
+        base_files = set(git("ls-tree", "-r", "--name-only", base).splitlines())
         (base_root / "e2e" / "node_modules").symlink_to(REPO_ROOT / "e2e" / "node_modules")
         missing = scratch / "no-such-config.ini"
         trees = (Tree(f"merge base {base[:12]}", base_root, missing),
@@ -199,8 +232,13 @@ def main() -> int:
             diff = difflib.unified_diff((old or "").splitlines(), (new or "").splitlines(),
                                         "merge base", "working tree", lineterm="", n=1)
             differences.append(f"`{command} --help` reads differently:\n" + "\n".join(diff))
-    differences += multiset_differences("unittest", before["unittest"], after["unittest"])
-    differences += multiset_differences("playwright", before["playwright"], after["playwright"])
+    added = []
+    for kind in ("unittest", "playwright"):
+        lines, allowed = multiset_differences(kind, before[kind], after[kind], base_files)
+        differences += lines
+        added += allowed
+    for line in added:
+        print(line)
     if differences:
         for line in differences:
             print(line)
