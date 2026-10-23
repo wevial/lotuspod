@@ -306,10 +306,12 @@ const TS_EDGES: readonly (readonly [string, string])[] = [];
 const SCRIPT_SUFFIXES = [".ts", ".tsx", ".js"];
 
 // The module specifiers a file imports or re-exports: `from "x"`,
-// `import "x"`, `import("x")` and `require("x")`.
-function importedFiles(text: string): string[] {
+// `import "x"`, `import("x")` and `require("x")`, the last two with a
+// template literal too. null stands for an `import(...)` or `require(...)`
+// whose specifier is not a literal, which the slice rule cannot read.
+function importedFiles(text: string): (string | null)[] {
   const scanner = createScanner(true, undefined, text);
-  const found: string[] = [];
+  const found: (string | null)[] = [];
   const kinds: SyntaxKind[] = [];
   // What each open brace closes: a block, or a template's substitution.
   const braces: boolean[] = [];
@@ -319,23 +321,28 @@ function importedFiles(text: string): string[] {
     SyntaxKind.TemplateTail, SyntaxKind.RegularExpressionLiteral]);
   for (let kind = scanner.scan(); kind !== SyntaxKind.EndOfFile; kind = scanner.scan()) {
     const last = kinds[kinds.length - 1];
+    const before = kinds[kinds.length - 2];
+    const called = last === SyntaxKind.OpenParenToken
+      && (before === SyntaxKind.ImportKeyword || before === SyntaxKind.RequireKeyword);
     if ((kind === SyntaxKind.SlashToken || kind === SyntaxKind.SlashEqualsToken)
         && (last === undefined || !ends.has(last))) {
       kind = scanner.reScanSlashToken();
     } else if (kind === SyntaxKind.TemplateHead) {
       braces.push(true);
+      if (called) found.push(null);
     } else if (kind === SyntaxKind.OpenBraceToken) {
       braces.push(false);
     } else if (kind === SyntaxKind.CloseBraceToken && braces.pop()) {
       kind = scanner.reScanTemplateToken(false);
       if (kind === SyntaxKind.TemplateMiddle) braces.push(true);
     } else if (kind === SyntaxKind.StringLiteral) {
-      const before = kinds[kinds.length - 2];
-      if (last === SyntaxKind.FromKeyword || last === SyntaxKind.ImportKeyword
-          || (last === SyntaxKind.OpenParenToken
-              && (before === SyntaxKind.ImportKeyword || before === SyntaxKind.RequireKeyword))) {
+      if (last === SyntaxKind.FromKeyword || last === SyntaxKind.ImportKeyword || called) {
         found.push(scanner.getTokenValue());
       }
+    } else if (kind === SyntaxKind.NoSubstitutionTemplateLiteral && called) {
+      found.push(scanner.getTokenValue());
+    } else if (called) {
+      found.push(null);
     }
     kinds.push(kind);
   }
@@ -383,6 +390,11 @@ function sliceImportProblems(root: string, edges: readonly (readonly [string, st
   for (const file of files) {
     const own = placeOf(root, file).slice!;
     for (const specifier of importedFiles(readFileSync(file, "utf8"))) {
+      if (specifier === null) {
+        problems.push(`${relative(root, file)}: imports a specifier that is not a literal, `
+          + "which the slice rule cannot read");
+        continue;
+      }
       if (!specifier.startsWith(".")) {
         continue;
       }
@@ -422,8 +434,11 @@ test("the scanner reads every import, type-only ones too, and nothing in strings
     'const pattern = /from "\\.\\/not-c"/;',
     'const shown = `${late} from "./not-d" ${said}`;',
     'type G = typeof import("./g");',
+    'const later = await import(`./h`);',
+    'const named = await import(`./${late}`);',
+    'const chosen = require(said);',
   ].join("\n");
-  expect(importedFiles(text)).toEqual(["./a", "./b", "./c.js", "./d", "./e", "./f", "./g"]);
+  expect(importedFiles(text)).toEqual(["./a", "./b", "./c.js", "./d", "./e", "./f", "./g", "./h", null, null]);
 });
 
 describe("the slice rule over fixture slices a and b and core", () => {
@@ -459,6 +474,15 @@ describe("the slice rule over fixture slices a and b and core", () => {
     const problems = sliceImportProblems(lotuspod, [["b", "a"]]);
     expect(problems).toHaveLength(2);
     expect(problems[0]).toStartWith(`${join("features", "a", "ts", "types.ts")}: imports ../../b/ts/inner (${join("features", "b", "ts", "inner.ts")})`);
+    expect(problems[1]).toContain("slice a reaches past slice b's ts/index.ts along no listed edge");
+  });
+
+  test("a dynamic import of b's other file in a template literal fails, and one it cannot read fails too", () => {
+    write("features/a/ts/use.ts", "const inner = await import(`../../b/ts/inner`);\n");
+    write("features/a/ts/pick.ts", "const name = \"inner\";\nconst inner = await import(`../../b/ts/${name}`);\n");
+    const problems = sliceImportProblems(lotuspod, []);
+    expect(problems).toHaveLength(2);
+    expect(problems[0]).toStartWith(`${join("features", "a", "ts", "pick.ts")}: imports a specifier that is not a literal`);
     expect(problems[1]).toContain("slice a reaches past slice b's ts/index.ts along no listed edge");
   });
 
