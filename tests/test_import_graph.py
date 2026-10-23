@@ -156,6 +156,19 @@ def is_module(package_dir: Path, name: str) -> bool:
     return path.with_suffix(".py").is_file() or path.is_dir()
 
 
+def bound_names(target: ast.expr) -> set[str]:
+    """The names an assignment or del target binds or unbinds itself: a name,
+    or the names a tuple, list or starred target holds, never those inside a
+    subscript or an attribute (registry[key] binds no key)."""
+    if isinstance(target, ast.Name):
+        return {target.id}
+    if isinstance(target, ast.Starred):
+        return bound_names(target.value)
+    if isinstance(target, (ast.Tuple, ast.List)):
+        return set().union(*map(bound_names, target.elts))
+    return set()
+
+
 def exports(package_dir: Path, name: str) -> set[str]:
     """The names the package's __init__.py binds at its top level itself (an
     annotation alone binds none), and does not delete again: a `from X import
@@ -169,13 +182,11 @@ def exports(package_dir: Path, name: str) -> set[str]:
             bound.add(node.name)
         elif isinstance(node, ast.Assign) or isinstance(node, ast.AnnAssign) and node.value:
             targets = node.targets if isinstance(node, ast.Assign) else [node.target]
-            bound |= {name.id for target in targets for name in ast.walk(target)
-                      if isinstance(name, ast.Name)}
+            bound |= set().union(*map(bound_names, targets))
         elif isinstance(node, (ast.Import, ast.ImportFrom)):
             bound |= {alias.asname or alias.name.split(".")[0] for alias in node.names}
         elif isinstance(node, ast.Delete):
-            bound -= {name.id for target in node.targets for name in ast.walk(target)
-                      if isinstance(name, ast.Name)}
+            bound -= set().union(*map(bound_names, node.targets))
     return bound
 
 
@@ -443,6 +454,13 @@ class CheckerTests(unittest.TestCase):
         self.write("features/b/__init__.py", "from . import inner\ndel inner\n")
         self.assert_reported("features/a/user.py", "from lotuspod.features.b import inner\n",
                              "lotuspod.features.b.inner")
+
+    def test_a_name_an_init_only_indexes_or_reaches_is_not_an_export(self):
+        self.write("features/b/__init__.py",
+                   "registry = {}\nregistry[inner] = 1\nregistry.inner = 2\n[*rest] = [3]\n")
+        self.assert_reported("features/a/user.py", "from lotuspod.features.b import inner\n",
+                             "lotuspod.features.b.inner")
+        self.assertEqual(exports(self.package, "lotuspod.features.b"), {"registry", "rest"})
 
     def test_a_name_an_init_only_annotates_is_not_an_export(self):
         self.write("features/b/__init__.py", "inner: object\n")
