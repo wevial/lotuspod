@@ -19,7 +19,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from lotuspod import db  # noqa: E402
+from lotuspod.store import db  # noqa: E402
 from tests import access_keys as keys  # noqa: E402
 from tests.test_api import (  # noqa: E402
     ACTOR, CREATED_AT, DECISIONS_BODY, PLAN, ApiTestCase, run_cli,

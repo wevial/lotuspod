@@ -9,7 +9,8 @@ from unittest import mock
 
 from tests.test_agent_pull import PullTestCase, run_cli
 from tests.test_inbox import InboxTestCase
-from lotuspod import archive, cli, db, machine
+from lotuspod import archive, cli, machine, serve_files
+from lotuspod.store import db
 
 
 def hide(case, name):
@@ -27,7 +28,7 @@ class PullCatalogTests(PullTestCase):
             shutil.copyfile(self.out_dir / "plan.html", self.out_dir / f"{page}.html")
             comments.append(self.comment("@hermes Is the heater enough?", page=page)["id"])
 
-        with mock.patch.object(cli, "serve_allow_list", wraps=cli.serve_allow_list) as reads:
+        with mock.patch.object(serve_files, "serve_allow_list", wraps=serve_files.serve_allow_list) as reads:
             items = self.pull("hermes")
 
         self.assertEqual(len(items), 20)
@@ -39,7 +40,7 @@ class PullCatalogTests(PullTestCase):
         hide(self, "plan-01")
         shutil.copyfile(self.out_dir / "plan.html", self.out_dir / "plan-20.html")
         comment = self.comment("@hermes A new plan.", page="plan-20")
-        with mock.patch.object(cli, "serve_allow_list", wraps=cli.serve_allow_list) as reads:
+        with mock.patch.object(serve_files, "serve_allow_list", wraps=serve_files.serve_allow_list) as reads:
             second = self.pull("hermes")
         self.assertEqual(reads.call_count, 1)
         self.assertNotIn("plan-01", [item["page"]["name"] for item in second])
@@ -75,7 +76,7 @@ class PullCatalogTests(PullTestCase):
                             for item in items))
 
     def test_an_empty_pull_reads_no_page_list(self):
-        with mock.patch.object(cli, "serve_allow_list", wraps=cli.serve_allow_list) as reads:
+        with mock.patch.object(serve_files, "serve_allow_list", wraps=serve_files.serve_allow_list) as reads:
             self.assertEqual(self.pull("hermes"), [])
         self.assertEqual(reads.call_count, 0)
 
@@ -92,7 +93,7 @@ class InboxCatalogTests(InboxTestCase):
             queued.append(database.queue(owner="operator", page=page,
                                          comment=comment["id"], ask="change the risks")["id"])
 
-        with mock.patch.object(cli, "serve_allow_list", wraps=cli.serve_allow_list) as reads:
+        with mock.patch.object(serve_files, "serve_allow_list", wraps=serve_files.serve_allow_list) as reads:
             items = self.pulled("one")
 
         self.assertEqual(len(items), 20)
@@ -109,6 +110,6 @@ class InboxCatalogTests(InboxTestCase):
                          {"name": "ops-03", "title": "", "owner": "operator", "revision": ""})
 
     def test_an_empty_inbox_reads_no_page_list(self):
-        with mock.patch.object(cli, "serve_allow_list", wraps=cli.serve_allow_list) as reads:
+        with mock.patch.object(serve_files, "serve_allow_list", wraps=serve_files.serve_allow_list) as reads:
             self.assertEqual(self.pulled("one"), [])
         self.assertEqual(reads.call_count, 0)

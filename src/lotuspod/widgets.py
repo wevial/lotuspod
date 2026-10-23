@@ -10,9 +10,10 @@ import re
 import shlex
 
 from . import libraries
+from .core import Templates, collect_scripts, html_title, normalized, script_hash
 
 THEME = Path(__file__).parent / '_theme'
-WIDGET_NAME = re.compile(r'.+\.w-[0-9a-f]{12}\.html\Z')
+TOKENS = Path(__file__).parent / 'core' / 'theme' / 'tokens.json'
 HEADERS = (
     ('Content-Security-Policy', "sandbox allow-scripts; frame-ancestors 'self'"),
     ('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), clipboard-read=(), clipboard-write=(), display-capture=(), payment=(), usb=()'),
@@ -26,7 +27,7 @@ def variables(attribute: str = 'data-lotus-theme') -> str:
     names no night. A widget file keys them on data-lotus-theme, which its
     bridge sets from the page's message; the stylesheet on the page's
     data-theme."""
-    tokens = json.loads((THEME / 'tokens.json').read_text(encoding='utf-8'))
+    tokens = json.loads(TOKENS.read_text(encoding='utf-8'))
     singular = {'colors': 'color', 'fonts': 'font', 'radii': 'radius'}
 
     def declarations(sets: dict, indent: str) -> str:
@@ -79,46 +80,6 @@ def fence(info: str, source: str, line: int, number: int) -> str:
         options['libs'] = ' '.join(names)
     attrs = ''.join(f' data-{key}="{html.escape(value)}"' for key, value in options.items())
     return f'<template class="lotuspod-live" data-line="{line}"{attrs}>{source}</template>'
-
-
-class Templates(HTMLParser):
-    # Widgets enable scripts, so noscript contents are raw text. Extending the
-    # raw-text tags also supports Python versions without scripting=True.
-    CDATA_CONTENT_ELEMENTS = (*HTMLParser.CDATA_CONTENT_ELEMENTS, 'noscript')
-
-    def __init__(self, text: str):
-        super().__init__(convert_charrefs=False)
-        self.text = text
-        self.offsets = [0, *(match.end() for match in re.finditer('\n', text))]
-        self.blocks = []
-        self.active = None
-        self.depth = 0
-        self.feed(text)
-        if self.active:
-            raise RuntimeError(f'widget at line {self.active[3]}: unclosed template')
-
-    def position(self):
-        line, col = self.getpos()
-        return self.offsets[line - 1] + col
-
-    def handle_starttag(self, tag, attrs):
-        attrs = dict(attrs)
-        if tag == 'template':
-            if self.active:
-                self.depth += 1
-            elif 'lotuspod-live' in (attrs.get('class') or '').split():
-                start = self.position()
-                self.active = (start, start + len(self.get_starttag_text()), attrs, self.getpos()[0])
-                self.depth = 1
-
-    def handle_endtag(self, tag):
-        if tag == 'template' and self.active:
-            self.depth -= 1
-            if not self.depth:
-                start, content, attrs, line = self.active
-                end = self.text.index('>', self.position()) + 1
-                self.blocks.append((start, end, attrs, self.text[content:self.position()], line))
-                self.active = None
 
 
 class InlineScriptsOnly(HTMLParser):
@@ -210,7 +171,6 @@ def block_source(source: str, markdown_source: bool, ident: str) -> str:
     markdown or HTML, found as publish finds it: its line endings made
     newlines, and an HTML source's first h1 left out; "" when it has none,
     or when the source no longer reads."""
-    from .cli import html_title, normalized
     source = normalized(source)
     lines = source.split('\n')
     try:
@@ -294,7 +254,6 @@ class DocumentHead(HTMLParser):
 
 def render(body: str, name: str) -> tuple[str, dict[str, bytes], list[str]]:
     # Prepare every byte before the caller writes anything.
-    from .cli import collect_scripts, script_hash
     files, warnings, ids, replacements = {}, [], set(), []
     total = 0
     for number, (start, end, attrs, source, line) in enumerate(Templates(body).blocks, 1):
@@ -420,15 +379,8 @@ def link_decisions(body: str) -> str:
     return body
 
 
-def without_templates(text: str) -> str:
-    """Hide widget markup from source readers, preserving offsets and lines."""
-    for start, end, _, _, _ in reversed(Templates(text).blocks):
-        text = text[:start] + re.sub(r'[^\n]', ' ', text[start:end]) + text[end:]
-    return text
-
-
 if __name__ == '__main__':
-    # Regenerate the checked-in page declarations after editing tokens.json:
+    # Regenerate the checked-in page declarations after editing core/theme/tokens.json:
     # PYTHONPATH=src python -m lotuspod.widgets
     stylesheet = THEME / 'css/widgets.css'
     styles = stylesheet.read_text(encoding='utf-8')

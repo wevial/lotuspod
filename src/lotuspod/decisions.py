@@ -52,8 +52,7 @@ import re
 from dataclasses import dataclass, field, replace
 from html.parser import HTMLParser
 
-# cli imports this module too: only names used at call time are read from it.
-from lotuspod import api, cli, comments
+from lotuspod import api, comments, core
 
 HEADING = "decisions for the maintainer"
 CHECKLIST_HEADING = "checklist for the maintainer"
@@ -285,7 +284,7 @@ def _cell(row: list[dict], index: int | None) -> dict:
 
 def option_value(label: str) -> str:
     """The value of the option labelled label: its slug, bounded."""
-    slug = cli.slugify(label)
+    slug = core.slugify(label)
     if len(slug) <= OPTION_BOUND:
         return slug
     cut = slug[:OPTION_BOUND]
@@ -313,8 +312,8 @@ def _questions(rows: list[list[dict]], taken: set[str]) -> list[dict] | None:
             return None
         # A `#` cell with nothing to slug falls back to the row number.
         mark = _cell(row, columns["#"])["text"]
-        key = cli.slugify(mark) if _SLUGGABLE.search(mark.lower()) else str(number)
-        question_id = cli._unique_id(ID_PREFIX + key, taken)
+        key = core.slugify(mark) if _SLUGGABLE.search(mark.lower()) else str(number)
+        question_id = core._unique_id(ID_PREFIX + key, taken)
         taken.add(question_id)
         default = _cell(row, columns["default"])
         if columns["options"] is not None:
@@ -323,7 +322,7 @@ def _questions(rows: list[list[dict]], taken: set[str]) -> list[dict] | None:
             values: set[str] = set()
             options = []
             for label in labels:
-                value = cli._unique_id(option_value(label), values)
+                value = core._unique_id(option_value(label), values)
                 values.add(value)
                 options.append((value, label))
         elif columns["default"] is not None and default["text"]:
@@ -383,8 +382,8 @@ def _checklist(rows: list[list[dict]], number: int, legend: str) -> dict | None:
         if not item["text"] or checked is None:
             return None
         mark = _cell(row, columns["#"])["text"]
-        key = cli.slugify(mark) if _SLUGGABLE.search(mark.lower()) else str(row_number)
-        item_id = cli._unique_id(key, taken)
+        key = core.slugify(mark) if _SLUGGABLE.search(mark.lower()) else str(row_number)
+        item_id = core._unique_id(key, taken)
         taken.add(item_id)
         items.append({"id": item_id, "html": item["html"], "text": item["text"],
                       "checked": checked})

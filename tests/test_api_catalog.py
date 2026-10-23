@@ -26,7 +26,8 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from lotuspod import access, api, archive, cli, db, versions  # noqa: E402
+from lotuspod import access, api, archive, cli, core, render, serve_files, versions  # noqa: E402
+from lotuspod.store import db  # noqa: E402
 from tests import access_keys as keys  # noqa: E402
 from tests.capture_site import repository  # noqa: E402
 from tests.test_api import ACTOR, DECISIONS_BODY, HOST, ApiTestCase, quiet, run_cli  # noqa: E402
@@ -63,7 +64,7 @@ class CatalogTestCase(unittest.TestCase):
                 "--body", BODY, "--out-dir", str(self.out_dir))
         self.pages = 1
         self.database = db.Database(self.db_path)
-        self.revision = cli.page_revision(self.out_dir, page_name(0))
+        self.revision = core.page_revision(self.out_dir, page_name(0))
 
         verifier = access.Verifier(access.parse_config(keys.config_section()))
         server = cli._make_server(self.out_dir, HOST, 0, verifier=verifier,
@@ -96,7 +97,7 @@ class CatalogTestCase(unittest.TestCase):
         """The answer of api.Api built without a catalog, as serve built it
         before."""
         routes = api.Api(db.Database(self.db_path), partial(cli.api_page, self.out_dir),
-                         history=versions.History(self.out_dir, cli.version_stamp),
+                         history=versions.History(self.out_dir, render.version_stamp),
                          names=partial(cli.served_page_names, self.out_dir))
         status, payload, _ = routes.answer("GET", path, query, Message(), None, ACTOR)
         self.assertEqual(status, 200, payload)
@@ -104,7 +105,7 @@ class CatalogTestCase(unittest.TestCase):
 
     def reads(self, path: str) -> int:
         """How many times one request for path reads the allow-list."""
-        with mock.patch.object(cli, "serve_allow_list", wraps=cli.serve_allow_list) as read:
+        with mock.patch.object(serve_files, "serve_allow_list", wraps=serve_files.serve_allow_list) as read:
             status, _ = self.ask("GET", path)
         self.assertEqual(status, 200)
         return read.call_count

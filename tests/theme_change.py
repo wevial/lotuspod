@@ -7,7 +7,7 @@ into the fixture's site (LOTUSPOD_TEST_OUT):
     python -m tests.theme_change change COMMENT
         copies the packaged theme to a scratch directory, appends COMMENT to
         the copy's last stylesheet source and renders the page with
-        cli.THEME_DIR pointed at the copy, so the site serves a stylesheet
+        core.THEME_ROOT pointed at the copy, so the site serves a stylesheet
         ending in COMMENT;
     python -m tests.theme_change restore
         renders the page again from the packaged theme, so the site serves
@@ -30,7 +30,7 @@ from unittest import mock
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
-from lotuspod import cli  # noqa: E402
+from lotuspod import cli, core  # noqa: E402
 
 NAME = "theme-change"
 OUT_ENV = "LOTUSPOD_TEST_OUT"
@@ -64,11 +64,11 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     with tempfile.TemporaryDirectory(prefix="lotuspod-theme-") as scratch:
         theme = Path(scratch) / "theme"
-        shutil.copytree(cli.THEME_DIR, theme)
-        last_source = cli.THEME_SOURCES["lotuspod.css"][-1]
+        shutil.copytree(core.THEME_ROOT, theme, ignore=shutil.ignore_patterns("*.py", "__pycache__"))
+        last_source = core.THEME_SOURCES["lotuspod.css"][-1]
         with (theme / last_source).open("a", encoding="utf-8") as fh:
             fh.write(args[1])
-        with mock.patch.object(cli, "THEME_DIR", theme):
+        with mock.patch.object(core, "THEME_ROOT", theme):
             render(out_dir)
     return 0
 

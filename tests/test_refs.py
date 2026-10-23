@@ -29,7 +29,7 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from lotuspod import cli, refs  # noqa: E402
+from lotuspod import cli, core, refs, render  # noqa: E402
 
 STAMP = "2026-10-09T12:00:00Z"
 ENTRIES = {
@@ -220,7 +220,7 @@ class MarkRefsTests(unittest.TestCase):
         body = ("<h2>Ref HOLO-175</h2>\n<p>One.</p>\n<h2>Ref HOLO-175</h2>\n"
                 "<p>HOLO-175 again.</p>\n")
         marked, block, _ = refs.mark_refs(body, self.entries, STAMP)
-        _, outline = cli.outline_body(marked)
+        _, outline = render.outline_body(marked)
         headings = [entry["id"] for entry in outline]
         self.assertEqual(headings, ["ref-holo-175", "ref-holo-175-2"])
         cards = list(parsed(block).cards)
@@ -344,7 +344,7 @@ class KeptRefsTests(PublishTestCase):
         # Without --refs, the cards and their as-of time stay, while the
         # page's own updated time moves on.
         self.source.write_text("# Plan\n\nNow only HOLO-175.\n", encoding="utf-8")
-        with mock.patch.object(cli, "_utc_stamp", lambda _: "2027-01-01T00:00:00Z"):
+        with mock.patch.object(core, "_utc_stamp", lambda _: "2027-01-01T00:00:00Z"):
             rc, _, err = self.publish()
         self.assertEqual(rc, 0, err)
         page = parsed(self.page())

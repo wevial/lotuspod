@@ -1,4 +1,4 @@
-"""Test suite for the theme's palette (`src/lotuspod/_theme/tokens.json`): every
+"""Test suite for the theme's palette (`src/lotuspod/core/theme/tokens.json`): every
 text colour reads at WCAG AA on the night and surface backgrounds, and text
 reads on the tints the theme draws it on, in Night and in its light Dawn set
 (`dawn`), which names exactly Night's colours, tints and ink.
@@ -8,7 +8,7 @@ the formula is first checked on a published pair: #767676 on white is 4.54:1.
 
 Run from the repo root:
 
-    python -m unittest tests.test_palette -v
+    python -m unittest tests.core.test_palette -v
 """
 
 from __future__ import annotations
@@ -18,9 +18,9 @@ import re
 import unittest
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[2]
 TOKENS = json.loads(
-    (REPO_ROOT / "src" / "lotuspod" / "_theme" / "tokens.json").read_text(encoding="utf-8")
+    (REPO_ROOT / "src" / "lotuspod" / "core" / "theme" / "tokens.json").read_text(encoding="utf-8")
 )
 COLORS = TOKENS["colors"]
 STRUCTURE = TOKENS["structure"]

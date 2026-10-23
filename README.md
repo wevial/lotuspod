@@ -58,9 +58,15 @@ The pictures come from a sample page served on loopback by the test fixture;
 ```
 lotuspod/
 ├── src/lotuspod/          # package + CLI (`lotuspod render|publish|manifest|index|serve|credential|answers|audit|comments|inbox|respond|backup|restore|archive|unarchive`)
-│   ├── _templates/artifact.html   # artifact template ({{placeholder}} substitution)
-│   ├── _templates/index.html      # index-page template
-│   └── _theme/            # tokens.json (colors, fonts, radii), css/, js/, favicon.svg; the served lotuspod.css is css/ joined in order
+│   ├── cli.py             # the entry point: the commands, and serve
+│   ├── core/              # what every part shares (imports nothing else in Lotuspod)
+│   │   ├── templates/artifact.html  # artifact template ({{placeholder}} substitution)
+│   │   ├── theme/         # tokens.json (colors, fonts, radii), base.css, favicon.svg
+│   │   └── ts/            # the scripts every page script shares: shared.js, link-tab.js
+│   ├── store/db.py        # serve's database
+│   ├── features/          # the feature slices, filled one move at a time
+│   ├── _templates/index.html  # index-page template
+│   └── _theme/            # css/, js/; the served lotuspod.css is core/theme/base.css and css/ joined in order
 ├── artifacts/             # rendered output (gitignored)
 └── lotuspod-media/        # markdown pages' images and the images readers attach to comments, beside artifacts/ (gitignored)
 ```

@@ -39,8 +39,8 @@ import tempfile
 from contextlib import closing
 from pathlib import Path
 
-# cli imports this module too: only names used at call time are read from it.
-from lotuspod import cli, db, media
+from lotuspod import core, media, serve_files
+from lotuspod.store import db
 
 MANIFEST = "manifest.json"
 DATABASE = "lotuspod.sqlite3"
@@ -92,12 +92,12 @@ def backups_dir(args: argparse.Namespace, out_dir: Path) -> Path:
 
 
 def output_dir(args: argparse.Namespace) -> Path:
-    return (Path(args.out_dir) if args.out_dir else cli.DEFAULT_OUTPUT_DIR).resolve()
+    return (Path(args.out_dir) if args.out_dir else core.DEFAULT_OUTPUT_DIR).resolve()
 
 
 def own_repository(out_dir: Path) -> bool:
     try:
-        top = cli._git(out_dir, "rev-parse", "--show-toplevel")
+        top = core._git(out_dir, "rev-parse", "--show-toplevel")
     except OSError:
         return False
     return (top.returncode == 0 and bool(top.stdout.strip())
@@ -106,8 +106,8 @@ def own_repository(out_dir: Path) -> bool:
 
 def git(cwd: Path, *argv: str) -> str:
     try:
-        return cli._git_ok(cwd, *argv).strip()
-    except (cli._GitFailed, OSError) as exc:
+        return core._git_ok(cwd, *argv).strip()
+    except (core._GitFailed, OSError) as exc:
         raise Failed(str(exc)) from None
 
 
@@ -186,7 +186,7 @@ def take(db_path: Path, out_dir: Path, backups: Path) -> Path:
         raise Failed(f"no database at {db_path}, though {backups} holds earlier sets; "
                      "nothing backed up")
     backups.mkdir(parents=True, exist_ok=True)
-    with cli.publish_lock(out_dir):
+    with core.publish_lock(out_dir):
         earlier = sets(backups)
         name = set_name()
         final = backups / name
@@ -196,7 +196,7 @@ def take(db_path: Path, out_dir: Path, backups: Path) -> Path:
             schema = copy_database(db_path, partial / DATABASE)
             git(out_dir, "bundle", "create", str(partial / BUNDLE), "--all")
             head = git(out_dir, "rev-parse", "--verify", "HEAD")
-            remote = cli._git(out_dir, "remote", "get-url", "origin")
+            remote = core._git(out_dir, "remote", "get-url", "origin")
             images = copy_media(media.media_dir(out_dir), partial / MEDIA,
                                 earlier[-1] if earlier else None)
             manifest = {
@@ -211,7 +211,7 @@ def take(db_path: Path, out_dir: Path, backups: Path) -> Path:
             for file in (DATABASE, BUNDLE):
                 os.chmod(partial / file, 0o600)
                 manifest["files"][file] = sha256(partial / file)
-            cli.write_atomic(partial / MANIFEST,
+            core.write_atomic(partial / MANIFEST,
                              (json.dumps(manifest, indent=2) + "\n").encode("utf-8"))
             partial.rename(final)
         except BaseException:
@@ -406,7 +406,7 @@ def cmd_backup(args: argparse.Namespace) -> int:
                   f"intact, repository at {manifest['head']}, "
                   f"{len(manifest['media'])} images")
             return 0
-        db_path = cli.serve_db_path(out_dir, args.db)
+        db_path = serve_files.serve_db_path(out_dir, args.db)
         made = take(db_path, out_dir, backups)
         removed = prune(backups, args.keep)
     except (Failed, ValueError, OSError) as exc:

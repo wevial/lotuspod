@@ -26,7 +26,8 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from lotuspod import agents, cli, comments, db, responder, versions  # noqa: E402
+from lotuspod import agents, cli, comments, core, render, responder, serve_files, versions  # noqa: E402
+from lotuspod.store import db  # noqa: E402
 from tests.test_agent_pull import PullTestCase, run_cli  # noqa: E402
 
 TITLE = "Merge churn by worker count"
@@ -219,7 +220,7 @@ class EarlierVersionTests(AnchorCase):
         self.publish_churn(churn(CHANGED))
         # As a page published before its blocks' hashes were kept beside it:
         # only the history knows the first one.
-        (self.out_dir / f"churn{cli.BLOCKS_SUFFIX}").unlink()
+        (self.out_dir / f"churn{render.BLOCKS_SUFFIX}").unlink()
 
     def test_a_hash_the_block_had_in_an_earlier_version_is_stored_as_sent(self):
         self.check_stored_as_sent(self.first)
@@ -249,7 +250,7 @@ class WithoutGitTests(AnchorCase):
         self.publish_churn(churn(CHANGED))
 
     def test_the_site_has_no_versions(self):
-        self.assertFalse(cli.is_repository_top(self.out_dir))
+        self.assertFalse(core.is_repository_top(self.out_dir))
         status, payload = self.reader("GET", "/api/versions?page=churn")
         self.assertEqual((status, payload.get("versions")), (200, []))
 
@@ -262,8 +263,8 @@ class WithoutGitTests(AnchorCase):
         self.check_never_had_refused()
 
     def test_the_kept_hashes_are_never_served(self):
-        self.assertTrue((self.out_dir / f"churn{cli.BLOCKS_SUFFIX}").is_file())
-        self.assertNotIn(f"churn{cli.BLOCKS_SUFFIX}", cli.serve_allow_list(self.out_dir))
+        self.assertTrue((self.out_dir / f"churn{render.BLOCKS_SUFFIX}").is_file())
+        self.assertNotIn(f"churn{render.BLOCKS_SUFFIX}", serve_files.serve_allow_list(self.out_dir))
 
 
 class UpgradeWithoutGitTests(AnchorCase):
@@ -273,12 +274,12 @@ class UpgradeWithoutGitTests(AnchorCase):
     def prepare(self) -> None:
         self.publish_churn(churn(BLOCK))
         self.first = self.block_hash()
-        (self.out_dir / f"churn{cli.BLOCKS_SUFFIX}").unlink()
+        (self.out_dir / f"churn{render.BLOCKS_SUFFIX}").unlink()
         self.publish_churn(churn(CHANGED))
 
     def test_the_outgoing_page_s_hash_is_kept_at_the_republish(self):
-        self.assertFalse(cli.is_repository_top(self.out_dir))
-        self.assertEqual(cli.kept_block_hashes(self.out_dir, "churn")["churn"],
+        self.assertFalse(core.is_repository_top(self.out_dir))
+        self.assertEqual(render.kept_block_hashes(self.out_dir, "churn")["churn"],
                          [self.first, self.block_hash()])
         self.check_stored_as_sent(self.first)
 

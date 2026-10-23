@@ -76,7 +76,10 @@ from unittest import mock
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
-from lotuspod import access, api, cli, db, machine, media, routing  # noqa: E402
+from lotuspod import (access, api, cli, core, machine, media, publish, routing,  # noqa: E402
+                      site_index)
+from lotuspod import render as page_render  # noqa: E402
+from lotuspod.store import db  # noqa: E402
 from tests import access_keys  # noqa: E402
 
 
@@ -130,7 +133,8 @@ class _SampleTime(datetime.datetime):
 
 
 def _sample_clock() -> types.ModuleType:
-    """The datetime module as cli.py reads it, with today() held at SAMPLE_DATE
+    """The datetime module as render, publish and site_index read it, with
+    today() held at SAMPLE_DATE
     and now() at SAMPLE_UPDATED.
 
     `index` has no --date: it stamps the page with date.today(). `publish`
@@ -1026,7 +1030,10 @@ def render(out_dir: Path, db_path: Path) -> None:
             prepare()
         committed = {"GIT_AUTHOR_DATE": moment, "GIT_COMMITTER_DATE": moment}
         # The CLI reports on stdout; keep that stream for COMMAND alone.
-        with redirect_stdout(sys.stderr), mock.patch.object(cli, "_dt", _sample_clock()), \
+        clock = _sample_clock()
+        with redirect_stdout(sys.stderr), mock.patch.object(page_render, "_dt", clock), \
+                mock.patch.object(publish, "_dt", clock), \
+                mock.patch.object(site_index, "_dt", clock), \
                 mock.patch.dict(os.environ, committed):
             try:
                 rc = cli.main(argv)
@@ -1058,10 +1065,10 @@ PACKAGED_CSS = REPO_ROOT / "src" / "lotuspod" / "_theme" / "lotuspod.css"
 def write_packaged_css() -> bool:
     """Write the joined stylesheet to PACKAGED_CSS unless it is there already
     (a run beside this one wrote it). True when this call wrote it."""
-    joined = cli.theme_file_bytes("lotuspod.css")
+    joined = core.theme_file_bytes("lotuspod.css")
     if PACKAGED_CSS.is_file() and PACKAGED_CSS.read_bytes() == joined:
         return False
-    cli.write_atomic(PACKAGED_CSS, joined)
+    core.write_atomic(PACKAGED_CSS, joined)
     return True
 
 

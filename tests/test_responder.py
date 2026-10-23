@@ -32,8 +32,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from lotuspod import api, cli, decisions, media, responder  # noqa: E402
-from lotuspod.db import Database  # noqa: E402
+from lotuspod import api, core, decisions, media, responder  # noqa: E402
+from lotuspod.store.db import Database  # noqa: E402
 from tests.test_responder_witness import (  # noqa: E402
     ASSERTION, REPO, READER, Site, assertion, git)
 
@@ -695,12 +695,12 @@ class SnapshotTests(ResponderCase):
         self.publish("orphan", ORPHAN.replace("Nothing here.", "A concurrent edit."))
         kept.write_bytes(old)
         page = (self.out / "orphan.html").read_text(encoding="utf-8")
-        self.assertNotIn(f'content="{cli.source_revision(old)}"', page)
+        self.assertNotIn(f'content="{core.source_revision(old)}"', page)
 
         row = self.comment("orphan", "greeting", "Please add a line.")
         [item] = self.pull(self.responder, "responder")
         self.assertEqual((item["page"]["source"].encode("utf-8"), item["page"]["revision"]),
-                         (old, cli.source_revision(old)))
+                         (old, core.source_revision(old)))
 
         done = self.respond(env=dict(self.env, APPEND="The responder's line.\n"))
         self.assertEqual(done.returncode, 0, done.stderr)

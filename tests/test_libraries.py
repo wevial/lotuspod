@@ -4,7 +4,7 @@ import hashlib
 import json
 from pathlib import Path
 
-from lotuspod import libraries
+from lotuspod import core, libraries, render
 from tests.test_manifest_v2 import TempDirTestCase, cli, run_cli
 from tests.test_widgets import Elements
 from tests.test_page_policy import directives, read_page
@@ -34,7 +34,7 @@ class LibraryTests(TempDirTestCase):
             self.assertLess(document.index(lib.url + '"'), document.index((Path(cli.__file__).parent / '_theme/widget-frame.js').read_text()))
         policy = directives(read_page(document).policies[0])
         self.assertEqual(policy['script-src'],
-                         [cli.script_hash(s) for s in cli.collect_scripts(document).inline]
+                         [core.script_hash(s) for s in core.collect_scripts(document).inline]
                          + [lib.url for lib in expected])
         self.assertEqual(policy['connect-src'], ["'none'"])
 
@@ -59,11 +59,11 @@ class LibraryTests(TempDirTestCase):
         self.assert_libraries(document, ['mermaid'])
         page = (self.out_dir / 'charts.html').read_text()
         page_sources = directives(read_page(page).policies[0])['script-src']
-        self.assertIn(cli.MERMAID_DIR, page_sources)
+        self.assertIn(render.MERMAID_DIR, page_sources)
         for library in libraries.LIBRARIES.values():
             self.assertNotIn(library.url, page_sources)
         widget_sources = directives(read_page(document).policies[0])['script-src']
-        self.assertNotIn(cli.MERMAID_DIR, widget_sources)
+        self.assertNotIn(render.MERMAID_DIR, widget_sources)
 
     def test_duplicate_and_transitive_library_loads_once(self):
         rc, _, err = self.publish('# Charts\n```html live d3 plot d3 title="Dots"\nx\n```')

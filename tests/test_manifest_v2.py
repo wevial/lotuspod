@@ -42,7 +42,7 @@ from unittest import mock
 SRC_DIR = Path(__file__).resolve().parents[1] / "src"
 sys.path.insert(0, str(SRC_DIR))
 
-from lotuspod import cli  # noqa: E402
+from lotuspod import cli, core, render, sections, serve_files  # noqa: E402
 from tests import history  # noqa: E402
 
 
@@ -118,7 +118,7 @@ def render_updated(out_dir: Path, name: str, date: str, updated: str) -> None:
     ])
     args.updated = updated
     with redirect_stdout(io.StringIO()):
-        if cli.cmd_render(args) != 0:
+        if render.cmd_render(args) != 0:
             raise AssertionError(f"render {name} failed")
 
 
@@ -127,7 +127,7 @@ _STYLESHEET_LINK = re.compile(r'<link rel="stylesheet" href="lotuspod\.css\?v=([
 
 def served_css() -> str:
     """The stylesheet serve answers: its theme sources, joined."""
-    return cli.theme_file_bytes("lotuspod.css").decode("utf-8")
+    return core.theme_file_bytes("lotuspod.css").decode("utf-8")
 
 
 def stylesheet_hash(page: str) -> str:
@@ -160,7 +160,7 @@ class ExtractVisibilityTests(TempDirTestCase):
     """The fail-closed primitive every listing and the server rely on."""
 
     def assertVisibility(self, page_html: str, expected: bool) -> None:
-        self.assertEqual(cli.extract_visibility(page_html), expected)
+        self.assertEqual(core.extract_visibility(page_html), expected)
 
     def test_exact_true_is_visible(self):
         self.assertVisibility('<meta name="lotuspod:visible" content="true">', True)
@@ -276,7 +276,7 @@ class ArtifactHeaderTests(TempDirTestCase):
         )
         page = (self.out_dir / "ep-002.html").read_text(encoding="utf-8")
         self.assertEqual(
-            cli.extract_meta(page, "ep-002"),
+            core.extract_meta(page, "ep-002"),
             {
                 "file": "ep-002.html",
                 "title": "Ep-002",
@@ -315,8 +315,26 @@ class ArtifactHeaderTests(TempDirTestCase):
                 page = (self.out_dir / "stamped.html").read_text(encoding="utf-8")
                 self.assertIn(header, page)
                 self.assertIn(f'<meta name="lotuspod:updated" content="{updated}">', page)
-                self.assertEqual(cli.extract_meta(page, "stamped")["date"], "2026-09-01")
-                self.assertEqual(cli.extract_meta(page, "stamped")["updated"], updated)
+                self.assertEqual(core.extract_meta(page, "stamped")["date"], "2026-09-01")
+                self.assertEqual(core.extract_meta(page, "stamped")["updated"], updated)
+
+
+def previous_theme(out_dir: Path, commit: str) -> Path:
+    """A stand-in for the package's theme files, under out_dir, holding the
+    stylesheet and the tokens as they were at commit and today's other
+    served files, which the copy step needs present, and the page its head's
+    theme script."""
+    repo = Path(__file__).resolve().parent.parent
+    previous = out_dir / "previous-theme"
+    for filename, now in (("lotuspod.css", "_theme"), ("tokens.json", "core/theme")):
+        text = history.show(commit, f"src/lotuspod/_theme/{filename}", repo=repo)
+        (previous / now).mkdir(parents=True)
+        (previous / now / filename).write_text(text, encoding="utf-8")
+    for filename in ("favicon.svg", core.PAGE_SCRIPT, core.INDEX_SCRIPT,
+                     core.OLD_VERSION_SCRIPT, "theme-head.js"):
+        now = core.THEME_FILE_SOURCES.get(filename, f"_theme/{filename}")
+        (previous / now).write_bytes(core.theme_file_bytes(filename))
+    return previous
 
 
 class ArtifactTopbarTests(TempDirTestCase):
@@ -416,24 +434,15 @@ class ArtifactTopbarTests(TempDirTestCase):
 
     def test_markup_differs_from_before_only_in_the_theme_version(self):
         """KO-236 is CSS alone: the page markup is untouched."""
-        repo = Path(__file__).resolve().parent.parent
-        previous = self.out_dir / "previous-theme"
-        previous.mkdir()
-        for filename in ("lotuspod.css", "tokens.json"):
-            text = history.show("afec6b8", f"src/lotuspod/_theme/{filename}", repo=repo)
-            (previous / filename).write_text(text, encoding="utf-8")
         # afec6b8 predates the favicon (KO-244) and the page, index and old-version
-        # scripts; the copy step needs them present, and the page its head's
-        # theme script.
-        for filename in ("favicon.svg", cli.PAGE_SCRIPT, cli.INDEX_SCRIPT,
-                         cli.OLD_VERSION_SCRIPT, "theme-head.js"):
-            (previous / filename).write_bytes(cli.theme_file_bytes(filename))
+        # scripts.
+        previous = previous_theme(self.out_dir, "afec6b8")
 
         after = self.rendered()
         # The older stylesheet is the only stylesheet source: each file in
         # the older theme is served as it is.
-        with mock.patch.object(cli, "THEME_DIR", previous), \
-                mock.patch.object(cli, "THEME_SOURCES", {}):
+        with mock.patch.object(core, "THEME_ROOT", previous), \
+                mock.patch.object(core, "THEME_SOURCES", {}):
             before = self.rendered()
 
         old_hash, new_hash = stylesheet_hash(before), stylesheet_hash(after)
@@ -448,7 +457,7 @@ class ThemeCssSyncTests(TempDirTestCase):
     """A theme upgrade must reach directories rendered by an older version."""
 
     def packaged_css(self) -> bytes:
-        return cli.theme_file_bytes("lotuspod.css")
+        return core.theme_file_bytes("lotuspod.css")
 
     def css_copy(self) -> Path:
         return self.out_dir / "lotuspod.css"
@@ -483,7 +492,7 @@ class FaviconTests(TempDirTestCase):
     ICON_LINK = '<link rel="icon" type="image/svg+xml" href="favicon.svg">'
 
     def packaged_icon(self) -> bytes:
-        return (cli.THEME_DIR / "favicon.svg").read_bytes()
+        return (core.THEME_ROOT / "core/theme/favicon.svg").read_bytes()
 
     def test_theme_icon_is_the_lavender_lotus_glyph(self):
         svg = self.packaged_icon().decode("utf-8")
@@ -512,7 +521,7 @@ class FaviconTests(TempDirTestCase):
         index_html = (self.out_dir / "index.html").read_text(encoding="utf-8")
         self.assertIn(self.ICON_LINK, index_html.split("</head>", 1)[0])
         self.assertEqual((self.out_dir / "favicon.svg").read_bytes(), self.packaged_icon())
-        self.assertIn("favicon.svg", cli.serve_allow_list(self.out_dir))
+        self.assertIn("favicon.svg", serve_files.serve_allow_list(self.out_dir))
 
     def test_manifest_lands_the_icon_too(self):
         self.render("ep-001")
@@ -915,7 +924,7 @@ class ServeAllowListTests(TempDirTestCase):
     """serve v2 enforces the same visibility rule over HTTP names."""
 
     def allow_list(self) -> frozenset[str]:
-        return cli.serve_allow_list(self.out_dir)
+        return serve_files.serve_allow_list(self.out_dir)
 
     def test_only_visible_pages_plus_support_files(self):
         make_mixed_fixture(self.out_dir)
@@ -978,7 +987,7 @@ class ServeHandlerTests(TempDirTestCase):
         self.assertEqual(self.resolve(url_path, root), expected, url_path)
 
     def test_root_resolves_to_index(self):
-        self.assertEqual(self.resolve("/"), self.out_dir / cli.INDEX_FILE)
+        self.assertEqual(self.resolve("/"), self.out_dir / core.INDEX_FILE)
 
     def test_allow_listed_visible_page_resolves_to_itself(self):
         make_mixed_fixture(self.out_dir)
@@ -986,9 +995,9 @@ class ServeHandlerTests(TempDirTestCase):
 
     def test_never_files_on_disk_resolve_to_deny_sentinel(self):
         make_mixed_fixture(self.out_dir)
-        (self.out_dir / cli.MANIFEST_FILE).write_text("{}", encoding="utf-8")
+        (self.out_dir / core.MANIFEST_FILE).write_text("{}", encoding="utf-8")
         (self.out_dir / "FINDINGS.md").write_text("findings", encoding="utf-8")
-        self.assertDenied(f"/{cli.MANIFEST_FILE}")
+        self.assertDenied(f"/{core.MANIFEST_FILE}")
         self.assertDenied("/FINDINGS.md")
 
     def test_stray_file_denied(self):
@@ -1330,8 +1339,8 @@ class OutlineTests(TempDirTestCase):
         built from them - leaving the page a body with no outline at all."""
         # Sections fold only on a page with an outline; left unwrapped here.
         with mock.patch.object(
-            cli.sections, "wrap_sections",
-            lambda body: (body, False, cli.unit_digest(body)),
+            sections, "wrap_sections",
+            lambda body: (body, False, core.unit_digest(body)),
         ):
             with_ids = self.rendered(self.TWO_H2)
         opted_out = self.rendered(self.TWO_H2, "--no-outline")
@@ -1344,8 +1353,8 @@ class OutlineTests(TempDirTestCase):
             "<h2>B", '<h2 id="b">B'
         )
         without_nav = without_nav.replace(
-            f'data-intro-digest="{cli.unit_digest(body_with_ids)}"',
-            f'data-intro-digest="{cli.unit_digest(self.TWO_H2)}"',
+            f'data-intro-digest="{core.unit_digest(body_with_ids)}"',
+            f'data-intro-digest="{core.unit_digest(self.TWO_H2)}"',
         )
         self.assertEqual(
             opted_out,
@@ -1354,7 +1363,7 @@ class OutlineTests(TempDirTestCase):
 
     def test_outline_reaches_the_template_context(self):
         with mock.patch.object(
-            cli, "render_template", wraps=cli.render_template
+            cli, "render_template", wraps=core.render_template
         ) as render_template:
             self.rendered(self.TWO_H2)
         context = render_template.call_args.args[0]
@@ -1365,7 +1374,7 @@ class OutlineTests(TempDirTestCase):
 
     def test_no_outline_passes_an_empty_outline(self):
         with mock.patch.object(
-            cli, "render_template", wraps=cli.render_template
+            cli, "render_template", wraps=core.render_template
         ) as render_template:
             self.rendered(self.TWO_H2, "--no-outline")
         self.assertEqual(render_template.call_args.args[0]["outline"], [])
@@ -1445,13 +1454,13 @@ class OutlineMarkupTests(TempDirTestCase):
                 self.assertNotIn("artifact-outline", page)
 
     def test_ids_and_text_are_escaped(self):
-        markup = cli.outline_html([{"id": 'a"b', "text": "Tom & <Jerry>"}])
+        markup = render.outline_html([{"id": 'a"b', "text": "Tom & <Jerry>"}])
         self.assertIn(
             '<a href="#a&quot;b">Tom &amp; &lt;Jerry&gt;</a>', markup
         )
 
     def test_empty_outline_renders_nothing(self):
-        self.assertEqual(cli.outline_html([]), "")
+        self.assertEqual(render.outline_html([]), "")
 
 
 class MermaidTests(TempDirTestCase):
@@ -1468,7 +1477,7 @@ class MermaidTests(TempDirTestCase):
 
     def test_a_diagram_block_loads_pinned_mermaid_in_the_lotus_palette(self):
         page = self.rendered(self.BODY)
-        tokens = json.loads((cli.THEME_DIR / "tokens.json").read_text(encoding="utf-8"))
+        tokens = json.loads((core.THEME_ROOT / core.TOKENS_SOURCE).read_text(encoding="utf-8"))
         scripts = re.findall(r'<script type="module">.*?</script>', page, re.DOTALL)
         self.assertEqual(len(scripts), 1)
         script = scripts[0]
@@ -1491,10 +1500,10 @@ class MermaidTests(TempDirTestCase):
             '<pre class="mermaid">flowchart LR\n'
             'a["<h2>Alpha</h2>"] --> b["<h2>Beta</h2>"]</pre>'
         )
-        out, outline = cli.outline_body(diagram)
+        out, outline = render.outline_body(diagram)
         self.assertEqual((out, outline), (diagram, []))
         body = f"<h2>One</h2>{diagram}<h2>Two</h2>"
-        out, outline = cli.outline_body(body)
+        out, outline = render.outline_body(body)
         self.assertIn(diagram, out)
         self.assertEqual([entry["text"] for entry in outline], ["One", "Two"])
         self.assertIn(diagram, self.rendered(body))
@@ -1505,17 +1514,17 @@ class MermaidTests(TempDirTestCase):
         # The head's theme script, then the page script, which folds the two
         # sections.
         self.assertEqual(re.findall(r"<script[^>]*>", page),
-                         ["<script>", f'<script src="{cli.PAGE_SCRIPT}?v={stylesheet_hash(page)}" defer>'])
+                         ["<script>", f'<script src="{core.PAGE_SCRIPT}?v={stylesheet_hash(page)}" defer>'])
 
     def test_the_flag_and_palette_reach_the_template_context(self):
         with mock.patch.object(
-            cli, "render_template", wraps=cli.render_template
+            cli, "render_template", wraps=core.render_template
         ) as render_template:
             self.rendered(self.BODY)
         context = render_template.call_args.args[0]
         self.assertTrue(context["mermaid"])
         sets = json.loads(context["mermaid_theme_variables"])
-        tokens = json.loads((cli.THEME_DIR / "tokens.json").read_text(encoding="utf-8"))
+        tokens = json.loads((core.THEME_ROOT / core.TOKENS_SOURCE).read_text(encoding="utf-8"))
         self.assertEqual(sorted(sets), ["dawn", "night"])
         for name, colors in (("night", tokens["colors"]), ("dawn", tokens["dawn"]["colors"])):
             with self.subTest(set=name):
@@ -1529,10 +1538,10 @@ class MermaidTests(TempDirTestCase):
                 self.assertEqual(variables["fontFamily"], tokens["fonts"]["mono"])
 
     def test_detection_needs_a_pre_with_the_mermaid_class(self):
-        self.assertTrue(cli.has_mermaid_block('<pre class="code mermaid">x</pre>'))
-        self.assertFalse(cli.has_mermaid_block("<p>mermaid</p>"))
-        self.assertFalse(cli.has_mermaid_block('<div class="mermaid">x</div>'))
-        self.assertFalse(cli.has_mermaid_block('<pre class="mermaids">x</pre>'))
+        self.assertTrue(render.has_mermaid_block('<pre class="code mermaid">x</pre>'))
+        self.assertFalse(render.has_mermaid_block("<p>mermaid</p>"))
+        self.assertFalse(render.has_mermaid_block('<div class="mermaid">x</div>'))
+        self.assertFalse(render.has_mermaid_block('<pre class="mermaids">x</pre>'))
 
     def test_the_theme_styles_the_diagram_block(self):
         css = served_css()
@@ -1550,7 +1559,7 @@ class TemplateSectionTests(unittest.TestCase):
     def render(self, template: str, context: dict) -> str:
         path = Path(self.enterContext(tempfile.TemporaryDirectory())) / "t.html"
         path.write_text(template, encoding="utf-8")
-        return cli.render_template(context, path)
+        return core.render_template(context, path)
 
     def test_section_is_kept_and_filled_when_the_value_is_present(self):
         self.assertEqual(
@@ -1577,7 +1586,7 @@ class TemplateSectionTests(unittest.TestCase):
 
     def test_the_artifact_template_carries_the_outline_markup(self):
         """The nav lives in the theme's template, not in a Python string."""
-        template = cli.TEMPLATE_PATH.read_text(encoding="utf-8")
+        template = core.TEMPLATE_PATH.read_text(encoding="utf-8")
         self.assertIn('<nav class="artifact-outline"', template)
         self.assertIn("{{#outline}}", template)
         self.assertIn("{{/outline}}", template)
@@ -1688,25 +1697,15 @@ class OutlineSideRenderTests(TempDirTestCase):
         return (self.out_dir / "ep-001.html").read_text(encoding="utf-8")
 
     def test_markup_differs_from_before_only_in_the_theme_version(self):
-        repo = Path(__file__).resolve().parent.parent
-        previous = self.out_dir / "previous-theme"
-        previous.mkdir()
-        for filename in ("lotuspod.css", "tokens.json"):
-            text = history.show(self.PREVIOUS_COMMIT, f"src/lotuspod/_theme/{filename}",
-                                repo=repo)
-            (previous / filename).write_text(text, encoding="utf-8")
         # 175406f predates the favicon (KO-244) and the page, index and old-version
-        # scripts; the copy step needs them present, and the page its head's
-        # theme script.
-        for filename in ("favicon.svg", cli.PAGE_SCRIPT, cli.INDEX_SCRIPT,
-                         cli.OLD_VERSION_SCRIPT, "theme-head.js"):
-            (previous / filename).write_bytes(cli.theme_file_bytes(filename))
+        # scripts.
+        previous = previous_theme(self.out_dir, self.PREVIOUS_COMMIT)
 
         after = self.rendered()
         # The older stylesheet is the only stylesheet source: each file in
         # the older theme is served as it is.
-        with mock.patch.object(cli, "THEME_DIR", previous), \
-                mock.patch.object(cli, "THEME_SOURCES", {}):
+        with mock.patch.object(core, "THEME_ROOT", previous), \
+                mock.patch.object(core, "THEME_SOURCES", {}):
             before = self.rendered()
 
         old_hash, new_hash = stylesheet_hash(before), stylesheet_hash(after)
@@ -1722,12 +1721,12 @@ class OutlineBodyTests(unittest.TestCase):
 
     def test_markup_is_spliced_not_reserialized(self):
         body = '<h2 class="x"\n  data-y=\'1\'>Multi\n  Head!</h2><h2>Next</h2>'
-        out, outline = cli.outline_body(body)
+        out, outline = render.outline_body(body)
         self.assertIn('<h2 id="multi-head" class="x"\n  data-y=\'1\'>', out)
         self.assertEqual(outline[0], {"id": "multi-head", "text": "Multi Head!"})
 
     def test_nested_markup_and_entities_flatten_into_the_text(self):
-        out, outline = cli.outline_body(
+        out, outline = render.outline_body(
             "<h2><em>Deep</em> Dive</h2><h2>Salt &amp; Pepper</h2>"
         )
         self.assertEqual(
@@ -1741,35 +1740,35 @@ class OutlineBodyTests(unittest.TestCase):
 
     def test_other_headings_are_untouched(self):
         body = "<h1>Title</h1><h2>A</h2><h3>a1</h3><h2>B</h2>"
-        out, _ = cli.outline_body(body)
+        out, _ = render.outline_body(body)
         self.assertIn("<h1>Title</h1>", out)
         self.assertIn("<h3>a1</h3>", out)
 
     def test_bodies_below_the_threshold_come_back_unchanged(self):
         for body in ("", "<p>x</p>", "<h2>Only</h2>"):
             with self.subTest(body=body):
-                self.assertEqual(cli.outline_body(body), (body, []))
+                self.assertEqual(render.outline_body(body), (body, []))
 
     def test_ids_on_other_elements_are_reserved_too(self):
         """An anchor that lands on a non-heading element is a broken anchor."""
         body = '<div id="notes">n</div><h2>Notes</h2><h2>Other</h2>'
-        out, outline = cli.outline_body(body)
+        out, outline = render.outline_body(body)
         self.assertIn('<h2 id="notes-2">Notes</h2>', out)
         self.assertEqual(outline[0], {"id": "notes-2", "text": "Notes"})
-        self.assertEqual(cli.outline_body(out), (out, outline))
+        self.assertEqual(render.outline_body(out), (out, outline))
 
     def test_running_twice_is_a_fixed_point(self):
-        once, outline = cli.outline_body("<h2>A</h2><h2>B</h2>")
-        self.assertEqual(cli.outline_body(once), (once, outline))
+        once, outline = render.outline_body("<h2>A</h2><h2>B</h2>")
+        self.assertEqual(render.outline_body(once), (once, outline))
 
     def test_unsluggable_headings_fall_back_to_section(self):
-        _, outline = cli.outline_body("<h2>!!!</h2><h2>???</h2>")
+        _, outline = render.outline_body("<h2>!!!</h2><h2>???</h2>")
         self.assertEqual([entry["id"] for entry in outline], ["section", "section-2"])
 
     def test_slugify_rule(self):
-        self.assertEqual(cli.slugify("  Hello, World!  "), "hello-world")
-        self.assertEqual(cli.slugify("Episode 2 — Recap"), "episode-2-recap")
-        self.assertEqual(cli.slugify("***"), "section")
+        self.assertEqual(core.slugify("  Hello, World!  "), "hello-world")
+        self.assertEqual(core.slugify("Episode 2 — Recap"), "episode-2-recap")
+        self.assertEqual(core.slugify("***"), "section")
 
 
 class ModuleEntryPointTests(unittest.TestCase):
@@ -1827,7 +1826,7 @@ class ReportVariantTests(TempDirTestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.css = served_css()
-        cls.tokens = cli.load_tokens()
+        cls.tokens = core.load_tokens()
 
     def rendered(self, *extra: str) -> str:
         rc, _, err = self.render(
@@ -1881,20 +1880,20 @@ class ReportVariantTests(TempDirTestCase):
         )
 
     def test_variant_class_helper_matches_the_flag(self):
-        self.assertEqual(cli.variant_class("article"), "")
-        self.assertEqual(cli.variant_class("report"), " artifact--report")
+        self.assertEqual(render.variant_class("article"), "")
+        self.assertEqual(render.variant_class("report"), " artifact--report")
         with self.assertRaises(KeyError):
-            cli.variant_class("poster")
+            render.variant_class("poster")
 
     def test_report_ruleset_is_scoped_and_in_the_one_stylesheet(self):
         """One lotuspod.css is what serve allow-lists - no second sheet."""
         self.assertIn(".artifact--report", self.css)
-        cli.sync_theme_css(self.out_dir)
+        core.sync_theme_css(self.out_dir)
         self.assertEqual(sorted(p.name for p in self.out_dir.glob("*.css")), ["lotuspod.css"])
         self.assertEqual(sorted(p.name for p in self.out_dir.glob("*.js")),
-                         sorted([cli.PAGE_SCRIPT, cli.INDEX_SCRIPT, cli.OLD_VERSION_SCRIPT]))
+                         sorted([core.PAGE_SCRIPT, core.INDEX_SCRIPT, core.OLD_VERSION_SCRIPT]))
         self.assertEqual(
-            cli.serve_allow_list(self.out_dir),
+            serve_files.serve_allow_list(self.out_dir),
             {"index.html", "lotuspod.css", "favicon.svg", "lotuspod-page.js",
              "lotuspod-index.js", "lotuspod-old-version.js"},
         )

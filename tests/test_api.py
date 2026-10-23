@@ -26,7 +26,7 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from lotuspod import access, api, cli, db, decisions, machine, media, routing  # noqa: E402
+from lotuspod import access, api, cli, core, decisions, machine, media, routing, store  # noqa: E402
 from tests import access_keys as keys  # noqa: E402
 
 HOST = "127.0.0.1"
@@ -209,7 +209,7 @@ class ApiTestCase(unittest.TestCase):
         return self.ask("POST", "/api/comments", {"page": "plan", **body})
 
     def page_revision(self, page: str = "plan") -> str:
-        return cli.page_revision(self.out_dir, page)
+        return core.page_revision(self.out_dir, page)
 
     def assertEmpty(self, page: str = "plan") -> None:
         self.assertEqual(self.ask("GET", f"/api/answers?page={page}"),
@@ -260,7 +260,7 @@ class AnswerTests(ApiTestCase):
                 self.assertNotIn("asked", body)
 
     def test_an_answer_stored_without_its_words_reads_them_as_null(self):
-        stored = db.Database(self.db_path).add_answer(
+        stored = store.db.Database(self.db_path).add_answer(
             page="plan", question="decision-2", version=self.version("decision-2"),
             choice="no", note="", revision=self.revision, actor=SHOWN,
         )
@@ -474,7 +474,7 @@ class CommentTests(ApiTestCase):
             self.ask("GET", "/api/comments?page=plan"),
             (200, {"page": "plan", "revision": self.revision,
                    "threads": [{"root": root, "replies": [reply, deeper],
-                                "resolution": db.UNRESOLVED}],
+                                "resolution": store.db.UNRESOLVED}],
                    "unread": [], "maxImageBytes": media.DEFAULT_MAX_BYTES}),
         )
 
@@ -484,7 +484,7 @@ class CommentTests(ApiTestCase):
                                    revision=self.revision)
         self.assertEqual(status, 201)
         self.assertEqual((row["quote"], row["revision"]), (quote, self.revision))
-        stored = db.Database(self.db_path).comment(row["id"])
+        stored = store.db.Database(self.db_path).comment(row["id"])
         self.assertEqual((stored["quote"], stored["revision"]), (quote, self.revision))
 
         self.assertNotEqual(self.revision, "0000000000ff")
@@ -511,13 +511,13 @@ class CommentTests(ApiTestCase):
                                  (400, {"error": "invalid_body"}))
         _, got = self.ask("GET", "/api/comments?page=plan")
         self.assertEqual(got["threads"],
-                         [{"root": root, "replies": [], "resolution": db.UNRESOLVED}])
+                         [{"root": root, "replies": [], "resolution": store.db.UNRESOLVED}])
 
     def test_threads_come_oldest_first_and_gone_sections_have_no_title(self):
         _, goals = self.comment(section="goals", text="Which goal first?")
         # A thread on a section an earlier revision had: the route takes new
         # threads only on the page's own boxes.
-        elsewhere = db.Database(self.db_path).add_comment(
+        elsewhere = store.db.Database(self.db_path).add_comment(
             page="plan", section="nowhere", section_title="Nowhere", revision="0" * 12,
             text="A section not on the page.", quote=None, actor=ACTOR,
         )
@@ -529,16 +529,16 @@ class CommentTests(ApiTestCase):
         self.assertIsNone(reply["quote"])
         _, got = self.ask("GET", "/api/comments?page=plan")
         self.assertEqual(got["threads"],
-                         [{"root": goals, "replies": [], "resolution": db.UNRESOLVED},
+                         [{"root": goals, "replies": [], "resolution": store.db.UNRESOLVED},
                           {"root": elsewhere, "replies": [reply],
-                           "resolution": db.UNRESOLVED}])
+                           "resolution": store.db.UNRESOLVED}])
 
 
     def publish_owned(self, name: str) -> None:
         """Publish PLAN as name, owned by hermes."""
         token = self.work / "hermes.token"
         if not token.exists():
-            machine.create_credential(db.Database(self.db_path), "desk", ["hermes"],
+            machine.create_credential(store.db.Database(self.db_path), "desk", ["hermes"],
                                       ["publish"], token)
         source = self.work / f"{name}.md"
         source.write_text(PLAN, encoding="utf-8")
@@ -567,7 +567,7 @@ class CommentTests(ApiTestCase):
             self.ask("GET", "/api/comments?page=owned"),
             (200, {"page": "owned", "revision": revision,
                    "threads": [{"root": root, "replies": [reply],
-                                "resolution": db.UNRESOLVED}],
+                                "resolution": store.db.UNRESOLVED}],
                    "unread": [], "maxImageBytes": media.DEFAULT_MAX_BYTES}),
         )
 
@@ -616,7 +616,7 @@ class DecisionThreadTests(ApiTestCase):
                 self.assertEqual(root["revision"], self.page_revision(page))
                 _, got = self.ask("GET", f"/api/comments?page={page}")
                 self.assertEqual(got["threads"],
-                                 [{"root": root, "replies": [], "resolution": db.UNRESOLVED}])
+                                 [{"root": root, "replies": [], "resolution": store.db.UNRESOLVED}])
                 self.assertEqual(self.ask("GET", f"/api/answers?page={page}"),
                                  (200, {"page": page, "questions": {}}))
 
@@ -634,9 +634,9 @@ class DecisionThreadTests(ApiTestCase):
             self.assertNotIn("question", row)
         _, got = self.ask("GET", "/api/comments?page=plan")
         self.assertEqual(got["threads"],
-                         [{"root": root, "replies": [reply], "resolution": db.UNRESOLVED},
-                          {"root": section, "replies": [], "resolution": db.UNRESOLVED},
-                          {"root": passage, "replies": [], "resolution": db.UNRESOLVED}])
+                         [{"root": root, "replies": [reply], "resolution": store.db.UNRESOLVED},
+                          {"root": section, "replies": [], "resolution": store.db.UNRESOLVED},
+                          {"root": passage, "replies": [], "resolution": store.db.UNRESOLVED}])
         for thread in got["threads"][1:]:
             self.assertNotIn("question", thread["root"])
 
@@ -687,7 +687,7 @@ class NoteThreadTests(ApiTestCase):
              "state": "unavailable", "owner": "responder"})
         self.assertEqual(answer["note"], "  Not before March.\n")
         self.assertEqual(self.threads(),
-                         [{"root": comment, "replies": [], "resolution": db.UNRESOLVED}])
+                         [{"root": comment, "replies": [], "resolution": store.db.UNRESOLVED}])
         _, got = self.ask("GET", "/api/answers?page=plan")
         self.assertNotIn("comment", got["questions"]["decision-1"]["current"])
 
@@ -705,7 +705,7 @@ class NoteThreadTests(ApiTestCase):
         self.assertEqual(status, 201, second)
         self.assertNotIn("comment", second)
         self.assertEqual(self.threads(), [{"root": first["comment"], "replies": [],
-                                           "resolution": db.UNRESOLVED}])
+                                           "resolution": store.db.UNRESOLVED}])
 
     def test_a_later_note_is_a_reply_in_the_same_thread(self):
         _, first = self.answer(choice="yes", note="First.")
@@ -786,7 +786,7 @@ class ResolutionTests(ApiTestCase):
 
     def test_the_reader_resolves_and_reopens_a_thread(self):
         _, root = self.comment(section="risks", text="What if it does?")
-        self.assertEqual(self.resolution(root["id"]), db.UNRESOLVED)
+        self.assertEqual(self.resolution(root["id"]), store.db.UNRESOLVED)
 
         status, got = self.resolve(root["id"])
         self.assertEqual(status, 200)
@@ -830,7 +830,7 @@ class ResolutionTests(ApiTestCase):
                 self.assertEqual(self.ask("POST", "/api/comments", sent),
                                  (400, {"error": "invalid_body"}))
         self.assertEqual(self.stored(), [])
-        self.assertEqual(self.resolution(root["id"]), db.UNRESOLVED)
+        self.assertEqual(self.resolution(root["id"]), store.db.UNRESOLVED)
 
     def test_a_resolution_is_refused_as_every_post_is(self):
         _, root = self.comment(section="risks", text="A thread.")
@@ -921,7 +921,7 @@ class ReaderNameTests(ApiTestCase):
         self.assertEqual(thread["resolution"]["actor"], SHOWN)
         self.assertNotIn("@example.com", json.dumps(got))
         # The database keeps the address.
-        self.assertEqual(db.Database(self.db_path).comment(root["id"])["actor"], ACTOR)
+        self.assertEqual(store.db.Database(self.db_path).comment(root["id"])["actor"], ACTOR)
 
     def test_answers_name_the_reader_without_their_address(self):
         _, first = self.answer(choice="yes")
@@ -1336,7 +1336,7 @@ class CommentImageTests(MediaTestCase):
         status, root = self.comment(section="goals", text="", images=[frog["name"]])
         self.assertEqual(status, 201, root)
         self.assertEqual(root["images"], [frog])
-        self.assertEqual(db.Database(self.db_path).comment(root["id"])["images"], [frog])
+        self.assertEqual(store.db.Database(self.db_path).comment(root["id"])["images"], [frog])
 
     def test_the_reader_never_sees_where_an_image_is_kept(self):
         _, fish = self.upload(JPEG, "image/jpeg")
@@ -1386,7 +1386,7 @@ class CommentImageTests(MediaTestCase):
         self.assertEqual(self.comment(section="risks", text=""), (400, {"error": "invalid_body"}))
         _, got = self.ask("GET", "/api/comments?page=plan")
         self.assertEqual(got["threads"],
-                         [{"root": root, "replies": [], "resolution": db.UNRESOLVED}])
+                         [{"root": root, "replies": [], "resolution": store.db.UNRESOLVED}])
 
 
 class SchemaTests(ApiTestCase):
@@ -1394,8 +1394,8 @@ class SchemaTests(ApiTestCase):
         self.stop()
         path = self.work / "before.sqlite3"
         conn = sqlite3.connect(str(path))
-        for step in range(1, db.SCHEMA_VERSION):
-            for statement in db._SCHEMA[step]:
+        for step in range(1, store.db.SCHEMA_VERSION):
+            for statement in store.db._SCHEMA[step]:
                 conn.execute(statement)
         conn.execute(
             "INSERT INTO comments (page, section, section_title, revision, parent, text,"
@@ -1403,7 +1403,7 @@ class SchemaTests(ApiTestCase):
             " 'Kept from before.', NULL, ?, '2026-01-02T03:04:05.000Z', 'pending')",
             (self.revision, json.dumps(ACTOR)),
         )
-        conn.execute(f"PRAGMA user_version = {db.SCHEMA_VERSION - 1}")
+        conn.execute(f"PRAGMA user_version = {store.db.SCHEMA_VERSION - 1}")
         conn.commit()
         conn.close()
         self.start(path)
@@ -1416,7 +1416,7 @@ class SchemaTests(ApiTestCase):
         conn = sqlite3.connect(str(path))
         try:
             self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0],
-                             db.SCHEMA_VERSION)
+                             store.db.SCHEMA_VERSION)
         finally:
             conn.close()
 
@@ -1424,8 +1424,8 @@ class SchemaTests(ApiTestCase):
         self.stop()
         path = self.work / "before.sqlite3"
         conn = sqlite3.connect(str(path))
-        for step in range(1, db.SCHEMA_VERSION):
-            for statement in db._SCHEMA[step]:
+        for step in range(1, store.db.SCHEMA_VERSION):
+            for statement in store.db._SCHEMA[step]:
                 conn.execute(statement)
         conn.execute(
             "INSERT INTO answers (page, question, version, choice, note, revision, actor,"
@@ -1434,7 +1434,7 @@ class SchemaTests(ApiTestCase):
             " NULL, 'Freeze the pond?', 'No')",
             (self.version(), self.revision, json.dumps(ACTOR)),
         )
-        conn.execute(f"PRAGMA user_version = {db.SCHEMA_VERSION - 1}")
+        conn.execute(f"PRAGMA user_version = {store.db.SCHEMA_VERSION - 1}")
         conn.commit()
         conn.close()
         self.start(path)
@@ -1450,7 +1450,7 @@ class SchemaTests(ApiTestCase):
         conn = sqlite3.connect(str(path))
         try:
             self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0],
-                             db.SCHEMA_VERSION)
+                             store.db.SCHEMA_VERSION)
         finally:
             conn.close()
 

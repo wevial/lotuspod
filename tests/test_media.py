@@ -30,7 +30,8 @@ from pathlib import Path
 SRC_DIR = Path(__file__).resolve().parents[1] / "src"
 sys.path.insert(0, str(SRC_DIR))
 
-from lotuspod import cli, db, media  # noqa: E402
+from lotuspod import cli, media  # noqa: E402
+from lotuspod.store import db  # noqa: E402
 
 FIXTURES = Path(__file__).parent / "fixtures" / "media"
 SIZE_IN_NAME = re.compile(r"(\d+)x(\d+)")

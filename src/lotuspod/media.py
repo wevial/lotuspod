@@ -26,8 +26,9 @@ import zlib
 from dataclasses import dataclass
 from pathlib import Path
 
+from lotuspod.core import URL_PREFIX, write_atomic
+
 MEDIA_DIR_NAME = "lotuspod-media"
-URL_PREFIX = "/media/"
 DEFAULT_MAX_BYTES = 10 * 1024 * 1024
 
 # The extension a stored image takes, and the Content-Type serve answers it
@@ -328,10 +329,6 @@ def _exif_orientation(tiff: bytes) -> int:
 
 def store(directory: Path, image: Image) -> Path:
     """Keep image in directory under its name; storing it again writes nothing."""
-    # Imported here: cli imports this module, so this one must not need cli
-    # while it is first imported.
-    from lotuspod.cli import write_atomic
-
     directory.mkdir(parents=True, exist_ok=True)
     path = directory / image.name
     if not path.is_file() or path.is_symlink():

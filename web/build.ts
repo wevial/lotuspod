@@ -3,7 +3,7 @@
 // alone), after one marker line naming the source. Beside them it bundles the
 // islands entry, web/src/islands/main.tsx, with its imports and Preact into
 // src/lotuspod/_theme/js/islands.js, after its marker line. The order the
-// scripts are served in stays in THEME_SOURCES in src/lotuspod/cli.py, which
+// scripts are served in stays in THEME_SOURCES in src/lotuspod/core/__init__.py, which
 // joins them.
 //
 //   bun build.ts [WEB_DIR]           build
@@ -152,7 +152,7 @@ export async function build(webDir: string): Promise<BuildResult> {
 // Each JS file under the output directory, at any depth, built or written by
 // hand, that does not parse on its own, with Bun's parse error: a source is a
 // complete script, and render adds the closure some served scripts share
-// (THEME_CLOSURES in src/lotuspod/cli.py).
+// (THEME_CLOSURES in src/lotuspod/core/__init__.py).
 export function unparsed(dir: string): string[] {
   const transpiler = new Bun.Transpiler({ loader: "js", target: "browser" });
   const problems: string[] = [];

@@ -319,13 +319,14 @@ class ServedSiteTests(CaptureSiteTestCase):
 
     def fetch_on(self, day: str, *paths: str) -> dict:
         # Move the CLI's clock from outside: a sitecustomize swaps the
-        # datetime module cli.py reads for one whose today() is `day`.
+        # datetime module render, publish and site_index read for one whose
+        # today() is `day`.
         hook = self.work / f"clock-{day}"
         hook.mkdir()
         (hook / "sitecustomize.py").write_text(
             "import datetime, sys, types\n"
             f"sys.path.insert(0, {str(REPO_ROOT / 'src')!r})\n"
-            "from lotuspod import cli\n"
+            "from lotuspod import publish, render, site_index\n"
             "class _Day(datetime.date):\n"
             "    @classmethod\n"
             "    def today(cls):\n"
@@ -333,7 +334,7 @@ class ServedSiteTests(CaptureSiteTestCase):
             "clock = types.ModuleType('datetime')\n"
             "clock.__dict__.update(vars(datetime))\n"
             "clock.date = _Day\n"
-            "cli._dt = clock\n",
+            "render._dt = publish._dt = site_index._dt = clock\n",
             encoding="utf-8",
         )
         env = dict(os.environ, TMPDIR=str(self.scratch), PYTHONPATH=str(hook))
@@ -477,7 +478,7 @@ class TeardownTests(CaptureSiteTestCase):
         )
         self.assertEqual(proc.returncode, 0, proc.stderr)
         self.assertEqual(self.record.read_bytes(),
-                         capture_site.cli.theme_file_bytes("lotuspod.css"))
+                         capture_site.core.theme_file_bytes("lotuspod.css"))
         self.assertFalse(packaged.exists())
 
     def test_no_command_exits_2_with_usage(self):

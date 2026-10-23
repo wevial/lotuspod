@@ -8,7 +8,7 @@ The expected hash is never computed here: it is read from the pages.
 
 Run from the repo root:
 
-    python -m unittest tests.test_theme_hash -v
+    python -m unittest tests.core.test_theme_hash -v
 """
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ from unittest import mock
 
 from tests.test_manifest_v2 import TempDirTestCase, run_cli, stylesheet_hash
 
-from lotuspod import cli  # after test_manifest_v2, which puts src/ on the path
+from lotuspod import cli, core  # after test_manifest_v2, which puts src/ on the path
 
 HASH = r"\A[0-9a-f]{12}\Z"
 BODY = "<h2>Alpha</h2><p>a</p><h2>Beta</h2><p>b</p>"
@@ -32,7 +32,7 @@ OLD_VERSION = "0.4.12"
 
 def script_hash(page: str) -> str:
     """The value a page's page script tag carries after ?v=."""
-    found = re.findall(rf'<script src="{re.escape(cli.PAGE_SCRIPT)}\?v=([^"]*)" defer>', page)
+    found = re.findall(rf'<script src="{re.escape(core.PAGE_SCRIPT)}\?v=([^"]*)" defer>', page)
     if len(found) != 1:
         raise AssertionError(f"expected one page script tag, found {len(found)}")
     return found[0]
@@ -47,7 +47,7 @@ class ThemeHashTestCase(TempDirTestCase):
 
     def theme_copy(self) -> Path:
         copy = Path(self.enterContext(tempfile.TemporaryDirectory())) / "theme"
-        shutil.copytree(cli.THEME_DIR, copy)
+        shutil.copytree(core.THEME_ROOT, copy, ignore=shutil.ignore_patterns("*.py", "__pycache__"))
         return copy
 
 
@@ -74,17 +74,17 @@ class AddressTests(ThemeHashTestCase):
 class ThemeEditTests(ThemeHashTestCase):
     def assert_edit_moves_the_address(self, filename: str) -> None:
         """Flip one byte of the served file filename's last source."""
-        source = cli.THEME_SOURCES[filename][-1]
+        source = core.THEME_SOURCES[filename][-1]
         unchanged = self.theme_copy()
-        with mock.patch.object(cli, "THEME_DIR", unchanged):
+        with mock.patch.object(core, "THEME_ROOT", unchanged):
             before = self.rendered("before")
         changed = self.theme_copy()
         edited = bytearray((changed / source).read_bytes())
         edited[-1] ^= 0x01
         (changed / source).write_bytes(bytes(edited))
-        with mock.patch.object(cli, "THEME_DIR", changed):
+        with mock.patch.object(core, "THEME_ROOT", changed):
             after = self.rendered("after")
-            data = cli.theme_file_bytes(filename)
+            data = core.theme_file_bytes(filename)
         self.assertIn(bytes(edited), data)
 
         for page in (before, after):
@@ -99,7 +99,7 @@ class ThemeEditTests(ThemeHashTestCase):
         self.assert_edit_moves_the_address("lotuspod.css")
 
     def test_one_byte_of_the_page_script_moves_the_address(self):
-        self.assert_edit_moves_the_address(cli.PAGE_SCRIPT)
+        self.assert_edit_moves_the_address(core.PAGE_SCRIPT)
 
 
 class OldAddressTests(ThemeHashTestCase):
@@ -123,10 +123,10 @@ class OldAddressTests(ThemeHashTestCase):
                 self.assertEqual(response.status, 200)
                 return response.read()
 
-        for filename in ("lotuspod.css", cli.PAGE_SCRIPT):
+        for filename in ("lotuspod.css", core.PAGE_SCRIPT):
             with self.subTest(filename=filename):
                 current = fetch(f"/{filename}?v={theme_hash}")
-                self.assertEqual(current, cli.theme_file_bytes(filename))
+                self.assertEqual(current, core.theme_file_bytes(filename))
                 self.assertEqual(fetch(f"/{filename}?v={OLD_VERSION}"), current)
 
 

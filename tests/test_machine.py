@@ -31,7 +31,8 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from lotuspod import cli, db, machine, media  # noqa: E402
+from lotuspod import agents, cli, core, machine, media  # noqa: E402
+from lotuspod.store import db  # noqa: E402
 from tests import access_keys as keys  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -410,27 +411,27 @@ class StaleSocketTests(MachineTestCase):
 class ClientOptionTests(MachineTestCase):
     def args(self, **values):
         parser = cli.argparse.ArgumentParser()
-        cli.add_agent_options(parser)
+        agents.add_agent_options(parser)
         argv = [f"--{key}={value}" for key, value in values.items()]
         return parser.parse_args(argv)
 
     def test_socket_comes_from_the_flag_then_the_config_then_the_default(self):
-        self.assertEqual(cli.agent_socket(self.args(socket="/x.sock")), Path("/x.sock"))
-        self.assertEqual(cli.agent_socket(self.args()),
-                         cli.DEFAULT_OUTPUT_DIR.parent / machine.SOCKET_NAME)
+        self.assertEqual(agents.agent_socket(self.args(socket="/x.sock")), Path("/x.sock"))
+        self.assertEqual(agents.agent_socket(self.args()),
+                         core.DEFAULT_OUTPUT_DIR.parent / machine.SOCKET_NAME)
         self.config.write_text("[agents]\nsocket = /run/l.sock\n", encoding="utf-8")
-        self.assertEqual(cli.agent_socket(self.args()), Path("/run/l.sock"))
+        self.assertEqual(agents.agent_socket(self.args()), Path("/run/l.sock"))
         self.assertEqual(cli.serve_socket_path(self.db_path, ""), Path("/run/l.sock"))
 
     def test_credential_comes_from_the_flag_then_the_environment(self):
         token = self.hermes()
         path = str(self.work / "hermes.token")
-        self.assertEqual(cli.agent_token(self.args(credential=path)), token)
+        self.assertEqual(agents.agent_token(self.args(credential=path)), token)
         with mock.patch.dict(os.environ, {machine.CREDENTIAL_ENV: path}):
-            self.assertEqual(cli.agent_token(self.args()), token)
+            self.assertEqual(agents.agent_token(self.args()), token)
         with mock.patch.dict(os.environ, {machine.CREDENTIAL_ENV: ""}), \
-                self.assertRaises(cli.ConfigError):
-            cli.agent_token(self.args())
+                self.assertRaises(core.ConfigError):
+            agents.agent_token(self.args())
 
 
 class ReadmeTests(unittest.TestCase):

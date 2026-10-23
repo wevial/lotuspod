@@ -10,7 +10,7 @@ import unittest
 from unittest import mock
 from pathlib import Path
 
-from lotuspod import access, archive, cli, events
+from lotuspod import access, archive, cli, core, events, site_index
 from tests import access_keys as keys
 
 
@@ -103,36 +103,36 @@ class EventsTest(unittest.TestCase):
         hub = self.start(poll=.02)
         self.render_pages(hub)
         subscription = hub.open()
-        original_index = (hub.out_dir / cli.INDEX_FILE).read_bytes()
-        rebuild = cli.cmd_index
+        original_index = (hub.out_dir / core.INDEX_FILE).read_bytes()
+        rebuild = site_index.cmd_index
 
         def paused_index(args):
             # Archive, like publish, replaces the manifest before rebuilding
             # the index while holding the publish lock.
             with self.assertRaises(queue.Empty):
                 subscription.get(timeout=.2)
-            self.assertEqual((hub.out_dir / cli.INDEX_FILE).read_bytes(), original_index)
+            self.assertEqual((hub.out_dir / core.INDEX_FILE).read_bytes(), original_index)
             return rebuild(args)
 
-        with mock.patch.object(cli, "cmd_index", side_effect=paused_index):
+        with mock.patch.object(site_index, "cmd_index", side_effect=paused_index):
             archive.set_archived(hub.out_dir, "pond", True)
         self.assertEqual(subscription.get(timeout=2), events.frame("publish", "pond"))
         self.assertEqual(subscription.get(timeout=2), events.frame("index", None))
-        self.assertNotEqual((hub.out_dir / cli.INDEX_FILE).read_bytes(), original_index)
+        self.assertNotEqual((hub.out_dir / core.INDEX_FILE).read_bytes(), original_index)
 
     def test_open_during_publish_and_close_while_locked(self):
         hub = self.start(poll=.02)
         self.render_pages(hub)
-        with cli.publish_lock(hub.out_dir):
+        with core.publish_lock(hub.out_dir):
             subscription = hub.open()
             with self.assertRaises(queue.Empty):
                 subscription.get(timeout=.1)
         self.assertEqual(subscription.get(timeout=2), events.frame("publish", "next"))
         self.assertEqual(subscription.get(timeout=2), events.frame("publish", "pond"))
         self.assertEqual(subscription.get(timeout=2), events.frame("index", None))
-        with cli.publish_lock(hub.out_dir):
-            cli.write_atomic(hub.out_dir / cli.MANIFEST_FILE,
-                             (hub.out_dir / cli.MANIFEST_FILE).read_bytes())
+        with core.publish_lock(hub.out_dir):
+            core.write_atomic(hub.out_dir / core.MANIFEST_FILE,
+                             (hub.out_dir / core.MANIFEST_FILE).read_bytes())
             with self.assertRaises(queue.Empty):
                 subscription.get(timeout=.1)
             closer = threading.Thread(target=hub.close, daemon=True)

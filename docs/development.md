@@ -20,7 +20,7 @@ install cannot shadow the code under test.
 
 A theme script can be written in TypeScript: its source is `web/src/NAME.ts`,
 and the build writes it as `src/lotuspod/_theme/js/NAME.js`, the file render
-already joins in the order `THEME_SOURCES` in `cli.py` declares. `web/` is a
+already joins in the order `THEME_SOURCES` in `core/__init__.py` declares. `web/` is a
 Bun project of its own, beside `e2e/`. The build strips each source's types
 on its own with Bun's transpiler, without bundling, which also drops its
 comments, and starts the file with a marker line naming the source; edit the

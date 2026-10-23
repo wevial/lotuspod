@@ -28,7 +28,7 @@ from tests.test_publish_witness import parse
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "src"))
 
-from lotuspod import access, cli, versions  # noqa: E402
+from lotuspod import access, cli, core, versions  # noqa: E402
 from tests import access_keys  # noqa: E402
 
 PAGE = "pond-plan"
@@ -201,13 +201,13 @@ class ViewTests(VersionsWitness):
             self.assertEqual(len(carrying), 1)
             self.assertEqual(carrying[0].attrs["nonce"], found.group(1))
             self.assertEqual(carrying[0].attrs["src"],
-                             f"{cli.OLD_VERSION_SCRIPT}?v={cli.theme_hash()}")
+                             f"{core.OLD_VERSION_SCRIPT}?v={core.theme_hash()}")
             nonces.append(found.group(1))
         self.assertNotEqual(nonces[0], nonces[1])
 
-        status, _, data = self.get(f"/{cli.OLD_VERSION_SCRIPT}?v={cli.theme_hash()}")
+        status, _, data = self.get(f"/{core.OLD_VERSION_SCRIPT}?v={core.theme_hash()}")
         self.assertEqual(status, 200)
-        self.assertEqual(data, cli.theme_file_bytes(cli.OLD_VERSION_SCRIPT))
+        self.assertEqual(data, core.theme_file_bytes(core.OLD_VERSION_SCRIPT))
 
     def test_no_version_but_one_of_the_pages_listed_ones_is_served(self):
         self.repository(self.out)

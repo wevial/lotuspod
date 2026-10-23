@@ -22,7 +22,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from lotuspod import cli, responder  # noqa: E402
+from lotuspod import cli, core, publish, responder, site_index  # noqa: E402
 
 POND = "# Pond\n\nStill water.\n\n## Fish\n\nThree.\n"
 
@@ -149,7 +149,7 @@ class LabelsCase(unittest.TestCase):
         return (self.out_dir / f"{name}.html").read_text(encoding="utf-8")
 
     def manifest_labels(self, name: str = "pond") -> list[str]:
-        data = json.loads((self.out_dir / cli.MANIFEST_FILE).read_text(encoding="utf-8"))
+        data = json.loads((self.out_dir / core.MANIFEST_FILE).read_text(encoding="utf-8"))
         [entry] = [e for e in data["artifacts"] if e["file"] == f"{name}.html"]
         return entry["labels"]
 
@@ -170,7 +170,7 @@ class PublishLabelsTests(LabelsCase):
     def test_a_label_that_is_not_one_is_refused_by_name_and_nothing_is_written(self):
         source = self.source("pond")
         before = self.snapshot()
-        for bad in ("two words", "-lead", "a_b", "x" * (cli.LABEL_MAX + 1), ""):
+        for bad in ("two words", "-lead", "a_b", "x" * (publish.LABEL_MAX + 1), ""):
             with self.subTest(label=bad):
                 rc, _, err = self.publish(source, "--label", "fine", f"--label={bad}")
                 self.assertNotEqual(rc, 0)
@@ -178,7 +178,7 @@ class PublishLabelsTests(LabelsCase):
                 self.assertEqual(self.snapshot(), before)
 
     def test_a_label_of_forty_characters_is_taken(self):
-        label = "a" * cli.LABEL_MAX
+        label = "a" * publish.LABEL_MAX
         self.published(self.source("pond"), "--label", label)
         self.assertEqual(self.manifest_labels(), [label])
 
@@ -219,7 +219,7 @@ class PublishLabelsTests(LabelsCase):
         source = self.source("pond")
         self.published(source, "--label", "relos")
         kept = self.out_dir / "pond.md"
-        revision = cli.page_revision(self.out_dir, "pond")
+        revision = core.page_revision(self.out_dir, "pond")
         agent = responder.Responder(
             socket_path=self.tmp / "unused.sock", token="", database=None,
             out_dir=self.out_dir, journal=None, command=["true"], timeout=1,
@@ -247,12 +247,12 @@ class IndexLabelsTests(LabelsCase):
         rc, _, err = run_cli("index", "--out-dir", str(self.out_dir))
         self.assertEqual(rc, 0, err)
         parsed = _IndexRows()
-        parsed.feed((self.out_dir / cli.INDEX_FILE).read_text(encoding="utf-8"))
+        parsed.feed((self.out_dir / core.INDEX_FILE).read_text(encoding="utf-8"))
         self.assertEqual(parsed.tbodies, 1)
         self.assertEqual(len(parsed.rows), len(pages))
         updated = [row["updated"] for row in parsed.rows]
         self.assertEqual(updated, sorted(updated, reverse=True))
-        artifacts, _ = cli.collect_artifacts(self.out_dir)
+        artifacts, _ = site_index.collect_artifacts(self.out_dir)
         self.assertEqual([row["title"] for row in parsed.rows],
                          [entry["title"] for entry in artifacts])
         by_title = {row["title"]: row for row in parsed.rows}

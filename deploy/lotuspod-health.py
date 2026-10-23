@@ -30,7 +30,7 @@ from pathlib import Path
 LOOPBACK_WAIT = 30.0
 TIMEOUT = 10.0
 THEME_FILES = ("lotuspod.css", "lotuspod-page.js")
-SYNC = ("import sys; from pathlib import Path; from lotuspod.cli import sync_theme_css; "
+SYNC = ("import sys; from pathlib import Path; from lotuspod.core import sync_theme_css; "
         "sync_theme_css(Path(sys.argv[1]))")
 
 

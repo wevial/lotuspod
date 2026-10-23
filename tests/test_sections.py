@@ -25,7 +25,7 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from lotuspod import cli, sections  # noqa: E402
+from lotuspod import cli, core, sections  # noqa: E402
 
 WRAPPER = "artifact-section-body"
 VOID = {"br", "img", "input", "hr", "wbr", "source", "col", "area", "embed", "track", "meta",
@@ -161,14 +161,14 @@ class WrappedTests(SectionsTestCase):
         forms = [node for node in walk(wrappers[1]) if node["tag"] == "form"
                  and "artifact-decision" in node["attrs"].get("class", "").split()]
         self.assertEqual([f["attrs"]["data-question"] for f in forms], ["decision-1"])
-        self.assertEqual([src.split("?")[0] for src in page.scripts if src], [cli.PAGE_SCRIPT])
+        self.assertEqual([src.split("?")[0] for src in page.scripts if src], [core.PAGE_SCRIPT])
 
     def test_a_page_without_comments_is_wrapped_and_loads_the_script(self):
         page = self.render("plain", "<h2>A</h2>\n<p>a</p>\n<h2>B</h2>\n<p>b</p>\n")
         top = page.root["children"]
         self.assertEqual([node["tag"] for node in top], ["h2", "div", "h2", "div"])
         self.assertEqual([w["attrs"]["data-section"] for w in top[1::2]], ["a", "b"])
-        self.assertEqual([src.split("?")[0] for src in page.scripts if src], [cli.PAGE_SCRIPT])
+        self.assertEqual([src.split("?")[0] for src in page.scripts if src], [core.PAGE_SCRIPT])
 
 
 class UnwrappedTests(SectionsTestCase):
@@ -188,7 +188,7 @@ class UnwrappedTests(SectionsTestCase):
                 self.assertFalse(any(is_wrapper(node) for node in walk(page.root)))
                 self.assertNotIn(WRAPPER, (self.out_dir / f"{name}.html").read_text())
                 # Only the comment box loads the page script.
-                loaded = cli.PAGE_SCRIPT in [src.split("?")[0] for src in page.scripts]
+                loaded = core.PAGE_SCRIPT in [src.split("?")[0] for src in page.scripts]
                 self.assertEqual(loaded, "--comments" in extra)
 
 
@@ -197,7 +197,7 @@ class WrapSectionsTests(unittest.TestCase):
         body = '<p>Intro &amp; more</p>\n<H2 ID="a"  class=x>A</H2>\n<p>a<br>b</p>\n<h2 id="b">B</h2>tail'
         wrapped, done, intro_digest = sections.wrap_sections(body)
         self.assertTrue(done)
-        self.assertEqual(intro_digest, cli.unit_digest('<p>Intro &amp; more</p>\n'))
+        self.assertEqual(intro_digest, core.unit_digest('<p>Intro &amp; more</p>\n'))
         self.assertEqual(
             re.sub(r' data-digest="[0-9a-f]{16}"', "", wrapped),
             '<p>Intro &amp; more</p>\n<H2 ID="a"  class=x>A</H2>\n'
@@ -213,7 +213,7 @@ class WrapSectionsTests(unittest.TestCase):
             '<h2 id="a">A<h2 id="b">B</h2>',
         ):
             with self.subTest(body=body):
-                self.assertEqual(sections.wrap_sections(body), (body, False, cli.unit_digest(body)))
+                self.assertEqual(sections.wrap_sections(body), (body, False, core.unit_digest(body)))
 
     def test_void_elements_and_stray_end_tags_keep_the_depth(self):
         body = ('<p>a<img src="x.png"><br/><input type="checkbox"></p></span>\n'

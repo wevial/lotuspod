@@ -6,7 +6,7 @@ from unittest import mock
 
 from tests.test_sections import SectionsTestCase, run_cli
 from tests.test_refs import PublishTestCase
-from lotuspod import cli, sections
+from lotuspod import core, sections
 
 MARKDOWN = """Intro paragraph.
 
@@ -101,14 +101,14 @@ class PageDigestTests(SectionsTestCase):
 
     def test_digest_frames_utf8_bytes_and_part_boundaries(self):
         expected = hashlib.sha256(b'\x00\x00\x00\x00\x00\x00\x00\x02\xc3\xa9').hexdigest()[:16]
-        self.assertEqual(cli.unit_digest("é"), expected)
-        self.assertNotEqual(cli.unit_digest("ab", "c"), cli.unit_digest("a", "bc"))
+        self.assertEqual(core.unit_digest("é"), expected)
+        self.assertNotEqual(core.unit_digest("ab", "c"), core.unit_digest("a", "bc"))
 
 
 class ReferencesDigestTests(PublishTestCase):
     def test_published_reference_title_changes_cards_digest(self):
         with (mock.patch.dict(os.environ, {"LOTUSPOD_CONFIG": str(self.tmp / "none.ini")}),
-              mock.patch.object(cli, "_utc_stamp", return_value="2026-10-09T12:00:00Z")):
+              mock.patch.object(core, "_utc_stamp", return_value="2026-10-09T12:00:00Z")):
             stamps = []
             for title in ("Original title", "Revised title"):
                 refs = self.refs_file({"refs": {"HOLO-175": {"title": title}}})

@@ -25,8 +25,7 @@ import re
 from html.parser import HTMLParser
 from urllib.parse import urlsplit
 
-# cli imports this module too: only names used at call time are read from it.
-from lotuspod import cli
+from lotuspod import core
 
 REF_CLASS = "artifact-ref"
 CARDS_CLASS = "artifact-ref-cards"
@@ -243,7 +242,7 @@ class _TextFinder(HTMLParser):
     def handle_endtag(self, tag: str) -> None:
         self._tag(tag)
         if tag == "h2" and self._heading is not None:
-            self.slugs.append(cli.slugify(" ".join("".join(self._heading).split())))
+            self.slugs.append(core.slugify(" ".join("".join(self._heading).split())))
             self._heading = None
         # An end tag closes its element and any left open inside it; one
         # with nothing to close is ignored, as a browser ignores it.
@@ -286,7 +285,7 @@ class _TextFinder(HTMLParser):
 
 def card_id(key: str, taken: set[str]) -> str:
     """The id of key's card, taken from those already used."""
-    return cli._unique_id(ID_PREFIX + cli.slugify(key), taken)
+    return core._unique_id(ID_PREFIX + core.slugify(key), taken)
 
 
 def _time(stamp: str) -> str:
@@ -345,7 +344,7 @@ def mark_refs(body: str, refs: dict[str, dict], as_of: str = "") -> tuple[str, s
     # Every id the outline could give a heading, as outline_body gives them:
     # repeated headings take base, base-2, base-3, ... in page order.
     for slug in finder.slugs:
-        taken.add(cli._unique_id(slug, taken))
+        taken.add(core._unique_id(slug, taken))
     ids: dict[str, str] = {}
     pieces: list[str] = []
     cursor = 0
@@ -376,5 +375,5 @@ def mark_refs(body: str, refs: dict[str, dict], as_of: str = "") -> tuple[str, s
     pieces.append(body[cursor:])
     cards = "\n".join(card(key, refs[key], card_id_, as_of) for key, card_id_ in ids.items())
     # The template writes the block straight after the body's section.
-    block = f'\n      <div class="{CARDS_CLASS}" data-digest="{cli.unit_digest(cards)}">\n{cards}\n</div>'
+    block = f'\n      <div class="{CARDS_CLASS}" data-digest="{core.unit_digest(cards)}">\n{cards}\n</div>'
     return "".join(pieces), block, list(ids)

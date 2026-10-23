@@ -23,7 +23,7 @@ const PYTHON = ENV.LOTUSPOD_TEST_PYTHON ?? '';
 // This checkout's package, whatever lotuspod is installed.
 const SRC = path.resolve(__dirname, '..', '..', 'src');
 const TOKENS = JSON.parse(fs.readFileSync(
-  path.resolve(__dirname, '..', '..', 'src', 'lotuspod', '_theme', 'tokens.json'), 'utf-8'));
+  path.resolve(__dirname, '..', '..', 'src', 'lotuspod', 'core', 'theme', 'tokens.json'), 'utf-8'));
 // The reader as a page names them: their address's part before the @.
 const READER = 'maintainer';
 const OWNER = 'hermes';

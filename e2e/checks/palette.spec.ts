@@ -24,7 +24,7 @@ const SIGNED_IN = { 'Cf-Access-Jwt-Assertion': ASSERTION };
 const READER = 'maintainer';
 const OWNER = 'hermes';
 const TOKENS = JSON.parse(fs.readFileSync(
-  path.resolve(__dirname, '..', '..', 'src', 'lotuspod', '_theme', 'tokens.json'), 'utf-8'));
+  path.resolve(__dirname, '..', '..', 'src', 'lotuspod', 'core', 'theme', 'tokens.json'), 'utf-8'));
 const COLORS: Record<string, string> = TOKENS.colors;
 const STRUCTURE: Record<string, string> = TOKENS.structure;
 

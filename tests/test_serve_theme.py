@@ -21,7 +21,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
 sys.path.insert(0, str(SRC))
 
-from lotuspod.cli import sync_theme_css  # noqa: E402
+from lotuspod.core import sync_theme_css  # noqa: E402
 
 TIMEOUT = 30
 STYLESHEET = "lotuspod.css"

@@ -21,6 +21,8 @@ import html
 import re
 from html.parser import HTMLParser
 
+from lotuspod.core import _unique_id
+
 PRE_ATTRIBUTE = "data-node-table"
 TABLE_CLASS = "artifact-node-table"
 HEADING_CLASS = "artifact-node-heading"
@@ -264,9 +266,6 @@ def _row_marks(rows: list[dict]) -> dict[int, dict[str, str]]:
 def mark_node_tables(body: str) -> tuple[str, bool]:
     """The body with each Nodes table and its diagram marked, and whether
     any was."""
-    # Here rather than at the top: cli imports this module.
-    from lotuspod.cli import _unique_id
-
     finder = _NodeTableFinder(body)
     finder.feed(body)
     finder.close()

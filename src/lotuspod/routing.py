@@ -35,7 +35,7 @@ import string
 import unicodedata
 from typing import Mapping
 
-from lotuspod import db
+from lotuspod.store import db
 
 RESPONDER = "responder"
 # Seconds: how long a pull keeps a handle listening.

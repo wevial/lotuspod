@@ -16,7 +16,7 @@ from pathlib import Path
 
 from tests.test_manifest_v2 import TempDirTestCase
 
-from lotuspod import cli, markdown  # after test_manifest_v2, which puts src/ on the path
+from lotuspod import core, markdown  # after test_manifest_v2, which puts src/ on the path
 from lotuspod.node_tables import mark_node_tables
 
 DIAGRAM = """\
@@ -184,12 +184,12 @@ class RenderTests(TempDirTestCase):
             with self.subTest(diagram.splitlines()[1]):
                 page = self.rendered(diagram, "--hidden")
                 self.assertIn('class="mermaid"', page)
-                self.assertEqual(page.count(f'<script src="{cli.PAGE_SCRIPT}?v='), 1)
+                self.assertEqual(page.count(f'<script src="{core.PAGE_SCRIPT}?v='), 1)
 
     def test_a_marked_diagram_loads_the_page_script_once(self):
         page = self.rendered(SOURCE)
         self.assertIn("data-node-table=", page)
-        self.assertEqual(page.count(f'<script src="{cli.PAGE_SCRIPT}?v='), 1)
+        self.assertEqual(page.count(f'<script src="{core.PAGE_SCRIPT}?v='), 1)
 
 
 if __name__ == "__main__":

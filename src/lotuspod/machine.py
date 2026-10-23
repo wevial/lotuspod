@@ -204,7 +204,7 @@ from http import HTTPStatus
 from pathlib import Path
 from typing import Callable, Mapping
 
-from lotuspod import api, db, media, routing, widgets
+from lotuspod import api, media, routing, store, widgets
 
 OPERATIONS = ("pull", "claim", "reply", "publish")
 # An owner handle, and a credential's name: 1 to 63 lower-case letters,
@@ -318,7 +318,7 @@ def _unique(values: list[str]) -> list[str]:
     return list(dict.fromkeys(values))
 
 
-def create_credential(database: db.Database, name: str, handles: list[str],
+def create_credential(database: store.db.Database, name: str, handles: list[str],
                       operations: list[str], out: Path) -> dict:
     """Make the credential name, write its token to out (mode 0600, never
     over an existing file) and store it; CredentialError, with nothing
@@ -362,7 +362,7 @@ def create_credential(database: db.Database, name: str, handles: list[str],
         )
     except BaseException as exc:
         os.unlink(out)
-        if isinstance(exc, db.DuplicateCredential):
+        if isinstance(exc, store.db.DuplicateCredential):
             raise CredentialError(f"a credential named {name!r} already exists") from None
         raise
     return public(row)
@@ -373,7 +373,7 @@ def public(credential: Mapping) -> dict:
     return {key: value for key, value in credential.items() if key != "tokenHash"}
 
 
-def find(database: db.Database, token: str) -> dict | None:
+def find(database: store.db.Database, token: str) -> dict | None:
     """The unrevoked credential whose token this is; None when there is none."""
     digest = token_hash(token)
     found = None
@@ -395,7 +395,7 @@ def authorize(credential: Mapping, operation: str, handle: str) -> str | None:
     return None
 
 
-def check_owner(database: db.Database, token: str, handle: str) -> dict:
+def check_owner(database: store.db.Database, token: str, handle: str) -> dict:
     """The credential of token when it may publish as handle;
     CredentialError naming the problem when it may not."""
     credential = find(database, token)
@@ -440,7 +440,7 @@ class Routes:
     fresh page lookup for each pull or inbox request.
     """
 
-    def __init__(self, database: db.Database,
+    def __init__(self, database: store.db.Database,
                  pages: Callable[[str], api.Page | None] = _no_page,
                  describe: Callable[[api.Page], dict] | None = None,
                  window: float = routing.DEFAULT_WINDOW,
@@ -518,7 +518,7 @@ class Routes:
             return HTTPStatus.OK, self._ack(credential, int(ack.group(1))), ()
         except api.Refusal as exc:
             return exc.status, {"error": exc.error}, ()
-        except db.Refused as exc:
+        except store.db.Refused as exc:
             return _REFUSED[exc.error], {"error": exc.error}, ()
         except (sqlite3.Error, OSError):
             return HTTPStatus.SERVICE_UNAVAILABLE, {"error": "storage_unavailable"}, ()
@@ -1045,7 +1045,7 @@ class SocketServer(socketserver.ThreadingMixIn, socketserver.UnixStreamServer):
 
     daemon_threads = True
 
-    def __init__(self, path: Path | str, database: db.Database,
+    def __init__(self, path: Path | str, database: store.db.Database,
                  pages: Callable[[str], api.Page | None] = _no_page,
                  describe: Callable[[api.Page], dict] | None = None,
                  window: float = routing.DEFAULT_WINDOW,

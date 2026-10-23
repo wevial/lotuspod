@@ -28,7 +28,7 @@ from pathlib import Path
 SRC_DIR = Path(__file__).resolve().parents[1] / "src"
 sys.path.insert(0, str(SRC_DIR))
 
-from lotuspod import cli  # noqa: E402
+from lotuspod import cli, core  # noqa: E402
 
 TIMEOUT = 120
 
@@ -157,12 +157,12 @@ class RepublishTests(PublishTestCase):
         page = self.page("fish")
         self.assertIn('<h1 class="artifact-title">Fish &amp; plants</h1>', page)
         self.assertIn('<p class="artifact-summary">Salt &amp; &lt;pepper&gt;</p>', page)
-        index = (self.out_dir / cli.INDEX_FILE).read_text(encoding="utf-8")
+        index = (self.out_dir / core.INDEX_FILE).read_text(encoding="utf-8")
         self.assertIn(">Fish &amp; plants</a>", index)
         self.assertIn(">Salt &amp; &lt;pepper&gt;</td>", index)
         self.assertNotIn("&amp;amp;", index)
         entry = json.loads(
-            (self.out_dir / cli.MANIFEST_FILE).read_text(encoding="utf-8")
+            (self.out_dir / core.MANIFEST_FILE).read_text(encoding="utf-8")
         )["artifacts"][0]
         self.assertEqual((entry["title"], entry["summary"]),
                          ("Fish & plants", "Salt & <pepper>"))
@@ -171,7 +171,7 @@ class RepublishTests(PublishTestCase):
         source = self.source("pond.md", POND)
         done = self.publish(source)
         self.assertEqual(done.returncode, 0, done.stderr)
-        revision = cli.source_revision(POND.encode("utf-8"))
+        revision = core.source_revision(POND.encode("utf-8"))
         self.assertIn(revision, done.stdout)
         self.assertIn(f'<meta name="lotuspod:revision" content="{revision}">',
                       self.page("pond"))
@@ -224,8 +224,8 @@ class SourcesAndServeTests(PublishTestCase):
             done = lotuspod(step, "--out-dir", str(self.out_dir), cwd=self.tmp)
             self.assertEqual(done.returncode, 0, done.stderr)
             self.assertIn("(2 artifacts, 1 not visible)", done.stdout)
-        manifest = (self.out_dir / cli.MANIFEST_FILE).read_text(encoding="utf-8")
-        index = (self.out_dir / cli.INDEX_FILE).read_text(encoding="utf-8")
+        manifest = (self.out_dir / core.MANIFEST_FILE).read_text(encoding="utf-8")
+        index = (self.out_dir / core.INDEX_FILE).read_text(encoding="utf-8")
         for listing in (manifest, index):
             self.assertIn("garden.html", listing)
             self.assertIn("pond.html", listing)
@@ -279,7 +279,7 @@ class PageScriptTests(PublishTestCase):
         self.assertEqual(done.returncode, 0, done.stderr)
         page = self.page("note")
         self.assertIn('<meta name="lotuspod:revision"', page)
-        self.assertIn(f'<script src="{cli.PAGE_SCRIPT}?v=', page)
+        self.assertIn(f'<script src="{core.PAGE_SCRIPT}?v=', page)
 
 
 class RacingPublishTests(PublishTestCase):
@@ -287,7 +287,7 @@ class RacingPublishTests(PublishTestCase):
         source = self.source("pond.md", POND)
         done = self.publish(source)
         self.assertEqual(done.returncode, 0, done.stderr)
-        current = cli.source_revision(POND.encode("utf-8"))
+        current = core.source_revision(POND.encode("utf-8"))
         before = self.commits()
 
         env = dict(os.environ, PYTHONPATH=str(SRC_DIR))
@@ -316,7 +316,7 @@ class NoRepositoryTests(PublishTestCase):
         done = self.publish(self.source("pond.md", POND), out_dir=plain)
         self.assertEqual(done.returncode, 0, done.stderr)
         self.assertEqual(done.stderr, "")
-        for name in ("pond.html", "pond.md", cli.MANIFEST_FILE, cli.INDEX_FILE):
+        for name in ("pond.html", "pond.md", core.MANIFEST_FILE, core.INDEX_FILE):
             self.assertTrue((plain / name).is_file(), name)
         self.assertEqual((plain / "pond.md").read_text(encoding="utf-8"), POND)
         self.assertFalse(any(p.name.startswith(".") for p in plain.iterdir()))
@@ -372,13 +372,14 @@ class StandardInputTests(PublishTestCase):
     def publish_at(self, moment: str, *argv: str,
                    stdin: str | None = None) -> subprocess.CompletedProcess:
         # Set the CLI's clock from outside: a sitecustomize gives the
-        # datetime module cli.py reads a now() that is `moment`.
+        # datetime module render, publish and site_index read a now() that is
+        # `moment`.
         hook = self.tmp / f"clock-{moment.replace(':', '')}"
         hook.mkdir()
         (hook / "sitecustomize.py").write_text(
             "import datetime, sys, types\n"
             f"sys.path.insert(0, {str(SRC_DIR)!r})\n"
-            "from lotuspod import cli\n"
+            "from lotuspod import publish, render, site_index\n"
             "class _Moment(datetime.datetime):\n"
             "    @classmethod\n"
             "    def now(cls, tz=None):\n"
@@ -386,7 +387,7 @@ class StandardInputTests(PublishTestCase):
             "clock = types.ModuleType('datetime')\n"
             "clock.__dict__.update(vars(datetime))\n"
             "clock.datetime = _Moment\n"
-            "cli._dt = clock\n",
+            "render._dt = publish._dt = site_index._dt = clock\n",
             encoding="utf-8",
         )
         env = dict(os.environ, PYTHONPATH=os.pathsep.join((str(hook), str(SRC_DIR))))

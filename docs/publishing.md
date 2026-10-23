@@ -1513,7 +1513,7 @@ version of a page keeps `frame-ancestors 'none'`.
 
 ## Template
 
-`src/lotuspod/_templates/artifact.html` uses `{{placeholder}}` substitution with the context:
+`src/lotuspod/core/templates/artifact.html` uses `{{placeholder}}` substitution with the context:
 `title`, `kicker`, `date`, `summary_block`, `body`, `theme_name`, `theme_hash`,
 `theme_head` (the head's theme script), plus the `mermaid` section flag with its
 `mermaid_theme_variables` (Night's and Dawn's), `mermaid_dir` and
@@ -1525,7 +1525,8 @@ and the page `policy`, which the renderer fills in last.
 
 ## Theme
 
-The lotus theme lives in `src/lotuspod/_theme/`: `tokens.json` is the source of truth for the
+The lotus theme lives in `src/lotuspod/_theme/`, and its shared part in
+`src/lotuspod/core/theme/` and `src/lotuspod/core/ts/`: `core/theme/tokens.json` is the source of truth for the
 palette (dark/white/lavender: `night`, `deep_night`, `surface`, `glow`,
 `lavender`, `pale_lavender`, `muted_lavender`, `white`), typography,
 structural hairlines/tints (table rules, code and quote surfaces), and radii;
@@ -1534,13 +1535,13 @@ structural hairlines/tints (table rules, code and quote surfaces), and radii;
 Edit the CSS to restyle all artifacts.
 A feature's CSS goes in its own file in `src/lotuspod/_theme/css/` and its JS in
 `src/lotuspod/_theme/js/`, and each new file takes one line in the declared
-order (`THEME_SOURCES` in `cli.py`), which render joins into the one
+order (`THEME_SOURCES` in `src/lotuspod/core/__init__.py`), which render joins into the one
 `lotuspod.css`, `lotuspod-page.js`, `lotuspod-index.js` and
 `lotuspod-old-version.js` it serves. `lotuspod-page.js` and
 `lotuspod-old-version.js` each run as one strict function, so their sources
-share `js/page-open.js`'s and `js/shared.js`'s helpers: the join opens that
+share `js/page-open.js`'s and `core/ts/shared.js`'s helpers: the join opens that
 function before them and closes it after the last (`THEME_CLOSURES` in
-`cli.py`). A new source is a complete script that parses on its own, never
+`core/__init__.py`). A new source is a complete script that parses on its own, never
 one that opens or closes the function.
 A script converted to TypeScript lives in `web/src/`, and its built file, the
 one `THEME_SOURCES` names, under `src/lotuspod/_theme/js/` (see
@@ -1564,7 +1565,7 @@ agents. Beside it, one colour per job:
   a typing bubble, and a decision card's "Not saved", its ring and its left
   rule.
 
-`tests/test_palette.py` checks every text colour at 4.5:1 or more on `night`
+`tests/core/test_palette.py` checks every text colour at 4.5:1 or more on `night`
 and `surface`, and text on the tints, in both sets.
 
 Night is the theme above; `tokens.json`'s `dawn` set is a light Dawn with
