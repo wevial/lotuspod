@@ -4,6 +4,52 @@ All notable changes to Lotuspod are recorded here, newest first, in the
 Keep a Changelog style. Each version's section, headed
 `## X.Y.Z - YYYY-MM-DD`, becomes the notes of its GitHub release.
 
+## 0.6.0 - 2026-10-22
+
+- Authors can add interactive charts, sliders and walkthroughs with an
+  `html live` fence or an HTML live template. Each block runs in a
+  sandboxed, isolated frame with the page's theme available as CSS
+  variables; it can't reach external resources, the reader's session or the
+  page's own content, and only resize, ready, error and Escape messages
+  cross back into the page.
+- Each live block gets chrome: a title, a loading/Live status badge with an
+  error count, Expand to fill the window, Pause to stop its scripts, and
+  Open alone. These work without page scripts and hold their place on
+  narrow screens.
+- A block can pin reproducible chart libraries — `mermaid`, `d3`, `plot` or
+  `chartjs` — with `html live plot chartjs` or `data-libs`, loaded from an
+  exact, integrity-checked URL alongside its own hashed scripts.
+- An unchanged block keeps running, with its state, through a page swap,
+  and Pause/Resume, Expand and sizing keep working across one. An earlier
+  page version shows the widgets it had at the time, even after they've
+  changed or been removed.
+- `lotuspod publish --live` puts a whole interactive HTML mock-up in a pod,
+  with optional `--notes` markdown and comments alongside it. The README
+  and `docs/publishing.md` gain an "Interactive pages" section, and the
+  demo runs a live example.
+- A reader can start a comment thread from a live block's own Comment
+  button; the thread is anchored to the block, follows it if it moves to
+  another section, and moves to the changed list if the block is removed.
+  A widget can say where the reader is with `lotuspod.state()`, and a
+  comment started from the block keeps that label. A decisions table
+  placed right after a block is tied to it in the form, the block's
+  chrome and the review sheet.
+- A comment form opened on a block survives a republish that changes or
+  removes the block, and an unsent comment — including one begun from a
+  block — survives a reload of the page in the same tab.
+- A reader can switch a pod between Night and a new light Dawn theme with a
+  Night / Dawn / Auto switch on the title bar. Auto follows the system and
+  is the default. Live blocks, Mermaid diagrams and the review sheet follow
+  the switch too.
+- The comments panel finishes its move to Preact islands — drafts,
+  placement, chips and the thread store all now live there, and
+  `comments.js` is deleted — with no change for readers.
+- The `e2e` check runs as four parallel shards with one retry on a flaky
+  failure, skips entirely on a docs-only pull request, and records a
+  timeline on failure to help diagnose rare flakes. Each spec also drops
+  its route handlers after the check ends, so an in-flight poll can't fail
+  it.
+
 ## 0.5.0 - 2026-10-16
 
 - An open page updates in place when a new revision is published, where it
