@@ -51,12 +51,12 @@ export function outDir(webDir: string): string {
   return join(webDir, "..", "src", "lotuspod", "_theme", "js");
 }
 
-export function featuresDir(webDir: string): string {
+function featuresDir(webDir: string): string {
   return join(webDir, "..", "src", "lotuspod", "features");
 }
 
 // Each slice's ts/ directory, by slice name, in order.
-export function sliceScriptDirs(webDir: string): string[] {
+function sliceScriptDirs(webDir: string): string[] {
   const features = featuresDir(webDir);
   if (!existsSync(features)) {
     return [];
