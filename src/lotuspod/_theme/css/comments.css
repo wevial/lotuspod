@@ -1169,6 +1169,11 @@
   grid-column: 2;
 }
 
+/* An answered thread's whole "✓ Answered · 1 reply" line is mint. */
+.artifact-comments-entry-state:has(.artifact-comments-entry-said--answered) {
+  color: var(--color-mint);
+}
+
 .artifact-comments-tick {
   color: var(--color-mint);
 }

@@ -305,6 +305,10 @@ test('in Dawn a live block is a white card with a mint sandbox band, and an agen
   // The open thread around it is a white card.
   const entry = page.locator('.artifact-comments-entry--open').filter({ has: agent });
   expect(await entry.evaluate((node) => getComputedStyle(node).backgroundColor)).toBe(rgb(DAWN.surface));
+  // Its "✓ Answered · 1 reply" line is mint, the count with the word.
+  const state = entry.locator('.artifact-comments-entry-state');
+  await expect(state).toHaveText('✓ Answered · 1 reply');
+  await expect(state.locator('.artifact-comments-entry-count')).toHaveCSS('color', rgb(DAWN.mint));
   // A section's composer: its field on the deeper paper in Dawn, as today in Night.
   await page.locator('details.artifact-comment[data-section="table"] summary').click();
   const composer = page.locator('.artifact-comment-form .artifact-composer-box')
@@ -316,6 +320,7 @@ test('in Dawn a live block is a white card with a mint sandbox band, and an agen
   expect(await field()).toBe(rgb(NIGHT.surface));
   expect(await entry.evaluate((node) => getComputedStyle(node).backgroundColor)).toBe(rgb(NIGHT.night));
   expect(await agent.evaluate((node) => getComputedStyle(node).backgroundColor)).toBe(rgb(NIGHT.surface));
+  await expect(state.locator('.artifact-comments-entry-count')).toHaveCSS('color', rgb(NIGHT.mint));
   expect(errors).toEqual([]);
 });
 
