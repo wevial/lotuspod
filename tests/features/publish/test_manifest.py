@@ -3,7 +3,7 @@ uniform schema with no nulls, is sorted, and lists only visible pages.
 
 Run from the repo root:
 
-    python -m unittest tests.features.index.test_manifest -v
+    python -m unittest tests.features.publish.test_manifest -v
 """
 
 from __future__ import annotations

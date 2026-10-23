@@ -1,1 +1,1 @@
-"""Tests of lotuspod.features.index: the listing, `manifest` and `index`."""
+"""Tests of lotuspod.features.index: the listing and `index`."""
