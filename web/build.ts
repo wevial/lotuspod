@@ -243,7 +243,7 @@ async function main(args: string[]): Promise<number> {
       return 0;
     }
     const problems = [...(existsSync(outDir(webDir)) ? unparsed(outDir(webDir)) : []),
-      ...sliceScriptDirs(webDir).flatMap((dir) => unparsed(dir))];
+      ...sliceScriptDirs(webDir).flatMap(unparsed)];
     if (problems.length) {
       for (const problem of problems) console.error(problem);
       return 1;
