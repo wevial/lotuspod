@@ -383,9 +383,6 @@ function placeOf(root: string, path: string): { slice: string | null; core: bool
 // the file, the specifier and why. root is the package (src/lotuspod).
 async function sliceImportProblems(root: string, edges: readonly (readonly [string, string])[]): Promise<string[]> {
   const features = join(root, "features");
-  if (!existsSync(features)) {
-    return [];
-  }
   const allowed = new Set(edges.map(([from, to]) => `${from} ${to}`));
   const problems: string[] = [];
   const files = readdirSync(features, { recursive: true, encoding: "utf8" })
