@@ -29,7 +29,8 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from lotuspod import access, cli, comments, db, machine, media, routing  # noqa: E402
+from lotuspod import access, cli, comments, core, machine, media, routing  # noqa: E402
+from lotuspod.store import db  # noqa: E402
 from tests import access_keys as keys  # noqa: E402
 from tests.test_forms import normalised_page  # noqa: E402
 
@@ -221,7 +222,7 @@ class BoxTests(CommentsTestCase):
                 self.assertEqual([(b["type"], text(b["text"])) for b in found["buttons"]],
                                  [("submit", "Comment")])
         # The diagram's start-up module is inline; the page script the one loaded.
-        self.assertEqual([src.split("?")[0] for src in page.scripts if src], [cli.PAGE_SCRIPT])
+        self.assertEqual([src.split("?")[0] for src in page.scripts if src], [core.PAGE_SCRIPT])
         self.assertEqual(comments.read_boxes(self.page("plan")), ["findings", "kept", "next-steps"])
 
     def test_one_section_gets_one_box_for_the_page_at_the_end(self):
@@ -264,7 +265,7 @@ class WithoutCommentsTests(CommentsTestCase):
         page = read(self.page("plan"))
         self.assertEqual(page.boxes, [])
         # Still loaded, to fold the page's sections.
-        self.assertIn(cli.PAGE_SCRIPT, [src.split("?")[0] for src in page.scripts])
+        self.assertIn(core.PAGE_SCRIPT, [src.split("?")[0] for src in page.scripts])
 
     def test_publish_comments_by_default_and_not_with_no_comments(self):
         rc, err = self.publish(self.source())
@@ -275,7 +276,7 @@ class WithoutCommentsTests(CommentsTestCase):
         page = read(self.page("pond"))
         self.assertEqual(page.boxes, [])
         # Still loaded, to fold the page's sections.
-        self.assertIn(cli.PAGE_SCRIPT, [src.split("?")[0] for src in page.scripts])
+        self.assertIn(core.PAGE_SCRIPT, [src.split("?")[0] for src in page.scripts])
 
 
 class OwnerTests(CommentsTestCase):
@@ -386,7 +387,7 @@ class SectionCheckTests(CommentsTestCase):
                              {"page": "pond", "section": section, "text": "Hello"}),
                     (400, {"error": "unknown_section"}),
                 )
-        revision = cli.page_revision(self.out_dir, "pond")
+        revision = core.page_revision(self.out_dir, "pond")
         self.assertEqual(self.ask("GET", "/api/comments?page=pond"),
                          (200, {"page": "pond", "revision": revision, "threads": [],
                                 "unread": [], "maxImageBytes": media.DEFAULT_MAX_BYTES}))
@@ -403,7 +404,7 @@ class SectionCheckTests(CommentsTestCase):
         rc, err = self.publish(self.source("long.html", body))
         self.assertEqual(rc, 0, err)
         sections = comments.read_boxes(self.page("long"))
-        self.assertEqual(sections, [cli.slugify(long_title), explicit])
+        self.assertEqual(sections, [core.slugify(long_title), explicit])
         self.assertTrue(all(len(section) > 100 for section in sections))
         for section in sections:
             with self.subTest(section=section[:20]):

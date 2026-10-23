@@ -30,7 +30,8 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from lotuspod import access, cli, db, decisions, markdown  # noqa: E402
+from lotuspod import access, cli, core, decisions, markdown  # noqa: E402
+from lotuspod.store import db  # noqa: E402
 from tests import access_keys  # noqa: E402
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "decisions"
@@ -247,7 +248,7 @@ class DecisionsTestCase(unittest.TestCase):
         self.assertEqual(page.tables, 1)
         # A listed page still loads the page script, to open in the index's
         # tabs and to fold its sections.
-        self.assertEqual([src.split("?")[0] for src in page.scripts], [cli.PAGE_SCRIPT])
+        self.assertEqual([src.split("?")[0] for src in page.scripts], [core.PAGE_SCRIPT])
 
 
 class FormTests(DecisionsTestCase):
@@ -281,7 +282,7 @@ class FormTests(DecisionsTestCase):
             self.assertEqual([label["marks"] for label in labels], [["default"], []])
             self.assertIn("artifact-decision-default", labels[0]["last"])
         self.assertEqual([form["context"] for form in page.forms], [[], []])
-        self.assertEqual([src.split("?")[0] for src in page.scripts], [cli.PAGE_SCRIPT])
+        self.assertEqual([src.split("?")[0] for src in page.scripts], [core.PAGE_SCRIPT])
 
     def test_the_forms_sit_inside_their_section(self):
         page_html = self.render_markdown("plan", PLAN)
@@ -438,7 +439,7 @@ class FormTests(DecisionsTestCase):
         self.assertLess(first, heater)
         self.assertLess(heater, second)
         self.assertEqual(page_html.count('<div class="artifact-decisions">'), 2)
-        self.assertEqual([src.split("?")[0] for src in page.scripts], [cli.PAGE_SCRIPT])
+        self.assertEqual([src.split("?")[0] for src in page.scripts], [core.PAGE_SCRIPT])
 
     def test_read_forms_reads_every_section_s_questions(self):
         forms = decisions.read_forms(self.render_markdown("pond", SECTIONS))
@@ -676,7 +677,7 @@ class ChecklistTests(DecisionsTestCase):
         # Inside the decisions block, as a decision's forms are.
         self.assertLess(page_html.index('<div class="artifact-decisions">'),
                         page_html.index('data-question="checklist-1"'))
-        self.assertEqual([src.split("?")[0] for src in page.scripts], [cli.PAGE_SCRIPT])
+        self.assertEqual([src.split("?")[0] for src in page.scripts], [core.PAGE_SCRIPT])
 
         [read_back] = decisions.read_forms(page_html).values()
         self.assertEqual(read_back.question, "checklist-1")
@@ -885,7 +886,7 @@ class LongOptionValueTests(DecisionsTestCase):
         values = [radio["value"] for radio in form["radios"]]
         self.assertLessEqual(len(values[0]), 100)
         self.assertRegex(values[0], r"-[0-9a-f]{8}$")
-        self.assertTrue(cli.slugify(LONG_LABEL).startswith(values[0][:-9]))
+        self.assertTrue(core.slugify(LONG_LABEL).startswith(values[0][:-9]))
         self.assertEqual(values[1], "no")
         self.assertEqual([label["text"] for label in form["labels"]], [LONG_LABEL, "No"])
 
@@ -902,7 +903,7 @@ class LongOptionValueTests(DecisionsTestCase):
         labels = ["Sonnet", "A" * 40 + " " + "b" * 39]
         form = read(self.render_markdown("pond", long_options(" / ".join(labels)))).forms[0]
         self.assertEqual([radio["value"] for radio in form["radios"]],
-                         [cli.slugify(label) for label in labels])
+                         [core.slugify(label) for label in labels])
 
     def test_a_default_naming_a_long_option_marks_it(self):
         form = read(self.render_markdown(

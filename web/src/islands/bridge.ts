@@ -1,7 +1,7 @@
 // Islands reach the legacy closure only through page. The bundle follows
-// comment-markdown.js inside THEME_CLOSURES (src/lotuspod/cli.py); a minifier never
-// renames its free names. Reading each as the bundle loads makes a missing
-// name throw on every page at once.
+// comment-markdown.js inside THEME_CLOSURES (src/lotuspod/core/__init__.py);
+// a minifier never renames its free names. Reading each as the bundle loads
+// makes a missing name throw on every page at once.
 
 // What js/live-page.js keeps of the page's revision while it is open.
 export interface Live {

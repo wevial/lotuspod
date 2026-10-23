@@ -21,7 +21,7 @@ from pathlib import Path
 SRC_DIR = Path(__file__).resolve().parents[1] / "src"
 sys.path.insert(0, str(SRC_DIR))
 
-from lotuspod import cli  # noqa: E402
+from lotuspod import cli, core  # noqa: E402
 
 
 SOURCE_BYTES = "# Pond\n\nStill water, café.\r\n".encode("utf-8")
@@ -89,7 +89,7 @@ class OwnRepositoryTests(RepoTestCase):
         self.assertEqual((rc, err), (0, ""))
 
         files = self.remote_files()
-        for name in ("pond.html", "pond.md", cli.MANIFEST_FILE, cli.INDEX_FILE):
+        for name in ("pond.html", "pond.md", core.MANIFEST_FILE, core.INDEX_FILE):
             self.assertIn(name, files)
         blob = subprocess.run(
             ["git", "-C", str(self.bare), "show", "main:pond.md"],

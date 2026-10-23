@@ -7,6 +7,8 @@ import threading
 from pathlib import Path
 from typing import Callable
 
+from lotuspod import core, serve_files
+
 PATH = "/api/events"
 MAX_STREAMS = 32
 HEARTBEAT = 30
@@ -43,27 +45,25 @@ class Hub:
         self._pages = {}
 
     def _stat(self):
-        from lotuspod.cli import MANIFEST_FILE
         try:
-            stat = (self.out_dir / MANIFEST_FILE).stat()
+            stat = (self.out_dir / core.MANIFEST_FILE).stat()
             return stat.st_mtime_ns, stat.st_size, stat.st_ino
         except OSError:
             return None
 
     def _snapshot(self):
-        from lotuspod import archive, cli
-        return {file[:-5]: (cli.page_revision(self.out_dir, file[:-5]),
+        from lotuspod import archive
+        return {file[:-5]: (core.page_revision(self.out_dir, file[:-5]),
                            archive.read_record(self.out_dir, file[:-5]))
-                for file in cli.serve_allow_list(self.out_dir) if file.endswith(".html") and cli.is_page_name(file)}
+                for file in serve_files.serve_allow_list(self.out_dir) if file.endswith(".html") and core.is_page_name(file)}
 
     def open(self, disconnect: Callable[[], None] = lambda: None):
         with self._condition:
             if self._closed or len(self._streams) >= self.max_streams:
                 return None
             if not self._streams:
-                from lotuspod.cli import publish_lock
                 try:
-                    with publish_lock(self.out_dir, blocking=False):
+                    with core.publish_lock(self.out_dir, blocking=False):
                         self._stamp = self._stat()
                         self._pages = self._snapshot()
                 except (OSError, ValueError, RuntimeError):
@@ -86,8 +86,7 @@ class Hub:
     def changed(self, what: str, page: str | None):
         # Recheck visibility, including writes racing a page being hidden.
         if page is not None:
-            from lotuspod.cli import serve_allow_list
-            if f"{page}.html" not in serve_allow_list(self.out_dir):
+            if f"{page}.html" not in serve_files.serve_allow_list(self.out_dir):
                 return
         data = frame(what, page)
         with self._condition:
@@ -113,10 +112,9 @@ class Hub:
                 if stamp == self._stamp:
                     continue
                 try:
-                    from lotuspod.cli import publish_lock
                     # Manifest replacement precedes the index rebuild. Observe
                     # the completed transaction, without blocking hub shutdown.
-                    with publish_lock(self.out_dir, blocking=False):
+                    with core.publish_lock(self.out_dir, blocking=False):
                         stamp = self._stat()
                         pages = self._snapshot()
                 except (OSError, ValueError, RuntimeError):

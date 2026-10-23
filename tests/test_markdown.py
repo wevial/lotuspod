@@ -40,7 +40,7 @@ from unittest import mock
 
 from tests.test_manifest_v2 import SRC_DIR, TempDirTestCase, run_cli
 
-from lotuspod import cli, media
+from lotuspod import core, media
 from lotuspod.markdown import images, to_body, with_sources
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -709,7 +709,7 @@ class RenderMarkdownTests(TempDirTestCase):
                         )
                     self.assertEqual(rc, 0, err)
                     page = self.page(name).decode("utf-8")
-                    self.assertEqual(f'<script src="{cli.PAGE_SCRIPT}?v=' in page, listed or loads)
+                    self.assertEqual(f'<script src="{core.PAGE_SCRIPT}?v=' in page, listed or loads)
 
     def test_a_body_larger_than_the_command_line_renders_in_a_subprocess(self):
         paragraph = "A line of prose that repeats to make the page large & long. " * 4

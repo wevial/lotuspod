@@ -28,7 +28,7 @@ from tests.test_versions_witness import VersionsWitness
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "src"))
 
-from lotuspod import access, cli, versions  # noqa: E402
+from lotuspod import access, cli, render, versions  # noqa: E402
 from tests import access_keys  # noqa: E402
 
 PAGE = "pond-plan"
@@ -75,7 +75,7 @@ class ChangesWitness(VersionsWitness):
              "--out-dir", str(self.out)])
         args.revision = revision
         with redirect_stdout(io.StringIO()):
-            self.assertEqual(cli.cmd_render(args), 0)
+            self.assertEqual(render.cmd_render(args), 0)
         self.assertFalse((self.out / f"{name}.md").exists())
 
     def changes(self, name: str, since: str, token="valid"):

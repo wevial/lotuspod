@@ -219,7 +219,7 @@ from http import HTTPStatus
 from pathlib import Path
 from typing import BinaryIO, Callable, Mapping, Sequence
 
-from lotuspod import comments, db, media, routing, versions
+from lotuspod import comments, media, routing, store, versions
 
 ANSWERS = "/api/answers"
 COMMENTS = "/api/comments"
@@ -344,7 +344,7 @@ class Widget:
     # comments.PAGE_SECTION on a page whose only box is that one.
     section: str
     # The hashes it had in the page's visible publishes, its own among them
-    # (cli.BLOCKS_SUFFIX); empty for a page published before they were kept.
+    # (render.BLOCKS_SUFFIX); empty for a page published before they were kept.
     earlier: frozenset[str] = frozenset()
 
 
@@ -619,7 +619,7 @@ class Api:
     gives the activity route its names from the same read, in place of
     names()."""
 
-    def __init__(self, database: db.Database, pages: Callable[[str], Page | None],
+    def __init__(self, database: store.db.Database, pages: Callable[[str], Page | None],
                  window: float = routing.DEFAULT_WINDOW,
                  clock: Callable[[], float] = time.time,
                  media_dir: Path | None = None,
@@ -724,7 +724,7 @@ class Api:
                 end = moment.timestamp()
             else:
                 end = self.clock()
-            return db.stamp(end - ACTIVITY_DAYS * 86400), db.stamp(end)
+            return store.db.stamp(end - ACTIVITY_DAYS * 86400), store.db.stamp(end)
         except (ValueError, OverflowError, OSError):
             raise Refusal(HTTPStatus.BAD_REQUEST, "invalid_query") from None
 
@@ -985,7 +985,7 @@ class Api:
             stored = self.database.dismiss(
                 page=page.name, question=question, version=version, reason=reason,
                 revision=page.revision, actor=actor, question_text=asked.text)
-        except db.Refused as exc:
+        except store.db.Refused as exc:
             raise Refusal(HTTPStatus.CONFLICT, exc.error) from None
 
         self.changed("answer", page.name)
@@ -999,7 +999,7 @@ class Api:
         asked_question(page, question)
         try:
             entry = self.database.undismiss(page=page.name, question=question, asked=True)
-        except db.Refused as exc:
+        except store.db.Refused as exc:
             raise Refusal(HTTPStatus.CONFLICT, exc.error) from None
         self.changed("answer", page.name)
         return {"page": page.name, "question": question, **entry}
@@ -1059,7 +1059,7 @@ class Api:
             stored = self.database.record_thread_view(
                 reader=str(actor.get("email") or ""), page=page.name, thread=thread,
                 comment=comment)
-        except db.Refused as exc:
+        except store.db.Refused as exc:
             raise Refusal(HTTPStatus.NOT_FOUND, exc.error) from None
         return {"thread": thread, "comment": stored}
 
@@ -1073,7 +1073,7 @@ class Api:
         try:
             resolution = self.database.resolve(root, page=page.name, resolved=resolved,
                                                actor=actor)
-        except db.Refused as exc:
+        except store.db.Refused as exc:
             raise Refusal(HTTPStatus.NOT_FOUND, exc.error) from None
         self.changed("comment", page.name)
         return {"thread": root, "resolution": resolution}
@@ -1100,7 +1100,7 @@ class Api:
                     sections=page.sections, text=text, actor=actor, owner=page.owner,
                     images=images,
                 )
-            except db.UnknownParent:
+            except store.db.UnknownParent:
                 raise Refusal(HTTPStatus.NOT_FOUND, "unknown_parent") from None
         if "question" in fields and "section" not in fields:
             return self._store_decision_thread(fields, names, least, actor)

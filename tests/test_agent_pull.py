@@ -34,7 +34,7 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from lotuspod import api, cli, db, decisions, machine, media, routing  # noqa: E402
+from lotuspod import api, cli, core, decisions, machine, media, routing, store  # noqa: E402
 from tests import access_keys as keys  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -110,7 +110,7 @@ class PullTestCase(unittest.TestCase):
         self.work = Path(tmp.name).resolve()
         self.out_dir = self.work / "artifacts"
         self.out_dir.mkdir()
-        self.db_path = self.work / db.DEFAULT_NAME
+        self.db_path = self.work / store.db.DEFAULT_NAME
         self.socket_path = self.work / machine.SOCKET_NAME
         config = self.work / "config.ini"
         config.write_text(keys.config_text(), encoding="utf-8")
@@ -123,7 +123,7 @@ class PullTestCase(unittest.TestCase):
             patcher.start()
             self.addCleanup(patcher.stop)
 
-        database = db.Database(self.db_path)
+        database = store.db.Database(self.db_path)
         self.desk = self.work / "desk.token"
         machine.create_credential(database, "desk",
                                   ["hermes", "hermes-desk", "claude-3f9a2c", "responder"],
@@ -298,7 +298,7 @@ class PullTests(PullTestCase):
         self.assertEqual(page["source"], PLAN)
         self.assertEqual(set(comment_item),
                          {"kind", "comment", "thread", "omitted", "resolution", "page"})
-        self.assertEqual(comment_item["resolution"], db.UNRESOLVED)
+        self.assertEqual(comment_item["resolution"], store.db.UNRESOLVED)
         self.assertEqual(comment_item["page"], page)
         got = comment_item["comment"]
         self.assertEqual(got["id"], comment["id"])
@@ -450,7 +450,7 @@ class AckTests(PullTestCase):
                                 "--local")
         self.assertEqual(rc, 0, err)
         # An answer stored before the words were kept, to the same question.
-        old = db.Database(self.db_path).add_answer(
+        old = store.db.Database(self.db_path).add_answer(
             page="plan", question="decision-1", version=answer["version"], choice="no",
             note="", revision=answer["revision"], actor=READER,
         )
@@ -641,7 +641,7 @@ class ResolvedThreadTests(PullTestCase):
             self.assertEqual(item["comment"]["state"], "pending")
             self.assertEqual(item["resolution"]["actor"], READER)
             self.assertEqual(api.shown(item["resolution"]), resolution)
-        self.assertEqual(items[still["id"]]["resolution"], db.UNRESOLVED)
+        self.assertEqual(items[still["id"]]["resolution"], store.db.UNRESOLVED)
         self.assertEqual(self.row(done["id"])["state"], "pending")
 
         line = f"Resolved by {keys.EMAIL} at {resolution['at']}"
@@ -668,7 +668,7 @@ class FollowUpPullTests(PullTestCase):
 
     def prepare(self) -> None:
         self.hermes = self.work / "hermes.token"
-        machine.create_credential(db.Database(self.db_path), "hermes", ["hermes"],
+        machine.create_credential(store.db.Database(self.db_path), "hermes", ["hermes"],
                                   ["pull", "claim", "reply"], self.hermes)
 
     def as_hermes(self, *argv: str) -> dict:
@@ -1090,7 +1090,7 @@ class DismissalPullTests(PullTestCase):
                           if item["kind"] == "answer"], [bare["id"]])
 
     def test_an_undo_gives_the_entry_as_answers_gives_it(self):
-        database = db.Database(self.db_path)
+        database = store.db.Database(self.db_path)
         args = {"page": "plan", "question": "decision-2", "version": "v1", "revision": "r",
                 "actor": READER}
         database.add_answer(choice="yes", note="", question_text="Run it?",
@@ -1180,7 +1180,7 @@ class RecordAnswerTests(PullTestCase):
 
     def test_a_refused_record_stores_nothing(self):
         self.publish_mail(MAIL)
-        machine.create_credential(db.Database(self.db_path), "reader-only", ["hermes"],
+        machine.create_credential(store.db.Database(self.db_path), "reader-only", ["hermes"],
                                   ["pull"], self.work / "reader-only.token")
         record = {"page": "plan", "question": "decision-1", "choice": "yes",
                   "source": self.SOURCE}
@@ -1209,7 +1209,7 @@ class RecordAnswerTests(PullTestCase):
             with self.subTest(name):
                 self.assertEqual(self.record(body, credential), (status, {"error": error}))
         for page in ("plan", "mail", "loose", "nowhere"):
-            self.assertEqual(db.Database(self.db_path).answers(page), {})
+            self.assertEqual(store.db.Database(self.db_path).answers(page), {})
 
         status, payload = self.record({**record, "source": "s" * 200})
         self.assertEqual(status, 200, payload)
@@ -1456,7 +1456,7 @@ class NoteCommentTests(unittest.TestCase):
     def setUp(self) -> None:
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
-        self.database = db.Database(Path(tmp.name) / db.DEFAULT_NAME)
+        self.database = store.db.Database(Path(tmp.name) / store.db.DEFAULT_NAME)
 
     def save(self, choice: str, note: str, thread: dict | None = THREAD) -> dict:
         return self.database.add_answer(
@@ -1506,12 +1506,12 @@ class SchemaTests(PullTestCase):
     def prepare(self) -> None:
         # The database again as an earlier schema wrote it, with the
         # credentials and a comment in it: serve is the first to open it.
-        credentials = db.Database(self.db_path).credentials()
-        for path in self.work.glob(db.DEFAULT_NAME + "*"):
+        credentials = store.db.Database(self.db_path).credentials()
+        for path in self.work.glob(store.db.DEFAULT_NAME + "*"):
             path.unlink()
         conn = sqlite3.connect(str(self.db_path))
         for step in range(1, self.version + 1):
-            for statement in db._SCHEMA[step]:
+            for statement in store.db._SCHEMA[step]:
                 conn.execute(statement)
         for row in credentials:
             conn.execute(
@@ -1547,10 +1547,10 @@ class SchemaTests(PullTestCase):
         conn = sqlite3.connect(str(self.db_path))
         try:
             self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0],
-                             db.SCHEMA_VERSION)
+                             store.db.SCHEMA_VERSION)
         finally:
             conn.close()
-        self.assertEqual(db.SCHEMA_VERSION, 17)
+        self.assertEqual(store.db.SCHEMA_VERSION, 17)
 
 
 class ReplySchemaTests(SchemaTests):
@@ -1655,10 +1655,10 @@ class OwnerWindowOptionTests(unittest.TestCase):
                 self.assertEqual(cli.owner_window(None), 42)
                 self.assertEqual(cli.owner_window(7), 7)
                 for bad in (0, -1):
-                    with self.subTest(flag=bad), self.assertRaises(cli.ConfigError):
+                    with self.subTest(flag=bad), self.assertRaises(core.ConfigError):
                         cli.owner_window(bad)
                 config.write_text("[comments]\nowner_window_sec = soon\n", encoding="utf-8")
-                with self.assertRaises(cli.ConfigError):
+                with self.assertRaises(core.ConfigError):
                     cli.owner_window(None)
 
 

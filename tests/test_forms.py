@@ -25,7 +25,7 @@ from unittest import mock
 
 from tests.test_manifest_v2 import TempDirTestCase, stylesheet_hash
 
-from lotuspod import cli  # after test_manifest_v2, which puts src/ on the path
+from lotuspod import cli, core  # after test_manifest_v2, which puts src/ on the path
 
 FIXTURES = Path(__file__).parent / "fixtures"
 GENERATOR_TAG = '<meta name="generator" content="lotuspod theme lotus">'
@@ -166,11 +166,11 @@ class PageScriptTests(FormsTestCase):
         self.addCleanup(thread.join, 5)
         self.addCleanup(server.server_close)
         self.addCleanup(server.shutdown)
-        url = f"http://127.0.0.1:{server.server_address[1]}/{cli.PAGE_SCRIPT}"
+        url = f"http://127.0.0.1:{server.server_address[1]}/{core.PAGE_SCRIPT}"
         with urllib.request.urlopen(url, timeout=5) as response:
             self.assertEqual(response.status, 200)
             served = response.read()
-        self.assertEqual(served, cli.theme_file_bytes(cli.PAGE_SCRIPT))
+        self.assertEqual(served, core.theme_file_bytes(core.PAGE_SCRIPT))
 
 
 if __name__ == "__main__":

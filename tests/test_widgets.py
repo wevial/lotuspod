@@ -10,7 +10,7 @@ from unittest.mock import patch
 
 from tests.test_manifest_v2 import TempDirTestCase, cli, run_cli
 from tests.test_page_policy import read_page, directives
-from lotuspod import markdown, widgets
+from lotuspod import core, markdown, publish_sources, render, widgets
 
 SOURCE = '<button>Press</button>\n<style>button { color: red; }</style>\n<script>document.body.dataset.ran = "yes";</script>\n'
 
@@ -90,14 +90,14 @@ class WidgetTests(TempDirTestCase):
         self.assertIn((widgets.THEME / 'widget-frame.js').read_text(), document)
         policy = directives(read_page(document).policies[0])
         self.assertEqual(policy, {
-            'default-src': ["'none'"], 'script-src': [cli.script_hash(s) for s in cli.collect_scripts(document).inline],
+            'default-src': ["'none'"], 'script-src': [core.script_hash(s) for s in core.collect_scripts(document).inline],
             'style-src': ["'unsafe-inline'"], 'img-src': ['data:'], 'font-src': ['data:'],
             'connect-src': ["'none'"], 'form-action': ["'none'"], 'base-uri': ["'none'"], 'frame-src': ["'none'"],
         })
-        bridge = cli.collect_scripts(page).inline[0]
+        bridge = core.collect_scripts(page).inline[0]
         self.assertIn('installWidgetBridge();', bridge)
         self.assertLess(page.index(bridge), page.index('</head>'))
-        self.assertIn(cli.script_hash(bridge), directives(read_page(page).policies[0])['script-src'])
+        self.assertIn(core.script_hash(bridge), directives(read_page(page).policies[0])['script-src'])
         self.assertIn('&lt;button&gt;plain&lt;/button&gt;', page)
         self.assertEqual(Elements(document).tags[1][0], 'head')
         self.assertEqual(Elements(document).tags[2][0], 'meta')
@@ -106,7 +106,7 @@ class WidgetTests(TempDirTestCase):
         body = markdown.to_body('```html live id=steps title="Steps"\n<script>lotuspod.state("at 6 workers");</script>\n```')
         self.assertEqual(self.render('pond', '--body', body)[0], 0)
         document = (self.out_dir / self.frame()[1]['src']).read_text()
-        scripts = cli.collect_scripts(document).inline
+        scripts = core.collect_scripts(document).inline
         bridge = scripts[0]
         self.assertEqual(bridge, (widgets.THEME / 'widget-frame.js').read_text())
         self.assertIn('post({type: "lotuspod:state", label: String(label).slice(0, 80).replace(/[\\uD800-\\uDBFF]$/, "")});', bridge)
@@ -114,7 +114,7 @@ class WidgetTests(TempDirTestCase):
         self.assertIn('window.lotuspod = {state: state, theme: theme};\n  state("");', bridge)
         self.assertEqual(scripts[1], 'lotuspod.state("at 6 workers");')
         hashes = directives(read_page(document).policies[0])['script-src']
-        self.assertEqual(hashes, [cli.script_hash(script) for script in scripts])
+        self.assertEqual(hashes, [core.script_hash(script) for script in scripts])
         self.assertEqual(len(set(hashes)), len(scripts))
 
     def test_publish_history_stability_and_cleanup(self):
@@ -163,13 +163,13 @@ class WidgetTests(TempDirTestCase):
         self.assertEqual(len(Elements(page).of('h2')), 2)
         self.assertNotIn('Private heading', page)
         self.assertEqual(directives(read_page(page).policies[0])['frame-src'], ["'self'"])
-        self.assertNotIn('frame-src', cli.page_policy('<p>Plain</p>', set()))
+        self.assertNotIn('frame-src', render.page_policy('<p>Plain</p>', set()))
         self.assertEqual([a['data-section'] for a in Elements(page).of('details') if 'artifact-comment' in a.get('class', '') and a.get('data-section')], ['one', 'two'])
 
     def test_html_source_readers_ignore_widget_headings_and_images(self):
         body = '<template class="lotuspod-live" data-title="Clock"><h1>Inside</h1><img src="data:image/gif;base64,AAAA"></template><h1>Outside</h1>'
-        self.assertEqual(cli.html_title(body)[0], 'Outside')
-        self.assertEqual(cli.html_images(body).images, [])
+        self.assertEqual(core.html_title(body)[0], 'Outside')
+        self.assertEqual(publish_sources.html_images(body).images, [])
         self.assertEqual(self.publish(body)[0], 0)
 
     def test_noscript_text_preserves_widget_template_boundaries(self):
@@ -186,7 +186,7 @@ class WidgetTests(TempDirTestCase):
                 self.assertEqual(len(files), 1)
                 self.assertIn(content, next(iter(files.values())).decode())
                 self.assertNotIn('Private heading', rendered)
-                self.assertNotIn('Private heading', widgets.without_templates(body))
+                self.assertNotIn('Private heading', core.without_templates(body))
                 rc, _, error = self.publish(source, suffix, '--comments')
                 self.assertEqual(rc, 0, error)
                 page, frame = self.frame()
@@ -226,7 +226,7 @@ class WidgetTests(TempDirTestCase):
 
     def test_variables_are_exact_and_complete(self):
         import re
-        tokens = json.loads((widgets.THEME / 'tokens.json').read_text())
+        tokens = json.loads(widgets.TOKENS.read_text())
         singular = {"colors": "color", "fonts": "font", "radii": "radius"}
 
         def expected(sets):
@@ -240,7 +240,7 @@ class WidgetTests(TempDirTestCase):
             self.assertEqual(len(declarations), len(dict(declarations)))
             return dict(declarations)
         _, files, _ = widgets.render('<template class="lotuspod-live" data-title="Clock">x</template>', 'pond')
-        for text, attribute in [(cli.theme_file_bytes('lotuspod.css').decode(), 'data-theme'),
+        for text, attribute in [(core.theme_file_bytes('lotuspod.css').decode(), 'data-theme'),
                                 (next(iter(files.values())).decode(), 'data-lotus-theme')]:
             with self.subTest(attribute=attribute):
                 blocks = {

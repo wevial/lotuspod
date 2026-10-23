@@ -96,7 +96,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Callable, Iterator, Mapping, Sequence
 
-from lotuspod import media
+from lotuspod.core import URL_PREFIX
 
 DEFAULT_NAME = "lotuspod.sqlite3"
 SCHEMA_VERSION = 17
@@ -428,7 +428,7 @@ def _images(text: str | None) -> list[dict]:
     """A comment's stored images, each with the URL serve answers it at."""
     if text is None:
         return []
-    return [{"name": image["name"], "url": media.URL_PREFIX + image["name"],
+    return [{"name": image["name"], "url": URL_PREFIX + image["name"],
              "width": image["width"], "height": image["height"]} for image in json.loads(text)]
 
 

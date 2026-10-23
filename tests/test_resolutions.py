@@ -23,7 +23,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from lotuspod import db, machine  # noqa: E402
+from lotuspod import machine  # noqa: E402
+from lotuspod.store import db  # noqa: E402
 from tests.test_agent_pull import READER, run_cli  # noqa: E402
 from tests.test_claims import ClaimTestCase  # noqa: E402
 from tests.test_cli_surface import run_lotuspod  # noqa: E402

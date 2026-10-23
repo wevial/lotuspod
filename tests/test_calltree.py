@@ -8,7 +8,7 @@ from unittest import mock
 
 from tests.test_manifest_v2 import TempDirTestCase, run_cli
 
-from lotuspod import calltree, cli, refs
+from lotuspod import calltree, core, refs
 from lotuspod.markdown import to_body
 from tests.test_markdown import parse
 
@@ -148,4 +148,4 @@ class CalltreePageScriptTests(TempDirTestCase):
                                          '--hidden')
                 self.assertEqual(rc, 0, err)
                 page = (self.out_dir / f'{name}.html').read_text(encoding='utf-8')
-                self.assertEqual(f'<script src="{cli.PAGE_SCRIPT}?v=' in page, loads)
+                self.assertEqual(f'<script src="{core.PAGE_SCRIPT}?v=' in page, loads)

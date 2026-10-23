@@ -92,8 +92,8 @@ from contextlib import contextmanager, redirect_stderr, redirect_stdout
 from pathlib import Path
 from typing import Collection, Iterator
 
-# cli imports this module too: only names used at call time are read from it.
-from lotuspod import agents, api, cli, comments, db, machine, media, routing
+from lotuspod import agents, api, comments, core, machine, media, publish, routing, serve_files
+from lotuspod.store import db
 
 DEFAULT_COMMAND = "claude -p --model opus --permission-mode acceptEdits"
 DEFAULT_INTERVAL = 30
@@ -605,16 +605,16 @@ class Responder:
         except Refused:
             raise _Failed(NO_PUBLISH) from None
         name = page["name"]
-        revision = cli.source_revision(data)
+        revision = core.source_revision(data)
         self.journal.write({"key": key, "text": text, "publishing": revision})
         try:
             # Only if the page is still at the revision of the source the
             # agent read, whatever revision was read beside it.
-            expect = cli.source_revision(page["source"].encode("utf-8"))
+            expect = core.source_revision(page["source"].encode("utf-8"))
             code, printed = self._publish(name, page["sourceFile"], data, expect)
         except (RuntimeError, OSError, KeyError, ValueError) as exc:
             raise _Failed(f"I could not republish the page: {exc}") from None
-        if code == cli.EXIT_REVISION_CONFLICT:
+        if code == core.EXIT_REVISION_CONFLICT:
             raise _Failed(CONFLICT)
         if code != 0:
             lines = printed.strip().splitlines()
@@ -639,12 +639,12 @@ class Responder:
             source.write_bytes(data)
             text = data.decode("utf-8", "replace")
             if source_file.endswith(".md"):
-                titled = cli.markdown_title(text)
+                titled = core.markdown_title(text)
             else:
-                titled = cli.html_title(text)[0]
+                titled = core.html_title(text)[0]
             args = argparse.Namespace(
                 source=str(source), name=name, format="", date="",
-                title=None if titled else cli.extract_meta(previous, name)["title"],
+                title=None if titled else core.extract_meta(previous, name)["title"],
                 summary=None, labels=None, no_labels=False, variant=None,
                 expect_revision=expect,
                 out_dir=str(self.out_dir), owner="", credential="", db="",
@@ -654,7 +654,7 @@ class Responder:
             out, err = io.StringIO(), io.StringIO()
             try:
                 with redirect_stdout(out), redirect_stderr(err):
-                    code = cli.cmd_publish(args)
+                    code = publish.cmd_publish(args)
             finally:
                 sys.stdout.write(out.getvalue())
                 sys.stderr.write(err.getvalue())
@@ -782,7 +782,7 @@ class Responder:
             revision = entry.get("published") or self.database.published_revision(
                 comment_id, credential=self.credential["name"], key=key)
             if revision is None and publishing is not None and (
-                    cli.page_revision(self.out_dir, entry.get("page", "")) == publishing
+                    core.page_revision(self.out_dir, entry.get("page", "")) == publishing
                     or committed(self.out_dir, entry.get("source", ""), publishing,
                                  entry.get("at", 0))):
                 revision = publishing
@@ -823,7 +823,7 @@ def committed(out_dir: Path, source_file: str, revision: str, since: float) -> b
                     source_file)
         for commit in found.stdout.decode("ascii", "replace").split():
             shown = git("show", f"{commit}:{source_file}")
-            if shown.returncode == 0 and cli.source_revision(shown.stdout) == revision:
+            if shown.returncode == 0 and core.source_revision(shown.stdout) == revision:
                 return True
     except OSError:
         return False
@@ -836,16 +836,16 @@ def agent_command(arg: str | None) -> list[str]:
     if arg:
         text, label = arg, "--command"
     else:
-        text = (cli.config_section("responder") or {}).get("command", "")
-        label = f"config {cli.config_path()} [responder] command"
+        text = (core.config_section("responder") or {}).get("command", "")
+        label = f"config {core.config_path()} [responder] command"
         if not text:
             text, label = DEFAULT_COMMAND, "the default command"
     try:
         argv = shlex.split(text)
     except ValueError as exc:
-        raise cli.ConfigError(f"{label} {text!r}: {exc}") from None
+        raise core.ConfigError(f"{label} {text!r}: {exc}") from None
     if not argv:
-        raise cli.ConfigError(f"{label} is empty")
+        raise core.ConfigError(f"{label} is empty")
     return argv
 
 
@@ -864,7 +864,7 @@ def command_model(argv: list[str]) -> str | None:
 
 def cmd_pause(args: argparse.Namespace, paused: bool) -> int:
     try:
-        cli.serve_database(args).set_responder_paused(paused)
+        serve_files.serve_database(args).set_responder_paused(paused)
     except ValueError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
@@ -877,14 +877,14 @@ def cmd_respond(args: argparse.Namespace) -> int:
         return cmd_pause(args, True)
     if args.action == "resume":
         return cmd_pause(args, False)
-    out_dir = (Path(args.out_dir) if args.out_dir else cli.DEFAULT_OUTPUT_DIR).resolve()
+    out_dir = (Path(args.out_dir) if args.out_dir else core.DEFAULT_OUTPUT_DIR).resolve()
     try:
-        db_path = cli.serve_db_path(out_dir, args.db)
+        db_path = serve_files.serve_db_path(out_dir, args.db)
     except ValueError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
     responder = Responder(
-        socket_path=cli.agent_socket(args), token=cli.agent_token(args),
+        socket_path=agents.agent_socket(args), token=agents.agent_token(args),
         database=db.Database(db_path), out_dir=out_dir,
         journal=Journal(Path(args.journal) if args.journal else db_path.parent / JOURNAL_NAME),
         command=agent_command(args.command), timeout=args.timeout,
@@ -1005,7 +1005,7 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
         "--timeout", type=_seconds, default=DEFAULT_TIMEOUT, metavar="SEC",
         help=f"seconds the agent command may run on one comment (default: {DEFAULT_TIMEOUT})",
     )
-    cli.add_agent_options(parser)
+    agents.add_agent_options(parser)
     parser.add_argument(
         "--journal", default="", metavar="PATH",
         help=f"the responder's journal (default: {JOURNAL_NAME} beside the database)",

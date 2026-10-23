@@ -1,5 +1,5 @@
 // The names the page script's sources share in the closure the join wraps
-// them in (THEME_CLOSURES in src/lotuspod/cli.py), as a page source written
+// them in (THEME_CLOSURES in src/lotuspod/core/__init__.py), as a page source written
 // in TypeScript (web/src/page-swap.ts) calls them: declared once here, each
 // with the source that defines it. A source's own top-level names join these
 // in the one closure, so none may repeat another source's.
@@ -22,7 +22,7 @@ interface PageLive {
 }
 declare const live: PageLive;
 
-// js/shared.js.
+// core/ts/shared.js.
 declare function element<K extends keyof HTMLElementTagNameMap>(
   tag: K, className?: string | null, text?: string): HTMLElementTagNameMap[K];
 // js/page-open.js: the elements selector matches under root (the document
@@ -30,7 +30,7 @@ declare function element<K extends keyof HTMLElementTagNameMap>(
 declare function all<E extends Element = HTMLElement>(selector: string, root?: ParentNode): E[];
 // js/page-open.js: a response's JSON, null when it is none.
 declare function json(response: Response): Promise<unknown>;
-// js/link-tab.js: a link off the site opens in a new tab.
+// core/ts/link-tab.js: a link off the site opens in a new tab.
 declare function linkTab(link: Element): void;
 // js/decisions.js: what reads and saves the page's decision forms, null on a
 // page that loaded with neither a form nor a comment box.

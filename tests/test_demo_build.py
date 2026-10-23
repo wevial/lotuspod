@@ -48,7 +48,7 @@ SRC_DIR = REPO_ROOT / "src"
 sys.path.insert(0, str(SRC_DIR))
 
 from demo import build  # noqa: E402
-from lotuspod import cli, widgets  # noqa: E402
+from lotuspod import core, serve_files, widgets  # noqa: E402
 
 PAGES = ("readme.html", "publishing.html", "comments.html", "agents.html", "operating.html",
          "development.html", "architecture.html", "try-it.html", "interactive.html")
@@ -414,19 +414,19 @@ class OutsideTheBuildTests(unittest.TestCase):
             self.assertNotIn("demo-banner", text)
             self.assertNotIn("lotuspod-demo.css", text)
             self.assertNotIn("lotuspod-demo.js", text)
-            self.assertNotIn("lotuspod-demo", (out / cli.PAGE_SCRIPT).read_text(encoding="utf-8"))
+            self.assertNotIn("lotuspod-demo", (out / core.PAGE_SCRIPT).read_text(encoding="utf-8"))
             (out / "lotuspod-demo.css").write_bytes(build.STYLESHEET.read_bytes())
             (out / "lotuspod-demo.js").write_bytes(build.SHIM.read_bytes())
-            allowed = cli.serve_allow_list(out)
+            allowed = serve_files.serve_allow_list(out)
             self.assertIn("try-it.html", allowed)
             self.assertNotIn("lotuspod-demo.css", allowed)
             self.assertNotIn("lotuspod-demo.js", allowed)
 
     def test_no_theme_source_is_under_demo(self):
         demo = (REPO_ROOT / "demo").resolve()
-        sources = [cli.THEME_DIR / source for files in cli.THEME_SOURCES.values()
+        sources = [core.THEME_ROOT / source for files in core.THEME_SOURCES.values()
                    for source in files]
-        self.assertIn("js/islands.js", cli.THEME_SOURCES[cli.PAGE_SCRIPT])
+        self.assertIn("_theme/js/islands.js", core.THEME_SOURCES[core.PAGE_SCRIPT])
         for source in sources:
             with self.subTest(source=str(source)):
                 self.assertTrue(source.is_file())

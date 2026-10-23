@@ -29,7 +29,8 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from lotuspod import db, machine, media  # noqa: E402
+from lotuspod import machine, media  # noqa: E402
+from lotuspod.store import db  # noqa: E402
 from tests.test_agent_pull import (  # noqa: E402
     CHART, FISH, MEDIA_FIXTURES, PLAN, READER, PullTestCase, run_cli,
 )

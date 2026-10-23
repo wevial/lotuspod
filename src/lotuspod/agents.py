@@ -50,16 +50,54 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
 import unicodedata
 import urllib.parse
 from pathlib import Path
 
-# cli imports this module too: only names used at call time are read from it.
-from lotuspod import api, cli, comments, machine, media
+from lotuspod import api, comments, core, machine, media
 
 _BACKTICKS = re.compile(r"`+")
+
+
+def configured_socket() -> Path | None:
+    """The socket the config's [agents] section names; None when it names none."""
+    value = (core.config_section("agents") or {}).get("socket", "")
+    return Path(value).expanduser() if value else None
+
+
+def agent_socket(args: argparse.Namespace) -> Path:
+    """The socket an agent command talks to: --socket, else the config's
+    [agents] socket, else lotuspod.sock beside the default database."""
+    if args.socket:
+        return Path(args.socket)
+    return configured_socket() or core.DEFAULT_OUTPUT_DIR.parent / machine.SOCKET_NAME
+
+
+def agent_token(args: argparse.Namespace) -> str:
+    """The token of --credential, else of $LOTUSPOD_CREDENTIAL's file."""
+    path = args.credential or os.environ.get(machine.CREDENTIAL_ENV, "")
+    if not path:
+        raise core.ConfigError(f"no credential: pass --credential FILE or set {machine.CREDENTIAL_ENV}")
+    try:
+        return machine.read_token(path)
+    except machine.CredentialError as exc:
+        raise core.ConfigError(str(exc)) from None
+
+
+def add_agent_options(parser: argparse.ArgumentParser) -> None:
+    """--socket and --credential, which every agent command takes."""
+    parser.add_argument(
+        "--socket", default="", metavar="PATH",
+        help="serve's agent socket (default: the config's [agents] socket, else "
+        f"{machine.SOCKET_NAME} beside the default database)",
+    )
+    parser.add_argument(
+        "--credential", default="", metavar="FILE",
+        help=f"the agent's credential file (default: ${machine.CREDENTIAL_ENV})",
+    )
 
 
 def fence(text: str, info: str = "") -> str:
@@ -81,10 +119,10 @@ def _ask(args: argparse.Namespace, method: str, target: str, body: object = None
          content_type: str | None = None) -> dict:
     """The socket's JSON for one request; _Failed naming the refusal."""
     try:
-        token = cli.agent_token(args)
-    except cli.ConfigError as exc:
+        token = agent_token(args)
+    except core.ConfigError as exc:
         raise _Failed("no_credential", str(exc)) from None
-    socket_path = cli.agent_socket(args)
+    socket_path = agent_socket(args)
     try:
         status, payload = machine.request(socket_path, token, method, target, body,
                                           content_type)
@@ -696,7 +734,7 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
     )
     pull.add_argument("--owner", required=True, metavar="HANDLE", help="the handle to pull for")
     pull.add_argument("--json", action="store_true", help="print the socket's JSON")
-    cli.add_agent_options(pull)
+    add_agent_options(pull)
     pull.set_defaults(func=cmd_pull)
 
     ack = actions.add_parser(
@@ -705,7 +743,7 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
     )
     ack.add_argument("id", type=_answer_id, metavar="ID", help="the answer's id")
     ack.add_argument("--json", action="store_true", help="print the socket's JSON")
-    cli.add_agent_options(ack)
+    add_agent_options(ack)
     ack.set_defaults(func=cmd_ack_answer)
 
     record = actions.add_parser(
@@ -730,7 +768,7 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
                         help="where the answer was given, in 1 to 200 characters")
     record.add_argument("--note", default=None, metavar="TEXT", help="a note kept with it")
     record.add_argument("--json", action="store_true", help="print the socket's JSON")
-    cli.add_agent_options(record)
+    add_agent_options(record)
     record.set_defaults(func=cmd_record_answer)
 
     show = actions.add_parser(
@@ -738,7 +776,7 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
     )
     show.add_argument("page", metavar="PAGE", help="the page's name")
     show.add_argument("--json", action="store_true", help="print the socket's JSON")
-    cli.add_agent_options(show)
+    add_agent_options(show)
     show.set_defaults(func=cmd_show)
 
     claim = actions.add_parser(
@@ -752,7 +790,7 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
     )
     claim.add_argument("id", type=_comment_id, metavar="ID", help="the comment's id")
     claim.add_argument("--json", action="store_true", help="print the socket's JSON")
-    cli.add_agent_options(claim)
+    add_agent_options(claim)
     claim.set_defaults(func=cmd_claim)
 
     reply = actions.add_parser(
@@ -783,7 +821,7 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
     reply.add_argument("--image", action="append", default=[], metavar="PATH",
                        help="a PNG, JPEG, WebP or GIF file to attach; repeat for up to four")
     reply.add_argument("--json", action="store_true", help="print the socket's JSON")
-    cli.add_agent_options(reply)
+    add_agent_options(reply)
     reply.set_defaults(func=cmd_reply)
 
     follow = actions.add_parser(
@@ -811,7 +849,7 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
     follow.add_argument("--image", action="append", default=[], metavar="PATH",
                         help="a PNG, JPEG, WebP or GIF file to attach; repeat for up to four")
     follow.add_argument("--json", action="store_true", help="print the socket's JSON")
-    cli.add_agent_options(follow)
+    add_agent_options(follow)
     follow.set_defaults(func=cmd_follow_up)
 
     release = actions.add_parser(
@@ -820,7 +858,7 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
     release.add_argument("id", type=_comment_id, metavar="ID", help="the comment's id")
     release.add_argument("--claim", required=True, metavar="TOKEN", help="the claim token")
     release.add_argument("--json", action="store_true", help="print the socket's JSON")
-    cli.add_agent_options(release)
+    add_agent_options(release)
     release.set_defaults(func=cmd_release)
 
     fail = actions.add_parser(
@@ -832,7 +870,7 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
     fail.add_argument("--reason", required=True, metavar="TEXT",
                       help="why, in up to 200 characters")
     fail.add_argument("--json", action="store_true", help="print the socket's JSON")
-    cli.add_agent_options(fail)
+    add_agent_options(fail)
     fail.set_defaults(func=cmd_fail)
 
     for action, func in (("resolve", cmd_resolve), ("reopen", cmd_reopen)):
@@ -848,7 +886,7 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
         change.add_argument("id", type=_comment_id, metavar="ID",
                             help="the id of the thread's first comment")
         change.add_argument("--json", action="store_true", help="print the socket's JSON")
-        cli.add_agent_options(change)
+        add_agent_options(change)
         change.set_defaults(func=func)
 
 
@@ -876,7 +914,7 @@ def add_inbox_parser(sub: argparse._SubParsersAction) -> None:
     )
     pull.add_argument("--owner", required=True, metavar="HANDLE", help="the inbox's handle")
     pull.add_argument("--json", action="store_true", help="print the socket's JSON")
-    cli.add_agent_options(pull)
+    add_agent_options(pull)
     pull.set_defaults(func=cmd_inbox_pull)
 
     claim = actions.add_parser(
@@ -890,7 +928,7 @@ def add_inbox_parser(sub: argparse._SubParsersAction) -> None:
     claim.add_argument("id", type=_item_id, metavar="ID", help="the item's id")
     claim.add_argument("--owner", required=True, metavar="HANDLE", help="the inbox's handle")
     claim.add_argument("--json", action="store_true", help="print the socket's JSON")
-    cli.add_agent_options(claim)
+    add_agent_options(claim)
     claim.set_defaults(func=cmd_inbox_claim)
 
     done = actions.add_parser(
@@ -912,5 +950,5 @@ def add_inbox_parser(sub: argparse._SubParsersAction) -> None:
     text.add_argument("--text-file", default=None, metavar="PATH",
                       help="a UTF-8 file holding the reply's text")
     done.add_argument("--json", action="store_true", help="print the socket's JSON")
-    cli.add_agent_options(done)
+    add_agent_options(done)
     done.set_defaults(func=cmd_inbox_done)

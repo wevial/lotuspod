@@ -1,7 +1,7 @@
 """Historical widget bytes and chrome through real publish, git and serve."""
 from unittest import mock
 
-from lotuspod import cli, versions, widgets
+from lotuspod import render, versions, widgets
 from tests.test_publish_witness import parse
 from tests.test_versions_witness import VersionsWitness, PAGE, OTHER, DATES
 
@@ -78,7 +78,7 @@ class WidgetVersionsTests(VersionsWitness):
 
     def test_history_budget_and_visible_listing(self):
         first, _ = self.prepare()
-        history = versions.History(self.out, cli.version_stamp)
+        history = versions.History(self.out, render.version_stamp)
         with mock.patch.object(history, '_git', wraps=history._git) as calls:
             self.assertEqual(history.widget_version(PAGE, first[0], first[1]), first[2])
         self.assertLessEqual(calls.call_count, 3)

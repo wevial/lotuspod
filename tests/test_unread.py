@@ -24,7 +24,8 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from lotuspod import cli, db, machine, routing  # noqa: E402
+from lotuspod import cli, machine, routing  # noqa: E402
+from lotuspod.store import db  # noqa: E402
 from tests import access_keys as keys  # noqa: E402
 from tests.test_api import ACTOR, CREATED_AT, DECISIONS_BODY, ApiTestCase, run_cli  # noqa: E402
 

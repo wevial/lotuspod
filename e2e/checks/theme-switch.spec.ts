@@ -27,7 +27,7 @@ const PHONE = { width: 390, height: 844 };
 const MERMAID_DIR = 'https://cdn.jsdelivr.net/npm/mermaid@11.4.1/';
 const MERMAID_COPY = path.join(__dirname, '..', 'node_modules', 'mermaid');
 const TOKENS = JSON.parse(fs.readFileSync(
-  path.resolve(__dirname, '..', '..', 'src', 'lotuspod', '_theme', 'tokens.json'), 'utf-8'));
+  path.resolve(__dirname, '..', '..', 'src', 'lotuspod', 'core', 'theme', 'tokens.json'), 'utf-8'));
 const NIGHT: Record<string, string> = TOKENS.colors;
 const DAWN: Record<string, string> = TOKENS.dawn.colors;
 const DAWN_STRUCTURE: Record<string, string> = TOKENS.dawn.structure;

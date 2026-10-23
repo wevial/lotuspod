@@ -1,7 +1,7 @@
 """A page's earlier versions, read from the artifacts repository.
 
 Every publish commits the output directory when it is the top of its own git
-repository (cli.commit_output), so each commit that changed NAME.html is a
+repository (core.commit_output), so each commit that changed NAME.html is a
 version of the page. They are read at request time, with nothing stored:
 
     git log --raw over NAME.html   the commits that changed it, newest first,
@@ -49,7 +49,6 @@ from __future__ import annotations
 import datetime as _dt
 import difflib
 import html
-import os
 import re
 import subprocess
 import threading
@@ -60,6 +59,7 @@ from pathlib import Path
 from typing import Callable
 
 from . import widgets
+from .core import WIDGET_NAME, git_environment
 
 # The versions of one page a list holds, newest first.
 MAX_VERSIONS = 200
@@ -81,11 +81,6 @@ _SLUG_STRIP = re.compile(r"[^a-z0-9]+")
 _NO_BLOB = "0" * 40
 _MAIN_OPEN_RE = re.compile(r'<main class="([^"]*)"([^>]*)>')
 _TITLE_END_RE = re.compile(r"</title\s*>", re.IGNORECASE)
-
-
-def git_environment() -> dict[str, str]:
-    """The environment every git process runs in: never asking for a password."""
-    return {**os.environ, "GIT_TERMINAL_PROMPT": "0"}
 
 
 @dataclass(frozen=True)
@@ -187,7 +182,7 @@ class Section:
     @property
     def key(self) -> str:
         """What the section is known by in another version: its id, else the
-        id the outline gives its heading text (cli.slugify), as a page left
+        id the outline gives its heading text (core.slugify), as a page left
         with one h2 has none, with its heading text, so a renamed heading
         is one section removed and one added even where it keeps an id the
         author gave it; "" for the text before the first h2."""
@@ -593,7 +588,7 @@ class History:
         The page establishes membership; neither today's files nor another
         commit can supply the bytes. Widget bytes are never cached.
         """
-        if (not widgets.WIDGET_NAME.fullmatch(filename)
+        if (not WIDGET_NAME.fullmatch(filename)
                 or not filename.startswith(name + ".w-")
                 or any(char in filename for char in "/\\\n\r")):
             return None
@@ -809,7 +804,7 @@ def old_page(page_html: str, name: str, version: Version, behind: int,
     edits = []
     for start, end, tag, attrs, attribute in places.widget_tags:
         value = dict(attrs).get(attribute) or ""
-        if widgets.WIDGET_NAME.fullmatch(value) and value.startswith(name + ".w-"):
+        if WIDGET_NAME.fullmatch(value) and value.startswith(name + ".w-"):
             rewritten = [(key, value + "?version=" + version.commit if key == attribute else val)
                          for key, val in attrs]
             markup = "<" + tag + "".join(

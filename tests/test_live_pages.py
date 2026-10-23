@@ -33,7 +33,7 @@ class LivePages(unittest.TestCase):
         self.assertTrue(text.startswith('<!DOCTYPE html><html lang="en"><head><meta http-equiv="Content-Security-Policy"'))
         self.assertIn('<style>body { padding: 24px;', text)
         script = re.search(r'<script>(.*?)</script>', DOCUMENT).group(1)
-        from lotuspod.cli import script_hash
+        from lotuspod.core import script_hash
         self.assertEqual(text.count(script_hash(script).strip("'")), 1)
         kept = (self.out / 'mock.md').read_text()
         self.assertIn(DOCUMENT, kept)

@@ -29,7 +29,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from lotuspod import backup, db, media  # noqa: E402
+from lotuspod import backup, media  # noqa: E402
+from lotuspod.store import db  # noqa: E402
 
 REPO = Path(__file__).resolve().parents[1]
 SRC = REPO / "src"

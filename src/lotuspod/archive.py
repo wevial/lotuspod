@@ -36,8 +36,8 @@ from pathlib import Path
 
 from http import HTTPStatus
 
-# cli imports this module too: only names used at call time are read from it.
-from lotuspod import api, cli, versions
+# site_index imports this module too: only names used at call time are read from it.
+from lotuspod import api, core, serve_files, site_index, versions
 
 class Refused(api.Refusal, RuntimeError):
     """An archive or unarchive that wrote nothing, saying why: a RuntimeError
@@ -81,7 +81,7 @@ def visible_page(out_dir: Path, name: str) -> bool:
     however render named it. The allow-list holds bare file names only, so
     no name reaches past it."""
     file = f"{name}.html"
-    return cli.is_page_name(file) and file in cli.serve_allow_list(out_dir)
+    return core.is_page_name(file) and file in serve_files.serve_allow_list(out_dir)
 
 
 def archived_page(page_html: str, record: dict, successor_title: str | None) -> str:
@@ -134,7 +134,7 @@ def successor_title(out_dir: Path, record: dict) -> str | None:
         page_html = (out_dir / f"{successor}.html").read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError):
         return None
-    return cli.extract_meta(page_html, successor)["title"]
+    return core.extract_meta(page_html, successor)["title"]
 
 
 def set_archived(out_dir: Path, name: str, archived: bool,
@@ -150,7 +150,7 @@ def set_archived(out_dir: Path, name: str, archived: bool,
     nothing.
     """
     out_dir = out_dir.resolve()
-    with cli.publish_lock(out_dir):
+    with core.publish_lock(out_dir):
         if not visible_page(out_dir, name):
             raise Refused(HTTPStatus.NOT_FOUND, "unknown_page",
                           f"{name} is not a visible page of {out_dir}; nothing written")
@@ -171,7 +171,7 @@ def set_archived(out_dir: Path, name: str, archived: bool,
             return None, False
         # What a failed rebuild puts back, so a refusal leaves nothing written.
         kept = {file: file.read_bytes() if file.is_file() else None
-                for file in (path, out_dir / cli.MANIFEST_FILE, out_dir / cli.INDEX_FILE)}
+                for file in (path, out_dir / core.MANIFEST_FILE, out_dir / core.INDEX_FILE)}
         try:
             if not archived:
                 path.unlink()
@@ -179,22 +179,22 @@ def set_archived(out_dir: Path, name: str, archived: bool,
             else:
                 record = {
                     "archivedAt": current["archivedAt"] if current else
-                    cli._utc_stamp(_dt.datetime.now(_dt.timezone.utc)),
+                    core._utc_stamp(_dt.datetime.now(_dt.timezone.utc)),
                     "supersededBy": superseded_by if superseded_by is not None else
                     (current["supersededBy"] if current else None),
                 }
-                cli.write_atomic(path, (json.dumps(record, indent=2) + "\n").encode("utf-8"))
+                core.write_atomic(path, (json.dumps(record, indent=2) + "\n").encode("utf-8"))
             steps = argparse.Namespace(out_dir=str(out_dir), commit=False)
-            cli.cmd_manifest(steps)
-            cli.cmd_index(steps)
+            site_index.cmd_manifest(steps)
+            site_index.cmd_index(steps)
         except Exception as exc:
             for file, data in kept.items():
                 if data is None:
                     file.unlink(missing_ok=True)
                 else:
-                    cli.write_atomic(file, data)
+                    core.write_atomic(file, data)
             raise RuntimeError(f"{exc}; nothing written") from None
-        cli.commit_output(out_dir, f"{'archive' if archived else 'unarchive'} {name}")
+        core.commit_output(out_dir, f"{'archive' if archived else 'unarchive'} {name}")
     return record, True
 
 
@@ -202,20 +202,20 @@ def over_ssh(args: argparse.Namespace, config: dict[str, str], action: str) -> i
     """Run the command on the config's host; ssh's exit status."""
     out_dir = config.get("out_dir", "")
     if not out_dir:
-        raise cli.ConfigError(f"config {cli.config_path()} sets host but no out_dir in [publish]")
+        raise core.ConfigError(f"config {core.config_path()} sets host but no out_dir in [publish]")
     if args.out_dir:
-        raise cli.ConfigError(
-            f"--out-dir names a directory on this machine, but config {cli.config_path()} "
+        raise core.ConfigError(
+            f"--out-dir names a directory on this machine, but config {core.config_path()} "
             f"{action}s on its host; pass --local to {action} here"
         )
-    # Quoted as cli.remote_publish_command quotes publish's.
+    # Quoted as publish.remote_publish_command quotes publish's.
     argv = [action, "--local", f"--out-dir={out_dir}"]
     if getattr(args, "superseded_by", None) is not None:
         argv.append(f"--superseded-by={args.superseded_by}")
     # A NAME beginning with '-' (render takes one) would be read as an option
     # on the far side; after '--' it is NAME.
     argv += ["--", args.name] if args.name.startswith("-") else [args.name]
-    command = config.get("command") or cli.DEFAULT_REMOTE_COMMAND
+    command = config.get("command") or core.DEFAULT_REMOTE_COMMAND
     remote = " ".join([command, *(shlex.quote(arg) for arg in argv)])
     # Nothing rides on standard input, so the far side never waits for it.
     try:
@@ -230,13 +230,13 @@ def _run(args: argparse.Namespace, archived: bool) -> int:
     superseded_by = getattr(args, "superseded_by", None)
     if not args.local:
         try:
-            config = cli.publish_config()
+            config = core.publish_config()
             if config.get("host"):
                 return over_ssh(args, config, action)
-        except cli.ConfigError as exc:
+        except core.ConfigError as exc:
             print(f"error: {exc}", file=sys.stderr)
-            return cli.EXIT_CONFIG
-    out_dir = Path(args.out_dir) if args.out_dir else cli.DEFAULT_OUTPUT_DIR
+            return core.EXIT_CONFIG
+    out_dir = Path(args.out_dir) if args.out_dir else core.DEFAULT_OUTPUT_DIR
     if not out_dir.is_dir():
         raise FileNotFoundError(f"artifacts directory not found: {out_dir}")
     _, written = set_archived(out_dir, args.name, archived, superseded_by)
