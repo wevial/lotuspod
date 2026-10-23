@@ -372,10 +372,12 @@ so each failed check is annotated with its spec, line and title, and with
 the rest of the suite. It splits the checks across four shards with
 Playwright's `--shard=N/4`, one `e2e-shard (N/4)` job each, and each shard
 serves its own copy of the sample site; one job named `e2e` reports their
-combined result. Each shard caches
-npm's downloads, keyed on `e2e/package-lock.json`, and Playwright's Chromium
-in `~/.cache/ms-playwright`, keyed on the installed `@playwright/test`
-version. Each shard runs with one worker, and `e2e/checks.config.ts` retries
+combined result. Each shard runs in Microsoft's Playwright image
+(`mcr.microsoft.com/playwright:v<version>-noble`) at the exact
+`@playwright/test` version `e2e/package.json` pins, which ships Chromium and
+the libraries it needs, so no shard downloads a browser;
+`tests/test_e2e_image.py` fails when the image tag and the pinned version
+differ, so bump both together. Each shard runs with one worker, and `e2e/checks.config.ts` retries
 a failed check once when `CI` is set (never locally). A check that passes
 only on its retry is reported as flaky: the list output prints `N flaky`
 with each such check, and the `Playwright Run Summary` notice on the run's
