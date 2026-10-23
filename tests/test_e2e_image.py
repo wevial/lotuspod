@@ -41,11 +41,14 @@ def shard_image(root: Path) -> str:
     if job is None:
         raise AssertionError("no `e2e-shard` job in the e2e workflow")
     container = re.search(
-        r"^    container:[ \t]*(.*)\n((?:      .*\n)*)", job.group(1), re.MULTILINE)
+        r"^    container:[ \t]*(.*)\n((?:      .*\n|[ \t]*\n)*)", job.group(1), re.MULTILINE)
     if container is None:
         raise AssertionError("the `e2e-shard` job has no `container:`")
     inline, nested = container.group(1).strip(), container.group(2)
-    image = (re.search(r"image:\s*[\"']?([^\"'\s,}]+)", inline + "\n" + nested)
+    # Only `container.image` itself, not a key nested deeper such as `env.base_image`.
+    image = (re.search(r"^      image:[ \t]*[\"']?([^\"'\s]+)", nested, re.MULTILINE)
+             or re.search(r"^\{\s*image:\s*[\"']?([^\"'\s,}]+)", inline)
+             or re.search(r",\s*image:\s*[\"']?([^\"'\s,}]+)", inline)
              or re.fullmatch(r"[\"']?([^\"'\s{]+)[\"']?", inline))
     if image is None:
         raise AssertionError("the `e2e-shard` container names no image")
@@ -91,7 +94,12 @@ class E2eImageTestCase(unittest.TestCase):
         return root
 
     def test_repository_image_matches_pinned_version(self) -> None:
-        self.assertIsNone(image_mismatch(REPO_ROOT))
+        reason = image_mismatch(REPO_ROOT)
+        if reason:
+            self.fail(reason)
+
+    def test_matching_scratch_copy_passes(self) -> None:
+        self.assertIsNone(image_mismatch(self.scratch("1.62.1", "1.62.1")))
 
     def test_different_pinned_version_fails_naming_both(self) -> None:
         reason = image_mismatch(self.scratch("1.63.0", "1.62.1"))
@@ -112,6 +120,20 @@ class E2eImageTestCase(unittest.TestCase):
             "    container:\n      # image: mcr.microsoft.com/playwright:v1.62.1-noble\n")
         root = self.scratch("1.62.1", "1.62.0", workflow)
         self.assertEqual(shard_image(root), "mcr.microsoft.com/playwright:v1.62.0-noble")
+
+    def test_nested_image_key_under_container_is_ignored(self) -> None:
+        workflow = WORKFLOW.replace(
+            "    container:\n",
+            "    container:\n      env:\n"
+            "        base_image: mcr.microsoft.com/playwright:v1.62.1-noble\n")
+        root = self.scratch("1.62.1", "1.61.0", workflow)
+        self.assertEqual(shard_image(root), "mcr.microsoft.com/playwright:v1.61.0-noble")
+        self.assertIn("1.61.0", image_mismatch(root))
+
+    def test_blank_line_inside_container_is_allowed(self) -> None:
+        workflow = WORKFLOW.replace("    container:\n", "    container:\n\n")
+        root = self.scratch("1.62.1", "1.62.1", workflow)
+        self.assertEqual(shard_image(root), "mcr.microsoft.com/playwright:v1.62.1-noble")
 
     def test_missing_container_fails(self) -> None:
         workflow = WORKFLOW.replace(
