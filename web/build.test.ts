@@ -6,8 +6,8 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, 
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve, sep } from "node:path";
 
-import { SyntaxKind } from "typescript/unstable/ast";
-import { createScanner } from "typescript/unstable/ast/scanner";
+import { type CallExpression, type Identifier, type Node, type StringLiteral, SyntaxKind } from "typescript/unstable/ast";
+import { API } from "typescript/unstable/async";
 
 import { build, ISLANDS_MARKER, marker, outDir, unparsed } from "./build";
 
@@ -296,8 +296,8 @@ test("a file nested under the output directory that does not parse is named", ()
 // public entry (its ts/index.ts), or another slice's other files only along
 // an edge in TS_EDGES; the islands' bridge (a slice's ts/islands/bridge.ts)
 // is the only file that reaches the classic scripts outside core and the
-// slices. The imports are read with
-// TypeScript's own scanner, type-only ones among them.
+// slices. The imports are read with TypeScript's own parser, type-only ones
+// among them.
 //
 // TS_EDGES is a ratchet, as EDGES in tests/test_import_graph.py is: one
 // [from, to] slice pair an entry, which can only be removed.
@@ -305,46 +305,51 @@ const TS_EDGES: readonly (readonly [string, string])[] = [];
 
 const SCRIPT_SUFFIXES = [".ts", ".tsx", ".js"];
 
-// The module specifiers a file imports or re-exports: `from "x"`,
-// `import "x"`, `import("x")` and `require("x")`, the last two with a
-// template literal too. null stands for an `import(...)` or `require(...)`
-// whose specifier is not a literal, which the slice rule cannot read.
-function importedFiles(text: string): (string | null)[] {
-  const scanner = createScanner(true, undefined, text);
-  const found: (string | null)[] = [];
-  const kinds: SyntaxKind[] = [];
-  // What each open brace closes: a block, or a template's substitution.
-  const braces: boolean[] = [];
-  const ends = new Set([SyntaxKind.Identifier, SyntaxKind.NumericLiteral, SyntaxKind.StringLiteral,
-    SyntaxKind.CloseParenToken, SyntaxKind.CloseBracketToken, SyntaxKind.CloseBraceToken,
-    SyntaxKind.ThisKeyword, SyntaxKind.SuperKeyword, SyntaxKind.NoSubstitutionTemplateLiteral,
-    SyntaxKind.TemplateTail, SyntaxKind.RegularExpressionLiteral]);
-  for (let kind = scanner.scan(); kind !== SyntaxKind.EndOfFile; kind = scanner.scan()) {
-    const last = kinds[kinds.length - 1];
-    const before = kinds[kinds.length - 2];
-    const called = last === SyntaxKind.OpenParenToken
-      && (before === SyntaxKind.ImportKeyword || before === SyntaxKind.RequireKeyword);
-    if ((kind === SyntaxKind.SlashToken || kind === SyntaxKind.SlashEqualsToken)
-        && (last === undefined || !ends.has(last))) {
-      kind = scanner.reScanSlashToken();
-    } else if (kind === SyntaxKind.TemplateHead) {
-      braces.push(true);
-      if (called) found.push(null);
-    } else if (kind === SyntaxKind.OpenBraceToken) {
-      braces.push(false);
-    } else if (kind === SyntaxKind.CloseBraceToken && braces.pop()) {
-      kind = scanner.reScanTemplateToken(false);
-      if (kind === SyntaxKind.TemplateMiddle) braces.push(true);
-    } else if (kind === SyntaxKind.StringLiteral) {
-      if (last === SyntaxKind.FromKeyword || last === SyntaxKind.ImportKeyword || called) {
-        found.push(scanner.getTokenValue());
-      }
-    } else if (kind === SyntaxKind.NoSubstitutionTemplateLiteral && called) {
-      found.push(scanner.getTokenValue());
-    } else if (called) {
-      found.push(null);
+// The module specifiers each file imports or re-exports, as TypeScript's
+// own parser lists them (a source file's imports): `from "x"`, `import "x"`,
+// `import x = require("x")`, `import("x")` and `typeof import("x")`, a
+// type-only import too, and a JavaScript file's `require("x")`. null stands
+// for an `import(...)` or `require(...)` whose specifier is not a literal,
+// which the slice rule cannot read. The files are parsed as one project in a
+// scratch directory, by the compiler the typecheck runs.
+async function importedFiles(files: readonly string[]): Promise<Map<string, (string | null)[]>> {
+  const found = new Map<string, (string | null)[]>();
+  if (files.length === 0) {
+    return found;
+  }
+  const scratch = mkdtempSync(join(tmpdir(), "lotuspod-imports-"));
+  const config = join(scratch, "tsconfig.json");
+  writeFileSync(config, JSON.stringify({
+    compilerOptions: { allowJs: true, jsx: "preserve", module: "esnext", target: "esnext", noEmit: true },
+    files,
+  }));
+  const api = new API({ cwd: scratch });
+  try {
+    const snapshot = await api.updateSnapshot({ openProjects: [config] });
+    const program = snapshot.getProject(config)!.program;
+    for (const file of files) {
+      const source = (await program.getSourceFile(file))!;
+      const specifiers: (string | null)[] = source.imports.map((node) => (node as StringLiteral).text);
+      const unread = (node: Node): void => {
+        if (node.kind === SyntaxKind.CallExpression) {
+          const call = node as CallExpression;
+          const loads = call.expression.kind === SyntaxKind.ImportKeyword
+            || (call.expression.kind === SyntaxKind.Identifier
+                && (call.expression as Identifier).text === "require");
+          const argument = call.arguments[0];
+          if (loads && argument !== undefined && argument.kind !== SyntaxKind.StringLiteral
+              && argument.kind !== SyntaxKind.NoSubstitutionTemplateLiteral) {
+            specifiers.push(null);
+          }
+        }
+        node.forEachChild(unread);
+      };
+      source.forEachChild(unread);
+      found.set(file, specifiers);
     }
-    kinds.push(kind);
+  } finally {
+    await api.close();
+    rmSync(scratch, { recursive: true, force: true });
   }
   return found;
 }
@@ -375,7 +380,7 @@ function placeOf(root: string, path: string): { slice: string | null; core: bool
 
 // One line per import a slice's script makes that the rule refuses, naming
 // the file, the specifier and why. root is the package (src/lotuspod).
-function sliceImportProblems(root: string, edges: readonly (readonly [string, string])[]): string[] {
+async function sliceImportProblems(root: string, edges: readonly (readonly [string, string])[]): Promise<string[]> {
   const features = join(root, "features");
   if (!existsSync(features)) {
     return [];
@@ -387,9 +392,10 @@ function sliceImportProblems(root: string, edges: readonly (readonly [string, st
     .filter((path) => relative(features, path).split(sep)[1] === "ts" && statSync(path).isFile()
       && SCRIPT_SUFFIXES.some((suffix) => path.endsWith(suffix)))
     .sort();
+  const imported = await importedFiles(files);
   for (const file of files) {
     const own = placeOf(root, file).slice!;
-    for (const specifier of importedFiles(readFileSync(file, "utf8"))) {
+    for (const specifier of imported.get(file)!) {
       if (specifier === null) {
         problems.push(`${relative(root, file)}: imports a specifier that is not a literal, `
           + "which the slice rule cannot read");
@@ -417,11 +423,11 @@ function sliceImportProblems(root: string, edges: readonly (readonly [string, st
   return problems;
 }
 
-test("the scripts of the repository's slices keep the slice rule", () => {
-  expect(sliceImportProblems(join(import.meta.dir, "..", "src", "lotuspod"), TS_EDGES)).toEqual([]);
+test("the scripts of the repository's slices keep the slice rule", async () => {
+  expect(await sliceImportProblems(join(import.meta.dir, "..", "src", "lotuspod"), TS_EDGES)).toEqual([]);
 });
 
-test("the scanner reads every import, type-only ones too, and nothing in strings, comments or patterns", () => {
+test("the parser reads every import, type-only ones too, and nothing in strings, comments or patterns", async () => {
   const text = [
     'import type { A } from "./a";',
     'import { type B } from "./b";',
@@ -437,8 +443,14 @@ test("the scanner reads every import, type-only ones too, and nothing in strings
     'const later = await import(`./h`);',
     'const named = await import(`./${late}`);',
     'const chosen = require(said);',
+    'if (late) /"/.test(""); import { after } from "./i";',
   ].join("\n");
-  expect(importedFiles(text)).toEqual(["./a", "./b", "./c.js", "./d", "./e", "./f", "./g", "./h", null, null]);
+  const file = join(root, "imports.ts");
+  writeFileSync(file, text);
+  const found = (await importedFiles([file])).get(file)!;
+  expect(found.filter((specifier) => specifier !== null).sort())
+    .toEqual(["./a", "./b", "./c.js", "./d", "./e", "./f", "./g", "./h", "./i"]);
+  expect(found.filter((specifier) => specifier === null)).toHaveLength(2);
 });
 
 describe("the slice rule over fixture slices a and b and core", () => {
@@ -457,7 +469,7 @@ describe("the slice rule over fixture slices a and b and core", () => {
     write("features/a/ts/own.ts", "export const own = 3;\n");
   });
 
-  test("a file of a importing b's public entry, a core script or its own file passes", () => {
+  test("a file of a importing b's public entry, a core script or its own file passes", async () => {
     write("features/a/ts/use.ts", [
       'import { inner } from "../../b/ts/index";',
       'import { inner as again } from "../../b/ts";',
@@ -465,45 +477,52 @@ describe("the slice rule over fixture slices a and b and core", () => {
       'import { own } from "./own";',
       'import { render } from "preact";',
     ].join("\n"));
-    expect(sliceImportProblems(lotuspod, [])).toEqual([]);
+    expect(await sliceImportProblems(lotuspod, [])).toEqual([]);
   });
 
-  test("a file of a importing a file of b other than its public entry, along no listed edge, fails", () => {
+  test("a file of a importing a file of b other than its public entry, along no listed edge, fails", async () => {
     write("features/a/ts/use.ts", 'import { inner } from "../../b/ts/inner";\n');
     write("features/a/ts/types.ts", 'import type { inner } from "../../b/ts/inner";\n');
-    const problems = sliceImportProblems(lotuspod, [["b", "a"]]);
+    const problems = await sliceImportProblems(lotuspod, [["b", "a"]]);
     expect(problems).toHaveLength(2);
     expect(problems[0]).toStartWith(`${join("features", "a", "ts", "types.ts")}: imports ../../b/ts/inner (${join("features", "b", "ts", "inner.ts")})`);
     expect(problems[1]).toContain("slice a reaches past slice b's ts/index.ts along no listed edge");
   });
 
-  test("a dynamic import of b's other file in a template literal fails, and one it cannot read fails too", () => {
+  test("a dynamic import of b's other file in a template literal fails, and one it cannot read fails too", async () => {
     write("features/a/ts/use.ts", "const inner = await import(`../../b/ts/inner`);\n");
     write("features/a/ts/pick.ts", "const name = \"inner\";\nconst inner = await import(`../../b/ts/${name}`);\n");
-    const problems = sliceImportProblems(lotuspod, []);
+    const problems = await sliceImportProblems(lotuspod, []);
     expect(problems).toHaveLength(2);
     expect(problems[0]).toStartWith(`${join("features", "a", "ts", "pick.ts")}: imports a specifier that is not a literal`);
     expect(problems[1]).toContain("slice a reaches past slice b's ts/index.ts along no listed edge");
   });
 
-  test("the same import along a listed edge passes", () => {
+  test("an import after a pattern that follows a statement's parentheses is read", async () => {
+    write("features/a/ts/use.ts", 'if (true) /"/.test(""); import { inner } from "../../b/ts/inner";\n');
+    const problems = await sliceImportProblems(lotuspod, []);
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toContain("slice a reaches past slice b's ts/index.ts along no listed edge");
+  });
+
+  test("the same import along a listed edge passes", async () => {
     write("features/a/ts/use.ts", 'import { inner } from "../../b/ts/inner";\n');
-    expect(sliceImportProblems(lotuspod, [["a", "b"]])).toEqual([]);
+    expect(await sliceImportProblems(lotuspod, [["a", "b"]])).toEqual([]);
   });
 
-  test("a .js specifier names its .ts source, so b's public entry so named passes", () => {
+  test("a .js specifier names its .ts source, so b's public entry so named passes", async () => {
     write("features/a/ts/use.ts", 'import { inner } from "../../b/ts/index.js";\n');
-    expect(sliceImportProblems(lotuspod, [])).toEqual([]);
+    expect(await sliceImportProblems(lotuspod, [])).toEqual([]);
     write("features/a/ts/use.ts", 'import { inner } from "../../b/ts/inner.js";\n');
-    expect(sliceImportProblems(lotuspod, [])).toHaveLength(1);
+    expect(await sliceImportProblems(lotuspod, [])).toHaveLength(1);
   });
 
-  test("only the islands' bridge.ts reaches a classic script outside core and the slices", () => {
+  test("only the islands' bridge.ts reaches a classic script outside core and the slices", async () => {
     write("features/a/ts/islands/bridge.ts", 'import "../../../../_theme/js/page-open.js";\n');
-    expect(sliceImportProblems(lotuspod, [])).toEqual([]);
+    expect(await sliceImportProblems(lotuspod, [])).toEqual([]);
     write("features/a/ts/bridge.ts", 'import "../../../_theme/js/page-open.js";\n');
     write("features/a/ts/use.ts", 'import "../../../_theme/js/page-open.js";\n');
-    const problems = sliceImportProblems(lotuspod, []);
+    const problems = await sliceImportProblems(lotuspod, []);
     expect(problems).toHaveLength(2);
     for (const problem of problems) {
       expect(problem).toContain("only the islands' bridge.ts reaches the classic scripts");
