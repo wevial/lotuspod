@@ -157,8 +157,9 @@ def is_module(package_dir: Path, name: str) -> bool:
 
 
 def exports(package_dir: Path, name: str) -> set[str]:
-    """The names the package's __init__.py binds at its top level itself: a
-    `from X import name` of one of them takes that name, not a submodule."""
+    """The names the package's __init__.py binds at its top level itself, and
+    does not delete again: a `from X import name` of one of them takes that
+    name, not a submodule."""
     path = package_dir.parent.joinpath(*name.split("."), "__init__.py")
     if not path.is_file():
         return set()
@@ -168,9 +169,13 @@ def exports(package_dir: Path, name: str) -> set[str]:
             bound.add(node.name)
         elif isinstance(node, (ast.Assign, ast.AnnAssign)):
             targets = node.targets if isinstance(node, ast.Assign) else [node.target]
-            bound |= {target.id for target in targets if isinstance(target, ast.Name)}
+            bound |= {name.id for target in targets for name in ast.walk(target)
+                      if isinstance(name, ast.Name)}
         elif isinstance(node, (ast.Import, ast.ImportFrom)):
             bound |= {alias.asname or alias.name.split(".")[0] for alias in node.names}
+        elif isinstance(node, ast.Delete):
+            bound -= {name.id for target in node.targets for name in ast.walk(target)
+                      if isinstance(name, ast.Name)}
     return bound
 
 
@@ -428,6 +433,16 @@ class CheckerTests(unittest.TestCase):
         self.write("features/b/__init__.py", "from .inner import run as inner\n")
         self.write("features/a/user.py", "from lotuspod.features.b import inner\n")
         self.assertEqual(self.found(), [])
+
+    def test_a_name_an_init_unpacks_is_an_export(self):
+        self.write("features/b/__init__.py", "from .inner import run\ninner, other = run, 0\n")
+        self.write("features/a/user.py", "from lotuspod.features.b import inner\n")
+        self.assertEqual(self.found(), [])
+
+    def test_a_name_an_init_deletes_is_not_an_export(self):
+        self.write("features/b/__init__.py", "from . import inner\ndel inner\n")
+        self.assert_reported("features/a/user.py", "from lotuspod.features.b import inner\n",
+                             "lotuspod.features.b.inner")
 
     def test_call_edges_name_one_use_for_each(self):
         self.write("cli.py", """\
