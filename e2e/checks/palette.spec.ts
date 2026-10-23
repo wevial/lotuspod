@@ -288,6 +288,9 @@ test.describe('signed in', () => {
     const second = page.locator('form.artifact-decision[data-question="decision-2"]');
     await expect(first.locator('.artifact-decision-saved-line')).toContainText('Saved');
     await expect(first.locator('.artifact-decision-check')).toHaveCSS('color', rgb(COLORS.mint));
+    const mark = first.locator('.artifact-decision-saved-mark');
+    await expect(mark).toHaveText('✓ Saved');
+    await expect(mark).toHaveCSS('color', rgb(COLORS.mint));
 
     await second.getByRole('radio', { name: 'No' }).check();
     const unsaved = second.locator('.artifact-decision-unsaved');

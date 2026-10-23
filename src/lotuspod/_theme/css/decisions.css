@@ -320,8 +320,12 @@ label.artifact-decision-note span {
   margin-top: 0.2em;
 }
 
-.artifact-decision-check {
+/* "✓ Saved" in mint, the check bold. */
+.artifact-decision-saved-mark {
   color: var(--color-mint);
+}
+
+.artifact-decision-check {
   font-weight: 700;
 }
 

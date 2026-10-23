@@ -110,9 +110,6 @@ test.describe('signed in', () => {
   });
 
   test('a page published twice lists two versions and opens the older one read-only', async ({ page }) => {
-    // Some seventeen loads of the page, its old version and the index's
-    // tab: on a shared runner they outlast the default 30 seconds.
-    test.setTimeout(90_000);
     const errors = watchErrors(page);
     const name = 'versions-check';
     publish(name, source('Versions check', 'first'));

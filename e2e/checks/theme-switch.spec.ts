@@ -531,6 +531,29 @@ test('beside the review sheet on a phone every switch button stays in the window
   expect(errors).toEqual([]);
 });
 
+test('beside the archive button alone on a phone every switch button stays in the window', async ({ page }) => {
+  const errors = await watch(page);
+  await page.route((url) => url.pathname === '/api/archive', (route) =>
+    route.fulfill({ json: { page: SLUG, mayArchive: true, archived: true, archivedAt: '2026-10-06T17:54:00Z' } }));
+  for (const width of [375, 320, 280]) {
+    await page.setViewportSize({ width, height: 700 });
+    await page.goto(`${PAGE}?standalone`);
+    await expect(page.locator('.artifact-topbar button.artifact-archive')).toBeVisible();
+    await expect(page.locator('.artifact-review-bar')).toHaveCount(0);
+    const bar = (await page.locator('.artifact-topbar').boundingBox())!;
+    for (const name of ['Night', 'Dawn', 'Auto'] as const) {
+      const box = (await switchButton(page, name).boundingBox())!;
+      expect(box.x, `${name} at ${width}`).toBeGreaterThanOrEqual(0);
+      expect(box.x + box.width, `${name} at ${width}`).toBeLessThanOrEqual(width);
+      expect(box.y + box.height, `${name} at ${width}`).toBeLessThanOrEqual(bar.y + bar.height);
+    }
+    const archive = (await page.locator('.artifact-topbar button.artifact-archive').boundingBox())!;
+    expect(archive.x + archive.width, `Unarchive at ${width}`).toBeLessThanOrEqual(width);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+  }
+  expect(errors).toEqual([]);
+});
+
 test('on a phone the switch shows whole in the title bar and nothing scrolls sideways', async ({ page }) => {
   await page.setViewportSize(PHONE);
   const errors = await watch(page);
