@@ -14,9 +14,10 @@ LOTUSPOD_CONFIG naming a missing file:
   depth;
 - the discovered test names: unittest's Class.method ids and Playwright's
   `--list` titles for each e2e/*.config.ts, each without its file path, as
-  multisets. A name may be discovered more often here than at the merge base
-  only by as many times as test files the merge base lacks declare it, so a
-  move ticket may add a test module; those names are listed.
+  multisets; a test module that fails to import fails the run rather than
+  counting as an added name. A name may be discovered more often here than
+  at the merge base only by as many times as test files the merge base lacks
+  declare it, so a move ticket may add a test module; those names are listed.
 
 Prints each difference and exits 1, else prints the counts it compared and
 exits 0. Every move ticket runs it from the repo root:
@@ -48,6 +49,7 @@ LISTED = re.compile(r"^\s*(\[[^\]]+\]) › (\S+):\d+:\d+ › (.+)$")
 PAGE_BODY = ('<h2>One</h2><p>A <a href="https://example.com/">link</a>.</p>'
              "<h2>Two</h2><p>The second section.</p>")
 UNITTEST_NAMES = """
+import sys
 import unittest
 
 def tests(suite):
@@ -57,7 +59,11 @@ def tests(suite):
         else:
             yield test
 
-for test in tests(unittest.defaultTestLoader.discover("tests", top_level_dir=".")):
+loader = unittest.TestLoader()
+suite = loader.discover("tests", top_level_dir=".")
+if loader.errors:
+    sys.exit("\\n".join(loader.errors))
+for test in tests(suite):
     module = type(test).__module__.replace(".", "/") + ".py"
     print(f"{module} {type(test).__name__}.{test._testMethodName}")
 """

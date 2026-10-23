@@ -1,8 +1,9 @@
-"""Test suite for `ci/move_witness.py`'s reading of Playwright's test names.
+"""Test suite for `ci/move_witness.py`'s reading of discovered test names.
 
-Each test lists a scratch tree's e2e configs through a stand-in for
-Playwright that answers `--list` and its JSON report as Playwright does, and
-compares the titles with a merge base's files.
+The Playwright tests list a scratch tree's e2e configs through a stand-in
+for Playwright that answers `--list` and its JSON report as Playwright does,
+and compare the titles with a merge base's files. The unittest tests run
+discovery over a scratch tree's tests/.
 
 Run from the repo root:
 
@@ -56,6 +57,29 @@ class SpecPathsTest(unittest.TestCase):
         self.assertEqual(lines, [])
         self.assertEqual(allowed, ["playwright: 'demo.config.ts [chromium] › demo theme' "
                                    "is added by e2e/demo/theme.spec.ts"])
+
+
+class UnittestNamesTest(unittest.TestCase):
+    def setUp(self):
+        scratch = tempfile.TemporaryDirectory()
+        self.addCleanup(scratch.cleanup)
+        self.root = Path(scratch.name)
+        (self.root / "tests").mkdir()
+        (self.root / "tests" / "__init__.py").write_text("")
+        (self.root / "tests" / "test_fine.py").write_text(
+            "import unittest\n\nclass Fine(unittest.TestCase):\n"
+            "    def test_it(self):\n        pass\n")
+        self.tree = move_witness.Tree("working tree", self.root, self.root / "missing.ini")
+
+    def test_each_discovered_test_is_named_with_its_file(self):
+        self.assertEqual(self.tree.unittest_names(),
+                         {("tests/test_fine.py", "Fine.test_it"): 1})
+
+    def test_a_test_module_that_fails_to_import_fails_discovery(self):
+        (self.root / "tests" / "test_broken.py").write_text(
+            'raise RuntimeError("discovery failed")\n')
+        with self.assertRaisesRegex(RuntimeError, "unittest discovery failed.*test_broken"):
+            self.tree.unittest_names()
 
 
 if __name__ == "__main__":
