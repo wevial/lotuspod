@@ -24,7 +24,6 @@ IMAGE_PREFIX = "mcr.microsoft.com/playwright:v"
 
 
 def pinned_version(root: Path) -> str:
-    """`@playwright/test`'s version in `e2e/package.json` under root."""
     package = json.loads((root / "e2e" / "package.json").read_text(encoding="utf-8"))
     for key in ("devDependencies", "dependencies"):
         version = package.get(key, {}).get("@playwright/test")
@@ -34,7 +33,6 @@ def pinned_version(root: Path) -> str:
 
 
 def shard_image(root: Path) -> str:
-    """The `e2e-shard` job's container image in the e2e workflow under root."""
     text = (root / ".github" / "workflows" / "e2e.yml").read_text(encoding="utf-8")
     # Drop comment lines and trailing comments, so a commented-out image is not read.
     text = re.sub(r"^[ \t]*#.*\n", "", text, flags=re.MULTILINE)
