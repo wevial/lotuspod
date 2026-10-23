@@ -4,7 +4,8 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, relative, resolve, sep } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { type CallExpression, type Identifier, type Node, type StringLiteral, SyntaxKind } from "typescript/unstable/ast";
 import { API } from "typescript/unstable/async";
@@ -401,10 +402,13 @@ async function sliceImportProblems(root: string, edges: readonly (readonly [stri
           + "which the slice rule cannot read");
         continue;
       }
-      if (!specifier.startsWith(".")) {
+      // A package name is not a file of the repository's; a relative path,
+      // an absolute one and a file: URL all are.
+      const local = specifier.startsWith("file:") ? fileURLToPath(specifier) : specifier;
+      if (!local.startsWith(".") && !isAbsolute(local)) {
         continue;
       }
-      const target = resolveSpecifier(file, specifier);
+      const target = resolveSpecifier(file, local);
       const place = placeOf(root, target);
       let why = "";
       if (place.core || place.slice === own || place.entry) {
@@ -503,6 +507,20 @@ describe("the slice rule over fixture slices a and b and core", () => {
     const problems = await sliceImportProblems(lotuspod, []);
     expect(problems).toHaveLength(1);
     expect(problems[0]).toContain("slice a reaches past slice b's ts/index.ts along no listed edge");
+  });
+
+  test("an absolute path or a file: URL to a file of b other than its public entry fails", async () => {
+    const inner = join(lotuspod, "features", "b", "ts", "inner.ts");
+    write("features/a/ts/use.ts", `import { inner } from ${JSON.stringify(inner)};\n`);
+    write("features/a/ts/url.ts", `import { inner } from ${JSON.stringify(pathToFileURL(inner).href)};\n`);
+    const problems = await sliceImportProblems(lotuspod, []);
+    expect(problems).toHaveLength(2);
+    for (const problem of problems) {
+      expect(problem).toContain("slice a reaches past slice b's ts/index.ts along no listed edge");
+    }
+    write("features/a/ts/use.ts", `import { inner } from ${JSON.stringify(join(lotuspod, "features", "b", "ts", "index.ts"))};\n`);
+    write("features/a/ts/url.ts", "export {};\n");
+    expect(await sliceImportProblems(lotuspod, [])).toEqual([]);
   });
 
   test("the same import along a listed edge passes", async () => {
