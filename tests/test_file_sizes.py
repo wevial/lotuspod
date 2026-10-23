@@ -24,6 +24,7 @@ Run from the repo root:
 
 from __future__ import annotations
 
+import os
 import subprocess
 import tempfile
 import unittest
@@ -66,8 +67,9 @@ def is_built(root: Path, path: str) -> bool:
 
 def tracked(root: Path) -> list[str]:
     out = subprocess.run(["git", "ls-files", "-z", "--", *PATTERNS], cwd=root,
-                         check=True, capture_output=True, text=True).stdout
-    return sorted(path for path in out.split("\0") if path)
+                         check=True, capture_output=True).stdout
+    # Bytes, not text=True, which would turn a "\r" in a name into "\n".
+    return sorted(os.fsdecode(path) for path in out.split(b"\0") if path)
 
 
 def measure(root: Path) -> dict[str, int]:
@@ -186,6 +188,12 @@ class WalkTest(unittest.TestCase):
         self.write("src/z.py", 2)
         self.assertEqual(violations(self.root, self.PINS),
                          ["src/a\u2028name.py: 1001 lines, past its cap of 1000"])
+
+    def test_counts_a_file_whose_name_holds_a_carriage_return(self):
+        self.write("src/has\rcarriage.py", 1001)
+        self.write("src/has\ncarriage.py", 1)
+        self.assertEqual(violations(self.root, self.PINS),
+                         ["src/has\rcarriage.py: 1001 lines, past its cap of 1000"])
 
 
 if __name__ == "__main__":
