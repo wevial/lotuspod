@@ -76,8 +76,8 @@ from unittest import mock
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
-from lotuspod import (access, api, cli, core, machine, media, publish, routing,  # noqa: E402
-                      site_index)
+from lotuspod import (access, api, cli, core, machine, media, publish, routing)  # noqa: E402
+from lotuspod.features.index import listing  # noqa: E402
 from lotuspod import render as page_render  # noqa: E402
 from lotuspod.store import db  # noqa: E402
 from tests import access_keys  # noqa: E402
@@ -133,7 +133,7 @@ class _SampleTime(datetime.datetime):
 
 
 def _sample_clock() -> types.ModuleType:
-    """The datetime module as render, publish and site_index read it, with
+    """The datetime module as render, publish and the index's listing read it, with
     today() held at SAMPLE_DATE
     and now() at SAMPLE_UPDATED.
 
@@ -1033,7 +1033,7 @@ def render(out_dir: Path, db_path: Path) -> None:
         clock = _sample_clock()
         with redirect_stdout(sys.stderr), mock.patch.object(page_render, "_dt", clock), \
                 mock.patch.object(publish, "_dt", clock), \
-                mock.patch.object(site_index, "_dt", clock), \
+                mock.patch.object(listing, "_dt", clock), \
                 mock.patch.dict(os.environ, committed):
             try:
                 rc = cli.main(argv)

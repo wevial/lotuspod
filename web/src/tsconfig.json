@@ -1,5 +1,6 @@
 {
-  // The browser sources: the DOM's types and none of Bun's. The empty
+  // The browser sources, here and in each slice's ts/ (built beside it by
+  // web/build.ts): the DOM's types and none of Bun's. The empty
   // "references" keeps tsc from failing while no source is converted yet.
   "compilerOptions": {
     "target": "ESNext",
@@ -10,6 +11,6 @@
     "noEmit": true,
     "skipLibCheck": true
   },
-  "include": ["*.ts"],
+  "include": ["*.ts", "../../src/lotuspod/features/*/ts/*.ts"],
   "references": []
 }

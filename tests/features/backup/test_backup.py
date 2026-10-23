@@ -9,7 +9,7 @@ Real git and SQLite; the CLI runs as a subprocess from this checkout's src/.
 
 Run from the repo root:
 
-    python -m unittest tests.test_backup -v
+    python -m unittest tests.features.backup.test_backup -v
 """
 
 from __future__ import annotations
@@ -27,12 +27,13 @@ import time
 import unittest
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "src"))
 
-from lotuspod import backup, media  # noqa: E402
+from lotuspod import media  # noqa: E402
+from lotuspod.features.backup import backup  # noqa: E402
 from lotuspod.store import db  # noqa: E402
 
-REPO = Path(__file__).resolve().parents[1]
+REPO = Path(__file__).resolve().parents[3]
 SRC = REPO / "src"
 TIMEOUT = 120
 FIXTURES = REPO / "tests" / "fixtures" / "media"

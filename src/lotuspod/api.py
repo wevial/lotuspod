@@ -52,7 +52,7 @@ first, none while the page has no comment boxes.
 
 /api/versions answers {page, versions: [{commit, date, revision, current,
 summary}]}: each commit of the artifacts repository that changed the page
-while it was visible, newest first (lotuspod.versions), `date` its committer
+while it was visible, newest first (lotuspod.features.history.versions), `date` its committer
 time, `current` true on the newest only and `summary` what it changed from
 the page before it in one line (versions.summary()), "" on a first version.
 It is empty when the output directory is not the top of its own repository.
@@ -77,7 +77,7 @@ mayArchive}: `archived` the time the page was archived or null,
 `supersededBy` the page that replaces it or null, and `mayArchive` whether
 the reader is one of the owners. POST /api/archive with {page, archived:
 true|false[, supersededBy]} archives or unarchives the page as `lotuspod
-archive` does (lotuspod.archive), and answers 200 in the same shape. It is
+archive` does (lotuspod.features.history.archive), and answers 200 in the same shape. It is
 refused, with nothing written, as any POST, and 403 not_owner for a reader
 who is not an owner, 400 invalid_body for a body not of that shape (a
 `supersededBy` with `archived` false included), 404 unknown_page, and 400
@@ -85,7 +85,7 @@ unknown_successor for a successor serve does not answer, or the page itself.
 
 /api/changes compares the newest listed version of NAME whose revision is
 REV, the revision the reader last opened it at, with the current one
-(lotuspod.versions.compare), and answers {page, since: {commit, date,
+(lotuspod.features.history.versions.compare), and answers {page, since: {commit, date,
 revision}, behind, changed, sections, lines, truncated}: `behind` the listed
 versions newer than it, and `changed` false, with nothing compared, when REV
 is the current revision. `sections` is {changed: [{id, title}], added: [{id,
@@ -219,7 +219,8 @@ from http import HTTPStatus
 from pathlib import Path
 from typing import BinaryIO, Callable, Mapping, Sequence
 
-from lotuspod import comments, media, routing, store, versions
+from lotuspod import comments, media, routing, store
+from lotuspod.features.history import versions
 
 ANSWERS = "/api/answers"
 COMMENTS = "/api/comments"
@@ -611,7 +612,7 @@ class Api:
     pages' versions; without it every page has none. names() is the names
     of the pages serve answers, archived ones left out, whose versions the
     activity route reads. archive(name, archived, superseded_by) archives or
-    unarchives a page (lotuspod.archive.set_archived), and owners are the
+    unarchives a page (lotuspod.features.history.archive.set_archived), and owners are the
     readers who may; without it the archive route's POST answers 503.
     catalog() is a lookup like pages over one read of the site, which the
     seen and activity routes take once per request for every name they

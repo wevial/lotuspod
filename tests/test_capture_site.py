@@ -326,7 +326,8 @@ class ServedSiteTests(CaptureSiteTestCase):
         (hook / "sitecustomize.py").write_text(
             "import datetime, sys, types\n"
             f"sys.path.insert(0, {str(REPO_ROOT / 'src')!r})\n"
-            "from lotuspod import publish, render, site_index\n"
+            "from lotuspod import publish, render\n"
+            "from lotuspod.features.index import listing\n"
             "class _Day(datetime.date):\n"
             "    @classmethod\n"
             "    def today(cls):\n"
@@ -334,7 +335,7 @@ class ServedSiteTests(CaptureSiteTestCase):
             "clock = types.ModuleType('datetime')\n"
             "clock.__dict__.update(vars(datetime))\n"
             "clock.date = _Day\n"
-            "render._dt = publish._dt = site_index._dt = clock\n",
+            "render._dt = publish._dt = listing._dt = clock\n",
             encoding="utf-8",
         )
         env = dict(os.environ, TMPDIR=str(self.scratch), PYTHONPATH=str(hook))
@@ -495,10 +496,10 @@ class TeardownTests(CaptureSiteTestCase):
         (hook / "sitecustomize.py").write_text(
             "import os, sys\n"
             f"sys.path.insert(0, {str(REPO_ROOT / 'src')!r})\n"
-            "from lotuspod import cli\n"
+            "from lotuspod.features.index import commands\n"
             "def _fail(args):\n"
             "    raise RuntimeError('index broken')\n"
-            "cli.cmd_index = _fail\n",
+            "commands.cmd_index = _fail\n",
             encoding="utf-8",
         )
         env = dict(os.environ, TMPDIR=str(self.scratch), PYTHONPATH=str(hook))

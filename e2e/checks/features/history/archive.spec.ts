@@ -15,7 +15,7 @@ const SIGNED_IN = { 'Cf-Access-Jwt-Assertion': ASSERTION };
 const OUT = ENV.LOTUSPOD_TEST_OUT ?? '';
 const PYTHON = ENV.LOTUSPOD_TEST_PYTHON ?? '';
 // This checkout's package, whatever lotuspod is installed.
-const SRC = path.resolve(__dirname, '..', '..', 'src');
+const SRC = path.resolve(__dirname, '..', '..', '..', '..', 'src');
 const NAME = 'archive-check';
 
 function run(...args: string[]) {

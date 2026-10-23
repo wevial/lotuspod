@@ -518,7 +518,8 @@ def package_path(*parts: str) -> Path:
 
 
 # The directory every theme source is named relative to: the package's own,
-# whose core/theme/ and core/ts/ hold the shared sources and _theme/ the rest.
+# whose core/theme/ and core/ts/ hold the shared sources, each slice's
+# features/SLICE/theme/ and features/SLICE/ts/ its own, and _theme/ the rest.
 THEME_ROOT = package_path()
 # The palette, relative to THEME_ROOT.
 TOKENS_SOURCE = "core/theme/tokens.json"
@@ -542,7 +543,7 @@ PAGE_SCRIPT = "lotuspod-page.js"
 # loads it deferred, beside its own inline script.
 INDEX_SCRIPT = "lotuspod-index.js"
 # The old-version script draws the version menu in an earlier version's
-# banner (lotuspod.versions.old_page); serve allows it there, and only it, by
+# banner (lotuspod.features.history.versions.old_page); serve allows it there, and only it, by
 # a nonce of its own answer (_OLD_VERSION_HEADERS). It draws nothing else: no
 # comment, no answer, and nothing posted.
 OLD_VERSION_SCRIPT = "lotuspod-old-version.js"
@@ -571,11 +572,11 @@ THEME_SOURCES = {
         "_theme/css/table-expand.css",
         "_theme/css/widgets.css",
         "_theme/css/image-viewer.css",
-        "_theme/css/index.css",
-        "_theme/css/pod-tabs.css",
-        "_theme/css/pod-finder.css",
-        "_theme/css/versions.css",
-        "_theme/css/archive.css",
+        "features/index/theme/index.css",
+        "features/index/theme/pod-tabs.css",
+        "features/index/theme/pod-finder.css",
+        "features/history/theme/versions.css",
+        "features/history/theme/archive.css",
         "_theme/css/theme-switch.css",
     ),
     PAGE_SCRIPT: (
@@ -601,19 +602,19 @@ THEME_SOURCES = {
         "_theme/js/tables.js",
         "_theme/js/table-expand.js",
         "_theme/js/image-viewer.js",
-        "_theme/js/version-menu.js",
-        "_theme/js/versions.js",
+        "features/history/ts/version-menu.js",
+        "features/history/ts/versions.js",
         "_theme/js/diagram-cards.js",
         "_theme/js/diagram-view.js",
         "_theme/js/ref-cards.js",
         # Built from web/src/calltree.ts: it folds calltree blocks.
         "_theme/js/calltree.js",
         "_theme/js/widgets.js",
-        "_theme/js/archive.js",
+        "features/history/ts/archive.js",
     ),
     INDEX_SCRIPT: (
-        "_theme/js/pod-tabs.js",
-        "_theme/js/pod-finder.js",
+        "features/index/ts/pod-tabs.js",
+        "features/index/ts/pod-finder.js",
         # Built from web/src/index-refresh.ts: it swaps in the listing's rows
         # as the index is served again.
         "_theme/js/index-refresh.js",
@@ -621,8 +622,8 @@ THEME_SOURCES = {
     ),
     OLD_VERSION_SCRIPT: (
         "core/ts/shared.js",
-        "_theme/js/version-menu.js",
-        "_theme/js/old-version.js",
+        "features/history/ts/version-menu.js",
+        "features/history/ts/old-version.js",
     ),
 }
 # The served scripts that run as one strict function, so their sources share

@@ -52,7 +52,7 @@ class Hub:
             return None
 
     def _snapshot(self):
-        from lotuspod import archive
+        from lotuspod.features.history import archive
         return {file[:-5]: (core.page_revision(self.out_dir, file[:-5]),
                            archive.read_record(self.out_dir, file[:-5]))
                 for file in serve_files.serve_allow_list(self.out_dir) if file.endswith(".html") and core.is_page_name(file)}

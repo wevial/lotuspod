@@ -53,8 +53,6 @@ TARGET_TREE = {
     "access": "serve",
     "agents": "agents",
     "api": "serve",
-    "archive": "history",
-    "backup": "backup",
     "calltree": "blocks",
     "comments": "comments",
     "decisions": "decisions",
@@ -72,8 +70,6 @@ TARGET_TREE = {
     "routing": "agents",
     "sections": "publish",
     "serve_files": "serve",
-    "site_index": "index",
-    "versions": "history",
     "widgets": "widgets",
 }
 

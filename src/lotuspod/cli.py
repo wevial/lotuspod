@@ -22,8 +22,8 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Callable
 
-from lotuspod import (access, agents, api, archive, backup, comments, decisions, machine,
-                      media, responder, routing, serve_files, versions, widgets)
+from lotuspod import (access, agents, api, comments, decisions, machine, media, responder,
+                      routing, serve_files, widgets)
 from lotuspod import events as event_streams
 from lotuspod.agents import configured_socket
 from lotuspod.core import (DEFAULT_OUTPUT_DIR, EXIT_REVISION_CONFLICT, INDEX_FILE,
@@ -31,12 +31,15 @@ from lotuspod.core import (DEFAULT_OUTPUT_DIR, EXIT_REVISION_CONFLICT, INDEX_FIL
                            ConfigError, config_path, config_section, extract_meta,
                            extract_visibility, is_page_name, page_revision, source_revision,
                            sync_theme_css, theme_hash)
+from lotuspod.features.backup import commands as backup_commands
+from lotuspod.features.history import archive, versions
+from lotuspod.features.history import commands as history_commands
+from lotuspod.features.index import commands as index_commands
 from lotuspod.publish import _PAGE_NAME, LABEL_MAX, PUBLISH_FORMATS, PUBLISH_VARIANT, cmd_publish
 from lotuspod.publish_sources import media_cap
 from lotuspod.render import (_H2Collector, DEFAULT_VARIANT, VARIANTS, cmd_render,
                              kept_block_hashes, page_owner, version_stamp)
 from lotuspod.serve_files import _SERVE_NEVER_FILES, serve_database, serve_db_path
-from lotuspod.site_index import cmd_index, cmd_manifest
 from lotuspod.store import db
 
 
@@ -920,15 +923,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     render.set_defaults(func=cmd_render)
 
-    manifest = sub.add_parser(
-        "manifest", help="generate manifest.json indexing rendered artifacts"
-    )
-    manifest.add_argument("--out-dir", default="", help="artifacts directory (default: artifacts/)")
-    manifest.set_defaults(func=cmd_manifest)
-
-    index = sub.add_parser("index", help="build index.html listing rendered artifacts")
-    index.add_argument("--out-dir", default="", help="artifacts directory (default: artifacts/)")
-    index.set_defaults(func=cmd_index)
+    index_commands.add_parser(sub)
 
     publish = sub.add_parser(
         "publish",
@@ -1121,8 +1116,8 @@ def build_parser() -> argparse.ArgumentParser:
     agents.add_parser(sub)
     agents.add_inbox_parser(sub)
     responder.add_parser(sub)
-    backup.add_parser(sub)
-    archive.add_parser(sub)
+    backup_commands.add_parser(sub)
+    history_commands.add_parser(sub)
 
     return parser
 

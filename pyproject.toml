@@ -17,6 +17,8 @@ lotuspod = "lotuspod.cli:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-lotuspod = ["py.typed", "_templates/*.html", "_theme/*.js", "_theme/css/*.css", "_theme/js/*.js",
+lotuspod = ["py.typed", "_theme/*.js", "_theme/css/*.css", "_theme/js/*.js",
             "core/templates/*.html", "core/theme/*.css", "core/theme/*.json", "core/theme/*.svg",
-            "core/ts/*.js"]
+            "core/ts/*.js", "features/history/theme/*.css", "features/history/ts/*.js",
+            "features/index/templates/*.html", "features/index/theme/*.css",
+            "features/index/ts/*.js"]

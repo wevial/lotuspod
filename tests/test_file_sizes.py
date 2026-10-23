@@ -42,14 +42,14 @@ OVER = 150
 PINNED = {
     "e2e/checks/live-page.spec.ts": 2849,
     "src/lotuspod/_theme/css/comments.css": 1773,
-    "src/lotuspod/api.py": 1168,
-    "src/lotuspod/cli.py": 1141,
+    "src/lotuspod/api.py": 1169,
+    "src/lotuspod/cli.py": 1136,
     "src/lotuspod/machine.py": 1144,
     "src/lotuspod/responder.py": 1029,
     "src/lotuspod/store/db.py": 1562,
     "tests/test_agent_pull.py": 1688,
     "tests/test_api.py": 1552,
-    "tests/test_manifest_v2.py": 2017,
+    "tests/test_manifest_v2.py": 1656,
 }
 
 

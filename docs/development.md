@@ -19,7 +19,9 @@ install cannot shadow the code under test.
 ## Theme build
 
 A theme script can be written in TypeScript: its source is `web/src/NAME.ts`,
-and the build writes it as `src/lotuspod/_theme/js/NAME.js`, the file render
+and the build writes it as `src/lotuspod/_theme/js/NAME.js`; a slice's source,
+`src/lotuspod/features/SLICE/ts/NAME.ts`, it writes beside itself as `NAME.js`.
+That is the file render
 already joins in the order `THEME_SOURCES` in `core/__init__.py` declares. `web/` is a
 Bun project of its own, beside `e2e/`. The build strips each source's types
 on its own with Bun's transpiler, without bundling, which also drops its
@@ -193,12 +195,12 @@ strict mode and with `erasableSyntaxOnly`, so a source is plain JavaScript
 once its types are erased: no enums, namespaces or parameter properties.
 It checks the build script and its test against Bun's types
 (`web/tsconfig.json`), the sources against the DOM's and none of Bun's
-(`web/src/tsconfig.json`), and the islands, modules with imports and JSX
+(`web/src/tsconfig.json`, which takes in the slices' `ts/` sources too), and the islands, modules with imports and JSX
 whose `jsxImportSource` is `preact`, under their own config
 (`web/src/islands/tsconfig.json`).
 `test` runs `web/build.test.ts`. `check` builds, then fails naming each file
-under `src/lotuspod/_theme/js/`, built or written by hand, that does not parse
-on its own with Bun, and fails when git sees any file there modified, deleted
+under `src/lotuspod/_theme/js/` or a slice's `ts/`, built or written by hand, that does not parse
+on its own with Bun, and fails when git sees any JS file there modified, deleted
 or new, printing what differs.
 
 The built JS is committed, so the wheel ships it, and `pip install`, the unit

@@ -1,4 +1,4 @@
-// Built from web/src/pod-finder.ts by web/build.ts. Edit that file, not this one.
+// Built from src/lotuspod/features/index/ts/pod-finder.ts by web/build.ts. Edit that file, not this one.
 (() => {
   const main = document.querySelector("main.index");
   const bar = document.querySelector(".pod-tabs-bar");

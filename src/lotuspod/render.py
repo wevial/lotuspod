@@ -574,7 +574,7 @@ _MAIN_CLASS_RE = re.compile(r'<main class="([^"]*)"')
 def version_stamp(page_html: str) -> tuple[str, bool, str]:
     """A page's lotuspod:revision ("" when none), whether it is visible and
     the handle its lotuspod:owner names ("" when none does), read from its
-    HTML alone: what lotuspod.versions keeps of each version."""
+    HTML alone: what lotuspod.features.history.versions keeps of each version."""
     tag = _REVISION_TAG_RE.search(page_html)
     content = _META_CONTENT_RE.search(tag.group(0)) if tag else None
     owner = page_owner(page_html)

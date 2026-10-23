@@ -1,9 +1,10 @@
 """Historical widget bytes and chrome through real publish, git and serve."""
 from unittest import mock
 
-from lotuspod import render, versions, widgets
+from lotuspod import render, widgets
+from lotuspod.features.history import versions
 from tests.test_publish_witness import parse
-from tests.test_versions_witness import VersionsWitness, PAGE, OTHER, DATES
+from tests.features.history.test_versions_witness import VersionsWitness, PAGE, OTHER, DATES
 
 
 def live(text):

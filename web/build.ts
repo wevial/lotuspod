@@ -1,5 +1,6 @@
-// Builds each theme source web/src/NAME.ts into src/lotuspod/_theme/js/NAME.js:
-// its types stripped by Bun's transpiler (no bundling, so each file stands
+// Builds each theme source web/src/NAME.ts into src/lotuspod/_theme/js/NAME.js,
+// and each slice's src/lotuspod/features/SLICE/ts/NAME.ts into NAME.js beside
+// it: its types stripped by Bun's transpiler (no bundling, so each file stands
 // alone), after one marker line naming the source. Beside them it bundles the
 // islands entry, web/src/islands/main.tsx, with its imports and Preact into
 // src/lotuspod/_theme/js/islands.js, after its marker line. The order the
@@ -10,12 +11,14 @@
 //   bun build.ts --check [WEB_DIR]   build, then fail on a file that does not
 //                                    parse alone or a difference from git
 //
-// WEB_DIR defaults to this directory; the output is its ../src/lotuspod/_theme/js.
+// WEB_DIR defaults to this directory; the output is its ../src/lotuspod/_theme/js
+// and the slices' ts/ directories under ../src/lotuspod/features.
 
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { basename, join, resolve } from "node:path";
+import { basename, dirname, join, relative, resolve } from "node:path";
 
 const MARKER_PREFIX = "// Built from web/src/";
+const SLICE_MARKER_PREFIX = "// Built from src/lotuspod/features/";
 const USE_STRICT = "use strict";
 // Not a directive JavaScript knows, so Bun keeps it where it stands.
 const USE_STRICT_PROBE = "use strict, probed by web/build.ts";
@@ -27,18 +30,48 @@ const ISLANDS = "islands";
 
 class BuildError extends Error {}
 
+// The marker line of a file built from source, a path from the repository's
+// root.
 function markerOf(source: string): string {
-  return `${MARKER_PREFIX}${source} by web/build.ts. Edit that file, not this one.\n`;
+  return `// Built from ${source} by web/build.ts. Edit that file, not this one.\n`;
 }
 
 export function marker(name: string): string {
-  return markerOf(`${name}.ts`);
+  return markerOf(`web/src/${name}.ts`);
 }
 
-export const ISLANDS_MARKER = markerOf(ISLANDS_ENTRY);
+export function sliceMarker(slice: string, name: string): string {
+  return markerOf(`src/lotuspod/features/${slice}/ts/${name}.ts`);
+}
+
+export const ISLANDS_MARKER = markerOf(`web/src/${ISLANDS_ENTRY}`);
 
 export function outDir(webDir: string): string {
   return join(webDir, "..", "src", "lotuspod", "_theme", "js");
+}
+
+function featuresDir(webDir: string): string {
+  return join(webDir, "..", "src", "lotuspod", "features");
+}
+
+// Each slice's ts/ directory, by slice name, in order.
+function sliceScriptDirs(webDir: string): string[] {
+  const features = featuresDir(webDir);
+  if (!existsSync(features)) {
+    return [];
+  }
+  return readdirSync(features)
+    .sort()
+    .map((slice) => join(features, slice, "ts"))
+    .filter((dir) => existsSync(dir) && statSync(dir).isDirectory());
+}
+
+// The TypeScript sources directly in dir, by name, declarations left out.
+function sourceNames(dir: string): string[] {
+  return readdirSync(dir)
+    .filter((file) => file.endsWith(".ts") && !file.endsWith(".d.ts"))
+    .map((file) => basename(file, ".ts"))
+    .sort();
 }
 
 // The one Bun pin is package.json's "packageManager": "bun@X.Y.Z". Bun's
@@ -61,18 +94,18 @@ function checkBun(webDir: string): void {
 // export. A directive shows as the one difference between the source's JS and
 // the JS of the source with each "use strict" renamed to the probe, which the
 // transpiler keeps, renamed back; comments and strings strip alike in both.
-function strip(transpiler: Bun.Transpiler, name: string, source: string): string {
+function strip(transpiler: Bun.Transpiler, label: string, source: string): string {
   const stripped = transpiler.transformSync(source);
   const probed = transpiler.transformSync(source.replaceAll(USE_STRICT, USE_STRICT_PROBE));
   if (probed.replaceAll(USE_STRICT_PROBE, USE_STRICT) !== stripped) {
-    throw new BuildError(`web/src/${name}.ts: Bun's transpiler drops its "use strict", so the built script would not be strict`);
+    throw new BuildError(`${label}: Bun's transpiler drops its "use strict", so the built script would not be strict`);
   }
   try {
     new Function(stripped);
   } catch (error) {
-    throw new BuildError(`web/src/${name}.ts: its JS is not a classic script, as render joins it (${(error as Error).message}); a source has no import or export`);
+    throw new BuildError(`${label}: its JS is not a classic script, as render joins it (${(error as Error).message}); a source has no import or export`);
   }
-  return marker(name) + stripped;
+  return markerOf(label) + stripped;
 }
 
 // The JS of the islands entry and everything it imports, Preact among them,
@@ -108,13 +141,23 @@ export async function build(webDir: string): Promise<BuildResult> {
   checkBun(webDir);
   const srcDir = join(webDir, "src");
   const out = outDir(webDir);
-  const names = readdirSync(srcDir)
-    .filter((file) => file.endsWith(".ts") && !file.endsWith(".d.ts"))
-    .map((file) => basename(file, ".ts"))
-    .sort();
+  const names = sourceNames(srcDir);
   const transpiler = new Bun.Transpiler({ loader: "ts", target: "browser" });
   const result: BuildResult = { written: [], removed: [] };
-  const builds = names.map((name) => strip(transpiler, name, readFileSync(join(srcDir, `${name}.ts`), "utf8")));
+  const builds = names.map((name) => strip(transpiler, `web/src/${name}.ts`,
+    readFileSync(join(srcDir, `${name}.ts`), "utf8")));
+  // Each slice's sources, built beside themselves; every one is stripped
+  // before anything is written.
+  const slices = sliceScriptDirs(webDir).map((dir) => {
+    const slice = basename(dirname(dir));
+    const sliceNames = sourceNames(dir);
+    return {
+      dir,
+      names: sliceNames,
+      builds: sliceNames.map((name) => strip(transpiler, `src/lotuspod/features/${slice}/ts/${name}.ts`,
+        readFileSync(join(dir, `${name}.ts`), "utf8"))),
+    };
+  });
   const islands = await bundle(srcDir);
   if (islands !== null) {
     if (names.includes(ISLANDS)) {
@@ -126,27 +169,36 @@ export async function build(webDir: string): Promise<BuildResult> {
   if (names.length) {
     mkdirSync(out, { recursive: true });
   }
+  if (existsSync(out)) {
+    write(out, names, builds, MARKER_PREFIX, result);
+  }
+  for (const slice of slices) {
+    write(slice.dir, slice.names, slice.builds, SLICE_MARKER_PREFIX, result);
+  }
+  return result;
+}
+
+// Writes each build into dir as its name's JS where it differs, then deletes
+// each JS file there that starts with markerPrefix and whose source is gone.
+function write(dir: string, names: string[], builds: string[], markerPrefix: string, result: BuildResult): void {
   for (const [index, name] of names.entries()) {
     const built = builds[index]!;
-    const target = join(out, `${name}.js`);
+    const target = join(dir, `${name}.js`);
     if (!existsSync(target) || readFileSync(target, "utf8") !== built) {
       writeFileSync(target, built);
       result.written.push(target);
     }
   }
-  if (existsSync(out)) {
-    for (const file of readdirSync(out).sort()) {
-      const target = join(out, file);
-      if (!file.endsWith(".js") || names.includes(basename(file, ".js"))) {
-        continue;
-      }
-      if (readFileSync(target, "utf8").startsWith(MARKER_PREFIX)) {
-        rmSync(target);
-        result.removed.push(target);
-      }
+  for (const file of readdirSync(dir).sort()) {
+    const target = join(dir, file);
+    if (!file.endsWith(".js") || names.includes(basename(file, ".js"))) {
+      continue;
+    }
+    if (readFileSync(target, "utf8").startsWith(markerPrefix)) {
+      rmSync(target);
+      result.removed.push(target);
     }
   }
-  return result;
 }
 
 // Each JS file under the output directory, at any depth, built or written by
@@ -189,20 +241,23 @@ async function main(args: string[]): Promise<number> {
     if (!check) {
       return 0;
     }
-    const problems = existsSync(outDir(webDir)) ? unparsed(outDir(webDir)) : [];
+    const problems = [...(existsSync(outDir(webDir)) ? unparsed(outDir(webDir)) : []),
+      ...sliceScriptDirs(webDir).flatMap(unparsed)];
     if (problems.length) {
       for (const problem of problems) console.error(problem);
       return 1;
     }
-    // What git sees differ under the output directory once built: modified,
+    // What git sees differ under the output directories once built: modified,
     // deleted or new. Empty when the committed JS is fresh.
-    const stale = git(webDir, ["status", "--porcelain", "--untracked-files=all", "--", outDir(webDir)]);
+    // Every slice's ts/, so a directory deleted whole shows too.
+    const outputs = [outDir(webDir), `:(glob)${relative(webDir, featuresDir(webDir))}/*/ts/**/*.js`];
+    const stale = git(webDir, ["status", "--porcelain", "--untracked-files=all", "--", ...outputs]);
     if (!stale) {
       console.log("theme build is fresh");
       return 0;
     }
     console.error(`the committed theme JS differs from a rebuild (bun run --cwd web build, then commit):\n${stale}`);
-    console.error(git(webDir, ["diff", "--", outDir(webDir)]));
+    console.error(git(webDir, ["diff", "--", ...outputs]));
     return 1;
   } catch (error) {
     if (error instanceof BuildError) {

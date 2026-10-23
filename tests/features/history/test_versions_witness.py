@@ -4,7 +4,7 @@ and opens each one read-only, marked as old.
 Real git in temporary directories, with a local identity; pages published
 with this checkout's CLI and served by a real `lotuspod serve`, which the
 test reaches with Access assertions it signs itself (tests.test_answers_witness).
-The git processes lotuspod.versions starts are counted in a server run in
+The git processes lotuspod.features.history.versions starts are counted in a server run in
 process, each still run through the real subprocess.
 """
 
@@ -25,10 +25,11 @@ from unittest import mock
 from tests.test_answers_witness import Site, assertion, git
 from tests.test_publish_witness import parse
 
-REPO = Path(__file__).resolve().parents[1]
+REPO = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(REPO / "src"))
 
-from lotuspod import access, cli, core, versions  # noqa: E402
+from lotuspod import access, cli, core  # noqa: E402
+from lotuspod.features.history import versions  # noqa: E402
 from tests import access_keys  # noqa: E402
 
 PAGE = "pond-plan"

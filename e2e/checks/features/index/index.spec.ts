@@ -100,7 +100,7 @@ test('#pages opens the index on Pages, as when no fragment names a view', async 
 // data-labels, which the index writes from each page's labels.
 const PYTHON = process.env.LOTUSPOD_TEST_PYTHON ?? '';
 // This checkout's package, whatever lotuspod is installed.
-const SRC = path.resolve(__dirname, '..', '..', 'src');
+const SRC = path.resolve(__dirname, '..', '..', '..', '..', 'src');
 const NO_MATCH = 'No pages match these filters.';
 
 type Row = { title: string; labels: string[] };
