@@ -53,14 +53,12 @@ PINNED = {
 
 
 def kind(path: str) -> str:
-    """"test" for a file under tests/ or e2e/ or named *.test.ts, else "source"."""
     if path.split("/", 1)[0] in ("tests", "e2e") or path.endswith(".test.ts"):
         return "test"
     return "source"
 
 
 def is_built(root: Path, path: str) -> bool:
-    """Whether the file's first line is web/build.ts's generated-file marker."""
     with open(root / path, encoding="utf-8", errors="replace") as handle:
         first = handle.readline()
     return first.startswith("// Built from ") and " by web/build.ts." in first
