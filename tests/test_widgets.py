@@ -109,7 +109,6 @@ class WidgetTests(TempDirTestCase):
         scripts = cli.collect_scripts(document).inline
         bridge = scripts[0]
         self.assertEqual(bridge, (widgets.THEME / 'widget-frame.js').read_text())
-        self.assertIn('window.lotuspod = {state: state, theme: theme};', bridge)
         self.assertIn('post({type: "lotuspod:state", label: String(label).slice(0, 80).replace(/[\\uD800-\\uDBFF]$/, "")});', bridge)
         # Each new document opens with no state, so a reload keeps none.
         self.assertIn('window.lotuspod = {state: state, theme: theme};\n  state("");', bridge)
