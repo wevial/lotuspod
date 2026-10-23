@@ -47,9 +47,8 @@ def shard_image(root: Path) -> str:
     if container is None:
         raise AssertionError("the `e2e-shard` job has no `container:`")
     inline, nested = container.group(1).strip(), container.group(2)
-    image = re.search(r"image:\s*[\"']?([^\"'\s,}]+)", inline + "\n" + nested)
-    if image is None:
-        image = re.fullmatch(r"[\"']?([^\"'\s{]+)[\"']?", inline)
+    image = (re.search(r"image:\s*[\"']?([^\"'\s,}]+)", inline + "\n" + nested)
+             or re.fullmatch(r"[\"']?([^\"'\s{]+)[\"']?", inline))
     if image is None:
         raise AssertionError("the `e2e-shard` container names no image")
     return image.group(1)
@@ -96,9 +95,7 @@ class E2eImageTestCase(unittest.TestCase):
         return root
 
     def test_repository_image_matches_pinned_version(self) -> None:
-        reason = image_mismatch(REPO_ROOT)
-        if reason:
-            self.fail(reason)
+        self.assertIsNone(image_mismatch(REPO_ROOT))
         self.assertTrue(shard_image(REPO_ROOT).startswith(
             IMAGE_PREFIX + pinned_version(REPO_ROOT) + "-"))
 
