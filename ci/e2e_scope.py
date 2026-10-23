@@ -36,8 +36,7 @@ def main(argv: list[str]) -> int:
         return 2
     base, head = argv
     proc = subprocess.run(
-        ["git", "-c", "core.quotePath=false", "diff", "--name-only", "--no-renames",
-         "-z", base, head, "--"],
+        ["git", "diff", "--name-only", "--no-renames", "-z", base, head, "--"],
         capture_output=True,
     )
     if proc.returncode != 0:
