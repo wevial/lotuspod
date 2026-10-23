@@ -455,6 +455,7 @@ test("the parser reads every import, type-only ones too, and nothing in strings,
 });
 
 describe("the slice rule over fixture slices a and b and core", () => {
+  const PAST_B = "slice a reaches past slice b's ts/index.ts along no listed edge";
   let lotuspod: string;
   const write = (file: string, text: string) => {
     mkdirSync(dirname(join(lotuspod, file)), { recursive: true });
@@ -487,7 +488,7 @@ describe("the slice rule over fixture slices a and b and core", () => {
     const problems = await sliceImportProblems(lotuspod, [["b", "a"]]);
     expect(problems).toHaveLength(2);
     expect(problems[0]).toStartWith(`${join("features", "a", "ts", "types.ts")}: imports ../../b/ts/inner (${join("features", "b", "ts", "inner.ts")})`);
-    expect(problems[1]).toContain("slice a reaches past slice b's ts/index.ts along no listed edge");
+    expect(problems[1]).toContain(PAST_B);
   });
 
   test("a dynamic import of b's other file in a template literal fails, and one it cannot read fails too", async () => {
@@ -496,14 +497,14 @@ describe("the slice rule over fixture slices a and b and core", () => {
     const problems = await sliceImportProblems(lotuspod, []);
     expect(problems).toHaveLength(2);
     expect(problems[0]).toStartWith(`${join("features", "a", "ts", "pick.ts")}: imports a specifier that is not a literal`);
-    expect(problems[1]).toContain("slice a reaches past slice b's ts/index.ts along no listed edge");
+    expect(problems[1]).toContain(PAST_B);
   });
 
   test("an import after a pattern that follows a statement's parentheses is read", async () => {
     write("features/a/ts/use.ts", 'if (true) /"/.test(""); import { inner } from "../../b/ts/inner";\n');
     const problems = await sliceImportProblems(lotuspod, []);
     expect(problems).toHaveLength(1);
-    expect(problems[0]).toContain("slice a reaches past slice b's ts/index.ts along no listed edge");
+    expect(problems[0]).toContain(PAST_B);
   });
 
   test("an absolute path or a file: URL to a file of b other than its public entry fails", async () => {
@@ -513,7 +514,7 @@ describe("the slice rule over fixture slices a and b and core", () => {
     const problems = await sliceImportProblems(lotuspod, []);
     expect(problems).toHaveLength(2);
     for (const problem of problems) {
-      expect(problem).toContain("slice a reaches past slice b's ts/index.ts along no listed edge");
+      expect(problem).toContain(PAST_B);
     }
     write("features/a/ts/use.ts", `import { inner } from ${JSON.stringify(join(lotuspod, "features", "b", "ts", "index.ts"))};\n`);
     write("features/a/ts/url.ts", "export {};\n");
