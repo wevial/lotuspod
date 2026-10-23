@@ -73,9 +73,9 @@ class E2eScopeTestCase(unittest.TestCase):
                 handle.write("more\n")
         self.commit()
 
-    def scope(self) -> subprocess.CompletedProcess:
+    def scope(self, base: str | None = None) -> subprocess.CompletedProcess:
         """Run the script on the last commit, as the `scope` job does."""
-        base = self.git("rev-parse", "HEAD^")
+        base = base or self.git("rev-parse", "HEAD^")
         return subprocess.run([sys.executable, str(SCOPE), base, "HEAD"], cwd=self.repo,
                               env=self.env, capture_output=True, text=True)
 
@@ -122,8 +122,7 @@ class RunTests(E2eScopeTestCase):
 
 class FailureTests(E2eScopeTestCase):
     def test_an_unknown_base_fails(self):
-        proc = subprocess.run([sys.executable, str(SCOPE), "0" * 40, "HEAD"], cwd=self.repo,
-                              env=self.env, capture_output=True, text=True)
+        proc = self.scope("0" * 40)
         self.assertNotEqual(proc.returncode, 0)
         self.assertEqual(proc.stdout, "")
 
