@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from lotuspod import widgets
+from lotuspod.features.widgets import widgets
 from lotuspod.core import (DEFAULT_OUTPUT_DIR, INDEX_FILE, INDEX_SCRIPT, MANIFEST_FILE,
                            OLD_VERSION_SCRIPT, PAGE_SCRIPT, WIDGET_NAME, extract_visibility,
                            is_page_name)

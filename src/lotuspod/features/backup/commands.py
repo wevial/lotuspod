@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import argparse
 
-from lotuspod import media
+from lotuspod.features.publish import media
 from lotuspod.features.backup.backup import (DEFAULT_BACKUPS, DEFAULT_KEEP, LATEST, cmd_backup,
                                              cmd_restore)
 from lotuspod.store import db

@@ -28,7 +28,8 @@ from tests.features.history.test_versions_witness import VersionsWitness
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "src"))
 
-from lotuspod import access, cli, render  # noqa: E402
+from lotuspod import access, cli  # noqa: E402
+from lotuspod.features.publish import render  # noqa: E402
 from lotuspod.features.history import versions  # noqa: E402
 from tests import access_keys  # noqa: E402
 

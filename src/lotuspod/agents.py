@@ -57,7 +57,8 @@ import unicodedata
 import urllib.parse
 from pathlib import Path
 
-from lotuspod import api, comments, core, machine, media
+from lotuspod import api, comments, core, machine
+from lotuspod.features.publish import media
 
 _BACKTICKS = re.compile(r"`+")
 

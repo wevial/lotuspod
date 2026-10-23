@@ -23,7 +23,7 @@ import urllib.request
 
 from tests import test_activity_witness as activity_witness
 from tests.test_answers_witness import assertion
-from tests.test_publish_witness import Node, parse
+from tests.features.publish.test_publish_witness import Node, parse
 
 from lotuspod import decisions  # after test_activity_witness, which puts src/ on the path
 

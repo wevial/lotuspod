@@ -31,7 +31,8 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from lotuspod import agents, cli, core, machine, media  # noqa: E402
+from lotuspod import agents, cli, core, machine  # noqa: E402
+from lotuspod.features.publish import media  # noqa: E402
 from lotuspod.store import db  # noqa: E402
 from tests import access_keys as keys  # noqa: E402
 

@@ -150,7 +150,9 @@ class AboutTests(DecisionsTestCase):
         self.assertAboutNothing(page_text(table=CHECKLIST, heading="Checklist for the maintainer"))
 
     def test_an_inert_form_in_a_template_is_not_counted(self):
-        from lotuspod import decisions, markdown, widgets
+        from lotuspod import decisions
+        from lotuspod.features.publish import markdown
+        from lotuspod.features.widgets import widgets
         body, _, _ = widgets.render(markdown.to_body(page_text()), "churn")
         body, _ = decisions.render_decisions(body, "churn")
         ghost = ('<template><form class="artifact-decision" data-about="merge-churn-by-worker-count"'

@@ -24,7 +24,7 @@ import tempfile
 from pathlib import Path
 from unittest import mock
 
-from tests.test_manifest_v2 import TempDirTestCase, stylesheet_hash
+from tests.features.publish.test_manifest_v2 import TempDirTestCase, stylesheet_hash
 from tests.core.test_theme_hash import ThemeHashTestCase, script_hash
 
 from lotuspod import core, serve_files  # after test_manifest_v2, which puts src/ on the path
@@ -33,6 +33,9 @@ STYLESHEET = "lotuspod.css"
 # The files under the package that are only declared sources.
 SOURCE_GLOBS = ("_theme/css/**/*", "_theme/js/**/*", "core/ts/**/*", "core/theme/*.css",
                 "features/*/ts/**/*.js", "features/*/theme/*.css")
+# The files those globs match that are no source of a joined file: the widget
+# frame's bridge, which widgets.py writes into each widget's own document.
+NOT_JOINED = {"features/widgets/ts/widget-frame.js"}
 
 
 # The closure the join wraps the page script's and the old-version script's
@@ -61,7 +64,7 @@ def source_problems(theme_dir: Path, declared: dict[str, tuple[str, ...]]) -> li
         for pattern in SOURCE_GLOBS
         for path in theme_dir.glob(pattern)
         if path.is_file()
-    }
+    } - NOT_JOINED
     return sorted(
         [f"{source}: in {theme_dir} but not in the declared order"
          for source in on_disk - named]
@@ -103,7 +106,7 @@ class JoinTests(TempDirTestCase):
         )
         # The hand-off ends in a call with no semicolon, so the opening right
         # after it is its argument.
-        self.assertTrue((core.THEME_ROOT / "_theme/js/open-in-tabs.js").read_bytes().endswith(b"})()\n"))
+        self.assertTrue((core.THEME_ROOT / "features/publish/ts/open-in-tabs.js").read_bytes().endswith(b"})()\n"))
 
     def test_no_source_opens_or_closes_the_closure(self):
         """The closure's opening and close are the join's: js/page-close.js
@@ -165,8 +168,8 @@ class DeclaredOrderTests(ThemeCopyTestCase):
         js/islands.js (LOTUS-206), inside the closure the join closes after
         the last source."""
         script = core.THEME_SOURCES[core.PAGE_SCRIPT]
-        self.assertIn("_theme/js/tables.js", script)
-        self.assertGreater(script.index("_theme/js/tables.js"), script.index("_theme/js/islands.js"))
+        self.assertIn("features/blocks/ts/tables.js", script)
+        self.assertGreater(script.index("features/blocks/ts/tables.js"), script.index("_theme/js/islands.js"))
         problems = source_problems(core.THEME_ROOT, core.THEME_SOURCES)
         self.assertEqual(problems, [], "\n".join(problems))
 
@@ -189,26 +192,26 @@ class DeclaredOrderTests(ThemeCopyTestCase):
         so js/table-expand.js is joined after it, inside the closure; its
         styles are declared in the stylesheet's order."""
         script = core.THEME_SOURCES[core.PAGE_SCRIPT]
-        self.assertIn("_theme/js/table-expand.js", script)
-        self.assertGreater(script.index("_theme/js/table-expand.js"), script.index("_theme/js/tables.js"))
-        self.assertIn("_theme/css/table-expand.css", core.THEME_SOURCES["lotuspod.css"])
+        self.assertIn("features/blocks/ts/table-expand.js", script)
+        self.assertGreater(script.index("features/blocks/ts/table-expand.js"), script.index("features/blocks/ts/tables.js"))
+        self.assertIn("features/blocks/theme/table-expand.css", core.THEME_SOURCES["lotuspod.css"])
         problems = source_problems(core.THEME_ROOT, core.THEME_SOURCES)
         self.assertEqual(problems, [], "\n".join(problems))
 
     def test_widget_sources_follow_tables_and_calltree(self):
         styles = core.THEME_SOURCES[STYLESHEET]
         script = core.THEME_SOURCES[core.PAGE_SCRIPT]
-        self.assertEqual(styles.index("_theme/css/widgets.css"), styles.index("_theme/css/table-expand.css") + 1)
-        self.assertEqual(script.index("_theme/js/widgets.js"), script.index("_theme/js/calltree.js") + 1)
+        self.assertEqual(styles.index("features/widgets/theme/widgets.css"), styles.index("features/blocks/theme/table-expand.css") + 1)
+        self.assertEqual(script.index("features/widgets/ts/widgets.js"), script.index("features/blocks/ts/calltree.js") + 1)
 
     def test_the_image_viewer_sources_are_declared(self):
         """LOTUS-56: the image viewer's script is joined after
         js/page-open.js, inside the closure, and its styles are declared in
         the stylesheet's order."""
         script = core.THEME_SOURCES[core.PAGE_SCRIPT]
-        self.assertIn("_theme/js/image-viewer.js", script)
-        self.assertGreater(script.index("_theme/js/image-viewer.js"), script.index("_theme/js/page-open.js"))
-        self.assertIn("_theme/css/image-viewer.css", core.THEME_SOURCES[STYLESHEET])
+        self.assertIn("features/blocks/ts/image-viewer.js", script)
+        self.assertGreater(script.index("features/blocks/ts/image-viewer.js"), script.index("features/publish/ts/page-open.js"))
+        self.assertIn("features/blocks/theme/image-viewer.css", core.THEME_SOURCES[STYLESHEET])
         problems = source_problems(core.THEME_ROOT, core.THEME_SOURCES)
         self.assertEqual(problems, [], "\n".join(problems))
 
@@ -219,7 +222,7 @@ class DeclaredOrderTests(ThemeCopyTestCase):
         script = core.THEME_SOURCES[core.PAGE_SCRIPT]
         self.assertIn("_theme/js/comment-markdown.js", script)
         self.assertEqual(script.index("_theme/js/islands.js"), script.index("_theme/js/comment-markdown.js") + 1)
-        self.assertGreater(script.index("_theme/js/comment-markdown.js"), script.index("_theme/js/page-open.js"))
+        self.assertGreater(script.index("_theme/js/comment-markdown.js"), script.index("features/publish/ts/page-open.js"))
 
     def test_the_ref_cards_sources_are_declared(self):
         """LOTUS-100: the cards' script uses when() and linkTab(), so it is
@@ -228,9 +231,9 @@ class DeclaredOrderTests(ThemeCopyTestCase):
         styles just after css/prose.css."""
         styles = core.THEME_SOURCES[STYLESHEET]
         script = core.THEME_SOURCES[core.PAGE_SCRIPT]
-        self.assertEqual(script[-4:], ("_theme/js/ref-cards.js", "_theme/js/calltree.js", "_theme/js/widgets.js", "features/history/ts/archive.js"))
-        self.assertGreater(script.index("_theme/js/ref-cards.js"), script.index("core/ts/link-tab.js"))
-        self.assertEqual(styles.index("_theme/css/ref-cards.css"), styles.index("_theme/css/prose.css") + 1)
+        self.assertEqual(script[-4:], ("features/blocks/ts/ref-cards.js", "features/blocks/ts/calltree.js", "features/widgets/ts/widgets.js", "features/history/ts/archive.js"))
+        self.assertGreater(script.index("features/blocks/ts/ref-cards.js"), script.index("core/ts/link-tab.js"))
+        self.assertEqual(styles.index("features/blocks/theme/ref-cards.css"), styles.index("features/publish/theme/prose.css") + 1)
         problems = source_problems(core.THEME_ROOT, core.THEME_SOURCES)
         self.assertEqual(problems, [], "\n".join(problems))
 
@@ -314,7 +317,7 @@ class DeclaredOrderTests(ThemeCopyTestCase):
         self.assertEqual(script, ("core/ts/shared.js", "features/history/ts/version-menu.js",
                                   "features/history/ts/old-version.js"))
         page = core.THEME_SOURCES[core.PAGE_SCRIPT]
-        self.assertEqual(page[:3], ("_theme/js/open-in-tabs.js", "_theme/js/page-open.js", "core/ts/shared.js"))
+        self.assertEqual(page[:3], ("features/publish/ts/open-in-tabs.js", "features/publish/ts/page-open.js", "core/ts/shared.js"))
         problems = source_problems(core.THEME_ROOT, core.THEME_SOURCES)
         self.assertEqual(problems, [], "\n".join(problems))
 

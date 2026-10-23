@@ -190,7 +190,7 @@ def is_repository_top(out_dir: Path) -> bool:
 
 # A live block's widget file, served beside its page.
 WIDGET_NAME = re.compile(r'.+\.w-[0-9a-f]{12}\.html\Z')
-# Where serve answers the media store's images (lotuspod.media).
+# Where serve answers the media store's images (lotuspod.features.publish.media).
 URL_PREFIX = "/media/"
 INDEX_FILE = "index.html"
 MANIFEST_FILE = "manifest.json"
@@ -532,12 +532,12 @@ def load_tokens() -> dict:
 
 
 # The page script answers decision forms (lotuspod.decisions), shows and
-# posts comments (lotuspod.comments) and folds sections (lotuspod.sections),
-# and offers a reload once its page is published again. Every listed page
-# loads it: loaded on its own at the top level, a listed page first goes to
-# the index, opened there in a tab (js/open-in-tabs.js), and runs none of the
-# rest. A page not listed loads it only with any of those, a revision or a
-# link.
+# posts comments (lotuspod.comments) and folds sections
+# (lotuspod.features.publish.sections), and offers a reload once its page is
+# published again. Every listed page loads it: loaded on its own at the top
+# level, a listed page first goes to the index, opened there in a tab
+# (features/publish/ts/open-in-tabs.js), and runs none of the rest. A page not
+# listed loads it only with any of those, a revision or a link.
 PAGE_SCRIPT = "lotuspod-page.js"
 # The index script opens pods in tabs over the index's listing; the index
 # loads it deferred, beside its own inline script.
@@ -555,7 +555,7 @@ THEME_FILES = ("lotuspod.css", "favicon.svg", PAGE_SCRIPT, INDEX_SCRIPT, OLD_VER
 THEME_SOURCES = {
     "lotuspod.css": (
         "core/theme/base.css",
-        "_theme/css/forms.css",
+        "features/publish/theme/forms.css",
         "_theme/css/decisions.css",
         "_theme/css/review-sheet.css",
         "_theme/css/attachments.css",
@@ -563,15 +563,15 @@ THEME_SOURCES = {
         "_theme/css/panel-resize.css",
         "_theme/css/narrow.css",
         "_theme/css/live-page.css",
-        "_theme/css/prose.css",
-        "_theme/css/ref-cards.css",
-        "_theme/css/calltree.css",
-        "_theme/css/diagram-cards.css",
-        "_theme/css/diagram-view.css",
-        "_theme/css/report.css",
-        "_theme/css/table-expand.css",
-        "_theme/css/widgets.css",
-        "_theme/css/image-viewer.css",
+        "features/publish/theme/prose.css",
+        "features/blocks/theme/ref-cards.css",
+        "features/blocks/theme/calltree.css",
+        "features/blocks/theme/diagram-cards.css",
+        "features/blocks/theme/diagram-view.css",
+        "features/publish/theme/report.css",
+        "features/blocks/theme/table-expand.css",
+        "features/widgets/theme/widgets.css",
+        "features/blocks/theme/image-viewer.css",
         "features/index/theme/index.css",
         "features/index/theme/pod-tabs.css",
         "features/index/theme/pod-finder.css",
@@ -580,8 +580,8 @@ THEME_SOURCES = {
         "_theme/css/theme-switch.css",
     ),
     PAGE_SCRIPT: (
-        "_theme/js/open-in-tabs.js",
-        "_theme/js/page-open.js",
+        "features/publish/ts/open-in-tabs.js",
+        "features/publish/ts/page-open.js",
         "core/ts/shared.js",
         "core/ts/link-tab.js",
         "_theme/js/decisions.js",
@@ -599,17 +599,17 @@ THEME_SOURCES = {
         # here.
         "_theme/js/islands.js",
         "_theme/js/panel-resize.js",
-        "_theme/js/tables.js",
-        "_theme/js/table-expand.js",
-        "_theme/js/image-viewer.js",
+        "features/blocks/ts/tables.js",
+        "features/blocks/ts/table-expand.js",
+        "features/blocks/ts/image-viewer.js",
         "features/history/ts/version-menu.js",
         "features/history/ts/versions.js",
-        "_theme/js/diagram-cards.js",
-        "_theme/js/diagram-view.js",
-        "_theme/js/ref-cards.js",
-        # Built from web/src/calltree.ts: it folds calltree blocks.
-        "_theme/js/calltree.js",
-        "_theme/js/widgets.js",
+        "features/blocks/ts/diagram-cards.js",
+        "features/blocks/ts/diagram-view.js",
+        "features/blocks/ts/ref-cards.js",
+        # Built from features/blocks/ts/calltree.ts: it folds calltree blocks.
+        "features/blocks/ts/calltree.js",
+        "features/widgets/ts/widgets.js",
         "features/history/ts/archive.js",
     ),
     INDEX_SCRIPT: (
@@ -627,11 +627,11 @@ THEME_SOURCES = {
     ),
 }
 # The served scripts that run as one strict function, so their sources share
-# its helpers and objects (_theme/js/page-open.js, core/ts/shared.js) while each source
+# its helpers and objects (features/publish/ts/page-open.js, core/ts/shared.js) while each source
 # stays a complete script: the join puts THEME_CLOSURE_OPEN before the source
 # at the index named here and THEME_CLOSURE_CLOSE after the last.
 #
-# The page script's first source, _theme/js/open-in-tabs.js, evaluates to a function
+# The page script's first source, features/publish/ts/open-in-tabs.js, evaluates to a function
 # that is handed the closure and runs it only when the page stays, so the
 # opening follows it with nothing between. The close ends the closure and
 # calls the result.

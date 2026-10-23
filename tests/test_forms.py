@@ -23,7 +23,7 @@ from html.parser import HTMLParser
 from pathlib import Path
 from unittest import mock
 
-from tests.test_manifest_v2 import TempDirTestCase, stylesheet_hash
+from tests.features.publish.test_manifest_v2 import TempDirTestCase, stylesheet_hash
 
 from lotuspod import cli, core  # after test_manifest_v2, which puts src/ on the path
 

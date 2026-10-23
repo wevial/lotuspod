@@ -50,13 +50,13 @@ IIFE for the browser with no source map, JSX through Preact's automatic
 runtime. `THEME_SOURCES` declares it directly after comment-markdown.js inside
 the shared closure: comments start before later sources find the panel and register
 their listeners, and never on a pod that goes to the index
-(`js/open-in-tabs.js`). Neither the index script nor the old-version script
+(`features/publish/ts/open-in-tabs.js`). Neither the index script nor the old-version script
 has it. The islands reach the legacy page only through
 `web/src/islands/bridge.ts`, the one module that names the closure's
 variables: it declares the types of `live` (`js/live-page.js`), `forms` and
 `answering`, the decision forms and what reads and saves them
 (`js/decisions.js`), `linkedTo()`, `ARCHIVED` and the page events
-`ANSWERED`, `SAVED` and `DRAWN` (`js/page-open.js`), and exports one object,
+`ANSWERED`, `SAVED` and `DRAWN` (`features/publish/ts/page-open.js`), and exports one object,
 `page`, built from them as the bundle loads, so a name that does not exist
 throws on every page at once. A minifier never renames a free name, so the
 bridge's reads stay the closure's own. An island imports `page`, never the
@@ -325,7 +325,7 @@ CAPTURE_OUT="$(mktemp -d)" .venv/bin/python -m tests.capture_site \
 
 Browser checks run the same way, with `e2e/checks.config.ts` and the specs in
 `e2e/checks/` (among them `comments.spec.ts`, which posts and reads back
-comments on the fixture's comments page); `e2e/checks/policy.spec.ts` checks
+comments on the fixture's comments page); `e2e/checks/features/publish/policy.spec.ts` checks
 the page policy in Chromium,
 answering jsDelivr's Mermaid requests from the copy pinned in `e2e/`, so no
 network is needed. `e2e/checks/chain.spec.ts` is the acceptance run of the
@@ -334,11 +334,11 @@ reader-to-agent story: the signed-in reader answers and comments on
 and `lotuspod publish` commands, alone receives both, claims the comment,
 revises the page expecting its revision and replies, which the reader sees
 after a reload; a reader without the assertion stores nothing.
-`e2e/checks/images.spec.ts` loads `capture-images` at 1280 and 360 pixels
+`e2e/checks/features/publish/images.spec.ts` loads `capture-images` at 1280 and 360 pixels
 wide with every media response held back 500 ms, and checks that each image's
 natural size is its `width` and `height`, that no layout shift is recorded,
 that no image is wider than its column and that a click opens the media URL.
-`e2e/checks/sections.spec.ts` folds and opens the sections of
+`e2e/checks/features/publish/sections.spec.ts` folds and opens the sections of
 `capture-sections` by mouse, keyboard, a text fragment, a link and the
 fold-all control, and checks what a reload remembers, print, and the page
 without scripts.

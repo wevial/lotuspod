@@ -20,10 +20,10 @@ part of the version. A table with any row of fewer than two options is left
 exactly as written.
 
 A decisions table whose previous element in the body is a live block (a
-`figure.artifact-live`, as lotuspod.widgets renders one before this step),
-with only whitespace between them, is about that block: each of its forms
-carries `data-about`, the block's id, and an "About: TITLE" line under its
-question, TITLE the block's title, else its id. Neither is part of the
+`figure.artifact-live`, as lotuspod.features.widgets.widgets renders one
+before this step), with only whitespace between them, is about that block:
+each of its forms carries `data-about`, the block's id, and an "About: TITLE"
+line under its question, TITLE the block's title, else its id. Neither is part of the
 version, nor read back as context.
 
 Under each h2 or h3 whose text is "Checklist for the maintainer" (any case),
@@ -81,7 +81,7 @@ ACCEPT = ("accept", "Accept the default")
 OTHER = ("other", "Something else")
 # The stylesheet draws the "· " before it.
 DEFAULT_MARK = "default"
-# A live block as lotuspod.widgets renders it, and its frame, whose title is
+# A live block as lotuspod.features.widgets.widgets renders it, and its frame, whose title is
 # the block's title, else its id.
 LIVE_CLASS = "artifact-live"
 LIVE_FRAME_CLASS = "artifact-widget"

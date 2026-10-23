@@ -184,9 +184,9 @@ route's GET also answers `maxImageBytes`, the largest upload it takes.
 
 POST /api/media takes one image as its body, with Content-Type image/png,
 image/jpeg, image/webp or image/gif, and answers 201 {name, url, width,
-height} once it is in the media store (lotuspod.media). It is refused, with
-nothing stored: 403 cross_origin as any POST, 415 unsupported_media_type for
-any other type, 411 without a length, 413 body_too_large over the store's
+height} once it is in the media store (lotuspod.features.publish.media). It
+is refused, with nothing stored: 403 cross_origin as any POST, 415
+unsupported_media_type for any other type, 411 without a length, 413 body_too_large over the store's
 cap, 400 invalid_image when the bytes are not a whole image of the declared
 type, and 429 too_many_uploads once the reader has had UPLOAD_LIMIT accepted
 in the last UPLOAD_WINDOW seconds.
@@ -219,7 +219,8 @@ from http import HTTPStatus
 from pathlib import Path
 from typing import BinaryIO, Callable, Mapping, Sequence
 
-from lotuspod import comments, media, routing, store
+from lotuspod import comments, routing, store
+from lotuspod.features.publish import media
 from lotuspod.features.history import versions
 
 ANSWERS = "/api/answers"

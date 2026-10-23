@@ -53,24 +53,13 @@ TARGET_TREE = {
     "access": "serve",
     "agents": "agents",
     "api": "serve",
-    "calltree": "blocks",
     "comments": "comments",
     "decisions": "decisions",
     "events": "live",
-    "libraries": "widgets",
     "machine": "agents",
-    "markdown": "publish",
-    "media": "publish",
-    "node_tables": "blocks",
-    "publish": "publish",
-    "publish_sources": "publish",
-    "refs": "blocks",
-    "render": "publish",
     "responder": "agents",
     "routing": "agents",
-    "sections": "publish",
     "serve_files": "serve",
-    "widgets": "widgets",
 }
 
 # The slice each function and class cli.py still holds moves into. One of
@@ -111,7 +100,6 @@ EDGES = (
     ("backup", "serve"),  # backup.py:409 calls cli.serve_db_path
     ("decisions", "agents"),  # cli.py:3170, answers_text, uses agents
     ("decisions", "comments"),  # decisions.py:56 imports comments
-    ("decisions", "publish"),  # cli.py:3189, cmd_answers, uses publish's _PAGE_NAME
     ("decisions", "serve"),  # decisions.py:56 imports api
     ("history", "index"),  # archive.py:188 calls cli.cmd_manifest
     ("history", "serve"),  # archive.py:40 imports api

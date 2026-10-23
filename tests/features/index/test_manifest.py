@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 import unittest
 
-from tests.test_manifest_v2 import MANIFEST_KEYS, TempDirTestCase, make_mixed_fixture, run_cli
+from tests.features.publish.test_manifest_v2 import MANIFEST_KEYS, TempDirTestCase, make_mixed_fixture, run_cli
 
 
 class ManifestV2Tests(TempDirTestCase):

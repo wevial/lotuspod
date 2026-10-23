@@ -92,7 +92,8 @@ from contextlib import contextmanager, redirect_stderr, redirect_stdout
 from pathlib import Path
 from typing import Collection, Iterator
 
-from lotuspod import agents, api, comments, core, machine, media, publish, routing, serve_files
+from lotuspod import agents, api, comments, core, machine, routing, serve_files
+from lotuspod.features.publish import media, publish
 from lotuspod.store import db
 
 DEFAULT_COMMAND = "claude -p --model opus --permission-mode acceptEdits"

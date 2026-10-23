@@ -7,7 +7,7 @@ import { expect, test, type Page } from '@playwright/test';
 // with the sandbox policy, and a comment on its section gets demo-agent's
 // scripted reply; the worked example's d3 chart redraws as its slider moves,
 // with no console error or policy violation. jsDelivr is answered from the
-// d3 installed under e2e/, as e2e/checks/libraries.spec.ts does, so no
+// d3 installed under e2e/, as e2e/checks/features/widgets/libraries.spec.ts does, so no
 // request leaves the machine.
 const TRY_IT = '/try-it.html';
 const EXAMPLE = '/interactive.html';

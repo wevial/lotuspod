@@ -40,6 +40,7 @@ from http import HTTPStatus
 from lotuspod import api, core, serve_files
 from lotuspod.features.history import versions
 from lotuspod.features.index import commands as index_commands
+from lotuspod.features.publish import cmd_manifest
 
 class Refused(api.Refusal, RuntimeError):
     """An archive or unarchive that wrote nothing, saying why: a RuntimeError
@@ -187,7 +188,7 @@ def set_archived(out_dir: Path, name: str, archived: bool,
                 }
                 core.write_atomic(path, (json.dumps(record, indent=2) + "\n").encode("utf-8"))
             steps = argparse.Namespace(out_dir=str(out_dir), commit=False)
-            index_commands.cmd_manifest(steps)
+            cmd_manifest(steps)
             index_commands.cmd_index(steps)
         except Exception as exc:
             for file, data in kept.items():

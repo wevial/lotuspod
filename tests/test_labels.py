@@ -22,7 +22,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from lotuspod import cli, core, publish, responder  # noqa: E402
+from lotuspod import cli, core, responder  # noqa: E402
+from lotuspod.features.publish import publish  # noqa: E402
 
 POND = "# Pond\n\nStill water.\n\n## Fish\n\nThree.\n"
 

@@ -76,9 +76,10 @@ from unittest import mock
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
-from lotuspod import (access, api, cli, core, machine, media, publish, routing)  # noqa: E402
+from lotuspod import access, api, cli, core, machine, routing  # noqa: E402
+from lotuspod.features.publish import media, publish  # noqa: E402
 from lotuspod.features.index import listing  # noqa: E402
-from lotuspod import render as page_render  # noqa: E402
+from lotuspod.features.publish import render as page_render  # noqa: E402
 from lotuspod.store import db  # noqa: E402
 from tests import access_keys  # noqa: E402
 
