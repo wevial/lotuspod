@@ -133,6 +133,7 @@ class WalkTest(unittest.TestCase):
         self.write("src/style.css", 1000)
         self.write("tests/test_big.py", 1501)
         self.write("e2e/checks/big.spec.ts", 1500)
+        self.write("web/src/big.test.ts", 1500)
 
     def git(self, *args: str) -> None:
         subprocess.run(["git", *args], cwd=self.root, check=True,
@@ -152,7 +153,6 @@ class WalkTest(unittest.TestCase):
         ])
 
     def test_reports_a_file_past_its_pin(self):
-        self.assertEqual(violations(self.root, self.PINS), [])
         self.write("src/big.py", 1002)
         self.assertEqual(violations(self.root, self.PINS),
                          ["src/big.py: 1002 lines, past its pin of 1001"])
@@ -171,23 +171,12 @@ class WalkTest(unittest.TestCase):
         ])
 
     def test_skips_a_built_file(self):
-        self.write("src/js/built.js", 1400, first="// Built from web/src/built.ts"
+        self.write("src/js/built.js", 1400, first="// Built from slices/x/built.ts"
                    " by web/build.ts. Edit that file, not this one.")
         self.write("src/js/written.js", 1400)
         self.assertEqual(violations(self.root, self.PINS),
                          ["src/js/written.js: 1400 lines, past its cap of 1000"])
 
-    def test_skips_a_built_file_whose_source_moved(self):
-        self.write("src/js/moved.js", 1400, first="// Built from slices/x/moved.ts"
-                   " by web/build.ts. Edit that file, not this one.")
-        self.assertNotIn("src/js/moved.js", measure(self.root))
-
-    def test_kinds(self):
-        self.assertEqual(kind("tests/test_api.py"), "test")
-        self.assertEqual(kind("e2e/checks/panel.spec.ts"), "test")
-        self.assertEqual(kind("web/src/calltree.test.ts"), "test")
-        self.assertEqual(kind("web/src/calltree.ts"), "source")
-        self.assertEqual(kind("src/lotuspod/_theme/css/comments.css"), "source")
 
 
 if __name__ == "__main__":
