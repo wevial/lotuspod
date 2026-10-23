@@ -76,10 +76,11 @@ def measure(root: Path) -> dict[str, int]:
     if not paths:
         return {}
     out = subprocess.run(["wc", "-l", "--", *paths], cwd=root, check=True,
-                         capture_output=True, text=True).stdout
+                         capture_output=True).stdout
     # wc prints one line per file in the order given, then a total; it quotes
-    # an odd name, so pair counts with paths by position, not by the name.
-    lines = out.splitlines()[:len(paths)]
+    # an odd name, so pair counts with paths by position, not by the name, and
+    # split on "\n" alone, as splitlines() also splits on U+2028 and the like.
+    lines = out.split(b"\n")[:len(paths)]
     return {path: int(line.split(None, 1)[0]) for path, line in zip(paths, lines)}
 
 
@@ -179,6 +180,12 @@ class WalkTest(unittest.TestCase):
         self.write("src/has\nnewline.py", 1001)
         self.assertIn("src/has\nnewline.py: 1001 lines, past its cap of 1000",
                       violations(self.root, self.PINS))
+
+    def test_counts_a_file_whose_name_holds_a_line_separator(self):
+        self.write("src/a\u2028name.py", 1001)
+        self.write("src/z.py", 2)
+        self.assertEqual(violations(self.root, self.PINS),
+                         ["src/a\u2028name.py: 1001 lines, past its cap of 1000"])
 
 
 if __name__ == "__main__":
