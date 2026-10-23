@@ -18,7 +18,6 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, wri
 import { basename, dirname, join, relative, resolve } from "node:path";
 
 const MARKER_PREFIX = "// Built from web/src/";
-// The marker of a file built from a slice's source.
 const SLICE_MARKER_PREFIX = "// Built from src/lotuspod/features/";
 const USE_STRICT = "use strict";
 // Not a directive JavaScript knows, so Bun keeps it where it stands.
