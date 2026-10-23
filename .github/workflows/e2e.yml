@@ -62,7 +62,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - run: pip install -e .
+      - run: python -m pip install -e .
       - run: npm --prefix e2e ci --no-audit --no-fund
       - name: browser checks
         run: python -m tests.capture_site npm --prefix e2e exec --no -- playwright test --config e2e/checks.config.ts --reporter=github,list --trace=retain-on-failure --forbid-only --shard=${{ matrix.shard }}/4
