@@ -102,10 +102,9 @@ jobs:
           SHARDS: ${{ needs.e2e-shard.result }}
         run: |
           echo "scope: $SCOPE, run: ${RUN:-none}, shards: $SHARDS"
-          if [ "$SCOPE" = "success" ] && [ "$SHARDS" = "success" ]; then
-            exit 0
-          fi
-          if [ "$SCOPE" = "success" ] && [ "$RUN" = "false" ] && [ "$SHARDS" = "skipped" ]; then
+          [ "$SCOPE" = "success" ] || exit 1
+          [ "$SHARDS" = "success" ] && exit 0
+          if [ "$RUN" = "false" ] && [ "$SHARDS" = "skipped" ]; then
             echo "docs-only change: the shards were skipped"
             exit 0
           fi

@@ -48,19 +48,16 @@ class E2eScopeTestCase(unittest.TestCase):
             "GIT_COMMITTER_EMAIL": "tester" + "@" + "example.com",
         })
         self.git("init", "-q", "-b", "main")
-        self.write(BASE_FILES)
+        for name, content in BASE_FILES.items():
+            path = self.repo / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(content, encoding="utf-8")
         self.commit()
 
     def git(self, *args: str) -> str:
         proc = subprocess.run(["git", *args], cwd=self.repo, env=self.env,
                               capture_output=True, text=True, check=True)
         return proc.stdout.strip()
-
-    def write(self, files: dict[str, str]) -> None:
-        for name, content in files.items():
-            path = self.repo / name
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(content, encoding="utf-8")
 
     def commit(self) -> None:
         self.git("add", "-A")
