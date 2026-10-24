@@ -328,17 +328,24 @@ test.describe('signed in', () => {
     for (const text of texts) bare.push({ root: await post(request, 'pond', text), text });
     // Raw HTML and entities, an image, a refused link around markup and a
     // four-backtick line stay as typed, none of the markup drawn.
+    // Posted in this order, bold markup among them, as the threads are listed.
     const typed = [];
-    for (const [text, drawn] of [
+    const asTyped = async (cases: [string, string][]) => {
+      for (const [text, drawn] of cases) typed.push({ root: await post(request, 'pond', text), text, drawn });
+    };
+    await asTyped([
       ['<script>window.__pwned = 1</script>', 'script'],
       ['<img src=x onerror="window.__pwned = 1">', 'img'],
       ['&lt;b&gt;hi&lt;/b&gt; &amp; &#60;i&#62;', 'b, i'],
+    ]);
+    const bold = await post(request, 'pond', '**<b>x</b>**');
+    await asTyped([
       ['![fish](https://example.com/fish.jpg)', 'a, img'],
       ['[**bad**](javascript:alert(1))', 'a, strong'],
       ['````\nnot code\n````', 'pre, code'],
-    ]) typed.push({ root: await post(request, 'pond', text), text, drawn });
+    ]);
     const roots = {
-      bold: await post(request, 'pond', '**<b>x</b>**'),
+      bold,
       code: await post(request, 'frogs', '`**not bold**`'),
       snake: await post(request, 'frogs', 'snake_case_name'),
       times: await post(request, 'frogs', '2 * 3'),
