@@ -565,7 +565,8 @@ class Routes:
 
         items = []
         for comment in self.database.open_comments():
-            routed = routing.route(comment, pulls, self.window, now, paused)
+            found = self.database.thread(comment["parent"] or comment["id"])
+            routed = routing.route(comment, pulls, self.window, now, paused, found)
             # A current claim takes it off the queue; a lapsed one does not.
             if routed is None or routed[1] not in routing.WAITING or routed[0] != owner:
                 continue
@@ -573,15 +574,14 @@ class Routes:
             page = page_of(comment["page"])
             if page is None:
                 continue
-            root = comment["id"] if comment["parent"] is None else comment["parent"]
-            found = self.database.thread(root)
             omitted = max(0, len(found["replies"]) - routing.THREAD_TAIL)
             item = {
                 "kind": "comment",
                 "comment": self._located(
-                    routing.public(comment, pulls, self.window, now, paused)),
+                    routing.public(comment, pulls, self.window, now, paused, found)),
                 # The thread's first comment and its latest replies, oldest first.
-                "thread": [self._located(routing.public(row, pulls, self.window, now, paused))
+                "thread": [self._located(routing.public(row, pulls, self.window, now, paused,
+                                                        found))
                            for row in (found["root"], *found["replies"][omitted:])],
                 "omitted": omitted,
                 # The thread's resolution: a comment in a resolved thread still waits.
@@ -917,7 +917,8 @@ class Routes:
 
         def route(comment: dict, pulls: dict[str, str], now: float) -> str | None:
             last = {handle: routing.seconds(stamp) for handle, stamp in pulls.items()}
-            routed = routing.route(comment, last, self.window, now)
+            routed = routing.route(comment, last, self.window, now,
+                                   thread=routing.thread_of(self.database, comment))
             return None if routed is None else routed[0]
 
         token = claim_token()
@@ -932,8 +933,7 @@ class Routes:
 
     def _shown(self, row: dict) -> dict:
         """A comment as the threads routes show it."""
-        return routing.public(row, routing.last_pulls(self.database), self.window,
-                              self.clock(), self.database.responder_paused())
+        return routing.shown(self.database, row, self.window, self.clock())
 
 
 def _json_body(headers: Message, body: serve.Body | None) -> dict:

@@ -968,9 +968,8 @@ class Api:
         self.changed("answer", page.name)
         if "comment" in stored:
             self.changed("comment", page.name)
-            stored["comment"] = agents.public(
-                stored["comment"], agents.last_pulls(self.database), self.window,
-                self.clock(), self.database.responder_paused())
+            stored["comment"] = agents.shown(self.database, stored["comment"], self.window,
+                                             self.clock())
         return stored
 
     def _post_dismissal(self, fields: dict, actor: Mapping) -> dict:
@@ -1085,8 +1084,7 @@ class Api:
     def _post_comment(self, fields: dict, actor: Mapping) -> dict:
         row = self._store_comment(fields, actor)
         self.changed("comment", row["page"])
-        return agents.public(row, agents.last_pulls(self.database), self.window, self.clock(),
-                              self.database.responder_paused())
+        return agents.shown(self.database, row, self.window, self.clock())
 
     def _store_comment(self, fields: dict, actor: Mapping) -> dict:
         names = _image_names(fields["images"]) if "images" in fields else None

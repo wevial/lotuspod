@@ -6,6 +6,12 @@ A reader's comment no agent has taken up yet is routed to one handle:
 - A comment whose text starts with `@HANDLE` (a handle in any case, then
   whitespace, punctuation or the end) goes to HANDLE and only ever to it;
   `@responder` names the default responder.
+- A reply (a comment that is not its thread's root) that names no handle
+  goes to the handle of the latest agent reply before it in its thread,
+  while that handle is listening; when it is not, or no agent has replied
+  before it, it goes to the default responder as below. Listening is read
+  at routing time, so such a reply whose agent stops listening before it
+  claims the reply is routed to the responder again.
 - Otherwise it goes to the default responder, `responder`, on a page with
   an owner too, whether or not the owner is listening. The responder
   answers it, and queues what asks the owner to act in that owner's inbox
@@ -21,7 +27,8 @@ as the handle's that took it: `claimed` while the claim is current,
 that has expired simply lapses: the comment is routed again, as if never
 claimed.
 
-`route()` is a pure function of the comment (its text and its claim), the last-pull times,
+`route()` is a pure function of the comment (its text and its claim), its
+thread (its root and the replies before it), the last-pull times,
 the window, the clock and whether the responder is paused, so the threads
 routes, the pull and the claim all agree. A thread's resolution plays no
 part: a comment in a resolved thread is routed as any other.
@@ -89,27 +96,46 @@ def lapsed(comment: Mapping, now: float) -> bool:
 
 
 def route(comment: Mapping, pulls: Mapping[str, float], window: float,
-          now: float, paused: bool = False) -> tuple[str, str] | None:
+          now: float, paused: bool = False,
+          thread: Mapping | None = None) -> tuple[str, str] | None:
     """(handle, state) of a reader's comment; None for an agent's reply.
 
     pulls maps handles to their last pull, in seconds since the epoch;
-    paused is whether the responder is paused.
+    paused is whether the responder is paused; thread is the comment's
+    thread {root, replies}, of which only the replies before it count, or
+    None for a thread's root.
     """
     if comment["actor"].get("kind") != "human":
         return None
     state = PENDING if lapsed(comment, now) else comment["state"]
     if state != PENDING:
-        return comment["claim"]["handle"] or _routed(comment), state
-    handle = _routed(comment)
+        return comment["claim"]["handle"] or _routed(comment, thread, pulls, window, now), state
+    handle = _routed(comment, thread, pulls, window, now)
     if handle == RESPONDER and paused:
         return handle, PAUSED
     return handle, PENDING if listening(handle, pulls, window, now) else UNAVAILABLE
 
 
-def _routed(comment: Mapping) -> str:
+def _routed(comment: Mapping, thread: Mapping | None, pulls: Mapping[str, float],
+            window: float, now: float) -> str:
     """The handle a comment no agent has taken up is routed to: the one it
-    mentions, else the responder."""
-    return mention(comment["text"]) or RESPONDER
+    mentions, else, for a reply, its thread's last answering agent while that
+    one is listening, else the responder."""
+    named = mention(comment["text"])
+    if named is not None:
+        return named
+    if thread is not None and comment.get("parent") is not None:
+        before = [row for row in thread["replies"] if row["id"] < comment["id"]]
+        agents = [row["actor"]["handle"] for row in before
+                  if row["actor"].get("kind") == "agent" and row["actor"].get("handle")]
+        if agents and listening(agents[-1], pulls, window, now):
+            return agents[-1]
+    return RESPONDER
+
+
+def thread_of(database: db.Database, comment: Mapping) -> dict | None:
+    """The thread route() takes for comment: None for a thread's root."""
+    return None if comment.get("parent") is None else database.thread(comment["parent"])
 
 
 def last_pulls(database: db.Database) -> dict[str, float]:
@@ -118,11 +144,12 @@ def last_pulls(database: db.Database) -> dict[str, float]:
 
 
 def public(comment: Mapping, pulls: Mapping[str, float], window: float, now: float,
-           paused: bool = False) -> dict:
+           paused: bool = False, thread: Mapping | None = None) -> dict:
     """The comment as it is shown: its `owner` the handle it is routed to
-    (None for an agent's reply) and its `state` its routing state."""
+    (None for an agent's reply) and its `state` its routing state; thread
+    as route() takes it."""
     row = {key: value for key, value in comment.items() if key not in ("arrival", "claim")}
-    routed = route(comment, pulls, window, now, paused)
+    routed = route(comment, pulls, window, now, paused, thread)
     row["owner"] = None if routed is None else routed[0]
     if routed is not None:
         row["state"] = routed[1]
@@ -134,7 +161,8 @@ def thread(found: Mapping, pulls: Mapping[str, float], window: float, now: float
     """A thread {root, replies, resolution} as it is shown."""
     return {
         "root": public(found["root"], pulls, window, now, paused),
-        "replies": [public(row, pulls, window, now, paused) for row in found["replies"]],
+        "replies": [public(row, pulls, window, now, paused, found)
+                    for row in found["replies"]],
         "resolution": found["resolution"],
     }
 
@@ -143,3 +171,9 @@ def threads(database: db.Database, page: str, window: float, now: float) -> list
     """The page's threads as the threads routes answer them."""
     pulls, paused = last_pulls(database), database.responder_paused()
     return [thread(found, pulls, window, now, paused) for found in database.threads(page)]
+
+
+def shown(database: db.Database, comment: Mapping, window: float, now: float) -> dict:
+    """The comment as public() shows it, as the database stands now."""
+    return public(comment, last_pulls(database), window, now,
+                  database.responder_paused(), thread_of(database, comment))
