@@ -483,6 +483,35 @@ test('a decision thread on a question the page does not ask, with a key serve do
   seen.clean();
 });
 
+test('a block comment keeps its widget, and a block anchor serve refuses is refused with nothing stored', async ({ context, page }) => {
+  const seen = watch(context, page);
+  await load(page, TRY_IT);
+  const frame = page.locator('iframe.artifact-widget[data-widget="deep-shelf"]');
+  const source = await frame.evaluate((each: HTMLIFrameElement) =>
+    each.dataset.pausedSource || each.getAttribute('src') || '');
+  const hash = /\.w-([0-9a-f]{12})\.html/.exec(source)?.[1] ?? '';
+  expect(hash).toMatch(/^[0-9a-f]{12}$/);
+  const refused: [object, number, string][] = [
+    [{ section: 'the-pond-today', widget: { id: 'deep-shelf', hash: '000000000000', state: '' } }, 409, 'stale_widget'],
+    [{ section: 'the-pond-today', widget: { id: 'no-such-block', hash, state: '' } }, 400, 'unknown_widget'],
+    [{ section: '', widget: { id: 'deep-shelf', hash, state: '' } }, 400, 'unknown_widget'],
+    [{ section: 'the-pond-today', widget: { id: 'deep-shelf', hash: 'XYZ', state: '' } }, 400, 'invalid_body'],
+    [{ section: 'the-pond-today', widget: { id: 'deep-shelf', hash, state: '', extra: 1 } }, 400, 'invalid_body'],
+  ];
+  for (const [fields, status, error] of refused) {
+    const sent = await api(page, 'POST', '/api/comments', { page: 'try-it', text: 'How deep?', ...fields });
+    expect.soft(sent, JSON.stringify(fields)).toEqual({ status, json: { error } });
+  }
+  expect.soft(await rows(page, 'try-it'), 'refused anchors store nothing').toEqual([]);
+  await page.evaluate((key) => localStorage.removeItem(key), `${KEY}threads:try-it`);
+  const widget = { id: 'deep-shelf', hash, state: '' };
+  const sent = await api(page, 'POST', '/api/comments',
+    { page: 'try-it', section: 'the-pond-today', text: 'How deep?', widget });
+  expect(sent.status).toBe(201);
+  expect(await newestRoot(page, 'try-it')).toMatchObject({ section: 'the-pond-today', widget });
+  seen.clean();
+});
+
 test('an image chosen in a composer is refused, and nothing is attached', async ({ context, page }) => {
   const seen = watch(context, page);
   await load(page, TRY_IT);
