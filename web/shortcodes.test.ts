@@ -47,10 +47,10 @@ describe("matches", () => {
 });
 
 describe("closed", () => {
-  test("a known shortcode closed gives its opening colon and its emoji", () => {
+  test("a known shortcode closed becomes its emoji, the caret right after it", () => {
     const table = { tada: "🎉" };
-    expect(closed("so :tada:", 9, table)).toEqual({ start: 3, emoji: "🎉" });
-    expect(closed("so :tada: now", 9, table)).toEqual({ start: 3, emoji: "🎉" });
+    expect(closed("so :tada:", 9, table)).toEqual({ start: 3, emoji: "🎉", text: "so 🎉", caret: "so 🎉".length });
+    expect(closed("so :tada: now", 9, table)).toEqual({ start: 3, emoji: "🎉", text: "so 🎉 now", caret: "so 🎉".length });
   });
 
   test("an unknown one stays as typed", () => {

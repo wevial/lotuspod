@@ -147,23 +147,26 @@ export function shortcodeList(form: HTMLFormElement, field: HTMLTextAreaElement)
     close();
     field.focus();
   }
-  // The shortcode the colon before at closes becomes its emoji; the
-  // emoji's length less the shortcode's, 0 for none.
-  function convert(at: number): number {
+  // The shortcode the colon before at closes becomes its emoji: its
+  // opening colon and the caret after the emoji, null for none.
+  function convert(at: number): { start: number; caret: number } | null {
     const done = table && closed(field.value, at, table);
-    return done && replace(done.start, at, done.emoji) ? done.emoji.length - (at - done.start) : 0;
+    return done && replace(done.start, at, done.emoji) ? done : null;
   }
   // The table arrived: the shortcodes the colons typed meanwhile close
   // become their emoji, the last first so the earlier carets still hold,
-  // and the reader's selection stays on the text it was on.
+  // and the reader's selection stays on the text it was on; an end of it
+  // inside a shortcode moves to after its emoji.
   function arrived() {
     const carets = pending.map(each => each.end).sort((a, b) => b - a);
     pending = [];
     let start = field.selectionStart, end = field.selectionEnd;
     for (const at of carets) {
-      const shift = convert(at);
-      if (start >= at) start += shift;
-      if (end >= at) end += shift;
+      const done = convert(at);
+      if (!done) continue;
+      const move = (point: number) => point >= at ? point + done.caret - at : point > done.start ? done.caret : point;
+      start = move(start);
+      end = move(end);
     }
     field.setSelectionRange(start, end);
     refresh();
@@ -184,6 +187,12 @@ export function shortcodeList(form: HTMLFormElement, field: HTMLTextAreaElement)
       : each.start >= end ? [{ start: each.start + shift, end: each.end + shift }] : []);
   }
 
+  // An edit over a selection drops the waiting shortcodes it covers,
+  // whatever text takes their place, so a paste is never converted.
+  field.addEventListener("beforeinput", () => {
+    const from = field.selectionStart, to = field.selectionEnd;
+    if (from !== to) pending = pending.filter(each => each.end <= from || each.start >= to);
+  });
   field.addEventListener("input", event => {
     const typed = event instanceof InputEvent && event.inputType === "insertText" ? event.data ?? "" : null;
     const caret = field.selectionStart;

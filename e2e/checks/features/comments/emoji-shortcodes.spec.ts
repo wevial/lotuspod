@@ -304,6 +304,53 @@ test.describe('signed in', () => {
     seen.clean();
   });
 
+  test('a selection inside a shortcode closed before the table arrives moves to after its emoji', async ({ page }) => {
+    const seen = await watch(page);
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => { release = resolve; });
+    await page.route((url) => url.pathname === '/lotuspod-emoji.json', async (route) => {
+      await held;
+      await route.continue();
+    });
+    await page.goto(`${PAGE}?standalone`);
+    await loaded(page);
+    const field = await panelComposer(page, 'Frogs');
+    await field.pressSequentially('Before :tada: after');
+    await field.evaluate((node: HTMLTextAreaElement) => node.setSelectionRange(8, 12));
+    const answered = page.waitForResponse((r) => new URL(r.url()).pathname === '/lotuspod-emoji.json');
+    release();
+    await answered;
+    await expect(field).toHaveValue('Before 🎉 after');
+    await field.pressSequentially('X');
+    await expect(field).toHaveValue('Before 🎉X after');
+    seen.clean();
+  });
+
+  test('a shortcode closed before the table arrives and pasted over is not converted', async ({ page, context }) => {
+    const seen = await watch(page);
+    await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => { release = resolve; });
+    await page.route((url) => url.pathname === '/lotuspod-emoji.json', async (route) => {
+      await held;
+      await route.continue();
+    });
+    await page.goto(`${PAGE}?standalone`);
+    await loaded(page);
+    const field = await panelComposer(page, 'Frogs');
+    await field.pressSequentially(':tada:');
+    await page.evaluate(() => navigator.clipboard.writeText(':tada: pasted'));
+    await page.keyboard.press('ControlOrMeta+A');
+    await page.keyboard.press('ControlOrMeta+V');
+    await expect(field).toHaveValue(':tada: pasted');
+    const answered = page.waitForResponse((r) => new URL(r.url()).pathname === '/lotuspod-emoji.json');
+    release();
+    await answered;
+    await page.waitForTimeout(300);
+    await expect(field).toHaveValue(':tada: pasted');
+    seen.clean();
+  });
+
   test('a converted or picked emoji is undone by Ctrl+Z, and one past the field\'s limit is not inserted', async ({ page }) => {
     const seen = await watch(page);
     await page.goto(`${PAGE}?standalone`);

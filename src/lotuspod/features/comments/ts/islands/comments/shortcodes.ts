@@ -35,11 +35,15 @@ export function matches(table: Table, query: string): string[] {
 }
 
 // The shortcode a colon just typed before caret closes: the index of its
-// opening colon and its emoji; null when the colon closes no shortcode in
+// opening colon, its emoji, the text with the emoji in its place and the
+// caret right after the emoji; null when the colon closes no shortcode in
 // table.
-export function closed(text: string, caret: number, table: Table): { start: number; emoji: string } | null {
+export function closed(text: string, caret: number, table: Table):
+    { start: number; emoji: string; text: string; caret: number } | null {
   if (text[caret - 1] !== ":") return null;
   const open = fragment(text, caret - 1);
   if (!open || !Object.hasOwn(table, open.query)) return null;
-  return { start: open.start, emoji: table[open.query]! };
+  const emoji = table[open.query]!;
+  return { start: open.start, emoji, text: text.slice(0, open.start) + emoji + text.slice(caret),
+    caret: open.start + emoji.length };
 }
