@@ -16,10 +16,7 @@ a function, is checked against the rules:
 A module still flat in src/lotuspod/ is checked only for the cli rule, and a
 slice may still import one.
 
-EDGES was a ratchet: it started at the cross-slice edges main's code made, by
-TARGET_TREE, one (from, to) slice pair a line, and each entry went once its
-slice reached the other only through its public edge. It is empty now, and a
-test fails while it holds an entry. TARGET_TREE names the slice each flat
+A test fails while EDGES holds an entry. TARGET_TREE names the slice each flat
 module moves into, so an edge still made by flat modules counts as made;
 CLI_FUNCTIONS names the slice each function cli/__init__.py still holds moves
 into, so an edge made by a use inside one of them counts too.
@@ -58,8 +55,7 @@ TARGET_TREE: dict[str, str] = {}
 CLI_FUNCTIONS: dict[str, str] = {}
 
 # Each import that reaches past another slice's __init__.py into its modules
-# is allowed only along one of these (from, to) edges. Every slice reaches
-# the others through their public edges alone, so none is left.
+# is allowed only along one of these (from, to) edges.
 EDGES: tuple[tuple[str, str], ...] = ()
 
 
