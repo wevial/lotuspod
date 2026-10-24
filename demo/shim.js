@@ -278,8 +278,7 @@
   // value as a live block's anchor, {id, hash, state}; invalid_body for
   // anything else.
   function widget(value) {
-    if (!value || typeof value !== "object" || Array.isArray(value) ||
-        Object.keys(value).sort().join() !== "hash,id,state") {
+    if (!value || typeof value !== "object" || Object.keys(value).sort().join() !== "hash,id,state") {
       throw invalid();
     }
     var anchor = {
