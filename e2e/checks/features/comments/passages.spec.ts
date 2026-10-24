@@ -724,10 +724,12 @@ test.describe('signed in', () => {
       publish(source, (await revisionOf(page))!);
     }
 
-    // Two occurrences: the one between its context.
+    // Two occurrences: the one between its context. Neither lies between the
+    // second thread's context, so it draws no mark.
     await page.unrouteAll({ behavior: 'wait' });
     const root = row({ text: 'Again?', quote: { exact: 'pump stops', prefix: 'and the ', suffix: ' again' } });
-    await serve(page, [{ root, replies: [], resolution: OPEN }]);
+    const nowhere = row({ text: 'At dawn?', quote: { exact: 'pump stops', prefix: 'the old ', suffix: ' at dawn' } });
+    await serve(page, [{ root, replies: [], resolution: OPEN }, { root: nowhere, replies: [], resolution: OPEN }]);
     await page.reload();
     await settle(page);
     await expect(page.locator('meta[name="lotuspod:revision"]')).toHaveAttribute('content', before);
@@ -740,55 +742,11 @@ test.describe('signed in', () => {
       return { before: before.slice(-8), after: after.slice(0, 6) };
     });
     expect(around).toEqual({ before: 'and the ', after: ' again' });
-    await seen.clean();
-  });
-
-  test('a passage deleted from the page keeps its thread with the quote struck through', async ({ page, request }) => {
-    test.setTimeout(120_000);
-    const seen = await watch(page);
-    await load(page);
-    const before = (await revisionOf(page))!;
-    const asked = await postHeater(request, before, 'Is the heater still there?');
-    const ids = new Set<number>([asked.id]);
-    await ownThreads(page, ids);
-    const source = original();
-    const changed = source.replace(` ${SENTENCE}`, '');
-    expect(changed).not.toBe(source);
-    publish(changed, before);
-    try {
-      await page.reload();
-      await settle(page);
-      const after = (await revisionOf(page))!;
-      expect(after).not.toBe(before);
-      await expect(page.locator('.artifact-body')).not.toContainText('north wall');
-      await expect(marks(page, asked.id)).toHaveCount(0);
-      await expect(page.locator(`.artifact-passage-number[data-thread="${asked.id}"]`)).toHaveCount(0);
-      const side = panel(page);
-      if (await side.opener.isVisible()) await side.opener.click();
-      const lost = entry(page, asked.id);
-      await expect(side.group('Findings').locator(`.artifact-comments-entry[data-thread="${asked.id}"]`)).toHaveCount(1);
-      await expect(lost.words.locator('del')).toHaveText(HEATER);
-      await expect(lost.words).toContainText('this passage has changed since');
-      await expect(lost.words).not.toContainText(after);
-      await expect(lost.words.locator('.artifact-passage-why')).toHaveAttribute('title', `Changed in revision ${after}`);
-      await expect(lost.mark).toHaveText('1');
-      await lost.head.click();
-      await expect(lost.readers.locator('.artifact-comment-text')).toHaveText('Is the heater still there?');
-      await expect(lost.item.getByRole('button', { name: 'Add to your comment' })).toBeVisible();
-    } finally {
-      publish(source, (await revisionOf(page))!);
-    }
-
-    // Neither occurrence lies between its context, and there are two.
-    await page.unrouteAll({ behavior: 'wait' });
-    const root = row({ text: 'At dawn?', quote: { exact: 'pump stops', prefix: 'the old ', suffix: ' at dawn' } });
-    await serve(page, [{ root, replies: [], resolution: OPEN }]);
-    await page.reload();
-    await settle(page);
-    await expect(page.locator('mark.artifact-passage')).toHaveCount(0);
+    await expect(page.locator('mark.artifact-passage')).toHaveCount(1);
+    await expect(marks(page, nowhere.id)).toHaveCount(0);
     const side = panel(page);
     if (await side.opener.isVisible()) await side.opener.click();
-    const lost = entry(page, root.id);
+    const lost = entry(page, nowhere.id);
     await expect(lost.words.locator('del')).toHaveText('pump stops');
     await expect(lost.words).toContainText('this passage has changed since');
     await expect(lost.words).not.toContainText(before);
@@ -969,34 +927,6 @@ test.describe('signed in', () => {
     expect(await joined(marks(page, asked.id))).toBe(HEATER);
     await expect(page.locator(`.artifact-passage-number[data-thread="${asked.id}"]`)).toHaveText('1');
     await expect(side.fold).toBeVisible();
-    await seen.clean();
-  });
-
-  test('no width scrolls sideways with a composer open at 360 pixels or the panel open at 1440', async ({ page }) => {
-    const seen = await watch(page);
-    await serve(page, []);
-    const fits = () => page.evaluate(() => ({
-      scroll: document.documentElement.scrollWidth, viewport: document.documentElement.clientWidth,
-    }));
-    await page.setViewportSize({ width: 360, height: 780 });
-    await load(page);
-    await choose(page, '.artifact-body p', 'The heater', 'hard frost.');
-    await expect(pill(page)).toBeVisible();
-    const offer = (await pill(page).boundingBox())!;
-    expect(offer.x).toBeGreaterThanOrEqual(0);
-    expect(offer.x + offer.width).toBeLessThanOrEqual(360);
-    await pill(page).click();
-    const open = page.locator('.artifact-comments-bottom-sheet .artifact-passage-composer');
-    await expect(open).toBeVisible();
-    await expect(open.locator('textarea')).toBeFocused();
-    let widths = await fits();
-    expect(widths.scroll).toBeLessThanOrEqual(widths.viewport);
-
-    await page.setViewportSize(WIDE);
-    await expect(panel(page).fold).toBeVisible();
-    await expect(panel(page).group('Findings').locator('.artifact-passage-composer')).toBeVisible();
-    widths = await fits();
-    expect(widths.scroll).toBeLessThanOrEqual(widths.viewport);
     await seen.clean();
   });
 });

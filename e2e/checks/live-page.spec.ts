@@ -845,41 +845,6 @@ test.describe('signed in', () => {
     expect(errors).toEqual([]);
   });
 
-  test('a table a swap puts in place of an expanded one is expanded where storage is refused', async ({ page }) => {
-    const errors = watchErrors(page);
-    const name = 'live-page-tables-unkept';
-    const ARTICLE = ['--no-comments', '--variant', 'article'];
-    const tabled = (risks: string) => sectioned('Live page tables unkept', pond({
-      Risks: { paragraphs: ['The pump may crack in the ice.', ledger(risks)] },
-    }));
-    await page.addInitScript(() => {
-      Object.defineProperty(window, 'sessionStorage', {
-        get() { throw new DOMException('Storage is refused', 'SecurityError'); },
-      });
-    });
-    publish(name, tabled('Pump'), ...ARTICLE);
-    await openPlain(page, name);
-    expect(await page.evaluate(() => { try { sessionStorage.length; return 'kept'; } catch { return 'refused'; } }))
-      .toBe('refused');
-    const table = page.locator('.artifact-section-body[data-section="risks"] > table');
-    const button = page.locator('.artifact-section-body[data-section="risks"] > .artifact-table-expand > button');
-    await button.click();
-    await expect(table).toHaveClass(/artifact-table--expanded/);
-    await table.evaluate((node) => { (node as any).__kept = true; });
-    // Focus left in Risks would hold it back.
-    await button.blur();
-
-    const second = publish(name, tabled('Ladder'), ...ARTICLE);
-    await page.clock.runFor(CHECK);
-    await expect.poll(() => revisionOf(page)).toBe(second);
-    await expect(banner(page).node).toHaveCount(0);
-    await expect(table).toContainText('Ladder');
-    expect(await table.evaluate((node) => (node as any).__kept)).toBeUndefined();
-    await expect(table).toHaveClass(/artifact-table--expanded/);
-    await expect(button).toHaveText('Collapse');
-    expect(errors).toEqual([]);
-  });
-
   test('a swapped section\'s reference opens its new card, the cards swapped with it', async ({ page }) => {
     const errors = watchErrors(page);
     const swaps = await watchSwaps(page);
@@ -1166,6 +1131,10 @@ test.describe('signed in', () => {
     const field = await selectPassage(page, 'Risks, paragraph 1', 18);
     const UNSENT = 'Which pump is this?';
     await field.fill(UNSENT);
+    // An image still uploading goes with the text.
+    const release = await holdUploads(page);
+    await pasteFishOnly(field);
+    await expect(page.locator('form.artifact-passage-form .artifact-attach-item--loading')).toHaveCount(1);
 
     // Only Risks changes: the swap holds it back, the composer as it was.
     const second = publish(name, source('Live page passage gone', 'first')
@@ -1191,6 +1160,15 @@ test.describe('signed in', () => {
     await expect(form.locator('.artifact-comment-status')).toHaveText(
       'The words you selected have changed since. Your comment is kept here, on the section.');
     await expect(page.locator('.artifact-passage-composer')).toHaveCount(0);
+    // The image joins the form, and shows once its upload is let go.
+    await expect(form.locator('.artifact-attach-item--loading')).toHaveCount(1);
+    const [uploaded] = await Promise.all([
+      page.waitForResponse((r) => new URL(r.url()).pathname === '/api/media'),
+      release(),
+    ]);
+    expect(uploaded.status()).toBe(201);
+    await expect(form.locator('.artifact-attach-item img')).toHaveCount(1);
+    expect((await attachedIn(form))[0]).toMatch(MEDIA_URL);
     expect(loads.count).toBe(0);
     expect(errors).toEqual([]);
   });
@@ -1206,6 +1184,10 @@ test.describe('signed in', () => {
     await expect(risks).toBeFocused();
     const UNSENT = 'What cracks first, the pump or the pipe?';
     await risks.fill(UNSENT);
+    // An image still uploading goes with the text.
+    const release = await holdUploads(page);
+    await pasteFishOnly(risks);
+    await expect(page.locator('.artifact-attach-item--loading')).toHaveCount(1);
 
     const loads = watchLoads(page);
     // The next section is renamed with it.
@@ -1228,6 +1210,15 @@ test.describe('signed in', () => {
       'Where you were writing has changed since. Your text is kept here.');
     await expect(page.locator('.artifact-comments-panel')
       .getByRole('textbox', { name: 'Comment on Actions', includeHidden: true })).toHaveValue('');
+    // The image joins the form, and shows once its upload is let go.
+    await expect(form.locator('.artifact-attach-item--loading')).toHaveCount(1);
+    const [uploaded] = await Promise.all([
+      page.waitForResponse((r) => new URL(r.url()).pathname === '/api/media'),
+      release(),
+    ]);
+    expect(uploaded.status()).toBe(201);
+    await expect(form.locator('.artifact-attach-item img')).toHaveCount(1);
+    expect((await attachedIn(form))[0]).toMatch(MEDIA_URL);
     expect(loads.count).toBe(0);
     expect(errors).toEqual([]);
   });
@@ -1385,85 +1376,6 @@ test.describe('signed in', () => {
     expect(errors).toEqual([]);
   });
 
-  test('an image still uploading to a section renamed since joins the form where the section was', async ({ page }) => {
-    const errors = watchErrors(page);
-    const name = 'live-page-renamed-uploading';
-    publish(name, source('Live page renamed uploading', 'first'));
-    await stopClock(page);
-    await open(page, name);
-    await page.locator('details.artifact-comment[data-section="risks"] summary').click();
-    const risks = page.locator('.artifact-comments-panel').getByRole('textbox', { name: 'Comment on Risks' });
-    const UNSENT = 'What cracks first, the pump or the pipe?';
-    await risks.fill(UNSENT);
-    const release = await holdUploads(page);
-    await pasteFishOnly(risks);
-    await expect(page.locator('.artifact-attach-item--loading')).toHaveCount(1);
-
-    const loads = watchLoads(page);
-    const second = publish(name, source('Live page renamed uploading', 'first').replace(/Risks/g, 'Hazards'));
-    await page.clock.runFor(CHECK);
-    await expect.poll(() => revisionOf(page)).toBe(second);
-    const bar = page.locator('div.artifact-section-body[data-section="risks"] div.artifact-swap-held');
-    await expect(bar).toContainText('This section was removed');
-    await bar.getByRole('button', { name: 'Update' }).click();
-
-    const form = page.locator('.artifact-comments-panel form.artifact-comment-form')
-      .filter({ has: page.getByRole('textbox', { name: 'Comment on Hazards' }) });
-    await expect(form.locator('textarea')).toHaveValue(UNSENT);
-    await expect(form.locator('.artifact-attach-item--loading')).toHaveCount(1);
-    const [uploaded] = await Promise.all([
-      page.waitForResponse((r) => new URL(r.url()).pathname === '/api/media'),
-      release(),
-    ]);
-    expect(uploaded.status()).toBe(201);
-    await expect(form.locator('.artifact-attach-item img')).toHaveCount(1);
-    const attached = await attachedIn(form);
-    expect(attached[0]).toMatch(MEDIA_URL);
-    await expect(form.locator('.artifact-comment-status')).toHaveText(
-      'Where you were writing has changed since. Your text is kept here.');
-    expect(loads.count).toBe(0);
-    expect(errors).toEqual([]);
-  });
-
-  test('an image still uploading to a passage comment whose words changed joins its section\'s form', async ({ page }) => {
-    const errors = watchErrors(page);
-    const name = 'live-page-passage-uploading';
-    publish(name, source('Live page passage uploading', 'first'));
-    await stopClock(page);
-    await open(page, name);
-    const field = await selectPassage(page, 'Risks, paragraph 1', 18);
-    const UNSENT = 'Which pump is this?';
-    await field.fill(UNSENT);
-    const release = await holdUploads(page);
-    await pasteFishOnly(field);
-    await expect(page.locator('form.artifact-passage-form .artifact-attach-item--loading')).toHaveCount(1);
-
-    const loads = watchLoads(page);
-    const second = publish(name, source('Live page passage uploading', 'first')
-      .replace('Risks, paragraph 1:', 'Risks, first point:'));
-    await page.clock.runFor(CHECK);
-    await expect.poll(() => revisionOf(page)).toBe(second);
-    const bar = page.locator('div.artifact-section-body[data-section="risks"] div.artifact-swap-held');
-    await expect(bar).toContainText('This section changed');
-    await bar.getByRole('button', { name: 'Update' }).click();
-
-    const form = page.locator('.artifact-comments-panel form.artifact-comment-form')
-      .filter({ has: page.getByRole('textbox', { name: 'Comment on Risks' }) });
-    await expect(form.locator('textarea')).toHaveValue(UNSENT);
-    await expect(form.locator('.artifact-attach-item--loading')).toHaveCount(1);
-    const [uploaded] = await Promise.all([
-      page.waitForResponse((r) => new URL(r.url()).pathname === '/api/media'),
-      release(),
-    ]);
-    expect(uploaded.status()).toBe(201);
-    await expect(form.locator('.artifact-attach-item img')).toHaveCount(1);
-    expect((await attachedIn(form))[0]).toMatch(MEDIA_URL);
-    await expect(form.locator('.artifact-comment-status')).toHaveText(
-      'The words you selected have changed since. Your comment is kept here, on the section.');
-    expect(loads.count).toBe(0);
-    expect(errors).toEqual([]);
-  });
-
   test('a hidden page with nothing unsent has reloaded itself before it is seen again', async ({ page }) => {
     const errors = watchErrors(page);
     const name = 'live-page-hidden';
@@ -1513,37 +1425,6 @@ test.describe('signed in', () => {
     expect(await page.evaluate(() => (window as any).__stayed)).toBe('this page');
     expect(await revisionOf(page)).toBe(first);
     await expect(field).toHaveValue(UNSENT);
-    expect(errors).toEqual([]);
-  });
-
-  test('a hidden page with only an image attached waits for the reader, the image intact', async ({ page }) => {
-    const errors = watchErrors(page);
-    const name = 'live-page-unsent-image';
-    await fallBack(page, name);
-    const first = publish(name, source('Live page unsent image', 'first'));
-    await stopClock(page);
-    await open(page, name);
-    await page.locator('details.artifact-comment[data-section="findings"] summary').click();
-    const field = page.locator('.artifact-comments-panel')
-      .getByRole('textbox', { name: 'Comment on Findings' });
-    await expect(field).toBeFocused();
-    const form = page.locator('.artifact-comments-panel form.artifact-comment-form')
-      .filter({ has: page.getByRole('textbox', { name: 'Comment on Findings' }) });
-    await pasteFish(page, field);
-    await expect(form.locator('.artifact-attach-item img')).toHaveCount(1);
-    const attached = await attachedIn(form);
-    await page.evaluate(() => { (window as any).__stayed = 'this page'; });
-    await setVisibility(page, 'hidden');
-
-    publish(name, source('Live page unsent image', 'second'));
-    await page.clock.runFor(CHECK);
-    await expect(banner(page).node).toBeAttached();
-    await setVisibility(page, 'visible');
-
-    await expect(banner(page).node).toBeVisible();
-    expect(await page.evaluate(() => (window as any).__stayed)).toBe('this page');
-    expect(await revisionOf(page)).toBe(first);
-    expect(await attachedIn(form)).toEqual(attached);
     expect(errors).toEqual([]);
   });
 

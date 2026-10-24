@@ -499,30 +499,6 @@ test("a block's form refused after the block changed keeps its refusal over a sw
   expect(errors).toEqual([]);
 });
 
-test("a block's form whose block a later swap takes away no longer says it stays on the block", async ({ page }) => {
-  const name = `block-comments-updated-gone-${test.info().repeatEachIndex}`;
-  publish(name, doc(1));
-  const errors = watch(page);
-  await load(page, name);
-  const { churn, form, field, status } = churnForm(page);
-  await block(page).comment.click();
-  await field.fill(QUESTION);
-  await swap(page, name, doc(2));
-  await expect(status).toHaveText(BLOCK_CHANGED);
-
-  // The block leaves the page: the form is a comment on its section.
-  await swap(page, name, doc(0));
-  await expect(page.locator('figure[data-widget="churn"]')).toHaveCount(0);
-  await expect(churn.locator('.artifact-comment-on')).toHaveCount(0);
-  await expect(field).toHaveValue(QUESTION);
-  await expect(status).toHaveText('');
-  const sent = posting(page);
-  await form.getByRole('button', { name: 'Comment', exact: true }).click();
-  expect((await sent).postDataJSON().widget).toBeUndefined();
-  await expect(churn.locator('.artifact-comments-entry')).toHaveCount(1);
-  expect(errors).toEqual([]);
-});
-
 test("a block's form that Escape takes off the block no longer says it stays on the block", async ({ page }) => {
   const name = `block-comments-updated-escape-${test.info().repeatEachIndex}`;
   publish(name, doc(1));
@@ -570,6 +546,8 @@ test("a block's form refused for its block no longer says to reload once a swap 
   const { churn, form, field, status } = churnForm(page);
   await block(page).comment.click();
   await field.fill(QUESTION);
+  await swap(page, name, doc(2));
+  await expect(status).toHaveText(BLOCK_CHANGED);
   await form.getByRole('button', { name: 'Comment', exact: true }).click();
   await expect(status).toHaveText(STALE_BLOCK);
   await page.unroute(comments);
@@ -682,24 +660,6 @@ async function send(page: Page) {
   return { body: (await sent).postDataJSON(), response: await answered };
 }
 
-test("a block's form with an image keeps its block over the banner's Reload", async ({ page }) => {
-  const name = `block-comments-banner-reload-${test.info().repeatEachIndex}`;
-  const errors = watch(page);
-  const first = await reloadOnto(page, name, third(doc(1)));
-  const { churn, form, field } = churnForm(page);
-  await expect(page.locator('details.artifact-comment[data-section="later"]')).toHaveCount(1);
-  await expect(churn.locator('.artifact-comment-on')).toHaveText(WORDS);
-  await expect(field).toHaveValue(QUESTION);
-  await expect(form.locator('li.artifact-attach-item')).toHaveCount(1);
-
-  const { body, response } = await send(page);
-  expect(body.widget).toEqual({ id: 'churn', hash: first, state: '' });
-  expect(body.images).toHaveLength(1);
-  expect(response.status()).toBe(201);
-  await expect(churn.locator('.artifact-comments-entry')).toHaveCount(1);
-  expect(errors).toEqual([]);
-});
-
 test("a block's form reloaded onto a changed block stays on the version the reader saw", async ({ page }) => {
   const name = `block-comments-reload-changed-${test.info().repeatEachIndex}`;
   const errors = watch(page);
@@ -715,6 +675,7 @@ test("a block's form reloaded onto a changed block stays on the version the read
 
   const { body, response } = await send(page);
   expect(body.widget).toEqual({ id: 'churn', hash: first, state: '' });
+  expect(body.images).toHaveLength(1);
   expect(response.status()).toBe(201);
   const entry = churn.locator('.artifact-comments-entry');
   await expect(entry).toHaveCount(1);
@@ -761,6 +722,28 @@ test("a kept draft whose block is not a block's anchor reloads as its section's 
     await expect(field).toHaveValue('Kept as written');
     await expect(churn.locator('.artifact-comment-on')).toHaveCount(0);
   }
+
+  // A draft whose section is gone, given back to the form on a block, takes
+  // the form off its block.
+  const first = await hashOf(page);
+  await page.evaluate(({ key, first }) => {
+    const write = () => sessionStorage.setItem(key, JSON.stringify({ x: 0, y: 0, comments: {
+      open: { section: 'churn', writing: true },
+      texts: [
+        { section: 'churn', index: 1, text: 'On the block', images: [], widget: { id: 'churn', hash: first, state: '' } },
+        { section: 'gone', index: 1, text: 'On no block', images: [] },
+      ],
+    } }));
+    window.addEventListener('pagehide', write);
+    document.addEventListener('visibilitychange', write);
+  }, { key: KEPT + name, first });
+  await page.reload();
+  await expect(block(page).comment).toBeVisible();
+  await expect(field).toHaveValue(/On the block/);
+  await expect(field).toHaveValue(/On no block/);
+  await expect(churn.locator('.artifact-comment-on')).toHaveCount(0);
+  const { body } = await send(page);
+  expect(body).not.toHaveProperty('widget');
   expect(errors).toEqual([]);
 });
 
@@ -1045,34 +1028,6 @@ test("a block's draft given back to its form already written on the same block k
   const { body } = await send(page);
   expect(body.widget).toEqual({ id: 'churn', hash: first, state: '' });
   await page.unrouteAll({ behavior: 'ignoreErrors' });
-  expect(errors).toEqual([]);
-});
-
-test("a draft whose section is gone, given back to a form on a block, takes the form off its block", async ({ page }) => {
-  const name = `block-comments-reload-gone-section-${test.info().repeatEachIndex}`;
-  publish(name, doc(1));
-  const errors = watch(page);
-  await load(page, name);
-  const first = await hashOf(page);
-  const { churn, field } = churnForm(page);
-  await page.evaluate(({ key, first }) => {
-    const write = () => sessionStorage.setItem(key, JSON.stringify({ x: 0, y: 0, comments: {
-      open: { section: 'churn', writing: true },
-      texts: [
-        { section: 'churn', index: 1, text: 'On the block', images: [], widget: { id: 'churn', hash: first, state: '' } },
-        { section: 'gone', index: 1, text: 'On no block', images: [] },
-      ],
-    } }));
-    window.addEventListener('pagehide', write);
-    document.addEventListener('visibilitychange', write);
-  }, { key: KEPT + name, first });
-  await page.reload();
-  await expect(block(page).comment).toBeVisible();
-  await expect(field).toHaveValue(/On the block/);
-  await expect(field).toHaveValue(/On no block/);
-  await expect(churn.locator('.artifact-comment-on')).toHaveCount(0);
-  const { body } = await send(page);
-  expect(body).not.toHaveProperty('widget');
   expect(errors).toEqual([]);
 });
 

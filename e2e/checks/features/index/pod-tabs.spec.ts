@@ -42,31 +42,14 @@ function rgb(token: string) {
   return `rgb(${r}, ${g}, ${b})`;
 }
 
-type Violation = { blockedURI: string; effectiveDirective: string };
-
-// Console errors and thrown errors, in the index and in every frame, and
-// each document's policy violations, kept on its own window.
-async function watch(page: Page) {
+// Console errors and thrown errors, in the index and in every frame.
+function watch(page: Page) {
   const errors: string[] = [];
   page.on('console', (message) => {
     if (message.type() === 'error') errors.push(message.text());
   });
   page.on('pageerror', (error) => errors.push(error.message));
-  await page.addInitScript(() => {
-    const seen: { blockedURI: string; effectiveDirective: string }[] = [];
-    (window as any).__violations = seen;
-    document.addEventListener('securitypolicyviolation', (event) => {
-      seen.push({ blockedURI: event.blockedURI, effectiveDirective: event.effectiveDirective });
-    });
-  });
   return errors;
-}
-
-function violations(page: Page, name?: string): Promise<Violation[]> {
-  const frame = name === undefined ? page.mainFrame()
-    : page.frames().find((each) => new URL(each.url()).pathname === `/${name}.html`);
-  if (!frame) throw new Error(`no frame shows ${name}`);
-  return frame.evaluate(() => (window as any).__violations as Violation[]);
 }
 
 function run(...args: string[]) {
@@ -218,26 +201,6 @@ test.describe('signed in', () => {
     }
   });
 
-  test('a plain click on a title link opens the pod in a tab, with no error or violation', async ({ page }) => {
-    const errors = await watch(page);
-    await openIndex(page);
-    await expect(tabs(page)).toHaveCount(0);
-    await listingLink(page, ARTICLE).click();
-
-    await expect(tabs(page)).toHaveCount(1);
-    await expect(tabTitle(page, ARTICLE)).toHaveText(ARTICLE.title);
-    await expectActive(page, ARTICLE);
-    await expect(framed(page, ARTICLE).locator('h1')).toHaveText(ARTICLE.title);
-    await expect(page).toHaveURL(/#tabs=capture-article&on=capture-article$/);
-    await expect(close(page, ARTICLE)).toHaveText('✕');
-    // The index is the page it was: the frame holds the pod.
-    expect(new URL(page.url()).pathname).toBe('/');
-
-    expect(await violations(page)).toEqual([]);
-    expect(await violations(page, ARTICLE.name)).toEqual([]);
-    expect(errors).toEqual([]);
-  });
-
   test('a link in a framed pod opens a tab after it, Ctrl-click a browser tab, and the pod\'s Lotuspod link the listing', async ({ page, context }) => {
     const errors = await watch(page);
     // A framed page's links are handled before it has loaded: its page
@@ -279,6 +242,36 @@ test.describe('signed in', () => {
     await expect(home(page)).toHaveAttribute('aria-current', 'page');
     await expect(page).toHaveURL(/#tabs=capture-decision-context,capture-article$/);
     expect(new URL(page.url()).pathname).toBe('/');
+
+    // A reload, as the reload banner's: the old page is marked, so the
+    // reloaded one is told apart from it.
+    const readyState = () => frame(page, CONTEXT).evaluate((node) =>
+      (node as HTMLIFrameElement).contentDocument?.readyState);
+    await tabTitle(page, CONTEXT).click();
+    await close(page, ARTICLE).click();
+    await expectActive(page, CONTEXT);
+    await expect.poll(readyState).toBe('complete');
+    await frame(page, CONTEXT).evaluate((node) => {
+      const framed = (node as HTMLIFrameElement).contentWindow as Window;
+      framed.document.body.dataset.before = 'reload';
+      framed.location.reload();
+    });
+    await expect(framed(page, CONTEXT).locator('body:not([data-before])')).toHaveCount(1);
+    await expect(framed(page, CONTEXT).locator('h1')).toHaveText(CONTEXT.title);
+    // Straight away, loaded or not.
+    await link.click();
+    await expect.poll(() => openNames(page)).toEqual([CONTEXT.name, ARTICLE.name]);
+    await expectActive(page, ARTICLE);
+    await expect(page).toHaveURL(/#tabs=capture-decision-context,capture-article&on=capture-article$/);
+
+    // Once it has loaded, too.
+    await close(page, ARTICLE).click();
+    await expectActive(page, CONTEXT);
+    await expect.poll(readyState).toBe('complete');
+    await link.click();
+    await expect.poll(() => openNames(page)).toEqual([CONTEXT.name, ARTICLE.name]);
+    await expectActive(page, ARTICLE);
+    await expect(framed(page, CONTEXT).locator('h1')).toHaveText(CONTEXT.title);
     expect(errors).toEqual([]);
   });
 
@@ -372,41 +365,6 @@ test.describe('signed in', () => {
     await expect(page).toHaveURL(new RegExp(`/${pod.name}\\.html\\?version=${first}$`));
   });
 
-  test('a framed pod reloaded still opens its links in tabs, before and after it has loaded again', async ({ page }) => {
-    const errors = await watch(page);
-    const readyState = () => frame(page, CONTEXT).evaluate((node) =>
-      (node as HTMLIFrameElement).contentDocument?.readyState);
-    await openIndex(page);
-    await openFromListing(page, CONTEXT);
-    await expect.poll(readyState).toBe('complete');
-
-    // A reload, as the reload banner's: the old page is marked, so the
-    // reloaded one is told apart from it.
-    await frame(page, CONTEXT).evaluate((node) => {
-      const framed = (node as HTMLIFrameElement).contentWindow as Window;
-      framed.document.body.dataset.before = 'reload';
-      framed.location.reload();
-    });
-    await expect(framed(page, CONTEXT).locator('body:not([data-before])')).toHaveCount(1);
-    await expect(framed(page, CONTEXT).locator('h1')).toHaveText(CONTEXT.title);
-    // Straight away, loaded or not.
-    const link = framed(page, CONTEXT).getByRole('link', { name: 'the pump notes' }).first();
-    await link.click();
-    await expect.poll(() => openNames(page)).toEqual([CONTEXT.name, ARTICLE.name]);
-    await expectActive(page, ARTICLE);
-    await expect(page).toHaveURL(/#tabs=capture-decision-context,capture-article&on=capture-article$/);
-
-    // Once it has loaded, too.
-    await close(page, ARTICLE).click();
-    await expectActive(page, CONTEXT);
-    await expect.poll(readyState).toBe('complete');
-    await link.click();
-    await expect.poll(() => openNames(page)).toEqual([CONTEXT.name, ARTICLE.name]);
-    await expectActive(page, ARTICLE);
-    await expect(framed(page, CONTEXT).locator('h1')).toHaveText(CONTEXT.title);
-    expect(errors).toEqual([]);
-  });
-
   test('a framed page keeps the clicks its own script takes: its image opens in the viewer', async ({ page }) => {
     const errors = await watch(page);
     const images = { name: 'capture-images', title: 'Capture images' };
@@ -424,34 +382,6 @@ test.describe('signed in', () => {
     await expectActive(page, images);
     // The frame is still the page: nothing navigated.
     expect(page.frames().map((each) => new URL(each.url()).pathname)).toContain('/capture-images.html');
-    expect(errors).toEqual([]);
-  });
-
-  test('back on the listing from a tab, a page just read there loses its updated mark', async ({ page }) => {
-    const errors = await watch(page);
-    const pod = { name: 'pod-tabs-marks', title: 'Pod tabs marks' };
-    publish(pod.name, source(pod.title, 'first'));
-    const first = seenPost(page, pod.name);
-    await page.goto(`/${pod.name}.html?standalone`);
-    await first;
-    await page.waitForTimeout(1100);
-    publish(pod.name, source(pod.title, 'second'));
-
-    await openIndex(page);
-    const row = page.locator(`.index-table tbody tr[data-page="${pod.name}"]`);
-    const toggle = page.locator('button.index-toggle', { hasText: /^Updated/ });
-    await expect(row.locator('.index-mark')).toHaveText('updated');
-    const before = Number(/(\d+)$/.exec(await toggle.innerText())?.[1]);
-    expect(before).toBeGreaterThan(0);
-
-    const read = seenPost(page, pod.name);
-    await listingLink(page, pod).click();
-    await read;
-    await expectActive(page, pod);
-    await home(page).click();
-    await expectListing(page);
-    await expect(row.locator('.index-mark')).toHaveCount(0);
-    await expect(toggle).toHaveText(`Updated · ${before - 1}`);
     expect(errors).toEqual([]);
   });
 

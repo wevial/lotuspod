@@ -213,11 +213,17 @@ test.describe('signed in', () => {
     const title = page.locator('.index-table thead th', { hasText: 'Title' });
     await title.getByRole('button').click();
     await expect(title).toHaveAttribute('aria-sort', 'ascending');
+    // Focus on the pod's link moves to its new row.
+    await rowLink(page, name).evaluate((link) => link.setAttribute('data-old', ''));
+    await rowLink(page, name).focus();
+    await expect(rowLink(page, name)).toBeFocused();
 
     publish(name, 'Index refresh zander', 'A page whose title changes.');
     await nextRead(page);
 
     await expect(rowLink(page, name)).toHaveText('Index refresh zander');
+    await expect(rowLink(page, name)).not.toHaveAttribute('data-old', '');
+    await expect(rowLink(page, name)).toBeFocused();
     const titles = await page.locator('.index-table tbody tr').evaluateAll((rows) =>
       rows.map((each) => (each as HTMLTableRowElement).cells[0].querySelector('a')?.textContent?.trim() ?? ''));
     const ordered = titles.slice().sort((a, b) =>
@@ -518,25 +524,6 @@ test.describe('signed in', () => {
     expect(loads).toEqual([]);
     await expect(page.locator('main.index')).toBeHidden();
     await expect(page.locator('.index-table tbody tr')).not.toHaveCount(0);
-    expect(errors).toEqual([]);
-  });
-
-  test('focus on a pod\'s link moves to its new row when it is republished', async ({ page }) => {
-    const errors = watchErrors(page);
-    const name = 'index-refresh-focus';
-    publish(name, 'Index refresh focus', 'A page whose summary changes.');
-    await openIndex(page);
-    await rowLink(page, name).evaluate((link) => link.setAttribute('data-old', ''));
-    await rowLink(page, name).focus();
-    await expect(rowLink(page, name)).toBeFocused();
-
-    publish(name, 'Index refresh focus', 'A page whose summary changed while it had focus.');
-    await nextRead(page);
-
-    await expect(row(page, name).locator('td.episode-summary'))
-      .toHaveText('A page whose summary changed while it had focus.');
-    await expect(rowLink(page, name)).not.toHaveAttribute('data-old', '');
-    await expect(rowLink(page, name)).toBeFocused();
     expect(errors).toEqual([]);
   });
 });

@@ -126,12 +126,9 @@ test.describe.serial('signed in', () => {
     expect(questions[QUESTION].current.note).toBe('Skip the welcome');
     await page.reload();
     await folded();
-    expect(errors).toEqual([]);
-  });
 
-  test('the Answered table holds the checklist as one row, whose change opens the card at its saved items', async ({ page }) => {
-    const errors = await watch(page);
-    await page.goto(`${PAGE}?standalone`);
+    // The Answered table holds the checklist as one row, whose change opens
+    // the card at its saved items.
     const table = page.getByRole('table', { name: 'Answered' });
     const rows = table.locator('tbody tr');
     await expect(rows).toHaveCount(1);
@@ -147,7 +144,6 @@ test.describe.serial('signed in', () => {
     expect(note!.y).toBeGreaterThanOrEqual(label!.y + label!.height - 1);
 
     await row.getByRole('button', { name: 'change' }).click();
-    const card = checklist(page);
     await expect(card.saved).toBeHidden();
     expect(await checked(page)).toEqual(['2', '3']);
     await expect(card.item('2')).toBeFocused();

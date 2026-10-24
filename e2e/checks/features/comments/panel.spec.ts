@@ -725,6 +725,10 @@ test.describe('signed in', () => {
     await expect(side.titles).toHaveText(['Findings', 'Costs']);
     await expect(pick.perSection).toHaveCount(0);
     await expect(pick.none).toBeHidden();
+    // With no resolved thread, no control shows them.
+    await expect(side.count).toHaveText('2 open · 0 resolved');
+    await expect(side.aside.getByRole('button', { name: /resolved/ })).toHaveCount(0);
+    await expect(side.showResolved).toBeHidden();
     // Under the heading, above the groups.
     const head = (await side.aside.locator('.artifact-comments-head').boundingBox())!;
     const button = (await pick.button.boundingBox())!;
@@ -801,19 +805,6 @@ test.describe('signed in', () => {
     await side.count.click();
     await expect(pick.list).toBeHidden();
     await expect(pick.button).toBeFocused();
-    await seen.clean();
-  });
-
-  test('a page with no threads says so above the control', async ({ page }) => {
-    const seen = await watch(page);
-    await serve(page, () => [], FIVE_SLUG);
-    const side = await loadFive(page);
-    const pick = picker(page);
-    await expect(pick.none).toBeVisible();
-    await expect(pick.button).toBeVisible();
-    expect((await pick.none.boundingBox())!.y).toBeLessThan((await pick.button.boundingBox())!.y);
-    await expect(side.titles).toHaveCount(0);
-    await expect(pick.perSection).toHaveCount(0);
     await seen.clean();
   });
 
@@ -922,16 +913,6 @@ test.describe('signed in', () => {
     await seen.clean();
   });
 
-  test('a page with no resolved threads draws no control to show them', async ({ page }) => {
-    const seen = await watch(page);
-    await serve(page, () => onFive({ findings: 'Findings', costs: 'Costs' }), FIVE_SLUG);
-    const side = await loadFive(page);
-    await expect(side.count).toHaveText('2 open · 0 resolved');
-    await expect(side.aside.getByRole('button', { name: /resolved/ })).toHaveCount(0);
-    await expect(side.showResolved).toBeHidden();
-    await seen.clean();
-  });
-
   test('with storage that throws, resolved threads still show and hide', async ({ page }) => {
     const seen = await watch(page);
     await page.addInitScript(() => {
@@ -977,6 +958,11 @@ test.describe('signed in', () => {
       Boolean(node.compareDocumentPosition(node.parentElement!.querySelector('.artifact-comments-pick')!)
         & Node.DOCUMENT_POSITION_FOLLOWING))).toBe(true);
     await expect(side.titles).toHaveCount(0);
+    // With no threads, the panel says so above the control.
+    await expect(pick.none).toBeVisible();
+    await expect(pick.button).toBeVisible();
+    expect((await pick.none.boundingBox())!.y).toBeLessThan((await pick.button.boundingBox())!.y);
+    await expect(pick.perSection).toHaveCount(0);
 
     await pick.onPage.click();
     const whole = side.group('This page');

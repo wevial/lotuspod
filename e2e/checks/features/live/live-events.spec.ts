@@ -145,42 +145,33 @@ test.describe('signed in', () => {
     }
   });
 
-  test("hermes's reply is drawn in its thread at once, the clock never moved", async ({ page, request }) => {
+  test('a republish is checked and swapped in at once, the clock never moved', async ({ page, request }) => {
     const errors = watchErrors(page);
-    const name = 'live-events-reply';
+    const name = 'live-events-publish';
     // hermes pulls first, so it is listening and the comment, naming it, waits for it.
     hermes('pull', '--owner', OWNER);
-    publish(name, source('Live events reply', 'first'));
-    const root = await comment(request, name, 'findings', '@hermes Which heater?');
+    const first = publish(name, source('Live events publish', 'first'));
+    const root = await comment(request, name, 'risks', '@hermes Will the pump crack?');
     const claim = hermes('claim', String(root.id));
     expect(claim.handle).toBe(OWNER);
+    const asked = watchAsked(page, REVISION);
     await stopClock(page);
     await open(page, name);
 
-    await page.locator('details.artifact-comment[data-section="findings"] summary').click();
+    // hermes's reply is drawn in the thread open in the panel at once.
+    await page.locator('details.artifact-comment[data-section="risks"] summary').click();
     const thread = page.locator(`.artifact-comment-thread[data-thread="${root.id}"]`);
     await expect(thread).toBeVisible();
     await expect(thread.locator('.artifact-comment-item--agent')).toHaveCount(0);
-
-    const REPLY = 'A submerged heater, clear of the pump outlet.';
+    const REPLY = 'Not if the heater keeps the water moving.';
     // A claim token may start with '-': give it to its option in one word.
     hermes('reply', String(root.id), `--claim=${claim.claimToken}`, '--key', `live-events-${root.id}`,
       '--text', REPLY);
     await expect(thread.locator('.artifact-comment-item--agent .artifact-comment-text'))
       .toHaveText(REPLY, { timeout: 10_000 });
     expect(await page.evaluate(() => Date.now())).toBe(START + 1000);
-    expect(errors).toEqual([]);
-  });
-
-  test('a republish is checked and swapped in at once, the clock never moved', async ({ page, request }) => {
-    const errors = watchErrors(page);
-    const name = 'live-events-publish';
-    const first = publish(name, source('Live events publish', 'first'));
-    await comment(request, name, 'risks', 'Will the pump crack?');
-    const asked = watchAsked(page, REVISION);
-    await stopClock(page);
-    await open(page, name);
-    // A tick for the first publish may still reach the page: it checks then too.
+    // A tick for the first publish or the reply may still reach the page: it
+    // checks then too.
     const before = asked.length;
 
     const second = publish(name, source('Live events publish', 'second'));

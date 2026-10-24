@@ -205,6 +205,17 @@ test.describe('signed in', () => {
     await expect(chip(page).locator('.artifact-comment-chip-unread')).toHaveCount(0);
     await expect(theirs).toHaveClass(/\bartifact-comment--unread\b/);
 
+    // The window narrowed to a popover, the thread keeps its New marks.
+    await page.setViewportSize({ width: 1024, height: 900 });
+    const popover = page.locator('.artifact-comments-popover');
+    await expect(popover.locator(`.artifact-comment-thread[data-thread="${thread}"]`)).toBeVisible();
+    const narrowed = popover.locator(`.artifact-comment-item:has(#artifact-comment-text-${id})`);
+    await expect(narrowed).toHaveClass(/\bartifact-comment--unread\b/);
+    await expect(narrowed.locator('.artifact-comment-new')).toHaveText('New');
+    await expect(popover.locator('.artifact-comment-divider')).toHaveText('New since you last looked');
+    await expect(page.locator('.artifact-unread')).toHaveCount(0);
+
+    await page.setViewportSize(WIDE);
     await openPage(page, true);
     await expect(reply(page, id)).toHaveCount(1);
     await expect(page.locator('.artifact-comment--unread')).toHaveCount(0);
@@ -328,30 +339,6 @@ test.describe('signed in', () => {
     await expect(page.locator('.artifact-unread')).toHaveText('1 new reply to you');
     const read = await request.get(`${COMMENTS}?page=${NAME}`, { headers: SIGNED_IN });
     expect(((await read.json()) as { unread: number[] }).unread).toEqual([id]);
-    expect(errors).toEqual([]);
-  });
-
-  test('a thread open in the panel keeps its New marks when the window narrows to a popover', async ({ page, request }) => {
-    test.setTimeout(120_000);
-    const errors = watchErrors(page);
-    const { thread, reply: id } = await answered(request, 'Will the liner hold?');
-
-    await openPage(page);
-    const seen = page.waitForResponse((response) =>
-      new URL(response.url()).pathname === SEEN && response.request().method() === 'POST' &&
-      'thread' in (response.request().postDataJSON() ?? {}));
-    await chip(page).click();
-    expect((await seen).status()).toBe(200);
-    await expect(reply(page, id)).toHaveClass(/\bartifact-comment--unread\b/);
-
-    await page.setViewportSize({ width: 1024, height: 900 });
-    const popover = page.locator('.artifact-comments-popover');
-    await expect(popover.locator(`.artifact-comment-thread[data-thread="${thread}"]`)).toBeVisible();
-    const theirs = popover.locator(`.artifact-comment-item:has(#artifact-comment-text-${id})`);
-    await expect(theirs).toHaveClass(/\bartifact-comment--unread\b/);
-    await expect(theirs.locator('.artifact-comment-new')).toHaveText('New');
-    await expect(popover.locator('.artifact-comment-divider')).toHaveText('New since you last looked');
-    await expect(page.locator('.artifact-unread')).toHaveCount(0);
     expect(errors).toEqual([]);
   });
 
