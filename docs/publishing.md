@@ -1089,6 +1089,19 @@ history. An answer to an earlier wording leaves the card open, not filled
 from it, with the line "Answered to an earlier wording by READER, TIME" (the
 page script picks its default, as for a question not answered).
 
+The page script makes each decision card's question a toggle, led by ▾ while
+the card is open and ▸ once it is collapsed (a checklist has none). A
+collapsed card hides everything under its question but one line of where it
+stands: "✓ Saved · LABEL" while it holds its saved answer, "LABEL · Not saved"
+for a pick that differs from it (a default picked and not saved included), or
+"Not answered yet" with nothing picked. The line follows a pick or a save made
+in the comments panel's Decisions tab at once. Show on page and a question's
+text in that tab, Next open, a `#question=ID` link, and "change" in the
+Answered table or the tab's Answered list each open a collapsed card first,
+"change" straight to its options. Every card starts open on each load, a card
+a republish swaps in is drawn open, and a page without the script shows every
+card open with no toggle.
+
 On a page that takes comments (one with at least one comment box), each card
 also has "Ask" beside "Save answer", for a question about the decision rather
 than an answer to it. It posts the note's text, trimmed, as a thread on the
