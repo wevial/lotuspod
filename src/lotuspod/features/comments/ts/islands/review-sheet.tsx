@@ -556,17 +556,31 @@ export function reviewSheet(page: Page, cards: Cards | null): void {
   let drawnAnswers = false;
   let followed = false;
   document.addEventListener("click", (event) => {
-    const link = event.target instanceof Element ? event.target.closest("a.artifact-live-decisions") : null;
-    if (!link || event.defaultPrevented) {
+    const link = event.target instanceof Element ?
+      event.target.closest<HTMLAnchorElement>('a.artifact-live-decisions, a[href*="#question="]') : null;
+    // A click that opens the link elsewhere (a modifier, another button, or
+    // another browsing context) is the browser's.
+    const target = link?.getAttribute("target");
+    if (!link || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey ||
+      event.shiftKey || event.altKey || (target && target !== "_self")) {
       return;
     }
-    // An expanded block would cover the form: it closes first.
-    if (link.closest("figure.artifact-live--expanded")) {
-      link.closest("figure")?.querySelector<HTMLButtonElement>(".artifact-live-expand")?.click();
+    // Any link to a question on this document (a bare hash, or the page's
+    // own path or URL with one) followed again, its hash already the
+    // address, places the form again, as a collapsed card is opened there;
+    // a block's link also takes the focus.
+    const url = new URL(link.getAttribute("href") ?? "", location.href);
+    const here = url.origin + url.pathname + url.search === location.origin + location.pathname + location.search;
+    const hash = here ? url.hash : "";
+    focusing = null;
+    if (link.matches("a.artifact-live-decisions")) {
+      // An expanded block would cover the form: it closes first.
+      if (link.closest("figure.artifact-live--expanded")) {
+        link.closest("figure")?.querySelector<HTMLButtonElement>(".artifact-live-expand")?.click();
+      }
+      focusing = hash.startsWith("#question=") ? decodeURIComponent(hash.slice("#question=".length)) : null;
     }
-    const href = link.getAttribute("href") ?? "";
-    focusing = href.startsWith("#question=") ? decodeURIComponent(href.slice("#question=".length)) : null;
-    if (href === location.hash && drawnAnswers) {
+    if (hash.startsWith("#question=") && hash === location.hash && drawnAnswers) {
       event.preventDefault();
       toQuestion(false);
     }

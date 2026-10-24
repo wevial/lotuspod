@@ -834,3 +834,229 @@ test('an empty panel Ask posts nothing, and the card\'s Ask still sends and empt
   await expect(row(page, 'decision-3').label).toHaveText('Overlay on the console');
   expect(errors).toEqual([]);
 });
+
+// A card's title as its toggle, and the one line a collapsed card shows.
+function collapsible(page: Page, question: string) {
+  const own = card(page, question);
+  const toggle = own.form.locator('legend > button.artifact-decision-toggle');
+  return {
+    ...own,
+    toggle,
+    caret: toggle.locator('.artifact-decision-caret'),
+    line: own.form.locator('.artifact-decision-line'),
+    options: own.form.locator('.artifact-decision-options'),
+  };
+}
+
+test('a card\'s title collapses it to one line of where it stands, which follows picks and saves in the panel', async ({ page, request }) => {
+  test.setTimeout(90_000);
+  test.skip(test.info().repeatEachIndex > 0, 'answers a page the first repeat answered');
+  const name = 'decisions-panel-collapse';
+  await prepare(request, name);
+  const errors = watch(page, ['500 (Internal Server Error)']);
+  await load(page, name);
+  const one = collapsible(page, 'decision-1');
+
+  await expect(one.toggle).toHaveAttribute('aria-expanded', 'true');
+  await expect(one.caret).toHaveText('▾');
+  await expect(one.caret).toHaveAttribute('aria-hidden', 'true');
+  await expect(one.line).toBeHidden();
+  await one.toggle.click();
+  await expect(one.toggle).toHaveAttribute('aria-expanded', 'false');
+  await expect(one.caret).toHaveText('▸');
+  for (const part of [one.options, one.noteBox, one.save]) await expect(part).toBeHidden();
+  await expect(one.line).toHaveText('Not answered yet');
+  expect(await one.form.locator('fieldset > *').evaluateAll((nodes) => nodes
+    .filter((node) => node.tagName !== 'LEGEND' && (node as HTMLElement).offsetParent !== null)
+    .map((node) => (node as HTMLElement).innerText.trim()))).toEqual(['Not answered yet']);
+  await one.toggle.click();
+  await expect(one.toggle).toHaveAttribute('aria-expanded', 'true');
+  await expect(one.caret).toHaveText('▾');
+  for (const part of [one.options, one.noteBox, one.save]) await expect(part).toBeVisible();
+  await expect(one.line).toBeHidden();
+
+  const two = collapsible(page, 'decision-2');
+  const four = collapsible(page, 'decision-4');
+  await two.toggle.click();
+  await four.toggle.click();
+  await expect(two.line).toHaveText('Added and removed · Not saved');
+  await expect(four.line).toHaveText('✓ Saved · Only open tickets');
+  await expect(two.form.locator('.artifact-decision-label').first()).toHaveText('Added and removed');
+  await expect(four.form.locator('.artifact-decision-label').first()).toHaveText('Only open tickets');
+  await expect(four.saved).toBeHidden();
+
+  const entry2 = entry(page, 'decision-2');
+  await entry2.option('One total').check();
+  await expect(two.line).toHaveText('One total · Not saved');
+  await expect(two.toggle).toHaveAttribute('aria-expanded', 'false');
+  await expect(two.options).toBeHidden();
+  await entry2.save.click();
+  await expect(two.line).toHaveText('✓ Saved · One total');
+  await expect(two.toggle).toHaveAttribute('aria-expanded', 'false');
+  await expect(two.saved).toBeHidden();
+
+  // A link in the question is followed and leaves the card as it is.
+  await one.form.locator('.artifact-decision-text').evaluate((text) => {
+    const link = text.appendChild(document.createElement('a'));
+    link.href = '#plan';
+    link.textContent = ' the plan';
+  });
+  await one.form.getByRole('link', { name: 'the plan' }).click();
+  await expect.poll(() => page.evaluate(() => location.hash)).toBe('#plan');
+  await expect(one.toggle).toHaveAttribute('aria-expanded', 'true');
+  await expect(one.options).toBeVisible();
+
+  // Saved from the panel with nothing picked, a collapsed card opens to say
+  // why; a refused save opens it too.
+  await one.toggle.click();
+  const first = entry(page, 'decision-1');
+  await first.save.click();
+  await expect(one.toggle).toHaveAttribute('aria-expanded', 'true');
+  await expect(one.status).toHaveText('Pick an option first.');
+  await expect(one.status).toBeVisible();
+  await one.toggle.click();
+  await page.route((url) => url.pathname === '/api/answers', (route) =>
+    route.request().method() === 'POST' ?
+      route.fulfill({ status: 500, json: { error: 'storage_unavailable' } }) : route.fallback());
+  await first.option('Beside the title').check();
+  await expect(one.line).toHaveText('Beside the title · Not saved');
+  await first.save.click();
+  await expect(one.toggle).toHaveAttribute('aria-expanded', 'true');
+  await expect(one.status).toHaveText('Your answer was not saved (storage_unavailable). Try again.');
+  await expect(one.status).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
+test('Show on page, Next open and either Answered list\'s "change" open a collapsed card', async ({ page, request }) => {
+  test.setTimeout(90_000);
+  test.skip(test.info().repeatEachIndex > 0, 'answers a page the first repeat answered');
+  const name = 'decisions-panel-collapse-open';
+  await prepare(request, name);
+  const errors = watch(page);
+  await load(page, name);
+  const side = panel(page);
+  const one = collapsible(page, 'decision-1');
+
+  await one.toggle.click();
+  await expect(one.options).toBeHidden();
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await entry(page, 'decision-1').show.click();
+  await expect(one.toggle).toHaveAttribute('aria-expanded', 'true');
+  await expect(one.caret).toHaveText('▾');
+  await expect(one.options).toBeVisible();
+  await expect.poll(() => belowBar(page, 'decision-1')).toBe(16);
+
+  await one.toggle.click();
+  await expect(one.options).toBeHidden();
+  await page.locator('a.artifact-review-next').click();
+  await expect.poll(() => focused(page)).toBe('decision-1');
+  await expect(one.toggle).toHaveAttribute('aria-expanded', 'true');
+  await expect(one.options).toBeVisible();
+
+  // A link to the question opens it, and followed again once it is the
+  // address, opens it again.
+  await page.evaluate(() => {
+    const link = document.querySelector('section.artifact-body')!.appendChild(document.createElement('a'));
+    link.href = '#question=decision-1';
+    link.id = 'to-question-1';
+    link.textContent = 'To question 1';
+  });
+  const link = page.locator('#to-question-1');
+  for (let time = 0; time < 2; time += 1) {
+    await one.toggle.click();
+    await expect(one.options).toBeHidden();
+    await link.click();
+    await expect(one.toggle).toHaveAttribute('aria-expanded', 'true');
+    await expect(one.options).toBeVisible();
+    await expect.poll(() => belowBar(page, 'decision-1')).toBe(16);
+  }
+  // So does a link naming the page's own path, or its full address, with
+  // the hash the address already holds.
+  for (const whole of [false, true]) {
+    await page.evaluate((whole) => {
+      const link = document.getElementById('to-question-1') as HTMLAnchorElement;
+      link.setAttribute('href', whole ? location.href.split('#')[0] + '#question=decision-1' :
+        location.pathname + location.search + '#question=decision-1');
+    }, whole);
+    await one.toggle.click();
+    await expect(one.options).toBeHidden();
+    await link.click();
+    await expect(one.toggle).toHaveAttribute('aria-expanded', 'true');
+    await expect(one.options).toBeVisible();
+  }
+  // A modified click is left to the browser: the page does not move.
+  await one.toggle.click();
+  await expect(one.options).toBeHidden();
+  const clicked = await link.evaluate((node) => {
+    const event = new MouseEvent('click', { bubbles: true, cancelable: true, ctrlKey: true });
+    node.dispatchEvent(event);
+    return event.defaultPrevented;
+  });
+  expect(clicked).toBe(false);
+  await expect(one.toggle).toHaveAttribute('aria-expanded', 'false');
+  await one.toggle.click();
+
+  const four = collapsible(page, 'decision-4');
+  await four.toggle.click();
+  await expect(four.line).toHaveText('✓ Saved · Only open tickets');
+  await page.locator('.artifact-answered tr[data-question="decision-4"] .artifact-decision-change').click();
+  await expect(four.toggle).toHaveAttribute('aria-expanded', 'true');
+  await expect(four.option('Only open tickets')).toBeVisible();
+  await expect(four.option('Only open tickets')).toBeChecked();
+
+  // On a fresh load the card is folded to its saved line again.
+  await page.reload();
+  await expect(page.locator('button.artifact-review-count')).toBeVisible();
+  await expect(four.saved).toBeVisible();
+  await four.toggle.click();
+  await expect(four.options).toBeHidden();
+  await side.answeredSummary.click();
+  await row(page, 'decision-4').change.click();
+  await expect(four.toggle).toHaveAttribute('aria-expanded', 'true');
+  await expect(four.option('Only open tickets')).toBeVisible();
+  await expect(four.option('Only open tickets')).toBeChecked();
+  await expect(row(page, 'decision-4').option('Only open tickets')).toBeChecked();
+
+  // The row's question opens a collapsed card as its "change" does.
+  await row(page, 'decision-4').title.click();
+  await expect(row(page, 'decision-4').change).toBeVisible();
+  await four.toggle.click();
+  await expect(four.options).toBeHidden();
+  await row(page, 'decision-4').title.click();
+  await expect(four.toggle).toHaveAttribute('aria-expanded', 'true');
+  await expect(four.option('Only open tickets')).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
+test('without the script every card is open with no toggle, and a reload opens a collapsed card', async ({ page, request, browser }) => {
+  test.setTimeout(90_000);
+  test.skip(test.info().repeatEachIndex > 0, 'answers a page the first repeat answered');
+  const name = 'decisions-panel-collapse-plain';
+  await prepare(request, name);
+  const bare = await browser.newContext({ javaScriptEnabled: false, extraHTTPHeaders: SIGNED_IN, viewport: WIDE,
+    baseURL: ENV.LOTUSPOD_URL });
+  try {
+    const plain = await bare.newPage();
+    await plain.goto(`/${name}.html?standalone`);
+    const forms = plain.locator('form.artifact-decision');
+    await expect(forms).toHaveCount(4);
+    for (const question of ['decision-1', 'decision-2', 'decision-3', 'decision-4']) {
+      await expect(collapsible(plain, question).options).toBeVisible();
+    }
+    await expect(plain.locator('button.artifact-decision-toggle')).toHaveCount(0);
+  } finally {
+    await bare.close();
+  }
+
+  const errors = watch(page);
+  await load(page, name);
+  const one = collapsible(page, 'decision-1');
+  await one.toggle.click();
+  await expect(one.options).toBeHidden();
+  await page.reload();
+  await expect(page.locator('button.artifact-review-count')).toBeVisible();
+  await expect(one.toggle).toHaveAttribute('aria-expanded', 'true');
+  await expect(one.caret).toHaveText('▾');
+  await expect(one.options).toBeVisible();
+  expect(errors).toEqual([]);
+});

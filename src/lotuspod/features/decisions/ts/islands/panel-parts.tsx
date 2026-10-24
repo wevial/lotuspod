@@ -23,6 +23,9 @@ export interface Desk {
   // Open a card folded to its answer, as its "change" does, the focus and
   // the scroll left where they are.
   reopen(form: HTMLFormElement): void;
+  // Open a collapsed card straight to its options, as an Answered row's
+  // "change" does; a card not collapsed is left as it is.
+  expand(form: HTMLFormElement): void;
   // Put back the card's saved pick and note, and fold it to its answer.
   restore(form: HTMLFormElement): void;
 }
