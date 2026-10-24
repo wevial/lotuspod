@@ -4,7 +4,7 @@ under src/lotuspod/.
 Each module is read with ast, and every import it makes, at the top or inside
 a function, is checked against the rules:
 
-- nothing imports lotuspod.cli but lotuspod.__main__;
+- nothing imports lotuspod.cli but lotuspod.__main__ and the cli package itself;
 - lotuspod.core imports nothing else in Lotuspod;
 - lotuspod.store imports only lotuspod.core;
 - a slice, each folder under src/lotuspod/features/, imports core, store, its
@@ -215,7 +215,7 @@ def problem(importer: str, target: str, edges: set[tuple[str, str]]) -> str | No
     allow it."""
     if not within(target, PACKAGE):
         return None
-    if within(target, CLI) and importer != ENTRY:
+    if within(target, CLI) and importer != ENTRY and not within(importer, CLI):
         return f"only {ENTRY} imports {CLI}"
     if within(importer, CORE):
         return None if within(target, CORE) else "core imports nothing else in Lotuspod"
