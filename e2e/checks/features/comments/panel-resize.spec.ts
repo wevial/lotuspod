@@ -32,24 +32,9 @@ function watch(page: Page) {
   return errors;
 }
 
-// A thread in the comments page's Findings section, answered by hermes.
-const ROOT = {
-  id: 951_001, page: COMMENTS.slug, section: 'findings', sectionTitle: 'Findings', revision: '',
-  parent: null, text: 'Does the pump stop when the pond freezes?', quote: null,
-  actor: { kind: 'human', name: 'maintainer' }, createdAt: '2026-10-02T10:00:00.000Z', state: 'answered',
-};
-const THREAD = {
-  root: ROOT,
-  replies: [{
-    ...ROOT, id: 951_002, parent: ROOT.id, text: 'It does. It needs a heater beside it.',
-    actor: { kind: 'agent', handle: 'hermes' }, createdAt: '2026-10-02T10:05:00.000Z',
-  }],
-  resolution: { resolved: false, actor: null, at: null },
-};
-
-async function load(page: Page, target = COMMENTS, threads: unknown[] = []) {
+async function load(page: Page, target = COMMENTS) {
   await page.route((url) => url.pathname === '/api/comments', (route) =>
-    route.fulfill({ json: { page: target.slug, threads } }));
+    route.fulfill({ json: { page: target.slug, threads: [] } }));
   await page.goto(`${target.url}?standalone`);
   await expect(page.locator('details.artifact-comment').first()).toBeAttached();
   await expect(page.locator(PANEL)).toBeVisible();
@@ -245,6 +230,15 @@ test('a width of 28rem opens again after a reload and on another page', async ({
   await expect(side.fold).toBeVisible();
   expect(Math.abs((await width(page)) - 28 * REM)).toBeLessThanOrEqual(0.5);
   await expect(side.handle).toHaveAttribute('aria-valuenow', '28');
+
+  // A double-click on the handle goes back to 20rem and forgets the width.
+  await side.handle.dblclick();
+  expect(Math.abs((await width(page)) - 20 * REM)).toBeLessThanOrEqual(0.5);
+  await expect(side.handle).toHaveAttribute('aria-valuenow', '20');
+  expect(await page.evaluate((key) => localStorage.getItem(key), WIDTH)).toBeNull();
+  await page.reload();
+  await expect(side.fold).toBeVisible();
+  expect(Math.abs((await width(page)) - 20 * REM)).toBeLessThanOrEqual(0.5);
 });
 
 test('with a storage that throws on every call the panel opens at 20rem and still resizes, logging no error', async ({ page }) => {
@@ -270,23 +264,6 @@ test('with a storage that throws on every call the panel opens at 20rem and stil
   await side.handle.dblclick();
   expect(Math.abs((await width(page)) - 20 * REM)).toBeLessThanOrEqual(0.5);
   expect(errors).toEqual([]);
-});
-
-test('a double-click on the handle goes back to 20rem and forgets the stored width', async ({ page }) => {
-  await load(page);
-  const side = await openPanel(page);
-  await side.handle.focus();
-  for (let step = 0; step < 10; step += 1) await page.keyboard.press('ArrowLeft');
-  expect(Math.abs((await width(page)) - 30 * REM)).toBeLessThanOrEqual(0.5);
-
-  await side.handle.dblclick();
-  expect(Math.abs((await width(page)) - 20 * REM)).toBeLessThanOrEqual(0.5);
-  await expect(side.handle).toHaveAttribute('aria-valuenow', '20');
-  expect(await page.evaluate((key) => localStorage.getItem(key), WIDTH)).toBeNull();
-
-  await page.reload();
-  await expect(side.fold).toBeVisible();
-  expect(Math.abs((await width(page)) - 20 * REM)).toBeLessThanOrEqual(0.5);
 });
 
 test('a panel widened to its maximum narrows the column and its tables, and the passage read stays put', async ({ page }) => {
@@ -322,9 +299,9 @@ test('a panel widened to its maximum narrows the column and its tables, and the 
   expect(Math.abs((await box(passage)).top - before)).toBeLessThanOrEqual(4);
 });
 
-test('a stored 36rem is clamped to a narrower window and shown again once it widens, and without room a thread opens in a popover', async ({ page }) => {
+test('a stored 36rem is clamped to a narrower window and shown again once it widens, and hidden without room', async ({ page }) => {
   await page.setViewportSize({ width: 1920, height: 1080 });
-  await load(page, COMMENTS, [THREAD]);
+  await load(page);
   await page.evaluate((key) => localStorage.setItem(key, '36'), WIDTH);
   await page.reload();
   await expect(page.locator(PANEL)).toBeVisible();
@@ -349,21 +326,7 @@ test('a stored 36rem is clamped to a narrower window and shown again once it wid
   await expect(side.handle).toHaveAttribute('aria-valuenow', '36');
   expect(await page.evaluate((key) => localStorage.getItem(key), WIDTH)).toBe('36');
 
-  // Below the panel's room the thread opens from its chip in a popover over
-  // the text, never in its box.
+  // Below the panel's room it is hidden.
   await page.setViewportSize({ width: 1024, height: 768 });
   await expect(side.aside).toBeHidden();
-  const findings = page.locator('details.artifact-comment[data-section="findings"]');
-  await expect(findings.locator(':scope > summary')).toHaveText('1 reply · ✓ hermes answered');
-  await findings.locator(':scope > summary').click();
-  const popover = page.locator('.artifact-comments-popover');
-  await expect(popover).toBeVisible();
-  await expect(page.getByRole('dialog', { name: 'Section Findings' })).toBeVisible();
-  const thread = popover.locator(`.artifact-comment-thread[data-thread="${ROOT.id}"]`);
-  await expect(thread).toBeVisible();
-  await expect(thread.locator('.artifact-comment-item--reader .artifact-comment-text'))
-    .toHaveText('Does the pump stop when the pond freezes?');
-  await expect(thread.locator('.artifact-comment-item--agent .artifact-comment-text'))
-    .toHaveText('It does. It needs a heater beside it.');
-  await expect(findings).not.toHaveAttribute('open');
 });

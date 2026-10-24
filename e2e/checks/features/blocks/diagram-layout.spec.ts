@@ -117,11 +117,8 @@ test('a flowchart asking for ELK draws its lanes with no title over another lane
       }
     }
   }
-  await seen.clean();
-});
 
-test('a box on an ELK diagram opens its node card', async ({ page }) => {
-  const seen = await drawn(page);
+  // A box opens its card in place of the Nodes table, which stays hidden.
   await expect(page.locator('#nodes-table')).toBeHidden();
   await box(page, 'B1').click();
   await expect(card(page)).toBeVisible();

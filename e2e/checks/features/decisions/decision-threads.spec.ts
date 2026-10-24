@@ -14,8 +14,6 @@ import { expect, test, type APIRequestContext, type Page } from '@playwright/tes
 // real `lotuspod` commands on the fixture's agent socket.
 const PAGE = '/capture-decision-threads.html';
 const SLUG = 'capture-decision-threads';
-// The fixture's decisions page asks two questions and takes no comments.
-const NO_COMMENTS = '/capture-decisions.html';
 const ENV = process.env;
 const ASSERTION = ENV.LOTUSPOD_TEST_ASSERTION ?? '';
 const SIGNED_IN = { 'Cf-Access-Jwt-Assertion': ASSERTION };
@@ -598,17 +596,6 @@ test.describe('signed in', () => {
     await expect(sheet.at).toHaveText('3 of 3');
     const last = Math.max(...ids);
     await expect(sheet.thread(last)).toBeVisible();
-    await seen.clean();
-  });
-
-  test('a page with decisions and no comment boxes has no Ask and no chip', async ({ page }) => {
-    const seen = await watch(page);
-    await page.goto(`${NO_COMMENTS}?standalone`);
-    await settle(page);
-    await expect(page.locator('form.artifact-decision')).toHaveCount(2);
-    await expect(page.getByRole('button', { name: 'Save answer' })).toHaveCount(2);
-    await expect(page.getByRole('button', { name: 'Ask', exact: true })).toHaveCount(0);
-    await expect(page.locator('.artifact-decision-ask, .artifact-decision-chip')).toHaveCount(0);
     await seen.clean();
   });
 

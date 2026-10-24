@@ -443,14 +443,14 @@ test.describe('signed in', () => {
     await seen.clean();
   });
 
-  test("hermes's reply in markdown is drawn as markdown", async ({ page, request }) => {
+  test("hermes's reply with --image draws its image in the reply's bubble", async ({ page, request }) => {
     test.setTimeout(120_000);
     const seen = await watch(page);
     // hermes pulls first, so it is listening and the comment, naming it, waits for it.
     hermes('pull', '--owner', OWNER);
-    const root = await post(request, 'frogs', '@hermes Is the **pond** ready for winter?');
+    const root = await post(request, 'pond', '@hermes What does the **pond** look like now?');
     await page.goto(`${PAGE}?standalone`);
-    await open(page, 'frogs');
+    await open(page, 'pond');
     const node = page.locator(`.artifact-comment-thread[data-thread="${root.id}"]`);
     await expect(node).toBeVisible();
     await expect(bubble(page, root).locator('strong')).toHaveText('pond');
@@ -458,36 +458,17 @@ test.describe('signed in', () => {
     const claim = hermes('claim', String(root.id));
     expect(claim.handle).toBe(OWNER);
     // A claim token may start with '-': give it to its option in one word.
-    hermes('reply', String(root.id), `--claim=${claim.claimToken}`, '--key', `markdown-${root.id}`,
-      '--text', '**Done.**\n- drained the filter\n- moved the heater');
-    const theirs = node.locator('.artifact-comment-item--agent .artifact-comment-text');
-    await expect(theirs).toHaveCount(1, { timeout: 15_000 });
-    await expect(theirs.locator('strong')).toHaveText('Done.');
-    await expect(theirs.locator('ul')).toHaveCount(1);
-    await expect(theirs.locator('ul > li')).toHaveText(['drained the filter', 'moved the heater']);
-    await seen.clean();
-  });
-
-  test("hermes's reply with --image draws its image in the reply's bubble", async ({ page, request }) => {
-    test.setTimeout(120_000);
-    const seen = await watch(page);
-    hermes('pull', '--owner', OWNER);
-    const root = await post(request, 'pond', '@hermes What does the pond look like now?');
-    await page.goto(`${PAGE}?standalone`);
-    await open(page, 'pond');
-    const node = page.locator(`.artifact-comment-thread[data-thread="${root.id}"]`);
-    await expect(node).toBeVisible();
-
-    const claim = hermes('claim', String(root.id));
-    expect(claim.handle).toBe(OWNER);
     const reply = hermes('reply', String(root.id), `--claim=${claim.claimToken}`, '--key', `image-${root.id}`,
-      '--text', 'Here is the fish.', '--image', FISH);
+      '--text', '**Here is the fish.**\n- drained the filter\n- moved the heater', '--image', FISH);
     expect(reply.images).toHaveLength(1);
     const url = reply.images[0].url;
     expect(url).toMatch(/^\/media\/[0-9a-f]{64}\.jpg$/);
     const theirs = node.locator('.artifact-comment-item--agent');
     await expect(theirs).toHaveCount(1, { timeout: 15_000 });
-    await expect(theirs.locator('.artifact-comment-text')).toHaveText('Here is the fish.');
+    const text = theirs.locator('.artifact-comment-text');
+    await expect(text.locator('strong')).toHaveText('Here is the fish.');
+    await expect(text.locator('ul')).toHaveCount(1);
+    await expect(text.locator('ul > li')).toHaveText(['drained the filter', 'moved the heater']);
     const thumbs = theirs.locator('.artifact-comment-images img');
     await expect(thumbs).toHaveCount(1);
     await expect(thumbs).toHaveAttribute('src', url);

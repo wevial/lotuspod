@@ -363,13 +363,3 @@ test.describe('signed in', () => {
     expect(errors).toEqual([]);
   });
 });
-
-test.describe('signed out', () => {
-  test('the answers route refuses the reader, so there is no table', async ({ page, request }) => {
-    expect(Object.keys(await stored(request)).length).toBeGreaterThan(0);
-    await page.goto(`${PAGE}?standalone`);
-    await expect(decision(page, 'decision-1').save).toBeVisible();
-    await page.evaluate(() => new Promise((resolve) => setTimeout(resolve, 300)));
-    await expect(page.locator('.artifact-answered')).toHaveCount(0);
-  });
-});

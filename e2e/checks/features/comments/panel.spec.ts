@@ -211,14 +211,15 @@ function sample() {
 }
 
 // Show only the threads this check made: the site answers every read and
-// post, and a read is cut to the threads whose ids posts returned.
-async function ownThreads(page: Page, ids: Set<number>) {
+// post, and a read is cut to the threads whose ids posts returned, each as
+// shape gives it.
+async function ownThreads(page: Page, ids: Set<number>, shape = (thread: any) => thread) {
   await page.route((url) => url.pathname === '/api/comments', async (route) => {
     const request = route.request();
     const response = await route.fetch();
     const body = await response.json();
     if (request.method() === 'GET' && Array.isArray(body.threads)) {
-      body.threads = body.threads.filter((thread: any) => ids.has(thread.root.id));
+      body.threads = body.threads.filter((thread: any) => ids.has(thread.root.id)).map(shape);
     } else if (response.status() === 201 && body.parent === null) {
       ids.add(body.id);
     }
@@ -571,16 +572,19 @@ test.describe('signed in', () => {
   });
 
   test('Resolve takes a thread out of the list, shown it is a dashed line, and Reopen brings it back', async ({ page, request }) => {
-    test.setTimeout(120_000);
     const seen = await watch(page);
-    hermes('pull', '--owner', OWNER);
     const asked = await post(request, 'findings', '@hermes Is the outlet on its own fuse?');
     const other = await post(request, 'risks', 'What if the heater fails too?');
-    const claim = hermes('claim', String(asked.id));
-    hermes('reply', String(asked.id), `--claim=${claim.claimToken}`, '--key', `panel-resolve-${asked.id}`,
-      '--text', 'It is, since the spring.');
+    // hermes's answer is served in the asked thread.
     const ids = new Set<number>([asked.id, other.id]);
-    await ownThreads(page, ids);
+    await ownThreads(page, ids, (thread) => thread.root.id !== asked.id ? thread : {
+      ...thread,
+      root: { ...thread.root, state: 'answered' },
+      replies: [{
+        ...reply(thread.root, 'It is, since the spring.'), id: 950_000 + asked.id,
+        revision: thread.root.revision, createdAt: thread.root.createdAt,
+      }],
+    });
     await load(page);
     const side = panel(page);
     await expect(side.badge).toHaveText('2');
@@ -721,6 +725,10 @@ test.describe('signed in', () => {
     await expect(side.titles).toHaveText(['Findings', 'Costs']);
     await expect(pick.perSection).toHaveCount(0);
     await expect(pick.none).toBeHidden();
+    // With no resolved thread, no control shows them.
+    await expect(side.count).toHaveText('2 open · 0 resolved');
+    await expect(side.aside.getByRole('button', { name: /resolved/ })).toHaveCount(0);
+    await expect(side.showResolved).toBeHidden();
     // Under the heading, above the groups.
     const head = (await side.aside.locator('.artifact-comments-head').boundingBox())!;
     const button = (await pick.button.boundingBox())!;
@@ -797,19 +805,6 @@ test.describe('signed in', () => {
     await side.count.click();
     await expect(pick.list).toBeHidden();
     await expect(pick.button).toBeFocused();
-    await seen.clean();
-  });
-
-  test('a page with no threads says so above the control', async ({ page }) => {
-    const seen = await watch(page);
-    await serve(page, () => [], FIVE_SLUG);
-    const side = await loadFive(page);
-    const pick = picker(page);
-    await expect(pick.none).toBeVisible();
-    await expect(pick.button).toBeVisible();
-    expect((await pick.none.boundingBox())!.y).toBeLessThan((await pick.button.boundingBox())!.y);
-    await expect(side.titles).toHaveCount(0);
-    await expect(pick.perSection).toHaveCount(0);
     await seen.clean();
   });
 
@@ -918,16 +913,6 @@ test.describe('signed in', () => {
     await seen.clean();
   });
 
-  test('a page with no resolved threads draws no control to show them', async ({ page }) => {
-    const seen = await watch(page);
-    await serve(page, () => onFive({ findings: 'Findings', costs: 'Costs' }), FIVE_SLUG);
-    const side = await loadFive(page);
-    await expect(side.count).toHaveText('2 open · 0 resolved');
-    await expect(side.aside.getByRole('button', { name: /resolved/ })).toHaveCount(0);
-    await expect(side.showResolved).toBeHidden();
-    await seen.clean();
-  });
-
   test('with storage that throws, resolved threads still show and hide', async ({ page }) => {
     const seen = await watch(page);
     await page.addInitScript(() => {
@@ -973,6 +958,11 @@ test.describe('signed in', () => {
       Boolean(node.compareDocumentPosition(node.parentElement!.querySelector('.artifact-comments-pick')!)
         & Node.DOCUMENT_POSITION_FOLLOWING))).toBe(true);
     await expect(side.titles).toHaveCount(0);
+    // With no threads, the panel says so above the control.
+    await expect(pick.none).toBeVisible();
+    await expect(pick.button).toBeVisible();
+    expect((await pick.none.boundingBox())!.y).toBeLessThan((await pick.button.boundingBox())!.y);
+    await expect(pick.perSection).toHaveCount(0);
 
     await pick.onPage.click();
     const whole = side.group('This page');

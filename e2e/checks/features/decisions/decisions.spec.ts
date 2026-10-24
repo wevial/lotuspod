@@ -210,6 +210,9 @@ test.describe('signed in', () => {
       await expect(card.saved).toHaveCount(0);
       await expect(card.save).toBeVisible();
     }
+    // The page takes no comments, so no question has an Ask or a chip.
+    await expect(page.getByRole('button', { name: 'Ask', exact: true })).toHaveCount(0);
+    await expect(page.locator('.artifact-decision-ask, .artifact-decision-chip')).toHaveCount(0);
     const first = decision(page, 'decision-1');
     const mark = first.form.locator('.artifact-decision-option').first().locator('.artifact-decision-default');
     await expect(mark).toBeVisible();
@@ -223,6 +226,8 @@ test.describe('signed in', () => {
 
   test('a picked answer is marked not saved until saved, then folds to one line', async ({ page, request }) => {
     const seen = await watch(page);
+    // The note holds markup, shown as the text written and never drawn.
+    const note = 'Opus for <b>page edits</b>';
     await page.goto(`${PAGE}?standalone`);
     const first = decision(page, 'decision-1');
     await first.option('Opus').check();
@@ -233,15 +238,16 @@ test.describe('signed in', () => {
 
     await first.addNote.click();
     await expect(first.note).toBeVisible();
-    await first.note.fill('Opus for page edits');
+    await first.note.fill(note);
     await first.save.click();
     await expect(first.saved).toContainText('Saved · Opus · change');
     const answer = (await stored(request))['decision-1'].current;
-    expect(answer).toMatchObject({ choice: 'opus', note: 'Opus for page edits' });
+    expect(answer).toMatchObject({ choice: 'opus', note });
 
     const folded = async () => {
       await expect(first.saved).toContainText('Saved · Opus · change');
-      await expect(first.savedNote).toHaveText('Opus for page edits');
+      await expect(first.savedNote).toHaveText(note);
+      await expect(page.locator('b')).toHaveCount(0);
       await expect(first.savedBy).toContainText(READER);
       await expect(first.savedBy).not.toContainText('replaced');
       for (const radio of await first.radios.all()) await expect(radio).toBeHidden();
@@ -260,7 +266,7 @@ test.describe('signed in', () => {
     await expect(first.option('Opus')).toBeChecked();
     await expect(first.option('Opus')).toBeFocused();
     await expect(first.noteBox).toHaveAttribute('open');
-    await expect(first.note).toHaveValue('Opus for page edits');
+    await expect(first.note).toHaveValue(note);
     await expect(first.unsaved).toBeHidden();
     await expect(first.saved).toBeHidden();
 
@@ -273,7 +279,7 @@ test.describe('signed in', () => {
     await first.history.locator('summary').click();
     await expect(first.history.locator('li')).toHaveCount(1);
     await expect(first.history.locator('li')).toContainText('Opus');
-    await expect(first.history.locator('li')).toContainText('Opus for page edits');
+    await expect(first.history.locator('li')).toContainText(note);
     expect(seen.errors).toEqual([]);
   });
 
@@ -313,24 +319,6 @@ test.describe('signed in', () => {
     await expect(first.saved).toContainText('Saved \u00b7 Sonnet \u00b7 change');
     await expect(first.savedBy).toContainText('replaced an earlier answer');
     expect(seen.errors).toEqual([]);
-  });
-
-  test('a note is shown as the text written, never as markup', async ({ page }) => {
-    const note = '<b>bold</b>';
-    await page.goto(`${PAGE}?standalone`);
-    const second = decision(page, 'decision-2');
-    await second.option(/^Yes/).check();
-    await second.addNote.click();
-    await second.note.fill(note);
-    await second.save.click();
-    await expect(second.saved).toContainText('Saved · Yes · change');
-    await expect(second.savedNote).toHaveText(note);
-    await expect(page.locator('b')).toHaveCount(0);
-
-    await page.reload();
-    await expect(second.saved).toContainText('Saved · Yes · change');
-    await expect(second.savedNote).toHaveText(note);
-    await expect(page.locator('b')).toHaveCount(0);
   });
 
   test('a form published before the cards still saves and folds', async ({ page, request }) => {

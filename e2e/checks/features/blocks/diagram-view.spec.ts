@@ -244,6 +244,13 @@ test('each drawn diagram has an Expand button in its corner, shown on hover or f
 
 test('Expand opens the diagram whole in a view that fills the window', async ({ page }) => {
   const seen = await drawn(page);
+  // An invisible heading before the diagram, which the view's title skips.
+  await diagram(page).evaluate((pre) => {
+    const hidden = document.createElement('h2');
+    hidden.textContent = 'Invisible heading';
+    hidden.style.visibility = 'hidden';
+    pre.before(hidden);
+  });
   const before = await attributes(page);
   await scrollToDiagram(page);
   await open(page);
@@ -429,20 +436,6 @@ test('the page holds still behind the view, and Esc or ✕ puts the diagram back
   await seen.clean();
 });
 
-test('the title skips an invisible heading before the diagram', async ({ page }) => {
-  const seen = await drawn(page);
-  await diagram(page).evaluate((pre) => {
-    const hidden = document.createElement('h2');
-    hidden.textContent = 'Invisible heading';
-    hidden.style.visibility = 'hidden';
-    pre.before(hidden);
-  });
-  await open(page);
-  await expect(view(page).title).toHaveText('Release plan');
-  await page.keyboard.press('Escape');
-  await seen.clean();
-});
-
 test('a diagram scrolled sideways in its block comes back scrolled as it was', async ({ page }) => {
   await page.setViewportSize({ width: 360, height: 800 });
   const seen = await drawn(page);
@@ -491,26 +484,8 @@ test("a node card closes when its diagram's view opens and opens again after", a
   const card = page.locator('.artifact-node-card');
   await expect(box).toHaveAttribute('role', 'button');
   await expect(expand(page)).toHaveCount(1);
-  await box.click();
-  await expect(card).toBeVisible();
-
-  await diagram(page).hover({ position: { x: 4, y: 4 } });
-  await expand(page).click();
-  await expect(card).toBeHidden();
-  await expect(view(page).dialog).toBeVisible();
-  await page.keyboard.press('Escape');
-  await expect(view(page).dialog).toBeHidden();
-  await box.click();
-  await expect(card).toBeVisible();
-  await expect(card.locator('h3')).toHaveText('Draw the cards');
-  await seen.clean();
-});
-
-test('the view colors each box by its status as the page does, and Esc leaves them so', async ({ page }) => {
-  const seen = await watch(page);
-  await page.goto(`${CARDS_PAGE}?standalone`);
-  await expect(expand(page)).toHaveCount(1);
-  // The first plan's Nodes table gives A merged, C ready and D waiting.
+  // The first plan's Nodes table gives A merged, C ready and D waiting: the
+  // view colors each box by its status as the page does, and Esc leaves them so.
   const looks = (svg: Locator) => svg.evaluate((node) => {
     const look = (id: string) => {
       const style = getComputedStyle(node.querySelector(`g.node[id^="flowchart-${id}-"] > .label-container`)!);
@@ -520,17 +495,22 @@ test('the view colors each box by its status as the page does, and Esc leaves th
   });
   const before = await looks(drawing(page));
   expect(new Set(Object.values(before).map((look) => JSON.stringify(look))).size).toBe(3);
+  await box.click();
+  await expect(card).toBeVisible();
 
   await diagram(page).hover({ position: { x: 4, y: 4 } });
   await expand(page).click();
+  await expect(card).toBeHidden();
   await expect(view(page).dialog).toBeVisible();
   await expect(view(page).svg).toHaveCount(1);
   expect(await looks(view(page).svg)).toEqual(before);
-
   await page.keyboard.press('Escape');
   await expect(view(page).dialog).toBeHidden();
   await expect(drawing(page)).toHaveCount(1);
   expect(await looks(drawing(page))).toEqual(before);
+  await box.click();
+  await expect(card).toBeVisible();
+  await expect(card.locator('h3')).toHaveText('Draw the cards');
   await seen.clean();
 });
 
@@ -737,18 +717,15 @@ test('a press that leaves the stage still drags, and ends with its release', asy
   await seen.clean();
 });
 
-test("a click on the stage's empty space closes the card and leaves the view open", async ({ page }) => {
+test("Esc closes the card before the view, and the view's ✕ closes both", async ({ page }) => {
   const seen = await cardsView(page);
+  // A click on the stage's empty space closes the card and leaves the view open.
   await openB(page);
   const at = await empty(page);
   await page.mouse.click(at.x, at.y);
   await expect(card(page)).toBeHidden();
   await expect(view(page).dialog).toBeVisible();
-  await seen.clean();
-});
 
-test("Esc closes the card before the view, and the view's ✕ closes both", async ({ page }) => {
-  const seen = await cardsView(page);
   await openB(page);
   await page.keyboard.press('Escape');
   await expect(card(page)).toBeHidden();
@@ -812,19 +789,13 @@ test.describe('on a touch screen', () => {
     };
   }
 
-  test('the Expand button is shown at rest and a tap opens the view', async ({ page }) => {
+  test('one finger drags the diagram and two pinch it about their midpoint', async ({ page }) => {
     const seen = await drawn(page);
+    // With no hover, the Expand button is shown at rest, and a tap opens the view.
     expect(await page.evaluate(() => matchMedia('(hover: none)').matches)).toBe(true);
     await expect.poll(() => opacity(expand(page))).toBe('1');
     await expand(page).tap();
     await expect(view(page).dialog).toBeVisible();
-    await expect(view(page).svg).toHaveCount(1);
-    await seen.clean();
-  });
-
-  test('one finger drags the diagram and two pinch it about their midpoint', async ({ page }) => {
-    const seen = await drawn(page);
-    await expand(page).tap();
     await expect(view(page).svg).toHaveCount(1);
     const fingers = await touches(page);
     const first = await where(step(page, 'S1'));

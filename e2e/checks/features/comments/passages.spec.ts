@@ -570,6 +570,21 @@ test.describe('signed in', () => {
     const seen = await watch(page);
     const root = row({ text: 'Which heater is it?', quote: HEATER_QUOTE });
     await serve(page, [{ root, replies: [], resolution: OPEN }]);
+    // The pill waits 200 ms for the selection to keep still: the clock,
+    // paused, runs past it once the page has seen the selection change.
+    await page.addInitScript(() => {
+      (window as any).__changes = 0;
+      document.addEventListener('selectionchange', () => { (window as any).__changes++; });
+    });
+    const changes = () => page.evaluate(() => (window as any).__changes as number);
+    async function changed<T>(act: () => Promise<T>) {
+      const before = await changes();
+      const done = await act();
+      await expect.poll(changes).toBeGreaterThan(before);
+      return done;
+    }
+    const clear = () => changed(() => page.evaluate(() => document.getSelection()!.removeAllRanges()));
+    await stopClock(page);
     await load(page);
     const side = panel(page);
     await side.opener.click();
@@ -578,7 +593,8 @@ test.describe('signed in', () => {
     const offer = pill(page);
 
     // A selection that may have one shows it.
-    await choose(page, '.artifact-body p', 'pump stops when', 'pump stops when');
+    await changed(() => choose(page, '.artifact-body p', 'pump stops when', 'pump stops when'));
+    await page.clock.runFor(250);
     await expect(offer).toBeVisible();
 
     const cases: [string, () => Promise<string>][] = [
@@ -589,16 +605,17 @@ test.describe('signed in', () => {
       ['501 characters', () => choose(page, '.artifact-body p', 'Through the winter', '', 501)],
     ];
     for (const [name, make] of cases) {
-      await page.evaluate(() => document.getSelection()!.removeAllRanges());
-      const words = await make();
+      await clear();
+      const words = await changed(make);
       expect(words.length, name).toBeGreaterThan(0);
       if (name === '501 characters') expect(Array.from(words).length).toBe(501);
-      await page.waitForTimeout(500);
+      await page.clock.runFor(250);
       await expect(offer, name).toBeHidden();
     }
     // Just under the limit, the same paragraph offers it.
-    await page.evaluate(() => document.getSelection()!.removeAllRanges());
-    await choose(page, '.artifact-body p', 'Through the winter', '', 500);
+    await clear();
+    await changed(() => choose(page, '.artifact-body p', 'Through the winter', '', 500));
+    await page.clock.runFor(250);
     await expect(offer).toBeVisible();
     await seen.clean();
   });
@@ -707,10 +724,12 @@ test.describe('signed in', () => {
       publish(source, (await revisionOf(page))!);
     }
 
-    // Two occurrences: the one between its context.
+    // Two occurrences: the one between its context. Neither lies between the
+    // second thread's context, so it draws no mark.
     await page.unrouteAll({ behavior: 'wait' });
     const root = row({ text: 'Again?', quote: { exact: 'pump stops', prefix: 'and the ', suffix: ' again' } });
-    await serve(page, [{ root, replies: [], resolution: OPEN }]);
+    const nowhere = row({ text: 'At dawn?', quote: { exact: 'pump stops', prefix: 'the old ', suffix: ' at dawn' } });
+    await serve(page, [{ root, replies: [], resolution: OPEN }, { root: nowhere, replies: [], resolution: OPEN }]);
     await page.reload();
     await settle(page);
     await expect(page.locator('meta[name="lotuspod:revision"]')).toHaveAttribute('content', before);
@@ -723,55 +742,11 @@ test.describe('signed in', () => {
       return { before: before.slice(-8), after: after.slice(0, 6) };
     });
     expect(around).toEqual({ before: 'and the ', after: ' again' });
-    await seen.clean();
-  });
-
-  test('a passage deleted from the page keeps its thread with the quote struck through', async ({ page, request }) => {
-    test.setTimeout(120_000);
-    const seen = await watch(page);
-    await load(page);
-    const before = (await revisionOf(page))!;
-    const asked = await postHeater(request, before, 'Is the heater still there?');
-    const ids = new Set<number>([asked.id]);
-    await ownThreads(page, ids);
-    const source = original();
-    const changed = source.replace(` ${SENTENCE}`, '');
-    expect(changed).not.toBe(source);
-    publish(changed, before);
-    try {
-      await page.reload();
-      await settle(page);
-      const after = (await revisionOf(page))!;
-      expect(after).not.toBe(before);
-      await expect(page.locator('.artifact-body')).not.toContainText('north wall');
-      await expect(marks(page, asked.id)).toHaveCount(0);
-      await expect(page.locator(`.artifact-passage-number[data-thread="${asked.id}"]`)).toHaveCount(0);
-      const side = panel(page);
-      if (await side.opener.isVisible()) await side.opener.click();
-      const lost = entry(page, asked.id);
-      await expect(side.group('Findings').locator(`.artifact-comments-entry[data-thread="${asked.id}"]`)).toHaveCount(1);
-      await expect(lost.words.locator('del')).toHaveText(HEATER);
-      await expect(lost.words).toContainText('this passage has changed since');
-      await expect(lost.words).not.toContainText(after);
-      await expect(lost.words.locator('.artifact-passage-why')).toHaveAttribute('title', `Changed in revision ${after}`);
-      await expect(lost.mark).toHaveText('1');
-      await lost.head.click();
-      await expect(lost.readers.locator('.artifact-comment-text')).toHaveText('Is the heater still there?');
-      await expect(lost.item.getByRole('button', { name: 'Add to your comment' })).toBeVisible();
-    } finally {
-      publish(source, (await revisionOf(page))!);
-    }
-
-    // Neither occurrence lies between its context, and there are two.
-    await page.unrouteAll({ behavior: 'wait' });
-    const root = row({ text: 'At dawn?', quote: { exact: 'pump stops', prefix: 'the old ', suffix: ' at dawn' } });
-    await serve(page, [{ root, replies: [], resolution: OPEN }]);
-    await page.reload();
-    await settle(page);
-    await expect(page.locator('mark.artifact-passage')).toHaveCount(0);
+    await expect(page.locator('mark.artifact-passage')).toHaveCount(1);
+    await expect(marks(page, nowhere.id)).toHaveCount(0);
     const side = panel(page);
     if (await side.opener.isVisible()) await side.opener.click();
-    const lost = entry(page, root.id);
+    const lost = entry(page, nowhere.id);
     await expect(lost.words.locator('del')).toHaveText('pump stops');
     await expect(lost.words).toContainText('this passage has changed since');
     await expect(lost.words).not.toContainText(before);
@@ -927,7 +902,7 @@ test.describe('signed in', () => {
     await seen.clean();
   });
 
-  test('a resolved passage loses its highlight until reopened, and a narrow window opens it in a popover', async ({ page, request }) => {
+  test('a resolved passage loses its highlight until reopened', async ({ page, request }) => {
     const seen = await watch(page);
     await load(page);
     const asked = await postHeater(request, (await revisionOf(page))!, 'Should the heater move?');
@@ -952,54 +927,6 @@ test.describe('signed in', () => {
     expect(await joined(marks(page, asked.id))).toBe(HEATER);
     await expect(page.locator(`.artifact-passage-number[data-thread="${asked.id}"]`)).toHaveText('1');
     await expect(side.fold).toBeVisible();
-
-    // A fresh load: what the page keeps as it is left goes, so it does not come back to where the reader was.
-    await page.evaluate(() => window.addEventListener('pagehide', () => {
-      for (const key of Object.keys(sessionStorage).filter((key) => key.startsWith('lotuspod:reload:'))) {
-        sessionStorage.removeItem(key);
-      }
-    }));
-    await page.setViewportSize({ width: 1024, height: 768 });
-    await page.reload();
-    await settle(page);
-    await expect(side.aside).toBeHidden();
-    const findings = page.locator('details.artifact-comment[data-section="findings"]');
-    const popover = page.locator('.artifact-comments-popover');
-    const held = popover.locator(`.artifact-comment-thread[data-thread="${asked.id}"]`);
-    await expect(findings).not.toHaveAttribute('open');
-    await marks(page, asked.id).first().click();
-    await expect(findings).not.toHaveAttribute('open');
-    await expect(held).toBeVisible();
-    await expect(popover.locator('.artifact-comments-held-title')).toHaveText(`1 ${HEATER}`);
-    await expect(held.locator('.artifact-comment-text')).toHaveText('Should the heater move?');
-    await seen.clean();
-  });
-
-  test('no width scrolls sideways with a composer open at 360 pixels or the panel open at 1440', async ({ page }) => {
-    const seen = await watch(page);
-    await serve(page, []);
-    const fits = () => page.evaluate(() => ({
-      scroll: document.documentElement.scrollWidth, viewport: document.documentElement.clientWidth,
-    }));
-    await page.setViewportSize({ width: 360, height: 780 });
-    await load(page);
-    await choose(page, '.artifact-body p', 'The heater', 'hard frost.');
-    await expect(pill(page)).toBeVisible();
-    const offer = (await pill(page).boundingBox())!;
-    expect(offer.x).toBeGreaterThanOrEqual(0);
-    expect(offer.x + offer.width).toBeLessThanOrEqual(360);
-    await pill(page).click();
-    const open = page.locator('.artifact-comments-bottom-sheet .artifact-passage-composer');
-    await expect(open).toBeVisible();
-    await expect(open.locator('textarea')).toBeFocused();
-    let widths = await fits();
-    expect(widths.scroll).toBeLessThanOrEqual(widths.viewport);
-
-    await page.setViewportSize(WIDE);
-    await expect(panel(page).fold).toBeVisible();
-    await expect(panel(page).group('Findings').locator('.artifact-passage-composer')).toBeVisible();
-    widths = await fits();
-    expect(widths.scroll).toBeLessThanOrEqual(widths.viewport);
     await seen.clean();
   });
 });

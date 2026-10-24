@@ -495,10 +495,19 @@ test.describe('signed in', () => {
   test('a passage draft written in the panel moves to a popover and the sheet, and back through the panel', async ({ page }) => {
     const seen = await watch(page);
     await serve(page, []);
-    await page.setViewportSize({ width: 1440, height: 900 });
+    // At 360 the pill is inside the window.
+    await page.setViewportSize(PHONE);
     await load(page, PASSAGES);
     await choose(page, HEATER);
     const offered = page.locator('button.artifact-passage-pill');
+    await expect(offered).toBeVisible();
+    const offer = await rect(offered);
+    expect(offer.left).toBeGreaterThanOrEqual(0);
+    expect(offer.right).toBeLessThanOrEqual(PHONE.width);
+    await page.evaluate(() => document.getSelection()!.removeAllRanges());
+
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await choose(page, HEATER);
     await expect(offered).toBeVisible();
     await offered.click();
     const aside = page.locator('aside.artifact-comments-panel');
@@ -517,12 +526,17 @@ test.describe('signed in', () => {
       await expect(drafted).toHaveValue('Half a thought');
       await expect(drafted).toBeFocused();
       await expect(page.locator('mark.artifact-passage--pending')).toHaveCount(1);
+      // No width scrolls sideways, the composer in the sheet at 360 too.
+      const fit = await widths(page);
+      expect(fit.scroll).toBeLessThanOrEqual(fit.viewport);
     }
 
     // To the panel and back: the draft is never left in the hidden panel.
     await page.setViewportSize({ width: 1440, height: 900 });
     await expect(aside.locator('.artifact-passage-composer')).toBeVisible();
     await expect(drafted).toHaveValue('Half a thought');
+    const wide = await widths(page);
+    expect(wide.scroll).toBeLessThanOrEqual(wide.viewport);
     await page.setViewportSize(MEDIUM);
     await expect(aside).toBeHidden();
     await expect(pop.node.locator('.artifact-passage-composer')).toBeVisible();
@@ -615,55 +629,7 @@ test.describe('signed in', () => {
     test('at 360 pixels the sheet steps through passage and section threads, and a chip opens it at its section', async ({ page }) => {
       const seen = await watch(page);
       const { heater, floods, section, threads } = passageThreads();
-      await serve(page, threads);
-      await load(page, PASSAGES);
-      const bottom = sheet(page);
-      await marks(page, heater.id).click();
-      await risen(page);
-      await expect(bottom.at).toHaveText('1 of 3');
-      await expect(bottom.back).toBeDisabled();
-
-      await bottom.forth.click();
-      await expect(bottom.at).toHaveText('2 of 3');
-      await expect(bottom.thread(floods.id)).toBeVisible();
-      await expect(bottom.state).toHaveText(`Waiting for ${OWNER}`);
-      await bottom.forth.click();
-      await expect(bottom.at).toHaveText('3 of 3');
-      await expect(bottom.title).toHaveText('Section Findings');
-      await expect(page.getByRole('dialog', { name: 'Section Findings' })).toBeVisible();
-      await expect(bottom.thread(section.id)).toBeVisible();
-      await expect(bottom.forth).toBeDisabled();
-      // The section's chip shows above the sheet.
-      const findings = chip(page, 'findings');
-      expect((await rect(findings.chip)).bottom).toBeLessThanOrEqual((await rect(bottom.node)).top);
-      await bottom.back.click();
-      await expect(bottom.at).toHaveText('2 of 3');
-      await expect(bottom.thread(floods.id)).toBeVisible();
-      await bottom.close.click();
-      await expect(bottom.node).toBeHidden();
-      await expect(marks(page, heater.id)).toBeFocused();
-
-      await findings.chip.click();
-      await risen(page);
-      await expect(bottom.at).toHaveText('3 of 3');
-      await expect(bottom.title).toHaveText('Section Findings');
-      await expect(bottom.thread(section.id)).toBeVisible();
-      await expect(findings.details).not.toHaveAttribute('open');
-      await bottom.close.click();
-      await expect(bottom.node).toBeHidden();
-      await expect(findings.chip).toBeFocused();
-
-      await findings.chip.click();
-      await risen(page);
-      await page.keyboard.press('Escape');
-      await expect(bottom.node).toBeHidden();
-      await expect(findings.chip).toBeFocused();
-      await seen.clean();
-    });
-
-    test('at 360 pixels the sheet also steps to a thread on a section the page no longer has', async ({ page }) => {
-      const seen = await watch(page);
-      const { heater, threads } = passageThreads();
+      // A thread on a section the page no longer has, which the sheet steps to last.
       const gone = row({
         page: PASSAGES_SLUG, section: 'old-notes', sectionTitle: 'Old notes', text: 'Where did the old notes go?',
       });
@@ -676,18 +642,51 @@ test.describe('signed in', () => {
       await marks(page, heater.id).click();
       await risen(page);
       await expect(bottom.at).toHaveText('1 of 4');
+      await expect(bottom.back).toBeDisabled();
 
-      for (const at of ['2 of 4', '3 of 4', '4 of 4']) {
-        await bottom.forth.click();
-        await expect(bottom.at).toHaveText(at);
-      }
+      await bottom.forth.click();
+      await expect(bottom.at).toHaveText('2 of 4');
+      await expect(bottom.thread(floods.id)).toBeVisible();
+      await expect(bottom.state).toHaveText(`Waiting for ${OWNER}`);
+      await bottom.forth.click();
+      await expect(bottom.at).toHaveText('3 of 4');
+      await expect(bottom.title).toHaveText('Section Findings');
+      await expect(page.getByRole('dialog', { name: 'Section Findings' })).toBeVisible();
+      await expect(bottom.thread(section.id)).toBeVisible();
+      // The section's chip shows above the sheet.
+      const findings = chip(page, 'findings');
+      expect((await rect(findings.chip)).bottom).toBeLessThanOrEqual((await rect(bottom.node)).top);
+      await bottom.forth.click();
+      await expect(bottom.at).toHaveText('4 of 4');
       await expect(bottom.title).toHaveText('Section Old notes');
       await expect(bottom.thread(gone.id)).toBeVisible();
       await expect(bottom.forth).toBeDisabled();
       await expect(page.locator(`.artifact-comment-thread[data-thread="${gone.id}"]`)).toHaveCount(1);
+      await bottom.back.click();
+      await expect(bottom.at).toHaveText('3 of 4');
+      await bottom.back.click();
+      await expect(bottom.at).toHaveText('2 of 4');
+      await expect(bottom.thread(floods.id)).toBeVisible();
       await bottom.close.click();
       await expect(bottom.node).toBeHidden();
+      await expect(marks(page, heater.id)).toBeFocused();
       await expect(listed).toHaveCount(1);
+
+      await findings.chip.click();
+      await risen(page);
+      await expect(bottom.at).toHaveText('3 of 4');
+      await expect(bottom.title).toHaveText('Section Findings');
+      await expect(bottom.thread(section.id)).toBeVisible();
+      await expect(findings.details).not.toHaveAttribute('open');
+      await bottom.close.click();
+      await expect(bottom.node).toBeHidden();
+      await expect(findings.chip).toBeFocused();
+
+      await findings.chip.click();
+      await risen(page);
+      await page.keyboard.press('Escape');
+      await expect(bottom.node).toBeHidden();
+      await expect(findings.chip).toBeFocused();
       await seen.clean();
     });
 

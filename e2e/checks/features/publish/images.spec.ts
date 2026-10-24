@@ -44,52 +44,52 @@ async function watch(page: Page) {
   };
 }
 
-for (const width of [1280, 360]) {
-  test(`images keep their reserved boxes and the column at ${width} pixels wide`, async ({ page }) => {
-    await page.setViewportSize({ width, height: 800 });
-    const seen = await watch(page);
-    await page.goto(`${PAGE}?standalone`);
+// The figure CSS has no breakpoint rule: the narrowest width holds for every
+// other.
+test('images keep their reserved boxes and the column at 360 pixels wide', async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 800 });
+  const seen = await watch(page);
+  await page.goto(`${PAGE}?standalone`);
 
-    const images = page.locator('.artifact-body figure.artifact-figure img');
-    await expect(images).toHaveCount(8);
-    let widest = 0;
-    for (let i = 0; i < 8; i += 1) {
-      const image = images.nth(i);
-      await image.scrollIntoViewIfNeeded();
-      await expect.poll(() => image.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0), {
-        timeout: 10_000,
-      }).toBe(true);
-      const sizes = await image.evaluate((img: HTMLImageElement) => {
-        const body = img.closest('.artifact-body') as HTMLElement;
-        const style = getComputedStyle(body);
-        return {
-          natural: [img.naturalWidth, img.naturalHeight],
-          attributes: [Number(img.getAttribute('width')), Number(img.getAttribute('height'))],
-          drawn: img.getBoundingClientRect().width,
-          column: body.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight),
-          scrollWidth: document.documentElement.scrollWidth,
-          viewport: window.innerWidth,
-        };
-      });
-      expect(sizes.natural).toEqual(sizes.attributes);
-      expect(sizes.drawn).toBeLessThanOrEqual(sizes.column + 0.5);
-      expect(sizes.scrollWidth).toBeLessThanOrEqual(sizes.viewport);
-      if (sizes.attributes[0] > widest) widest = sizes.attributes[0];
-    }
-    expect(widest).toBe(1600);
+  const images = page.locator('.artifact-body figure.artifact-figure img');
+  await expect(images).toHaveCount(8);
+  let widest = 0;
+  for (let i = 0; i < 8; i += 1) {
+    const image = images.nth(i);
+    await image.scrollIntoViewIfNeeded();
+    await expect.poll(() => image.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0), {
+      timeout: 10_000,
+    }).toBe(true);
+    const sizes = await image.evaluate((img: HTMLImageElement) => {
+      const body = img.closest('.artifact-body') as HTMLElement;
+      const style = getComputedStyle(body);
+      return {
+        natural: [img.naturalWidth, img.naturalHeight],
+        attributes: [Number(img.getAttribute('width')), Number(img.getAttribute('height'))],
+        drawn: img.getBoundingClientRect().width,
+        column: body.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight),
+        scrollWidth: document.documentElement.scrollWidth,
+        viewport: window.innerWidth,
+      };
+    });
+    expect(sizes.natural).toEqual(sizes.attributes);
+    expect(sizes.drawn).toBeLessThanOrEqual(sizes.column + 0.5);
+    expect(sizes.scrollWidth).toBeLessThanOrEqual(sizes.viewport);
+    if (sizes.attributes[0] > widest) widest = sizes.attributes[0];
+  }
+  expect(widest).toBe(1600);
 
-    // The turned JPEG is drawn upright: taller than it is wide.
-    const turned = page.getByRole('img', { name: 'A turned photo' });
-    expect(await turned.evaluate((img: HTMLImageElement) => [img.naturalWidth, img.naturalHeight])).toEqual([96, 160]);
+  // The turned JPEG is drawn upright: taller than it is wide.
+  const turned = page.getByRole('img', { name: 'A turned photo' });
+  expect(await turned.evaluate((img: HTMLImageElement) => [img.naturalWidth, img.naturalHeight])).toEqual([96, 160]);
 
-    // The widest image is capped at the column and keeps its ratio.
-    const chart = page.getByRole('img', { name: 'Pump hours per month' });
-    const box = await chart.boundingBox();
-    expect(box!.width).toBeLessThan(1600);
-    expect(Math.abs(box!.height - (box!.width * 600) / 1600)).toBeLessThan(1);
+  // The widest image is capped at the column and keeps its ratio.
+  const chart = page.getByRole('img', { name: 'Pump hours per month' });
+  const box = await chart.boundingBox();
+  expect(box!.width).toBeLessThan(1600);
+  expect(Math.abs(box!.height - (box!.width * 600) / 1600)).toBeLessThan(1);
 
-    expect(await seen.shifts()).toEqual([]);
-    expect(await seen.violations()).toEqual([]);
-    expect(seen.consoleErrors).toEqual([]);
-  });
-}
+  expect(await seen.shifts()).toEqual([]);
+  expect(await seen.violations()).toEqual([]);
+  expect(seen.consoleErrors).toEqual([]);
+});

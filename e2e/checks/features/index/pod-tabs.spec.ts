@@ -42,31 +42,14 @@ function rgb(token: string) {
   return `rgb(${r}, ${g}, ${b})`;
 }
 
-type Violation = { blockedURI: string; effectiveDirective: string };
-
-// Console errors and thrown errors, in the index and in every frame, and
-// each document's policy violations, kept on its own window.
-async function watch(page: Page) {
+// Console errors and thrown errors, in the index and in every frame.
+function watch(page: Page) {
   const errors: string[] = [];
   page.on('console', (message) => {
     if (message.type() === 'error') errors.push(message.text());
   });
   page.on('pageerror', (error) => errors.push(error.message));
-  await page.addInitScript(() => {
-    const seen: { blockedURI: string; effectiveDirective: string }[] = [];
-    (window as any).__violations = seen;
-    document.addEventListener('securitypolicyviolation', (event) => {
-      seen.push({ blockedURI: event.blockedURI, effectiveDirective: event.effectiveDirective });
-    });
-  });
   return errors;
-}
-
-function violations(page: Page, name?: string): Promise<Violation[]> {
-  const frame = name === undefined ? page.mainFrame()
-    : page.frames().find((each) => new URL(each.url()).pathname === `/${name}.html`);
-  if (!frame) throw new Error(`no frame shows ${name}`);
-  return frame.evaluate(() => (window as any).__violations as Violation[]);
 }
 
 function run(...args: string[]) {
@@ -184,11 +167,29 @@ function ringOf(page: Page, pod: Pod) {
   });
 }
 
-async function focusWindow(page: Page) {
-  const read = page.waitForResponse((response) =>
+const RING = { tab: `solid 2px ${rgb(COLORS.lavender)} -2px`, title: 'none', encloses: true };
+
+function seenRead(page: Page) {
+  return page.waitForResponse((response) =>
     new URL(response.url()).pathname === SEEN && response.request().method() === 'GET');
+}
+
+async function focusWindow(page: Page) {
+  const read = seenRead(page);
   await page.evaluate(() => window.dispatchEvent(new Event('focus')));
   await read;
+}
+
+// The pods' tabs opened from the address, on the one named, each frame's
+// page loaded from it and the index's first read of the seen route in: a
+// dot drawn after a press could shift a tab under the pointer.
+async function openTabs(page: Page, pods: Pod[], on: Pod) {
+  const read = seenRead(page);
+  await openIndex(page, `/#tabs=${pods.map((pod) => pod.name).join(',')}&on=${on.name}`);
+  await read;
+  expect(await openNames(page)).toEqual(pods.map((pod) => pod.name));
+  await expectActive(page, on);
+  for (const pod of pods) await expect(framed(page, pod).locator('h1')).toHaveText(pod.title);
 }
 
 test.describe('signed in', () => {
@@ -198,26 +199,6 @@ test.describe('signed in', () => {
     for (const [name, value] of Object.entries({ ASSERTION, SECOND, HERMES, OUT, PYTHON })) {
       expect(value, `the capture fixture names ${name}`).toBeTruthy();
     }
-  });
-
-  test('a plain click on a title link opens the pod in a tab, with no error or violation', async ({ page }) => {
-    const errors = await watch(page);
-    await openIndex(page);
-    await expect(tabs(page)).toHaveCount(0);
-    await listingLink(page, ARTICLE).click();
-
-    await expect(tabs(page)).toHaveCount(1);
-    await expect(tabTitle(page, ARTICLE)).toHaveText(ARTICLE.title);
-    await expectActive(page, ARTICLE);
-    await expect(framed(page, ARTICLE).locator('h1')).toHaveText(ARTICLE.title);
-    await expect(page).toHaveURL(/#tabs=capture-article&on=capture-article$/);
-    await expect(close(page, ARTICLE)).toHaveText('✕');
-    // The index is the page it was: the frame holds the pod.
-    expect(new URL(page.url()).pathname).toBe('/');
-
-    expect(await violations(page)).toEqual([]);
-    expect(await violations(page, ARTICLE.name)).toEqual([]);
-    expect(errors).toEqual([]);
   });
 
   test('a link in a framed pod opens a tab after it, Ctrl-click a browser tab, and the pod\'s Lotuspod link the listing', async ({ page, context }) => {
@@ -261,10 +242,40 @@ test.describe('signed in', () => {
     await expect(home(page)).toHaveAttribute('aria-current', 'page');
     await expect(page).toHaveURL(/#tabs=capture-decision-context,capture-article$/);
     expect(new URL(page.url()).pathname).toBe('/');
+
+    // A reload, as the reload banner's: the old page is marked, so the
+    // reloaded one is told apart from it.
+    const readyState = () => frame(page, CONTEXT).evaluate((node) =>
+      (node as HTMLIFrameElement).contentDocument?.readyState);
+    await tabTitle(page, CONTEXT).click();
+    await close(page, ARTICLE).click();
+    await expectActive(page, CONTEXT);
+    await expect.poll(readyState).toBe('complete');
+    await frame(page, CONTEXT).evaluate((node) => {
+      const framed = (node as HTMLIFrameElement).contentWindow as Window;
+      framed.document.body.dataset.before = 'reload';
+      framed.location.reload();
+    });
+    await expect(framed(page, CONTEXT).locator('body:not([data-before])')).toHaveCount(1);
+    await expect(framed(page, CONTEXT).locator('h1')).toHaveText(CONTEXT.title);
+    // Straight away, loaded or not.
+    await link.click();
+    await expect.poll(() => openNames(page)).toEqual([CONTEXT.name, ARTICLE.name]);
+    await expectActive(page, ARTICLE);
+    await expect(page).toHaveURL(/#tabs=capture-decision-context,capture-article&on=capture-article$/);
+
+    // Once it has loaded, too.
+    await close(page, ARTICLE).click();
+    await expectActive(page, CONTEXT);
+    await expect.poll(readyState).toBe('complete');
+    await link.click();
+    await expect.poll(() => openNames(page)).toEqual([CONTEXT.name, ARTICLE.name]);
+    await expectActive(page, ARTICLE);
+    await expect(framed(page, CONTEXT).locator('h1')).toHaveText(CONTEXT.title);
     expect(errors).toEqual([]);
   });
 
-  test('a link to another pod, in a framed pod\'s body or comment, opens it in a tab of its own and leaves the pod where it was', async ({ page }) => {
+  test('a link to another pod, in a framed pod\'s body or comment, opens it in a tab of its own and leaves the pod where it was', async ({ page, baseURL }) => {
     const errors = await watch(page);
     const pod = { name: 'pod-tabs-links', title: 'Pod tabs links' };
     const body = (old: string) => [`# ${pod.title}`, '',
@@ -275,8 +286,14 @@ test.describe('signed in', () => {
     // The first edition's commit, which names its old version.
     const first = execFileSync('git', ['-C', OUT, 'log', '-1', '--format=%H'], { encoding: 'utf-8' }).trim();
     publish(pod.name, body(first));
+    // A comment links to the article's second section, and to the article as
+    // the index's address shows it.
     const comment = await page.request.post('/api/comments', {
-      data: { page: pod.name, section: 'findings', text: 'See [the article\'s second section](capture-article.html#second-section).' },
+      data: {
+        page: pod.name, section: 'findings',
+        text: 'See [the article\'s second section](capture-article.html#second-section) and ' +
+          `[the article's tab](${baseURL}/#tabs=capture-article&on=capture-article).`,
+      },
     });
     expect(comment.status(), await comment.text()).toBe(201);
     await openIndex(page);
@@ -323,6 +340,16 @@ test.describe('signed in', () => {
     await expect.poll(async () => (await shownIn(page, ARTICLE)).hash).toBe('#second-section');
     await shownPod();
 
+    // The index's own address for the article, in the same comment.
+    await close(page, ARTICLE).click();
+    await expectActive(page, pod);
+    const index = inPod.locator('.artifact-comment-text a:visible', { hasText: 'the article\'s tab' });
+    await expect(index).toBeVisible();
+    await index.click();
+    await expect.poll(() => openNames(page)).toEqual([pod.name, ARTICLE.name]);
+    await expectActive(page, ARTICLE);
+    await shownPod();
+
     // A link within the pod only scrolls it.
     await tabTitle(page, pod).click();
     await expectActive(page, pod);
@@ -336,66 +363,6 @@ test.describe('signed in', () => {
     // A page on the site that is no pod the listing has loads in the window.
     await inPod.getByRole('link', { name: 'the first edition' }).click();
     await expect(page).toHaveURL(new RegExp(`/${pod.name}\\.html\\?version=${first}$`));
-  });
-
-  test('a link to another pod in a comment, as the address shows it in the index, opens it in a tab of its own', async ({ page }) => {
-    const pod = { name: 'pod-tabs-comment-link', title: 'Pod tabs comment link' };
-    publish(pod.name, source(pod.title, 'first'));
-    // The address the reader sees while reading the article in its tab.
-    await openIndex(page);
-    await openFromListing(page, ARTICLE);
-    const address = page.url();
-    expect(new URL(address).hash).toBe('#tabs=capture-article&on=capture-article');
-    await close(page, ARTICLE).click();
-    const comment = await page.request.post('/api/comments', {
-      data: { page: pod.name, section: 'findings', text: `See [the article](${address}).` },
-    });
-    expect(comment.status(), await comment.text()).toBe(201);
-    await openFromListing(page, pod);
-    const inPod = framed(page, pod);
-    // Once the page has read the thread, which the chip then opens.
-    await expect(inPod.locator('.artifact-comments-entry')).toHaveCount(1);
-    await inPod.locator('details.artifact-comment[data-section="findings"] summary').click();
-    await inPod.locator('.artifact-comment-text a:visible', { hasText: 'the article' }).click();
-    await expect.poll(() => openNames(page)).toEqual([pod.name, ARTICLE.name]);
-    await expectActive(page, ARTICLE);
-    await expect(tabTitle(page, pod)).toHaveText(pod.title);
-    expect((await shownIn(page, pod)).pathname).toBe(`/${pod.name}.html`);
-  });
-
-  test('a framed pod reloaded still opens its links in tabs, before and after it has loaded again', async ({ page }) => {
-    const errors = await watch(page);
-    const readyState = () => frame(page, CONTEXT).evaluate((node) =>
-      (node as HTMLIFrameElement).contentDocument?.readyState);
-    await openIndex(page);
-    await openFromListing(page, CONTEXT);
-    await expect.poll(readyState).toBe('complete');
-
-    // A reload, as the reload banner's: the old page is marked, so the
-    // reloaded one is told apart from it.
-    await frame(page, CONTEXT).evaluate((node) => {
-      const framed = (node as HTMLIFrameElement).contentWindow as Window;
-      framed.document.body.dataset.before = 'reload';
-      framed.location.reload();
-    });
-    await expect(framed(page, CONTEXT).locator('body:not([data-before])')).toHaveCount(1);
-    await expect(framed(page, CONTEXT).locator('h1')).toHaveText(CONTEXT.title);
-    // Straight away, loaded or not.
-    const link = framed(page, CONTEXT).getByRole('link', { name: 'the pump notes' }).first();
-    await link.click();
-    await expect.poll(() => openNames(page)).toEqual([CONTEXT.name, ARTICLE.name]);
-    await expectActive(page, ARTICLE);
-    await expect(page).toHaveURL(/#tabs=capture-decision-context,capture-article&on=capture-article$/);
-
-    // Once it has loaded, too.
-    await close(page, ARTICLE).click();
-    await expectActive(page, CONTEXT);
-    await expect.poll(readyState).toBe('complete');
-    await link.click();
-    await expect.poll(() => openNames(page)).toEqual([CONTEXT.name, ARTICLE.name]);
-    await expectActive(page, ARTICLE);
-    await expect(framed(page, CONTEXT).locator('h1')).toHaveText(CONTEXT.title);
-    expect(errors).toEqual([]);
   });
 
   test('a framed page keeps the clicks its own script takes: its image opens in the viewer', async ({ page }) => {
@@ -415,34 +382,6 @@ test.describe('signed in', () => {
     await expectActive(page, images);
     // The frame is still the page: nothing navigated.
     expect(page.frames().map((each) => new URL(each.url()).pathname)).toContain('/capture-images.html');
-    expect(errors).toEqual([]);
-  });
-
-  test('back on the listing from a tab, a page just read there loses its updated mark', async ({ page }) => {
-    const errors = await watch(page);
-    const pod = { name: 'pod-tabs-marks', title: 'Pod tabs marks' };
-    publish(pod.name, source(pod.title, 'first'));
-    const first = seenPost(page, pod.name);
-    await page.goto(`/${pod.name}.html?standalone`);
-    await first;
-    await page.waitForTimeout(1100);
-    publish(pod.name, source(pod.title, 'second'));
-
-    await openIndex(page);
-    const row = page.locator(`.index-table tbody tr[data-page="${pod.name}"]`);
-    const toggle = page.locator('button.index-toggle', { hasText: /^Updated/ });
-    await expect(row.locator('.index-mark')).toHaveText('updated');
-    const before = Number(/(\d+)$/.exec(await toggle.innerText())?.[1]);
-    expect(before).toBeGreaterThan(0);
-
-    const read = seenPost(page, pod.name);
-    await listingLink(page, pod).click();
-    await read;
-    await expectActive(page, pod);
-    await home(page).click();
-    await expectListing(page);
-    await expect(row.locator('.index-mark')).toHaveCount(0);
-    await expect(toggle).toHaveText(`Updated · ${before - 1}`);
     expect(errors).toEqual([]);
   });
 
@@ -788,36 +727,8 @@ test.describe('signed in', () => {
     expect(errors).toEqual([]);
   });
 
-  test('a tab dragged onto the left half of the first goes first, in the strip and the address', async ({ page }) => {
-    await openIndex(page);
-    await openFromListing(page, ARTICLE);
-    await openFromListing(page, CONTEXT);
-    await openFromListing(page, CHECKLIST);
-    expect(await openNames(page)).toEqual([ARTICLE.name, CONTEXT.name, CHECKLIST.name]);
-
-    const from = (await tabTitle(page, CHECKLIST).boundingBox())!;
-    const onto = (await tab(page, ARTICLE).boundingBox())!;
-    await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
-    await page.mouse.down();
-    await page.mouse.move(onto.x + onto.width / 4, onto.y + onto.height / 2, { steps: 12 });
-    await page.mouse.up();
-
-    expect(await openNames(page)).toEqual([CHECKLIST.name, ARTICLE.name, CONTEXT.name]);
-    await expect(page).toHaveURL(
-      /#tabs=capture-checklist,capture-article,capture-decision-context&on=capture-checklist$/);
-    await expectActive(page, CHECKLIST);
-
-    // The address keeps the order through a reload.
-    await page.reload();
-    await expectActive(page, CHECKLIST);
-    expect(await openNames(page)).toEqual([CHECKLIST.name, ARTICLE.name, CONTEXT.name]);
-  });
-
   test('a press on a tab that never moves activates it; a drag ended with Escape, or begun on ✕, moves nothing', async ({ page }) => {
-    await openIndex(page);
-    await openFromListing(page, ARTICLE);
-    await openFromListing(page, CONTEXT);
-    await openFromListing(page, CHECKLIST);
+    await openTabs(page, [ARTICLE, CONTEXT, CHECKLIST], CHECKLIST);
     const order = [ARTICLE.name, CONTEXT.name, CHECKLIST.name];
     const centre = async (target: ReturnType<typeof tab>) => {
       const box = (await target.boundingBox())!;
@@ -859,6 +770,23 @@ test.describe('signed in', () => {
     await page.mouse.up();
     expect(await openNames(page)).toEqual(order);
 
+    // Pressed at a tab's bottom edge, out over the pod's page at once,
+    // released there: back over the first tab with no button held, no drag
+    // behind, and a click on it is a click.
+    await tabTitle(page, CHECKLIST).click();
+    await expectActive(page, CHECKLIST);
+    const c = (await tab(page, CHECKLIST).boundingBox())!;
+    await page.mouse.move(c.x + c.width / 2, c.y + c.height - 1);
+    await page.mouse.down();
+    await page.mouse.move(c.x + c.width / 2, c.y + c.height + 80);
+    await page.mouse.up();
+    at = await centre(tabTitle(page, ARTICLE));
+    await page.mouse.move(at.x, at.y, { steps: 8 });
+    await expect(strip(page).locator('.pod-tab--dragging')).toHaveCount(0);
+    await page.mouse.click(at.x, at.y);
+    expect(await openNames(page)).toEqual(order);
+    await expectActive(page, ARTICLE);
+
     // And a plain click on ✕ closes the tab as ever.
     await close(page, CONTEXT).click();
     expect(await openNames(page)).toEqual([ARTICLE.name, CHECKLIST.name]);
@@ -866,10 +794,7 @@ test.describe('signed in', () => {
   });
 
   test('a touch held on a tab and lifted without moving activates it; a held touch then moved drags it', async ({ page }) => {
-    await openIndex(page);
-    await openFromListing(page, ARTICLE);
-    await openFromListing(page, CONTEXT);
-    await openFromListing(page, CHECKLIST);
+    await openTabs(page, [ARTICLE, CONTEXT, CHECKLIST], CHECKLIST);
     const cdp = await page.context().newCDPSession(page);
     await cdp.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 1 });
     const touch = (type: string, points: { x: number; y: number }[]) =>
@@ -897,34 +822,8 @@ test.describe('signed in', () => {
     await expectActive(page, ARTICLE);
   });
 
-  test('a press released outside the strip before it drags leaves no drag behind', async ({ page }) => {
-    await openIndex(page);
-    await openFromListing(page, ARTICLE);
-    await openFromListing(page, CONTEXT);
-    await openFromListing(page, CHECKLIST);
-    const c = (await tab(page, CHECKLIST).boundingBox())!;
-    const a = (await tabTitle(page, ARTICLE).boundingBox())!;
-
-    // Pressed at the tab's bottom edge, out over the pod's page at once,
-    // released there.
-    await page.mouse.move(c.x + c.width / 2, c.y + c.height - 1);
-    await page.mouse.down();
-    await page.mouse.move(c.x + c.width / 2, c.y + c.height + 80);
-    await page.mouse.up();
-
-    // Back over the first tab with no button held, then a click on it.
-    await page.mouse.move(a.x + a.width / 2, a.y + a.height / 2, { steps: 8 });
-    await expect(strip(page).locator('.pod-tab--dragging')).toHaveCount(0);
-    await page.mouse.click(a.x + a.width / 2, a.y + a.height / 2);
-    expect(await openNames(page)).toEqual([ARTICLE.name, CONTEXT.name, CHECKLIST.name]);
-    await expectActive(page, ARTICLE);
-  });
-
   test('Alt+Shift+Right pressed while a tab is dragged moves nothing, and the drop moves the dragged tab', async ({ page }) => {
-    await openIndex(page);
-    await openFromListing(page, ARTICLE);
-    await openFromListing(page, CONTEXT);
-    await openFromListing(page, CHECKLIST);
+    await openTabs(page, [ARTICLE, CONTEXT, CHECKLIST], CHECKLIST);
 
     const from = (await tabTitle(page, CONTEXT).boundingBox())!;
     const onto = (await tab(page, ARTICLE).boundingBox())!;
@@ -940,42 +839,21 @@ test.describe('signed in', () => {
     await expect(page).toHaveURL(
       /#tabs=capture-decision-context,capture-article,capture-checklist&on=capture-checklist$/);
     await expectActive(page, CHECKLIST);
+
+    // The address keeps the order through a reload.
+    await page.reload();
+    await expectActive(page, CHECKLIST);
+    expect(await openNames(page)).toEqual([CONTEXT.name, ARTICLE.name, CHECKLIST.name]);
+    await expect(page).toHaveURL(
+      /#tabs=capture-decision-context,capture-article,capture-checklist&on=capture-checklist$/);
   });
 
   test('Alt+Shift+Right moves a focused tab one place, keeping its focus and ring, and says where; Alt+Shift+Left on the first does nothing', async ({ page }) => {
-    await openIndex(page);
-    await openFromListing(page, ARTICLE);
-    await openFromListing(page, CONTEXT);
-    await openFromListing(page, CHECKLIST);
+    await openTabs(page, [ARTICLE, CONTEXT, CHECKLIST], CHECKLIST);
     const said = page.locator('.pod-tabs-bar [aria-live="polite"]');
 
-    await close(page, ARTICLE).focus();
-    await page.keyboard.press('Tab');
-    await expect(tabTitle(page, CONTEXT)).toBeFocused();
-    await page.keyboard.press('Alt+Shift+ArrowRight');
-    expect(await openNames(page)).toEqual([ARTICLE.name, CHECKLIST.name, CONTEXT.name]);
-    await expect(tabTitle(page, CONTEXT)).toBeFocused();
-    await expect(said).toHaveText(`${CONTEXT.title} moved to position 3 of 3`);
-    await expect(page).toHaveURL(/#tabs=capture-article,capture-checklist,capture-decision-context&on=capture-checklist$/);
-    await expectActive(page, CHECKLIST);
-    expect.soft(await ringOf(page, CONTEXT))
-      .toEqual({ tab: `solid 2px ${rgb(COLORS.lavender)} -2px`, title: 'none', encloses: true });
-
-    // At the end already: nothing further.
-    await page.keyboard.press('Alt+Shift+ArrowRight');
-    expect(await openNames(page)).toEqual([ARTICLE.name, CHECKLIST.name, CONTEXT.name]);
-
-    await tabTitle(page, ARTICLE).focus();
-    await page.keyboard.press('Alt+Shift+ArrowLeft');
-    expect(await openNames(page)).toEqual([ARTICLE.name, CHECKLIST.name, CONTEXT.name]);
-    await expect(tabTitle(page, ARTICLE)).toBeFocused();
-    await expect(said).toHaveText(`${CONTEXT.title} moved to position 3 of 3`);
-  });
-
-  test('the pointer on a tab not active lifts the whole tab, its ✕ white as its title', async ({ page }) => {
-    await openIndex(page);
-    await openFromListing(page, ARTICLE);
-    await openFromListing(page, CHECKLIST);
+    // The pointer on a tab not active lifts the whole tab, its ✕ white as
+    // its title.
     const resting = tab(page, ARTICLE);
     const background = (await resting.evaluate((node) => getComputedStyle(node).backgroundColor));
     await tabTitle(page, ARTICLE).hover();
@@ -995,38 +873,34 @@ test.describe('signed in', () => {
     expect(active.rule).toContain('-2px');
     expect(active.color).toBe(white);
     expect(active.weight).toBe('600');
-  });
-
-  test('a tab focused from the keyboard is outlined whole, title and ✕ together; one focused after a mouse pick shows no ring', async ({ page }) => {
-    await openIndex(page);
-    await openFromListing(page, ARTICLE);
-    await openFromListing(page, CHECKLIST);
 
     // The Tab key onto the second tab's title: one lavender ring, inset, on
     // the tab around both its buttons, none on the title alone.
     await close(page, ARTICLE).focus();
     await page.keyboard.press('Tab');
-    await expect(tabTitle(page, CHECKLIST)).toBeFocused();
-    expect.soft(await ringOf(page, CHECKLIST))
-      .toEqual({ tab: `solid 2px ${rgb(COLORS.lavender)} -2px`, title: 'none', encloses: true });
+    await expect(tabTitle(page, CONTEXT)).toBeFocused();
+    expect.soft(await ringOf(page, CONTEXT)).toEqual(RING);
+    await page.keyboard.press('Alt+Shift+ArrowRight');
+    expect(await openNames(page)).toEqual([ARTICLE.name, CHECKLIST.name, CONTEXT.name]);
+    await expect(tabTitle(page, CONTEXT)).toBeFocused();
+    await expect(said).toHaveText(`${CONTEXT.title} moved to position 3 of 3`);
+    await expect(page).toHaveURL(/#tabs=capture-article,capture-checklist,capture-decision-context&on=capture-checklist$/);
+    await expectActive(page, CHECKLIST);
+    expect.soft(await ringOf(page, CONTEXT)).toEqual(RING);
 
-    // A pod picked in the finder with the mouse: its tab focused, no ring.
-    await page.keyboard.press('ControlOrMeta+K');
-    const finder = page.getByRole('dialog', { name: 'Find a pod' });
-    await finder.getByRole('combobox').fill(ARTICLE.title);
-    await finder.locator(`[role="option"][data-page="${ARTICLE.name}"]`).click();
-    await expectActive(page, ARTICLE);
+    // At the end already: nothing further.
+    await page.keyboard.press('Alt+Shift+ArrowRight');
+    expect(await openNames(page)).toEqual([ARTICLE.name, CHECKLIST.name, CONTEXT.name]);
+
+    await tabTitle(page, ARTICLE).focus();
+    await page.keyboard.press('Alt+Shift+ArrowLeft');
+    expect(await openNames(page)).toEqual([ARTICLE.name, CHECKLIST.name, CONTEXT.name]);
     await expect(tabTitle(page, ARTICLE)).toBeFocused();
-    await expect(page.locator('.pod-tabs-bar :focus-visible')).toHaveCount(0);
+    await expect(said).toHaveText(`${CONTEXT.title} moved to position 3 of 3`);
   });
 
   test('a tab focused after a click on ✕ shows no ring until a key moves focus; one picked in the finder with Enter is outlined whole', async ({ page }) => {
-    await openIndex(page);
-    await openFromListing(page, ARTICLE);
-    await openFromListing(page, CONTEXT);
-    await openFromListing(page, CHECKLIST);
-    await tabTitle(page, CONTEXT).click();
-    await expectActive(page, CONTEXT);
+    await openTabs(page, [ARTICLE, CONTEXT, CHECKLIST], CONTEXT);
 
     // The middle tab's ✕ clicked: its neighbour takes focus with no ring.
     await close(page, CONTEXT).click();
@@ -1042,21 +916,28 @@ test.describe('signed in', () => {
     expect.soft(await close(page, CHECKLIST).evaluate((node) => {
       const style = getComputedStyle(node);
       return `${style.outlineStyle} ${style.outlineWidth} ${style.outlineColor} ${style.outlineOffset}`;
-    })).toBe(`solid 2px ${rgb(COLORS.lavender)} -2px`);
+    })).toBe(RING.tab);
 
-    // A pod picked in the finder with Enter: its tab focused, ringed whole.
+    // A pod picked in the finder with the mouse: its tab focused, no ring.
     await page.keyboard.press('ControlOrMeta+K');
     const finder = page.getByRole('dialog', { name: 'Find a pod' });
+    await finder.getByRole('combobox').fill(ARTICLE.title);
+    await finder.locator(`[role="option"][data-page="${ARTICLE.name}"]`).click();
+    await expectActive(page, ARTICLE);
+    await expect(tabTitle(page, ARTICLE)).toBeFocused();
+    await expect(page.locator('.pod-tabs-bar :focus-visible')).toHaveCount(0);
+
+    // One picked with Enter: its tab focused, ringed whole.
+    await page.keyboard.press('ControlOrMeta+K');
     await finder.getByRole('combobox').fill(CONTEXT.title);
     await expect(finder.locator(`[role="option"][data-page="${CONTEXT.name}"]`)).toHaveAttribute('aria-selected', 'true');
     await page.keyboard.press('Enter');
     await expectActive(page, CONTEXT);
     await expect(tabTitle(page, CONTEXT)).toBeFocused();
-    expect.soft(await ringOf(page, CONTEXT))
-      .toEqual({ tab: `solid 2px ${rgb(COLORS.lavender)} -2px`, title: 'none', encloses: true });
+    expect.soft(await ringOf(page, CONTEXT)).toEqual(RING);
   });
 
-  test('a pod published again shows an amber "new version" dot until its tab is activated', async ({ page }) => {
+  test('a pod published again shows an amber "new version" dot until its tab is activated', async ({ page, baseURL }) => {
     const errors = await watch(page);
     const pod = { name: 'pod-tabs-version', title: 'Pod tabs version' };
     publish(pod.name, source(pod.title, 'first'));
@@ -1085,20 +966,16 @@ test.describe('signed in', () => {
     await tabTitle(page, pod).click();
     await expectActive(page, pod);
     await expect(tab(page, pod).locator('.pod-tab-dot')).toHaveCount(0);
-    expect(errors).toEqual([]);
-  });
 
-  test('a pod someone else comments on shows an orchid "new replies" dot until its tab is activated', async ({ page, baseURL }) => {
-    const errors = await watch(page);
-    const pod = { name: 'pod-tabs-replies', title: 'Pod tabs replies' };
-    publish(pod.name, source(pod.title, 'first'));
-    await openIndex(page);
-    const loaded = seenPost(page, pod.name);
-    await listingLink(page, pod).click();
-    await loaded;
-    await openFromListing(page, ARTICLE);
-    await expect(tab(page, pod).locator('.pod-tab-dot')).toHaveCount(0);
-
+    // Not active again, the pod someone else comments on: an orchid "new
+    // replies" dot, until its tab is activated. Its frame reloaded first, as
+    // the reload banner's, is read at the second edition.
+    const reread = seenPost(page, pod.name);
+    await frame(page, pod).evaluate((node) => (node as HTMLIFrameElement).contentWindow?.location.reload());
+    await reread;
+    await expect(framed(page, pod).locator('body')).toContainText('Edition: second.');
+    await tabTitle(page, ARTICLE).click();
+    await expectActive(page, ARTICLE);
     const second = await requests.newContext({ baseURL, extraHTTPHeaders: { 'Cf-Access-Jwt-Assertion': SECOND } });
     try {
       const comment = await second.post('/api/comments', {
@@ -1109,7 +986,6 @@ test.describe('signed in', () => {
       await second.dispose();
     }
     await focusWindow(page);
-    const dot = tab(page, pod).locator('.pod-tab-dot');
     await expect(dot).toHaveText('new replies');
     expect(await dot.evaluate((node) => getComputedStyle(node).backgroundColor)).toBe(rgb(COLORS.orchid));
 

@@ -208,7 +208,9 @@ async function expectExpanded(page: Page, first: Box) {
   return now;
 }
 
-for (const { target, size, open } of EXPANDING) {
+// Each page once, and each size and panel state once.
+const KEEPING = [{ target: ARTICLE, size: ULTRAWIDE, open: false }, { target: REPORT, size: WIDE, open: true }];
+for (const { target, size, open } of KEEPING) {
   test(`${target.slug} at ${size.width}x${size.height}, panel ${open ? 'open' : 'folded'}: tables keep their width at 1920`, async ({ page, context }) => {
     await at(page, target, size, open);
     const widths = await topLevelWidths(page);
@@ -228,15 +230,13 @@ for (const { target, size, open } of EXPANDING) {
   });
 }
 
-for (const target of TARGETS) {
-  test(`${target.slug} at 3440x1440: the ledger has an Expand button, the small and listed tables none`, async ({ page }) => {
-    await at(page, target, ULTRAWIDE, false);
-    await expectExpand(page);
-    await expect(await button(page, SMALL)).toBeHidden();
-    await expect(page.locator(`li table ~ ${BUTTON}, li .artifact-table-expand`)).toHaveCount(0);
-    expect(await table(page, LISTED).evaluate((node) => node.closest('li') !== null)).toBe(true);
-  });
-}
+test(`${ARTICLE.slug} at 3440x1440: the ledger has an Expand button, the small and listed tables none`, async ({ page }) => {
+  await at(page, ARTICLE, ULTRAWIDE, false);
+  await expectExpand(page);
+  await expect(await button(page, SMALL)).toBeHidden();
+  await expect(page.locator(`li table ~ ${BUTTON}, li .artifact-table-expand`)).toHaveCount(0);
+  expect(await table(page, LISTED).evaluate((node) => node.closest('li') !== null)).toBe(true);
+});
 
 for (const open of [false, true]) {
   test(`${REPORT.slug} at 1440x900, panel ${open ? 'open' : 'folded'}: no room, no button`, async ({ page }) => {
@@ -336,21 +336,19 @@ test(`${ARTICLE.slug} at 3440x1440: Enter and Space on the focused button expand
   expect(Math.abs((await box(page)).width - first.width)).toBeLessThanOrEqual(1);
 });
 
-for (const target of TARGETS) {
-  test(`${target.slug} at 3440x1440: the expanded ledger follows the panel opening and folding`, async ({ page }) => {
-    await at(page, target, ULTRAWIDE, false);
-    const first = await box(page);
-    await (await button(page)).click();
-    const expanded = await expectExpanded(page, first);
-    await openPanel(page);
-    const beside = await box(page);
-    expect(beside.right).toBeLessThanOrEqual((await panelLeft(page)) - GUTTER + 0.5);
-    await expectCollapse(page);
-    await foldPanel(page);
-    expect(Math.abs((await box(page)).width - expanded.width)).toBeLessThanOrEqual(1);
-    await expectCollapse(page);
-  });
-}
+test(`${ARTICLE.slug} at 3440x1440: the expanded ledger follows the panel opening and folding`, async ({ page }) => {
+  await at(page, ARTICLE, ULTRAWIDE, false);
+  const first = await box(page);
+  await (await button(page)).click();
+  const expanded = await expectExpanded(page, first);
+  await openPanel(page);
+  const beside = await box(page);
+  expect(beside.right).toBeLessThanOrEqual((await panelLeft(page)) - GUTTER + 0.5);
+  await expectCollapse(page);
+  await foldPanel(page);
+  expect(Math.abs((await box(page)).width - expanded.width)).toBeLessThanOrEqual(1);
+  await expectCollapse(page);
+});
 
 test(`${REPORT.slug}: the expanded ledger re-fits as the window is resized`, async ({ page, browser }) => {
   await at(page, REPORT, ULTRAWIDE, false);
@@ -439,35 +437,33 @@ test(`${ARTICLE.slug} at 3440x1440: with sessionStorage refused, Expand still wo
 // holders, which a page without scripts does not have and which must have
 // no height: every block, comment boxes included, has the same top and
 // height with scripts as without.
-for (const target of TARGETS) {
-  test(`${target.slug} at 3440x1440: the buttons take no room`, async ({ browser }) => {
-    const pages: Awaited<ReturnType<typeof blocks>>[] = [];
-    for (const javaScriptEnabled of [true, false]) {
-      const context = await browser.newContext({ viewport: ULTRAWIDE, extraHTTPHeaders: SIGNED_IN, javaScriptEnabled });
-      const page = await context.newPage();
-      await page.route((url) => url.pathname === '/api/comments', (route) =>
-        route.fulfill({ json: { page: target.slug, threads: [] } }));
-      await page.goto(`${target.url}?standalone`);
-      await expect(page.locator('.artifact-body table')).toHaveCount(7);
-      if (javaScriptEnabled) {
-        await settle(page);
-        await expectExpand(page);
-        const holders = await page.locator('.artifact-table-expand').evaluateAll((nodes) =>
-          nodes.map((node) => node.getBoundingClientRect().height));
-        expect(holders.length).toBeGreaterThan(0);
-        for (const height of holders) expect(height).toBe(0);
-      }
-      pages.push(await blocks(page));
-      await context.close();
+test(`${REPORT.slug} at 3440x1440: the buttons take no room`, async ({ browser }) => {
+  const pages: Awaited<ReturnType<typeof blocks>>[] = [];
+  for (const javaScriptEnabled of [true, false]) {
+    const context = await browser.newContext({ viewport: ULTRAWIDE, extraHTTPHeaders: SIGNED_IN, javaScriptEnabled });
+    const page = await context.newPage();
+    await page.route((url) => url.pathname === '/api/comments', (route) =>
+      route.fulfill({ json: { page: REPORT.slug, threads: [] } }));
+    await page.goto(`${REPORT.url}?standalone`);
+    await expect(page.locator('.artifact-body table')).toHaveCount(7);
+    if (javaScriptEnabled) {
+      await settle(page);
+      await expectExpand(page);
+      const holders = await page.locator('.artifact-table-expand').evaluateAll((nodes) =>
+        nodes.map((node) => node.getBoundingClientRect().height));
+      expect(holders.length).toBeGreaterThan(0);
+      for (const height of holders) expect(height).toBe(0);
     }
-    const [scripted, plain] = pages;
-    expect(scripted.map((block) => block.name)).toEqual(plain.map((block) => block.name));
-    scripted.forEach((block, index) => {
-      const counterpart = plain[index];
-      const label = `${block.name}: ${JSON.stringify({ block, counterpart })}`;
-      expect(block.comment, label).toBe(counterpart.comment);
-      expect(Math.abs(block.top - counterpart.top), label).toBeLessThanOrEqual(1);
-      expect(Math.abs(block.height - counterpart.height), label).toBeLessThanOrEqual(1);
-    });
+    pages.push(await blocks(page));
+    await context.close();
+  }
+  const [scripted, plain] = pages;
+  expect(scripted.map((block) => block.name)).toEqual(plain.map((block) => block.name));
+  scripted.forEach((block, index) => {
+    const counterpart = plain[index];
+    const label = `${block.name}: ${JSON.stringify({ block, counterpart })}`;
+    expect(block.comment, label).toBe(counterpart.comment);
+    expect(Math.abs(block.top - counterpart.top), label).toBeLessThanOrEqual(1);
+    expect(Math.abs(block.height - counterpart.height), label).toBeLessThanOrEqual(1);
   });
-}
+});

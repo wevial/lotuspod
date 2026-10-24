@@ -83,19 +83,14 @@ test.describe('signed in', () => {
     const second = decision(page, 'decision-2');
     await expect(second.radios).toHaveCount(2);
     await expect(second.context).toHaveCount(0);
-    expect(seen.errors).toEqual([]);
-    expect(await seen.violations()).toEqual([]);
-  });
 
-  test('at 360 pixels wide the context wraps and the page does not scroll sideways', async ({ page }) => {
-    const seen = await watch(page);
+    // At 360 pixels wide the context wraps and the page does not scroll
+    // sideways.
     await page.setViewportSize({ width: 360, height: 780 });
-    await page.goto(`${PAGE}?standalone`);
-    const first = decision(page, 'decision-1');
-    await expect(first.context).toBeVisible();
     await first.form.scrollIntoViewIfNeeded();
     expect(await lines(first.context)).toBeGreaterThan(1);
     await fits(page);
     expect(seen.errors).toEqual([]);
+    expect(await seen.violations()).toEqual([]);
   });
 });

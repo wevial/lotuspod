@@ -205,6 +205,17 @@ test.describe('signed in', () => {
     await expect(chip(page).locator('.artifact-comment-chip-unread')).toHaveCount(0);
     await expect(theirs).toHaveClass(/\bartifact-comment--unread\b/);
 
+    // The window narrowed to a popover, the thread keeps its New marks.
+    await page.setViewportSize({ width: 1024, height: 900 });
+    const popover = page.locator('.artifact-comments-popover');
+    await expect(popover.locator(`.artifact-comment-thread[data-thread="${thread}"]`)).toBeVisible();
+    const narrowed = popover.locator(`.artifact-comment-item:has(#artifact-comment-text-${id})`);
+    await expect(narrowed).toHaveClass(/\bartifact-comment--unread\b/);
+    await expect(narrowed.locator('.artifact-comment-new')).toHaveText('New');
+    await expect(popover.locator('.artifact-comment-divider')).toHaveText('New since you last looked');
+    await expect(page.locator('.artifact-unread')).toHaveCount(0);
+
+    await page.setViewportSize(WIDE);
     await openPage(page, true);
     await expect(reply(page, id)).toHaveCount(1);
     await expect(page.locator('.artifact-comment--unread')).toHaveCount(0);
@@ -331,30 +342,6 @@ test.describe('signed in', () => {
     expect(errors).toEqual([]);
   });
 
-  test('a thread open in the panel keeps its New marks when the window narrows to a popover', async ({ page, request }) => {
-    test.setTimeout(120_000);
-    const errors = watchErrors(page);
-    const { thread, reply: id } = await answered(request, 'Will the liner hold?');
-
-    await openPage(page);
-    const seen = page.waitForResponse((response) =>
-      new URL(response.url()).pathname === SEEN && response.request().method() === 'POST' &&
-      'thread' in (response.request().postDataJSON() ?? {}));
-    await chip(page).click();
-    expect((await seen).status()).toBe(200);
-    await expect(reply(page, id)).toHaveClass(/\bartifact-comment--unread\b/);
-
-    await page.setViewportSize({ width: 1024, height: 900 });
-    const popover = page.locator('.artifact-comments-popover');
-    await expect(popover.locator(`.artifact-comment-thread[data-thread="${thread}"]`)).toBeVisible();
-    const theirs = popover.locator(`.artifact-comment-item:has(#artifact-comment-text-${id})`);
-    await expect(theirs).toHaveClass(/\bartifact-comment--unread\b/);
-    await expect(theirs.locator('.artifact-comment-new')).toHaveText('New');
-    await expect(popover.locator('.artifact-comment-divider')).toHaveText('New since you last looked');
-    await expect(page.locator('.artifact-unread')).toHaveCount(0);
-    expect(errors).toEqual([]);
-  });
-
   test('a resolved thread opens from its line to read its reply, which is then seen, and it stays resolved', async ({ page, request }) => {
     test.setTimeout(120_000);
     const errors = watchErrors(page);
@@ -402,6 +389,16 @@ test.describe('signed in', () => {
     await expect(item.locator('.artifact-comments-resolve')).toBeHidden();
     await expect(page.locator('.artifact-unread')).toHaveCount(0);
     await expect(page).toHaveTitle(title);
+
+    // As the window narrows to a popover, the thread moves there still open
+    // to read, its reply marked New; widened again, it is back in the panel.
+    await page.setViewportSize({ width: 1024, height: 900 });
+    const popover = page.locator('.artifact-comments-popover');
+    const moved = popover.locator(`.artifact-comment-item:has(#artifact-comment-text-${id})`);
+    await expect(moved).toBeVisible();
+    await expect(moved.locator('.artifact-comment-new')).toHaveText('New');
+    await expect(popover.locator('.artifact-comments-entry-read')).toHaveAttribute('aria-expanded', 'true');
+    await page.setViewportSize(WIDE);
 
     // Its line again: folded back to the line.
     await read.click();
@@ -517,29 +514,6 @@ test.describe('signed in', () => {
     await expect(page.locator('.artifact-comments-fold')).toBeVisible();
     await page.waitForTimeout(500);
     expect(posts).toEqual([]);
-    expect(errors).toEqual([]);
-  });
-
-  test('a resolved thread open to read in the panel moves to a popover as the window narrows', async ({ page, request }) => {
-    test.setTimeout(120_000);
-    const errors = watchErrors(page);
-    const { thread, reply: id } = await answered(request, 'Does the heater need its own fuse?');
-    await resolve(request, thread);
-
-    await openPage(page);
-    await page.locator('.artifact-comments-rail').click();
-    await page.locator('.artifact-comments-show-resolved', { hasText: /^Show resolved/ }).click();
-    const seen = seenPost(page, thread);
-    await page.locator(`.artifact-comments-entry[data-thread="${thread}"] .artifact-comments-entry-read`).click();
-    expect((await seen).status()).toBe(200);
-    await expect(reply(page, id)).toBeVisible();
-
-    await page.setViewportSize({ width: 1024, height: 900 });
-    const popover = page.locator('.artifact-comments-popover');
-    const theirs = popover.locator(`.artifact-comment-item:has(#artifact-comment-text-${id})`);
-    await expect(theirs).toBeVisible();
-    await expect(theirs.locator('.artifact-comment-new')).toHaveText('New');
-    await expect(popover.locator('.artifact-comments-entry-read')).toHaveAttribute('aria-expanded', 'true');
     expect(errors).toEqual([]);
   });
 
