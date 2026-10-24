@@ -237,7 +237,8 @@ function installWidgetBridge(): void {
   });
 }
 
-// Set by the comments island (web/src/islands/bridge.ts) before the page
+// Set by the comments island
+// (src/lotuspod/features/comments/ts/islands/bridge.ts) before the page
 // bundle reaches this source; never given a value here, so that stays.
 var startComment: ((request: { anchor: BlockAnchor }) => void) | undefined;
 

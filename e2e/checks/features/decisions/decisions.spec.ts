@@ -25,7 +25,7 @@ const SIGNED_OUT = 'You are signed out. Reload the page to sign in.';
 // An unsaved card's left rule: the theme's amber, as Chromium reports it.
 const AMBER = (() => {
   const tokens = JSON.parse(fs.readFileSync(
-    path.resolve(__dirname, '..', '..', 'src', 'lotuspod', 'core', 'theme', 'tokens.json'), 'utf-8'));
+    path.resolve(__dirname, '..', '..', '..', '..', 'src', 'lotuspod', 'core', 'theme', 'tokens.json'), 'utf-8'));
   const [r, g, b] = (tokens.colors.amber as string).slice(1).match(/../g)!.map((pair) => parseInt(pair, 16));
   return `rgb(${r}, ${g}, ${b})`;
 })();

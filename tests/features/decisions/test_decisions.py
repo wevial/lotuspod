@@ -10,7 +10,7 @@ where a table must survive byte for byte.
 
 Run from the repo root:
 
-    python -m unittest tests.test_decisions -v
+    python -m unittest tests.features.decisions.test_decisions -v
 """
 
 from __future__ import annotations
@@ -28,14 +28,16 @@ from html.parser import HTMLParser
 from pathlib import Path
 from unittest import mock
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "src"))
 
-from lotuspod import access, cli, core, decisions  # noqa: E402
+from lotuspod import access, cli, core  # noqa: E402
+from lotuspod.features.decisions import commands as decisions_commands  # noqa: E402
+from lotuspod.features.decisions import decisions  # noqa: E402
 from lotuspod.features.publish import markdown  # noqa: E402
 from lotuspod.store import db  # noqa: E402
 from tests import access_keys  # noqa: E402
 
-FIXTURES = Path(__file__).resolve().parent / "fixtures" / "decisions"
+FIXTURES = Path(__file__).resolve().parents[2] / "fixtures" / "decisions"
 
 READER = {"kind": "human", "email": "maintainer@example.com"}
 
@@ -596,8 +598,8 @@ class DefaultTests(DecisionsTestCase):
             version=version or self.forms[question].version, choice=choice, note="",
             revision="abc123abc123", actor=READER,
         )
-        lines = cli.answers_text("defaults", database.answers("defaults", asked=True),
-                                 self.forms).splitlines()
+        lines = decisions_commands.answers_text(
+            "defaults", database.answers("defaults", asked=True), self.forms).splitlines()
         return lines[1].replace(f"(answer {row['id']}", "(answer N")
 
     def test_an_answer_off_its_default_says_what_it_was(self):

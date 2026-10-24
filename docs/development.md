@@ -43,16 +43,17 @@ one no other source uses: a duplicate `const` or `let` breaks the whole page
 script.
 
 The page's islands, widgets written in Preact, are the one bundle: the build
-bundles `web/src/islands/main.tsx` with its imports and Preact (pinned in
-`web/package.json` as a dependency) with `Bun.build` into
-`src/lotuspod/_theme/js/islands.js`, after its marker line, as one minified
+bundles the comments slice's `src/lotuspod/features/comments/ts/islands/main.tsx`
+with its imports and Preact (pinned in `web/package.json` as a dependency,
+and resolved from `web/node_modules`) with `Bun.build` into
+`src/lotuspod/features/comments/ts/islands.js`, after its marker line, as one minified
 IIFE for the browser with no source map, JSX through Preact's automatic
 runtime. `THEME_SOURCES` declares it directly after comment-markdown.js inside
 the shared closure: comments start before later sources find the panel and register
 their listeners, and never on a pod that goes to the index
 (`features/publish/ts/open-in-tabs.js`). Neither the index script nor the old-version script
 has it. The islands reach the legacy page only through
-`web/src/islands/bridge.ts`, the one module that names the closure's
+`features/comments/ts/islands/bridge.ts`, the one module that names the closure's
 variables: it declares the types of `live` (`js/live-page.js`), `forms` and
 `answering`, the decision forms and what reads and saves them
 (`js/decisions.js`), `linkedTo()`, `ARCHIVED` and the page events
@@ -62,7 +63,7 @@ throws on every page at once. A minifier never renames a free name, so the
 bridge's reads stay the closure's own. An island imports `page`, never the
 names. `main.tsx` mounts each island it lists, handing it `page`.
 
-The first island is the review sheet (`web/src/islands/review-sheet.tsx`):
+The first island is the review sheet (`features/comments/ts/islands/review-sheet.tsx`):
 the title bar's open-question count and Next open, the "N open" marks on
 headings and outline links, and the Respond panel. Once `ANSWERED` is first
 sent, and only when `answering.read` is true and the page is not archived, it
@@ -83,7 +84,7 @@ the question Next open last jumped to, which a swap keeps. The bundle, Preact wi
 47,000 bytes gzipped; it uses Preact and its hooks, with `createPortal` from
 `preact/compat` for independently owned DOM targets.
 
-The comments island (`web/src/islands/comments/index.ts`) mounts after the
+The comments island (`features/comments/ts/islands/comments/index.ts`) mounts after the
 review sheet and starts the page itself as it mounts, on a page with comment
 boxes: it reads the boxes, adds the whole page's box (`pageBox`) and starts
 the drafts part (`comments/drafts.ts`), which creates the store
@@ -197,7 +198,8 @@ It checks the build script and its test against Bun's types
 (`web/tsconfig.json`), the sources against the DOM's and none of Bun's
 (`web/src/tsconfig.json`, which takes in the slices' `ts/` sources too), and the islands, modules with imports and JSX
 whose `jsxImportSource` is `preact`, under their own config
-(`web/src/islands/tsconfig.json`).
+(`src/lotuspod/features/comments/ts/islands/tsconfig.json`, which finds
+Preact in `web/node_modules`).
 `test` runs `web/build.test.ts`. `check` builds, then fails naming each file
 under `src/lotuspod/_theme/js/` or a slice's `ts/`, built or written by hand, that does not parse
 on its own with Bun, and fails when git sees any JS file there modified, deleted
@@ -361,7 +363,7 @@ instead of exercising HTTP 409 `stale_page`. Repeat that check with:
 for attempt in $(seq 1 10); do
   python -m tests.capture_site \
     npm --prefix e2e exec --no -- playwright test --config e2e/checks.config.ts \
-    e2e/checks/decision-threads.spec.ts \
+    e2e/checks/features/decisions/decision-threads.spec.ts \
     --grep 'a page published again since it loaded keeps the question and says to reload' \
     --reporter=line || exit 1
 done

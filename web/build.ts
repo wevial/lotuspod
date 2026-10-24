@@ -1,11 +1,11 @@
 // Builds each theme source web/src/NAME.ts into src/lotuspod/_theme/js/NAME.js,
 // and each slice's src/lotuspod/features/SLICE/ts/NAME.ts into NAME.js beside
 // it: its types stripped by Bun's transpiler (no bundling, so each file stands
-// alone), after one marker line naming the source. Beside them it bundles the
-// islands entry, web/src/islands/main.tsx, with its imports and Preact into
-// src/lotuspod/_theme/js/islands.js, after its marker line. The order the
-// scripts are served in stays in THEME_SOURCES in src/lotuspod/core/__init__.py, which
-// joins them.
+// alone), after one marker line naming the source. Beside them it bundles a
+// slice's islands entry, src/lotuspod/features/SLICE/ts/islands/main.tsx, with
+// its imports and Preact (from web/node_modules) into islands.js in that ts/,
+// after its marker line. The order the scripts are served in stays in
+// THEME_SOURCES in src/lotuspod/core/__init__.py, which joins them.
 //
 //   bun build.ts [WEB_DIR]           build
 //   bun build.ts --check [WEB_DIR]   build, then fail on a file that does not
@@ -23,10 +23,13 @@ const USE_STRICT = "use strict";
 // Not a directive JavaScript knows, so Bun keeps it where it stands.
 const USE_STRICT_PROBE = "use strict, probed by web/build.ts";
 
-// The islands entry under web/src, and the name of the script it is bundled
-// into.
+// The islands entry under a slice's ts/, and the name of the script it is
+// bundled into beside it.
 const ISLANDS_ENTRY = "islands/main.tsx";
 const ISLANDS = "islands";
+// The packages an island imports, resolved from web/, where they are
+// installed, not from the slice the island is in.
+const WEB_PACKAGES = /^preact(\/|$)/;
 
 class BuildError extends Error {}
 
@@ -44,7 +47,9 @@ export function sliceMarker(slice: string, name: string): string {
   return markerOf(`src/lotuspod/features/${slice}/ts/${name}.ts`);
 }
 
-export const ISLANDS_MARKER = markerOf(`web/src/${ISLANDS_ENTRY}`);
+export function islandsMarker(slice: string): string {
+  return markerOf(`src/lotuspod/features/${slice}/ts/${ISLANDS_ENTRY}`);
+}
 
 export function outDir(webDir: string): string {
   return join(webDir, "..", "src", "lotuspod", "_theme", "js");
@@ -108,15 +113,22 @@ function strip(transpiler: Bun.Transpiler, label: string, source: string): strin
   return markerOf(label) + stripped;
 }
 
-// The JS of the islands entry and everything it imports, Preact among them,
-// as one minified IIFE for the browser, with JSX through Preact's automatic
-// runtime: a classic script render joins last inside the page script's
-// closure. Null when there is no entry.
-async function bundle(srcDir: string): Promise<string | null> {
-  const entry = join(srcDir, ISLANDS_ENTRY);
+// The JS of a slice's islands entry and everything it imports, Preact among
+// them, as one minified IIFE for the browser, with JSX through Preact's
+// automatic runtime: a classic script render joins inside the page script's
+// closure. Null when the slice has no entry.
+async function bundle(webDir: string, dir: string, slice: string): Promise<string | null> {
+  const entry = join(dir, ISLANDS_ENTRY);
   if (!existsSync(entry)) {
     return null;
   }
+  const label = `src/lotuspod/features/${slice}/ts/${ISLANDS_ENTRY}`;
+  const fromWeb: Bun.BunPlugin = {
+    name: "web packages",
+    setup(builder) {
+      builder.onResolve({ filter: WEB_PACKAGES }, (args) => ({ path: Bun.resolveSync(args.path, webDir) }));
+    },
+  };
   const result = await Bun.build({
     entrypoints: [entry],
     target: "browser",
@@ -124,15 +136,16 @@ async function bundle(srcDir: string): Promise<string | null> {
     minify: true,
     sourcemap: "none",
     jsx: { runtime: "automatic", importSource: "preact", development: false },
+    plugins: [fromWeb],
     throw: false,
   });
   if (!result.success) {
-    throw new BuildError(`web/src/${ISLANDS_ENTRY}: Bun could not bundle it\n${result.logs.join("\n")}`);
+    throw new BuildError(`${label}: Bun could not bundle it\n${result.logs.join("\n")}`);
   }
   if (result.outputs.length !== 1) {
-    throw new BuildError(`web/src/${ISLANDS_ENTRY}: Bun bundled it into ${result.outputs.length} files, not one script`);
+    throw new BuildError(`${label}: Bun bundled it into ${result.outputs.length} files, not one script`);
   }
-  return ISLANDS_MARKER + (await result.outputs[0]!.text());
+  return islandsMarker(slice) + (await result.outputs[0]!.text());
 }
 
 type BuildResult = { written: string[]; removed: string[] };
@@ -146,25 +159,23 @@ export async function build(webDir: string): Promise<BuildResult> {
   const result: BuildResult = { written: [], removed: [] };
   const builds = names.map((name) => strip(transpiler, `web/src/${name}.ts`,
     readFileSync(join(srcDir, `${name}.ts`), "utf8")));
-  // Each slice's sources, built beside themselves; every one is stripped
-  // before anything is written.
-  const slices = sliceScriptDirs(webDir).map((dir) => {
+  // Each slice's sources, built beside themselves, and its islands, bundled
+  // beside them; every one is built before anything is written.
+  const slices = [];
+  for (const dir of sliceScriptDirs(webDir)) {
     const slice = basename(dirname(dir));
     const sliceNames = sourceNames(dir);
-    return {
-      dir,
-      names: sliceNames,
-      builds: sliceNames.map((name) => strip(transpiler, `src/lotuspod/features/${slice}/ts/${name}.ts`,
-        readFileSync(join(dir, `${name}.ts`), "utf8"))),
-    };
-  });
-  const islands = await bundle(srcDir);
-  if (islands !== null) {
-    if (names.includes(ISLANDS)) {
-      throw new BuildError(`web/src/${ISLANDS}.ts: its name is the islands bundle's, ${ISLANDS}.js`);
+    const sliceBuilds = sliceNames.map((name) => strip(transpiler, `src/lotuspod/features/${slice}/ts/${name}.ts`,
+      readFileSync(join(dir, `${name}.ts`), "utf8")));
+    const islands = await bundle(webDir, dir, slice);
+    if (islands !== null) {
+      if (sliceNames.includes(ISLANDS)) {
+        throw new BuildError(`src/lotuspod/features/${slice}/ts/${ISLANDS}.ts: its name is the islands bundle's, ${ISLANDS}.js`);
+      }
+      sliceNames.push(ISLANDS);
+      sliceBuilds.push(islands);
     }
-    names.push(ISLANDS);
-    builds.push(islands);
+    slices.push({ dir, names: sliceNames, builds: sliceBuilds });
   }
   if (names.length) {
     mkdirSync(out, { recursive: true });

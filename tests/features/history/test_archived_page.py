@@ -22,10 +22,10 @@ import urllib.error
 import urllib.request
 
 from tests import test_activity_witness as activity_witness
-from tests.test_answers_witness import assertion
+from tests.features.decisions.test_answers_witness import assertion
 from tests.features.publish.test_publish_witness import Node, parse
 
-from lotuspod import decisions  # after test_activity_witness, which puts src/ on the path
+from lotuspod.features.decisions import decisions  # after test_activity_witness, which puts src/ on the path
 
 CLOSED = "Answering is closed: this page is archived."
 SECTIONS = (("Alpha", "The pond freezes."), ("Beta", "The pump stops."))

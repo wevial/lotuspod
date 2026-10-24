@@ -1,5 +1,5 @@
-// Bundled with Preact into src/lotuspod/_theme/js/islands.js (web/build.ts),
-// after comment-markdown.js so comments start before later sources, and never
+// Bundled with Preact into src/lotuspod/features/comments/ts/islands.js
+// (web/build.ts), after comment-markdown.js so comments start before later sources, and never
 // on a pod that goes to the index (js/open-in-tabs.js).
 
 import { page, type Page } from "./bridge";

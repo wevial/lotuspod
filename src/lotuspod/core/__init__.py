@@ -531,8 +531,8 @@ def load_tokens() -> dict:
         return json.load(fh)
 
 
-# The page script answers decision forms (lotuspod.decisions), shows and
-# posts comments (lotuspod.comments) and folds sections
+# The page script answers decision forms (lotuspod.features.decisions), shows and
+# posts comments (lotuspod.features.comments) and folds sections
 # (lotuspod.features.publish.sections), and offers a reload once its page is
 # published again. Every listed page loads it: loaded on its own at the top
 # level, a listed page first goes to the index, opened there in a tab
@@ -556,12 +556,12 @@ THEME_SOURCES = {
     "lotuspod.css": (
         "core/theme/base.css",
         "features/publish/theme/forms.css",
-        "_theme/css/decisions.css",
-        "_theme/css/review-sheet.css",
-        "_theme/css/attachments.css",
-        "_theme/css/comments.css",
-        "_theme/css/panel-resize.css",
-        "_theme/css/narrow.css",
+        "features/decisions/theme/decisions.css",
+        "features/comments/theme/review-sheet.css",
+        "features/comments/theme/attachments.css",
+        "features/comments/theme/comments.css",
+        "features/comments/theme/panel-resize.css",
+        "features/comments/theme/narrow.css",
         "_theme/css/live-page.css",
         "features/publish/theme/prose.css",
         "features/blocks/theme/ref-cards.css",
@@ -584,21 +584,21 @@ THEME_SOURCES = {
         "features/publish/ts/page-open.js",
         "core/ts/shared.js",
         "core/ts/link-tab.js",
-        "_theme/js/decisions.js",
-        "_theme/js/narrow.js",
-        "_theme/js/attachments.js",
+        "features/decisions/ts/decisions.js",
+        "features/comments/ts/narrow.js",
+        "features/comments/ts/attachments.js",
         # Built from web/src/live-events.ts: serve's change stream, which the
         # sources after it listen to.
         "_theme/js/live-events.js",
         "_theme/js/live-page.js",
         # Built from web/src/page-swap.ts: it registers its swap with live.
         "_theme/js/page-swap.js",
-        "_theme/js/comment-markdown.js",
+        "features/comments/ts/comment-markdown.js",
         # The islands start the comments before later sources look for the
         # panel and register their listeners. All bridge names are defined
         # here.
-        "_theme/js/islands.js",
-        "_theme/js/panel-resize.js",
+        "features/comments/ts/islands.js",
+        "features/comments/ts/panel-resize.js",
         "features/blocks/ts/tables.js",
         "features/blocks/ts/table-expand.js",
         "features/blocks/ts/image-viewer.js",

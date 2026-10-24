@@ -50,7 +50,8 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 SRC = REPO_ROOT / "src"
 sys.path.insert(0, str(SRC))
 
-from lotuspod import comments, decisions  # noqa: E402
+from lotuspod.features.comments import comments  # noqa: E402
+from lotuspod.features.decisions import decisions  # noqa: E402
 from tests import capture_site  # noqa: E402
 
 FIXTURE = REPO_ROOT / "tests" / "fixtures" / "demo" / "api-shapes.json"

@@ -20,6 +20,8 @@ where = ["src"]
 lotuspod = ["py.typed", "_theme/*.js", "_theme/css/*.css", "_theme/js/*.js",
             "core/templates/*.html", "core/theme/*.css", "core/theme/*.json", "core/theme/*.svg",
             "core/ts/*.js", "features/blocks/theme/*.css", "features/blocks/ts/*.js",
+            "features/comments/theme/*.css", "features/comments/ts/*.js",
+            "features/decisions/theme/*.css", "features/decisions/ts/*.js",
             "features/history/theme/*.css", "features/history/ts/*.js",
             "features/index/templates/*.html", "features/index/theme/*.css",
             "features/index/ts/*.js", "features/publish/theme/*.css", "features/publish/ts/*.js",

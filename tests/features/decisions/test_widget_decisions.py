@@ -6,7 +6,7 @@ The markup is witnessed by parsing it, never by matching strings.
 
 Run from the repo root:
 
-    python -m unittest tests.test_widget_decisions -v
+    python -m unittest tests.features.decisions.test_widget_decisions -v
 """
 
 from __future__ import annotations
@@ -15,9 +15,9 @@ import sys
 from html.parser import HTMLParser
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "src"))
 
-from tests.test_decisions import LIVE_BLOCK as BLOCK, DecisionsTestCase  # noqa: E402
+from tests.features.decisions.test_decisions import LIVE_BLOCK as BLOCK, DecisionsTestCase  # noqa: E402
 
 TABLE = """\
 | # | Question | Options | Default |
@@ -150,7 +150,7 @@ class AboutTests(DecisionsTestCase):
         self.assertAboutNothing(page_text(table=CHECKLIST, heading="Checklist for the maintainer"))
 
     def test_an_inert_form_in_a_template_is_not_counted(self):
-        from lotuspod import decisions
+        from lotuspod.features.decisions import decisions
         from lotuspod.features.publish import markdown
         from lotuspod.features.widgets import widgets
         body, _, _ = widgets.render(markdown.to_body(page_text()), "churn")

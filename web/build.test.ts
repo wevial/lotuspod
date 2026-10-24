@@ -10,7 +10,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { type CallExpression, type Identifier, type Node, type StringLiteral, SyntaxKind } from "typescript/unstable/ast";
 import { API } from "typescript/unstable/async";
 
-import { build, ISLANDS_MARKER, marker, outDir, sliceMarker, unparsed } from "./build";
+import { build, islandsMarker, marker, outDir, sliceMarker, unparsed } from "./build";
 
 const SOURCE = `// Counts the pods a reader has open.
 interface Pod {
@@ -171,28 +171,34 @@ test("a source with an import or export is refused, since render joins classic s
   }
 });
 
-// The islands entry: a module whose import names a free variable, as an
+// A slice's islands entry: a module whose import names a free variable, as an
 // island reaches the page script's closure through the bridge.
+function islandsDir(): string {
+  return join(root, "src", "lotuspod", "features", "talk", "ts");
+}
+
 function writeIslands(files: Record<string, string>): void {
-  mkdirSync(join(web, "src", "islands"), { recursive: true });
+  mkdirSync(join(islandsDir(), "islands"), { recursive: true });
   for (const [file, source] of Object.entries(files)) {
-    writeFileSync(join(web, "src", "islands", file), source);
+    writeFileSync(join(islandsDir(), "islands", file), source);
   }
 }
 
 const BRIDGE = "declare const live: { seen(revision: string): void };\nexport const page = { live };\n";
 const ENTRY = 'import { page } from "./bridge";\n\npage.live.seen("r2");\n';
 
-test("the islands entry is bundled with its imports into islands.js, after its marker, as one script", async () => {
-  writeFileSync(join(web, "src", "pod-count.ts"), SOURCE);
+test("a slice's islands entry is bundled with its imports into islands.js beside it, after its marker, as one script", async () => {
+  const slice = islandsDir();
   writeIslands({ "bridge.ts": BRIDGE, "main.tsx": ENTRY });
+  writeFileSync(join(slice, "pod-count.ts"), SOURCE);
   await build(web);
-  expect(readdirSync(out).sort()).toEqual(["islands.js", "pod-count.js"]);
-  const built = readFileSync(join(out, "islands.js"), "utf8");
-  expect(built).toStartWith(ISLANDS_MARKER);
-  expect(ISLANDS_MARKER).toContain("web/src/islands/main.tsx");
+  expect(readdirSync(slice).sort()).toEqual(["islands", "islands.js", "pod-count.js", "pod-count.ts"]);
+  expect(readdirSync(out)).toEqual([]);
+  const built = readFileSync(join(slice, "islands.js"), "utf8");
+  expect(built).toStartWith(islandsMarker("talk"));
+  expect(islandsMarker("talk")).toContain("src/lotuspod/features/talk/ts/islands/main.tsx");
   expect(built).not.toContain("import");
-  expect(unparsed(out)).toEqual([]);
+  expect(unparsed(slice)).toEqual([]);
   // The free name keeps its own, so the closure's live is the one read.
   const seen: string[] = [];
   new Function("live", built)({ seen: (revision: string) => seen.push(revision) });
@@ -200,33 +206,35 @@ test("the islands entry is bundled with its imports into islands.js, after its m
   expect(await build(web)).toEqual({ written: [], removed: [] });
 });
 
-test("an island's JSX goes through Preact's automatic runtime, not its development one", async () => {
+test("an island's JSX goes through Preact's automatic runtime, not its development one, with Preact from web/", async () => {
   symlinkSync(join(import.meta.dir, "node_modules"), join(web, "node_modules"));
   writeIslands({ "main.tsx": 'import { render } from "preact";\n\nrender(<p class="island">hi</p>, document.body);\n' });
   await build(web);
-  const built = readFileSync(join(out, "islands.js"), "utf8");
+  const built = readFileSync(join(islandsDir(), "islands.js"), "utf8");
   expect(built).toContain('{class:"island",children:"hi"}');
   expect(built).not.toContain("void 0,this)");
-  expect(unparsed(out)).toEqual([]);
+  expect(unparsed(islandsDir())).toEqual([]);
 });
 
 test("an islands.js whose entry is gone is deleted", async () => {
-  writeFileSync(join(out, "islands.js"), ISLANDS_MARKER + "(()=>{})();\n");
-  expect(await build(web)).toEqual({ written: [], removed: [join(out, "islands.js")] });
+  mkdirSync(islandsDir(), { recursive: true });
+  writeFileSync(join(islandsDir(), "islands.js"), islandsMarker("talk") + "(()=>{})();\n");
+  expect(await build(web)).toEqual({ written: [], removed: [join(islandsDir(), "islands.js")] });
 });
 
 test("an islands entry that does not bundle is refused before anything is written", async () => {
   writeFileSync(join(web, "src", "pod-count.ts"), SOURCE);
   writeIslands({ "main.tsx": 'import { page } from "./missing";\n\nconsole.log(page);\n' });
-  await expect(build(web)).rejects.toThrow("web/src/islands/main.tsx: Bun could not bundle it");
+  await expect(build(web)).rejects.toThrow("src/lotuspod/features/talk/ts/islands/main.tsx: Bun could not bundle it");
   expect(readdirSync(out)).toEqual([]);
+  expect(readdirSync(islandsDir())).toEqual(["islands"]);
 });
 
-test("a source named as the islands bundle is refused", async () => {
-  writeFileSync(join(web, "src", "islands.ts"), SOURCE);
+test("a slice source named as the islands bundle is refused", async () => {
   writeIslands({ "bridge.ts": BRIDGE, "main.tsx": ENTRY });
-  await expect(build(web)).rejects.toThrow("web/src/islands.ts: its name is the islands bundle's");
-  expect(readdirSync(out)).toEqual([]);
+  writeFileSync(join(islandsDir(), "islands.ts"), SOURCE);
+  await expect(build(web)).rejects.toThrow("src/lotuspod/features/talk/ts/islands.ts: its name is the islands bundle's");
+  expect(readdirSync(islandsDir()).sort()).toEqual(["islands", "islands.ts"]);
 });
 
 // check, run as CI runs it but from the root of a scratch repository and

@@ -33,8 +33,8 @@ const HERMES = ENV.LOTUSPOD_TEST_CREDENTIAL_HERMES ?? '';
 const OUT = ENV.LOTUSPOD_TEST_OUT ?? '';
 const PYTHON = ENV.LOTUSPOD_TEST_PYTHON ?? '';
 // This checkout's package, whatever lotuspod is installed.
-const SRC = path.resolve(__dirname, '..', '..', 'src');
-const FIXTURES = path.resolve(__dirname, '..', '..', 'tests', 'fixtures', 'media');
+const SRC = path.resolve(__dirname, '..', '..', '..', '..', 'src');
+const FIXTURES = path.resolve(__dirname, '..', '..', '..', '..', 'tests', 'fixtures', 'media');
 const FISH = path.join(FIXTURES, 'fish-320x240.jpg');
 const OWNER = 'hermes';
 const BODY = `<p>A page for the comment markdown checks.</p>
