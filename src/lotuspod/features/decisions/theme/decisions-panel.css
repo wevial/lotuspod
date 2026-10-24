@@ -110,6 +110,13 @@
   padding: 0.15rem 0.35rem;
 }
 
+/* The default mark's "· " already parts it from its label, so the row's gap
+   is taken back there; a label that fits the row beside its mark stays on
+   one line. */
+.artifact-decisions-option .artifact-decision-default {
+  margin-left: -0.35rem;
+}
+
 .artifact-decisions-option:hover {
   background: var(--row-tint);
 }
