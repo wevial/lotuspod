@@ -39,12 +39,11 @@ export function Ask({ form, asking, draft, done, focused = true }: {
       setSaid("Write your question first.");
       return;
     }
-    const sent = text;
     setBusy(true);
     setSaid("Sending your question...");
     try {
       setSaid(await asking.ask(form.dataset.question!, question, () => {
-        if (draft.now() !== sent) return;
+        if (draft.now() !== text) return;
         draft.set("");
         done();
       }, false));
