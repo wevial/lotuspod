@@ -173,8 +173,6 @@ def finish(module: Module, status: int, usage, ceiling: float | None) -> None:
         module.verdict = "ran zero tests"
     elif module.code != 0:
         module.verdict = "failed"
-    elif module.tests == 0:
-        module.verdict = "ran zero tests"
     elif ceiling is not None and module.wall > ceiling:
         module.verdict = f"over the {ceiling:g}s ceiling"
     else:
