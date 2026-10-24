@@ -23,6 +23,9 @@ function load(): Promise<Table | null> {
   return loading;
 }
 
+// The keys that move the caret without typing.
+const MOVES = new Set(["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End", "PageUp", "PageDown"]);
+
 // Each list's id stays unique among the page's composers.
 let made = 0;
 
@@ -114,42 +117,48 @@ export function shortcodeList(form: HTMLFormElement, field: HTMLTextAreaElement)
     shown = { ...open, names, active: same ? shown!.active : 0 };
     draw();
   }
-  function put(text: string, caret: number) {
-    field.value = text;
-    field.setSelectionRange(caret, caret);
+  // The text from start to end made emoji, the caret after it, as an edit
+  // the reader can undo where the field has the focus; false, and the text
+  // left alone, when it would pass the field's maxlength.
+  function replace(start: number, end: number, emoji: string): boolean {
+    const before = field.value;
+    if (field.maxLength >= 0 && before.length - (end - start) + emoji.length > field.maxLength) return false;
+    field.setSelectionRange(start, end);
+    if (document.activeElement !== field || !document.execCommand("insertText", false, emoji) ||
+        field.value === before) {
+      field.value = before.slice(0, start) + emoji + before.slice(end);
+    }
+    field.setSelectionRange(start + emoji.length, start + emoji.length);
+    return true;
   }
   function choose(index: number) {
     if (!shown) return;
     const { start, query, names } = shown;
-    const end = start + 1 + query.length, emoji = table![names[index]!]!;
-    put(field.value.slice(0, start) + emoji + field.value.slice(end), start + emoji.length);
+    if (!replace(start, start + 1 + query.length, table![names[index]!]!)) return;
     close();
     field.focus();
   }
-  // The shortcode a typed colon closes becomes its emoji.
-  function convert() {
-    const caret = field.selectionStart;
-    const done = table && caret === field.selectionEnd ? closed(field.value, caret, table) : null;
-    if (done) put(done.text, done.caret);
+  // The shortcode the colon before at closes becomes its emoji; the
+  // emoji's length less the shortcode's, 0 for none.
+  function convert(at: number): number {
+    const done = table && closed(field.value, at, table);
+    if (!done) return 0;
+    const start = fragment(field.value, at - 1)!.start, emoji = done.text.slice(start, done.caret);
+    return replace(start, at, emoji) ? emoji.length - (at - start) : 0;
   }
   // The table arrived: the shortcodes the colons typed meanwhile close
-  // become their emoji, the last first so the earlier carets still hold.
+  // become their emoji, the last first so the earlier carets still hold,
+  // and the reader's selection stays on the text it was on.
   function arrived() {
     const carets = pending.sort((a, b) => b - a);
     pending = [];
-    let text = field.value, start = field.selectionStart, end = field.selectionEnd;
+    let start = field.selectionStart, end = field.selectionEnd;
     for (const at of table ? carets : []) {
-      const done = closed(text, at, table!);
-      if (!done) continue;
-      const shift = done.caret - at;
-      text = done.text;
+      const shift = convert(at);
       if (start >= at) start += shift;
       if (end >= at) end += shift;
     }
-    if (text !== field.value) {
-      field.value = text;
-      field.setSelectionRange(start, end);
-    }
+    field.setSelectionRange(start, end);
     refresh();
   }
 
@@ -159,8 +168,9 @@ export function shortcodeList(form: HTMLFormElement, field: HTMLTextAreaElement)
     // Only text typed after them leaves the waiting colons where they were.
     if (typed === null || caret - typed.length < Math.max(0, ...pending)) pending = [];
     if (typed?.includes(":")) {
-      if (table) convert();
-      else {
+      if (table) {
+        if (caret === field.selectionEnd) convert(caret);
+      } else {
         pending.push(caret);
         void load().then(arrived);
       }
@@ -183,7 +193,21 @@ export function shortcodeList(form: HTMLFormElement, field: HTMLTextAreaElement)
     event.preventDefault();
     event.stopPropagation();
   });
-  for (const type of ["click", "keyup"]) field.addEventListener(type, () => { if (shown) refresh(); });
+  // A caret moved onto a fragment opens the list, and off it closes it.
+  field.addEventListener("click", refresh);
+  field.addEventListener("keyup", event => { if (shown || MOVES.has(event.key)) refresh(); });
   field.addEventListener("blur", close);
-  form.addEventListener("submit", close);
+  // A comment sent before the table arrived waits for it, so the shortcodes
+  // typed meanwhile are sent as their emoji.
+  form.addEventListener("submit", event => {
+    close();
+    if (!pending.length) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    const submitter = event.submitter;
+    void load().then(() => {
+      arrived();
+      form.requestSubmit(submitter);
+    });
+  });
 }

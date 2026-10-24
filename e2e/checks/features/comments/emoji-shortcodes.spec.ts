@@ -39,6 +39,11 @@ test.beforeAll(() => {
   ], { env: { ...ENV, PYTHONPATH: SRC }, stdio: ['ignore', 'pipe', 'pipe'], timeout: 60_000 });
 });
 
+// A check that holds the emoji table drops its route when it ends.
+test.afterEach(async ({ page }) => {
+  await page.unrouteAll({ behavior: 'ignoreErrors' });
+});
+
 type Violation = { blockedURI: string; effectiveDirective: string };
 
 // Console errors, page errors and policy violations.
@@ -100,6 +105,17 @@ async function reply(node: Locator) {
 
 function posted(page: Page) {
   return page.waitForResponse((r) => new URL(r.url()).pathname === '/api/comments' && r.request().method() === 'POST');
+}
+
+// The panel's composer for a new thread on a section, its field focused.
+async function panelComposer(page: Page, name: string) {
+  const aside = page.locator('aside.artifact-comments-panel');
+  await aside.getByRole('button', { name: 'Comments', exact: true }).click();
+  await aside.getByRole('button', { name: 'Comment on a section' }).click();
+  await aside.getByRole('listbox', { name: 'Sections' }).getByRole('option', { name }).click();
+  const field = aside.getByLabel(`Comment on ${name}`);
+  await expect(field).toBeFocused();
+  return field;
 }
 
 // The emoji lists on the page that show.
@@ -225,6 +241,88 @@ test.describe('signed in', () => {
     await expect(field).toHaveValue('🎉 🏟️ :ta');
     await expect(field).toBeFocused();
     expect(sends).toBe(0);
+    seen.clean();
+  });
+
+  test('a comment sent before the table arrives waits for it and is sent with the emoji', async ({ page, request }) => {
+    const seen = await watch(page);
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => { release = resolve; });
+    await page.route((url) => url.pathname === '/lotuspod-emoji.json', async (route) => {
+      await held;
+      await route.continue();
+    });
+    const bodies: string[] = [];
+    page.on('request', (r) => {
+      if (new URL(r.url()).pathname === '/api/comments' && r.method() === 'POST') bodies.push(r.postData() ?? '');
+    });
+    await page.goto(`${PAGE}?standalone`);
+    await loaded(page);
+    const field = await panelComposer(page, 'Frogs');
+    await field.pressSequentially('Slow :tada:');
+    await expect(field).toHaveValue('Slow :tada:');
+    await page.keyboard.press('Control+Enter');
+    await page.waitForTimeout(300);
+    expect(bodies).toEqual([]);
+
+    const sending = posted(page);
+    release();
+    const sent = await sending;
+    expect(sent.status()).toBe(201);
+    const row = await sent.json();
+    expect(row.text).toBe('Slow 🎉');
+    expect((await stored(request)).get(row.id)?.text).toBe('Slow 🎉');
+    expect(bodies).toHaveLength(1);
+    seen.clean();
+  });
+
+  test('a converted or picked emoji is undone by Ctrl+Z, and one past the field\'s limit is not inserted', async ({ page }) => {
+    const seen = await watch(page);
+    await page.goto(`${PAGE}?standalone`);
+    await loaded(page);
+    const field = await panelComposer(page, 'Frogs');
+    await field.pressSequentially('Draft text :ta');
+    await expect(shown(page)).toHaveCount(1);
+    await field.pressSequentially('da:');
+    await expect(field).toHaveValue('Draft text 🎉');
+    await page.keyboard.press('Control+z');
+    await expect(field).toHaveValue('Draft text :tada:');
+
+    await field.fill('');
+    await field.pressSequentially('So :tad');
+    await page.keyboard.press('Enter');
+    await expect(field).toHaveValue('So 🎉');
+    await page.keyboard.press('Control+z');
+    await expect(field).toHaveValue('So :tad');
+
+    // 4000 characters with :en; 🏴󠁧󠁢󠁥󠁮󠁧󠁿 would make 4011, 🔚 makes 3999.
+    const full = 'a'.repeat(3996) + ' :e';
+    await field.fill(full);
+    await field.press('n');
+    const options = shown(page).getByRole('option');
+    await expect(options.nth(1)).toHaveText(/:england:$/);
+    await page.keyboard.press('ArrowDown');
+    await page.keyboard.press('Enter');
+    await expect(field).toHaveValue(full + 'n');
+    await expect(shown(page)).toHaveCount(1);
+    await page.keyboard.press('ArrowUp');
+    await page.keyboard.press('Enter');
+    await expect(field).toHaveValue('a'.repeat(3996) + ' 🔚');
+    seen.clean();
+  });
+
+  test('the list reopens when the caret comes back to the end of a fragment', async ({ page }) => {
+    const seen = await watch(page);
+    await page.goto(`${PAGE}?standalone`);
+    await loaded(page);
+    const field = await panelComposer(page, 'Frogs');
+    await field.pressSequentially('Hello :tad');
+    await expect(shown(page)).toHaveCount(1);
+    await page.keyboard.press('Home');
+    await expect(shown(page)).toHaveCount(0);
+    await page.keyboard.press('End');
+    await expect(shown(page)).toHaveCount(1);
+    await expect(shown(page).getByRole('option').first()).toHaveText('🎉 :tada:');
     seen.clean();
   });
 
