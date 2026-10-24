@@ -937,4 +937,57 @@ test.describe('on a phone', () => {
     await expect(sheet.entry('decision-2')).toBeVisible();
     expect(errors).toEqual([]);
   });
+
+  test('a passage\'s draft and a section\'s form written in come back on Comments, and the draft goes as the sheet closes', async ({ page, request }) => {
+    const name = `decisions-panel-drafts-${test.info().repeatEachIndex}`;
+    await prepare(request, name);
+    const errors = watch(page);
+    await load(page, name);
+    const sheet = bottom(page);
+    const count = page.locator('button.artifact-review-count');
+    const drafted = page.locator('.artifact-passage-composer textarea');
+    const pending = page.locator('mark.artifact-passage--pending');
+    const words = 'what it waits on';
+    await page.evaluate((wanted) => {
+      const walker = document.createTreeWalker(document.querySelector('.artifact-body')!, NodeFilter.SHOW_TEXT);
+      for (let node = walker.nextNode() as Text | null; node; node = walker.nextNode() as Text | null) {
+        const at = node.data.indexOf(wanted);
+        if (at < 0) continue;
+        document.getSelection()!.setBaseAndExtent(node, at, node, at + wanted.length);
+        return;
+      }
+    }, words);
+    await page.locator('button.artifact-passage-pill').click();
+    await expect(sheet.node.locator('.artifact-passage-composer')).toBeVisible();
+    await drafted.fill('Half a thought');
+
+    // The count, then Comments: the draft is where it was.
+    await count.click();
+    await expect(sheet.tab('Decisions')).toHaveAttribute('aria-selected', 'true');
+    await sheet.tab('Comments').click();
+    await expect(sheet.node.locator('.artifact-passage-composer')).toBeVisible();
+    await expect(drafted).toHaveValue('Half a thought');
+    await expect(pending).toHaveCount(1);
+
+    // Closed on Decisions, the sheet takes the draft with it, at any width.
+    await sheet.tab('Decisions').click();
+    await sheet.close.click();
+    await expect(sheet.node).toBeHidden();
+    await expect(drafted).toHaveCount(0);
+    await expect(pending).toHaveCount(0);
+    await page.setViewportSize({ width: 800, height: 900 });
+    await expect(page.locator('.artifact-comments-popover')).toBeHidden();
+    await page.setViewportSize(PHONE);
+
+    // A section's form, Decisions and back: still open, its words kept.
+    await page.locator('details.artifact-comment[data-section="pull-request-rows"] > summary').click();
+    const form = sheet.node.locator('textarea').first();
+    await expect(form).toBeVisible();
+    await form.fill('A section thought');
+    await sheet.tab('Decisions').click();
+    await sheet.tab('Comments').click();
+    await expect(form).toBeVisible();
+    await expect(form).toHaveValue('A section thought');
+    expect(errors).toEqual([]);
+  });
 });

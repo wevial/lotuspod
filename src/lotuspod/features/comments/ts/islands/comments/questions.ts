@@ -22,17 +22,21 @@ export function questions(page: Page): void {
   });
 
   // The panel, or the sheet, as the window allows; the questions open in
-  // the sheet move to the panel when the window widens, and back.
+  // the sheet move to the panel when the window widens, and back, the
+  // focus kept on what had it.
   function arrange(): void {
     const mode = modeOf(page);
+    let focused: Element | null = null;
     if (mode !== api.mode) {
+      focused = document.activeElement;
+      const deciding = api.mode === "panel" && shell.deciding() && sheetTabs.asks();
       const taken = over.take();
       api.mode = mode;
       over.mode(mode);
       if (mode === "panel" && taken.view) {
         shell.setOpen(true, false, "decisions");
       } else if (mode !== "panel") {
-        over.restore(taken);
+        over.restore(deciding ? { ...taken, view: { decisions: true } } : taken);
       }
       decisionsTab.opens.value = opensIn(mode === "panel", shell.decide, over.decisions);
     }
@@ -42,6 +46,9 @@ export function questions(page: Page): void {
     }
     shell.hidden(mode !== "panel" || !sheetTabs.asks());
     over.sync();
+    if (focused instanceof HTMLElement && focused !== document.activeElement && focused.isConnected) {
+      focused.focus({ preventScroll: true });
+    }
   }
 
   arrange();

@@ -24,6 +24,8 @@ export interface Shell {
   readonly list: HTMLDivElement;
   // Whether the threads are in view: the panel open on its Comments tab.
   isOpen(): boolean;
+  // Whether the panel is open on its Decisions tab.
+  deciding(): boolean;
   resolvedShown(): boolean;
   // Open or fold the panel; opened, it shows tab, Comments unless named.
   setOpen(show: boolean, remember: boolean, tab?: Tab): void;

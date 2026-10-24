@@ -327,6 +327,26 @@ test.describe('signed in', () => {
     expect((await stored(request))['decision-d1'].current.id).toBe(before.id);
   });
 
+  test('the questions open in the panel move to the bottom sheet as the window narrows, and back, the focus kept', async ({ page }) => {
+    const seen = await watch(page);
+    await page.goto(`${PAGE}?standalone`);
+    const the = sheet(page);
+    await the.count.click();
+    // The earlier checks' answers saved, the first question still open.
+    const option = the.entries.first().getByRole('radio').last();
+    await option.focus();
+    const bottom = page.locator('.artifact-comments-bottom-sheet');
+    await page.setViewportSize({ width: 360, height: 740 });
+    await expect(bottom).toBeVisible();
+    await expect(bottom.getByRole('tab', { name: /^Decisions/ })).toHaveAttribute('aria-selected', 'true');
+    await expect(bottom.locator('.artifact-decisions-entry').first().getByRole('radio').last()).toBeFocused();
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await expect(the.decisions).toBeVisible();
+    await expect(bottom).toBeHidden();
+    await expect(option).toBeFocused();
+    expect(seen.errors).toEqual([]);
+  });
+
   test('a page with no forms has no count, Next open or Decisions tab', async ({ page }) => {
     await page.goto('/capture-article.html?standalone');
     await expect(page.locator('nav.artifact-outline')).toBeVisible();
@@ -500,13 +520,13 @@ function markdown(title: string, parts: Part[]) {
   return lines.join('\n');
 }
 
-function publish(name: string, parts: Part[]): string {
+function publish(name: string, parts: Part[], comments = false): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lotuspod-review-sheet-'));
   try {
     const file = path.join(dir, `${name}.md`);
     fs.writeFileSync(file, markdown(name, parts), 'utf-8');
     const said = execFileSync(PYTHON, ['-m', 'lotuspod', 'publish', file, '--local', '--out-dir', OUT,
-      '--owner', 'hermes', '--credential', HERMES], {
+      '--owner', 'hermes', '--credential', HERMES, ...(comments ? ['--comments'] : [])], {
       encoding: 'utf-8', env: { ...ENV, PYTHONPATH: SRC }, stdio: ['ignore', 'pipe', 'pipe'], timeout: 60_000,
     });
     const revision = /at revision ([0-9a-f]{12})/.exec(said)?.[1] ?? '';
@@ -524,8 +544,8 @@ function named(slug: string) {
 
 // Publish the page, open it with its clock stopped and wait for its sheet;
 // the number of loads and navigations from then on.
-async function openPublished(page: Page, name: string, parts: Part[]) {
-  publish(name, parts);
+async function openPublished(page: Page, name: string, parts: Part[], comments = false) {
+  publish(name, parts, comments);
   await page.clock.install({ time: START });
   await page.clock.pauseAt(START + 1000);
   await page.goto(`/${name}.html?standalone`);
@@ -539,8 +559,8 @@ async function openPublished(page: Page, name: string, parts: Part[]) {
 }
 
 // Publish the page again and let the 60-second check swap it in.
-async function republish(page: Page, name: string, parts: Part[]) {
-  const revision = publish(name, parts);
+async function republish(page: Page, name: string, parts: Part[], comments = false) {
+  const revision = publish(name, parts, comments);
   await page.clock.runFor(CHECK);
   await expect.poll(() => page.locator('meta[name="lotuspod:revision"]').getAttribute('content')).toBe(revision);
   await expect(page.locator('.artifact-live-page-banner')).toHaveCount(0);
@@ -683,9 +703,10 @@ test.describe('signed in, published again', () => {
     await republish(page, name, [['Findings', []], [DECISIONS, [HEATER, NET]]]);
     await expect(the.form('decision-2')).toHaveCount(0);
     await expect(the.decisions).toBeVisible();
-    expect(await the.entries.evaluateAll((items) =>
-      items.map((item) => (item as HTMLElement).dataset.question))).toEqual(['decision-1', 'decision-3']);
     await expect(the.count).toHaveText('2 to answer');
+    // The tab is drawn again once the swap's answers are read.
+    await expect.poll(() => the.entries.evaluateAll((items) =>
+      items.map((item) => (item as HTMLElement).dataset.question))).toEqual(['decision-1', 'decision-3']);
 
     await republish(page, name, [['Findings', []], [DECISIONS, []]]);
     await expect(the.form('decision-1')).toHaveCount(0);
@@ -693,6 +714,28 @@ test.describe('signed in, published again', () => {
     await expect(the.tabs).toHaveCount(0);
     await expect(the.decisions).toBeHidden();
     await expect(the.heading(DECISIONS).locator('.artifact-review-open')).toHaveCount(0);
+    expect(seen.errors).toEqual([]);
+  });
+
+  test('on a phone, the sheet open on Decisions goes to Comments as a republish takes the last question', async ({ page }) => {
+    await page.setViewportSize({ width: 360, height: 740 });
+    const seen = await watch(page);
+    const name = named('phone');
+    const parts: Part[] = [['Findings', []], [DECISIONS, [HEATER]]];
+    publish(name, parts, true);
+    expect((await page.request.post('/api/comments', {
+      data: { page: name, section: 'findings', text: 'Is the ice thick yet?' },
+    })).status()).toBe(201);
+    await openPublished(page, name, parts, true);
+    const bottom = page.locator('.artifact-comments-bottom-sheet');
+    await page.locator('button.artifact-review-count').click();
+    await expect(bottom.getByRole('tab', { name: /^Decisions/ })).toHaveAttribute('aria-selected', 'true');
+
+    await republish(page, name, [['Findings', []], [DECISIONS, []]], true);
+    await expect(page.locator('button.artifact-review-count')).toBeHidden();
+    await expect(bottom).toBeVisible();
+    await expect(bottom.getByRole('tablist')).toBeHidden();
+    await expect(bottom.locator('.artifact-comment-thread', { hasText: 'Is the ice thick yet?' })).toBeVisible();
     expect(seen.errors).toEqual([]);
   });
 });

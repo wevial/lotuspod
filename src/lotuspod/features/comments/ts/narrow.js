@@ -328,6 +328,20 @@
       }
       var made = holderOf(held.kind);
       if (view.decisions) {
+        // The questions gone, the sheet goes back to Comments, or closes.
+        if (!the.tabs.asks()) {
+          var inside = made.node.contains(document.activeElement);
+          var to = the.comments ? target() : null;
+          if (to) {
+            unlend(to, held.opener);
+          } else if (the.comments) {
+            release(false);
+          }
+          if (to && inside) {
+            made.node.focus({ preventScroll: true });
+          }
+          return;
+        }
         move(the.tabs.node(), sheet.decisions);
         retab();
         made.node.setAttribute("aria-label", "Decisions");
@@ -534,6 +548,14 @@
       });
       if (view.decisions) {
         move(sheet.decisions, the.tabs.node());
+        // Closed, the sheet no longer keeps a passage's composer behind
+        // Decisions; a mode change keeps it.
+        if (!keep && back && back.view.passage) {
+          passages.cancel(back.view.passage);
+        }
+        if (!keep) {
+          back = null;
+        }
       } else if (view.box) {
         var group = groups.get(view.box);
         the.compose(group, false);
@@ -661,12 +683,45 @@
     // question to answer, else on the tab. Comments goes back to the thread
     // or form the sheet held.
     over.decisions = function (opener) {
-      back = held.kind === "sheet" && held.view && !held.view.decisions ?
-        { view: held.view, anchor: held.anchor } : back;
-      hold("sheet", { decisions: true }, opener, null);
+      if (!(held.view && held.view.decisions)) {
+        if (held.kind === "sheet") {
+          lend();
+        }
+        hold("sheet", { decisions: true }, opener, null);
+      }
       var question = sheet.decisions.querySelector(".artifact-decisions-entry .artifact-decisions-question");
       (question || sheet.tab.decisions.button).focus({ preventScroll: true });
     };
+
+    // Decisions takes the place of what the sheet holds, kept for Comments
+    // to go back to: a passage's composer, and a section's form as it was
+    // being written in.
+    function lend() {
+      var group = held.view.box ? groups.get(held.view.box) : null;
+      back = { view: held.view, anchor: held.anchor, writing: Boolean(group && !group.holder.hidden) };
+      release(false, true, "sheet");
+    }
+
+    // What Comments goes back to: what the sheet held before Decisions,
+    // else the first open thread, else the first section's form, else null.
+    function target() {
+      if (back && there(back.view)) {
+        return back;
+      }
+      var first = steps()[0];
+      var box = groups.keys().next().value;
+      return first ? { view: { thread: first }, anchor: the.anchorOf(first) } :
+        box ? { view: { box: box }, anchor: box.querySelector("summary") } : null;
+    }
+
+    // Comments in the sheet's place again, at to. The page stays where it is.
+    function unlend(to, opener) {
+      back = null;
+      hold("sheet", to.view, opener, to.anchor, true);
+      if (to.view.box && to.writing) {
+        the.compose(groups.get(to.view.box), true);
+      }
+    }
 
     // Whether a view the Comments tab would go back to is still there.
     function there(view) {
@@ -675,9 +730,7 @@
     }
 
     // A tab pressed: Decisions shows the questions in place of what the
-    // sheet held, a passage's composer kept; Comments what it held before
-    // them, else the first open thread, else the first section's form. The
-    // page stays where it is.
+    // sheet held (lend), Comments what it held before them (unlend).
     function choose(name) {
       var deciding = Boolean(held.view && held.view.decisions);
       if (!held.view || (name === "decisions") === deciding) {
@@ -685,22 +738,14 @@
       }
       var opener = held.opener;
       if (name === "decisions") {
-        back = { view: held.view, anchor: held.anchor };
-        release(false, true, "sheet");
+        lend();
         hold("sheet", { decisions: true }, opener, null, true);
       } else {
-        var to = back && there(back.view) ? back : null;
-        if (!to) {
-          var first = steps()[0];
-          var box = groups.keys().next().value;
-          to = first ? { view: { thread: first }, anchor: the.anchorOf(first) } :
-            box ? { view: { box: box }, anchor: box.querySelector("summary") } : null;
-        }
+        var to = target();
         if (!to) {
           return;
         }
-        back = null;
-        hold("sheet", to.view, opener, to.anchor, true);
+        unlend(to, opener);
       }
       sheet.tab[name].button.focus({ preventScroll: true });
     }
