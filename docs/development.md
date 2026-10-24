@@ -64,8 +64,8 @@ script.
 
 The page's islands, widgets written in Preact, are the one bundle: the build
 bundles the comments slice's `src/lotuspod/features/comments/ts/islands/main.tsx`
-with its imports and Preact (pinned in `web/package.json` as a dependency,
-and resolved from `web/node_modules`) with `Bun.build` into
+with its imports, Preact and `@preact/signals` (pinned in `web/package.json`
+as dependencies, and resolved from `web/node_modules`) with `Bun.build` into
 `src/lotuspod/features/comments/ts/islands.js`, after its marker line, as one minified
 IIFE for the browser with no source map, JSX through Preact's automatic
 runtime. The comments slice's `theme_parts.json` slots it directly after comment-markdown.js inside
@@ -74,19 +74,40 @@ their listeners, and never on a pod that goes to the index
 (`features/publish/ts/open-in-tabs.js`). Neither the index script nor the old-version script
 has it. The islands reach the legacy page only through
 `features/comments/ts/islands/bridge.ts`, the one module that names the closure's
-variables: it declares the types of `live` (`js/live-page.js`), `forms` and
-`answering`, the decision forms and what reads and saves them
-(`js/decisions.js`), `linkedTo()`, `ARCHIVED` and the page events
+variables: it declares the types of `live` (`js/live-page.js`), `linkedTo()`,
+`ARCHIVED`, the answers route, `STALE`, `FOLDED_ANSWERED`, `foldSection()`,
+`reader()` and the page events
 `ANSWERED`, `SAVED` and `DRAWN` (`features/publish/ts/page-open.js`), and exports one object,
 `page`, built from them as the bundle loads, so a name that does not exist
 throws on every page at once. A minifier never renames a free name, so the
 bridge's reads stay the closure's own. An island imports `page`, never the
-names. `main.tsx` mounts each island it lists, handing it `page`.
+names. `main.tsx` mounts the decision cards, then each island it lists,
+handing each `page`. Another slice's island joins the bundle through that
+slice's public entry, its `ts/index.ts`, which the build bundles with what
+imports it and never builds alone; the comments slice's `ts/index.ts` is in
+turn what another slice's island reaches the comments store and `Page` by.
+
+The decision cards are the decisions slice's island
+(`features/decisions/ts/islands/`, mounted through `features/decisions/ts/index.ts`):
+on a page with a decision form or a comment box, it takes over each form
+the renderer wrote, drawing it from the comments store's answers to its
+question (folded to its saved line, its history, an earlier wording's line)
+and saving, dismissing and undoing through the store; the Answered table
+that ends the body is drawn from the store's current answers. A form is
+drawn from them once a read of the answers succeeds after it is wired, then
+each time they change, keeping what the reader picked or wrote and has not
+saved. Each decision's Ask, once the comments store has started, posts
+through the store. It reads the answers at load and after each swap that
+brings in or takes out a form, sends `ANSWERED` once each is drawn and
+`SAVED` on a form once an answer to it is saved, and registers the
+`holdSwap` test that holds back a section whose form is changed and not
+saved, or still posting. What it returns (`Cards`) is what the review sheet
+reads the forms by.
 
 The first island is the review sheet (`features/comments/ts/islands/review-sheet.tsx`):
 the title bar's open-question count and Next open, the "N open" marks on
 headings and outline links, and the Respond panel. Once `ANSWERED` is first
-sent, and only when `answering.read` is true and the page is not archived, it
+sent, and only when the cards' `read` is true and the page is not archived, it
 renders into a `div.artifact-review-bar` it adds to the title bar, with the
 panel and each mark as a portal: the panel into the body, each mark into an
 empty span it adds to the heading or outline link, so the heading the fold
@@ -98,7 +119,7 @@ does, and picks a default only on a form the swap brought in. A form a
 swap brings in whose read fails stays out of the sheet until a later read. The forms and their stored answers stay the
 truth: the sheet draws from them on each form's `input`, `change` and
 `SAVED`, a pick in the panel sets the form's own input, and it saves through
-`answering.save()`, one question at a time in page order. Preact holds only
+the cards' `save()`, one question at a time in page order. Preact holds only
 the sheet's own state: the panel open, a Save under way, what it did, and
 the question Next open last jumped to, which a swap keeps. The bundle, Preact with it, stays at most
 47,000 bytes gzipped; it uses Preact and its hooks, with `createPortal` from
@@ -110,7 +131,17 @@ boxes: it reads the boxes, adds the whole page's box (`pageBox`) and starts
 the drafts part (`comments/drafts.ts`), which creates the store
 (`comments/store.ts`). The store holds the thread state: the sections,
 boxes' forms, threads and attachments by form, all Maps, and the revision the
-page shows, which a swap moves on. It adds a thread or merges what a read
+page shows, which a swap moves on. What every island shares is held in
+signals (`@preact/signals`, `comments/state.ts`), one state for the page,
+exposed read-only and written only by the store's reads and posts: each
+thread by its first comment's id, changed only when a read or a post changes
+it; the ids the route names unread and each thread's seen mark; the drafts'
+marks; and each question's answers, read from and posted to `/api/answers`
+by `comments/answers.ts`, where a read never writes over a post that landed
+after it began. Each shown thread follows its signal: whatever writes it,
+its record takes it and its rows are drawn again, and outside the store's
+own reads the panel, chips and passages are drawn again once after; each
+form's status says the drafts' mark from the marks signal. It adds a thread or merges what a read
 brings (true when anything was drawn), keeps the list at the end of the body
 for sections the page no longer has, and reads `/api/comments` while a thread
 waits or one is in view, each gap half again as long as the last, from 3 up to
@@ -127,14 +158,15 @@ the first read. The store also creates the replies part
 (`comments/unread.ts`), which keeps the replies to the reader: the ids each
 read names `unread`, each thread's seen mark and the comments unread as it
 opened. It counts them for the shell, rows and chips, draws the tab title's
-"(N)" and the header's "N new replies to you", and, when the list opens a
+"(N)" and the header's "N new replies to you" from the signals as they
+change, and, when the list opens a
 thread (`looked`), posts `/api/seen` with `page`, `thread` and `comment`; a
 route that names no `unread` (signed out, the demo) marks nothing and posts
-nothing. It gives each decision form its Ask, which posts the note to
+nothing. It posts each decision's Ask (the cards' button) to
 `/api/comments` as a question thread with `page`, `question`, `text` and
-`revision`, empties and folds the note unless it changed while sending, adds
-the thread and opens it (`asked`), and on `SAVED` with a comment reads the
-threads at once. The drafts part keeps what is unsent over a reload
+`revision`, has the cards empty and fold the note unless it changed while
+sending, adds the thread and opens it (`asked`); an answer saved with a
+comment has the store read the threads at once. The drafts part keeps what is unsent over a reload
 (`live.keep`, `live.kept`, `live.place`): each composer's text and images,
 what was open and a passage composer's words, and the live block a
 section's form is on (the composer's `on`), which opens the form on it again
@@ -146,7 +178,7 @@ and registers the `holdSwap` test that holds back a section whose form holds
 unsent text or whose words the open passage composer quotes. One map,
 `takenAt`, keeps the index a section had when a swap first took it away, for
 both paths. It reaches the threads through the store (`refresh`, `retitle`,
-`askAbout` for a swap's decision forms, the composer handles, the Maps); the
+the composer handles, the Maps); the
 store reaches its `restore` and `boxWith` through its bridge. The bridge
 supplies `holdSwap`, `PLACE_GONE`, `PASSAGE_GONE`, `BLOCK_GONE`, `BLOCK_CHANGED`,
 `STALE_BLOCK`, `settleImageCap`,
@@ -214,14 +246,21 @@ bun run --cwd web check
 `typecheck` runs the pinned TypeScript's `tsc --noEmit` on Bun's runtime, in
 strict mode and with `erasableSyntaxOnly`, so a source is plain JavaScript
 once its types are erased: no enums, namespaces or parameter properties.
-It checks the build script and its test against Bun's types
+It checks the build script and the tests against Bun's types and the DOM's
 (`web/tsconfig.json`), the sources against the DOM's and none of Bun's
-(`src/lotuspod/core/ts/tsconfig.json`, which takes in the slices' `ts/` sources), and the islands, modules with imports and JSX
+(`src/lotuspod/core/ts/tsconfig.json`, which takes in the slices' `ts/`
+sources but their public entries), and the islands, modules with imports and JSX
 whose `jsxImportSource` is `preact`, under their own config
 (`src/lotuspod/features/comments/ts/islands/tsconfig.json`, which finds
-Preact in `web/node_modules`).
-`test` runs `web/build.test.ts` and `web/shortcodes.test.ts`, the comment
-composers' emoji shortcode matcher with the table it reads. `check` builds, then fails naming each file
+Preact and its signals in `web/node_modules`, and checks the decisions
+island as `main.tsx` imports it).
+`test` runs `web/build.test.ts`, `web/shortcodes.test.ts`, the comment
+composers' emoji shortcode matcher with the table it reads, and the islands'
+tests (`web/store.test.ts`, the comments store's signals;
+`web/decisions.test.ts`, the decision cards in happy-dom's DOM), which run the
+islands as the page does: `web/islands.ts` bundles them with Preact and its
+signals as the build does, and the tests import that one bundle. `check`
+builds, then fails naming each file
 under a slice's `ts/`, built or written by hand, that does not parse
 on its own with Bun, and fails when git sees any JS file there modified, deleted
 or new, printing what differs.

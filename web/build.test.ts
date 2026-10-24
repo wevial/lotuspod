@@ -240,6 +240,20 @@ test("an islands entry that does not bundle is refused before anything is writte
   expect(readdirSync(islandsDir())).toEqual(["islands"]);
 });
 
+test("another slice's public entry, ts/index.ts, is bundled into the islands that import it, never built alone", async () => {
+  writeIslands({ "main.tsx": 'import { pond } from "../../../pond/ts/index";\n\ndocument.title = pond();\n' });
+  const pond = join(root, "src", "lotuspod", "features", "pond", "ts");
+  mkdirSync(join(pond, "islands"), { recursive: true });
+  writeFileSync(join(pond, "index.ts"), 'export { pond } from "./islands/pond";\n');
+  writeFileSync(join(pond, "islands", "pond.ts"), 'export function pond(): string {\n  return "pond";\n}\n');
+  await build(web);
+  expect(readdirSync(pond).sort()).toEqual(["index.ts", "islands"]);
+  const built = readFileSync(join(islandsDir(), "islands.js"), "utf8");
+  expect(built).toContain('"pond"');
+  expect(built).not.toContain("import");
+  expect(unparsed(islandsDir())).toEqual([]);
+});
+
 test("a slice source named as the islands bundle is refused", async () => {
   writeIslands({ "bridge.ts": BRIDGE, "main.tsx": ENTRY });
   writeFileSync(join(islandsDir(), "islands.ts"), SOURCE);

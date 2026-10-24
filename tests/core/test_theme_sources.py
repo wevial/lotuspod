@@ -283,9 +283,10 @@ class DeclaredOrderTests(ThemeCopyTestCase):
 
     def test_the_review_sheet_is_an_island(self):
         """LOTUS-157: the review sheet is drawn by the islands bundle, after
-        js/comment-markdown.js and js/decisions.js, whose forms it reads (no
-        js/comments.js since LOTUS-206): no script of
-        its own is declared, and its styles stay css/review-sheet.css."""
+        js/comment-markdown.js (no js/comments.js since LOTUS-206, and the
+        decision cards whose forms it reads are an island in the same bundle
+        since LOTUS-241): no script of its own is declared, and its styles
+        stay css/review-sheet.css."""
         styles = core.theme_sources()[STYLESHEET]
         script = core.theme_sources()[core.PAGE_SCRIPT]
         self.assertNotIn("features/comments/ts/review-sheet.js", script)
@@ -295,7 +296,6 @@ class DeclaredOrderTests(ThemeCopyTestCase):
         self.assertEqual(script.index("features/comments/ts/islands.js"), script.index("features/comments/ts/comment-markdown.js") + 1)
         self.assertNotIn("features/comments/ts/islands.js", core.theme_sources()[core.INDEX_SCRIPT])
         self.assertNotIn("features/comments/ts/islands.js", core.theme_sources()[core.OLD_VERSION_SCRIPT])
-        self.assertGreater(script.index("features/comments/ts/islands.js"), script.index("features/decisions/ts/decisions.js"))
         self.assertIn("features/comments/theme/review-sheet.css", styles)
         problems = source_problems(core.THEME_ROOT, core.theme_sources())
         self.assertEqual(problems, [], "\n".join(problems))
@@ -340,6 +340,17 @@ class DeclaredOrderTests(ThemeCopyTestCase):
         problems = source_problems(core.THEME_ROOT, core.theme_sources())
         self.assertEqual(problems, [], "\n".join(problems))
 
+    def test_the_decision_cards_are_an_island(self):
+        """LOTUS-241: the decision cards are drawn by the decisions slice's
+        island, built into the comments islands bundle: the page script
+        joins no source of the decisions slice, which keeps its
+        stylesheet."""
+        script = core.theme_sources()[core.PAGE_SCRIPT]
+        self.assertEqual([source for source in script if source.startswith("features/decisions/")], [])
+        self.assertFalse((core.THEME_ROOT / "features" / "decisions" / "ts" / "decisions.js").exists())
+        self.assertIn("features/comments/ts/islands.js", script)
+        self.assertIn("features/decisions/theme/decisions.css", core.theme_sources()[STYLESHEET])
+
     def test_a_source_not_in_the_declared_order_is_named(self):
         theme = self.theme_copy()
         (theme / "core" / "theme" / "stray.css").write_text(".stray {}\n", encoding="utf-8")
@@ -352,13 +363,13 @@ class DeclaredOrderTests(ThemeCopyTestCase):
     def test_a_declared_source_not_on_disk_is_named(self):
         theme = self.theme_copy()
         comments_css = "features/comments/theme/comments.css"
-        decisions_js = "features/decisions/ts/decisions.js"
+        versions_js = "features/history/ts/versions.js"
         (theme / comments_css).unlink()
-        (theme / decisions_js).unlink()
+        (theme / versions_js).unlink()
         problems = source_problems(theme, sources_at(theme))
         self.assertEqual(len(problems), 2, problems)
         self.assertTrue(problems[0].startswith(f"{comments_css}: "), problems)
-        self.assertTrue(problems[1].startswith(f"{decisions_js}: "), problems)
+        self.assertTrue(problems[1].startswith(f"{versions_js}: "), problems)
 
     def test_a_new_slices_part_is_joined_at_its_slot(self):
         """A new slice folder holding one stylesheet part and its declaration,
@@ -433,8 +444,8 @@ class SourceEditTests(ThemeHashTestCase):
     def test_one_byte_of_the_comments_stylesheet_moves_the_address(self):
         self.assert_edit_moves_the_address("features/comments/theme/comments.css")
 
-    def test_one_byte_of_the_decisions_page_script_moves_the_address(self):
-        self.assert_edit_moves_the_address("features/decisions/ts/decisions.js")
+    def test_one_byte_of_the_islands_bundle_moves_the_address(self):
+        self.assert_edit_moves_the_address("features/comments/ts/islands.js")
 
 
 if __name__ == "__main__":

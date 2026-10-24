@@ -18,7 +18,7 @@
 // own: the focus is in it; the comments island's
 // (src/lotuspod/features/comments/ts/islands/comments/drafts.ts): an open
 // passage composer's words are in it, or it is a section taken away whose form
-// holds text not sent; js/decisions.js's: a decision form in it holds an answer
+// holds text not sent; the decisions island's: a decision form in it holds an answer
 // not saved; js/diagram-view.js's: its diagram is open full-window) stays as it
 // is, under a bar saying so with an Update button, which applies the part's
 // newest nodes as a swap would.
@@ -40,8 +40,8 @@
 // Each test a changed or removed part, as the open page has it, is put to
 // before a swap: a part any test holds is kept as it is under a bar until the
 // reader presses its Update (holdSwap). A var with no value of its own, made
-// by the first test: js/decisions.js, joined before this source, registers
-// its test as it runs.
+// by the first test: the islands, joined after this source, register theirs
+// as they mount.
 var SWAP_HOLDS: ((nodes: readonly Element[], removed: boolean) => boolean)[] | undefined;
 
 // Hold back from a swap each part whose nodes (a section's heading and
@@ -55,6 +55,10 @@ function pageSwap(): void {
   // What the page script adds to the body outside any part, left where it is.
   const ADDED = "div.artifact-answered, .artifact-comments-changed";
   const DECISION = "form.artifact-decision";
+  // Whether the page loaded with a decision form or a comment box, which
+  // the decision cards (the decisions island) mount on: one with neither
+  // has no cards to take a form a swap brings in.
+  const DECIDES = document.querySelector(DECISION + ", details.artifact-comment[data-page]") !== null;
   const DIAGRAM = "pre.mermaid";
   // The bar over a part held back, which the intro leaves out.
   const HELD = "div.artifact-swap-held";
@@ -265,10 +269,10 @@ function pageSwap(): void {
       }),
     ].filter((node): node is Node => node !== null);
     // A page that loaded with neither a form nor a comment box has no
-    // answering (js/decisions.js) to mount a form on.
+    // decision cards to mount a form on.
     const decided = (nodes: Node[]): boolean => nodes.some((node) => node instanceof Element &&
       (node.matches(DECISION) || node.querySelector(DECISION) !== null));
-    if (answering === null && decided(touched)) return null;
+    if (!DECIDES && decided(touched)) return null;
 
     // Each changed or removed part, as the open page has it, that a test
     // holds back: kept as it is, its new nodes kept for the reader's Update.

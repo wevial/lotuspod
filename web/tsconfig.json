@@ -1,17 +1,27 @@
 {
-  // The build script and its test, on Bun's types; the browser sources have
-  // their own config in ../src/lotuspod/core/ts/.
+  // The build script and the tests, on Bun's types; the browser sources have
+  // their own configs in ../src/lotuspod/core/ts/ and the slices' islands/.
+  // The islands' tests run the islands' sources in a DOM, so they are
+  // checked here with the DOM's types, the islands' JSX and Preact from
+  // node_modules.
   "compilerOptions": {
     "target": "ESNext",
     "module": "Preserve",
     "moduleResolution": "bundler",
-    "lib": ["ESNext"],
+    "lib": ["ESNext", "DOM"],
     "types": ["bun"],
     "strict": true,
     "erasableSyntaxOnly": true,
     "verbatimModuleSyntax": true,
     "noEmit": true,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "jsx": "react-jsx",
+    "jsxImportSource": "preact",
+    "paths": {
+      "preact": ["./node_modules/preact"],
+      "preact/*": ["./node_modules/preact/*"],
+      "@preact/signals": ["./node_modules/@preact/signals"]
+    }
   },
-  "include": ["build.ts", "build.test.ts", "shortcodes.test.ts"]
+  "include": ["build.ts", "build.test.ts", "shortcodes.test.ts", "islands.ts", "store.test.ts", "decisions.test.ts"]
 }
