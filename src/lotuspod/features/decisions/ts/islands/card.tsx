@@ -76,7 +76,7 @@ function Line({ card, changed }: { card: Card; changed: boolean }) {
   if (answer && !changed) {
     return (
       <>
-        <span class="artifact-decision-saved-mark"><span class="artifact-decision-check" aria-hidden="true">✓</span>{" Saved"}</span>
+        <span class="artifact-decision-line-saved"><span class="artifact-decision-line-check" aria-hidden="true">✓</span>{" Saved"}</span>
         {" · "}<strong>{label(card.form, answer)}</strong>
       </>
     );

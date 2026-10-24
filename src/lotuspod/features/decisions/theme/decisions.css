@@ -91,6 +91,14 @@
   color: var(--color-amber);
 }
 
+.artifact-decision-line-saved {
+  color: var(--color-mint);
+}
+
+.artifact-decision-line-check {
+  font-weight: 700;
+}
+
 .artifact-decision-number {
   border: 1px solid var(--hairline-strong);
   border-radius: var(--radius-chip);
