@@ -352,7 +352,7 @@ test.describe('signed in', () => {
     const nightly = decision(page, 'decision-2');
     const winter = decision(page, 'decision-3');
     const side = parts(page);
-    await expect(side.count).toHaveText('1 to answer · Respond');
+    await expect(side.count).toHaveText('3 to answer · Respond');
     await expect(winter.dismiss).toBeVisible();
 
     // Undo puts the default back as the page opened it, so Save answer saves it.

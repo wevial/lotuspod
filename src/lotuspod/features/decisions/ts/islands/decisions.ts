@@ -5,6 +5,8 @@ import { giveAsk } from "./ask";
 import { acting, adopt, dirty, draw, mark, queue, refused, saved, unfold, type Card, type Deck } from "./card";
 import { all, isChecklist, optionText, same, summary, ticked } from "./checklist";
 import { dismissals } from "./dismiss";
+import { decisionsPanel } from "./panel";
+import { headingOf, jump, place, sectionsOf, type Section } from "./sections";
 import { noteField, status } from "./words";
 
 // What the review sheet (comments/ts/islands/review-sheet.tsx) reads the
@@ -27,6 +29,20 @@ export interface Cards {
   isChecklist(form: HTMLFormElement): boolean;
   // Whether the picked option, items or note differ from the stored answer.
   dirty(form: HTMLFormElement): boolean;
+  // Whether the question is to answer: its answers are read and it has no
+  // stored answer at its version (a dismissal is one). A form whose answers
+  // are not read, as one a swap brought in before a failed read, is not: its
+  // defaults could replace an answer the reader never saw. Every count of
+  // questions to answer counts this.
+  toAnswer(form: HTMLFormElement): boolean;
+  // The nearest h2 before the form, null before the first.
+  heading(form: HTMLFormElement): HTMLElement | null;
+  // The forms in one group per section, in page order, under its title.
+  sections(forms: readonly HTMLFormElement[]): Section[];
+  // Put a form just under the title bar, its section opened if folded.
+  place(form: HTMLFormElement): void;
+  // Place a form and focus its first option, or its "change" once folded.
+  jump(form: HTMLFormElement): void;
   // Post the form's answer in its turn: true once saved, false when refused,
   // with why in the form's status.
   save(form: HTMLFormElement): Promise<boolean>;
@@ -61,6 +77,9 @@ export function decisions(page: Page): Cards | null {
   // outside them.
   let loading = 0;
   const drawn = signal(0);
+  // Each card marked, and whether a read of the answers has succeeded.
+  const marked = signal(0);
+  const ready = signal(false);
   const each = () => forms.map(cardOf);
 
   // The form asking question, if the page asks it.
@@ -172,7 +191,7 @@ export function decisions(page: Page): Cards | null {
   function wire(form: HTMLFormElement): void {
     const card: Card = {
       form, answers: store.answer(form.dataset.question!), shown: UNANSWERED,
-      editing: false, turn: Promise.resolve(), queued: 0, acting: 0, waiting: true, dispose() {},
+      editing: false, turn: Promise.resolve(), queued: 0, acting: 0, waiting: true, marked, dispose() {},
     };
     cards.set(form, card);
     form.addEventListener("submit", submit);
@@ -207,11 +226,27 @@ export function decisions(page: Page): Cards | null {
   });
   dismissing.mayDismiss(name, each);
 
+  const toAnswer = (form: HTMLFormElement) => {
+    const card = cardOf(form);
+    return !card.waiting && !saved(card);
+  };
   const reading: Cards = {
-    forms, ticked, same, summary, optionText, isChecklist, save, read: false, drawn,
+    forms, ticked, same, summary, optionText, isChecklist, save, read: false, drawn, toAnswer,
+    heading: headingOf, sections: sectionsOf, place, jump,
     saved: (form) => saved(cardOf(form)),
     dirty: (form) => dirty(cardOf(form)),
   };
+  // Each form marked to answer, for the folded headings' count, which no
+  // island draws.
+  effect(() => {
+    marked.value;
+    untracked(() => {
+      for (const form of forms) form.classList.toggle("artifact-decision--to-answer", toAnswer(form));
+    });
+  });
+  // The Decisions tab, on a page that takes answers.
+  decisionsPanel({ forms, marked, ready, save, toAnswer, saved: reading.saved, dirty: reading.dirty },
+    () => forms.length > 0 && !page.archived);
 
   // The answers read, the table placed after the body's last section, and
   // the page told (ANSWERED); not for a read a newer one replaced, which
@@ -233,6 +268,9 @@ export function decisions(page: Page): Cards | null {
             adopt(deck, card, card.answers.peek());
           }
         }
+        // No card waits now, though none may have been drawn again.
+        marked.value = marked.peek() + 1;
+        ready.value = true;
       }
       table(store.currents.peek());
       document.dispatchEvent(new CustomEvent(page.events.answered));
@@ -290,6 +328,7 @@ export function decisions(page: Page): Cards | null {
     // dismiss.
     dismissing.mayDismiss(name, each);
     forms.sort((a, b) => a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1);
+    marked.value = marked.peek() + 1;
     load();
   });
 

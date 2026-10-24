@@ -122,7 +122,7 @@ test('the Respond panel lists the questions under the block, after their section
   expect(await groups.nth(1).locator('li.artifact-review-entry').evaluateAll(
     (items) => items.map((item) => (item as HTMLElement).dataset.question))).toEqual(['decision-workers', 'decision-cadence']);
   // The headings' marks stay per section.
-  await expect(page.locator('section.artifact-body h2', { hasText: 'Merge churn' }).locator('.artifact-review-open')).toHaveText('2 open');
+  await expect(page.locator('section.artifact-body h2', { hasText: 'Merge churn' }).locator('.artifact-review-open')).toHaveText('3 open');
   const entry = groups.nth(1).locator('li.artifact-review-entry[data-question="decision-workers"]');
   await entry.getByRole('button', { name: 'Four', exact: true }).click();
   await expect(the.form('decision-workers').getByRole('radio', { name: 'Four' })).toBeChecked();

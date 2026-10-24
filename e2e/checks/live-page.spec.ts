@@ -2667,7 +2667,7 @@ test.describe('signed in', () => {
     await expect(banner(page).node).toHaveCount(0);
     await expect(card(page, 'decision-1').text).toHaveText('Which heater, for a deep pond?');
     await expect(page.locator('div.artifact-review-bar')).toHaveCount(1);
-    await expect(page.locator('button.artifact-review-count')).toHaveText('All answered · Respond');
+    await expect(page.locator('button.artifact-review-count')).toHaveText('1 to answer · Respond');
     expect(moved.count).toBe(0);
     expect(errors).toEqual([]);
   });

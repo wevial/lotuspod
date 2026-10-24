@@ -7,8 +7,12 @@
 // default's label, or "was: open" with no default. A form with a default
 // and no stored answer gets its default picked, so it shows "Not saved":
 // on a swap, only a form the swap brought in.
+// A question is to answer while it has no stored answer at its version (a
+// dismissal is one), a default picked for it included: every count of
+// them, and Next open, ask the decisions island (Cards.toAnswer), as the
+// comments panel's Decisions tab does.
 // The title bar ends in "Next open: QUESTION ↓", which jumps to the next
-// open question, and "N to answer · Respond", which opens the Respond
+// question to answer, and "N to answer · Respond", which opens the Respond
 // panel: every question under its section's heading (one whose form is
 // about a live block, data-about, under the block's title, right after
 // its section's group), its options as
@@ -16,7 +20,7 @@
 // that posts each answer whose shown choice or note is not stored, in page
 // order. A page whose answers could not be read gets no sheet, and nor
 // does an archived one, which takes no answer.
-// Each h2 whose section asks open questions, and its outline link, is
+// Each h2 whose section asks questions to answer, and its outline link, is
 // marked "N open". The panel and the forms are one state: a pick in
 // either moves the other. The sheet draws from the forms and the stored
 // answers on every change to them; Preact keeps only what is the sheet's
@@ -28,8 +32,6 @@ import { useLayoutEffect, useReducer, useRef, useState } from "preact/hooks";
 import { effect, untracked } from "@preact/signals";
 import type { Cards } from "../../../decisions/ts/index";
 import type { Page } from "./bridge";
-
-const MARKS = ".artifact-section-mark, .artifact-changed-tag, .artifact-review-open";
 
 interface Question {
   form: HTMLFormElement;
@@ -67,13 +69,6 @@ function words(node: Element | null): string {
   return node ? (node.textContent ?? "").replace(/\s+/g, " ").trim() : "";
 }
 
-// A heading's own words: its fold button's, without the marks in it.
-function headingTitle(heading: HTMLElement): string {
-  const copy = (heading.querySelector(".artifact-section-toggle") ?? heading).cloneNode(true) as Element;
-  for (const mark of all(MARKS, copy)) mark.remove();
-  return words(copy);
-}
-
 function radios(form: HTMLFormElement): HTMLInputElement[] {
   return all<HTMLInputElement>('input[type="radio"][name="choice"]', form);
 }
@@ -105,8 +100,7 @@ function label(the: Cards, question: Question, value: string): string {
   return radio ? the.optionText(radio) : value;
 }
 
-// A question whose saved answer is a dismissal is Dismissed, never pending,
-// so it is never counted nor jumped to as open.
+// A question whose saved answer is a dismissal is Dismissed, never pending.
 function standing(the: Cards, question: Question): Standing {
   const form = question.form;
   const answer = the.saved(form);
@@ -132,7 +126,7 @@ function standing(the: Cards, question: Question): Standing {
 }
 
 function opened(the: Cards, question: Question): boolean {
-  return standing(the, question).name === "Open";
+  return the.toAnswer(question.form);
 }
 
 function plural(n: number, one: string, many: string): string {
@@ -142,33 +136,6 @@ function plural(n: number, one: string, many: string): string {
 // Tell the form a pick moved it, as the reader's own pick would.
 function moved(input: HTMLInputElement): void {
   input.dispatchEvent(new Event("change", { bubbles: true }));
-}
-
-// Where the title bar ends, in the window, as the comments panel reads it.
-function barBottom(): number {
-  const bar = document.querySelector(".artifact-topbar");
-  return bar ? Math.max(0, bar.getBoundingClientRect().bottom) : 0;
-}
-
-// Open a form's section if it is folded, as a row's "change" does, and put
-// the form just below the title bar.
-function place(form: HTMLFormElement): void {
-  const wrapper = form.closest("div.artifact-section-body");
-  if (wrapper && wrapper.hasAttribute("hidden")) {
-    wrapper.dispatchEvent(new Event("beforematch"));
-  }
-  window.scrollBy({ top: form.getBoundingClientRect().top - barBottom() - 16, left: 0, behavior: "instant" });
-}
-
-// Place a form, then focus its first option, or its "change" (a
-// dismissal's Undo) when it is folded to its answer.
-function jump(form: HTMLFormElement): void {
-  place(form);
-  const target = form.classList.contains("artifact-decision--saved") ?
-    form.querySelector<HTMLElement>(".artifact-decision-saved :is(.artifact-decision-change, " +
-      ".artifact-decision-undo)") :
-    form.querySelector<HTMLElement>("input");
-  target?.focus({ preventScroll: true });
 }
 
 interface Group {
@@ -253,11 +220,11 @@ function Sheet({ page, the, questions, groups, marks }: SheetProps) {
   }, [open]);
 
   const states = questions.map((question) => standing(the, question));
-  const opens = states.filter((s) => s.name === "Open").length;
+  const opens = questions.filter((question) => opened(the, question)).length;
   const changed = states.filter((s) => s.name === "Changed").length;
   const due = states.filter((s) => s.pending).length;
 
-  // The first open question after the last one jumped to, wrapping round;
+  // The first question to answer after the last one jumped to, wrapping round;
   // from the top when that one is no longer asked.
   function upcoming(): number {
     const from = questions.findIndex((question) => question.form.dataset.question === last);
@@ -278,7 +245,7 @@ function Sheet({ page, the, questions, groups, marks }: SheetProps) {
     const at = upcoming();
     if (at >= 0) {
       setLast(questions[at]!.form.dataset.question ?? "");
-      jump(questions[at]!.form);
+      the.jump(questions[at]!.form);
     }
   }
 
@@ -334,11 +301,11 @@ function Sheet({ page, the, questions, groups, marks }: SheetProps) {
     }
   }
 
-  // The open questions in each section that has marks.
+  // The questions to answer in each section that has marks.
   const counts = new Map<HTMLElement, number>();
-  questions.forEach((question, at) => {
+  questions.forEach((question) => {
     if (question.heading) {
-      counts.set(question.heading, (counts.get(question.heading) ?? 0) + (states[at]!.name === "Open" ? 1 : 0));
+      counts.set(question.heading, (counts.get(question.heading) ?? 0) + (opened(the, question) ? 1 : 0));
     }
   });
 
@@ -381,7 +348,7 @@ function Sheet({ page, the, questions, groups, marks }: SheetProps) {
           <a class="artifact-review-show" href="#" onClick={(event) => {
             event.preventDefault();
             shut(false);
-            jump(question.form);
+            the.jump(question.form);
           }}>Show on page</a>
         </p>
       </li>
@@ -451,19 +418,13 @@ function Sheet({ page, the, questions, groups, marks }: SheetProps) {
 
 // Each question in page order, under the nearest h2 before its form, and
 // one group per h2 asking one, each followed by one per live block its
-// questions are about. The heading stays the h2's, which the marks count.
+// questions are about (Cards.sections). The heading stays the h2's, which
+// the marks count.
 function questionsOf(page: Page, the: Cards,
   asks: (form: HTMLFormElement) => boolean): { questions: Question[]; groups: Group[] } {
-  const headings = all<HTMLElement>("h2", document.querySelector("section.artifact-body")!);
   const questions = the.forms.filter(asks).map((form): Question => {
-    let heading: HTMLElement | null = null;
-    for (const h2 of headings) {
-      if (h2.compareDocumentPosition(form) & Node.DOCUMENT_POSITION_FOLLOWING) {
-        heading = h2;
-      }
-    }
     const question: Question = {
-      form, heading, checklist: the.isChecklist(form),
+      form, heading: the.heading(form), checklist: the.isChecklist(form),
       text: words(form.querySelector(".artifact-decision-text")),
       number: words(form.querySelector(".artifact-decision-number")),
       fallback: "",
@@ -473,41 +434,10 @@ function questionsOf(page: Page, the: Cards,
     return question;
   });
 
-  const sections = new Map<HTMLElement | null, { own: Group; blocks: Map<string, Group> }>();
-  for (const question of questions) {
-    let section = sections.get(question.heading);
-    if (!section) {
-      section = {
-        own: {
-          key: question.heading?.id ?? "",
-          title: question.heading ? headingTitle(question.heading) :
-            words(document.querySelector(".artifact-title")),
-          questions: [],
-        },
-        blocks: new Map(),
-      };
-      sections.set(question.heading, section);
-    }
-    const about = question.form.dataset.about;
-    if (!about) {
-      section.own.questions.push(question);
-      continue;
-    }
-    let block = section.blocks.get(about);
-    if (!block) {
-      const figure = document.querySelector(`figure.artifact-live[data-widget="${CSS.escape(about)}"]`);
-      block = { key: "about:" + about, title: words(figure?.querySelector(".artifact-live-title") ?? null) || about, questions: [] };
-      section.blocks.set(about, block);
-    }
-    block.questions.push(question);
-  }
-  const groups: Group[] = [];
-  for (const { own, blocks } of sections.values()) {
-    if (own.questions.length) {
-      groups.push(own);
-    }
-    groups.push(...blocks.values());
-  }
+  const byForm = new Map(questions.map((question) => [question.form, question]));
+  const groups = the.sections(questions.map((question) => question.form)).map((section): Group => ({
+    key: section.key, title: section.title, questions: section.forms.map((form) => byForm.get(form)!),
+  }));
   return { questions, groups };
 }
 
@@ -599,13 +529,13 @@ function draw(page: Page, the: Cards, tools: HTMLElement, marks: Map<HTMLElement
 // #question=ID, a link from the index's Recent activity: once the answers
 // are drawn, an answered form folded to its saved line, and again on each
 // hashchange, the form asking ID has its section opened if it is folded
-// and lands just under the title bar, as jump() places it, with or without
+// and lands just under the title bar, as Cards.jump places it, with or without
 // the sheet. A question the page does not ask leaves the page where it is.
 // A link followed before the answers are drawn is no reload's fragment,
 // and one after waits for every other hashchange listener, such as the
 // versions view's (js/versions.js), which may still hide the text.
 // A live block's "N decisions" (lotuspod.widgets) is such a link to the
-// first question about it, which then also takes the focus, as jump() gives
+// first question about it, which then also takes the focus, as Cards.jump gives
 // it, pressed again once it is the address too.
 export function reviewSheet(page: Page, cards: Cards | null): void {
   if (!cards || !cards.forms.length) {
@@ -620,7 +550,7 @@ export function reviewSheet(page: Page, cards: Cards | null): void {
     const focus = !first && id !== null && id === focusing;
     focusing = null;
     if (form) {
-      (focus ? jump : place)(form);
+      (focus ? the.jump : the.place)(form);
     }
   }
   let drawnAnswers = false;

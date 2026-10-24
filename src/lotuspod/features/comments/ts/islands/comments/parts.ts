@@ -12,6 +12,8 @@ export interface Tally {
   resolved: number;
   none: boolean;
 }
+// The comments panel's tabs, on a page that asks questions.
+export type Tab = "decisions" | "comments";
 export interface ShellHooks {
   opened(): void;
   resolvedChanged(): void;
@@ -19,9 +21,11 @@ export interface ShellHooks {
 }
 export interface Shell {
   readonly list: HTMLDivElement;
+  // Whether the threads are in view: the panel open on its Comments tab.
   isOpen(): boolean;
   resolvedShown(): boolean;
-  setOpen(show: boolean, remember: boolean): void;
+  // Open or fold the panel; opened, it shows tab, Comments unless named.
+  setOpen(show: boolean, remember: boolean, tab?: Tab): void;
   setResolvedShown(show: boolean, remember: boolean): void;
   hidden(hide: boolean): void;
   sections(sections: Section[]): void;
@@ -29,7 +33,7 @@ export interface Shell {
   empty(none: boolean): void;
   unpick(focus: boolean): void;
   unlit(): void;
-  focus(control: "fold" | "opener" | "resolved" | HTMLElement): void;
+  focus(control: "fold" | "opener" | "resolved" | "decisions" | HTMLElement): void;
 }
 export interface ComposerHandles {
   field: HTMLTextAreaElement;

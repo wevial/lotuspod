@@ -1,0 +1,169 @@
+/* The comments panel on a page that asks questions: its head is two tabs,
+   Decisions and Comments, each with a count, the one shown underlined in
+   lavender; the Decisions count is orchid, a mint check once nothing is left
+   to answer. Folded, the rail holds an orchid "N to answer" above the thread
+   dots, its words set sideways as the rail's own label is. */
+.artifact-comments-head--tabs {
+  align-items: stretch;
+  column-gap: 0.4rem;
+  padding-bottom: 0;
+  padding-left: 0.75rem;
+  padding-top: 0.35rem;
+}
+
+/* Both tabs fit beside the fold at the panel's narrowest, 16rem; a wider
+   count clips them there rather than lay them over the fold. */
+.artifact-comments-tabs {
+  display: flex;
+  flex: 0 1 auto;
+  gap: 0.8rem;
+  min-width: 0;
+  overflow-x: clip;
+}
+
+.artifact-comments-tab {
+  align-items: center;
+  appearance: none;
+  background: none;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  color: var(--color-muted-lavender);
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-weight: 600;
+  gap: 0.3rem;
+  margin-bottom: -1px;
+  padding: 0.5rem 0 0.55rem;
+  white-space: nowrap;
+}
+
+.artifact-comments-tab:hover {
+  color: var(--color-pale-lavender);
+}
+
+.artifact-comments-tab[aria-selected="true"] {
+  border-bottom-color: var(--color-lavender);
+  color: var(--color-white);
+}
+
+.artifact-comments-tab-badge {
+  background: var(--hairline-strong);
+  border-radius: var(--radius-pill);
+  color: var(--color-pale-lavender);
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  font-weight: 600;
+  line-height: 1;
+  min-width: 1.1rem;
+  padding: 0.2rem 0.35rem;
+  text-align: center;
+}
+
+#artifact-comments-tab-decisions .artifact-comments-tab-badge {
+  background: color-mix(in srgb, var(--color-orchid) 28%, transparent);
+  color: var(--color-orchid);
+}
+
+#artifact-comments-tab-decisions .artifact-comments-tab-badge--done {
+  background: color-mix(in srgb, var(--color-mint) 22%, transparent);
+  color: var(--color-mint);
+}
+
+.artifact-comments-head--tabs .artifact-comments-fold {
+  margin-bottom: 0.35rem;
+}
+
+/* The Comments tab's counts: the tab's badge shows the open threads, so the
+   count line is for screen readers alone (the rail's opener is described by
+   it), and the row shows only while there is a Show resolved to offer. */
+.artifact-comments-start > .artifact-comments-tally {
+  margin: 0 0 0.35rem;
+}
+
+.artifact-comments-start > .artifact-comments-tally:not(:has(.artifact-comments-show-resolved:not([hidden]))) {
+  margin: 0;
+}
+
+.artifact-comments-start > .artifact-comments-tally > .artifact-comments-count {
+  clip-path: inset(50%);
+  height: 1px;
+  overflow: hidden;
+  position: absolute;
+  white-space: nowrap;
+  width: 1px;
+}
+
+/* The Comments tab's panel, the start controls over the threads, lays them
+   out as the sheet would on its own. */
+.artifact-comments-threads {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.artifact-comments-threads[hidden],
+.artifact-comments-decisions[hidden] {
+  display: none;
+}
+
+.artifact-comments-decisions {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-color: var(--hairline-strong) transparent;
+  scrollbar-width: thin;
+}
+
+.artifact-comments-to-answer {
+  align-items: center;
+  appearance: none;
+  background: color-mix(in srgb, var(--color-orchid) 14%, transparent);
+  border: 1px solid var(--color-orchid);
+  border-radius: var(--radius-block);
+  color: var(--color-orchid);
+  cursor: pointer;
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  font: inherit;
+  gap: 0.35rem;
+  padding: 0.45rem 0 0.6rem;
+  width: 2rem;
+}
+
+.artifact-comments-to-answer[hidden] {
+  display: none;
+}
+
+.artifact-comments-to-answer:hover {
+  background: color-mix(in srgb, var(--color-orchid) 24%, transparent);
+}
+
+.artifact-comments-to-answer:focus-visible {
+  outline: 2px solid var(--color-lavender);
+  outline-offset: 2px;
+}
+
+.artifact-comments-to-answer--done {
+  background: color-mix(in srgb, var(--color-mint) 12%, transparent);
+  border-color: var(--color-mint);
+  color: var(--color-mint);
+}
+
+.artifact-comments-to-answer-count {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.artifact-comments-to-answer-label {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  writing-mode: vertical-rl;
+}
