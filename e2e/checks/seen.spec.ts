@@ -171,14 +171,14 @@ test.describe('signed in', () => {
     await expect(page.locator('.index-active')).toBeHidden();
     await expect.poll(() => shownPages(page)).toEqual(all);
 
-    // Opened again, and back on the index, the page is no longer marked. A
-    // plain click would open it in a tab of the index (pod-tabs.spec.ts).
+    // Opened again with a plain click, in a tab of the index, and back on the
+    // listing from it, the page is no longer marked.
     const answer = seenAnswer(page, 'POST');
-    await page.goto(`/${await row(page, name).locator('a').getAttribute('href')}?standalone`);
+    await row(page, name).locator('td.episode-title > a').click();
     expect(await posted(answer)).toEqual({ page: name, revision: second });
-    const read = seenAnswer(page, 'GET');
-    await page.goBack();
-    await read;
+    await expect(page.locator('iframe.pod-frame[title="Seen check"]')).toBeVisible();
+    await page.locator('.pod-tabs-bar').getByRole('button', { name: 'Lotuspod', exact: true }).click();
+    await expect(page.locator('main.index')).toBeVisible();
     await expect(row(page, name).locator('.index-mark')).toHaveCount(0);
     await expect(toggle).toHaveText('Updated · 0');
     expect(errors).toEqual([]);

@@ -297,11 +297,24 @@ test.describe('signed in', () => {
 
   test('a pick in the panel stays picked when its saved form is opened with "change"', async ({ page, request }) => {
     firstRepeatOnly();
-    const before = (await stored(request))['decision-d1'].current.choice;
-    const other = before === 'codex' ? 'Claude Opus' : 'Codex';
     await page.goto(`${PAGE}?standalone`);
     const the = sheet(page);
     const form = the.form('decision-d1');
+    // A note changed alone is one change, saved only by the panel.
+    await expect(form.locator('.artifact-decision-saved-line')).toBeVisible();
+    await form.getByRole('button', { name: 'change' }).click();
+    await form.locator('details.artifact-decision-note > summary').click();
+    await form.locator('textarea[name="note"]').fill('Only the note changed');
+    await the.count.click();
+    await expect(the.entry('decision-d1').unsaved).toBeVisible();
+    await expect(the.save).toHaveText('Save 1 answer');
+    await the.save.click();
+    await expect(the.save).toHaveText('Nothing new to save');
+    expect((await stored(request))['decision-d1'].current).toMatchObject({ note: 'Only the note changed' });
+
+    const before = (await stored(request))['decision-d1'].current.choice;
+    const other = before === 'codex' ? 'Claude Opus' : 'Codex';
+    await page.reload();
     await expect(form.locator('.artifact-decision-saved-line')).toBeVisible();
     await the.count.click();
     await the.entry('decision-d1').option(other).click();
@@ -314,23 +327,6 @@ test.describe('signed in', () => {
     await the.count.click();
     await expect(the.entry('decision-d1').unsaved).toBeVisible();
     await expect(the.entry('decision-d1').option(other)).toHaveAttribute('aria-pressed', 'true');
-  });
-
-  test('a changed note is not saved until the panel saves it', async ({ page, request }) => {
-    firstRepeatOnly();
-    await page.goto(`${PAGE}?standalone`);
-    const the = sheet(page);
-    const form = the.form('decision-d1');
-    await expect(form.locator('.artifact-decision-saved-line')).toBeVisible();
-    await form.getByRole('button', { name: 'change' }).click();
-    await form.locator('details.artifact-decision-note > summary').click();
-    await form.locator('textarea[name="note"]').fill('Only the note changed');
-    await the.count.click();
-    await expect(the.entry('decision-d1').unsaved).toBeVisible();
-    await expect(the.save).toHaveText('Save 1 answer');
-    await the.save.click();
-    await expect(the.save).toHaveText('Nothing new to save');
-    expect((await stored(request))['decision-d1'].current).toMatchObject({ note: 'Only the note changed' });
   });
 
   test('a form answered only to an earlier wording gets its default picked on the form and in the panel', async ({ page }) => {
@@ -395,6 +391,7 @@ test.describe('signed in', () => {
     await page.waitForFunction(() => document.readyState === 'complete');
     await expect(the.form('decision-d1').locator('input[name="choice"]:checked')).toHaveCount(0);
     await expect(page.locator('.artifact-review-bar, .artifact-review-panel')).toHaveCount(0);
+    await expect(page.locator('.artifact-answered')).toHaveCount(0);
     expect((await stored(request))['decision-d1'].current.id).toBe(before.id);
   });
 
@@ -620,15 +617,21 @@ test.describe('signed in, published again', () => {
     const seen = await watch(page);
     const name = named('sections');
     const HOLE: Row = ['H1', 'Keep a hole in the ice?', 'Yes / No', ''];
-    const LILY: Row = ['S1', 'Plant lilies?', 'Yes / No', ''];
     await openPublished(page, name, [['Heater', [HOLE]], [DECISIONS, [PUMP]]]);
     const the = sheet(page);
     await expect(the.count).toHaveText('2 to answer · Respond');
     await expect(the.heading('Heater').locator('.artifact-review-open')).toHaveText('1 open');
     await expect(the.outline('Heater').locator('.artifact-review-outline')).toHaveText('1 open');
+    await the.count.click();
+    await the.entry('decision-h1').option('No').focus();
 
-    await republish(page, name, [['Heater', []], [DECISIONS, [PUMP]], ['Spring', [LILY]]]);
-    await expect(the.form('decision-s1')).toHaveCount(1);
+    // The question moves to the new section with a new option, and the focus
+    // follows it, staying on its option.
+    await republish(page, name, [['Heater', []], [DECISIONS, [PUMP]],
+      ['Spring', [['H1', 'Keep a hole in the ice?', 'Yes / Maybe / No', '']]]]);
+    await expect(the.entry('decision-h1').option('Maybe')).toHaveCount(1);
+    await expect(the.panel).toBeVisible();
+    await expect(the.entry('decision-h1').option('No')).toBeFocused();
     await expect(the.count).toHaveText('2 to answer · Respond');
     await expect(the.heading('Spring').locator('.artifact-review-open')).toHaveText('1 open');
     await expect(the.outline('Spring').locator('.artifact-review-outline')).toHaveText('1 open');
@@ -636,7 +639,6 @@ test.describe('signed in, published again', () => {
     await expect(the.outline(DECISIONS).locator('.artifact-review-outline')).toHaveText('1 open');
     await expect(the.heading('Heater').locator('.artifact-review-open')).toHaveCount(0);
     await expect(the.outline('Heater').locator('.artifact-review-outline')).toHaveCount(0);
-    await the.count.click();
     await expect(the.groups.locator('.artifact-review-group-title')).toHaveText([DECISIONS, 'Spring']);
     expect(seen.errors).toEqual([]);
   });
@@ -733,22 +735,6 @@ test.describe('signed in, published again', () => {
     const answers = await request.get(`/api/answers?page=${name}`, { headers: SIGNED_IN });
     expect((await answers.json()).questions['decision-3'].current.choice).toBe('no');
     expect(seen.errors.filter((error) => !error.includes('503'))).toEqual([]);
-  });
-
-  test('the focus on a panel option follows its question to another section, and stays on its option', async ({ page }) => {
-    const seen = await watch(page);
-    const name = named('moved');
-    await openPublished(page, name, [['Heater', [NET]], [DECISIONS, [PUMP]]]);
-    const the = sheet(page);
-    await the.count.click();
-    await the.entry('decision-3').option('No').focus();
-
-    await republish(page, name, [['Heater', []], [DECISIONS, [PUMP]],
-      ['Spring', [['3', 'Net the pond?', 'Yes / Maybe / No', '']]]]);
-    await expect(the.entry('decision-3').option('Maybe')).toHaveCount(1);
-    await expect(the.panel).toBeVisible();
-    await expect(the.entry('decision-3').option('No')).toBeFocused();
-    expect(seen.errors).toEqual([]);
   });
 
   test('the panel stays open, its focus on Close, as a republish takes the last question away', async ({ page }) => {

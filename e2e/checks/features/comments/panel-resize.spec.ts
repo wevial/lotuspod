@@ -230,6 +230,15 @@ test('a width of 28rem opens again after a reload and on another page', async ({
   await expect(side.fold).toBeVisible();
   expect(Math.abs((await width(page)) - 28 * REM)).toBeLessThanOrEqual(0.5);
   await expect(side.handle).toHaveAttribute('aria-valuenow', '28');
+
+  // A double-click on the handle goes back to 20rem and forgets the width.
+  await side.handle.dblclick();
+  expect(Math.abs((await width(page)) - 20 * REM)).toBeLessThanOrEqual(0.5);
+  await expect(side.handle).toHaveAttribute('aria-valuenow', '20');
+  expect(await page.evaluate((key) => localStorage.getItem(key), WIDTH)).toBeNull();
+  await page.reload();
+  await expect(side.fold).toBeVisible();
+  expect(Math.abs((await width(page)) - 20 * REM)).toBeLessThanOrEqual(0.5);
 });
 
 test('with a storage that throws on every call the panel opens at 20rem and still resizes, logging no error', async ({ page }) => {
@@ -255,23 +264,6 @@ test('with a storage that throws on every call the panel opens at 20rem and stil
   await side.handle.dblclick();
   expect(Math.abs((await width(page)) - 20 * REM)).toBeLessThanOrEqual(0.5);
   expect(errors).toEqual([]);
-});
-
-test('a double-click on the handle goes back to 20rem and forgets the stored width', async ({ page }) => {
-  await load(page);
-  const side = await openPanel(page);
-  await side.handle.focus();
-  for (let step = 0; step < 10; step += 1) await page.keyboard.press('ArrowLeft');
-  expect(Math.abs((await width(page)) - 30 * REM)).toBeLessThanOrEqual(0.5);
-
-  await side.handle.dblclick();
-  expect(Math.abs((await width(page)) - 20 * REM)).toBeLessThanOrEqual(0.5);
-  await expect(side.handle).toHaveAttribute('aria-valuenow', '20');
-  expect(await page.evaluate((key) => localStorage.getItem(key), WIDTH)).toBeNull();
-
-  await page.reload();
-  await expect(side.fold).toBeVisible();
-  expect(Math.abs((await width(page)) - 20 * REM)).toBeLessThanOrEqual(0.5);
 });
 
 test('a panel widened to its maximum narrows the column and its tables, and the passage read stays put', async ({ page }) => {
