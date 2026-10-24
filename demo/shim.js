@@ -52,6 +52,8 @@
   var WIDGET_HASH = /^[0-9a-f]{12}$/;
   // A control character, which a widget's state never holds.
   var CONTROL = /[\u0000-\u001f\u007f-\u009f]/;
+  // Half of a surrogate pair standing alone, which serve refuses.
+  var LONE_SURROGATE = /[\ud800-\udbff](?![\udc00-\udfff])|(?:^|[^\ud800-\udbff])[\udc00-\udfff]/;
   // The largest image the comments route says it takes; none is ever taken.
   var MAX_IMAGE_BYTES = 10 * 1024 * 1024;
   var NO_UPLOADS = "image uploading is disabled for the demo";
@@ -127,6 +129,19 @@
 
   function text(value, low, high) {
     if (typeof value !== "string" || value.length < low || value.length > high) {
+      throw invalid();
+    }
+    return value;
+  }
+
+  // value as a string of low to high characters, counted as serve counts
+  // them, by code point, and holding no lone surrogate.
+  function chars(value, low, high) {
+    if (typeof value !== "string" || LONE_SURROGATE.test(value)) {
+      throw invalid();
+    }
+    var count = Array.from(value).length;
+    if (count < low || count > high) {
       throw invalid();
     }
     return value;
@@ -282,9 +297,9 @@
       throw invalid();
     }
     var anchor = {
-      id: text(value.id, 1, MAX_WIDGET_ID),
-      hash: text(value.hash, 12, 12),
-      state: text(value.state, 0, MAX_STATE),
+      id: chars(value.id, 1, MAX_WIDGET_ID),
+      hash: chars(value.hash, 12, 12),
+      state: chars(value.state, 0, MAX_STATE),
     };
     if (!WIDGET_HASH.test(anchor.hash) || CONTROL.test(anchor.state)) {
       throw invalid();

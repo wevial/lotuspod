@@ -515,14 +515,17 @@ test('a block comment keeps its widget, and a block anchor serve refuses is refu
   const refused: [object, number, string][] = [
     [on({ widget: { ...widget, extra: 1 } }), 400, 'invalid_body'],
     [on({ widget: { ...widget, hash: 'XYZ' } }), 400, 'invalid_body'],
+    [on({ widget: { ...widget, hash: hash.slice(1) } }), 400, 'invalid_body'],
     [on({ widget: { ...widget, hash: 'ABCDEF012345' } }), 400, 'invalid_body'],
     [on({ widget: { ...widget, state: 'x'.repeat(81) } }), 400, 'invalid_body'],
+    [on({ widget: { ...widget, state: '\u{1F600}'.repeat(81) } }), 400, 'invalid_body'],
     [on({ widget: { ...widget, state: 'ring\u0007' } }), 400, 'invalid_body'],
     [on({ widget, quote: { exact: 'the first algae', prefix: '', suffix: '' } }), 400, 'invalid_body'],
     [{ parent: 1, widget }, 400, 'invalid_body'],
     [{ question: 'decision-1', widget }, 400, 'invalid_body'],
     [on({ widget: { ...widget, id: 'no-such-block' } }), 400, 'unknown_widget'],
     [{ section: '', widget }, 400, 'unknown_widget'],
+    [{ section: 'what-goes-in', widget }, 400, 'unknown_widget'],
     [on({ widget: { ...widget, hash: '000000000000' } }), 409, 'stale_widget'],
   ];
   for (const [fields, status, error] of refused) {
@@ -533,10 +536,15 @@ test('a block comment keeps its widget, and a block anchor serve refuses is refu
   const sent = await api(page, 'POST', '/api/comments', { page: 'try-it', text: 'How deep?', ...on({ widget }) });
   expect(sent.status).toBe(201);
   expect(await newestRoot(page, 'try-it')).toMatchObject({ section: 'the-pond-today', widget });
+  // A state is counted in characters, as serve counts it, not UTF-16 units.
+  const wide = { ...widget, state: '\u{1F600}'.repeat(80) };
+  const taken = await api(page, 'POST', '/api/comments', { page: 'try-it', text: 'How deep?', ...on({ widget: wide }) });
+  expect(taken.status).toBe(201);
+  expect(await newestRoot(page, 'try-it')).toMatchObject({ section: 'the-pond-today', widget: wide });
   seen.clean();
 });
 
-test('a comment from a block\'s Comment is stored on the block, listed and pinned there', async ({ context, page }) => {
+test('a comment from a block\'s Comment is stored on the block, listed and pinned there, and stays over a reload', async ({ context, page }) => {
   const seen = watch(context, page);
   await load(page, TRY_IT);
   const live = block(page);
@@ -566,6 +574,11 @@ test('a comment from a block\'s Comment is stored on the block, listed and pinne
   expect(replied.root.widget).toEqual({ id: BLOCK, hash, state: '' });
   expect(replied.replies).toHaveLength(1);
   expect(replied.replies[0]).toMatchObject({ actor: { kind: 'agent', handle: AGENT }, widget: null });
+
+  await page.reload();
+  await settle(page);
+  await expect(entry(page, root.id).head.locator('.artifact-comments-entry-words')).toHaveText(BLOCK_WORDS);
+  await expect(block(page).pin).toHaveText('1');
   seen.clean();
 });
 
