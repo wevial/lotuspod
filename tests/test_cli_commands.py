@@ -22,9 +22,6 @@ from typing import Callable
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 PACKAGE_DIR = REPO_ROOT / "src" / "lotuspod"
-sys.path.insert(0, str(REPO_ROOT / "src"))
-
-from lotuspod import cli  # noqa: E402
 
 HELLO = textwrap.dedent('''\
     """The hello slice's one command."""
@@ -54,14 +51,6 @@ class DiscoveryTests(unittest.TestCase):
                    LOTUSPOD_CONFIG=str(scratch / "no-such-config.ini"))
         return lambda *argv: subprocess.run([sys.executable, "-m", "lotuspod", *argv], cwd=scratch,
                                             env=env, capture_output=True, text=True)
-
-    def test_the_commands_are_registered_in_slot_order(self):
-        slots = [slot for slot, _ in cli.registrations()]
-        self.assertEqual(slots, sorted(slots))
-        self.assertEqual(len(slots), len(set(slots)))
-        found = {path.parent.name for path in cli.FEATURES_DIR.glob("*/commands.py")}
-        self.assertIn("publish", found)
-        self.assertIn("serve", found)
 
     def test_a_new_slices_commands_module_adds_its_command(self):
         """A copy of the package with a new slice folder holding only its

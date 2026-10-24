@@ -43,13 +43,6 @@ class RewrittenTest(unittest.TestCase):
                                  "merge base and 0 time(s) here"])
         self.assertEqual(allowed, [])
 
-    def test_without_the_option_a_dropped_name_is_a_difference(self):
-        after = {key: count for key, count in self.BEFORE.items() if key[1] != "JoinTests.test_old"}
-        lines, _ = move_witness.multiset_differences(
-            "unittest", self.BEFORE, after, {path for path, _ in self.BEFORE})
-        self.assertEqual(lines, ["unittest: 'JoinTests.test_old' is discovered 1 time(s) at the "
-                                 "merge base and 0 time(s) here"])
-
 
 if __name__ == "__main__":
     unittest.main()

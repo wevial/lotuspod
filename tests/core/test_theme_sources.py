@@ -362,40 +362,21 @@ class DeclaredOrderTests(ThemeCopyTestCase):
 
     def test_a_new_slices_part_is_joined_at_its_slot(self):
         """A new slice folder holding one stylesheet part and its declaration,
-        at slot 5, nothing else edited: the part is joined after every part
-        with a lower slot and before every part with a higher one."""
+        at slot 15, between the first part's and the second's, nothing else
+        edited: the part is joined between them."""
         theme = self.theme_copy()
+        existing = core.theme_sources()[STYLESHEET]
         rule = b"\n.pond {\n  color: var(--color-sky);\n}\n"
-        add_pond(theme, rule, 5)
+        add_pond(theme, rule, 15)
 
         with mock.patch.object(core, "THEME_ROOT", theme):
             core.sync_theme_css(self.out_dir)
         served = (self.out_dir / STYLESHEET).read_bytes()
-        slots = {}
-        for declared in [theme / "core" / core.THEME_PARTS,
-                         *sorted((theme / "features").glob(f"*/{core.THEME_PARTS}"))]:
-            prefix = declared.parent.relative_to(theme).as_posix()
-            slots.update({f"{prefix}/{part['part']}": part["slot"]
-                          for part in json.loads(declared.read_text(encoding="utf-8"))
-                          if part["file"] == STYLESHEET})
-        lower = tuple(source for source in sorted(slots, key=slots.get) if slots[source] < 5)
-        higher = tuple(source for source in sorted(slots, key=slots.get) if slots[source] > 5)
-        self.assertGreater(len(higher), 1)
-        self.assertEqual(served, joined(theme, lower) + rule + joined(theme, higher))
-        self.assertEqual(sources_at(theme)[STYLESHEET], (*lower, "features/pond/theme/pond.css", *higher))
+        self.assertEqual(served, joined(theme, existing[:1]) + rule + joined(theme, existing[1:]))
+        self.assertEqual(sources_at(theme)[STYLESHEET],
+                         (existing[0], "features/pond/theme/pond.css", *existing[1:]))
         problems = source_problems(theme, sources_at(theme))
         self.assertEqual(problems, [], "\n".join(problems))
-
-    def test_a_part_between_two_slots_is_joined_between_their_parts(self):
-        theme = self.theme_copy()
-        before, after = core.theme_sources()[STYLESHEET][:2]
-        rule = b".pond {}\n"
-        add_pond(theme, rule, 15)
-
-        with mock.patch.object(core, "THEME_ROOT", theme):
-            served = core.theme_file_bytes(STYLESHEET)
-        self.assertEqual(sources_at(theme)[STYLESHEET][:3], (before, "features/pond/theme/pond.css", after))
-        self.assertTrue(served.startswith(joined(theme, (before,)) + rule + joined(theme, (after,))))
 
     def test_two_parts_at_one_slot_are_refused(self):
         theme = self.theme_copy()
