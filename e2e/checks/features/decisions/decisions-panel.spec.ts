@@ -850,6 +850,20 @@ test('an empty panel Ask posts nothing, and the card\'s Ask still sends and empt
   expect(errors).toEqual([]);
 });
 
+// The page's words selected, as a reader's drag does.
+async function select(page: Page, words: string) {
+  await page.evaluate((wanted) => {
+    const walker = document.createTreeWalker(document.querySelector('.artifact-body')!, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode() as Text | null; node; node = walker.nextNode() as Text | null) {
+      const at = node.data.indexOf(wanted);
+      if (at < 0) continue;
+      node.parentElement!.scrollIntoView({ block: 'center' });
+      document.getSelection()!.setBaseAndExtent(node, at, node, at + wanted.length);
+      return;
+    }
+  }, words);
+}
+
 // The bottom sheet, in place of the panel on a phone.
 function bottom(page: Page) {
   const node = page.locator('.artifact-comments-bottom-sheet');
@@ -948,15 +962,7 @@ test.describe('on a phone', () => {
     const drafted = page.locator('.artifact-passage-composer textarea');
     const pending = page.locator('mark.artifact-passage--pending');
     const words = 'what it waits on';
-    await page.evaluate((wanted) => {
-      const walker = document.createTreeWalker(document.querySelector('.artifact-body')!, NodeFilter.SHOW_TEXT);
-      for (let node = walker.nextNode() as Text | null; node; node = walker.nextNode() as Text | null) {
-        const at = node.data.indexOf(wanted);
-        if (at < 0) continue;
-        document.getSelection()!.setBaseAndExtent(node, at, node, at + wanted.length);
-        return;
-      }
-    }, words);
+    await select(page, words);
     await page.locator('button.artifact-passage-pill').click();
     await expect(sheet.node.locator('.artifact-passage-composer')).toBeVisible();
     await drafted.fill('Half a thought');
@@ -969,8 +975,19 @@ test.describe('on a phone', () => {
     await expect(drafted).toHaveValue('Half a thought');
     await expect(pending).toHaveCount(1);
 
-    // Closed on Decisions, the sheet takes the draft with it, at any width.
+    // Behind Decisions it stays as the width changes, in the panel too.
     await sheet.tab('Decisions').click();
+    await page.setViewportSize({ width: 800, height: 900 });
+    await expect(sheet.tab('Decisions')).toHaveAttribute('aria-selected', 'true');
+    await expect(drafted).toHaveValue('Half a thought');
+    await page.setViewportSize(WIDE);
+    await expect(panel(page).decisions).toBeVisible();
+    await expect(page.locator('aside.artifact-comments-panel .artifact-passage-composer textarea')).toHaveValue('Half a thought');
+    await page.setViewportSize(PHONE);
+    await expect(sheet.tab('Decisions')).toHaveAttribute('aria-selected', 'true');
+    await expect(drafted).toHaveValue('Half a thought');
+
+    // Closed on Decisions, the sheet takes the draft with it, at any width.
     await sheet.close.click();
     await expect(sheet.node).toBeHidden();
     await expect(drafted).toHaveCount(0);
@@ -988,6 +1005,34 @@ test.describe('on a phone', () => {
     await sheet.tab('Comments').click();
     await expect(form).toBeVisible();
     await expect(form).toHaveValue('A section thought');
+    await sheet.close.click();
+
+    // From 700 pixels, a draft in a popover is kept behind Decisions too.
+    await page.setViewportSize({ width: 800, height: 900 });
+    await select(page, words);
+    await page.locator('button.artifact-passage-pill').click();
+    await expect(page.locator('.artifact-comments-popover .artifact-passage-composer')).toBeVisible();
+    await drafted.fill('Another thought');
+    await count.click();
+    await expect(sheet.tab('Decisions')).toHaveAttribute('aria-selected', 'true');
+    await sheet.tab('Comments').click();
+    await expect(drafted).toBeVisible();
+    await expect(drafted).toHaveValue('Another thought');
+    expect(errors).toEqual([]);
+  });
+
+  test('the questions open in the panel move into the sheet as the window narrows, the focus kept', async ({ page, request }) => {
+    const name = `decisions-panel-narrows-${test.info().repeatEachIndex}`;
+    await prepare(request, name);
+    const errors = watch(page);
+    await page.setViewportSize(WIDE);
+    await load(page, name);
+    await page.locator('button.artifact-review-count').click();
+    await entry(page, 'decision-1').item.getByRole('radio', { name: 'Only on hover' }).focus();
+    await page.setViewportSize(PHONE);
+    const sheet = bottom(page);
+    await expect(sheet.tab('Decisions')).toHaveAttribute('aria-selected', 'true');
+    await expect(sheet.entry('decision-1').getByRole('radio', { name: 'Only on hover' })).toBeFocused();
     expect(errors).toEqual([]);
   });
 });

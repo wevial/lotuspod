@@ -323,11 +323,14 @@ export function placement(page: Page, bridge: PlacementBridge): Placement {
   };
 
   // What the open panel shows, to open again in a popover or the sheet
-  // (over.restore) when the window narrows: a section's form being
-  // written in, else the open entry's thread. A passage's composer is
-  // placed by its own (passages.place).
+  // (over.restore) when the window narrows: its Decisions tab, else a
+  // section's form being written in, else the open entry's thread. A
+  // passage's composer is placed by its own (passages.place).
   function opened(): Taken {
     var none = { view: null, opener: null, anchor: null, writing: null };
+    if (shell.deciding() && sheetTabs.asks()) {
+      return { view: { decisions: true }, opener: null, anchor: null, writing: null };
+    }
     if (!shell.isOpen()) {
       return none;
     }
@@ -402,6 +405,10 @@ export function placement(page: Page, bridge: PlacementBridge): Placement {
     moving = false;
     refresh();
     passages.place();
+    // A composer placed in the panel leaves it on Decisions, as it was.
+    if (api.wide && view && view.decisions) {
+      shell.setOpen(true, false, "decisions");
+    }
     if (focused instanceof HTMLElement && focused !== document.body && focused.isConnected && document.activeElement !== focused) {
       focused.focus({ preventScroll: true });
     }

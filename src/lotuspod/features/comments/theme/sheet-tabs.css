@@ -64,7 +64,6 @@
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding: 0 0.9rem 1rem;
   scrollbar-color: var(--hairline-strong) transparent;
   scrollbar-width: thin;
 }

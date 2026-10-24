@@ -637,6 +637,10 @@
         over.sync();
         return;
       }
+      // Kept behind Decisions, a composer stays there as the width changes.
+      if (held.view && held.view.decisions && back && back.view.passage === mine) {
+        return;
+      }
       hold(panel.mode, { passage: mine }, null, mine.marks[mine.marks.length - 1]);
     };
 
@@ -684,8 +688,10 @@
     // or form the sheet held.
     over.decisions = function (opener) {
       if (!(held.view && held.view.decisions)) {
-        if (held.kind === "sheet") {
+        if (held.view) {
           lend();
+        } else {
+          back = null;
         }
         hold("sheet", { decisions: true }, opener, null);
       }
@@ -833,13 +839,14 @@
       }
     });
     // A click outside the popover, its opener, the pill, the banner
-    // offering a reload (which keeps it open over the reload) and the image
-    // viewer opened from it closes it, before whatever the click is for.
+    // offering a reload (which keeps it open over the reload), the image
+    // viewer opened from it and the title bar's count (which keeps it
+    // behind Decisions) closes it, before whatever the click is for.
     document.addEventListener("click", function (event) {
       var target = event.target;
       if (held.kind !== "popover" || popover.node.contains(target) ||
           (held.opener && held.opener.contains(target)) ||
-          (target.closest && target.closest(".artifact-passage-pill, .artifact-live-page, .artifact-image-viewer"))) {
+          (target.closest && target.closest(".artifact-passage-pill, .artifact-live-page, .artifact-image-viewer, .artifact-review-count"))) {
         return;
       }
       release(true);
