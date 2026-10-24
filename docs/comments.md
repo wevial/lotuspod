@@ -610,7 +610,7 @@ focus goes back to the button that started it; nothing is posted. In any
 comment composer (a box's form, a reply, a passage's), Cmd+Enter (Ctrl+Enter
 off macOS) sends as its button does, and does nothing while it saves; Enter
 alone adds a line. A composer also takes emoji shortcodes as GitHub writes
-them (LOTUS-231, `comments/shortcodes.ts` and `comments/shortcode-list.tsx`
+them (`comments/shortcodes.ts` and `comments/shortcode-list.tsx`
 under the islands): a typed (never pasted) `:tada:` becomes 🎉 in the field,
 so the stored text holds the emoji, and an unknown name such as `:nope:`
 stays as typed. A shortcode starts at the start of the field or after

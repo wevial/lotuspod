@@ -118,7 +118,7 @@ class ServeSyncsTheme(unittest.TestCase):
             self.assertEqual(served, data, name)
 
     def test_serve_answers_the_emoji_table_as_json(self):
-        """LOTUS-231: a comment composer fetches the emoji table from the
+        """A comment composer fetches the emoji table from the
         theme's files, the packaged table byte for byte."""
         site = ServedSite(self)
         sync_theme_css(site.out)
