@@ -10,9 +10,8 @@ def public_edge(package: str, names: dict[str, str]) -> Callable[[str], Any]:
     """The module __getattr__ a slice's __init__.py exports names with: each
     of names, by the module of package that defines it, is read from that
     module when asked for. Importing a slice so loads none of its modules,
-    and the slices' modules import each other as they did before they went
-    through the slice, with no cycle between the slice packages for two
-    threads importing at once to deadlock on."""
+    leaving no cycle between the slice packages for two threads importing
+    at once to deadlock on."""
     def __getattr__(name: str) -> Any:
         if name not in names:
             raise AttributeError(f"module {package!r} has no attribute {name!r}")
