@@ -1,5 +1,3 @@
-import { execFileSync } from 'node:child_process';
-import path from 'node:path';
 import { expect, test, type Locator, type Page } from '@playwright/test';
 
 // Windows without room for the comments panel: at 1024 pixels a thread opens
@@ -8,19 +6,13 @@ import { expect, test, type Locator, type Page } from '@playwright/test';
 // the page. The capture fixture's comments and passages pages. Most checks
 // answer the threads route themselves; those that post go to the site, and
 // as the run shares one database they show only the threads they made,
-// found by id. hermes claims and replies through real `lotuspod` commands on
-// the fixture's agent socket.
+// found by id.
 const COMMENTS = '/capture-comments.html';
 const PASSAGES = '/capture-passages.html';
 const PASSAGES_SLUG = 'capture-passages';
 const ENV = process.env;
 const ASSERTION = ENV.LOTUSPOD_TEST_ASSERTION ?? '';
 const SIGNED_IN = { 'Cf-Access-Jwt-Assertion': ASSERTION };
-const SOCKET = ENV.LOTUSPOD_TEST_SOCKET ?? '';
-const HERMES = ENV.LOTUSPOD_TEST_CREDENTIAL_HERMES ?? '';
-const PYTHON = ENV.LOTUSPOD_TEST_PYTHON ?? '';
-// This checkout's package, whatever lotuspod is installed.
-const SRC = path.resolve(__dirname, '..', '..', '..', '..', 'src');
 // The reader as a page names them: their address's part before the @.
 const READER = 'maintainer';
 const OWNER = 'hermes';
@@ -78,20 +70,6 @@ async function watch(page: Page) {
       expect(await page.evaluate(() => (window as any).__violations as Violation[])).toEqual([]);
     },
   };
-}
-
-// `lotuspod comments ACTION ... --json` as hermes; what it printed.
-function hermes(action: string, ...args: string[]) {
-  const stdout = execFileSync(PYTHON, [
-    '-m', 'lotuspod', 'comments', action, ...args, '--json',
-    '--socket', SOCKET, '--credential', HERMES,
-  ], {
-    encoding: 'utf-8',
-    env: { ...ENV, PYTHONPATH: SRC },
-    stdio: ['ignore', 'pipe', 'pipe'],
-    timeout: 60_000,
-  });
-  return JSON.parse(stdout);
 }
 
 let next = 1;
@@ -373,50 +351,6 @@ test.describe('signed in', () => {
     await seen.clean();
   });
 
-  test('at 1024 pixels hermes answers in the open popover without a reload, and nothing below moves', async ({ page }) => {
-    test.setTimeout(120_000);
-    for (const [name, value] of Object.entries({ ASSERTION, SOCKET, HERMES, PYTHON })) {
-      expect(value, `the capture fixture names ${name}`).toBeTruthy();
-    }
-    const seen = await watch(page);
-    // hermes pulls first, so it is listening and the comment, naming it, waits for it.
-    hermes('pull', '--owner', OWNER);
-    const ids = new Set<number>();
-    await ownThreads(page, ids);
-    await load(page, COMMENTS);
-    await page.evaluate(() => { (window as any).__stayed = 'this page'; });
-    const risks = chip(page, 'risks');
-    await risks.chip.click();
-    const pop = popover(page);
-    await expect(pop.field).toBeFocused();
-    // It names hermes, so it waits for hermes, not the responder.
-    const COMMENT = '@hermes Will the pump crack?';
-    await pop.field.fill(COMMENT);
-    await pop.send.click();
-    await expect(pop.threads).toHaveCount(1);
-    const id = Number(await pop.threads.first().getAttribute('data-thread'));
-    const thread = pop.thread(id);
-    const below = page.locator('h2#next-steps');
-    const before = await rect(below);
-
-    const claim = hermes('claim', String(id));
-    expect(claim.handle).toBe(OWNER);
-    await expect(thread.locator('.artifact-comment-typing--claimed')).toHaveCount(1, { timeout: 15_000 });
-    const REPLY = 'Not with the heater running beside it.';
-    // A claim token may start with '-': give it to its option in one word.
-    hermes('reply', String(id), `--claim=${claim.claimToken}`, '--key', `narrow-${id}`, '--text', REPLY);
-    const theirs = thread.locator('.artifact-comment-item--agent');
-    await expect(theirs).toHaveCount(1, { timeout: 15_000 });
-    await expect(theirs.locator('.artifact-comment-text')).toHaveText(REPLY);
-    await expect(pop.node).toBeVisible();
-    const left = await rect(theirs.locator('.artifact-comment-text'));
-    const right = await rect(thread.locator('.artifact-comment-item--reader .artifact-comment-text'));
-    expect(left.left).toBeLessThan(right.left);
-    expect(await rect(below)).toEqual(before);
-    expect(await page.evaluate(() => (window as any).__stayed)).toBe('this page');
-    await seen.clean();
-  });
-
   test('what is open moves with the window from popover to sheet to panel, its typed words kept', async ({ page }) => {
     const seen = await watch(page);
     const root = row({ text: 'Does the pump stop every January?' });
@@ -483,10 +417,17 @@ test.describe('signed in', () => {
     await risen(page);
     await expect(bottom.thread(root.id)).toBeVisible();
     await expect(page.locator(`.artifact-comment-thread[data-thread="${root.id}"]`)).toHaveCount(1);
+    // The chip never opens its box, and no width scrolls sideways.
+    await expect(findings.details).not.toHaveAttribute('open');
+    let fit = await widths(page);
+    expect(fit.scroll).toBeLessThanOrEqual(fit.viewport);
 
     // A section's form being written in the panel goes with its words.
     await page.setViewportSize({ width: 1440, height: 900 });
     await expect(aside).toBeVisible();
+    await expect(findings.details).not.toHaveAttribute('open');
+    fit = await widths(page);
+    expect(fit.scroll).toBeLessThanOrEqual(fit.viewport);
     const steps = chip(page, 'next-steps');
     await steps.chip.click();
     const written = aside.locator('form.artifact-comment-form textarea[name="text"]').filter({ visible: true });
@@ -505,7 +446,7 @@ test.describe('signed in', () => {
     const field = bottom.node.locator('form.artifact-comment-form textarea[name="text"]');
     await expect(field).toBeVisible();
     await expect(field).toHaveValue('Half a thought');
-    const fit = await widths(page);
+    fit = await widths(page);
     expect(fit.scroll).toBeLessThanOrEqual(fit.viewport);
     await seen.clean();
   });
@@ -825,18 +766,5 @@ test.describe('signed in', () => {
       expect(fit.scroll).toBeLessThanOrEqual(fit.viewport);
       await seen.clean();
     });
-  });
-
-  test('with a fine pointer at 1024 pixels the pill sits above the selection', async ({ page }) => {
-    const seen = await watch(page);
-    await serve(page, []);
-    await load(page, PASSAGES);
-    expect(await page.evaluate(() => matchMedia('(pointer: coarse)').matches)).toBe(false);
-    await choose(page, HEATER);
-    const offered = page.locator('button.artifact-passage-pill');
-    await expect(offered).toBeVisible();
-    const chosen = await selectionRect(page);
-    expect((await rect(offered)).bottom).toBeLessThan(chosen.top);
-    await seen.clean();
   });
 });

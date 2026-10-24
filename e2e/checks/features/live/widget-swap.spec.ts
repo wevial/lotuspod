@@ -95,86 +95,84 @@ test('unchanged widgets keep their frame, runtime and chrome through section and
   await kept(page, introStart, introCount);
 });
 
-for (const intro of [false, true]) {
-  test(`carried widgets reconcile the sandbox explanation in the ${intro ? 'intro' : 'section'}`, async ({ page }) => {
-    const name = `widget-swap-note-${intro ? 'intro' : 'section'}`;
-    const survivor = widget().replace('live title=', 'live id=survivor title=');
-    const first = widget().replace('live title=', 'live id=first title=');
-    const content = (both: boolean) => doc(undefined, undefined, 1, intro)
-      .replace(widget(), both ? `${first}\n\n${survivor}` : survivor);
-    await open(page, name, content(false));
-    const original = await page.locator('iframe.artifact-widget').elementHandle();
-    const start = await output(page).getAttribute('data-started');
-    const count = await ticks(page);
+test('carried widgets reconcile the sandbox explanation in the section', async ({ page }) => {
+  const name = 'widget-swap-note-section';
+  const survivor = widget().replace('live title=', 'live id=survivor title=');
+  const first = widget().replace('live title=', 'live id=first title=');
+  const content = (both: boolean) => doc()
+    .replace(widget(), both ? `${first}\n\n${survivor}` : survivor);
+  await open(page, name, content(false));
+  const original = await page.locator('iframe.artifact-widget').elementHandle();
+  const start = await output(page).getAttribute('data-started');
+  const count = await ticks(page);
 
-    await swap(page, name, content(true));
-    await expect(page.locator('.artifact-live-note')).toHaveCount(1);
-    await expect(page.locator('figure[data-widget="first"] .artifact-live-note')).toContainText('Sandboxed:');
-    await expect(page.locator('figure[data-widget="survivor"] .artifact-live-note')).toHaveCount(0);
+  await swap(page, name, content(true));
+  await expect(page.locator('.artifact-live-note')).toHaveCount(1);
+  await expect(page.locator('figure[data-widget="first"] .artifact-live-note')).toContainText('Sandboxed:');
+  await expect(page.locator('figure[data-widget="survivor"] .artifact-live-note')).toHaveCount(0);
 
-    await swap(page, name, content(false));
-    await expect(page.locator('.artifact-live-note')).toHaveCount(1);
-    await expect(figure(page).locator('.artifact-live-note')).toHaveText("Sandboxed: this block can't see the page or your comments");
-    expect(await original!.evaluate(node => node === document.querySelector('iframe.artifact-widget'))).toBe(true);
-    await kept(page, start, count);
-  });
+  await swap(page, name, content(false));
+  await expect(page.locator('.artifact-live-note')).toHaveCount(1);
+  await expect(figure(page).locator('.artifact-live-note')).toHaveText("Sandboxed: this block can't see the page or your comments");
+  expect(await original!.evaluate(node => node === document.querySelector('iframe.artifact-widget'))).toBe(true);
+  await kept(page, start, count);
+});
 
-  test(`running widgets restore automatic height in the ${intro ? 'intro' : 'section'}`, async ({ page }) => {
-    const name = `widget-swap-auto-height-${intro ? 'intro' : 'section'}`;
-    const content = (fixed: boolean) => doc(undefined, undefined, 1, intro)
-      .replace('live title="Running clock"', `live id=clock title="Running clock"${fixed ? ' height=800' : ''}`)
-      .replace('<button>Keep my place', '<style>html, body { margin: 0; height: 700px; }</style><button>Keep my place');
-    await open(page, name, content(true));
-    const frame = page.locator('iframe.artifact-widget');
-    const original = await frame.elementHandle();
-    const start = await output(page).getAttribute('data-started');
-    const count = await ticks(page);
-    await expect(frame).toHaveAttribute('height', '800');
-    await swap(page, name, content(false));
-    await expect(frame).not.toHaveAttribute('data-height-fixed');
-    await expect(frame).toHaveAttribute('height', '700');
-    expect(await original!.evaluate(node => node === document.querySelector('iframe.artifact-widget'))).toBe(true);
-    await kept(page, start, count);
-  });
+test('running widgets restore automatic height in the section', async ({ page }) => {
+  const name = 'widget-swap-auto-height-section';
+  const content = (fixed: boolean) => doc()
+    .replace('live title="Running clock"', `live id=clock title="Running clock"${fixed ? ' height=800' : ''}`)
+    .replace('<button>Keep my place', '<style>html, body { margin: 0; height: 700px; }</style><button>Keep my place');
+  await open(page, name, content(true));
+  const frame = page.locator('iframe.artifact-widget');
+  const original = await frame.elementHandle();
+  const start = await output(page).getAttribute('data-started');
+  const count = await ticks(page);
+  await expect(frame).toHaveAttribute('height', '800');
+  await swap(page, name, content(false));
+  await expect(frame).not.toHaveAttribute('data-height-fixed');
+  await expect(frame).toHaveAttribute('height', '700');
+  expect(await original!.evaluate(node => node === document.querySelector('iframe.artifact-widget'))).toBe(true);
+  await kept(page, start, count);
+});
 
-  test(`carried widgets apply published title and height changes in the ${intro ? 'intro' : 'section'}`, async ({ page }) => {
-    const name = `widget-swap-metadata-${intro ? 'intro' : 'section'}`;
-    const content = (title: string, height?: number) => doc(undefined, undefined, 1, intro)
-      .replace('live title="Running clock"', `live id=clock title="${title}"${height === undefined ? '' : ` height=${height}`}`);
-    await open(page, name, content('Old title', 200));
-    const frame = page.locator('iframe.artifact-widget');
-    const original = await frame.elementHandle();
-    const source = await frame.getAttribute('src');
-    const start = await output(page).getAttribute('data-started');
-    const count = await ticks(page);
-    await swap(page, name, content('New title', 800));
-    await expect(figure(page).locator('.artifact-live-title')).toHaveText('New title');
-    await expect(frame).toHaveAttribute('title', 'New title');
-    await expect(frame).toHaveAttribute('height', '800');
-    await expect(frame).toHaveAttribute('data-height-fixed');
-    await expect(frame).toHaveAttribute('src', source!);
-    expect(await original!.evaluate(node => node === document.querySelector('iframe.artifact-widget'))).toBe(true);
-    await kept(page, start, count);
+test('carried widgets apply published title and height changes in the section', async ({ page }) => {
+  const name = 'widget-swap-metadata-section';
+  const content = (title: string, height?: number) => doc()
+    .replace('live title="Running clock"', `live id=clock title="${title}"${height === undefined ? '' : ` height=${height}`}`);
+  await open(page, name, content('Old title', 200));
+  const frame = page.locator('iframe.artifact-widget');
+  const original = await frame.elementHandle();
+  const source = await frame.getAttribute('src');
+  const start = await output(page).getAttribute('data-started');
+  const count = await ticks(page);
+  await swap(page, name, content('New title', 800));
+  await expect(figure(page).locator('.artifact-live-title')).toHaveText('New title');
+  await expect(frame).toHaveAttribute('title', 'New title');
+  await expect(frame).toHaveAttribute('height', '800');
+  await expect(frame).toHaveAttribute('data-height-fixed');
+  await expect(frame).toHaveAttribute('src', source!);
+  expect(await original!.evaluate(node => node === document.querySelector('iframe.artifact-widget'))).toBe(true);
+  await kept(page, start, count);
 
-    await figure(page).getByRole('button', { name: 'Pause', exact: true }).click();
-    await page.locator('.artifact-title').click();
-    await swap(page, name, content('Automatic height'));
-    await expect(frame).toHaveAttribute('title', 'Automatic height');
-    await expect(frame).not.toHaveAttribute('data-height-fixed');
-    await expect(frame).toHaveAttribute('height', '360');
-    await expect(frame).toHaveAttribute('src', 'about:blank');
-    await expect(figure(page).locator('.artifact-live-paused')).toBeVisible();
-    expect(await figure(page).evaluate(node => (node as any).kept)).toBe(true);
-    await figure(page).getByRole('button', { name: 'Resume' }).click();
-    await expect(figure(page).locator('.artifact-live-badge')).toHaveText('Live');
-    await expect(frame).toHaveAttribute('src', source!);
-    await page.locator('.artifact-title').click();
-    await swap(page, name, content('Fixed again', 450));
-    await expect(frame).toHaveAttribute('height', '450');
-    await expect(frame).toHaveAttribute('data-height-fixed');
-    expect(await original!.evaluate(node => node === document.querySelector('iframe.artifact-widget'))).toBe(true);
-  });
-}
+  await figure(page).getByRole('button', { name: 'Pause', exact: true }).click();
+  await page.locator('.artifact-title').click();
+  await swap(page, name, content('Automatic height'));
+  await expect(frame).toHaveAttribute('title', 'Automatic height');
+  await expect(frame).not.toHaveAttribute('data-height-fixed');
+  await expect(frame).toHaveAttribute('height', '360');
+  await expect(frame).toHaveAttribute('src', 'about:blank');
+  await expect(figure(page).locator('.artifact-live-paused')).toBeVisible();
+  expect(await figure(page).evaluate(node => (node as any).kept)).toBe(true);
+  await figure(page).getByRole('button', { name: 'Resume' }).click();
+  await expect(figure(page).locator('.artifact-live-badge')).toHaveText('Live');
+  await expect(frame).toHaveAttribute('src', source!);
+  await page.locator('.artifact-title').click();
+  await swap(page, name, content('Fixed again', 450));
+  await expect(frame).toHaveAttribute('height', '450');
+  await expect(frame).toHaveAttribute('data-height-fixed');
+  expect(await original!.evaluate(node => node === document.querySelector('iframe.artifact-widget'))).toBe(true);
+});
 
 test('changed widgets load a new file, receive chrome and briefly tint their strip', async ({ page }) => {
   await open(page, 'widget-swap-reload');

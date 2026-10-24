@@ -16,8 +16,6 @@ const ASSERTION = process.env.LOTUSPOD_TEST_ASSERTION ?? '';
 const SIGNED_IN = { 'Cf-Access-Jwt-Assertion': ASSERTION };
 const STALE = 'This question has changed since the page loaded. Reload it.';
 const SECTIONS = ['Who reviews', 'When a review blocks', 'Prompt rules', 'Rollout'];
-const QUESTIONS = ['decision-d1', 'decision-d2', 'decision-d3', 'decision-d4', 'checklist-1',
-  'decision-d5', 'decision-d6'];
 
 type Violation = { blockedURI: string; effectiveDirective: string };
 
@@ -429,27 +427,25 @@ test.describe('signed in', () => {
     });
   });
 
-  for (const width of [320, 280]) {
-    test.describe(`at ${width} wide`, () => {
-      test.use({ viewport: { width, height: 640 } });
+  test.describe('at 320 wide', () => {
+    test.use({ viewport: { width: 320, height: 640 } });
 
-      test('the count and Next open stay inside the window', async ({ page }) => {
-        const reads = (url: URL) => url.pathname === '/api/answers';
+    test('the count and Next open stay inside the window', async ({ page }) => {
+      const reads = (url: URL) => url.pathname === '/api/answers';
     await page.route(reads, (route) =>
-          route.request().method() === 'GET'
-            ? route.fulfill({ json: { page: 'capture-review-sheet', questions: {} } })
-            : route.continue());
-        await page.goto(`${PAGE}?standalone`);
-        const the = sheet(page);
-        await expect(the.count).toHaveText('3 to answer · Respond');
-        for (const target of [the.count, the.next]) {
-          const box = await target.boundingBox();
-          expect(box!.x).toBeGreaterThanOrEqual(0);
-          expect(box!.x + box!.width).toBeLessThanOrEqual(width);
-        }
-      });
+        route.request().method() === 'GET'
+          ? route.fulfill({ json: { page: 'capture-review-sheet', questions: {} } })
+          : route.continue());
+      await page.goto(`${PAGE}?standalone`);
+      const the = sheet(page);
+      await expect(the.count).toHaveText('3 to answer · Respond');
+      for (const target of [the.count, the.next]) {
+        const box = await target.boundingBox();
+        expect(box!.x).toBeGreaterThanOrEqual(0);
+        expect(box!.x + box!.width).toBeLessThanOrEqual(320);
+      }
     });
-  }
+  });
 
   test.describe('at 280 wide, then 1280', () => {
     test.use({ viewport: { width: 280, height: 640 } });
@@ -463,6 +459,12 @@ test.describe('signed in', () => {
       await page.goto(`${PAGE}?standalone`);
       const the = sheet(page);
       await expect(the.count).toHaveText('3 to answer · Respond');
+      // The count and Next open stay inside the window.
+      for (const target of [the.count, the.next]) {
+        const box = await target.boundingBox();
+        expect(box!.x).toBeGreaterThanOrEqual(0);
+        expect(box!.x + box!.width).toBeLessThanOrEqual(280);
+      }
       // The words truncate in their own span; the arrow after them lies
       // wholly inside the link and the window, so it shows whole.
       const fit = () => the.next.evaluate((link) => {
@@ -513,17 +515,6 @@ test.describe('signed in', () => {
       const box = await the.count.boundingBox();
       expect(box!.x + box!.width).toBeLessThanOrEqual(280);
     });
-  });
-});
-
-test.describe('without JavaScript', () => {
-  test.use({ extraHTTPHeaders: SIGNED_IN, javaScriptEnabled: false });
-
-  test('the forms show as before and there is no count', async ({ page }) => {
-    await page.goto(`${PAGE}?standalone`);
-    await expect(page.locator('form.artifact-decision')).toHaveCount(QUESTIONS.length);
-    for (const radio of await page.locator('input[name="choice"]').all()) await expect(radio).not.toBeChecked();
-    await expect(page.locator('.artifact-review-bar, .artifact-review-panel')).toHaveCount(0);
   });
 });
 

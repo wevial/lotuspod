@@ -30,13 +30,14 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "src"))
 
-from lotuspod import cli, core  # noqa: E402
-from lotuspod.features.serve import access, handler as serve_handler  # noqa: E402
-from lotuspod.features.decisions import commands as decisions_commands  # noqa: E402
-from lotuspod.features.decisions import decisions  # noqa: E402
-from lotuspod.features.publish import markdown  # noqa: E402
-from lotuspod.store import db  # noqa: E402
-from tests import access_keys  # noqa: E402
+from lotuspod import cli, core
+from lotuspod.features.decisions import commands as decisions_commands
+from lotuspod.features.decisions import decisions
+from lotuspod.features.publish import markdown
+from lotuspod.features.serve import access
+from lotuspod.features.serve import handler as serve_handler
+from lotuspod.store import db
+from tests import access_keys
 
 FIXTURES = Path(__file__).resolve().parents[2] / "fixtures" / "decisions"
 
@@ -118,15 +119,17 @@ CHECKLIST_TABLE = CHECKLIST.split("### Checklist for the maintainer\n\n", 1)[1]
 
 
 class _Page(HTMLParser):
-    """A page's decision forms, with their inputs, plus its tables and the
+    """A page's decision forms, with their inputs, plus its tables, the
     scripts it loads (an inline script, the theme's head script, has no src
-    and is not listed)."""
+    and is not listed) and every class and id its elements carry."""
 
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
         self.forms: list[dict] = []
         self.tables = 0
         self.scripts: list[str] = []
+        self.classes: set[str] = set()
+        self.ids: set[str] = set()
         self._form: dict | None = None
         self._label: dict | None = None
         self._button: dict | None = None
@@ -138,6 +141,9 @@ class _Page(HTMLParser):
     def handle_starttag(self, tag, attrs):
         attrs = {key: value or "" for key, value in attrs}
         classes = attrs.get("class", "").split()
+        self.classes.update(classes)
+        if "id" in attrs:
+            self.ids.add(attrs["id"])
         if tag == "table":
             self.tables += 1
         elif tag == "script" and attrs.get("src"):
@@ -287,6 +293,11 @@ class FormTests(DecisionsTestCase):
             self.assertIn("artifact-decision-default", labels[0]["last"])
         self.assertEqual([form["context"] for form in page.forms], [[], []])
         self.assertEqual([src.split("?")[0] for src in page.scripts], [core.PAGE_SCRIPT])
+        # The review bar and its panel are the page script's to draw: no
+        # element of the page as rendered is either.
+        for drawn in ("artifact-review-bar", "artifact-review-panel"):
+            self.assertNotIn(drawn, page.classes)
+            self.assertNotIn(drawn, page.ids)
 
     def test_the_forms_sit_inside_their_section(self):
         page_html = self.render_markdown("plan", PLAN)

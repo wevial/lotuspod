@@ -311,8 +311,10 @@ test.describe('signed in', () => {
     expect(page.context().pages()).toHaveLength(1);
   });
 
-  test('a bare URL in a code span, a code block, an image or a refused link, or after a look-alike scheme, draws no link', async ({ page, request }) => {
+  test('text that is not markdown draws as typed: a bare URL where no link belongs, raw HTML and entities, a code span, an underscore, a lone asterisk, an image, a refused link and a four-backtick line', async ({ page, request }) => {
     const seen = await watch(page);
+    // A bare URL in a code span, a code block, an image or a refused link, or
+    // after a look-alike scheme, draws no link.
     const texts = [
       'Run `curl https://example.com/code` first.',
       '```\ncurl https://example.com/fence\n```',
@@ -322,14 +324,64 @@ test.describe('signed in', () => {
       'See ![chart](https://example.com/c_(a_(b)).png) mid-line.',
       'Search httpſ://example.com/long-s now.',
     ];
-    const roots = [];
-    for (const text of texts) roots.push({ root: await post(request, 'pond', text), text });
+    const bare = [];
+    for (const text of texts) bare.push({ root: await post(request, 'pond', text), text });
+    const script = '<script>window.__pwned = 1</script>';
+    const img = '<img src=x onerror="window.__pwned = 1">';
+    const entities = '&lt;b&gt;hi&lt;/b&gt; &amp; &#60;i&#62;';
+    const bold = '**<b>x</b>**';
+    const image = '![fish](https://example.com/fish.jpg)';
+    const refused = '[**bad**](javascript:alert(1))';
+    const fence = '````\nnot code\n````';
+    const roots = {
+      script: await post(request, 'pond', script),
+      img: await post(request, 'pond', img),
+      entities: await post(request, 'pond', entities),
+      bold: await post(request, 'pond', bold),
+      image: await post(request, 'pond', image),
+      refused: await post(request, 'pond', refused),
+      fence: await post(request, 'pond', fence),
+      code: await post(request, 'frogs', '`**not bold**`'),
+      snake: await post(request, 'frogs', 'snake_case_name'),
+      times: await post(request, 'frogs', '2 * 3'),
+    };
     await page.goto(`${PAGE}?standalone`);
     await open(page, 'pond');
-    for (const { root, text } of roots) {
+    for (const { root, text } of bare) {
       await expect(bubble(page, root)).toBeVisible();
       await expect(bubble(page, root).locator('a')).toHaveCount(0);
       expect(await exact(bubble(page, root))).toBe(text.replace(/`|\n/g, ''));
+    }
+
+    // Raw HTML and entities are text, never markup.
+    expect(await exact(bubble(page, roots.script))).toBe(script);
+    await expect(bubble(page, roots.script).locator('script')).toHaveCount(0);
+    expect(await exact(bubble(page, roots.img))).toBe(img);
+    await expect(bubble(page, roots.img).locator('img')).toHaveCount(0);
+    expect(await exact(bubble(page, roots.entities))).toBe(entities);
+    await expect(bubble(page, roots.entities).locator('b, i')).toHaveCount(0);
+    const strong = bubble(page, roots.bold).locator('strong');
+    await expect(strong).toHaveCount(1);
+    expect(await exact(strong)).toBe('<b>x</b>');
+    await expect(bubble(page, roots.bold).locator('b')).toHaveCount(0);
+    expect(await page.evaluate(() => (window as any).__pwned)).toBeUndefined();
+
+    // An image, a refused link around markup and a four-backtick line stay as typed.
+    expect(await exact(bubble(page, roots.image))).toBe(image);
+    await expect(bubble(page, roots.image).locator('a, img')).toHaveCount(0);
+    expect(await exact(bubble(page, roots.refused))).toBe(refused);
+    await expect(bubble(page, roots.refused).locator('a, strong')).toHaveCount(0);
+    expect(await exact(bubble(page, roots.fence))).toBe(fence);
+    await expect(bubble(page, roots.fence).locator('pre, code')).toHaveCount(0);
+
+    // A code span, an underscore and a lone asterisk stay as typed.
+    await page.keyboard.press('Escape');
+    await expect(box(page, 'pond').popover).toBeHidden();
+    await open(page, 'frogs');
+    const code = bubble(page, roots.code).locator('code');
+    expect(await exact(code)).toBe('**not bold**');
+    for (const [root, text] of [[roots.snake, 'snake_case_name'], [roots.times, '2 * 3']] as const) {
+      expect(await exact(bubble(page, root))).toBe(text);
     }
     await seen.clean();
   });
@@ -369,77 +421,6 @@ test.describe('signed in', () => {
     await expect(protocol).toHaveAttribute('rel', 'noopener noreferrer');
     await expect(body.locator('a[href="#top"]')).not.toHaveAttribute('target');
     await recorded;
-    await seen.clean();
-  });
-
-  test('raw HTML and entities are text, never markup', async ({ page, request }) => {
-    const seen = await watch(page);
-    const script = '<script>window.__pwned = 1</script>';
-    const img = '<img src=x onerror="window.__pwned = 1">';
-    const entities = '&lt;b&gt;hi&lt;/b&gt; &amp; &#60;i&#62;';
-    const bold = '**<b>x</b>**';
-    const roots = {
-      script: await post(request, 'pond', script),
-      img: await post(request, 'pond', img),
-      entities: await post(request, 'pond', entities),
-      bold: await post(request, 'pond', bold),
-    };
-    await page.goto(`${PAGE}?standalone`);
-    await open(page, 'pond');
-
-    expect(await exact(bubble(page, roots.script))).toBe(script);
-    await expect(bubble(page, roots.script).locator('script')).toHaveCount(0);
-
-    expect(await exact(bubble(page, roots.img))).toBe(img);
-    await expect(bubble(page, roots.img).locator('img')).toHaveCount(0);
-
-    expect(await exact(bubble(page, roots.entities))).toBe(entities);
-    await expect(bubble(page, roots.entities).locator('b, i')).toHaveCount(0);
-
-    const strong = bubble(page, roots.bold).locator('strong');
-    await expect(strong).toHaveCount(1);
-    expect(await exact(strong)).toBe('<b>x</b>');
-    await expect(bubble(page, roots.bold).locator('b')).toHaveCount(0);
-
-    expect(await page.evaluate(() => (window as any).__pwned)).toBeUndefined();
-    await seen.clean();
-  });
-
-  test('a code span, an underscore and a lone asterisk stay as typed', async ({ page, request }) => {
-    const seen = await watch(page);
-    const roots = {
-      code: await post(request, 'frogs', '`**not bold**`'),
-      snake: await post(request, 'frogs', 'snake_case_name'),
-      times: await post(request, 'frogs', '2 * 3'),
-    };
-    await page.goto(`${PAGE}?standalone`);
-    await open(page, 'frogs');
-    const code = bubble(page, roots.code).locator('code');
-    expect(await exact(code)).toBe('**not bold**');
-    for (const [root, text] of [[roots.snake, 'snake_case_name'], [roots.times, '2 * 3']] as const) {
-      expect(await exact(bubble(page, root))).toBe(text);
-    }
-    await seen.clean();
-  });
-
-  test('an image, a refused link around markup and a four-backtick line stay as typed', async ({ page, request }) => {
-    const seen = await watch(page);
-    const image = '![fish](https://example.com/fish.jpg)';
-    const refused = '[**bad**](javascript:alert(1))';
-    const fence = '````\nnot code\n````';
-    const roots = {
-      image: await post(request, 'pond', image),
-      refused: await post(request, 'pond', refused),
-      fence: await post(request, 'pond', fence),
-    };
-    await page.goto(`${PAGE}?standalone`);
-    await open(page, 'pond');
-    expect(await exact(bubble(page, roots.image))).toBe(image);
-    await expect(bubble(page, roots.image).locator('a, img')).toHaveCount(0);
-    expect(await exact(bubble(page, roots.refused))).toBe(refused);
-    await expect(bubble(page, roots.refused).locator('a, strong')).toHaveCount(0);
-    expect(await exact(bubble(page, roots.fence))).toBe(fence);
-    await expect(bubble(page, roots.fence).locator('pre, code')).toHaveCount(0);
     await seen.clean();
   });
 

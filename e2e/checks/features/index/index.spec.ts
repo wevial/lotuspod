@@ -53,6 +53,10 @@ test('the rows arrive newest update first and the Updated header says so', async
   // More than one time, so the order is a real one.
   expect(new Set(times).size).toBeGreaterThan(1);
   expect(never(times, (above, below) => below > above)).toBe(true);
+  // Each update shows its time as well as its day.
+  const updated = await page.locator('.index-table tbody tr').evaluateAll((rows) =>
+    rows.map((row) => (row as HTMLTableRowElement).cells[1].textContent?.trim() ?? ''));
+  for (const text of updated) expect(text).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/);
   expect(errors).toEqual([]);
 });
 

@@ -253,7 +253,11 @@ test.describe('signed in', () => {
   test('the index holds one stream for its frames, and a republished tab shows "new version" at once', async ({ page }) => {
     const errors = watchErrors(page);
     const shown = { name: 'live-events-shown', title: 'Live events shown' };
-    const behind = { name: 'live-events-behind', title: 'Live events behind' };
+    // A page of its own on each repeat and retry: a seen revision posted by a
+    // run before would dot its tab before its frame posts the one it opened at.
+    const behind = {
+      name: `live-events-behind-${test.info().repeatEachIndex}-${test.info().retry}`, title: 'Live events behind',
+    };
     publish(shown.name, source(shown.title, 'first'), '--no-comments');
     publish(behind.name, source(behind.title, 'first'), '--no-comments');
     // Each stream asked, and whether the index's own document asked it.
@@ -276,11 +280,30 @@ test.describe('signed in', () => {
     expect(streams).toEqual([true]);
 
     const tab = page.locator(`.pod-tab[data-page="${behind.name}"]`);
-    await expect(tab.locator('.pod-tab-dot')).toHaveCount(0);
-    publish(behind.name, source(behind.title, 'second'), '--no-comments');
-    await expect(tab.locator('.pod-tab-dot')).toHaveText('new version', { timeout: 10_000 });
+    const dot = tab.locator('.pod-tab-dot');
+    await expect(dot).toHaveCount(0);
+    // Each page a seen revision is posted for from now on.
+    const posted: string[] = [];
+    page.on('request', (sent) => {
+      if (new URL(sent.url()).pathname === '/api/seen' && sent.method() === 'POST') {
+        posted.push(sent.postDataJSON()?.page);
+      }
+    });
+    const second = publish(behind.name, source(behind.title, 'second'), '--no-comments');
+    await expect(dot).toHaveText('new version', { timeout: 10_000 });
+    // The tab not shown swaps in its new text, and no one has seen it yet.
+    const framed = page.frameLocator(`iframe.pod-frame[title="${behind.title}"]`);
+    await expect(framed.locator('.artifact-body')).toContainText('Edition: second.', { timeout: 10_000 });
+    await expect(framed.locator('meta[name="lotuspod:revision"]')).toHaveAttribute('content', second);
+    expect(posted).toEqual([]);
+    await expect(dot).toHaveText('new version');
     expect(await page.evaluate(() => Date.now())).toBe(START + 1000);
     expect(streams).toEqual([true]);
+
+    const marked = recorded(behind);
+    await tab.locator('button.pod-tab-title').click();
+    expect((await marked).request().postDataJSON().revision).toBe(second);
+    await expect(dot).toHaveCount(0);
     expect(errors).toEqual([]);
   });
 
