@@ -188,27 +188,31 @@ export function shell(page: Page, hooks: ShellHooks): Shell {
           </header>
           <div ref={decisions} class="artifact-comments-decisions" id="artifact-comments-decisions" role="tabpanel"
             aria-labelledby="artifact-comments-tab-decisions" hidden={shown !== "decisions"} />
-          <div ref={start} class="artifact-comments-start" id="artifact-comments-sheet-comments" hidden={shown !== "comments"}
+          {/* The Comments tab's panel holds the ways to start a thread and the
+              threads themselves. */}
+          <div class="artifact-comments-threads" id="artifact-comments-sheet-comments" hidden={shown !== "comments"}
             role={asks ? "tabpanel" : undefined} aria-labelledby={asks ? "artifact-comments-tab-comments" : undefined}>
-            {asks && counts}
-            {page.archived && <p class="artifact-comments-closed">{page.closed}</p>}
-            <p class="artifact-comments-none" hidden={!tally.none}>No comments yet</p>
-            {whole() && <button ref={onPage} type="button" class="artifact-comments-on-page" disabled={page.archived}
-              onClick={() => choose(whole()!)}>Comment on this page</button>}
-            <button ref={pick} type="button" class="artifact-comments-pick" disabled={page.archived}
-              aria-haspopup="listbox" aria-expanded={picking} aria-controls="artifact-comments-choices" onClick={() => {
-                if (picking) { unpick(true); return; }
-                picking = true; light(-1); choices.current?.focus({ preventScroll: true });
-              }}>Comment on a section</button>
-            <ul ref={choices} class="artifact-comments-choices" id="artifact-comments-choices" role="listbox"
-              aria-label="Sections" tabIndex={-1} hidden={!picking} onKeyDown={keydown}
-              aria-activedescendant={active < 0 ? undefined : `artifact-comments-choice-${sections[active]?.id}`}>
-              {sections.map((section, index) => <li key={section.id} class="artifact-comments-choice"
-                id={`artifact-comments-choice-${section.id}`} role="option" aria-selected={index === active}
-                onClick={() => choose(section)}>{section.title}</li>)}
-            </ul>
+            <div ref={start} class="artifact-comments-start">
+              {asks && counts}
+              {page.archived && <p class="artifact-comments-closed">{page.closed}</p>}
+              <p class="artifact-comments-none" hidden={!tally.none}>No comments yet</p>
+              {whole() && <button ref={onPage} type="button" class="artifact-comments-on-page" disabled={page.archived}
+                onClick={() => choose(whole()!)}>Comment on this page</button>}
+              <button ref={pick} type="button" class="artifact-comments-pick" disabled={page.archived}
+                aria-haspopup="listbox" aria-expanded={picking} aria-controls="artifact-comments-choices" onClick={() => {
+                  if (picking) { unpick(true); return; }
+                  picking = true; light(-1); choices.current?.focus({ preventScroll: true });
+                }}>Comment on a section</button>
+              <ul ref={choices} class="artifact-comments-choices" id="artifact-comments-choices" role="listbox"
+                aria-label="Sections" tabIndex={-1} hidden={!picking} onKeyDown={keydown}
+                aria-activedescendant={active < 0 ? undefined : `artifact-comments-choice-${sections[active]?.id}`}>
+                {sections.map((section, index) => <li key={section.id} class="artifact-comments-choice"
+                  id={`artifact-comments-choice-${section.id}`} role="option" aria-selected={index === active}
+                  onClick={() => choose(section)}>{section.title}</li>)}
+              </ul>
+            </div>
+            <div ref={list} class="artifact-comments-groups" />
           </div>
-          <div ref={list} class="artifact-comments-groups" hidden={shown !== "comments"} />
         </div>
       </aside>, document.body), root);
     // Other scripts own modifiers such as --resizing. Update only ours.

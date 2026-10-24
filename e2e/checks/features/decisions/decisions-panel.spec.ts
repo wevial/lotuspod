@@ -256,6 +256,12 @@ test('every question with no saved answer is to answer, in the title bar, the ma
   await expect(side.decisions).toBeHidden();
   await expect(side.groups.locator('.artifact-comments-group-title', { hasText: 'Screenshots on a row' }))
     .toBeVisible();
+  // The tab's panel holds the threads, not only the ways to start one.
+  const threads = side.aside.getByRole('tabpanel', { name: /^Comments/ });
+  await expect(side.tab('Comments')).toHaveAttribute('aria-controls', (await threads.getAttribute('id'))!);
+  await expect(threads.locator('.artifact-comments-groups .artifact-comments-group-title',
+    { hasText: 'Screenshots on a row' })).toBeVisible();
+  await expect(threads.getByRole('button', { name: 'Comment on a section' })).toBeVisible();
   expect(errors).toEqual([]);
 });
 

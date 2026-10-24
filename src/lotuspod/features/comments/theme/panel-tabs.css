@@ -79,8 +79,16 @@
   margin: 0 0 0.35rem;
 }
 
-.artifact-comments-start[hidden],
-.artifact-comments-groups[hidden],
+/* The Comments tab's panel, the start controls over the threads, lays them
+   out as the sheet would on its own. */
+.artifact-comments-threads {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.artifact-comments-threads[hidden],
 .artifact-comments-decisions[hidden] {
   display: none;
 }
