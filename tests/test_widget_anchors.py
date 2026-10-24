@@ -32,6 +32,7 @@ from lotuspod.features.serve import pages as serve_pages, serve_files  # noqa: E
 from lotuspod.features.comments import comments  # noqa: E402
 from lotuspod.features.publish import render  # noqa: E402
 from lotuspod.features.history import versions  # noqa: E402
+from lotuspod.features.widgets import widgets  # noqa: E402
 from lotuspod.store import db  # noqa: E402
 from tests.features.agents.test_agent_pull import PullTestCase, run_cli  # noqa: E402
 
@@ -249,6 +250,17 @@ class NestedSectionTests(AnchorCase):
                                      "widget": self.shelf()})
         self.assertEqual((status, payload), (400, {"error": "unknown_widget"}))
         self.assertEqual(self.stored(), before)
+
+    def test_a_heading_whose_box_is_inert_places_no_block(self):
+        # An h2 in an inert template starts a section for the boxes, so the
+        # box of the h2 before it lands in that template; the page script
+        # sees no box for it, and neither may the server.
+        body = ('<section><h2 id="first">One</h2>'
+                '<template><h2 id="fake">Inert</h2></template>'
+                '<template class="lotuspod-live" data-id="w"><p>live</p></template></section>'
+                '<section><h2 id="other">Two</h2></section>')
+        page = comments.render_comments(widgets.render(body, "p")[0], "p")
+        self.assertEqual(widgets.PageWidgets(page).found["w"][2], comments.WHOLE_PAGE)
 
 
 class EarlierVersionTests(AnchorCase):
