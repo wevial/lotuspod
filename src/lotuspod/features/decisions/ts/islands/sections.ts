@@ -1,4 +1,5 @@
 import { all } from "./checklist";
+import { expand } from "./collapse";
 
 // The marks other islands add to a heading, which are no part of its title.
 const MARKS = ".artifact-section-mark, .artifact-changed-tag, .artifact-review-open";
@@ -83,9 +84,10 @@ function barBottom(): number {
   return bar ? Math.max(0, bar.getBoundingClientRect().bottom) : 0;
 }
 
-// Open a form's section if it is folded, as a row's "change" does, and put
-// the form just below the title bar.
+// Open a form's section if it is folded, as a row's "change" does, open the
+// form if it is collapsed, and put it just below the title bar.
 export function place(form: HTMLFormElement): void {
+  expand(form);
   const wrapper = form.closest("div.artifact-section-body");
   if (wrapper && wrapper.hasAttribute("hidden")) {
     wrapper.dispatchEvent(new Event("beforematch"));

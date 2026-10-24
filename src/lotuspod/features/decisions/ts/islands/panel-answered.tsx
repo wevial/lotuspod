@@ -6,7 +6,8 @@ import { label, words } from "./words";
 
 // One saved question. Collapsed: its number and question, which open it, its
 // answer's label, who saved it and when as its card says, and "change",
-// which opens it too. Open in place: its context lines, its options with the
+// which opens it too, and its card collapsed on the page to its options.
+// Open in place: its context lines, its options with the
 // card's pick, its note, Save, Cancel, "not saved" while the card differs
 // from its answer, and Show on page. A pick or a note opens the card on the
 // page as its "change" does; Cancel puts the card back as saved. It is
@@ -77,7 +78,10 @@ function Row({ desk, form, draft }: { desk: Desk; form: HTMLFormElement; draft: 
           <strong class="artifact-decisions-row-label">{label(form, answer)}</strong>
           {" "}<span class="artifact-decisions-row-by">{words(form, ".artifact-decision-saved-by")}</span>
           {" · "}
-          <button type="button" class="artifact-decisions-change" onClick={() => show(true, "pick")}>change</button>
+          <button type="button" class="artifact-decisions-change" onClick={() => {
+            desk.expand(form);
+            show(true, "pick");
+          }}>change</button>
           {changed && <>{" "}<span class="artifact-decisions-unsaved">not saved</span></>}
         </p>
       )}

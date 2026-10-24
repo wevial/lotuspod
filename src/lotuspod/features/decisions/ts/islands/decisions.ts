@@ -4,6 +4,7 @@ import { answeredTable } from "./answered";
 import { giveAsk } from "./ask";
 import { acting, adopt, dirty, draw, mark, openCard, queue, refused, restore, saved, unfold, type Card, type Deck } from "./card";
 import { all, isChecklist, optionText, same, summary, ticked } from "./checklist";
+import { collapsible, expand, isCollapsed } from "./collapse";
 import { dismissals } from "./dismiss";
 import { decisionsPanel } from "./panel";
 import { headingOf, jump, place, sectionsOf, type Section } from "./sections";
@@ -88,8 +89,10 @@ export function decisions(page: Page): Cards | null {
   }
 
   // A row's "change": the card's section opened if it is folded, as find
-  // in page opens it, then the card scrolled to and opened again.
+  // in page opens it, then the card, collapsed or not, scrolled to and
+  // opened again.
   function reopen(form: HTMLFormElement): void {
+    expand(form);
     const wrapper = form.closest("div.artifact-section-body");
     if (wrapper && wrapper.hasAttribute("hidden")) {
       wrapper.dispatchEvent(new Event("beforematch"));
@@ -194,6 +197,7 @@ export function decisions(page: Page): Cards | null {
       editing: false, turn: Promise.resolve(), queued: 0, acting: 0, waiting: true, marked, dispose() {},
     };
     cards.set(form, card);
+    if (!isChecklist(form)) collapsible(form);
     form.addEventListener("submit", submit);
     form.addEventListener("input", () => mark(card));
     form.addEventListener("change", () => mark(card));
@@ -248,6 +252,11 @@ export function decisions(page: Page): Cards | null {
   decisionsPanel({
     forms, marked, ready, save, toAnswer, saved: reading.saved, dirty: reading.dirty,
     reopen: (form) => {
+      if (form.classList.contains("artifact-decision--saved")) openCard(deck, cardOf(form));
+    },
+    expand: (form) => {
+      if (!isCollapsed(form)) return;
+      expand(form);
       if (form.classList.contains("artifact-decision--saved")) openCard(deck, cardOf(form));
     },
     restore: (form) => restore(deck, cardOf(form)),

@@ -50,6 +50,47 @@
   clear: both;
 }
 
+/* The page script wraps the question in a toggle led by ▾ (open) or ▸
+   (collapsed); a collapsed card shows only its question and one line of
+   where it stands. */
+.artifact-decision-toggle {
+  appearance: none;
+  background: none;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  padding: 0;
+  text-align: left;
+}
+
+.artifact-decision-toggle:hover .artifact-decision-text {
+  text-decoration: underline;
+  text-decoration-color: var(--hairline-strong);
+  text-underline-offset: 0.18em;
+}
+
+.artifact-decision-caret {
+  color: var(--color-muted-lavender);
+  display: inline-block;
+  font-size: 0.75em;
+  margin-right: 0.5em;
+  width: 0.8em;
+}
+
+.artifact-decision--collapsed fieldset > :not(legend):not(.artifact-decision-line) {
+  display: none;
+}
+
+.artifact-body .artifact-decision-line {
+  color: var(--color-muted-lavender);
+  margin: 0.1em 0 0;
+}
+
+.artifact-decision-line-unsaved {
+  color: var(--color-amber);
+}
+
 .artifact-decision-number {
   border: 1px solid var(--hairline-strong);
   border-radius: var(--radius-chip);
