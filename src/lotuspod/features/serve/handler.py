@@ -278,6 +278,9 @@ class _AllowListHandler(SimpleHTTPRequestHandler):
                 or not (is_page_name(name) or WIDGET_NAME.fullmatch(name))):
             return None
         fields = urllib.parse.parse_qs(query, keep_blank_values=True)
+        # The framing page's frame of an earlier version (widgets.alone_page).
+        if WIDGET_NAME.fullmatch(name) and fields.get(widgets.ALONE_QUERY) == [""]:
+            del fields[widgets.ALONE_QUERY]
         if list(fields) != [_VERSION_QUERY] or len(fields[_VERSION_QUERY]) != 1:
             return None
         return fields[_VERSION_QUERY][0]
@@ -316,13 +319,34 @@ class _AllowListHandler(SimpleHTTPRequestHandler):
         if data is None:
             self.send_error(HTTPStatus.NOT_FOUND, "File not found")
             return None
+        if self._opened_alone():
+            return self._serve_alone(name, urllib.parse.urlencode({_VERSION_QUERY: commit}))
         self._page_response, self._media_type = False, ""
         self.send_response(HTTPStatus.OK)
         self.send_header("Content-Type", "text/html; charset=utf-8")
         self.send_header("Content-Length", str(len(data)))
-        for header, value in widgets.HEADERS:
+        for header, value in (*widgets.HEADERS, widgets.VARY):
             self.send_header(header, value)
         self.send_header("Cache-Control", "private, no-store")
+        self.end_headers()
+        return io.BytesIO(data)
+
+    def _opened_alone(self) -> bool:
+        """Whether the browser asked for a widget file as a tab's document.
+        Only a browser that says so is framed: one that sends no
+        Sec-Fetch-Dest would ask for the framing page again from its frame."""
+        return (self.headers.get("Sec-Fetch-Dest") or "").strip().lower() == "document"
+
+    def _serve_alone(self, name: str, query: str = ""):
+        """The widget file name, opened in a tab, as a page framing it under
+        frame-src 'self' (widgets.alone_page)."""
+        data = widgets.alone_page(name, query)
+        self._page_response, self._media_type = False, ""
+        self.send_response(HTTPStatus.OK)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(data)))
+        for header, value in widgets.ALONE_HEADERS:
+            self.send_header(header, value)
         self.end_headers()
         return io.BytesIO(data)
 
@@ -382,6 +406,9 @@ class _AllowListHandler(SimpleHTTPRequestHandler):
         else:
             self._page_response, self._media_type = target.endswith(".html"), ""
         self._widget_response = bool(WIDGET_NAME.fullmatch(stored.name))
+        if self._widget_response and self._opened_alone() and stored.is_file():
+            self._widget_response = False
+            return self._serve_alone(stored.name)
         return super().send_head()
 
     def send_error(self, *args, **kwargs):
@@ -395,7 +422,8 @@ class _AllowListHandler(SimpleHTTPRequestHandler):
 
     def end_headers(self):
         if self._page_response:
-            for header, value in (widgets.HEADERS if getattr(self, "_widget_response", False) else _PAGE_HEADERS):
+            for header, value in ((*widgets.HEADERS, widgets.VARY)
+                                  if getattr(self, "_widget_response", False) else _PAGE_HEADERS):
                 self.send_header(header, value)
         if self._media_type:
             for header, value in _MEDIA_HEADERS:

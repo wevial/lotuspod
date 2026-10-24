@@ -5,7 +5,11 @@ from lotuspod.features import public_edge
 
 # The names the other slices use, by the module that defines each.
 __getattr__ = public_edge(__name__, {
+    "ALONE_HEADERS": "widgets",
+    "ALONE_QUERY": "widgets",
     "HEADERS": "widgets",
+    "VARY": "widgets",
+    "alone_page": "widgets",
     "Frames": "widgets",
     "PageWidgets": "widgets",
     "block_source": "widgets",
