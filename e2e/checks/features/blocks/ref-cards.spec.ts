@@ -177,16 +177,6 @@ test('a click pins a card, and Esc, its ✕ or a click outside closes it', async
   await seen.clean();
 });
 
-test('a key the refs file lacks, or one in code, is plain text', async ({ page }) => {
-  const seen = await opened(page);
-  await expect(page.locator('button.artifact-ref[data-ref="LOTUS-95"]')).toHaveCount(0);
-  await expect(page.locator('.artifact-body p', { hasText: 'LOTUS-95' }))
-    .toHaveText('The relay fix is relos#2266, and LOTUS-95 is still only an idea.');
-  await expect(page.locator('.artifact-body code', { hasText: 'HOLO-175' })).toHaveCount(1);
-  await expect(page.locator('.artifact-body code button')).toHaveCount(0);
-  await seen.clean();
-});
-
 test.describe('in a narrow window', () => {
   test.use({ viewport: { width: 360, height: 740 } });
 

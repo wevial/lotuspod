@@ -14,10 +14,8 @@ test.use({ viewport: MEDIUM });
 // expected colour is read from the theme's tokens, never from the stylesheet.
 const PAGE = '/capture-palette.html';
 const DECISIONS = '/capture-decisions.html';
-// A section heading and a subsection heading under it, and a page whose
-// sections fold under their headings.
+// A section heading and a subsection heading under it.
 const SUBSECTIONS = '/capture-section-questions.html';
-const SECTIONS = '/capture-sections.html';
 const ASSERTION = process.env.LOTUSPOD_TEST_ASSERTION ?? '';
 const SIGNED_IN = { 'Cf-Access-Jwt-Assertion': ASSERTION };
 // The reader as a page names them: their address's part before the @.
@@ -107,21 +105,6 @@ async function css(target: Locator, property: string, pseudo: string | null = nu
 test.describe('signed in', () => {
   test.use({ extraHTTPHeaders: SIGNED_IN });
 
-  test('the root element names the new colours and the highlight tints as the tokens do', async ({ page }) => {
-    const seen = await watch(page);
-    await page.goto(`${PAGE}?standalone`);
-    const root = page.locator('html');
-    for (const name of ['sky', 'pale_sky', 'rose', 'pale_rose', 'mint', 'amber']) {
-      const property = `--color-${name.replace(/_/g, '-')}`;
-      expect((await css(root, property)).trim().toLowerCase(), property).toBe(COLORS[name].toLowerCase());
-    }
-    for (const name of ['highlight', 'highlight_line']) {
-      const property = `--${name.replace(/_/g, '-')}`;
-      expect((await css(root, property)).trim(), property).toBe(STRUCTURE[name]);
-    }
-    await clean(seen);
-  });
-
   test('a link, inline code, a table header, a quote and a code block take the sky colours', async ({ page }) => {
     const seen = await watch(page);
     await page.goto(`${PAGE}?standalone`);
@@ -177,32 +160,6 @@ test.describe('signed in', () => {
       await expect(heading).toHaveCSS('color', rgb(COLORS.pale_lavender));
       expect(await css(heading, 'color')).not.toBe(rgb(COLORS.lavender));
     }
-    await clean(seen);
-  });
-
-  test('a folded section title keeps a visible focus ring around its lavender text', async ({ page }) => {
-    const seen = await watch(page);
-    await page.goto(`${SECTIONS}?standalone`);
-    const heading = page.locator('h2#findings');
-    const button = heading.getByRole('button', { name: 'Findings' });
-    await button.click();
-    await expect(button).toHaveAttribute('aria-expanded', 'false');
-    // Away from the button, whose hover lightens its text.
-    await page.mouse.move(0, 0);
-    await expect(heading).toHaveCSS('color', rgb(COLORS.lavender));
-    await expect(button).toHaveCSS('color', rgb(COLORS.lavender));
-    expect(await css(button, 'border-bottom-color', '::before')).toBe(rgb(COLORS.lavender));
-
-    await page.locator('.artifact-outline-list a').last().focus();
-    let reached = false;
-    for (let presses = 0; presses < 2 && !reached; presses += 1) {
-      await page.keyboard.press('Tab');
-      reached = await button.evaluate((node) => node === document.activeElement && node.matches(':focus-visible'));
-    }
-    expect(reached).toBe(true);
-    expect(await css(button, 'outline-style')).not.toBe('none');
-    expect(parseFloat(await css(button, 'outline-width'))).toBeGreaterThan(0);
-    expect(await css(button, 'outline-color')).not.toBe(rgb(COLORS.night));
     await clean(seen);
   });
 

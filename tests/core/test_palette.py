@@ -1,7 +1,8 @@
 """Test suite for the theme's palette (`src/lotuspod/core/theme/tokens.json`): every
 text colour reads at WCAG AA on the night and surface backgrounds, and text
 reads on the tints the theme draws it on, in Night and in its light Dawn set
-(`dawn`), which names exactly Night's colours, tints and ink.
+(`dawn`), which names exactly Night's colours, tints and ink. The stylesheet's
+root names the newer colours and the highlight tints as the tokens do.
 
 The contrast is computed here with the WCAG 2 relative-luminance formula, and
 the formula is first checked on a published pair: #767676 on white is 4.54:1.
@@ -19,9 +20,8 @@ import unittest
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-TOKENS = json.loads(
-    (REPO_ROOT / "src" / "lotuspod" / "core" / "theme" / "tokens.json").read_text(encoding="utf-8")
-)
+THEME = REPO_ROOT / "src" / "lotuspod" / "core" / "theme"
+TOKENS = json.loads((THEME / "tokens.json").read_text(encoding="utf-8"))
 COLORS = TOKENS["colors"]
 STRUCTURE = TOKENS["structure"]
 INK = TOKENS["type"]["ink"]
@@ -36,6 +36,12 @@ TEXT_COLORS = (
     "sky", "pale_sky", "rose", "pale_rose", "mint", "amber", "orchid",
     "lavender", "pale_lavender", "muted_lavender",
 )
+
+# A CSS comment, the first `:root { ... }` block of the stylesheet, and a
+# custom property in it.
+COMMENT = re.compile(r"/\*.*?\*/", re.DOTALL)
+ROOT_BLOCK = re.compile(r":root\s*\{([^}]*)\}")
+PROPERTY = re.compile(r"(--[\w-]+)\s*:\s*([^;]+);")
 
 RGBA = re.compile(r"rgba\(\s*(\d+),\s*(\d+),\s*(\d+),\s*([0-9.]+)\s*\)")
 HEX = re.compile(r"#([0-9a-fA-F]{6})")
@@ -151,6 +157,24 @@ class DawnTests(unittest.TestCase):
         for name, (text, ground) in tint_pairs(DAWN_COLORS, DAWN_STRUCTURE, DAWN_INK).items():
             with self.subTest(pair=name):
                 self.assertGreaterEqual(contrast(text, ground), AA)
+
+
+class RootTests(unittest.TestCase):
+    def test_the_root_names_the_new_colours_and_the_highlight_tints_as_the_tokens_do(self):
+        block = ROOT_BLOCK.search(COMMENT.sub("", (THEME / "base.css").read_text(encoding="utf-8")))
+        self.assertIsNotNone(block, "base.css has no :root block")
+        root = {name: value.strip() for name, value in PROPERTY.findall(block.group(1))}
+        want = {
+            **{f"--color-{name.replace('_', '-')}": COLORS[name].lower()
+               for name in ("sky", "pale_sky", "rose", "pale_rose", "mint", "amber")},
+            **{f"--{name.replace('_', '-')}": STRUCTURE[name] for name in ("highlight", "highlight_line")},
+        }
+        for prop, value in want.items():
+            with self.subTest(property=prop):
+                got = root.get(prop)
+                if got is not None and HEX.fullmatch(value):
+                    got = got.lower()
+                self.assertEqual(got, value, f"{prop} in base.css's :root is not the token's value")
 
 
 if __name__ == "__main__":
