@@ -1,5 +1,6 @@
 import type { Thread } from "../bridge";
 import type { threadList } from "./thread-list";
+import type { Asked } from "./state";
 
 export interface Section {
   box: HTMLElement;
@@ -149,6 +150,8 @@ export interface Placement {
   posted(box: HTMLElement, thread: Thread | undefined): void;
   started(thread: Thread | undefined, focused: boolean): void;
   open(thread: Thread): void;
+  // A decision's open threads, by its question.
+  about(question: string): Asked | null;
   // Open box's form for a new thread, as a live block's Comment does, from
   // opener.
   write(box: HTMLElement, opener: HTMLElement): void;

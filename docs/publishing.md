@@ -1106,7 +1106,10 @@ does ("1 comment · waiting", "HANDLE is writing…", "1 reply · ✓ HANDLE
 answered"), or "N resolved" once every one is resolved, and opens its newest
 open thread (see [The comments panel](comments.md#the-comments-panel)). Ask
 sits in the card's foot, so a folded card shows it again after "change"; the
-chip stays under a folded card.
+chip stays under a folded card. The comments panel's Decisions tab has an Ask
+of its own for each question to answer, which posts a field of its own and
+leaves the note alone; a question saved there moves to the tab's folded
+"Answered · N" list, whose rows change an answer in place.
 
 A reader in the `[access] owners` list (the page asks the archive route, as
 its Archive button does; see [Archive a page](#archive-a-page)) also gets

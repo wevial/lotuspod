@@ -1,36 +1,60 @@
 import { render } from "preact";
 import { useLayoutEffect, useRef, useState } from "preact/hooks";
-import { effect, untracked, type ReadonlySignal } from "@preact/signals";
-import { decisionsTab, type Answer } from "../../../comments/ts/index";
-import { all, boxes, isChecklist, optionText } from "./checklist";
+import { effect, untracked } from "@preact/signals";
+import { decisionsTab, store, type Asking } from "../../../comments/ts/index";
+import { Answered } from "./panel-answered";
+import { Context, Note, Options, type Desk } from "./panel-parts";
 import { jump, sectionsOf } from "./sections";
-import { label, noteField, radios, words } from "./words";
+import { label, words } from "./words";
+
+export type { Desk } from "./panel-parts";
 
 // How long an entry saved from the tab reads "✓ Saved · LABEL" before it
 // leaves the list.
 const SAVED_FOR = 1600;
 
-// What the Decisions tab reads the page's decision cards by: the forms and
-// their inputs are the one state, the cards' own, so the tab never holds a
-// pick or a note of its own.
-export interface Desk {
-  // The page's decision forms, in page order.
-  readonly forms: HTMLFormElement[];
-  // Counts each change to a card: a pick, a note or a draw.
-  readonly marked: ReadonlySignal<number>;
-  // True once the page's answers are read.
-  readonly ready: ReadonlySignal<boolean>;
-  saved(form: HTMLFormElement): Answer | null;
-  dirty(form: HTMLFormElement): boolean;
-  // Whether the question has no saved answer.
-  toAnswer(form: HTMLFormElement): boolean;
-  // Post the form's answer in its turn, as its "Save answer" does.
-  save(form: HTMLFormElement): Promise<boolean>;
-}
-
-// Tell the card an input moved, as the reader's own pick or typing would.
-function moved(input: HTMLInputElement | HTMLTextAreaElement, type: "change" | "input"): void {
-  input.dispatchEvent(new Event(type, { bubbles: true }));
+// A question's own Ask, under its entry: the field's text posted as a
+// question thread on the decision, as the card's Ask posts the note, which
+// it leaves alone. Sent, the field empties and closes, and the panel stays
+// on Decisions; a refused post keeps the text and says why.
+function Ask({ form, asking, done }: { form: HTMLFormElement; asking: Asking; done(): void }) {
+  const [text, setText] = useState("");
+  const [said, setSaid] = useState("");
+  const [busy, setBusy] = useState(false);
+  const field = useRef<HTMLTextAreaElement>(null);
+  useLayoutEffect(() => field.current?.focus({ preventScroll: true }), []);
+  const number = words(form, ".artifact-decision-number");
+  async function send(): Promise<void> {
+    const question = text.trim();
+    if (!question) {
+      setSaid("Write your question first.");
+      return;
+    }
+    setBusy(true);
+    setSaid("Sending your question...");
+    try {
+      setSaid(await asking.ask(form.dataset.question!, question, () => {
+        setText("");
+        done();
+      }, false));
+    } catch {
+      setSaid("Your question was not sent: the site did not answer. Try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <div class="artifact-decisions-asking">
+      <textarea rows={2} maxLength={4000} value={text} ref={field}
+        aria-label={"Ask about decision " + (number || words(form, ".artifact-decision-text"))}
+        onInput={(event) => setText(event.currentTarget.value)} />
+      <div class="artifact-decisions-asking-foot">
+        <button type="button" class="artifact-decisions-ask-send" disabled={busy} onClick={send}>Ask</button>
+        <button type="button" class="artifact-decisions-cancel" onClick={done}>Cancel</button>
+        <span class="artifact-decisions-ask-status" role="status">{said}</span>
+      </div>
+    </div>
+  );
 }
 
 interface EntryProps {
@@ -43,14 +67,15 @@ interface EntryProps {
 }
 
 // One question: its number and text, which jump to its card, the card's
-// context lines, its options (a checklist's items), its note, Save, "not
-// saved" while the card differs from its saved answer, and Show on page.
+// context lines, its options (a checklist's items), its note, Save, its own
+// Ask, "not saved" while the card differs from its saved answer, Show on
+// page, and a link to its newest open thread.
 function Entry({ desk, form, held, saving, saved }: EntryProps) {
   const question = form.dataset.question ?? "";
   const answer = desk.saved(form);
-  const note = noteField(form);
-  const [noting, setNoting] = useState(() => Boolean(note.value));
   const [busy, setBusy] = useState(false);
+  const [asking, setAsking] = useState(false);
+  const askButton = useRef<HTMLButtonElement>(null);
   if (held && answer && !desk.dirty(form)) {
     return (
       <li class="artifact-decisions-entry artifact-decisions-entry--saved" data-question={question}>
@@ -61,16 +86,20 @@ function Entry({ desk, form, held, saving, saved }: EntryProps) {
       </li>
     );
   }
-  const checklist = isChecklist(form);
   const number = words(form, ".artifact-decision-number");
-  const inputs = checklist ? boxes(form) : radios(form);
   const summary = words(form, "details.artifact-decision-note > summary") || "Add a note";
+  const asker = store.asking.value;
+  const threads = asker?.about(question) ?? null;
   async function save(): Promise<void> {
     setBusy(true);
     saving(form);
     const done = await desk.save(form);
     setBusy(false);
     saved(form, done);
+  }
+  function asked(): void {
+    setAsking(false);
+    askButton.current?.focus({ preventScroll: true });
   }
   return (
     <li class={"artifact-decisions-entry" + (desk.dirty(form) ? " artifact-decisions-entry--dirty" : "")}
@@ -79,54 +108,33 @@ function Entry({ desk, form, held, saving, saved }: EntryProps) {
         {number && <><span class="artifact-decision-number">{number}</span>{" "}</>}
         {words(form, ".artifact-decision-text")}
       </button>
-      {all<HTMLParagraphElement>("p.artifact-decision-context", form).map((line, at) => (
-        // The renderer's own markup, so a link in the context stays a link.
-        <p key={at} class="artifact-decision-context" dangerouslySetInnerHTML={{ __html: line.innerHTML }} />
-      ))}
-      <div class="artifact-decisions-options" role={checklist ? "group" : "radiogroup"}
-        aria-label={words(form, ".artifact-decision-text")}>
-        {inputs.map((input) => {
-          const mark = input.parentNode!.querySelector(".artifact-decision-default");
-          return (
-            <label key={input.value} class="artifact-decisions-option">
-              {checklist ?
-                <input type="checkbox" value={input.value} checked={input.checked} onChange={(event) => {
-                  input.checked = event.currentTarget.checked;
-                  moved(input, "change");
-                }} /> :
-                <input type="radio" name={"artifact-decisions-" + question} value={input.value}
-                  checked={input.checked} onChange={() => {
-                    input.checked = true;
-                    moved(input, "change");
-                  }} />}
-              {" "}<span class="artifact-decision-label">{optionText(input)}</span>
-              {mark && <>{" "}<span class="artifact-decision-default">{(mark.textContent ?? "").trim()}</span></>}
-            </label>
-          );
-        })}
-      </div>
-      <details class="artifact-decisions-note" open={noting}
-        onToggle={(event) => setNoting((event.currentTarget as HTMLDetailsElement).open)}>
-        <summary>{summary}</summary>
-        <textarea rows={2} maxLength={4000} aria-label="Note" value={note.value} onInput={(event) => {
-          note.value = event.currentTarget.value;
-          const box = note.closest("details");
-          if (box) box.open = true;
-          moved(note, "input");
-        }} />
-      </details>
+      <Context form={form} />
+      <Options form={form} name={"artifact-decisions-" + question} />
+      <Note desk={desk} form={form} summary={summary} />
       <div class="artifact-decisions-foot">
         <button type="button" class="artifact-decisions-save" disabled={busy} onClick={save}>Save</button>
+        {asker && <button ref={askButton} type="button" class="artifact-decisions-ask" aria-expanded={asking}
+          onClick={() => setAsking(!asking)}>Ask</button>}
         <span class="artifact-decisions-unsaved" hidden={!desk.dirty(form)}>not saved</span>
         <button type="button" class="artifact-decisions-show" onClick={() => jump(form)}>Show on page</button>
       </div>
+      {asker && asking && <Ask form={form} asking={asker} done={asked} />}
+      {threads && (
+        <button type="button" class="artifact-decisions-threads" onClick={threads.open}>
+          <span class="artifact-decisions-threads-mark" aria-hidden="true">?</span>
+          <span class="artifact-decisions-threads-count">{threads.count === 1 ? "1 thread" : threads.count + " threads"}</span>
+          {" · "}<span class="artifact-decisions-threads-standing">{threads.standing}</span>
+        </button>
+      )}
     </li>
   );
 }
 
 // The questions with no saved answer, under one heading per section, as the
 // Comments tab heads its groups; one just saved from the tab stays a moment,
-// as saved, then leaves, and its heading with the last of its section.
+// as saved, then leaves for the Answered list after them, and its heading
+// with the last of its section. The list stays folded or open as the reader
+// left it.
 function Panel({ desk }: { desk: Desk }) {
   desk.marked.value;
   const [held, setHeld] = useState<ReadonlySet<HTMLFormElement>>(new Set());
@@ -146,9 +154,12 @@ function Panel({ desk }: { desk: Desk }) {
     }
     after.current = null;
   });
+  const [answeredOpen, setAnsweredOpen] = useState(false);
   if (!desk.ready.value) {
     return null;
   }
+  // Each entry's thread link reads the store's threads.
+  for (const id of store.threadIds.value) store.thread(id).value;
   // Whether a form is still the page's: a swap may replace one while its
   // save or its saved moment is pending, and a replaced form has no card.
   const asked = (form: HTMLFormElement) => desk.forms.includes(form);
@@ -159,6 +170,11 @@ function Panel({ desk }: { desk: Desk }) {
     if (!asked(form) || !desk.dirty(form)) kept.current.delete(form);
   }
   const listed = desk.forms.filter((form) => desk.toAnswer(form) || held.has(form) || kept.current.has(form));
+  // A dismissal is in neither list: its card and the Answered table show it.
+  const answered = desk.forms.filter((form) => {
+    const answer = desk.saved(form);
+    return answer !== null && !answer.dismissed && !listed.includes(form);
+  });
   function hold(form: HTMLFormElement, on: boolean): void {
     setHeld((was) => {
       const next = new Set(was);
@@ -207,6 +223,7 @@ function Panel({ desk }: { desk: Desk }) {
           </ol>
         </section>
       )) : <p class="artifact-decisions-none">Nothing left to answer</p>}
+      <Answered desk={desk} forms={answered} open={answeredOpen} toggled={setAnsweredOpen} />
     </div>
   );
 }
