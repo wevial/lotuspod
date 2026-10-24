@@ -483,35 +483,6 @@ test('a decision thread on a question the page does not ask, with a key serve do
   seen.clean();
 });
 
-test('a block comment keeps its widget, and a block anchor serve refuses is refused with nothing stored', async ({ context, page }) => {
-  const seen = watch(context, page);
-  await load(page, TRY_IT);
-  const frame = page.locator('iframe.artifact-widget[data-widget="deep-shelf"]');
-  const source = await frame.evaluate((each: HTMLIFrameElement) =>
-    each.dataset.pausedSource || each.getAttribute('src') || '');
-  const hash = /\.w-([0-9a-f]{12})\.html/.exec(source)?.[1] ?? '';
-  expect(hash).toMatch(/^[0-9a-f]{12}$/);
-  const refused: [object, number, string][] = [
-    [{ section: 'the-pond-today', widget: { id: 'deep-shelf', hash: '000000000000', state: '' } }, 409, 'stale_widget'],
-    [{ section: 'the-pond-today', widget: { id: 'no-such-block', hash, state: '' } }, 400, 'unknown_widget'],
-    [{ section: '', widget: { id: 'deep-shelf', hash, state: '' } }, 400, 'unknown_widget'],
-    [{ section: 'the-pond-today', widget: { id: 'deep-shelf', hash: 'XYZ', state: '' } }, 400, 'invalid_body'],
-    [{ section: 'the-pond-today', widget: { id: 'deep-shelf', hash, state: '', extra: 1 } }, 400, 'invalid_body'],
-  ];
-  for (const [fields, status, error] of refused) {
-    const sent = await api(page, 'POST', '/api/comments', { page: 'try-it', text: 'How deep?', ...fields });
-    expect.soft(sent, JSON.stringify(fields)).toEqual({ status, json: { error } });
-  }
-  expect.soft(await rows(page, 'try-it'), 'refused anchors store nothing').toEqual([]);
-  await page.evaluate((key) => localStorage.removeItem(key), `${KEY}threads:try-it`);
-  const widget = { id: 'deep-shelf', hash, state: '' };
-  const sent = await api(page, 'POST', '/api/comments',
-    { page: 'try-it', section: 'the-pond-today', text: 'How deep?', widget });
-  expect(sent.status).toBe(201);
-  expect(await newestRoot(page, 'try-it')).toMatchObject({ section: 'the-pond-today', widget });
-  seen.clean();
-});
-
 // The block "deep-shelf" on try-it: its figure, its Comment, its pin, and
 // the 12 hex digits of the file its frame shows.
 const BLOCK = 'deep-shelf';
@@ -534,6 +505,31 @@ async function blockHash(page: Page) {
   expect(hash, `the frame's file ${source} names its hash`).toMatch(/^[0-9a-f]{12}$/);
   return hash;
 }
+
+test('a block comment keeps its widget, and a block anchor serve refuses is refused with nothing stored', async ({ context, page }) => {
+  const seen = watch(context, page);
+  await load(page, TRY_IT);
+  const hash = await blockHash(page);
+  const refused: [object, number, string][] = [
+    [{ section: 'the-pond-today', widget: { id: BLOCK, hash: '000000000000', state: '' } }, 409, 'stale_widget'],
+    [{ section: 'the-pond-today', widget: { id: 'no-such-block', hash, state: '' } }, 400, 'unknown_widget'],
+    [{ section: '', widget: { id: BLOCK, hash, state: '' } }, 400, 'unknown_widget'],
+    [{ section: 'the-pond-today', widget: { id: BLOCK, hash: 'XYZ', state: '' } }, 400, 'invalid_body'],
+    [{ section: 'the-pond-today', widget: { id: BLOCK, hash, state: '', extra: 1 } }, 400, 'invalid_body'],
+  ];
+  for (const [fields, status, error] of refused) {
+    const sent = await api(page, 'POST', '/api/comments', { page: 'try-it', text: 'How deep?', ...fields });
+    expect.soft(sent, JSON.stringify(fields)).toEqual({ status, json: { error } });
+  }
+  expect.soft(await rows(page, 'try-it'), 'refused anchors store nothing').toEqual([]);
+  await page.evaluate((key) => localStorage.removeItem(key), `${KEY}threads:try-it`);
+  const widget = { id: BLOCK, hash, state: '' };
+  const sent = await api(page, 'POST', '/api/comments',
+    { page: 'try-it', section: 'the-pond-today', text: 'How deep?', widget });
+  expect(sent.status).toBe(201);
+  expect(await newestRoot(page, 'try-it')).toMatchObject({ section: 'the-pond-today', widget });
+  seen.clean();
+});
 
 test('a comment from a block\'s Comment is stored on the block, listed and pinned there, and stays over a reload', async ({ context, page }) => {
   const seen = watch(context, page);
