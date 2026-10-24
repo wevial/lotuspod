@@ -64,6 +64,21 @@ class WidgetVersionsTests(VersionsWitness):
             self.assertEqual((status, data), (200, original))
             for header, value in (*widgets.HEADERS, ('Cache-Control', 'private, no-store')):
                 self.assertEqual(headers[header], value)
+            self.assertEqual(headers['Vary'], 'Sec-Fetch-Dest')
+            status, headers, data = self.get(f'/{filename}?version={commit}',
+                                             headers={'Sec-Fetch-Dest': 'iframe'})
+            self.assertEqual((status, data), (200, original))
+            for header, value in (*widgets.HEADERS, ('Cache-Control', 'private, no-store')):
+                self.assertEqual(headers[header], value)
+            status, headers, data = self.get(f'/{filename}?version={commit}',
+                                             headers={'Sec-Fetch-Dest': 'document'})
+            self.assertEqual(status, 200)
+            self.assertIn("frame-src 'self'", headers['Content-Security-Policy'])
+            self.assertIn("frame-ancestors 'none'", headers['Content-Security-Policy'])
+            (frame,) = parse(data.decode()).find('iframe')
+            self.assertEqual(frame.attrs['sandbox'], 'allow-scripts')
+            self.assertEqual(self.get('/' + frame.attrs['src'])[::2],
+                             (200, original))
             self.assertFalse((self.out / filename).exists())
 
         unlisted = self.commits(self.out, OTHER)[0]

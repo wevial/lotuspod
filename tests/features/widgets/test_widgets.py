@@ -333,3 +333,13 @@ class WidgetTests(TempDirTestCase):
         self.assertEqual(len(frames), 1)
         self.assertEqual(frames[0].get('sandbox'), 'allow-scripts')
         self.assertIn(frame['src'], frames[0].get('src', ''))
+        url = f'http://127.0.0.1:{server.server_address[1]}/'
+        with urllib.request.urlopen(url + frames[0]['src']) as response:
+            self.assertEqual(response.read(), (self.out_dir / frame['src']).read_bytes())
+        for headers in ({'Sec-Fetch-Dest': 'iframe'}, {}):
+            request = urllib.request.Request(url + frame['src'], headers=headers)
+            with urllib.request.urlopen(request) as response:
+                self.assertEqual(response.status, 200)
+                self.assertEqual(response.read(), (self.out_dir / frame['src']).read_bytes())
+                for key, value in (*widgets.HEADERS, ('Vary', 'Sec-Fetch-Dest')):
+                    self.assertEqual(response.headers[key], value)

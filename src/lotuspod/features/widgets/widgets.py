@@ -19,6 +19,33 @@ HEADERS = (
     ('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), clipboard-read=(), clipboard-write=(), display-capture=(), payment=(), usb=()'),
     ('X-Content-Type-Options', 'nosniff'),
 )
+# Every widget file answer, the file's or the framing page's, varies on
+# whether the browser asked for a frame or a tab, so a kept answer of one
+# kind is never given to the other.
+VARY = ('Vary', 'Sec-Fetch-Dest')
+# The framing page's headers: it runs nothing and frames only the site, so a
+# widget opened alone meets frame-src 'self' as it does on its page.
+ALONE_HEADERS = (
+    ('Content-Security-Policy', "default-src 'none'; frame-src 'self'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"),
+    ('X-Content-Type-Options', 'nosniff'),
+    ('Cache-Control', 'no-store'),
+    VARY,
+)
+# The query key the framing page's frame adds to the widget's address: a
+# frame may not load its ancestor's own address, and serve ignores the key.
+ALONE_QUERY = 'alone'
+
+
+def alone_page(filename: str, query: str = '') -> bytes:
+    """The page answering a widget file opened in a tab: one sandboxed frame
+    of the same file (query: its own, without the ?) filling the window."""
+    src = filename + '?' + (query + '&' if query else '') + ALONE_QUERY
+    return ('<!doctype html><html><head><meta charset="utf-8">'
+            f'<title>{html.escape(filename)}</title>'
+            '<style>:root { color-scheme: dark; } html, body { margin: 0; height: 100%; } '
+            'iframe { display: block; width: 100%; height: 100%; border: 0; }</style></head>'
+            f'<body><iframe src="{html.escape(src)}" sandbox="allow-scripts" allow="" '
+            'referrerpolicy="no-referrer"></iframe></body></html>').encode('utf-8')
 
 
 def variables(attribute: str = 'data-lotus-theme') -> str:
