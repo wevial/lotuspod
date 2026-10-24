@@ -404,7 +404,7 @@ def _comment(row: sqlite3.Row) -> dict:
         "actor": _actor(row["actor"]),
         "createdAt": row["created_at"],
         "state": row["state"],
-        # Routing's own: lotuspod.routing reads them and never shows them.
+        # Routing's own: lotuspod.features.agents.routing reads them and never shows them.
         "arrival": {"owner": row["arrival_owner"], "ownerPull": row["arrival_pull"]},
         "claim": {"handle": row["claim_handle"], "credential": row["claim_credential"],
                   "tokenHash": row["claim_hash"], "expiresAt": row["claim_expires"]},

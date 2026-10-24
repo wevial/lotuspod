@@ -13,7 +13,8 @@ import sys
 from functools import partial
 from pathlib import Path
 
-from lotuspod import core, machine
+from lotuspod import core
+from lotuspod.features.agents import machine
 from lotuspod.core import (DEFAULT_OUTPUT_DIR, DEFAULT_REMOTE_COMMAND, EXIT_CONFIG,
                            EXIT_REVISION_CONFLICT, INDEX_FILE, _KEPT_SOURCE_SUFFIX, ConfigError,
                            commit_output, config_path, extract_meta, html_title, markdown_title,

@@ -8,7 +8,7 @@ refused with nothing stored.
 
 The site is served by `lotuspod serve` on loopback with its agent socket;
 the reader's requests carry Access assertions signed with a test key the
-site trusts, and the agent runs the real commands (tests.test_agent_pull_witness).
+site trusts, and the agent runs the real commands (tests.features.agents.test_agent_pull_witness).
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ import json
 import re
 import unittest
 
-from tests.test_agent_pull_witness import Site
+from tests.features.agents.test_agent_pull_witness import Site
 
 NAME = "pond-model"
 SOURCE = "Chat with the maintainer, 2026-10-09"

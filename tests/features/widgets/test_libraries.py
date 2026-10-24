@@ -33,7 +33,7 @@ class LibraryTests(TempDirTestCase):
                                crossorigin='anonymous') for lib in expected])
         for lib in expected:
             self.assertLess(document.index('Content-Security-Policy'), document.index(lib.url + '"'))
-            self.assertLess(document.index(lib.url + '"'), document.index((Path(cli.__file__).parent / 'features/widgets/ts/widget-frame.js').read_text()))
+            self.assertLess(document.index(lib.url + '"'), document.index((Path(cli.__file__).parent.parent / 'features/widgets/ts/widget-frame.js').read_text()))
         policy = directives(read_page(document).policies[0])
         self.assertEqual(policy['script-src'],
                          [core.script_hash(s) for s in core.collect_scripts(document).inline]

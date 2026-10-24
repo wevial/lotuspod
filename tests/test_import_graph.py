@@ -20,7 +20,7 @@ by TARGET_TREE, one (from, to) slice pair a line. An entry can only be
 removed, never added: once a slice reaches the other only through its public
 edge, the entry goes. TARGET_TREE names the slice each flat module moves
 into, so an edge still made by flat modules counts as made; CLI_FUNCTIONS
-names the slice each function cli.py still holds moves into, so an edge made
+names the slice each function cli/__init__.py still holds moves into, so an edge made
 by a use inside one of them counts too.
 
 Run from the repo root:
@@ -47,24 +47,14 @@ CORE = "lotuspod.core"
 STORE = "lotuspod.store"
 FEATURES = "lotuspod.features"
 
-# The slice each module still flat in src/lotuspod/ moves into. cli.py, the
-# entry point, is split across them by the moves themselves.
-TARGET_TREE = {
-    "agents": "agents",
-    "machine": "agents",
-    "responder": "agents",
-    "routing": "agents",
-}
+# The slice each module still flat in src/lotuspod/ moves into. The entry
+# point, cli/__init__.py, was split across them by the moves themselves.
+TARGET_TREE: dict[str, str] = {}
 
-# The slice each function and class cli.py still holds moves into. One of
+# The slice each function and class cli/__init__.py still holds moves into. One of
 # them using a name another slice owns makes an edge, as an import does; the
 # parser and main stay with the entry point.
-CLI_FUNCTIONS = {
-    "cmd_audit": "serve",
-    "cmd_credential_create": "serve",
-    "cmd_credential_list": "serve",
-    "cmd_credential_revoke": "serve",
-}
+CLI_FUNCTIONS: dict[str, str] = {}
 
 # Each import that reaches past another slice's __init__.py into its modules
 # is allowed only along one of these (from, to) edges. Only ever remove one.
@@ -281,10 +271,10 @@ def made_edges(package_dir: Path, tree: dict[str, str]) -> dict[tuple[str, str],
 
 def call_edges(package_dir: Path, tree: dict[str, str],
                functions: dict[str, str]) -> dict[tuple[str, str], str]:
-    """Each cross-slice edge cli.py's functions make, with one use that makes
+    """Each cross-slice edge the entry point's functions make, with one use that makes
     it: a function or class in functions using a name bound to a flat module
     in tree, or to another of functions, whose slice is not its own."""
-    path = package_dir / "cli.py"
+    path = package_dir / "cli" / "__init__.py"
     tree_ast = ast.parse(path.read_text(encoding="utf-8"), str(path))
     owner = {}
     for node in tree_ast.body:
@@ -302,7 +292,7 @@ def call_edges(package_dir: Path, tree: dict[str, str],
         for used in ast.walk(node):
             other = owner.get(used.id) if isinstance(used, ast.Name) else None
             if other and other != own:
-                made.setdefault((own, other), f"lotuspod/cli.py:{used.lineno}: "
+                made.setdefault((own, other), f"lotuspod/cli/__init__.py:{used.lineno}: "
                                               f"{node.name} uses {used.id}")
     return made
 
@@ -312,15 +302,15 @@ class RepositoryTests(unittest.TestCase):
         self.assertEqual(violations(PACKAGE_DIR, EDGES), [])
 
     def test_every_listed_edge_is_still_made(self):
-        """A listed edge no import, and no use in cli.py, makes any more is
+        """A listed edge no import, and no use in the entry point, makes any more is
         dropped from EDGES."""
         made = made_edges(PACKAGE_DIR, TARGET_TREE) | call_edges(PACKAGE_DIR, TARGET_TREE,
                                                                  CLI_FUNCTIONS)
         self.assertEqual(sorted(set(EDGES) - set(made)), [])
 
     def test_every_mapped_cli_function_is_in_cli(self):
-        """A function a move takes out of cli.py is dropped from CLI_FUNCTIONS."""
-        defined = {node.name for node in ast.parse((PACKAGE_DIR / "cli.py").read_text()).body
+        """A function a move takes out of the entry point is dropped from CLI_FUNCTIONS."""
+        defined = {node.name for node in ast.parse((PACKAGE_DIR / "cli" / "__init__.py").read_text()).body
                    if isinstance(node, (ast.FunctionDef, ast.ClassDef))}
         self.assertEqual(sorted(set(CLI_FUNCTIONS) - defined), [])
 
@@ -335,7 +325,7 @@ class CheckerTests(unittest.TestCase):
         self.package = Path(self.enterContext(tempfile.TemporaryDirectory())) / PACKAGE
         self.write("__init__.py", "")
         self.write("__main__.py", "from lotuspod.cli import main\n")
-        self.write("cli.py", "from lotuspod.features import a\n")
+        self.write("cli/__init__.py", "from lotuspod.features import a\n")
         self.write("flat.py", "")
         self.write("core/__init__.py", "import os\n")
         self.write("store/__init__.py", "")
@@ -460,7 +450,7 @@ class CheckerTests(unittest.TestCase):
         self.assertEqual(exports(self.package, "lotuspod.features.b"), {"registry", "rest"})
 
     def test_call_edges_name_one_use_for_each(self):
-        self.write("cli.py", """\
+        self.write("cli/__init__.py", """\
             from lotuspod import flat
             from lotuspod.flat_user import helper
 
@@ -476,7 +466,7 @@ class CheckerTests(unittest.TestCase):
         made = call_edges(self.package, {"flat": "a", "flat_user": "c"},
                           {"serving": "b", "owned": "a"})
         self.assertEqual(sorted(made), [("b", "a"), ("b", "c")])
-        self.assertIn("lotuspod/cli.py:5: serving uses flat", made[("b", "a")])
+        self.assertIn("lotuspod/cli/__init__.py:5: serving uses flat", made[("b", "a")])
 
 
 if __name__ == "__main__":

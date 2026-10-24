@@ -1525,7 +1525,7 @@ and the page `policy`, which the renderer fills in last.
 
 ## Theme
 
-The lotus theme lives in `src/lotuspod/_theme/`, and its shared part in
+The lotus theme's shared part lives in
 `src/lotuspod/core/theme/` and `src/lotuspod/core/ts/`: `core/theme/tokens.json` is the source of truth for the
 palette (dark/white/lavender: `night`, `deep_night`, `surface`, `glow`,
 `lavender`, `pale_lavender`, `muted_lavender`, `white`), typography,
@@ -1534,7 +1534,7 @@ structural hairlines/tints (table rules, code and quote surfaces), and radii;
 `k` as `--color-k`, a `structure` key `k` as `--k`, underscores as dashes).
 Edit the CSS to restyle all artifacts.
 A feature's CSS goes in its own file in its slice's
-`src/lotuspod/features/SLICE/theme/` (outside a slice, `src/lotuspod/_theme/css/`)
+`src/lotuspod/features/SLICE/theme/` (outside a slice, `src/lotuspod/core/theme/`)
 and its JS in the slice's `ts/`, and each new file takes one line in the declared
 order (`THEME_SOURCES` in `src/lotuspod/core/__init__.py`), which render joins into the one
 `lotuspod.css`, `lotuspod-page.js`, `lotuspod-index.js` and

@@ -14,7 +14,8 @@ import sys
 from html.parser import HTMLParser
 from pathlib import Path
 
-from lotuspod import core, machine
+from lotuspod import core
+from lotuspod.features.agents import machine
 from lotuspod.features.serve import serve_files
 from lotuspod.features.comments import comments
 from lotuspod.features.decisions import decisions
@@ -471,7 +472,7 @@ def cmd_render(args: argparse.Namespace) -> int:
         "widget_bridge": ("(function () {\n"
                           + (core.THEME_ROOT / "features/widgets/ts/widgets.js").read_text(encoding="utf-8")
                           + "\ninstallWidgetBridge();\n})();" if widget_files else ""),
-        "theme_head": (core.THEME_ROOT / "_theme/theme-head.js").read_text(encoding="utf-8"),
+        "theme_head": (core.THEME_ROOT / "core/ts/theme-head.js").read_text(encoding="utf-8"),
         "page_script": PAGE_SCRIPT,
         "mermaid_theme_variables": mermaid_theme_variables(tokens) if has_mermaid_block(body) else "",
         "mermaid_dir": MERMAID_DIR,

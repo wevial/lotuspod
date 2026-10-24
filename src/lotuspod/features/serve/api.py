@@ -172,7 +172,7 @@ refused as a new thread is, and 400 unknown_question for a question the page
 does not ask, checked before its section; it takes no quote.
 
 Every reader's comment a route answers carries its routing state (see
-lotuspod.routing): `state` is `pending`, `unavailable` or `paused` until an
+lotuspod.features.agents.routing): `state` is `pending`, `unavailable` or `paused` until an
 agent takes it up, and `owner` is the handle it is routed to (null on an agent's reply).
 
 `images` names 1 to MAX_IMAGES images the reader uploaded, by their stored
@@ -198,7 +198,7 @@ resolved thread reopens it.
 
 A reader's actor leaves a route as {kind: human, name}: the name is the part
 of their address before its last @, and the address itself never reaches a
-page. The agents' socket (lotuspod.machine) still sees the address.
+page. The agents' socket (lotuspod.features.agents.machine) still sees the address.
 """
 
 from __future__ import annotations
@@ -219,7 +219,8 @@ from http import HTTPStatus
 from pathlib import Path
 from typing import BinaryIO, Callable, Mapping, Sequence
 
-from lotuspod import routing, store
+from lotuspod import store
+from lotuspod.features.agents import routing
 from lotuspod.features.comments import comments
 from lotuspod.features.publish import media
 from lotuspod.features.history import versions

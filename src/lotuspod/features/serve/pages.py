@@ -6,7 +6,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Callable
 
-from lotuspod import machine
+from lotuspod.features.agents import machine
 from lotuspod.core import (_KEPT_SOURCE_SUFFIX, extract_meta, extract_visibility, is_page_name,
                            page_revision, source_revision)
 from lotuspod.features.comments import comments

@@ -124,7 +124,7 @@ with open(sys.argv[1], "w", encoding="utf-8") as fh:
 AGENT_COMMAND = """\
 import json, os, pathlib, stat, sys, urllib.error, urllib.request
 sys.path.insert(0, "src")
-from lotuspod import machine
+from lotuspod.features.agents import machine
 env = os.environ
 socket_path = env["LOTUSPOD_TEST_SOCKET"]
 seen = {"python": env["LOTUSPOD_TEST_PYTHON"], "out": env["LOTUSPOD_TEST_OUT"],

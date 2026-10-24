@@ -9,7 +9,7 @@ A reader's comment no agent has taken up yet is routed to one handle:
 - Otherwise it goes to the default responder, `responder`, on a page with
   an owner too, whether or not the owner is listening. The responder
   answers it, and queues what asks the owner to act in that owner's inbox
-  (lotuspod.responder, lotuspod.db).
+  (lotuspod.features.agents.responder, lotuspod.db).
 
 A handle is listening when its last pull is within the window. A comment is
 `pending` while the handle it is routed to is listening, else `unavailable`;

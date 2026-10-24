@@ -7,9 +7,9 @@ from email.message import Message
 from functools import partial
 from unittest import mock
 
-from tests.test_agent_pull import PullTestCase, run_cli
-from tests.test_inbox import InboxTestCase
-from lotuspod import machine
+from tests.features.agents.test_agent_pull import PullTestCase, run_cli
+from tests.features.agents.test_inbox import InboxTestCase
+from lotuspod.features.agents import machine
 from lotuspod.features.serve import pages as serve_pages, serve_files
 from lotuspod.features.history import archive
 from lotuspod.store import db

@@ -1,21 +1,17 @@
-"""Minimal CLI for rendering Lotuspod artifacts from the template + theme."""
+"""The agents slice's commands: `lotuspod credential`, the machine
+credentials agents use on serve's socket (lotuspod.features.agents.machine),
+and `lotuspod audit`, with `lotuspod comments` and `lotuspod inbox`
+(agents.py) and `lotuspod respond` (responder.py) registered after it."""
 
 from __future__ import annotations
-
 
 import argparse
 import json
 import sys
 from pathlib import Path
 
-from lotuspod import agents, machine, responder
-from lotuspod.features.backup import commands as backup_commands
-from lotuspod.features.decisions import commands as decisions_commands
-from lotuspod.features.history import commands as history_commands
-from lotuspod.features.index import commands as index_commands
-from lotuspod.features.publish import commands as publish_commands
+from lotuspod.features.agents import agents, machine, responder
 from lotuspod.features.publish.publish import _PAGE_NAME
-from lotuspod.features.serve import commands as serve_commands
 from lotuspod.features.serve.serve_files import serve_database
 from lotuspod.store import db
 
@@ -89,30 +85,22 @@ def cmd_audit(args: argparse.Namespace) -> int:
     return 0
 
 
-def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="lotuspod", description=__doc__)
-    sub = parser.add_subparsers(dest="command", required=True)
+def database_options(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--out-dir", default="", help="artifacts directory (default: artifacts/)"
+    )
+    parser.add_argument(
+        "--db", default="", metavar="PATH",
+        help=f"serve's database (default: {db.DEFAULT_NAME} beside the artifacts directory)",
+    )
 
-    publish_commands.add_render_parsers(sub)
-    index_commands.add_parser(sub)
-    publish_commands.add_publish_parser(sub)
 
-    serve_commands.add_parser(sub)
-
+def add_credential_parser(sub: argparse._SubParsersAction) -> None:
     credential = sub.add_parser(
         "credential",
         help="make, list and revoke the machine credentials agents use on serve's socket",
     )
     actions = credential.add_subparsers(dest="action", required=True)
-
-    def database_options(parser: argparse.ArgumentParser) -> None:
-        parser.add_argument(
-            "--out-dir", default="", help="artifacts directory (default: artifacts/)"
-        )
-        parser.add_argument(
-            "--db", default="", metavar="PATH",
-            help=f"serve's database (default: {db.DEFAULT_NAME} beside the artifacts directory)",
-        )
 
     create = actions.add_parser(
         "create", help="make a credential and write its token to a new file"
@@ -143,8 +131,10 @@ def build_parser() -> argparse.ArgumentParser:
     database_options(revoke)
     revoke.set_defaults(func=cmd_credential_revoke)
 
-    decisions_commands.add_parser(sub)
 
+def add_audit_parsers(sub: argparse._SubParsersAction) -> None:
+    """`lotuspod audit`, then the commands beside it: `comments`, `inbox` and
+    `respond`."""
     audit = sub.add_parser(
         "audit",
         help="list every claim, reply, release, failure, resolve and reopen by an agent, "
@@ -162,21 +152,3 @@ def build_parser() -> argparse.ArgumentParser:
     agents.add_parser(sub)
     agents.add_inbox_parser(sub)
     responder.add_parser(sub)
-    backup_commands.add_parser(sub)
-    history_commands.add_parser(sub)
-
-    return parser
-
-
-def main(argv: list[str] | None = None) -> int:
-    parser = build_parser()
-    args = parser.parse_args(argv)
-    try:
-        return args.func(args)
-    except (KeyError, FileNotFoundError, json.JSONDecodeError, RuntimeError) as exc:
-        print(f"error: {exc}", file=sys.stderr)
-        return 1
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())

@@ -332,10 +332,10 @@ def previous_theme(out_dir: Path, commit: str) -> Path:
         text = history.show(commit, f"src/lotuspod/_theme/{filename}", repo=repo)
         (previous / now).mkdir(parents=True)
         (previous / now / filename).write_text(text, encoding="utf-8")
-    for filename in ("favicon.svg", core.PAGE_SCRIPT, core.INDEX_SCRIPT,
-                     core.OLD_VERSION_SCRIPT, "theme-head.js"):
+    for filename in ("favicon.svg", core.PAGE_SCRIPT, core.INDEX_SCRIPT, core.OLD_VERSION_SCRIPT):
         now = core.THEME_FILE_SOURCES.get(filename, f"_theme/{filename}")
         (previous / now).write_bytes(core.theme_file_bytes(filename))
+    os.symlink(core.THEME_ROOT / "core" / "ts", previous / "core" / "ts")
     return previous
 
 

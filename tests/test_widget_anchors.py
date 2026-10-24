@@ -4,7 +4,7 @@ and the default responder's prompt name the block by its title and state
 with its source, saying when it has changed or left the page.
 
 serve runs on a thread with the test Access key trusted, as in
-tests.test_agent_pull; the reader posts over its port and agents use the
+tests.features.agents.test_agent_pull; the reader posts over its port and agents use the
 commands through its socket.
 
 Run from the repo root:
@@ -26,13 +26,14 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from lotuspod import agents, core, responder  # noqa: E402
+from lotuspod import core  # noqa: E402
+from lotuspod.features.agents import agents, responder  # noqa: E402
 from lotuspod.features.serve import pages as serve_pages, serve_files  # noqa: E402
 from lotuspod.features.comments import comments  # noqa: E402
 from lotuspod.features.publish import render  # noqa: E402
 from lotuspod.features.history import versions  # noqa: E402
 from lotuspod.store import db  # noqa: E402
-from tests.test_agent_pull import PullTestCase, run_cli  # noqa: E402
+from tests.features.agents.test_agent_pull import PullTestCase, run_cli  # noqa: E402
 
 TITLE = "Merge churn by worker count"
 STATE = "at 6 workers"
