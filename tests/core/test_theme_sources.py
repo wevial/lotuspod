@@ -82,12 +82,14 @@ def sources_at(theme_dir: Path) -> dict[str, tuple[str, ...]]:
         return core.theme_sources()
 
 
-def declare(folder: Path, *parts: tuple[str, str, int]) -> None:
-    """Write folder's theme_parts.json declaring each (served file, part, slot)."""
-    folder.mkdir(parents=True, exist_ok=True)
-    (folder / core.THEME_PARTS).write_text(json.dumps(
-        [{"file": served, "part": part, "slot": slot} for served, part, slot in parts]),
-        encoding="utf-8")
+def add_pond(theme_dir: Path, rule: bytes, slot: int) -> None:
+    """Add a pond slice under theme_dir whose theme/pond.css, holding rule, is
+    declared as the stylesheet's part at slot."""
+    pond = theme_dir / "features" / "pond"
+    (pond / "theme").mkdir(parents=True)
+    (pond / "theme" / "pond.css").write_bytes(rule)
+    (pond / core.THEME_PARTS).write_text(json.dumps(
+        [{"file": STYLESHEET, "part": "theme/pond.css", "slot": slot}]), encoding="utf-8")
 
 
 class ThemeCopyTestCase(TempDirTestCase):
@@ -364,10 +366,7 @@ class DeclaredOrderTests(ThemeCopyTestCase):
         with a lower slot and before every part with a higher one."""
         theme = self.theme_copy()
         rule = b"\n.pond {\n  color: var(--color-sky);\n}\n"
-        pond = theme / "features" / "pond"
-        (pond / "theme").mkdir(parents=True)
-        (pond / "theme" / "pond.css").write_bytes(rule)
-        declare(pond, (STYLESHEET, "theme/pond.css", 5))
+        add_pond(theme, rule, 5)
 
         with mock.patch.object(core, "THEME_ROOT", theme):
             core.sync_theme_css(self.out_dir)
@@ -391,9 +390,7 @@ class DeclaredOrderTests(ThemeCopyTestCase):
         theme = self.theme_copy()
         before, after = core.theme_sources()[STYLESHEET][:2]
         rule = b".pond {}\n"
-        (theme / "features" / "pond" / "theme").mkdir(parents=True)
-        (theme / "features" / "pond" / "theme" / "pond.css").write_bytes(rule)
-        declare(theme / "features" / "pond", (STYLESHEET, "theme/pond.css", 15))
+        add_pond(theme, rule, 15)
 
         with mock.patch.object(core, "THEME_ROOT", theme):
             served = core.theme_file_bytes(STYLESHEET)
@@ -403,9 +400,7 @@ class DeclaredOrderTests(ThemeCopyTestCase):
     def test_two_parts_at_one_slot_are_refused(self):
         theme = self.theme_copy()
         taken = core.theme_sources()[STYLESHEET][0]
-        (theme / "features" / "pond" / "theme").mkdir(parents=True)
-        (theme / "features" / "pond" / "theme" / "pond.css").write_bytes(b".pond {}\n")
-        declare(theme / "features" / "pond", (STYLESHEET, "theme/pond.css", 10))
+        add_pond(theme, b".pond {}\n", 10)
 
         with mock.patch.object(core, "THEME_ROOT", theme), \
                 self.assertRaisesRegex(ValueError, f"features/pond/theme/pond.css takes slot 10 "
