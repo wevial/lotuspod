@@ -26,6 +26,9 @@ const QUOTE = { exact: 'the first algae', prefix: 'from edge to edge and ', suff
 const UNKNOWN_SECTION = 'no-such-section';
 const UNKNOWN_QUESTION = 'no-such-question';
 const STALE_VERSION = 'stale';
+const BLOCK = 'deep-shelf';
+const UNKNOWN_BLOCK = 'no-such-block';
+const STALE_HASH = '000000000000';
 
 type Entry = { request: string; method: string; path: string; status: number; shape: unknown };
 
@@ -55,6 +58,9 @@ test('the shim answers the script in the shapes serve gives', async ({ page }) =
   }));
   expect(form.choices.length).toBeGreaterThanOrEqual(2);
   const [first, second] = form.choices;
+  const source = await page.locator(`iframe.artifact-widget[data-widget="${BLOCK}"]`).getAttribute('src') ?? '';
+  const blockHash = /\.w-([0-9a-f]{12})\.html$/.exec(source)?.[1] ?? '';
+  expect(blockHash, `the ${BLOCK} frame's src names its hash`).toMatch(/^[0-9a-f]{12}$/);
 
   const entries: Entry[] = [];
   const ask = async (label: string, method: string, url: string, body?: object) => {
@@ -101,6 +107,13 @@ test('the shim answers the script in the shapes serve gives', async ({ page }) =
   await ask('14. GET revision', 'GET', `/api/revision${query}`);
   await ask('15. POST a comment on an unknown section', 'POST', comments,
     { page: PAGE, section: UNKNOWN_SECTION, text: 'Where does this go?' });
+  const onBlock = (id: string, hash: string) => ({
+    page: PAGE, section: PASSAGE_SECTION, text: 'How deep is the shelf?', widget: { id, hash, state: '' },
+  });
+  await ask('16. POST a block comment', 'POST', comments, onBlock(BLOCK, blockHash));
+  await ask('17. GET comments, with a block thread', 'GET', comments + query);
+  await ask('18. POST a block comment with a stale hash', 'POST', comments, onBlock(BLOCK, STALE_HASH));
+  await ask('19. POST a comment on a block the page lacks', 'POST', comments, onBlock(UNKNOWN_BLOCK, blockHash));
 
   const found: string[] = compare(FIXTURE, entries);
   expect(found, `the shim's answers differ from tests/fixtures/demo/api-shapes.json:\n${found.join('\n')}`)
