@@ -757,15 +757,21 @@ test('an empty panel Ask posts nothing, and the card\'s Ask still sends and empt
   await expect(three.askStatus).toHaveText('');
   await expect(three.askField).toHaveValue('Does Esc close it? And a click outside?');
 
-  // Saved while its Ask holds an unsent question, the entry stays listed
-  // with the question until it is sent or emptied.
+  // Saved while its Ask holds an unsent question, the question still moves
+  // to Answered, and its row carries the unsent question until it is sent
+  // or cancelled.
+  const side = panel(page);
   await three.save.click();
   await expect(card(page, 'decision-3').saved).toBeVisible();
-  await page.waitForTimeout(2_000);
-  await expect(three.item).toBeVisible();
-  await expect(three.askField).toHaveValue('Does Esc close it? And a click outside?');
-  await three.item.getByRole('button', { name: 'Cancel', exact: true }).click();
   await expect(three.item).toHaveCount(0);
-  await expect(row(page, 'decision-3').item).toHaveCount(1);
+  await expect(side.answeredSummary).toHaveText('Answered · 2');
+  await side.answeredSummary.click();
+  const carried = row(page, 'decision-3').item.locator('.artifact-decisions-asking textarea');
+  await expect(carried).toHaveValue('Does Esc close it? And a click outside?');
+  await expect(carried).toHaveAccessibleName('Ask about decision 3');
+  await row(page, 'decision-3').item.locator('.artifact-decisions-asking')
+    .getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(carried).toHaveCount(0);
+  await expect(row(page, 'decision-3').label).toHaveText('Overlay on the console');
   expect(errors).toEqual([]);
 });

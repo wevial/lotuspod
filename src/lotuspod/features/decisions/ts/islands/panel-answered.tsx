@@ -1,4 +1,6 @@
 import { useLayoutEffect, useRef, useState } from "preact/hooks";
+import { store } from "../../../comments/ts/index";
+import { Ask, type Draft } from "./panel-ask";
 import { Context, Note, Options, type Desk } from "./panel-parts";
 import { jump, sectionsOf } from "./sections";
 import { label, words } from "./words";
@@ -9,12 +11,16 @@ import { label, words } from "./words";
 // card's pick, its note, Save, Cancel, "not saved" while the card differs
 // from its answer, and Show on page. A pick or a note opens the card on the
 // page as its "change" does; Cancel puts the card back as saved. It is
-// drawn again as the cards change.
-function Row({ desk, form }: { desk: Desk; form: HTMLFormElement }) {
+// drawn again as the cards change. A question saved while its entry's Ask
+// held an unsent question carries that field here, until it is sent or
+// cancelled.
+function Row({ desk, form, draft }: { desk: Desk; form: HTMLFormElement; draft: Draft }) {
   desk.marked.value;
   const question = form.dataset.question ?? "";
   const answer = desk.saved(form);
   const [open, setOpen] = useState(false);
+  const [carrying, setCarrying] = useState(() => draft.text.trim() !== "");
+  const asker = store.asking.value;
   const [busy, setBusy] = useState(false);
   const item = useRef<HTMLLIElement>(null);
   // What to focus once the row is drawn open or collapsed.
@@ -77,6 +83,8 @@ function Row({ desk, form }: { desk: Desk; form: HTMLFormElement }) {
           {changed && <>{" "}<span class="artifact-decisions-unsaved">not saved</span></>}
         </p>
       )}
+      {asker && carrying &&
+        <Ask form={form} asking={asker} draft={draft} done={() => setCarrying(false)} focused={false} />}
     </li>
   );
 }
@@ -84,11 +92,12 @@ function Row({ desk, form }: { desk: Desk; form: HTMLFormElement }) {
 // The questions with a saved answer that is not a dismissal, folded under
 // "Answered · N" until the reader opens it, under the open list's section
 // headings in page order.
-export function Answered({ desk, forms, open, toggled }: {
+export function Answered({ desk, forms, open, toggled, draftOf }: {
   desk: Desk;
   forms: readonly HTMLFormElement[];
   open: boolean;
   toggled(open: boolean): void;
+  draftOf(form: HTMLFormElement): Draft;
 }) {
   if (!forms.length) {
     return null;
@@ -101,7 +110,7 @@ export function Answered({ desk, forms, open, toggled }: {
         <section key={section.key} class="artifact-decisions-answered-group">
           <h3 class="artifact-decisions-answered-title">{section.title}</h3>
           <ol class="artifact-decisions-rows">
-            {section.forms.map((form) => <Row key={form.dataset.question} desk={desk} form={form} />)}
+            {section.forms.map((form) => <Row key={form.dataset.question} desk={desk} form={form} draft={draftOf(form)} />)}
           </ol>
         </section>
       ))}

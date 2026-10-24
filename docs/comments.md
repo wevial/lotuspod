@@ -659,10 +659,11 @@ maintainer](publishing.md#decisions-for-the-maintainer)), and the panel
 stays on Decisions. Sent, the field empties and closes, and the note, in the
 panel and on the card, is left as it was; an empty field reads "Write your
 question first." and posts nothing, a refused post keeps the text and says
-why, and text changed while the question was sending stays, unsent. While
-the field holds an unsent question its entry stays in the list, saved or
-not, so the question is never lost; the entry's "Ask" folds the field and
-keeps its text, and Cancel empties it. An entry whose question has open threads ends in "?", "1 thread"
+why, and text changed while the question was sending stays, unsent. The
+entry's "Ask" folds the field and keeps its text, and Cancel empties it. A
+question saved while its field holds an unsent question still moves to the
+Answered list, and its row there carries the field, text and all, until it
+is sent or cancelled. An entry whose question has open threads ends in "?", "1 thread"
 (or "N threads") and where the newest stands as its chip reads it
 ("answered", "writing", "waiting" or "failed"); pressing it opens the
 Comments tab at that thread, as the decision's chip does.
