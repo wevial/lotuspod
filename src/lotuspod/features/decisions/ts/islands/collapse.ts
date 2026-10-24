@@ -21,10 +21,7 @@ export function collapse(form: HTMLFormElement, on: boolean): void {
   form.classList.toggle(COLLAPSED, on);
   button.setAttribute("aria-expanded", String(!on));
   button.querySelector(".artifact-decision-caret")!.textContent = on ? "▸" : "▾";
-  const line = form.querySelector<HTMLElement>(".artifact-decision-line");
-  if (line) {
-    line.hidden = !on;
-  }
+  form.querySelector<HTMLElement>(".artifact-decision-line")!.hidden = !on;
 }
 
 // A collapsed card open again, before anything takes the reader to it.
