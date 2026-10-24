@@ -1377,7 +1377,13 @@ Above each frame is a bar, the chrome, which the page draws, not the block:
   badge shows the last error.
 - **Expand** fills the window below the top bar with the frame; **Close**, or
   Escape, puts it back.
-- **Open alone** opens the widget file in a new tab, still sandboxed.
+- **Open alone** opens the widget file in a new tab, still sandboxed. The
+  tab's address is the widget file's, but serve answers a tab's request for
+  it (`Sec-Fetch-Dest: document`) with a small page that frames the file,
+  sandboxed, under `frame-src 'self'`, so the widget runs in a frame there
+  as it does on its page. A browser that sends no `Sec-Fetch-Dest` (one
+  reaching the site over plain HTTP at an address that is not local) gets
+  the file itself instead.
 - **Pause** stops the block: the frame is emptied, so its scripts stop, and
   a note says so. **Resume** loads it again from the beginning.
 
@@ -1393,15 +1399,19 @@ A widget is the running block. Serve answers its file with
 page frames it with `sandbox="allow-scripts"`, and the file carries its own
 policy. So a widget has:
 
-- **No network but its own frame's address.** It cannot fetch, open a
-  socket or load anything from elsewhere: scripts are its own inline ones and
-  the pinned libraries, and images and fonts are `data:` URLs only. It holds
-  no forms that send, no frames of its own, and no camera, microphone,
-  location or clipboard. It can still move its own frame to another address,
-  and that address can carry anything the widget has at that moment: what
-  its author wrote, what it worked out, and what the reader typed or chose
-  in it. So a widget is safe for showing things, not for asking the reader
-  for anything they would not post on the page.
+- **No network.** It cannot fetch, open a socket or load anything from
+  elsewhere: scripts are its own inline ones and the pinned libraries, and
+  images and fonts are `data:` URLs only. It holds no forms that send, no
+  frames of its own, and no camera, microphone, location or clipboard. Nor
+  can it move its frame to another site, which would carry off what the
+  reader typed or chose in it: on its page, the page's `frame-src 'self'`
+  policy stops the frame loading anything from elsewhere, and opened alone
+  it runs inside a frame of the site's under the same rule (see **Open
+  alone** above). It can still move its frame to another address on the
+  site itself. A browser that sends no `Sec-Fetch-Dest` header (plain HTTP
+  to an address that is not local) gets the file itself when it opens it
+  alone, so there the widget is the tab and nothing stops it moving the tab
+  to another site.
 - **No page.** It cannot read or change the page around it, open a window or
   move the reader to another page.
 - **No session.** It runs as a stranger to the site, so its scripts cannot
