@@ -53,8 +53,6 @@ TARGET_TREE = {
     "access": "serve",
     "agents": "agents",
     "api": "serve",
-    "comments": "comments",
-    "decisions": "decisions",
     "events": "live",
     "machine": "agents",
     "responder": "agents",
@@ -72,11 +70,9 @@ CLI_FUNCTIONS = {
     "_stop_serving": "serve",
     "access_verifier": "serve",
     "agent_page": "agents",
-    "answers_text": "decisions",
     "api_catalog": "serve",
     "api_page": "serve",
     "claim_seconds": "serve",
-    "cmd_answers": "decisions",
     "cmd_audit": "serve",
     "cmd_credential_create": "serve",
     "cmd_credential_list": "serve",
@@ -100,6 +96,7 @@ EDGES = (
     ("backup", "serve"),  # backup.py:409 calls cli.serve_db_path
     ("decisions", "agents"),  # cli.py:3170, answers_text, uses agents
     ("decisions", "comments"),  # decisions.py:56 imports comments
+    ("decisions", "publish"),  # cli.py:842, cmd_answers, uses publish's _PAGE_NAME
     ("decisions", "serve"),  # decisions.py:56 imports api
     ("history", "index"),  # archive.py:188 calls cli.cmd_manifest
     ("history", "serve"),  # archive.py:40 imports api
@@ -116,7 +113,6 @@ EDGES = (
     ("publish", "widgets"),  # markdown.py:53 imports widgets
     ("serve", "agents"),  # api.py:222 imports routing
     ("serve", "comments"),  # api.py:222 imports comments
-    ("serve", "decisions"),  # cli.py:2440, api_page, calls decisions.read_forms
     ("serve", "history"),  # api.py:222 imports versions
     ("serve", "live"),  # cli.py:2583, _AllowListHandler, uses events
     ("serve", "publish"),  # api.py:222 imports media

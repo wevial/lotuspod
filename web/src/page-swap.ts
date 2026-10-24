@@ -14,12 +14,12 @@
 // bar stays where it was in the window, as do the next one kept when the swap
 // takes it away and the new one when it replaces it.
 //
-// A changed or removed part any test registered with holdSwap holds (the
-// swap's own: the focus is in it; the comments island's
-// (web/src/islands/comments/drafts.ts): an open passage composer's words are
-// in it, or it is a section taken away whose form holds text not sent;
-// js/decisions.js's: a decision form in it holds an answer not
-// saved; js/diagram-view.js's: its diagram is open full-window) stays as it
+// A changed or removed part any test registered with holdSwap holds (the swap's
+// own: the focus is in it; the comments island's
+// (src/lotuspod/features/comments/ts/islands/comments/drafts.ts): an open
+// passage composer's words are in it, or it is a section taken away whose form
+// holds text not sent; js/decisions.js's: a decision form in it holds an answer
+// not saved; js/diagram-view.js's: its diagram is open full-window) stays as it
 // is, under a bar saying so with an Update button, which applies the part's
 // newest nodes as a swap would.
 // The page still takes the new revision; a later swap replaces the kept nodes

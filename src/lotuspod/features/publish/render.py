@@ -14,7 +14,9 @@ import sys
 from html.parser import HTMLParser
 from pathlib import Path
 
-from lotuspod import comments, core, decisions, machine, serve_files
+from lotuspod import core, machine, serve_files
+from lotuspod.features.comments import comments
+from lotuspod.features.decisions import decisions
 from lotuspod.features.blocks import node_tables, refs
 from lotuspod.features.publish import markdown, media, sections
 from lotuspod.features.widgets import widgets

@@ -70,6 +70,8 @@ lotuspod/
 │   │   ├── widgets/       # live blocks and the browser libraries they load
 │   │   ├── history/       # page versions and the archive (`archive`, `unarchive`)
 │   │   ├── index/         # the site's listing (`index`); templates/index.html, the index-page template
+│   │   ├── comments/      # comment boxes, the comments panel's islands, the review sheet, attachments, narrow windows, the panel's resize
+│   │   ├── decisions/     # a page's decision tables, answered on the page (`answers`)
 │   │   └── backup/        # `backup` and `restore`
 │   └── _theme/            # css/, js/; the served lotuspod.css is core/theme/base.css, css/ and the slices' theme/ joined in order
 ├── artifacts/             # rendered output (gitignored)

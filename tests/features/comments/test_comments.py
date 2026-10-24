@@ -9,7 +9,7 @@ where a page must survive byte for byte.
 
 Run from the repo root:
 
-    python -m unittest tests.test_comments -v
+    python -m unittest tests.features.comments.test_comments -v
 """
 
 from __future__ import annotations
@@ -27,15 +27,16 @@ from html.parser import HTMLParser
 from pathlib import Path
 from unittest import mock
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "src"))
 
-from lotuspod import access, cli, comments, core, machine, routing  # noqa: E402
+from lotuspod import access, cli, core, machine, routing  # noqa: E402
+from lotuspod.features.comments import comments  # noqa: E402
 from lotuspod.features.publish import media  # noqa: E402
 from lotuspod.store import db  # noqa: E402
 from tests import access_keys as keys  # noqa: E402
 from tests.test_forms import normalised_page  # noqa: E402
 
-FIXTURES = Path(__file__).parent / "fixtures"
+FIXTURES = Path(__file__).parents[2] / "fixtures"
 HOST = "127.0.0.1"
 
 THREE_SECTIONS = """\

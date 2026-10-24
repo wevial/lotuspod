@@ -227,7 +227,7 @@ test.beforeAll(() => {
     '-m', 'lotuspod', 'comments', 'pull', '--owner', OWNER, '--json',
     '--socket', env.LOTUSPOD_TEST_SOCKET ?? '',
     '--credential', env.LOTUSPOD_TEST_CREDENTIAL_HERMES ?? '',
-  ], { env: { ...env, PYTHONPATH: path.resolve(__dirname, '..', '..', 'src') }, stdio: 'ignore' });
+  ], { env: { ...env, PYTHONPATH: path.resolve(__dirname, '..', '..', '..', '..', 'src') }, stdio: 'ignore' });
 });
 
 test.describe('signed in', () => {

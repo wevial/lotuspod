@@ -219,7 +219,8 @@ from http import HTTPStatus
 from pathlib import Path
 from typing import BinaryIO, Callable, Mapping, Sequence
 
-from lotuspod import comments, routing, store
+from lotuspod import routing, store
+from lotuspod.features.comments import comments
 from lotuspod.features.publish import media
 from lotuspod.features.history import versions
 

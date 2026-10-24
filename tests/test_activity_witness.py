@@ -35,7 +35,8 @@ from tests.features.history.test_versions_witness import VersionsWitness
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "src"))
 
-from lotuspod import api, cli, decisions, machine  # noqa: E402
+from lotuspod import api, cli, machine  # noqa: E402
+from lotuspod.features.decisions import decisions  # noqa: E402
 from lotuspod.features.history import versions  # noqa: E402
 
 # A second reader the site lets in.

@@ -145,10 +145,10 @@ class DeclaredOrderTests(ThemeCopyTestCase):
         styles win at equal specificity, so they are joined after css/comments.css."""
         styles = core.THEME_SOURCES[STYLESHEET]
         script = core.THEME_SOURCES[core.PAGE_SCRIPT]
-        self.assertIn("_theme/css/narrow.css", styles)
-        self.assertIn("_theme/js/narrow.js", script)
-        self.assertGreater(styles.index("_theme/css/narrow.css"), styles.index("_theme/css/comments.css"))
-        self.assertLess(script.index("_theme/js/narrow.js"), script.index("_theme/js/islands.js"))
+        self.assertIn("features/comments/theme/narrow.css", styles)
+        self.assertIn("features/comments/ts/narrow.js", script)
+        self.assertGreater(styles.index("features/comments/theme/narrow.css"), styles.index("features/comments/theme/comments.css"))
+        self.assertLess(script.index("features/comments/ts/narrow.js"), script.index("features/comments/ts/islands.js"))
 
     def test_the_live_page_sources_are_declared_before_the_comments_script(self):
         """LOTUS-41: the comments' reads hand the live page each revision
@@ -158,7 +158,7 @@ class DeclaredOrderTests(ThemeCopyTestCase):
         script = core.THEME_SOURCES[core.PAGE_SCRIPT]
         self.assertIn("_theme/css/live-page.css", styles)
         self.assertIn("_theme/js/live-page.js", script)
-        self.assertLess(script.index("_theme/js/live-page.js"), script.index("_theme/js/islands.js"))
+        self.assertLess(script.index("_theme/js/live-page.js"), script.index("features/comments/ts/islands.js"))
         problems = source_problems(core.THEME_ROOT, core.THEME_SOURCES)
         self.assertEqual(problems, [], "\n".join(problems))
 
@@ -169,7 +169,7 @@ class DeclaredOrderTests(ThemeCopyTestCase):
         the last source."""
         script = core.THEME_SOURCES[core.PAGE_SCRIPT]
         self.assertIn("features/blocks/ts/tables.js", script)
-        self.assertGreater(script.index("features/blocks/ts/tables.js"), script.index("_theme/js/islands.js"))
+        self.assertGreater(script.index("features/blocks/ts/tables.js"), script.index("features/comments/ts/islands.js"))
         problems = source_problems(core.THEME_ROOT, core.THEME_SOURCES)
         self.assertEqual(problems, [], "\n".join(problems))
 
@@ -180,10 +180,10 @@ class DeclaredOrderTests(ThemeCopyTestCase):
         joined after css/comments.css."""
         styles = core.THEME_SOURCES[STYLESHEET]
         script = core.THEME_SOURCES[core.PAGE_SCRIPT]
-        self.assertIn("_theme/css/panel-resize.css", styles)
-        self.assertIn("_theme/js/panel-resize.js", script)
-        self.assertGreater(styles.index("_theme/css/panel-resize.css"), styles.index("_theme/css/comments.css"))
-        self.assertGreater(script.index("_theme/js/panel-resize.js"), script.index("_theme/js/islands.js"))
+        self.assertIn("features/comments/theme/panel-resize.css", styles)
+        self.assertIn("features/comments/ts/panel-resize.js", script)
+        self.assertGreater(styles.index("features/comments/theme/panel-resize.css"), styles.index("features/comments/theme/comments.css"))
+        self.assertGreater(script.index("features/comments/ts/panel-resize.js"), script.index("features/comments/ts/islands.js"))
         problems = source_problems(core.THEME_ROOT, core.THEME_SOURCES)
         self.assertEqual(problems, [], "\n".join(problems))
 
@@ -220,9 +220,9 @@ class DeclaredOrderTests(ThemeCopyTestCase):
         is joined before js/islands.js, whose comments call it; the islands
         follow it directly, in js/comments.js's old place (LOTUS-206)."""
         script = core.THEME_SOURCES[core.PAGE_SCRIPT]
-        self.assertIn("_theme/js/comment-markdown.js", script)
-        self.assertEqual(script.index("_theme/js/islands.js"), script.index("_theme/js/comment-markdown.js") + 1)
-        self.assertGreater(script.index("_theme/js/comment-markdown.js"), script.index("features/publish/ts/page-open.js"))
+        self.assertIn("features/comments/ts/comment-markdown.js", script)
+        self.assertEqual(script.index("features/comments/ts/islands.js"), script.index("features/comments/ts/comment-markdown.js") + 1)
+        self.assertGreater(script.index("features/comments/ts/comment-markdown.js"), script.index("features/publish/ts/page-open.js"))
 
     def test_the_ref_cards_sources_are_declared(self):
         """LOTUS-100: the cards' script uses when() and linkTab(), so it is
@@ -269,15 +269,15 @@ class DeclaredOrderTests(ThemeCopyTestCase):
         its own is declared, and its styles stay css/review-sheet.css."""
         styles = core.THEME_SOURCES[STYLESHEET]
         script = core.THEME_SOURCES[core.PAGE_SCRIPT]
-        self.assertNotIn("_theme/js/review-sheet.js", script)
+        self.assertNotIn("features/comments/ts/review-sheet.js", script)
         self.assertFalse((core.THEME_ROOT / "_theme" / "js" / "review-sheet.js").exists())
-        self.assertNotIn("_theme/js/comments.js", script)
+        self.assertNotIn("features/comments/ts/comments.js", script)
         self.assertFalse((core.THEME_ROOT / "_theme" / "js" / "comments.js").exists())
-        self.assertEqual(script.index("_theme/js/islands.js"), script.index("_theme/js/comment-markdown.js") + 1)
-        self.assertNotIn("_theme/js/islands.js", core.THEME_SOURCES[core.INDEX_SCRIPT])
-        self.assertNotIn("_theme/js/islands.js", core.THEME_SOURCES[core.OLD_VERSION_SCRIPT])
-        self.assertGreater(script.index("_theme/js/islands.js"), script.index("_theme/js/decisions.js"))
-        self.assertIn("_theme/css/review-sheet.css", styles)
+        self.assertEqual(script.index("features/comments/ts/islands.js"), script.index("features/comments/ts/comment-markdown.js") + 1)
+        self.assertNotIn("features/comments/ts/islands.js", core.THEME_SOURCES[core.INDEX_SCRIPT])
+        self.assertNotIn("features/comments/ts/islands.js", core.THEME_SOURCES[core.OLD_VERSION_SCRIPT])
+        self.assertGreater(script.index("features/comments/ts/islands.js"), script.index("features/decisions/ts/decisions.js"))
+        self.assertIn("features/comments/theme/review-sheet.css", styles)
         problems = source_problems(core.THEME_ROOT, core.THEME_SOURCES)
         self.assertEqual(problems, [], "\n".join(problems))
 
@@ -332,8 +332,8 @@ class DeclaredOrderTests(ThemeCopyTestCase):
 
     def test_a_declared_source_not_on_disk_is_named(self):
         theme = self.theme_copy()
-        comments_css = "_theme/css/comments.css"
-        decisions_js = "_theme/js/decisions.js"
+        comments_css = "features/comments/theme/comments.css"
+        decisions_js = "features/decisions/ts/decisions.js"
         (theme / comments_css).unlink()
         (theme / decisions_js).unlink()
         problems = source_problems(theme, core.THEME_SOURCES)
@@ -375,10 +375,10 @@ class SourceEditTests(ThemeHashTestCase):
         self.assertNotEqual(script_hash(after), script_hash(before))
 
     def test_one_byte_of_the_comments_stylesheet_moves_the_address(self):
-        self.assert_edit_moves_the_address("_theme/css/comments.css")
+        self.assert_edit_moves_the_address("features/comments/theme/comments.css")
 
     def test_one_byte_of_the_decisions_page_script_moves_the_address(self):
-        self.assert_edit_moves_the_address("_theme/js/decisions.js")
+        self.assert_edit_moves_the_address("features/decisions/ts/decisions.js")
 
 
 if __name__ == "__main__":

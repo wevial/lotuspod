@@ -47,7 +47,7 @@ DEVELOPMENT = REPO_ROOT / "docs" / "development.md"
 VERSION_HEADING = re.compile(r"^## (\d+\.\d+\.\d+) - (\d{4}-\d{2}-\d{2})$", re.M)
 FULL_SHA = re.compile(r"^[0-9a-f]{40}$")
 # The theme script the broken wheel leaves out.
-DROPPED_SCRIPT = "narrow.js"
+DROPPED_SCRIPT = "live-page.js"
 IMAGES = ("loop.gif", "thread.png", "decisions.png", "passage.png")
 RAW = "https://raw.githubusercontent.com/wevial/lotuspod"
 BLOB = "https://github.com/wevial/lotuspod/blob"

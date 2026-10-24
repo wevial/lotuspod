@@ -20,8 +20,8 @@ const SIGNED_IN = { 'Cf-Access-Jwt-Assertion': ASSERTION };
 const OUT = ENV.LOTUSPOD_TEST_OUT ?? '';
 const PYTHON = ENV.LOTUSPOD_TEST_PYTHON ?? '';
 // This checkout's package, whatever lotuspod is installed.
-const SRC = path.resolve(__dirname, '..', '..', 'src');
-const FIXTURES = path.resolve(__dirname, '..', '..', 'tests', 'fixtures', 'media');
+const SRC = path.resolve(__dirname, '..', '..', '..', '..', 'src');
+const FIXTURES = path.resolve(__dirname, '..', '..', '..', '..', 'tests', 'fixtures', 'media');
 const FISH = path.join(FIXTURES, 'fish-320x240.jpg');
 const FROG = path.join(FIXTURES, 'frog-140x100.gif');
 const LILY = path.join(FIXTURES, 'lily-lossy-240x160.webp');
