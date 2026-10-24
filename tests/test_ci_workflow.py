@@ -1,10 +1,12 @@
 """Test suite for the `unit` GitHub Actions workflow: the pull request check
-runs the leak guard on the diff, then the whole unit suite.
+runs the leak guard on the diff in one job, the unit suite in two shards in
+another, and a gate job named `unit` passes only when both pass.
 
 Reads `.github/workflows/unit.yml` as text, since the package has no YAML
-parser, and pins the triggers, the job name, the full-history checkout, the
-Python version, the leak guard step and the ranges it scans, the install step
-and the test command.
+parser, and pins the triggers, the three jobs and the gate's name, the
+full-history checkout, the Python version, the leak guard step and the ranges
+it scans, the install step, the shard matrix and the runner command, and the
+gate's needs and results.
 
 Run from the repo root:
 
@@ -18,6 +20,17 @@ import unittest
 from pathlib import Path
 
 WORKFLOW = Path(__file__).resolve().parent.parent / ".github" / "workflows" / "unit.yml"
+RUNNER = "python ci/run_modules.py --jobs 4 --shard ${{ matrix.shard }}/2 --max-module-sec 150"
+
+
+def block(text: str, key: str, indent: str = "") -> str | None:
+    """The lines nested under `key:` at the given indent, or None."""
+    match = re.search(
+        rf"^{indent}{re.escape(key)}:[ \t]*\n((?:{indent}[ \t]+.*\n|[ \t]*\n)*)",
+        text,
+        re.MULTILINE,
+    )
+    return match.group(1) if match else None
 
 
 class UnitWorkflowTestCase(unittest.TestCase):
@@ -25,23 +38,24 @@ class UnitWorkflowTestCase(unittest.TestCase):
         self.assertTrue(WORKFLOW.is_file(), f"{WORKFLOW} does not exist")
         self.text = WORKFLOW.read_text(encoding="utf-8")
 
-    def block(self, key: str, indent: str = "") -> str:
-        """The lines nested under `key:` at the given indent."""
-        match = re.search(
-            rf"^{indent}{re.escape(key)}:[ \t]*\n((?:{indent}[ \t]+.*\n|[ \t]*\n)*)",
-            self.text,
-            re.MULTILINE,
-        )
-        self.assertIsNotNone(match, f"no `{key}:` block in the workflow")
-        return match.group(1)
+    def block(self, key: str, indent: str = "", text: str | None = None) -> str:
+        found = block(self.text if text is None else text, key, indent)
+        self.assertIsNotNone(found, f"no `{key}:` block in the workflow")
+        return found
 
-    def steps(self) -> list[str]:
-        """The `unit` job's steps, each as its text, in order."""
-        steps = self.block("steps", indent="    ")
+    def job(self, name: str) -> str:
+        return self.block(name, indent="  ", text=self.block("jobs"))
+
+    def steps(self, job: str) -> list[str]:
+        """The job's steps, each as its text, in order."""
+        steps = self.block("steps", indent="    ", text=self.job(job))
         return [step for step in re.split(r"(?m)^(?=      - )", steps) if step.strip()]
 
+    def runs(self, job: str) -> list[str]:
+        return re.findall(r"(?m)^\s+- run: (.+)$", "".join(self.steps(job)))
+
     def guard_step(self) -> str:
-        guards = [step for step in self.steps() if "ci/leak_guard.py" in step]
+        guards = [step for step in self.steps("leak-guard") if "ci/leak_guard.py" in step]
         self.assertEqual(len(guards), 1, guards)
         return guards[0]
 
@@ -56,31 +70,31 @@ class UnitWorkflowTestCase(unittest.TestCase):
         branches = re.findall(r"(?m)^\s+- (\S+)\s*$", push)
         self.assertEqual(branches, ["main"])
 
-    def test_has_one_job_named_unit(self) -> None:
+    def test_has_the_leak_guard_the_suite_and_the_unit_gate(self) -> None:
         jobs = re.findall(r"(?m)^  (\S+):\s*$", self.block("jobs"))
-        self.assertEqual(jobs, ["unit"])
-        self.assertRegex(self.block("unit", indent="  "), r"(?m)^    name: unit$")
+        self.assertEqual(jobs, ["leak-guard", "suite", "unit"])
+        names = re.findall(r"(?m)^    name: (.+)$", self.block("jobs"))
+        self.assertEqual(names, ["unit"])
+        self.assertRegex(self.job("unit"), r"(?m)^    name: unit$")
 
-    def test_runs_on_ubuntu_latest(self) -> None:
-        self.assertRegex(self.text, r"(?m)^    runs-on: ubuntu-latest$")
+    def test_every_job_runs_on_ubuntu_latest(self) -> None:
+        for job in ("leak-guard", "suite", "unit"):
+            with self.subTest(job=job):
+                self.assertRegex(self.job(job), r"(?m)^    runs-on: ubuntu-latest$")
 
-    def test_checks_out_and_sets_up_python_3_11(self) -> None:
-        self.assertIn("uses: actions/checkout@v4", self.text)
-        self.assertIn("uses: actions/setup-python@v5", self.text)
-        self.assertRegex(self.text, r"""(?m)^\s+python-version: ["']3\.11["']$""")
+    def test_guard_and_suite_check_out_the_full_history_and_set_up_python_3_11(self) -> None:
+        for job in ("leak-guard", "suite"):
+            with self.subTest(job=job):
+                checkout, python = self.steps(job)[:2]
+                self.assertIn("uses: actions/checkout@v4", checkout)
+                self.assertRegex(checkout, r"(?m)^          fetch-depth: 0$")
+                self.assertIn("uses: actions/setup-python@v5", python)
+                self.assertRegex(python, r"""(?m)^\s+python-version: ["']3\.11["']$""")
 
-    def test_checks_out_the_full_history(self) -> None:
-        checkout = self.steps()[0]
-        self.assertIn("uses: actions/checkout@v4", checkout)
-        self.assertRegex(checkout, r"(?m)^          fetch-depth: 0$")
-
-    def test_the_leak_guard_runs_before_the_install_and_the_suite(self) -> None:
-        steps = self.steps()
-        guard = steps.index(self.guard_step())
-        install = steps.index("      - run: pip install -e .\n")
-        suite = steps.index("      - run: python -m unittest discover -s tests\n")
-        self.assertLess(guard, install)
-        self.assertLess(install, suite)
+    def test_the_leak_guard_job_runs_the_guard_only(self) -> None:
+        self.assertEqual(len(self.steps("leak-guard")), 3)
+        self.assertEqual(self.runs("leak-guard"), [])
+        self.assertIn(self.guard_step(), self.steps("leak-guard"))
 
     def test_the_guard_scans_the_pull_request_and_the_push(self) -> None:
         guard = self.guard_step()
@@ -101,6 +115,9 @@ class UnitWorkflowTestCase(unittest.TestCase):
         self.assertIn('! git cat-file -e "${base}^{commit}"', script)
         self.assertIn('base="HEAD^"', script)
         self.assertIn('python ci/leak_guard.py "$base" "$PUSH_SHA"', script)
+        for job in ("suite", "unit"):
+            with self.subTest(job=job):
+                self.assertNotIn("ci/leak_guard.py", self.job(job))
 
     def test_the_leak_patterns_secret_reaches_the_guard_step_only(self) -> None:
         self.assertEqual(self.text.count("secrets.LEAK_PATTERNS"), 1)
@@ -111,11 +128,32 @@ class UnitWorkflowTestCase(unittest.TestCase):
             r"(?m)^          LEAK_PATTERNS: \$\{\{ secrets\.LEAK_PATTERNS \}\}$",
         )
 
-    def test_installs_the_package_then_runs_the_suite(self) -> None:
-        runs = re.findall(r"(?m)^\s+- run: (.+)$", self.text)
-        self.assertEqual(
-            runs, ["pip install -e .", "python -m unittest discover -s tests"]
-        )
+    def test_the_suite_runs_two_shards_that_do_not_cancel_each_other(self) -> None:
+        suite = self.job("suite")
+        strategy = self.block("strategy", indent="    ", text=suite)
+        self.assertRegex(strategy, r"(?m)^      fail-fast: false$")
+        self.assertRegex(strategy, r"(?m)^        shard: \[1, 2\]$")
+        self.assertRegex(suite, r"(?m)^    timeout-minutes: 15$")
+
+    def test_the_suite_installs_the_package_then_runs_its_shard_four_at_a_time(self) -> None:
+        self.assertEqual(self.runs("suite"), ["pip install -e .", RUNNER])
+        self.assertNotIn("unittest discover", self.text)
+
+    def test_the_unit_gate_passes_only_when_the_guard_and_both_shards_pass(self) -> None:
+        unit = self.job("unit")
+        self.assertRegex(unit, r"(?m)^    needs: \[leak-guard, suite\]$")
+        self.assertRegex(unit, r"(?m)^    if: always\(\)$")
+        self.assertRegex(unit, r"(?m)^    timeout-minutes: 5$")
+        (step,) = self.steps("unit")
+        self.assertRegex(step, r"(?m)^          LEAK_GUARD: \$\{\{ needs\.leak-guard\.result \}\}$")
+        self.assertRegex(step, r"(?m)^          SUITE: \$\{\{ needs\.suite\.result \}\}$")
+        script = step.split("run: |\n", 1)[1]
+        self.assertNotIn("${{", script)
+        self.assertIn('if [ "$LEAK_GUARD" != "success" ]; then', script)
+        self.assertIn('echo "leak-guard: $LEAK_GUARD"', script)
+        self.assertIn('if [ "$SUITE" != "success" ]; then', script)
+        self.assertIn('echo "suite: $SUITE"', script)
+        self.assertIn('exit "$status"', script)
 
     def test_has_no_node_or_browser_step(self) -> None:
         for word in ("setup-node", "npm", "npx", "playwright"):

@@ -16,6 +16,26 @@ python -m unittest discover
 The suite always tests this checkout's `src/`, so an ambient `lotuspod`
 install cannot shadow the code under test.
 
+`ci/run_modules.py` (standard library only) runs the same tests module by
+module, each `tests/**/test_*.py` as `python -m unittest DOTTED` in its own
+process, several at a time, and can run one shard of them:
+
+```sh
+python ci/run_modules.py --jobs 4
+python ci/run_modules.py --jobs 4 --shard 1/2 --max-module-sec 150
+python ci/run_modules.py tests/test_ci_workflow.py 'features/serve/*'
+```
+
+The required `unit` check runs it in two shards of four, one runner each,
+beside the leak guard; a gate job named `unit` passes only when the guard and
+both shards pass. A module fails the run when it fails, runs zero tests, is
+killed at `--module-timeout` (default 300 seconds) or finishes past
+`--max-module-sec`, and the last line names each failed module. Shards are
+balanced by the seconds `tests/module_times.json` records, longest first; a
+module it does not record counts as the median. `--list` prints a shard's
+modules without running them, and `--record PATH` writes each module's
+seconds in that file's shape, to refresh it by hand.
+
 ## Theme build
 
 A theme script can be written in TypeScript: its source is a slice's
@@ -217,7 +237,8 @@ the build refuses to run under any other Bun, naming both versions.
 ## Leak guard
 
 The repository is public, and so is every pull request as it opens, so the
-required `unit` check scans the lines a change adds before it runs the suite.
+required `unit` check scans the lines a change adds, in a `leak-guard` job of
+its own beside the suite's two shards.
 `ci/leak_guard.py` (standard library only) reads
 `git diff --unified=0 BASE HEAD` and checks each added line of each text file;
 binary files are skipped. On a pull request it scans the base commit to
