@@ -4,6 +4,7 @@ import json
 import subprocess
 import threading
 import urllib.error
+import urllib.parse
 import urllib.request
 from html.parser import HTMLParser
 from unittest.mock import patch
@@ -312,3 +313,36 @@ class WidgetTests(TempDirTestCase):
             self.assertEqual(run_cli(command, '--out-dir', str(self.out_dir))[0], 0)
         for name in ['manifest.json', 'index.html']:
             self.assertNotIn('.w-', (self.out_dir / name).read_text())
+
+    def test_widget_opened_alone_is_framed_under_frame_src_self(self):
+        body = '<template class="lotuspod-live" data-title="Clock">x</template>'
+        self.assertEqual(self.render('pond', '--body', body)[0], 0)
+        _, frame = self.frame()
+        server = serve_handler._make_server(self.out_dir, '127.0.0.1', 0)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(server.server_close); self.addCleanup(server.shutdown)
+        url = f'http://127.0.0.1:{server.server_address[1]}/'
+        request = urllib.request.Request(url + frame['src'], headers={'Sec-Fetch-Dest': 'document'})
+        with urllib.request.urlopen(request) as response:
+            self.assertEqual(response.status, 200)
+            policy = directives(response.headers['Content-Security-Policy'])
+            self.assertEqual(policy.get('frame-src'), ["'self'"])
+            self.assertEqual(policy.get('frame-ancestors'), ["'none'"])
+            self.assertEqual(response.headers['Vary'], 'Sec-Fetch-Dest')
+            frames = Elements(response.read().decode()).of('iframe')
+        self.assertEqual(len(frames), 1)
+        self.assertEqual(frames[0].get('sandbox'), 'allow-scripts')
+        self.assertIn(frame['src'], frames[0].get('src', ''))
+        # The frame's address holds from a tab whose address ends in a /.
+        request = urllib.request.Request(url + frame['src'] + '/', headers={'Sec-Fetch-Dest': 'document'})
+        with urllib.request.urlopen(request) as response:
+            (inner,) = Elements(response.read().decode()).of('iframe')
+        with urllib.request.urlopen(urllib.parse.urljoin(url + frame['src'] + '/', inner['src'])) as response:
+            self.assertEqual(response.read(), (self.out_dir / frame['src']).read_bytes())
+        for headers in ({'Sec-Fetch-Dest': 'iframe'}, {}):
+            request = urllib.request.Request(url + frame['src'], headers=headers)
+            with urllib.request.urlopen(request) as response:
+                self.assertEqual(response.status, 200)
+                self.assertEqual(response.read(), (self.out_dir / frame['src']).read_bytes())
+                for key, value in (*widgets.HEADERS, ('Vary', 'Sec-Fetch-Dest')):
+                    self.assertEqual(response.headers[key], value)

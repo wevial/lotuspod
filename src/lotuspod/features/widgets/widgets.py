@@ -10,6 +10,7 @@ import re
 import shlex
 
 from lotuspod.core import Templates, collect_scripts, html_title, normalized, script_hash
+from lotuspod.features import comments
 from lotuspod.features.widgets import libraries
 
 THEME = Path(__file__).parent / 'ts'
@@ -19,6 +20,35 @@ HEADERS = (
     ('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), clipboard-read=(), clipboard-write=(), display-capture=(), payment=(), usb=()'),
     ('X-Content-Type-Options', 'nosniff'),
 )
+# Every widget file answer, the file's or the framing page's, varies on
+# whether the browser asked for a frame or a tab, so a kept answer of one
+# kind is never given to the other.
+VARY = ('Vary', 'Sec-Fetch-Dest')
+# The framing page's headers: it runs nothing and frames only the site, so a
+# widget opened alone meets frame-src 'self' as it does on its page.
+ALONE_HEADERS = (
+    ('Content-Security-Policy', "default-src 'none'; frame-src 'self'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"),
+    ('X-Content-Type-Options', 'nosniff'),
+    ('Cache-Control', 'no-store'),
+    VARY,
+)
+# The query key the framing page's frame adds to the widget's address: a
+# frame may not load its ancestor's own address, and serve ignores the key.
+ALONE_QUERY = 'alone'
+
+
+def alone_page(filename: str, query: str = '') -> bytes:
+    """The page answering a widget file opened in a tab: one sandboxed frame
+    of the same file (query: its own, without the ?) filling the window. The
+    frame's address is from the site's root: a tab's address may end in a /
+    that serve ignores, and a relative one would resolve beneath it."""
+    src = '/' + filename + '?' + (query + '&' if query else '') + ALONE_QUERY
+    return ('<!doctype html><html><head><meta charset="utf-8">'
+            f'<title>{html.escape(filename)}</title>'
+            '<style>:root { color-scheme: dark; } html, body { margin: 0; height: 100%; } '
+            'iframe { display: block; width: 100%; height: 100%; border: 0; }</style></head>'
+            f'<body><iframe src="{html.escape(src)}" sandbox="allow-scripts" allow="" '
+            'referrerpolicy="no-referrer"></iframe></body></html>').encode('utf-8')
 
 
 def variables(attribute: str = 'data-lotus-theme') -> str:
@@ -122,9 +152,13 @@ class Frames(HTMLParser):
 class PageWidgets(HTMLParser):
     """A served page's live blocks: each frame's data-widget id to its
     file's hash, its title and the data-section of the section wrapper it
-    sits in (lotuspod.features.publish.sections), "" outside every wrapper.
-    A frame inside a template or a noscript is inert, and not one of them,
-    and a div inside a template opens no section."""
+    sits in (lotuspod.features.publish.sections). Outside every wrapper it
+    is the id of the last h2 before it that starts a section, by
+    comments._SectionFinder's rule (an h2 in a pre.mermaid or a form starts
+    none), and has a comment box outside every template, as the page script
+    finds it; "" when no such h2 comes before it. A frame inside a template or a noscript
+    is inert, and not one of them, and a div or an h2 inside a template
+    opens no section."""
     CDATA_CONTENT_ELEMENTS = Templates.CDATA_CONTENT_ELEMENTS
 
     def __init__(self, text: str):
@@ -133,6 +167,12 @@ class PageWidgets(HTMLParser):
         self._section = None
         self._depth = 0
         self._templates = 0
+        self._headings: list[str] = []
+        self._boxes: set[str] = set()
+        # Each frame outside every wrapper: the number of headings before it.
+        self._outside: dict[str, int] = {}
+        self._mermaid = 0
+        self._forms = 0
         if re.search(r'<iframe\b', text, re.IGNORECASE):
             self.feed(text)
             self.close()
@@ -144,6 +184,14 @@ class PageWidgets(HTMLParser):
             self._templates += 1
         elif self._templates:
             return
+        elif tag == 'pre' and (self._mermaid or 'mermaid' in classes):
+            self._mermaid += 1
+        elif tag == 'form' and not self._mermaid:
+            self._forms += 1
+        elif tag == 'h2' and not self._mermaid and not self._forms:
+            self._headings.append(attrs.get('id') or '')
+        elif tag == 'details' and comments.BOX_CLASS in classes:
+            self._boxes.add(attrs.get('data-section') or '')
         elif tag == 'div':
             if self._section is not None:
                 self._depth += 1
@@ -154,13 +202,29 @@ class PageWidgets(HTMLParser):
             ident = attrs.get('data-widget') or ''
             named = re.search(r'\.w-([0-9a-f]{12})\.html\Z', attrs.get('src') or '')
             if ident and named and ident not in self.found:
-                self.found[ident] = (named.group(1), attrs.get('title') or '',
-                                     self._section or '')
+                self.found[ident] = (named.group(1), attrs.get('title') or '', self._section or '')
+                if self._section is None:
+                    self._outside[ident] = len(self._headings)
+
+    def close(self):
+        super().close()
+        # A box ends its section, after the frames in it: place them now.
+        for ident, before in self._outside.items():
+            section = next((heading for heading in reversed(self._headings[:before])
+                            if heading and heading in self._boxes), '')
+            hash_, title, _ = self.found[ident]
+            self.found[ident] = (hash_, title, section)
 
     def handle_endtag(self, tag):
         if tag == 'template' and self._templates:
             self._templates -= 1
-        elif tag == 'div' and self._section is not None and not self._templates:
+        elif self._templates:
+            return
+        elif tag == 'pre' and self._mermaid:
+            self._mermaid -= 1
+        elif tag == 'form' and self._forms and not self._mermaid:
+            self._forms -= 1
+        elif tag == 'div' and self._section is not None:
             self._depth -= 1
             if not self._depth:
                 self._section = None

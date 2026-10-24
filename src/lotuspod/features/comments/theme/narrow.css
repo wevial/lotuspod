@@ -7,8 +7,8 @@
    is a bottom sheet fixed to the bottom of the window, at most 60% of its
    height, that slides up; its header steps through the page's threads and
    says where this one stands. Both (.artifact-comments-held) hold the thread
-   as the panel's open entry does, under a title: "Section HEADING", or a
-   passage's number and words. */
+   as the panel's open entry does, under a title: "Section HEADING", a
+   passage's number and words, or "On TITLE" for a live block. */
 .artifact-comments-held {
   background: var(--color-surface);
   box-sizing: border-box;
@@ -202,6 +202,18 @@
 
 .artifact-comments-held .artifact-comments-entry-body {
   padding: 0;
+}
+
+/* In a section's view, the line naming the block a thread is on, above its
+   comments, where the panel's hidden head names it. */
+.artifact-comments-held-on {
+  color: var(--color-muted-lavender);
+  font-size: 0.85rem;
+  margin: 0 0 0.4em;
+}
+
+.artifact-comments-held-on .artifact-comments-entry-block {
+  color: var(--color-pale-lavender);
 }
 
 .artifact-comments-held-extra .artifact-comments-new {
