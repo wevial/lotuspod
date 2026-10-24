@@ -67,12 +67,14 @@ def api_page(out_dir: Path, name: str,
     }
     owner = page_owner(page_html)
     boxes = frozenset(comments.read_boxes(page_html))
-    # A block outside every section's wrapper is on the whole page, or in
-    # the page's one box when that is its only box.
-    outside = comments.PAGE_SECTION if boxes == {comments.PAGE_SECTION} else comments.WHOLE_PAGE
+    # A block is in its wrapper's section or its heading's, else on the
+    # whole page; on a page whose only box is `page`, in that box.
+    only_page = boxes == {comments.PAGE_SECTION}
+    outside = comments.PAGE_SECTION if only_page else comments.WHOLE_PAGE
     earlier = kept_block_hashes(out_dir, name)
     page_widgets = {
-        ident: api.Widget(hash=hash_, title=title, section=section or outside,
+        ident: api.Widget(hash=hash_, title=title,
+                          section=outside if only_page else section or outside,
                           earlier=frozenset(earlier.get(ident, ())))
         for ident, (hash_, title, section) in widgets.PageWidgets(page_html).found.items()
     }
