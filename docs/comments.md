@@ -786,7 +786,14 @@ by one rule that the threads routes and the agents' pull share:
   `claude-3f9a2c`, while `email@claude-3f9a2c` names nobody. `@responder`
   names the default responder. To re-route, write a new comment naming
   someone else.
-- A comment with no mention is routed to `responder`, on a page with an
+- A reply (any comment after a thread's first) with no mention is routed to
+  the handle of the latest agent reply before it in its thread, while that
+  handle is listening; when it is not listening, or no agent has replied
+  before it, the reply is routed to `responder` as below. Listening is read
+  when the reply is routed, so one whose agent stops listening before
+  claiming it goes to `responder` again. A thread's first comment never
+  routes this way.
+- Any other comment with no mention is routed to `responder`, on a page with an
   owner too, whether or not the owner is listening. The responder answers
   what the page and its thread can answer, and puts what asks the owner to
   act in the owner's inbox (see [The owner
