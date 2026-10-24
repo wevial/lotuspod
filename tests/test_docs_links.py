@@ -7,7 +7,8 @@ links, every relative link and anchor between
 the pages and SECURITY.md, every code block of the README before the split kept exactly once
 (as it was, or with the placeholders the public repository uses) but the
 Layout, revised on purpose and naming every command `lotuspod --help` lists, one
-"Decisions for the maintainer" heading, and the README's pictures: three
+"Decisions for the maintainer" heading, the Comments page's routing list
+stating where a reader's reply with no mention goes, and the README's pictures: three
 PNG screenshots and one GIF under docs/images/, each with alt text, each a
 real image of its kind and small enough to load. It also witnesses what the
 README tells a first-time visitor: why Lotuspod, in five bullets before
@@ -370,6 +371,20 @@ class ContentTests(unittest.TestCase):
         found = [page for page in PAGES for heading in headings(read(page))
                  if heading == "Decisions for the maintainer"]
         self.assertEqual(found, ["docs/publishing.md"])
+
+    def test_the_routing_list_states_where_an_unmentioned_reply_goes(self):
+        text = " ".join(section(read("docs/comments.md"), "Comments").split())
+        start = text.index("Every reader's comment no agent has taken up is routed")
+        routing = text[start:text.index("A routed comment is `pending`", start)]
+        case = re.search(r"- A reply \([^)]*\) with no mention is routed to (.+?)(?= - )",
+                         routing)
+        self.assertIsNotNone(case, routing)
+        reply = case.group(1)
+        self.assertIn("the latest agent reply before it in its thread", reply)
+        self.assertIn("while that handle is listening", reply)
+        self.assertIn("when it is not listening, or no agent has replied before it,"
+                      " the reply is routed to `responder`", reply)
+        self.assertIn("A thread's first comment never routes this way.", reply)
 
 
 if __name__ == "__main__":

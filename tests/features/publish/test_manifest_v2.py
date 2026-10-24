@@ -332,9 +332,9 @@ def previous_theme(out_dir: Path, commit: str) -> Path:
         text = history.show(commit, f"src/lotuspod/_theme/{filename}", repo=repo)
         (previous / now).mkdir(parents=True)
         (previous / now / filename).write_text(text, encoding="utf-8")
-    for filename in ("favicon.svg", core.PAGE_SCRIPT, core.INDEX_SCRIPT, core.OLD_VERSION_SCRIPT):
-        now = core.THEME_FILE_SOURCES.get(filename, f"_theme/{filename}")
-        (previous / now).write_bytes(core.theme_file_bytes(filename))
+    for filename in core.THEME_FILES[1:]:
+        (now := previous / core.THEME_FILE_SOURCES.get(filename, f"_theme/{filename}")).parent.mkdir(parents=True, exist_ok=True)
+        now.write_bytes(core.theme_file_bytes(filename))
     os.symlink(core.THEME_ROOT / "core" / "ts", previous / "core" / "ts")
     return previous
 
@@ -572,7 +572,7 @@ class ServeAllowListTests(TempDirTestCase):
         self.assertEqual(
             allowed,
             {"index.html", "lotuspod.css", "favicon.svg", "lotuspod-page.js", "lotuspod-index.js",
-             "lotuspod-old-version.js", "zeta.html"},
+             "lotuspod-old-version.js", "lotuspod-emoji.json", "zeta.html"},
         )
         self.assertNotIn("alpha.html", allowed)
         self.assertNotIn("mike.html", allowed)
@@ -584,7 +584,7 @@ class ServeAllowListTests(TempDirTestCase):
         self.assertEqual(
             self.allow_list(),
             {"index.html", "lotuspod.css", "favicon.svg", "lotuspod-page.js", "lotuspod-index.js",
-             "lotuspod-old-version.js", "good.html"},
+             "lotuspod-old-version.js", "lotuspod-emoji.json", "good.html"},
         )
 
     def test_allow_list_recomputed_on_rewrite(self):
@@ -902,7 +902,7 @@ class PublishHttpRoundTripTests(TempDirTestCase):
         self.assertEqual(rc, 0, err)
         self.assertEqual(
             sorted(p.name for p in self.out_dir.iterdir()),
-            ["FINDINGS.md", "alpha.html", "asked.html", "favicon.svg", "index.html",
+            ["FINDINGS.md", "alpha.html", "asked.html", "favicon.svg", "index.html", "lotuspod-emoji.json",
              "lotuspod-index.js", "lotuspod-old-version.js", "lotuspod-page.js",
              "lotuspod.css", "manifest.json",
              "mike.html", "tango.html", "zeta.html"],
@@ -1534,7 +1534,7 @@ class ReportVariantTests(TempDirTestCase):
         self.assertEqual(
             serve_files.serve_allow_list(self.out_dir),
             {"index.html", "lotuspod.css", "favicon.svg", "lotuspod-page.js",
-             "lotuspod-index.js", "lotuspod-old-version.js"},
+             "lotuspod-index.js", "lotuspod-old-version.js", "lotuspod-emoji.json"},
         )
         for rule in self.css.split("}"):
             if "--size-body-report" in rule or "--leading-body-report" in rule:
