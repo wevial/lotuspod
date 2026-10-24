@@ -547,7 +547,11 @@ INDEX_SCRIPT = "lotuspod-index.js"
 # a nonce of its own answer (_OLD_VERSION_HEADERS). It draws nothing else: no
 # comment, no answer, and nothing posted.
 OLD_VERSION_SCRIPT = "lotuspod-old-version.js"
-THEME_FILES = ("lotuspod.css", "favicon.svg", PAGE_SCRIPT, INDEX_SCRIPT, OLD_VERSION_SCRIPT)
+# The emoji table a comment composer fetches on the first colon typed in it
+# (features/comments/ts/islands/comments/shortcode-list.tsx), kept out of the
+# page script for its size.
+EMOJI_TABLE = "lotuspod-emoji.json"
+THEME_FILES = ("lotuspod.css", "favicon.svg", PAGE_SCRIPT, INDEX_SCRIPT, OLD_VERSION_SCRIPT, EMOJI_TABLE)
 # The served files written as one source per feature are joined from parts,
 # each declared in THEME_PARTS at the root of core/ or of a slice
 # (features/SLICE/), from its own ts/ and theme/: a JSON list of
@@ -577,6 +581,7 @@ THEME_CLOSURE_CLOSE = b"})();\n"
 # name no part joins and not in this table is read from _theme/.
 THEME_FILE_SOURCES = {
     "favicon.svg": "core/theme/favicon.svg",
+    EMOJI_TABLE: "features/comments/theme/lotuspod-emoji.json",
 }
 
 

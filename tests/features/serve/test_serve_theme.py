@@ -21,7 +21,7 @@ ROOT = Path(__file__).resolve().parents[3]
 SRC = ROOT / "src"
 sys.path.insert(0, str(SRC))
 
-from lotuspod.core import sync_theme_css  # noqa: E402
+from lotuspod.core import THEME_ROOT, sync_theme_css  # noqa: E402
 
 TIMEOUT = 30
 STYLESHEET = "lotuspod.css"
@@ -116,6 +116,20 @@ class ServeSyncsTheme(unittest.TestCase):
             status, served = fetch(f"{site.url}/{name}")
             self.assertEqual(status, 200, name)
             self.assertEqual(served, data, name)
+
+    def test_serve_answers_the_emoji_table_as_json(self):
+        """LOTUS-231: a comment composer fetches the emoji table from the
+        theme's files, the packaged table byte for byte."""
+        site = ServedSite(self)
+        sync_theme_css(site.out)
+        site.start()
+
+        with urllib.request.urlopen(f"{site.url}/lotuspod-emoji.json?v=abc", timeout=TIMEOUT) as response:
+            self.assertEqual(response.status, 200)
+            self.assertEqual(response.headers.get_content_type(), "application/json")
+            served = response.read()
+        packaged = THEME_ROOT / "features" / "comments" / "theme" / "lotuspod-emoji.json"
+        self.assertEqual(served, packaged.read_bytes())
 
 
 if __name__ == "__main__":
