@@ -7,8 +7,7 @@ on:
       - main
 
 jobs:
-  unit:
-    name: unit
+  leak-guard:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -34,5 +33,43 @@ jobs:
             fi
             python ci/leak_guard.py "$base" "$PUSH_SHA"
           fi
+
+  suite:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
       - run: pip install -e .
-      - run: python -m unittest discover -s tests
+      - run: python ci/run_modules.py --jobs 4 --shard ${{ matrix.shard }}/2 --max-module-sec 150
+
+  unit:
+    name: unit
+    needs: [leak-guard, suite]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: leak guard and both shards passed
+        env:
+          LEAK_GUARD: ${{ needs.leak-guard.result }}
+          SUITE: ${{ needs.suite.result }}
+        run: |
+          status=0
+          if [ "$LEAK_GUARD" != "success" ]; then
+            echo "leak-guard: $LEAK_GUARD"
+            status=1
+          fi
+          if [ "$SUITE" != "success" ]; then
+            echo "suite: $SUITE"
+            status=1
+          fi
+          exit "$status"
