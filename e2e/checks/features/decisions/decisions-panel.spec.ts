@@ -172,8 +172,6 @@ function panel(page: Page) {
     answered: decisions.locator('details.artifact-decisions-answered'),
     answeredSummary: decisions.locator('details.artifact-decisions-answered > summary'),
     answeredTitles: decisions.locator('.artifact-decisions-answered-title'),
-    answeredGroup: (title: string) => decisions.locator('.artifact-decisions-answered-group')
-      .filter({ has: page.locator('.artifact-decisions-answered-title', { hasText: title }) }),
     rows: decisions.locator('.artifact-decisions-row'),
   };
 }
