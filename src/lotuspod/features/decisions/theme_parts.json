@@ -1,3 +1,4 @@
 [
-  {"file": "lotuspod.css", "part": "theme/decisions.css", "slot": 30}
+  {"file": "lotuspod.css", "part": "theme/decisions.css", "slot": 30},
+  {"file": "lotuspod.css", "part": "theme/decisions-panel.css", "slot": 66}
 ]

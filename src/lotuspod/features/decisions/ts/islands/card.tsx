@@ -1,5 +1,5 @@
 import { render } from "preact";
-import type { ReadonlySignal } from "@preact/signals";
+import type { ReadonlySignal, Signal } from "@preact/signals";
 import type { Answer, Answers, Page } from "../../../comments/ts/index";
 import { isChecklist, same, ticked, boxes } from "./checklist";
 import { label, noteField, noteOf, radios, status } from "./words";
@@ -21,6 +21,9 @@ export interface Card {
   // none of the store's: a form a swap brought in stays out of what a
   // failed or replaced read would leave it, as on a reload.
   waiting: boolean;
+  // Counts each time any card is marked: a pick, a note or a draw, which the
+  // Decisions tab draws from.
+  marked: Signal<number>;
   dispose(): void;
 }
 
@@ -75,6 +78,7 @@ export function mark(card: Card): void {
   if (hint) {
     hint.hidden = changed || Boolean(card.shown.current);
   }
+  card.marked.value = card.marked.peek() + 1;
 }
 
 function History({ page, form, earlier }: { page: Page; form: HTMLFormElement; earlier: readonly Answer[] }) {

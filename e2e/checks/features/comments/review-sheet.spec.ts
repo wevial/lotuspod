@@ -98,15 +98,13 @@ test.describe('signed in', () => {
     const seen = await watch(page);
     await page.goto(`${PAGE}?standalone`);
     const the = sheet(page);
-    await expect(the.count).toHaveText('3 to answer · Respond');
+    await expect(the.count).toHaveText('7 to answer · Respond');
     await expect(the.next).toBeVisible();
-    for (const name of ['Who reviews', 'When a review blocks', 'Rollout']) {
+    for (const [name, open] of [['Who reviews', 2], ['When a review blocks', 2], ['Prompt rules', 1], ['Rollout', 2]] as const) {
       await expect(the.outline(name).locator('.artifact-review-outline')).toBeVisible();
-      await expect(the.outline(name).locator('.artifact-review-outline-number')).toHaveText('1');
-      await expect(the.heading(name).locator('.artifact-review-open')).toHaveText('1 open');
+      await expect(the.outline(name).locator('.artifact-review-outline-number')).toHaveText(String(open));
+      await expect(the.heading(name).locator('.artifact-review-open')).toHaveText(`${open} open`);
     }
-    await expect(the.outline('Prompt rules').locator('.artifact-review-outline')).toBeHidden();
-    await expect(the.heading('Prompt rules').locator('.artifact-review-open')).toBeHidden();
     await expect(the.form('decision-d1').getByRole('radio', { name: 'Codex' })).toBeChecked();
     // The default picked is not saved until it is.
     await expect(the.form('decision-d1').locator('.artifact-decision-unsaved')).toBeVisible();
@@ -126,9 +124,9 @@ test.describe('signed in', () => {
     firstRepeatOnly();
     await page.goto(`${PAGE}?standalone`);
     const the = sheet(page);
-    await expect(the.count).toHaveText('3 to answer · Respond');
+    await expect(the.count).toHaveText('7 to answer · Respond');
     const bar = await page.locator('.artifact-topbar').boundingBox();
-    for (const question of ['decision-d2', 'decision-d3', 'decision-d6', 'decision-d2']) {
+    for (const question of [...QUESTIONS, 'decision-d1']) {
       await the.next.click();
       await expect(the.form(question).locator('input').first()).toBeFocused();
       const top = await the.form(question).evaluate((form) => form.getBoundingClientRect().top);
@@ -136,9 +134,11 @@ test.describe('signed in', () => {
     }
 
     await page.reload();
-    await expect(the.count).toHaveText('3 to answer · Respond');
+    await expect(the.count).toHaveText('7 to answer · Respond');
     await the.heading('When a review blocks').locator('button.artifact-section-toggle').click();
     await expect(the.form('decision-d3')).toBeHidden();
+    await the.next.click();
+    await expect(the.form('decision-d1').locator('input').first()).toBeFocused();
     await the.next.click();
     await expect(the.form('decision-d2').locator('input').first()).toBeFocused();
     await the.next.click();
@@ -154,7 +154,7 @@ test.describe('signed in', () => {
     await expect(the.panel).toBeVisible();
     await expect(the.panel).toHaveAttribute('role', 'dialog');
     await expect(the.close).toBeFocused();
-    await expect(the.tally).toHaveText('3 to answer · 0 changed · 7 in all');
+    await expect(the.tally).toHaveText('7 to answer · 0 changed · 7 in all');
     await expect(the.groups.locator('.artifact-review-group-title')).toHaveText(SECTIONS);
     const held = await the.groups.evaluateAll((groups) => groups.map((group) =>
       Array.from(group.querySelectorAll('li.artifact-review-entry')).map((entry) =>
@@ -192,9 +192,9 @@ test.describe('signed in', () => {
     await expect(second.state).toHaveText('Changed');
     await expect(second.was).toHaveText('was: open');
     await expect(second.option('Every ticket')).toHaveAttribute('aria-pressed', 'true');
-    await expect(the.count).toHaveText('2 to answer · Respond');
-    await expect(the.outline('Who reviews').locator('.artifact-review-outline')).toBeHidden();
-    await expect(the.heading('Who reviews').locator('.artifact-review-open')).toBeHidden();
+    await expect(the.count).toHaveText('7 to answer · Respond');
+    await expect(the.outline('Who reviews').locator('.artifact-review-outline-number')).toHaveText('2');
+    await expect(the.heading('Who reviews').locator('.artifact-review-open')).toHaveText('2 open');
 
     const rules = the.entry('checklist-1');
     await rules.box('Cite the line a finding is about').uncheck();
@@ -202,7 +202,7 @@ test.describe('signed in', () => {
       .not.toBeChecked();
     await expect(rules.state).toHaveText('Changed');
     await expect(rules.was).toHaveText('Off: Cite the line a finding is about');
-    await expect(the.tally).toHaveText('2 to answer · 3 changed · 7 in all');
+    await expect(the.tally).toHaveText('7 to answer · 3 changed · 7 in all');
 
     await page.keyboard.press('Escape');
     await expect(the.panel).toBeHidden();
@@ -282,7 +282,7 @@ test.describe('signed in', () => {
     });
     await page.goto(`${PAGE}?standalone`);
     const the = sheet(page);
-    await expect(the.count).toHaveText('3 to answer · Respond');
+    await expect(the.count).toHaveText('7 to answer · Respond');
     const form = the.form('decision-d3');
     await form.getByRole('radio', { name: 'Reproduced findings' }).check();
     await form.getByRole('button', { name: 'Save answer' }).click();
@@ -416,7 +416,7 @@ test.describe('signed in', () => {
           : route.continue());
       await page.goto(`${PAGE}?standalone`);
       const the = sheet(page);
-      await expect(the.count).toHaveText('3 to answer · Respond');
+      await expect(the.count).toHaveText('7 to answer · Respond');
       for (const target of [the.count, the.next]) {
         const box = await target.boundingBox();
         expect(box!.x).toBeGreaterThanOrEqual(0);
@@ -441,7 +441,7 @@ test.describe('signed in', () => {
             : route.continue());
         await page.goto(`${PAGE}?standalone`);
         const the = sheet(page);
-        await expect(the.count).toHaveText('3 to answer · Respond');
+        await expect(the.count).toHaveText('7 to answer · Respond');
         for (const target of [the.count, the.next]) {
           const box = await target.boundingBox();
           expect(box!.x).toBeGreaterThanOrEqual(0);
@@ -462,7 +462,7 @@ test.describe('signed in', () => {
           : route.continue());
       await page.goto(`${PAGE}?standalone`);
       const the = sheet(page);
-      await expect(the.count).toHaveText('3 to answer · Respond');
+      await expect(the.count).toHaveText('7 to answer · Respond');
       // The words truncate in their own span; the arrow after them lies
       // wholly inside the link and the window, so it shows whole.
       const fit = () => the.next.evaluate((link) => {
@@ -495,18 +495,27 @@ test.describe('signed in', () => {
 
     test('with no question open the title stays and the count fits', async ({ page }) => {
       const reads = (url: URL) => url.pathname === '/api/answers';
-    await page.route(reads, (route) =>
+      // Each answer posted is taken as saved, so the site keeps none.
+      let id = 0;
+      await page.route(reads, (route) =>
         route.request().method() === 'GET'
           ? route.fulfill({ json: { page: 'capture-review-sheet', questions: {} } })
-          : route.continue());
+          : route.fulfill({ status: 201, json: { ...route.request().postDataJSON(), id: ++id,
+            actor: { kind: 'human', name: 'maintainer' }, createdAt: '2026-10-01T09:30:00Z' } }));
       await page.goto(`${PAGE}?standalone`);
       const the = sheet(page);
-      await expect(the.count).toHaveText('3 to answer · Respond');
+      await expect(the.count).toHaveText('7 to answer · Respond');
       await expect(page.locator('.artifact-topbar-title')).toBeHidden();
-      // A pick on each form with no default leaves no question open, unsaved.
+      // A pick on each form with no default, and every answer saved, leaves
+      // no question open.
       for (const question of ['decision-d2', 'decision-d3', 'decision-d6']) {
         await the.form(question).locator('input[name="choice"]').first().check();
       }
+      await the.count.click();
+      await the.save.click();
+      await expect(the.outcome).toContainText('Saved at');
+      await the.close.click();
+      await expect(the.count).toHaveText('All answered · Respond');
       await expect(the.next).toBeHidden();
       expect(await page.locator('.artifact-topbar-title').evaluate((title) => getComputedStyle(title).display))
         .not.toBe('none');
@@ -708,7 +717,7 @@ test.describe('signed in, published again', () => {
     await openPublished(page, name, [[DECISIONS, [HEATER, PUMP, NETTED]]]);
     const the = sheet(page);
     await expect(the.form('decision-3').getByRole('radio', { name: 'Yes' })).toBeChecked();
-    await expect(the.count).toHaveText('2 to answer · Respond');
+    await expect(the.count).toHaveText('3 to answer · Respond');
     // The first answered, and the third's default saved with it, so no
     // pick holds the section back.
     await the.count.click();
@@ -721,7 +730,7 @@ test.describe('signed in, published again', () => {
 
     await republish(page, name, [[DECISIONS, [HEATER, PUMP, ['3', 'Net the whole pond?', 'Yes / No', 'Yes']]]]);
     await expect(the.form('decision-3').locator('.artifact-decision-text')).toHaveText('Net the whole pond?');
-    await expect(the.count).toHaveText('1 to answer · Respond');
+    await expect(the.count).toHaveText('2 to answer · Respond');
     await expect(the.form('decision-3').getByRole('radio', { name: 'Yes' })).toBeChecked();
     await expect(the.form('decision-3').locator('.artifact-decision-unsaved')).toBeVisible();
     await the.count.click();

@@ -613,6 +613,37 @@ alone adds a line. The page remembers whether the
 reader left the panel open or folded in `localStorage` (a page whose storage
 throws starts folded), and Escape elsewhere in it folds it.
 
+On a page that asks questions (one with decision or checklist forms that is
+not archived), the panel's head is two tabs in place of its "Comments"
+heading: "Decisions", with the number of questions to answer (an orchid
+badge, a mint "✓" once there are none), and "Comments", with the number of
+open threads the rail's badge counts. The tab shown is underlined in
+lavender; Left and Right Arrow move between them. The Comments tab holds
+"N open · M resolved", the ways to start a thread and the groups, as above.
+The Decisions tab lists every question with no saved answer (see [The review
+sheet](publishing.md#the-review-sheet)), in page order, under one heading per
+section as the Comments tab heads its groups (a question about a live block
+under the block's title, right after its section's). Each is answered in
+place: its number and question, which scroll its card just under the title
+bar and focus its first option as Next open does; its card's context lines;
+its options as radios with the card's labels and "· default" mark (a
+checklist's items as checkboxes); "Add a note"; Save; "not saved" while the
+card's pick or note differs from its saved answer; and "Show on page", which
+does as the question does. The entry and its card are one state: a pick or a
+note in either shows in both, and typing a note in the panel opens the
+card's. Save posts the card's answer with its note, as "Save answer" does,
+in the card's turn; saved, the card folds, the entry reads "✓ Saved · LABEL"
+for a moment and then leaves, and a section's heading goes with its last
+question. A refused save keeps the entry and its "not saved", and the card's
+status says why. With none left the tab reads "Nothing left to answer".
+Folded, such a page's rail holds an orchid button above the thread dots, the
+count over "to answer" set sideways (a mint "✓" over "answered" at none),
+named "N to answer: open the questions"; it opens the panel on Decisions.
+The rail's "Comments" button, a chip, a highlighted passage, a block's pin
+and every other way to a thread open it on Comments; the panel opens on
+Decisions when nothing chose a tab. Only the Comments tab shows the threads,
+so a thread counts as seen only while it does.
+
 The open panel is resized from a handle on its left edge, a separator named
 "Resize comments": dragged, its edge follows the pointer, and focused, Left
 Arrow widens it and Right Arrow narrows it by 1rem. Its width stays between

@@ -292,14 +292,14 @@ test.describe('signed in', () => {
     const second = section(page, 1);
     await expect.poll(() => reads).toBe(1);
     await expect(second.form).not.toHaveClass(/artifact-decision--saved/);
-    // Open, the heading's text is its title alone.
-    await expect(second.heading).toHaveText('Decisions for the maintainer');
+    // Open, the heading's text is its title and the review sheet's mark.
+    await expect(second.heading).toHaveText('Decisions for the maintainer 1 open');
     await fold(page, 1);
     await expect(second.drawn).toHaveText('1 to answer');
     await expect(second.button).toHaveAccessibleName(/1 to answer/);
     await second.button.click();
     await expect(second.drawn).toHaveCount(0);
-    await expect(second.heading).toHaveText('Decisions for the maintainer');
+    await expect(second.heading).toHaveText('Decisions for the maintainer 1 open');
     await seen.clean();
   });
 
