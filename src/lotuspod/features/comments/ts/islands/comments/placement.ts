@@ -378,7 +378,6 @@ export function placement(page: Page, bridge: PlacementBridge): Placement {
     api.wide = mode === "panel";
     shell.hidden(!api.wide);
     over.mode(mode);
-    // The title bar's count opens the panel on Decisions, else the sheet.
     decisionsTab.opens.value = opensIn(api.wide, shell.decide, over.decisions);
     var old = document.querySelector<HTMLElement>(".artifact-comments-changed");
     if (old) {
