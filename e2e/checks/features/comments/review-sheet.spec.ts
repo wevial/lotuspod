@@ -310,10 +310,10 @@ test.describe('signed in', () => {
     await expect(the.save).toHaveText('Save 1 answer');
     await the.save.click();
     await expect(the.save).toHaveText('Nothing new to save');
-    const saved = (await stored(request))['decision-d1'].current;
-    expect(saved).toMatchObject({ note: 'Only the note changed' });
+    expect((await stored(request))['decision-d1'].current).toMatchObject({ note: 'Only the note changed' });
 
-    const other = saved.choice === 'codex' ? 'Claude Opus' : 'Codex';
+    const before = (await stored(request))['decision-d1'].current.choice;
+    const other = before === 'codex' ? 'Claude Opus' : 'Codex';
     await page.reload();
     await expect(form.locator('.artifact-decision-saved-line')).toBeVisible();
     await the.count.click();
