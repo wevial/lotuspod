@@ -388,30 +388,48 @@
   appearance: none;
   background: none;
   border: 0;
-  color: var(--color-white);
+  color: var(--color-pale-lavender);
   cursor: pointer;
   display: block;
   font: inherit;
-  font-weight: 600;
-  padding: 0;
+  font-weight: 400;
+  padding: 0 0 0 2.05em;
+  position: relative;
   text-align: left;
   text-decoration: underline;
   text-decoration-color: color-mix(in srgb, var(--color-lavender) 45%, transparent);
   text-underline-offset: 0.18em;
 }
 
-/* A disclosure triangle, then the mint check. */
+/* A muted disclosure triangle, then the mint check, both left of the
+   underlined title. */
+.artifact-decisions-row-title::before,
+.artifact-decisions-row-title::after {
+  left: 0;
+  position: absolute;
+  top: 0;
+}
+
 .artifact-decisions-row-title::before {
-  color: var(--color-mint);
-  content: "\25b8\00a0\2713\00a0";
+  color: var(--color-muted-lavender);
+  content: "\25b8";
+  font-size: 0.75em;
+  line-height: 2;
 }
 
 .artifact-decisions-row-title[aria-expanded="true"]::before {
-  content: "\25be\00a0\2713\00a0";
+  content: "\25be";
+}
+
+.artifact-decisions-row-title::after {
+  color: var(--color-mint);
+  content: "\2713";
+  font-weight: 700;
+  left: 0.9em;
 }
 
 .artifact-decisions-row-title:hover {
-  color: var(--color-pale-lavender);
+  color: var(--color-white);
 }
 
 .artifact-decisions-row--open .artifact-decisions-row-title {
