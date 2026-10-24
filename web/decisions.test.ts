@@ -98,11 +98,13 @@ function routes(...reads: object[]): void {
 
 // The island mounted over a fresh page holding FORM, once its first read
 // of the answers is drawn.
+let cards: ReturnType<typeof decisions> = null;
 async function mounted(page: Page): Promise<HTMLFormElement> {
   document.body.innerHTML = `<section class="artifact-body"><h2 id="decisions">Decisions</h2>
 <div class="artifact-section-body" data-section="decisions">${FORM}</div></section>`;
   const answered = new Promise((done) => document.addEventListener("lotuspod:answered", done, { once: true }));
-  expect(decisions(page)).not.toBeNull();
+  cards = decisions(page);
+  expect(cards).not.toBeNull();
   await answered;
   return document.querySelector<HTMLFormElement>("form.artifact-decision")!;
 }
@@ -160,4 +162,30 @@ test("a pick the reader changed and has not saved stays open as they left it whe
   expect(form.classList.contains("artifact-decision--saved")).toBe(false);
   expect(picked(form)).toBe("a");
   expect(form.querySelector<HTMLElement>(".artifact-decision-unsaved")!.hidden).toBe(false);
+});
+
+test("a change to the store's answers between the island's reads tells the review sheet, and the island's own read does not", async () => {
+  const page = stubPage();
+  routes({ questions: { "decision-1": { current: answer(1, "b"), earlier: [] } } });
+  await mounted(page);
+  const the = cards!;
+  expect(the.drawn.value).toBe(0);
+  routes({ questions: { "decision-1": { current: answer(2, "c"), earlier: [answer(1, "b")] } } });
+  await answerStore(page).read("pond");
+  expect(the.drawn.value).toBe(1);
+  expect(the.saved(the.forms[0]!)?.choice).toBe("c");
+});
+
+test("an answer dismissed elsewhere folds the card with its saved note emptied, so it is not taken for an unsaved one", async () => {
+  const page = stubPage();
+  const noted = { ...answer(1, "b"), note: "Quiet at night" };
+  routes({ questions: { "decision-1": { current: noted, earlier: [] } } });
+  const form = await mounted(page);
+  expect(form.querySelector("textarea")!.value).toBe("Quiet at night");
+  const dismissal = { ...answer(2, "b"), choice: undefined, dismissed: true, note: "No longer needed" };
+  routes({ questions: { "decision-1": { current: dismissal, earlier: [noted] } } });
+  await answerStore(page).read("pond");
+  expect(form.classList.contains("artifact-decision--dismissed")).toBe(true);
+  expect(form.querySelector("textarea")!.value).toBe("");
+  expect(cards!.dirty(form)).toBe(false);
 });

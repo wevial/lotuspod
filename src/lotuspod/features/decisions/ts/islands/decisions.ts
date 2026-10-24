@@ -1,4 +1,4 @@
-import { effect, untracked } from "@preact/signals";
+import { effect, signal, untracked, type ReadonlySignal } from "@preact/signals";
 import { answerStore, store, UNANSWERED, type Answer, type Page, type Swapped } from "../../../comments/ts/index";
 import { answeredTable } from "./answered";
 import { giveAsk } from "./ask";
@@ -33,6 +33,10 @@ export interface Cards {
   // True once the page's answers are read, set before ANSWERED is sent;
   // after a swap, whether its read of them was.
   read: boolean;
+  // Counts each time a card is drawn again from a change to the store's
+  // answers outside the island's own reads (a read or post elsewhere on the
+  // page), which send ANSWERED instead.
+  readonly drawn: ReadonlySignal<number>;
 }
 
 // The page's decision cards (lotuspod.decisions), as an island on the
@@ -53,6 +57,10 @@ export function decisions(page: Page): Cards | null {
   const cards = new Map<HTMLFormElement, Card>();
   const deck: Deck = { page, owner: false, undo() {} };
   const cardOf = (form: HTMLFormElement) => cards.get(form)!;
+  // The island's reads of the answers under way, and the cards drawn again
+  // outside them.
+  let loading = 0;
+  const drawn = signal(0);
   const each = () => forms.map(cardOf);
 
   // The form asking question, if the page asks it.
@@ -174,7 +182,12 @@ export function decisions(page: Page): Cards | null {
     card.dispose = effect(() => {
       const value = card.answers.value;
       if (value !== card.shown && !card.acting && !card.waiting) {
-        untracked(() => adopt(deck, card, value));
+        untracked(() => {
+          adopt(deck, card, value);
+          // Outside the island's own reads, which send ANSWERED once drawn,
+          // the review sheet is told the cards changed.
+          if (!loading) drawn.value += 1;
+        });
       }
     });
     const asking = store.asking.peek();
@@ -195,7 +208,7 @@ export function decisions(page: Page): Cards | null {
   dismissing.mayDismiss(name, each);
 
   const reading: Cards = {
-    forms, ticked, same, summary, optionText, isChecklist, save, read: false,
+    forms, ticked, same, summary, optionText, isChecklist, save, read: false, drawn,
     saved: (form) => saved(cardOf(form)),
     dirty: (form) => dirty(cardOf(form)),
   };
@@ -206,7 +219,9 @@ export function decisions(page: Page): Cards | null {
   // are read, so a failed read is never taken for a page with nothing
   // answered.
   function load(): void {
+    loading += 1;
     answers.read(name).catch(() => false).then((read) => {
+      loading -= 1;
       if (read === null) {
         return;
       }
@@ -261,6 +276,7 @@ export function decisions(page: Page): Cards | null {
       if (at >= 0) {
         forms.splice(at, 1);
         cards.get(form)?.dispose();
+        cards.delete(form);
       }
     }
     for (const form of fresh) {

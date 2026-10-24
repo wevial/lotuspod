@@ -217,7 +217,8 @@ export function fill(card: Card): void {
 
 // The store's answers to the question changed under the card (a read, or a
 // post from elsewhere): it is drawn from them. A dismissal folds it all the
-// same, no option left picked and a note written kept for Undo to open; a
+// same, no option left picked and a note the reader wrote kept for Undo to
+// open, the saved answer's note emptied, as Dismiss leaves it; a
 // form the reader changed from what it last showed stays open as they left
 // it; any other takes the answer's pick and note.
 export function adopt(deck: Deck, card: Card, value: Answers): void {
@@ -226,6 +227,7 @@ export function adopt(deck: Deck, card: Card, value: Answers): void {
   const answer = saved(card);
   if (answer && answer.dismissed) {
     for (const radio of radios(card.form)) radio.checked = false;
+    if (!touched) noteField(card.form).value = "";
     card.editing = false;
   } else if (touched && dirty(card)) {
     card.editing = true;

@@ -25,6 +25,7 @@
 
 import { createPortal, Fragment, render } from "preact";
 import { useLayoutEffect, useReducer, useRef, useState } from "preact/hooks";
+import { effect, untracked } from "@preact/signals";
 import type { Cards } from "../../../decisions/ts/index";
 import type { Page } from "./bridge";
 
@@ -669,4 +670,13 @@ function sheet(page: Page, the: Cards): void {
   const read = new WeakSet<HTMLFormElement>();
   draw(page, the, tools, marks, read);
   document.addEventListener(page.events.answered, () => draw(page, the, tools, marks, read));
+  // A card drawn again from the store's answers between reads (one saved or
+  // read elsewhere on the page) draws the sheet again too.
+  let seen = the.drawn.peek();
+  effect(() => {
+    const now = the.drawn.value;
+    if (now === seen) return;
+    seen = now;
+    untracked(() => draw(page, the, tools, marks, read));
+  });
 }

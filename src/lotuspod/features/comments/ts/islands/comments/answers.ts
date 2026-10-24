@@ -72,8 +72,11 @@ export function answerStore(page: AnswersPage, state: StoreState = shared) {
 
   // The answer replacing the current one, which goes first among those it
   // replaced.
+  // A read that landed before the post may already hold the answer as the
+  // current one: it is never its own earlier answer.
   function replacing(answer: Answer, was: Answers): Answers {
-    return { current: answer, earlier: was.current ? [was.current, ...was.earlier] : was.earlier.slice() };
+    const earlier = was.current ? [was.current, ...was.earlier] : was.earlier.slice();
+    return { current: answer, earlier: earlier.filter(each => each.id !== answer.id) };
   }
 
   return {

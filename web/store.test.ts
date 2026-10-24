@@ -112,3 +112,22 @@ test("a read of the answers that changes only question A runs A's consumer, and 
   expect(await newer).toBe(true);
   expect(seen.a).toEqual(["a", "c"]);
 });
+
+test("a post landing after a read that already found its answer keeps that answer out of its own history", async () => {
+  const state = storeState();
+  const answers = answerStore({ ...page, answersURL: "/api/answers" }, state);
+  const A1 = answer(1, "decision-1", "a");
+  const B2 = answer(2, "decision-1", "b");
+  route({ questions: { "decision-1": { current: A1, earlier: [] } } });
+  await answers.read("pond");
+  let landPost!: () => void;
+  globalThis.fetch = ((url: string, init?: RequestInit) => init?.method === "POST"
+    ? new Promise<Response>((resolve) => { landPost = () => resolve(Response.json(B2, { status: 201 })); })
+    : Promise.resolve(Response.json({ questions: { "decision-1": { current: B2, earlier: [A1] } } }))) as unknown as typeof fetch;
+  const posted = answers.save("decision-1", { choice: "b" });
+  expect(await answers.read("pond")).toBe(true);
+  landPost();
+  await posted;
+  expect(state.answer("decision-1").value.current?.id).toBe(2);
+  expect(state.answer("decision-1").value.earlier.map((each) => each.id)).toEqual([1]);
+});
