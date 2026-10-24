@@ -29,7 +29,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "src"))
 
-from lotuspod import media  # noqa: E402
+from lotuspod.features.publish import media  # noqa: E402
 from lotuspod.features.backup import backup  # noqa: E402
 from lotuspod.store import db  # noqa: E402
 

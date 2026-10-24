@@ -18,7 +18,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from tests.test_publish_witness import Node, meta, parse
+from tests.features.publish.test_publish_witness import Node, meta, parse
 
 REPO = Path(__file__).resolve().parents[1]
 SRC = REPO / "src"

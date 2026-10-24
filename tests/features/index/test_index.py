@@ -14,7 +14,7 @@ import unittest
 from pathlib import Path
 
 from tests import history
-from tests.test_manifest_v2 import (MANIFEST_KEYS, TempDirTestCase, _IndexTable,
+from tests.features.publish.test_manifest_v2 import (MANIFEST_KEYS, TempDirTestCase, _IndexTable,
                                     make_mixed_fixture, render_updated, run_cli, served_css,
                                     stylesheet_hash)
 

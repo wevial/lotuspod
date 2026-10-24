@@ -47,9 +47,9 @@ the thread's resolution is its newest row. A reader's reply to a resolved
 thread reopens it. A resolution never changes a comment's state.
 
 A reader's comment, and an agent's reply or follow-up, may name up to four
-images in the media store (lotuspod.media), each kept by its stored name with
-its width and height; a comment row carries them as `images`, each with its
-/media/ URL, and an empty list when it has none.
+images in the media store (lotuspod.features.publish.media), each kept by its
+stored name with its width and height; a comment row carries them as
+`images`, each with its /media/ URL, and an empty list when it has none.
 
 A thread may be anchored to a decision rather than a section: each of its
 comments keeps the decision's question id as `question`, beside the section

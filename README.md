@@ -65,8 +65,11 @@ lotuspod/
 │   │   └── ts/            # the scripts every page script shares: shared.js, link-tab.js
 │   ├── store/db.py        # serve's database
 │   ├── features/          # the feature slices, filled one move at a time: Python at a slice's root, ts/, theme/, templates/
+│   │   ├── publish/       # render, the manifest and publish (`render`, `manifest`, `publish`); markdown, images and sections
+│   │   ├── blocks/        # body blocks: reference cards, node tables, calltrees, diagrams, tables, the image viewer
+│   │   ├── widgets/       # live blocks and the browser libraries they load
 │   │   ├── history/       # page versions and the archive (`archive`, `unarchive`)
-│   │   ├── index/         # the site's listing (`manifest`, `index`); templates/index.html, the index-page template
+│   │   ├── index/         # the site's listing (`index`); templates/index.html, the index-page template
 │   │   └── backup/        # `backup` and `restore`
 │   └── _theme/            # css/, js/; the served lotuspod.css is core/theme/base.css, css/ and the slices' theme/ joined in order
 ├── artifacts/             # rendered output (gitignored)

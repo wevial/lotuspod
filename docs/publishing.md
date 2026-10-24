@@ -195,7 +195,7 @@ without meeting the command-line length limit.
 lotuspod render --name ep-002 --title "Under the Leaves" --markdown ep-002.md
 ```
 
-The converter (`lotuspod.markdown.to_body`) takes a small subset of markdown:
+The converter (`lotuspod.features.publish.markdown.to_body`) takes a small subset of markdown:
 
 - `##` and `###` headings, and paragraphs; every `# ` line is dropped, since
   the title is passed with `--title`.
@@ -1540,7 +1540,7 @@ order (`THEME_SOURCES` in `src/lotuspod/core/__init__.py`), which render joins i
 `lotuspod.css`, `lotuspod-page.js`, `lotuspod-index.js` and
 `lotuspod-old-version.js` it serves. `lotuspod-page.js` and
 `lotuspod-old-version.js` each run as one strict function, so their sources
-share `js/page-open.js`'s and `core/ts/shared.js`'s helpers: the join opens that
+share `features/publish/ts/page-open.js`'s and `core/ts/shared.js`'s helpers: the join opens that
 function before them and closes it after the last (`THEME_CLOSURES` in
 `core/__init__.py`). A new source is a complete script that parses on its own, never
 one that opens or closes the function.

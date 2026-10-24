@@ -5,7 +5,7 @@ Recent activity, and keeps its URL and its bytes.
 
 Real git in temporary directories, with a local identity; pages published
 and archived with this checkout's CLI. Over ssh, `ssh` on the PATH is the
-stub of tests.test_publish_remote, which runs the remote command on this
+stub of tests.features.publish.test_publish_remote, which runs the remote command on this
 machine. serve is the real `lotuspod serve`, run as
 tests.test_activity_witness runs it, reached with Access assertions the test
 signs itself.
@@ -29,7 +29,7 @@ from html.parser import HTMLParser
 from pathlib import Path
 
 from tests import test_activity_witness as activity_witness
-from tests import test_publish_remote as publish_remote
+from tests.features.publish import test_publish_remote as publish_remote
 from tests.test_answers_witness import READER, assertion
 
 REPO = Path(__file__).resolve().parents[3]

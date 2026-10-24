@@ -326,7 +326,7 @@ class ServedSiteTests(CaptureSiteTestCase):
         (hook / "sitecustomize.py").write_text(
             "import datetime, sys, types\n"
             f"sys.path.insert(0, {str(REPO_ROOT / 'src')!r})\n"
-            "from lotuspod import publish, render\n"
+            "from lotuspod.features.publish import publish, render\n"
             "from lotuspod.features.index import listing\n"
             "class _Day(datetime.date):\n"
             "    @classmethod\n"

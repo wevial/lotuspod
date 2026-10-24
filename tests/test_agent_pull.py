@@ -34,7 +34,8 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from lotuspod import api, cli, core, decisions, machine, media, routing, store  # noqa: E402
+from lotuspod import api, cli, core, decisions, machine, routing, store  # noqa: E402
+from lotuspod.features.publish import media  # noqa: E402
 from tests import access_keys as keys  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parents[1]

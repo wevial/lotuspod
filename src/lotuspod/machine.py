@@ -204,7 +204,9 @@ from http import HTTPStatus
 from pathlib import Path
 from typing import Callable, Mapping
 
-from lotuspod import api, media, routing, store, widgets
+from lotuspod import api, routing, store
+from lotuspod.features.publish import media
+from lotuspod.features.widgets import widgets
 
 OPERATIONS = ("pull", "claim", "reply", "publish")
 # An owner handle, and a credential's name: 1 to 63 lower-case letters,

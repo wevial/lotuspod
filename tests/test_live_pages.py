@@ -3,7 +3,7 @@ import re
 import unittest
 from pathlib import Path
 
-from tests.test_publish_remote_witness import (
+from tests.features.publish.test_publish_remote_witness import (
     LIVE_DOCUMENT as DOCUMENT, LIVE_NOTES as NOTES, RemotePublishWitness, git,
 )
 

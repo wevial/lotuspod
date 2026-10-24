@@ -106,8 +106,9 @@ HEADERS = """\
   Referrer-Policy: no-referrer
 """
 # A widget file publish writes for a live block, and the headers serve answers
-# it with (lotuspod.widgets.HEADERS, which the build cannot import: it runs
-# without the package installed). X-Content-Type-Options comes from "/*".
+# it with (lotuspod.features.widgets.widgets.HEADERS, which the build cannot
+# import: it runs without the package installed). X-Content-Type-Options
+# comes from "/*".
 WIDGET_NAME = re.compile(r".+\.w-[0-9a-f]{12}\.html\Z")
 WIDGET_HEADERS = (
     ("Content-Security-Policy", "sandbox allow-scripts; frame-ancestors 'self'"),

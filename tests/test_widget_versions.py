@@ -1,9 +1,10 @@
 """Historical widget bytes and chrome through real publish, git and serve."""
 from unittest import mock
 
-from lotuspod import render, widgets
+from lotuspod.features.publish import render
+from lotuspod.features.widgets import widgets
 from lotuspod.features.history import versions
-from tests.test_publish_witness import parse
+from tests.features.publish.test_publish_witness import parse
 from tests.features.history.test_versions_witness import VersionsWitness, PAGE, OTHER, DATES
 
 

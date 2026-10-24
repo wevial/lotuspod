@@ -58,7 +58,7 @@ from html.parser import HTMLParser
 from pathlib import Path
 from typing import Callable
 
-from lotuspod import widgets
+from lotuspod.features.widgets import widgets
 from lotuspod.core import WIDGET_NAME, git_environment
 
 # The versions of one page a list holds, newest first.

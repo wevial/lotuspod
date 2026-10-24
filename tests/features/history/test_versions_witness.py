@@ -23,7 +23,7 @@ from pathlib import Path
 from unittest import mock
 
 from tests.test_answers_witness import Site, assertion, git
-from tests.test_publish_witness import parse
+from tests.features.publish.test_publish_witness import parse
 
 REPO = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(REPO / "src"))
