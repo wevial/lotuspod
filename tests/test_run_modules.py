@@ -15,10 +15,13 @@ Run from the repo root:
 from __future__ import annotations
 
 import json
+import os
+import signal
 import subprocess
 import sys
 import tempfile
 import textwrap
+import time
 import unittest
 from pathlib import Path
 
@@ -136,6 +139,47 @@ class RunTests(RunModulesTestCase):
         proc = self.run_runner("--module-timeout", "1")
         self.assertNotEqual(proc.returncode, 0, proc.stdout)
         self.assertIn("test_hung.py (timed out)", self.summary(proc))
+
+    def test_a_test_printing_a_ran_line_still_counts_its_tests(self) -> None:
+        self.write("test_noisy.py", PASSING + '        print("Ran 0 tests")\n')
+        proc = self.run_runner()
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertIn("    1 tests  ok  test_noisy.py", proc.stdout)
+
+    def test_a_module_the_repository_root_shadows_is_refused(self) -> None:
+        self.write("tests/test_ci_workflow.py", FAILING)
+        proc = self.run_runner()
+        self.assertNotEqual(proc.returncode, 0, proc.stdout)
+        self.assertIn("the repository root shadows tests/test_ci_workflow.py", proc.stderr)
+        self.assertNotIn("run_modules:", proc.stdout)
+
+    def test_sigterm_kills_the_running_modules(self) -> None:
+        pid_file = self.dir / "pid"
+        self.write("test_hung.py", f"""
+import os
+import time
+import unittest
+
+class Hung(unittest.TestCase):
+    def test_hangs(self):
+        with open({str(pid_file)!r}, "w") as out:
+            out.write(str(os.getpid()))
+        time.sleep(60)
+""")
+        runner = subprocess.Popen(
+            [sys.executable, str(RUNNER), "--dir", str(self.dir)],
+            cwd=REPO_ROOT, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+        self.addCleanup(runner.kill)
+        deadline = time.monotonic() + 30
+        while not pid_file.is_file() or not pid_file.read_text():
+            self.assertLess(time.monotonic(), deadline, "the module never started")
+            time.sleep(0.05)
+        pid = int(pid_file.read_text())
+        runner.send_signal(signal.SIGTERM)
+        self.assertNotEqual(runner.wait(timeout=30), 0)
+        with self.assertRaises(ProcessLookupError):
+            os.kill(pid, 0)
 
     def test_record_writes_each_module_s_seconds(self) -> None:
         self.write("test_good.py", PASSING)

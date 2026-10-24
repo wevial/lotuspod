@@ -43,7 +43,8 @@ from typing import IO
 REPO_ROOT = Path(__file__).resolve().parent.parent
 TESTS = REPO_ROOT / "tests"
 TIMES_FILE = "module_times.json"
-RAN = re.compile(r"^Ran (\d+) tests?\b", re.MULTILINE)
+# unittest's own summary line, whole, so a test printing "Ran 0 tests" is not it.
+RAN = re.compile(r"^Ran (\d+) tests? in \d+\.\d+s$", re.MULTILINE)
 TAIL_LINES = 40
 SLOWEST = 10
 POLL_SEC = 0.05
@@ -86,6 +87,13 @@ def select(modules: list[str], patterns: list[str]) -> list[str]:
             raise SystemExit(f"run_modules: no module matches {pattern!r}")
         chosen.update(hits)
     return [rel for rel in modules if rel in chosen]
+
+
+def shadows(rel: str) -> bool:
+    top = rel.split("/", 1)[0]
+    if top.endswith(".py"):
+        return (REPO_ROOT / top).is_file()
+    return (REPO_ROOT / top / "__init__.py").is_file()
 
 
 def load_times(tests: Path) -> dict[str, float]:
@@ -133,6 +141,8 @@ def start(module: Module, tests: Path) -> None:
     env["PYTHONPATH"] = os.pathsep.join(
         part for part in (str(tests), env.get("PYTHONPATH", "")) if part
     )
+    # Prints land before unittest's summary line, not flushed after it at exit.
+    env["PYTHONUNBUFFERED"] = "1"
     # Closed in finish(), once the module's process is reaped.
     module.out = tempfile.TemporaryFile()  # noqa: SIM115
     module.started = time.monotonic()
@@ -183,6 +193,8 @@ def run(modules: list[Module], tests: Path, jobs: int, timeout: float,
         ceiling: float | None) -> None:
     waiting = list(modules)
     running: dict[int, Module] = {}
+    # SIGTERM (a cancelled job) unwinds through the finally below, like Ctrl-C.
+    signal.signal(signal.SIGTERM, lambda signum, frame: sys.exit(128 + signum))
     try:
         while waiting or running:
             while waiting and len(running) < jobs:
@@ -211,6 +223,8 @@ def run(modules: list[Module], tests: Path, jobs: int, timeout: float,
         for module in running.values():
             assert module.proc is not None
             kill_group(module.proc.pid)
+            os.waitpid(module.proc.pid, 0)
+            module.proc.returncode = -signal.SIGKILL
 
 
 def summarize(modules: list[Module], elapsed: float) -> int:
@@ -257,6 +271,13 @@ def main(argv: list[str] | None = None) -> int:
         print(f"run_modules: no test_*.py module under {tests}", file=sys.stderr)
         return 2
     selected = select(found, args.patterns)
+    # The working directory comes before PYTHONPATH on sys.path, so a module
+    # whose top-level name the repository root also holds would import that.
+    shadowed = [rel for rel in selected if shadows(rel)]
+    if shadowed:
+        print("run_modules: the repository root shadows " + ", ".join(shadowed),
+              file=sys.stderr)
+        return 2
     weight = weights(selected, load_times(tests))
     if args.shard:
         index, count = args.shard
