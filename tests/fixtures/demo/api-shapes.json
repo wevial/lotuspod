@@ -3,7 +3,18 @@
     {"key": "unread", "request": "1. GET comments, none yet"},
     {"key": "unread", "request": "4. GET comments"},
     {"key": "unread", "request": "6. GET comments, after the agent's reply"},
-    {"key": "unread", "request": "8e. GET comments, with a decision thread"}
+    {"key": "unread", "request": "8e. GET comments, with a decision thread"},
+    {"key": "unread", "request": "17. GET comments, with a block thread"},
+    {
+      "key": "threads[].root.actor.credential",
+      "request": "17. GET comments, with a block thread"
+    },
+    {
+      "key": "threads[].root.actor.handle",
+      "request": "17. GET comments, with a block thread"
+    },
+    {"key": "threads[].root.model", "request": "17. GET comments, with a block thread"},
+    {"key": "threads[].root.owner", "request": "17. GET comments, with a block thread"}
   ],
   "requests": [
     {
@@ -380,6 +391,99 @@
       "method": "POST",
       "path": "/api/comments",
       "request": "15. POST a comment on an unknown section",
+      "shape": {"error": "string"},
+      "status": 400
+    },
+    {
+      "method": "POST",
+      "path": "/api/comments",
+      "request": "16. POST a block comment",
+      "shape": {
+        "actor": {"kind": "string", "name": "string"},
+        "createdAt": "string",
+        "id": "number",
+        "images": [],
+        "owner": "string",
+        "page": "string",
+        "parent": "null",
+        "quote": "null",
+        "revision": "string",
+        "section": "string",
+        "sectionTitle": "string",
+        "state": "string",
+        "text": "string",
+        "widget": {"hash": "string", "id": "string", "state": "string"}
+      },
+      "status": 201
+    },
+    {
+      "method": "GET",
+      "path": "/api/comments",
+      "request": "17. GET comments, with a block thread",
+      "shape": {
+        "maxImageBytes": "number",
+        "page": "string",
+        "revision": "string",
+        "threads": [
+          {
+            "replies": [
+              {
+                "actor": {"credential": "string", "handle": "string", "kind": "string", "name": "string"},
+                "createdAt": "string",
+                "id": "number",
+                "images": [],
+                "model": "string",
+                "owner": "null|string",
+                "page": "string",
+                "parent": "number",
+                "quote": "null",
+                "revision": "string",
+                "section": "string",
+                "sectionTitle": "string",
+                "state": "string",
+                "text": "string",
+                "widget": "null"
+              }
+            ],
+            "resolution": {
+              "actor": {"oneOf": ["null", {"kind": "string", "name": "string"}]},
+              "at": "null|string",
+              "resolved": "boolean"
+            },
+            "root": {
+              "actor": {"kind": "string", "name": "string"},
+              "createdAt": "string",
+              "id": "number",
+              "images": [],
+              "owner": "string",
+              "page": "string",
+              "parent": "null",
+              "question": "string",
+              "quote": {"oneOf": ["null", {"exact": "string", "prefix": "string", "suffix": "string"}]},
+              "revision": "string",
+              "section": "string",
+              "sectionTitle": "string",
+              "state": "string",
+              "text": "string",
+              "widget": {"oneOf": ["null", {"hash": "string", "id": "string", "state": "string"}]}
+            }
+          }
+        ],
+        "unread": []
+      },
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "path": "/api/comments",
+      "request": "18. POST a block comment with a stale hash",
+      "shape": {"error": "string"},
+      "status": 409
+    },
+    {
+      "method": "POST",
+      "path": "/api/comments",
+      "request": "19. POST a comment on a block the page lacks",
       "shape": {"error": "string"},
       "status": 400
     }

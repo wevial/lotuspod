@@ -52,6 +52,7 @@ sys.path.insert(0, str(SRC))
 
 from lotuspod.features.comments import comments  # noqa: E402
 from lotuspod.features.decisions import decisions  # noqa: E402
+from lotuspod.features.widgets import widgets  # noqa: E402
 from tests import capture_site  # noqa: E402
 
 FIXTURE = REPO_ROOT / "tests" / "fixtures" / "demo" / "api-shapes.json"
@@ -70,6 +71,10 @@ QUOTE = {"exact": "the first algae", "prefix": "from edge to edge and ",
          "suffix": " are showing"}
 UNKNOWN_SECTION = "no-such-section"
 UNKNOWN_QUESTION = "no-such-question"
+# try-it's live block, in PASSAGE_SECTION, and an id the page has no block for.
+BLOCK = "deep-shelf"
+UNKNOWN_BLOCK = "no-such-block"
+STALE_HASH = "000000000000"
 STALE_VERSION = "stale"
 MODEL = "scripted"
 
@@ -205,6 +210,10 @@ def run(api: Api, agent_reply: Callable[[int], None], page_html: str) -> list[di
     if not forms or len(forms[0].options) < 2:
         raise RecordError(f"{PAGE} asks no question with two options")
     form = forms[0]
+    found_block = widgets.PageWidgets(page_html).found.get(BLOCK)
+    if found_block is None:
+        raise RecordError(f"{PAGE} has no live block {BLOCK}")
+    block_hash = found_block[0]
     first, second = form.options[0][0], form.options[1][0]
     comments_path, answers_path = "/api/comments", "/api/answers"
     query = f"?page={PAGE}"
@@ -253,6 +262,17 @@ def run(api: Api, agent_reply: Callable[[int], None], page_html: str) -> list[di
     ask("14. GET revision", "GET", "/api/revision" + query)
     ask("15. POST a comment on an unknown section", "POST", comments_path,
         {"page": PAGE, "section": UNKNOWN_SECTION, "text": "Where does this go?"})
+
+    def on_block(ident: str, hash_: str) -> dict:
+        return {"page": PAGE, "section": PASSAGE_SECTION, "text": "How deep is the shelf?",
+                "widget": {"id": ident, "hash": hash_, "state": ""}}
+
+    ask("16. POST a block comment", "POST", comments_path, on_block(BLOCK, block_hash))
+    ask("17. GET comments, with a block thread", "GET", comments_path + query)
+    ask("18. POST a block comment with a stale hash", "POST", comments_path,
+        on_block(BLOCK, STALE_HASH))
+    ask("19. POST a comment on a block the page lacks", "POST", comments_path,
+        on_block(UNKNOWN_BLOCK, block_hash))
     return entries
 
 
