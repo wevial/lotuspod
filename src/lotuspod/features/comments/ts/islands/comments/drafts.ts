@@ -1,7 +1,8 @@
 import type { Attachments, Page, Swapped, Widget } from "../bridge";
 import { blockStanding } from "./anchor";
 import type { Kept, PassageDraft, Store } from "./parts";
-import { shared } from "./state";
+import { effect } from "@preact/signals";
+import { shared, type Mark } from "./state";
 import { store as makeStore } from "./store";
 
 // A composer's text and images not sent, as kept over a reload or a swap:
@@ -161,13 +162,19 @@ export function drafts(page: Page, boxes: HTMLElement[]): void {
   }
 
   // The form says why a draft came to it: the drafts' mark, held in the
-  // store's state (comments/state.ts).
+  // store's state (comments/state.ts), from which each form's status is
+  // drawn as it is told.
   function told(form: HTMLFormElement, why: string) {
-    if (why) {
-      shared.write.mark(form, why);
-      form.querySelector(".artifact-comment-status")!.textContent = why;
-    }
+    if (why) shared.write.mark(form, why);
   }
+  const shownMarks = new WeakMap<HTMLFormElement, Mark>();
+  effect(() => {
+    for (const [form, mark] of shared.marks.value) {
+      if (shownMarks.get(form) === mark) continue;
+      shownMarks.set(form, mark);
+      form.querySelector(".artifact-comment-status")!.textContent = mark.why;
+    }
+  });
 
   // What rehome() keeps for a form until the post it is sending is saved:
   // held only here meanwhile, so kept over a reload too (why: what its

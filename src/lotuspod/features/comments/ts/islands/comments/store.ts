@@ -6,6 +6,7 @@ import { passages as makePassages } from "./passages";
 import { placement as makePlacement } from "./placement";
 import { threadRows } from "./thread";
 import { readThreads, SIGNED_OUT } from "./route";
+import { effect, untracked } from "@preact/signals";
 import { shared, type Read } from "./state";
 import { replies as makeReplies } from "./unread";
 
@@ -93,11 +94,49 @@ export function store(page: Page, bridge: StoreBridge): Store {
     counted: replies.counted, opening: replies.opening, label: (thread, row) => composer.label(thread, row),
   });
   const { agent, author, routed, rows, sync, markUnread } = threadPart;
-  // Rows merged into a thread are its signal's too.
+
+  // Each shown thread follows its signal in the store's state: whatever
+  // writes it (a read, a post, a resolution), the thread's record takes it
+  // and its rows are drawn again, and outside the store's own reads and
+  // merges the panel, chips and passages are drawn again once after.
+  // drawn says whether the signal drew anything since merge last asked.
+  const following = new WeakMap<Thread, { drawn: boolean }>();
+  let merging = 0;
+  let redraw = false;
+  function follow(thread: Thread) {
+    const since = { drawn: false };
+    following.set(thread, since);
+    effect(() => {
+      const state = shared.thread(thread.root.id).value;
+      if (!state) return;
+      untracked(() => {
+        thread.root = state.root;
+        thread.replies = state.replies.slice();
+        thread.resolution = state.resolution;
+        if (sync(thread)) since.drawn = true;
+        if (reading || merging || !panel || redraw) return;
+        redraw = true;
+        queueMicrotask(() => {
+          redraw = false;
+          refresh();
+        });
+      });
+    });
+  }
+  // Rows merged into a thread go to its signal, which draws them; true
+  // when anything was drawn.
   function merge(thread: Thread, entries: (CommentRow | null)[]) {
-    const drawn = threadPart.merge(thread, entries);
-    shared.write.take({ root: thread.root, replies: thread.replies, resolution: thread.resolution });
-    return drawn;
+    const root = entries.find(entry => entry && entry.id === thread.root.id) || thread.root;
+    merging += 1;
+    try {
+      shared.write.take({ root, replies: entries.filter((entry): entry is CommentRow => Boolean(entry) && entry!.id !== thread.root.id) });
+    } finally {
+      merging -= 1;
+    }
+    const since = following.get(thread)!;
+    const drawn = since.drawn;
+    since.drawn = false;
+    return sync(thread) || drawn;
   }
 
   const composer = composers(page, {
@@ -167,11 +206,15 @@ export function store(page: Page, bridge: StoreBridge): Store {
   function add(entry: Read): boolean {
     const root = entry.root;
     if (!root) return false;
-    shared.write.take(entry);
     const known = shown.get(root.id);
+    const moved = Boolean(known && entry.resolution) && resolved(known!) !== Boolean(entry.resolution!.resolved);
+    merging += 1;
+    try {
+      shared.write.take(entry);
+    } finally {
+      merging -= 1;
+    }
     if (known) {
-      const moved = Boolean(entry.resolution) && resolved(known) !== Boolean(entry.resolution!.resolved);
-      if (entry.resolution) known.resolution = entry.resolution;
       return merge(known, [root, ...(entry.replies || [])]) || moved;
     }
     const list = page.element("ol", "artifact-comment-list");
@@ -198,6 +241,12 @@ export function store(page: Page, bridge: StoreBridge): Store {
     Object.assign(thread, composer.reply(thread, node));
     shown.set(root.id, thread);
     watch(node);
+    merging += 1;
+    try {
+      follow(thread);
+    } finally {
+      merging -= 1;
+    }
     merge(thread, entry.replies || []);
     put(thread);
     return true;

@@ -118,7 +118,10 @@ thread by its first comment's id, changed only when a read or a post changes
 it; the ids the route names unread and each thread's seen mark; the drafts'
 marks; and each question's answers, read from and posted to `/api/answers`
 by `comments/answers.ts`, where a read never writes over a post that landed
-after it began. It adds a thread or merges what a read
+after it began. Each shown thread follows its signal: whatever writes it,
+its record takes it and its rows are drawn again, and outside the store's
+own reads the panel, chips and passages are drawn again once after; each
+form's status says the drafts' mark from the marks signal. It adds a thread or merges what a read
 brings (true when anything was drawn), keeps the list at the end of the body
 for sections the page no longer has, and reads `/api/comments` while a thread
 waits or one is in view, each gap half again as long as the last, from 3 up to

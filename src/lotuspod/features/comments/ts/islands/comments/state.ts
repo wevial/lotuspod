@@ -30,6 +30,9 @@ export interface Answer {
   asked?: { label?: unknown; text?: unknown } | null;
 }
 
+// What the drafts told a form: why a draft came to it.
+export interface Mark { readonly why: string }
+
 // A question's answers: the current one, if any, and those it replaced,
 // newest first.
 export interface Answers {
@@ -63,8 +66,9 @@ export function storeState() {
   const unread = signal<ReadonlySet<unknown>>(new Set());
   const tracked = signal(false);
   const seenTo = signal<ReadonlyMap<number, number>>(new Map());
-  // What the drafts last told each form: why a draft's place is gone.
-  const marks = signal<ReadonlyMap<HTMLFormElement, string>>(new Map());
+  // What the drafts last told each form: why a draft's place is gone, a
+  // new mark each time it is told, even in the same words.
+  const marks = signal<ReadonlyMap<HTMLFormElement, Mark>>(new Map());
   const answers = new Map<string, Signal<Answers>>();
   const questions = signal<readonly string[]>([]);
   const asking = signal<Asking | null>(null);
@@ -133,7 +137,7 @@ export function storeState() {
     unread: unread as ReadonlySignal<ReadonlySet<unknown>>,
     tracked: tracked as ReadonlySignal<boolean>,
     seenTo: seenTo as ReadonlySignal<ReadonlyMap<number, number>>,
-    marks: marks as ReadonlySignal<ReadonlyMap<HTMLFormElement, string>>,
+    marks: marks as ReadonlySignal<ReadonlyMap<HTMLFormElement, Mark>>,
     answer: (question: string): ReadonlySignal<Answers> => answerSignal(question),
     currents: currents as ReadonlySignal<readonly Answer[]>,
     asking: asking as ReadonlySignal<Asking | null>,
@@ -152,7 +156,7 @@ export function storeState() {
         if (id > at) seenTo.value = new Map(seenTo.peek()).set(thread, id);
       },
       mark(form: HTMLFormElement, why: string): void {
-        marks.value = new Map(marks.peek()).set(form, why);
+        marks.value = new Map(marks.peek()).set(form, { why });
       },
       asking(to: Asking | null): void {
         asking.value = to;
