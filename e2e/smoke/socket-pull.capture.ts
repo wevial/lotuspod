@@ -3,7 +3,7 @@ import path from 'node:path';
 import { expect, test } from '@playwright/test';
 
 // Visual evidence for the unchanged reader experience after a socket pull.
-// tests.test_pull_catalog supplies the allow-list read-count evidence.
+// tests.features.agents.test_pull_catalog supplies the allow-list read-count evidence.
 const ENV = process.env;
 const COMMENT = '@hermes Which heater fits beside the pump?';
 test.use({ extraHTTPHeaders: { 'Cf-Access-Jwt-Assertion': ENV.LOTUSPOD_TEST_ASSERTION ?? '' } });

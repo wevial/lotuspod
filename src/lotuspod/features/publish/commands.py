@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import argparse
 
-from lotuspod import machine
+from lotuspod.features.agents import machine
 from lotuspod.core import EXIT_REVISION_CONFLICT, NO_REVISION
 from lotuspod.features.publish.manifest import cmd_manifest
 from lotuspod.features.publish.publish import (LABEL_MAX, PUBLISH_FORMATS, PUBLISH_VARIANT,

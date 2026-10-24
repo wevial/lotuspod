@@ -3,7 +3,7 @@ import http.client
 import json
 import time
 
-from tests.test_agent_pull_witness import Site, PAGE, _Page, assertion, ASSERTION
+from tests.features.agents.test_agent_pull_witness import Site, PAGE, _Page, assertion, ASSERTION
 
 
 class EventsWitness(Site):

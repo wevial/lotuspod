@@ -76,7 +76,8 @@ from unittest import mock
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
-from lotuspod import cli, core, machine, routing  # noqa: E402
+from lotuspod import cli, core  # noqa: E402
+from lotuspod.features.agents import machine, routing  # noqa: E402
 from lotuspod.features.serve import access, api  # noqa: E402
 from lotuspod.features.serve import handler as serve_handler, pages as serve_pages  # noqa: E402
 from lotuspod.features.publish import media, publish  # noqa: E402
@@ -1071,6 +1072,7 @@ def write_packaged_css() -> bool:
     joined = core.theme_file_bytes("lotuspod.css")
     if PACKAGED_CSS.is_file() and PACKAGED_CSS.read_bytes() == joined:
         return False
+    PACKAGED_CSS.parent.mkdir(parents=True, exist_ok=True)
     core.write_atomic(PACKAGED_CSS, joined)
     return True
 

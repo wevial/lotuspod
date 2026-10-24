@@ -57,7 +57,8 @@ import unicodedata
 import urllib.parse
 from pathlib import Path
 
-from lotuspod import core, machine
+from lotuspod import core
+from lotuspod.features.agents import machine
 from lotuspod.features.serve import api
 from lotuspod.features.comments import comments
 from lotuspod.features.publish import media

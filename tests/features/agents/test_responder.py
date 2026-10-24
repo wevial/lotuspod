@@ -4,11 +4,11 @@ with no kept source, which command runs, the loop and its stop, a
 credential without publish, and the systemd unit that runs it.
 
 serve runs as a subprocess with the test Access key trusted, as in
-tests.test_responder_witness; the agent commands are stand-in scripts.
+tests.features.agents.test_responder_witness; the agent commands are stand-in scripts.
 
 Run from the repo root:
 
-    python -m unittest tests.test_responder -v
+    python -m unittest tests.features.agents.test_responder -v
 """
 
 from __future__ import annotations
@@ -30,17 +30,18 @@ import unittest
 import urllib.request
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "src"))
 
-from lotuspod import core, responder  # noqa: E402
+from lotuspod import core  # noqa: E402
+from lotuspod.features.agents import responder  # noqa: E402
 from lotuspod.features.serve import api  # noqa: E402
 from lotuspod.features.decisions import decisions  # noqa: E402
 from lotuspod.features.publish import media  # noqa: E402
 from lotuspod.store.db import Database  # noqa: E402
-from tests.test_responder_witness import (  # noqa: E402
+from tests.features.agents.test_responder_witness import (  # noqa: E402
     ASSERTION, REPO, READER, Site, assertion, git)
 
-MEDIA_FIXTURES = Path(__file__).resolve().parent / "fixtures" / "media"
+MEDIA_FIXTURES = Path(__file__).resolve().parents[2] / "fixtures" / "media"
 
 ORPHAN = """\
 # Orphan page

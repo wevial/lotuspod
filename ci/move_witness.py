@@ -140,6 +140,7 @@ class Tree:
         they run, so it is written there for the listing too."""
         css = self.root / "src" / "lotuspod" / "_theme" / "lotuspod.css"
         kept = css.read_bytes() if css.exists() else None
+        css.parent.mkdir(parents=True, exist_ok=True)
         css.write_bytes(stylesheet)
         titles: collections.Counter = collections.Counter()
         try:

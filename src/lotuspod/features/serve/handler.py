@@ -17,7 +17,7 @@ from http import HTTPStatus
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from lotuspod import routing
+from lotuspod.features.agents import routing
 from lotuspod.core import INDEX_FILE, OLD_VERSION_SCRIPT, WIDGET_NAME, is_page_name, theme_hash
 from lotuspod.features.history import archive, versions
 from lotuspod.features.live import events as event_streams

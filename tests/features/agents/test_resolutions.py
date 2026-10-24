@@ -3,12 +3,12 @@ with `lotuspod comments resolve|reopen` on serve's socket, its audit rows,
 who may, the database a version before, and the commands' help.
 
 serve runs on a thread with the test Access key trusted, as in
-tests.test_claims; the reader posts over its port and agents use the
+tests.features.agents.test_claims; the reader posts over its port and agents use the
 commands.
 
 Run from the repo root:
 
-    python -m unittest tests.test_resolutions -v
+    python -m unittest tests.features.agents.test_resolutions -v
 """
 
 from __future__ import annotations
@@ -21,12 +21,12 @@ import tempfile
 import unittest
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "src"))
 
-from lotuspod import machine  # noqa: E402
+from lotuspod.features.agents import machine  # noqa: E402
 from lotuspod.store import db  # noqa: E402
-from tests.test_agent_pull import READER, run_cli  # noqa: E402
-from tests.test_claims import ClaimTestCase  # noqa: E402
+from tests.features.agents.test_agent_pull import READER, run_cli  # noqa: E402
+from tests.features.agents.test_claims import ClaimTestCase  # noqa: E402
 from tests.test_cli_surface import run_lotuspod  # noqa: E402
 
 STAMP = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$")

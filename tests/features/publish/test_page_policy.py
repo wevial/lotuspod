@@ -40,7 +40,7 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 
 # The head's theme script (theme-head.js), which every artifact page carries
 # inline and its policy allows by hash.
-THEME_HEAD = (REPO_ROOT / "src" / "lotuspod" / "_theme" / "theme-head.js").read_text(encoding="utf-8")
+THEME_HEAD = (REPO_ROOT / "src" / "lotuspod" / "core" / "ts" / "theme-head.js").read_text(encoding="utf-8")
 
 INLINE_SCRIPT = '<script>document.title = "ran";</script>'
 REMOTE_SCRIPT = '<script src="https://scripts.example.com/widget.js"></script>'

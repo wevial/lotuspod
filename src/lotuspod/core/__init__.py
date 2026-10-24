@@ -577,7 +577,7 @@ THEME_SOURCES = {
         "features/index/theme/pod-finder.css",
         "features/history/theme/versions.css",
         "features/history/theme/archive.css",
-        "_theme/css/theme-switch.css",
+        "core/theme/theme-switch.css",
     ),
     PAGE_SCRIPT: (
         "features/publish/ts/open-in-tabs.js",

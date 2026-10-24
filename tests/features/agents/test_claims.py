@@ -4,12 +4,12 @@ the reply's page revision, the `claimed`, `answered` and `failed` states, and
 `lotuspod audit`.
 
 serve runs on a thread with the test Access key trusted, as in
-tests.test_agent_pull; the reader posts over its port and agents use the
+tests.features.agents.test_agent_pull; the reader posts over its port and agents use the
 commands.
 
 Run from the repo root:
 
-    python -m unittest tests.test_claims -v
+    python -m unittest tests.features.agents.test_claims -v
 """
 
 from __future__ import annotations
@@ -27,12 +27,12 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "src"))
 
-from lotuspod import machine  # noqa: E402
+from lotuspod.features.agents import machine  # noqa: E402
 from lotuspod.features.publish import media  # noqa: E402
 from lotuspod.store import db  # noqa: E402
-from tests.test_agent_pull import (  # noqa: E402
+from tests.features.agents.test_agent_pull import (  # noqa: E402
     CHART, FISH, MEDIA_FIXTURES, PLAN, READER, PullTestCase, run_cli,
 )
 

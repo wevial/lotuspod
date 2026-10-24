@@ -58,13 +58,13 @@ The pictures come from a sample page served on loopback by the test fixture;
 ```
 lotuspod/
 ├── src/lotuspod/          # package + CLI (`lotuspod render|publish|manifest|index|serve|credential|answers|audit|comments|inbox|respond|backup|restore|archive|unarchive`)
-│   ├── cli.py             # the entry point: the commands
+│   ├── cli/               # the entry point: the root parser and each slice's commands
 │   ├── core/              # what every part shares (imports nothing else in Lotuspod)
 │   │   ├── templates/artifact.html  # artifact template ({{placeholder}} substitution)
-│   │   ├── theme/         # tokens.json (colors, fonts, radii), base.css, favicon.svg
-│   │   └── ts/            # the scripts every page script shares: shared.js, link-tab.js
+│   │   ├── theme/         # tokens.json (colors, fonts, radii), base.css, favicon.svg, theme-switch.css
+│   │   └── ts/            # the scripts every page script shares: shared.js, link-tab.js; theme-head.js
 │   ├── store/db.py        # serve's database
-│   ├── features/          # the feature slices, filled one move at a time: Python at a slice's root, ts/, theme/, templates/
+│   ├── features/          # the feature slices: Python at a slice's root, ts/, theme/, templates/; the served lotuspod.css is core/theme/ and the slices' theme/ joined in order
 │   │   ├── publish/       # render, the manifest and publish (`render`, `manifest`, `publish`); markdown, images and sections
 │   │   ├── blocks/        # body blocks: reference cards, node tables, calltrees, diagrams, tables, the image viewer
 │   │   ├── widgets/       # live blocks and the browser libraries they load
@@ -74,8 +74,8 @@ lotuspod/
 │   │   ├── decisions/     # a page's decision tables, answered on the page (`answers`)
 │   │   ├── live/          # serve's change stream and the page's live scripts: revision checks, the swap, the index's refresh
 │   │   ├── serve/         # `serve`: its allow-list and handler, the /api routes and the Cloudflare Access check
-│   │   └── backup/        # `backup` and `restore`
-│   └── _theme/            # css/, theme-head.js; the served lotuspod.css is core/theme/base.css, css/ and the slices' theme/ joined in order
+│   │   ├── backup/        # `backup` and `restore`
+│   │   └── agents/        # machine credentials, the agents' pull, the default responder, routing (`credential`, `audit`, `comments`, `inbox`, `respond`)
 ├── artifacts/             # rendered output (gitignored)
 └── lotuspod-media/        # markdown pages' images and the images readers attach to comments, beside artifacts/ (gitignored)
 ```

@@ -179,7 +179,7 @@
     });
   }
 
-  // A row as a route shows it (lotuspod.routing.public): a reader's routed
+  // A row as a route shows it (lotuspod.features.agents.routing.public): a reader's routed
   // to demo-agent, an agent's to no one.
   function shown(entry) {
     var copy = JSON.parse(JSON.stringify(entry));
@@ -226,7 +226,7 @@
     }
   }
 
-  // The page's threads as lotuspod.routing.threads answers them.
+  // The page's threads as lotuspod.features.agents.routing.threads answers them.
   function threads(page, stored) {
     return stored.rows.filter(function (entry) { return entry.parent === null; }).map(function (root) {
       return {

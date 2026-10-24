@@ -92,7 +92,8 @@ from contextlib import contextmanager, redirect_stderr, redirect_stdout
 from pathlib import Path
 from typing import Collection, Iterator
 
-from lotuspod import agents, core, machine, routing
+from lotuspod import core
+from lotuspod.features.agents import agents, machine, routing
 from lotuspod.features.serve import api, serve_files
 from lotuspod.features.comments import comments
 from lotuspod.features.publish import media, publish

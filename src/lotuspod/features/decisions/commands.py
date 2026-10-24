@@ -8,7 +8,7 @@ import json
 import sys
 from pathlib import Path
 
-from lotuspod import agents
+from lotuspod.features.agents import agents
 from lotuspod.core import DEFAULT_OUTPUT_DIR
 from lotuspod.features.decisions import decisions
 from lotuspod.features.publish.publish import _PAGE_NAME

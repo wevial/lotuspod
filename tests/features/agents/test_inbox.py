@@ -4,13 +4,13 @@ in the thread, decision answers waiting in it until acknowledged, and the
 migration that adds its table.
 
 serve runs on a thread with the test Access key trusted, as in
-tests.test_agent_pull; the reader posts over its port, the responder's
+tests.features.agents.test_agent_pull; the reader posts over its port, the responder's
 queueing is stood in for by the database's own queue(), and the owner's
 sessions use the commands.
 
 Run from the repo root:
 
-    python -m unittest tests.test_inbox -v
+    python -m unittest tests.features.agents.test_inbox -v
 """
 
 from __future__ import annotations
@@ -23,12 +23,12 @@ import time
 import unittest
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "src"))
 
-from lotuspod import agents, machine  # noqa: E402
+from lotuspod.features.agents import agents, machine  # noqa: E402
 from lotuspod.features.decisions import decisions  # noqa: E402
 from lotuspod.store import db  # noqa: E402
-from tests.test_agent_pull import PLAN, READER, PullTestCase, run_cli  # noqa: E402
+from tests.features.agents.test_agent_pull import PLAN, READER, PullTestCase, run_cli  # noqa: E402
 
 
 class InboxTestCase(PullTestCase):

@@ -5,7 +5,7 @@ refusals, the socket file's life, and the agents page's word on the limit.
 
 Run from the repo root:
 
-    python -m unittest tests.test_machine -v
+    python -m unittest tests.features.agents.test_machine -v
 """
 
 from __future__ import annotations
@@ -29,15 +29,16 @@ from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest import mock
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "src"))
 
-from lotuspod import agents, cli, core, machine  # noqa: E402
+from lotuspod import cli, core  # noqa: E402
+from lotuspod.features.agents import agents, machine  # noqa: E402
 from lotuspod.features.serve import commands as serve_commands, handler as serve_handler  # noqa: E402
 from lotuspod.features.publish import media  # noqa: E402
 from lotuspod.store import db  # noqa: E402
 from tests import access_keys as keys  # noqa: E402
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[3]
 HOST = "127.0.0.1"
 
 

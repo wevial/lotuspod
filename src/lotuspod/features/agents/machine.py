@@ -61,7 +61,7 @@ same items come back until they are claimed or acknowledged. The pull is
 the only way a page's kept source leaves the host's files.
 
 An inbox item is what the responder queued for a page's owner from a
-reader's comment it answered (lotuspod.responder): a reply's `ask`, 1 to
+reader's comment it answered (lotuspod.features.agents.responder): a reply's `ask`, 1 to
 MAX_ASK characters, goes into the page owner's inbox in the reply's own
 transaction, so a refused reply queues nothing, and a page with no owner
 queues nothing. An item is {kind: ask, id, owner, ask, createdAt,
@@ -204,7 +204,8 @@ from http import HTTPStatus
 from pathlib import Path
 from typing import Callable, Mapping
 
-from lotuspod import routing, store
+from lotuspod import store
+from lotuspod.features.agents import routing
 from lotuspod.features.serve import api
 from lotuspod.features.publish import media
 from lotuspod.features.widgets import widgets

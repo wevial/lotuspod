@@ -32,7 +32,7 @@ import urllib.request
 from html.parser import HTMLParser
 from pathlib import Path
 
-REPO = Path(__file__).resolve().parents[1]
+REPO = Path(__file__).resolve().parents[3]
 SRC = REPO / "src"
 TIMEOUT = 120
 ISSUER = "https://witness.cloudflareaccess.com"

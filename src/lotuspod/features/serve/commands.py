@@ -11,8 +11,8 @@ import threading
 from functools import partial
 from pathlib import Path
 
-from lotuspod import machine, routing
-from lotuspod.agents import configured_socket
+from lotuspod.features.agents import machine, routing
+from lotuspod.features.agents.agents import configured_socket
 from lotuspod.core import (DEFAULT_OUTPUT_DIR, INDEX_FILE, ConfigError, config_path,
                            config_section, sync_theme_css)
 from lotuspod.features.publish import media

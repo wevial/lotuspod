@@ -35,7 +35,8 @@ from tests.features.history.test_versions_witness import VersionsWitness
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "src"))
 
-from lotuspod import cli, machine  # noqa: E402
+from lotuspod import cli  # noqa: E402
+from lotuspod.features.agents import machine  # noqa: E402
 from lotuspod.features.serve import api  # noqa: E402
 from lotuspod.features.serve import commands as serve_commands, handler as serve_handler  # noqa: E402
 from lotuspod.features.decisions import decisions  # noqa: E402

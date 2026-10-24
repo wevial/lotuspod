@@ -1,9 +1,8 @@
 """Test suite for the theme's sources: the stylesheet, the page script, the
 index script and the old-version script are written as one source file per
 feature
-(src/lotuspod/_theme/css/, the shared ones in
-src/lotuspod/core/theme/ and src/lotuspod/core/ts/, and a slice's in its
-features/SLICE/theme/ and features/SLICE/ts/), and render joins each
+(the shared ones in src/lotuspod/core/theme/ and src/lotuspod/core/ts/, and
+a slice's in its features/SLICE/theme/ and features/SLICE/ts/), and render joins each
 served file's sources in the order core.THEME_SOURCES declares into the one
 file serve answers. The page script and the old-version script each run as
 one strict function: the join opens it before their shared sources and
@@ -32,11 +31,12 @@ from lotuspod.features.serve import serve_files  # after test_manifest_v2, which
 
 STYLESHEET = "lotuspod.css"
 # The files under the package that are only declared sources.
-SOURCE_GLOBS = ("_theme/css/**/*", "core/ts/**/*.js", "core/theme/*.css",
-                "features/*/ts/**/*.js", "features/*/theme/*.css")
+SOURCE_GLOBS = ("core/ts/**/*.js", "core/theme/*.css", "features/*/ts/**/*.js",
+                "features/*/theme/*.css")
 # The files those globs match that are no source of a joined file: the widget
-# frame's bridge, which widgets.py writes into each widget's own document.
-NOT_JOINED = {"features/widgets/ts/widget-frame.js"}
+# frame's bridge, which widgets.py writes into each widget's own document, and
+# the head script, which render inlines in each page's head.
+NOT_JOINED = {"features/widgets/ts/widget-frame.js", "core/ts/theme-head.js"}
 
 
 # The closure the join wraps the page script's and the old-version script's
@@ -324,11 +324,11 @@ class DeclaredOrderTests(ThemeCopyTestCase):
 
     def test_a_source_not_in_the_declared_order_is_named(self):
         theme = self.theme_copy()
-        (theme / "_theme" / "css" / "stray.css").write_text(".stray {}\n", encoding="utf-8")
+        (theme / "core" / "theme" / "stray.css").write_text(".stray {}\n", encoding="utf-8")
         (theme / "core" / "ts" / "stray.js").write_text("// stray\n", encoding="utf-8")
         problems = source_problems(theme, core.THEME_SOURCES)
         self.assertEqual(len(problems), 2, problems)
-        self.assertTrue(problems[0].startswith("_theme/css/stray.css: "), problems)
+        self.assertTrue(problems[0].startswith("core/theme/stray.css: "), problems)
         self.assertTrue(problems[1].startswith("core/ts/stray.js: "), problems)
 
     def test_a_declared_source_not_on_disk_is_named(self):
@@ -344,7 +344,7 @@ class DeclaredOrderTests(ThemeCopyTestCase):
 
     def test_a_new_source_takes_one_line_in_the_declared_order(self):
         theme = self.theme_copy()
-        new = "_theme/css/pond.css"
+        new = "core/theme/pond.css"
         rule = b"\n.pond {\n  color: var(--color-sky);\n}\n"
         (theme / new).write_bytes(rule)
         declared = dict(core.THEME_SOURCES)

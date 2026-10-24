@@ -10,7 +10,7 @@ over its port with assertions from that key, and agents use the commands.
 
 Run from the repo root:
 
-    python -m unittest tests.test_agent_pull -v
+    python -m unittest tests.features.agents.test_agent_pull -v
 """
 
 from __future__ import annotations
@@ -32,15 +32,16 @@ from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest import mock
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "src"))
 
-from lotuspod import cli, core, machine, routing, store  # noqa: E402
+from lotuspod import cli, core, store  # noqa: E402
+from lotuspod.features.agents import machine, routing  # noqa: E402
 from lotuspod.features.serve import api, commands as serve_commands, handler as serve_handler  # noqa: E402
 from lotuspod.features.decisions import decisions  # noqa: E402
 from lotuspod.features.publish import media  # noqa: E402
 from tests import access_keys as keys  # noqa: E402
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[3]
 HOST = "127.0.0.1"
 READER = {"kind": "human", "email": keys.EMAIL}
 # The reader as the page's routes show them.
@@ -86,7 +87,7 @@ What each new reader is sent.
 
 LOOSE = "# Loose\n\nA page nobody owns.\n\n## One\n\nFirst.\n\n## Two\n\nSecond.\n"
 
-MEDIA_FIXTURES = Path(__file__).resolve().parent / "fixtures" / "media"
+MEDIA_FIXTURES = Path(__file__).resolve().parents[2] / "fixtures" / "media"
 CHART = MEDIA_FIXTURES / "chart-1600x600.png"
 FISH = MEDIA_FIXTURES / "fish-320x240.jpg"
 
