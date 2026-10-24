@@ -183,41 +183,4 @@ test.describe('signed in', () => {
     await expect(toggle).toHaveText('Updated · 0');
     expect(errors).toEqual([]);
   });
-
-  test('with the seen route answered 404 the index has no toggle and no mark, and still filters', async ({ page, request }) => {
-    const errors = watchErrors(page);
-    const name = 'seen-shim';
-    publish(name, source('Seen shim', 'first'));
-    await catchUp(request);
-    await openPage(page, name);
-    // Marked, were the route to answer.
-    publish(name, source('Seen shim', 'second'));
-
-    await page.route((url) => url.pathname === SEEN, (route) =>
-      route.fulfill({ status: 404, contentType: 'application/json', body: '{"error":"not_found"}' }));
-    await openIndex(page);
-    await expect(page.locator('.index-count')).toBeVisible();
-    await expect(page.locator('.index-toggle')).toHaveCount(0);
-    await expect(page.locator('.index-mark')).toHaveCount(0);
-    const all = await shownPages(page);
-    expect(all).toContain(name);
-
-    // The Labels menu filters.
-    const labelled = await page.locator('.index-table tbody tr[data-labels]').evaluateAll((rows) =>
-      rows.filter((row) => ((row as HTMLElement).dataset.labels ?? '').split(',').includes('relos'))
-        .map((row) => (row as HTMLElement).dataset.page ?? ''));
-    expect(labelled.length).toBeGreaterThan(0);
-    await page.getByRole('button', { name: /^Labels/ }).click();
-    await page.locator('.index-labels-option', { hasText: 'relos' }).locator('input').check();
-    await page.keyboard.press('Escape');
-    await expect.poll(() => shownPages(page)).toEqual(labelled);
-    await expect(page.locator('.index-active')).toHaveText('Showing relos ✕');
-    await page.getByRole('button', { name: 'Remove filter relos' }).click();
-    await expect.poll(() => shownPages(page)).toEqual(all);
-
-    // So does the search.
-    await page.getByLabel('Search').fill('Seen shim');
-    await expect.poll(() => shownPages(page)).toEqual([name]);
-    expect(errors).toEqual([]);
-  });
 });

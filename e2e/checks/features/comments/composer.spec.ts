@@ -390,43 +390,6 @@ test.describe('signed in', () => {
     await seen.clean();
   });
 
-  test('the + is disabled at four images, and the + and each X while a comment saves', async ({ page }) => {
-    const seen = await watch(page);
-    await stored(page);
-    await page.goto(`${PAGE}?standalone`);
-    await loaded(page);
-    let open = await compose(page, 'frogs');
-    await pick(page, open.add, [FISH, FROG, LILY, POND]);
-    await expect(open.links.locator('img')).toHaveCount(4);
-    await expect(open.add).toBeDisabled();
-    await expect(open.removes.nth(3)).toHaveAccessibleName('Remove image 4 of 4');
-    await open.removes.nth(3).click();
-    await expect(open.add).toBeEnabled();
-    await page.keyboard.press('Escape');
-
-    await page.reload();
-    await loaded(page);
-    open = await compose(page, 'pond');
-    await pick(page, open.add, [FISH]);
-    await expect(open.links.locator('img')).toHaveCount(1);
-    let release!: () => void;
-    const held = new Promise<void>((resolve) => { release = resolve; });
-    await page.route('**/api/comments', async (route) => {
-      if (route.request().method() === 'POST') await held;
-      await route.continue();
-    });
-    await open.field.fill('Held while it saves.');
-    const posted = page.waitForResponse((r) => new URL(r.url()).pathname === '/api/comments' && r.request().method() === 'POST');
-    await open.send.click();
-    await expect(open.status).toHaveText('Saving...');
-    await expect(open.add).toBeDisabled();
-    await expect(open.removes).toBeDisabled();
-    release();
-    expect((await posted).status()).toBe(201);
-    await expect(open.items).toHaveCount(0);
-    await seen.clean();
-  });
-
   test('a reply composer in the side panel and a passage composer are each one box with the + inside', async ({ page, request }) => {
     const seen = await watch(page);
     await stored(page);

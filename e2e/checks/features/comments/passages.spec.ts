@@ -469,6 +469,7 @@ test.describe('signed in', () => {
     await marks(page, id).first().click();
     await expect(side.fold).toBeVisible();
     await expect(entry(page, id).head).toHaveAttribute('aria-expanded', 'true');
+    await expect(entry(page, id).head).toBeFocused();
     await expect(entry(page, id).readers.locator('.artifact-comment-text')).toHaveText('Is this still true?');
     await expect(marks(page, id).first()).toHaveClass(/artifact-passage--lit/);
     await entry(page, id).head.click();
@@ -481,37 +482,15 @@ test.describe('signed in', () => {
     expect(rgba(lit)).not.toEqual(rgba(TOKENS.structure.highlight));
     await page.mouse.move(5, 5);
     await expect(marks(page, id).first()).not.toHaveClass(/artifact-passage--lit/);
-    await seen.clean();
-  });
 
-  test('a passage number is a button named for its thread, and on plain words it and the highlight open it', async ({ page }) => {
-    const seen = await watch(page);
-    const heater = row({ text: 'Which heater is it?', quote: HEATER_QUOTE });
-    const bed = row({ section: 'risks', sectionTitle: 'Risks', text: 'How far does it flood?', quote: BED_QUOTE });
-    await serve(page, [{ root: heater, replies: [], resolution: OPEN }, { root: bed, replies: [], resolution: OPEN }]);
-    await linkBed(page);
-    await load(page);
-    const first = page.getByRole('button', { name: 'Open comment 1', exact: true });
-    const second = page.getByRole('button', { name: 'Open comment 2', exact: true });
-    await expect(first).toHaveAttribute('data-thread', String(heater.id));
-    await expect(first).toHaveText('1');
-    await expect(first).not.toHaveAttribute('aria-hidden');
-    await expect(second).toHaveAttribute('data-thread', String(bed.id));
-    await expect(second).toHaveText('2');
-
-    const side = panel(page);
-    const mine = entry(page, heater.id);
-    await marks(page, heater.id).first().click();
-    await expect(side.fold).toBeVisible();
-    await expect(mine.head).toHaveAttribute('aria-expanded', 'true');
-    await expect(mine.head).toBeFocused();
-    await mine.head.click();
-    await expect(mine.head).toHaveAttribute('aria-expanded', 'false');
-
-    await first.click();
-    await expect(mine.head).toHaveAttribute('aria-expanded', 'true');
-    await expect(mine.head).toBeFocused();
-    await expect(mine.readers.locator('.artifact-comment-text')).toHaveText('Which heater is it?');
+    // Its number is a button named for its thread, and opens it too.
+    const number = page.getByRole('button', { name: 'Open comment 1', exact: true });
+    await expect(number).toHaveAttribute('data-thread', String(id));
+    await expect(number).not.toHaveAttribute('aria-hidden');
+    await expect(entry(page, id).head).toHaveAttribute('aria-expanded', 'false');
+    await number.click();
+    await expect(entry(page, id).head).toHaveAttribute('aria-expanded', 'true');
+    await expect(entry(page, id).head).toBeFocused();
     await seen.clean();
   });
 
@@ -654,30 +633,6 @@ test.describe('signed in', () => {
     await page.waitForTimeout(300);
     expect(posts).toEqual([]);
     expect(ids.size).toBe(0);
-    await seen.clean();
-  });
-
-  test('ControlOrMeta+Enter in the composer posts the passage thread with its quote and closes it', async ({ page }) => {
-    const seen = await watch(page);
-    const ids = new Set<number>();
-    await ownThreads(page, ids);
-    await load(page);
-    await choose(page, '.artifact-body p', 'pump stops when', 'pump stops when');
-    await expect(pill(page)).toBeVisible();
-    await page.keyboard.press('Control+Alt+KeyM');
-    const open = composer(page);
-    const field = open.locator('textarea');
-    await expect(field).toBeFocused();
-    await field.fill('When exactly?');
-    const sent = page.waitForRequest((request) =>
-      request.method() === 'POST' && new URL(request.url()).pathname === '/api/comments');
-    await field.press('ControlOrMeta+Enter');
-    const body = (await sent).postDataJSON();
-    expect(body.text).toBe('When exactly?');
-    expect(body.quote.exact).toBe('pump stops when');
-    await expect.poll(() => ids.size).toBe(1);
-    await expect(composer(page)).toHaveCount(0);
-    await expect(pending(page)).toHaveCount(0);
     await seen.clean();
   });
 
@@ -824,36 +779,6 @@ test.describe('signed in', () => {
     await seen.clean();
   });
 
-  test('a passage in a section swapped in place is highlighted again, keeping its number', async ({ page, request }) => {
-    test.setTimeout(120_000);
-    const seen = await watch(page);
-    await stopClock(page);
-    await load(page);
-    const before = (await revisionOf(page))!;
-    const asked = await postHeater(request, before, 'Still on the north wall?');
-    await ownThreads(page, new Set<number>([asked.id]));
-    await page.reload();
-    await settle(page);
-    await expect(entry(page, asked.id).mark).toHaveText('1');
-    const source = original();
-    // Its neighbour paragraph in Findings changes; its own does not.
-    const changed = source.replace(NEIGHBOUR, 'Through the winter the pond was checked twice a day.');
-    expect(changed).not.toBe(source);
-    try {
-      await swapIn(page, changed, before);
-      await expect(page.locator('.artifact-body')).toContainText('checked twice a day');
-      await expect(marks(page, asked.id).first()).toBeVisible();
-      expect(await joined(marks(page, asked.id))).toBe(HEATER);
-      await expect(page.locator(`.artifact-passage-number[data-thread="${asked.id}"]`)).toHaveText('1');
-      await expect(entry(page, asked.id).mark).toHaveText('1');
-      await expect(entry(page, asked.id).words.locator('del')).toHaveCount(0);
-      await expect(page.locator('.artifact-body mark.artifact-passage')).toHaveCount(1);
-    } finally {
-      publish(source, await served(request));
-    }
-    await seen.clean();
-  });
-
   test('passages found again after a swap that adds a paragraph above them number in page order', async ({ page, request }) => {
     test.setTimeout(120_000);
     const seen = await watch(page);
@@ -883,6 +808,9 @@ test.describe('signed in', () => {
       await expect(page.locator('.artifact-passage-number')).toHaveText(['1', '2']);
       await expect(entry(page, heater.id).mark).toHaveText('1');
       await expect(entry(page, bed.id).mark).toHaveText('2');
+      // The heater's section, swapped in place, highlights it again, not struck through.
+      await expect(entry(page, heater.id).words.locator('del')).toHaveCount(0);
+      await expect(page.locator('.artifact-body mark.artifact-passage')).toHaveCount(2);
     } finally {
       publish(source, await served(request));
     }

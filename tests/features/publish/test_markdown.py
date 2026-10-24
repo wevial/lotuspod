@@ -38,8 +38,10 @@ from html.parser import HTMLParser
 from pathlib import Path
 from unittest import mock
 
+# First: it puts this checkout's src/ at the front of sys.path for lotuspod.
 from tests.features.publish.test_manifest_v2 import SRC_DIR, TempDirTestCase, run_cli
 
+# isort: split
 from lotuspod import core
 from lotuspod.features.publish import media
 from lotuspod.features.publish.markdown import images, to_body, with_sources
@@ -569,7 +571,7 @@ class PublishedLinkTests(TempDirTestCase):
         proc = subprocess.run(
             [sys.executable, "-m", "lotuspod", "publish", str(source), "--local",
              "--out-dir", str(out), "--date", "2026-01-02"],
-            capture_output=True, text=True, timeout=60, cwd=str(self.out_dir),
+            capture_output=True, text=True, timeout=60, cwd=str(self.out_dir), check=False,
             env=dict(os.environ, PYTHONPATH=str(SRC_DIR),
                      LOTUSPOD_CONFIG=str(self.out_dir / "missing.ini"),
                      XDG_CONFIG_HOME=str(self.out_dir), HOME=str(self.out_dir)),
@@ -696,6 +698,8 @@ class RenderMarkdownTests(TempDirTestCase):
             ("entity", '<p><a href="https&#58;//example.com/body">elsewhere</a></p>\n', True),
             ("upper", "<p><A HREF='/\\example.com/body'>elsewhere</A></p>\n", True),
             ("anchorless", '<p><a name="x">no href</a></p>\n', False),
+            # Unlike "heading", its h2 carries an id.
+            ("plain", '<h2 id="a-section">A section</h2><p>Plain text.</p>', False),
         )
         cases = [(name, ("--markdown", "-"), source, loads) for name, source, loads in markdown]
         cases += [(name, ("--body", body), "", loads) for name, body, loads in html_bodies]
@@ -721,7 +725,7 @@ class RenderMarkdownTests(TempDirTestCase):
         proc = subprocess.run(
             [sys.executable, "-m", "lotuspod", "render", "--markdown", str(md),
              "--name", "big", "--title", "Big", "--out-dir", str(self.out_dir)],
-            capture_output=True, text=True, timeout=60,
+            capture_output=True, text=True, timeout=60, check=False,
             env=dict(os.environ, PYTHONPATH=str(SRC_DIR)), cwd=str(self.out_dir),
         )
         self.assertEqual(proc.returncode, 0, proc.stderr)
