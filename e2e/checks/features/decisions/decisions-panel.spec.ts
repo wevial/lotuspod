@@ -406,8 +406,8 @@ test('the title bar\'s count and the folded rail\'s orchid count open Decisions,
   await load(page, name, 'folded');
   const side = panel(page);
   // The title bar's count unfolds the panel on Decisions, the focus on the
-  // first question to answer; nothing of the review sheet's is drawn into
-  // the body, where its panel was.
+  // first question to answer; of the review sheet only the title bar, the
+  // outline and the heading marks are drawn, no panel of its own.
   const count = page.locator('button.artifact-review-count');
   await expect(count).toHaveText('3 to answer');
   await expect(side.decisions).toBeHidden();
@@ -416,7 +416,9 @@ test('the title bar\'s count and the folded rail\'s orchid count open Decisions,
   await expect(side.decisions).toBeVisible();
   await expect(side.tab('Decisions')).toHaveAttribute('aria-selected', 'true');
   await expect(entry(page, 'decision-1').question).toBeFocused();
-  await expect(page.locator('body > [class*="artifact-review"]')).toHaveCount(0);
+  expect(await page.locator('[class*="artifact-review-"]').evaluateAll((nodes) => nodes.flatMap((node) =>
+    [...node.classList].filter((name) => name.startsWith('artifact-review-')
+      && !/^artifact-review-(bar|count(--done)?|dot|hidden|next(-\w+)?|open|outline(-number)?)$/.test(name))))).toEqual([]);
   await side.fold.click();
 
   await expect(side.toAnswer).toBeVisible();
