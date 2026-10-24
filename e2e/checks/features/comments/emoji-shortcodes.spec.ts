@@ -130,12 +130,7 @@ test.describe('signed in', () => {
     const seen = await watch(page);
     await page.goto(`${PAGE}?standalone`);
     await loaded(page);
-    const aside = page.locator('aside.artifact-comments-panel');
-    await aside.getByRole('button', { name: 'Comments', exact: true }).click();
-    await aside.getByRole('button', { name: 'Comment on a section' }).click();
-    await aside.getByRole('listbox', { name: 'Sections' }).getByRole('option', { name: 'Pond' }).click();
-    const field = aside.getByLabel('Comment on Pond');
-    await expect(field).toBeFocused();
+    const field = await panelComposer(page, 'Pond');
     await field.pressSequentially('Looks great :tad');
     await expect(field).toHaveValue('Looks great :tad');
 
@@ -401,11 +396,7 @@ test.describe('signed in', () => {
     const theme = /[?&]v=([^&#]*)/.exec((await page.locator('link[rel="stylesheet"][href*="?v="]').getAttribute('href'))!)![1];
     expect(theme).toMatch(/^[0-9a-f]{12}$/);
     const aside = page.locator('aside.artifact-comments-panel');
-    await aside.getByRole('button', { name: 'Comments', exact: true }).click();
-    await aside.getByRole('button', { name: 'Comment on a section' }).click();
-    await aside.getByRole('listbox', { name: 'Sections' }).getByRole('option', { name: 'Pond' }).click();
-    const field = aside.getByLabel('Comment on Pond');
-    await expect(field).toBeFocused();
+    const field = await panelComposer(page, 'Pond');
     await field.pressSequentially('Pond');
     await page.waitForTimeout(300);
     expect(asked).toEqual([]);
