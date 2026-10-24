@@ -36,10 +36,12 @@ ALONE_HEADERS = (
 ALONE_QUERY = 'alone'
 
 
-def alone_page(filename: str, query: str) -> bytes:
+def alone_page(filename: str, query: str = '') -> bytes:
     """The page answering a widget file opened in a tab: one sandboxed frame
-    of the same file (query: its own, without the ?) filling the window."""
-    src = filename + '?' + (query + '&' if query else '') + ALONE_QUERY
+    of the same file (query: its own, without the ?) filling the window. The
+    frame's address is from the site's root: a tab's address may end in a /
+    that serve ignores, and a relative one would resolve beneath it."""
+    src = '/' + filename + '?' + (query + '&' if query else '') + ALONE_QUERY
     return ('<!doctype html><html><head><meta charset="utf-8">'
             f'<title>{html.escape(filename)}</title>'
             '<style>:root { color-scheme: dark; } html, body { margin: 0; height: 100%; } '

@@ -73,7 +73,7 @@ class WidgetVersionsTests(VersionsWitness):
             self.assertIn("frame-ancestors 'none'", headers['Content-Security-Policy'])
             (frame,) = parse(data.decode()).find('iframe')
             self.assertEqual(frame.attrs['sandbox'], 'allow-scripts')
-            self.assertEqual(self.get('/' + frame.attrs['src'])[::2],
+            self.assertEqual(self.get(frame.attrs['src'])[::2],
                              (200, original))
             self.assertFalse((self.out / filename).exists())
 

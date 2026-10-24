@@ -4,6 +4,7 @@ import json
 import subprocess
 import threading
 import urllib.error
+import urllib.parse
 import urllib.request
 from html.parser import HTMLParser
 from unittest.mock import patch
@@ -332,7 +333,11 @@ class WidgetTests(TempDirTestCase):
         self.assertEqual(len(frames), 1)
         self.assertEqual(frames[0].get('sandbox'), 'allow-scripts')
         self.assertIn(frame['src'], frames[0].get('src', ''))
-        with urllib.request.urlopen(url + frames[0]['src']) as response:
+        # The frame's address holds from a tab whose address ends in a /.
+        request = urllib.request.Request(url + frame['src'] + '/', headers={'Sec-Fetch-Dest': 'document'})
+        with urllib.request.urlopen(request) as response:
+            (inner,) = Elements(response.read().decode()).of('iframe')
+        with urllib.request.urlopen(urllib.parse.urljoin(url + frame['src'] + '/', inner['src'])) as response:
             self.assertEqual(response.read(), (self.out_dir / frame['src']).read_bytes())
         for headers in ({'Sec-Fetch-Dest': 'iframe'}, {}):
             request = urllib.request.Request(url + frame['src'], headers=headers)
