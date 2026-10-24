@@ -1,0 +1,22 @@
+{
+  "features/agents/test_agent_pull.py": 47.9,
+  "features/agents/test_agent_pull_witness.py": 9.8,
+  "features/agents/test_claims.py": 56.5,
+  "features/agents/test_inbox.py": 18.7,
+  "features/agents/test_responder.py": 87.7,
+  "features/agents/test_responder_witness.py": 9.7,
+  "features/history/test_archive.py": 17.5,
+  "features/history/test_versions_witness.py": 8.8,
+  "features/publish/test_publish.py": 9.6,
+  "features/publish/test_publish_remote.py": 11.0,
+  "features/serve/test_access.py": 12.3,
+  "features/serve/test_api.py": 45.2,
+  "features/serve/test_api_catalog.py": 19.9,
+  "features/serve/test_seen.py": 9.5,
+  "test_activity_witness.py": 27.7,
+  "test_capture_site.py": 55.8,
+  "test_changes_witness.py": 9.8,
+  "test_live_pages.py": 8.1,
+  "test_unread.py": 13.6,
+  "test_widget_anchors.py": 20.7
+}
