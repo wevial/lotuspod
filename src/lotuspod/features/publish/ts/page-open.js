@@ -445,15 +445,16 @@
     }
 
     // Draw a section's mark: "changed", "N new", "N to answer" or several,
-    // only while it is folded and something waits. A question waits once the answers are
-    // read while its form is not folded to a saved answer.
+    // only while it is folded and something waits. A question waits once the
+    // answers are read while the decisions island marks its form to answer
+    // (artifact-decision--to-answer), as every other count of it does.
     function tally(section) {
       var parts = section.changed ? ["changed"] : [];
       if (section.fresh) {
         parts.push(section.fresh + " new");
       }
       var open = answered ? all("form.artifact-decision", section.wrapper).filter(function (form) {
-        return !form.classList.contains("artifact-decision--saved");
+        return form.classList.contains("artifact-decision--to-answer");
       }).length : 0;
       if (open) {
         parts.push(open + " to answer");

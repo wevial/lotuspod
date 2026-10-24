@@ -262,6 +262,11 @@ test('every question with no saved answer is to answer, in the title bar, the ma
   await expect(threads.locator('.artifact-comments-groups .artifact-comments-group-title',
     { hasText: 'Screenshots on a row' })).toBeVisible();
   await expect(threads.getByRole('button', { name: 'Comment on a section' })).toBeVisible();
+  // The tab's badge counts the open threads; the count line is read, not
+  // shown, so the ways to start a thread sit right under the tabs.
+  const tally = threads.locator('.artifact-comments-tally');
+  await expect(tally.locator('.artifact-comments-count')).toHaveText('1 open · 0 resolved');
+  expect(await tally.evaluate((node) => node.getBoundingClientRect().height)).toBe(0);
   expect(errors).toEqual([]);
 });
 
@@ -467,5 +472,26 @@ test('at the panel\'s narrowest both tabs sit clear of the fold', async ({ page,
   await side.tab('Comments').click({ position: { x: comments.width - 2, y: comments.height / 2 } });
   await expect(side.tab('Comments')).toHaveAttribute('aria-selected', 'true');
   await expect(side.groups).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
+test('a folded heading counts a saved question reopened by its change as answered, as every count does', async ({ page, request }) => {
+  test.setTimeout(90_000);
+  test.skip(test.info().repeatEachIndex > 0, 'answers a page the first repeat answered');
+  const name = 'decisions-panel-folded';
+  await prepare(request, name);
+  const errors = watch(page);
+  await load(page, name);
+  const side = panel(page);
+  const own = card(page, 'decision-1');
+  await own.option('Beside the title').check();
+  await own.save.click();
+  await expect(own.saved).toHaveText('✓ Saved · Beside the title · change');
+  await own.form.locator('.artifact-decision-change').click();
+  await expect(own.option('Beside the title')).toBeVisible();
+  await page.locator('h2#pull-request-rows button.artifact-section-toggle').click();
+  await expect(page.locator('h2#pull-request-rows .artifact-section-mark:not([hidden])')).toHaveText('1 to answer');
+  await expect(page.locator('button.artifact-review-count')).toHaveText('2 to answer · Respond');
+  await expect(side.badge('Decisions')).toHaveText('2');
   expect(errors).toEqual([]);
 });

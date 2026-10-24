@@ -74,9 +74,24 @@
   margin-bottom: 0.35rem;
 }
 
-/* The Comments tab's counts, at the top of its panel. */
+/* The Comments tab's counts: the tab's badge shows the open threads, so the
+   count line is for screen readers alone (the rail's opener is described by
+   it), and the row shows only while there is a Show resolved to offer. */
 .artifact-comments-start > .artifact-comments-tally {
   margin: 0 0 0.35rem;
+}
+
+.artifact-comments-start > .artifact-comments-tally:not(:has(.artifact-comments-show-resolved:not([hidden]))) {
+  margin: 0;
+}
+
+.artifact-comments-start > .artifact-comments-tally > .artifact-comments-count {
+  clip-path: inset(50%);
+  height: 1px;
+  overflow: hidden;
+  position: absolute;
+  white-space: nowrap;
+  width: 1px;
 }
 
 /* The Comments tab's panel, the start controls over the threads, lays them

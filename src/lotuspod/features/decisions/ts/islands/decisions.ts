@@ -236,6 +236,14 @@ export function decisions(page: Page): Cards | null {
     saved: (form) => saved(cardOf(form)),
     dirty: (form) => dirty(cardOf(form)),
   };
+  // Each form marked to answer, for the folded headings' count, which no
+  // island draws.
+  effect(() => {
+    marked.value;
+    untracked(() => {
+      for (const form of forms) form.classList.toggle("artifact-decision--to-answer", toAnswer(form));
+    });
+  });
   // The Decisions tab, on a page that takes answers.
   decisionsPanel({ forms, marked, ready, save, toAnswer, saved: reading.saved, dirty: reading.dirty },
     () => forms.length > 0 && !page.archived);
