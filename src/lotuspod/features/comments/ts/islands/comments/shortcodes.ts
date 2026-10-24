@@ -7,7 +7,7 @@
 export type Table = Readonly<Record<string, string>>;
 
 // The most shortcodes a fragment lists.
-export const LIMIT = 8;
+const LIMIT = 8;
 // The characters of a shortcode's name.
 const NAME = /[a-z0-9_+-]/;
 // What may stand before a shortcode's opening colon, besides the start of
@@ -26,12 +26,12 @@ export function fragment(text: string, caret: number): { start: number; query: s
 }
 
 // The shortcodes in table matching query: those starting with it, then those
-// only containing it, each in alphabetical order, at most limit.
-export function matches(table: Table, query: string, limit = LIMIT): string[] {
+// only containing it, each in alphabetical order, at most LIMIT.
+export function matches(table: Table, query: string): string[] {
   const names = Object.keys(table).sort();
   const starting = names.filter(name => name.startsWith(query));
   const containing = names.filter(name => !name.startsWith(query) && name.includes(query));
-  return [...starting, ...containing].slice(0, limit);
+  return [...starting, ...containing].slice(0, LIMIT);
 }
 
 // The text with the shortcode a colon just typed before caret closes made
