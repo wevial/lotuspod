@@ -776,13 +776,12 @@ test('an empty panel Ask posts nothing, and the card\'s Ask still sends and empt
   await expect(three.askField).toHaveValue('Does Esc close it? And a click outside?');
 
   // Saved while its Ask holds an unsent question with a send still pending,
-  // the question still moves to Answered; its collapsed row holds no Ask,
-  // and opened, it carries the field, text, pending send and all, until the
-  // question is sent or cancelled.
+  // the question still moves to Answered. Its row has no Ask, collapsed or
+  // open: opened, it shows the unsent question read only, with how the
+  // pending send went.
   const side = panel(page);
   const third = row(page, 'decision-3');
-  const carried = third.item.locator('.artifact-decisions-asking textarea');
-  const carriedSend = third.item.locator('.artifact-decisions-asking button.artifact-decisions-ask-send');
+  const carried = third.item.locator('.artifact-decisions-row-unsent');
   let refuse = () => {};
   const holding = new Promise<void>((resolve) => { refuse = resolve; });
   const comments = (url: URL) => url.pathname === '/api/comments';
@@ -807,15 +806,18 @@ test('an empty panel Ask posts nothing, and the card\'s Ask still sends and empt
   await expect(third.item.locator('textarea')).toHaveCount(0);
   await expect(third.item.getByRole('button', { name: 'Ask', exact: true })).toHaveCount(0);
   await third.change.click();
-  await expect(carried).toHaveValue('Does Esc close it? And a click outside?');
-  await expect(carried).toHaveAccessibleName('Ask about decision 3');
-  await expect(carriedSend).toBeDisabled();
+  await expect(carried.locator('q')).toHaveText('Does Esc close it? And a click outside?');
+  await expect(carried).toContainText('Your question, not sent:');
+  await expect(carried).toContainText('Sending your question...');
+  await expect(third.item.locator('.artifact-decisions-asking')).toHaveCount(0);
+  await expect(third.item.getByRole('button', { name: 'Ask', exact: true })).toHaveCount(0);
   refuse();
   expect((await refused).status()).toBe(500);
-  await expect(carriedSend).toBeEnabled();
-  await expect(carried).toHaveValue('Does Esc close it? And a click outside?');
-  const status = third.item.locator('.artifact-decisions-asking .artifact-decisions-ask-status');
+  const status = carried.locator('.artifact-decisions-ask-status');
+  await expect(status).not.toHaveText('Sending your question...');
   await expect(status).not.toHaveText('');
+  await expect(carried.locator('q')).toHaveText('Does Esc close it? And a click outside?');
+  await expect(third.item.getByRole('button', { name: 'Ask', exact: true })).toHaveCount(0);
   // A long refusal wraps inside the panel.
   const [inside, right] = await Promise.all([
     status.evaluate((node) => node.getBoundingClientRect().right),
@@ -827,10 +829,8 @@ test('an empty panel Ask posts nothing, and the card\'s Ask still sends and empt
   const texts = (await stored(request, name)).threads.map((thread) => thread.root.text);
   expect(texts.filter((text) => text === 'Does Esc close it?')).toHaveLength(1);
   expect(texts).not.toContain('Does Esc close it? And a click outside?');
-  await third.item.locator('.artifact-decisions-asking')
-    .getByRole('button', { name: 'Cancel', exact: true }).click();
-  await expect(carried).toHaveCount(0);
   await third.cancel.click();
+  await expect(carried).toHaveCount(0);
   await expect(row(page, 'decision-3').label).toHaveText('Overlay on the console');
   expect(errors).toEqual([]);
 });

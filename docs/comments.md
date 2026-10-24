@@ -662,10 +662,11 @@ question first." and posts nothing, a refused post keeps the text and says
 why, and text changed while the question was sending stays, unsent. The
 entry's "Ask" folds the field and keeps its text, and Cancel empties it. A
 question saved while its field holds an unsent question still moves to the
-Answered list, and its row there, once opened, carries the field, text and
-a send still pending and all, until it is sent or cancelled; the collapsed row
-holds only its title, answer and "change". The field and its text are kept
-by question, so a section a new revision swaps in keeps them. An entry whose question has open threads ends in "?", "1 thread"
+Answered list. An Answered row has no Ask: opened, it shows that question,
+read only, as "Your question, not sent:", with how a send still pending went,
+and the collapsed row holds only its title, answer and "change". The field
+and its text are kept by question, so a section a new revision swaps in keeps
+them. An entry whose question has open threads ends in "?", "1 thread"
 (or "N threads") and where the newest stands as its chip reads it
 ("answered", "writing", "waiting" or "failed"); pressing it opens the
 Comments tab at that thread, as the decision's chip does.

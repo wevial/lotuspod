@@ -1,6 +1,5 @@
 import { useLayoutEffect, useRef, useState } from "preact/hooks";
-import { store } from "../../../comments/ts/index";
-import { Ask, type Draft } from "./panel-ask";
+import type { Draft } from "./panel-ask";
 import { Context, Note, Options, type Desk } from "./panel-parts";
 import { jump, sectionsOf } from "./sections";
 import { label, words } from "./words";
@@ -11,18 +10,15 @@ import { label, words } from "./words";
 // card's pick, its note, Save, Cancel, "not saved" while the card differs
 // from its answer, and Show on page. A pick or a note opens the card on the
 // page as its "change" does; Cancel puts the card back as saved. It is
-// drawn again as the cards change. A question saved while its entry's Ask
-// held an unsent question carries that field here, shown while the row is
-// open, until it is sent or cancelled; a row opened with no unsent question
-// and no send pending has no Ask, even if its entry's field was left open.
+// drawn again as the cards change. A row has no Ask: a question saved while
+// its entry's Ask held an unsent question shows that text here, read only,
+// while the row is open, with how a send still pending went, so it is never
+// lost.
 function Row({ desk, form, draft }: { desk: Desk; form: HTMLFormElement; draft: Draft }) {
   desk.marked.value;
   const question = form.dataset.question ?? "";
   const answer = desk.saved(form);
   const [open, setOpen] = useState(false);
-  // The unsent question this row carries, fixed as the row opens.
-  const [carry, setCarry] = useState(false);
-  const asker = store.asking.value;
   const [busy, setBusy] = useState(false);
   const item = useRef<HTMLLIElement>(null);
   // What to focus once the row is drawn open or collapsed.
@@ -48,7 +44,6 @@ function Row({ desk, form, draft }: { desk: Desk; form: HTMLFormElement; draft: 
   function show(on: boolean, to: "pick" | "title"): void {
     focus.current = to;
     setOpen(on);
-    setCarry(on && (draft.text.trim() !== "" || draft.busy));
   }
   async function save(): Promise<void> {
     setBusy(true);
@@ -86,8 +81,12 @@ function Row({ desk, form, draft }: { desk: Desk; form: HTMLFormElement; draft: 
           {changed && <>{" "}<span class="artifact-decisions-unsaved">not saved</span></>}
         </p>
       )}
-      {asker && open && carry && (draft.open || draft.text !== "" || draft.busy) &&
-        <Ask form={form} asking={asker} draft={draft} done={() => setCarry(false)} focused={false} />}
+      {open && (draft.text.trim() !== "" || draft.busy) && (
+        <p class="artifact-decisions-row-unsent">
+          {"Your question, not sent: "}<q>{draft.text}</q>
+          {draft.said && <>{" "}<span class="artifact-decisions-ask-status" role="status">{draft.said}</span></>}
+        </p>
+      )}
     </li>
   );
 }
@@ -101,8 +100,6 @@ export function Answered({ desk, forms, draftOf }: {
   draftOf(form: HTMLFormElement): Draft;
 }) {
   const [open, setOpen] = useState(false);
-  // The unsent question this row carries, fixed as the row opens.
-  const [carry, setCarry] = useState(false);
   if (!forms.length) {
     return null;
   }

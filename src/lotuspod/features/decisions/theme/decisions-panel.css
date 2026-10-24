@@ -443,6 +443,18 @@
   overflow-wrap: anywhere;
 }
 
+/* An unsent question its entry carried here, read only. */
+.artifact-decisions-row-unsent {
+  color: var(--color-muted-lavender);
+  font-size: 0.82rem;
+  margin: 0.4rem 0 0;
+  overflow-wrap: anywhere;
+}
+
+.artifact-decisions-row-unsent q {
+  color: var(--color-pale-lavender);
+}
+
 .artifact-decisions-row-label {
   color: var(--color-white);
   font-weight: 600;
