@@ -499,6 +499,105 @@ test('a decision thread on a question the page does not ask, with a key serve do
   seen.clean();
 });
 
+// The block "deep-shelf" on try-it: its figure, its Comment, its pin, and
+// the 12 hex digits of the file its frame shows.
+const BLOCK = 'deep-shelf';
+const BLOCK_WORDS = 'On Lilies on the deep shelf';
+
+function block(page: Page) {
+  const figure = page.locator(`figure[data-widget="${BLOCK}"]`);
+  return {
+    figure,
+    frame: figure.locator('iframe.artifact-widget'),
+    comment: figure.locator('.artifact-live-chrome').getByRole('button', { name: 'Comment', exact: true }),
+    pin: figure.locator(':scope > .artifact-live-pin'),
+  };
+}
+
+async function blockHash(page: Page) {
+  const source = await block(page).frame.evaluate((each: HTMLIFrameElement) =>
+    each.dataset.pausedSource || each.getAttribute('src') || '');
+  const hash = /\.w-([0-9a-f]{12})\.html$/.exec(source)?.[1] ?? '';
+  expect(hash, `the frame's file ${source} names its hash`).toMatch(/^[0-9a-f]{12}$/);
+  return hash;
+}
+
+test('a block comment keeps its widget, and a block anchor serve refuses is refused with nothing stored', async ({ context, page }) => {
+  const seen = watch(context, page);
+  await load(page, TRY_IT);
+  const hash = await blockHash(page);
+  const widget = { id: BLOCK, hash, state: '' };
+  const on = (fields: object) => ({ section: 'the-pond-today', ...fields });
+  const refused: [object, number, string][] = [
+    [on({ widget: { ...widget, extra: 1 } }), 400, 'invalid_body'],
+    [on({ widget: { ...widget, hash: 'XYZ' } }), 400, 'invalid_body'],
+    [on({ widget: { ...widget, hash: hash.slice(1) } }), 400, 'invalid_body'],
+    [on({ widget: { ...widget, hash: 'ABCDEF012345' } }), 400, 'invalid_body'],
+    [on({ widget: { ...widget, state: 'x'.repeat(81) } }), 400, 'invalid_body'],
+    [on({ widget: { ...widget, state: '\u{1F600}'.repeat(81) } }), 400, 'invalid_body'],
+    [on({ widget: { ...widget, state: 'ring\u0007' } }), 400, 'invalid_body'],
+    [on({ widget, quote: { exact: 'the first algae', prefix: '', suffix: '' } }), 400, 'invalid_body'],
+    [{ parent: 1, widget }, 400, 'invalid_body'],
+    [{ question: 'decision-1', widget }, 400, 'invalid_body'],
+    [on({ widget: { ...widget, id: 'no-such-block' } }), 400, 'unknown_widget'],
+    [{ section: '', widget }, 400, 'unknown_widget'],
+    [{ section: 'what-goes-in', widget }, 400, 'unknown_widget'],
+    [on({ widget: { ...widget, hash: '000000000000' } }), 409, 'stale_widget'],
+  ];
+  for (const [fields, status, error] of refused) {
+    const sent = await api(page, 'POST', '/api/comments', { page: 'try-it', text: 'How deep?', ...fields });
+    expect.soft(sent, JSON.stringify(fields)).toEqual({ status, json: { error } });
+  }
+  expect.soft(await rows(page, 'try-it'), 'refused anchors store nothing').toEqual([]);
+  const sent = await api(page, 'POST', '/api/comments', { page: 'try-it', text: 'How deep?', ...on({ widget }) });
+  expect(sent.status).toBe(201);
+  expect(await newestRoot(page, 'try-it')).toMatchObject({ section: 'the-pond-today', widget });
+  // A state is counted in characters, as serve counts it, not UTF-16 units.
+  const wide = { ...widget, state: '\u{1F600}'.repeat(80) };
+  const taken = await api(page, 'POST', '/api/comments', { page: 'try-it', text: 'How deep?', ...on({ widget: wide }) });
+  expect(taken.status).toBe(201);
+  expect(await newestRoot(page, 'try-it')).toMatchObject({ section: 'the-pond-today', widget: wide });
+  seen.clean();
+});
+
+test('a comment from a block\'s Comment is stored on the block, listed and pinned there, and stays over a reload', async ({ context, page }) => {
+  const seen = watch(context, page);
+  await load(page, TRY_IT);
+  const live = block(page);
+  const hash = await blockHash(page);
+  await expect(live.pin).toBeHidden();
+  await live.comment.click();
+  const group = panel(page).group('The pond today');
+  await expect(group.locator('.artifact-comment-on')).toHaveText(BLOCK_WORDS);
+  const form = group.locator('form.artifact-comment-form');
+  const field = form.locator('textarea[name="text"]');
+  await expect(field).toBeFocused();
+  await field.fill('How deep is the shelf?');
+  await form.getByRole('button', { name: 'Comment', exact: true }).click();
+  await expect(field).toHaveValue('');
+
+  const root = await newestRoot(page, 'try-it');
+  expect(root).toMatchObject({ section: 'the-pond-today', widget: { id: BLOCK, hash, state: '' } });
+  const listed = entry(page, root.id);
+  await expect(group.locator(`.artifact-comments-entry[data-thread="${root.id}"]`)).toHaveCount(1);
+  await expect(listed.head.locator('.artifact-comments-entry-mark')).toHaveText('▣');
+  await expect(listed.head.locator('.artifact-comments-entry-words')).toHaveText(BLOCK_WORDS);
+  await expect(live.pin).toBeVisible();
+  await expect(live.pin).toHaveText('1');
+
+  await expectReply(listed, REPLIES['try-it']['the-pond-today']);
+  const replied = await thread(page, root.id);
+  expect(replied.root.widget).toEqual({ id: BLOCK, hash, state: '' });
+  expect(replied.replies).toHaveLength(1);
+  expect(replied.replies[0]).toMatchObject({ actor: { kind: 'agent', handle: AGENT }, widget: null });
+
+  await page.reload();
+  await settle(page);
+  await expect(entry(page, root.id).head.locator('.artifact-comments-entry-words')).toHaveText(BLOCK_WORDS);
+  await expect(block(page).pin).toHaveText('1');
+  seen.clean();
+});
+
 test('an image chosen in a composer is refused, and nothing is attached', async ({ context, page }) => {
   const seen = watch(context, page);
   await load(page, TRY_IT);
