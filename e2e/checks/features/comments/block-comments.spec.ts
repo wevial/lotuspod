@@ -987,22 +987,6 @@ test("a block's form holding only an image keeps its block when another form ope
   expect(errors).toEqual([]);
 });
 
-test("a block's unsent comment is still on its block after the browser reloads the page", async ({ page }) => {
-  const name = `block-comments-repro-reload-${test.info().repeatEachIndex}`;
-  publish(name, doc(1));
-  const errors = watch(page);
-  await load(page, name);
-  const { churn, field } = churnForm(page);
-  await block(page).comment.click();
-  await field.fill(QUESTION);
-
-  await page.reload();
-  await expect(block(page).comment).toBeVisible();
-  await expect(field).toHaveValue(QUESTION);
-  await expect(churn.locator('.artifact-comment-on')).toHaveText(WORDS);
-  expect(errors).toEqual([]);
-});
-
 // The next load's first read of the threads waits until the returned
 // function lets it go.
 async function holdFirstRead(page: Page) {

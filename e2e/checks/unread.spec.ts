@@ -629,6 +629,24 @@ test.describe('signed in', () => {
     await expect(page.locator('.index-toggle')).toHaveCount(0);
     await expect(page.locator('.index-unread')).toHaveCount(0);
     await expect(page).toHaveTitle('Lotuspod');
+
+    // The index still filters: the Labels menu, then the search.
+    const all = await shownPages(page);
+    expect(all).toContain(NAME);
+    const labelled = await page.locator('.index-table tbody tr[data-labels]').evaluateAll((rows) =>
+      rows.filter((row) => ((row as HTMLElement).dataset.labels ?? '').split(',').includes('relos'))
+        .map((row) => (row as HTMLElement).dataset.page ?? ''));
+    expect(labelled.length).toBeGreaterThan(0);
+    await page.getByRole('button', { name: /^Labels/ }).click();
+    await page.locator('.index-labels-option', { hasText: 'relos' }).locator('input').check();
+    await page.keyboard.press('Escape');
+    await expect.poll(() => shownPages(page)).toEqual(labelled);
+    await expect(page.locator('.index-active')).toHaveText('Showing relos ✕');
+    await page.getByRole('button', { name: 'Remove filter relos' }).click();
+    await expect.poll(() => shownPages(page)).toEqual(all);
+    const name = (await row(page, NAME).locator('a').first().textContent())?.trim() ?? '';
+    await page.getByLabel('Search').fill(name);
+    await expect.poll(() => shownPages(page)).toEqual([NAME]);
     expect(errors).toEqual([]);
   });
 });

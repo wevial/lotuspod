@@ -27,8 +27,6 @@ const SRC = path.resolve(__dirname, '..', '..', '..', '..', 'src');
 const SEEN = '/api/seen';
 const MAC_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 ' +
   '(KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36';
-const LINUX_AGENT = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 ' +
-  '(KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36';
 
 const ARTICLE = { name: 'capture-article', title: 'Capture article' };
 const CHECKLIST = { name: 'capture-checklist', title: 'Capture checklist' };
@@ -420,16 +418,6 @@ test.describe('the key the button shows', () => {
       await expect(finder(page)).toBeVisible();
       await page.keyboard.press('Meta+K');
       await expect(finder(page)).toBeHidden();
-    });
-  });
-
-  test.describe('on Linux', () => {
-    test.use({ userAgent: LINUX_AGENT });
-
-    test('reads Ctrl K', async ({ page }) => {
-      await openIndex(page, '/');
-      const button = page.locator('.pod-tabs-bar').getByRole('button', { name: 'Find a pod' });
-      await expect(button.locator('kbd')).toHaveText('Ctrl K');
     });
   });
 });

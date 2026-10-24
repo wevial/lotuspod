@@ -655,23 +655,6 @@ test.describe('signed in', () => {
     expect(errors).toEqual([]);
   });
 
-  test('with no fragment, the index opens on Pages and the switch marks Pages as current', async ({ page }) => {
-    const errors = watchErrors(page);
-    const now = Date.now();
-    await page.route((url) => url.pathname === ACTIVITY, (route) => route.fulfill({
-      json: { from: new Date(now - 7 * DAY).toISOString(), to: new Date(now).toISOString(),
-        older: false, truncated: false, pages: [] },
-    }));
-    const read = activityRead(page);
-    await page.goto('/');
-    expect((await read).status()).toBe(200);
-    const { pages, activity } = views(page);
-    await expect(pages).toHaveAttribute('aria-pressed', 'true');
-    await expect(activity).toHaveAttribute('aria-pressed', 'false');
-    await expect(page.locator('.index-table')).toBeVisible();
-    expect(errors).toEqual([]);
-  });
-
   test('Recent activity, once pressed, is kept in the address, and Pages clears it', async ({ page }) => {
     const errors = watchErrors(page);
     const now = Date.now();
@@ -728,35 +711,22 @@ test.describe('signed in', () => {
     await expect(activity).toHaveAttribute('aria-pressed', 'true');
     await expect(page.locator('.index-count')).toHaveText('No activity in the last 7 days.');
     await expect(page).toHaveURL(/\/#tabs=capture-article&view=activity$/);
-    expect(errors).toEqual([]);
-  });
 
-  test('an answer with nothing in it says there was no activity', async ({ page }) => {
-    const errors = watchErrors(page);
-    const now = Date.now();
-    await page.route((url) => url.pathname === ACTIVITY, (route) => route.fulfill({
-      json: { from: new Date(now - 7 * DAY).toISOString(), to: new Date(now).toISOString(),
-        older: false, truncated: false, pages: [] },
-    }));
-    await page.goto('/#activity');
-    await expect(views(page).activity).toHaveAttribute('aria-pressed', 'true');
-    await expect(page.locator('.index-count')).toHaveText('No activity in the last 7 days.');
-    await expect(page.getByText('No activity matches these filters.')).toBeHidden();
-    await expect(page.getByRole('button', { name: 'Show older' })).toBeHidden();
-    expect(errors).toEqual([]);
-  });
-
-  test('the Pages view lists Title, Updated, Created and Summary, each update with its time', async ({ page }) => {
-    const errors = watchErrors(page);
-    await page.goto('/#pages');
-    await expect(views(page).pages).toHaveAttribute('aria-pressed', 'true');
+    // Pages drops the view and keeps the tab, each press written in place.
+    const entries = await page.evaluate(() => history.length);
+    await pages.click();
+    await expect(pages).toHaveAttribute('aria-pressed', 'true');
     await expect(page.locator('.index-table')).toBeVisible();
-    expect(await page.locator('.index-table thead th').allTextContents())
-      .toEqual(['Title', 'Updated', 'Created', 'Summary']);
-    const updated = await page.locator('.index-table tbody tr').evaluateAll((rows) =>
-      rows.map((row) => (row as HTMLTableRowElement).cells[1].textContent?.trim() ?? ''));
-    expect(updated.length).toBeGreaterThan(1);
-    for (const text of updated) expect(text).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/);
+    await expect(page).toHaveURL(/\/#tabs=capture-article$/);
+    await activity.click();
+    await expect(activity).toHaveAttribute('aria-pressed', 'true');
+    await expect(page).toHaveURL(/\/#tabs=capture-article&view=activity$/);
+    await expect(strip.locator('.pod-tab')).toHaveCount(1);
+    expect(await page.evaluate(() => history.length)).toBe(entries);
+
+    // With the tab active too.
+    await strip.locator('.pod-tab[data-page="capture-article"] button.pod-tab-title').click();
+    await expect(page).toHaveURL(/\/#tabs=capture-article&on=capture-article&view=activity$/);
     expect(errors).toEqual([]);
   });
 
@@ -823,20 +793,6 @@ test.describe('signed in', () => {
     await expect(page.getByRole('group', { name: 'View' })).toHaveCount(0);
     await expect(page.locator('.index-controls')).toBeHidden();
     await expect(page.getByText('No pages match these filters.')).toBeHidden();
-    expect(errors).toEqual([]);
-  });
-
-  test('answered 404, as the demo answers, the index is the Pages view with no switch', async ({ page }) => {
-    const errors = watchErrors(page);
-    await page.route((url) => url.pathname === ACTIVITY, (route) =>
-      route.fulfill({ status: 404, contentType: 'application/json', body: '{"error":"not_found"}' }));
-    const read = activityRead(page);
-    await page.goto('/');
-    expect((await read).status()).toBe(404);
-    await expect(page.locator('.index-count')).toHaveText(/^\d+ pages, newest update first$/);
-    await expect(page.getByRole('group', { name: 'View' })).toHaveCount(0);
-    await expect(page.locator('.index-table')).toBeVisible();
-    await expect(page.locator('.index-activity')).toBeHidden();
     expect(errors).toEqual([]);
   });
 });

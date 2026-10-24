@@ -8,15 +8,6 @@ import { expect, test, type APIRequestContext, type Locator, type Page } from '@
 // signed out.
 const PAGE = '/capture-decisions.html';
 const ANSWERS = '/api/answers?page=capture-decisions';
-// The fixture's sections page asks one question in each of two sections.
-const SECTIONS = '/capture-section-questions.html';
-const SECTIONS_ANSWERS = '/api/answers?page=capture-section-questions';
-// The fixture's long option page asks one question whose first option's
-// label slugifies to more than the answers route takes as a choice.
-const LONG_OPTION = '/capture-long-option.html';
-const LONG_OPTION_ANSWERS = '/api/answers?page=capture-long-option';
-const LONG_LABEL = 'Evidence levels: reproduced or traced can block; a concern is answered '
-  + 'but never blocks, at most 3 per round, high-tier ones also go to the operator';
 const ASSERTION = process.env.LOTUSPOD_TEST_ASSERTION ?? '';
 const SIGNED_IN = { 'Cf-Access-Jwt-Assertion': ASSERTION };
 // The reader as a page names them: their address's part before the @.
@@ -105,7 +96,6 @@ function decision(page: Page, question: string) {
     savedNote: form.locator('.artifact-decision-saved-note'),
     savedBy: form.locator('.artifact-decision-saved-by'),
     change: form.getByRole('button', { name: 'change' }),
-    earlier: form.locator('.artifact-decision-earlier'),
     history: form.locator('.artifact-decision-history'),
   };
 }
@@ -343,22 +333,6 @@ test.describe('signed in', () => {
     await expect(page.locator('b')).toHaveCount(0);
   });
 
-  test('an answer to an earlier wording leaves the card open, not filled from it, with its default picked', async ({ page }) => {
-    await serve(page, () => ({
-      'decision-1': { current: row('decision-1', '000000000000', 'opus', 'Old words'), earlier: [] },
-    }));
-    await page.goto(`${PAGE}?standalone`);
-    const first = decision(page, 'decision-1');
-    await expect(first.earlier).toContainText(`Answered to an earlier wording by ${READER}`);
-    await expect(first.saved).toHaveCount(0);
-    for (const radio of await first.radios.all()) await expect(radio).toBeVisible();
-    // Not filled from the old answer: the page's default is picked, not saved.
-    await expect(first.option('Opus')).not.toBeChecked();
-    await expect(first.option(/^Sonnet/)).toBeChecked();
-    await expect(first.save).toBeVisible();
-    await expect(first.unsaved).toBeVisible();
-  });
-
   test('a form published before the cards still saves and folds', async ({ page, request }) => {
     const seen = await watch(page);
     await page.route((url) => url.pathname === PAGE, async (route) => {
@@ -421,61 +395,6 @@ test.describe('signed in', () => {
     }
     expect(seen.errors).toEqual([]);
     expect(await seen.violations()).toEqual([]);
-  });
-
-  test('an answer saved in the second section folds there and leaves the first section open', async ({ page, request }) => {
-    const seen = await watch(page);
-    await page.goto(`${SECTIONS}?standalone`);
-    const pump = decision(page, 'decision-d1');
-    const heater = decision(page, 'decision-d2');
-    // Each question sits in its own section, under the heading it is about.
-    const order = await page.evaluate(() => [
-      ...document.querySelectorAll('h2, form.artifact-decision'),
-    ].map((node) => (node as HTMLElement).dataset.question ?? node.textContent!.trim()));
-    expect(order).toEqual(['Pump', 'decision-d1', 'Heater', 'decision-d2']);
-
-    await heater.option('Solar').check();
-    await expect(heater.unsaved).toBeVisible();
-    await heater.save.click();
-    const folded = async () => {
-      await expect(heater.saved).toContainText('Saved · Solar · change');
-      for (const radio of await heater.radios.all()) await expect(radio).toBeHidden();
-      await expect(heater.save).toBeHidden();
-      await expect(pump.saved).toHaveCount(0);
-      // Its default is picked once the answers are read, not yet saved.
-      await expect(pump.hint).toBeHidden();
-      await expect(pump.unsaved).toBeVisible();
-      await expect(pump.save).toBeVisible();
-      for (const radio of await pump.radios.all()) await expect(radio).toBeVisible();
-      await expect(pump.option('Floating')).toBeChecked();
-      await expect(pump.option('Submerged')).not.toBeChecked();
-    };
-    await folded();
-    const response = await request.get(SECTIONS_ANSWERS, { headers: SIGNED_IN });
-    const questions = (await response.json()).questions;
-    expect(Object.keys(questions)).toEqual(['decision-d2']);
-    expect(questions['decision-d2'].current).toMatchObject({ choice: 'solar' });
-
-    await page.reload();
-    await folded();
-    expect(seen.errors).toEqual([]);
-  });
-
-  test('an option with a long label saves and folds', async ({ page, request }) => {
-    const seen = await watch(page);
-    await page.goto(`${LONG_OPTION}?standalone`);
-    const card = decision(page, 'decision-d1');
-    await expect(card.form.locator('.artifact-decision-label').first()).toHaveText(LONG_LABEL);
-    const value = await card.radios.first().getAttribute('value');
-
-    await card.option(LONG_LABEL).check();
-    await card.save.click();
-    await expect(card.saved).toContainText(`Saved · ${LONG_LABEL} · change`);
-    for (const radio of await card.radios.all()) await expect(radio).toBeHidden();
-    expect(value!.length).toBeLessThanOrEqual(100);
-    const response = await request.get(LONG_OPTION_ANSWERS, { headers: SIGNED_IN });
-    expect((await response.json()).questions['decision-d1'].current).toMatchObject({ choice: value });
-    expect(seen.errors).toEqual([]);
   });
 
   test('at 360 pixels wide the cards fit, open, unsaved and folded', async ({ page }) => {

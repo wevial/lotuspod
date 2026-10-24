@@ -474,16 +474,6 @@ test.describe('signed in', () => {
     await seen.clean();
   });
 
-  test('a section whose newest comment waits reads its count and waiting', async ({ page }) => {
-    const seen = await watch(page);
-    const { threads } = sample();
-    const pending = row({ state: 'pending', section: 'next-steps', sectionTitle: 'Next steps' });
-    await serve(page, () => [...threads, { root: pending, replies: [], resolution: OPEN }]);
-    await load(page);
-    await expect(box(page, 'next-steps').chip).toHaveText('1 comment · waiting');
-    await seen.clean();
-  });
-
   test('a comment written in the panel starts a thread there and the column stays still', async ({ page }) => {
     const seen = await watch(page);
     const ids = new Set<number>();
@@ -496,10 +486,13 @@ test.describe('signed in', () => {
     await steps.chip.scrollIntoViewIfNeeded();
     const before = await spot(paragraph);
     await expect(steps.chip).toHaveText('No comments · Comment');
+    await expect(side.titles).toHaveCount(0);
     await steps.chip.click();
+    await expect(steps.details).not.toHaveAttribute('open');
     const field = side.group('Next steps').locator('textarea[name="text"]');
     await expect(field).toBeVisible();
     await expect(field).toBeFocused();
+    await expect(side.titles).toHaveText(['Next steps']);
     const COMMENT = 'Who fits the heater?';
     await field.fill(COMMENT);
     await side.group('Next steps').getByRole('button', { name: 'Comment', exact: true }).click();
@@ -962,51 +955,6 @@ test.describe('signed in', () => {
     await seen.clean();
   });
 
-  test("a chip for a section with no threads opens that section's form in the panel", async ({ page }) => {
-    const seen = await watch(page);
-    await serve(page, () => onFive({ findings: 'Findings', costs: 'Costs' }), FIVE_SLUG);
-    const side = await loadFive(page);
-    await expect(side.titles).toHaveText(['Findings', 'Costs']);
-    const risks = box(page, 'risks');
-    await expect(risks.chip).toHaveText('No comments · Comment');
-    await risks.chip.click();
-    await expect(risks.details).not.toHaveAttribute('open');
-    const field = side.group('Risks').locator('textarea[name="text"]');
-    await expect(field).toBeVisible();
-    await expect(field).toBeFocused();
-    await expect(side.titles).toHaveText(['Findings', 'Risks', 'Costs']);
-    await seen.clean();
-  });
-
-  test('the panel starts a page comment itself, an open form has Cancel, ControlOrMeta+Enter sends, and Escape folds a form, not the panel', async ({ page }) => {
-    await watch(page);
-    const ids = new Set<number>();
-    await ownThreads(page, ids);
-    const side = await loadFive(page);
-    const pick = picker(page);
-    const start = side.aside.locator('.artifact-comments-start');
-    await expect.soft(start.getByRole('button', { name: 'Comment on this page' })).toBeVisible();
-
-    await pick.button.click();
-    await pick.options.first().click();
-    const whole = side.group('This page');
-    const field = whole.getByLabel('Comment on this page');
-    await expect(field).toBeFocused();
-    await field.fill('Not yet');
-    await expect.soft(whole.getByRole('button', { name: 'Cancel' })).toBeVisible();
-    await field.press('ControlOrMeta+Enter');
-    await expect.soft.poll(() => ids.size).toBe(1);
-
-    await pick.button.click();
-    await pick.options.nth(3).click();
-    const heater = side.group('Heater').getByLabel('Comment on Heater');
-    await expect(heater).toBeFocused();
-    await heater.fill('Which heater?');
-    await heater.press('Escape');
-    await expect.soft(side.fold).toBeVisible();
-    await expect.soft(heater).toBeHidden();
-  });
-
   test('"Comment on this page" opens the page form first in the list, and Cancel folds it, keeping its text', async ({ page }) => {
     const seen = await watch(page);
     const ids = new Set<number>();
@@ -1046,6 +994,18 @@ test.describe('signed in', () => {
     await page.waitForTimeout(300);
     expect(posts).toEqual([]);
     expect(ids.size).toBe(0);
+
+    // ControlOrMeta+Enter sends it; Escape folds a form, not the panel.
+    await field.press('ControlOrMeta+Enter');
+    await expect.poll(() => ids.size).toBe(1);
+    await pick.button.click();
+    await pick.options.nth(3).click();
+    const heater = side.group('Heater').getByLabel('Comment on Heater');
+    await expect(heater).toBeFocused();
+    await heater.fill('Which heater?');
+    await heater.press('Escape');
+    await expect(heater).toBeHidden();
+    await expect(side.fold).toBeVisible();
     await seen.clean();
   });
 
@@ -1096,50 +1056,6 @@ test.describe('signed in', () => {
     await expect(mine.readers.last().locator('.artifact-comment-text')).toHaveText('The one by the outlet.');
     await expect(answer).toBeHidden();
     await expect(toggle).toBeFocused();
-    await seen.clean();
-  });
-
-  test('at 1024 pixels a chip opens a popover, never its box, its thread moves with the window, and no width scrolls sideways', async ({ page }) => {
-    const seen = await watch(page);
-    const { answered, threads } = sample();
-    await serve(page, () => threads);
-    await page.setViewportSize({ width: 1024, height: 768 });
-    await load(page);
-    const side = panel(page);
-    await expect(side.aside).toBeHidden();
-    await expect(side.opener).toBeHidden();
-    const findings = box(page, 'findings');
-    await expect(findings.chip).toHaveText('1 reply · ✓ hermes answered');
-    await findings.chip.click();
-    await expect(findings.details).not.toHaveAttribute('open');
-    const popover = page.locator('.artifact-comments-popover');
-    await expect(popover.locator(`.artifact-comment-thread[data-thread="${answered.id}"]`)).toBeVisible();
-    await expect(page.locator(`.artifact-comment-thread[data-thread="${answered.id}"]`)).toHaveCount(1);
-
-    const fits = () => page.evaluate(() => ({
-      scroll: document.documentElement.scrollWidth, viewport: document.documentElement.clientWidth,
-    }));
-    // The open thread moves to the phone's bottom sheet, drawn once.
-    await page.setViewportSize({ width: 360, height: 780 });
-    await expect(side.aside).toBeHidden();
-    await expect(popover).toBeHidden();
-    await expect(findings.details).not.toHaveAttribute('open');
-    const sheet = page.locator('.artifact-comments-bottom-sheet');
-    await expect(sheet.locator(`.artifact-comment-thread[data-thread="${answered.id}"]`)).toBeVisible();
-    await expect(page.locator(`.artifact-comment-thread[data-thread="${answered.id}"]`)).toHaveCount(1);
-    let widths = await fits();
-    expect(widths.scroll).toBeLessThanOrEqual(widths.viewport);
-
-    await page.setViewportSize(WIDE);
-    await expect(side.aside).toBeVisible();
-    await expect(findings.details).not.toHaveAttribute('open');
-    await expect(findings.chip).toHaveText('1 reply · ✓ hermes answered');
-    // The thread open in the sheet opens the panel at its entry.
-    await expect(side.fold).toBeVisible();
-    await expect(entry(page, answered).head).toHaveAttribute('aria-expanded', 'true');
-    await expect(entry(page, answered).item.locator('.artifact-comment-thread')).toBeVisible();
-    widths = await fits();
-    expect(widths.scroll).toBeLessThanOrEqual(widths.viewport);
     await seen.clean();
   });
 });

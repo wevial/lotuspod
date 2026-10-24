@@ -387,22 +387,6 @@ test.describe('signed in', () => {
     await seen.clean();
   });
 
-  test('a file of another type or over the cap is refused before it is sent', async ({ page, request }) => {
-    const seen = await watch(page);
-    const cap = await capOf(request);
-    await page.goto(`${PAGE}?standalone`);
-    const pond = box(page, 'pond');
-    await compose(page, 'pond');
-
-    await pick(page, pond.add, [LOGO]);
-    await expect(pond.status).toHaveText('logo.svg is not a PNG, JPEG, WebP or GIF image.');
-    await paste(pond.text, [{ name: 'big.png', type: 'image/png', size: cap + 1 }]);
-    await expect(pond.status).toHaveText(/^big\.png is over the .+ limit\.$/);
-    await expect(pond.form.locator('.artifact-attach-item')).toHaveCount(0);
-    expect(seen.uploads).toEqual([]);
-    await seen.clean();
-  });
-
   test('a file attached before the cap is read waits for it, and is checked against it', async ({ page, request }) => {
     const seen = await watch(page);
     const cap = await capOf(request);

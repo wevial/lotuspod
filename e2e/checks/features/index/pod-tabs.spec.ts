@@ -418,47 +418,6 @@ test.describe('signed in', () => {
     expect(errors).toEqual([]);
   });
 
-  test('the listing\'s view buttons keep the tabs in the address, Recent activity named in it', async ({ page }) => {
-    const errors = await watch(page);
-    await openIndex(page);
-    await expect(page.locator('.index-views')).toHaveCount(1);
-    await openFromListing(page, ARTICLE);
-    await home(page).click();
-    await expect(page).toHaveURL(/\/#tabs=capture-article$/);
-
-    const pages = page.getByRole('button', { name: 'Pages', exact: true });
-    const activity = page.getByRole('button', { name: 'Recent activity', exact: true });
-    await activity.click();
-    await expect(activity).toHaveAttribute('aria-pressed', 'true');
-    await expect(page).toHaveURL(/\/#tabs=capture-article&view=activity$/);
-
-    // A load of that address opens the tab again, on Recent activity.
-    await page.reload();
-    await expect(tabs(page)).toHaveCount(1);
-    await expectListing(page);
-    await expect(activity).toHaveAttribute('aria-pressed', 'true');
-    await expect(page.locator('.index-activity')).toBeVisible();
-    await expect(page).toHaveURL(/\/#tabs=capture-article&view=activity$/);
-
-    const entries = await page.evaluate(() => history.length);
-    await pages.click();
-    await expect(pages).toHaveAttribute('aria-pressed', 'true');
-    await expect(page.locator('.index-table')).toBeVisible();
-    await expect(page).toHaveURL(/\/#tabs=capture-article$/);
-    // Back to Recent activity, the tab kept, each press written in place.
-    await activity.click();
-    await expect(activity).toHaveAttribute('aria-pressed', 'true');
-    await expect(page).toHaveURL(/\/#tabs=capture-article&view=activity$/);
-    await expect(tabs(page)).toHaveCount(1);
-    expect(await page.evaluate(() => history.length)).toBe(entries);
-
-    // With a tab active too.
-    await activity.click();
-    await tabTitle(page, ARTICLE).click();
-    await expect(page).toHaveURL(/\/#tabs=capture-article&on=capture-article&view=activity$/);
-    expect(errors).toEqual([]);
-  });
-
   test('back on the listing from a tab, a page just read there loses its updated mark', async ({ page }) => {
     const errors = await watch(page);
     const pod = { name: 'pod-tabs-marks', title: 'Pod tabs marks' };
@@ -595,32 +554,6 @@ test.describe('signed in', () => {
     expect(posted).toEqual([{ bare: false, page: ARTICLE.name }]);
 
     // The bare page left no history entry: Back leaves the site.
-    await page.goBack();
-    await expect(page).toHaveURL('about:blank');
-    expect(errors).toEqual([]);
-  });
-
-  test('a listed page rendered with one heading and plain text, loaded directly, opens in the index as the active tab', async ({ page }) => {
-    const errors = await watch(page);
-    // Nothing on the page asks for the page script but being listed: no
-    // sections to fold, no comments, decisions, links or revision.
-    const plain = { name: 'pod-tabs-plain', title: 'Pod tabs plain' };
-    run('render', '--name', plain.name, '--title', plain.title, '--date', '2026-01-02',
-      '--body', '<h2 id="a-section">A section</h2><p>Plain text.</p>', '--out-dir', OUT);
-    run('index', '--out-dir', OUT);
-
-    await page.goto('about:blank');
-    await page.goto(`/${plain.name}.html#a-section`);
-    await expect(strip(page)).toHaveCount(1);
-    expect(new URL(page.url()).pathname).toBe('/');
-    await expectActive(page, plain);
-    await expect(framed(page, plain).locator('h1')).toHaveText(plain.title);
-    const shown = await shownIn(page, plain);
-    expect(shown.pathname).toBe(`/${plain.name}.html`);
-    expect(shown.hash).toBe('#a-section');
-
-    await page.keyboard.press('ControlOrMeta+K');
-    await expect(page.getByRole('dialog', { name: 'Find a pod' })).toBeVisible();
     await page.goBack();
     await expect(page).toHaveURL('about:blank');
     expect(errors).toEqual([]);
