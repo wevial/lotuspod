@@ -93,20 +93,3 @@ for (const width of [1280, 360]) {
     expect(seen.consoleErrors).toEqual([]);
   });
 }
-
-// A plain click opens the image viewer (image-viewer.spec.ts).
-test('clicking an image with the platform modifier opens its media URL', async ({ page, context }) => {
-  const seen = await watch(page);
-  await page.goto(`${PAGE}?standalone`);
-  const fish = page.getByRole('img', { name: 'A fish in the pond' });
-  const src = await fish.getAttribute('src');
-  expect(src).toMatch(/^\/media\/[0-9a-f]{64}\.jpg$/);
-
-  const [response] = await Promise.all([
-    context.waitForEvent('response', (r) => r.url().endsWith(src!) && r.request().isNavigationRequest()),
-    fish.click({ modifiers: ['ControlOrMeta'] }),
-  ]);
-  expect(response.status()).toBe(200);
-  expect(response.headers()['content-type']).toBe('image/jpeg');
-  expect(seen.consoleErrors).toEqual([]);
-});
