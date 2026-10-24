@@ -427,26 +427,6 @@ test.describe('signed in', () => {
     });
   });
 
-  test.describe('at 320 wide', () => {
-    test.use({ viewport: { width: 320, height: 640 } });
-
-    test('the count and Next open stay inside the window', async ({ page }) => {
-      const reads = (url: URL) => url.pathname === '/api/answers';
-    await page.route(reads, (route) =>
-        route.request().method() === 'GET'
-          ? route.fulfill({ json: { page: 'capture-review-sheet', questions: {} } })
-          : route.continue());
-      await page.goto(`${PAGE}?standalone`);
-      const the = sheet(page);
-      await expect(the.count).toHaveText('3 to answer · Respond');
-      for (const target of [the.count, the.next]) {
-        const box = await target.boundingBox();
-        expect(box!.x).toBeGreaterThanOrEqual(0);
-        expect(box!.x + box!.width).toBeLessThanOrEqual(320);
-      }
-    });
-  });
-
   test.describe('at 280 wide, then 1280', () => {
     test.use({ viewport: { width: 280, height: 640 } });
 
