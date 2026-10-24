@@ -90,8 +90,7 @@ function Entry({ desk, form, held, saving, saved, draft }: EntryProps) {
 // The questions with no saved answer, under one heading per section, as the
 // Comments tab heads its groups; one just saved from the tab stays a moment,
 // as saved, then leaves for the Answered list after them, and its heading
-// with the last of its section. The list stays folded or open as the reader
-// left it.
+// with the last of its section.
 function Panel({ desk }: { desk: Desk }) {
   desk.marked.value;
   const [held, setHeld] = useState<ReadonlySet<HTMLFormElement>>(new Set());
@@ -115,7 +114,6 @@ function Panel({ desk }: { desk: Desk }) {
     }
     after.current = null;
   });
-  const [answeredOpen, setAnsweredOpen] = useState(false);
   if (!desk.ready.value) {
     return null;
   }
@@ -194,7 +192,7 @@ function Panel({ desk }: { desk: Desk }) {
           </ol>
         </section>
       )) : <p class="artifact-decisions-none">Nothing left to answer</p>}
-      <Answered desk={desk} forms={answered} open={answeredOpen} toggled={setAnsweredOpen} draftOf={draftOf} />
+      <Answered desk={desk} forms={answered} draftOf={draftOf} />
     </div>
   );
 }

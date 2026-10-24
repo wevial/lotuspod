@@ -92,19 +92,18 @@ function Row({ desk, form, draft }: { desk: Desk; form: HTMLFormElement; draft: 
 // The questions with a saved answer that is not a dismissal, folded under
 // "Answered · N" until the reader opens it, under the open list's section
 // headings in page order.
-export function Answered({ desk, forms, open, toggled, draftOf }: {
+export function Answered({ desk, forms, draftOf }: {
   desk: Desk;
   forms: readonly HTMLFormElement[];
-  open: boolean;
-  toggled(open: boolean): void;
   draftOf(form: HTMLFormElement): Draft;
 }) {
+  const [open, setOpen] = useState(false);
   if (!forms.length) {
     return null;
   }
   return (
     <details class="artifact-decisions-answered" open={open}
-      onToggle={(event) => toggled((event.currentTarget as HTMLDetailsElement).open)}>
+      onToggle={(event) => setOpen((event.currentTarget as HTMLDetailsElement).open)}>
       <summary>{"Answered · " + forms.length}</summary>
       {sectionsOf(forms).map((section) => (
         <section key={section.key} class="artifact-decisions-answered-group">
