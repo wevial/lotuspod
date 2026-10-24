@@ -113,7 +113,7 @@ test.describe('signed in', () => {
   test('typing :tad in the panel\'s new thread composer lists 🎉 :tada: then 🏟️ :stadium:, and a click on 🎉 posts it', async ({ page, request }) => {
     const seen = await watch(page);
     await page.goto(`${PAGE}?standalone`);
-    await expect(page.locator(':root')).toHaveAttribute('data-lotuspod-comments-read', '');
+    await loaded(page);
     const aside = page.locator('aside.artifact-comments-panel');
     await aside.getByRole('button', { name: 'Comments', exact: true }).click();
     await aside.getByRole('button', { name: 'Comment on a section' }).click();
@@ -129,13 +129,13 @@ test.describe('signed in', () => {
     await expect(options.nth(0)).toHaveText('🎉 :tada:');
     await expect(options.nth(0)).toHaveAttribute('aria-selected', 'true');
     await expect(options.nth(1)).toHaveText('🏟️ :stadium:');
-    await expect(field).toHaveAttribute('aria-controls', (await list.getAttribute('id'))!);
+    const id = (await list.getAttribute('id'))!;
+    await expect(field).toHaveAttribute('aria-controls', id);
     await expect(field).toHaveAttribute('aria-activedescendant', (await options.nth(0).getAttribute('id'))!);
     await expect(field).toHaveAttribute('aria-autocomplete', 'list');
     const under = await list.boundingBox(), above = await field.boundingBox();
     expect(under!.y).toBeGreaterThanOrEqual(above!.y + above!.height);
 
-    const id = (await list.getAttribute('id'))!;
     await options.nth(0).click();
     await expect(page.locator(`[id="${id}"]`)).toBeHidden();
     await expect(field).toHaveValue('Looks great 🎉');
