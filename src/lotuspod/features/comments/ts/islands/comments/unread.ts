@@ -1,5 +1,7 @@
-import type { CommentRow, Page, Saved, Thread } from "../bridge";
+import { effect, signal } from "@preact/signals";
+import type { CommentRow, Page, Thread } from "../bridge";
 import type { Placement } from "./parts";
+import { shared } from "./state";
 
 // What the unread replies and the Ask reach the store by.
 interface RepliesBridge {
@@ -24,28 +26,21 @@ const SEEN = "/api/seen";
 // each thread's mark as this page last knew it, and the comments of each
 // open thread that were unread as it opened, which stay marked while it
 // stays open; threads by their first comment's id. A route that names none
-// (signed out, the demo) marks nothing. With them, each decision's Ask.
+// (signed out, the demo) marks nothing. The first two are the store's
+// signals (comments/state.ts), which the tab's title and the header's badge
+// are drawn from. With them, what each decision's Ask posts.
 export function replies(page: Page, bridge: RepliesBridge) {
   const { shown, rows, markUnread } = bridge;
-  let unread = new Set<unknown>();
-  // Whether the route named any: only then is a thread opened posted.
-  let tracked = false;
-  const seenTo = new Map<number, number>();
+  const { unread, tracked, seenTo } = shared;
   const opening = new Map<number, Set<number>>();
-  let tabTitle = document.title;
+  const tabTitle = signal(document.title);
   const dateLine = document.querySelector("header.artifact-header .artifact-meta");
   let newBadge: HTMLSpanElement | null = null;
-
-  // A read named the comments unread to the reader, or named none.
-  function named(ids: unknown) {
-    tracked = Array.isArray(ids);
-    unread = new Set<unknown>(Array.isArray(ids) ? ids : []);
-  }
 
   // Whether a comment counts as unread: the route named it, and neither a
   // mark this page posted nor the reader's own reply since has read it.
   function counted(thread: Thread, entry: CommentRow) {
-    return unread.has(entry.id) && entry.id > (seenTo.get(thread.root.id) || 0);
+    return unread.value.has(entry.id) && entry.id > (seenTo.value.get(thread.root.id) || 0);
   }
 
   // How many comments in some threads count as unread.
@@ -56,16 +51,22 @@ export function replies(page: Page, bridge: RepliesBridge) {
   // The thread is read up to comment id: by a mark posted, or the reader's
   // own reply.
   function readTo(thread: Thread, id: number) {
-    seenTo.set(thread.root.id, Math.max(seenTo.get(thread.root.id) || 0, id));
+    shared.write.readTo(thread.root.id, id);
   }
 
-  // Draw the replies to the reader outside the chips: each thread's marks,
-  // the badge ending the header's date line and the tab's title.
-  function showUnread() {
-    const threads = [...shown.values()];
-    threads.forEach(markUnread);
-    const n = unreadIn(threads);
-    document.title = n > 0 ? "(" + n + ") " + tabTitle : tabTitle;
+  // The badge ending the header's date line and the tab's title, drawn
+  // again as the threads, the ids named unread or the seen marks change.
+  effect(() => {
+    let n = 0;
+    for (const id of shared.threadIds.value) {
+      const thread = shared.thread(id).value;
+      if (!thread) continue;
+      const seen = seenTo.value.get(id) || 0;
+      for (const entry of [thread.root, ...thread.replies]) {
+        if (unread.value.has(entry.id) && entry.id > seen) n += 1;
+      }
+    }
+    document.title = n > 0 ? "(" + n + ") " + tabTitle.value : tabTitle.value;
     if (!dateLine) return;
     if (n > 0) {
       newBadge = newBadge || page.element("span", "artifact-unread");
@@ -74,6 +75,12 @@ export function replies(page: Page, bridge: RepliesBridge) {
     } else if (newBadge) {
       newBadge.remove();
     }
+  });
+
+  // Draw the replies to the reader on each thread's rows; the badge and
+  // the title follow the signals.
+  function showUnread() {
+    shown.forEach(markUnread);
   }
 
   // A thread opened or closed, in the panel, a popover or the sheet, all of
@@ -85,7 +92,7 @@ export function replies(page: Page, bridge: RepliesBridge) {
       if (opening.delete(thread.root.id)) markUnread(thread);
       return;
     }
-    if (!tracked) return;
+    if (!tracked.value) return;
     const fresh = rows(thread).filter(entry => counted(thread, entry));
     if (fresh.length) {
       opening.set(thread.root.id, new Set(fresh.map(entry => entry.id)));
@@ -122,80 +129,34 @@ export function replies(page: Page, bridge: RepliesBridge) {
     return "Your question was not sent (" + error + "). Try again.";
   }
 
-  // An answer saved with a note opens a thread on its decision, or adds to
-  // one: the threads are read again at once, so its chip shows it. A read
-  // already in flight may have missed it, and is followed by another; one
-  // that fails is tried again after the schedule's first gap.
-  function noted(event: Event) {
-    if (!(event as CustomEvent<Saved>).detail.comment) return;
-    bridge.owe();
-  }
-
-  // Each decision's Ask, beside "Save answer": the note's text posted as a
-  // question thread on the decision, which saves no answer. Sent, the note
-  // is emptied and folded, so it is never saved as the answer's note, and
-  // the thread opens where the window has room for it.
-  function askAbout(form: HTMLFormElement) {
-    form.addEventListener(page.events.saved, noted);
-    const save = form.querySelector('button[type="submit"]');
-    const note = form.elements.namedItem("note");
-    if (!save || !(note instanceof HTMLTextAreaElement || note instanceof HTMLInputElement)) return;
-    const button = page.element("button", "artifact-decision-ask", "Ask");
-    button.type = "button";
-    save.parentNode!.insertBefore(button, save.nextSibling);
-    const status = form.querySelector(".artifact-decision-status");
-    function say(text: string) {
-      if (status) status.textContent = text;
-    }
-    button.addEventListener("click", async () => {
-      const sent = note.value;
-      const text = sent.trim();
-      if (!text) {
-        say(page.noQuestion);
-        return;
-      }
-      const body: Question = { page: bridge.page, question: form.dataset.question!, text };
-      const revision = bridge.revision();
-      if (revision !== null) body.revision = revision;
-      button.disabled = true;
-      say("Sending your question...");
-      try {
-        const response = await fetch(page.commentsURL, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        });
-        const payload = await page.json(response);
-        if (response.status !== 201 || !payload) {
-          say(unasked(response, payload));
-          return;
-        }
-        say("");
-        // A note changed while the question was sending holds a question
-        // not yet sent: it stays, open, and the card keeps it unsaved.
-        if (note.value === sent) {
-          note.value = "";
-          const fold = note.closest("details");
-          if (fold) fold.open = false;
-          // The card marks itself as its note now reads.
-          note.dispatchEvent(new Event("input", { bubbles: true }));
-        }
-        bridge.add({ root: payload, replies: [] });
-        bridge.posted();
-        bridge.placement().asked(shown.get(payload.id));
-      } catch {
-        say("Your question was not sent: the site did not answer. Try again.");
-      } finally {
-        button.disabled = false;
-      }
+  // A question about a decision, its note's text, posted as a question
+  // thread on it, which saves no answer: once it is sent, sent() runs, then
+  // the thread is added and opens where the window has room for it. What
+  // the form is to say comes back, "" once it is sent; a fetch that fails
+  // throws.
+  async function ask(question: string, text: string, sent: () => void): Promise<string> {
+    const body: Question = { page: bridge.page, question, text };
+    const revision = bridge.revision();
+    if (revision !== null) body.revision = revision;
+    const response = await fetch(page.commentsURL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
     });
+    const payload = await page.json(response);
+    if (response.status !== 201 || !payload) return unasked(response, payload);
+    sent();
+    bridge.add({ root: payload, replies: [] });
+    bridge.posted();
+    bridge.placement().asked(shown.get(payload.id));
+    return "";
   }
 
   return {
-    opening, named, counted, unreadIn, readTo, showUnread, looked, askAbout,
+    opening, counted, unreadIn, readTo, showUnread, looked, ask,
     // A swap gave the tab the new revision's title.
     retitle() {
-      tabTitle = document.title;
+      tabTitle.value = document.title;
     },
   };
 }

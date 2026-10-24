@@ -1,8 +1,9 @@
 {
   // The browser sources in each slice's ts/ (built beside it by
   // web/build.ts), with the declarations they share here: the DOM's types
-  // and none of Bun's. The empty "references" keeps tsc from failing while
-  // no source is converted yet.
+  // and none of Bun's. A slice's public entry (ts/index.ts) is a module of
+  // its islands, checked with them, not a source here. The empty
+  // "references" keeps tsc from failing while no source is converted yet.
   "compilerOptions": {
     "target": "ESNext",
     "lib": ["ESNext", "DOM"],
@@ -13,5 +14,6 @@
     "skipLibCheck": true
   },
   "include": ["*.ts", "../../features/*/ts/*.ts"],
+  "exclude": ["../../features/*/ts/index.ts"],
   "references": []
 }
