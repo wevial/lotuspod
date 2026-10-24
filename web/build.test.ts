@@ -121,6 +121,16 @@ test("a slice's marked file whose source is gone is deleted, and a hand-written 
   expect(readFileSync(join(slice, "tabs.js"), "utf8")).toBe(HAND_WRITTEN);
 });
 
+test("with no web/src, a slice's source is still built beside it", async () => {
+  rmSync(join(web, "src"), { recursive: true });
+  rmSync(out, { recursive: true });
+  const slice = join(root, "src", "lotuspod", "features", "pods", "ts");
+  mkdirSync(slice, { recursive: true });
+  writeFileSync(join(slice, "pod-count.ts"), SOURCE);
+  expect(await build(web)).toEqual({ written: [join(slice, "pod-count.js")], removed: [] });
+  expect(existsSync(out)).toBe(false);
+});
+
 test("another Bun exits non-zero before writing anything, naming both versions", () => {
   writePackage("0.0.1");
   writeFileSync(join(web, "src", "pod-count.ts"), SOURCE);

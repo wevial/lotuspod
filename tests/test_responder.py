@@ -32,7 +32,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from lotuspod import api, core, responder  # noqa: E402
+from lotuspod import core, responder  # noqa: E402
+from lotuspod.features.serve import api  # noqa: E402
 from lotuspod.features.decisions import decisions  # noqa: E402
 from lotuspod.features.publish import media  # noqa: E402
 from lotuspod.store.db import Database  # noqa: E402

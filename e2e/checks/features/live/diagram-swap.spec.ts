@@ -5,7 +5,7 @@ import path from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 
 // An open page published again swaps in a changed section's diagram
-// (web/src/page-swap.ts): the template's start-up module draws it on the
+// (features/live/ts/page-swap.ts): the template's start-up module draws it on the
 // lotuspod:diagrams event, its Expand button (js/diagram-view.js) and node
 // cards (js/diagram-cards.js) are mounted on it once drawn, and a section
 // whose diagram is open in the view is held back until the reader updates it.
@@ -20,13 +20,13 @@ const HERMES = ENV.LOTUSPOD_TEST_CREDENTIAL_HERMES ?? '';
 const OUT = ENV.LOTUSPOD_TEST_OUT ?? '';
 const PYTHON = ENV.LOTUSPOD_TEST_PYTHON ?? '';
 // This checkout's package, whatever lotuspod is installed.
-const SRC = path.resolve(__dirname, '..', '..', 'src');
+const SRC = path.resolve(__dirname, '..', '..', '..', '..', 'src');
 const OWNER = 'hermes';
 const NEWER = 'A newer version of this page is available';
 // The pinned Mermaid (e2e/package.json) answers jsDelivr's requests for it,
 // as in diagram-view.spec.ts.
 const MERMAID_DIR = 'https://cdn.jsdelivr.net/npm/mermaid@11.4.1/';
-const MERMAID_COPY = path.join(__dirname, '..', 'node_modules', 'mermaid');
+const MERMAID_COPY = path.join(__dirname, '..', '..', '..', 'node_modules', 'mermaid');
 
 test.use({ viewport: { width: 1280, height: 800 }, extraHTTPHeaders: SIGNED_IN });
 

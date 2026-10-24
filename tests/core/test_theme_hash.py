@@ -23,7 +23,8 @@ from unittest import mock
 
 from tests.features.publish.test_manifest_v2 import TempDirTestCase, run_cli, stylesheet_hash
 
-from lotuspod import cli, core  # after test_manifest_v2, which puts src/ on the path
+from lotuspod import core  # after test_manifest_v2, which puts src/ on the path
+from lotuspod.features.serve import handler as serve_handler  # after test_manifest_v2, which puts src/ on the path
 
 HASH = r"\A[0-9a-f]{12}\Z"
 BODY = "<h2>Alpha</h2><p>a</p><h2>Beta</h2><p>b</p>"
@@ -107,10 +108,10 @@ class OldAddressTests(ThemeHashTestCase):
         page = self.rendered()
         theme_hash = stylesheet_hash(page)
 
-        patcher = mock.patch.object(cli._AllowListHandler, "log_message", lambda *a: None)
+        patcher = mock.patch.object(serve_handler._AllowListHandler, "log_message", lambda *a: None)
         patcher.start()
         self.addCleanup(patcher.stop)
-        server = cli._make_server(self.out_dir, "127.0.0.1", 0)
+        server = serve_handler._make_server(self.out_dir, "127.0.0.1", 0)
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         self.addCleanup(thread.join, 5)

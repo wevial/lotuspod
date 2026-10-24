@@ -340,18 +340,18 @@ class InstallSmokeTests(unittest.TestCase):
 
     def test_a_wheel_without_one_theme_script_fails_naming_it(self):
         source = self.copy_checkout(self.root)
-        scripts = sorted(p.name for p in (source / "src/lotuspod/_theme/js").glob("*.js"))
+        scripts = sorted(p.name for p in (source / "src/lotuspod/features/live/ts").glob("*.js"))
         self.assertIn(DROPPED_SCRIPT, scripts)
-        kept = ", ".join(f'"_theme/js/{name}"' for name in scripts if name != DROPPED_SCRIPT)
+        kept = ", ".join(f'"features/live/ts/{name}"' for name in scripts if name != DROPPED_SCRIPT)
         pyproject = source / "pyproject.toml"
         text = pyproject.read_text(encoding="utf-8")
-        self.assertIn('"_theme/js/*.js"', text)
-        pyproject.write_text(text.replace('"_theme/js/*.js"', kept), encoding="utf-8")
+        self.assertIn('"features/live/ts/*.js"', text)
+        pyproject.write_text(text.replace('"features/live/ts/*.js"', kept), encoding="utf-8")
         dist = self.root / "dist"
         self.build(source, dist)
         proc = self.smoke(dist)
         self.assertNotEqual(proc.returncode, 0, proc.stdout)
-        self.assertIn(f"js/{DROPPED_SCRIPT}", proc.stderr)
+        self.assertIn(f"live/ts/{DROPPED_SCRIPT}", proc.stderr)
 
     def test_a_wheel_built_without_the_rewrite_fails_naming_a_relative_target(self):
         dist = self.root / "dist"

@@ -10,7 +10,9 @@ import unittest
 from unittest import mock
 from pathlib import Path
 
-from lotuspod import access, cli, core, events
+from lotuspod import cli, core
+from lotuspod.features.live import events
+from lotuspod.features.serve import access, handler as serve_handler
 from lotuspod.features.history import archive
 from lotuspod.features.index import commands as index_commands
 from tests import access_keys as keys
@@ -23,8 +25,8 @@ class EventsTest(unittest.TestCase):
         out = Path(tmp.name)
         hub = events.Hub(out, **options)
         verifier = access.Verifier(access.parse_config(keys.config_section()))
-        server = cli._make_server(out, "127.0.0.1", 0, verifier=verifier if configured else None,
-                                  db_path=out / "db.sqlite" if database else None, events=hub)
+        server = serve_handler._make_server(out, "127.0.0.1", 0, verifier=verifier if configured else None,
+                                            db_path=out / "db.sqlite" if database else None, events=hub)
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         def stop():

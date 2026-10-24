@@ -1,4 +1,4 @@
-// Built from web/src/page-swap.ts by web/build.ts. Edit that file, not this one.
+// Built from src/lotuspod/features/live/ts/page-swap.ts by web/build.ts. Edit that file, not this one.
 var SWAP_HOLDS;
 function holdSwap(test) {
   (SWAP_HOLDS ??= []).push(test);

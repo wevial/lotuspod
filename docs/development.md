@@ -18,9 +18,9 @@ install cannot shadow the code under test.
 
 ## Theme build
 
-A theme script can be written in TypeScript: its source is `web/src/NAME.ts`,
-and the build writes it as `src/lotuspod/_theme/js/NAME.js`; a slice's source,
-`src/lotuspod/features/SLICE/ts/NAME.ts`, it writes beside itself as `NAME.js`.
+A theme script can be written in TypeScript: its source is a slice's
+`src/lotuspod/features/SLICE/ts/NAME.ts`, and the build writes it beside
+itself as `NAME.js`.
 That is the file render
 already joins in the order `THEME_SOURCES` in `core/__init__.py` declares. `web/` is a
 Bun project of its own, beside `e2e/`. The build strips each source's types
@@ -33,10 +33,10 @@ writing anything, a source whose `"use strict"` it would drop or whose JS is
 not a classic script (an `import` or `export`): render joins the scripts
 into one classic script.
 
-A page source written in TypeScript (`web/src/page-swap.ts`) runs inside the
+A page source written in TypeScript (`features/live/ts/page-swap.ts`) runs inside the
 page script's shared closure, so it calls the closure's names (`live`,
 `element()`, `all()`, `json()`, `linkTab()`, `foldSection`, `SWAPPED`)
-directly. Their types are declared once, in `web/src/page-closure.d.ts`, with
+directly. Their types are declared once, in `core/ts/page-closure.d.ts`, with
 the source that defines each, and so is the detail of a page event such a
 source sends. Its own top-level names join the closure's too, so each must be
 one no other source uses: a duplicate `const` or `let` breaks the whole page
@@ -72,7 +72,7 @@ panel and each mark as a portal: the panel into the body, each mark into an
 empty span it adds to the heading or outline link, so the heading the fold
 code owns is never drawn again. Once drawn, it is drawn again, into the same
 container, on each `ANSWERED` a swap's read of the answers sends
-(`web/src/page-swap.ts`): it reads the questions from the forms again, gives
+(`features/live/ts/page-swap.ts`): it reads the questions from the forms again, gives
 a heading that now asks one its span and takes them off one that no longer
 does, and picks a default only on a form the swap brought in. A form a
 swap brings in whose read fails stays out of the sheet until a later read. The forms and their stored answers stay the
@@ -151,7 +151,7 @@ immediate layout reads. Entry leads and status words retain separate redraw keys
 On resize, placement takes the open view before changing modes, suppresses
 thread opening and closing while moving it, then restores the focused field.
 Across swaps, it reads the page-owned boxes and sections map to find replacement
-anchors; the drafts part owns drafts and `web/src/page-swap.ts` the swap itself.
+anchors; the drafts part owns drafts and `features/live/ts/page-swap.ts` the swap itself.
 The chips part (`comments/chips.tsx`) draws section, whole-page and decision
 chips synchronously. Served summaries are emptied once before rendering; decision
 buttons are independent roots after their forms. A keyed line replaces changed
@@ -196,12 +196,12 @@ strict mode and with `erasableSyntaxOnly`, so a source is plain JavaScript
 once its types are erased: no enums, namespaces or parameter properties.
 It checks the build script and its test against Bun's types
 (`web/tsconfig.json`), the sources against the DOM's and none of Bun's
-(`web/src/tsconfig.json`, which takes in the slices' `ts/` sources too), and the islands, modules with imports and JSX
+(`src/lotuspod/core/ts/tsconfig.json`, which takes in the slices' `ts/` sources), and the islands, modules with imports and JSX
 whose `jsxImportSource` is `preact`, under their own config
 (`src/lotuspod/features/comments/ts/islands/tsconfig.json`, which finds
 Preact in `web/node_modules`).
 `test` runs `web/build.test.ts`. `check` builds, then fails naming each file
-under `src/lotuspod/_theme/js/` or a slice's `ts/`, built or written by hand, that does not parse
+under a slice's `ts/`, built or written by hand, that does not parse
 on its own with Bun, and fails when git sees any JS file there modified, deleted
 or new, printing what differs.
 

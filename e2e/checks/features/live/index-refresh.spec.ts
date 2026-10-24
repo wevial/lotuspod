@@ -5,7 +5,7 @@ import path from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 
 // The index keeps its listing fresh (lotuspod-index.js, from
-// web/src/index-refresh.ts): while the listing is shown it reads its own page
+// features/live/ts/index-refresh.ts): while the listing is shown it reads its own page
 // again every 60 seconds and each time the listing shows again over the tabs,
 // and swaps in the rows when they differ, keeping the reader's search, labels,
 // sort, view and tabs. Each check publishes pages of its own on the capture
@@ -30,7 +30,7 @@ const HERMES = ENV.LOTUSPOD_TEST_CREDENTIAL_HERMES ?? '';
 const OUT = ENV.LOTUSPOD_TEST_OUT ?? '';
 const PYTHON = ENV.LOTUSPOD_TEST_PYTHON ?? '';
 // This checkout's package, whatever lotuspod is installed.
-const SRC = path.resolve(__dirname, '..', '..', 'src');
+const SRC = path.resolve(__dirname, '..', '..', '..', '..', 'src');
 const ACTIVITY = '/api/activity';
 const EVERY = 60_000;
 const START = Date.parse('2026-10-15T09:00:00Z');

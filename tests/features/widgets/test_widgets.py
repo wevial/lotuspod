@@ -8,9 +8,10 @@ import urllib.request
 from html.parser import HTMLParser
 from unittest.mock import patch
 
-from tests.features.publish.test_manifest_v2 import TempDirTestCase, cli, run_cli
+from tests.features.publish.test_manifest_v2 import TempDirTestCase, run_cli
 from tests.features.publish.test_page_policy import read_page, directives
 from lotuspod import core
+from lotuspod.features.serve import handler as serve_handler, pages as serve_pages
 from lotuspod.features.publish import markdown, publish_sources, render
 from lotuspod.features.widgets import widgets
 
@@ -294,7 +295,7 @@ class WidgetTests(TempDirTestCase):
         hidden = widgets.Frames((self.out_dir / 'hidden.html').read_text()).sources[0]
         stale = 'pond.w-000000000000.html'
         (self.out_dir / stale).write_text('stale')
-        server = cli._make_server(self.out_dir, '127.0.0.1', 0)
+        server = serve_handler._make_server(self.out_dir, '127.0.0.1', 0)
         threading.Thread(target=server.serve_forever, daemon=True).start()
         self.addCleanup(server.server_close); self.addCleanup(server.shutdown)
         base = f'http://127.0.0.1:{server.server_address[1]}/'
@@ -306,7 +307,7 @@ class WidgetTests(TempDirTestCase):
             with self.assertRaises(urllib.error.HTTPError) as raised:
                 urllib.request.urlopen(base + name)
             self.assertEqual(raised.exception.code, 404)
-        self.assertEqual(cli.served_page_names(self.out_dir), ['pond'])
+        self.assertEqual(serve_pages.served_page_names(self.out_dir), ['pond'])
         for command in ['manifest', 'index']:
             self.assertEqual(run_cli(command, '--out-dir', str(self.out_dir))[0], 0)
         for name in ['manifest.json', 'index.html']:

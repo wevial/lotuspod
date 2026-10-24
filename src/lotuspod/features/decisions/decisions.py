@@ -52,7 +52,8 @@ import re
 from dataclasses import dataclass, field, replace
 from html.parser import HTMLParser
 
-from lotuspod import api, core
+from lotuspod import core
+from lotuspod.features.serve import api
 from lotuspod.features.comments import comments
 
 HEADING = "decisions for the maintainer"

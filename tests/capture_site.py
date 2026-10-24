@@ -76,7 +76,9 @@ from unittest import mock
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
-from lotuspod import access, api, cli, core, machine, routing  # noqa: E402
+from lotuspod import cli, core, machine, routing  # noqa: E402
+from lotuspod.features.serve import access, api  # noqa: E402
+from lotuspod.features.serve import handler as serve_handler, pages as serve_pages  # noqa: E402
 from lotuspod.features.publish import media, publish  # noqa: E402
 from lotuspod.features.index import listing  # noqa: E402
 from lotuspod.features.publish import render as page_render  # noqa: E402
@@ -1101,14 +1103,14 @@ def main(argv: list[str] | None = None) -> int:
         verifier = access.Verifier(access.parse_config({
             **access_keys.config_section(allowed_emails=f"{access_keys.EMAIL} {SECOND_READER}"),
             "owners": access_keys.EMAIL}))
-        server = cli._make_server(site, HOST, 0, verifier=verifier, db_path=db_path)
+        server = serve_handler._make_server(site, HOST, 0, verifier=verifier, db_path=db_path)
         port = server.server_address[1]
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         # The agent socket as serve runs it: the same database and pages.
         sockets = machine.SocketServer(
-            socket_path, db.Database(db_path), pages=partial(cli.api_page, site),
-            describe=partial(cli.agent_page, site), window=routing.DEFAULT_WINDOW,
+            socket_path, db.Database(db_path), pages=partial(serve_pages.api_page, site),
+            describe=partial(serve_pages.agent_page, site), window=routing.DEFAULT_WINDOW,
             claim_sec=routing.DEFAULT_CLAIM, media_dir=media.media_dir(site),
             max_image_bytes=media.DEFAULT_MAX_BYTES, changed=server.events.changed,
         )

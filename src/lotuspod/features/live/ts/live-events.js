@@ -1,4 +1,4 @@
-// Built from web/src/live-events.ts by web/build.ts. Edit that file, not this one.
+// Built from src/lotuspod/features/live/ts/live-events.ts by web/build.ts. Edit that file, not this one.
 (() => {
   const EVENTS = "/api/events";
   const HELD = "data-lotuspod-events";

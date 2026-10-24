@@ -204,7 +204,8 @@ from http import HTTPStatus
 from pathlib import Path
 from typing import Callable, Mapping
 
-from lotuspod import api, routing, store
+from lotuspod import routing, store
+from lotuspod.features.serve import api
 from lotuspod.features.publish import media
 from lotuspod.features.widgets import widgets
 

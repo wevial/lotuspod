@@ -5,7 +5,7 @@ database from the previous schema step.
 
 Run from the repo root:
 
-    python -m unittest tests.test_seen -v
+    python -m unittest tests.features.serve.test_seen -v
 """
 
 from __future__ import annotations
@@ -17,11 +17,11 @@ import time
 import unittest
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "src"))
 
 from lotuspod.store import db  # noqa: E402
 from tests import access_keys as keys  # noqa: E402
-from tests.test_api import (  # noqa: E402
+from tests.features.serve.test_api import (  # noqa: E402
     ACTOR, CREATED_AT, DECISIONS_BODY, PLAN, ApiTestCase, run_cli,
 )
 from tests.test_unread import A, B, OWNER, UnreadTestCase  # noqa: E402

@@ -42,7 +42,8 @@ from unittest import mock
 SRC_DIR = Path(__file__).resolve().parents[3] / "src"
 sys.path.insert(0, str(SRC_DIR))
 
-from lotuspod import cli, core, serve_files  # noqa: E402
+from lotuspod import cli, core  # noqa: E402
+from lotuspod.features.serve import commands as serve_commands, handler as serve_handler, serve_files  # noqa: E402
 from lotuspod.features.publish import render, sections  # noqa: E402
 from tests import history  # noqa: E402
 
@@ -603,9 +604,9 @@ class ServeAllowListTests(TempDirTestCase):
         self.assertNotIn("flip.html", self.allow_list())
 
 
-def bare_handler(root: Path) -> cli._AllowListHandler:
+def bare_handler(root: Path) -> serve_handler._AllowListHandler:
     """A handler instance wired for direct method calls, no sockets."""
-    handler = cli._AllowListHandler.__new__(cli._AllowListHandler)
+    handler = serve_handler._AllowListHandler.__new__(serve_handler._AllowListHandler)
     handler.root = root
     handler.directory = str(root)
     handler.client_address = ("127.0.0.1", 0)
@@ -623,7 +624,7 @@ class ServeHandlerTests(TempDirTestCase):
         return Path(bare_handler(root or self.out_dir).translate_path(url_path))
 
     def assertDenied(self, url_path: str, root: Path | None = None) -> None:
-        expected = (root or self.out_dir) / cli._DENY_PATH_NAME
+        expected = (root or self.out_dir) / serve_handler._DENY_PATH_NAME
         self.assertEqual(self.resolve(url_path, root), expected, url_path)
 
     def test_root_resolves_to_index(self):
@@ -664,7 +665,7 @@ class ServeHandlerTests(TempDirTestCase):
     def test_vanished_artifacts_dir_denies_without_raising(self):
         gone = self.out_dir / "gone"
         self.assertEqual(
-            self.resolve("/page.html", gone), gone / cli._DENY_PATH_NAME
+            self.resolve("/page.html", gone), gone / serve_handler._DENY_PATH_NAME
         )
 
     def test_directory_listing_suppressed_with_404(self):
@@ -737,12 +738,12 @@ class PublishConfigTests(unittest.TestCase):
 
     def test_ingress_port_is_dedicated_publish_port_not_serve_default(self):
         # The committed ingress intentionally targets 8622 (dedicated publish
-        # port), NOT cli.DEFAULT_SERVE_PORT (8000). Operators run
+        # port), NOT serve_commands.DEFAULT_SERVE_PORT (8000). Operators run
         # `serve --host 127.0.0.1 --port 8622` per README.
         self.assertEqual(self.rules[0]["service"], "http://127.0.0.1:8622")
         self.assertNotEqual(
             self.rules[0]["service"],
-            f"http://127.0.0.1:{cli.DEFAULT_SERVE_PORT}",
+            f"http://127.0.0.1:{serve_commands.DEFAULT_SERVE_PORT}",
             "ingress must not silently track serve's default port",
         )
 
@@ -770,13 +771,13 @@ class ServeHostOverrideTests(TempDirTestCase):
 
     def test_parser_defaults_to_loopback_without_a_subprocess(self):
         args = cli.build_parser().parse_args(["serve"])
-        self.assertEqual(args.port, cli.DEFAULT_SERVE_PORT)
+        self.assertEqual(args.port, serve_commands.DEFAULT_SERVE_PORT)
         with mock.patch.object(
             subprocess, "run", side_effect=AssertionError("must not run a subprocess")
         ), mock.patch.object(
             subprocess, "Popen", side_effect=AssertionError("must not run a subprocess")
         ):
-            self.assertEqual(cli.resolve_serve_host(args.host), "127.0.0.1")
+            self.assertEqual(serve_commands.resolve_serve_host(args.host), "127.0.0.1")
 
     def test_parser_accepts_host_override(self):
         args = cli.build_parser().parse_args(["serve", "--host", "127.0.0.1"])
@@ -784,10 +785,10 @@ class ServeHostOverrideTests(TempDirTestCase):
 
     def test_explicit_host_is_returned_unchanged(self):
         args = cli.build_parser().parse_args(["serve", "--host", "192.0.2.10"])
-        self.assertEqual(cli.resolve_serve_host(args.host), "192.0.2.10")
+        self.assertEqual(serve_commands.resolve_serve_host(args.host), "192.0.2.10")
 
     def test_make_server_binds_requested_host(self):
-        server = cli._make_server(self.out_dir, "127.0.0.1", 0)
+        server = serve_handler._make_server(self.out_dir, "127.0.0.1", 0)
         self.addCleanup(server.server_close)
         host, port = server.server_address[:2]
         self.assertEqual(host, "127.0.0.1")
@@ -860,7 +861,7 @@ class PublishHttpRoundTripTests(TempDirTestCase):
         rc, _, err = run_cli("manifest", "--out-dir", str(self.out_dir))
         assert rc == 0, err
         (self.out_dir / "FINDINGS.md").write_text("private findings", encoding="utf-8")
-        self.server = cli._make_server(self.out_dir, "127.0.0.1", 0)
+        self.server = serve_handler._make_server(self.out_dir, "127.0.0.1", 0)
         self.port = self.server.server_address[1]
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()

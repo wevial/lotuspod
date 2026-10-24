@@ -28,7 +28,8 @@ from pathlib import Path
 SRC_DIR = Path(__file__).resolve().parents[3] / "src"
 sys.path.insert(0, str(SRC_DIR))
 
-from lotuspod import cli, core  # noqa: E402
+from lotuspod import core  # noqa: E402
+from lotuspod.features.serve import handler as serve_handler  # noqa: E402
 
 TIMEOUT = 120
 
@@ -197,7 +198,7 @@ class SourcesAndServeTests(PublishTestCase):
         self.assertEqual(done.returncode, 0, done.stderr)
 
     def serve(self) -> int:
-        server = cli._make_server(self.out_dir, "127.0.0.1", 0)
+        server = serve_handler._make_server(self.out_dir, "127.0.0.1", 0)
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
 
@@ -252,13 +253,13 @@ class SourcesAndServeTests(PublishTestCase):
             self.assertEqual(self.status(port, path), 404, path)
 
     def test_a_file_at_the_denial_sentinel_is_never_served(self):
-        sentinel = self.out_dir / cli._DENY_PATH_NAME
+        sentinel = self.out_dir / serve_handler._DENY_PATH_NAME
         sentinel.write_text("sentinel-secret", encoding="utf-8")
         (self.tmp / "secret.txt").write_text("secret", encoding="utf-8")
         port = self.serve()
 
         self.assertEqual(self.status(port, "/pond.html"), 200)
-        for path in ("/pond.md", "/manifest.json", f"/{cli._DENY_PATH_NAME}",
+        for path in ("/pond.md", "/manifest.json", f"/{serve_handler._DENY_PATH_NAME}",
                      "/%2e%2e/secret.txt", "/..%2fsecret.txt"):
             conn = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
             try:

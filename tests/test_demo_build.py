@@ -48,7 +48,8 @@ SRC_DIR = REPO_ROOT / "src"
 sys.path.insert(0, str(SRC_DIR))
 
 from demo import build  # noqa: E402
-from lotuspod import core, serve_files  # noqa: E402
+from lotuspod import core  # noqa: E402
+from lotuspod.features.serve import serve_files  # noqa: E402
 from lotuspod.features.widgets import widgets  # noqa: E402
 
 PAGES = ("readme.html", "publishing.html", "comments.html", "agents.html", "operating.html",

@@ -1,7 +1,7 @@
 """Test suite for the theme's sources: the stylesheet, the page script, the
 index script and the old-version script are written as one source file per
 feature
-(src/lotuspod/_theme/css/ and src/lotuspod/_theme/js/, the shared ones in
+(src/lotuspod/_theme/css/, the shared ones in
 src/lotuspod/core/theme/ and src/lotuspod/core/ts/, and a slice's in its
 features/SLICE/theme/ and features/SLICE/ts/), and render joins each
 served file's sources in the order core.THEME_SOURCES declares into the one
@@ -27,11 +27,12 @@ from unittest import mock
 from tests.features.publish.test_manifest_v2 import TempDirTestCase, stylesheet_hash
 from tests.core.test_theme_hash import ThemeHashTestCase, script_hash
 
-from lotuspod import core, serve_files  # after test_manifest_v2, which puts src/ on the path
+from lotuspod import core  # after test_manifest_v2, which puts src/ on the path
+from lotuspod.features.serve import serve_files  # after test_manifest_v2, which puts src/ on the path
 
 STYLESHEET = "lotuspod.css"
 # The files under the package that are only declared sources.
-SOURCE_GLOBS = ("_theme/css/**/*", "_theme/js/**/*", "core/ts/**/*", "core/theme/*.css",
+SOURCE_GLOBS = ("_theme/css/**/*", "core/ts/**/*.js", "core/theme/*.css",
                 "features/*/ts/**/*.js", "features/*/theme/*.css")
 # The files those globs match that are no source of a joined file: the widget
 # frame's bridge, which widgets.py writes into each widget's own document.
@@ -156,9 +157,9 @@ class DeclaredOrderTests(ThemeCopyTestCase):
         reads them (LOTUS-206)."""
         styles = core.THEME_SOURCES[STYLESHEET]
         script = core.THEME_SOURCES[core.PAGE_SCRIPT]
-        self.assertIn("_theme/css/live-page.css", styles)
-        self.assertIn("_theme/js/live-page.js", script)
-        self.assertLess(script.index("_theme/js/live-page.js"), script.index("features/comments/ts/islands.js"))
+        self.assertIn("features/live/theme/live-page.css", styles)
+        self.assertIn("features/live/ts/live-page.js", script)
+        self.assertLess(script.index("features/live/ts/live-page.js"), script.index("features/comments/ts/islands.js"))
         problems = source_problems(core.THEME_ROOT, core.THEME_SOURCES)
         self.assertEqual(problems, [], "\n".join(problems))
 
@@ -294,16 +295,16 @@ class DeclaredOrderTests(ThemeCopyTestCase):
 
     def test_the_live_events_source_joins_the_page_and_index_scripts(self):
         """LOTUS-177: serve's change stream, built from
-        web/src/live-events.ts, is joined just before js/live-page.js, whose
+        features/live/ts/live-events.ts, is joined just before js/live-page.js, whose
         check its ticks run, and last in the index script, after
         js/pod-finder.js and js/index-refresh.js; the old-version script
         opens no stream."""
         page = core.THEME_SOURCES[core.PAGE_SCRIPT]
-        self.assertEqual(page.index("_theme/js/live-events.js") + 1, page.index("_theme/js/live-page.js"))
+        self.assertEqual(page.index("features/live/ts/live-events.js") + 1, page.index("features/live/ts/live-page.js"))
         self.assertEqual(core.THEME_SOURCES[core.INDEX_SCRIPT],
-                         ("features/index/ts/pod-tabs.js", "features/index/ts/pod-finder.js", "_theme/js/index-refresh.js",
-                          "_theme/js/live-events.js"))
-        self.assertNotIn("_theme/js/live-events.js", core.THEME_SOURCES[core.OLD_VERSION_SCRIPT])
+                         ("features/index/ts/pod-tabs.js", "features/index/ts/pod-finder.js", "features/live/ts/index-refresh.js",
+                          "features/live/ts/live-events.js"))
+        self.assertNotIn("features/live/ts/live-events.js", core.THEME_SOURCES[core.OLD_VERSION_SCRIPT])
         problems = source_problems(core.THEME_ROOT, core.THEME_SOURCES)
         self.assertEqual(problems, [], "\n".join(problems))
 
@@ -324,11 +325,11 @@ class DeclaredOrderTests(ThemeCopyTestCase):
     def test_a_source_not_in_the_declared_order_is_named(self):
         theme = self.theme_copy()
         (theme / "_theme" / "css" / "stray.css").write_text(".stray {}\n", encoding="utf-8")
-        (theme / "_theme" / "js" / "stray.js").write_text("// stray\n", encoding="utf-8")
+        (theme / "core" / "ts" / "stray.js").write_text("// stray\n", encoding="utf-8")
         problems = source_problems(theme, core.THEME_SOURCES)
         self.assertEqual(len(problems), 2, problems)
         self.assertTrue(problems[0].startswith("_theme/css/stray.css: "), problems)
-        self.assertTrue(problems[1].startswith("_theme/js/stray.js: "), problems)
+        self.assertTrue(problems[1].startswith("core/ts/stray.js: "), problems)
 
     def test_a_declared_source_not_on_disk_is_named(self):
         theme = self.theme_copy()

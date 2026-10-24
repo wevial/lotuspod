@@ -13,7 +13,7 @@ function publish(name: string, content: string) {
     const file = path.join(dir, `${name}.md`);
     fs.writeFileSync(file, content);
     execFileSync(env.LOTUSPOD_TEST_PYTHON!, ['-m', 'lotuspod', 'publish', file, '--local', '--out-dir', env.LOTUSPOD_TEST_OUT!, '--owner', 'hermes', '--credential', env.LOTUSPOD_TEST_CREDENTIAL_HERMES!, '--no-comments'], {
-      env: { ...env, PYTHONPATH: path.resolve(__dirname, '../../src') }, stdio: 'pipe', timeout: 60_000,
+      env: { ...env, PYTHONPATH: path.resolve(__dirname, '../../../../src') }, stdio: 'pipe', timeout: 60_000,
     });
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 }

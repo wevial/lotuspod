@@ -23,7 +23,7 @@ const SOCKET = ENV.LOTUSPOD_TEST_SOCKET ?? '';
 const HERMES = ENV.LOTUSPOD_TEST_CREDENTIAL_HERMES ?? '';
 const PYTHON = ENV.LOTUSPOD_TEST_PYTHON ?? '';
 // This checkout's package, whatever lotuspod is installed.
-const SRC = path.resolve(__dirname, '..', '..', 'src');
+const SRC = path.resolve(__dirname, '..', '..', '..', '..', 'src');
 // The reader as a page names them: their address's part before the @.
 const READER = 'maintainer';
 const OWNER = 'hermes';

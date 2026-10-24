@@ -25,9 +25,10 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from lotuspod import cli, machine, routing  # noqa: E402
+from lotuspod.features.serve import pages as serve_pages  # noqa: E402
 from lotuspod.store import db  # noqa: E402
 from tests import access_keys as keys  # noqa: E402
-from tests.test_api import ACTOR, CREATED_AT, DECISIONS_BODY, ApiTestCase, run_cli  # noqa: E402
+from tests.features.serve.test_api import ACTOR, CREATED_AT, DECISIONS_BODY, ApiTestCase, run_cli  # noqa: E402
 
 # Reader a, the maintainer, and reader b.
 A = keys.EMAIL
@@ -62,8 +63,8 @@ class UnreadTestCase(ApiTestCase):
         self.addCleanup(patcher.stop)
         sockets = machine.SocketServer(
             self.socket_path, db.Database(self.db_path),
-            pages=partial(cli.api_page, self.out_dir),
-            describe=partial(cli.agent_page, self.out_dir), window=routing.DEFAULT_WINDOW,
+            pages=partial(serve_pages.api_page, self.out_dir),
+            describe=partial(serve_pages.agent_page, self.out_dir), window=routing.DEFAULT_WINDOW,
             claim_sec=routing.DEFAULT_CLAIM,
         )
         thread = threading.Thread(target=sockets.serve_forever, daemon=True)

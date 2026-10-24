@@ -1,5 +1,6 @@
-// Builds each theme source web/src/NAME.ts into src/lotuspod/_theme/js/NAME.js,
-// and each slice's src/lotuspod/features/SLICE/ts/NAME.ts into NAME.js beside
+// Builds each theme source web/src/NAME.ts, if any, into
+// src/lotuspod/_theme/js/NAME.js, and each slice's
+// src/lotuspod/features/SLICE/ts/NAME.ts into NAME.js beside
 // it: its types stripped by Bun's transpiler (no bundling, so each file stands
 // alone), after one marker line naming the source. Beside them it bundles a
 // slice's islands entry, src/lotuspod/features/SLICE/ts/islands/main.tsx, with
@@ -154,7 +155,8 @@ export async function build(webDir: string): Promise<BuildResult> {
   checkBun(webDir);
   const srcDir = join(webDir, "src");
   const out = outDir(webDir);
-  const names = sourceNames(srcDir);
+  // web/src may be absent: every theme source here is a slice's.
+  const names = existsSync(srcDir) ? sourceNames(srcDir) : [];
   const transpiler = new Bun.Transpiler({ loader: "ts", target: "browser" });
   const result: BuildResult = { written: [], removed: [] };
   const builds = names.map((name) => strip(transpiler, `web/src/${name}.ts`,

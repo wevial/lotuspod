@@ -39,7 +39,8 @@ import tempfile
 from contextlib import closing
 from pathlib import Path
 
-from lotuspod import core, serve_files
+from lotuspod import core
+from lotuspod.features.serve import serve_files
 from lotuspod.features.publish import media
 from lotuspod.store import db
 

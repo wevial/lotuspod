@@ -4,7 +4,7 @@ refusals, the database across a restart, and where `serve` keeps it.
 
 Run from the repo root:
 
-    python -m unittest tests.test_api -v
+    python -m unittest tests.features.serve.test_api -v
 """
 
 from __future__ import annotations
@@ -24,9 +24,10 @@ from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest import mock
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "src"))
 
-from lotuspod import access, api, cli, core, machine, routing, store  # noqa: E402
+from lotuspod import cli, core, machine, routing, store  # noqa: E402
+from lotuspod.features.serve import access, api, commands as serve_commands, handler as serve_handler  # noqa: E402
 from lotuspod.features.decisions import decisions  # noqa: E402
 from lotuspod.features.publish import media  # noqa: E402
 from tests import access_keys as keys  # noqa: E402
@@ -98,7 +99,7 @@ def run_cli(*argv: str) -> None:
 
 def quiet(testcase: unittest.TestCase) -> None:
     """Keep the servers' request log off the test output."""
-    patcher = mock.patch.object(cli._AllowListHandler, "log_message", lambda *a: None)
+    patcher = mock.patch.object(serve_handler._AllowListHandler, "log_message", lambda *a: None)
     patcher.start()
     testcase.addCleanup(patcher.stop)
 
@@ -148,9 +149,9 @@ class ApiTestCase(unittest.TestCase):
         if self.owners:
             section["owners"] = self.owners
         verifier = access.Verifier(access.parse_config(section))
-        server = cli._make_server(self.out_dir, HOST, 0, verifier=verifier,
-                                  db_path=db_path or self.db_path,
-                                  max_image_bytes=max_image_bytes)
+        server = serve_handler._make_server(self.out_dir, HOST, 0, verifier=verifier,
+                                            db_path=db_path or self.db_path,
+                                            max_image_bytes=max_image_bytes)
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         self.server = server
@@ -1201,7 +1202,7 @@ class RestartTests(ApiTestCase):
         self.assertGreater(later["id"], answer["id"])
 
 
-MEDIA_FIXTURES = Path(__file__).resolve().parent / "fixtures" / "media"
+MEDIA_FIXTURES = Path(__file__).resolve().parents[2] / "fixtures" / "media"
 PNG = MEDIA_FIXTURES / "chart-1600x600.png"
 JPEG = MEDIA_FIXTURES / "fish-320x240.jpg"
 WEBP = MEDIA_FIXTURES / "lily-lossy-240x160.webp"
@@ -1485,7 +1486,7 @@ class ServeCommandTests(unittest.TestCase):
                        self.out_dir):
             with self.subTest(inside=inside):
                 out, err = io.StringIO(), io.StringIO()
-                with mock.patch.object(cli, "_make_server") as make, \
+                with mock.patch.object(serve_commands, "_make_server") as make, \
                         redirect_stdout(out), redirect_stderr(err):
                     rc = cli.main(self.serve_argv("--db", str(inside)))
                 self.assertEqual(rc, 1)
@@ -1497,7 +1498,7 @@ class ServeCommandTests(unittest.TestCase):
         listing = sorted(str(p) for p in self.out_dir.rglob("*"))
         made = []
         ready = threading.Event()
-        real = cli._make_server
+        real = serve_handler._make_server
 
         def make(*args, **kwargs):
             server = real(*args, **kwargs)
@@ -1510,7 +1511,7 @@ class ServeCommandTests(unittest.TestCase):
         def serve() -> None:
             results["rc"] = cli.main(self.serve_argv())
 
-        with mock.patch.object(cli, "_make_server", make), \
+        with mock.patch.object(serve_commands, "_make_server", make), \
                 redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
             thread = threading.Thread(target=serve, daemon=True)
             thread.start()

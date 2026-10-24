@@ -12,7 +12,7 @@ republish leaves the record alone.
 
 set_archived() writes or removes the record, rebuilds the manifest and the
 index and commits once, under the output directory's publish lock: the
-commands call it, and so does serve's /api/archive route (lotuspod.api).
+commands call it, and so does serve's /api/archive route (lotuspod.features.serve.api).
 Without --local, when the config's [publish] section names a host, a command
 runs there over ssh, as publish does.
 
@@ -37,7 +37,8 @@ from pathlib import Path
 from http import HTTPStatus
 
 # The index's listing imports this module too: only names used at call time are read from it.
-from lotuspod import api, core, serve_files
+from lotuspod import core
+from lotuspod.features.serve import api, serve_files
 from lotuspod.features.history import versions
 from lotuspod.features.index import commands as index_commands
 from lotuspod.features.publish import cmd_manifest

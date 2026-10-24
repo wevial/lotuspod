@@ -13,7 +13,7 @@ real image of its kind and small enough to load. It also witnesses what the
 README tells a first-time visitor: why Lotuspod, in five bullets before
 "See it" whose commands `lotuspod --help` lists, how Lotuspod was built, that it is a
 personal project with issues off, and a Security section whose cited
-tests.test_access ids each load. The architecture page holds one Mermaid
+tests.features.serve.test_access ids each load. The architecture page holds one Mermaid
 diagram, whose nodes name the closed list of parts it shows.
 
 Run from the repo root:
@@ -67,14 +67,14 @@ ARCHITECTURE_NODES = ("lotuspod serve", "Agent socket", "SQLite", "Cloudflare Ac
 NODE_LABEL = re.compile(r"\b\w+\[([^\]]*)\]")
 # Mermaid statements that would style the diagram or make it clickable.
 STYLING = re.compile(r"^\s*(click|style|classDef|class|linkStyle)\b", re.M)
-ACCESS_TEST_ID = re.compile(r"`(tests\.test_access\.\w+\.\w+)`")
+ACCESS_TEST_ID = re.compile(r"`(tests\.features\.serve\.test_access\.\w+\.\w+)`")
 # The Access tests the Security section must cite at least.
 PINNING_TESTS = (
-    "tests.test_access.VerifierTests.test_header_must_name_rs256_and_a_listed_key",
-    "tests.test_access.VerifierTests.test_signature_block_is_compared_whole",
-    "tests.test_access.VerifierTests.test_keys_under_2048_bits_are_not_listed",
-    "tests.test_access.VerifierTests.test_malformed_tokens_are_invalid",
-    "tests.test_access.WhoamiTests.test_email_header_naming_someone_else_is_not_read",
+    "tests.features.serve.test_access.VerifierTests.test_header_must_name_rs256_and_a_listed_key",
+    "tests.features.serve.test_access.VerifierTests.test_signature_block_is_compared_whole",
+    "tests.features.serve.test_access.VerifierTests.test_keys_under_2048_bits_are_not_listed",
+    "tests.features.serve.test_access.VerifierTests.test_malformed_tokens_are_invalid",
+    "tests.features.serve.test_access.WhoamiTests.test_email_header_naming_someone_else_is_not_read",
 )
 
 
@@ -259,7 +259,7 @@ class ReadmeStoryTests(unittest.TestCase):
                 self.assertEqual([test.id() for test in suite], [name])
 
     def test_a_missing_test_id_does_not_load_as_itself(self):
-        name = "tests.test_access.VerifierTests.test_no_such_check"
+        name = "tests.features.serve.test_access.VerifierTests.test_no_such_check"
         suite = unittest.TestLoader().loadTestsFromName(name)
         self.assertNotEqual([test.id() for test in suite], [name])
 
