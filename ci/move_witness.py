@@ -18,15 +18,16 @@ LOTUSPOD_CONFIG naming a missing file:
   counting as an added name. A name may be discovered more often here than
   at the merge base only by as many times as test files the merge base lacks
   declare it, so a move ticket may add a test module; those names are listed.
-  A test module named by `--rewritten MODULE` (its dotted name, once for
-  each) is one the ticket rewrites: the names declared in it may be added
+  A test module named by `--rewritten PATH` (its file path from the repo
+  root, such as tests/core/test_theme_sources.py, or its dotted name; once
+  for each) is one the ticket rewrites: the names declared in it may be added
   or dropped at either tree, and each one that is is listed as allowed;
   every other module's names are compared as before.
 
 Prints each difference and exits 1, else prints the counts it compared and
 exits 0. Every move ticket runs it from the repo root:
 
-    python -m ci.move_witness [--rewritten MODULE ...]
+    python -m ci.move_witness [--rewritten PATH ...]
 """
 
 from __future__ import annotations
@@ -186,8 +187,10 @@ def unmarked(data: bytes) -> bytes:
 
 
 def module_path(module: str) -> str:
-    """The file of a test module named by its dotted name, from the root, as
-    UNITTEST_NAMES names it."""
+    """The file of a test module named by its path or its dotted name, from
+    the root, as UNITTEST_NAMES names it."""
+    if module.endswith(".py") or "/" in module:
+        return Path(module).as_posix()
     return module.replace(".", "/") + ".py"
 
 
@@ -235,8 +238,9 @@ def multiset_differences(kind: str, before: collections.Counter, after: collecti
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m ci.move_witness", description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--rewritten", action="append", default=[], metavar="MODULE",
-                        help="a test module the ticket rewrites, by its dotted name")
+    parser.add_argument("--rewritten", action="append", default=[], metavar="PATH",
+                        help="a test module the ticket rewrites, by its file path "
+                             "(a dotted name is also accepted)")
     args = parser.parse_args(argv)
     rewritten = frozenset(map(module_path, args.rewritten))
     playwright = REPO_ROOT / "e2e" / "node_modules" / ".bin" / "playwright"

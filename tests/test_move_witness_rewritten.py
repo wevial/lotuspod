@@ -1,4 +1,4 @@
-"""Test suite for `ci/move_witness.py`'s `--rewritten MODULE`: the names a
+"""Test suite for `ci/move_witness.py`'s `--rewritten PATH`: the names a
 rewritten test module declares may be added or dropped at either tree, each
 listed as allowed, while every other module's names are compared as before.
 
@@ -33,6 +33,13 @@ class RewrittenTest(unittest.TestCase):
             "unittest: 'JoinTests.test_old' is dropped in tests/core/test_theme_sources.py, "
             "rewritten (1 time(s) at the merge base, 0 here)",
         ])
+
+    def test_a_module_is_named_by_its_path_or_its_dotted_name(self):
+        for named in ("tests/core/test_theme_sources.py", "./tests/core/test_theme_sources.py",
+                      "tests.core.test_theme_sources"):
+            with self.subTest(named=named):
+                self.assertEqual(move_witness.module_path(named),
+                                 "tests/core/test_theme_sources.py")
 
     def test_every_other_modules_names_are_compared_as_before(self):
         after = {key: count for key, count in self.BEFORE.items() if key[0] != "tests/test_other.py"}
