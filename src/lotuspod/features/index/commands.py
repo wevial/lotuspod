@@ -43,8 +43,7 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
     index.set_defaults(func=cmd_index)
 
 
-# This slice's subcommands, each by the slot `lotuspod --help` lists it at
-# (lotuspod.cli.build_parser).
+# This slice's subcommands by slot, the order `lotuspod --help` lists them in.
 COMMANDS = (
     (20, add_parser),
 )

@@ -174,8 +174,7 @@ def add_publish_parser(sub: argparse._SubParsersAction) -> None:
     publish.set_defaults(func=cmd_publish)
 
 
-# This slice's subcommands, each by the slot `lotuspod --help` lists it at
-# (lotuspod.cli.build_parser).
+# This slice's subcommands by slot, the order `lotuspod --help` lists them in.
 COMMANDS = (
     (10, add_render_parsers),
     (30, add_publish_parser),

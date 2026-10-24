@@ -154,8 +154,7 @@ def add_audit_parsers(sub: argparse._SubParsersAction) -> None:
     responder.add_parser(sub)
 
 
-# This slice's subcommands, each by the slot `lotuspod --help` lists it at
-# (lotuspod.cli.build_parser).
+# This slice's subcommands by slot, the order `lotuspod --help` lists them in.
 COMMANDS = (
     (50, add_credential_parser),
     (70, add_audit_parsers),
