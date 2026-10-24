@@ -6,6 +6,7 @@
   {"file": "lotuspod.css", "part": "theme/panel-tabs.css", "slot": 67},
   {"file": "lotuspod.css", "part": "theme/panel-resize.css", "slot": 70},
   {"file": "lotuspod.css", "part": "theme/narrow.css", "slot": 80},
+  {"file": "lotuspod.css", "part": "theme/sheet-tabs.css", "slot": 85},
   {"file": "lotuspod-page.js", "part": "ts/narrow.js", "slot": 60},
   {"file": "lotuspod-page.js", "part": "ts/attachments.js", "slot": 70},
   {"file": "lotuspod-page.js", "part": "ts/comment-markdown.js", "slot": 110},

@@ -109,6 +109,16 @@ function Panel({ desk }: { desk: Desk }) {
   const root = useRef<HTMLDivElement>(null);
   // The question to give the focus to once a saved entry leaves.
   const after = useRef<string | null>(null);
+  // The option or item holding the focus as the tab is drawn, by its
+  // question and value: a swap that moves a question to another section
+  // draws its entry anew, once its answers are read, and the focus goes to
+  // the same option there. It is kept while the focus is nowhere.
+  const option = useRef<{ question: string; value: string } | null>(null);
+  const active = document.activeElement;
+  if (active && active !== document.body) {
+    option.current = active instanceof HTMLInputElement && root.current?.contains(active) ?
+      { question: active.closest<HTMLElement>("[data-question]")?.dataset.question ?? "", value: active.value } : null;
+  }
   useLayoutEffect(() => {
     const flash = root.current?.querySelector<HTMLElement>(".artifact-decisions-saved");
     if (flash && document.activeElement === document.body) {
@@ -120,6 +130,16 @@ function Panel({ desk }: { desk: Desk }) {
       next?.querySelector<HTMLElement>(".artifact-decisions-question")?.focus({ preventScroll: true });
     }
     after.current = null;
+    const was = option.current;
+    if (was && (document.activeElement === document.body || !document.activeElement)) {
+      const item = Array.from(root.current?.querySelectorAll<HTMLElement>(".artifact-decisions-entry") ?? [])
+        .find((each) => each.dataset.question === was.question);
+      const input = Array.from(item?.querySelectorAll("input") ?? []).find((each) => each.value === was.value);
+      if (input) {
+        input.focus({ preventScroll: true });
+        option.current = null;
+      }
+    }
   });
   if (!desk.ready.value) {
     return null;

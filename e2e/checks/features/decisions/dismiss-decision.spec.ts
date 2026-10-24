@@ -90,8 +90,9 @@ function parts(page: Page) {
     title: page.locator('.artifact-answered-title'),
     row: (question: string) =>
       page.locator(`.artifact-answered tbody tr[data-question="${question}"]`),
-    state: (question: string) =>
-      page.locator(`.artifact-review-entry[data-question="${question}"] .artifact-review-state`),
+    // A question's entry in the comments panel's Decisions tab.
+    entry: (question: string) =>
+      page.locator(`.artifact-comments-decisions .artifact-decisions-entry[data-question="${question}"]`),
   };
 }
 
@@ -103,14 +104,15 @@ async function dismissed(page: Page) {
   await expect(model.form).toHaveClass(/\bartifact-decision--dismissed\b/);
   await expect(model.saved).toHaveText(`Dismissed: ${REASON} · Undo`);
   await expect(model.undo).toBeVisible();
-  await expect(side.count).toHaveText('1 to answer · Respond');
+  await expect(side.count).toHaveText('1 to answer');
   await expect(side.title).toHaveText('Answered (1)');
   await expect(side.row('decision-1')).toContainText('Dismissed');
   await expect(side.row('decision-1')).toContainText(REASON);
   await expect(side.row('decision-1').locator('.artifact-decision-change')).toHaveCount(0);
+  // The Decisions tab lists only the question still open.
   await side.count.click();
-  await expect(side.state('decision-1')).toHaveText('Dismissed');
-  await expect(side.state('decision-2')).toHaveText('Open');
+  await expect(side.entry('decision-1')).toHaveCount(0);
+  await expect(side.entry('decision-2')).toBeVisible();
   await page.keyboard.press('Escape');
 }
 
@@ -129,7 +131,7 @@ test.describe('signed in', () => {
     await page.goto(`/${NAME}.html?standalone`);
     const model = decision(page, 'decision-1');
     const side = parts(page);
-    await expect(side.count).toHaveText('2 to answer · Respond');
+    await expect(side.count).toHaveText('2 to answer');
     await expect(model.dismiss).toHaveText('Dismiss');
     await expect(decision(page, 'decision-2').dismiss).toBeVisible();
 
@@ -145,10 +147,10 @@ test.describe('signed in', () => {
     await model.undo.click();
     await expect(model.form).not.toHaveClass(/\bartifact-decision--saved\b/);
     await expect(model.form).not.toHaveClass(/\bartifact-decision--dismissed\b/);
-    await expect(side.count).toHaveText('2 to answer · Respond');
+    await expect(side.count).toHaveText('2 to answer');
     await expect(side.table).toHaveCount(0);
     await page.reload();
-    await expect(side.count).toHaveText('2 to answer · Respond');
+    await expect(side.count).toHaveText('2 to answer');
     await expect(model.form).not.toHaveClass(/\bartifact-decision--saved\b/);
     await expect(model.dismiss).toBeVisible();
     expect(errors).toEqual([]);
@@ -176,7 +178,7 @@ test.describe('signed in', () => {
       await expect(nightly.form).toHaveClass(/\bartifact-decision--dismissed\b/);
       await expect(nightly.saved).toHaveText('Dismissed');
       await expect(nightly.undo).toHaveCount(0);
-      await expect(parts(other).count).toHaveText('1 to answer · Respond');
+      await expect(parts(other).count).toHaveText('1 to answer');
       // The archive route has answered.
       await archive;
       await expect(other.locator('button.artifact-decision-dismiss')).toHaveCount(0);
@@ -223,13 +225,6 @@ test.describe('signed in', () => {
     await expect(model.saved).toHaveText('Dismissed · Undo');
     expect((await current('decision-1')).dismissed).toBe(true);
 
-    // A Respond pick on the dismissed question goes with Undo, which leaves
-    // no answer: the question is open again.
-    await side.count.click();
-    await page.locator('.artifact-review-entry[data-question="decision-1"] .artifact-review-option',
-      { hasText: 'Opus' }).click();
-    await expect(side.state('decision-1')).toHaveText('Dismissed');
-    await page.keyboard.press('Escape');
     // The Save before it stays: Undo brings it back.
     await model.undo.click();
     await expect(model.saved).toContainText('Saved · Sonnet');
@@ -238,15 +233,12 @@ test.describe('signed in', () => {
     const nightly = decision(page, 'decision-2');
     await nightly.dismiss.click();
     await expect(nightly.saved).toHaveText('Dismissed · Undo');
-    await side.count.click();
-    await page.locator('.artifact-review-entry[data-question="decision-2"] .artifact-review-option',
-      { hasText: 'Yes' }).click();
-    await page.keyboard.press('Escape');
+    await expect(side.entry('decision-2')).toHaveCount(0);
     await nightly.undo.click();
     await expect(nightly.form).not.toHaveClass(/\bartifact-decision--saved\b/);
     await expect(nightly.option('Yes')).not.toBeChecked();
-    await expect(side.state('decision-2')).toHaveText('Open');
-    await expect(side.count).toHaveText('1 to answer · Respond');
+    await expect(side.entry('decision-2')).toHaveCount(1);
+    await expect(side.count).toHaveText('1 to answer');
 
     // A note over 200 characters once trimmed posts nothing, however much
     // of it is spaces.
@@ -271,7 +263,7 @@ test.describe('signed in', () => {
     gates.shift()!();
     await expect(nightly.form).toHaveClass(/\bartifact-decision--dismissed\b/);
     await expect(nightly.undo).toBeVisible();
-    await expect(side.count).toHaveText('All answered · Respond');
+    await expect(side.count).toHaveText('All answered');
     expect((await current('decision-2')).note).toBe(`${reason}\n\nsecond line`);
     await nightly.undo.click();
     await expect(nightly.form).not.toHaveClass(/\bartifact-decision--saved\b/);
@@ -300,7 +292,7 @@ test.describe('signed in', () => {
     await expect(nightly.saved).toHaveText('Dismissed: Draft B · Undo');
     // Saved, so a folded section's mark (js/page-open.js) never counts it.
     await expect(nightly.form).toHaveClass(/\bartifact-decision--saved\b/);
-    await expect(side.count).toHaveText('All answered · Respond');
+    await expect(side.count).toHaveText('All answered');
     await page.unroute(reading, holdRead);
     await nightly.undo.click();
     await expect(nightly.note).toHaveValue('Draft C');
@@ -329,30 +321,20 @@ test.describe('signed in', () => {
     expect(errors).toEqual([]);
   });
 
-  test('Undo gives a default back, a dismissal during Respond\'s Save is skipped, and a slow read never undoes an Undo', async ({ page, request }) => {
+  test('Undo gives a default back, and a slow read never undoes an Undo', async ({ page, request }) => {
     test.skip(test.info().repeatEachIndex > 0, 'dismisses on a page the first repeat answered');
     const name = 'dismiss-decision-defaults';
     publish(name, DEFAULTS);
     const answers = `/api/answers?page=${name}`;
     const current = async (question: string) =>
       (await (await request.get(answers, { headers: SIGNED_IN })).json()).questions[question]?.current;
-    // The first POST to the answers route held until its gate is opened.
-    const gates: Array<() => void> = [];
-    let holding = false;
-    await page.route('**/api/answers', async (route) => {
-      if (route.request().method() === 'POST' && holding) {
-        holding = false;
-        await new Promise<void>((open) => gates.push(open));
-      }
-      await route.fallback();
-    });
     const errors = watch(page);
     await page.goto(`/${name}.html?standalone`);
     const model = decision(page, 'decision-1');
     const nightly = decision(page, 'decision-2');
     const winter = decision(page, 'decision-3');
     const side = parts(page);
-    await expect(side.count).toHaveText('3 to answer · Respond');
+    await expect(side.count).toHaveText('3 to answer');
     await expect(winter.dismiss).toBeVisible();
 
     // Undo puts the default back as the page opened it, so Save answer saves it.
@@ -363,30 +345,17 @@ test.describe('signed in', () => {
     await winter.undo.click();
     await expect(winter.form).not.toHaveClass(/\bartifact-decision--saved\b/);
     await expect(winter.option('No')).toBeChecked();
-    await expect(side.state('decision-3')).toHaveText('Default');
+    // The Decisions tab, folded, holds it at its default too.
+    await expect(side.entry('decision-3').locator('input[value="no"]')).toBeChecked();
     await winter.save.click();
     await expect(winter.saved).toContainText('Saved · No');
     expect((await current('decision-3')).choice).toBe('no');
 
-    // A question dismissed while Respond's Save posts an earlier one is not
-    // posted, and the Save finishes.
-    await side.count.click();
-    await page.locator('.artifact-review-entry[data-question="decision-2"] .artifact-review-option',
-      { hasText: 'Yes' }).click();
-    const save = page.locator('button.artifact-review-save');
-    await expect(save).toHaveText('Save 2 answers');
-    holding = true;
-    await save.click();
-    await expect.poll(() => gates.length).toBe(1);
-    await page.keyboard.press('Escape');
+    // decision-1 saved at its default, and decision-2 dismissed.
+    await model.save.click();
+    await expect(model.saved).toContainText('Saved · Sonnet');
     await nightly.dismiss.click();
     await expect(nightly.saved).toHaveText('Dismissed · Undo');
-    gates.shift()!();
-    await expect(model.saved).toContainText('Saved · Sonnet');
-    await side.count.click();
-    await expect(save).toHaveText('Nothing new to save');
-    await expect(page.locator('.artifact-review-outcome')).toContainText('Saved at');
-    await page.keyboard.press('Escape');
     expect((await current('decision-1')).choice).toBe('sonnet');
     expect((await current('decision-2')).dismissed).toBe(true);
 
@@ -419,7 +388,7 @@ test.describe('signed in', () => {
     await nightly.undo.click();
     await expect(nightly.form).not.toHaveClass(/\bartifact-decision--saved\b/);
     answerRead();
-    await expect(side.count).toHaveText('1 to answer · Respond');
+    await expect(side.count).toHaveText('1 to answer');
     await expect(nightly.form).not.toHaveClass(/\bartifact-decision--saved\b/);
     await expect(nightly.form).not.toHaveClass(/\bartifact-decision--dismissed\b/);
     await expect(side.title).toHaveText('Answered (2)');

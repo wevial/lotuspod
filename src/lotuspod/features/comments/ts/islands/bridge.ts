@@ -32,7 +32,7 @@ declare const CHANGED_GROUP: string;
 declare const COMMENTS: string;
 declare const ROOM: number;
 declare const POPOVER: string;
-declare function overText(the: NarrowBridge): import("./comments/parts").Over;
+declare function overText(the: NarrowBridge | QuestionsBridge): import("./comments/parts").Over;
 
 // js/live-page.js.
 declare const live: Live;
@@ -256,6 +256,9 @@ export interface PlacementBridge extends Omit<ThreadListBridge,
 export interface NarrowBridge extends Pick<import("./comments/parts").ThreadList,
   "compose" | "unresolvedOf" | "ordered" | "latest" | "standing" | "asked" |
   "said" | "tick" | "title" | "opening"> {
+  // The page takes comments: the sheet holds threads, and its Comments tab.
+  comments: true;
+  tabs: import("./comments/tabs").SheetTabs;
   panel: import("./comments/parts").Placement;
   groups: Map<HTMLElement, import("./comments/parts").Group>;
   passages: PlacementBridge["passages"];
@@ -270,6 +273,13 @@ export interface NarrowBridge extends Pick<import("./comments/parts").ThreadList
   unfold(target: HTMLElement): void;
   barBottom(): number;
   standsFor(box: HTMLElement): HTMLElement | null;
+}
+
+// What overText reads on a page that takes no comments, where the sheet
+// holds only the questions and never a thread.
+export interface QuestionsBridge extends Pick<NarrowBridge, "tabs" | "mute" | "unfold" | "barBottom"> {
+  comments: false;
+  panel: Pick<import("./comments/parts").Placement, "mode">;
 }
 
 // What the store reaches the drafts (comments/drafts.ts) by: the boxes and

@@ -104,7 +104,7 @@ test.describe('signed in', () => {
     const nightly = decision(page, 'decision-2');
     await expect(nightly.form).not.toHaveClass(/\bartifact-decision--saved\b/);
     await expect(nightly.save).toBeVisible();
-    await expect(page.locator('button.artifact-review-count')).toHaveText('1 to answer · Respond');
+    await expect(page.locator('button.artifact-review-count')).toHaveText('1 to answer');
     await expect(page.locator('.artifact-answered-title')).toHaveText('Answered (1)');
     const row = page.locator('.artifact-answered tbody tr[data-question="decision-1"]');
     await expect(row.locator('.artifact-answered-source')).toContainText('Answered elsewhere:');

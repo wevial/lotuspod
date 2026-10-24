@@ -22,6 +22,7 @@ const PYTHON = ENV.LOTUSPOD_TEST_PYTHON ?? '';
 const SRC = path.resolve(__dirname, '..', '..', '..', '..', 'src');
 const PANEL = 'lotuspod:comments-panel';
 const WIDE = { width: 1280, height: 800 };
+const PHONE = { width: 360, height: 740 };
 const CONTEXT_1 = 'The facts line already holds rounds and waits-on.';
 const OPTIONS: Record<string, string[]> = {
   'decision-1': ['Beside the title', 'In the facts line', 'Only on hover'],
@@ -254,7 +255,7 @@ test('every question with no saved answer is to answer, in the title bar, the ma
   const errors = watch(page);
   await load(page, name);
 
-  await expect(page.locator('button.artifact-review-count')).toHaveText('3 to answer · Respond');
+  await expect(page.locator('button.artifact-review-count')).toHaveText('3 to answer');
   const mark = (id: string) => page.locator(`h2#${id} .artifact-review-open`);
   await expect(mark('pull-request-rows')).toHaveText('2 open');
   await expect(mark('screenshots-on-a-row')).toHaveText('1 open');
@@ -347,7 +348,7 @@ test('a pick or a note in the panel is the card\'s, and Save posts it as the car
   await expect(own.saved).toHaveText('✓ Saved · Only on hover · change');
   await expect(one.saved).toHaveText('✓ Saved · Only on hover');
   await expect(one.item).toHaveCount(0);
-  await expect(count).toHaveText('2 to answer · Respond');
+  await expect(count).toHaveText('2 to answer');
   await expect(side.badge('Decisions')).toHaveText('2');
   await expect(page.locator('h2#pull-request-rows .artifact-review-open')).toHaveText('1 open');
 
@@ -365,7 +366,7 @@ test('a pick or a note in the panel is the card\'s, and Save posts it as the car
     .toHaveText('Your answer was not saved (storage_unavailable). Try again.');
   await expect(two.item).toBeVisible();
   await expect(two.unsaved).toBeVisible();
-  await expect(count).toHaveText('2 to answer · Respond');
+  await expect(count).toHaveText('2 to answer');
 
   // Saved from its card, question 3 leaves, and its heading with it.
   await card(page, 'decision-3').save.click();
@@ -396,7 +397,7 @@ test('a question\'s text, and its Show on page, put its card under the title bar
   expect(errors).toEqual([]);
 });
 
-test('the folded rail\'s orchid count opens Decisions, and the opener and a chip open Comments', async ({ page, request }) => {
+test('the title bar\'s count and the folded rail\'s orchid count open Decisions, and the opener and a chip open Comments', async ({ page, request }) => {
   test.setTimeout(90_000);
   test.skip(test.info().repeatEachIndex > 0, 'answers a page the first repeat answered');
   const name = 'decisions-panel-rail';
@@ -404,6 +405,20 @@ test('the folded rail\'s orchid count opens Decisions, and the opener and a chip
   const errors = watch(page);
   await load(page, name, 'folded');
   const side = panel(page);
+  // The title bar's count unfolds the panel on Decisions, the focus on the
+  // first question to answer; nothing of the review sheet's is drawn into
+  // the body, where its panel was.
+  const count = page.locator('button.artifact-review-count');
+  await expect(count).toHaveText('3 to answer');
+  await expect(side.decisions).toBeHidden();
+  await expect(count).toHaveAttribute('aria-controls', 'artifact-comments-decisions');
+  await count.click();
+  await expect(side.decisions).toBeVisible();
+  await expect(side.tab('Decisions')).toHaveAttribute('aria-selected', 'true');
+  await expect(entry(page, 'decision-1').question).toBeFocused();
+  await expect(page.locator('body > [class*="artifact-review"]')).toHaveCount(0);
+  await side.fold.click();
+
   await expect(side.toAnswer).toBeVisible();
   await expect(side.toAnswer).toHaveAttribute('aria-label', '3 to answer: open the questions');
   await expect(side.toAnswer.locator('.artifact-comments-to-answer-count')).toHaveText('3');
@@ -535,7 +550,7 @@ test('a folded heading counts a saved question reopened by its change as answere
   await expect(own.option('Beside the title')).toBeVisible();
   await page.locator('h2#pull-request-rows button.artifact-section-toggle').click();
   await expect(page.locator('h2#pull-request-rows .artifact-section-mark:not([hidden])')).toHaveText('1 to answer');
-  await expect(page.locator('button.artifact-review-count')).toHaveText('2 to answer · Respond');
+  await expect(page.locator('button.artifact-review-count')).toHaveText('2 to answer');
   await expect(side.badge('Decisions')).toHaveText('2');
   expect(errors).toEqual([]);
 });
@@ -833,4 +848,93 @@ test('an empty panel Ask posts nothing, and the card\'s Ask still sends and empt
   await expect(carried).toHaveCount(0);
   await expect(row(page, 'decision-3').label).toHaveText('Overlay on the console');
   expect(errors).toEqual([]);
+});
+
+// The bottom sheet, in place of the panel on a phone.
+function bottom(page: Page) {
+  const node = page.locator('.artifact-comments-bottom-sheet');
+  const tabs = node.getByRole('tablist');
+  return {
+    node,
+    tab: (name: 'Decisions' | 'Comments') => tabs.getByRole('tab', { name: new RegExp(`^${name}`) }),
+    decisions: node.locator('.artifact-comments-bottom-sheet-decisions'),
+    at: node.locator('.artifact-comments-bottom-sheet-at'),
+    close: node.getByRole('button', { name: 'Close', exact: true }),
+    entry: (question: string) => node.locator(`.artifact-decisions-entry[data-question="${question}"]`),
+  };
+}
+
+test.describe('on a phone', () => {
+  test.use({ viewport: PHONE });
+
+  test('the count opens the bottom sheet on Decisions, and a chip on Comments, each tab a press away', async ({ page, request }) => {
+    test.setTimeout(90_000);
+    // A page of each repeat's own, as the site keeps its answers.
+    const name = `decisions-panel-phone-${test.info().repeatEachIndex}`;
+    await prepare(request, name);
+    const errors = watch(page);
+    await load(page, name);
+    const count = page.locator('button.artifact-review-count');
+    await expect(count).toHaveText('3 to answer');
+    for (const target of [count, page.locator('a.artifact-review-next')]) {
+      const box = (await target.boundingBox())!;
+      expect(box.x).toBeGreaterThanOrEqual(0);
+      expect(box.x + box.width).toBeLessThanOrEqual(PHONE.width);
+    }
+    await expect(count).toHaveAttribute('aria-controls', 'artifact-comments-bottom-sheet-decisions');
+
+    const sheet = bottom(page);
+    await count.click();
+    await expect(sheet.node).toBeVisible();
+    expect(await sheet.node.boundingBox()).toMatchObject({ x: 0, width: PHONE.width });
+    await expect(sheet.tab('Decisions')).toHaveAttribute('aria-selected', 'true');
+    await expect(sheet.decisions.locator('.artifact-decisions-group-title').first()).toHaveText('Pull request rows');
+    expect(await sheet.decisions.locator('.artifact-decisions-group').first().locator('.artifact-decisions-entry')
+      .evaluateAll((items) => items.map((item) => (item as HTMLElement).dataset.question)))
+      .toEqual(['decision-1', 'decision-2']);
+    await expect(sheet.entry('decision-1').locator('button.artifact-decisions-question')).toBeFocused();
+
+    // A pick and its Save in the sheet are the card's.
+    await sheet.entry('decision-1').getByRole('radio', { name: 'In the facts line' }).check();
+    const posted = page.waitForResponse((response) =>
+      new URL(response.url()).pathname === '/api/answers' && response.request().method() === 'POST');
+    await sheet.entry('decision-1').getByRole('button', { name: 'Save', exact: true }).click();
+    expect((await posted).status()).toBe(201);
+    expect((await stored(request, name)).answers['decision-1'].current).toMatchObject({ choice: 'in-the-facts-line' });
+    await expect(count).toHaveText('2 to answer');
+
+    // Closed, the sheet gives the questions back to the panel's tab.
+    await sheet.close.click();
+    await expect(sheet.node).toBeHidden();
+    await expect(sheet.node.locator('[data-question]')).toHaveCount(0);
+    await expect(panel(page).decisions.locator('[data-question="decision-1"]')).toHaveCount(1);
+
+    // A chip opens the sheet on Comments at its thread; the tabs swap the
+    // questions and the thread.
+    const chip = page.locator('details.artifact-comment[data-section="screenshots-on-a-row"] > summary');
+    const thread = sheet.node.locator('.artifact-comment-thread', { hasText: 'Should the lightbox close on Esc?' });
+    await chip.click();
+    await expect(sheet.tab('Comments')).toHaveAttribute('aria-selected', 'true');
+    await expect(sheet.at).toHaveText(/^1 of /);
+    await expect(thread).toBeVisible();
+    await sheet.tab('Decisions').click();
+    await expect(sheet.tab('Decisions')).toHaveAttribute('aria-selected', 'true');
+    await expect(sheet.entry('decision-2')).toBeVisible();
+    await expect(thread).toBeHidden();
+    await sheet.tab('Comments').click();
+    await expect(thread).toBeVisible();
+    await expect(sheet.entry('decision-2')).toBeHidden();
+    await sheet.close.click();
+
+    // From 700 pixels a chip opens a popover, and the count still the sheet.
+    await page.setViewportSize({ width: 800, height: 900 });
+    await chip.click();
+    await expect(page.locator('.artifact-comments-popover')).toBeVisible();
+    await page.keyboard.press('Escape');
+    await count.click();
+    await expect(sheet.node).toBeVisible();
+    await expect(sheet.tab('Decisions')).toHaveAttribute('aria-selected', 'true');
+    await expect(sheet.entry('decision-2')).toBeVisible();
+    expect(errors).toEqual([]);
+  });
 });

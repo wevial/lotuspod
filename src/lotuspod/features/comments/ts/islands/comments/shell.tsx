@@ -9,8 +9,10 @@ import { decisionsTab } from "./tabs";
 // nor is the Decisions tab's root, which the decisions island draws.
 // On a page that asks questions the head is two tabs, Decisions and Comments:
 // the panel shows Decisions until something chooses a tab, and the threads
-// are in view only while the Comments tab shows them.
-export function shell(page: Page, hooks: ShellHooks): Shell {
+// are in view only while the Comments tab shows them. On a page that takes
+// no comments (comments false) the head is the Decisions tab alone, with no
+// way to start a thread, and the rail holds only "N to answer".
+export function shell(page: Page, hooks: ShellHooks, comments = true): Shell {
   const root = document.createElement("div");
   const panel = createRef<HTMLElement>();
   const list = createRef<HTMLDivElement>();
@@ -23,6 +25,7 @@ export function shell(page: Page, hooks: ShellHooks): Shell {
   const start = createRef<HTMLDivElement>();
   const decisions = createRef<HTMLDivElement>();
   const tabs = { decisions: createRef<HTMLButtonElement>(), comments: createRef<HTMLButtonElement>() };
+  const toAnswer = createRef<HTMLButtonElement>();
   let open = false;
   let chosen: Tab | null = null;
   let resolvedShown = false;
@@ -35,13 +38,13 @@ export function shell(page: Page, hooks: ShellHooks): Shell {
   let picking = false;
   let active = -1;
   const tabbed = () => decisionsTab.asks.peek();
-  const showing = (): Tab => tabbed() ? chosen ?? "decisions" : "comments";
+  const showing = (): Tab => !comments ? "decisions" : tabbed() ? chosen ?? "decisions" : "comments";
   // Whether the threads are in view: the panel open on its Comments tab.
   const seen = () => open && showing() === "comments";
   const whole = () => sections.find(s => s.section === page.wholePage)
     || sections.find(s => s.section === "page");
   const focus = (control: "fold" | "opener" | "resolved" | "decisions" | HTMLElement) => {
-    const node = control === "fold" ? fold.current : control === "opener" ? opener.current
+    const node = control === "fold" ? fold.current : control === "opener" ? opener.current ?? toAnswer.current
       : control === "resolved" ? resolved.current : control === "decisions" ? tabs.decisions.current
       : control === whole()?.box ? onPage.current : pick.current;
     node?.focus({ preventScroll: true });
@@ -86,7 +89,15 @@ export function shell(page: Page, hooks: ShellHooks): Shell {
     draw();
     if (focused) tabs[tab].current?.focus({ preventScroll: true });
   }
+  // The title bar's count: the panel opens on Decisions, the focus on the
+  // first question to answer, else on the tab.
+  function decide(): void {
+    setOpen(true, true, "decisions");
+    const question = decisions.current?.querySelector<HTMLElement>(".artifact-decisions-entry .artifact-decisions-question");
+    (question ?? tabs.decisions.current)?.focus({ preventScroll: true });
+  }
   function tabKey(event: KeyboardEvent): void {
+    if (!comments) return;
     const order: Tab[] = ["decisions", "comments"];
     const at = order.indexOf(showing());
     const to = event.key === "ArrowRight" || event.key === "ArrowLeft" ? order[(at + 1) % 2]
@@ -138,18 +149,18 @@ export function shell(page: Page, hooks: ShellHooks): Shell {
     );
     render(createPortal(
       <aside ref={panel} class="artifact-comments-panel"
-        aria-label="Comments" hidden={hidden} onKeyDown={event => {
+        aria-label={comments ? "Comments" : "Decisions"} hidden={hidden} onKeyDown={event => {
           if (event.key === "Escape" && open) {
             event.preventDefault(); setOpen(false, true); focus("opener");
           }
         }}>
         <div class="artifact-comments-rail" hidden={open} onClick={() => { setOpen(true, true); focus("fold"); }}>
-          <button ref={opener} type="button" class="artifact-comments-opener" aria-label="Comments"
+          {comments && <button ref={opener} type="button" class="artifact-comments-opener" aria-label="Comments"
             aria-controls="artifact-comments-sheet" aria-describedby="artifact-comments-count" aria-expanded={open}>
             <span class="artifact-comments-icon" aria-hidden="true" />
-          </button>
-          <span class="artifact-comments-badge" hidden={!tally.open.length}>{tally.open.length}</span>
-          {asks && <button type="button" hidden={count === null}
+          </button>}
+          {comments && <span class="artifact-comments-badge" hidden={!tally.open.length}>{tally.open.length}</span>}
+          {asks && <button ref={toAnswer} type="button" hidden={count === null}
             class={"artifact-comments-to-answer" + (count === 0 ? " artifact-comments-to-answer--done" : "")}
             aria-label={(count ? `${count} to answer` : "All answered") + ": open the questions"}
             aria-controls="artifact-comments-decisions" onClick={event => {
@@ -158,14 +169,15 @@ export function shell(page: Page, hooks: ShellHooks): Shell {
             <span class="artifact-comments-to-answer-count" aria-hidden="true">{count ? String(count) : "✓"}</span>
             <span class="artifact-comments-to-answer-label" aria-hidden="true">{count ? "to answer" : "answered"}</span>
           </button>}
-          <ol class="artifact-comments-dots" aria-hidden="true">
+          {comments && <ol class="artifact-comments-dots" aria-hidden="true">
             {tally.open.map(thread => <li key={thread.id} class={`artifact-comments-dot artifact-comments-dot--${thread.standing}`} />)}
-          </ol>
-          <span class="artifact-comments-rail-label" aria-hidden="true">Comments</span>
+          </ol>}
+          <span class="artifact-comments-rail-label" aria-hidden="true">{comments ? "Comments" : "Decisions"}</span>
         </div>
         <div class="artifact-comments-sheet" id="artifact-comments-sheet" hidden={!open}>
           <header class={"artifact-comments-head" + (asks ? " artifact-comments-head--tabs" : "")}>
-            {asks ? <div class="artifact-comments-tabs" role="tablist" aria-label="Decisions and comments" onKeyDown={tabKey}>
+            {asks ? <div class="artifact-comments-tabs" role="tablist"
+              aria-label={comments ? "Decisions and comments" : "Decisions"} onKeyDown={tabKey}>
               <button ref={tabs.decisions} type="button" role="tab" class="artifact-comments-tab"
                 id="artifact-comments-tab-decisions" aria-controls="artifact-comments-decisions"
                 aria-selected={shown === "decisions"} tabIndex={shown === "decisions" ? 0 : -1}
@@ -174,16 +186,17 @@ export function shell(page: Page, hooks: ShellHooks): Shell {
                 <span class={"artifact-comments-tab-badge" + (count === 0 ? " artifact-comments-tab-badge--done" : "")}
                   hidden={count === null}>{count ? String(count) : "✓"}</span>
               </button>
-              <button ref={tabs.comments} type="button" role="tab" class="artifact-comments-tab"
+              {comments && <button ref={tabs.comments} type="button" role="tab" class="artifact-comments-tab"
                 id="artifact-comments-tab-comments" aria-controls="artifact-comments-sheet-comments"
                 aria-selected={shown === "comments"} tabIndex={shown === "comments" ? 0 : -1}
                 onClick={() => select("comments", false)}>
                 Comments
                 <span class="artifact-comments-tab-badge">{tally.open.length}</span>
-              </button>
+              </button>}
             </div> : <h2 class="artifact-comments-title">Comments</h2>}
             {!asks && counts}
-            <button ref={fold} type="button" class="artifact-comments-fold" aria-label="Fold comments"
+            <button ref={fold} type="button" class="artifact-comments-fold"
+              aria-label={comments ? "Fold comments" : "Fold decisions"}
               onClick={() => { setOpen(false, true); focus("opener"); }}><span aria-hidden="true">»</span></button>
           </header>
           <div ref={decisions} class="artifact-comments-decisions" id="artifact-comments-decisions" role="tabpanel"
@@ -192,7 +205,7 @@ export function shell(page: Page, hooks: ShellHooks): Shell {
               threads themselves. */}
           <div class="artifact-comments-threads" id="artifact-comments-sheet-comments" hidden={shown !== "comments"}
             role={asks ? "tabpanel" : undefined} aria-labelledby={asks ? "artifact-comments-tab-comments" : undefined}>
-            <div ref={start} class="artifact-comments-start">
+            {comments && <div ref={start} class="artifact-comments-start">
               {asks && counts}
               {page.archived && <p class="artifact-comments-closed">{page.closed}</p>}
               <p class="artifact-comments-none" hidden={!tally.none}>No comments yet</p>
@@ -210,7 +223,7 @@ export function shell(page: Page, hooks: ShellHooks): Shell {
                   id={`artifact-comments-choice-${section.id}`} role="option" aria-selected={index === active}
                   onClick={() => choose(section)}>{section.title}</li>)}
               </ul>
-            </div>
+            </div>}
             <div ref={list} class="artifact-comments-groups" />
           </div>
         </div>
@@ -234,7 +247,7 @@ export function shell(page: Page, hooks: ShellHooks): Shell {
   }, true);
   return {
     list: list.current!, isOpen: seen, resolvedShown: () => resolvedShown,
-    setOpen, setResolvedShown, unpick, focus,
+    setOpen, decide, setResolvedShown, unpick, focus,
     hidden(hide) { hidden = hide; draw(); },
     sections(next) { sections = next; active = -1; draw(); },
     refresh(next) { tally = next; draw(); },

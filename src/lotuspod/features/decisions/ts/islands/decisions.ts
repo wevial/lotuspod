@@ -3,10 +3,10 @@ import { answerStore, store, UNANSWERED, type Answer, type Page, type Swapped } 
 import { answeredTable } from "./answered";
 import { giveAsk } from "./ask";
 import { acting, adopt, dirty, draw, mark, openCard, queue, refused, restore, saved, unfold, type Card, type Deck } from "./card";
-import { all, isChecklist, optionText, same, summary, ticked } from "./checklist";
+import { all, isChecklist, ticked } from "./checklist";
 import { dismissals } from "./dismiss";
 import { decisionsPanel } from "./panel";
-import { headingOf, jump, place, sectionsOf, type Section } from "./sections";
+import { headingOf, jump, place } from "./sections";
 import { noteField, status } from "./words";
 
 // What the review sheet (comments/ts/islands/review-sheet.tsx) reads the
@@ -17,16 +17,6 @@ export interface Cards {
   readonly forms: HTMLFormElement[];
   // The form's stored answer at its version, else null.
   saved(form: HTMLFormElement): Answer | null;
-  // A checklist's item ids checked now ("checked") or by default
-  // ("defaultChecked"), in page order.
-  ticked(form: HTMLFormElement, state: "checked" | "defaultChecked"): string[];
-  // Whether two lists of item ids hold the same items.
-  same(a: readonly string[], b: readonly string[]): boolean;
-  // The items whose state in checked differs from their defaults, worded.
-  summary(form: HTMLFormElement, checked: readonly string[]): string;
-  // An option's label, else its value.
-  optionText(input: HTMLInputElement): string;
-  isChecklist(form: HTMLFormElement): boolean;
   // Whether the picked option, items or note differ from the stored answer.
   dirty(form: HTMLFormElement): boolean;
   // Whether the question is to answer: its answers are read and it has no
@@ -37,15 +27,10 @@ export interface Cards {
   toAnswer(form: HTMLFormElement): boolean;
   // The nearest h2 before the form, null before the first.
   heading(form: HTMLFormElement): HTMLElement | null;
-  // The forms in one group per section, in page order, under its title.
-  sections(forms: readonly HTMLFormElement[]): Section[];
   // Put a form just under the title bar, its section opened if folded.
   place(form: HTMLFormElement): void;
   // Place a form and focus its first option, or its "change" once folded.
   jump(form: HTMLFormElement): void;
-  // Post the form's answer in its turn: true once saved, false when refused,
-  // with why in the form's status.
-  save(form: HTMLFormElement): Promise<boolean>;
   // True once the page's answers are read, set before ANSWERED is sent;
   // after a swap, whether its read of them was.
   read: boolean;
@@ -77,9 +62,11 @@ export function decisions(page: Page): Cards | null {
   // outside them.
   let loading = 0;
   const drawn = signal(0);
-  // Each card marked, and whether a read of the answers has succeeded.
+  // Each card marked, whether a read of the answers has succeeded, and
+  // whether one failed before any did.
   const marked = signal(0);
   const ready = signal(false);
+  let failed = false;
   const each = () => forms.map(cardOf);
 
   // The form asking question, if the page asks it.
@@ -231,8 +218,7 @@ export function decisions(page: Page): Cards | null {
     return !card.waiting && !saved(card);
   };
   const reading: Cards = {
-    forms, ticked, same, summary, optionText, isChecklist, save, read: false, drawn, toAnswer,
-    heading: headingOf, sections: sectionsOf, place, jump,
+    forms, read: false, drawn, toAnswer, heading: headingOf, place, jump,
     saved: (form) => saved(cardOf(form)),
     dirty: (form) => dirty(cardOf(form)),
   };
@@ -244,7 +230,8 @@ export function decisions(page: Page): Cards | null {
       for (const form of forms) form.classList.toggle("artifact-decision--to-answer", toAnswer(form));
     });
   });
-  // The Decisions tab, on a page that takes answers.
+  // The Decisions tab, on a page that takes answers whose answers could be
+  // read.
   decisionsPanel({
     forms, marked, ready, save, toAnswer, saved: reading.saved, dirty: reading.dirty,
     reopen: (form) => {
@@ -252,7 +239,7 @@ export function decisions(page: Page): Cards | null {
     },
     restore: (form) => restore(deck, cardOf(form)),
   },
-    () => forms.length > 0 && !page.archived);
+    () => forms.length > 0 && !page.archived && (ready.peek() || !failed));
 
   // The answers read, the table placed after the body's last section, and
   // the page told (ANSWERED); not for a read a newer one replaced, which
@@ -277,6 +264,9 @@ export function decisions(page: Page): Cards | null {
         // No card waits now, though none may have been drawn again.
         marked.value = marked.peek() + 1;
         ready.value = true;
+      } else if (!ready.peek()) {
+        failed = true;
+        marked.value = marked.peek() + 1;
       }
       table(store.currents.peek());
       document.dispatchEvent(new CustomEvent(page.events.answered));

@@ -2537,10 +2537,8 @@ test.describe('signed in', () => {
     await open(page, name);
     await expect(page.locator('div.artifact-review-bar')).toHaveCount(1);
     // The defaults picked on load are saved, so no pick holds the section.
-    await page.locator('button.artifact-review-count').click();
-    await page.locator('button.artifact-review-save').click();
-    await expect(page.locator('.artifact-review-outcome')).toContainText('Saved at');
-    await page.locator('.artifact-review-close').click();
+    for (const question of ['decision-1', 'decision-2']) await card(page, question).save.click();
+    await expect(page.locator('form.artifact-decision--saved')).toHaveCount(2);
     await page.locator('h1.artifact-title').click();
     const moved = watchLoads(page);
 
@@ -2548,7 +2546,7 @@ test.describe('signed in', () => {
     await expect(banner(page).node).toHaveCount(0);
     await expect(card(page, 'decision-1').text).toHaveText('Which heater, for a deep pond?');
     await expect(page.locator('div.artifact-review-bar')).toHaveCount(1);
-    await expect(page.locator('button.artifact-review-count')).toHaveText('1 to answer · Respond');
+    await expect(page.locator('button.artifact-review-count')).toHaveText('1 to answer');
     expect(moved.count).toBe(0);
     expect(errors).toEqual([]);
   });

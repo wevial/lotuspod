@@ -40,7 +40,7 @@ CEILING = {
 # How far a pin may sit above its file before it must come down.
 OVER = 150
 PINNED = {
-    "e2e/checks/live-page.spec.ts": 2555,
+    "e2e/checks/live-page.spec.ts": 2553,
     "src/lotuspod/features/agents/machine.py": 1146,
     "src/lotuspod/features/agents/responder.py": 1033,
     "src/lotuspod/features/comments/theme/comments.css": 1773,
