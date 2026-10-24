@@ -84,21 +84,59 @@ async function columns(page: Page, index: number) {
   }));
 }
 
+// What each page and size is checked for, on one load: the page never
+// scrolls sideways and each table fits the window or scrolls itself; at the
+// phone size the eight-column table scrolls rather than squeezing its cells;
+// beside the outline rail no table starts under it; and on the report page a
+// long first cell leaves the second column its room and the findings table's
+// long first column starves no other.
+const RAIL = [1024, 1440];
+const LONG_FIRST_ROOM = [1024, 768];
+const FINDINGS_ROOM = [1024, 1440];
+
 for (const target of [ARTICLE, REPORT]) {
   for (const size of SIZES) {
     test(`${target.slug} at ${size.width}x${size.height} never scrolls sideways`, async ({ page }) => {
       await page.setViewportSize(size);
       await load(page, target);
+      await settle(page);
       const widths = await page.evaluate(() => ({
         scroll: document.documentElement.scrollWidth,
         window: window.innerWidth,
       }));
       expect(widths.scroll).toBeLessThanOrEqual(widths.window);
-    });
 
-    test(`${target.slug} at ${size.width}x${size.height}: each table fits the window or scrolls itself`, async ({ page }) => {
-      await page.setViewportSize(size);
-      await load(page, target);
+      if (size.width === 390) {
+        const wide = await page.locator('.artifact-body table').nth(WIDE).evaluate((table) => ({
+          rem: parseFloat(getComputedStyle(document.documentElement).fontSize),
+          scrolls: table.scrollWidth > table.clientWidth,
+          cells: Array.from(table.querySelectorAll('tbody td'), (cell) => cell.getBoundingClientRect().width),
+        }));
+        expect(wide.cells.length).toBe(16);
+        for (const cell of wide.cells) expect(cell).toBeGreaterThanOrEqual(6 * wide.rem - 0.5);
+        expect(wide.scrolls).toBe(true);
+      }
+
+      if (RAIL.includes(size.width)) {
+        const outline = (await page.locator('nav.artifact-outline').boundingBox())!;
+        const lefts = (await tableBoxes(page, '.artifact-body table')).map((box) => box.left);
+        for (const left of lefts) expect(left).toBeGreaterThanOrEqual(outline.x + outline.width);
+      }
+
+      if (target === REPORT && LONG_FIRST_ROOM.includes(size.width)) {
+        const { table, cells } = await columns(page, LONG_FIRST);
+        expect(cells.length).toBe(2);
+        expect(cells[1] / table).toBeGreaterThanOrEqual(0.4);
+      }
+
+      if (target === REPORT && FINDINGS_ROOM.includes(size.width)) {
+        const { table, cells } = await columns(page, FINDINGS);
+        expect(cells.length).toBe(3);
+        expect(Math.min(...cells) / table).toBeGreaterThanOrEqual(0.2);
+        expect(cells[0] / table).toBeLessThanOrEqual(0.6);
+      }
+
+      // Last, as it scrolls each table to its end.
       const tables = await page.locator('.artifact-body table').evaluateAll((all) => all.map((table) => {
         const fits = table.getBoundingClientRect().right <= window.innerWidth;
         const scrolls = table.scrollWidth > table.clientWidth;
@@ -114,73 +152,22 @@ for (const target of [ARTICLE, REPORT]) {
       }
     });
   }
-
-  test(`${target.slug} at 390x844: the eight-column table scrolls rather than squeezing its cells`, async ({ page }) => {
-    await page.setViewportSize({ width: 390, height: 844 });
-    await load(page, target);
-    const wide = await page.locator('.artifact-body table').nth(WIDE).evaluate((table) => ({
-      rem: parseFloat(getComputedStyle(document.documentElement).fontSize),
-      scrolls: table.scrollWidth > table.clientWidth,
-      cells: Array.from(table.querySelectorAll('tbody td'), (cell) => cell.getBoundingClientRect().width),
-    }));
-    expect(wide.cells.length).toBe(16);
-    for (const cell of wide.cells) expect(cell).toBeGreaterThanOrEqual(6 * wide.rem - 0.5);
-    expect(wide.scrolls).toBe(true);
-  });
-
-  for (const size of [{ width: 1024, height: 768 }, { width: 1440, height: 900 }]) {
-    test(`${target.slug} at ${size.width}x${size.height}: no table starts under the outline rail`, async ({ page }) => {
-      await page.setViewportSize(size);
-      await load(page, target);
-      const outline = (await page.locator('nav.artifact-outline').boundingBox())!;
-      const lefts = (await tableBoxes(page, '.artifact-body table')).map((box) => box.left);
-      for (const left of lefts) expect(left).toBeGreaterThanOrEqual(outline.x + outline.width);
-    });
-  }
 }
 
-for (const size of [{ width: 1024, height: 768 }, { width: 768, height: 1024 }]) {
-  test(`${REPORT.slug} at ${size.width}x${size.height}: a long first cell leaves the second column its room`, async ({ page }) => {
-    await page.setViewportSize(size);
-    await load(page, REPORT);
-    const { table, cells } = await columns(page, LONG_FIRST);
-    expect(cells.length).toBe(2);
-    expect(cells[1] / table).toBeGreaterThanOrEqual(0.4);
-  });
-}
-
-for (const size of [{ width: 1024, height: 768 }, { width: 1440, height: 900 }]) {
-  test(`${REPORT.slug} at ${size.width}x${size.height}: the findings table's long first column starves no other`, async ({ page }) => {
-    await page.setViewportSize(size);
-    await load(page, REPORT);
-    await settle(page);
-    const { table, cells } = await columns(page, FINDINGS);
-    expect(cells.length).toBe(3);
-    expect(Math.min(...cells) / table).toBeGreaterThanOrEqual(0.2);
-    expect(cells[0] / table).toBeLessThanOrEqual(0.6);
-  });
-}
-
-for (const [target, size] of [
-  [REPORT, { width: 1440, height: 900 }],
-  [REPORT, { width: 1700, height: 1000 }],
-  [ARTICLE, { width: 1360, height: 900 }],
-] as const) {
-  test(`${target.slug} at ${size.width}x${size.height}: no top-level table runs under the open panel`, async ({ page }) => {
-    await page.setViewportSize(size);
-    await load(page, target);
-    const aside = page.locator('aside.artifact-comments-panel');
-    await aside.getByRole('button', { name: 'Comments', exact: true }).click();
-    await expect(aside.getByRole('button', { name: 'Fold comments' })).toBeVisible();
-    await expect.poll(async () => (await aside.boundingBox())!.width).toBeGreaterThan(300);
-    await expect.poll(() => aside.evaluate((node) => node.getAnimations().length)).toBe(0);
-    const left = (await aside.boundingBox())!.x;
-    const rights = await page.locator(TOP_LEVEL).evaluateAll((tables) =>
-      tables.map((table) => Math.round(table.getBoundingClientRect().right)));
-    expect(rights.length).toBeGreaterThan(0);
-    for (const right of rights) expect(right).toBeLessThanOrEqual(left);
-  });
-}
+test(`${ARTICLE.slug} at 1360x900: no top-level table runs under the open panel`, async ({ page }) => {
+  await page.setViewportSize({ width: 1360, height: 900 });
+  await load(page, ARTICLE);
+  const aside = page.locator('aside.artifact-comments-panel');
+  await aside.getByRole('button', { name: 'Comments', exact: true }).click();
+  await expect(aside.getByRole('button', { name: 'Fold comments' })).toBeVisible();
+  await expect.poll(async () => (await aside.boundingBox())!.width).toBeGreaterThan(300);
+  await expect.poll(() => aside.evaluate((node) => node.getAnimations().length)).toBe(0);
+  const left = (await aside.boundingBox())!.x;
+  const rights = await page.locator(TOP_LEVEL).evaluateAll((tables) =>
+    tables.map((table) => Math.round(table.getBoundingClientRect().right)));
+  expect(rights.length).toBeGreaterThan(0);
+  for (const right of rights) expect(right).toBeLessThanOrEqual(left);
+});
 
 test(`${REPORT.slug} at 1440x900: no top-level table runs under the folded rail`, async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });

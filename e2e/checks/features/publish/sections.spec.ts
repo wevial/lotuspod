@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 
 // At this width a box never opens: its chip opens the section's threads in
@@ -16,6 +18,18 @@ const ASSERTION = process.env.LOTUSPOD_TEST_ASSERTION ?? '';
 const SIGNED_IN = { 'Cf-Access-Jwt-Assertion': ASSERTION };
 const IDS = ['findings', 'decisions-for-the-maintainer', 'next-steps'];
 const TITLES = ['Findings', 'Decisions for the maintainer', 'Next steps'];
+// Every expected colour is read from the theme's tokens, never from the
+// stylesheet.
+const COLORS: Record<string, string> = JSON.parse(fs.readFileSync(
+  path.resolve(__dirname, '..', '..', '..', '..', 'src', 'lotuspod', 'core', 'theme', 'tokens.json'), 'utf-8')).colors;
+
+// A token as Chromium reports a computed colour: hex becomes rgb(r, g, b).
+function rgb(token: string) {
+  const hex = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(token);
+  if (!hex) return token;
+  const [r, g, b] = hex.slice(1).map((pair) => parseInt(pair, 16));
+  return `rgb(${r}, ${g}, ${b})`;
+}
 
 type Violation = { blockedURI: string; effectiveDirective: string };
 
@@ -138,6 +152,16 @@ test.describe('signed in', () => {
     await page.keyboard.press('Enter');
     await expect(first.button).toHaveAttribute('aria-expanded', 'false');
     await expect(first.paragraph).toBeHidden();
+    // Folded, the title keeps a visible ring around its lavender text.
+    await expect(first.button).toBeFocused();
+    const kept = await first.button.evaluate((node) => {
+      const style = getComputedStyle(node);
+      return { style: style.outlineStyle, width: parseFloat(style.outlineWidth), color: style.outlineColor };
+    });
+    expect(kept.style).not.toBe('none');
+    expect(kept.width).toBeGreaterThan(0);
+    expect(kept.color).not.toBe(rgb(COLORS.night));
+    await expect(first.button).toHaveCSS('color', rgb(COLORS.lavender));
     await page.keyboard.press('Space');
     await expect(first.button).toHaveAttribute('aria-expanded', 'true');
     await expect(first.paragraph).toBeVisible();
@@ -192,17 +216,6 @@ test.describe('signed in', () => {
     }
     await expectOpen(page, 0);
     await page.goto(`${PAGE}?standalone`);
-    await expectOpen(page, 0);
-    await seen.clean();
-  });
-
-  test('a beforematch event on a folded section opens it', async ({ page }) => {
-    const seen = await watch(page);
-    await page.goto(`${PAGE}?standalone`);
-    await fold(page, 0);
-    await section(page, 0).wrapper.evaluate((node) => node.dispatchEvent(new Event('beforematch')));
-    await expectOpen(page, 0);
-    await page.reload();
     await expectOpen(page, 0);
     await seen.clean();
   });

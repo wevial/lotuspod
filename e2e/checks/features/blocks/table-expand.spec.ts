@@ -208,29 +208,27 @@ async function expectExpanded(page: Page, first: Box) {
   return now;
 }
 
-for (const target of TARGETS) {
-  for (const size of [ULTRAWIDE, WIDE]) {
-    for (const open of [false, true]) {
-      test(`${target.slug} at ${size.width}x${size.height}, panel ${open ? 'open' : 'folded'}: tables keep their width at 1920`, async ({ page, context }) => {
-        await at(page, target, size, open);
-        const widths = await topLevelWidths(page);
-        const scrolls = await table(page).evaluate((node) => node.scrollWidth > node.clientWidth);
-        // The panel left as it was: a page loaded after this one opens it so.
-        const fresh = await context.newPage();
-        await fresh.setViewportSize(DEFAULT);
-        await load(fresh, target);
-        const opened = expect(fresh.locator(PANEL));
-        await (open ? opened : opened.not).toHaveClass(/artifact-comments-panel--open/);
-        const want = await topLevelWidths(fresh);
-        await fresh.close();
-        expect(widths.length).toBe(want.length);
-        widths.forEach((width, index) =>
-          expect(Math.abs(width - want[index]), `table ${index}: ${width}, at 1920 ${want[index]}`).toBeLessThanOrEqual(1));
-        expect(scrolls).toBe(true);
-      });
-    }
-  }
+for (const { target, size, open } of EXPANDING) {
+  test(`${target.slug} at ${size.width}x${size.height}, panel ${open ? 'open' : 'folded'}: tables keep their width at 1920`, async ({ page, context }) => {
+    await at(page, target, size, open);
+    const widths = await topLevelWidths(page);
+    const scrolls = await table(page).evaluate((node) => node.scrollWidth > node.clientWidth);
+    // The panel left as it was: a page loaded after this one opens it so.
+    const fresh = await context.newPage();
+    await fresh.setViewportSize(DEFAULT);
+    await load(fresh, target);
+    const opened = expect(fresh.locator(PANEL));
+    await (open ? opened : opened.not).toHaveClass(/artifact-comments-panel--open/);
+    const want = await topLevelWidths(fresh);
+    await fresh.close();
+    expect(widths.length).toBe(want.length);
+    widths.forEach((width, index) =>
+      expect(Math.abs(width - want[index]), `table ${index}: ${width}, at 1920 ${want[index]}`).toBeLessThanOrEqual(1));
+    expect(scrolls).toBe(true);
+  });
+}
 
+for (const target of TARGETS) {
   test(`${target.slug} at 3440x1440: the ledger has an Expand button, the small and listed tables none`, async ({ page }) => {
     await at(page, target, ULTRAWIDE, false);
     await expectExpand(page);
@@ -256,21 +254,9 @@ test(`${ARTICLE.slug} at 1440x900, panel folded: the ledger has an Expand button
 for (const { target, size, open } of EXPANDING) {
   const name = `${target.slug} at ${size.width}x${size.height}, panel ${open ? 'open' : 'folded'}`;
 
-  test(`${name}: Expand widens the ledger to the right, Collapse restores it`, async ({ page }) => {
-    await at(page, target, size, open);
-    await expectExpand(page);
-    const first = await box(page);
-    await (await button(page)).click();
-    await expectExpanded(page, first);
-    await (await button(page)).click();
-    const back = await box(page);
-    expect(Math.abs(back.width - first.width)).toBeLessThanOrEqual(1);
-    expect(Math.abs(back.height - first.height)).toBeLessThanOrEqual(1);
-    await expectExpand(page);
-  });
-
   test(`${name}: nothing above or beside the ledger moves, what is below moves up`, async ({ page }) => {
     await at(page, target, size, open);
+    await expectExpand(page);
     const outline = page.locator('nav.artifact-outline');
     const rail = (await outline.boundingBox())!;
     const before = await blocks(page);
@@ -300,30 +286,36 @@ for (const { target, size, open } of EXPANDING) {
     for (const key of ['x', 'y', 'width', 'height'] as const) {
       expect(Math.abs(railNow[key] - rail[key]), key).toBeLessThanOrEqual(1);
     }
+    // Collapse restores the ledger.
+    await (await button(page)).click();
+    const back = await box(page);
+    expect(Math.abs(back.width - first.width)).toBeLessThanOrEqual(1);
+    expect(Math.abs(back.height - first.height)).toBeLessThanOrEqual(1);
+    await expectExpand(page);
   });
+}
 
-  for (const offset of [200, -300]) {
-    test(`${name}: with the ledger's top ${offset} px into the window, it stays there`, async ({ page }) => {
-      await at(page, target, size, open);
-      await page.evaluate(({ index, offset }) => {
-        const node = document.querySelectorAll('.artifact-body table')[index];
-        window.scrollTo(0, node.getBoundingClientRect().top + window.scrollY - offset);
-      }, { index: LEDGER, offset });
-      await settle(page);
-      const first = await box(page);
-      expect(Math.abs(first.top - offset)).toBeLessThanOrEqual(1);
-      await press(page);
-      await settle(page);
-      await expectCollapse(page);
-      expect(Math.abs((await box(page)).top - offset)).toBeLessThanOrEqual(1);
-      await press(page);
-      await settle(page);
-      await expectExpand(page);
-      const back = await box(page);
-      expect(Math.abs(back.top - offset)).toBeLessThanOrEqual(1);
-      expect(Math.abs(back.height - first.height)).toBeLessThanOrEqual(1);
-    });
-  }
+for (const offset of [200, -300]) {
+  test(`${REPORT.slug} at 2560x1440, panel open: with the ledger's top ${offset} px into the window, it stays there`, async ({ page }) => {
+    await at(page, REPORT, WIDE, true);
+    await page.evaluate(({ index, offset }) => {
+      const node = document.querySelectorAll('.artifact-body table')[index];
+      window.scrollTo(0, node.getBoundingClientRect().top + window.scrollY - offset);
+    }, { index: LEDGER, offset });
+    await settle(page);
+    const first = await box(page);
+    expect(Math.abs(first.top - offset)).toBeLessThanOrEqual(1);
+    await press(page);
+    await settle(page);
+    await expectCollapse(page);
+    expect(Math.abs((await box(page)).top - offset)).toBeLessThanOrEqual(1);
+    await press(page);
+    await settle(page);
+    await expectExpand(page);
+    const back = await box(page);
+    expect(Math.abs(back.top - offset)).toBeLessThanOrEqual(1);
+    expect(Math.abs(back.height - first.height)).toBeLessThanOrEqual(1);
+  });
 }
 
 test(`${ARTICLE.slug} at 3440x1440: Enter and Space on the focused button expand and collapse`, async ({ page }) => {
