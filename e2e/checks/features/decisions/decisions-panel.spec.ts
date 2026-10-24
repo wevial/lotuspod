@@ -915,7 +915,7 @@ test.describe('on a phone', () => {
     const thread = sheet.node.locator('.artifact-comment-thread', { hasText: 'Should the lightbox close on Esc?' });
     await chip.click();
     await expect(sheet.tab('Comments')).toHaveAttribute('aria-selected', 'true');
-    await expect(sheet.at).toHaveText(/^1 of /);
+    await expect(sheet.at).toHaveText('1 of 2');
     await expect(thread).toBeVisible();
     await sheet.tab('Decisions').click();
     await expect(sheet.tab('Decisions')).toHaveAttribute('aria-selected', 'true');
