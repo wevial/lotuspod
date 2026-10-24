@@ -2,7 +2,7 @@ import type { Page, Thread, PlacementBridge } from "../bridge";
 import type { Placement, Group, Taken, Mode } from "./parts";
 import { shell as makeShell } from "./shell";
 import { threadList as makeThreadList } from "./thread-list";
-import { anchorOf as threadAnchor, frameOf } from "./anchor";
+import { anchorOf as threadAnchor, blockTitle, frameOf } from "./anchor";
 import { chips as makeChips } from "./chips";
 import { pins as makePins } from "./pins";
 
@@ -74,6 +74,12 @@ export function placement(page: Page, bridge: PlacementBridge): Placement {
       case "section": return chips.anchor(thread);
       default: { const never: never = anchor; return never; }
     }
+  }
+
+  // The title and state of the live block a thread is on, else null.
+  function blockOf(thread: Thread) {
+    const anchor = threadAnchor(thread.root);
+    return anchor.kind === "block" ? { title: blockTitle(anchor), state: anchor.state } : null;
   }
 
   function unfold(target: HTMLElement) {
@@ -289,7 +295,7 @@ export function placement(page: Page, bridge: PlacementBridge): Placement {
     ordered: threadList.ordered,
     latest: threadList.latest, standing: threadList.standing, routed: routed, asked: threadList.asked, said: threadList.said, tick: threadList.tick,
     title: threadList.title, opening: threadList.opening, anchorOf: anchorOf, unfold: unfold, barBottom: barBottom,
-    decisionOf: decisionOf, standsFor: standsFor,
+    decisionOf: decisionOf, standsFor: standsFor, blockOf: blockOf,
   });
   api.show = over.show;
   api.passage = over.passage;
