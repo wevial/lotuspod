@@ -99,13 +99,6 @@ class RunTests(RunModulesTestCase):
                         proc.stdout)
         self.assertIn("AssertionError: 1 != 2", proc.stdout)
 
-    def test_passing_modules_pass_the_run(self) -> None:
-        self.write("test_good.py", PASSING)
-        self.write("sub/test_deep.py", PASSING)
-        proc = self.run_runner()
-        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
-        self.assertIn("no module failed", self.summary(proc))
-
     def test_a_module_with_no_test_fails_the_run(self) -> None:
         self.write("test_empty.py", EMPTY)
         proc = self.run_runner()
@@ -149,7 +142,8 @@ class RunTests(RunModulesTestCase):
         self.write("sub/test_deep.py", PASSING)
         record = self.dir / "record.json"
         proc = self.run_runner("--record", str(record))
-        self.assertEqual(proc.returncode, 0, proc.stdout)
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertIn("no module failed", self.summary(proc))
         times = json.loads(record.read_text(encoding="utf-8"))
         self.assertEqual(sorted(times), ["sub/test_deep.py", "test_good.py"])
         self.assertTrue(all(isinstance(t, float) for t in times.values()))
@@ -168,23 +162,18 @@ class ShardTests(RunModulesTestCase):
         self.assertEqual(proc.returncode, 0, proc.stderr)
         return proc.stdout.split()
 
-    def check_shards(self) -> None:
-        every = self.listed()
-        self.assertEqual(sorted(every), sorted(self.MODULES))
-        for count in (2, 3):
-            with self.subTest(count=count):
-                shards = [self.listed("--shard", f"{i}/{count}") for i in range(1, count + 1)]
-                self.assertTrue(all(shards), shards)
-                flat = [rel for shard in shards for rel in shard]
-                self.assertEqual(sorted(flat), sorted(every))
-
-    def test_shards_split_every_module_once_without_a_times_file(self) -> None:
-        self.check_shards()
-
-    def test_shards_split_every_module_once_with_a_times_file(self) -> None:
-        times = {"test_a.py": 30.0, "test_b.py": 10.0, "sub/test_d.py": 5.0}
-        (self.dir / "module_times.json").write_text(json.dumps(times), encoding="utf-8")
-        self.check_shards()
+    def test_shards_split_every_module_once_with_and_without_a_times_file(self) -> None:
+        for times in (None, {"test_a.py": 30.0, "test_b.py": 10.0, "sub/test_d.py": 5.0}):
+            if times:
+                (self.dir / "module_times.json").write_text(json.dumps(times), encoding="utf-8")
+            every = self.listed()
+            self.assertEqual(sorted(every), sorted(self.MODULES))
+            for count in (2, 3):
+                with self.subTest(times=times, count=count):
+                    shards = [self.listed("--shard", f"{i}/{count}") for i in range(1, count + 1)]
+                    self.assertTrue(all(shards), shards)
+                    flat = [rel for shard in shards for rel in shard]
+                    self.assertEqual(sorted(flat), sorted(every))
 
     def test_the_longest_module_runs_first_and_balances_the_shards(self) -> None:
         times = {"test_a.py": 30.0, "test_b.py": 20.0, "test_c.py": 10.0,
