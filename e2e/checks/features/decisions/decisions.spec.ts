@@ -429,9 +429,17 @@ test.describe('signed in', () => {
     const pump = decision(page, 'decision-d1');
     const heater = decision(page, 'decision-d2');
     // Each question sits in its own section, under the heading it is about.
+    // A heading's text is read without the review sheet's "N open" mark,
+    // which may or may not have landed yet.
     const order = await page.evaluate(() => [
       ...document.querySelectorAll('h2, form.artifact-decision'),
-    ].map((node) => (node as HTMLElement).dataset.question ?? node.textContent!.trim()));
+    ].map((node) => {
+      const question = (node as HTMLElement).dataset.question;
+      if (question) return question;
+      const own = node.cloneNode(true) as HTMLElement;
+      own.querySelectorAll('.artifact-review-open').forEach((mark) => mark.remove());
+      return own.textContent!.trim();
+    }));
     expect(order).toEqual(['Pump', 'decision-d1', 'Heater', 'decision-d2']);
 
     await heater.option('Solar').check();
