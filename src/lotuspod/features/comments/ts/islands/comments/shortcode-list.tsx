@@ -40,9 +40,12 @@ export function shortcodeList(form: HTMLFormElement, field: HTMLTextAreaElement)
   // The open list: its fragment's opening colon and name, its shortcodes
   // and the active one's index.
   let shown: { start: number; query: string; names: string[]; active: number } | null = null;
-  // The carets after the colons typed since the first, before the table
-  // arrived.
-  let pending: number[] = [];
+  // The shortcodes closed before the table arrived, each from its opening
+  // colon to after its closing one, and the field's text they are in.
+  let pending: { start: number; end: number }[] = [];
+  let last = field.value;
+  // A send held until the table arrives, sent once.
+  let holding = false;
 
   function optionId(index: number) {
     return id + "-" + index;
@@ -129,6 +132,7 @@ export function shortcodeList(form: HTMLFormElement, field: HTMLTextAreaElement)
       field.value = before.slice(0, start) + emoji + before.slice(end);
     }
     field.setSelectionRange(start + emoji.length, start + emoji.length);
+    last = field.value;
     return true;
   }
   function choose(index: number) {
@@ -150,7 +154,7 @@ export function shortcodeList(form: HTMLFormElement, field: HTMLTextAreaElement)
   // become their emoji, the last first so the earlier carets still hold,
   // and the reader's selection stays on the text it was on.
   function arrived() {
-    const carets = pending.sort((a, b) => b - a);
+    const carets = pending.map(each => each.end).sort((a, b) => b - a);
     pending = [];
     let start = field.selectionStart, end = field.selectionEnd;
     for (const at of table ? carets : []) {
@@ -162,16 +166,30 @@ export function shortcodeList(form: HTMLFormElement, field: HTMLTextAreaElement)
     refresh();
   }
 
+  // The field's text was edited from last: the waiting shortcodes before
+  // the edit stay, those after it move with it, and those it touched go.
+  function edited() {
+    const before = last, now = field.value;
+    last = now;
+    if (!pending.length) return;
+    let head = 0, tail = 0;
+    while (head < before.length && head < now.length && before[head] === now[head]) head += 1;
+    while (tail < before.length - head && tail < now.length - head &&
+           before[before.length - 1 - tail] === now[now.length - 1 - tail]) tail += 1;
+    const end = before.length - tail, shift = now.length - before.length;
+    pending = pending.flatMap(each => each.end <= head ? [each]
+      : each.start >= end ? [{ start: each.start + shift, end: each.end + shift }] : []);
+  }
+
   field.addEventListener("input", event => {
     const typed = event instanceof InputEvent && event.inputType === "insertText" ? event.data ?? "" : null;
     const caret = field.selectionStart;
-    // Only text typed after them leaves the waiting colons where they were.
-    if (typed === null || caret - typed.length < Math.max(0, ...pending)) pending = [];
-    if (typed?.includes(":")) {
-      if (table) {
-        if (caret === field.selectionEnd) convert(caret);
-      } else {
-        pending.push(caret);
+    edited();
+    if (typed?.includes(":") && caret === field.selectionEnd) {
+      if (table) convert(caret);
+      else {
+        const open = field.value[caret - 1] === ":" ? fragment(field.value, caret - 1) : null;
+        if (open) pending.push({ start: open.start, end: caret });
         void load().then(arrived);
       }
     }
@@ -197,16 +215,20 @@ export function shortcodeList(form: HTMLFormElement, field: HTMLTextAreaElement)
   field.addEventListener("click", refresh);
   field.addEventListener("keyup", event => { if (shown || MOVES.has(event.key)) refresh(); });
   field.addEventListener("blur", close);
-  // A comment sent before the table arrived waits for it, so the shortcodes
-  // typed meanwhile are sent as their emoji.
+  // A comment sent before the table arrived waits for it, once however
+  // often it is sent meanwhile, so the shortcodes typed meanwhile are sent
+  // as their emoji.
   form.addEventListener("submit", event => {
     close();
-    if (!pending.length) return;
+    if (!pending.length && !holding) return;
     event.preventDefault();
     event.stopImmediatePropagation();
+    if (holding) return;
+    holding = true;
     const submitter = event.submitter;
     void load().then(() => {
       arrived();
+      holding = false;
       form.requestSubmit(submitter);
     });
   });

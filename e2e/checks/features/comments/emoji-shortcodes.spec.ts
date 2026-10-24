@@ -244,7 +244,7 @@ test.describe('signed in', () => {
     seen.clean();
   });
 
-  test('a comment sent before the table arrives waits for it and is sent with the emoji', async ({ page, request }) => {
+  test('a comment sent three times before the table arrives waits for it and is sent once, with the emoji', async ({ page, request }) => {
     const seen = await watch(page);
     let release!: () => void;
     const held = new Promise<void>((resolve) => { release = resolve; });
@@ -262,17 +262,50 @@ test.describe('signed in', () => {
     await field.pressSequentially('Slow :tada:');
     await expect(field).toHaveValue('Slow :tada:');
     await page.keyboard.press('Control+Enter');
+    const send = field.locator('xpath=ancestor::form').locator('button[type="submit"]');
+    await send.click();
+    await send.click();
     await page.waitForTimeout(300);
     expect(bodies).toEqual([]);
 
     const sending = posted(page);
     release();
     const sent = await sending;
+    await page.waitForTimeout(500);
     expect(sent.status()).toBe(201);
     const row = await sent.json();
     expect(row.text).toBe('Slow 🎉');
     expect((await stored(request)).get(row.id)?.text).toBe('Slow 🎉');
     expect(bodies).toHaveLength(1);
+    seen.clean();
+  });
+
+  test('a shortcode closed before the table arrives is converted though the text after it was edited', async ({ page }) => {
+    const seen = await watch(page);
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => { release = resolve; });
+    await page.route((url) => url.pathname === '/lotuspod-emoji.json', async (route) => {
+      await held;
+      await route.continue();
+    });
+    await page.goto(`${PAGE}?standalone`);
+    await loaded(page);
+    const field = await panelComposer(page, 'Frogs');
+    await field.pressSequentially('Yes :tada: ');
+    await page.keyboard.press('Backspace');
+    await field.pressSequentially('! :+1: so');
+    await page.keyboard.press('Backspace');
+    await page.keyboard.press('Backspace');
+    // An edit inside a shortcode leaves it as typed.
+    await field.pressSequentially(':-1:');
+    await page.keyboard.press('ArrowLeft');
+    await page.keyboard.press('Backspace');
+    await page.keyboard.press('End');
+    await expect(field).toHaveValue('Yes :tada:! :+1: :-:');
+    const answered = page.waitForResponse((r) => new URL(r.url()).pathname === '/lotuspod-emoji.json');
+    release();
+    await answered;
+    await expect(field).toHaveValue('Yes 🎉! 👍 :-:');
     seen.clean();
   });
 
