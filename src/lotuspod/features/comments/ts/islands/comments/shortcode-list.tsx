@@ -163,7 +163,7 @@ export function shortcodeList(form: HTMLFormElement, field: HTMLTextAreaElement)
     const carets = pending.map(each => each.end).sort((a, b) => b - a);
     pending = [];
     let start = field.selectionStart, end = field.selectionEnd;
-    for (const at of table ? carets : []) {
+    for (const at of carets) {
       const shift = convert(at);
       if (start >= at) start += shift;
       if (end >= at) end += shift;
