@@ -198,6 +198,10 @@
   content: "\00b7\00a0";
 }
 
+.artifact-decision-default {
+  white-space: nowrap;
+}
+
 .artifact-decision :is(input, summary, button, textarea):focus-visible {
   outline: 2px solid var(--color-lavender);
   outline-offset: 2px;

@@ -65,6 +65,8 @@
         made.forth.appendChild(mute(element("span", "", "›")));
         nav.append(made.back, made.at, made.forth);
         made.state = element("span", "artifact-comments-held-state");
+        // Over its tabs, Close is spelled out in place of the ×.
+        close.appendChild(element("span", "artifact-comments-close-word", "Close"));
         made.tabs = element("div", "artifact-comments-bottom-sheet-tabs");
         made.tabs.setAttribute("role", "tablist");
         made.tabs.setAttribute("aria-label", the.comments ? "Decisions and comments" : "Decisions");

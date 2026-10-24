@@ -23,10 +23,10 @@ const SRC = path.resolve(__dirname, '..', '..', '..', '..', 'src');
 const PANEL = 'lotuspod:comments-panel';
 const WIDE = { width: 1280, height: 800 };
 const PHONE = { width: 360, height: 740 };
-const CONTEXT_1 = 'The facts line already holds rounds and waits-on.';
+const CONTEXT_1 = 'The facts line already holds rounds and waits-on; a fourth fact may wrap on a laptop.';
 const OPTIONS: Record<string, string[]> = {
   'decision-1': ['Beside the title', 'In the facts line', 'Only on hover'],
-  'decision-2': ['Added and removed', 'One total', 'A small bar'],
+  'decision-2': ['Added and removed (+412 −88)', 'One total (500 lines)', 'A small bar'],
   'decision-3': ['Overlay on the console', 'A new tab'],
 };
 const BACKFILL = ['Only open tickets', 'Everything since September', 'None'];
@@ -34,16 +34,18 @@ const NOTE_4 = 'Merged ones can keep the blank cell.';
 const MARKDOWN = ['# Console PR rows plan', '',
   'How each PR row reads in the console.', '',
   '## Pull request rows', '',
-  'Each PR row carries the facts the serve route sends: rounds, what it waits on, and the diff size.', '',
+  'Each PR row now carries the facts the serve route sends: rounds, what it waits on, and the diff size, '
+    + 'read as +412 −88 from the PR\'s own numbers. The row has one facts line under the title, and today it '
+    + 'already holds rounds and waits-on.', '',
   '### Decisions for the maintainer', '',
   '| # | Question | Context | Options | Default |', '| --- | --- | --- | --- | --- |',
   `| 1 | Where should the diff size sit? | ${CONTEXT_1} | ${OPTIONS['decision-1'].join(' / ')} | |`,
-  `| 2 | How is the diff size written? | The PR's own numbers read as +412 −88. | ${OPTIONS['decision-2'].join(' / ')} | Added and removed |`,
+  `| 2 | How is the diff size written? | The PR's own numbers read as +412 −88; one total is shorter but hides what was removed. | ${OPTIONS['decision-2'].join(' / ')} | ${OPTIONS['decision-2'][0]} |`,
   '', '## Screenshots on a row', '',
   'A row may carry screenshots, shown as thumbnails.', '',
   '### Decisions for the maintainer', '',
   '| # | Question | Context | Options | Default |', '| --- | --- | --- | --- | --- |',
-  `| 3 | Lightbox surface | Where a row's screenshots open when a thumbnail is clicked. | ${OPTIONS['decision-3'].join(' / ')} | Overlay on the console |`,
+  `| 3 | Lightbox surface | Where a row's screenshots open when the thumbnail is clicked. | ${OPTIONS['decision-3'].join(' / ')} | Overlay on the console |`,
   '', '## Backfill', '',
   'The rows of tickets opened before the change.', '',
   '### Decisions for the maintainer', '',
@@ -909,6 +911,8 @@ test.describe('on a phone', () => {
       .evaluateAll((items) => items.map((item) => (item as HTMLElement).dataset.question)))
       .toEqual(['decision-1', 'decision-2']);
     await expect(sheet.entry('decision-1').locator('button.artifact-decisions-question')).toBeFocused();
+    // Over the tabs, Close is spelled out, as the phone boards draw it.
+    expect(await sheet.close.innerText()).toBe('Close');
 
     // A pick and its Save in the sheet are the card's.
     await sheet.entry('decision-1').getByRole('radio', { name: 'In the facts line' }).check();
@@ -1083,19 +1087,19 @@ test('a card\'s title collapses it to one line of where it stands, which follows
   const four = collapsible(page, 'decision-4');
   await two.toggle.click();
   await four.toggle.click();
-  await expect(two.line).toHaveText('Added and removed · Not saved');
+  await expect(two.line).toHaveText('Added and removed (+412 −88) · Not saved');
   await expect(four.line).toHaveText('✓ Saved · Only open tickets');
-  await expect(two.form.locator('.artifact-decision-label').first()).toHaveText('Added and removed');
+  await expect(two.form.locator('.artifact-decision-label').first()).toHaveText('Added and removed (+412 −88)');
   await expect(four.form.locator('.artifact-decision-label').first()).toHaveText('Only open tickets');
   await expect(four.saved).toBeHidden();
 
   const entry2 = entry(page, 'decision-2');
   await entry2.option('One total').check();
-  await expect(two.line).toHaveText('One total · Not saved');
+  await expect(two.line).toHaveText('One total (500 lines) · Not saved');
   await expect(two.toggle).toHaveAttribute('aria-expanded', 'false');
   await expect(two.options).toBeHidden();
   await entry2.save.click();
-  await expect(two.line).toHaveText('✓ Saved · One total');
+  await expect(two.line).toHaveText('✓ Saved · One total (500 lines)');
   await expect(two.toggle).toHaveAttribute('aria-expanded', 'false');
   await expect(two.saved).toBeHidden();
 

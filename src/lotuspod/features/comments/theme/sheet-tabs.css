@@ -29,8 +29,23 @@
   overflow-x: clip;
 }
 
+.artifact-comments-close-word {
+  display: none;
+}
+
 .artifact-comments-bottom-sheet--tabs .artifact-comments-close {
   align-self: center;
+  font-size: 0.85rem;
+  padding: 0 0.5rem;
+  width: auto;
+}
+
+.artifact-comments-bottom-sheet--tabs .artifact-comments-close > [aria-hidden="true"] {
+  display: none;
+}
+
+.artifact-comments-bottom-sheet--tabs .artifact-comments-close > .artifact-comments-close-word {
+  display: inline;
 }
 
 #artifact-comments-bottom-sheet-tab-decisions .artifact-comments-tab-badge {
