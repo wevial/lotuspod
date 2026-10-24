@@ -635,6 +635,8 @@ test.describe('signed in, published again', () => {
     const name = named('next');
     const moved = await openPublished(page, name, [['Findings', []], [DECISIONS, [HEATER, PUMP, NET, FISH]]]);
     const the = sheet(page);
+    await expect(the.heading(DECISIONS).locator('.artifact-review-open')).toHaveText('4 open');
+    await expect(the.outline(DECISIONS).locator('.artifact-review-outline')).toHaveText('4 open');
     for (const question of ['decision-1', 'decision-2', 'decision-3']) {
       await the.next.click();
       await expect(the.form(question).locator('input').first()).toBeFocused();
