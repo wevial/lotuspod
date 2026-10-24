@@ -3,8 +3,8 @@
    tab sets its groups. Each is a small card in the panel's voice: its number
    and question, its context, its options as radio rows (a checklist's items
    as square boxes), "Add a note", Save, the amber "not saved" and Show on
-   page; its rule turns amber while it differs from its saved answer, as the
-   card on the page does. */
+   page; its left rule is lavender, amber while it differs from its saved
+   answer, as the card on the page does. */
 .artifact-decisions-panel {
   padding: 0.5rem 0.75rem 1.5rem;
 }
@@ -37,6 +37,7 @@
 
 .artifact-decisions-entry {
   border: 1px solid var(--hairline-strong);
+  border-left: 2px solid var(--color-lavender);
   border-radius: var(--radius-block);
   padding: 0.5rem 0.65rem 0.55rem;
 }

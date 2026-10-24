@@ -406,3 +406,60 @@ test('a page with comments and no decision forms keeps its panel\'s Comments hea
   await expect(side.toAnswer).toHaveCount(0);
   expect(errors).toEqual([]);
 });
+
+test('a pick made while the panel\'s Save is pending keeps the entry, not saved', async ({ page, request }) => {
+  test.setTimeout(90_000);
+  test.skip(test.info().repeatEachIndex > 0, 'answers a page the first repeat answered');
+  const name = 'decisions-panel-pending';
+  await prepare(request, name);
+  const errors = watch(page);
+  await load(page, name);
+  let release = () => {};
+  const held = new Promise<void>((resolve) => { release = resolve; });
+  await page.route((url) => url.pathname === '/api/answers', async (route) => {
+    const request = route.request();
+    if (request.method() === 'POST' && request.postDataJSON()?.question === 'decision-1') {
+      await held;
+    }
+    return route.fallback();
+  });
+  const one = entry(page, 'decision-1');
+  const own = card(page, 'decision-1');
+  await one.option('Beside the title').check();
+  const posted = page.waitForResponse((response) =>
+    new URL(response.url()).pathname === '/api/answers' && response.request().method() === 'POST');
+  await one.save.click();
+  await own.option('Only on hover').check();
+  release();
+  expect(await (await posted).json()).toMatchObject({ question: 'decision-1', choice: 'beside-the-title' });
+  await expect(own.unsaved).toBeVisible();
+  // Past the moment a saved entry reads "Saved", it is still listed.
+  await page.waitForTimeout(2_000);
+  await expect(one.item).toBeVisible();
+  await expect(one.saved).toHaveCount(0);
+  await expect(one.option('Only on hover')).toBeChecked();
+  await expect(one.unsaved).toBeVisible();
+  // Saved again, it leaves.
+  await one.save.click();
+  await expect(one.item).toHaveCount(0);
+  expect(errors).toEqual([]);
+});
+
+test('at the panel\'s narrowest both tabs sit clear of the fold', async ({ page, request }) => {
+  test.setTimeout(90_000);
+  test.skip(test.info().repeatEachIndex > 0, 'answers a page the first repeat answered');
+  const name = 'decisions-panel-narrow';
+  await prepare(request, name);
+  const errors = watch(page);
+  await load(page, name);
+  const side = panel(page);
+  await side.aside.evaluate((aside) => (aside as HTMLElement).style.setProperty('--comments-panel-width', '16rem'));
+  const comments = (await side.tab('Comments').boundingBox())!;
+  const fold = (await side.fold.boundingBox())!;
+  expect(comments.x + comments.width).toBeLessThanOrEqual(fold.x);
+  // A press at the Comments tab's right edge selects it, and the panel stays open.
+  await side.tab('Comments').click({ position: { x: comments.width - 2, y: comments.height / 2 } });
+  await expect(side.tab('Comments')).toHaveAttribute('aria-selected', 'true');
+  await expect(side.groups).toBeVisible();
+  expect(errors).toEqual([]);
+});

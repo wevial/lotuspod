@@ -5,14 +5,20 @@
    dots, its words set sideways as the rail's own label is. */
 .artifact-comments-head--tabs {
   align-items: stretch;
+  column-gap: 0.4rem;
   padding-bottom: 0;
+  padding-left: 0.75rem;
   padding-top: 0.35rem;
 }
 
+/* Both tabs fit beside the fold at the panel's narrowest, 16rem; a wider
+   count clips them there rather than lay them over the fold. */
 .artifact-comments-tabs {
   display: flex;
-  gap: 1.1rem;
+  flex: 0 1 auto;
+  gap: 0.8rem;
   min-width: 0;
+  overflow-x: clip;
 }
 
 .artifact-comments-tab {
@@ -26,9 +32,9 @@
   display: inline-flex;
   font: inherit;
   font-weight: 600;
-  gap: 0.4rem;
+  gap: 0.3rem;
   margin-bottom: -1px;
-  padding: 0.5rem 0.1rem 0.55rem;
+  padding: 0.5rem 0 0.55rem;
   white-space: nowrap;
 }
 
@@ -49,8 +55,8 @@
   font-size: 0.68rem;
   font-weight: 600;
   line-height: 1;
-  min-width: 1.3rem;
-  padding: 0.2rem 0.4rem;
+  min-width: 1.1rem;
+  padding: 0.2rem 0.35rem;
   text-align: center;
 }
 

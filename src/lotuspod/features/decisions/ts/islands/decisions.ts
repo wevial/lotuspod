@@ -29,9 +29,11 @@ export interface Cards {
   isChecklist(form: HTMLFormElement): boolean;
   // Whether the picked option, items or note differ from the stored answer.
   dirty(form: HTMLFormElement): boolean;
-  // Whether the question is to answer: it has no stored answer at its
-  // version (a dismissal is one). Every count of questions to answer counts
-  // this.
+  // Whether the question is to answer: its answers are read and it has no
+  // stored answer at its version (a dismissal is one). A form whose answers
+  // are not read, as one a swap brought in before a failed read, is not: its
+  // defaults could replace an answer the reader never saw. Every count of
+  // questions to answer counts this.
   toAnswer(form: HTMLFormElement): boolean;
   // The nearest h2 before the form, null before the first.
   heading(form: HTMLFormElement): HTMLElement | null;
@@ -224,7 +226,10 @@ export function decisions(page: Page): Cards | null {
   });
   dismissing.mayDismiss(name, each);
 
-  const toAnswer = (form: HTMLFormElement) => !saved(cardOf(form));
+  const toAnswer = (form: HTMLFormElement) => {
+    const card = cardOf(form);
+    return !card.waiting && !saved(card);
+  };
   const reading: Cards = {
     forms, ticked, same, summary, optionText, isChecklist, save, read: false, drawn, toAnswer,
     heading: headingOf, sections: sectionsOf, place, jump,
@@ -255,6 +260,8 @@ export function decisions(page: Page): Cards | null {
             adopt(deck, card, card.answers.peek());
           }
         }
+        // No card waits now, though none may have been drawn again.
+        marked.value = marked.peek() + 1;
         ready.value = true;
       }
       table(store.currents.peek());

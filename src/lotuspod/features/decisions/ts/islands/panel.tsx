@@ -51,7 +51,7 @@ function Entry({ desk, form, held, saving, saved }: EntryProps) {
   const note = noteField(form);
   const [noting, setNoting] = useState(() => Boolean(note.value));
   const [busy, setBusy] = useState(false);
-  if (held && answer) {
+  if (held && answer && !desk.dirty(form)) {
     return (
       <li class="artifact-decisions-entry artifact-decisions-entry--saved" data-question={question}>
         <p class="artifact-decisions-saved" tabIndex={-1}>
@@ -130,6 +130,7 @@ function Entry({ desk, form, held, saving, saved }: EntryProps) {
 function Panel({ desk }: { desk: Desk }) {
   desk.marked.value;
   const [held, setHeld] = useState<ReadonlySet<HTMLFormElement>>(new Set());
+  const kept = useRef(new Set<HTMLFormElement>());
   const root = useRef<HTMLDivElement>(null);
   // The question to give the focus to once a saved entry leaves.
   const after = useRef<string | null>(null);
@@ -148,7 +149,13 @@ function Panel({ desk }: { desk: Desk }) {
   if (!desk.ready.value) {
     return null;
   }
-  const listed = desk.forms.filter((form) => desk.toAnswer(form) || held.has(form));
+  // A form saved from the tab while the reader changed it again stays listed,
+  // not saved, until it is saved or put back: the confirmation would hide
+  // what is still unsaved.
+  for (const form of kept.current) {
+    if (!desk.dirty(form)) kept.current.delete(form);
+  }
+  const listed = desk.forms.filter((form) => desk.toAnswer(form) || held.has(form) || kept.current.has(form));
   function hold(form: HTMLFormElement, on: boolean): void {
     setHeld((was) => {
       const next = new Set(was);
@@ -157,11 +164,17 @@ function Panel({ desk }: { desk: Desk }) {
     });
   }
   function saved(form: HTMLFormElement, done: boolean): void {
-    if (!done) {
+    if (!done || desk.dirty(form)) {
+      if (done) kept.current.add(form);
       hold(form, false);
       return;
     }
     setTimeout(() => {
+      if (desk.dirty(form)) {
+        kept.current.add(form);
+        hold(form, false);
+        return;
+      }
       const at = listed.indexOf(form);
       const rest = desk.forms.filter((each) => desk.toAnswer(each) && each !== form);
       const next = listed.slice(at + 1).find((each) => rest.includes(each)) ?? rest[0];
