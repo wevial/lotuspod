@@ -84,7 +84,9 @@ lotuspod comments reopen 7                     # POST /v1/threads/7/reopen
 nothing and settles nothing, so the same items come back on every pull until
 they are claimed or acknowledged. A comment with no mention is the
 responder's, on the handle's own pages too: the handle reads only what names
-it, and its inbox (see [The owner inbox](#the-owner-inbox)) for what the
+it, the follow-ups (replies with no mention) in a thread whose latest agent
+reply is its own while it is listening, which go to the responder once it is
+not, and its inbox (see [The owner inbox](#the-owner-inbox)) for what the
 responder queued for it. Items are, comments first, oldest first:
 
 - `{"kind": "comment", "comment", "thread", "omitted", "resolution", "page"}` for each
@@ -468,7 +470,8 @@ claim 409 `not_claimed`.
 ## The default responder
 
 Comments with no mention, and those naming `@responder`, go to the default
-responder, on pages with an owner, whether or not the owner is listening,
+responder (save a reply with no mention in a thread another agent answered
+last while that agent is listening, which goes to that agent), on pages with an owner, whether or not the owner is listening,
 and on pages with none. `lotuspod respond` answers them. It is an ordinary agent
 on the socket, with its own credential for the handle `responder`:
 
