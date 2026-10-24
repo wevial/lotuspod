@@ -11,9 +11,11 @@
   },
   "devDependencies": {
     "@types/bun": "1.4.2",
+    "happy-dom": "21.0.4",
     "typescript": "7.0.2"
   },
   "dependencies": {
+    "@preact/signals": "2.11.3",
     "preact": "11.0.1"
   }
 }

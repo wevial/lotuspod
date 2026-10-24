@@ -23,40 +23,6 @@ export interface Live {
   previous(): Promise<string | null>;
 }
 
-// A stored answer to a decision, as the answers route gives it: a choice, a
-// checklist's items checked, or a dismissal.
-export interface Answer {
-  choice?: string;
-  checked?: string[];
-  note?: string;
-  dismissed?: boolean;
-}
-
-// What js/decisions.js reads and saves the page's decision forms by
-// (answerForms()): the forms and the stored answers are the truth.
-export interface Answering {
-  // The form's stored answer at its version, else null.
-  saved(form: HTMLFormElement): Answer | null;
-  // A checklist's item ids checked now ("checked") or by default
-  // ("defaultChecked"), in page order.
-  ticked(form: HTMLFormElement, state: "checked" | "defaultChecked"): string[];
-  // Whether two lists of item ids hold the same items.
-  same(a: string[], b: string[]): boolean;
-  // The items whose state in checked differs from their defaults, worded.
-  summary(form: HTMLFormElement, checked: string[]): string;
-  // An option's label, else its value.
-  optionText(input: HTMLInputElement): string;
-  isChecklist(form: HTMLFormElement): boolean;
-  // Whether the picked option, items or note differ from the stored answer.
-  dirty(form: HTMLFormElement): boolean;
-  // Post the form's answer in its turn: true once saved, false when refused,
-  // with why in the form's status.
-  save(form: HTMLFormElement): Promise<boolean>;
-  // True once the page's answers are read, set before ANSWERED is sent;
-  // after a swap, whether its read of them was.
-  read: boolean;
-}
-
 // js/page-open.js: shell text, storage keys and the whole-page section id.
 declare const CLOSED: string;
 declare const PANEL: string;
@@ -70,10 +36,6 @@ declare function overText(the: NarrowBridge): import("./comments/parts").Over;
 
 // js/live-page.js.
 declare const live: Live;
-// js/decisions.js: the page's decision forms, in page order, and what reads
-// them, null on a page with neither a form nor a comment box.
-declare const forms: HTMLFormElement[];
-declare const answering: Answering | null;
 // js/page-open.js: what the address's fragment gives name as #NAME=VALUE,
 // decoded, else null; read as the page opens (first), null on a reload.
 declare function linkedTo(name: string, first?: boolean): string | null;
@@ -89,6 +51,17 @@ declare var startComment: StartComment | undefined;
 // it.
 declare const ANSWERED: string;
 declare const SAVED: string;
+// js/page-open.js: the answers route, what an answer to a question the page
+// has changed since it loaded is refused with, and the Answered table's key
+// among the folded sections.
+declare const ANSWERS: string;
+declare const STALE: string;
+declare const FOLDED_ANSWERED: number;
+// js/page-open.js: fold a section's wrapper under its heading's button,
+// kept as id.
+declare function foldSection(heading: HTMLElement, wrapper: HTMLElement, id: string | number): void;
+// js/page-open.js: a reader's name, else a handle; never an address.
+declare function reader(row: { actor?: CommentRow["actor"] } | null): string;
 declare const DRAWN: string;
 // js/page-open.js: sent on the document once a swap is applied.
 declare const SWAPPED: string;
@@ -158,9 +131,12 @@ export const page = Object.freeze({
   changedGroup: CHANGED_GROUP,
   commentsURL: COMMENTS,
   live,
-  forms,
-  answering,
   linkedTo,
+  answersURL: ANSWERS,
+  stale: STALE,
+  foldedAnswered: FOLDED_ANSWERED,
+  foldSection,
+  reader,
   archived: ARCHIVED,
   // Publish start as what a live block's Comment calls (startComment), on
   // a page that takes new comments; an archived page's blocks have none.

@@ -1,7 +1,7 @@
 // Builds each theme source web/src/NAME.ts, if any, into
 // src/lotuspod/_theme/js/NAME.js, and each slice's
-// src/lotuspod/features/SLICE/ts/NAME.ts into NAME.js beside
-// it: its types stripped by Bun's transpiler (no bundling, so each file stands
+// src/lotuspod/features/SLICE/ts/NAME.ts but its public entry (index.ts)
+// into NAME.js beside it: its types stripped by Bun's transpiler (no bundling, so each file stands
 // alone), after one marker line naming the source. Beside them it bundles a
 // slice's islands entry, src/lotuspod/features/SLICE/ts/islands/main.tsx, with
 // its imports and Preact (from web/node_modules) into islands.js in that ts/,
@@ -30,8 +30,12 @@ const USE_STRICT_PROBE = "use strict, probed by web/build.ts";
 const ISLANDS_ENTRY = "islands/main.tsx";
 const ISLANDS = "islands";
 // The packages an island imports, resolved from web/, where they are
-// installed, not from the slice the island is in.
-const WEB_PACKAGES = /^preact(\/|$)/;
+// installed, not from the slice the island is in: Preact and its signals.
+const WEB_PACKAGES = /^(preact|@preact\/signals)(\/|$)/;
+// A slice's public entry, ts/index.ts: a module another slice's islands
+// import (the slice rule in build.test.ts), bundled with them, never a
+// classic script of its own.
+const ENTRY = "index";
 
 class BuildError extends Error {}
 
@@ -79,6 +83,11 @@ function sourceNames(dir: string): string[] {
     .filter((file) => file.endsWith(".ts") && !file.endsWith(".d.ts"))
     .map((file) => basename(file, ".ts"))
     .sort();
+}
+
+// The classic sources directly in a slice's ts/: each but its public entry.
+function sliceSourceNames(dir: string): string[] {
+  return sourceNames(dir).filter((name) => name !== ENTRY);
 }
 
 // The one Bun pin is package.json's "packageManager": "bun@X.Y.Z". Bun's
@@ -167,7 +176,7 @@ export async function build(webDir: string): Promise<BuildResult> {
   const slices = [];
   for (const dir of sliceScriptDirs(webDir)) {
     const slice = basename(dirname(dir));
-    const sliceNames = sourceNames(dir);
+    const sliceNames = sliceSourceNames(dir);
     const sliceBuilds = sliceNames.map((name) => strip(transpiler, `src/lotuspod/features/${slice}/ts/${name}.ts`,
       readFileSync(join(dir, `${name}.ts`), "utf8")));
     const islands = await bundle(webDir, dir, slice);
