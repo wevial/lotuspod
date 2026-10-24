@@ -161,7 +161,12 @@ test.describe('signed in', () => {
     expect(kept.style).not.toBe('none');
     expect(kept.width).toBeGreaterThan(0);
     expect(kept.color).not.toBe(rgb(COLORS.night));
+    // Away from the button, whose hover lightens its text.
+    await page.mouse.move(0, 0);
+    await expect(first.heading).toHaveCSS('color', rgb(COLORS.lavender));
     await expect(first.button).toHaveCSS('color', rgb(COLORS.lavender));
+    expect(await first.button.evaluate((node) =>
+      getComputedStyle(node, '::before').borderBottomColor)).toBe(rgb(COLORS.lavender));
     await page.keyboard.press('Space');
     await expect(first.button).toHaveAttribute('aria-expanded', 'true');
     await expect(first.paragraph).toBeVisible();

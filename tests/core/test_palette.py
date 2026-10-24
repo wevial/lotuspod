@@ -37,7 +37,9 @@ TEXT_COLORS = (
     "lavender", "pale_lavender", "muted_lavender",
 )
 
-# The first `:root { ... }` block of the stylesheet, and a custom property in it.
+# A CSS comment, the first `:root { ... }` block of the stylesheet, and a
+# custom property in it.
+COMMENT = re.compile(r"/\*.*?\*/", re.DOTALL)
 ROOT_BLOCK = re.compile(r":root\s*\{([^}]*)\}")
 PROPERTY = re.compile(r"(--[\w-]+)\s*:\s*([^;]+);")
 
@@ -159,7 +161,7 @@ class DawnTests(unittest.TestCase):
 
 class RootTests(unittest.TestCase):
     def test_the_root_names_the_new_colours_and_the_highlight_tints_as_the_tokens_do(self):
-        block = ROOT_BLOCK.search((THEME / "base.css").read_text(encoding="utf-8"))
+        block = ROOT_BLOCK.search(COMMENT.sub("", (THEME / "base.css").read_text(encoding="utf-8")))
         self.assertIsNotNone(block, "base.css has no :root block")
         root = {name: value.strip() for name, value in PROPERTY.findall(block.group(1))}
         want = {
