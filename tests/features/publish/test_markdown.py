@@ -695,7 +695,7 @@ class RenderMarkdownTests(TempDirTestCase):
             ("entity", '<p><a href="https&#58;//example.com/body">elsewhere</a></p>\n', True),
             ("upper", "<p><A HREF='/\\example.com/body'>elsewhere</A></p>\n", True),
             ("anchorless", '<p><a name="x">no href</a></p>\n', False),
-            # One heading and plain text: the page pod-tabs.spec.ts opens in the index.
+            # Unlike "heading", its h2 carries an id.
             ("plain", '<h2 id="a-section">A section</h2><p>Plain text.</p>', False),
         )
         cases = [(name, ("--markdown", "-"), source, loads) for name, source, loads in markdown]

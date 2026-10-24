@@ -145,7 +145,6 @@ test('served chrome, lifecycle, expansion and isolated Open alone: height=260', 
   } finally { releaseScript(); releaseWidget(); }
 });
 
-// A block with no height, sized by its own page, expands and closes the same way.
 test('a block sized by its own page fills the window under the top bar when expanded, and Close puts it back in the column', async ({page}) => {
   for (const style of ['body { min-height: 100vh; box-sizing: border-box; margin: 0; }', 'html, body { height: 100%; box-sizing: border-box; margin: 0; }']) {
     publish('widget-chrome-fill', '', style);
