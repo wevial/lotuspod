@@ -30,6 +30,8 @@ from __future__ import annotations
 
 import ast
 import secrets
+import subprocess
+import sys
 import tempfile
 import textwrap
 import unittest
@@ -37,6 +39,25 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 PACKAGE_DIR = REPO_ROOT / "src" / "lotuspod"
+
+# Two threads, held at a barrier, each import one of the modules named on
+# the command line first in a fresh interpreter; any error is printed.
+RACE = """\
+import importlib, sys, threading
+barrier, failed = threading.Barrier(2), []
+def first_import(name):
+    barrier.wait()
+    try:
+        importlib.import_module(name)
+    except BaseException as error:
+        failed.append(f"{name}: {error!r}")
+threads = [threading.Thread(target=first_import, args=(name,)) for name in sys.argv[1:]]
+for thread in threads:
+    thread.start()
+for thread in threads:
+    thread.join()
+sys.exit("\\n".join(failed) or None)
+"""
 
 PACKAGE = "lotuspod"
 CLI = "lotuspod.cli"
@@ -269,6 +290,16 @@ class RepositoryTests(unittest.TestCase):
     def test_no_edge_is_listed(self):
         """Every slice reaches another through its public edge alone."""
         self.assertEqual(list(EDGES), [])
+
+    def test_two_slices_imported_first_at_once_both_load(self):
+        """No import-time cycle between slices deadlocks two threads that
+        first-import different slices at the same moment."""
+        for pair in (("lotuspod.features.publish", "lotuspod.features.serve"),
+                     ("lotuspod.features.agents.machine", "lotuspod.features.serve.api")):
+            with self.subTest(pair=pair):
+                done = subprocess.run([sys.executable, "-c", RACE, *pair], cwd=PACKAGE_DIR.parent,
+                                      capture_output=True, text=True, timeout=60)
+                self.assertEqual(done.returncode, 0, done.stderr)
 
     def test_every_listed_edge_is_still_made(self):
         """A listed edge no import, and no use in the entry point, makes any more is
