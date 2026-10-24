@@ -9,7 +9,7 @@ from pathlib import Path
 from lotuspod import core
 from lotuspod.core import (extract_meta, _git, is_page_name, is_repository_top, load_tokens,
                            package_path, render_template, theme_hash)
-from lotuspod.features.history import archive
+from lotuspod.features import history
 
 
 INDEX_TEMPLATE_PATH = package_path("features", "index", "templates", "index.html")
@@ -65,7 +65,7 @@ def collect_artifacts(out_dir: Path) -> tuple[list[dict], int]:
     for meta in unstamped:
         meta["updated"] = committed.get(meta["file"], meta["created"])
     for meta in visible:
-        record = archive.read_record(out_dir, meta["file"].removesuffix(".html"))
+        record = history.read_record(out_dir, meta["file"].removesuffix(".html"))
         if record is not None:
             meta["archived"] = record["archivedAt"]
             meta["supersededBy"] = record["supersededBy"] or ""

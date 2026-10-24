@@ -53,8 +53,8 @@ from dataclasses import dataclass, field, replace
 from html.parser import HTMLParser
 
 from lotuspod import core
-from lotuspod.features.serve import api
-from lotuspod.features.comments import comments
+from lotuspod.features import serve
+from lotuspod.features import comments
 
 HEADING = "decisions for the maintainer"
 CHECKLIST_HEADING = "checklist for the maintainer"
@@ -76,7 +76,7 @@ VERSION_LENGTH = 12
 # An option's value past OPTION_BOUND characters is cut to them, back to a
 # hyphen, and ends in "-" and OPTION_HASH hex digits of its full slug: with
 # room left for _unique_id's "-N", it is a choice the answers route takes.
-OPTION_BOUND = api.MAX_NAME - 20
+OPTION_BOUND = serve.MAX_NAME - 20
 OPTION_HASH = 8
 # The options a row with a Default and no Options column offers.
 ACCEPT = ("accept", "Accept the default")

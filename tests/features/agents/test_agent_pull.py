@@ -167,7 +167,7 @@ class PullTestCase(unittest.TestCase):
             argv += ["--owner-window", str(self.window)]
         thread = threading.Thread(target=cli.main, args=(argv,), daemon=True)
         patches = (mock.patch.object(serve_commands, "_make_server", make_port),
-                   mock.patch.object(machine, "SocketServer", make_socket))
+                   mock.patch("lotuspod.features.agents.SocketServer", make_socket))
         for patcher in patches:
             patcher.start()
         output = io.StringIO()

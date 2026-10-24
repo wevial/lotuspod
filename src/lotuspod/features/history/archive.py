@@ -38,12 +38,12 @@ from http import HTTPStatus
 
 # The index's listing imports this module too: only names used at call time are read from it.
 from lotuspod import core
-from lotuspod.features.serve import api, serve_files
+from lotuspod.features import serve
 from lotuspod.features.history import versions
-from lotuspod.features.index import commands as index_commands
+from lotuspod.features import index
 from lotuspod.features.publish import cmd_manifest
 
-class Refused(api.Refusal, RuntimeError):
+class Refused(serve.Refusal, RuntimeError):
     """An archive or unarchive that wrote nothing, saying why: a RuntimeError
     for the commands, and the refusal /api/archive answers with."""
 
@@ -85,7 +85,7 @@ def visible_page(out_dir: Path, name: str) -> bool:
     however render named it. The allow-list holds bare file names only, so
     no name reaches past it."""
     file = f"{name}.html"
-    return core.is_page_name(file) and file in serve_files.serve_allow_list(out_dir)
+    return core.is_page_name(file) and file in serve.serve_allow_list(out_dir)
 
 
 def archived_page(page_html: str, record: dict, successor_title: str | None) -> str:
@@ -190,7 +190,7 @@ def set_archived(out_dir: Path, name: str, archived: bool,
                 core.write_atomic(path, (json.dumps(record, indent=2) + "\n").encode("utf-8"))
             steps = argparse.Namespace(out_dir=str(out_dir), commit=False)
             cmd_manifest(steps)
-            index_commands.cmd_index(steps)
+            index.cmd_index(steps)
         except Exception as exc:
             for file, data in kept.items():
                 if data is None:

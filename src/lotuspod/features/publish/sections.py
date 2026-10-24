@@ -20,7 +20,7 @@ from __future__ import annotations
 import html
 
 from lotuspod import core
-from lotuspod.features.comments.comments import MIN_SECTIONS, _SectionFinder
+from lotuspod.features.comments import MIN_SECTIONS, _SectionFinder
 
 WRAPPER_CLASS = "artifact-section-body"
 # Elements with no end tag, which open no depth.

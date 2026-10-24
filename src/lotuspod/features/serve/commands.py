@@ -11,12 +11,12 @@ import threading
 from functools import partial
 from pathlib import Path
 
-from lotuspod.features.agents import machine, routing
-from lotuspod.features.agents.agents import configured_socket
+from lotuspod.features import agents
+from lotuspod.features.agents import configured_socket
 from lotuspod.core import (DEFAULT_OUTPUT_DIR, INDEX_FILE, ConfigError, config_path,
                            config_section, sync_theme_css)
-from lotuspod.features.publish import media
-from lotuspod.features.publish.publish_sources import media_cap
+from lotuspod.features import publish
+from lotuspod.features.publish import media_cap
 from lotuspod.features.serve import access
 from lotuspod.features.serve.handler import _make_server
 from lotuspod.features.serve.pages import agent_page, api_catalog, api_page
@@ -50,7 +50,7 @@ def serve_socket_path(db_path: Path, socket_arg: str) -> Path:
     [agents] socket, else lotuspod.sock beside the database."""
     if socket_arg:
         return Path(socket_arg)
-    return configured_socket() or db_path.parent / machine.SOCKET_NAME
+    return configured_socket() or db_path.parent / agents.SOCKET_NAME
 
 
 def owner_window(arg: int | None) -> int:
@@ -62,7 +62,7 @@ def owner_window(arg: int | None) -> int:
         value = (config_section("comments") or {}).get("owner_window_sec", "")
         label = f"config {config_path()} [comments] owner_window_sec"
         if not value:
-            return routing.DEFAULT_WINDOW
+            return agents.DEFAULT_WINDOW
     if not value.isdigit() or int(value) < 1:
         raise ConfigError(f"{label} {value!r} is not a whole number of seconds, 1 or more")
     return int(value)
@@ -73,7 +73,7 @@ def claim_seconds() -> int:
     claim_sec, else the default."""
     value = (config_section("comments") or {}).get("claim_sec", "")
     if not value:
-        return routing.DEFAULT_CLAIM
+        return agents.DEFAULT_CLAIM
     if not value.isdigit() or int(value) < 1:
         raise ConfigError(f"config {config_path()} [comments] claim_sec {value!r} is not "
                           "a whole number of seconds, 1 or more")
@@ -107,14 +107,14 @@ def cmd_serve(args: argparse.Namespace) -> int:
         print(f"error: cannot bind {host}:{args.port}: {exc}", file=sys.stderr)
         return 1
     try:
-        sockets = machine.SocketServer(
+        sockets = agents.SocketServer(
             socket_path, db.Database(db_path), pages=partial(api_page, out_dir),
             catalog=partial(api_catalog, out_dir),
             describe=partial(agent_page, out_dir), window=window, claim_sec=claim_sec,
-            media_dir=media.media_dir(out_dir), max_image_bytes=image_cap,
+            media_dir=publish.media_dir(out_dir), max_image_bytes=image_cap,
             changed=server.events.changed,
         )
-    except (OSError, machine.SocketInUse) as exc:
+    except (OSError, agents.SocketInUse) as exc:
         server.server_close()
         print(f"error: cannot listen on {socket_path}: {exc}", file=sys.stderr)
         return 1
@@ -185,7 +185,7 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
         default="",
         metavar="PATH",
         help="Unix socket agents reach serve on (default: the config's [agents] "
-        f"socket, else {machine.SOCKET_NAME} beside the database)",
+        f"socket, else {agents.SOCKET_NAME} beside the database)",
     )
     serve.add_argument(
         "--owner-window",
@@ -194,7 +194,7 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
         metavar="SECONDS",
         help="how long a pull keeps a handle listening, and a listening page owner "
         "holds a comment before the responder gets it (default: the config's "
-        f"[comments] owner_window_sec, else {routing.DEFAULT_WINDOW})",
+        f"[comments] owner_window_sec, else {agents.DEFAULT_WINDOW})",
     )
     serve.set_defaults(func=cmd_serve)
 

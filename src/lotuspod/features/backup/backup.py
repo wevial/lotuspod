@@ -40,8 +40,8 @@ from contextlib import closing
 from pathlib import Path
 
 from lotuspod import core
-from lotuspod.features.serve import serve_files
-from lotuspod.features.publish import media
+from lotuspod.features import serve
+from lotuspod.features import publish
 from lotuspod.store import db
 
 MANIFEST = "manifest.json"
@@ -155,7 +155,7 @@ def copy_media(source: Path, target: Path, earlier: Path | None) -> list[str]:
         return []
     names = []
     for entry in os.scandir(source):
-        if not media.STORED_NAME.fullmatch(entry.name) \
+        if not publish.STORED_NAME.fullmatch(entry.name) \
                 or not entry.is_file(follow_symlinks=False):
             continue
         copy, linked = target / entry.name, False
@@ -199,7 +199,7 @@ def take(db_path: Path, out_dir: Path, backups: Path) -> Path:
             git(out_dir, "bundle", "create", str(partial / BUNDLE), "--all")
             head = git(out_dir, "rev-parse", "--verify", "HEAD")
             remote = core._git(out_dir, "remote", "get-url", "origin")
-            images = copy_media(media.media_dir(out_dir), partial / MEDIA,
+            images = copy_media(publish.media_dir(out_dir), partial / MEDIA,
                                 earlier[-1] if earlier else None)
             manifest = {
                 "version": MANIFEST_VERSION,
@@ -245,7 +245,7 @@ def read_manifest(backup: Path) -> dict:
         manifest["media"] = []
     images = manifest.get("media")
     if not isinstance(images, list) or not all(
-            isinstance(name, str) and media.STORED_NAME.fullmatch(name) for name in images) \
+            isinstance(name, str) and publish.STORED_NAME.fullmatch(name) for name in images) \
             or len(set(images)) != len(images):
         raise Failed(f"{backup / MANIFEST} does not list its images by their stored names")
     return manifest
@@ -308,7 +308,7 @@ def restore(backup: Path, db_path: Path, out_dir: Path) -> dict:
             raise Failed(f"{taken} already exists; nothing restored")
     if os.path.lexists(out_dir):
         raise Failed(f"{out_dir} already exists; nothing restored")
-    store = media.media_dir(out_dir)
+    store = publish.media_dir(out_dir)
     if manifest["media"]:
         if os.path.lexists(store) and not store.is_dir():
             raise Failed(f"{store} is not a directory; nothing restored")
@@ -385,7 +385,7 @@ def verify(backup: Path) -> dict:
         if head != manifest["head"]:
             raise Failed(f"{backup / BUNDLE} restores HEAD {head}, not the "
                          f"{manifest['head']} {MANIFEST} records")
-        store = media.media_dir(out_dir)
+        store = publish.media_dir(out_dir)
         found = sorted(p.name for p in store.iterdir()) if store.is_dir() else []
         if found != sorted(manifest["media"]):
             raise Failed(f"{backup / MEDIA} restores {len(found)} images, not the "
@@ -408,7 +408,7 @@ def cmd_backup(args: argparse.Namespace) -> int:
                   f"intact, repository at {manifest['head']}, "
                   f"{len(manifest['media'])} images")
             return 0
-        db_path = serve_files.serve_db_path(out_dir, args.db)
+        db_path = serve.serve_db_path(out_dir, args.db)
         made = take(db_path, out_dir, backups)
         removed = prune(backups, args.keep)
     except (Failed, ValueError, OSError) as exc:
@@ -434,6 +434,6 @@ def cmd_restore(args: argparse.Namespace) -> int:
         print(f"error: {exc}", file=sys.stderr)
         return 1
     print(f"restored {db_path} and {out_dir} at {manifest['head']}, "
-          f"{len(manifest['media'])} images in {media.media_dir(out_dir)}")
+          f"{len(manifest['media'])} images in {publish.media_dir(out_dir)}")
     return 0
 

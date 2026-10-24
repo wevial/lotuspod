@@ -206,9 +206,9 @@ from typing import Callable, Mapping
 
 from lotuspod import store
 from lotuspod.features.agents import routing
-from lotuspod.features.serve import api
-from lotuspod.features.publish import media
-from lotuspod.features.widgets import widgets
+from lotuspod.features import serve
+from lotuspod.features import publish
+from lotuspod.features import widgets
 
 OPERATIONS = ("pull", "claim", "reply", "publish")
 # An owner handle, and a credential's name: 1 to 63 lower-case letters,
@@ -256,7 +256,7 @@ def queued(answer: str, owner: str, ask: str) -> str:
     if not answer:
         return said
     # The answer gives way, so the reply stays within what the socket takes.
-    room = api.MAX_TEXT - len(said) - 2
+    room = serve.MAX_TEXT - len(said) - 2
     if len(answer) > room:
         answer = answer[:room - 1].rstrip() + "…"
     return f"{answer}\n\n{said}"
@@ -428,7 +428,7 @@ def bearer(headers: Message) -> str | None:
     return token
 
 
-def _no_page(name: str) -> api.Page | None:
+def _no_page(name: str) -> serve.Page | None:
     return None
 
 
@@ -445,15 +445,15 @@ class Routes:
     """
 
     def __init__(self, database: store.db.Database,
-                 pages: Callable[[str], api.Page | None] = _no_page,
-                 describe: Callable[[api.Page], dict] | None = None,
+                 pages: Callable[[str], serve.Page | None] = _no_page,
+                 describe: Callable[[serve.Page], dict] | None = None,
                  window: float = routing.DEFAULT_WINDOW,
                  clock: Callable[[], float] = time.time,
                  claim_sec: float = routing.DEFAULT_CLAIM,
                  media_dir: Path | None = None,
-                 max_image_bytes: int = media.DEFAULT_MAX_BYTES,
+                 max_image_bytes: int = publish.DEFAULT_MAX_BYTES,
                  changed: Callable[[str, str], None] = lambda what, page: None,
-                 catalog: Callable[[], Callable[[str], api.Page | None]] | None = None) -> None:
+                 catalog: Callable[[], Callable[[str], serve.Page | None]] | None = None) -> None:
         self.changed = changed
         self.catalog = catalog
         self.database = database
@@ -466,7 +466,7 @@ class Routes:
         self.claim_sec = claim_sec
 
     def answer(self, method: str, target: str, headers: Message,
-               body: api.Body | None = None) -> api.Answer:
+               body: serve.Body | None = None) -> serve.Answer:
         """The answer to one request for target, a path and query; body is
         the request's, which only the comment and media routes read."""
         token = bearer(headers)
@@ -495,7 +495,7 @@ class Routes:
                 fields = _query(query, ("op", "handle"))
                 error = authorize(credential, fields["op"], fields["handle"])
                 if error is not None:
-                    raise api.Refusal(HTTPStatus.FORBIDDEN, error)
+                    raise serve.Refusal(HTTPStatus.FORBIDDEN, error)
                 return HTTPStatus.OK, {"allowed": True, **fields}, ()
             if path == PULL:
                 return HTTPStatus.OK, self._pull(credential, _query(query, ("owner",))["owner"]), ()
@@ -520,14 +520,14 @@ class Routes:
                 return HTTPStatus.OK, self._resolve(credential, int(resolving.group(1)),
                                                     resolving.group(2) == "resolve"), ()
             return HTTPStatus.OK, self._ack(credential, int(ack.group(1))), ()
-        except api.Refusal as exc:
+        except serve.Refusal as exc:
             return exc.status, {"error": exc.error}, ()
         except store.db.Refused as exc:
             return _REFUSED[exc.error], {"error": exc.error}, ()
         except (sqlite3.Error, OSError):
             return HTTPStatus.SERVICE_UNAVAILABLE, {"error": "storage_unavailable"}, ()
 
-    def _page(self, name: str) -> api.Page | None:
+    def _page(self, name: str) -> serve.Page | None:
         return self.pages(name) if isinstance(name, str) else None
 
     def _pull(self, credential: Mapping, owner: str) -> dict:
@@ -537,21 +537,21 @@ class Routes:
         pulls = routing.last_pulls(self.database)
         paused = self.database.responder_paused()
         now = self.clock()
-        pages: dict[str, api.Page | None] = {}
+        pages: dict[str, serve.Page | None] = {}
         described: dict[str, dict] = {}
         answered: dict[str, dict] = {}
 
-        def page_of(name: str) -> api.Page | None:
+        def page_of(name: str) -> serve.Page | None:
             if name not in pages:
                 pages[name] = lookup(name) if isinstance(name, str) else None
             return pages[name]
 
-        def item_page(page: api.Page) -> dict:
+        def item_page(page: serve.Page) -> dict:
             if page.name not in described:
                 described[page.name] = self.describe(page)
             return described[page.name]
 
-        def decision(page: api.Page, question: str) -> dict:
+        def decision(page: serve.Page, question: str) -> dict:
             if page.name not in answered:
                 answered[page.name] = self.database.answers(page.name)
             current = answered[page.name].get(question, {}).get("current")
@@ -597,8 +597,8 @@ class Routes:
         items += self._answers(owner, page_of, item_page)
         return {"owner": owner, "pulledAt": pulled_at, "items": items}
 
-    def _answers(self, owner: str, page_of: Callable[[str], api.Page | None],
-                 item_page: Callable[[api.Page], dict]) -> list[dict]:
+    def _answers(self, owner: str, page_of: Callable[[str], serve.Page | None],
+                 item_page: Callable[[serve.Page], dict]) -> list[dict]:
         """An item for each answer on owner's pages it has not acknowledged,
         its page as item_page(page) shows it."""
         items = []
@@ -615,7 +615,7 @@ class Routes:
             # the page's form only while it asks at the answer's version.
             changed = None
             if "checked" in answer and not reworded:
-                changed = api.changes(asked.labels, asked.defaults, answer["checked"])
+                changed = serve.changes(asked.labels, asked.defaults, answer["checked"])
             if text is None:
                 # Stored before the words were kept: the page's own words are
                 # the answered ones only while its version is the same.
@@ -650,14 +650,14 @@ class Routes:
         _allow(credential, "pull", owner)
         lookup = self.catalog() if self.catalog is not None else self.pages
         now = self.clock()
-        pages: dict[str, api.Page | None] = {}
+        pages: dict[str, serve.Page | None] = {}
 
-        def page_of(name: str) -> api.Page | None:
+        def page_of(name: str) -> serve.Page | None:
             if name not in pages:
                 pages[name] = lookup(name) if isinstance(name, str) else None
             return pages[name]
 
-        def brief(page: api.Page) -> dict:
+        def brief(page: serve.Page) -> dict:
             return {"name": page.name, "title": page.title, "owner": page.owner,
                     "revision": self.describe(page)["revision"]}
 
@@ -677,32 +677,32 @@ class Routes:
         return {"owner": owner, "items": items}
 
     def _item(self, credential: Mapping, item_id: int, action: str,
-              headers: Message, body: api.Body | None) -> dict:
+              headers: Message, body: serve.Body | None) -> dict:
         """Claim inbox item item_id, or close it, replying in its thread
         first when the body has text."""
         fields = _json_body(headers, body)
         if not isinstance(fields.get("owner"), str):
-            raise api.Refusal(HTTPStatus.BAD_REQUEST, "invalid_body")
+            raise serve.Refusal(HTTPStatus.BAD_REQUEST, "invalid_body")
         owner = fields["owner"]
         _allow(credential, "claim", owner)
         name = credential["name"]
         if action == "claim":
-            api._keys(fields, {"owner"}, frozenset())
+            serve._keys(fields, {"owner"}, frozenset())
             token = claim_token()
             found = self.database.claim_item(item_id, owner=owner, credential=name,
                                              token_hash=token_hash(token),
                                              claim_sec=self.claim_sec, clock=self.clock)
             return {"item": found["id"], "owner": owner, "claimToken": token,
                     "expiresAt": found["claim"]["expiresAt"]}
-        api._keys(fields, {"owner", "claimToken"}, frozenset({"idempotencyKey", "text"}))
+        serve._keys(fields, {"owner", "claimToken"}, frozenset({"idempotencyKey", "text"}))
         if ("text" in fields) != ("idempotencyKey" in fields):
-            raise api.Refusal(HTTPStatus.BAD_REQUEST, "invalid_body")
-        token = token_hash(api._text(fields["claimToken"], 1, MAX_KEY))
+            raise serve.Refusal(HTTPStatus.BAD_REQUEST, "invalid_body")
+        token = token_hash(serve._text(fields["claimToken"], 1, MAX_KEY))
         reply = None
         if "text" in fields:
             _allow(credential, "reply", owner)
-            reply = {"key": api._text(fields["idempotencyKey"], 1, MAX_KEY),
-                     "text": api._text(fields["text"], 1, api.MAX_TEXT)}
+            reply = {"key": serve._text(fields["idempotencyKey"], 1, MAX_KEY),
+                     "text": serve._text(fields["text"], 1, serve.MAX_TEXT)}
         found, stored = self.database.finish_item(
             item_id, owner=owner, credential=name, token_hash=token, clock=self.clock,
             reply=reply, page_of=self._current)
@@ -715,10 +715,10 @@ class Routes:
 
     def _threads(self, credential: Mapping, name: str) -> dict:
         if "pull" not in credential["operations"]:
-            raise api.Refusal(HTTPStatus.FORBIDDEN, "operation_not_allowed")
+            raise serve.Refusal(HTTPStatus.FORBIDDEN, "operation_not_allowed")
         page = self._page(name)
         if page is None:
-            raise api.Refusal(HTTPStatus.NOT_FOUND, "unknown_page")
+            raise serve.Refusal(HTTPStatus.NOT_FOUND, "unknown_page")
         threads = routing.threads(self.database, page.name, self.window, self.clock())
         for thread in threads:
             thread["root"] = self._located(thread["root"])
@@ -730,27 +730,27 @@ class Routes:
         directory, or None when it is not there."""
         images = []
         for image in row.get("images") or ():
-            stored = None if self.media_dir is None else media.stored_file(
+            stored = None if self.media_dir is None else publish.stored_file(
                 self.media_dir, image["name"])
             images.append({**image, "path": None if stored is None else str(stored)})
         return {**row, "images": images}
 
-    def _media(self, credential: Mapping, headers: Message, body: api.Body | None) -> dict:
+    def _media(self, credential: Mapping, headers: Message, body: serve.Body | None) -> dict:
         """Check and store one image, as the reader's media route does."""
         _allow_op(credential, "reply")
-        extension = api.UPLOAD_TYPES.get(api._media_type(headers))
+        extension = serve.UPLOAD_TYPES.get(serve._media_type(headers))
         if extension is None:
-            raise api.Refusal(HTTPStatus.UNSUPPORTED_MEDIA_TYPE, "unsupported_media_type")
+            raise serve.Refusal(HTTPStatus.UNSUPPORTED_MEDIA_TYPE, "unsupported_media_type")
         if self.media_dir is None:
-            raise api.Refusal(HTTPStatus.SERVICE_UNAVAILABLE, "storage_unavailable")
+            raise serve.Refusal(HTTPStatus.SERVICE_UNAVAILABLE, "storage_unavailable")
         if body is None:
-            raise api.Refusal(HTTPStatus.LENGTH_REQUIRED, "length_required")
+            raise serve.Refusal(HTTPStatus.LENGTH_REQUIRED, "length_required")
         data = body.read(self.max_image_bytes)
         try:
-            image = media.check(data, f"upload.{extension}", self.max_image_bytes)
-        except media.MediaError:
-            raise api.Refusal(HTTPStatus.BAD_REQUEST, "invalid_image") from None
-        media.store(self.media_dir, image)
+            image = publish.check(data, f"upload.{extension}", self.max_image_bytes)
+        except publish.MediaError:
+            raise serve.Refusal(HTTPStatus.BAD_REQUEST, "invalid_image") from None
+        publish.store(self.media_dir, image)
         return {"name": image.name, "url": image.url, "width": image.width,
                 "height": image.height}
 
@@ -758,41 +758,41 @@ class Routes:
         """What looks up the stored images a message's fields name, as a
         reader's comment names them, once the database knows its key is new;
         none without `images`. The names' form is checked now."""
-        names = api._image_names(fields["images"]) if "images" in fields else None
-        return lambda: api.stored_images(self.media_dir, names)
+        names = serve._image_names(fields["images"]) if "images" in fields else None
+        return lambda: serve.stored_images(self.media_dir, names)
 
     def _ack(self, credential: Mapping, answer_id: int) -> dict:
         answer = self.database.answer(answer_id)
         if answer is None:
-            raise api.Refusal(HTTPStatus.NOT_FOUND, "unknown_answer")
+            raise serve.Refusal(HTTPStatus.NOT_FOUND, "unknown_answer")
         page = self._page(answer["page"])
         if page is None:
-            raise api.Refusal(HTTPStatus.NOT_FOUND, "unknown_page")
+            raise serve.Refusal(HTTPStatus.NOT_FOUND, "unknown_page")
         # A page with no owner is no handle's to acknowledge.
         _allow(credential, "pull", page.owner)
         acked_at = self.database.acknowledge_answer(answer_id, page.owner)
         return {"answer": answer_id, "owner": page.owner, "ackedAt": acked_at}
 
-    def _record(self, credential: Mapping, headers: Message, body: api.Body | None) -> dict:
+    def _record(self, credential: Mapping, headers: Message, body: serve.Body | None) -> dict:
         """Store a decision's answer given elsewhere, as the page's owner."""
         fields = _json_body(headers, body)
         # With no page named, there is none to look up: the body is wrong.
         if not isinstance(fields.get("page"), str):
-            raise api.Refusal(HTTPStatus.BAD_REQUEST, "invalid_body")
+            raise serve.Refusal(HTTPStatus.BAD_REQUEST, "invalid_body")
         page = self._page(fields["page"])
         if page is None:
-            raise api.Refusal(HTTPStatus.NOT_FOUND, "unknown_page")
+            raise serve.Refusal(HTTPStatus.NOT_FOUND, "unknown_page")
         # A page with no owner is no handle's to answer for.
         _allow(credential, "publish", page.owner)
-        api._keys(fields, {"page", "question", "choice", "source"}, frozenset({"note"}))
-        question = api._text(fields["question"], 1, api.MAX_NAME)
-        choice = api._text(fields["choice"], 1, api.MAX_NAME)
-        source = api._text(fields["source"], 1, MAX_SOURCE)
-        note = api._text(fields.get("note", ""), 0, api.MAX_TEXT)
-        asked = api.asked_question(page, question)
+        serve._keys(fields, {"page", "question", "choice", "source"}, frozenset({"note"}))
+        question = serve._text(fields["question"], 1, serve.MAX_NAME)
+        choice = serve._text(fields["choice"], 1, serve.MAX_NAME)
+        source = serve._text(fields["source"], 1, MAX_SOURCE)
+        note = serve._text(fields.get("note", ""), 0, serve.MAX_TEXT)
+        asked = serve.asked_question(page, question)
         if asked.checklist:
-            raise api.Refusal(HTTPStatus.BAD_REQUEST, "not_a_decision")
-        label = api.chosen(asked, choice)
+            raise serve.Refusal(HTTPStatus.BAD_REQUEST, "not_a_decision")
+        label = serve.chosen(asked, choice)
         answer, created = self.database.record_answer(
             page=page.name, question=question, version=asked.version, choice=choice,
             note=note, revision=page.revision, owner=page.owner,
@@ -805,7 +805,7 @@ class Routes:
 
 
     def _act(self, credential: Mapping, comment_id: int, action: str,
-             headers: Message, body: api.Body | None) -> dict:
+             headers: Message, body: serve.Body | None) -> dict:
         """Claim, reply to, release or fail comment comment_id."""
         _allow_op(credential, "reply" if action == "reply" else "claim")
         if action == "claim":
@@ -814,10 +814,10 @@ class Routes:
         required = {"reply": {"claimToken", "idempotencyKey", "text"},
                     "release": {"claimToken"},
                     "fail": {"claimToken", "reason"}}[action]
-        api._keys(fields, required,
+        serve._keys(fields, required,
                   frozenset({"revision", "model", "images", "ask"}
                             if action == "reply" else ()))
-        token = token_hash(api._text(fields["claimToken"], 1, MAX_KEY))
+        token = token_hash(serve._text(fields["claimToken"], 1, MAX_KEY))
         name = credential["name"]
         if action == "release":
             row = self.database.release(comment_id, credential=name, token_hash=token,
@@ -825,23 +825,23 @@ class Routes:
             self.changed("comment", row["page"])
             return self._shown(row)
         if action == "fail":
-            reason = api._text(fields["reason"], 1, MAX_REASON)
+            reason = serve._text(fields["reason"], 1, MAX_REASON)
             row = self.database.fail(comment_id, credential=name, token_hash=token,
                                      clock=self.clock, reason=reason)
             self.changed("comment", row["page"])
             return self._shown(row)
-        key = api._text(fields["idempotencyKey"], 1, MAX_KEY)
+        key = serve._text(fields["idempotencyKey"], 1, MAX_KEY)
         ask = fields.get("ask")
         if ask is not None:
-            ask = api._text(ask, 1, MAX_ASK)
+            ask = serve._text(ask, 1, MAX_ASK)
         # With an ask, text is the answer before the queued notice, and may be empty.
-        text = api._text(fields["text"], 0 if ask is not None else 1, api.MAX_TEXT)
+        text = serve._text(fields["text"], 0 if ask is not None else 1, serve.MAX_TEXT)
         revision = fields.get("revision")
         if revision is not None:
-            revision = api._text(revision, 1, api.MAX_NAME)
+            revision = serve._text(revision, 1, serve.MAX_NAME)
         model = fields.get("model")
         if "model" in fields and not is_model(model):
-            raise api.Refusal(HTTPStatus.BAD_REQUEST, "invalid_body")
+            raise serve.Refusal(HTTPStatus.BAD_REQUEST, "invalid_body")
         images = self._images(fields)
         notice = None if ask is None else (lambda owner: queued(text, owner, ask))
         row = self.database.reply(comment_id, credential=name, token_hash=token, key=key,
@@ -851,23 +851,23 @@ class Routes:
         self.changed("comment", row["page"])
         return self._shown(row)
 
-    def _thread_handle(self, credential: Mapping, root: int) -> tuple[api.Page, str]:
+    def _thread_handle(self, credential: Mapping, root: int) -> tuple[serve.Page, str]:
         """The page of the thread whose first comment is root, and the handle
         credential acts on it as: the page's owner when it holds it, else the
         handle the first comment is routed to."""
         _allow_op(credential, "reply")
         found = self.database.comment(root)
         if found is None or found["parent"] is not None:
-            raise api.Refusal(HTTPStatus.NOT_FOUND, "unknown_thread")
+            raise serve.Refusal(HTTPStatus.NOT_FOUND, "unknown_thread")
         page = self._page(found["page"])
         if page is None:
-            raise api.Refusal(HTTPStatus.NOT_FOUND, "unknown_page")
+            raise serve.Refusal(HTTPStatus.NOT_FOUND, "unknown_page")
         routed = self._shown(found)["owner"]
         if page.owner and page.owner in credential["handles"]:
             return page, page.owner
         if routed in credential["handles"]:
             return page, routed
-        raise api.Refusal(HTTPStatus.FORBIDDEN, "not_routed")
+        raise serve.Refusal(HTTPStatus.FORBIDDEN, "not_routed")
 
     def _resolve(self, credential: Mapping, root: int, resolved: bool) -> dict:
         """Resolve or reopen the thread whose first comment is root."""
@@ -879,20 +879,20 @@ class Routes:
         return {"thread": root, "resolution": resolution}
 
     def _follow_up(self, credential: Mapping, root: int, headers: Message,
-                   body: api.Body | None) -> dict:
+                   body: serve.Body | None) -> dict:
         """Add credential's message to the thread whose first comment is root."""
         _page, handle = self._thread_handle(credential, root)
         fields = _json_body(headers, body)
-        api._keys(fields, {"idempotencyKey", "text"},
+        serve._keys(fields, {"idempotencyKey", "text"},
                   frozenset({"revision", "reopen", "images"}))
-        key = api._text(fields["idempotencyKey"], 1, MAX_KEY)
-        text = api._text(fields["text"], 1, api.MAX_TEXT)
+        key = serve._text(fields["idempotencyKey"], 1, MAX_KEY)
+        text = serve._text(fields["text"], 1, serve.MAX_TEXT)
         revision = fields.get("revision")
         if revision is not None:
-            revision = api._text(revision, 1, api.MAX_NAME)
+            revision = serve._text(revision, 1, serve.MAX_NAME)
         reopen = fields.get("reopen", False)
         if not isinstance(reopen, bool):
-            raise api.Refusal(HTTPStatus.BAD_REQUEST, "invalid_body")
+            raise serve.Refusal(HTTPStatus.BAD_REQUEST, "invalid_body")
         images = self._images(fields)
         row = self.database.follow_up(root, credential=credential["name"], handle=handle,
                                       key=key, text=text, revision=revision, reopen=reopen,
@@ -913,7 +913,7 @@ class Routes:
         found = self.database.comment(comment_id)
         # A comment on a page serve no longer answers is no one's to claim.
         if found is not None and self._page(found["page"]) is None:
-            raise api.Refusal(HTTPStatus.NOT_FOUND, "unknown_page")
+            raise serve.Refusal(HTTPStatus.NOT_FOUND, "unknown_page")
 
         def route(comment: dict, pulls: dict[str, str], now: float) -> str | None:
             last = {handle: routing.seconds(stamp) for handle, stamp in pulls.items()}
@@ -936,16 +936,16 @@ class Routes:
                               self.clock(), self.database.responder_paused())
 
 
-def _json_body(headers: Message, body: api.Body | None) -> dict:
+def _json_body(headers: Message, body: serve.Body | None) -> dict:
     """The request's JSON object; Refusal as the /api routes refuse one."""
     if body is None:
-        raise api.Refusal(HTTPStatus.LENGTH_REQUIRED, "length_required")
+        raise serve.Refusal(HTTPStatus.LENGTH_REQUIRED, "length_required")
     if (headers.get("Content-Type") or "").split(";", 1)[0].strip().lower() != "application/json":
-        raise api.Refusal(HTTPStatus.UNSUPPORTED_MEDIA_TYPE, "unsupported_media_type")
-    return api._json_object(body.read(api.MAX_BODY))
+        raise serve.Refusal(HTTPStatus.UNSUPPORTED_MEDIA_TYPE, "unsupported_media_type")
+    return serve._json_object(body.read(serve.MAX_BODY))
 
 
-def block(page: api.Page, shown: Mapping, anchor: Mapping) -> dict:
+def block(page: serve.Page, shown: Mapping, anchor: Mapping) -> dict:
     """The live block a thread is anchored to, {title, source, status}, on
     page as shown (describe(page)): its title and its lines in the kept
     source, "" when it has none, and `current`, `changed` since the anchor's
@@ -961,10 +961,10 @@ def block(page: api.Page, shown: Mapping, anchor: Mapping) -> dict:
 
 def _allow_op(credential: Mapping, operation: str) -> None:
     if operation not in credential["operations"]:
-        raise api.Refusal(HTTPStatus.FORBIDDEN, "operation_not_allowed")
+        raise serve.Refusal(HTTPStatus.FORBIDDEN, "operation_not_allowed")
 
 
-def _describe(page: api.Page) -> dict:
+def _describe(page: serve.Page) -> dict:
     """A page as a pulled item shows it, when serve names no source."""
     return {"name": page.name, "title": page.title, "owner": page.owner,
             "revision": page.revision, "sourceFile": "", "source": ""}
@@ -973,7 +973,7 @@ def _describe(page: api.Page) -> dict:
 def _allow(credential: Mapping, operation: str, handle: str) -> None:
     error = authorize(credential, operation, handle)
     if error is not None:
-        raise api.Refusal(HTTPStatus.FORBIDDEN, error)
+        raise serve.Refusal(HTTPStatus.FORBIDDEN, error)
 
 
 def _query(query: str, names: tuple[str, ...]) -> dict:
@@ -985,7 +985,7 @@ def _query(query: str, names: tuple[str, ...]) -> dict:
     except (ValueError, UnicodeDecodeError):
         fields = {}
     if sorted(fields) != sorted(names) or any(len(v) != 1 for v in fields.values()):
-        raise api.Refusal(HTTPStatus.BAD_REQUEST, "invalid_query")
+        raise serve.Refusal(HTTPStatus.BAD_REQUEST, "invalid_query")
     return {name: fields[name][0] for name in names}
 
 
@@ -1004,7 +1004,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
     def parse_request(self) -> bool:
         if not super().parse_request():
             return False
-        body = api.Body(self.rfile, self.connection, self.headers)
+        body = serve.Body(self.rfile, self.connection, self.headers)
         status, payload, headers = self.server.routes.answer(
             self.command, self.path, self.headers, body
         )
@@ -1050,14 +1050,14 @@ class SocketServer(socketserver.ThreadingMixIn, socketserver.UnixStreamServer):
     daemon_threads = True
 
     def __init__(self, path: Path | str, database: store.db.Database,
-                 pages: Callable[[str], api.Page | None] = _no_page,
-                 describe: Callable[[api.Page], dict] | None = None,
+                 pages: Callable[[str], serve.Page | None] = _no_page,
+                 describe: Callable[[serve.Page], dict] | None = None,
                  window: float = routing.DEFAULT_WINDOW,
                  claim_sec: float = routing.DEFAULT_CLAIM,
                  media_dir: Path | None = None,
-                 max_image_bytes: int = media.DEFAULT_MAX_BYTES,
+                 max_image_bytes: int = publish.DEFAULT_MAX_BYTES,
                  changed: Callable[[str, str], None] = lambda what, page: None,
-                 catalog: Callable[[], Callable[[str], api.Page | None]] | None = None) -> None:
+                 catalog: Callable[[], Callable[[str], serve.Page | None]] | None = None) -> None:
         self.path = Path(path)
         self.routes = Routes(database, pages, describe, window, claim_sec=claim_sec,
                              media_dir=media_dir, max_image_bytes=max_image_bytes, changed=changed,

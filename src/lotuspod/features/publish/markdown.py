@@ -50,8 +50,8 @@ import re
 from dataclasses import dataclass
 from typing import Callable, Mapping
 
-from lotuspod.features.blocks import calltree
-from lotuspod.features.widgets import widgets
+from lotuspod.features.blocks import render
+from lotuspod.features import widgets
 
 CUT = "\n## Concrete commands"
 
@@ -321,7 +321,7 @@ def _convert(lines: list[str], numbers: list[int],
                 out.append(widgets.fence(lang, "\n".join(code) + "\n", fence_line, live_count[0]))
                 continue
             if words and words[0] == "calltree":
-                out.append(calltree.render(code, words[1:]))
+                out.append(render(code, words[1:]))
                 continue
             text = html.escape("\n".join(code), quote=False)
             if lang == "mermaid":

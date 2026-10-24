@@ -15,13 +15,13 @@ from html.parser import HTMLParser
 from pathlib import Path
 
 from lotuspod import core
-from lotuspod.features.agents import machine
-from lotuspod.features.serve import serve_files
-from lotuspod.features.comments import comments
-from lotuspod.features.decisions import decisions
-from lotuspod.features.blocks import node_tables, refs
+from lotuspod.features import agents
+from lotuspod.features import serve
+from lotuspod.features import comments
+from lotuspod.features import decisions
+from lotuspod.features.blocks import mark_node_tables, mark_refs
 from lotuspod.features.publish import markdown, media, sections
-from lotuspod.features.widgets import widgets
+from lotuspod.features import widgets
 from lotuspod.core import (DEFAULT_OUTPUT_DIR, _META_CONTENT_RE, PAGE_SCRIPT, _REVISION_TAG_RE,
                            collect_scripts, commit_output, extract_visibility, load_tokens,
                            render_template, script_hash, slugify, sync_theme_css, theme_hash,
@@ -341,23 +341,23 @@ def check_owner(args: argparse.Namespace, out_dir: Path) -> None:
     """Refuse (RuntimeError) args.owner unless the credential of --credential,
     else $LOTUSPOD_CREDENTIAL, may publish as it, in serve's database."""
     handle = args.owner
-    if not machine.is_handle(handle):
+    if not agents.is_handle(handle):
         raise RuntimeError(
             f"--owner {handle!r} is not a handle: 1 to 63 lower-case letters, digits "
             "and hyphens, starting with a letter or digit; nothing written"
         )
-    path = args.credential or os.environ.get(machine.CREDENTIAL_ENV, "")
+    path = args.credential or os.environ.get(agents.CREDENTIAL_ENV, "")
     if not path:
         raise RuntimeError(
             f"--owner {handle} needs --credential FILE for a credential that may publish "
             f"as {handle}; nothing written"
         )
     try:
-        token = machine.read_token(path)
-        db_path = serve_files.serve_db_path(out_dir, args.db)
+        token = agents.read_token(path)
+        db_path = serve.serve_db_path(out_dir, args.db)
         if not db_path.is_file():
             raise RuntimeError(f"no credentials at {db_path}; nothing written")
-        machine.check_owner(db.Database(db_path), token, handle)
+        agents.check_owner(db.Database(db_path), token, handle)
     except (ValueError, sqlite3.Error, OSError) as exc:
         raise RuntimeError(f"--owner {handle}: {exc}; nothing written") from None
 
@@ -411,7 +411,7 @@ def cmd_render(args: argparse.Namespace) -> int:
             raise RuntimeError(f"image {line.src} in {label}: {why}; nothing written")
         body = markdown.to_body(text, sizes)
     body, widget_files, widget_warnings = widgets.render(body, args.name)
-    body, has_node_tables = node_tables.mark_node_tables(body)
+    body, has_node_tables = mark_node_tables(body)
     # Before the outline, so the forms sit inside their section.
     body, has_decisions = decisions.render_decisions(body, args.name)
     # Once the forms say which block each is about, so its chrome counts them.
@@ -419,7 +419,7 @@ def cmd_render(args: argparse.Namespace) -> int:
     # After the forms, so no reference lands in a question or changes its
     # version; before the outline, so no heading's id is a card's.
     page_refs = getattr(args, "refs", None)
-    body, refs_block, named = refs.mark_refs(body, page_refs or {},
+    body, refs_block, named = mark_refs(body, page_refs or {},
                                              getattr(args, "refs_as_of", ""))
     body, outline = (body, []) if args.no_outline else outline_body(body)
     # After the outline, so each box names its heading's id.
@@ -585,7 +585,7 @@ def version_stamp(page_html: str) -> tuple[str, bool, str]:
     content = _META_CONTENT_RE.search(tag.group(0)) if tag else None
     owner = page_owner(page_html)
     return ((content.group(1).strip() if content else ""), extract_visibility(page_html),
-            owner if machine.is_handle(owner) else "")
+            owner if agents.is_handle(owner) else "")
 
 
 def page_variant(page_html: str) -> str:

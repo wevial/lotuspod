@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Callable
 
 from lotuspod import core
-from lotuspod.features.serve import serve_files
+from lotuspod.features import serve
 
 PATH = "/api/events"
 MAX_STREAMS = 32
@@ -53,10 +53,10 @@ class Hub:
             return None
 
     def _snapshot(self):
-        from lotuspod.features.history import archive
+        from lotuspod.features import history
         return {file[:-5]: (core.page_revision(self.out_dir, file[:-5]),
-                           archive.read_record(self.out_dir, file[:-5]))
-                for file in serve_files.serve_allow_list(self.out_dir) if file.endswith(".html") and core.is_page_name(file)}
+                           history.read_record(self.out_dir, file[:-5]))
+                for file in serve.serve_allow_list(self.out_dir) if file.endswith(".html") and core.is_page_name(file)}
 
     def open(self, disconnect: Callable[[], None] = lambda: None):
         with self._condition:
@@ -87,7 +87,7 @@ class Hub:
     def changed(self, what: str, page: str | None):
         # Recheck visibility, including writes racing a page being hidden.
         if page is not None:
-            if f"{page}.html" not in serve_files.serve_allow_list(self.out_dir):
+            if f"{page}.html" not in serve.serve_allow_list(self.out_dir):
                 return
         data = frame(what, page)
         with self._condition:

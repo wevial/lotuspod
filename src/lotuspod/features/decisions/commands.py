@@ -8,12 +8,12 @@ import json
 import sys
 from pathlib import Path
 
-from lotuspod.features.agents import agents
+from lotuspod.features import agents
 from lotuspod.core import DEFAULT_OUTPUT_DIR
 from lotuspod.features.decisions import decisions
-from lotuspod.features.publish.publish import _PAGE_NAME
-from lotuspod.features.serve import api
-from lotuspod.features.serve.serve_files import serve_database
+from lotuspod.features.publish import _PAGE_NAME
+from lotuspod.features import serve
+from lotuspod.features.serve import serve_database
 from lotuspod.store import db
 
 
@@ -35,7 +35,7 @@ def answers_text(name: str, questions: dict, forms: dict[str, decisions.Form]) -
             label = "Dismissed"
         elif "checked" in row:
             if form is not None and row["version"] == form.version:
-                label = api.summary(api.changes(dict(form.options), form.defaults,
+                label = serve.summary(serve.changes(dict(form.options), form.defaults,
                                                 row["checked"]))
             else:
                 label = row["asked"]["label"]

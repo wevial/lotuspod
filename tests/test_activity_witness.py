@@ -129,7 +129,7 @@ class ActivityWitness(VersionsWitness):
                 "--db", str(self.db), "--socket", str(self.sock)]
         thread = threading.Thread(target=cli.main, args=(argv,), daemon=True)
         patches = (mock.patch.object(serve_commands, "_make_server", make_port),
-                   mock.patch.object(machine, "SocketServer", make_socket),
+                   mock.patch("lotuspod.features.agents.SocketServer", make_socket),
                    mock.patch.dict(os.environ, {"LOTUSPOD_CONFIG": self.env["LOTUSPOD_CONFIG"]}))
         output = io.StringIO()
         for patcher in patches:

@@ -9,19 +9,17 @@ a function, is checked against the rules:
 - lotuspod.store imports only lotuspod.core;
 - a slice, each folder under src/lotuspod/features/, imports core, store, its
   own modules, and another slice through that slice's public edge (the names
-  its __init__.py exports); an import that reaches past another slice's
-  __init__.py into its modules is allowed only along an edge in EDGES.
+  its __init__.py exports) alone; an import that reaches past another
+  slice's __init__.py into its modules is allowed only along an edge in
+  EDGES, and EDGES is empty.
 
 A module still flat in src/lotuspod/ is checked only for the cli rule, and a
 slice may still import one.
 
-EDGES is a ratchet: it starts at the cross-slice edges main's code makes,
-by TARGET_TREE, one (from, to) slice pair a line. An entry can only be
-removed, never added: once a slice reaches the other only through its public
-edge, the entry goes. TARGET_TREE names the slice each flat module moves
-into, so an edge still made by flat modules counts as made; CLI_FUNCTIONS
-names the slice each function cli/__init__.py still holds moves into, so an edge made
-by a use inside one of them counts too.
+A test fails while EDGES holds an entry. TARGET_TREE names the slice each flat
+module moves into, so an edge still made by flat modules counts as made;
+CLI_FUNCTIONS names the slice each function cli/__init__.py still holds moves
+into, so an edge made by a use inside one of them counts too.
 
 Run from the repo root:
 
@@ -32,6 +30,8 @@ from __future__ import annotations
 
 import ast
 import secrets
+import subprocess
+import sys
 import tempfile
 import textwrap
 import unittest
@@ -39,6 +39,25 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 PACKAGE_DIR = REPO_ROOT / "src" / "lotuspod"
+
+# Two threads, held at a barrier, each import one of the modules named on
+# the command line first in a fresh interpreter; any error is printed.
+RACE = """\
+import importlib, sys, threading
+barrier, failed = threading.Barrier(2), []
+def first_import(name):
+    barrier.wait()
+    try:
+        importlib.import_module(name)
+    except BaseException as error:
+        failed.append(f"{name}: {error!r}")
+threads = [threading.Thread(target=first_import, args=(name,)) for name in sys.argv[1:]]
+for thread in threads:
+    thread.start()
+for thread in threads:
+    thread.join()
+sys.exit("\\n".join(failed) or None)
+"""
 
 PACKAGE = "lotuspod"
 CLI = "lotuspod.cli"
@@ -57,41 +76,8 @@ TARGET_TREE: dict[str, str] = {}
 CLI_FUNCTIONS: dict[str, str] = {}
 
 # Each import that reaches past another slice's __init__.py into its modules
-# is allowed only along one of these (from, to) edges. Only ever remove one.
-# Each names the import or call site on main (f388140) that made it first.
-EDGES = (
-    ("agents", "comments"),  # agents.py:60 imports comments
-    ("agents", "publish"),  # agents.py:60 imports media
-    ("agents", "serve"),  # agents.py:60 imports api
-    ("agents", "widgets"),  # machine.py:207 imports widgets
-    ("backup", "publish"),  # backup.py:43 imports media
-    ("backup", "serve"),  # backup.py:409 calls cli.serve_db_path
-    ("decisions", "agents"),  # cli.py:3170, answers_text, uses agents
-    ("decisions", "comments"),  # decisions.py:56 imports comments
-    ("decisions", "publish"),  # cli.py:842, cmd_answers, uses publish's _PAGE_NAME
-    ("decisions", "serve"),  # decisions.py:56 imports api
-    ("history", "index"),  # archive.py:188 calls cli.cmd_manifest
-    ("history", "serve"),  # archive.py:40 imports api
-    ("history", "widgets"),  # versions.py:62 imports widgets
-    ("index", "history"),  # cli.py:1109, collect_artifacts, calls archive.read_record
-    ("live", "history"),  # events.py:54 imports archive
-    ("live", "serve"),  # events.py:57 calls cli.serve_allow_list
-    ("publish", "agents"),  # cli.py:744, check_owner, calls machine.is_handle
-    ("publish", "blocks"),  # markdown.py:53 imports calltree
-    ("publish", "comments"),  # sections.py:23 imports comments
-    ("publish", "decisions"),  # cli.py:816, cmd_render, calls decisions.render_decisions
-    ("publish", "index"),  # cli.py:2342, cmd_publish, calls cmd_manifest
-    ("publish", "serve"),  # cli.py:757, check_owner, calls serve_db_path
-    ("publish", "widgets"),  # markdown.py:53 imports widgets
-    ("serve", "agents"),  # api.py:222 imports routing
-    ("serve", "comments"),  # api.py:222 imports comments
-    ("serve", "decisions"),  # cli.py:115, api_page, calls decisions.read_forms
-    ("serve", "history"),  # api.py:222 imports versions
-    ("serve", "live"),  # cli.py:2583, _AllowListHandler, uses events
-    ("serve", "publish"),  # api.py:222 imports media
-    ("serve", "widgets"),  # cli.py:2387, serve_allow_list, calls widgets.Frames
-    ("widgets", "publish"),  # widgets.py:218 imports markdown
-)
+# is allowed only along one of these (from, to) edges.
+EDGES: tuple[tuple[str, str], ...] = ()
 
 
 def module_name(package_dir: Path, path: Path) -> str:
@@ -300,6 +286,20 @@ def call_edges(package_dir: Path, tree: dict[str, str],
 class RepositoryTests(unittest.TestCase):
     def test_the_package_keeps_the_slice_rules(self):
         self.assertEqual(violations(PACKAGE_DIR, EDGES), [])
+
+    def test_no_edge_is_listed(self):
+        """Every slice reaches another through its public edge alone."""
+        self.assertEqual(list(EDGES), [])
+
+    def test_two_slices_imported_first_at_once_both_load(self):
+        """No import-time cycle between slices deadlocks two threads that
+        first-import different slices at the same moment."""
+        for pair in (("lotuspod.features.publish", "lotuspod.features.serve"),
+                     ("lotuspod.features.agents.machine", "lotuspod.features.serve.api")):
+            with self.subTest(pair=pair):
+                done = subprocess.run([sys.executable, "-c", RACE, *pair], cwd=PACKAGE_DIR.parent,
+                                      capture_output=True, text=True, timeout=60)
+                self.assertEqual(done.returncode, 0, done.stderr)
 
     def test_every_listed_edge_is_still_made(self):
         """A listed edge no import, and no use in the entry point, makes any more is
