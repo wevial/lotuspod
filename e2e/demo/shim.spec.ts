@@ -238,7 +238,10 @@ test('a comment on the whole page from the chip under the title gets the generic
 
 test('a page loaded directly opens in the demo index as its tab, the landing page too, and settles', async ({ context, page }) => {
   const seen = watch(context, page);
-  const shown = (name: string) => page.frames().map((frame) => new URL(frame.url()))
+  // A frame that has not committed its first navigation has the address "",
+  // which new URL() throws on, so only frames with an address are read.
+  const shown = (name: string) => page.frames().map((frame) => frame.url())
+    .filter((address) => URL.canParse(address)).map((address) => new URL(address))
     .find((where) => where.pathname === `/${name}.html`);
   // Hold the tab frame's request for the page a second, so the first reads of
   // the frames always meet the tab still loading, its address "". The
