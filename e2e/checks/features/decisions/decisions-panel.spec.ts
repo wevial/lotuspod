@@ -694,6 +694,13 @@ test('a question asked from the panel posts its own field, not the note, and its
   await side.tab('Decisions').click();
   await two.ask.click();
   await expect(two.askField).toHaveValue('');
+
+  // Dismissed with an unsent question in its Ask, it is in neither list.
+  await two.askField.fill('Unsent question');
+  await second.form.getByRole('button', { name: 'Dismiss', exact: true }).click();
+  await expect(second.saved).toContainText('Dismissed');
+  await expect(two.item).toHaveCount(0);
+  await expect(row(page, 'decision-2').item).toHaveCount(0);
   expect(errors).toEqual([]);
 });
 

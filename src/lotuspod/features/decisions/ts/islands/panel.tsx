@@ -198,7 +198,9 @@ function Panel({ desk }: { desk: Desk }) {
     if (!asked(form) || !desk.dirty(form)) kept.current.delete(form);
   }
   const listed = desk.forms.filter((form) =>
-    desk.toAnswer(form) || held.has(form) || kept.current.has(form) || drafting.has(form));
+    desk.toAnswer(form) || held.has(form) || kept.current.has(form) ||
+    // A dismissal leaves the tab, an unsent question with it.
+    (drafting.has(form) && !desk.saved(form)?.dismissed));
   function drafted(form: HTMLFormElement, on: boolean): void {
     setDrafting((was) => {
       if (was.has(form) === on) return was;
