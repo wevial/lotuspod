@@ -19,6 +19,9 @@
     var over = {};
     var held = { kind: null, view: null, opener: null, anchor: null, members: [], titleKey: null,
       stateKey: null };
+    // The line naming its block above each block thread's comments in a
+    // section's view, by thread.
+    var leads = new Map();
     var NAMES = { popover: "artifact-comments-popover", sheet: "artifact-comments-bottom-sheet" };
 
     function holder(kind) {
@@ -125,9 +128,46 @@
       return marked.concat(rest);
     }
 
+    // "On TITLE", and " · STATE" when the block's widget named one, as the
+    // panel's entry says it: its words, and its parts with the title bold.
+    function onBlock(block) {
+      var state = block.state ? " · " + block.state : "";
+      return {
+        name: "On " + block.title + state,
+        parts: ["On ", element("span", "artifact-comments-entry-block", block.title), state],
+      };
+    }
+
+    // In a section's view, a block thread's comments are led by the line
+    // naming its block, as its hidden head does in the panel; else by none.
+    function lead(thread, shown) {
+      var line = leads.get(thread);
+      var block = shown ? the.blockOf(thread) : null;
+      if (!block) {
+        if (line) {
+          line.remove();
+          leads.delete(thread);
+        }
+        return;
+      }
+      var said = onBlock(block);
+      if (!line || line.dataset.key !== said.name) {
+        if (line) {
+          line.remove();
+        }
+        line = element("p", "artifact-comments-held-on");
+        line.dataset.key = said.name;
+        line.append.apply(line, said.parts);
+        leads.set(thread, line);
+      }
+      if (line.nextSibling !== thread.node && thread.node.parentNode) {
+        thread.node.parentNode.insertBefore(line, thread.node);
+      }
+    }
+
     // What a view is called, and the title it shows: "Section HEADING", a
     // passage's number and its opening words, a decision's number and its
-    // question, or its composer.
+    // question, a block's title and state, or its composer.
     function caption(view) {
       if (view.passage) {
         var asking = "Comment on the selected words";
@@ -150,6 +190,11 @@
           name: decision.name + ": " + decision.question, key: decision.name + ": " + decision.question,
           parts: [element("span", "artifact-comments-held-kind", decision.name), ": ", decision.question],
         };
+      }
+      var block = thread && the.blockOf(thread);
+      if (block) {
+        var on = onBlock(block);
+        return { name: on.name, key: on.name, parts: on.parts };
       }
       var box = thread ? thread.box : view.box;
       var heading = box && document.getElementById(box.dataset.section);
@@ -176,6 +221,7 @@
       held.members = members;
       before.forEach(function (thread) {
         if (members.indexOf(thread) < 0) {
+          lead(thread, false);
           panel.put(thread);
           passages.shine(thread);
         }
@@ -186,6 +232,7 @@
         if (at !== thread.entry.item) {
           made.entries.insertBefore(thread.entry.item, at || null);
         }
+        lead(thread, Boolean(view.box));
         passages.shine(thread);
       });
       var named = caption(view);
@@ -361,6 +408,7 @@
       held.opener = null;
       held.anchor = null;
       members.forEach(function (thread) {
+        lead(thread, false);
         panel.put(thread);
         passages.shine(thread);
       });
