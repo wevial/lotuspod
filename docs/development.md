@@ -254,14 +254,29 @@ whose `jsxImportSource` is `preact`, under their own config
 (`src/lotuspod/features/comments/ts/islands/tsconfig.json`, which finds
 Preact and its signals in `web/node_modules`, and checks the decisions
 island as `main.tsx` imports it).
-`test` runs `web/build.test.ts` and the islands' tests (`web/store.test.ts`,
-the comments store's signals; `web/decisions.test.ts`, the decision cards in
-happy-dom's DOM), which run the islands as the page does: `web/islands.ts`
-bundles them with Preact and its signals as the build does, and the tests
-import that one bundle. `check` builds, then fails naming each file
+`test` runs `web/build.test.ts`, `web/shortcodes.test.ts`, the comment
+composers' emoji shortcode matcher with the table it reads, and the islands'
+tests (`web/store.test.ts`, the comments store's signals;
+`web/decisions.test.ts`, the decision cards in happy-dom's DOM), which run the
+islands as the page does: `web/islands.ts` bundles them with Preact and its
+signals as the build does, and the tests import that one bundle. `check`
+builds, then fails naming each file
 under a slice's `ts/`, built or written by hand, that does not parse
 on its own with Bun, and fails when git sees any JS file there modified, deleted
 or new, printing what differs.
+
+The composers' emoji table, `src/lotuspod/features/comments/theme/lotuspod-emoji.json`,
+is made once from gemoji's `db/emoji.json` (github/gemoji at commit
+`fadaeaf1f1a9`, MIT, copyright GitHub, Inc.; its notice and source are in
+`lotuspod-emoji.LICENSE` beside it): every alias of every entry mapped to its
+emoji, 1,913 shortcodes from 1,870 emoji, written as one compact JSON object
+sorted by shortcode (`json.dumps(..., ensure_ascii=False,
+separators=(",", ":"))` and a newline). It is a served theme file of its own,
+like `favicon.svg` (`THEME_FILE_SOURCES` in `src/lotuspod/core/__init__.py`),
+not bundled: at 42.4 KB it would grow `islands.js` by about 45% on every
+page, where a composer fetches it only on the first colon typed. To update
+it, regenerate it the same way from a newer gemoji commit and name that
+commit in the LICENSE file.
 
 The built JS is committed, so the wheel ships it, and `pip install`, the unit
 suite and the demo need neither Bun nor Node. The `theme` workflow

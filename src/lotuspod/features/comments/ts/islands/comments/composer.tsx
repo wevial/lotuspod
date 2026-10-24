@@ -3,6 +3,7 @@ import { createPortal } from "preact/compat";
 import type { CommentPayload, CommentRow, ComposerBridge, Page, Thread, Widget } from "../bridge";
 import type { ComposerHandles } from "./parts";
 import { blockStanding, frameOf, hashOf } from "./anchor";
+import { shortcodeList } from "./shortcode-list";
 
 type Quote = NonNullable<CommentRow["quote"]>;
 interface Body { page: string; text: string; parent?: number; section?: string; revision?: string; quote?: Quote; widget?: Widget; images?: string[] }
@@ -61,6 +62,7 @@ export function composers(page: Page, bridge: ComposerBridge) {
   function wireField(form: HTMLFormElement): ComposerHandles {
     const field = fieldOf(form), images = page.attachments(form, field);
     bridge.attached.set(form, images);
+    shortcodeList(form, field);
     field.addEventListener("keydown", event => {
       if (event.key !== "Enter" || !(event.metaKey || event.ctrlKey) || event.isComposing) return;
       event.preventDefault();

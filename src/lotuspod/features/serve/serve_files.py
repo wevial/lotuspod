@@ -6,7 +6,7 @@ import argparse
 from pathlib import Path
 
 from lotuspod.features import widgets
-from lotuspod.core import (DEFAULT_OUTPUT_DIR, INDEX_FILE, INDEX_SCRIPT, MANIFEST_FILE,
+from lotuspod.core import (DEFAULT_OUTPUT_DIR, EMOJI_TABLE, INDEX_FILE, INDEX_SCRIPT, MANIFEST_FILE,
                            OLD_VERSION_SCRIPT, PAGE_SCRIPT, WIDGET_NAME, extract_visibility,
                            is_page_name)
 from lotuspod.store import db
@@ -15,7 +15,7 @@ from lotuspod.store import db
 _SERVE_CSS_FILE = "lotuspod.css"
 _SERVE_ICON_FILE = "favicon.svg"
 _SERVE_SUPPORT_FILES = (_SERVE_CSS_FILE, _SERVE_ICON_FILE, PAGE_SCRIPT, INDEX_SCRIPT,
-                        OLD_VERSION_SCRIPT)
+                        OLD_VERSION_SCRIPT, EMOJI_TABLE)
 _SERVE_NEVER_FILES = frozenset({MANIFEST_FILE, "FINDINGS.md"})
 
 

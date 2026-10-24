@@ -23,5 +23,5 @@
       "@preact/signals": ["./node_modules/@preact/signals"]
     }
   },
-  "include": ["build.ts", "build.test.ts", "islands.ts", "store.test.ts", "decisions.test.ts"]
+  "include": ["build.ts", "build.test.ts", "shortcodes.test.ts", "islands.ts", "store.test.ts", "decisions.test.ts"]
 }
