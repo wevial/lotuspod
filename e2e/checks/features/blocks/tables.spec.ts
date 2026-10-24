@@ -90,9 +90,6 @@ async function columns(page: Page, index: number) {
 // beside the outline rail no table starts under it; and on the report page a
 // long first cell leaves the second column its room and the findings table's
 // long first column starves no other.
-const RAIL = [1024, 1440];
-const LONG_FIRST_ROOM = [1024, 768];
-const FINDINGS_ROOM = [1024, 1440];
 
 for (const target of [ARTICLE, REPORT]) {
   for (const size of SIZES) {
@@ -117,19 +114,19 @@ for (const target of [ARTICLE, REPORT]) {
         expect(wide.scrolls).toBe(true);
       }
 
-      if (RAIL.includes(size.width)) {
+      if ([1024, 1440].includes(size.width)) {
         const outline = (await page.locator('nav.artifact-outline').boundingBox())!;
         const lefts = (await tableBoxes(page, '.artifact-body table')).map((box) => box.left);
         for (const left of lefts) expect(left).toBeGreaterThanOrEqual(outline.x + outline.width);
       }
 
-      if (target === REPORT && LONG_FIRST_ROOM.includes(size.width)) {
+      if (target === REPORT && [1024, 768].includes(size.width)) {
         const { table, cells } = await columns(page, LONG_FIRST);
         expect(cells.length).toBe(2);
         expect(cells[1] / table).toBeGreaterThanOrEqual(0.4);
       }
 
-      if (target === REPORT && FINDINGS_ROOM.includes(size.width)) {
+      if (target === REPORT && [1024, 1440].includes(size.width)) {
         const { table, cells } = await columns(page, FINDINGS);
         expect(cells.length).toBe(3);
         expect(Math.min(...cells) / table).toBeGreaterThanOrEqual(0.2);
