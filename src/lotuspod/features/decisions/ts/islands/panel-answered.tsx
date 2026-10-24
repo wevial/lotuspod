@@ -13,12 +13,15 @@ import { label, words } from "./words";
 // page as its "change" does; Cancel puts the card back as saved. It is
 // drawn again as the cards change. A question saved while its entry's Ask
 // held an unsent question carries that field here, shown while the row is
-// open, until it is sent or cancelled.
+// open, until it is sent or cancelled; a row opened with no unsent question
+// and no send pending has no Ask, even if its entry's field was left open.
 function Row({ desk, form, draft }: { desk: Desk; form: HTMLFormElement; draft: Draft }) {
   desk.marked.value;
   const question = form.dataset.question ?? "";
   const answer = desk.saved(form);
   const [open, setOpen] = useState(false);
+  // The unsent question this row carries, fixed as the row opens.
+  const [carry, setCarry] = useState(false);
   const asker = store.asking.value;
   const [busy, setBusy] = useState(false);
   const item = useRef<HTMLLIElement>(null);
@@ -45,6 +48,7 @@ function Row({ desk, form, draft }: { desk: Desk; form: HTMLFormElement; draft: 
   function show(on: boolean, to: "pick" | "title"): void {
     focus.current = to;
     setOpen(on);
+    setCarry(on && (draft.text.trim() !== "" || draft.busy));
   }
   async function save(): Promise<void> {
     setBusy(true);
@@ -82,8 +86,8 @@ function Row({ desk, form, draft }: { desk: Desk; form: HTMLFormElement; draft: 
           {changed && <>{" "}<span class="artifact-decisions-unsaved">not saved</span></>}
         </p>
       )}
-      {asker && open && (draft.open || draft.text !== "" || draft.busy) &&
-        <Ask form={form} asking={asker} draft={draft} done={() => {}} focused={false} />}
+      {asker && open && carry && (draft.open || draft.text !== "" || draft.busy) &&
+        <Ask form={form} asking={asker} draft={draft} done={() => setCarry(false)} focused={false} />}
     </li>
   );
 }
@@ -97,6 +101,8 @@ export function Answered({ desk, forms, draftOf }: {
   draftOf(form: HTMLFormElement): Draft;
 }) {
   const [open, setOpen] = useState(false);
+  // The unsent question this row carries, fixed as the row opens.
+  const [carry, setCarry] = useState(false);
   if (!forms.length) {
     return null;
   }

@@ -565,9 +565,11 @@ test('a saved question moves to the folded Answered list, and its row changes th
   await expect(four.change).toBeVisible();
   await expect(four.radios).toHaveCount(0);
 
-  // Saved from its entry, question 1 reads "Saved", then joins the list,
-  // which stays open.
+  // Saved from its entry, its Ask field left open and empty, question 1
+  // reads "Saved", then joins the list, which stays open.
   const one = entry(page, 'decision-1');
+  await one.item.getByRole('button', { name: 'Ask', exact: true }).click();
+  await expect(page.getByRole('textbox', { name: 'Ask about decision 1' })).toBeVisible();
   await one.option('Beside the title').check();
   await one.save.click();
   await expect(one.saved).toHaveText('✓ Saved · Beside the title');
@@ -579,9 +581,12 @@ test('a saved question moves to the folded Answered list, and its row changes th
     .toEqual(['decision-1', 'decision-4']);
   await expect(row(page, 'decision-1').title).toHaveText('1 · Where should the diff size sit?');
   await expect(row(page, 'decision-1').label).toHaveText('Beside the title');
-  // A row saved with no note still edits it under "Edit note".
+  // A row saved with no note still edits it under "Edit note", and an Ask
+  // field left empty does not follow it: an Answered row has no Ask.
   await row(page, 'decision-1').change.click();
   await expect(row(page, 'decision-1').noteSummary).toHaveText('Edit note');
+  await expect(row(page, 'decision-1').item.locator('.artifact-decisions-asking')).toHaveCount(0);
+  await expect(row(page, 'decision-1').item.getByRole('button', { name: 'Ask', exact: true })).toHaveCount(0);
   await row(page, 'decision-1').title.click();
   await expect(row(page, 'decision-1').radios).toHaveCount(0);
 
