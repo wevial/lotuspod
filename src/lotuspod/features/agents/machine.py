@@ -206,8 +206,8 @@ from typing import Callable, Mapping
 
 from lotuspod import store
 from lotuspod.features.agents import routing
-from lotuspod.features import publish
 from lotuspod.features import serve
+from lotuspod.features import publish
 from lotuspod.features import widgets
 
 OPERATIONS = ("pull", "claim", "reply", "publish")

@@ -4,13 +4,31 @@ manifest (manifest.py) and publish, here or over ssh (publish.py and
 publish_sources.py), with `lotuspod render`, `lotuspod manifest` and
 `lotuspod publish` in commands.py."""
 
+from lotuspod.features import public_edge
 from lotuspod.features.publish.manifest import cmd_manifest
-from lotuspod.features.publish.media import (CONTENT_TYPES, DEFAULT_MAX_BYTES, EXTENSIONS,
-                                             MEDIA_DIR_NAME, MediaError, STORED_NAME, URL_PREFIX,
-                                             check, load_stored, media_dir, named_type, store,
-                                             stored_file)
-from lotuspod.features.publish.markdown import images, to_body
-from lotuspod.features.publish.publish import _PAGE_NAME, cmd_publish
-from lotuspod.features.publish.publish_sources import media_cap
-from lotuspod.features.publish.render import (_H2Collector, kept_block_hashes, page_owner,
-                                              version_stamp)
+
+# The names the other slices use, by the module that defines each.
+__getattr__ = public_edge(__name__, {
+    "images": "markdown",
+    "to_body": "markdown",
+    "CONTENT_TYPES": "media",
+    "DEFAULT_MAX_BYTES": "media",
+    "EXTENSIONS": "media",
+    "MEDIA_DIR_NAME": "media",
+    "MediaError": "media",
+    "STORED_NAME": "media",
+    "URL_PREFIX": "media",
+    "check": "media",
+    "load_stored": "media",
+    "media_dir": "media",
+    "named_type": "media",
+    "store": "media",
+    "stored_file": "media",
+    "_PAGE_NAME": "publish",
+    "cmd_publish": "publish",
+    "media_cap": "publish_sources",
+    "_H2Collector": "render",
+    "kept_block_hashes": "render",
+    "page_owner": "render",
+    "version_stamp": "render",
+})

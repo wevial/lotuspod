@@ -3,8 +3,30 @@ handler (handler.py, over the pages pages.py reads), the /api routes
 (api.py) behind Cloudflare Access (access.py), with `lotuspod serve` in
 commands.py."""
 
-from lotuspod.features.serve.api import (MAX_BODY, MAX_IMAGES, MAX_NAME, MAX_TEXT, UPLOAD_TYPES,
-                                         Answer, Body, Page, Refusal, _image_names, _json_object,
-                                         _keys, _media_type, _text, asked_question, changes, chosen,
-                                         stored_images, summary)
-from lotuspod.features.serve.serve_files import serve_allow_list, serve_database, serve_db_path
+from lotuspod.features import public_edge
+
+# The names the other slices use, by the module that defines each.
+__getattr__ = public_edge(__name__, {
+    "MAX_BODY": "api",
+    "MAX_IMAGES": "api",
+    "MAX_NAME": "api",
+    "MAX_TEXT": "api",
+    "UPLOAD_TYPES": "api",
+    "Answer": "api",
+    "Body": "api",
+    "Page": "api",
+    "Refusal": "api",
+    "_image_names": "api",
+    "_json_object": "api",
+    "_keys": "api",
+    "_media_type": "api",
+    "_text": "api",
+    "asked_question": "api",
+    "changes": "api",
+    "chosen": "api",
+    "stored_images": "api",
+    "summary": "api",
+    "serve_allow_list": "serve_files",
+    "serve_database": "serve_files",
+    "serve_db_path": "serve_files",
+})

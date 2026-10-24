@@ -1,7 +1,20 @@
 """Lotuspod's feature slices, one package each (tests/test_import_graph.py)."""
 
-# Each slice's __init__.py exports what the other slices use, so importing one
-# loads them all. agents goes first whichever module is imported: its routing
-# defaults and publish's media are bound before serve's api reads them, and
-# serve is whole before anything subclasses or reads its api at import.
-from lotuspod.features import agents
+from __future__ import annotations
+
+from importlib import import_module
+from typing import Any, Callable
+
+
+def public_edge(package: str, names: dict[str, str]) -> Callable[[str], Any]:
+    """The module __getattr__ a slice's __init__.py exports names with: each
+    of names, by the module of package that defines it, is read from that
+    module when asked for. Importing a slice so loads none of its modules,
+    and the slices' modules import each other as they did before they went
+    through the slice, with no cycle between the slice packages for two
+    threads importing at once to deadlock on."""
+    def __getattr__(name: str) -> Any:
+        if name not in names:
+            raise AttributeError(f"module {package!r} has no attribute {name!r}")
+        return getattr(import_module(f"{package}.{names[name]}"), name)
+    return __getattr__
