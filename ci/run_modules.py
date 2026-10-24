@@ -179,14 +179,6 @@ def finish(module: Module, status: int, usage, ceiling: float | None) -> None:
         module.verdict = "ok"
 
 
-def report(module: Module) -> None:
-    print(
-        f"{module.wall:7.1f}s wall {module.cpu:7.1f}s cpu {module.tests:5d} tests"
-        f"  {module.verdict}  {module.rel}",
-        flush=True,
-    )
-
-
 def run(modules: list[Module], tests: Path, jobs: int, timeout: float,
         ceiling: float | None) -> None:
     waiting = list(modules)
@@ -202,7 +194,11 @@ def run(modules: list[Module], tests: Path, jobs: int, timeout: float,
             if pid in running:
                 module = running.pop(pid)
                 finish(module, status, usage, ceiling)
-                report(module)
+                print(
+                    f"{module.wall:7.1f}s wall {module.cpu:7.1f}s cpu {module.tests:5d} tests"
+                    f"  {module.verdict}  {module.rel}",
+                    flush=True,
+                )
                 continue
             now = time.monotonic()
             for module in running.values():

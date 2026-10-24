@@ -23,25 +23,20 @@ WORKFLOW = Path(__file__).resolve().parent.parent / ".github" / "workflows" / "u
 RUNNER = "python ci/run_modules.py --jobs 4 --shard ${{ matrix.shard }}/2 --max-module-sec 150"
 
 
-def block(text: str, key: str, indent: str = "") -> str | None:
-    """The lines nested under `key:` at the given indent, or None."""
-    match = re.search(
-        rf"^{indent}{re.escape(key)}:[ \t]*\n((?:{indent}[ \t]+.*\n|[ \t]*\n)*)",
-        text,
-        re.MULTILINE,
-    )
-    return match.group(1) if match else None
-
-
 class UnitWorkflowTestCase(unittest.TestCase):
     def setUp(self) -> None:
         self.assertTrue(WORKFLOW.is_file(), f"{WORKFLOW} does not exist")
         self.text = WORKFLOW.read_text(encoding="utf-8")
 
     def block(self, key: str, indent: str = "", text: str | None = None) -> str:
-        found = block(self.text if text is None else text, key, indent)
-        self.assertIsNotNone(found, f"no `{key}:` block in the workflow")
-        return found
+        """The lines nested under `key:` at the given indent."""
+        match = re.search(
+            rf"^{indent}{re.escape(key)}:[ \t]*\n((?:{indent}[ \t]+.*\n|[ \t]*\n)*)",
+            self.text if text is None else text,
+            re.MULTILINE,
+        )
+        self.assertIsNotNone(match, f"no `{key}:` block in the workflow")
+        return match.group(1)
 
     def job(self, name: str) -> str:
         return self.block(name, indent="  ", text=self.block("jobs"))
