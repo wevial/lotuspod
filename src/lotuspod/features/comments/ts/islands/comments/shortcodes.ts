@@ -40,7 +40,7 @@ export function matches(table: Table, query: string): string[] {
 export function closed(text: string, caret: number, table: Table): { text: string; caret: number } | null {
   if (text[caret - 1] !== ":") return null;
   const open = fragment(text, caret - 1);
-  const emoji = open && Object.hasOwn(table, open.query) ? table[open.query]! : null;
-  if (!open || emoji === null) return null;
+  if (!open || !Object.hasOwn(table, open.query)) return null;
+  const emoji = table[open.query]!;
   return { text: text.slice(0, open.start) + emoji + text.slice(caret), caret: open.start + emoji.length };
 }
