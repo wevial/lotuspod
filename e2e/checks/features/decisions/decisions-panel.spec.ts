@@ -970,6 +970,20 @@ test('Show on page, Next open and either Answered list\'s "change" open a collap
     await expect(one.options).toBeVisible();
     await expect.poll(() => belowBar(page, 'decision-1')).toBe(16);
   }
+  // So does a link naming the page's own path, or its full address, with
+  // the hash the address already holds.
+  for (const whole of [false, true]) {
+    await page.evaluate((whole) => {
+      const link = document.getElementById('to-question-1') as HTMLAnchorElement;
+      link.setAttribute('href', whole ? location.href.split('#')[0] + '#question=decision-1' :
+        location.pathname + location.search + '#question=decision-1');
+    }, whole);
+    await one.toggle.click();
+    await expect(one.options).toBeHidden();
+    await link.click();
+    await expect(one.toggle).toHaveAttribute('aria-expanded', 'true');
+    await expect(one.options).toBeVisible();
+  }
   // A modified click is left to the browser: the page does not move.
   await one.toggle.click();
   await expect(one.options).toBeHidden();
@@ -1002,6 +1016,15 @@ test('Show on page, Next open and either Answered list\'s "change" open a collap
   await expect(four.option('Only open tickets')).toBeVisible();
   await expect(four.option('Only open tickets')).toBeChecked();
   await expect(row(page, 'decision-4').option('Only open tickets')).toBeChecked();
+
+  // The row's question opens a collapsed card as its "change" does.
+  await row(page, 'decision-4').title.click();
+  await expect(row(page, 'decision-4').change).toBeVisible();
+  await four.toggle.click();
+  await expect(four.options).toBeHidden();
+  await row(page, 'decision-4').title.click();
+  await expect(four.toggle).toHaveAttribute('aria-expanded', 'true');
+  await expect(four.option('Only open tickets')).toBeVisible();
   expect(errors).toEqual([]);
 });
 

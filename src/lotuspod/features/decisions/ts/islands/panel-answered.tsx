@@ -60,7 +60,10 @@ function Row({ desk, form, draft }: { desk: Desk; form: HTMLFormElement; draft: 
     <li ref={item} class={"artifact-decisions-row" + (open ? " artifact-decisions-row--open" : "") +
       (changed ? " artifact-decisions-row--dirty" : "")} data-question={question}>
       <button type="button" class="artifact-decisions-row-title" aria-expanded={open}
-        onClick={() => show(!open, open ? "title" : "pick")}>{title}</button>
+        onClick={() => {
+          if (!open) desk.expand(form);
+          show(!open, open ? "title" : "pick");
+        }}>{title}</button>
       {open ? (
         <>
           <Context form={form} />
