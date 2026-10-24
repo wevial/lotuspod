@@ -211,6 +211,46 @@ class RouteTests(AnchorCase):
         self.assertEqual(serve_pages.api_page(self.out_dir, "plan").widgets, {})
 
 
+class NestedSectionTests(AnchorCase):
+    """An HTML page whose h2s sit inside `section` elements: every section
+    has its box and none its wrapper, so a block belongs to the section of
+    the h2 before it."""
+
+    def prepare(self) -> None:
+        self.publish_churn(
+            '<h1>Nested pond</h1>\n'
+            '<template class="lotuspod-live" data-id="early" data-title="Early"><p>early</p></template>\n'
+            '<section><h2>Shallows</h2><p>Warm water.</p></section>\n'
+            '<section><h2>Deep shelf</h2><p>Cold water.</p>\n'
+            '<template class="lotuspod-live" data-id="shelf" data-title="Shelf counter">'
+            '<p>12 fish</p></template>\n'
+            '<form><h2>Inner</h2></form>\n'
+            '<template class="lotuspod-live" data-id="gauge" data-title="Gauge"><p>3 m</p></template>\n'
+            '</section>\n', ".html")
+
+    def shelf(self) -> dict:
+        return {"id": "shelf", "hash": self.block_hash("shelf"), "state": ""}
+
+    def test_a_block_belongs_to_the_section_of_the_h2_before_it(self):
+        page = (self.out_dir / "churn.html").read_text(encoding="utf-8")
+        self.assertEqual(comments.read_boxes(page), ["shallows", "deep-shelf"])
+        self.assertNotIn("artifact-section-body", page)
+        widgets = serve_pages.api_page(self.out_dir, "churn").widgets
+        self.assertEqual({ident: block.section for ident, block in widgets.items()},
+                         {"early": comments.WHOLE_PAGE, "shelf": "deep-shelf",
+                          "gauge": "deep-shelf"})
+
+    def test_a_thread_on_the_block_is_stored_in_its_heading_s_section(self):
+        status, row = self.post({"section": "deep-shelf", "text": "Off.", "widget": self.shelf()})
+        self.assertEqual(status, 201, row)
+        self.assertEqual((row["section"], row["widget"]), ("deep-shelf", self.shelf()))
+        before = self.stored()
+        status, payload = self.post({"section": comments.WHOLE_PAGE, "text": "Off.",
+                                     "widget": self.shelf()})
+        self.assertEqual((status, payload), (400, {"error": "unknown_widget"}))
+        self.assertEqual(self.stored(), before)
+
+
 class EarlierVersionTests(AnchorCase):
     """The page's site is the top of its own git repository, so each publish
     is a version of it: churn published with BLOCK, then with CHANGED."""
