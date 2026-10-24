@@ -36,11 +36,12 @@ part: a comment in a resolved thread is routed as any other.
 
 from __future__ import annotations
 
+import bisect
 import datetime
 import re
 import string
 import unicodedata
-from typing import Mapping
+from typing import Callable, Mapping
 
 from lotuspod.store import db
 
@@ -105,37 +106,91 @@ def route(comment: Mapping, pulls: Mapping[str, float], window: float,
     thread {root, replies}, of which only the replies before it count, or
     None for a thread's root.
     """
+    return _route(comment, pulls, window, now, paused,
+                  lambda: None if thread is None else _answerer(_agents(thread), comment))
+
+
+def _route(comment: Mapping, pulls: Mapping[str, float], window: float, now: float,
+           paused: bool, answerer: Callable[[], str | None]) -> tuple[str, str] | None:
+    """route(), the thread's latest agent before the comment read from
+    answerer(), which is called only for a reply that names no handle."""
     if comment["actor"].get("kind") != "human":
         return None
     state = PENDING if lapsed(comment, now) else comment["state"]
     if state != PENDING:
-        return comment["claim"]["handle"] or _routed(comment, thread, pulls, window, now), state
-    handle = _routed(comment, thread, pulls, window, now)
+        return comment["claim"]["handle"] or _routed(comment, answerer, pulls, window, now), state
+    handle = _routed(comment, answerer, pulls, window, now)
     if handle == RESPONDER and paused:
         return handle, PAUSED
     return handle, PENDING if listening(handle, pulls, window, now) else UNAVAILABLE
 
 
-def _routed(comment: Mapping, thread: Mapping | None, pulls: Mapping[str, float],
-            window: float, now: float) -> str:
+def _routed(comment: Mapping, answerer: Callable[[], str | None],
+            pulls: Mapping[str, float], window: float, now: float) -> str:
     """The handle a comment no agent has taken up is routed to: the one it
     mentions, else, for a reply, its thread's last answering agent while that
     one is listening, else the responder."""
     named = mention(comment["text"])
     if named is not None:
         return named
-    if thread is not None and comment.get("parent") is not None:
-        before = [row for row in thread["replies"] if row["id"] < comment["id"]]
-        agents = [row["actor"]["handle"] for row in before
-                  if row["actor"].get("kind") == "agent" and row["actor"].get("handle")]
-        if agents and listening(agents[-1], pulls, window, now):
-            return agents[-1]
+    if comment.get("parent") is not None:
+        handle = answerer()
+        if handle is not None and listening(handle, pulls, window, now):
+            return handle
     return RESPONDER
+
+
+def _agents(thread: Mapping) -> tuple[list[int], list[str]]:
+    """The ids of the thread's agent replies, oldest first, and their handles."""
+    found = [(row["id"], row["actor"]["handle"]) for row in thread["replies"]
+             if row["actor"].get("kind") == "agent" and row["actor"].get("handle")]
+    return [row_id for row_id, _ in found], [handle for _, handle in found]
+
+
+def _answerer(agents: tuple[list[int], list[str]], comment: Mapping) -> str | None:
+    """The handle of the latest agent reply before comment; None for none."""
+    ids, handles = agents
+    at = bisect.bisect_left(ids, comment["id"])
+    return handles[at - 1] if at else None
 
 
 def thread_of(database: db.Database, comment: Mapping) -> dict | None:
     """The thread route() takes for comment: None for a thread's root."""
     return None if comment.get("parent") is None else database.thread(comment["parent"])
+
+
+class Threads:
+    """Many comments routed and shown as of one moment, each thread loaded
+    from the database at most once, and only when a comment needs it."""
+
+    def __init__(self, database: db.Database, pulls: Mapping[str, float], window: float,
+                 now: float, paused: bool = False) -> None:
+        self.database, self.pulls, self.window = database, pulls, window
+        self.now, self.paused = now, paused
+        self._loaded: dict[int, dict] = {}
+        self._indexed: dict[int, tuple[list[int], list[str]]] = {}
+
+    def of(self, comment: Mapping) -> dict:
+        """The comment's thread {root, replies, resolution}."""
+        root = comment.get("parent") or comment["id"]
+        if root not in self._loaded:
+            self._loaded[root] = self.database.thread(root)
+        return self._loaded[root]
+
+    def _answerer(self, comment: Mapping) -> str | None:
+        root = comment.get("parent") or comment["id"]
+        if root not in self._indexed:
+            self._indexed[root] = _agents(self.of(comment))
+        return _answerer(self._indexed[root], comment)
+
+    def route(self, comment: Mapping) -> tuple[str, str] | None:
+        """route() of the comment, its thread loaded as needed."""
+        return _route(comment, self.pulls, self.window, self.now, self.paused,
+                      lambda: self._answerer(comment))
+
+    def public(self, comment: Mapping) -> dict:
+        """public() of the comment, its thread loaded as needed."""
+        return _shown(comment, self.route(comment))
 
 
 def last_pulls(database: db.Database) -> dict[str, float]:
@@ -148,8 +203,11 @@ def public(comment: Mapping, pulls: Mapping[str, float], window: float, now: flo
     """The comment as it is shown: its `owner` the handle it is routed to
     (None for an agent's reply) and its `state` its routing state; thread
     as route() takes it."""
+    return _shown(comment, route(comment, pulls, window, now, paused, thread))
+
+
+def _shown(comment: Mapping, routed: tuple[str, str] | None) -> dict:
     row = {key: value for key, value in comment.items() if key not in ("arrival", "claim")}
-    routed = route(comment, pulls, window, now, paused, thread)
     row["owner"] = None if routed is None else routed[0]
     if routed is not None:
         row["state"] = routed[1]
@@ -159,9 +217,11 @@ def public(comment: Mapping, pulls: Mapping[str, float], window: float, now: flo
 def thread(found: Mapping, pulls: Mapping[str, float], window: float, now: float,
            paused: bool = False) -> dict:
     """A thread {root, replies, resolution} as it is shown."""
+    agents = _agents(found)
     return {
         "root": public(found["root"], pulls, window, now, paused),
-        "replies": [public(row, pulls, window, now, paused, found)
+        "replies": [_shown(row, _route(row, pulls, window, now, paused,
+                                       lambda row=row: _answerer(agents, row)))
                     for row in found["replies"]],
         "resolution": found["resolution"],
     }

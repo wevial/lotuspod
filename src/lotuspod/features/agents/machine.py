@@ -563,10 +563,9 @@ class Routes:
                         for value, label in asked.labels.items()],
                     "answer": current, "asked": asked is not None}
 
-        items = []
+        items, threads = [], routing.Threads(self.database, pulls, self.window, now, paused)
         for comment in self.database.open_comments():
-            found = self.database.thread(comment["parent"] or comment["id"])
-            routed = routing.route(comment, pulls, self.window, now, paused, found)
+            routed = threads.route(comment)
             # A current claim takes it off the queue; a lapsed one does not.
             if routed is None or routed[1] not in routing.WAITING or routed[0] != owner:
                 continue
@@ -574,14 +573,13 @@ class Routes:
             page = page_of(comment["page"])
             if page is None:
                 continue
+            found = threads.of(comment)
             omitted = max(0, len(found["replies"]) - routing.THREAD_TAIL)
             item = {
                 "kind": "comment",
-                "comment": self._located(
-                    routing.public(comment, pulls, self.window, now, paused, found)),
+                "comment": self._located(threads.public(comment)),
                 # The thread's first comment and its latest replies, oldest first.
-                "thread": [self._located(routing.public(row, pulls, self.window, now, paused,
-                                                        found))
+                "thread": [self._located(threads.public(row))
                            for row in (found["root"], *found["replies"][omitted:])],
                 "omitted": omitted,
                 # The thread's resolution: a comment in a resolved thread still waits.

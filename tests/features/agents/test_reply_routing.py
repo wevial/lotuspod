@@ -19,6 +19,7 @@ import sys
 import time
 import unittest
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "src"))
 
@@ -143,6 +144,22 @@ class ReplyRoutingTests(ReplyRoutingTestCase):
         rc, claimed = self.act("claude-a", "claim", str(reply["id"]))
         self.assertEqual(rc, 0, claimed)
         self.assertEqual((claimed["comment"], claimed["handle"]), (reply["id"], "claude-a"))
+
+
+    def test_a_pull_loads_no_thread_for_replies_that_name_another_handle(self):
+        root = self.thread_answered_by_a()
+        for count in range(5):
+            self.reply(root["id"], f"@claude-b Question {count}?")
+        loaded = []
+        real = db.Database.thread
+
+        def thread(database: db.Database, root_id: int) -> dict:
+            loaded.append(root_id)
+            return real(database, root_id)
+
+        with mock.patch.object(db.Database, "thread", thread):
+            self.assertEqual(self.pulled_as("claude-a", "claude-a"), [])
+        self.assertEqual(loaded, [])
 
 
 if __name__ == "__main__":

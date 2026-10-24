@@ -41,7 +41,7 @@ CEILING = {
 OVER = 150
 PINNED = {
     "e2e/checks/live-page.spec.ts": 2849,
-    "src/lotuspod/features/agents/machine.py": 1148,
+    "src/lotuspod/features/agents/machine.py": 1146,
     "src/lotuspod/features/agents/responder.py": 1033,
     "src/lotuspod/features/comments/theme/comments.css": 1773,
     "src/lotuspod/features/serve/api.py": 1170,
