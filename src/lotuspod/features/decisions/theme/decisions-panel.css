@@ -307,6 +307,9 @@
 .artifact-decisions-ask-status {
   color: var(--color-muted-lavender);
   flex-basis: 100%;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .artifact-decisions-ask-status:empty {

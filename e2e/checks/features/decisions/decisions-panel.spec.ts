@@ -709,7 +709,7 @@ test('an empty panel Ask posts nothing, and the card\'s Ask still sends and empt
   test.skip(test.info().repeatEachIndex > 0, 'asks on a page the first repeat asked on');
   const name = 'decisions-panel-ask-empty';
   await prepare(request, name);
-  const errors = watch(page);
+  const errors = watch(page, ['500 (Internal Server Error)']);
   await load(page, name);
   const posts: string[] = [];
   page.on('request', (sent) => {
@@ -757,21 +757,75 @@ test('an empty panel Ask posts nothing, and the card\'s Ask still sends and empt
   await expect(three.askStatus).toHaveText('');
   await expect(three.askField).toHaveValue('Does Esc close it? And a click outside?');
 
-  // Saved while its Ask holds an unsent question, the question still moves
-  // to Answered, and its row carries the unsent question until it is sent
-  // or cancelled.
+  // The question's section, held back by its unsaved pick and then updated
+  // to a new revision, keeps its field open with the unsent question.
+  await page.evaluate(() => {
+    (window as any).swapped = new Promise<void>((resolve) =>
+      document.addEventListener('lotuspod:swapped', () => setTimeout(resolve), { once: true }));
+  });
+  publish(name, MARKDOWN.replace('shown as thumbnails', 'each shown as a thumbnail'));
+  await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+  await page.evaluate(() => (window as any).swapped);
+  await page.locator('button.artifact-swap-update').click();
+  await expect(page.getByText('each shown as a thumbnail')).toBeVisible();
+  await expect(three.askField).toHaveValue('Does Esc close it? And a click outside?');
+
+  // Saved while its Ask holds an unsent question with a send still pending,
+  // the question still moves to Answered; its collapsed row holds no Ask,
+  // and opened, it carries the field, text, pending send and all, until the
+  // question is sent or cancelled.
   const side = panel(page);
+  const third = row(page, 'decision-3');
+  const carried = third.item.locator('.artifact-decisions-asking textarea');
+  const carriedSend = third.item.locator('.artifact-decisions-asking button.artifact-decisions-ask-send');
+  let refuse = () => {};
+  const holding = new Promise<void>((resolve) => { refuse = resolve; });
+  const comments = (url: URL) => url.pathname === '/api/comments';
+  await page.route(comments, async (route) => {
+    if (route.request().method() === 'POST') {
+      await holding;
+      return route.fulfill({ status: 500, contentType: 'application/json',
+        body: JSON.stringify({ error: 'Internal server error while storing the question thread on this page' }) });
+    }
+    return route.fallback();
+  });
+  const refused = page.waitForResponse((response) =>
+    new URL(response.url()).pathname === '/api/comments' && response.request().method() === 'POST');
+  await three.askSend.click();
+  await expect(three.askSend).toBeDisabled();
   await three.save.click();
   await expect(card(page, 'decision-3').saved).toBeVisible();
   await expect(three.item).toHaveCount(0);
   await expect(side.answeredSummary).toHaveText('Answered · 2');
   await side.answeredSummary.click();
-  const carried = row(page, 'decision-3').item.locator('.artifact-decisions-asking textarea');
+  await expect(third.label).toHaveText('Overlay on the console');
+  await expect(third.item.locator('textarea')).toHaveCount(0);
+  await expect(third.item.getByRole('button', { name: 'Ask', exact: true })).toHaveCount(0);
+  await third.change.click();
   await expect(carried).toHaveValue('Does Esc close it? And a click outside?');
   await expect(carried).toHaveAccessibleName('Ask about decision 3');
-  await row(page, 'decision-3').item.locator('.artifact-decisions-asking')
+  await expect(carriedSend).toBeDisabled();
+  refuse();
+  expect((await refused).status()).toBe(500);
+  await expect(carriedSend).toBeEnabled();
+  await expect(carried).toHaveValue('Does Esc close it? And a click outside?');
+  const status = third.item.locator('.artifact-decisions-asking .artifact-decisions-ask-status');
+  await expect(status).not.toHaveText('');
+  // A long refusal wraps inside the panel.
+  const [inside, right] = await Promise.all([
+    status.evaluate((node) => node.getBoundingClientRect().right),
+    side.aside.evaluate((node) => node.getBoundingClientRect().right),
+  ]);
+  expect(inside).toBeLessThanOrEqual(right);
+  expect(await side.decisions.evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true);
+  await page.unroute(comments);
+  const texts = (await stored(request, name)).threads.map((thread) => thread.root.text);
+  expect(texts.filter((text) => text === 'Does Esc close it?')).toHaveLength(1);
+  expect(texts).not.toContain('Does Esc close it? And a click outside?');
+  await third.item.locator('.artifact-decisions-asking')
     .getByRole('button', { name: 'Cancel', exact: true }).click();
   await expect(carried).toHaveCount(0);
+  await third.cancel.click();
   await expect(row(page, 'decision-3').label).toHaveText('Overlay on the console');
   expect(errors).toEqual([]);
 });

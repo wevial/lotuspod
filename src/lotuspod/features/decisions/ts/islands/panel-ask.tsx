@@ -1,23 +1,31 @@
-import { useLayoutEffect, useRef, useState } from "preact/hooks";
+import { useLayoutEffect, useRef } from "preact/hooks";
 import type { Asking } from "../../../comments/ts/index";
 import { words } from "./words";
 
-// A question's unsent Ask text, which the Decisions tab keeps for each form
-// so it outlives the entry it was written in: now() reads it as last set.
+// A question's unsent Ask, which the Decisions tab keeps for each question
+// so it outlives the entry it was written in, a section swapped under it
+// and a send still pending: whether its field is open, its text, what it
+// last said and whether a send is pending. now() reads the text as last set.
 export interface Draft {
+  open: boolean;
   text: string;
+  said: string;
+  busy: boolean;
+  show(open: boolean): void;
   set(text: string): void;
+  tell(said: string): void;
+  sending(busy: boolean): void;
   now(): string;
 }
 
-// A question's own Ask, under its entry: the field's text posted as a
-// question thread on the decision, as the card's Ask posts the note, which
-// it leaves alone. Sent, the field empties and closes, and the panel stays
-// on Decisions; a field changed while it was sending keeps what it holds, not
-// yet sent. A refused post keeps the text and says why. The text is the
-// tab's, so closing the field with the entry's Ask keeps it, and a question
-// saved meanwhile carries it to its Answered row; Cancel empties it. Drawn
-// where the reader opened it, it takes the focus.
+// A question's own Ask: the field's text posted as a question thread on the
+// decision, as the card's Ask posts the note, which it leaves alone. Sent,
+// the field empties and closes, and the panel stays on Decisions; a field
+// changed while it was sending keeps what it holds, not yet sent. A refused
+// post keeps the text and says why. The text is the tab's, so closing the
+// field with the entry's Ask keeps it, and a question saved meanwhile
+// carries it to its Answered row; Cancel empties it. Drawn where the reader
+// opened it, it takes the focus.
 export function Ask({ form, asking, draft, done, focused = true }: {
   form: HTMLFormElement;
   asking: Asking;
@@ -25,9 +33,7 @@ export function Ask({ form, asking, draft, done, focused = true }: {
   done(): void;
   focused?: boolean;
 }) {
-  const { text } = draft;
-  const [said, setSaid] = useState("");
-  const [busy, setBusy] = useState(false);
+  const { text, said, busy } = draft;
   const field = useRef<HTMLTextAreaElement>(null);
   useLayoutEffect(() => {
     if (focused) field.current?.focus({ preventScroll: true });
@@ -36,21 +42,22 @@ export function Ask({ form, asking, draft, done, focused = true }: {
   async function send(): Promise<void> {
     const question = text.trim();
     if (!question) {
-      setSaid("Write your question first.");
+      draft.tell("Write your question first.");
       return;
     }
-    setBusy(true);
-    setSaid("Sending your question...");
+    draft.sending(true);
+    draft.tell("Sending your question...");
     try {
-      setSaid(await asking.ask(form.dataset.question!, question, () => {
+      draft.tell(await asking.ask(form.dataset.question!, question, () => {
         if (draft.now() !== text) return;
         draft.set("");
+        draft.show(false);
         done();
       }, false));
     } catch {
-      setSaid("Your question was not sent: the site did not answer. Try again.");
+      draft.tell("Your question was not sent: the site did not answer. Try again.");
     } finally {
-      setBusy(false);
+      draft.sending(false);
     }
   }
   return (
@@ -62,6 +69,8 @@ export function Ask({ form, asking, draft, done, focused = true }: {
         <button type="button" class="artifact-decisions-ask-send" disabled={busy} onClick={send}>Ask</button>
         <button type="button" class="artifact-decisions-cancel" onClick={() => {
           draft.set("");
+          draft.tell("");
+          draft.show(false);
           done();
         }}>Cancel</button>
         <span class="artifact-decisions-ask-status" role="status">{said}</span>

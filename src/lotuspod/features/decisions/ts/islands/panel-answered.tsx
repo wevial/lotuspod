@@ -12,14 +12,13 @@ import { label, words } from "./words";
 // from its answer, and Show on page. A pick or a note opens the card on the
 // page as its "change" does; Cancel puts the card back as saved. It is
 // drawn again as the cards change. A question saved while its entry's Ask
-// held an unsent question carries that field here, until it is sent or
-// cancelled.
+// held an unsent question carries that field here, shown while the row is
+// open, until it is sent or cancelled.
 function Row({ desk, form, draft }: { desk: Desk; form: HTMLFormElement; draft: Draft }) {
   desk.marked.value;
   const question = form.dataset.question ?? "";
   const answer = desk.saved(form);
   const [open, setOpen] = useState(false);
-  const [carrying, setCarrying] = useState(() => draft.text.trim() !== "");
   const asker = store.asking.value;
   const [busy, setBusy] = useState(false);
   const item = useRef<HTMLLIElement>(null);
@@ -83,8 +82,8 @@ function Row({ desk, form, draft }: { desk: Desk; form: HTMLFormElement; draft: 
           {changed && <>{" "}<span class="artifact-decisions-unsaved">not saved</span></>}
         </p>
       )}
-      {asker && carrying &&
-        <Ask form={form} asking={asker} draft={draft} done={() => setCarrying(false)} focused={false} />}
+      {asker && open && (draft.open || draft.text !== "" || draft.busy) &&
+        <Ask form={form} asking={asker} draft={draft} done={() => {}} focused={false} />}
     </li>
   );
 }

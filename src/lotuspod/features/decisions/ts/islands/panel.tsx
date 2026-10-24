@@ -12,6 +12,9 @@ import { label, words } from "./words";
 // leaves the list.
 const SAVED_FOR = 1600;
 
+type Asked = Pick<Draft, "open" | "text" | "said" | "busy">;
+const UNASKED: Asked = { open: false, text: "", said: "", busy: false };
+
 interface EntryProps {
   desk: Desk;
   form: HTMLFormElement;
@@ -31,8 +34,9 @@ function Entry({ desk, form, held, saving, saved, draft }: EntryProps) {
   const question = form.dataset.question ?? "";
   const answer = desk.saved(form);
   const [busy, setBusy] = useState(false);
-  const [asking, setAsking] = useState(false);
   const askButton = useRef<HTMLButtonElement>(null);
+  // Opened by the reader here, not drawn again with a field already open.
+  const opened = useRef(false);
   if (held && answer && !desk.dirty(form)) {
     return (
       <li class="artifact-decisions-entry artifact-decisions-entry--saved" data-question={question}>
@@ -55,7 +59,6 @@ function Entry({ desk, form, held, saving, saved, draft }: EntryProps) {
     saved(form, done);
   }
   function asked(): void {
-    setAsking(false);
     askButton.current?.focus({ preventScroll: true });
   }
   return (
@@ -70,12 +73,15 @@ function Entry({ desk, form, held, saving, saved, draft }: EntryProps) {
       <Note desk={desk} form={form} summary={summary} />
       <div class="artifact-decisions-foot">
         <button type="button" class="artifact-decisions-save" disabled={busy} onClick={save}>Save</button>
-        {asker && <button ref={askButton} type="button" class="artifact-decisions-ask" aria-expanded={asking}
-          onClick={() => setAsking(!asking)}>Ask</button>}
+        {asker && <button ref={askButton} type="button" class="artifact-decisions-ask" aria-expanded={draft.open}
+          onClick={() => {
+            opened.current = true;
+            draft.show(!draft.open);
+          }}>Ask</button>}
         <span class="artifact-decisions-unsaved" hidden={!desk.dirty(form)}>not saved</span>
         <button type="button" class="artifact-decisions-show" onClick={() => jump(form)}>Show on page</button>
       </div>
-      {asker && asking && <Ask form={form} asking={asker} draft={draft} done={asked} />}
+      {asker && draft.open && <Ask form={form} asking={asker} draft={draft} done={asked} focused={opened.current} />}
       {threads && (
         <button type="button" class="artifact-decisions-threads" onClick={threads.open}>
           <span class="artifact-decisions-threads-mark" aria-hidden="true">?</span>
@@ -94,10 +100,11 @@ function Entry({ desk, form, held, saving, saved, draft }: EntryProps) {
 function Panel({ desk }: { desk: Desk }) {
   desk.marked.value;
   const [held, setHeld] = useState<ReadonlySet<HTMLFormElement>>(new Set());
-  // Each question's unsent Ask text, kept here so a question saved while it
-  // holds one carries it to the Answered list.
-  const [drafts, setDrafts] = useState<ReadonlyMap<HTMLFormElement, string>>(new Map());
-  const latest = useRef(new Map<HTMLFormElement, string>());
+  // Each question's unsent Ask, kept here by its question, so a question
+  // saved while it holds one carries it to the Answered list, a section
+  // swapped under it keeps it, and a send pending is still pending there.
+  const [drafts, setDrafts] = useState<ReadonlyMap<string, Asked>>(new Map());
+  const latest = useRef(new Map<string, Asked>());
   const kept = useRef(new Set<HTMLFormElement>());
   const root = useRef<HTMLDivElement>(null);
   // The question to give the focus to once a saved entry leaves.
@@ -130,13 +137,19 @@ function Panel({ desk }: { desk: Desk }) {
   }
   const listed = desk.forms.filter((form) => desk.toAnswer(form) || held.has(form) || kept.current.has(form));
   function draftOf(form: HTMLFormElement): Draft {
+    const key = form.dataset.question ?? "";
+    const change = (to: Partial<Asked>) => {
+      const next = { ...(latest.current.get(key) ?? UNASKED), ...to };
+      latest.current.set(key, next);
+      setDrafts((was) => new Map(was).set(key, next));
+    };
     return {
-      text: drafts.get(form) ?? "",
-      now: () => latest.current.get(form) ?? "",
-      set(to: string) {
-        latest.current.set(form, to);
-        setDrafts((was) => new Map(was).set(form, to));
-      },
+      ...(drafts.get(key) ?? UNASKED),
+      now: () => latest.current.get(key)?.text ?? "",
+      show: (open) => change({ open }),
+      set: (text) => change({ text }),
+      tell: (said) => change({ said }),
+      sending: (busy) => change({ busy }),
     };
   }
   // A dismissal is in neither list: its card and the Answered table show it.
