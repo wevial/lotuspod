@@ -76,7 +76,6 @@ export function placement(page: Page, bridge: PlacementBridge): Placement {
     }
   }
 
-  // The title and state of the live block a thread is on, else null.
   function blockOf(thread: Thread) {
     const anchor = threadAnchor(thread.root);
     return anchor.kind === "block" ? { title: blockTitle(anchor), state: anchor.state } : null;
