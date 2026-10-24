@@ -403,6 +403,16 @@ test.describe('signed in', () => {
     await expect(page.locator('.artifact-unread')).toHaveCount(0);
     await expect(page).toHaveTitle(title);
 
+    // As the window narrows to a popover, the thread moves there still open
+    // to read, its reply marked New; widened again, it is back in the panel.
+    await page.setViewportSize({ width: 1024, height: 900 });
+    const popover = page.locator('.artifact-comments-popover');
+    const moved = popover.locator(`.artifact-comment-item:has(#artifact-comment-text-${id})`);
+    await expect(moved).toBeVisible();
+    await expect(moved.locator('.artifact-comment-new')).toHaveText('New');
+    await expect(popover.locator('.artifact-comments-entry-read')).toHaveAttribute('aria-expanded', 'true');
+    await page.setViewportSize(WIDE);
+
     // Its line again: folded back to the line.
     await read.click();
     await expect(read).toHaveAttribute('aria-expanded', 'false');
@@ -517,29 +527,6 @@ test.describe('signed in', () => {
     await expect(page.locator('.artifact-comments-fold')).toBeVisible();
     await page.waitForTimeout(500);
     expect(posts).toEqual([]);
-    expect(errors).toEqual([]);
-  });
-
-  test('a resolved thread open to read in the panel moves to a popover as the window narrows', async ({ page, request }) => {
-    test.setTimeout(120_000);
-    const errors = watchErrors(page);
-    const { thread, reply: id } = await answered(request, 'Does the heater need its own fuse?');
-    await resolve(request, thread);
-
-    await openPage(page);
-    await page.locator('.artifact-comments-rail').click();
-    await page.locator('.artifact-comments-show-resolved', { hasText: /^Show resolved/ }).click();
-    const seen = seenPost(page, thread);
-    await page.locator(`.artifact-comments-entry[data-thread="${thread}"] .artifact-comments-entry-read`).click();
-    expect((await seen).status()).toBe(200);
-    await expect(reply(page, id)).toBeVisible();
-
-    await page.setViewportSize({ width: 1024, height: 900 });
-    const popover = page.locator('.artifact-comments-popover');
-    const theirs = popover.locator(`.artifact-comment-item:has(#artifact-comment-text-${id})`);
-    await expect(theirs).toBeVisible();
-    await expect(theirs.locator('.artifact-comment-new')).toHaveText('New');
-    await expect(popover.locator('.artifact-comments-entry-read')).toHaveAttribute('aria-expanded', 'true');
     expect(errors).toEqual([]);
   });
 

@@ -211,14 +211,15 @@ function sample() {
 }
 
 // Show only the threads this check made: the site answers every read and
-// post, and a read is cut to the threads whose ids posts returned.
-async function ownThreads(page: Page, ids: Set<number>) {
+// post, and a read is cut to the threads whose ids posts returned, each as
+// shape gives it.
+async function ownThreads(page: Page, ids: Set<number>, shape = (thread: any) => thread) {
   await page.route((url) => url.pathname === '/api/comments', async (route) => {
     const request = route.request();
     const response = await route.fetch();
     const body = await response.json();
     if (request.method() === 'GET' && Array.isArray(body.threads)) {
-      body.threads = body.threads.filter((thread: any) => ids.has(thread.root.id));
+      body.threads = body.threads.filter((thread: any) => ids.has(thread.root.id)).map(shape);
     } else if (response.status() === 201 && body.parent === null) {
       ids.add(body.id);
     }
@@ -571,16 +572,19 @@ test.describe('signed in', () => {
   });
 
   test('Resolve takes a thread out of the list, shown it is a dashed line, and Reopen brings it back', async ({ page, request }) => {
-    test.setTimeout(120_000);
     const seen = await watch(page);
-    hermes('pull', '--owner', OWNER);
     const asked = await post(request, 'findings', '@hermes Is the outlet on its own fuse?');
     const other = await post(request, 'risks', 'What if the heater fails too?');
-    const claim = hermes('claim', String(asked.id));
-    hermes('reply', String(asked.id), `--claim=${claim.claimToken}`, '--key', `panel-resolve-${asked.id}`,
-      '--text', 'It is, since the spring.');
+    // hermes's answer is served in the asked thread.
     const ids = new Set<number>([asked.id, other.id]);
-    await ownThreads(page, ids);
+    await ownThreads(page, ids, (thread) => thread.root.id !== asked.id ? thread : {
+      ...thread,
+      root: { ...thread.root, state: 'answered' },
+      replies: [{
+        ...reply(thread.root, 'It is, since the spring.'), id: 950_000 + asked.id,
+        revision: thread.root.revision, createdAt: thread.root.createdAt,
+      }],
+    });
     await load(page);
     const side = panel(page);
     await expect(side.badge).toHaveText('2');

@@ -370,6 +370,15 @@ test("a table naming a box the diagram lacks stays shown, and its boxes keep the
   await expect.poll(() => lit(page, 1)).toEqual(await arrows(page, ['L_X_A_0', 'L_A_Y_1'], 1));
   expect(await lit(page)).toEqual([]);
 
+  // A box with no label is named by its id in the cards that list it.
+  await expect(box(page, 'W', 1).locator('.nodeLabel')).toHaveText('');
+  await box(page, 'Y', 1).focus();
+  await page.keyboard.press('Enter');
+  await expect(card(page).locator('h3')).toHaveText('Ship it');
+  expect(await graph(page)).toEqual([
+    ['Waits for', 'Answer the questions (open)'], ['Unblocks', 'W'],
+  ]);
+
   // A box inside a subgraph: its arrow's copy keeps the subgraph's space.
   await box(page, 'P', 1).click();
   await expect(card(page).locator('h3')).toHaveText('Tidy the docs');
@@ -453,11 +462,8 @@ test('a box with its own Mermaid style keeps it, and only an unstyled box takes 
   await expect(card(page).locator('dl.artifact-node-card-fields dt')).toHaveText(['Title', 'Status']);
   await expect(card(page).locator('dl.artifact-node-card-fields dd'))
     .toHaveText(['A box with its own style', 'ready']);
-  await seen.clean();
-});
 
-test("a box's label that breaks its lines reads as words split by spaces", async ({ page }) => {
-  const seen = await drawn(page);
+  // A box whose label breaks its lines reads as words split by spaces.
   await expect(box(page, 'M', 3)).toHaveAttribute('role', 'button');
   await box(page, 'M', 3).click();
   await expect(card(page)).toBeVisible();
@@ -478,15 +484,4 @@ test.describe('without scripts', () => {
     await expect(page.locator('#nodes-table-2')).toBeVisible();
     await expect(page.locator('[tabindex]')).toHaveCount(0);
   });
-});
-
-test('a box with no label is named by its id in the cards that list it', async ({ page }) => {
-  const seen = await drawn(page);
-  await expect(box(page, 'W', 1).locator('.nodeLabel')).toHaveText('');
-  await box(page, 'Y', 1).click();
-  await expect(card(page).locator('h3')).toHaveText('Ship it');
-  expect(await graph(page)).toEqual([
-    ['Waits for', 'Answer the questions (open)'], ['Unblocks', 'W'],
-  ]);
-  await seen.clean();
 });

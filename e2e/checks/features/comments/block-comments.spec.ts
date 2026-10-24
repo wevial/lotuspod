@@ -266,38 +266,6 @@ test('a reader comments on a live block, hermes answers, and the thread follows 
   expect(errors).toEqual([]);
 });
 
-test("Escape drops the block from the composer, and the section's own box then sends no widget", async ({ page }) => {
-  const name = `block-comments-escape-${test.info().repeatEachIndex}`;
-  publish(name, doc(1));
-  const errors = watch(page);
-  await load(page, name);
-  const live = block(page);
-  const churn = panel(page).group('Churn');
-  const form = churn.locator('form.artifact-comment-form');
-
-  await live.comment.click();
-  await expect(churn.locator('.artifact-comment-on')).toHaveText(WORDS);
-  await expect(form.locator('textarea[name="text"]')).toBeFocused();
-  await page.keyboard.press('Escape');
-  await expect(form).toBeHidden();
-  await expect(churn.locator('.artifact-comment-on')).toHaveCount(0);
-
-  await page.locator('details.artifact-comment[data-section="churn"] > summary').click();
-  await expect(form).toBeVisible();
-  await expect(churn.locator('.artifact-comment-on')).toHaveCount(0);
-  await form.locator('textarea[name="text"]').fill('A note on the section');
-  const sent = posting(page);
-  await form.getByRole('button', { name: 'Comment', exact: true }).click();
-  const body = (await sent).postDataJSON();
-  expect(body.section).toBe('churn');
-  expect('widget' in body).toBe(false);
-  const entry = churn.locator('.artifact-comments-entry');
-  await expect(entry).toHaveCount(1);
-  await expect(entry.locator('.artifact-comments-entry-head .artifact-comments-entry-mark')).toHaveText('§');
-  await expect(live.pin).toBeHidden();
-  expect(errors).toEqual([]);
-});
-
 test('an archived page and a page without comments give the block no Comment', async ({ page }) => {
   const archived = `block-comments-archived-${test.info().repeatEachIndex}`;
   const plain = `block-comments-plain-${test.info().repeatEachIndex}`;
@@ -560,8 +528,11 @@ test("a block's form that Escape takes off the block no longer says it stays on 
   publish(name, doc(1));
   const errors = watch(page);
   await load(page, name);
+  const live = block(page);
   const { churn, form, field, status } = churnForm(page);
-  await block(page).comment.click();
+  await live.comment.click();
+  await expect(churn.locator('.artifact-comment-on')).toHaveText(WORDS);
+  await expect(field).toBeFocused();
   await field.fill(QUESTION);
   await swap(page, name, doc(2));
   await expect(status).toHaveText(BLOCK_CHANGED);
@@ -569,6 +540,7 @@ test("a block's form that Escape takes off the block no longer says it stays on 
   await field.focus();
   await page.keyboard.press('Escape');
   await expect(form).toBeHidden();
+  await expect(churn.locator('.artifact-comment-on')).toHaveCount(0);
   await page.locator('details.artifact-comment[data-section="churn"] > summary').click();
   await expect(form).toBeVisible();
   await expect(churn.locator('.artifact-comment-on')).toHaveCount(0);
@@ -576,8 +548,13 @@ test("a block's form that Escape takes off the block no longer says it stays on 
   await field.fill('A note on the section');
   const sent = posting(page);
   await form.getByRole('button', { name: 'Comment', exact: true }).click();
-  expect('widget' in (await sent).postDataJSON()).toBe(false);
-  await expect(churn.locator('.artifact-comments-entry')).toHaveCount(1);
+  const body = (await sent).postDataJSON();
+  expect(body.section).toBe('churn');
+  expect('widget' in body).toBe(false);
+  const entry = churn.locator('.artifact-comments-entry');
+  await expect(entry).toHaveCount(1);
+  await expect(entry.locator('.artifact-comments-entry-head .artifact-comments-entry-mark')).toHaveText('§');
+  await expect(live.pin).toBeHidden();
   expect(errors).toEqual([]);
 });
 

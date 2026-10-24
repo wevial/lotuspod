@@ -30,14 +30,6 @@ async function watch(page: Page) {
   };
 }
 
-test('scripts load without console errors or CSP violations', async ({ page }) => {
-  const seen = await watch(page);
-  await page.goto(URL);
-  await expect(page.locator('.calltree').first()).toBeVisible();
-  await page.waitForLoadState('networkidle');
-  await seen.clean();
-});
-
 const NAMES = ['cmd_publish()', 'publish_config()', 'to_body()', '_walk()', '_convert()',
   'render()', 'parse_line()', 'source_url()', '_inline()', 'cmd_render()'];
 const PARENTS = ['cmd_publish()', 'to_body()', '_walk()', '_convert()', 'render()'];
@@ -52,9 +44,19 @@ async function visibleNames(page: Page) {
 }
 
 test.describe('folding', () => {
+  // Each check also asserts the page's scripts load and run without console
+  // errors or CSP violations.
+  let seen: Awaited<ReturnType<typeof watch>>;
+
   test.beforeEach(async ({ page }) => {
+    seen = await watch(page);
     await page.goto(URL);
     await expect(page.locator('.calltree').first().locator('.calltree-caret')).toHaveCount(5);
+  });
+
+  test.afterEach(async ({ page }) => {
+    await page.waitForLoadState('networkidle');
+    await seen.clean();
   });
 
   test('each parent row has a caret, open, and every row shows', async ({ page }) => {

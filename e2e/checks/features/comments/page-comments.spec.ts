@@ -294,18 +294,6 @@ test.describe('signed in', () => {
     expect(errors).toEqual([]);
   });
 
-  test('a page with one section keeps its one box for the whole page', async ({ page }) => {
-    const name = `page-comments-one-${test.info().repeatEachIndex}`;
-    publish(name, ONE);
-    const errors = watch(page);
-    await load(page, `/${name}.html`);
-    const boxes = page.locator('details.artifact-comment');
-    await expect(boxes).toHaveCount(1);
-    await expect(boxes).toHaveAttribute('data-section', 'page');
-    await expect(page.locator('header.artifact-header details.artifact-comment')).toHaveCount(0);
-    expect(errors).toEqual([]);
-  });
-
   test('a thread on the whole page stays in the page box once the page keeps one section', async ({ page, request }) => {
     const name = `page-comments-fewer-${test.info().repeatEachIndex}`;
     publish(name, TWO);
@@ -317,6 +305,7 @@ test.describe('signed in', () => {
     await load(page, `/${name}.html`);
     const only = box(page, 'page');
     await expect(page.locator('details.artifact-comment')).toHaveCount(1);
+    await expect(page.locator('header.artifact-header details.artifact-comment')).toHaveCount(0);
     await expect(only.chip).toHaveText('1 comment · waiting');
     await expect(page.locator('.artifact-comments-group-title', { hasText: 'Sections that have changed' }))
       .toBeHidden();

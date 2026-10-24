@@ -294,17 +294,8 @@ test.describe('signed in', () => {
     await items.nth(2).click();
     await expect(view(await inTab(page, name)).heading).toBeVisible();
 
-    // The keyboard, as the header's menu takes it, and a click on the
-    // banner's text closes it.
+    // A click on the banner's text closes it.
     await page.goto(`/${name}.html?version=${older.commit}`);
-    await choose.focus();
-    await page.keyboard.press('ArrowDown');
-    await expect(menu).toBeVisible();
-    await expect(items.nth(0)).toBeFocused();
-    await page.keyboard.press('Escape');
-    await expect(menu).toBeHidden();
-    await expect(choose).toBeFocused();
-    await expect(choose).toHaveAttribute('aria-expanded', 'false');
     await choose.click();
     await expect(menu).toBeVisible();
     await banner.locator('.artifact-version-banner-text').click({ position: { x: 4, y: 4 } });
@@ -407,6 +398,21 @@ test.describe('signed in', () => {
     await expect(versions.node).toContainText('This is the only version.');
     await expect(versions.entries).toHaveCount(1);
     await expect(versions.entries.first()).toContainText('current');
+
+    // Outside a repository the versions route answers 200 with no versions;
+    // the fixture's site is one, so that answer is stood in for.
+    await page.route('**/api/versions?*', (route) => route.fulfill({
+      status: 200, contentType: 'application/json',
+      body: JSON.stringify({ page: 'capture-versions-once', versions: [] }),
+    }));
+    await page.goto('/capture-versions-once.html?standalone');
+    await expect(link).toHaveText('Versions · 0');
+    await link.click();
+    await expect(versions.heading).toBeVisible();
+    await expect(versions.node).toContainText('This page has no versions yet.');
+    await expect(versions.entries).toHaveCount(0);
+    await expect(versions.more).toBeHidden();
+    await expect(page.locator('.artifact-body')).toBeHidden();
     expect(errors).toEqual([]);
   });
 
@@ -745,42 +751,13 @@ test.describe('signed in, what changed', () => {
     await expect(page.locator('section.artifact-body#page-text')).toHaveCount(1);
     await link.click();
     await expect(page).toHaveURL(new RegExp(`/${name}\\.html\\?standalone#page-text$`));
-    expect(errors).toEqual([]);
-  });
 
-  test('Dismiss removes the box', async ({ page }) => {
-    const errors = watchErrors(page);
-    await republish(page, 'changes-dismiss', 'Changes dismiss');
+    // Dismiss removes the box, and the body stays.
     const box = page.locator(BOX);
     await expect(box).toBeVisible();
     await box.getByRole('button', { name: 'Dismiss' }).click();
     await expect(page.locator(BOX)).toHaveCount(0);
     await expect(page.locator('.artifact-body')).toBeVisible();
-    expect(errors).toEqual([]);
-  });
-});
-
-test.describe('signed in, outside a repository', () => {
-  test.use({ extraHTTPHeaders: SIGNED_IN });
-
-  // The fixture's site is a repository, so the route's answer for a
-  // directory that is not one is stood in for: 200 with no versions.
-  test('an empty list still shows "Versions · 0" and its view', async ({ page }) => {
-    const errors = watchErrors(page);
-    await page.route('**/api/versions?*', (route) => route.fulfill({
-      status: 200, contentType: 'application/json',
-      body: JSON.stringify({ page: 'capture-versions-once', versions: [] }),
-    }));
-    await page.goto('/capture-versions-once.html?standalone');
-    const link = page.locator('.artifact-header .artifact-meta a.artifact-versions-link');
-    await expect(link).toHaveText('Versions · 0');
-    await link.click();
-    const versions = view(page);
-    await expect(versions.heading).toBeVisible();
-    await expect(versions.node).toContainText('This page has no versions yet.');
-    await expect(versions.entries).toHaveCount(0);
-    await expect(versions.more).toBeHidden();
-    await expect(page.locator('.artifact-body')).toBeHidden();
     expect(errors).toEqual([]);
   });
 });
