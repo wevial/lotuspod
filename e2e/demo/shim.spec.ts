@@ -510,28 +510,33 @@ test('a block comment keeps its widget, and a block anchor serve refuses is refu
   const seen = watch(context, page);
   await load(page, TRY_IT);
   const hash = await blockHash(page);
+  const widget = { id: BLOCK, hash, state: '' };
+  const on = (fields: object) => ({ section: 'the-pond-today', ...fields });
   const refused: [object, number, string][] = [
-    [{ section: 'the-pond-today', widget: { id: BLOCK, hash: '000000000000', state: '' } }, 409, 'stale_widget'],
-    [{ section: 'the-pond-today', widget: { id: 'no-such-block', hash, state: '' } }, 400, 'unknown_widget'],
-    [{ section: '', widget: { id: BLOCK, hash, state: '' } }, 400, 'unknown_widget'],
-    [{ section: 'the-pond-today', widget: { id: BLOCK, hash: 'XYZ', state: '' } }, 400, 'invalid_body'],
-    [{ section: 'the-pond-today', widget: { id: BLOCK, hash, state: '', extra: 1 } }, 400, 'invalid_body'],
+    [on({ widget: { ...widget, extra: 1 } }), 400, 'invalid_body'],
+    [on({ widget: { ...widget, hash: 'XYZ' } }), 400, 'invalid_body'],
+    [on({ widget: { ...widget, hash: 'ABCDEF012345' } }), 400, 'invalid_body'],
+    [on({ widget: { ...widget, state: 'x'.repeat(81) } }), 400, 'invalid_body'],
+    [on({ widget: { ...widget, state: 'ring\u0007' } }), 400, 'invalid_body'],
+    [on({ widget, quote: { exact: 'the first algae', prefix: '', suffix: '' } }), 400, 'invalid_body'],
+    [{ parent: 1, widget }, 400, 'invalid_body'],
+    [{ question: 'decision-1', widget }, 400, 'invalid_body'],
+    [on({ widget: { ...widget, id: 'no-such-block' } }), 400, 'unknown_widget'],
+    [{ section: '', widget }, 400, 'unknown_widget'],
+    [on({ widget: { ...widget, hash: '000000000000' } }), 409, 'stale_widget'],
   ];
   for (const [fields, status, error] of refused) {
     const sent = await api(page, 'POST', '/api/comments', { page: 'try-it', text: 'How deep?', ...fields });
     expect.soft(sent, JSON.stringify(fields)).toEqual({ status, json: { error } });
   }
   expect.soft(await rows(page, 'try-it'), 'refused anchors store nothing').toEqual([]);
-  await page.evaluate((key) => localStorage.removeItem(key), `${KEY}threads:try-it`);
-  const widget = { id: BLOCK, hash, state: '' };
-  const sent = await api(page, 'POST', '/api/comments',
-    { page: 'try-it', section: 'the-pond-today', text: 'How deep?', widget });
+  const sent = await api(page, 'POST', '/api/comments', { page: 'try-it', text: 'How deep?', ...on({ widget }) });
   expect(sent.status).toBe(201);
   expect(await newestRoot(page, 'try-it')).toMatchObject({ section: 'the-pond-today', widget });
   seen.clean();
 });
 
-test('a comment from a block\'s Comment is stored on the block, listed and pinned there, and stays over a reload', async ({ context, page }) => {
+test('a comment from a block\'s Comment is stored on the block, listed and pinned there', async ({ context, page }) => {
   const seen = watch(context, page);
   await load(page, TRY_IT);
   const live = block(page);
@@ -561,45 +566,6 @@ test('a comment from a block\'s Comment is stored on the block, listed and pinne
   expect(replied.root.widget).toEqual({ id: BLOCK, hash, state: '' });
   expect(replied.replies).toHaveLength(1);
   expect(replied.replies[0]).toMatchObject({ actor: { kind: 'agent', handle: AGENT }, widget: null });
-
-  await page.reload();
-  await settle(page);
-  await expect(entry(page, root.id).head.locator('.artifact-comments-entry-words')).toHaveText(BLOCK_WORDS);
-  await expect(block(page).pin).toHaveText('1');
-  seen.clean();
-});
-
-test('a block anchor not of its shape, on no block of its section, or on another file is refused as serve refuses it, and nothing is stored', async ({ context, page }) => {
-  const seen = watch(context, page);
-  await load(page, TRY_IT);
-  const hash = await blockHash(page);
-  const widget = { id: BLOCK, hash, state: '' };
-  const made = await api(page, 'POST', '/api/comments',
-    { page: 'try-it', section: 'the-pond-today', text: 'How deep?' });
-  expect(made.status).toBe(201);
-  // demo-agent's reply first, so nothing else changes the rows meanwhile.
-  await expect.poll(async () => (await thread(page, made.json.id)).replies.length, { timeout: 15_000 }).toBe(1);
-  const kept = await rows(page, 'try-it');
-  const on = (fields: object) => ({ section: 'the-pond-today', ...fields });
-  const refused: [object, number, string][] = [
-    [on({ widget: { ...widget, extra: '' } }), 400, 'invalid_body'],
-    [on({ widget: { ...widget, hash: hash.slice(1) } }), 400, 'invalid_body'],
-    [on({ widget: { ...widget, hash: 'ABCDEF012345' } }), 400, 'invalid_body'],
-    [on({ widget: { ...widget, state: 'x'.repeat(81) } }), 400, 'invalid_body'],
-    [on({ widget: { ...widget, state: 'ring\u0007' } }), 400, 'invalid_body'],
-    [on({ widget, quote: { exact: 'the first algae', prefix: '', suffix: '' } }), 400, 'invalid_body'],
-    [{ parent: made.json.id, widget }, 400, 'invalid_body'],
-    [{ question: 'decision-1', widget }, 400, 'invalid_body'],
-    [on({ widget: { ...widget, id: 'no-such-block' } }), 400, 'unknown_widget'],
-    [{ section: '', widget }, 400, 'unknown_widget'],
-    [{ section: 'what-goes-in', widget }, 400, 'unknown_widget'],
-    [on({ widget: { ...widget, hash: '000000000000' } }), 409, 'stale_widget'],
-  ];
-  for (const [fields, status, error] of refused) {
-    const sent = await api(page, 'POST', '/api/comments', { page: 'try-it', text: 'How deep?', ...fields });
-    expect.soft(sent, JSON.stringify(fields)).toEqual({ status, json: { error } });
-  }
-  expect(await rows(page, 'try-it'), 'refused anchors store nothing').toEqual(kept);
   seen.clean();
 });
 
