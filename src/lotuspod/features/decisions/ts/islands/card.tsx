@@ -1,7 +1,8 @@
 import { render } from "preact";
 import type { ReadonlySignal, Signal } from "@preact/signals";
 import type { Answer, Answers, Page } from "../../../comments/ts/index";
-import { isChecklist, same, ticked, boxes } from "./checklist";
+import { isChecklist, optionText, same, ticked, boxes } from "./checklist";
+import { expand } from "./collapse";
 import { label, noteField, noteOf, radios, status } from "./words";
 
 // A decision form as the island holds it: the store's answers to its
@@ -64,8 +65,32 @@ export function dirty(card: Card): boolean {
   return differs(card.form, saved(card));
 }
 
+// Where a collapsed card stands, in its one line: "✓ Saved · LABEL" while
+// it holds its saved answer, "LABEL · Not saved" for a pick it differs
+// from that by, and "Not answered yet" with no pick.
+function Line({ card, changed }: { card: Card; changed: boolean }) {
+  const answer = saved(card);
+  if (answer && answer.dismissed && !changed) {
+    return <>{answer.note ? "Dismissed: " + answer.note : "Dismissed"}</>;
+  }
+  if (answer && !changed) {
+    return (
+      <>
+        <span class="artifact-decision-line-saved"><span class="artifact-decision-line-check" aria-hidden="true">✓</span>{" Saved"}</span>
+        {" · "}<strong>{label(card.form, answer)}</strong>
+      </>
+    );
+  }
+  const picked = card.form.querySelector<HTMLInputElement>('input[name="choice"]:checked');
+  if (!picked) {
+    return <>Not answered yet</>;
+  }
+  return <><strong>{optionText(picked)}</strong>{" · "}<span class="artifact-decision-line-unsaved">Not saved</span></>;
+}
+
 // The lavender rule and "Not saved" while the form differs from its
-// answer; "Not answered yet" while nothing is answered or picked.
+// answer; "Not answered yet" while nothing is answered or picked; the
+// collapsed card's line.
 export function mark(card: Card): void {
   const { form } = card;
   const changed = dirty(card);
@@ -77,6 +102,10 @@ export function mark(card: Card): void {
   const hint = form.querySelector<HTMLElement>(".artifact-decision-hint");
   if (hint) {
     hint.hidden = changed || Boolean(card.shown.current);
+  }
+  const line = form.querySelector<HTMLElement>(".artifact-decision-line");
+  if (line) {
+    render(<Line card={card} changed={changed} />, line);
   }
   card.marked.value = card.marked.peek() + 1;
 }
@@ -184,7 +213,8 @@ export function draw(deck: Deck, card: Card): HTMLButtonElement | null {
     render(<Folded deck={deck} card={card} answer={answer!} />, block);
   }
   for (const child of Array.from(form.querySelector("fieldset")!.children) as HTMLElement[]) {
-    if (child.tagName === "LEGEND" || child.classList.contains("artifact-decision-history")) {
+    if (child.tagName === "LEGEND" || child.classList.contains("artifact-decision-history") ||
+      child.classList.contains("artifact-decision-line")) {
       continue;
     }
     child.hidden = child.classList.contains("artifact-decision-saved") ? !folded : folded;
@@ -273,8 +303,9 @@ export function restore(deck: Deck, card: Card): void {
 }
 
 // Why a form's answer was not saved, in its status: a form folded to its
-// answer (saved from the review sheet) opens to show it.
+// answer (saved from the review sheet), or collapsed, opens to show it.
 export function refused(deck: Deck, card: Card, text: string): void {
+  expand(card.form);
   if (card.form.classList.contains("artifact-decision--saved")) {
     card.editing = true;
     draw(deck, card);
