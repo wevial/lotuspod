@@ -609,7 +609,21 @@ typed and attached, the group is unlisted if it holds no threads, and the
 focus goes back to the button that started it; nothing is posted. In any
 comment composer (a box's form, a reply, a passage's), Cmd+Enter (Ctrl+Enter
 off macOS) sends as its button does, and does nothing while it saves; Enter
-alone adds a line. The page remembers whether the
+alone adds a line. A composer also takes emoji shortcodes as GitHub writes
+them (`comments/shortcodes.ts` and `comments/shortcode-list.tsx`
+under the islands): a typed (never pasted) `:tada:` becomes 🎉 in the field,
+so the stored text holds the emoji, and an unknown name such as `:nope:`
+stays as typed. A shortcode starts at the start of the field or after
+whitespace, `(`, `[`, `{`, `"` or `'`, so `10:30:45` and `http://x` are left
+alone. Two or more characters after its colon open a listbox under the field
+(above it without room below) of at most 8 matches, those starting with what
+was typed first, each as `🎉 :tada:`, the first active; Arrow Down and Arrow
+Up move the active one, Enter, Tab or a click inserts its emoji, and Escape
+closes the list alone, keeping the composer open. The field names the list
+(`aria-controls`, `aria-autocomplete`, `aria-activedescendant`) while it is
+open. The table of shortcodes is the served theme file `lotuspod-emoji.json`,
+fetched at the theme address once per page on the first colon typed in any
+composer. The page remembers whether the
 reader left the panel open or folded in `localStorage` (a page whose storage
 throws starts folded), and Escape elsewhere in it folds it.
 
@@ -772,7 +786,14 @@ by one rule that the threads routes and the agents' pull share:
   `claude-3f9a2c`, while `email@claude-3f9a2c` names nobody. `@responder`
   names the default responder. To re-route, write a new comment naming
   someone else.
-- A comment with no mention is routed to `responder`, on a page with an
+- A reply (any comment after a thread's first) with no mention is routed to
+  the handle of the latest agent reply before it in its thread, while that
+  handle is listening; when it is not listening, or no agent has replied
+  before it, the reply is routed to `responder` as below. Listening is read
+  when the reply is routed, so one whose agent stops listening before
+  claiming it goes to `responder` again. A thread's first comment never
+  routes this way.
+- Any other comment with no mention is routed to `responder`, on a page with an
   owner too, whether or not the owner is listening. The responder answers
   what the page and its thread can answer, and puts what asks the owner to
   act in the owner's inbox (see [The owner

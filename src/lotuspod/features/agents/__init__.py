@@ -12,6 +12,7 @@ __getattr__ = public_edge(__name__, {
     "DEFAULT_WINDOW": "routing",
     "last_pulls": "routing",
     "public": "routing",
+    "shown": "routing",
     "threads": "routing",
     "CREDENTIAL_ENV": "machine",
     "SOCKET_NAME": "machine",

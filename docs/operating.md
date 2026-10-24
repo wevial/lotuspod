@@ -31,7 +31,8 @@ lotuspod serve --host "$(tailscale ip -4)"
 Everything else behaves identically whatever address serve binds.
 
 Serve v2 enforces an allow-list: the server answers only for `index.html`,
-`lotuspod.css`, `favicon.svg`, the page script `lotuspod-page.js`, and artifact pages whose fail-closed `lotuspod:visible` flag
+`lotuspod.css`, `favicon.svg`, the page script `lotuspod-page.js`, the comment
+composers' emoji table `lotuspod-emoji.json`, and artifact pages whose fail-closed `lotuspod:visible` flag
 parses to exactly `true` — the same rule as `lotuspod manifest`.
 `manifest.json` and `FINDINGS.md` are never served (the manifest lists
 private artifact ids); requests for either return 404. Everything else
