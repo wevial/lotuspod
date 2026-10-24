@@ -32,6 +32,7 @@ from lotuspod.features.serve import pages as serve_pages, serve_files  # noqa: E
 from lotuspod.features.comments import comments  # noqa: E402
 from lotuspod.features.publish import render  # noqa: E402
 from lotuspod.features.history import versions  # noqa: E402
+from lotuspod.features.widgets import widgets  # noqa: E402
 from lotuspod.store import db  # noqa: E402
 from tests.features.agents.test_agent_pull import PullTestCase, run_cli  # noqa: E402
 
@@ -209,6 +210,57 @@ class RouteTests(AnchorCase):
         self.assertEqual(status, 201, row)
         # A page with no blocks has none.
         self.assertEqual(serve_pages.api_page(self.out_dir, "plan").widgets, {})
+
+
+class NestedSectionTests(AnchorCase):
+    """An HTML page whose h2s sit inside `section` elements: every section
+    has its box and none its wrapper, so a block belongs to the section of
+    the h2 before it."""
+
+    def prepare(self) -> None:
+        self.publish_churn(
+            '<h1>Nested pond</h1>\n'
+            '<template class="lotuspod-live" data-id="early" data-title="Early"><p>early</p></template>\n'
+            '<section><h2>Shallows</h2><p>Warm water.</p></section>\n'
+            '<section><h2>Deep shelf</h2><p>Cold water.</p>\n'
+            '<template class="lotuspod-live" data-id="shelf" data-title="Shelf counter">'
+            '<p>12 fish</p></template>\n'
+            '<form><h2>Inner</h2></form>\n'
+            '<template class="lotuspod-live" data-id="gauge" data-title="Gauge"><p>3 m</p></template>\n'
+            '</section>\n', ".html")
+
+    def shelf(self) -> dict:
+        return {"id": "shelf", "hash": self.block_hash("shelf"), "state": ""}
+
+    def test_a_block_belongs_to_the_section_of_the_h2_before_it(self):
+        page = (self.out_dir / "churn.html").read_text(encoding="utf-8")
+        self.assertEqual(comments.read_boxes(page), ["shallows", "deep-shelf"])
+        self.assertNotIn("artifact-section-body", page)
+        widgets = serve_pages.api_page(self.out_dir, "churn").widgets
+        self.assertEqual({ident: block.section for ident, block in widgets.items()},
+                         {"early": comments.WHOLE_PAGE, "shelf": "deep-shelf",
+                          "gauge": "deep-shelf"})
+
+    def test_a_thread_on_the_block_is_stored_in_its_heading_s_section(self):
+        status, row = self.post({"section": "deep-shelf", "text": "Off.", "widget": self.shelf()})
+        self.assertEqual(status, 201, row)
+        self.assertEqual((row["section"], row["widget"]), ("deep-shelf", self.shelf()))
+        before = self.stored()
+        status, payload = self.post({"section": comments.WHOLE_PAGE, "text": "Off.",
+                                     "widget": self.shelf()})
+        self.assertEqual((status, payload), (400, {"error": "unknown_widget"}))
+        self.assertEqual(self.stored(), before)
+
+    def test_a_heading_whose_box_is_inert_places_no_block(self):
+        # An h2 in an inert template starts a section for the boxes, so the
+        # box of the h2 before it lands in that template; the page script
+        # sees no box for it, and neither may the server.
+        body = ('<section><h2 id="first">One</h2>'
+                '<template><h2 id="fake">Inert</h2></template>'
+                '<template class="lotuspod-live" data-id="w"><p>live</p></template></section>'
+                '<section><h2 id="other">Two</h2></section>')
+        page = comments.render_comments(widgets.render(body, "p")[0], "p")
+        self.assertEqual(widgets.PageWidgets(page).found["w"][2], comments.WHOLE_PAGE)
 
 
 class EarlierVersionTests(AnchorCase):

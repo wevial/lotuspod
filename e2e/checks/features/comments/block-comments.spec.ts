@@ -76,10 +76,10 @@ function hermes(action: string, ...args: string[]) {
     '--socket', SOCKET, '--credential', HERMES));
 }
 
-function publish(name: string, markdown: string, comments = true) {
+function publish(name: string, markdown: string, comments = true, suffix = '.md') {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lotuspod-block-comments-'));
   try {
-    const file = path.join(dir, `${name}.md`);
+    const file = path.join(dir, `${name}${suffix}`);
     fs.writeFileSync(file, markdown, 'utf-8');
     const said = run('publish', file, '--local', '--out-dir', OUT, '--owner', OWNER,
       '--credential', HERMES, comments ? '--comments' : '--no-comments');
@@ -1143,5 +1143,51 @@ test("on a narrow window, drafts on two blocks both keep their blocks over a rel
   const sent = posting(page);
   await churned.getByRole('button', { name: 'Comment', exact: true }).click();
   expect((await sent).postDataJSON().widget).toEqual({ id: 'churn', hash: first, state: '' });
+  expect(errors).toEqual([]);
+});
+
+// An HTML page whose h2s sit inside section elements: each section has its
+// box and none its wrapper.
+const NESTED = ['<h1>Nested pond</h1>',
+  '<section><h2>Shallows</h2><p>Warm water.</p></section>',
+  '<section><h2>Deep shelf</h2><p>Cold water.</p>',
+  '<template class="lotuspod-live" data-id="shelf" data-title="Shelf counter"><p>12 fish</p></template>',
+  '</section>', ''].join('\n');
+
+test("a block on a page whose sections have no wrapper takes its comment to its heading's section", async ({ page }) => {
+  const name = `block-comments-nested-${test.info().repeatEachIndex}`;
+  publish(name, NESTED, true, '.html');
+  const errors = watch(page);
+  await page.goto(`/${name}.html?standalone`);
+  const figure = page.locator('figure[data-widget="shelf"]');
+  const comment = figure.locator('.artifact-live-chrome').getByRole('button', { name: 'Comment', exact: true });
+  const pin = figure.locator(':scope > .artifact-live-pin');
+  await expect(comment).toBeVisible();
+  await expect(page.locator('.artifact-section-body')).toHaveCount(0);
+  const side = panel(page);
+  const shelf = side.group('Deep shelf');
+  const form = shelf.locator('form.artifact-comment-form');
+
+  await comment.click();
+  await expect(shelf.locator('.artifact-comment-on')).toHaveText('On Shelf counter');
+  await expect(form.locator('textarea[name="text"]')).toBeFocused();
+  await form.locator('textarea[name="text"]').fill(QUESTION);
+  const sent = posting(page);
+  await form.getByRole('button', { name: 'Comment', exact: true }).click();
+  const body = (await sent).postDataJSON();
+  expect(body.section).toBe('deep-shelf');
+  expect(body.widget).toMatchObject({ id: 'shelf' });
+
+  for (const reloaded of [false, true]) {
+    if (reloaded) {
+      await page.reload();
+      await expect(comment).toBeVisible();
+    }
+    const entry = shelf.locator('.artifact-comments-entry');
+    await expect(entry).toHaveCount(1);
+    await expect(entry.locator('.artifact-comments-entry-head .artifact-comments-entry-words')).toHaveText('On Shelf counter');
+    await expect(side.group('This page').locator('.artifact-comments-entry')).toHaveCount(0);
+    await expect(pin).toHaveText('1');
+  }
   expect(errors).toEqual([]);
 });

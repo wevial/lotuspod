@@ -10,6 +10,7 @@ import re
 import shlex
 
 from lotuspod.core import Templates, collect_scripts, html_title, normalized, script_hash
+from lotuspod.features import comments
 from lotuspod.features.widgets import libraries
 
 THEME = Path(__file__).parent / 'ts'
@@ -151,9 +152,13 @@ class Frames(HTMLParser):
 class PageWidgets(HTMLParser):
     """A served page's live blocks: each frame's data-widget id to its
     file's hash, its title and the data-section of the section wrapper it
-    sits in (lotuspod.features.publish.sections), "" outside every wrapper.
-    A frame inside a template or a noscript is inert, and not one of them,
-    and a div inside a template opens no section."""
+    sits in (lotuspod.features.publish.sections). Outside every wrapper it
+    is the id of the last h2 before it that starts a section, by
+    comments._SectionFinder's rule (an h2 in a pre.mermaid or a form starts
+    none), and has a comment box outside every template, as the page script
+    finds it; "" when no such h2 comes before it. A frame inside a template or a noscript
+    is inert, and not one of them, and a div or an h2 inside a template
+    opens no section."""
     CDATA_CONTENT_ELEMENTS = Templates.CDATA_CONTENT_ELEMENTS
 
     def __init__(self, text: str):
@@ -162,6 +167,12 @@ class PageWidgets(HTMLParser):
         self._section = None
         self._depth = 0
         self._templates = 0
+        self._headings: list[str] = []
+        self._boxes: set[str] = set()
+        # Each frame outside every wrapper: the number of headings before it.
+        self._outside: dict[str, int] = {}
+        self._mermaid = 0
+        self._forms = 0
         if re.search(r'<iframe\b', text, re.IGNORECASE):
             self.feed(text)
             self.close()
@@ -173,6 +184,14 @@ class PageWidgets(HTMLParser):
             self._templates += 1
         elif self._templates:
             return
+        elif tag == 'pre' and (self._mermaid or 'mermaid' in classes):
+            self._mermaid += 1
+        elif tag == 'form' and not self._mermaid:
+            self._forms += 1
+        elif tag == 'h2' and not self._mermaid and not self._forms:
+            self._headings.append(attrs.get('id') or '')
+        elif tag == 'details' and comments.BOX_CLASS in classes:
+            self._boxes.add(attrs.get('data-section') or '')
         elif tag == 'div':
             if self._section is not None:
                 self._depth += 1
@@ -183,13 +202,29 @@ class PageWidgets(HTMLParser):
             ident = attrs.get('data-widget') or ''
             named = re.search(r'\.w-([0-9a-f]{12})\.html\Z', attrs.get('src') or '')
             if ident and named and ident not in self.found:
-                self.found[ident] = (named.group(1), attrs.get('title') or '',
-                                     self._section or '')
+                self.found[ident] = (named.group(1), attrs.get('title') or '', self._section or '')
+                if self._section is None:
+                    self._outside[ident] = len(self._headings)
+
+    def close(self):
+        super().close()
+        # A box ends its section, after the frames in it: place them now.
+        for ident, before in self._outside.items():
+            section = next((heading for heading in reversed(self._headings[:before])
+                            if heading and heading in self._boxes), '')
+            hash_, title, _ = self.found[ident]
+            self.found[ident] = (hash_, title, section)
 
     def handle_endtag(self, tag):
         if tag == 'template' and self._templates:
             self._templates -= 1
-        elif tag == 'div' and self._section is not None and not self._templates:
+        elif self._templates:
+            return
+        elif tag == 'pre' and self._mermaid:
+            self._mermaid -= 1
+        elif tag == 'form' and self._forms and not self._mermaid:
+            self._forms -= 1
+        elif tag == 'div' and self._section is not None:
             self._depth -= 1
             if not self._depth:
                 self._section = None
