@@ -378,6 +378,32 @@ class DeclaredOrderTests(ThemeCopyTestCase):
         problems = source_problems(theme, sources_at(theme))
         self.assertEqual(problems, [], "\n".join(problems))
 
+    def test_a_new_slices_part_at_slot_5_is_joined_by_its_slot(self):
+        """A new slice folder holding one stylesheet part declared at slot 5,
+        nothing else edited: its bytes are joined after every part with a
+        lower slot and before every part with a higher one."""
+        theme = self.theme_copy()
+        rule = b"\n.pond {\n  color: var(--color-sky);\n}\n"
+        add_pond(theme, rule, 5)
+        slots = {}
+        for declared in [theme / "core" / core.THEME_PARTS,
+                         *sorted((theme / "features").glob(f"*/{core.THEME_PARTS}"))]:
+            prefix = declared.parent.relative_to(theme).as_posix()
+            slots.update({f"{prefix}/{part['part']}": part["slot"]
+                          for part in json.loads(declared.read_text(encoding="utf-8"))
+                          if part["file"] == STYLESHEET})
+        ordered = sorted(slots, key=slots.get)
+        lower = tuple(source for source in ordered if slots[source] < 5)
+        higher = tuple(source for source in ordered if slots[source] > 5)
+        self.assertGreater(len(higher), 1)
+
+        with mock.patch.object(core, "THEME_ROOT", theme):
+            core.sync_theme_css(self.out_dir)
+        served = (self.out_dir / STYLESHEET).read_bytes()
+        self.assertEqual(served, joined(theme, lower) + rule + joined(theme, higher))
+        self.assertEqual(sources_at(theme)[STYLESHEET],
+                         (*lower, "features/pond/theme/pond.css", *higher))
+
     def test_two_parts_at_one_slot_are_refused(self):
         theme = self.theme_copy()
         taken = core.theme_sources()[STYLESHEET][0]
