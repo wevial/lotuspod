@@ -1,5 +1,6 @@
 import { Component, createRef, render } from "preact";
 import type { Page, Thread, ThreadListBridge } from "../bridge";
+import { shared } from "./state";
 import type { Shell, Group, Entry } from "./parts";
 import { anchorOf, blockTitle, frameOf } from "./anchor";
 
@@ -380,6 +381,7 @@ export function threadList(page: Page, shell: Shell, bridge: ThreadListBridge) {
       }
       made.status.textContent = "";
       thread.resolution = payload.resolution;
+      shared.write.take({ root: thread.root, resolution: payload.resolution });
       if (resolve && current === thread) {
         current = null;
       }

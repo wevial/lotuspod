@@ -1,8 +1,10 @@
 {
   // The islands: modules with imports, bundled with Preact into one script
   // (web/build.ts), JSX through Preact's automatic runtime. The DOM's types
-  // and none of Bun's, as for the per-file sources in ../. Preact is
-  // installed in web/node_modules, so "paths" finds it there.
+  // and none of Bun's, as for the per-file sources in ../. Preact and its
+  // signals are installed in web/node_modules, so "paths" finds them there.
+  // The decisions island, which main.tsx mounts through that slice's
+  // ts/index.ts, is checked as main.tsx imports it.
   "compilerOptions": {
     "target": "ESNext",
     "module": "Preserve",
@@ -18,7 +20,8 @@
     "skipLibCheck": true,
     "paths": {
       "preact": ["../../../../../../web/node_modules/preact"],
-      "preact/*": ["../../../../../../web/node_modules/preact/*"]
+      "preact/*": ["../../../../../../web/node_modules/preact/*"],
+      "@preact/signals": ["../../../../../../web/node_modules/@preact/signals"]
     }
   },
   "include": ["*.ts", "*.tsx"]

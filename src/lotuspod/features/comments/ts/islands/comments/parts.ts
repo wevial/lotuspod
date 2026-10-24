@@ -52,8 +52,6 @@ export interface Store {
   swapped(to: string): void;
   // A swap gave the tab a new title.
   retitle(): void;
-  // A decision form a swap brought in takes its Ask.
-  askAbout(form: HTMLFormElement): void;
   enlist(box: HTMLElement): void;
   ask(): void;
   boxFor(root: import("../bridge").CommentRow): HTMLElement | null;
