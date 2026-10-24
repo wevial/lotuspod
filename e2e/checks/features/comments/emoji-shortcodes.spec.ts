@@ -351,6 +351,30 @@ test.describe('signed in', () => {
     seen.clean();
   });
 
+  test('a shortcode pasted before one closed while the table is held stays as pasted, and the typed one is converted', async ({ page, context }) => {
+    const seen = await watch(page);
+    await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => { release = resolve; });
+    await page.route((url) => url.pathname === '/lotuspod-emoji.json', async (route) => {
+      await held;
+      await route.continue();
+    });
+    await page.goto(`${PAGE}?standalone`);
+    await loaded(page);
+    const field = await panelComposer(page, 'Frogs');
+    await field.pressSequentially(':tada:');
+    await field.evaluate((node: HTMLTextAreaElement) => node.setSelectionRange(0, 0));
+    await page.evaluate(() => navigator.clipboard.writeText(':tada: '));
+    await page.keyboard.press('ControlOrMeta+V');
+    await expect(field).toHaveValue(':tada: :tada:');
+    const answered = page.waitForResponse((r) => new URL(r.url()).pathname === '/lotuspod-emoji.json');
+    release();
+    await answered;
+    await expect(field).toHaveValue(':tada: 🎉');
+    seen.clean();
+  });
+
   test('a converted or picked emoji is undone by Ctrl+Z, and one past the field\'s limit is not inserted', async ({ page }) => {
     const seen = await watch(page);
     await page.goto(`${PAGE}?standalone`);

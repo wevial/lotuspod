@@ -172,26 +172,35 @@ export function shortcodeList(form: HTMLFormElement, field: HTMLTextAreaElement)
     refresh();
   }
 
+  // The selection and the kind of the edit about to be made, from
+  // beforeinput, so the edit's place is known even where the text beside it
+  // repeats what it inserts.
+  let editing: { from: number; to: number; kind: string } | null = null;
   // The field's text was edited from last: the waiting shortcodes before
   // the edit stay, those after it move with it, and those it touched go.
+  // An edit whose place the selection does not tell (an undo, a redo, a
+  // drop) drops them all, so only what was typed is converted.
   function edited() {
-    const before = last, now = field.value;
+    const before = last, now = field.value, edit = editing;
     last = now;
+    editing = null;
     if (!pending.length) return;
-    let head = 0, tail = 0;
-    while (head < before.length && head < now.length && before[head] === now[head]) head += 1;
-    while (tail < before.length - head && tail < now.length - head &&
-           before[before.length - 1 - tail] === now[now.length - 1 - tail]) tail += 1;
-    const end = before.length - tail, shift = now.length - before.length;
-    pending = pending.flatMap(each => each.end <= head ? [each]
-      : each.start >= end ? [{ start: each.start + shift, end: each.end + shift }] : []);
+    const kind = edit ? edit.kind : "";
+    if (!edit || !/^(insert|delete)/.test(kind) || /^insert(FromDrop|ReplacementText)$/.test(kind)) {
+      pending = [];
+      return;
+    }
+    // A collapsed delete takes the text before or after the caret.
+    const removed = before.length - now.length, shift = now.length - before.length;
+    const [from, to] = edit.from !== edit.to ? [edit.from, edit.to]
+      : kind.startsWith("insert") ? [edit.from, edit.from]
+      : kind.endsWith("Backward") ? [edit.from - removed, edit.from] : [edit.from, edit.from + removed];
+    pending = pending.flatMap(each => each.end <= from ? [each]
+      : each.start >= to ? [{ start: each.start + shift, end: each.end + shift }] : []);
   }
 
-  // An edit over a selection drops the waiting shortcodes it covers,
-  // whatever text takes their place, so a paste is never converted.
-  field.addEventListener("beforeinput", () => {
-    const from = field.selectionStart, to = field.selectionEnd;
-    if (from !== to) pending = pending.filter(each => each.end <= from || each.start >= to);
+  field.addEventListener("beforeinput", event => {
+    editing = { from: field.selectionStart, to: field.selectionEnd, kind: event.inputType };
   });
   field.addEventListener("input", event => {
     const typed = event instanceof InputEvent && event.inputType === "insertText" ? event.data ?? "" : null;
