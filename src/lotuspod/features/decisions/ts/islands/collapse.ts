@@ -13,11 +13,8 @@ export function isCollapsed(form: HTMLFormElement): boolean {
 }
 
 // Collapse the card to its line, or open it.
-export function collapse(form: HTMLFormElement, on: boolean): void {
-  const button = toggleOf(form);
-  if (!button) {
-    return;
-  }
+function collapse(form: HTMLFormElement, on: boolean): void {
+  const button = toggleOf(form)!;
   form.classList.toggle(COLLAPSED, on);
   button.setAttribute("aria-expanded", String(!on));
   button.querySelector(".artifact-decision-caret")!.textContent = on ? "▸" : "▾";
