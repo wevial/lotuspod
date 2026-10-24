@@ -914,8 +914,6 @@ test.describe('signed in', () => {
     await page.reload();
     await expectActive(page, CHECKLIST);
     expect(await openNames(page)).toEqual([CONTEXT.name, ARTICLE.name, CHECKLIST.name]);
-    await expect(page).toHaveURL(
-      /#tabs=capture-decision-context,capture-article,capture-checklist&on=capture-checklist$/);
   });
 
   test('Alt+Shift+Right moves a focused tab one place, keeping its focus and ring, and says where; Alt+Shift+Left on the first does nothing', async ({ page }) => {

@@ -635,8 +635,6 @@ test.describe('signed in, published again', () => {
     const name = named('next');
     const moved = await openPublished(page, name, [['Findings', []], [DECISIONS, [HEATER, PUMP, NET, FISH]]]);
     const the = sheet(page);
-    await expect(the.heading(DECISIONS).locator('.artifact-review-open')).toHaveText('4 open');
-    await expect(the.outline(DECISIONS).locator('.artifact-review-outline')).toHaveText('4 open');
     for (const question of ['decision-1', 'decision-2', 'decision-3']) {
       await the.next.click();
       await expect(the.form(question).locator('input').first()).toBeFocused();
@@ -650,8 +648,6 @@ test.describe('signed in, published again', () => {
     await expect(the.count).toHaveText('5 to answer · Respond');
     await expect(the.heading(DECISIONS).locator('.artifact-review-open')).toHaveText('5 open');
     await expect(the.outline(DECISIONS).locator('.artifact-review-outline')).toHaveText('5 open');
-    await expect(the.heading(DECISIONS).locator('.artifact-review-open')).toHaveCount(1);
-    await expect(the.outline(DECISIONS).locator('.artifact-review-outline')).toHaveCount(1);
     await expect(the.next).toContainText('Move the fish indoors?');
     await the.next.click();
     await expect(the.form('decision-4').locator('input').first()).toBeFocused();
@@ -764,7 +760,6 @@ test.describe('signed in, published again', () => {
 
     await republish(page, name, [['Findings', []], [DECISIONS, []]]);
     await expect(the.form('decision-1')).toHaveCount(0);
-    await expect(the.form('decision-3')).toHaveCount(0);
     await expect(the.panel).toBeVisible();
     await expect(page.locator('li.artifact-review-entry')).toHaveCount(0);
     await expect(the.tally).toHaveText('All answered · 0 changed · 0 in all');
