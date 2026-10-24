@@ -109,30 +109,28 @@ test('the forms name the block, and its chrome jumps to the first of them', asyn
   expect(errors).toEqual([]);
 });
 
-test('the Respond panel lists the questions under the block, after their section', async ({ page }) => {
+test('the Decisions tab lists the questions under the block, after their section, and its Save folds the card', async ({ page }) => {
   const errors = watch(page);
   const the = await open(page);
   await page.locator('button.artifact-review-count').click();
-  const panel = page.locator('.artifact-review-panel');
-  await expect(panel).toBeVisible();
-  const groups = panel.locator('.artifact-review-group');
-  await expect(groups.locator('.artifact-review-group-title')).toHaveText(['Merge churn', BLOCK, 'Rollout']);
-  await expect(groups.nth(0).locator('li.artifact-review-entry')).toHaveCount(1);
-  await expect(groups.nth(1).locator('li.artifact-review-entry')).toHaveCount(2);
-  expect(await groups.nth(1).locator('li.artifact-review-entry').evaluateAll(
+  const tab = page.locator('aside.artifact-comments-panel .artifact-comments-decisions');
+  await expect(tab).toBeVisible();
+  const groups = tab.locator('.artifact-decisions-group');
+  await expect(groups.locator('.artifact-decisions-group-title')).toHaveText(['Merge churn', BLOCK, 'Rollout']);
+  await expect(groups.nth(0).locator('.artifact-decisions-entry')).toHaveCount(1);
+  expect(await groups.nth(1).locator('.artifact-decisions-entry').evaluateAll(
     (items) => items.map((item) => (item as HTMLElement).dataset.question))).toEqual(['decision-workers', 'decision-cadence']);
   // The headings' marks stay per section.
   await expect(page.locator('section.artifact-body h2', { hasText: 'Merge churn' }).locator('.artifact-review-open')).toHaveText('3 open');
-  const entry = groups.nth(1).locator('li.artifact-review-entry[data-question="decision-workers"]');
-  await entry.getByRole('button', { name: 'Four', exact: true }).click();
+  const entry = groups.nth(1).locator('.artifact-decisions-entry[data-question="decision-workers"]');
+  await entry.getByRole('radio', { name: 'Four', exact: true }).check();
   await expect(the.form('decision-workers').getByRole('radio', { name: 'Four' })).toBeChecked();
   const saved = page.waitForResponse((response) => response.url().includes('/api/answers') && response.request().method() === 'POST');
-  await panel.locator('button.artifact-review-save').click();
+  await entry.getByRole('button', { name: 'Save', exact: true }).click();
   expect((await saved).status()).toBe(201);
-  await expect(panel.locator('.artifact-review-outcome')).toContainText('Saved at');
   const stored = await page.request.get(`/api/answers?page=${the.name}`);
   expect(stored.status()).toBe(200);
-  expect(JSON.stringify((await stored.json()).questions)).toContain('four');
+  expect((await stored.json()).questions['decision-workers'].current.choice).toBe('four');
   await expect(the.form('decision-workers').locator('.artifact-decision-saved-line')).toContainText('Four');
   expect(errors).toEqual([]);
 });

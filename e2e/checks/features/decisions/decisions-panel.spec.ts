@@ -22,10 +22,11 @@ const PYTHON = ENV.LOTUSPOD_TEST_PYTHON ?? '';
 const SRC = path.resolve(__dirname, '..', '..', '..', '..', 'src');
 const PANEL = 'lotuspod:comments-panel';
 const WIDE = { width: 1280, height: 800 };
-const CONTEXT_1 = 'The facts line already holds rounds and waits-on.';
+const PHONE = { width: 360, height: 740 };
+const CONTEXT_1 = 'The facts line already holds rounds and waits-on; a fourth fact may wrap on a laptop.';
 const OPTIONS: Record<string, string[]> = {
   'decision-1': ['Beside the title', 'In the facts line', 'Only on hover'],
-  'decision-2': ['Added and removed', 'One total', 'A small bar'],
+  'decision-2': ['Added and removed (+412 −88)', 'One total (500 lines)', 'A small bar'],
   'decision-3': ['Overlay on the console', 'A new tab'],
 };
 const BACKFILL = ['Only open tickets', 'Everything since September', 'None'];
@@ -33,16 +34,18 @@ const NOTE_4 = 'Merged ones can keep the blank cell.';
 const MARKDOWN = ['# Console PR rows plan', '',
   'How each PR row reads in the console.', '',
   '## Pull request rows', '',
-  'Each PR row carries the facts the serve route sends: rounds, what it waits on, and the diff size.', '',
+  'Each PR row now carries the facts the serve route sends: rounds, what it waits on, and the diff size, '
+    + 'read as +412 −88 from the PR\'s own numbers. The row has one facts line under the title, and today it '
+    + 'already holds rounds and waits-on.', '',
   '### Decisions for the maintainer', '',
   '| # | Question | Context | Options | Default |', '| --- | --- | --- | --- | --- |',
   `| 1 | Where should the diff size sit? | ${CONTEXT_1} | ${OPTIONS['decision-1'].join(' / ')} | |`,
-  `| 2 | How is the diff size written? | The PR's own numbers read as +412 −88. | ${OPTIONS['decision-2'].join(' / ')} | Added and removed |`,
+  `| 2 | How is the diff size written? | The PR's own numbers read as +412 −88; one total is shorter but hides what was removed. | ${OPTIONS['decision-2'].join(' / ')} | ${OPTIONS['decision-2'][0]} |`,
   '', '## Screenshots on a row', '',
   'A row may carry screenshots, shown as thumbnails.', '',
   '### Decisions for the maintainer', '',
   '| # | Question | Context | Options | Default |', '| --- | --- | --- | --- | --- |',
-  `| 3 | Lightbox surface | Where a row's screenshots open when a thumbnail is clicked. | ${OPTIONS['decision-3'].join(' / ')} | Overlay on the console |`,
+  `| 3 | Lightbox surface | Where a row's screenshots open when the thumbnail is clicked. | ${OPTIONS['decision-3'].join(' / ')} | Overlay on the console |`,
   '', '## Backfill', '',
   'The rows of tickets opened before the change.', '',
   '### Decisions for the maintainer', '',
@@ -254,7 +257,7 @@ test('every question with no saved answer is to answer, in the title bar, the ma
   const errors = watch(page);
   await load(page, name);
 
-  await expect(page.locator('button.artifact-review-count')).toHaveText('3 to answer · Respond');
+  await expect(page.locator('button.artifact-review-count')).toHaveText('3 to answer');
   const mark = (id: string) => page.locator(`h2#${id} .artifact-review-open`);
   await expect(mark('pull-request-rows')).toHaveText('2 open');
   await expect(mark('screenshots-on-a-row')).toHaveText('1 open');
@@ -347,7 +350,7 @@ test('a pick or a note in the panel is the card\'s, and Save posts it as the car
   await expect(own.saved).toHaveText('✓ Saved · Only on hover · change');
   await expect(one.saved).toHaveText('✓ Saved · Only on hover');
   await expect(one.item).toHaveCount(0);
-  await expect(count).toHaveText('2 to answer · Respond');
+  await expect(count).toHaveText('2 to answer');
   await expect(side.badge('Decisions')).toHaveText('2');
   await expect(page.locator('h2#pull-request-rows .artifact-review-open')).toHaveText('1 open');
 
@@ -365,7 +368,7 @@ test('a pick or a note in the panel is the card\'s, and Save posts it as the car
     .toHaveText('Your answer was not saved (storage_unavailable). Try again.');
   await expect(two.item).toBeVisible();
   await expect(two.unsaved).toBeVisible();
-  await expect(count).toHaveText('2 to answer · Respond');
+  await expect(count).toHaveText('2 to answer');
 
   // Saved from its card, question 3 leaves, and its heading with it.
   await card(page, 'decision-3').save.click();
@@ -396,7 +399,7 @@ test('a question\'s text, and its Show on page, put its card under the title bar
   expect(errors).toEqual([]);
 });
 
-test('the folded rail\'s orchid count opens Decisions, and the opener and a chip open Comments', async ({ page, request }) => {
+test('the title bar\'s count and the folded rail\'s orchid count open Decisions, and the opener and a chip open Comments', async ({ page, request }) => {
   test.setTimeout(90_000);
   test.skip(test.info().repeatEachIndex > 0, 'answers a page the first repeat answered');
   const name = 'decisions-panel-rail';
@@ -404,6 +407,22 @@ test('the folded rail\'s orchid count opens Decisions, and the opener and a chip
   const errors = watch(page);
   await load(page, name, 'folded');
   const side = panel(page);
+  // The title bar's count unfolds the panel on Decisions, the focus on the
+  // first question to answer; of the review sheet only the title bar, the
+  // outline and the heading marks are drawn, no panel of its own.
+  const count = page.locator('button.artifact-review-count');
+  await expect(count).toHaveText('3 to answer');
+  await expect(side.decisions).toBeHidden();
+  await expect(count).toHaveAttribute('aria-controls', 'artifact-comments-decisions');
+  await count.click();
+  await expect(side.decisions).toBeVisible();
+  await expect(side.tab('Decisions')).toHaveAttribute('aria-selected', 'true');
+  await expect(entry(page, 'decision-1').question).toBeFocused();
+  expect(await page.locator('[class*="artifact-review-"]').evaluateAll((nodes) => nodes.flatMap((node) =>
+    [...node.classList].filter((name) => name.startsWith('artifact-review-')
+      && !/^artifact-review-(bar|count(--done)?|dot|hidden|next(-\w+)?|open|outline(-number)?)$/.test(name))))).toEqual([]);
+  await side.fold.click();
+
   await expect(side.toAnswer).toBeVisible();
   await expect(side.toAnswer).toHaveAttribute('aria-label', '3 to answer: open the questions');
   await expect(side.toAnswer.locator('.artifact-comments-to-answer-count')).toHaveText('3');
@@ -535,7 +554,7 @@ test('a folded heading counts a saved question reopened by its change as answere
   await expect(own.option('Beside the title')).toBeVisible();
   await page.locator('h2#pull-request-rows button.artifact-section-toggle').click();
   await expect(page.locator('h2#pull-request-rows .artifact-section-mark:not([hidden])')).toHaveText('1 to answer');
-  await expect(page.locator('button.artifact-review-count')).toHaveText('2 to answer · Respond');
+  await expect(page.locator('button.artifact-review-count')).toHaveText('2 to answer');
   await expect(side.badge('Decisions')).toHaveText('2');
   expect(errors).toEqual([]);
 });
@@ -835,6 +854,195 @@ test('an empty panel Ask posts nothing, and the card\'s Ask still sends and empt
   expect(errors).toEqual([]);
 });
 
+// The page's words selected, as a reader's drag does.
+async function select(page: Page, words: string) {
+  await page.evaluate((wanted) => {
+    const walker = document.createTreeWalker(document.querySelector('.artifact-body')!, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode() as Text | null; node; node = walker.nextNode() as Text | null) {
+      const at = node.data.indexOf(wanted);
+      if (at < 0) continue;
+      node.parentElement!.scrollIntoView({ block: 'center' });
+      document.getSelection()!.setBaseAndExtent(node, at, node, at + wanted.length);
+      return;
+    }
+  }, words);
+}
+
+// The bottom sheet, in place of the panel on a phone.
+function bottom(page: Page) {
+  const node = page.locator('.artifact-comments-bottom-sheet');
+  const tabs = node.getByRole('tablist');
+  return {
+    node,
+    tab: (name: 'Decisions' | 'Comments') => tabs.getByRole('tab', { name: new RegExp(`^${name}`) }),
+    decisions: node.locator('.artifact-comments-bottom-sheet-decisions'),
+    at: node.locator('.artifact-comments-bottom-sheet-at'),
+    close: node.getByRole('button', { name: 'Close', exact: true }),
+    entry: (question: string) => node.locator(`.artifact-decisions-entry[data-question="${question}"]`),
+  };
+}
+
+test.describe('on a phone', () => {
+  test.use({ viewport: PHONE });
+
+  test('the count opens the bottom sheet on Decisions, and a chip on Comments, each tab a press away', async ({ page, request }) => {
+    test.setTimeout(90_000);
+    // A page of each repeat's own, as the site keeps its answers.
+    const name = `decisions-panel-phone-${test.info().repeatEachIndex}`;
+    await prepare(request, name);
+    const errors = watch(page);
+    await load(page, name);
+    const count = page.locator('button.artifact-review-count');
+    await expect(count).toHaveText('3 to answer');
+    for (const target of [count, page.locator('a.artifact-review-next')]) {
+      const box = (await target.boundingBox())!;
+      expect(box.x).toBeGreaterThanOrEqual(0);
+      expect(box.x + box.width).toBeLessThanOrEqual(PHONE.width);
+    }
+    await expect(count).toHaveAttribute('aria-controls', 'artifact-comments-bottom-sheet-decisions');
+
+    const sheet = bottom(page);
+    await count.click();
+    await expect(sheet.node).toBeVisible();
+    expect(await sheet.node.boundingBox()).toMatchObject({ x: 0, width: PHONE.width });
+    await expect(sheet.tab('Decisions')).toHaveAttribute('aria-selected', 'true');
+    await expect(sheet.decisions.locator('.artifact-decisions-group-title').first()).toHaveText('Pull request rows');
+    expect(await sheet.decisions.locator('.artifact-decisions-group').first().locator('.artifact-decisions-entry')
+      .evaluateAll((items) => items.map((item) => (item as HTMLElement).dataset.question)))
+      .toEqual(['decision-1', 'decision-2']);
+    await expect(sheet.entry('decision-1').locator('button.artifact-decisions-question')).toBeFocused();
+    // Over the tabs, Close is spelled out, as the phone boards draw it.
+    expect(await sheet.close.innerText()).toBe('Close');
+
+    // A pick and its Save in the sheet are the card's.
+    await sheet.entry('decision-1').getByRole('radio', { name: 'In the facts line' }).check();
+    const posted = page.waitForResponse((response) =>
+      new URL(response.url()).pathname === '/api/answers' && response.request().method() === 'POST');
+    await sheet.entry('decision-1').getByRole('button', { name: 'Save', exact: true }).click();
+    expect((await posted).status()).toBe(201);
+    expect((await stored(request, name)).answers['decision-1'].current).toMatchObject({ choice: 'in-the-facts-line' });
+    await expect(count).toHaveText('2 to answer');
+
+    // Closed, the sheet gives the questions back to the panel's tab.
+    await sheet.close.click();
+    await expect(sheet.node).toBeHidden();
+    await expect(sheet.node.locator('[data-question]')).toHaveCount(0);
+    await expect(panel(page).decisions.locator('[data-question="decision-1"]')).toHaveCount(1);
+
+    // A chip opens the sheet on Comments at its thread; the tabs swap the
+    // questions and the thread.
+    const chip = page.locator('details.artifact-comment[data-section="screenshots-on-a-row"] > summary');
+    const thread = sheet.node.locator('.artifact-comment-thread', { hasText: 'Should the lightbox close on Esc?' });
+    await chip.click();
+    await expect(sheet.tab('Comments')).toHaveAttribute('aria-selected', 'true');
+    await expect(sheet.at).toHaveText('1 of 2');
+    await expect(thread).toBeVisible();
+    await sheet.tab('Decisions').click();
+    await expect(sheet.tab('Decisions')).toHaveAttribute('aria-selected', 'true');
+    await expect(sheet.entry('decision-2')).toBeVisible();
+    await expect(thread).toBeHidden();
+    await sheet.tab('Comments').click();
+    await expect(thread).toBeVisible();
+    await expect(sheet.entry('decision-2')).toBeHidden();
+    await sheet.close.click();
+
+    // From 700 pixels a chip opens a popover, and the count still the sheet.
+    await page.setViewportSize({ width: 800, height: 900 });
+    await chip.click();
+    await expect(page.locator('.artifact-comments-popover')).toBeVisible();
+    await page.keyboard.press('Escape');
+    await count.click();
+    await expect(sheet.node).toBeVisible();
+    await expect(sheet.tab('Decisions')).toHaveAttribute('aria-selected', 'true');
+    await expect(sheet.entry('decision-2')).toBeVisible();
+    expect(errors).toEqual([]);
+  });
+
+  test('a passage\'s draft and a section\'s form written in come back on Comments, and the draft goes as the sheet closes', async ({ page, request }) => {
+    const name = `decisions-panel-drafts-${test.info().repeatEachIndex}`;
+    await prepare(request, name);
+    const errors = watch(page);
+    await load(page, name);
+    const sheet = bottom(page);
+    const count = page.locator('button.artifact-review-count');
+    const drafted = page.locator('.artifact-passage-composer textarea');
+    const pending = page.locator('mark.artifact-passage--pending');
+    const words = 'what it waits on';
+    await select(page, words);
+    await page.locator('button.artifact-passage-pill').click();
+    await expect(sheet.node.locator('.artifact-passage-composer')).toBeVisible();
+    await drafted.fill('Half a thought');
+
+    // The count, then Comments: the draft is where it was.
+    await count.click();
+    await expect(sheet.tab('Decisions')).toHaveAttribute('aria-selected', 'true');
+    await sheet.tab('Comments').click();
+    await expect(sheet.node.locator('.artifact-passage-composer')).toBeVisible();
+    await expect(drafted).toHaveValue('Half a thought');
+    await expect(pending).toHaveCount(1);
+
+    // Behind Decisions it stays as the width changes, in the panel too.
+    await sheet.tab('Decisions').click();
+    await page.setViewportSize({ width: 800, height: 900 });
+    await expect(sheet.tab('Decisions')).toHaveAttribute('aria-selected', 'true');
+    await expect(drafted).toHaveValue('Half a thought');
+    await page.setViewportSize(WIDE);
+    await expect(panel(page).decisions).toBeVisible();
+    await expect(page.locator('aside.artifact-comments-panel .artifact-passage-composer textarea')).toHaveValue('Half a thought');
+    await page.setViewportSize(PHONE);
+    await expect(sheet.tab('Decisions')).toHaveAttribute('aria-selected', 'true');
+    await expect(drafted).toHaveValue('Half a thought');
+
+    // Closed on Decisions, the sheet takes the draft with it, at any width.
+    await sheet.close.click();
+    await expect(sheet.node).toBeHidden();
+    await expect(drafted).toHaveCount(0);
+    await expect(pending).toHaveCount(0);
+    await page.setViewportSize({ width: 800, height: 900 });
+    await expect(page.locator('.artifact-comments-popover')).toBeHidden();
+    await page.setViewportSize(PHONE);
+
+    // A section's form, Decisions and back: still open, its words kept.
+    await page.locator('details.artifact-comment[data-section="pull-request-rows"] > summary').click();
+    const form = sheet.node.locator('textarea').first();
+    await expect(form).toBeVisible();
+    await form.fill('A section thought');
+    await sheet.tab('Decisions').click();
+    await sheet.tab('Comments').click();
+    await expect(form).toBeVisible();
+    await expect(form).toHaveValue('A section thought');
+    await sheet.close.click();
+
+    // From 700 pixels, a draft in a popover is kept behind Decisions too.
+    await page.setViewportSize({ width: 800, height: 900 });
+    await select(page, words);
+    await page.locator('button.artifact-passage-pill').click();
+    await expect(page.locator('.artifact-comments-popover .artifact-passage-composer')).toBeVisible();
+    await drafted.fill('Another thought');
+    await count.click();
+    await expect(sheet.tab('Decisions')).toHaveAttribute('aria-selected', 'true');
+    await sheet.tab('Comments').click();
+    await expect(drafted).toBeVisible();
+    await expect(drafted).toHaveValue('Another thought');
+    expect(errors).toEqual([]);
+  });
+
+  test('the questions open in the panel move into the sheet as the window narrows, the focus kept', async ({ page, request }) => {
+    const name = `decisions-panel-narrows-${test.info().repeatEachIndex}`;
+    await prepare(request, name);
+    const errors = watch(page);
+    await page.setViewportSize(WIDE);
+    await load(page, name);
+    await page.locator('button.artifact-review-count').click();
+    await entry(page, 'decision-1').item.getByRole('radio', { name: 'Only on hover' }).focus();
+    await page.setViewportSize(PHONE);
+    const sheet = bottom(page);
+    await expect(sheet.tab('Decisions')).toHaveAttribute('aria-selected', 'true');
+    await expect(sheet.entry('decision-1').getByRole('radio', { name: 'Only on hover' })).toBeFocused();
+    expect(errors).toEqual([]);
+  });
+});
+
 // A card's title as its toggle, and the one line a collapsed card shows.
 function collapsible(page: Page, question: string) {
   const own = card(page, question);
@@ -879,19 +1087,19 @@ test('a card\'s title collapses it to one line of where it stands, which follows
   const four = collapsible(page, 'decision-4');
   await two.toggle.click();
   await four.toggle.click();
-  await expect(two.line).toHaveText('Added and removed · Not saved');
+  await expect(two.line).toHaveText('Added and removed (+412 −88) · Not saved');
   await expect(four.line).toHaveText('✓ Saved · Only open tickets');
-  await expect(two.form.locator('.artifact-decision-label').first()).toHaveText('Added and removed');
+  await expect(two.form.locator('.artifact-decision-label').first()).toHaveText('Added and removed (+412 −88)');
   await expect(four.form.locator('.artifact-decision-label').first()).toHaveText('Only open tickets');
   await expect(four.saved).toBeHidden();
 
   const entry2 = entry(page, 'decision-2');
   await entry2.option('One total').check();
-  await expect(two.line).toHaveText('One total · Not saved');
+  await expect(two.line).toHaveText('One total (500 lines) · Not saved');
   await expect(two.toggle).toHaveAttribute('aria-expanded', 'false');
   await expect(two.options).toBeHidden();
   await entry2.save.click();
-  await expect(two.line).toHaveText('✓ Saved · One total');
+  await expect(two.line).toHaveText('✓ Saved · One total (500 lines)');
   await expect(two.toggle).toHaveAttribute('aria-expanded', 'false');
   await expect(two.saved).toBeHidden();
 

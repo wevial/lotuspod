@@ -24,9 +24,13 @@ export interface Shell {
   readonly list: HTMLDivElement;
   // Whether the threads are in view: the panel open on its Comments tab.
   isOpen(): boolean;
+  // Whether the panel is open on its Decisions tab.
+  deciding(): boolean;
   resolvedShown(): boolean;
   // Open or fold the panel; opened, it shows tab, Comments unless named.
   setOpen(show: boolean, remember: boolean, tab?: Tab): void;
+  // Open the panel on Decisions, the focus on the first question to answer.
+  decide(): void;
   setResolvedShown(show: boolean, remember: boolean): void;
   hidden(hide: boolean): void;
   sections(sections: Section[]): void;
@@ -96,11 +100,13 @@ export interface Passage {
   holder: HTMLElement;
   marks: HTMLElement[];
 }
-// The narrow renderer reads exactly one of these destinations at a time.
+// The narrow renderer reads exactly one of these destinations at a time;
+// the questions, the bottom sheet's Decisions tab, only in the sheet.
 export type View =
-  | { thread: Thread; box?: never; passage?: never }
-  | { box: HTMLElement; thread?: never; passage?: never }
-  | { passage: Passage; thread?: never; box?: never };
+  | { thread: Thread; box?: never; passage?: never; decisions?: never }
+  | { box: HTMLElement; thread?: never; passage?: never; decisions?: never }
+  | { passage: Passage; thread?: never; box?: never; decisions?: never }
+  | { decisions: true; thread?: never; box?: never; passage?: never };
 export interface Taken {
   view: View | null;
   opener: HTMLElement | null;
@@ -126,6 +132,9 @@ export interface Over {
   started(thread: Thread, focused: boolean): void;
   posted(thread: Thread, focused: boolean): void;
   refit(): void;
+  // Open the bottom sheet on its Decisions tab, opener taking the focus
+  // back when it closes.
+  decisions(opener: HTMLElement): void;
   peek(): Taken;
   take(): Taken;
   mode(mode: Mode): void;

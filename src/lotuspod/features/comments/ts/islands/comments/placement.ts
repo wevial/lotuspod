@@ -5,13 +5,15 @@ import { threadList as makeThreadList } from "./thread-list";
 import { anchorOf as threadAnchor, blockTitle, frameOf } from "./anchor";
 import { chips as makeChips } from "./chips";
 import { pins as makePins } from "./pins";
+import { barBottom, modeOf, unfold } from "./room";
+import { decisionsTab, opensIn, sheetTabs } from "./tabs";
+import { effect, untracked } from "@preact/signals";
 
 // Placement owns no thread rendering: movable nodes stay in their existing
 // independent roots, while narrow.js owns the popover and sheet surfaces.
 export function placement(page: Page, bridge: PlacementBridge): Placement {
   const { boxes, shown, forms, sections, passages, resolved, decisionOf,
     threadsOf, routed, looked, refresh, showUnread, changed } = bridge;
-  var column = document.querySelector(".artifact-body");
   var api = { wide: false, mode: null } as Placement;
   var arranged = false;
   // While the threads move to another layout (api.arrange), none opens
@@ -79,22 +81,6 @@ export function placement(page: Page, bridge: PlacementBridge): Placement {
   function blockOf(thread: Thread) {
     const anchor = threadAnchor(thread.root);
     return anchor.kind === "block" ? { title: blockTitle(anchor), state: anchor.state } : null;
-  }
-
-  function unfold(target: HTMLElement) {
-    var wrapper = target.closest(".artifact-section-body");
-    if (wrapper && wrapper.hasAttribute("hidden")) {
-      var heading = wrapper.previousElementSibling;
-      var button = heading && heading.querySelector<HTMLButtonElement>("button.artifact-section-toggle");
-      if (button) {
-        button.click();
-      }
-    }
-  }
-
-  function barBottom() {
-    var bar = document.querySelector(".artifact-topbar");
-    return bar ? Math.max(0, bar.getBoundingClientRect().bottom) : 0;
   }
 
   // Bring a thread's highlight, else its chip, into the window, opening
@@ -306,12 +292,18 @@ export function placement(page: Page, bridge: PlacementBridge): Placement {
   // Without room for the panel, one thing at a time opens over the text,
   // in a popover or the bottom sheet (overText in js/narrow.js).
   var over = page.overText({
-    panel: api, groups: groups, passages: passages, mute: chips.mute,
+    comments: true, tabs: sheetTabs, panel: api, groups: groups, passages: passages, mute: chips.mute,
     compose: threadList.compose, threadsOf: threadsOf, unresolvedOf: threadList.unresolvedOf, resolved: resolved,
     ordered: threadList.ordered,
     latest: threadList.latest, standing: threadList.standing, routed: routed, asked: threadList.asked, said: threadList.said, tick: threadList.tick,
     title: threadList.title, opening: threadList.opening, anchorOf: anchorOf, unfold: unfold, barBottom: barBottom,
     decisionOf: decisionOf, standsFor: standsFor, blockOf: blockOf,
+  });
+  // The sheet's tabs follow the questions to answer.
+  effect(() => {
+    decisionsTab.asks.value;
+    decisionsTab.count.value;
+    untracked(over.sync);
   });
   api.show = over.show;
   api.passage = over.passage;
@@ -330,42 +322,15 @@ export function placement(page: Page, bridge: PlacementBridge): Placement {
     return (api.wide && threadList.current === thread) || over.holds(thread);
   };
 
-  // Whether the window leaves ROOM right of the reading column at its
-  // full measure: a panel widened into the column narrows it
-  // (css/base.css), which must not change where the threads live. The
-  // measure is read from a probe set in the column's font, out of sight
-  // and outside the column, so it is no part of the page's text.
-  var probe = document.createElement("div");
-  probe.setAttribute("aria-hidden", "true");
-  probe.style.cssText = "position: absolute; left: 0; top: 0; height: 0; visibility: hidden; pointer-events: none";
-  function roomy() {
-    if (!column) {
-      return false;
-    }
-    var rem = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
-    var style = getComputedStyle(column);
-    (["fontFamily", "fontSize", "fontStyle", "fontWeight", "fontStretch"] as const).forEach(function (name) {
-      probe.style[name] = style[name];
-    });
-    probe.style.width = style.getPropertyValue("--measure-prose") || "66ch";
-    document.body.appendChild(probe);
-    var measure = probe.getBoundingClientRect().width;
-    probe.remove();
-    var left = column.getBoundingClientRect().left;
-    var holder = column.parentElement!;
-    var edge = holder.getBoundingClientRect().right -
-      (parseFloat(getComputedStyle(holder).paddingRight) || 0) -
-      (parseFloat(getComputedStyle(holder).borderRightWidth) || 0);
-    var right = left + Math.min(measure, edge - left);
-    return document.documentElement.clientWidth - right >= page.room * rem;
-  }
-
   // What the open panel shows, to open again in a popover or the sheet
-  // (over.restore) when the window narrows: a section's form being
-  // written in, else the open entry's thread. A passage's composer is
-  // placed by its own (passages.place).
+  // (over.restore) when the window narrows: its Decisions tab, else a
+  // section's form being written in, else the open entry's thread. A
+  // passage's composer is placed by its own (passages.place).
   function opened(): Taken {
     var none = { view: null, opener: null, anchor: null, writing: null };
+    if (shell.deciding() && sheetTabs.asks()) {
+      return { view: { decisions: true }, opener: null, anchor: null, writing: null };
+    }
     if (!shell.isOpen()) {
       return none;
     }
@@ -397,7 +362,7 @@ export function placement(page: Page, bridge: PlacementBridge): Placement {
   // Show the threads in the panel, or else open them in a popover or the
   // sheet, as the window allows. What is open moves to the new place.
   api.arrange = function () {
-    var mode: Mode = roomy() ? "panel" : window.matchMedia(page.popover).matches ? "popover" : "sheet";
+    var mode: Mode = modeOf(page);
     if (arranged && mode === api.mode) {
       over.refit();
       return;
@@ -416,6 +381,7 @@ export function placement(page: Page, bridge: PlacementBridge): Placement {
     api.wide = mode === "panel";
     shell.hidden(!api.wide);
     over.mode(mode);
+    decisionsTab.opens.value = opensIn(api.wide, shell.decide, over.decisions);
     var old = document.querySelector<HTMLElement>(".artifact-comments-changed");
     if (old) {
       old.hidden = api.wide;
@@ -429,6 +395,8 @@ export function placement(page: Page, bridge: PlacementBridge): Placement {
       threadList.expand(view.thread);
     } else if (writing) {
       shell.setOpen(true, false);
+    } else if (view && view.decisions) {
+      shell.setOpen(true, false, "decisions");
     }
     if (writing) {
       threadList.compose(writing, true);
@@ -437,6 +405,10 @@ export function placement(page: Page, bridge: PlacementBridge): Placement {
     moving = false;
     refresh();
     passages.place();
+    // A composer placed in the panel leaves it on Decisions, as it was.
+    if (api.wide && view && view.decisions) {
+      shell.setOpen(true, false, "decisions");
+    }
     if (focused instanceof HTMLElement && focused !== document.body && focused.isConnected && document.activeElement !== focused) {
       focused.focus({ preventScroll: true });
     }

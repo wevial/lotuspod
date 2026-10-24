@@ -12,8 +12,8 @@
 // comments each form also has an Ask, which posts its note as a question
 // thread on the decision, and once the decision has threads a chip under it
 // opens them as a section's chip does. Its review sheet counts the open
-// questions in the title bar, marks where they are, and answers them all in
-// one Respond panel (web/src/islands/review-sheet.tsx). For
+// questions in the title bar, marks where they are, and opens the comments
+// panel's Decisions tab to answer them (web/src/islands/review-sheet.tsx). For
 // comments it reads the page's threads, draws each in its section's box as a
 // chat (the reader's comments on the right, agents' replies on the left, each
 // state as its own mark outside what anyone wrote), and posts new threads and

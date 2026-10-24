@@ -11,6 +11,15 @@
   // panel shows them, Resolve included. The comments island's placement
   // (web/src/islands/comments/placement.ts) makes it, and passes what it
   // reads threads with as `the`.
+  // On a page that asks questions the sheet's head is two tabs, Decisions
+  // and Comments, each with its count, and Close: on Decisions it holds the
+  // comments panel's Decisions tab, its nodes moved in and back as the
+  // threads' are, and on Comments it steps through the threads as above,
+  // its arrows and the thread's state under the tabs. The title bar's count
+  // opens it on Decisions (over.decisions), from any width without room for
+  // the panel. On a page that takes no comments (the.comments false) it
+  // holds only the questions, under the Decisions tab alone, and `the` is no
+  // more than they need.
   function overText(the) {
     var panel = the.panel;
     var groups = the.groups;
@@ -19,6 +28,9 @@
     var over = {};
     var held = { kind: null, view: null, opener: null, anchor: null, members: [], titleKey: null,
       stateKey: null };
+    // What the sheet's Comments tab goes back to, with its anchor, once
+    // Decisions took its place.
+    var back = null;
     // The line naming its block above each block thread's comments in a
     // section's view, by thread.
     var leads = new Map();
@@ -38,7 +50,7 @@
       var body = element("div", "artifact-comments-held-body");
       var entries = element("ol", "artifact-comments-entries");
       var extra = element("div", "artifact-comments-held-extra");
-      var made = { node: node, title: title, body: body, entries: entries, extra: extra };
+      var made = { node: node, top: top, close: close, title: title, body: body, entries: entries, extra: extra };
       if (kind === "sheet") {
         var nav = element("span", "artifact-comments-bottom-sheet-nav");
         made.nav = nav;
@@ -53,19 +65,73 @@
         made.forth.appendChild(mute(element("span", "", "›")));
         nav.append(made.back, made.at, made.forth);
         made.state = element("span", "artifact-comments-held-state");
-        top.append(nav, made.state, close);
+        // Over its tabs, Close is spelled out in place of the ×.
+        close.appendChild(element("span", "artifact-comments-close-word", "Close"));
+        made.tabs = element("div", "artifact-comments-bottom-sheet-tabs");
+        made.tabs.setAttribute("role", "tablist");
+        made.tabs.setAttribute("aria-label", the.comments ? "Decisions and comments" : "Decisions");
+        made.tabs.hidden = true;
+        made.tabs.addEventListener("keydown", tabKey);
+        made.tab = { decisions: tab(made, "decisions", "Decisions"), comments: tab(made, "comments", "Comments") };
+        made.tab.comments.button.hidden = !the.comments;
+        made.bar = element("div", "artifact-comments-bottom-sheet-bar");
+        made.bar.hidden = true;
+        made.comments = element("div", "artifact-comments-bottom-sheet-comments");
+        made.comments.id = "artifact-comments-bottom-sheet-comments";
+        made.decisions = element("div", "artifact-comments-bottom-sheet-decisions");
+        made.decisions.id = "artifact-comments-bottom-sheet-decisions";
+        made.decisions.setAttribute("role", "tabpanel");
+        made.decisions.setAttribute("aria-labelledby", made.tab.decisions.button.id);
+        made.decisions.hidden = true;
+        top.append(made.tabs, nav, made.state, close);
         body.append(title, entries, extra);
+        made.comments.append(made.bar, body);
+        node.append(top, made.comments, made.decisions);
         made.back.addEventListener("click", function () { step(-1); });
         made.forth.addEventListener("click", function () { step(1); });
+        // A question's words and its Show on page close the sheet before
+        // the card is scrolled to, its nodes back in the panel.
+        made.decisions.addEventListener("click", function (event) {
+          var target = event.target;
+          if (held.view && held.view.decisions && target.closest &&
+              target.closest(".artifact-decisions-question, .artifact-decisions-show")) {
+            release(false);
+          }
+        }, true);
       } else {
         top.append(title, close);
         body.append(entries, extra);
+        node.append(top, body);
       }
-      node.append(top, body);
       document.body.appendChild(node);
       close.addEventListener("click", function () { release(true); });
       return made;
     }
+    // One of the sheet's tabs, with its count.
+    function tab(made, name, words) {
+      var button = element("button", "artifact-comments-tab", words);
+      button.type = "button";
+      button.id = "artifact-comments-bottom-sheet-tab-" + name;
+      button.setAttribute("role", "tab");
+      button.setAttribute("aria-controls", "artifact-comments-bottom-sheet-" + name);
+      var badge = element("span", "artifact-comments-tab-badge");
+      button.append(" ", badge);
+      button.addEventListener("click", function () { choose(name); });
+      made.tabs.appendChild(button);
+      return { button: button, badge: badge };
+    }
+
+    function tabKey(event) {
+      var to = event.key === "ArrowRight" || event.key === "ArrowLeft" ?
+        (held.view && held.view.decisions ? "comments" : "decisions") :
+        event.key === "Home" ? "decisions" : event.key === "End" ? "comments" : null;
+      if (!to || !the.comments) {
+        return;
+      }
+      event.preventDefault();
+      choose(to);
+    }
+
     var popover = holder("popover");
     var sheet = holder("sheet");
     // Room at the end of the page while the sheet is open, so the last
@@ -75,6 +141,53 @@
 
     function holderOf(kind) {
       return kind === "sheet" ? sheet : popover;
+    }
+
+    // The comments panel's Decisions tab's nodes, lent to the sheet while it
+    // shows Decisions, and given back.
+    function move(from, to) {
+      while (from && to && from.firstChild) {
+        to.appendChild(from.firstChild);
+      }
+    }
+
+    // The sheet's tabs as they now stand: shown once the page's questions
+    // are counted, the one held selected, each with its count; the arrows
+    // and the thread's state under them, else in the head.
+    function retab() {
+      var asks = the.tabs.asks();
+      var deciding = Boolean(held.view && held.view.decisions);
+      sheet.node.classList.toggle("artifact-comments-bottom-sheet--tabs", asks);
+      sheet.tabs.hidden = !asks;
+      sheet.bar.hidden = !asks;
+      if (asks && sheet.nav.parentNode !== sheet.bar) {
+        sheet.bar.append(sheet.nav, sheet.state);
+      } else if (!asks && sheet.nav.parentNode !== sheet.top) {
+        sheet.top.insertBefore(sheet.nav, sheet.close);
+        sheet.top.insertBefore(sheet.state, sheet.close);
+      }
+      [["decisions", deciding], ["comments", !deciding]].forEach(function (pair) {
+        var button = sheet.tab[pair[0]].button;
+        button.setAttribute("aria-selected", pair[1] ? "true" : "false");
+        button.tabIndex = pair[1] ? 0 : -1;
+      });
+      var count = the.tabs.count();
+      var badge = sheet.tab.decisions.badge;
+      badge.hidden = count === null;
+      badge.textContent = count ? String(count) : "✓";
+      badge.classList.toggle("artifact-comments-tab-badge--done", count === 0);
+      if (the.comments) {
+        sheet.tab.comments.badge.textContent = String(steps().length);
+      }
+      if (asks) {
+        sheet.comments.setAttribute("role", "tabpanel");
+        sheet.comments.setAttribute("aria-labelledby", sheet.tab.comments.button.id);
+      } else {
+        sheet.comments.removeAttribute("role");
+        sheet.comments.removeAttribute("aria-labelledby");
+      }
+      sheet.comments.hidden = deciding;
+      sheet.decisions.hidden = !deciding;
     }
 
     // Whether a thread is open in a popover or the sheet.
@@ -216,6 +329,28 @@
         return;
       }
       var made = holderOf(held.kind);
+      if (view.decisions) {
+        // The questions gone, the sheet goes back to Comments, or closes.
+        if (!the.tabs.asks()) {
+          var inside = made.node.contains(document.activeElement);
+          var to = the.comments ? target() : null;
+          if (to) {
+            unlend(to, held.opener);
+          } else if (the.comments) {
+            release(false);
+          }
+          if (to && inside) {
+            made.node.focus({ preventScroll: true });
+          }
+          return;
+        }
+        move(the.tabs.node(), sheet.decisions);
+        retab();
+        made.node.setAttribute("aria-label", "Decisions");
+        held.titleKey = null;
+        room.style.height = made.node.offsetHeight + "px";
+        return;
+      }
       var before = held.members;
       var members = membersOf(view);
       held.members = members;
@@ -243,6 +378,7 @@
       }
       made.node.classList.toggle("artifact-comments-held--passage", Boolean(view.thread && view.thread.root.quote));
       if (held.kind === "sheet") {
+        retab();
         var list = steps();
         var at = view.thread ? list.indexOf(view.thread) : -1;
         made.nav.hidden = list.length === 0;
@@ -412,7 +548,17 @@
         panel.put(thread);
         passages.shine(thread);
       });
-      if (view.box) {
+      if (view.decisions) {
+        move(sheet.decisions, the.tabs.node());
+        // Closed, the sheet no longer keeps a passage's composer behind
+        // Decisions; a mode change keeps it.
+        if (!keep && back && back.view.passage) {
+          passages.cancel(back.view.passage);
+        }
+        if (!keep) {
+          back = null;
+        }
+      } else if (view.box) {
         var group = groups.get(view.box);
         the.compose(group, false);
         group.node.append(group.toggle, group.holder);
@@ -422,9 +568,11 @@
       if (next !== kind) {
         made.node.classList.remove(NAMES[kind] + "--open");
         made.node.removeAttribute("aria-label");
-        if (kind === "popover") {
+        // Out of the sheet's mode, it opens only on Decisions.
+        if (kind === "popover" || the.panel.mode !== "sheet") {
           made.node.hidden = true;
-        } else {
+        }
+        if (kind === "sheet") {
           room.style.height = "";
         }
       }
@@ -491,6 +639,10 @@
         over.sync();
         return;
       }
+      // Kept behind Decisions, a composer stays there as the width changes.
+      if (held.view && held.view.decisions && back && back.view.passage === mine) {
+        return;
+      }
       hold(panel.mode, { passage: mine }, null, mine.marks[mine.marks.length - 1]);
     };
 
@@ -533,6 +685,79 @@
       }
     };
 
+    // The title bar's count: the sheet on Decisions, the focus on the first
+    // question to answer, else on the tab. Comments goes back to the thread
+    // or form the sheet held.
+    over.decisions = function (opener) {
+      if (!(held.view && held.view.decisions)) {
+        if (held.view) {
+          lend();
+        } else {
+          back = null;
+        }
+        hold("sheet", { decisions: true }, opener, null);
+      }
+      var question = sheet.decisions.querySelector(".artifact-decisions-entry .artifact-decisions-question");
+      (question || sheet.tab.decisions.button).focus({ preventScroll: true });
+    };
+
+    // Decisions takes the place of what the sheet holds, kept for Comments
+    // to go back to: a passage's composer, and a section's form as it was
+    // being written in.
+    function lend() {
+      var group = held.view.box ? groups.get(held.view.box) : null;
+      back = { view: held.view, anchor: held.anchor, writing: Boolean(group && !group.holder.hidden) };
+      release(false, true, "sheet");
+    }
+
+    // What Comments goes back to: what the sheet held before Decisions,
+    // else the first open thread, else the first section's form, else null.
+    function target() {
+      if (back && there(back.view)) {
+        return back;
+      }
+      var first = steps()[0];
+      var box = groups.keys().next().value;
+      return first ? { view: { thread: first }, anchor: the.anchorOf(first) } :
+        box ? { view: { box: box }, anchor: box.querySelector("summary") } : null;
+    }
+
+    // Comments in the sheet's place again, at to. The page stays where it is.
+    function unlend(to, opener) {
+      back = null;
+      hold("sheet", to.view, opener, to.anchor, true);
+      if (to.view.box && to.writing) {
+        the.compose(groups.get(to.view.box), true);
+      }
+    }
+
+    // Whether a view the Comments tab would go back to is still there.
+    function there(view) {
+      return view.thread ? the.ordered().indexOf(view.thread) >= 0 :
+        view.box ? groups.has(view.box) : view.passage.holder.isConnected;
+    }
+
+    // A tab pressed: Decisions shows the questions in place of what the
+    // sheet held (lend), Comments what it held before them (unlend).
+    function choose(name) {
+      var deciding = Boolean(held.view && held.view.decisions);
+      if (!held.view || (name === "decisions") === deciding) {
+        return;
+      }
+      var opener = held.opener;
+      if (name === "decisions") {
+        lend();
+        hold("sheet", { decisions: true }, opener, null, true);
+      } else {
+        var to = target();
+        if (!to) {
+          return;
+        }
+        unlend(to, opener);
+      }
+      sheet.tab[name].button.focus({ preventScroll: true });
+    }
+
     // What is held, as over.take returns it, left open.
     over.peek = function () {
       var view = held.view;
@@ -567,6 +792,10 @@
     over.restore = function (taken) {
       var view = taken.view;
       if (!view || view.passage) {
+        return;
+      }
+      if (view.decisions) {
+        hold("sheet", view, taken.opener, null, true);
         return;
       }
       var opener = taken.opener;
@@ -612,13 +841,14 @@
       }
     });
     // A click outside the popover, its opener, the pill, the banner
-    // offering a reload (which keeps it open over the reload) and the image
-    // viewer opened from it closes it, before whatever the click is for.
+    // offering a reload (which keeps it open over the reload), the image
+    // viewer opened from it and the title bar's count (which keeps it
+    // behind Decisions) closes it, before whatever the click is for.
     document.addEventListener("click", function (event) {
       var target = event.target;
       if (held.kind !== "popover" || popover.node.contains(target) ||
           (held.opener && held.opener.contains(target)) ||
-          (target.closest && target.closest(".artifact-passage-pill, .artifact-live-page, .artifact-image-viewer"))) {
+          (target.closest && target.closest(".artifact-passage-pill, .artifact-live-page, .artifact-image-viewer, .artifact-review-count"))) {
         return;
       }
       release(true);

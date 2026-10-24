@@ -1135,7 +1135,7 @@ as the reason." Dismissed, the note is emptied and folded, and the card folds
 to "Dismissed: REASON · Undo" (or "Dismissed · Undo" with no reason), with
 no ✓, then the reader and the time. A dismissed decision stops counting as
 open: the title bar's "N to answer", the section marks and Next open leave it
-out, the Respond panel shows its state as "Dismissed", and the Answered table
+out, the comments panel's Decisions tab lists it in neither of its lists, and the Answered table
 lists it as "Dismissed" with its reason under it and no "change". Undo puts
 the decision back as it stood: open, or folded to its earlier answer. Any
 other reader sees a dismissed card as "Dismissed: REASON", with no Undo and
@@ -1178,43 +1178,34 @@ the page to sign in. Reader text is set as text, never as markup.
 ### The review sheet
 
 On a page with decision or checklist forms, the page script ends the title
-bar in "N to answer · Respond" (an orchid dot), or "All answered · Respond"
-(a mint dot) once no question is to answer, and "Next open: QUESTION ↓" while
-one is. A question is to answer while it has no saved answer as the page now
-asks it, a default picked for it included; a dismissal is a saved answer.
-The title bar, the section marks, Next open, the comments panel's Decisions
-tab and its rail (see [The comments panel](comments.md#the-comments-panel))
-and a folded section's "N to answer" all count the same questions. Next open
-jumps to the question to answer after the one it jumped to last, wrapping
-round: it opens the question's section if it is folded, scrolls the form
-just below the title bar and focuses its first option. Each section heading
-whose section asks questions to answer reads "N open" in orchid, and its
-link in "On this page" shows an orchid dot and N.
+bar in "N to answer" (an orchid dot), or "All answered" (a mint dot) once no
+question is to answer, and "Next open: QUESTION ↓" while one is. A question
+is to answer while it has no saved answer as the page now asks it, a default
+picked for it included; a dismissal is a saved answer. The title bar, the
+section marks, Next open, the comments panel's Decisions tab and its rail
+(see [The comments panel](comments.md#the-comments-panel)) and a folded
+section's "N to answer" all count the same questions. Next open jumps to the
+question to answer after the one it jumped to last, wrapping round: it opens
+the question's section if it is folded, scrolls the form just below the
+title bar and focuses its first option. Each section heading whose section
+asks questions to answer reads "N open" in orchid, and its link in "On this
+page" shows an orchid dot and N.
 
-The count opens the Respond panel at the window's right edge (the full
-width of a narrow window), over the comments panel. Its head reads "N to
-answer · M changed · T in all", and it lists every question under its
-section's heading, in page order (under the page's title on a page with no
-h2). Each shows its options as buttons (a checklist's items as checkboxes),
-its state, Default, Changed or Open (a question's shown choice is its picked
-option, else its saved answer, else its default; a decision with none is
-open), and for a changed question "was:" the
-default's label, "was: open" when it has none, or a checklist's changes
-("Off: LABEL"). "not saved" marks a question whose shown choice, or its
-form's note, differs from its saved answer, and "Show on page" closes the panel and jumps to the form
-as Next open does. A pick in the panel picks the same option in the form,
-and a pick in the form shows in the panel. ✕, Esc or the count closes it.
-
-"Save N answers" at the panel's foot posts each question marked "not saved",
-defaults included, in page order, one answer each with its
-form's note, as the form's own Save would; open questions are left out, and
-each saved form folds. Its line then reads "Saved at TIME. K questions stay
-open.", counting the questions still to answer. An answer refused keeps "not saved", with why in its form, and the
-others still save. With nothing to save the button reads "Nothing new to
-save". A form posts one answer at a time, so its own Save and the panel's
-never land out of order. A page whose answers could not be read gets no
-review sheet, and no default is picked. A page published before forms
-carried `data-default` has no defaults until it is published again.
+The count opens the comments panel's Decisions tab, unfolding the panel if
+it is folded, with the focus on the first question to answer; there every
+question with no saved answer is answered, changed or asked about, under its
+section's heading, and the saved ones are in its folded Answered list. A
+window without room for the panel opens the Decisions tab of the bottom
+sheet instead, beside its Comments tab (see [Without room for the panel: a
+popover, or a bottom sheet](comments.md#without-room-for-the-panel-a-popover-or-a-bottom-sheet)).
+A page published without comments gets the panel with its Decisions tab
+alone. A form posts one answer at a time, so its own Save and the tab's
+never land out of order. A form with a default and no saved answer gets its
+default picked once the answers are read, and shows "Not saved" until it is
+saved. A page whose answers could not be read gets no review sheet, no
+Decisions tab and no default picked, and nor does an archived page. A page
+published before forms carried `data-default` has no defaults until it is
+published again.
 
 An answer is the reader's choice on that one question, recorded with the page
 revision it was given against. It is evidence for that question's scope only

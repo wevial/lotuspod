@@ -40,33 +40,59 @@ async function watch(page: Page) {
   };
 }
 
+// The page's own route handlers, dropped as a check ends: a read still in
+// one would otherwise fail the check with "Test ended".
+test.afterEach(async ({ page }) => {
+  await page.unrouteAll({ behavior: 'ignoreErrors' });
+});
+
+// The title bar's count and Next open, the comments panel and its Decisions
+// tab, and the page's forms, headings and outline links.
 function sheet(page: Page) {
-  const panel = page.locator('.artifact-review-panel');
+  const aside = page.locator('aside.artifact-comments-panel');
+  const decisions = aside.locator('.artifact-comments-decisions');
   return {
     count: page.locator('button.artifact-review-count'),
     next: page.locator('a.artifact-review-next'),
-    panel,
-    close: panel.getByRole('button', { name: 'Close' }),
-    tally: panel.locator('.artifact-review-tally'),
-    groups: panel.locator('.artifact-review-group'),
-    states: panel.locator('.artifact-review-state'),
-    save: panel.locator('button.artifact-review-save'),
-    outcome: panel.locator('.artifact-review-outcome'),
+    aside,
+    decisions,
+    tabs: aside.getByRole('tab'),
+    titles: decisions.locator('.artifact-decisions-group-title'),
+    groups: decisions.locator('.artifact-decisions-group'),
+    entries: decisions.locator('.artifact-decisions-entry'),
+    answered: decisions.locator('details.artifact-decisions-answered > summary'),
     entry: (question: string) => {
-      const item = panel.locator(`li.artifact-review-entry[data-question="${question}"]`);
+      const item = decisions.locator(`.artifact-decisions-entry[data-question="${question}"]`);
       return {
         item,
-        option: (name: string) => item.getByRole('button', { name, exact: true }),
+        option: (name: string) => item.getByRole('radio', { name }),
         box: (name: string) => item.getByRole('checkbox', { name }),
-        state: item.locator('.artifact-review-state'),
-        was: item.locator('.artifact-review-was'),
-        unsaved: item.locator('.artifact-review-unsaved'),
+        save: item.getByRole('button', { name: 'Save', exact: true }),
+        unsaved: item.locator('.artifact-decisions-unsaved'),
+      };
+    },
+    row: (question: string) => {
+      const item = decisions.locator(`.artifact-decisions-row[data-question="${question}"]`);
+      return {
+        item,
+        label: item.locator('.artifact-decisions-row-label'),
+        change: item.getByRole('button', { name: 'change', exact: true }),
+        option: (name: string) => item.getByRole('radio', { name }),
+        save: item.getByRole('button', { name: 'Save', exact: true }),
+        unsaved: item.locator('.artifact-decisions-unsaved'),
       };
     },
     form: (question: string) => page.locator(`form.artifact-decision[data-question="${question}"]`),
     heading: (name: string) => page.locator('section.artifact-body h2', { hasText: name }),
     outline: (name: string) => page.locator('ol.artifact-outline-list a', { hasText: name }),
   };
+}
+
+// The questions each group of the Decisions tab holds, in order.
+function held(the: ReturnType<typeof sheet>) {
+  return the.groups.evaluateAll((groups) => groups.map((group) =>
+    Array.from(group.querySelectorAll('.artifact-decisions-entry')).map((entry) =>
+      (entry as HTMLElement).dataset.question)));
 }
 
 async function stored(request: APIRequestContext) {
@@ -92,13 +118,13 @@ async function quiet(target: ReturnType<Page['locator']>) {
 test.describe('signed in', () => {
   test.use({ extraHTTPHeaders: SIGNED_IN, viewport: { width: 1280, height: 800 } });
 
-  test('the title bar counts the open questions, and the outline and headings mark them', async ({ page }) => {
+  test('the title bar counts the open questions, the outline and headings mark them, and the count opens the Decisions tab alone', async ({ page }) => {
     firstRepeatOnly();
     expect(ASSERTION, 'LOTUSPOD_TEST_ASSERTION names an assertion the site accepts').toBeTruthy();
     const seen = await watch(page);
     await page.goto(`${PAGE}?standalone`);
     const the = sheet(page);
-    await expect(the.count).toHaveText('7 to answer · Respond');
+    await expect(the.count).toHaveText('7 to answer');
     await expect(the.next).toBeVisible();
     for (const [name, open] of [['Who reviews', 2], ['When a review blocks', 2], ['Prompt rules', 1], ['Rollout', 2]] as const) {
       await expect(the.outline(name).locator('.artifact-review-outline')).toBeVisible();
@@ -109,9 +135,22 @@ test.describe('signed in', () => {
     // The default picked is not saved until it is.
     await expect(the.form('decision-d1').locator('.artifact-decision-unsaved')).toBeVisible();
 
+    // The page takes no comments: the panel is its Decisions tab alone.
+    await expect(the.decisions).toBeHidden();
     await the.count.click();
-    await expect(the.panel).toBeVisible();
-    for (const target of [the.count, the.next, the.states.first(), the.states.nth(1)]) {
+    await expect(the.decisions).toBeVisible();
+    await expect(the.tabs).toHaveCount(1);
+    await expect(the.tabs).toHaveText(/^Decisions/);
+    await expect(the.tabs).toHaveAttribute('aria-selected', 'true');
+    await expect(page.getByText('Comment on this page')).toHaveCount(0);
+    await expect(page.getByText('Comment on a section')).toHaveCount(0);
+    await expect(the.aside.locator('.artifact-comments-opener')).toHaveCount(0);
+    await expect(the.titles).toHaveText(SECTIONS);
+    expect(await held(the)).toEqual([['decision-d1', 'decision-d2'], ['decision-d3', 'decision-d4'],
+      ['checklist-1'], ['decision-d5', 'decision-d6']]);
+    await expect(the.entry('checklist-1').item.getByRole('checkbox')).toHaveCount(3);
+    await expect(the.entry('checklist-1').box('Cite the line a finding is about')).toBeChecked();
+    for (const target of [the.count, the.next]) {
       const drawn = await quiet(target);
       expect(drawn.border).toBe('0px');
       expect(drawn.background).not.toBe('rgba(0, 0, 0, 0)');
@@ -124,7 +163,7 @@ test.describe('signed in', () => {
     firstRepeatOnly();
     await page.goto(`${PAGE}?standalone`);
     const the = sheet(page);
-    await expect(the.count).toHaveText('7 to answer · Respond');
+    await expect(the.count).toHaveText('7 to answer');
     const bar = await page.locator('.artifact-topbar').boundingBox();
     for (const question of [...QUESTIONS, 'decision-d1']) {
       await the.next.click();
@@ -134,7 +173,7 @@ test.describe('signed in', () => {
     }
 
     await page.reload();
-    await expect(the.count).toHaveText('7 to answer · Respond');
+    await expect(the.count).toHaveText('7 to answer');
     await the.heading('When a review blocks').locator('button.artifact-section-toggle').click();
     await expect(the.form('decision-d3')).toBeHidden();
     await the.next.click();
@@ -146,75 +185,33 @@ test.describe('signed in', () => {
     await expect(the.form('decision-d3').locator('input').first()).toBeFocused();
   });
 
-  test('the panel lists every question under its section with its state', async ({ page }) => {
-    firstRepeatOnly();
-    await page.goto(`${PAGE}?standalone`);
-    const the = sheet(page);
-    await the.count.click();
-    await expect(the.panel).toBeVisible();
-    await expect(the.panel).toHaveAttribute('role', 'dialog');
-    await expect(the.close).toBeFocused();
-    await expect(the.tally).toHaveText('7 to answer · 0 changed · 7 in all');
-    await expect(the.groups.locator('.artifact-review-group-title')).toHaveText(SECTIONS);
-    const held = await the.groups.evaluateAll((groups) => groups.map((group) =>
-      Array.from(group.querySelectorAll('li.artifact-review-entry')).map((entry) =>
-        (entry as HTMLElement).dataset.question)));
-    expect(held).toEqual([['decision-d1', 'decision-d2'], ['decision-d3', 'decision-d4'],
-      ['checklist-1'], ['decision-d5', 'decision-d6']]);
-    await expect(the.states).toHaveText(['Default', 'Open', 'Open', 'Default', 'Default', 'Default', 'Open']);
-    await expect(the.entry('decision-d1').option('Codex')).toHaveAttribute('aria-pressed', 'true');
-    await expect(the.entry('decision-d2').option('Every ticket')).toHaveAttribute('aria-pressed', 'false');
-    await expect(the.entry('checklist-1').box('Cite the line a finding is about')).toBeChecked();
-
-    await the.close.click();
-    await expect(the.panel).toBeHidden();
-    await expect(the.count).toBeFocused();
-  });
-
-  test('a pick in the panel or on the page moves both, and one Save stores every answer', async ({ page, request }) => {
+  test('a pick in the Decisions tab or on the page moves both, and each entry\'s Save stores its answer', async ({ page, request }) => {
     firstRepeatOnly();
     const seen = await watch(page);
     await page.goto(`${PAGE}?standalone`);
     const the = sheet(page);
     await the.count.click();
-    await expect(the.save).toHaveText('Save 4 answers');
 
     const first = the.entry('decision-d1');
-    await first.option('Claude Opus').click();
+    await first.option('Claude Opus').check();
     await expect(the.form('decision-d1').getByRole('radio', { name: 'Claude Opus' })).toBeChecked();
-    await expect(first.option('Claude Opus')).toHaveAttribute('aria-pressed', 'true');
-    await expect(first.state).toHaveText('Changed');
-    await expect(first.was).toHaveText('was: Codex');
     await expect(first.unsaved).toBeVisible();
 
     await the.form('decision-d2').getByRole('radio', { name: 'Every ticket' }).check();
-    const second = the.entry('decision-d2');
-    await expect(second.state).toHaveText('Changed');
-    await expect(second.was).toHaveText('was: open');
-    await expect(second.option('Every ticket')).toHaveAttribute('aria-pressed', 'true');
-    await expect(the.count).toHaveText('7 to answer · Respond');
+    await expect(the.entry('decision-d2').option('Every ticket')).toBeChecked();
+    await expect(the.count).toHaveText('7 to answer');
     await expect(the.outline('Who reviews').locator('.artifact-review-outline-number')).toHaveText('2');
     await expect(the.heading('Who reviews').locator('.artifact-review-open')).toHaveText('2 open');
 
-    const rules = the.entry('checklist-1');
-    await rules.box('Cite the line a finding is about').uncheck();
+    await the.entry('checklist-1').box('Cite the line a finding is about').uncheck();
     await expect(the.form('checklist-1').getByRole('checkbox', { name: 'Cite the line a finding is about' }))
       .not.toBeChecked();
-    await expect(rules.state).toHaveText('Changed');
-    await expect(rules.was).toHaveText('Off: Cite the line a finding is about');
-    await expect(the.tally).toHaveText('7 to answer · 3 changed · 7 in all');
 
-    await page.keyboard.press('Escape');
-    await expect(the.panel).toBeHidden();
-    await expect(the.count).toBeFocused();
-
-    await the.count.click();
-    await expect(the.save).toHaveText('Save 5 answers');
-    await the.save.click();
-    await expect(the.save).toHaveText('Nothing new to save');
-    await expect(the.save).toBeDisabled();
-    await expect(the.outcome).toContainText('Saved at');
-    await expect(the.outcome).toContainText('2 questions stay open.');
+    for (const question of ['decision-d1', 'decision-d2', 'decision-d4', 'checklist-1', 'decision-d5']) {
+      await the.entry(question).save.click();
+      await expect(the.form(question).locator('.artifact-decision-saved-line')).toContainText('✓ Saved');
+    }
+    await expect(the.count).toHaveText('2 to answer');
     const answers = await stored(request);
     expect(Object.keys(answers).sort()).toEqual(
       ['checklist-1', 'decision-d1', 'decision-d2', 'decision-d4', 'decision-d5']);
@@ -223,46 +220,12 @@ test.describe('signed in', () => {
     expect(answers['decision-d4'].current).toMatchObject({ choice: '3-rounds' });
     expect(answers['decision-d5'].current).toMatchObject({ choice: 'holophyte-only' });
     expect(answers['checklist-1'].current).toMatchObject({ checked: ['2'] });
-    for (const question of ['decision-d1', 'decision-d2', 'decision-d4', 'checklist-1', 'decision-d5']) {
-      await expect(the.form(question).locator('.artifact-decision-saved-line')).toContainText('✓ Saved');
-      await expect(the.entry(question).unsaved).toBeHidden();
-    }
-    await expect(the.states).toHaveText(['Changed', 'Changed', 'Open', 'Default', 'Changed', 'Default', 'Open']);
+    await expect(the.entries).toHaveCount(2);
     expect(seen.errors).toEqual([]);
     expect(await seen.violations()).toEqual([]);
   });
 
-  test('a refused answer stays not saved while the others save', async ({ page, request }) => {
-    firstRepeatOnly();
-    // The page reads nothing answered; the answer to D3 is refused as stale.
-    await page.route((url) => url.pathname === '/api/answers', async (route) => {
-      const request = route.request();
-      if (request.method() === 'GET') {
-        await route.fulfill({ json: { page: 'capture-review-sheet', questions: {} } });
-      } else if (request.postDataJSON().question === 'decision-d3') {
-        await route.fulfill({ status: 409, json: { error: 'stale_version' } });
-      } else {
-        await route.continue();
-      }
-    });
-    const before = (await stored(request))['decision-d6'];
-    expect(before).toBeUndefined();
-    await page.goto(`${PAGE}?standalone`);
-    const the = sheet(page);
-    await the.count.click();
-    await the.entry('decision-d3').option('Any finding').click();
-    await the.entry('decision-d6').option('The maintainer').click();
-    await the.save.click();
-    await expect(the.outcome).toContainText('1 answer was not saved.');
-    await expect(the.entry('decision-d3').unsaved).toBeVisible();
-    await expect(the.entry('decision-d3').unsaved).toHaveText('not saved');
-    await expect(the.form('decision-d3').locator('.artifact-decision-status')).toHaveText(STALE);
-    await expect(the.entry('decision-d6').unsaved).toBeHidden();
-    expect((await stored(request))['decision-d6'].current).toMatchObject({ choice: 'the-maintainer' });
-    expect((await stored(request))['decision-d3']).toBeUndefined();
-  });
-
-  test('a form posts one answer at a time, so its form Save never lands after a panel Save', async ({ page, request }) => {
+  test('a form posts one answer at a time, so its form Save never lands after a Save in the Decisions tab', async ({ page, request }) => {
     firstRepeatOnly();
     // The page reads nothing answered; the form's own post of D3 is held.
     let release = () => {};
@@ -282,54 +245,20 @@ test.describe('signed in', () => {
     });
     await page.goto(`${PAGE}?standalone`);
     const the = sheet(page);
-    await expect(the.count).toHaveText('7 to answer · Respond');
+    await expect(the.count).toHaveText('7 to answer');
     const form = the.form('decision-d3');
     await form.getByRole('radio', { name: 'Reproduced findings' }).check();
     await form.getByRole('button', { name: 'Save answer' }).click();
     await expect(form.locator('.artifact-decision-status')).toHaveText('Saving your answer...');
     await the.count.click();
-    await the.entry('decision-d3').option('Any finding').click();
-    await the.save.click();
+    await the.entry('decision-d3').option('Any finding').check();
+    await the.entry('decision-d3').save.click();
     release();
-    await expect(the.outcome).toContainText('Saved at');
+    await expect(form.locator('.artifact-decision-saved-line')).toContainText('Any finding');
     expect((await stored(request))['decision-d3'].current).toMatchObject({ choice: 'any-finding' });
   });
 
-  test('a pick in the panel stays picked when its saved form is opened with "change"', async ({ page, request }) => {
-    firstRepeatOnly();
-    await page.goto(`${PAGE}?standalone`);
-    const the = sheet(page);
-    const form = the.form('decision-d1');
-    // A note changed alone is one change, saved only by the panel.
-    await expect(form.locator('.artifact-decision-saved-line')).toBeVisible();
-    await form.getByRole('button', { name: 'change' }).click();
-    await form.locator('details.artifact-decision-note > summary').click();
-    await form.locator('textarea[name="note"]').fill('Only the note changed');
-    await the.count.click();
-    await expect(the.entry('decision-d1').unsaved).toBeVisible();
-    await expect(the.save).toHaveText('Save 1 answer');
-    await the.save.click();
-    await expect(the.save).toHaveText('Nothing new to save');
-    expect((await stored(request))['decision-d1'].current).toMatchObject({ note: 'Only the note changed' });
-
-    const before = (await stored(request))['decision-d1'].current.choice;
-    const other = before === 'codex' ? 'Claude Opus' : 'Codex';
-    await page.reload();
-    await expect(form.locator('.artifact-decision-saved-line')).toBeVisible();
-    await the.count.click();
-    await the.entry('decision-d1').option(other).click();
-    await expect(the.entry('decision-d1').unsaved).toBeVisible();
-    await the.entry('decision-d1').item.locator('.artifact-review-show').click();
-    await expect(the.panel).toBeHidden();
-    await form.getByRole('button', { name: 'change' }).click();
-    await expect(form.getByRole('radio', { name: other })).toBeChecked();
-    await expect(form.locator('.artifact-decision-unsaved')).toBeVisible();
-    await the.count.click();
-    await expect(the.entry('decision-d1').unsaved).toBeVisible();
-    await expect(the.entry('decision-d1').option(other)).toHaveAttribute('aria-pressed', 'true');
-  });
-
-  test('a form answered only to an earlier wording gets its default picked on the form and in the panel', async ({ page }) => {
+  test('a form answered only to an earlier wording gets its default picked on the form and in the Decisions tab', async ({ page }) => {
     firstRepeatOnly();
     const reads = (url: URL) => url.pathname === '/api/answers';
     await page.route(reads, (route) =>
@@ -350,8 +279,7 @@ test.describe('signed in', () => {
     await expect(form.getByRole('radio', { name: 'Codex' })).toBeChecked();
     await expect(form.locator('.artifact-decision-unsaved')).toBeVisible();
     await the.count.click();
-    await expect(the.entry('decision-d1').option('Codex')).toHaveAttribute('aria-pressed', 'true');
-    await expect(the.entry('decision-d1').state).toHaveText('Default');
+    await expect(the.entry('decision-d1').option('Codex')).toBeChecked();
     await expect(the.entry('decision-d1').unsaved).toBeVisible();
   });
 
@@ -369,18 +297,20 @@ test.describe('signed in', () => {
     const form = the.form('decision-d1');
     await expect(form.locator('.artifact-decision-saved-line')).toBeVisible();
     await the.count.click();
-    await the.entry('decision-d1').option(other).click();
-    await the.save.click();
-    await expect(the.outcome).toContainText('Nothing was saved');
+    await the.answered.click();
+    const row = the.row('decision-d1');
+    await row.change.click();
+    await row.option(other).check();
+    await row.save.click();
     await expect(form.locator('.artifact-decision-status')).toBeVisible();
     await expect(form.locator('.artifact-decision-status')).toHaveText(STALE);
     await expect(form.getByRole('radio', { name: other })).toBeVisible();
     await expect(form.getByRole('radio', { name: other })).toBeChecked();
-    await expect(the.entry('decision-d1').unsaved).toBeVisible();
+    await expect(row.unsaved).toBeVisible();
     expect((await stored(request))['decision-d1'].current.choice).toBe(before);
   });
 
-  test('a failed read of the answers draws no sheet and picks no default', async ({ page, request }) => {
+  test('a failed read of the answers draws no sheet, no Decisions tab and picks no default', async ({ page, request }) => {
     firstRepeatOnly();
     const before = (await stored(request))['decision-d1'].current;
     const reads = (url: URL) => url.pathname === '/api/answers';
@@ -390,37 +320,63 @@ test.describe('signed in', () => {
     const the = sheet(page);
     await page.waitForFunction(() => document.readyState === 'complete');
     await expect(the.form('decision-d1').locator('input[name="choice"]:checked')).toHaveCount(0);
-    await expect(page.locator('.artifact-review-bar, .artifact-review-panel')).toHaveCount(0);
+    await expect(page.locator('.artifact-review-bar')).toHaveCount(0);
+    await expect(the.aside).toBeHidden();
+    await expect(page.getByRole('tab', { name: /^Decisions/ })).toHaveCount(0);
     await expect(page.locator('.artifact-answered')).toHaveCount(0);
     expect((await stored(request))['decision-d1'].current.id).toBe(before.id);
   });
 
-  test('a page with no forms has no count, Next open or panel', async ({ page }) => {
+  test('the questions open in the panel move to the bottom sheet as the window narrows, and back, the focus kept', async ({ page }) => {
+    const seen = await watch(page);
+    await page.goto(`${PAGE}?standalone`);
+    const the = sheet(page);
+    await the.count.click();
+    // The earlier checks' answers saved, the first question still open.
+    const option = the.entries.first().getByRole('radio').last();
+    await option.focus();
+    const bottom = page.locator('.artifact-comments-bottom-sheet');
+    await page.setViewportSize({ width: 360, height: 740 });
+    await expect(bottom).toBeVisible();
+    await expect(bottom.getByRole('tab', { name: /^Decisions/ })).toHaveAttribute('aria-selected', 'true');
+    await expect(bottom.locator('.artifact-decisions-entry').first().getByRole('radio').last()).toBeFocused();
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await expect(the.decisions).toBeVisible();
+    await expect(bottom).toBeHidden();
+    await expect(option).toBeFocused();
+    expect(seen.errors).toEqual([]);
+  });
+
+  test('a page with no forms has no count, Next open or Decisions tab', async ({ page }) => {
     await page.goto('/capture-article.html?standalone');
     await expect(page.locator('nav.artifact-outline')).toBeVisible();
-    await expect(page.locator('.artifact-review-bar, .artifact-review-panel, .artifact-review-open'))
-      .toHaveCount(0);
+    await expect(page.locator('.artifact-review-bar, .artifact-review-open')).toHaveCount(0);
+    await expect(page.getByRole('tab', { name: /^Decisions/ })).toHaveCount(0);
   });
 
   test.describe('at 360 by 740', () => {
     test.use({ viewport: { width: 360, height: 740 } });
 
-    test('the count and Next open fit the title bar and the panel takes the full width', async ({ page }) => {
+    test('the count and Next open fit the title bar, and the count opens the bottom sheet on Decisions at the full width', async ({ page }) => {
       const reads = (url: URL) => url.pathname === '/api/answers';
-    await page.route(reads, (route) =>
+      await page.route(reads, (route) =>
         route.request().method() === 'GET'
           ? route.fulfill({ json: { page: 'capture-review-sheet', questions: {} } })
           : route.continue());
       await page.goto(`${PAGE}?standalone`);
       const the = sheet(page);
-      await expect(the.count).toHaveText('7 to answer · Respond');
+      await expect(the.count).toHaveText('7 to answer');
       for (const target of [the.count, the.next]) {
         const box = await target.boundingBox();
         expect(box!.x).toBeGreaterThanOrEqual(0);
         expect(box!.x + box!.width).toBeLessThanOrEqual(360);
       }
       await the.count.click();
-      const box = await the.panel.boundingBox();
+      const bottom = page.locator('.artifact-comments-bottom-sheet');
+      await expect(bottom.getByRole('tab')).toHaveCount(1);
+      await expect(bottom.getByRole('tab', { name: /^Decisions/ })).toHaveAttribute('aria-selected', 'true');
+      await expect(bottom.locator('.artifact-decisions-group-title').first()).toHaveText('Who reviews');
+      const box = await bottom.boundingBox();
       expect(box!.x).toBe(0);
       expect(box!.width).toBe(360);
     });
@@ -431,13 +387,13 @@ test.describe('signed in', () => {
 
     test('the count and Next open stay inside the window', async ({ page }) => {
       const reads = (url: URL) => url.pathname === '/api/answers';
-    await page.route(reads, (route) =>
+      await page.route(reads, (route) =>
         route.request().method() === 'GET'
           ? route.fulfill({ json: { page: 'capture-review-sheet', questions: {} } })
           : route.continue());
       await page.goto(`${PAGE}?standalone`);
       const the = sheet(page);
-      await expect(the.count).toHaveText('7 to answer · Respond');
+      await expect(the.count).toHaveText('7 to answer');
       for (const target of [the.count, the.next]) {
         const box = await target.boundingBox();
         expect(box!.x).toBeGreaterThanOrEqual(0);
@@ -446,8 +402,8 @@ test.describe('signed in', () => {
     });
   });
 
-  test.describe('at 280 wide, then 1280', () => {
-    test.use({ viewport: { width: 280, height: 640 } });
+  test.describe('at 240 wide, then 1280', () => {
+    test.use({ viewport: { width: 240, height: 640 } });
 
     test('Next open ends in an ellipsis when narrow and shows whole when wide', async ({ page }) => {
       const reads = (url: URL) => url.pathname === '/api/answers';
@@ -457,12 +413,12 @@ test.describe('signed in', () => {
           : route.continue());
       await page.goto(`${PAGE}?standalone`);
       const the = sheet(page);
-      await expect(the.count).toHaveText('7 to answer · Respond');
+      await expect(the.count).toHaveText('7 to answer');
       // The count and Next open stay inside the window.
       for (const target of [the.count, the.next]) {
         const box = await target.boundingBox();
         expect(box!.x).toBeGreaterThanOrEqual(0);
-        expect(box!.x + box!.width).toBeLessThanOrEqual(280);
+        expect(box!.x + box!.width).toBeLessThanOrEqual(240);
       }
       // The words truncate in their own span; the arrow after them lies
       // wholly inside the link and the window, so it shows whole.
@@ -505,23 +461,23 @@ test.describe('signed in', () => {
             actor: { kind: 'human', name: 'maintainer' }, createdAt: '2026-10-01T09:30:00Z' } }));
       await page.goto(`${PAGE}?standalone`);
       const the = sheet(page);
-      await expect(the.count).toHaveText('7 to answer · Respond');
+      await expect(the.count).toHaveText('7 to answer');
       await expect(page.locator('.artifact-topbar-title')).toBeHidden();
       // A pick on each form with no default, and every answer saved, leaves
       // no question open.
       for (const question of ['decision-d2', 'decision-d3', 'decision-d6']) {
         await the.form(question).locator('input[name="choice"]').first().check();
       }
-      await the.count.click();
-      await the.save.click();
-      await expect(the.outcome).toContainText('Saved at');
-      await the.close.click();
-      await expect(the.count).toHaveText('All answered · Respond');
+      for (const question of QUESTIONS) {
+        await the.form(question).getByRole('button', { name: 'Save answer' }).click();
+        await expect(the.form(question).locator('.artifact-decision-saved-line')).toBeAttached();
+      }
+      await expect(the.count).toHaveText('All answered');
       await expect(the.next).toBeHidden();
       expect(await page.locator('.artifact-topbar-title').evaluate((title) => getComputedStyle(title).display))
         .not.toBe('none');
       const box = await the.count.boundingBox();
-      expect(box!.x + box!.width).toBeLessThanOrEqual(280);
+      expect(box!.x + box!.width).toBeLessThanOrEqual(240);
     });
   });
 });
@@ -564,13 +520,13 @@ function markdown(title: string, parts: Part[]) {
   return lines.join('\n');
 }
 
-function publish(name: string, parts: Part[]): string {
+function publish(name: string, parts: Part[], comments = false): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lotuspod-review-sheet-'));
   try {
     const file = path.join(dir, `${name}.md`);
     fs.writeFileSync(file, markdown(name, parts), 'utf-8');
     const said = execFileSync(PYTHON, ['-m', 'lotuspod', 'publish', file, '--local', '--out-dir', OUT,
-      '--owner', 'hermes', '--credential', HERMES], {
+      '--owner', 'hermes', '--credential', HERMES, ...(comments ? ['--comments'] : [])], {
       encoding: 'utf-8', env: { ...ENV, PYTHONPATH: SRC }, stdio: ['ignore', 'pipe', 'pipe'], timeout: 60_000,
     });
     const revision = /at revision ([0-9a-f]{12})/.exec(said)?.[1] ?? '';
@@ -588,8 +544,8 @@ function named(slug: string) {
 
 // Publish the page, open it with its clock stopped and wait for its sheet;
 // the number of loads and navigations from then on.
-async function openPublished(page: Page, name: string, parts: Part[]) {
-  publish(name, parts);
+async function openPublished(page: Page, name: string, parts: Part[], comments = false) {
+  publish(name, parts, comments);
   await page.clock.install({ time: START });
   await page.clock.pauseAt(START + 1000);
   await page.goto(`/${name}.html?standalone`);
@@ -603,8 +559,8 @@ async function openPublished(page: Page, name: string, parts: Part[]) {
 }
 
 // Publish the page again and let the 60-second check swap it in.
-async function republish(page: Page, name: string, parts: Part[]) {
-  const revision = publish(name, parts);
+async function republish(page: Page, name: string, parts: Part[], comments = false) {
+  const revision = publish(name, parts, comments);
   await page.clock.runFor(CHECK);
   await expect.poll(() => page.locator('meta[name="lotuspod:revision"]').getAttribute('content')).toBe(revision);
   await expect(page.locator('.artifact-live-page-banner')).toHaveCount(0);
@@ -613,13 +569,13 @@ async function republish(page: Page, name: string, parts: Part[]) {
 test.describe('signed in, published again', () => {
   test.use({ extraHTTPHeaders: SIGNED_IN, viewport: { width: 1440, height: 900 } });
 
-  test('a section a republish adds is marked, and one whose questions went is not', async ({ page }) => {
+  test('a section a republish adds is marked, one whose questions went is not, and the focus stays on an option', async ({ page }) => {
     const seen = await watch(page);
     const name = named('sections');
     const HOLE: Row = ['H1', 'Keep a hole in the ice?', 'Yes / No', ''];
     await openPublished(page, name, [['Heater', [HOLE]], [DECISIONS, [PUMP]]]);
     const the = sheet(page);
-    await expect(the.count).toHaveText('2 to answer · Respond');
+    await expect(the.count).toHaveText('2 to answer');
     await expect(the.heading('Heater').locator('.artifact-review-open')).toHaveText('1 open');
     await expect(the.outline('Heater').locator('.artifact-review-outline')).toHaveText('1 open');
     await the.count.click();
@@ -630,16 +586,16 @@ test.describe('signed in, published again', () => {
     await republish(page, name, [['Heater', []], [DECISIONS, [PUMP]],
       ['Spring', [['H1', 'Keep a hole in the ice?', 'Yes / Maybe / No', '']]]]);
     await expect(the.entry('decision-h1').option('Maybe')).toHaveCount(1);
-    await expect(the.panel).toBeVisible();
+    await expect(the.decisions).toBeVisible();
     await expect(the.entry('decision-h1').option('No')).toBeFocused();
-    await expect(the.count).toHaveText('2 to answer · Respond');
+    await expect(the.count).toHaveText('2 to answer');
     await expect(the.heading('Spring').locator('.artifact-review-open')).toHaveText('1 open');
     await expect(the.outline('Spring').locator('.artifact-review-outline')).toHaveText('1 open');
     await expect(the.heading(DECISIONS).locator('.artifact-review-open')).toHaveText('1 open');
     await expect(the.outline(DECISIONS).locator('.artifact-review-outline')).toHaveText('1 open');
     await expect(the.heading('Heater').locator('.artifact-review-open')).toHaveCount(0);
     await expect(the.outline('Heater').locator('.artifact-review-outline')).toHaveCount(0);
-    await expect(the.groups.locator('.artifact-review-group-title')).toHaveText([DECISIONS, 'Spring']);
+    await expect(the.titles).toHaveText([DECISIONS, 'Spring']);
     expect(seen.errors).toEqual([]);
   });
 
@@ -660,7 +616,7 @@ test.describe('signed in, published again', () => {
     const POND: Row = ['2b', 'Drain the pond?', 'Yes / No', ''];
     await republish(page, name, [['Findings', []], [DECISIONS, [HEATER, PUMP, POND, NET, FISH]]]);
     await expect(the.form('decision-2b')).toHaveCount(1);
-    await expect(the.count).toHaveText('5 to answer · Respond');
+    await expect(the.count).toHaveText('5 to answer');
     await expect(the.heading(DECISIONS).locator('.artifact-review-open')).toHaveText('5 open');
     await expect(the.outline(DECISIONS).locator('.artifact-review-outline')).toHaveText('5 open');
     await expect(the.next).toContainText('Move the fish indoors?');
@@ -677,28 +633,24 @@ test.describe('signed in, published again', () => {
     await openPublished(page, name, [[DECISIONS, [HEATER, PUMP, NETTED]]]);
     const the = sheet(page);
     await expect(the.form('decision-3').getByRole('radio', { name: 'Yes' })).toBeChecked();
-    await expect(the.count).toHaveText('3 to answer · Respond');
-    // The first answered, and the third's default saved with it, so no
-    // pick holds the section back.
+    await expect(the.count).toHaveText('3 to answer');
+    // The first answered, and the third's default saved, so no pick holds
+    // the section back.
     await the.count.click();
-    await the.entry('decision-1').option('Large').click();
-    await the.save.click();
-    await expect(the.outcome).toContainText('Saved at');
-    await expect(the.count).toHaveText('1 to answer · Respond');
-    await the.close.click();
+    await the.entry('decision-1').option('Large').check();
+    await the.entry('decision-1').save.click();
+    await the.entry('decision-3').save.click();
+    await expect(the.count).toHaveText('1 to answer');
     await page.locator('h1.artifact-title').click();
 
     await republish(page, name, [[DECISIONS, [HEATER, PUMP, ['3', 'Net the whole pond?', 'Yes / No', 'Yes']]]]);
     await expect(the.form('decision-3').locator('.artifact-decision-text')).toHaveText('Net the whole pond?');
-    await expect(the.count).toHaveText('2 to answer · Respond');
+    await expect(the.count).toHaveText('2 to answer');
     await expect(the.form('decision-3').getByRole('radio', { name: 'Yes' })).toBeChecked();
     await expect(the.form('decision-3').locator('.artifact-decision-unsaved')).toBeVisible();
-    await the.count.click();
-    await expect(the.entry('decision-1').state).toHaveText('Changed');
-    await expect(the.entry('decision-1').unsaved).toBeHidden();
-    await expect(the.entry('decision-3').state).toHaveText('Default');
+    await expect(the.entry('decision-1').item).toHaveCount(0);
+    await expect(the.entry('decision-3').option('Yes')).toBeChecked();
     await expect(the.entry('decision-3').unsaved).toBeVisible();
-    await expect(the.save).toHaveText('Save 1 answer');
     expect(seen.errors).toEqual([]);
   });
 
@@ -712,7 +664,7 @@ test.describe('signed in, published again', () => {
     await form.getByRole('radio', { name: 'No' }).check();
     await form.getByRole('button', { name: 'Save answer' }).click();
     await expect(form.locator('.artifact-decision-saved-line')).toContainText('No');
-    await expect(the.count).toHaveText('1 to answer · Respond');
+    await expect(the.count).toHaveText('1 to answer');
     await page.locator('h1.artifact-title').click();
 
     const reads = (url: URL) => url.pathname === '/api/answers';
@@ -728,43 +680,62 @@ test.describe('signed in, published again', () => {
     // The next read that succeeds draws them, the answer as saved.
     await page.unroute(reads);
     await republish(page, name, [['Findings', []], [DECISIONS, [HEATER, PUMP, NETTED, FISH]]]);
-    await expect(the.count).toHaveText('3 to answer · Respond');
+    await expect(the.count).toHaveText('3 to answer');
     await the.count.click();
-    await expect(the.entry('decision-3').option('No')).toHaveAttribute('aria-pressed', 'true');
-    await expect(the.entry('decision-3').unsaved).toBeHidden();
+    await the.answered.click();
+    await expect(the.row('decision-3').label).toHaveText('No');
+    await expect(the.row('decision-3').unsaved).toHaveCount(0);
     const answers = await request.get(`/api/answers?page=${name}`, { headers: SIGNED_IN });
     expect((await answers.json()).questions['decision-3'].current.choice).toBe('no');
     expect(seen.errors.filter((error) => !error.includes('503'))).toEqual([]);
   });
 
-  test('the panel stays open, its focus on Close, as a republish takes the last question away', async ({ page }) => {
+  test('the Decisions tab follows a republish that takes its questions away, and goes with the last', async ({ page }) => {
     const seen = await watch(page);
     const name = named('last');
     await openPublished(page, name, [['Findings', []], [DECISIONS, [HEATER, PUMP, NET]]]);
     const the = sheet(page);
     await the.count.click();
-    await expect(the.panel).toBeVisible();
-    await expect(page.locator('li.artifact-review-entry')).toHaveCount(3);
+    await expect(the.decisions).toBeVisible();
+    await expect(the.entries).toHaveCount(3);
 
-    // One of the three taken away leaves the panel open on the two left.
+    // One of the three taken away leaves the tab open on the two left.
     await republish(page, name, [['Findings', []], [DECISIONS, [HEATER, NET]]]);
     await expect(the.form('decision-2')).toHaveCount(0);
-    await expect(the.panel).toBeVisible();
-    await expect(page.locator('li.artifact-review-entry')).toHaveCount(2);
-    expect(await page.locator('li.artifact-review-entry').evaluateAll((items) =>
+    await expect(the.decisions).toBeVisible();
+    await expect(the.count).toHaveText('2 to answer');
+    // The tab is drawn again once the swap's answers are read.
+    await expect.poll(() => the.entries.evaluateAll((items) =>
       items.map((item) => (item as HTMLElement).dataset.question))).toEqual(['decision-1', 'decision-3']);
-    await expect(the.tally).toHaveText('2 to answer · 0 changed · 2 in all');
-    await expect(the.count).toHaveText('2 to answer · Respond');
-    await the.entry('decision-1').option('Large').focus();
 
     await republish(page, name, [['Findings', []], [DECISIONS, []]]);
     await expect(the.form('decision-1')).toHaveCount(0);
-    await expect(the.panel).toBeVisible();
-    await expect(page.locator('li.artifact-review-entry')).toHaveCount(0);
-    await expect(the.tally).toHaveText('All answered · 0 changed · 0 in all');
-    await expect(the.close).toBeFocused();
     await expect(the.count).toBeHidden();
+    await expect(the.tabs).toHaveCount(0);
+    await expect(the.decisions).toBeHidden();
     await expect(the.heading(DECISIONS).locator('.artifact-review-open')).toHaveCount(0);
+    expect(seen.errors).toEqual([]);
+  });
+
+  test('on a phone, the sheet open on Decisions goes to Comments as a republish takes the last question', async ({ page }) => {
+    await page.setViewportSize({ width: 360, height: 740 });
+    const seen = await watch(page);
+    const name = named('phone');
+    const parts: Part[] = [['Findings', []], [DECISIONS, [HEATER]]];
+    publish(name, parts, true);
+    expect((await page.request.post('/api/comments', {
+      data: { page: name, section: 'findings', text: 'Is the ice thick yet?' },
+    })).status()).toBe(201);
+    await openPublished(page, name, parts, true);
+    const bottom = page.locator('.artifact-comments-bottom-sheet');
+    await page.locator('button.artifact-review-count').click();
+    await expect(bottom.getByRole('tab', { name: /^Decisions/ })).toHaveAttribute('aria-selected', 'true');
+
+    await republish(page, name, [['Findings', []], [DECISIONS, []]], true);
+    await expect(page.locator('button.artifact-review-count')).toBeHidden();
+    await expect(bottom).toBeVisible();
+    await expect(bottom.getByRole('tablist')).toBeHidden();
+    await expect(bottom.locator('.artifact-comment-thread', { hasText: 'Is the ice thick yet?' })).toBeVisible();
     expect(seen.errors).toEqual([]);
   });
 });

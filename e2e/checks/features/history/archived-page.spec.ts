@@ -318,6 +318,9 @@ test.describe.serial('an archived page', () => {
       await expect(side.save).toBeDisabled();
       await expect(side.note).toHaveText(CLOSED_NOTE);
       await expect(page.locator('.artifact-review-count')).toHaveCount(0);
+      // Nor does the comments panel offer its questions.
+      await expect(side.aside.getByRole('tab', { name: /^Decisions/ })).toHaveCount(0);
+      await expect(side.aside.locator('.artifact-comments-to-answer, .artifact-comments-decisions:not([hidden])')).toHaveCount(0);
       expect(errors).toEqual([]);
     });
 

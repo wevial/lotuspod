@@ -105,23 +105,24 @@ saved, or still posting. What it returns (`Cards`) is what the review sheet
 reads the forms by.
 
 The first island is the review sheet (`features/comments/ts/islands/review-sheet.tsx`):
-the title bar's open-question count and Next open, the "N open" marks on
-headings and outline links, and the Respond panel. Once `ANSWERED` is first
+the title bar's open-question count and Next open, and the "N open" marks on
+headings and outline links. Once `ANSWERED` is first
 sent, and only when the cards' `read` is true and the page is not archived, it
-renders into a `div.artifact-review-bar` it adds to the title bar, with the
-panel and each mark as a portal: the panel into the body, each mark into an
+renders into a `div.artifact-review-bar` it adds to the title bar, with
+each mark as a portal into an
 empty span it adds to the heading or outline link, so the heading the fold
-code owns is never drawn again. Once drawn, it is drawn again, into the same
+code owns is never drawn again. The count opens what `decisionsTab.opens`
+(`comments/tabs.ts`) names: the comments panel's Decisions tab, or the
+bottom sheet's without room for the panel, which the comments island sets
+as it places the panel. Once drawn, it is drawn again, into the same
 container, on each `ANSWERED` a swap's read of the answers sends
 (`features/live/ts/page-swap.ts`): it reads the questions from the forms again, gives
 a heading that now asks one its span and takes them off one that no longer
 does, and picks a default only on a form the swap brought in. A form a
 swap brings in whose read fails stays out of the sheet until a later read. The forms and their stored answers stay the
 truth: the sheet draws from them on each form's `input`, `change` and
-`SAVED`, a pick in the panel sets the form's own input, and it saves through
-the cards' `save()`, one question at a time in page order. Preact holds only
-the sheet's own state: the panel open, a Save under way, what it did, and
-the question Next open last jumped to, which a swap keeps. The bundle, Preact with it, stays at most
+`SAVED`. Preact holds only the sheet's own state: the question Next open
+last jumped to, which a swap keeps. The bundle, Preact with it, stays at most
 47,000 bytes gzipped; it uses Preact and its hooks, with `createPortal` from
 `preact/compat` for independently owned DOM targets.
 
@@ -129,7 +130,9 @@ The comments island (`features/comments/ts/islands/comments/index.ts`) mounts af
 review sheet and starts the page itself as it mounts, on a page with comment
 boxes: it reads the boxes, adds the whole page's box (`pageBox`) and starts
 the drafts part (`comments/drafts.ts`), which creates the store
-(`comments/store.ts`). The store holds the thread state: the sections,
+(`comments/store.ts`). On a page with decision or checklist forms and no
+comment boxes it mounts only the panel's shell, for the Decisions tab
+(`comments/questions.ts`), with no store, as the page serves no threads. The store holds the thread state: the sections,
 boxes' forms, threads and attachments by form, all Maps, and the revision the
 page shows, which a swap moves on. What every island shares is held in
 signals (`@preact/signals`, `comments/state.ts`), one state for the page,

@@ -628,8 +628,8 @@ reader left the panel open or folded in `localStorage` (a page whose storage
 throws starts folded), and Escape elsewhere in it folds it.
 
 On a page that asks questions (one with decision or checklist forms that is
-not archived), the panel's head is two tabs in place of its "Comments"
-heading: "Decisions", with the number of questions to answer (an orchid
+not archived, and whose answers could be read), the panel's head is two tabs
+in place of its "Comments" heading: "Decisions", with the number of questions to answer (an orchid
 badge, a mint "✓" once there are none), and "Comments", with the number of
 open threads the rail's badge counts. The tab shown is underlined in
 lavender; Left and Right Arrow move between them. The Comments tab holds
@@ -687,10 +687,21 @@ back, folds the card to its answer again and collapses the row.
 Folded, such a page's rail holds an orchid button above the thread dots, the
 count over "to answer" set sideways (a mint "✓" over "answered" at none),
 named "N to answer: open the questions"; it opens the panel on Decisions.
+The title bar's "N to answer" (see [The review
+sheet](publishing.md#the-review-sheet)) opens the panel on Decisions too,
+unfolding it, with the focus on the first question to answer (on the tab
+when none is left), and names the tab's panel in its `aria-controls`.
 The rail's "Comments" button, a chip, a highlighted passage, a block's pin
 and every other way to a thread open it on Comments; the panel opens on
 Decisions when nothing chose a tab. Only the Comments tab shows the threads,
 so a thread counts as seen only while it does.
+
+A page with decision or checklist forms and no comment boxes (published
+without comments) still gets the panel, for its questions: its head is the
+Decisions tab alone, with no Comments tab, no way to start a thread, and a
+rail with only the orchid "N to answer". It shows once the page's answers
+are read; an archived page, or one whose answers could not be read, gets
+none, and nor does a page with neither forms nor comment boxes.
 
 The open panel is resized from a handle on its left edge, a separator named
 "Resize comments": dragged, its edge follows the pointer, and focused, Left
@@ -769,6 +780,22 @@ at its section's newest open thread, or at its form when it has none. The
 sheet scrolls on its own, rises above an on-screen keyboard, and opening it
 scrolls the page, never its layout, so the highlight or chip sits above it.
 Escape or "Close" closes it and gives the focus back to what opened it.
+
+On a page that asks questions the sheet's header is two tabs, "Decisions"
+and "Comments", each with its count as the panel's tabs show them, and
+"Close"; the arrows and the thread's status sit in a row under them, on the
+Comments tab. The title bar's "N to answer" opens the sheet on Decisions,
+at any width without room for the panel, with the focus on the first
+question to answer, and a chip, a highlight or a pin on a phone opens it on
+Comments (from 700 pixels they open popovers, as above). The Decisions tab
+holds the panel's Decisions tab, its nodes moved into the sheet and back as
+a thread's are, so a pick, a note, Save, Ask and the Answered list work
+there as in the panel; a question's text and its "Show on page" close the
+sheet before they scroll to the card. Pressing "Comments" goes back to the
+thread the sheet held before, else to the first open thread, else to the
+first section's form; pressing "Decisions" keeps a passage's composer for
+it. On a page that takes no comments the sheet has the Decisions tab alone.
+The tabs are drawn by `js/narrow.js`, styled by `css/sheet-tabs.css`.
 
 ### Comments on passages
 
