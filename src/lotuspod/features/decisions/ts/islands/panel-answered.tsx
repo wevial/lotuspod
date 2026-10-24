@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef, useState } from "preact/hooks";
 import { Context, Note, Options, type Desk } from "./panel-parts";
 import { jump, sectionsOf } from "./sections";
-import { label, noteOf, words } from "./words";
+import { label, words } from "./words";
 
 // One saved question. Collapsed: its number and question, which open it, its
 // answer's label, who saved it and when as its card says, and "change",
@@ -60,10 +60,10 @@ function Row({ desk, form }: { desk: Desk; form: HTMLFormElement }) {
         <>
           <Context form={form} />
           <Options form={form} name={"artifact-decisions-answered-" + question} touched={touched} />
-          <Note desk={desk} form={form} summary={noteOf(answer) ? "Edit note" : "Add a note"} touched={touched} />
+          <Note desk={desk} form={form} summary="Edit note" touched={touched} />
           <div class="artifact-decisions-foot">
             <button type="button" class="artifact-decisions-save" disabled={busy} onClick={save}>Save</button>
-            <button type="button" class="artifact-decisions-cancel" onClick={cancel}>Cancel</button>
+            <button type="button" class="artifact-decisions-cancel" disabled={busy} onClick={cancel}>Cancel</button>
             <span class="artifact-decisions-unsaved" hidden={!changed}>not saved</span>
             <button type="button" class="artifact-decisions-show" onClick={() => jump(form)}>Show on page</button>
           </div>

@@ -658,8 +658,11 @@ as a question thread on the decision, as the card's Ask posts the note (see
 maintainer](publishing.md#decisions-for-the-maintainer)), and the panel
 stays on Decisions. Sent, the field empties and closes, and the note, in the
 panel and on the card, is left as it was; an empty field reads "Write your
-question first." and posts nothing, and a refused post keeps the text and
-says why. An entry whose question has open threads ends in "?", "1 thread"
+question first." and posts nothing, a refused post keeps the text and says
+why, and text changed while the question was sending stays, unsent. While
+the field holds an unsent question its entry stays in the list, saved or
+not, so the question is never lost; the entry's "Ask" folds the field and
+keeps its text, and Cancel empties it. An entry whose question has open threads ends in "?", "1 thread"
 (or "N threads") and where the newest stands as its chip reads it
 ("answered", "writing", "waiting" or "failed"); pressing it opens the
 Comments tab at that thread, as the decision's chip does.
@@ -671,8 +674,8 @@ section headings in page order. It stays folded or open as the reader left
 it. Each row reads the question's number and text, its answer's label, who
 saved it and when as its card says, and "change". Its text or "change" opens
 it in place: the card's context lines, its options with the card's pick, its
-note under "Edit note" (or "Add a note" when the answer has none), Save,
-Cancel, "not saved" while the card differs from its answer, and "Show on
+note under "Edit note", Save, Cancel (held back while Save is under way),
+"not saved" while the card differs from its answer, and "Show on
 page". A pick or a note there opens the card on the page as its "change"
 does, showing "Not saved". Save posts the answer as the entry's Save does
 and collapses the row to the new answer; Cancel puts the saved pick and note

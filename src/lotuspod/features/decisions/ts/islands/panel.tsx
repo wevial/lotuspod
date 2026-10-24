@@ -14,9 +14,17 @@ const SAVED_FOR = 1600;
 // A question's own Ask, under its entry: the field's text posted as a
 // question thread on the decision, as the card's Ask posts the note, which
 // it leaves alone. Sent, the field empties and closes, and the panel stays
-// on Decisions; a refused post keeps the text and says why.
-function Ask({ form, asking, done }: { form: HTMLFormElement; asking: Asking; done(): void }) {
-  const [text, setText] = useState("");
+// on Decisions; a field changed while it was sending keeps what it holds, not
+// yet sent. A refused post keeps the text and says why. The text is the
+// entry's, so closing the field with the entry's Ask keeps it; Cancel
+// empties it.
+function Ask({ form, asking, draft, done }: {
+  form: HTMLFormElement;
+  asking: Asking;
+  draft: { text: string; set(text: string): void; now(): string };
+  done(): void;
+}) {
+  const { text } = draft;
   const [said, setSaid] = useState("");
   const [busy, setBusy] = useState(false);
   const field = useRef<HTMLTextAreaElement>(null);
@@ -28,11 +36,13 @@ function Ask({ form, asking, done }: { form: HTMLFormElement; asking: Asking; do
       setSaid("Write your question first.");
       return;
     }
+    const sent = text;
     setBusy(true);
     setSaid("Sending your question...");
     try {
       setSaid(await asking.ask(form.dataset.question!, question, () => {
-        setText("");
+        if (draft.now() !== sent) return;
+        draft.set("");
         done();
       }, false));
     } catch {
@@ -45,10 +55,13 @@ function Ask({ form, asking, done }: { form: HTMLFormElement; asking: Asking; do
     <div class="artifact-decisions-asking">
       <textarea rows={2} maxLength={4000} value={text} ref={field}
         aria-label={"Ask about decision " + (number || words(form, ".artifact-decision-text"))}
-        onInput={(event) => setText(event.currentTarget.value)} />
+        onInput={(event) => draft.set(event.currentTarget.value)} />
       <div class="artifact-decisions-asking-foot">
         <button type="button" class="artifact-decisions-ask-send" disabled={busy} onClick={send}>Ask</button>
-        <button type="button" class="artifact-decisions-cancel" onClick={done}>Cancel</button>
+        <button type="button" class="artifact-decisions-cancel" onClick={() => {
+          draft.set("");
+          done();
+        }}>Cancel</button>
         <span class="artifact-decisions-ask-status" role="status">{said}</span>
       </div>
     </div>
@@ -62,19 +75,33 @@ interface EntryProps {
   held: boolean;
   saving(form: HTMLFormElement): void;
   saved(form: HTMLFormElement, done: boolean): void;
+  // The entry's Ask holds unsent text, or no longer does.
+  drafted(form: HTMLFormElement, on: boolean): void;
 }
 
 // One question: its number and text, which jump to its card, the card's
 // context lines, its options (a checklist's items), its note, Save, its own
 // Ask, "not saved" while the card differs from its saved answer, Show on
 // page, and a link to its newest open thread.
-function Entry({ desk, form, held, saving, saved }: EntryProps) {
+function Entry({ desk, form, held, saving, saved, drafted }: EntryProps) {
   const question = form.dataset.question ?? "";
   const answer = desk.saved(form);
   const [busy, setBusy] = useState(false);
   const [asking, setAsking] = useState(false);
+  const [text, setText] = useState("");
+  const latest = useRef("");
   const askButton = useRef<HTMLButtonElement>(null);
-  if (held && answer && !desk.dirty(form)) {
+  const draft = {
+    text,
+    now: () => latest.current,
+    set(to: string) {
+      latest.current = to;
+      setText(to);
+      drafted(form, to.trim() !== "");
+    },
+  };
+  // An unsent question keeps the entry as it is, not saved and gone.
+  if (held && answer && !desk.dirty(form) && !text.trim()) {
     return (
       <li class="artifact-decisions-entry artifact-decisions-entry--saved" data-question={question}>
         <p class="artifact-decisions-saved" tabIndex={-1}>
@@ -116,7 +143,7 @@ function Entry({ desk, form, held, saving, saved }: EntryProps) {
         <span class="artifact-decisions-unsaved" hidden={!desk.dirty(form)}>not saved</span>
         <button type="button" class="artifact-decisions-show" onClick={() => jump(form)}>Show on page</button>
       </div>
-      {asker && asking && <Ask form={form} asking={asker} done={asked} />}
+      {asker && asking && <Ask form={form} asking={asker} draft={draft} done={asked} />}
       {threads && (
         <button type="button" class="artifact-decisions-threads" onClick={threads.open}>
           <span class="artifact-decisions-threads-mark" aria-hidden="true">?</span>
@@ -136,6 +163,9 @@ function Entry({ desk, form, held, saving, saved }: EntryProps) {
 function Panel({ desk }: { desk: Desk }) {
   desk.marked.value;
   const [held, setHeld] = useState<ReadonlySet<HTMLFormElement>>(new Set());
+  // The entries whose Ask holds unsent text, which stay listed until it is
+  // sent or emptied.
+  const [drafting, setDrafting] = useState<ReadonlySet<HTMLFormElement>>(new Set());
   const kept = useRef(new Set<HTMLFormElement>());
   const root = useRef<HTMLDivElement>(null);
   // The question to give the focus to once a saved entry leaves.
@@ -167,7 +197,16 @@ function Panel({ desk }: { desk: Desk }) {
   for (const form of kept.current) {
     if (!asked(form) || !desk.dirty(form)) kept.current.delete(form);
   }
-  const listed = desk.forms.filter((form) => desk.toAnswer(form) || held.has(form) || kept.current.has(form));
+  const listed = desk.forms.filter((form) =>
+    desk.toAnswer(form) || held.has(form) || kept.current.has(form) || drafting.has(form));
+  function drafted(form: HTMLFormElement, on: boolean): void {
+    setDrafting((was) => {
+      if (was.has(form) === on) return was;
+      const next = new Set(was);
+      if (on) next.add(form); else next.delete(form);
+      return next;
+    });
+  }
   // A dismissal is in neither list: its card and the Answered table show it.
   const answered = desk.forms.filter((form) => {
     const answer = desk.saved(form);
@@ -216,7 +255,7 @@ function Panel({ desk }: { desk: Desk }) {
           <ol class="artifact-decisions-entries">
             {section.forms.map((form) => (
               <Entry key={form.dataset.question} desk={desk} form={form} held={held.has(form)}
-                saving={(each) => hold(each, true)} saved={saved} />
+                saving={(each) => hold(each, true)} saved={saved} drafted={drafted} />
             ))}
           </ol>
         </section>

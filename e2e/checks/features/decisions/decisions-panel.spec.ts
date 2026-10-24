@@ -579,6 +579,11 @@ test('a saved question moves to the folded Answered list, and its row changes th
     .toEqual(['decision-1', 'decision-4']);
   await expect(row(page, 'decision-1').title).toHaveText('1 · Where should the diff size sit?');
   await expect(row(page, 'decision-1').label).toHaveText('Beside the title');
+  // A row saved with no note still edits it under "Edit note".
+  await row(page, 'decision-1').change.click();
+  await expect(row(page, 'decision-1').noteSummary).toHaveText('Edit note');
+  await row(page, 'decision-1').title.click();
+  await expect(row(page, 'decision-1').radios).toHaveCount(0);
 
   // "change" opens the row in place, as saved.
   await four.change.click();
@@ -615,9 +620,18 @@ test('a saved question moves to the folded Answered list, and its row changes th
   await four.option('None').check();
   await four.note.fill('None after all.');
   await expect(fourth.note).toHaveValue('None after all.');
+  // Cancel waits while the Save is under way.
+  let release = () => {};
+  const held = new Promise<void>((resolve) => { release = resolve; });
+  await page.route((url) => url.pathname === '/api/answers', async (route) => {
+    if (route.request().method() === 'POST') await held;
+    return route.fallback();
+  });
   const posted = page.waitForResponse((response) =>
     new URL(response.url()).pathname === '/api/answers' && response.request().method() === 'POST');
   await four.save.click();
+  await expect(four.cancel).toBeDisabled();
+  release();
   expect((await posted).status()).toBe(201);
   await expect(four.radios).toHaveCount(0);
   await expect(four.label).toHaveText('None');
@@ -718,5 +732,33 @@ test('an empty panel Ask posts nothing, and the card\'s Ask still sends and empt
   await expect(second.note).toHaveValue('');
   await panel(page).tab('Decisions').click();
   await expect(two.note).toHaveValue('');
+
+  // Text added while a question is sending stays in the field, unsent.
+  let release = () => {};
+  const held = new Promise<void>((resolve) => { release = resolve; });
+  await page.route((url) => url.pathname === '/api/comments', async (route) => {
+    if (route.request().method() === 'POST') await held;
+    return route.fallback();
+  });
+  await three.askField.fill('Does Esc close it?');
+  const asked = page.waitForResponse((response) =>
+    new URL(response.url()).pathname === '/api/comments' && response.request().method() === 'POST');
+  await three.askSend.click();
+  await three.askField.fill('Does Esc close it? And a click outside?');
+  release();
+  expect((await asked).request().postDataJSON()).toMatchObject({ question: 'decision-3', text: 'Does Esc close it?' });
+  await expect(three.askStatus).toHaveText('');
+  await expect(three.askField).toHaveValue('Does Esc close it? And a click outside?');
+
+  // Saved while its Ask holds an unsent question, the entry stays listed
+  // with the question until it is sent or emptied.
+  await three.save.click();
+  await expect(card(page, 'decision-3').saved).toBeVisible();
+  await page.waitForTimeout(2_000);
+  await expect(three.item).toBeVisible();
+  await expect(three.askField).toHaveValue('Does Esc close it? And a click outside?');
+  await three.item.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(three.item).toHaveCount(0);
+  await expect(row(page, 'decision-3').item).toHaveCount(1);
   expect(errors).toEqual([]);
 });
