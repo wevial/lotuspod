@@ -605,46 +605,6 @@ async function republish(page: Page, name: string, parts: Part[]) {
 test.describe('signed in, published again', () => {
   test.use({ extraHTTPHeaders: SIGNED_IN, viewport: { width: 1440, height: 900 } });
 
-  test('a question a republish adds is counted and marked in place', async ({ page }) => {
-    const seen = await watch(page);
-    const name = named('added');
-    const moved = await openPublished(page, name, [['Findings', []], [DECISIONS, [HEATER, PUMP, NET]]]);
-    const the = sheet(page);
-    await expect(the.count).toHaveText('3 to answer · Respond');
-    await expect(the.heading(DECISIONS).locator('.artifact-review-open')).toHaveText('3 open');
-    await expect(the.outline(DECISIONS).locator('.artifact-review-outline')).toHaveText('3 open');
-
-    await republish(page, name, [['Findings', []], [DECISIONS, [HEATER, PUMP, NET, FISH]]]);
-    await expect(the.form('decision-4')).toHaveCount(1);
-    await expect(the.count).toHaveText('4 to answer · Respond');
-    await expect(the.heading(DECISIONS).locator('.artifact-review-open')).toHaveText('4 open');
-    await expect(the.outline(DECISIONS).locator('.artifact-review-outline')).toHaveText('4 open');
-    await expect(the.heading(DECISIONS).locator('.artifact-review-open')).toHaveCount(1);
-    await expect(the.outline(DECISIONS).locator('.artifact-review-outline')).toHaveCount(1);
-    expect(moved.count).toBe(0);
-    expect(seen.errors).toEqual([]);
-  });
-
-  test('the Respond panel stays open as a republish takes a question away', async ({ page }) => {
-    const seen = await watch(page);
-    const name = named('removed');
-    await openPublished(page, name, [['Findings', []], [DECISIONS, [HEATER, PUMP, NET, FISH]]]);
-    const the = sheet(page);
-    await the.count.click();
-    await expect(the.panel).toBeVisible();
-    await expect(page.locator('li.artifact-review-entry')).toHaveCount(4);
-
-    await republish(page, name, [['Findings', []], [DECISIONS, [HEATER, NET, FISH]]]);
-    await expect(the.form('decision-2')).toHaveCount(0);
-    await expect(the.panel).toBeVisible();
-    await expect(page.locator('li.artifact-review-entry')).toHaveCount(3);
-    expect(await page.locator('li.artifact-review-entry').evaluateAll((items) =>
-      items.map((item) => (item as HTMLElement).dataset.question))).toEqual(['decision-1', 'decision-3', 'decision-4']);
-    await expect(the.tally).toHaveText('3 to answer · 0 changed · 3 in all');
-    await expect(the.count).toHaveText('3 to answer · Respond');
-    expect(seen.errors).toEqual([]);
-  });
-
   test('a section a republish adds is marked, and one whose questions went is not', async ({ page }) => {
     const seen = await watch(page);
     const name = named('sections');
@@ -673,8 +633,10 @@ test.describe('signed in, published again', () => {
   test('Next open keeps its place by question when a republish adds one before it', async ({ page }) => {
     const seen = await watch(page);
     const name = named('next');
-    await openPublished(page, name, [[DECISIONS, [HEATER, PUMP, NET, FISH]]]);
+    const moved = await openPublished(page, name, [['Findings', []], [DECISIONS, [HEATER, PUMP, NET, FISH]]]);
     const the = sheet(page);
+    await expect(the.heading(DECISIONS).locator('.artifact-review-open')).toHaveText('4 open');
+    await expect(the.outline(DECISIONS).locator('.artifact-review-outline')).toHaveText('4 open');
     for (const question of ['decision-1', 'decision-2', 'decision-3']) {
       await the.next.click();
       await expect(the.form(question).locator('input').first()).toBeFocused();
@@ -683,12 +645,17 @@ test.describe('signed in, published again', () => {
     await page.locator('h1.artifact-title').click();
 
     const POND: Row = ['2b', 'Drain the pond?', 'Yes / No', ''];
-    await republish(page, name, [[DECISIONS, [HEATER, PUMP, POND, NET, FISH]]]);
+    await republish(page, name, [['Findings', []], [DECISIONS, [HEATER, PUMP, POND, NET, FISH]]]);
     await expect(the.form('decision-2b')).toHaveCount(1);
     await expect(the.count).toHaveText('5 to answer · Respond');
+    await expect(the.heading(DECISIONS).locator('.artifact-review-open')).toHaveText('5 open');
+    await expect(the.outline(DECISIONS).locator('.artifact-review-outline')).toHaveText('5 open');
+    await expect(the.heading(DECISIONS).locator('.artifact-review-open')).toHaveCount(1);
+    await expect(the.outline(DECISIONS).locator('.artifact-review-outline')).toHaveCount(1);
     await expect(the.next).toContainText('Move the fish indoors?');
     await the.next.click();
     await expect(the.form('decision-4').locator('input').first()).toBeFocused();
+    expect(moved.count).toBe(0);
     expect(seen.errors).toEqual([]);
   });
 
@@ -778,13 +745,26 @@ test.describe('signed in, published again', () => {
   test('the panel stays open, its focus on Close, as a republish takes the last question away', async ({ page }) => {
     const seen = await watch(page);
     const name = named('last');
-    await openPublished(page, name, [['Findings', []], [DECISIONS, [HEATER]]]);
+    await openPublished(page, name, [['Findings', []], [DECISIONS, [HEATER, PUMP, NET]]]);
     const the = sheet(page);
     await the.count.click();
+    await expect(the.panel).toBeVisible();
+    await expect(page.locator('li.artifact-review-entry')).toHaveCount(3);
+
+    // One of the three taken away leaves the panel open on the two left.
+    await republish(page, name, [['Findings', []], [DECISIONS, [HEATER, NET]]]);
+    await expect(the.form('decision-2')).toHaveCount(0);
+    await expect(the.panel).toBeVisible();
+    await expect(page.locator('li.artifact-review-entry')).toHaveCount(2);
+    expect(await page.locator('li.artifact-review-entry').evaluateAll((items) =>
+      items.map((item) => (item as HTMLElement).dataset.question))).toEqual(['decision-1', 'decision-3']);
+    await expect(the.tally).toHaveText('2 to answer · 0 changed · 2 in all');
+    await expect(the.count).toHaveText('2 to answer · Respond');
     await the.entry('decision-1').option('Large').focus();
 
     await republish(page, name, [['Findings', []], [DECISIONS, []]]);
     await expect(the.form('decision-1')).toHaveCount(0);
+    await expect(the.form('decision-3')).toHaveCount(0);
     await expect(the.panel).toBeVisible();
     await expect(page.locator('li.artifact-review-entry')).toHaveCount(0);
     await expect(the.tally).toHaveText('All answered · 0 changed · 0 in all');
