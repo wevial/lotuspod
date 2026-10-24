@@ -7,6 +7,13 @@ export interface Opens {
   open(opener: HTMLElement): void;
 }
 
+// The count opens the panel's Decisions tab with decide, else the bottom
+// sheet's with sheet.
+export function opensIn(panel: boolean, decide: () => void, sheet: (opener: HTMLElement) => void): Opens {
+  return panel ? { id: "artifact-comments-decisions", open: decide } :
+    { id: "artifact-comments-bottom-sheet-decisions", open: sheet };
+}
+
 // Where the comments panel's Decisions tab meets the decisions island. The
 // island says whether the page asks questions (asks), and how many are to
 // answer once its answers are read (count, null until then); the shell gives

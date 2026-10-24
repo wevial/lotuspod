@@ -3,7 +3,7 @@ import type { Page } from "../bridge";
 import type { Mode } from "./parts";
 import { barBottom, modeOf, unfold } from "./room";
 import { shell as makeShell } from "./shell";
-import { decisionsTab, sheetTabs } from "./tabs";
+import { decisionsTab, opensIn, sheetTabs } from "./tabs";
 
 // The comments panel on a page that asks questions and takes no comments:
 // its Decisions tab alone, and no store, as the page serves no threads to
@@ -21,10 +21,6 @@ export function questions(page: Page): void {
     },
   });
 
-  function shown(): boolean {
-    return decisionsTab.asks.peek() && decisionsTab.count.peek() !== null;
-  }
-
   // The panel, or the sheet, as the window allows; the questions open in
   // the sheet move to the panel when the window widens, and back.
   function arrange(): void {
@@ -38,15 +34,13 @@ export function questions(page: Page): void {
       } else if (mode !== "panel") {
         over.restore(taken);
       }
-      decisionsTab.opens.value = mode === "panel" ?
-        { id: "artifact-comments-decisions", open: shell.decide } :
-        { id: "artifact-comments-bottom-sheet-decisions", open: over.decisions };
+      decisionsTab.opens.value = opensIn(mode === "panel", shell.decide, over.decisions);
     }
     // Questions no longer asked, or no longer counted, close the sheet.
-    if (!shown()) {
+    if (!sheetTabs.asks()) {
       over.take();
     }
-    shell.hidden(mode !== "panel" || !shown());
+    shell.hidden(mode !== "panel" || !sheetTabs.asks());
     over.sync();
   }
 

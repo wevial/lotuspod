@@ -143,17 +143,9 @@
 
     // The comments panel's Decisions tab's nodes, lent to the sheet while it
     // shows Decisions, and given back.
-    function lend() {
-      var from = the.tabs.node();
-      while (from && from.firstChild) {
-        sheet.decisions.appendChild(from.firstChild);
-      }
-    }
-
-    function giveBack() {
-      var to = the.tabs.node();
-      while (to && sheet.decisions.firstChild) {
-        to.appendChild(sheet.decisions.firstChild);
+    function move(from, to) {
+      while (from && to && from.firstChild) {
+        to.appendChild(from.firstChild);
       }
     }
 
@@ -336,7 +328,7 @@
       }
       var made = holderOf(held.kind);
       if (view.decisions) {
-        lend();
+        move(the.tabs.node(), sheet.decisions);
         retab();
         made.node.setAttribute("aria-label", "Decisions");
         held.titleKey = null;
@@ -541,7 +533,7 @@
         passages.shine(thread);
       });
       if (view.decisions) {
-        giveBack();
+        move(sheet.decisions, the.tabs.node());
       } else if (view.box) {
         var group = groups.get(view.box);
         the.compose(group, false);

@@ -6,7 +6,7 @@ import { anchorOf as threadAnchor, blockTitle, frameOf } from "./anchor";
 import { chips as makeChips } from "./chips";
 import { pins as makePins } from "./pins";
 import { barBottom, modeOf, unfold } from "./room";
-import { decisionsTab, sheetTabs } from "./tabs";
+import { decisionsTab, opensIn, sheetTabs } from "./tabs";
 import { effect, untracked } from "@preact/signals";
 
 // Placement owns no thread rendering: movable nodes stay in their existing
@@ -379,9 +379,7 @@ export function placement(page: Page, bridge: PlacementBridge): Placement {
     shell.hidden(!api.wide);
     over.mode(mode);
     // The title bar's count opens the panel on Decisions, else the sheet.
-    decisionsTab.opens.value = api.wide ?
-      { id: "artifact-comments-decisions", open: shell.decide } :
-      { id: "artifact-comments-bottom-sheet-decisions", open: over.decisions };
+    decisionsTab.opens.value = opensIn(api.wide, shell.decide, over.decisions);
     var old = document.querySelector<HTMLElement>(".artifact-comments-changed");
     if (old) {
       old.hidden = api.wide;
