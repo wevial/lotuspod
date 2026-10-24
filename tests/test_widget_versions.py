@@ -60,16 +60,12 @@ class WidgetVersionsTests(VersionsWitness):
         self.assertEqual(root.find('iframe', 'artifact-widget')[0].attrs['height'], '240')
         self.assertEqual(len(root.find('script')), 1)
         for commit, filename, original in (first, second):
-            status, headers, data = self.get(f'/{filename}?version={commit}')
-            self.assertEqual((status, data), (200, original))
-            for header, value in (*widgets.HEADERS, ('Cache-Control', 'private, no-store')):
-                self.assertEqual(headers[header], value)
-            self.assertEqual(headers['Vary'], 'Sec-Fetch-Dest')
-            status, headers, data = self.get(f'/{filename}?version={commit}',
-                                             headers={'Sec-Fetch-Dest': 'iframe'})
-            self.assertEqual((status, data), (200, original))
-            for header, value in (*widgets.HEADERS, ('Cache-Control', 'private, no-store')):
-                self.assertEqual(headers[header], value)
+            for asked in ({}, {'Sec-Fetch-Dest': 'iframe'}):
+                status, headers, data = self.get(f'/{filename}?version={commit}', headers=asked)
+                self.assertEqual((status, data), (200, original))
+                for header, value in (*widgets.HEADERS, ('Cache-Control', 'private, no-store'),
+                                      ('Vary', 'Sec-Fetch-Dest')):
+                    self.assertEqual(headers[header], value)
             status, headers, data = self.get(f'/{filename}?version={commit}',
                                              headers={'Sec-Fetch-Dest': 'document'})
             self.assertEqual(status, 200)
