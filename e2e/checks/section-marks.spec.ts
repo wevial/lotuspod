@@ -261,6 +261,8 @@ test.describe('signed in', () => {
     await expect(third.drawn).toHaveText('2 new');
     await expect(first.button).toHaveAttribute('aria-expanded', 'true');
     await expect(first.drawn).toHaveCount(0);
+    // Open, the heading's text is its title and the review sheet's mark.
+    await expect(second.heading).toHaveText('Decisions for the maintainer 1 open');
 
     const control = page.locator('nav.artifact-outline button.artifact-sections-all');
     await expect(control).toHaveText('Collapse all');
@@ -275,6 +277,7 @@ test.describe('signed in', () => {
     await control.click();
     await expect(control).toHaveText('Collapse all');
     await expect(page.locator('.artifact-section-mark:not([hidden])')).toHaveCount(0);
+    await expect(second.heading).toHaveText('Decisions for the maintainer 1 open');
     for (let index = 0; index < IDS.length; index += 1) {
       await expect(section(page, index).button).toHaveAccessibleName(TITLES[index]);
     }
