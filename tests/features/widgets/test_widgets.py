@@ -320,9 +320,8 @@ class WidgetTests(TempDirTestCase):
         server = serve_handler._make_server(self.out_dir, '127.0.0.1', 0)
         threading.Thread(target=server.serve_forever, daemon=True).start()
         self.addCleanup(server.server_close); self.addCleanup(server.shutdown)
-        request = urllib.request.Request(
-            f'http://127.0.0.1:{server.server_address[1]}/' + frame['src'],
-            headers={'Sec-Fetch-Dest': 'document'})
+        url = f'http://127.0.0.1:{server.server_address[1]}/'
+        request = urllib.request.Request(url + frame['src'], headers={'Sec-Fetch-Dest': 'document'})
         with urllib.request.urlopen(request) as response:
             self.assertEqual(response.status, 200)
             policy = directives(response.headers['Content-Security-Policy'])
@@ -333,7 +332,6 @@ class WidgetTests(TempDirTestCase):
         self.assertEqual(len(frames), 1)
         self.assertEqual(frames[0].get('sandbox'), 'allow-scripts')
         self.assertIn(frame['src'], frames[0].get('src', ''))
-        url = f'http://127.0.0.1:{server.server_address[1]}/'
         with urllib.request.urlopen(url + frames[0]['src']) as response:
             self.assertEqual(response.read(), (self.out_dir / frame['src']).read_bytes())
         for headers in ({'Sec-Fetch-Dest': 'iframe'}, {}):
