@@ -76,7 +76,7 @@ from unittest import mock
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
-from lotuspod import cli, core  # noqa: E402
+from lotuspod import cli  # noqa: E402
 from lotuspod.features.agents import machine, routing  # noqa: E402
 from lotuspod.features.serve import access, api  # noqa: E402
 from lotuspod.features.serve import handler as serve_handler, pages as serve_pages  # noqa: E402
@@ -1059,24 +1059,6 @@ def repository(out_dir: Path) -> None:
             raise RuntimeError(f"git {argv[0]} failed: {done.stderr.strip()}")
 
 
-# The browser checks read the packaged stylesheet from here, as the bytes a
-# restored theme serves. The theme keeps it as per-feature sources, so the
-# fixture writes the joined stylesheet here while COMMAND runs and removes it
-# after; it is gitignored and never packaged.
-PACKAGED_CSS = REPO_ROOT / "src" / "lotuspod" / "_theme" / "lotuspod.css"
-
-
-def write_packaged_css() -> bool:
-    """Write the joined stylesheet to PACKAGED_CSS unless it is there already
-    (a run beside this one wrote it). True when this call wrote it."""
-    joined = core.theme_file_bytes("lotuspod.css")
-    if PACKAGED_CSS.is_file() and PACKAGED_CSS.read_bytes() == joined:
-        return False
-    PACKAGED_CSS.parent.mkdir(parents=True, exist_ok=True)
-    core.write_atomic(PACKAGED_CSS, joined)
-    return True
-
-
 def main(argv: list[str] | None = None) -> int:
     command = list(sys.argv[1:] if argv is None else argv)
     if not command:
@@ -1089,7 +1071,6 @@ def main(argv: list[str] | None = None) -> int:
     socket_path = directory / machine.SOCKET_NAME
     server = None
     thread = None
-    wrote_css = False
     sockets = None
     socket_thread = None
     upload_limit = mock.patch.object(api, "UPLOAD_LIMIT", FIXTURE_UPLOAD_LIMIT)
@@ -1128,7 +1109,6 @@ def main(argv: list[str] | None = None) -> int:
         env[OTHER_ENV] = str(credential_path(db_path, OTHER))
         env[OUT_ENV] = str(site)
         env[PYTHON_ENV] = sys.executable
-        wrote_css = write_packaged_css()
         try:
             return subprocess.run(command, cwd=str(REPO_ROOT), env=env, check=False).returncode
         except OSError as exc:
@@ -1137,8 +1117,6 @@ def main(argv: list[str] | None = None) -> int:
     finally:
         if server is not None:
             server.events.close()
-        if wrote_css:
-            PACKAGED_CSS.unlink(missing_ok=True)
         if sockets is not None:
             if socket_thread is not None:
                 sockets.shutdown()
@@ -1153,8 +1131,7 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     # A run stopped by SIGTERM (a timeout, a killed verify) unwinds through
-    # main's finally like Ctrl+C does, so it removes PACKAGED_CSS and its temp
-    # directory; a leftover PACKAGED_CSS would look like a run beside this one
-    # wrote it, and no later run would remove it.
+    # main's finally like Ctrl+C does, so it stops the server and removes its
+    # temp directory.
     signal.signal(signal.SIGTERM, lambda signum, frame: sys.exit(128 + signum))
     raise SystemExit(main())

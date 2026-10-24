@@ -25,7 +25,7 @@ node_modules/
 # playwright's output from a capture run
 e2e/test-results/
 
-# the joined stylesheet the capture fixture writes while browser checks run
+# the joined stylesheet ci/move_witness.py writes while Playwright lists the checks
 src/lotuspod/_theme/lotuspod.css
 
 # the demo site python -m demo.build writes by default
