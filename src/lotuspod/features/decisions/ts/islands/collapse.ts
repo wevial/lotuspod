@@ -50,6 +50,10 @@ export function collapsible(form: HTMLFormElement): void {
   const line = document.createElement("p");
   line.className = "artifact-decision-line";
   legend.parentNode!.appendChild(line);
-  button.addEventListener("click", () => collapse(form, !isCollapsed(form)));
+  // A link in the question is followed, the card left as it is.
+  button.addEventListener("click", (event) => {
+    if (event.target instanceof Element && event.target.closest("a")) return;
+    collapse(form, !isCollapsed(form));
+  });
   collapse(form, false);
 }

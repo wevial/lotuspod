@@ -556,16 +556,23 @@ export function reviewSheet(page: Page, cards: Cards | null): void {
   let drawnAnswers = false;
   let followed = false;
   document.addEventListener("click", (event) => {
-    const link = event.target instanceof Element ? event.target.closest("a.artifact-live-decisions") : null;
+    const link = event.target instanceof Element ?
+      event.target.closest('a.artifact-live-decisions, a[href^="#question="]') : null;
     if (!link || event.defaultPrevented) {
       return;
     }
-    // An expanded block would cover the form: it closes first.
-    if (link.closest("figure.artifact-live--expanded")) {
-      link.closest("figure")?.querySelector<HTMLButtonElement>(".artifact-live-expand")?.click();
-    }
     const href = link.getAttribute("href") ?? "";
-    focusing = href.startsWith("#question=") ? decodeURIComponent(href.slice("#question=".length)) : null;
+    // Any link to a question followed again, its hash already the address,
+    // places the form again, as a collapsed card is opened there; a block's
+    // link also takes the focus.
+    focusing = null;
+    if (link.matches("a.artifact-live-decisions")) {
+      // An expanded block would cover the form: it closes first.
+      if (link.closest("figure.artifact-live--expanded")) {
+        link.closest("figure")?.querySelector<HTMLButtonElement>(".artifact-live-expand")?.click();
+      }
+      focusing = href.startsWith("#question=") ? decodeURIComponent(href.slice("#question=".length)) : null;
+    }
     if (href === location.hash && drawnAnswers) {
       event.preventDefault();
       toQuestion(false);

@@ -2,6 +2,7 @@ import { render } from "preact";
 import type { ReadonlySignal, Signal } from "@preact/signals";
 import type { Answer, Answers, Page } from "../../../comments/ts/index";
 import { isChecklist, optionText, same, ticked, boxes } from "./checklist";
+import { expand } from "./collapse";
 import { label, noteField, noteOf, radios, status } from "./words";
 
 // A decision form as the island holds it: the store's answers to its
@@ -302,8 +303,9 @@ export function restore(deck: Deck, card: Card): void {
 }
 
 // Why a form's answer was not saved, in its status: a form folded to its
-// answer (saved from the review sheet) opens to show it.
+// answer (saved from the review sheet), or collapsed, opens to show it.
 export function refused(deck: Deck, card: Card, text: string): void {
+  expand(card.form);
   if (card.form.classList.contains("artifact-decision--saved")) {
     card.editing = true;
     draw(deck, card);

@@ -853,7 +853,7 @@ test('a card\'s title collapses it to one line of where it stands, which follows
   test.skip(test.info().repeatEachIndex > 0, 'answers a page the first repeat answered');
   const name = 'decisions-panel-collapse';
   await prepare(request, name);
-  const errors = watch(page);
+  const errors = watch(page, ['500 (Internal Server Error)']);
   await load(page, name);
   const one = collapsible(page, 'decision-1');
 
@@ -894,6 +894,30 @@ test('a card\'s title collapses it to one line of where it stands, which follows
   await expect(two.line).toHaveText('✓ Saved · One total');
   await expect(two.toggle).toHaveAttribute('aria-expanded', 'false');
   await expect(two.saved).toBeHidden();
+
+  // A link in the question is followed and leaves the card as it is.
+  await one.form.locator('.artifact-decision-text').evaluate((text) => {
+    const link = text.appendChild(document.createElement('a'));
+    link.href = '#plan';
+    link.textContent = ' the plan';
+  });
+  await one.form.getByRole('link', { name: 'the plan' }).click();
+  await expect.poll(() => page.evaluate(() => location.hash)).toBe('#plan');
+  await expect(one.toggle).toHaveAttribute('aria-expanded', 'true');
+  await expect(one.options).toBeVisible();
+
+  // A save refused while the card is collapsed opens it to say why.
+  await one.toggle.click();
+  await page.route((url) => url.pathname === '/api/answers', (route) =>
+    route.request().method() === 'POST' ?
+      route.fulfill({ status: 500, json: { error: 'storage_unavailable' } }) : route.fallback());
+  const first = entry(page, 'decision-1');
+  await first.option('Beside the title').check();
+  await expect(one.line).toHaveText('Beside the title · Not saved');
+  await first.save.click();
+  await expect(one.toggle).toHaveAttribute('aria-expanded', 'true');
+  await expect(one.status).toHaveText('Your answer was not saved (storage_unavailable). Try again.');
+  await expect(one.status).toBeVisible();
   expect(errors).toEqual([]);
 });
 
@@ -922,6 +946,24 @@ test('Show on page, Next open and either Answered list\'s "change" open a collap
   await expect.poll(() => focused(page)).toBe('decision-1');
   await expect(one.toggle).toHaveAttribute('aria-expanded', 'true');
   await expect(one.options).toBeVisible();
+
+  // A link to the question opens it, and followed again once it is the
+  // address, opens it again.
+  await page.evaluate(() => {
+    const link = document.querySelector('section.artifact-body')!.appendChild(document.createElement('a'));
+    link.href = '#question=decision-1';
+    link.id = 'to-question-1';
+    link.textContent = 'To question 1';
+  });
+  const link = page.locator('#to-question-1');
+  for (let time = 0; time < 2; time += 1) {
+    await one.toggle.click();
+    await expect(one.options).toBeHidden();
+    await link.click();
+    await expect(one.toggle).toHaveAttribute('aria-expanded', 'true');
+    await expect(one.options).toBeVisible();
+    await expect.poll(() => belowBar(page, 'decision-1')).toBe(16);
+  }
 
   const four = collapsible(page, 'decision-4');
   await four.toggle.click();
