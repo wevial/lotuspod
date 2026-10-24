@@ -22,6 +22,12 @@ const PNG = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
   'base64');
 
+// A check that holds a request in a route handler drops it here, so a request
+// still held when the check ends cannot fail it with "Test ended".
+test.afterEach(async ({ page }) => {
+  await page.unrouteAll({ behavior: 'ignoreErrors' });
+});
+
 // Every request the browser sends to /api/, which must stay none, and every
 // error the page throws.
 function watch(context: BrowserContext, page: Page) {
@@ -232,8 +238,18 @@ test('a comment on the whole page from the chip under the title gets the generic
 
 test('a page loaded directly opens in the demo index as its tab, the landing page too, and settles', async ({ context, page }) => {
   const seen = watch(context, page);
-  const shown = (name: string) => page.frames().map((frame) => new URL(frame.url()))
+  // A frame that has not committed its first navigation has the address "",
+  // which new URL() throws on, so only frames with an address are read.
+  const shown = (name: string) => page.frames().map((frame) => frame.url())
+    .filter((address) => URL.canParse(address)).map((address) => new URL(address))
     .find((where) => where.pathname === `/${name}.html`);
+  // Hold the tab frame's request for the page a second, so the first reads of
+  // the frames always meet the tab still loading, its address "". The
+  // top-level request for the page is not held.
+  await page.route(`**${TRY_IT}`, async (route) => {
+    if (route.request().frame() !== page.mainFrame()) await new Promise((done) => setTimeout(done, 1_000));
+    await route.continue();
+  });
 
   await page.goto(`${TRY_IT}#the-pond-today`);
   await expect(page).toHaveURL(/\/pages\.html#tabs=try-it&on=try-it$/);
