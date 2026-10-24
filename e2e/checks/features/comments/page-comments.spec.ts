@@ -19,7 +19,7 @@ const HERMES = ENV.LOTUSPOD_TEST_CREDENTIAL_HERMES ?? '';
 const OUT = ENV.LOTUSPOD_TEST_OUT ?? '';
 const PYTHON = ENV.LOTUSPOD_TEST_PYTHON ?? '';
 // This checkout's package, whatever lotuspod is installed.
-const SRC = path.resolve(__dirname, '..', '..', 'src');
+const SRC = path.resolve(__dirname, '..', '..', '..', '..', 'src');
 const OWNER = 'hermes';
 const WIDE = { width: 1440, height: 900 };
 const MEDIUM = { width: 1024, height: 768 };

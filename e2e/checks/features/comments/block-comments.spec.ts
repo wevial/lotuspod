@@ -20,7 +20,7 @@ const HERMES = ENV.LOTUSPOD_TEST_CREDENTIAL_HERMES ?? '';
 const OUT = ENV.LOTUSPOD_TEST_OUT ?? '';
 const PYTHON = ENV.LOTUSPOD_TEST_PYTHON ?? '';
 // This checkout's package, whatever lotuspod is installed.
-const SRC = path.resolve(__dirname, '..', '..', 'src');
+const SRC = path.resolve(__dirname, '..', '..', '..', '..', 'src');
 const OWNER = 'hermes';
 const WIDE = { width: 1440, height: 900 };
 const TITLE = 'Merge churn by worker count';
@@ -37,7 +37,7 @@ const STALE_BLOCK = 'This block has changed since the page loaded. Reload the pa
 const BLOCK_GONE = 'The block you were commenting on was removed. Your comment is kept here, on the section.';
 // js/live-page.js's KEPT: what the page keeps over a reload, per page.
 const KEPT = 'lotuspod:reload:';
-const FISH = path.resolve(__dirname, '..', '..', 'tests', 'fixtures', 'media', 'fish-320x240.jpg');
+const FISH = path.resolve(__dirname, '..', '..', '..', '..', 'tests', 'fixtures', 'media', 'fish-320x240.jpg');
 
 // A page whose first section holds the block, drawn as version says; none
 // at all when version is 0. Its second section keeps a block of its own, so

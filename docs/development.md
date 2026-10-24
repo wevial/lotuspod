@@ -363,7 +363,7 @@ instead of exercising HTTP 409 `stale_page`. Repeat that check with:
 for attempt in $(seq 1 10); do
   python -m tests.capture_site \
     npm --prefix e2e exec --no -- playwright test --config e2e/checks.config.ts \
-    e2e/checks/decision-threads.spec.ts \
+    e2e/checks/features/decisions/decision-threads.spec.ts \
     --grep 'a page published again since it loaded keeps the question and says to reload' \
     --reporter=line || exit 1
 done
