@@ -51,11 +51,13 @@ export function shortcodeList(form: HTMLFormElement, field: HTMLTextAreaElement)
     return id + "-" + index;
   }
   // Under the composer's box, which holds the field with its images, + and
-  // send, so the list hides none of them.
+  // send, so the list hides none of them; the room is the visible part of
+  // the window, above a phone's on-screen keyboard.
   function place() {
     if (!list) return;
     const box = (field.closest(".artifact-composer-box") ?? field).getBoundingClientRect(), gap = 4;
-    const below = innerHeight - box.bottom - gap * 2, above = box.top - gap * 2;
+    const seen = visualViewport, top = seen ? seen.offsetTop : 0, bottom = seen ? top + seen.height : innerHeight;
+    const below = bottom - box.bottom - gap * 2, above = box.top - top - gap * 2;
     list.style.left = box.left + "px";
     list.style.width = box.width + "px";
     list.style.maxHeight = "";
@@ -104,6 +106,8 @@ export function shortcodeList(form: HTMLFormElement, field: HTMLTextAreaElement)
     field.removeAttribute("aria-activedescendant");
     removeEventListener("scroll", scrolled, true);
     removeEventListener("resize", place);
+    visualViewport?.removeEventListener("resize", place);
+    visualViewport?.removeEventListener("scroll", place);
   }
   // Open, move or close the list for the fragment before the caret.
   function refresh() {
@@ -116,6 +120,8 @@ export function shortcodeList(form: HTMLFormElement, field: HTMLTextAreaElement)
     if (!shown) {
       addEventListener("scroll", scrolled, true);
       addEventListener("resize", place);
+      visualViewport?.addEventListener("resize", place);
+      visualViewport?.addEventListener("scroll", place);
     }
     shown = { ...open, names, active: same ? shown!.active : 0 };
     draw();

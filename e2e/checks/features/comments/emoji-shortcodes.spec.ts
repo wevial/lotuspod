@@ -359,6 +359,36 @@ test.describe('signed in', () => {
     seen.clean();
   });
 
+  test('at 360 with an on-screen keyboard the list stays in the visible part of the window', async ({ page, request }) => {
+    const seen = await watch(page);
+    const root = await thread(request, 'pond', 'Does the pump hum?');
+    await page.setViewportSize(PHONE);
+    // A keyboard over the bottom 300 pixels, as a phone's visual viewport
+    // reports it once it opens.
+    await page.addInitScript(() => {
+      const keyboard = Object.assign(new EventTarget(), { offsetTop: 0, offsetLeft: 0, height: innerHeight, width: innerWidth, scale: 1 });
+      Object.defineProperty(window, 'visualViewport', { value: keyboard, configurable: true });
+      (window as any).__keyboard = (height: number) => { keyboard.height = height; keyboard.dispatchEvent(new Event('resize')); };
+    });
+    await page.goto(`${PAGE}?standalone`);
+    await loaded(page);
+    await page.locator('details.artifact-comment[data-section="pond"] summary').click();
+    const sheet = page.locator('.artifact-comments-bottom-sheet');
+    await expect(sheet).toBeVisible();
+    const { field } = await reply(sheet.locator(`.artifact-comment-thread[data-thread="${root.id}"]`));
+    await page.evaluate(() => (window as any).__keyboard(440));
+    await expect.poll(async () => Math.round((await sheet.boundingBox())!.y + (await sheet.boundingBox())!.height)).toBe(440);
+    await field.scrollIntoViewIfNeeded();
+    await field.pressSequentially(':tad');
+    const list = shown(page);
+    await expect(list).toHaveCount(1);
+    const box = (await list.boundingBox())!;
+    expect(box.y).toBeGreaterThanOrEqual(0);
+    expect(box.y + box.height).toBeLessThanOrEqual(440);
+    await expect(list.getByRole('option')).toHaveText(['🎉 :tada:', '🏟️ :stadium:']);
+    seen.clean();
+  });
+
   test('the table is fetched once, on the first colon typed, at the theme address', async ({ page, request }) => {
     const seen = await watch(page);
     const root = await thread(request, 'frogs', 'Where do the frogs go in winter?');
