@@ -8,7 +8,7 @@ import { shared, type StoreState } from "./islands/comments/state";
 
 export type { Page, Saved, Swapped } from "./islands/bridge";
 export { answerStore, type AnswerStore, type Posted } from "./islands/comments/answers";
-export { UNANSWERED, type Answer, type Answers, type Asked, type Asking } from "./islands/comments/state";
+export { UNANSWERED, type Answer, type Answers, type Asking } from "./islands/comments/state";
 export { decisionsTab } from "./islands/comments/tabs";
 
 // The store's signals, which only the store writes.

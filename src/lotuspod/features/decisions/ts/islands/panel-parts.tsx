@@ -28,7 +28,7 @@ export interface Desk {
 }
 
 // Tell the card an input moved, as the reader's own pick or typing would.
-export function moved(input: HTMLInputElement | HTMLTextAreaElement, type: "change" | "input"): void {
+function moved(input: HTMLInputElement | HTMLTextAreaElement, type: "change" | "input"): void {
   input.dispatchEvent(new Event(type, { bubbles: true }));
 }
 

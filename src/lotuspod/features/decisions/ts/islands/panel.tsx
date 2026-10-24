@@ -7,8 +7,6 @@ import { Context, Note, Options, type Desk } from "./panel-parts";
 import { jump, sectionsOf } from "./sections";
 import { label, words } from "./words";
 
-export type { Desk } from "./panel-parts";
-
 // How long an entry saved from the tab reads "✓ Saved · LABEL" before it
 // leaves the list.
 const SAVED_FOR = 1600;
