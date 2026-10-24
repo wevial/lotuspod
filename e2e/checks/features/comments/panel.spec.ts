@@ -211,14 +211,15 @@ function sample() {
 }
 
 // Show only the threads this check made: the site answers every read and
-// post, and a read is cut to the threads whose ids posts returned.
-async function ownThreads(page: Page, ids: Set<number>) {
+// post, and a read is cut to the threads whose ids posts returned, each as
+// shape gives it.
+async function ownThreads(page: Page, ids: Set<number>, shape = (thread: any) => thread) {
   await page.route((url) => url.pathname === '/api/comments', async (route) => {
     const request = route.request();
     const response = await route.fetch();
     const body = await response.json();
     if (request.method() === 'GET' && Array.isArray(body.threads)) {
-      body.threads = body.threads.filter((thread: any) => ids.has(thread.root.id));
+      body.threads = body.threads.filter((thread: any) => ids.has(thread.root.id)).map(shape);
     } else if (response.status() === 201 && body.parent === null) {
       ids.add(body.id);
     }
@@ -574,24 +575,15 @@ test.describe('signed in', () => {
     const seen = await watch(page);
     const asked = await post(request, 'findings', '@hermes Is the outlet on its own fuse?');
     const other = await post(request, 'risks', 'What if the heater fails too?');
-    // The site's reads cut to these two threads, hermes's answer served in
-    // the asked one; resolve and reopen posts go to the site.
+    // hermes's answer is served in the asked thread.
     const ids = new Set<number>([asked.id, other.id]);
-    await page.route((url) => url.pathname === '/api/comments', async (route) => {
-      const response = await route.fetch();
-      const body = await response.json();
-      if (route.request().method() === 'GET' && Array.isArray(body.threads)) {
-        body.threads = body.threads.filter((thread: any) => ids.has(thread.root.id)).map((thread: any) =>
-          thread.root.id !== asked.id ? thread : {
-            ...thread,
-            root: { ...thread.root, state: 'answered' },
-            replies: [{
-              ...reply(thread.root, 'It is, since the spring.'), id: 950_000 + asked.id,
-              revision: thread.root.revision, createdAt: thread.root.createdAt,
-            }],
-          });
-      }
-      await route.fulfill({ response, json: body });
+    await ownThreads(page, ids, (thread) => thread.root.id !== asked.id ? thread : {
+      ...thread,
+      root: { ...thread.root, state: 'answered' },
+      replies: [{
+        ...reply(thread.root, 'It is, since the spring.'), id: 950_000 + asked.id,
+        revision: thread.root.revision, createdAt: thread.root.createdAt,
+      }],
     });
     await load(page);
     const side = panel(page);

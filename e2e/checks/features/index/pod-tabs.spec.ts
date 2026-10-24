@@ -184,6 +184,8 @@ function ringOf(page: Page, pod: Pod) {
   });
 }
 
+const RING = { tab: `solid 2px ${rgb(COLORS.lavender)} -2px`, title: 'none', encloses: true };
+
 function seenRead(page: Page) {
   return page.waitForResponse((response) =>
     new URL(response.url()).pathname === SEEN && response.request().method() === 'GET');
@@ -919,7 +921,6 @@ test.describe('signed in', () => {
   test('Alt+Shift+Right moves a focused tab one place, keeping its focus and ring, and says where; Alt+Shift+Left on the first does nothing', async ({ page }) => {
     await openTabs(page, [ARTICLE, CONTEXT, CHECKLIST], CHECKLIST);
     const said = page.locator('.pod-tabs-bar [aria-live="polite"]');
-    const ring = { tab: `solid 2px ${rgb(COLORS.lavender)} -2px`, title: 'none', encloses: true };
 
     // The pointer on a tab not active lifts the whole tab, its ✕ white as
     // its title.
@@ -948,14 +949,14 @@ test.describe('signed in', () => {
     await close(page, ARTICLE).focus();
     await page.keyboard.press('Tab');
     await expect(tabTitle(page, CONTEXT)).toBeFocused();
-    expect.soft(await ringOf(page, CONTEXT)).toEqual(ring);
+    expect.soft(await ringOf(page, CONTEXT)).toEqual(RING);
     await page.keyboard.press('Alt+Shift+ArrowRight');
     expect(await openNames(page)).toEqual([ARTICLE.name, CHECKLIST.name, CONTEXT.name]);
     await expect(tabTitle(page, CONTEXT)).toBeFocused();
     await expect(said).toHaveText(`${CONTEXT.title} moved to position 3 of 3`);
     await expect(page).toHaveURL(/#tabs=capture-article,capture-checklist,capture-decision-context&on=capture-checklist$/);
     await expectActive(page, CHECKLIST);
-    expect.soft(await ringOf(page, CONTEXT)).toEqual(ring);
+    expect.soft(await ringOf(page, CONTEXT)).toEqual(RING);
 
     // At the end already: nothing further.
     await page.keyboard.press('Alt+Shift+ArrowRight');
@@ -985,7 +986,7 @@ test.describe('signed in', () => {
     expect.soft(await close(page, CHECKLIST).evaluate((node) => {
       const style = getComputedStyle(node);
       return `${style.outlineStyle} ${style.outlineWidth} ${style.outlineColor} ${style.outlineOffset}`;
-    })).toBe(`solid 2px ${rgb(COLORS.lavender)} -2px`);
+    })).toBe(RING.tab);
 
     // A pod picked in the finder with the mouse: its tab focused, no ring.
     await page.keyboard.press('ControlOrMeta+K');
@@ -1003,8 +1004,7 @@ test.describe('signed in', () => {
     await page.keyboard.press('Enter');
     await expectActive(page, CONTEXT);
     await expect(tabTitle(page, CONTEXT)).toBeFocused();
-    expect.soft(await ringOf(page, CONTEXT))
-      .toEqual({ tab: `solid 2px ${rgb(COLORS.lavender)} -2px`, title: 'none', encloses: true });
+    expect.soft(await ringOf(page, CONTEXT)).toEqual(RING);
   });
 
   test('a pod published again shows an amber "new version" dot until its tab is activated', async ({ page, baseURL }) => {
