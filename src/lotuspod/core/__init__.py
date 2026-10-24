@@ -562,7 +562,7 @@ THEME_SOURCES = {
         "features/comments/theme/comments.css",
         "features/comments/theme/panel-resize.css",
         "features/comments/theme/narrow.css",
-        "_theme/css/live-page.css",
+        "features/live/theme/live-page.css",
         "features/publish/theme/prose.css",
         "features/blocks/theme/ref-cards.css",
         "features/blocks/theme/calltree.css",
@@ -587,12 +587,13 @@ THEME_SOURCES = {
         "features/decisions/ts/decisions.js",
         "features/comments/ts/narrow.js",
         "features/comments/ts/attachments.js",
-        # Built from web/src/live-events.ts: serve's change stream, which the
-        # sources after it listen to.
-        "_theme/js/live-events.js",
-        "_theme/js/live-page.js",
-        # Built from web/src/page-swap.ts: it registers its swap with live.
-        "_theme/js/page-swap.js",
+        # Built from features/live/ts/live-events.ts: serve's change stream,
+        # which the sources after it listen to.
+        "features/live/ts/live-events.js",
+        "features/live/ts/live-page.js",
+        # Built from features/live/ts/page-swap.ts: it registers its swap with
+        # live.
+        "features/live/ts/page-swap.js",
         "features/comments/ts/comment-markdown.js",
         # The islands start the comments before later sources look for the
         # panel and register their listeners. All bridge names are defined
@@ -615,10 +616,10 @@ THEME_SOURCES = {
     INDEX_SCRIPT: (
         "features/index/ts/pod-tabs.js",
         "features/index/ts/pod-finder.js",
-        # Built from web/src/index-refresh.ts: it swaps in the listing's rows
-        # as the index is served again.
-        "_theme/js/index-refresh.js",
-        "_theme/js/live-events.js",
+        # Built from features/live/ts/index-refresh.ts: it swaps in the
+        # listing's rows as the index is served again.
+        "features/live/ts/index-refresh.js",
+        "features/live/ts/live-events.js",
     ),
     OLD_VERSION_SCRIPT: (
         "core/ts/shared.js",

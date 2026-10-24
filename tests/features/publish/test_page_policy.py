@@ -26,7 +26,9 @@ import urllib.request
 from html.parser import HTMLParser
 from pathlib import Path
 
-from tests.features.publish.test_manifest_v2 import TempDirTestCase, cli, run_cli
+from tests.features.publish.test_manifest_v2 import TempDirTestCase, run_cli
+
+from lotuspod.features.serve import handler as serve_handler  # after test_manifest_v2, which puts src/ on the path
 
 MERMAID_DIR = "https://cdn.jsdelivr.net/npm/mermaid@11.4.1/"
 MERMAID_ELK_DIR = "https://cdn.jsdelivr.net/npm/@mermaid-js/layout-elk@0.2.3/"
@@ -190,7 +192,7 @@ class BodyScriptTests(PolicyTestCase):
 class ServeHeaderTests(PolicyTestCase):
     def test_a_served_page_may_be_framed_by_its_own_site_alone_and_forbids_sniffing(self):
         self.render_body("prose", PROSE)
-        server = cli._make_server(self.out_dir, "127.0.0.1", 0)
+        server = serve_handler._make_server(self.out_dir, "127.0.0.1", 0)
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         self.addCleanup(server.server_close)

@@ -26,7 +26,8 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from lotuspod import agents, cli, core, responder, serve_files  # noqa: E402
+from lotuspod import agents, core, responder  # noqa: E402
+from lotuspod.features.serve import pages as serve_pages, serve_files  # noqa: E402
 from lotuspod.features.comments import comments  # noqa: E402
 from lotuspod.features.publish import render  # noqa: E402
 from lotuspod.features.history import versions  # noqa: E402
@@ -188,7 +189,7 @@ class RouteTests(AnchorCase):
         self.assertEqual(thread["replies"], [])
 
     def test_a_block_s_section_is_its_wrapper_s_or_the_page_s(self):
-        page = cli.api_page(self.out_dir, "churn")
+        page = serve_pages.api_page(self.out_dir, "churn")
         self.assertEqual({ident: (block.title, block.section)
                           for ident, block in page.widgets.items()},
                          {"churn": (TITLE, "throughput"), "lag": ("Lag", "latency")})
@@ -196,17 +197,17 @@ class RouteTests(AnchorCase):
         # Before the first heading: the whole page.
         self.publish_churn(churn(BLOCK).replace("How merges go.\n", "How merges go.\n\n" + LAG
                                                  .replace("lag", "intro") + "\n"))
-        page = cli.api_page(self.out_dir, "churn")
+        page = serve_pages.api_page(self.out_dir, "churn")
         self.assertEqual(page.widgets["intro"].section, comments.WHOLE_PAGE)
         # A page whose only box is `page`.
         self.publish_churn(f"# Merge throughput\n\n{BLOCK}\n")
-        page = cli.api_page(self.out_dir, "churn")
+        page = serve_pages.api_page(self.out_dir, "churn")
         self.assertEqual(page.widgets["churn"].section, comments.PAGE_SECTION)
         status, row = self.post({"section": comments.PAGE_SECTION, "text": "Off.",
                                  "widget": self.anchor()})
         self.assertEqual(status, 201, row)
         # A page with no blocks has none.
-        self.assertEqual(cli.api_page(self.out_dir, "plan").widgets, {})
+        self.assertEqual(serve_pages.api_page(self.out_dir, "plan").widgets, {})
 
 
 class EarlierVersionTests(AnchorCase):
@@ -258,7 +259,7 @@ class WithoutGitTests(AnchorCase):
         self.assertEqual((status, payload.get("versions")), (200, []))
 
     def test_a_hash_the_block_had_in_an_earlier_publish_is_stored_as_sent(self):
-        self.assertEqual(cli.api_page(self.out_dir, "churn").widgets["churn"].earlier,
+        self.assertEqual(serve_pages.api_page(self.out_dir, "churn").widgets["churn"].earlier,
                          {self.first, self.block_hash()})
         self.check_stored_as_sent(self.first)
 
@@ -384,7 +385,7 @@ class SourceTests(AnchorCase):
         visible = '<template class="lotuspod-live"><p>visible widget</p></template>'
         self.publish_churn('<h1>Churn<template class="lotuspod-live"><p>heading widget</p>'
                            f'</template></h1>\n<p>Intro.</p>\n{visible}\n', ".html")
-        [ident] = cli.api_page(self.out_dir, "churn").widgets
+        [ident] = serve_pages.api_page(self.out_dir, "churn").widgets
         status, row = self.post({"section": comments.PAGE_SECTION, "text": "@hermes Off.",
                                  "widget": {"id": ident, "hash": self.block_hash(ident),
                                             "state": ""}})
@@ -399,7 +400,7 @@ class SourceTests(AnchorCase):
         page.write_text(served.replace("<p>How merges go.</p>", decoy + "<p>How merges go.</p>"),
                         encoding="utf-8")
         self.assertIn(decoy, page.read_text(encoding="utf-8"))
-        block = cli.api_page(self.out_dir, "churn").widgets["churn"]
+        block = serve_pages.api_page(self.out_dir, "churn").widgets["churn"]
         self.assertEqual((block.title, block.section), (TITLE, "throughput"))
         self.assertNotEqual(block.hash, "a" * 12)
 
@@ -412,7 +413,7 @@ class SourceTests(AnchorCase):
         page.write_text(served.replace("<p>How merges go.</p>", decoy + "<p>How merges go.</p>"),
                         encoding="utf-8")
         self.assertIn(decoy, page.read_text(encoding="utf-8"))
-        block = cli.api_page(self.out_dir, "churn").widgets["churn"]
+        block = serve_pages.api_page(self.out_dir, "churn").widgets["churn"]
         self.assertEqual((block.title, block.section, block.hash),
                          (TITLE, "throughput", self.block_hash()))
 
@@ -423,7 +424,7 @@ class SourceTests(AnchorCase):
         page.write_text(served.replace("<p>Merges an hour.</p>", "<p>Merges an hour.</p>" + inert),
                         encoding="utf-8")
         self.assertIn(inert, page.read_text(encoding="utf-8"))
-        widgets = cli.api_page(self.out_dir, "churn").widgets
+        widgets = serve_pages.api_page(self.out_dir, "churn").widgets
         self.assertEqual((widgets["churn"].section, widgets["lag"].section),
                          ("throughput", "latency"))
 

@@ -9,7 +9,8 @@ from unittest import mock
 
 from tests.test_agent_pull import PullTestCase, run_cli
 from tests.test_inbox import InboxTestCase
-from lotuspod import cli, machine, serve_files
+from lotuspod import machine
+from lotuspod.features.serve import pages as serve_pages, serve_files
 from lotuspod.features.history import archive
 from lotuspod.store import db
 
@@ -60,8 +61,8 @@ class PullCatalogTests(PullTestCase):
         hide(self, "plan-03")
         items = self.pull("hermes")
         routes = machine.Routes(db.Database(self.db_path),
-                                pages=partial(cli.api_page, self.out_dir),
-                                describe=partial(cli.agent_page, self.out_dir))
+                                pages=partial(serve_pages.api_page, self.out_dir),
+                                describe=partial(serve_pages.agent_page, self.out_dir))
         headers = Message()
         headers["Authorization"] = f"Bearer {machine.read_token(self.desk)}"
         status, payload, _ = routes.answer("GET", "/v1/pull?owner=hermes", headers)

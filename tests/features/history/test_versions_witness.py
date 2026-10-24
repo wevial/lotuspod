@@ -28,7 +28,8 @@ from tests.features.publish.test_publish_witness import parse
 REPO = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(REPO / "src"))
 
-from lotuspod import access, cli, core  # noqa: E402
+from lotuspod import core  # noqa: E402
+from lotuspod.features.serve import access, handler as serve_handler  # noqa: E402
 from lotuspod.features.history import versions  # noqa: E402
 from tests import access_keys  # noqa: E402
 
@@ -282,8 +283,8 @@ class GitProcessTests(VersionsWitness):
         commits = self.commits(self.out, PAGE)
 
         verifier = access.Verifier(access.parse_config(access_keys.config_section()))
-        server = cli._make_server(self.out, "127.0.0.1", 0, verifier=verifier,
-                                  db_path=self.db)
+        server = serve_handler._make_server(self.out, "127.0.0.1", 0, verifier=verifier,
+                                            db_path=self.db)
         self.addCleanup(server.server_close)
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()

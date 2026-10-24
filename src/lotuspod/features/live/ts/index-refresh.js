@@ -1,4 +1,4 @@
-// Built from web/src/index-refresh.ts by web/build.ts. Edit that file, not this one.
+// Built from src/lotuspod/features/live/ts/index-refresh.ts by web/build.ts. Edit that file, not this one.
 (() => {
   const main = document.querySelector("main.index");
   if (!main)

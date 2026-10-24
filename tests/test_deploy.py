@@ -19,7 +19,7 @@ import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from tests.test_serve_theme import SRC, STYLESHEET, ServedSite
+from tests.features.serve.test_serve_theme import SRC, STYLESHEET, ServedSite
 
 ROOT = Path(__file__).resolve().parents[1]
 DEPLOY = ROOT / "deploy" / "lotuspod-deploy.py"

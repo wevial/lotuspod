@@ -1,4 +1,4 @@
-"""Test suite for Cloudflare Access at serve's /api (`src/lotuspod/access.py`).
+"""Test suite for Cloudflare Access at serve's /api (`src/lotuspod/features/serve/access.py`).
 
 serve knows the signed-in reader only from a Cf-Access-Jwt-Assertion that
 verifies against the team's key set: right issuer, exact audience, unexpired,
@@ -9,7 +9,7 @@ loopback port.
 
 Run from the repo root:
 
-    python -m unittest tests.test_access -v
+    python -m unittest tests.features.serve.test_access -v
 """
 
 from __future__ import annotations
@@ -31,10 +31,12 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from unittest import mock
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
-from lotuspod import access, cli  # noqa: E402
+from lotuspod import cli  # noqa: E402
+from lotuspod.features.serve import access  # noqa: E402
+from lotuspod.features.serve import commands as serve_commands, handler as serve_handler  # noqa: E402
 from tests import access_keys as keys  # noqa: E402
 
 HOST = "127.0.0.1"
@@ -151,8 +153,8 @@ class ServedSiteTestCase(unittest.TestCase):
             self.config.write_text(config_text, encoding="utf-8")
             env["LOTUSPOD_CONFIG"] = str(self.config)
         with mock.patch.dict(os.environ, env):
-            verifier = cli.access_verifier()
-        server = cli._make_server(self.out_dir, HOST, 0, verifier=verifier)
+            verifier = serve_commands.access_verifier()
+        server = serve_handler._make_server(self.out_dir, HOST, 0, verifier=verifier)
         self.base = f"http://{HOST}:{server.server_address[1]}"
         serve_in_thread(self, server)
 
@@ -183,7 +185,7 @@ class ServedSiteTestCase(unittest.TestCase):
 
 def quiet(testcase: unittest.TestCase) -> None:
     """Keep the servers' request log off the test output."""
-    patcher = mock.patch.object(cli._AllowListHandler, "log_message", lambda *a: None)
+    patcher = mock.patch.object(serve_handler._AllowListHandler, "log_message", lambda *a: None)
     patcher.start()
     testcase.addCleanup(patcher.stop)
 
@@ -384,7 +386,7 @@ class ServeCommandTests(unittest.TestCase):
         server = mock.Mock()
         server.serve_forever.side_effect = KeyboardInterrupt
         out, err = io.StringIO(), io.StringIO()
-        with mock.patch.object(cli, "_make_server", return_value=server) as make, \
+        with mock.patch.object(serve_commands, "_make_server", return_value=server) as make, \
                 redirect_stdout(out), redirect_stderr(err):
             rc = cli.main(["serve", "--host", HOST, "--port", "0", "--out-dir", str(self.work),
                            "--socket", str(self.work / "lotuspod.sock")])

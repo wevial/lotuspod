@@ -31,6 +31,7 @@ SRC_DIR = Path(__file__).resolve().parents[3] / "src"
 sys.path.insert(0, str(SRC_DIR))
 
 from lotuspod import cli  # noqa: E402
+from lotuspod.features.serve import handler as serve_handler  # noqa: E402
 from lotuspod.features.publish import media  # noqa: E402
 from lotuspod.store import db  # noqa: E402
 
@@ -207,7 +208,7 @@ class ServeMediaTests(unittest.TestCase):
             self.stored[name] = image
         (self.tmp / db.DEFAULT_NAME).write_text("database-secret", encoding="utf-8")
 
-        server = cli._make_server(self.out_dir, "127.0.0.1", 0)
+        server = serve_handler._make_server(self.out_dir, "127.0.0.1", 0)
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
 

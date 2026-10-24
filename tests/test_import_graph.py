@@ -50,38 +50,20 @@ FEATURES = "lotuspod.features"
 # The slice each module still flat in src/lotuspod/ moves into. cli.py, the
 # entry point, is split across them by the moves themselves.
 TARGET_TREE = {
-    "access": "serve",
     "agents": "agents",
-    "api": "serve",
-    "events": "live",
     "machine": "agents",
     "responder": "agents",
     "routing": "agents",
-    "serve_files": "serve",
 }
 
 # The slice each function and class cli.py still holds moves into. One of
 # them using a name another slice owns makes an edge, as an import does; the
 # parser and main stay with the entry point.
 CLI_FUNCTIONS = {
-    "_AllowListHandler": "serve",
-    "_Catalog": "serve",
-    "_make_server": "serve",
-    "_stop_serving": "serve",
-    "access_verifier": "serve",
-    "agent_page": "agents",
-    "api_catalog": "serve",
-    "api_page": "serve",
-    "claim_seconds": "serve",
     "cmd_audit": "serve",
     "cmd_credential_create": "serve",
     "cmd_credential_list": "serve",
     "cmd_credential_revoke": "serve",
-    "cmd_serve": "serve",
-    "owner_window": "serve",
-    "resolve_serve_host": "serve",
-    "serve_socket_path": "serve",
-    "served_page_names": "serve",
 }
 
 # Each import that reaches past another slice's __init__.py into its modules
@@ -113,6 +95,7 @@ EDGES = (
     ("publish", "widgets"),  # markdown.py:53 imports widgets
     ("serve", "agents"),  # api.py:222 imports routing
     ("serve", "comments"),  # api.py:222 imports comments
+    ("serve", "decisions"),  # cli.py:115, api_page, calls decisions.read_forms
     ("serve", "history"),  # api.py:222 imports versions
     ("serve", "live"),  # cli.py:2583, _AllowListHandler, uses events
     ("serve", "publish"),  # api.py:222 imports media

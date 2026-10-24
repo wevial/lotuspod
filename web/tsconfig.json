@@ -1,6 +1,6 @@
 {
   // The build script and its test, on Bun's types; the browser sources have
-  // their own config in src/.
+  // their own config in ../src/lotuspod/core/ts/.
   "compilerOptions": {
     "target": "ESNext",
     "module": "Preserve",

@@ -15,7 +15,7 @@ describe it in a public pull request.
 In scope:
 
 - `lotuspod serve`;
-- the Cloudflare Access check, in `src/lotuspod/access.py`;
+- the Cloudflare Access check, in `src/lotuspod/features/serve/access.py`;
 - the agent socket and its credentials;
 - the page policy, what a published page may run.
 

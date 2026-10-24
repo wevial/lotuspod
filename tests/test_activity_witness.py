@@ -6,7 +6,7 @@ list carries the same summary.
 Real git in temporary directories, with a local identity, each commit dated
 with GIT_COMMITTER_DATE; pages published with this checkout's CLI. serve is
 the real `lotuspod serve`, run on a thread of this process so its clock can
-be held (the Api's, as tests.test_api holds it), with its agents' socket:
+be held (the Api's, as tests.features.serve.test_api holds it), with its agents' socket:
 hermes replies through it with real `lotuspod comments` commands. The test
 reaches the port with Access assertions it signs itself
 (tests.features.decisions.test_answers_witness). The git processes lotuspod.features.history.versions starts are
@@ -35,7 +35,9 @@ from tests.features.history.test_versions_witness import VersionsWitness
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "src"))
 
-from lotuspod import api, cli, machine  # noqa: E402
+from lotuspod import cli, machine  # noqa: E402
+from lotuspod.features.serve import api  # noqa: E402
+from lotuspod.features.serve import commands as serve_commands, handler as serve_handler  # noqa: E402
 from lotuspod.features.decisions import decisions  # noqa: E402
 from lotuspod.features.history import versions  # noqa: E402
 
@@ -111,7 +113,7 @@ class ActivityWitness(VersionsWitness):
         its routes."""
         made = {}
         ready = threading.Event()
-        real_port, real_socket = cli._make_server, machine.SocketServer
+        real_port, real_socket = serve_handler._make_server, machine.SocketServer
 
         def make_port(*args, **kwargs):
             made["port"] = real_port(*args, **kwargs)
@@ -125,7 +127,7 @@ class ActivityWitness(VersionsWitness):
         argv = ["serve", "--host", "127.0.0.1", "--port", "0", "--out-dir", str(self.out),
                 "--db", str(self.db), "--socket", str(self.sock)]
         thread = threading.Thread(target=cli.main, args=(argv,), daemon=True)
-        patches = (mock.patch.object(cli, "_make_server", make_port),
+        patches = (mock.patch.object(serve_commands, "_make_server", make_port),
                    mock.patch.object(machine, "SocketServer", make_socket),
                    mock.patch.dict(os.environ, {"LOTUSPOD_CONFIG": self.env["LOTUSPOD_CONFIG"]}))
         output = io.StringIO()
@@ -144,7 +146,7 @@ class ActivityWitness(VersionsWitness):
                 patcher.stop()
         self.assertTrue(started, output.getvalue())
         server = made["port"]
-        for handler in (cli._AllowListHandler, machine._Handler):
+        for handler in (serve_handler._AllowListHandler, machine._Handler):
             patcher = mock.patch.object(handler, "log_message", lambda *a: None)
             patcher.start()
             self.addCleanup(patcher.stop)

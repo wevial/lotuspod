@@ -30,6 +30,7 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "src"))
 
 from lotuspod import cli, core  # noqa: E402
+from lotuspod.features.serve import handler as serve_handler  # noqa: E402
 from lotuspod.features.blocks import refs  # noqa: E402
 from lotuspod.features.publish import render  # noqa: E402
 
@@ -367,7 +368,7 @@ class KeptRefsTests(PublishTestCase):
         rc, _, err = self.publish("--refs", str(self.refs_file({"refs": ENTRIES})))
         self.assertEqual(rc, 0, err)
         self.assertTrue((self.out_dir / "plan.refs.json").is_file())
-        server = cli._make_server(self.out_dir, "127.0.0.1", 0)
+        server = serve_handler._make_server(self.out_dir, "127.0.0.1", 0)
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         try:

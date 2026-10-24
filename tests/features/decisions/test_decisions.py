@@ -30,7 +30,8 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "src"))
 
-from lotuspod import access, cli, core  # noqa: E402
+from lotuspod import cli, core  # noqa: E402
+from lotuspod.features.serve import access, handler as serve_handler  # noqa: E402
 from lotuspod.features.decisions import commands as decisions_commands  # noqa: E402
 from lotuspod.features.decisions import decisions  # noqa: E402
 from lotuspod.features.publish import markdown  # noqa: E402
@@ -773,13 +774,13 @@ class ServedTestCase(DecisionsTestCase):
         env = mock.patch.dict(os.environ, {"LOTUSPOD_CONFIG": str(config)})
         env.start()
         self.addCleanup(env.stop)
-        patcher = mock.patch.object(cli._AllowListHandler, "log_message", lambda *a: None)
+        patcher = mock.patch.object(serve_handler._AllowListHandler, "log_message", lambda *a: None)
         patcher.start()
         self.addCleanup(patcher.stop)
         self.source = self.work / "pond.md"
         verifier = access.Verifier(access.parse_config(access_keys.config_section()))
-        server = cli._make_server(self.out_dir, "127.0.0.1", 0, verifier=verifier,
-                                  db_path=self.work / "lotuspod.sqlite3")
+        server = serve_handler._make_server(self.out_dir, "127.0.0.1", 0, verifier=verifier,
+                                            db_path=self.work / "lotuspod.sqlite3")
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         self.port = server.server_address[1]

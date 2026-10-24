@@ -29,7 +29,8 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "src"))
 
-from lotuspod import access, cli, core, machine, routing  # noqa: E402
+from lotuspod import cli, core, machine, routing  # noqa: E402
+from lotuspod.features.serve import access, handler as serve_handler  # noqa: E402
 from lotuspod.features.comments import comments  # noqa: E402
 from lotuspod.features.publish import media  # noqa: E402
 from lotuspod.store import db  # noqa: E402
@@ -352,14 +353,14 @@ class SectionCheckTests(CommentsTestCase):
         config = self.work / "config.ini"
         config.write_text(keys.config_text(), encoding="utf-8")
         os.environ["LOTUSPOD_CONFIG"] = str(config)
-        patcher = mock.patch.object(cli._AllowListHandler, "log_message", lambda *a: None)
+        patcher = mock.patch.object(serve_handler._AllowListHandler, "log_message", lambda *a: None)
         patcher.start()
         self.addCleanup(patcher.stop)
         rc, err = self.publish(self.source())
         self.assertEqual(rc, 0, err)
         verifier = access.Verifier(access.parse_config(keys.config_section()))
-        server = cli._make_server(self.out_dir, HOST, 0, verifier=verifier,
-                                  db_path=self.db_path)
+        server = serve_handler._make_server(self.out_dir, HOST, 0, verifier=verifier,
+                                            db_path=self.db_path)
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         self.addCleanup(thread.join, 5)

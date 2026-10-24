@@ -70,7 +70,7 @@ with open(sys.argv[1], "w", encoding="utf-8") as fh:
 UPLOADS_COMMAND = """\
 import json, os, sys, urllib.error, urllib.request
 sys.path.insert(0, "src")
-from lotuspod import api
+from lotuspod.features.serve import api
 frog = open("tests/fixtures/media/frog-140x100.gif", "rb").read()
 headers = {"Cf-Access-Jwt-Assertion": os.environ["LOTUSPOD_TEST_ASSERTION"],
            "Content-Type": "image/gif"}

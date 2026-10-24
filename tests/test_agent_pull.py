@@ -34,7 +34,8 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from lotuspod import api, cli, core, machine, routing, store  # noqa: E402
+from lotuspod import cli, core, machine, routing, store  # noqa: E402
+from lotuspod.features.serve import api, commands as serve_commands, handler as serve_handler  # noqa: E402
 from lotuspod.features.decisions import decisions  # noqa: E402
 from lotuspod.features.publish import media  # noqa: E402
 from tests import access_keys as keys  # noqa: E402
@@ -120,7 +121,7 @@ class PullTestCase(unittest.TestCase):
         env.start()
         self.addCleanup(env.stop)
         os.environ.pop(machine.CREDENTIAL_ENV, None)
-        for handler in (cli._AllowListHandler, machine._Handler):
+        for handler in (serve_handler._AllowListHandler, machine._Handler):
             patcher = mock.patch.object(handler, "log_message", lambda *a: None)
             patcher.start()
             self.addCleanup(patcher.stop)
@@ -149,7 +150,7 @@ class PullTestCase(unittest.TestCase):
     def serve(self) -> None:
         made = {}
         ready = threading.Event()
-        real_port, real_socket = cli._make_server, machine.SocketServer
+        real_port, real_socket = serve_handler._make_server, machine.SocketServer
 
         def make_port(*args, **kwargs):
             made["port"] = real_port(*args, **kwargs)
@@ -164,7 +165,7 @@ class PullTestCase(unittest.TestCase):
         if self.window is not None:
             argv += ["--owner-window", str(self.window)]
         thread = threading.Thread(target=cli.main, args=(argv,), daemon=True)
-        patches = (mock.patch.object(cli, "_make_server", make_port),
+        patches = (mock.patch.object(serve_commands, "_make_server", make_port),
                    mock.patch.object(machine, "SocketServer", make_socket))
         for patcher in patches:
             patcher.start()
@@ -1652,16 +1653,16 @@ class OwnerWindowOptionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             config = Path(tmp) / "config.ini"
             with mock.patch.dict(os.environ, {"LOTUSPOD_CONFIG": str(config)}):
-                self.assertEqual(cli.owner_window(None), routing.DEFAULT_WINDOW)
+                self.assertEqual(serve_commands.owner_window(None), routing.DEFAULT_WINDOW)
                 config.write_text("[comments]\nowner_window_sec = 42\n", encoding="utf-8")
-                self.assertEqual(cli.owner_window(None), 42)
-                self.assertEqual(cli.owner_window(7), 7)
+                self.assertEqual(serve_commands.owner_window(None), 42)
+                self.assertEqual(serve_commands.owner_window(7), 7)
                 for bad in (0, -1):
                     with self.subTest(flag=bad), self.assertRaises(core.ConfigError):
-                        cli.owner_window(bad)
+                        serve_commands.owner_window(bad)
                 config.write_text("[comments]\nowner_window_sec = soon\n", encoding="utf-8")
                 with self.assertRaises(core.ConfigError):
-                    cli.owner_window(None)
+                    serve_commands.owner_window(None)
 
 
 class ReadmeTests(unittest.TestCase):

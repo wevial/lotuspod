@@ -22,6 +22,7 @@ SRC_DIR = Path(__file__).resolve().parents[3] / "src"
 sys.path.insert(0, str(SRC_DIR))
 
 from lotuspod import cli, core  # noqa: E402
+from lotuspod.features.serve import handler as serve_handler  # noqa: E402
 
 
 SOURCE_BYTES = "# Pond\n\nStill water, café.\r\n".encode("utf-8")
@@ -196,7 +197,7 @@ class ServedRepositoryTests(RepoTestCase):
         source.write_bytes(SOURCE_BYTES)
         rc, _, err = self.render("pond", "--source", str(source))
         assert rc == 0, err
-        self.server = cli._make_server(self.out_dir, "127.0.0.1", 0)
+        self.server = serve_handler._make_server(self.out_dir, "127.0.0.1", 0)
         self.port = self.server.server_address[1]
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()

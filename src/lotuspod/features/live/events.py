@@ -7,7 +7,8 @@ import threading
 from pathlib import Path
 from typing import Callable
 
-from lotuspod import core, serve_files
+from lotuspod import core
+from lotuspod.features.serve import serve_files
 
 PATH = "/api/events"
 MAX_STREAMS = 32

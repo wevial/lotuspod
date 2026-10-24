@@ -1,10 +1,10 @@
 """`lotuspod serve` reads its allow-list once per /api request: /api/seen
-and /api/activity answer through cli.api_catalog as api.Api answers
+and /api/activity answer through pages.api_catalog as api.Api answers
 without one, and their time grows linearly with the site's page count.
 
 Run from the repo root:
 
-    python -m unittest tests.test_api_catalog -v
+    python -m unittest tests.features.serve.test_api_catalog -v
 """
 
 from __future__ import annotations
@@ -24,15 +24,17 @@ from functools import partial
 from pathlib import Path
 from unittest import mock
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "src"))
 
-from lotuspod import access, api, cli, core, serve_files  # noqa: E402
+from lotuspod import core  # noqa: E402
+from lotuspod.features.serve import access, api, serve_files  # noqa: E402
+from lotuspod.features.serve import handler as serve_handler, pages as serve_pages  # noqa: E402
 from lotuspod.features.publish import render  # noqa: E402
 from lotuspod.features.history import archive, versions  # noqa: E402
 from lotuspod.store import db  # noqa: E402
 from tests import access_keys as keys  # noqa: E402
 from tests.capture_site import repository  # noqa: E402
-from tests.test_api import ACTOR, DECISIONS_BODY, HOST, ApiTestCase, quiet, run_cli  # noqa: E402
+from tests.features.serve.test_api import ACTOR, DECISIONS_BODY, HOST, ApiTestCase, quiet, run_cli  # noqa: E402
 
 # Enough text that reading a page costs about what a real one does.
 BODY = DECISIONS_BODY + "".join(
@@ -69,8 +71,8 @@ class CatalogTestCase(unittest.TestCase):
         self.revision = core.page_revision(self.out_dir, page_name(0))
 
         verifier = access.Verifier(access.parse_config(keys.config_section()))
-        server = cli._make_server(self.out_dir, HOST, 0, verifier=verifier,
-                                  db_path=self.db_path)
+        server = serve_handler._make_server(self.out_dir, HOST, 0, verifier=verifier,
+                                            db_path=self.db_path)
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         self.port = server.server_address[1]
@@ -98,9 +100,9 @@ class CatalogTestCase(unittest.TestCase):
     def uncatalogued(self, path: str, query: str = "") -> dict:
         """The answer of api.Api built without a catalog, as serve built it
         before."""
-        routes = api.Api(db.Database(self.db_path), partial(cli.api_page, self.out_dir),
+        routes = api.Api(db.Database(self.db_path), partial(serve_pages.api_page, self.out_dir),
                          history=versions.History(self.out_dir, render.version_stamp),
-                         names=partial(cli.served_page_names, self.out_dir))
+                         names=partial(serve_pages.served_page_names, self.out_dir))
         status, payload, _ = routes.answer("GET", path, query, Message(), None, ACTOR)
         self.assertEqual(status, 200, payload)
         return payload
@@ -179,7 +181,7 @@ class CatalogTests(CatalogTestCase):
 
     def test_a_page_hidden_after_the_read_is_not_served(self) -> None:
         self.grow(2)
-        lookup = cli.api_catalog(self.out_dir)
+        lookup = serve_pages.api_catalog(self.out_dir)
         self.assertIsNotNone(lookup(page_name(0)))
         run_cli("render", "--name", page_name(1), "--title", "Private", "--hidden",
                 "--body", BODY, "--out-dir", str(self.out_dir))
@@ -187,7 +189,7 @@ class CatalogTests(CatalogTestCase):
 
     def test_a_page_linked_away_after_the_read_is_not_served(self) -> None:
         self.grow(2)
-        lookup = cli.api_catalog(self.out_dir)
+        lookup = serve_pages.api_catalog(self.out_dir)
         self.assertIsNotNone(lookup(page_name(0)))
         outside = self.work / "outside.html"
         shutil.copyfile(self.out_dir / f"{page_name(0)}.html", outside)

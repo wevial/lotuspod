@@ -32,6 +32,7 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from lotuspod import agents, cli, core, machine  # noqa: E402
+from lotuspod.features.serve import commands as serve_commands, handler as serve_handler  # noqa: E402
 from lotuspod.features.publish import media  # noqa: E402
 from lotuspod.store import db  # noqa: E402
 from tests import access_keys as keys  # noqa: E402
@@ -65,7 +66,7 @@ class MachineTestCase(unittest.TestCase):
         env = mock.patch.dict(os.environ, {"LOTUSPOD_CONFIG": str(self.config)})
         env.start()
         self.addCleanup(env.stop)
-        for handler in (cli._AllowListHandler, machine._Handler):
+        for handler in (serve_handler._AllowListHandler, machine._Handler):
             patcher = mock.patch.object(handler, "log_message", lambda *a: None)
             patcher.start()
             self.addCleanup(patcher.stop)
@@ -188,7 +189,7 @@ class ServeTestCase(MachineTestCase):
         super().setUp()
         made = {}
         ready = threading.Event()
-        real_port, real_socket = cli._make_server, machine.SocketServer
+        real_port, real_socket = serve_handler._make_server, machine.SocketServer
 
         def make_port(*args, **kwargs):
             made["port"] = real_port(*args, **kwargs)
@@ -205,7 +206,7 @@ class ServeTestCase(MachineTestCase):
             results["rc"] = cli.main(["serve", "--host", HOST, "--port", "0",
                                       "--out-dir", str(self.out_dir)])
 
-        patches = (mock.patch.object(cli, "_make_server", make_port),
+        patches = (mock.patch.object(serve_commands, "_make_server", make_port),
                    mock.patch.object(machine, "SocketServer", make_socket))
         for patcher in patches:
             patcher.start()
@@ -422,7 +423,7 @@ class ClientOptionTests(MachineTestCase):
                          core.DEFAULT_OUTPUT_DIR.parent / machine.SOCKET_NAME)
         self.config.write_text("[agents]\nsocket = /run/l.sock\n", encoding="utf-8")
         self.assertEqual(agents.agent_socket(self.args()), Path("/run/l.sock"))
-        self.assertEqual(cli.serve_socket_path(self.db_path, ""), Path("/run/l.sock"))
+        self.assertEqual(serve_commands.serve_socket_path(self.db_path, ""), Path("/run/l.sock"))
 
     def test_credential_comes_from_the_flag_then_the_environment(self):
         token = self.hermes()

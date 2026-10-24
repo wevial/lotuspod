@@ -58,7 +58,7 @@ The pictures come from a sample page served on loopback by the test fixture;
 ```
 lotuspod/
 ├── src/lotuspod/          # package + CLI (`lotuspod render|publish|manifest|index|serve|credential|answers|audit|comments|inbox|respond|backup|restore|archive|unarchive`)
-│   ├── cli.py             # the entry point: the commands, and serve
+│   ├── cli.py             # the entry point: the commands
 │   ├── core/              # what every part shares (imports nothing else in Lotuspod)
 │   │   ├── templates/artifact.html  # artifact template ({{placeholder}} substitution)
 │   │   ├── theme/         # tokens.json (colors, fonts, radii), base.css, favicon.svg
@@ -72,8 +72,10 @@ lotuspod/
 │   │   ├── index/         # the site's listing (`index`); templates/index.html, the index-page template
 │   │   ├── comments/      # comment boxes, the comments panel's islands, the review sheet, attachments, narrow windows, the panel's resize
 │   │   ├── decisions/     # a page's decision tables, answered on the page (`answers`)
+│   │   ├── live/          # serve's change stream and the page's live scripts: revision checks, the swap, the index's refresh
+│   │   ├── serve/         # `serve`: its allow-list and handler, the /api routes and the Cloudflare Access check
 │   │   └── backup/        # `backup` and `restore`
-│   └── _theme/            # css/, js/; the served lotuspod.css is core/theme/base.css, css/ and the slices' theme/ joined in order
+│   └── _theme/            # css/, theme-head.js; the served lotuspod.css is core/theme/base.css, css/ and the slices' theme/ joined in order
 ├── artifacts/             # rendered output (gitignored)
 └── lotuspod-media/        # markdown pages' images and the images readers attach to comments, beside artifacts/ (gitignored)
 ```
@@ -161,13 +163,13 @@ are the record.
 
 ## Security
 
-Report a vulnerability privately ([SECURITY.md](SECURITY.md)). `src/lotuspod/access.py` checks Cloudflare
+Report a vulnerability privately ([SECURITY.md](SECURITY.md)). `src/lotuspod/features/serve/access.py` checks Cloudflare
 Access's RS256 assertions with the standard library: the package has no runtime dependencies, the check only
 verifies (never signs or makes keys), and RS256 is one modular exponentiation plus a comparison of the whole
 re-encoded PKCS#1 v1.5 block, leaving no parser to trick. It refuses any `alg` but RS256, a key id not in
 the team's key set, keys under 2048 bits, and a wrong issuer, audience, time or email; it never reads the
-plain email header. Pinned by `tests.test_access.VerifierTests.test_header_must_name_rs256_and_a_listed_key`,
-`tests.test_access.VerifierTests.test_signature_block_is_compared_whole`,
-`tests.test_access.VerifierTests.test_keys_under_2048_bits_are_not_listed`,
-`tests.test_access.VerifierTests.test_malformed_tokens_are_invalid` and
-`tests.test_access.WhoamiTests.test_email_header_naming_someone_else_is_not_read`.
+plain email header. Pinned by `tests.features.serve.test_access.VerifierTests.test_header_must_name_rs256_and_a_listed_key`,
+`tests.features.serve.test_access.VerifierTests.test_signature_block_is_compared_whole`,
+`tests.features.serve.test_access.VerifierTests.test_keys_under_2048_bits_are_not_listed`,
+`tests.features.serve.test_access.VerifierTests.test_malformed_tokens_are_invalid` and
+`tests.features.serve.test_access.WhoamiTests.test_email_header_naming_someone_else_is_not_read`.

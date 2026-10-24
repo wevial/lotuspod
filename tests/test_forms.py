@@ -25,7 +25,8 @@ from unittest import mock
 
 from tests.features.publish.test_manifest_v2 import TempDirTestCase, stylesheet_hash
 
-from lotuspod import cli, core  # after test_manifest_v2, which puts src/ on the path
+from lotuspod import core  # after test_manifest_v2, which puts src/ on the path
+from lotuspod.features.serve import handler as serve_handler  # after test_manifest_v2, which puts src/ on the path
 
 FIXTURES = Path(__file__).parent / "fixtures"
 GENERATOR_TAG = '<meta name="generator" content="lotuspod theme lotus">'
@@ -157,10 +158,10 @@ class PageScriptTests(FormsTestCase):
             (FIXTURES / "no_task_list.expected.html").read_bytes(),
         )
 
-        patcher = mock.patch.object(cli._AllowListHandler, "log_message", lambda *a: None)
+        patcher = mock.patch.object(serve_handler._AllowListHandler, "log_message", lambda *a: None)
         patcher.start()
         self.addCleanup(patcher.stop)
-        server = cli._make_server(self.out_dir, "127.0.0.1", 0)
+        server = serve_handler._make_server(self.out_dir, "127.0.0.1", 0)
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         self.addCleanup(thread.join, 5)

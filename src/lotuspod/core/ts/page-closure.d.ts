@@ -1,6 +1,6 @@
 // The names the page script's sources share in the closure the join wraps
 // them in (THEME_CLOSURES in src/lotuspod/core/__init__.py), as a page source written
-// in TypeScript (web/src/page-swap.ts) calls them: declared once here, each
+// in TypeScript (features/live/ts/page-swap.ts) calls them: declared once here, each
 // with the source that defines it. A source's own top-level names join these
 // in the one closure, so none may repeat another source's.
 
@@ -83,7 +83,7 @@ interface DocumentEventMap {
   "lotuspod:diagrams": CustomEvent<DiagramsDetail>;
 }
 
-// web/src/page-swap.ts: hold back from a swap each part whose nodes (a
+// features/live/ts/page-swap.ts: hold back from a swap each part whose nodes (a
 // section's heading and wrapper, or the intro's) test says to, told whether
 // the new revision took the part away.
 declare function holdSwap(test: (nodes: readonly Element[], removed: boolean) => boolean): void;
