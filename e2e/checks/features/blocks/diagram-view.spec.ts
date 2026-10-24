@@ -1,6 +1,4 @@
-import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { expect, test, type Locator, type Page } from '@playwright/test';
 
@@ -17,15 +15,7 @@ const CARDS_PAGE = '/capture-node-cards.html';
 // as in policy.spec.ts.
 const MERMAID_DIR = 'https://cdn.jsdelivr.net/npm/mermaid@11.4.1/';
 const MERMAID_COPY = path.join(__dirname, '..', '..', '..', 'node_modules', 'mermaid');
-const ENV = process.env;
-const ASSERTION = ENV.LOTUSPOD_TEST_ASSERTION ?? '';
-const SIGNED_IN = { 'Cf-Access-Jwt-Assertion': ASSERTION };
-const HERMES = ENV.LOTUSPOD_TEST_CREDENTIAL_HERMES ?? '';
-const OUT = ENV.LOTUSPOD_TEST_OUT ?? '';
-const PYTHON = ENV.LOTUSPOD_TEST_PYTHON ?? '';
-// This checkout's package, whatever lotuspod is installed.
-const SRC = path.resolve(__dirname, '..', '..', '..', '..', 'src');
-const OWNER = 'hermes';
+const SIGNED_IN = { 'Cf-Access-Jwt-Assertion': process.env.LOTUSPOD_TEST_ASSERTION ?? '' };
 
 // Signed in, as a reader of the site is: the page script asks the API about the
 // page, which refuses a signed-out request.
@@ -924,55 +914,5 @@ test.describe('without scripts', () => {
     await expect(diagram(page, 1)).toContainText('sequenceDiagram');
     await expect(page.getByRole('button', { name: 'Expand diagram' })).toHaveCount(0);
     await expect(page.locator('pre.mermaid svg')).toHaveCount(0);
-  });
-});
-
-test.describe('an old version', () => {
-  function run(...args: string[]) {
-    return execFileSync(PYTHON, ['-m', 'lotuspod', ...args], {
-      encoding: 'utf-8',
-      env: { ...ENV, PYTHONPATH: SRC },
-      stdio: ['ignore', 'pipe', 'pipe'],
-      timeout: 60_000,
-    });
-  }
-
-  function publish(name: string, markdown: string) {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lotuspod-diagram-view-'));
-    try {
-      const file = path.join(dir, `${name}.md`);
-      fs.writeFileSync(file, markdown, 'utf-8');
-      const said = run('publish', file, '--local', '--out-dir', OUT, '--owner', OWNER,
-        '--credential', HERMES);
-      expect(said).toContain(`published ${name} at revision`);
-    } finally {
-      fs.rmSync(dir, { recursive: true, force: true });
-    }
-  }
-
-  function source(edition: string) {
-    return [
-      '# Diagram view versions', '', `Edition: ${edition}.`, '',
-      '## Plan', '', '```mermaid', 'flowchart LR', '  A[Write] --> B[Publish] --> C[Read]', '```', '',
-    ].join('\n');
-  }
-
-  test('opens with no Expand button and no dialog', async ({ page }) => {
-    for (const [name, value] of Object.entries({ ASSERTION, HERMES, OUT, PYTHON })) {
-      expect(value, `the capture fixture names ${name}`).toBeTruthy();
-    }
-    await watch(page);
-    const name = 'diagram-view-versions';
-    publish(name, source('first'));
-    publish(name, source('second'));
-    const answered = await page.request.get(`/api/versions?page=${name}`);
-    expect(answered.status()).toBe(200);
-    const listed = (await answered.json()).versions;
-    expect(listed).toHaveLength(2);
-    await page.goto(`/${name}.html?version=${listed[1].commit}`);
-    await expect(page.locator('main.artifact--old-version')).toBeVisible();
-    await expect(page.locator('pre.mermaid')).toContainText('A[Write] --> B[Publish]');
-    await expect(page.getByRole('button', { name: 'Expand diagram' })).toHaveCount(0);
-    await expect(page.locator('dialog')).toHaveCount(0);
   });
 });

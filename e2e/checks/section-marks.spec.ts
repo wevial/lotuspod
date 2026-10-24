@@ -261,6 +261,8 @@ test.describe('signed in', () => {
     await expect(third.drawn).toHaveText('2 new');
     await expect(first.button).toHaveAttribute('aria-expanded', 'true');
     await expect(first.drawn).toHaveCount(0);
+    // Open, the heading's text is its title and the review sheet's mark.
+    await expect(second.heading).toHaveText('Decisions for the maintainer 1 open');
 
     const control = page.locator('nav.artifact-outline button.artifact-sections-all');
     await expect(control).toHaveText('Collapse all');
@@ -269,37 +271,16 @@ test.describe('signed in', () => {
     // Its thread was drawn while it was open: the first section stays unmarked.
     await expect(first.drawn).toHaveCount(0);
     await expect(second.drawn).toHaveText('1 to answer');
+    await expect(second.button).toHaveAccessibleName(/1 to answer/);
     await expect(third.drawn).toHaveText('2 new');
 
     await control.click();
     await expect(control).toHaveText('Collapse all');
     await expect(page.locator('.artifact-section-mark:not([hidden])')).toHaveCount(0);
+    await expect(second.heading).toHaveText('Decisions for the maintainer 1 open');
     for (let index = 0; index < IDS.length; index += 1) {
       await expect(section(page, index).button).toHaveAccessibleName(TITLES[index]);
     }
-    await seen.clean();
-  });
-
-  test('a folded question with no answer marks its heading 1 to answer', async ({ page }) => {
-    const seen = await watch(page);
-    let reads = 0;
-    await page.route((url) => url.pathname === '/api/answers', (route) => {
-      reads += 1;
-      return route.fulfill({ json: { page: SLUG, questions: {} } });
-    });
-    await serveThreads(page, () => []);
-    await load(page);
-    const second = section(page, 1);
-    await expect.poll(() => reads).toBe(1);
-    await expect(second.form).not.toHaveClass(/artifact-decision--saved/);
-    // Open, the heading's text is its title and the review sheet's mark.
-    await expect(second.heading).toHaveText('Decisions for the maintainer 1 open');
-    await fold(page, 1);
-    await expect(second.drawn).toHaveText('1 to answer');
-    await expect(second.button).toHaveAccessibleName(/1 to answer/);
-    await second.button.click();
-    await expect(second.drawn).toHaveCount(0);
-    await expect(second.heading).toHaveText('Decisions for the maintainer 1 open');
     await seen.clean();
   });
 
