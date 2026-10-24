@@ -504,10 +504,12 @@ test('a widget opened alone follows the system as it changes', async ({ page }) 
     });
   });
   await page.goto(`/${file}`);
-  expect(await page.evaluate(() => (window as any).lotuspod.theme)).toBe('night');
+  // Opened alone, the file runs inside the framing page's one frame.
+  const alone = page.frameLocator('iframe').locator(':root');
+  await expect.poll(() => alone.evaluate(() => (window as any).lotuspod?.theme)).toBe('night');
   await page.emulateMedia({ colorScheme: 'light' });
-  await expect.poll(() => page.evaluate(() => (window as any).lotuspod.theme)).toBe('dawn');
-  expect(await page.evaluate(() => (window as any).heard)).toBe('dawn');
+  await expect.poll(() => alone.evaluate(() => (window as any).lotuspod.theme)).toBe('dawn');
+  expect(await alone.evaluate(() => (window as any).heard)).toBe('dawn');
   expect(errors).toEqual([]);
 });
 

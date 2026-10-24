@@ -21,6 +21,15 @@
 // from demo-agent to the thread of its form's section. Image uploads are
 // refused.
 //
+// A new thread on a section, or on the whole page, may be anchored to one of
+// the page's live blocks with `widget`, {id, hash, state}, refused as serve
+// refuses it: 400 invalid_body for one not of that shape, beside a quote or
+// on a reply; 400 unknown_widget for an id the page has no block for, or a
+// block in another section than the thread's; and 409 stale_widget for a
+// hash other than the block's file's now, as the demo has no earlier
+// publishes. The thread's first comment keeps the widget as sent; every
+// reply, demo-agent's included, and every other comment keeps widget null.
+//
 // Everything is kept under keys starting KEY, the page script's own
 // "lotuspod:" keys left alone, and kept until the banner's "Reset demo"
 // button removes every KEY key and reloads the page.
@@ -37,6 +46,14 @@
   var AGENT_ACTOR = { kind: "agent", handle: AGENT, credential: AGENT };
   var REPLY_AFTER = 3000;
   var MAX_TEXT = 4000;
+  // The longest block id and widget state a thread's widget may name.
+  var MAX_WIDGET_ID = 16 << 10;
+  var MAX_STATE = 80;
+  var WIDGET_HASH = /^[0-9a-f]{12}$/;
+  // A control character, which a widget's state never holds.
+  var CONTROL = /[\u0000-\u001f\u007f-\u009f]/;
+  // Half of a surrogate pair standing alone, which serve refuses.
+  var LONE_SURROGATE = /[\ud800-\udbff](?![\udc00-\udfff])|(?:^|[^\ud800-\udbff])[\udc00-\udfff]/;
   // The largest image the comments route says it takes; none is ever taken.
   var MAX_IMAGE_BYTES = 10 * 1024 * 1024;
   var NO_UPLOADS = "image uploading is disabled for the demo";
@@ -117,6 +134,19 @@
     return value;
   }
 
+  // value as a string of low to high characters, counted as serve counts
+  // them, by code point, and holding no lone surrogate.
+  function chars(value, low, high) {
+    if (typeof value !== "string" || LONE_SURROGATE.test(value)) {
+      throw invalid();
+    }
+    var count = Array.from(value).length;
+    if (count < low || count > high) {
+      throw invalid();
+    }
+    return value;
+  }
+
   function id(value) {
     if (typeof value !== "number" || Math.floor(value) !== value || value < 1) {
       throw invalid();
@@ -146,7 +176,7 @@
       parent: fields.parent,
       text: fields.text,
       quote: fields.quote || null,
-      widget: null,
+      widget: fields.widget || null,
       images: [],
       actor: fields.actor,
       createdAt: now(),
@@ -260,6 +290,66 @@
     };
   }
 
+  // value as a live block's anchor, {id, hash, state}; invalid_body for
+  // anything else.
+  function widget(value) {
+    if (!value || typeof value !== "object" || Object.keys(value).sort().join() !== "hash,id,state") {
+      throw invalid();
+    }
+    var anchor = {
+      id: chars(value.id, 1, MAX_WIDGET_ID),
+      hash: chars(value.hash, 12, 12),
+      state: chars(value.state, 0, MAX_STATE),
+    };
+    if (!WIDGET_HASH.test(anchor.hash) || CONTROL.test(anchor.state)) {
+      throw invalid();
+    }
+    return anchor;
+  }
+
+  // The page's live block ident: its frame, else null.
+  function blockFrame(ident) {
+    return Array.prototype.filter.call(document.querySelectorAll("iframe.artifact-widget"),
+      function (frame) { return frame.dataset.widget === ident; })[0] || null;
+  }
+
+  // The section a block's frame is in, as the page script places it: its
+  // wrapper's, else the whole page, "", or "page" on a page whose only box
+  // is "page".
+  function blockSection(frame) {
+    var body = frame.closest(".artifact-section-body");
+    if (body) {
+      return body.dataset.section || "";
+    }
+    var boxes = Array.prototype.map.call(document.querySelectorAll("details.artifact-comment"),
+      function (box) { return box.dataset.section; });
+    return boxes.length && boxes.every(function (name) { return name === "page"; }) ? "page" : "";
+  }
+
+  // The 12 hex digits of the file a block's frame shows now.
+  function blockHash(frame) {
+    var source = frame.dataset.pausedSource || frame.getAttribute("src") || "";
+    var named = /\.w-([0-9a-f]{12})\.html$/.exec(source);
+    return named ? named[1] : "";
+  }
+
+  // value as the anchor of a new thread on section, quoted or not;
+  // Refusal when serve would refuse it.
+  function anchor(value, section, quoted) {
+    var sent = widget(value);
+    if (quoted) {
+      throw invalid();
+    }
+    var frame = blockFrame(sent.id);
+    if (!frame || blockSection(frame) !== section) {
+      throw new Refusal(400, "unknown_widget");
+    }
+    if (sent.hash !== blockHash(frame)) {
+      throw new Refusal(409, "stale_widget");
+    }
+    return sent;
+  }
+
   function postResolution(fields) {
     var page = text(fields.page, 1, 100);
     var root = id(fields.thread);
@@ -300,6 +390,10 @@
     var stored = comments(page);
     var made;
     if (own(fields, "parent")) {
+      // A reply is on its thread's anchor, and names none of its own.
+      if (own(fields, "widget")) {
+        throw invalid();
+      }
       var parent = id(fields.parent);
       var found = stored.rows.filter(function (entry) { return entry.id === parent; })[0];
       if (!found) {
@@ -344,7 +438,10 @@
       if (own(fields, "revision") && fields.revision !== revision()) {
         throw new Refusal(409, "stale_page");
       }
-      made = readerRow(page, { section: section, parent: null, text: words, quote: quoted });
+      var block = own(fields, "widget") ? anchor(fields.widget, section, quoted) : null;
+      made = readerRow(page, {
+        section: section, parent: null, text: words, quote: quoted, widget: block,
+      });
     }
     stored.rows.push(made);
     save(THREADS + page, stored);

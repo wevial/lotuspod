@@ -265,6 +265,8 @@ export interface NarrowBridge extends Pick<import("./comments/parts").ThreadList
   routed: ThreadListBridge["routed"];
   decisionOf: ThreadListBridge["decisionOf"];
   anchorOf(thread: Thread): HTMLElement | null;
+  // The title and state of the live block a thread is on, else null.
+  blockOf(thread: Thread): { title: string; state: string } | null;
   unfold(target: HTMLElement): void;
   barBottom(): number;
   standsFor(box: HTMLElement): HTMLElement | null;

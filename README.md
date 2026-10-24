@@ -115,9 +115,12 @@ first line is three backticks and `html live`, with a `title=`; here are its
 three lines, without the backticks that open and close it. It is safe to put
 on a page because it runs in a sandboxed frame: it cannot fetch or load
 anything from elsewhere, read the page around it, or see the reader's session
-or comments. It can still move its own frame to another address, carrying
-what the reader typed into it, so it is for showing things, not for asking
-for secrets.
+or comments. Nor can it move itself to another site: on its page, the page's
+`frame-src 'self'` policy stops its frame loading anything from elsewhere, and
+opened alone it runs inside a frame of the site's under the same rule. A
+browser that sends no `Sec-Fetch-Dest` header (one reaching the site over
+plain HTTP at an address that is not local) gets the file itself when it
+opens it alone, without that frame around it.
 
 ```text
 html live title="A counter"

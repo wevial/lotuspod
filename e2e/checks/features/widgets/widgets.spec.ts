@@ -149,7 +149,7 @@ fetch('/api/whoami').then(() => note('fetch FAILED'), () => note('fetch blocked'
   const src = await page.locator('iframe.artifact-widget').getAttribute('src');
   const alone = await context.newPage();
   await alone.goto('/' + src);
-  expect(await alone.evaluate(() => self.origin)).toBe('null');
+  expect(await alone.frameLocator('iframe').locator('body').evaluate(() => self.origin)).toBe('null');
   await alone.close();
   await page.locator('details.artifact-comment[data-section="watch-the-pond"] summary').click();
   // The page's authenticated comment flow remains available beside the widget.
