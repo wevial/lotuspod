@@ -129,12 +129,12 @@ export function replies(page: Page, bridge: RepliesBridge) {
     return "Your question was not sent (" + error + "). Try again.";
   }
 
-  // A question about a decision, its note's text, posted as a question
-  // thread on it, which saves no answer: once it is sent, sent() runs, then
-  // the thread is added and opens where the window has room for it. What
+  // A question about a decision posted as a question thread on it, which
+  // saves no answer: once it is sent, sent() runs, then the thread is added
+  // and, unless opens is false, opens where the window has room for it. What
   // the form is to say comes back, "" once it is sent; a fetch that fails
   // throws.
-  async function ask(question: string, text: string, sent: () => void): Promise<string> {
+  async function ask(question: string, text: string, sent: () => void, opens = true): Promise<string> {
     const body: Question = { page: bridge.page, question, text };
     const revision = bridge.revision();
     if (revision !== null) body.revision = revision;
@@ -148,7 +148,7 @@ export function replies(page: Page, bridge: RepliesBridge) {
     sent();
     bridge.add({ root: payload, replies: [] });
     bridge.posted();
-    bridge.placement().asked(shown.get(payload.id));
+    if (opens) bridge.placement().asked(shown.get(payload.id));
     return "";
   }
 

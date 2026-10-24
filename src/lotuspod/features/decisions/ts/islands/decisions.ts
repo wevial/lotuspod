@@ -2,7 +2,7 @@ import { effect, signal, untracked, type ReadonlySignal } from "@preact/signals"
 import { answerStore, store, UNANSWERED, type Answer, type Page, type Swapped } from "../../../comments/ts/index";
 import { answeredTable } from "./answered";
 import { giveAsk } from "./ask";
-import { acting, adopt, dirty, draw, mark, queue, refused, saved, unfold, type Card, type Deck } from "./card";
+import { acting, adopt, dirty, draw, mark, openCard, queue, refused, restore, saved, unfold, type Card, type Deck } from "./card";
 import { all, isChecklist, optionText, same, summary, ticked } from "./checklist";
 import { dismissals } from "./dismiss";
 import { decisionsPanel } from "./panel";
@@ -245,7 +245,13 @@ export function decisions(page: Page): Cards | null {
     });
   });
   // The Decisions tab, on a page that takes answers.
-  decisionsPanel({ forms, marked, ready, save, toAnswer, saved: reading.saved, dirty: reading.dirty },
+  decisionsPanel({
+    forms, marked, ready, save, toAnswer, saved: reading.saved, dirty: reading.dirty,
+    reopen: (form) => {
+      if (form.classList.contains("artifact-decision--saved")) openCard(deck, cardOf(form));
+    },
+    restore: (form) => restore(deck, cardOf(form)),
+  },
     () => forms.length > 0 && !page.archived);
 
   // The answers read, the table placed after the body's last section, and

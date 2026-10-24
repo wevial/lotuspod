@@ -8,8 +8,9 @@ import { expect, test, type APIRequestContext, type Page } from '@playwright/tes
 // as hermes on the capture fixture's site with a real `lotuspod publish
 // --local --comments`: "Pull request rows" asks 1 (no default) and 2,
 // "Screenshots on a row" asks 3 and "Backfill" asks 4, each with a default.
-// Question 4 is saved and one thread posted on "Screenshots on a row" before
-// the reader loads it, so three questions are to answer and one thread is
+// Question 4 is saved as "Only open tickets" with a note, which opens a
+// thread on it, and one thread posted on "Screenshots on a row" before the
+// reader loads it, so three questions are to answer and two threads are
 // open. The run shares one database, so each check names its own page.
 const ENV = process.env;
 const ASSERTION = ENV.LOTUSPOD_TEST_ASSERTION ?? '';
@@ -27,6 +28,8 @@ const OPTIONS: Record<string, string[]> = {
   'decision-2': ['Added and removed', 'One total', 'A small bar'],
   'decision-3': ['Overlay on the console', 'A new tab'],
 };
+const BACKFILL = ['Only open tickets', 'Everything since September', 'None'];
+const NOTE_4 = 'Merged ones can keep the blank cell.';
 const MARKDOWN = ['# Console PR rows plan', '',
   'How each PR row reads in the console.', '',
   '## Pull request rows', '',
@@ -44,7 +47,7 @@ const MARKDOWN = ['# Console PR rows plan', '',
   'The rows of tickets opened before the change.', '',
   '### Decisions for the maintainer', '',
   '| # | Question | Context | Options | Default |', '| --- | --- | --- | --- | --- |',
-  '| 4 | Backfill which tickets? | Closed tickets are rarely opened again. | Only open tickets / Every ticket | Only open tickets |',
+  `| 4 | Backfill which tickets? | Closed tickets are rarely opened again. | ${BACKFILL.join(' / ')} | Only open tickets |`,
   ''].join('\n');
 // A page with comments and no decision or checklist forms.
 const PLAIN = ['# Pond notes', '', 'Notes on the pond.', '', '## Fish', '', 'Two koi.', ''].join('\n');
@@ -82,8 +85,8 @@ function publish(name: string, markdown: string) {
   }
 }
 
-// The page published, question 4 saved at its default and one thread on
-// "Screenshots on a row", each through the site's routes.
+// The page published, question 4 saved at its default with a note and one
+// thread on "Screenshots on a row", each through the site's routes.
 async function prepare(request: APIRequestContext, name: string) {
   publish(name, MARKDOWN);
   const html = await (await request.get(`/${name}.html?standalone`)).text();
@@ -93,7 +96,7 @@ async function prepare(request: APIRequestContext, name: string) {
     ?? 'screenshots-on-a-row';
   const answered = await request.post('/api/answers', {
     headers: SIGNED_IN,
-    data: { page: name, question: 'decision-4', version, choice: 'only-open-tickets', note: '' },
+    data: { page: name, question: 'decision-4', version, choice: 'only-open-tickets', note: NOTE_4 },
   });
   expect(answered.status()).toBe(201);
   const thread = await request.post('/api/comments', {
@@ -166,6 +169,30 @@ function panel(page: Page) {
     opener: rail.locator('.artifact-comments-opener'),
     dots: rail.locator('ol.artifact-comments-dots'),
     fold: aside.locator('button.artifact-comments-fold'),
+    answered: decisions.locator('details.artifact-decisions-answered'),
+    answeredSummary: decisions.locator('details.artifact-decisions-answered > summary'),
+    answeredTitles: decisions.locator('.artifact-decisions-answered-title'),
+    rows: decisions.locator('.artifact-decisions-row'),
+  };
+}
+
+// A saved question's row in the Decisions tab's Answered list.
+function row(page: Page, question: string) {
+  const item = page.locator(`.artifact-comments-decisions .artifact-decisions-row[data-question="${question}"]`);
+  return {
+    item,
+    title: item.locator('button.artifact-decisions-row-title'),
+    label: item.locator('.artifact-decisions-row-label'),
+    by: item.locator('.artifact-decisions-row-by'),
+    change: item.getByRole('button', { name: 'change', exact: true }),
+    radios: item.getByRole('radio'),
+    option: (name: string) => item.getByRole('radio', { name }),
+    noteSummary: item.locator('details.artifact-decisions-note > summary'),
+    note: item.locator('details.artifact-decisions-note textarea'),
+    save: item.getByRole('button', { name: 'Save', exact: true }),
+    cancel: item.getByRole('button', { name: 'Cancel', exact: true }),
+    unsaved: item.locator('.artifact-decisions-unsaved'),
+    show: item.getByRole('button', { name: 'Show on page' }),
   };
 }
 
@@ -184,6 +211,23 @@ function entry(page: Page, question: string) {
     unsaved: item.locator('.artifact-decisions-unsaved'),
     saved: item.locator('.artifact-decisions-saved'),
     show: item.getByRole('button', { name: 'Show on page' }),
+    ask: item.locator('.artifact-decisions-foot button.artifact-decisions-ask'),
+    askField: item.locator('.artifact-decisions-asking textarea'),
+    askSend: item.locator('.artifact-decisions-asking button.artifact-decisions-ask-send'),
+    askStatus: item.locator('.artifact-decisions-asking .artifact-decisions-ask-status'),
+    threads: item.locator('button.artifact-decisions-threads'),
+  };
+}
+
+// What the site keeps for a page: its answers by question and its threads.
+async function stored(request: APIRequestContext, name: string) {
+  const answers = await request.get(`/api/answers?page=${name}`, { headers: SIGNED_IN });
+  const comments = await request.get(`/api/comments?page=${name}`, { headers: SIGNED_IN });
+  expect(answers.status()).toBe(200);
+  expect(comments.status()).toBe(200);
+  return {
+    answers: (await answers.json()).questions as Record<string, { current: { choice?: string; note?: string } | null }>,
+    threads: (await comments.json()).threads as { root: { question?: string; text: string } }[],
   };
 }
 
@@ -225,7 +269,7 @@ test('every question with no saved answer is to answer, in the title bar, the ma
   await expect(side.tabs).toBeVisible();
   await expect(side.tabs.getByRole('tab')).toHaveCount(2);
   await expect(side.badge('Decisions')).toHaveText('3');
-  await expect(side.badge('Comments')).toHaveText('1');
+  await expect(side.badge('Comments')).toHaveText('2');
   await expect(side.title).toHaveCount(0);
   await expect(side.tab('Decisions')).toHaveAttribute('aria-selected', 'true');
   await expect(side.decisions).toBeVisible();
@@ -265,7 +309,7 @@ test('every question with no saved answer is to answer, in the title bar, the ma
   // The tab's badge counts the open threads; the count line is read, not
   // shown, so the ways to start a thread sit right under the tabs.
   const tally = threads.locator('.artifact-comments-tally');
-  await expect(tally.locator('.artifact-comments-count')).toHaveText('1 open · 0 resolved');
+  await expect(tally.locator('.artifact-comments-count')).toHaveText('2 open · 0 resolved');
   expect(await tally.evaluate((node) => node.getBoundingClientRect().height)).toBe(0);
   expect(errors).toEqual([]);
 });
@@ -493,5 +537,300 @@ test('a folded heading counts a saved question reopened by its change as answere
   await expect(page.locator('h2#pull-request-rows .artifact-section-mark:not([hidden])')).toHaveText('1 to answer');
   await expect(page.locator('button.artifact-review-count')).toHaveText('2 to answer · Respond');
   await expect(side.badge('Decisions')).toHaveText('2');
+  expect(errors).toEqual([]);
+});
+
+test('a saved question moves to the folded Answered list, and its row changes the answer in place', async ({ page, request }) => {
+  test.setTimeout(90_000);
+  test.skip(test.info().repeatEachIndex > 0, 'answers a page the first repeat answered');
+  const name = 'decisions-panel-answered';
+  await prepare(request, name);
+  const errors = watch(page);
+  await load(page, name);
+  const side = panel(page);
+  const four = row(page, 'decision-4');
+  const fourth = card(page, 'decision-4');
+
+  await expect(side.answered).toHaveJSProperty('open', false);
+  await expect(side.answeredSummary).toHaveText('Answered · 1');
+  await side.answeredSummary.click();
+  await expect(side.answered).toHaveJSProperty('open', true);
+  await expect(side.answeredTitles).toHaveText(['Backfill']);
+  await expect(side.rows).toHaveCount(1);
+  await expect(four.title).toHaveText('4 · Backfill which tickets?');
+  await expect(four.label).toHaveText('Only open tickets');
+  const by = (await fourth.form.locator('.artifact-decision-saved-by').innerText()).trim();
+  expect(by).not.toBe('');
+  await expect(four.by).toHaveText(by);
+  await expect(four.change).toBeVisible();
+  await expect(four.radios).toHaveCount(0);
+
+  // Saved from its entry, its Ask field left open and empty, question 1
+  // reads "Saved", then joins the list, which stays open.
+  const one = entry(page, 'decision-1');
+  await one.item.getByRole('button', { name: 'Ask', exact: true }).click();
+  await expect(page.getByRole('textbox', { name: 'Ask about decision 1' })).toBeVisible();
+  await one.option('Beside the title').check();
+  await one.save.click();
+  await expect(one.saved).toHaveText('✓ Saved · Beside the title');
+  await expect(one.item).toHaveCount(0);
+  await expect(side.answeredSummary).toHaveText('Answered · 2');
+  await expect(side.answered).toHaveJSProperty('open', true);
+  await expect(side.answeredTitles).toHaveText(['Pull request rows', 'Backfill']);
+  expect(await side.rows.evaluateAll((items) => items.map((item) => (item as HTMLElement).dataset.question)))
+    .toEqual(['decision-1', 'decision-4']);
+  await expect(row(page, 'decision-1').title).toHaveText('1 · Where should the diff size sit?');
+  await expect(row(page, 'decision-1').label).toHaveText('Beside the title');
+  // A row saved with no note still edits it under "Edit note", and an Ask
+  // field left empty does not follow it: an Answered row has no Ask.
+  await row(page, 'decision-1').change.click();
+  await expect(row(page, 'decision-1').noteSummary).toHaveText('Edit note');
+  await expect(row(page, 'decision-1').item.locator('.artifact-decisions-asking')).toHaveCount(0);
+  await expect(row(page, 'decision-1').item.getByRole('button', { name: 'Ask', exact: true })).toHaveCount(0);
+  await row(page, 'decision-1').title.click();
+  await expect(row(page, 'decision-1').radios).toHaveCount(0);
+
+  // "change" opens the row in place, as saved.
+  await four.change.click();
+  await expect(four.option('Only open tickets')).toBeChecked();
+  await expect(four.radios).toHaveCount(BACKFILL.length);
+  await expect(four.noteSummary).toHaveText('Edit note');
+  await expect(four.note).toHaveValue(NOTE_4);
+  for (const button of [four.save, four.cancel, four.show]) await expect(button).toBeVisible();
+  await expect(four.unsaved).toBeHidden();
+  await expect(fourth.saved).toBeVisible();
+
+  // A pick opens the card, not saved.
+  await four.option('Everything since September').check();
+  await expect(four.unsaved).toHaveText('not saved');
+  await expect(four.unsaved).toBeVisible();
+  await expect(fourth.form).not.toHaveClass(/artifact-decision--saved/);
+  await expect(fourth.option('Everything since September')).toBeChecked();
+  await expect(fourth.unsaved).toBeVisible();
+
+  // Cancel puts the saved pick back in both, folds the card and collapses
+  // the row.
+  await four.cancel.click();
+  // The folded card's radios are hidden, so they are found by value.
+  await expect(fourth.form.locator('input[name="choice"][value="only-open-tickets"]')).toBeChecked();
+  await expect(fourth.saved).toHaveText('✓ Saved · Only open tickets · change');
+  await expect(fourth.unsaved).toBeHidden();
+  await expect(four.radios).toHaveCount(0);
+  await expect(four.label).toHaveText('Only open tickets');
+  await four.title.click();
+  await expect(four.option('Only open tickets')).toBeChecked();
+  await expect(four.note).toHaveValue(NOTE_4);
+
+  // Saved, the row collapses to its new answer, still in the list.
+  await four.option('None').check();
+  await four.note.fill('None after all.');
+  await expect(fourth.note).toHaveValue('None after all.');
+  // Cancel waits while the Save is under way.
+  let release = () => {};
+  const held = new Promise<void>((resolve) => { release = resolve; });
+  await page.route((url) => url.pathname === '/api/answers', async (route) => {
+    if (route.request().method() === 'POST') await held;
+    return route.fallback();
+  });
+  const posted = page.waitForResponse((response) =>
+    new URL(response.url()).pathname === '/api/answers' && response.request().method() === 'POST');
+  await four.save.click();
+  await expect(four.cancel).toBeDisabled();
+  release();
+  expect((await posted).status()).toBe(201);
+  await expect(four.radios).toHaveCount(0);
+  await expect(four.label).toHaveText('None');
+  await expect(fourth.saved).toHaveText('✓ Saved · None · change');
+  await expect(side.answeredSummary).toHaveText('Answered · 2');
+  const { answers } = await stored(request, name);
+  expect(answers['decision-4'].current).toMatchObject({ choice: 'none', note: 'None after all.' });
+  expect(errors).toEqual([]);
+});
+
+test('a question asked from the panel posts its own field, not the note, and its entry links to the thread', async ({ page, request }) => {
+  test.setTimeout(90_000);
+  test.skip(test.info().repeatEachIndex > 0, 'asks on a page the first repeat asked on');
+  const name = 'decisions-panel-ask';
+  await prepare(request, name);
+  const errors = watch(page);
+  await load(page, name);
+  const side = panel(page);
+  const two = entry(page, 'decision-2');
+  const second = card(page, 'decision-2');
+  const asked = 'Does the total count generated files?';
+
+  await two.addNote.click();
+  await two.note.fill('Keep it short.');
+  await expect(second.note).toHaveValue('Keep it short.');
+  await expect(two.threads).toHaveCount(0);
+  await two.ask.click();
+  const field = side.decisions.getByRole('textbox', { name: 'Ask about decision 2' });
+  await expect(field).toBeFocused();
+  await field.fill(asked);
+  const posted = page.waitForResponse((response) =>
+    new URL(response.url()).pathname === '/api/comments' && response.request().method() === 'POST');
+  await two.askSend.click();
+  const sent = await posted;
+  expect(sent.status()).toBe(201);
+  expect(sent.request().postDataJSON()).toMatchObject({ page: name, question: 'decision-2', text: asked });
+  await expect(two.askField).toHaveCount(0);
+  await expect(second.note).toHaveValue('Keep it short.');
+  await expect(two.note).toHaveValue('Keep it short.');
+  await expect(side.tab('Decisions')).toHaveAttribute('aria-selected', 'true');
+  const { threads } = await stored(request, name);
+  expect(threads.filter((thread) => thread.root.question === 'decision-2').map((thread) => thread.root.text))
+    .toEqual([asked]);
+  await expect(second.form.locator('xpath=following-sibling::*[1]')).toHaveClass(/artifact-decision-chip/);
+  await expect(second.form.locator('xpath=following-sibling::*[1]')).toContainText('1 comment');
+
+  // The entry's link opens the thread in the Comments tab.
+  await expect(two.threads.locator('.artifact-decisions-threads-count')).toHaveText('1 thread');
+  await expect(two.threads.locator('.artifact-decisions-threads-standing')).toHaveText('waiting');
+  await two.threads.click();
+  await expect(side.tab('Comments')).toHaveAttribute('aria-selected', 'true');
+  const group = side.groups.locator('.artifact-comments-group')
+    .filter({ has: page.locator('.artifact-comments-group-title', { hasText: 'Pull request rows' }) });
+  const opened = group.locator('.artifact-comments-entry--open');
+  await expect(opened).toHaveCount(1);
+  await expect(opened).toContainText(asked);
+  await expect(opened).toBeInViewport();
+
+  // Opened again, the field is empty.
+  await side.tab('Decisions').click();
+  await two.ask.click();
+  await expect(two.askField).toHaveValue('');
+
+  // Dismissed with an unsent question in its Ask, it is in neither list.
+  await two.askField.fill('Unsent question');
+  await second.form.getByRole('button', { name: 'Dismiss', exact: true }).click();
+  await expect(second.saved).toContainText('Dismissed');
+  await expect(two.item).toHaveCount(0);
+  await expect(row(page, 'decision-2').item).toHaveCount(0);
+  expect(errors).toEqual([]);
+});
+
+test('an empty panel Ask posts nothing, and the card\'s Ask still sends and empties the note', async ({ page, request }) => {
+  test.setTimeout(90_000);
+  test.skip(test.info().repeatEachIndex > 0, 'asks on a page the first repeat asked on');
+  const name = 'decisions-panel-ask-empty';
+  await prepare(request, name);
+  const errors = watch(page, ['500 (Internal Server Error)']);
+  await load(page, name);
+  const posts: string[] = [];
+  page.on('request', (sent) => {
+    if (new URL(sent.url()).pathname === '/api/comments' && sent.method() === 'POST') posts.push(sent.postData() ?? '');
+  });
+  const before = (await stored(request, name)).threads.length;
+  const three = entry(page, 'decision-3');
+  await three.ask.click();
+  await expect(page.getByRole('textbox', { name: 'Ask about decision 3' })).toBeVisible();
+  await three.askSend.click();
+  await expect(three.askStatus).toHaveText('Write your question first.');
+  expect(posts).toEqual([]);
+  expect((await stored(request, name)).threads.length).toBe(before);
+
+  const second = card(page, 'decision-2');
+  const two = entry(page, 'decision-2');
+  const question = 'Is the minus sign a true minus?';
+  await second.noteBox.locator('summary').click();
+  await second.note.fill(question);
+  await expect(two.note).toHaveValue(question);
+  const posted = page.waitForResponse((response) =>
+    new URL(response.url()).pathname === '/api/comments' && response.request().method() === 'POST');
+  await second.form.getByRole('button', { name: 'Ask', exact: true }).click();
+  const sent = await posted;
+  expect(sent.status()).toBe(201);
+  expect(sent.request().postDataJSON()).toMatchObject({ question: 'decision-2', text: question });
+  await expect(second.note).toHaveValue('');
+  await panel(page).tab('Decisions').click();
+  await expect(two.note).toHaveValue('');
+
+  // Text added while a question is sending stays in the field, unsent.
+  let release = () => {};
+  const held = new Promise<void>((resolve) => { release = resolve; });
+  await page.route((url) => url.pathname === '/api/comments', async (route) => {
+    if (route.request().method() === 'POST') await held;
+    return route.fallback();
+  });
+  await three.askField.fill('Does Esc close it?');
+  const asked = page.waitForResponse((response) =>
+    new URL(response.url()).pathname === '/api/comments' && response.request().method() === 'POST');
+  await three.askSend.click();
+  await three.askField.fill('Does Esc close it? And a click outside?');
+  release();
+  expect((await asked).request().postDataJSON()).toMatchObject({ question: 'decision-3', text: 'Does Esc close it?' });
+  await expect(three.askStatus).toHaveText('');
+  await expect(three.askField).toHaveValue('Does Esc close it? And a click outside?');
+
+  // The question's section, held back by its unsaved pick and then updated
+  // to a new revision, keeps its field open with the unsent question.
+  await page.evaluate(() => {
+    (window as any).swapped = new Promise<void>((resolve) =>
+      document.addEventListener('lotuspod:swapped', () => setTimeout(resolve), { once: true }));
+  });
+  publish(name, MARKDOWN.replace('shown as thumbnails', 'each shown as a thumbnail'));
+  await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+  await page.evaluate(() => (window as any).swapped);
+  await page.locator('button.artifact-swap-update').click();
+  await expect(page.getByText('each shown as a thumbnail')).toBeVisible();
+  await expect(three.askField).toHaveValue('Does Esc close it? And a click outside?');
+
+  // Saved while its Ask holds an unsent question with a send still pending,
+  // the question still moves to Answered. Its row has no Ask, collapsed or
+  // open: opened, it shows the unsent question read only, with how the
+  // pending send went.
+  const side = panel(page);
+  const third = row(page, 'decision-3');
+  const carried = third.item.locator('.artifact-decisions-row-unsent');
+  let refuse = () => {};
+  const holding = new Promise<void>((resolve) => { refuse = resolve; });
+  const comments = (url: URL) => url.pathname === '/api/comments';
+  await page.route(comments, async (route) => {
+    if (route.request().method() === 'POST') {
+      await holding;
+      return route.fulfill({ status: 500, contentType: 'application/json',
+        body: JSON.stringify({ error: 'Internal server error while storing the question thread on this page' }) });
+    }
+    return route.fallback();
+  });
+  const refused = page.waitForResponse((response) =>
+    new URL(response.url()).pathname === '/api/comments' && response.request().method() === 'POST');
+  await three.askSend.click();
+  await expect(three.askSend).toBeDisabled();
+  await three.save.click();
+  await expect(card(page, 'decision-3').saved).toBeVisible();
+  await expect(three.item).toHaveCount(0);
+  await expect(side.answeredSummary).toHaveText('Answered · 2');
+  await side.answeredSummary.click();
+  await expect(third.label).toHaveText('Overlay on the console');
+  await expect(third.item.locator('textarea')).toHaveCount(0);
+  await expect(third.item.getByRole('button', { name: 'Ask', exact: true })).toHaveCount(0);
+  await third.change.click();
+  await expect(carried.locator('q')).toHaveText('Does Esc close it? And a click outside?');
+  await expect(carried).toContainText('Your question, not sent:');
+  await expect(carried).toContainText('Sending your question...');
+  await expect(third.item.locator('.artifact-decisions-asking')).toHaveCount(0);
+  await expect(third.item.getByRole('button', { name: 'Ask', exact: true })).toHaveCount(0);
+  refuse();
+  expect((await refused).status()).toBe(500);
+  const status = carried.locator('.artifact-decisions-ask-status');
+  await expect(status).not.toHaveText('Sending your question...');
+  await expect(status).not.toHaveText('');
+  await expect(carried.locator('q')).toHaveText('Does Esc close it? And a click outside?');
+  await expect(third.item.getByRole('button', { name: 'Ask', exact: true })).toHaveCount(0);
+  // A long refusal wraps inside the panel.
+  const [inside, right] = await Promise.all([
+    status.evaluate((node) => node.getBoundingClientRect().right),
+    side.aside.evaluate((node) => node.getBoundingClientRect().right),
+  ]);
+  expect(inside).toBeLessThanOrEqual(right);
+  expect(await side.decisions.evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true);
+  await page.unroute(comments);
+  const texts = (await stored(request, name)).threads.map((thread) => thread.root.text);
+  expect(texts.filter((text) => text === 'Does Esc close it?')).toHaveLength(1);
+  expect(texts).not.toContain('Does Esc close it? And a click outside?');
+  await third.cancel.click();
+  await expect(carried).toHaveCount(0);
+  await expect(row(page, 'decision-3').label).toHaveText('Overlay on the console');
   expect(errors).toEqual([]);
 });

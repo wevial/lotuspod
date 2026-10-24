@@ -241,10 +241,10 @@ export function adopt(deck: Deck, card: Card, value: Answers): void {
   draw(deck, card);
 }
 
-// "change": the card open again with its answer picked and its note; a
-// pick made since in the review sheet (comments/ts/islands/review-sheet.tsx)
-// stays picked.
-export function unfold(deck: Deck, card: Card): void {
+// The card open again with its answer picked and its note; a pick made
+// since in the review sheet (comments/ts/islands/review-sheet.tsx) or the
+// Decisions tab stays picked. The focus stays where it is.
+export function openCard(deck: Deck, card: Card): void {
   const { form } = card;
   if (!dirty(card)) {
     fill(card);
@@ -256,7 +256,20 @@ export function unfold(deck: Deck, card: Card): void {
   card.editing = true;
   status(form, "");
   draw(deck, card);
-  form.querySelector<HTMLInputElement>('input[name="choice"]:checked, input[name="item"]:checked')?.focus();
+}
+
+// "change": the card open again, its pick focused.
+export function unfold(deck: Deck, card: Card): void {
+  openCard(deck, card);
+  card.form.querySelector<HTMLInputElement>('input[name="choice"]:checked, input[name="item"]:checked')?.focus();
+}
+
+// The card's saved pick and note put back, and the card folded to its answer.
+export function restore(deck: Deck, card: Card): void {
+  fill(card);
+  card.editing = false;
+  status(card.form, "");
+  draw(deck, card);
 }
 
 // Why a form's answer was not saved, in its status: a form folded to its

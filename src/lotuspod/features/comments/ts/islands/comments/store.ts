@@ -566,7 +566,7 @@ export function store(page: Page, bridge: StoreBridge): Store {
     // state), the passages and the panel, the threads arranged as the
     // window allows, and the first read.
     start() {
-      shared.write.asking({ ask: replies.ask, owe });
+      shared.write.asking({ ask: replies.ask, owe, about: question => panel!.about(question) });
       passages = makePassages(page, {
         article, boxes, shown, resolved, revision, attached, composer,
         placement: () => panel!,

@@ -186,6 +186,23 @@ export function placement(page: Page, bridge: PlacementBridge): Placement {
     over.posted(thread, focused);
   };
 
+  // A decision's open threads, newest by its newest reader comment, which
+  // opens as the decision's chip opens it.
+  api.about = function (question) {
+    var threads = [...shown.values()].filter(function (thread) {
+      return !resolved(thread) && decisionOf(thread)?.form.dataset.question === question;
+    });
+    var newest = threadList.latest(threads);
+    if (!newest) {
+      return null;
+    }
+    return {
+      count: threads.length,
+      standing: threadList.standing(newest),
+      open: function () { reach(newest!, null, false); },
+    };
+  };
+
   api.open = function (thread) {
     shell.setOpen(true, true);
     threadList.expand(thread);

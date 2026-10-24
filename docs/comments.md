@@ -647,9 +647,43 @@ does as the question does. The entry and its card are one state: a pick or a
 note in either shows in both, and typing a note in the panel opens the
 card's. Save posts the card's answer with its note, as "Save answer" does,
 in the card's turn; saved, the card folds, the entry reads "✓ Saved · LABEL"
-for a moment and then leaves, and a section's heading goes with its last
-question. A refused save keeps the entry and its "not saved", and the card's
-status says why. With none left the tab reads "Nothing left to answer".
+for a moment and then moves to the Answered list, and a section's heading
+goes with its last question. A refused save keeps the entry and its "not
+saved", and the card's status says why. With none left the tab reads
+"Nothing left to answer". Each entry's foot also holds "Ask", which opens a
+field of its own under it, named "Ask about decision N" (N the question's
+number, else its text), with "Ask" and "Cancel": Ask posts the field's text
+as a question thread on the decision, as the card's Ask posts the note (see
+[Decisions for the
+maintainer](publishing.md#decisions-for-the-maintainer)), and the panel
+stays on Decisions. Sent, the field empties and closes, and the note, in the
+panel and on the card, is left as it was; an empty field reads "Write your
+question first." and posts nothing, a refused post keeps the text and says
+why, and text changed while the question was sending stays, unsent. The
+entry's "Ask" folds the field and keeps its text, and Cancel empties it. A
+question saved while its field holds an unsent question still moves to the
+Answered list. An Answered row has no Ask: opened, it shows that question,
+read only, as "Your question, not sent:", with how a send still pending went,
+and the collapsed row holds only its title, answer and "change". The field
+and its text are kept by question, so a section a new revision swaps in keeps
+them. An entry whose question has open threads ends in "?", "1 thread"
+(or "N threads") and where the newest stands as its chip reads it
+("answered", "writing", "waiting" or "failed"); pressing it opens the
+Comments tab at that thread, as the decision's chip does.
+
+After the questions to answer, a folded "Answered · N" list holds every
+question with a saved answer that is not a dismissal (a dismissed question
+is in neither list: its card and the Answered table show it), under the same
+section headings in page order. It stays folded or open as the reader left
+it. Each row reads the question's number and text, its answer's label, who
+saved it and when as its card says, and "change". Its text or "change" opens
+it in place: the card's context lines, its options with the card's pick, its
+note under "Edit note", Save, Cancel (held back while Save is under way),
+"not saved" while the card differs from its answer, and "Show on
+page". A pick or a note there opens the card on the page as its "change"
+does, showing "Not saved". Save posts the answer as the entry's Save does
+and collapses the row to the new answer; Cancel puts the saved pick and note
+back, folds the card to its answer again and collapses the row.
 Folded, such a page's rail holds an orchid button above the thread dots, the
 count over "to answer" set sideways (a mint "✓" over "answered" at none),
 named "N to answer: open the questions"; it opens the panel on Decisions.

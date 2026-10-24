@@ -42,14 +42,25 @@ export interface Answers {
 
 export const UNANSWERED: Answers = Object.freeze({ current: null, earlier: Object.freeze([]) as readonly Answer[] });
 
+// A decision's open threads, as the Decisions tab links to them: how many,
+// where the newest stands, as its chip reads it, and opening it as the
+// decision's chip does.
+export interface Asked {
+  count: number;
+  standing: "answered" | "writing" | "waiting" | "failed";
+  open(): void;
+}
+
 // What the decisions' Ask reaches the threads by, once the store has
 // started on a page with comment boxes: ask posts a question about a
-// decision, runs sent() once it is sent and opens its thread, giving back
-// what the form is to say ("" when it is sent); owe calls for a read of the
-// threads at once, an answer's note having opened or added to one.
+// decision, runs sent() once it is sent and, unless opens is false, opens
+// its thread, giving back what the form is to say ("" when it is sent); owe
+// calls for a read of the threads at once, an answer's note having opened or
+// added to one; about gives a question's open threads, null with none.
 export interface Asking {
-  ask(question: string, text: string, sent: () => void): Promise<string>;
+  ask(question: string, text: string, sent: () => void, opens?: boolean): Promise<string>;
   owe(): void;
+  about(question: string): Asked | null;
 }
 
 // The store's state, in signals, so every island reads the same live state
