@@ -558,7 +558,11 @@ export function reviewSheet(page: Page, cards: Cards | null): void {
   document.addEventListener("click", (event) => {
     const link = event.target instanceof Element ?
       event.target.closest('a.artifact-live-decisions, a[href^="#question="]') : null;
-    if (!link || event.defaultPrevented) {
+    // A click that opens the link elsewhere (a modifier, another button, or
+    // another browsing context) is the browser's.
+    const target = link?.getAttribute("target");
+    if (!link || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey ||
+      event.shiftKey || event.altKey || (target && target !== "_self")) {
       return;
     }
     const href = link.getAttribute("href") ?? "";

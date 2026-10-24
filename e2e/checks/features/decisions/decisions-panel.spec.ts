@@ -906,12 +906,18 @@ test('a card\'s title collapses it to one line of where it stands, which follows
   await expect(one.toggle).toHaveAttribute('aria-expanded', 'true');
   await expect(one.options).toBeVisible();
 
-  // A save refused while the card is collapsed opens it to say why.
+  // Saved from the panel with nothing picked, a collapsed card opens to say
+  // why; a refused save opens it too.
+  await one.toggle.click();
+  const first = entry(page, 'decision-1');
+  await first.save.click();
+  await expect(one.toggle).toHaveAttribute('aria-expanded', 'true');
+  await expect(one.status).toHaveText('Pick an option first.');
+  await expect(one.status).toBeVisible();
   await one.toggle.click();
   await page.route((url) => url.pathname === '/api/answers', (route) =>
     route.request().method() === 'POST' ?
       route.fulfill({ status: 500, json: { error: 'storage_unavailable' } }) : route.fallback());
-  const first = entry(page, 'decision-1');
   await first.option('Beside the title').check();
   await expect(one.line).toHaveText('Beside the title · Not saved');
   await first.save.click();
@@ -964,6 +970,17 @@ test('Show on page, Next open and either Answered list\'s "change" open a collap
     await expect(one.options).toBeVisible();
     await expect.poll(() => belowBar(page, 'decision-1')).toBe(16);
   }
+  // A modified click is left to the browser: the page does not move.
+  await one.toggle.click();
+  await expect(one.options).toBeHidden();
+  const clicked = await link.evaluate((node) => {
+    const event = new MouseEvent('click', { bubbles: true, cancelable: true, ctrlKey: true });
+    node.dispatchEvent(event);
+    return event.defaultPrevented;
+  });
+  expect(clicked).toBe(false);
+  await expect(one.toggle).toHaveAttribute('aria-expanded', 'false');
+  await one.toggle.click();
 
   const four = collapsible(page, 'decision-4');
   await four.toggle.click();

@@ -132,6 +132,8 @@ export function decisions(page: Page): Cards | null {
     const checklist = isChecklist(form);
     const picked = form.querySelector<HTMLInputElement>('input[name="choice"]:checked');
     if (!checklist && !picked) {
+      // A collapsed card opens to say why.
+      expand(form);
       status(form, "Pick an option first.");
       return false;
     }
