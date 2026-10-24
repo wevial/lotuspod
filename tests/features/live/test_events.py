@@ -118,7 +118,7 @@ class EventsTest(unittest.TestCase):
             self.assertEqual((hub.out_dir / core.INDEX_FILE).read_bytes(), original_index)
             return rebuild(args)
 
-        with mock.patch.object(index_commands, "cmd_index", side_effect=paused_index):
+        with mock.patch("lotuspod.features.index.cmd_index", side_effect=paused_index):
             archive.set_archived(hub.out_dir, "pond", True)
         self.assertEqual(subscription.get(timeout=2), events.frame("publish", "pond"))
         self.assertEqual(subscription.get(timeout=2), events.frame("index", None))

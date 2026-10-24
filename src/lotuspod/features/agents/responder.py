@@ -94,9 +94,9 @@ from typing import Collection, Iterator
 
 from lotuspod import core
 from lotuspod.features.agents import agents, machine, routing
-from lotuspod.features.serve import api, serve_files
-from lotuspod.features.comments import comments
-from lotuspod.features.publish import media, publish
+from lotuspod.features import serve
+from lotuspod.features import comments
+from lotuspod.features import publish
 from lotuspod.store import db
 
 DEFAULT_COMMAND = "claude -p --model opus --permission-mode acceptEdits"
@@ -304,7 +304,7 @@ def copy_images(item: dict, scratch: Path) -> set[str]:
     copied = set()
     for image in found:
         name = image["name"]
-        if not image.get("path") or not media.STORED_NAME.fullmatch(name):
+        if not image.get("path") or not publish.STORED_NAME.fullmatch(name):
             continue
         try:
             shutil.copyfile(image["path"], directory / name)
@@ -463,8 +463,8 @@ def run_agent(argv: list[str], text: str, cwd: Path, env: dict, timeout: float,
     if not answer:
         raise _Failed("the agent command printed no answer")
     # Room for a final NEEDS_OWNER line, which the reply does not carry.
-    if len(answer) > api.MAX_TEXT + MARKER_ROOM:
-        raise _Failed(f"the answer was longer than {api.MAX_TEXT} characters")
+    if len(answer) > serve.MAX_TEXT + MARKER_ROOM:
+        raise _Failed(f"the answer was longer than {serve.MAX_TEXT} characters")
     return answer
 
 
@@ -550,8 +550,8 @@ class Responder:
         try:
             text, edited = self.consult(item)
             text, ask = needs_owner(text)
-            if len(text) > api.MAX_TEXT:
-                raise _Failed(f"the answer was longer than {api.MAX_TEXT} characters")
+            if len(text) > serve.MAX_TEXT:
+                raise _Failed(f"the answer was longer than {serve.MAX_TEXT} characters")
             if ask is not None:
                 # serve adds the notice naming the owner it queues the ask for.
                 queue = {"page": page["name"], "ask": ask}
@@ -868,7 +868,7 @@ def command_model(argv: list[str]) -> str | None:
 
 def cmd_pause(args: argparse.Namespace, paused: bool) -> int:
     try:
-        serve_files.serve_database(args).set_responder_paused(paused)
+        serve.serve_database(args).set_responder_paused(paused)
     except ValueError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
@@ -883,7 +883,7 @@ def cmd_respond(args: argparse.Namespace) -> int:
         return cmd_pause(args, False)
     out_dir = (Path(args.out_dir) if args.out_dir else core.DEFAULT_OUTPUT_DIR).resolve()
     try:
-        db_path = serve_files.serve_db_path(out_dir, args.db)
+        db_path = serve.serve_db_path(out_dir, args.db)
     except ValueError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1

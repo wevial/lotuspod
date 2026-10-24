@@ -17,16 +17,17 @@ from http import HTTPStatus
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from lotuspod.features.agents import routing
+from lotuspod.features import agents
 from lotuspod.core import INDEX_FILE, OLD_VERSION_SCRIPT, WIDGET_NAME, is_page_name, theme_hash
-from lotuspod.features.history import archive, versions
-from lotuspod.features.live import events as event_streams
-from lotuspod.features.publish import media
-from lotuspod.features.publish.render import version_stamp
+from lotuspod.features.history import (History, archived_page, old_page, read_record, set_archived,
+                                        successor_title)
+from lotuspod.features import live
+from lotuspod.features import publish
+from lotuspod.features.publish import version_stamp
 from lotuspod.features.serve import access, api, serve_files
 from lotuspod.features.serve.pages import api_catalog, api_page, served_page_names
 from lotuspod.features.serve.serve_files import _SERVE_NEVER_FILES
-from lotuspod.features.widgets import widgets
+from lotuspod.features import widgets
 from lotuspod.store import db
 
 
@@ -76,7 +77,7 @@ _MEDIA_HEADERS = (
     ("X-Content-Type-Options", "nosniff"),
     ("Cache-Control", "private, max-age=31536000, immutable"),
 )
-_MEDIA_PATH = re.compile(re.escape(media.URL_PREFIX) + f"({media.STORED_NAME.pattern})")
+_MEDIA_PATH = re.compile(re.escape(publish.URL_PREFIX) + f"({publish.STORED_NAME.pattern})")
 
 
 class _AllowListHandler(SimpleHTTPRequestHandler):
@@ -99,8 +100,8 @@ class _AllowListHandler(SimpleHTTPRequestHandler):
     _media_type = ""
 
     def __init__(self, *args, root: Path, verifier: access.Verifier | None = None,
-                 api: api.Api | None = None, history: versions.History | None = None,
-                 events: event_streams.Hub | None = None,
+                 api: api.Api | None = None, history: History | None = None,
+                 events: live.Hub | None = None,
                  **kwargs):
         self.root = Path(root)
         self.verifier = verifier
@@ -147,7 +148,7 @@ class _AllowListHandler(SimpleHTTPRequestHandler):
         if email is None:
             return
         actor = {"kind": "human", "email": email}
-        if self.api is not None and path == event_streams.PATH:
+        if self.api is not None and path == live.PATH:
             self._serve_events()
         elif self.api is not None and path in api.ROUTES:
             query = self.path.split("#", 1)[0].partition("?")[2]
@@ -239,9 +240,9 @@ class _AllowListHandler(SimpleHTTPRequestHandler):
         # before normalisation could fold it back inside the directory.
         words = urllib.parse.unquote(path.split("?", 1)[0].split("#", 1)[0])
         # A stored image, named exactly as stored, and nothing else there.
-        if words == media.URL_PREFIX.rstrip("/") or words.startswith(media.URL_PREFIX):
+        if words == publish.URL_PREFIX.rstrip("/") or words.startswith(publish.URL_PREFIX):
             match = _MEDIA_PATH.fullmatch(words)
-            stored = match and media.stored_file(media.media_dir(self.root), match.group(1))
+            stored = match and publish.stored_file(publish.media_dir(self.root), match.group(1))
             return str(stored) if stored else deny
         if any(word.startswith(".") for word in words.split("/")):
             return deny
@@ -294,7 +295,7 @@ class _AllowListHandler(SimpleHTTPRequestHandler):
         version, behind, page_html = found
         nonce = secrets.token_urlsafe(18)
         script = f"{OLD_VERSION_SCRIPT}?v={theme_hash()}"
-        data = versions.old_page(page_html, stem, version, behind, nonce, script).encode("utf-8")
+        data = old_page(page_html, stem, version, behind, nonce, script).encode("utf-8")
         self._page_response, self._media_type = False, ""
         self.send_response(HTTPStatus.OK)
         self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -331,14 +332,14 @@ class _AllowListHandler(SimpleHTTPRequestHandler):
         it is answered from its file."""
         stem = stored.name[:-len(".html")]
         try:
-            record = archive.read_record(self.root, stem)
+            record = read_record(self.root, stem)
             if record is None:
                 return None
             page_html = stored.read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError, RuntimeError):
             return None
-        data = archive.archived_page(
-            page_html, record, archive.successor_title(self.root, record)).encode("utf-8")
+        data = archived_page(
+            page_html, record, successor_title(self.root, record)).encode("utf-8")
         self._page_response, self._media_type = False, ""
         self.send_response(HTTPStatus.OK)
         self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -375,9 +376,9 @@ class _AllowListHandler(SimpleHTTPRequestHandler):
                 answer = self._serve_archived(stored)
                 if answer is not None:
                     return answer
-        if stored.parent == media.media_dir(self.root):
+        if stored.parent == publish.media_dir(self.root):
             self._page_response = False
-            self._media_type = media.CONTENT_TYPES[stored.suffix[1:]]
+            self._media_type = publish.CONTENT_TYPES[stored.suffix[1:]]
         else:
             self._page_response, self._media_type = target.endswith(".html"), ""
         self._widget_response = bool(WIDGET_NAME.fullmatch(stored.name))
@@ -409,24 +410,24 @@ class _AllowListHandler(SimpleHTTPRequestHandler):
 def _make_server(out_dir: Path, host: str, port: int,
                  verifier: access.Verifier | None = None,
                  db_path: Path | None = None,
-                 window: int = routing.DEFAULT_WINDOW,
-                 max_image_bytes: int = media.DEFAULT_MAX_BYTES,
-                 events: event_streams.Hub | None = None) -> ThreadingHTTPServer:
+                 window: int = agents.DEFAULT_WINDOW,
+                 max_image_bytes: int = publish.DEFAULT_MAX_BYTES,
+                 events: live.Hub | None = None) -> ThreadingHTTPServer:
     """The allow-list server; /api answers 503 access_unconfigured without a
     verifier, and has no answers, comments, media, revision, seen, versions and
     archive routes without a database. Uploads go to the media store beside out_dir,
     within max_image_bytes. The pages' versions are read from out_dir's repository.
     The verifier's owners may archive a page, which the route writes as
     `lotuspod archive` does."""
-    history = versions.History(out_dir, version_stamp)
+    history = History(out_dir, version_stamp)
     routes = None
     if db_path is not None:
-        events = events or event_streams.Hub(out_dir)
+        events = events or live.Hub(out_dir)
         routes = api.Api(db.Database(db_path), partial(api_page, out_dir), window,
-                         media_dir=media.media_dir(out_dir), max_image_bytes=max_image_bytes,
+                         media_dir=publish.media_dir(out_dir), max_image_bytes=max_image_bytes,
                          history=history, names=partial(served_page_names, out_dir),
                          catalog=partial(api_catalog, out_dir),
-                         archive=partial(archive.set_archived, out_dir),
+                         archive=partial(set_archived, out_dir),
                          owners=verifier.config.owners if verifier is not None else frozenset(),
                          changed=events.changed)
     handler = partial(

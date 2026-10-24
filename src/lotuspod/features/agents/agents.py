@@ -59,9 +59,9 @@ from pathlib import Path
 
 from lotuspod import core
 from lotuspod.features.agents import machine
-from lotuspod.features.serve import api
-from lotuspod.features.comments import comments
-from lotuspod.features.publish import media
+from lotuspod.features import serve
+from lotuspod.features import comments
+from lotuspod.features import publish
 
 _BACKTICKS = re.compile(r"`+")
 
@@ -596,20 +596,20 @@ def _text(args: argparse.Namespace) -> str | None:
 
 
 # The Content-Type an upload declares, by the extension its type is stored under.
-_CONTENT_TYPES = {extension: media_type for media_type, extension in api.UPLOAD_TYPES.items()}
+_CONTENT_TYPES = {extension: media_type for media_type, extension in serve.UPLOAD_TYPES.items()}
 
 
 def _read_images(paths: list[str]) -> list[tuple[bytes, str]]:
     """Each --image file's bytes and Content-Type, in order; _Failed when
     there are too many, one cannot be read or its extension names no
     accepted type."""
-    if len(paths) > api.MAX_IMAGES:
+    if len(paths) > serve.MAX_IMAGES:
         raise _Failed("too_many_images",
-                      f"{len(paths)} images; a message takes at most {api.MAX_IMAGES}")
+                      f"{len(paths)} images; a message takes at most {serve.MAX_IMAGES}")
     read = []
     for path in paths:
-        kind = media.named_type(path)
-        content_type = None if kind is None else _CONTENT_TYPES.get(media.EXTENSIONS[kind])
+        kind = publish.named_type(path)
+        content_type = None if kind is None else _CONTENT_TYPES.get(publish.EXTENSIONS[kind])
         if content_type is None:
             raise _Failed("unsupported_media_type",
                           f"{path} is not a .png, .jpg, .jpeg, .webp or .gif file")

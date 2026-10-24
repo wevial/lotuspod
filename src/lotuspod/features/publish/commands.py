@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import argparse
 
-from lotuspod.features.agents import machine
+from lotuspod.features import agents
 from lotuspod.core import EXIT_REVISION_CONFLICT, NO_REVISION
 from lotuspod.features.publish.manifest import cmd_manifest
 from lotuspod.features.publish.publish import (LABEL_MAX, PUBLISH_FORMATS, PUBLISH_VARIANT,
@@ -30,7 +30,7 @@ def owner_options(parser: argparse.ArgumentParser, comments_default: bool) -> No
     )
     parser.add_argument(
         "--credential", default="", metavar="FILE",
-        help=f"the credential --owner is checked against (default: ${machine.CREDENTIAL_ENV})",
+        help=f"the credential --owner is checked against (default: ${agents.CREDENTIAL_ENV})",
     )
     parser.add_argument(
         "--db", default="", metavar="PATH",

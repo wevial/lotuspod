@@ -175,10 +175,10 @@ def block_source(source: str, markdown_source: bool, ident: str) -> str:
     lines = source.split('\n')
     try:
         if markdown_source:
-            from lotuspod.features.publish import markdown
+            from lotuspod.features import publish
             # Only where each block is matters, not how an image is drawn.
-            sizes = {image.src: (0, 0) for image in markdown.images(source)}
-            body = markdown.to_body(source, sizes)
+            sizes = {image.src: (0, 0) for image in publish.images(source)}
+            body = publish.to_body(source, sizes)
         else:
             # Without its h1, as render() numbers the blocks; the h1's lines
             # are kept as empty lines, so every line stays where it was.

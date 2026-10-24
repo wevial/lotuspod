@@ -220,10 +220,10 @@ from pathlib import Path
 from typing import BinaryIO, Callable, Mapping, Sequence
 
 from lotuspod import store
-from lotuspod.features.agents import routing
-from lotuspod.features.comments import comments
-from lotuspod.features.publish import media
-from lotuspod.features.history import versions
+from lotuspod.features import agents
+from lotuspod.features import comments
+from lotuspod.features import publish
+from lotuspod.features.history import History
 
 ANSWERS = "/api/answers"
 COMMENTS = "/api/comments"
@@ -522,7 +522,7 @@ def _image_names(value: object) -> list[str]:
     """value as 1 to MAX_IMAGES distinct stored names; Refusal for anything else."""
     if not isinstance(value, list) or not 1 <= len(value) <= MAX_IMAGES:
         raise _invalid()
-    if not all(isinstance(name, str) and media.STORED_NAME.fullmatch(name) for name in value):
+    if not all(isinstance(name, str) and publish.STORED_NAME.fullmatch(name) for name in value):
         raise _invalid()
     if len(set(value)) != len(value):
         raise _invalid()
@@ -538,7 +538,7 @@ def stored_images(media_dir: Path | None, names: list[str] | None) -> list[dict]
         raise Refusal(HTTPStatus.SERVICE_UNAVAILABLE, "storage_unavailable")
     found = []
     for name in names:
-        image = media.load_stored(media_dir, name)
+        image = publish.load_stored(media_dir, name)
         if image is None:
             raise Refusal(HTTPStatus.BAD_REQUEST, "unknown_image")
         found.append({"name": name, "width": image.width, "height": image.height})
@@ -624,11 +624,11 @@ class Api:
     names()."""
 
     def __init__(self, database: store.db.Database, pages: Callable[[str], Page | None],
-                 window: float = routing.DEFAULT_WINDOW,
+                 window: float = agents.DEFAULT_WINDOW,
                  clock: Callable[[], float] = time.time,
                  media_dir: Path | None = None,
-                 max_image_bytes: int = media.DEFAULT_MAX_BYTES,
-                 history: versions.History | None = None,
+                 max_image_bytes: int = publish.DEFAULT_MAX_BYTES,
+                 history: History | None = None,
                  names: Callable[[], Sequence[str]] = tuple,
                  archive: Callable[[str, bool, str | None], tuple] | None = None,
                  owners: frozenset[str] = frozenset(),
@@ -700,7 +700,7 @@ class Api:
             elif path == VERSIONS:
                 payload = {"page": page.name, "versions": self._versions(page.name)}
             else:
-                threads = routing.threads(self.database, page.name, self.window, self.clock())
+                threads = agents.threads(self.database, page.name, self.window, self.clock())
                 payload = {"page": page.name, "revision": page.revision,
                            "threads": threads, "unread": self._unread(page, threads, actor),
                            "maxImageBytes": self.max_image_bytes}
@@ -885,12 +885,12 @@ class Api:
         self._take_upload(reader, reserve=False)
         data = body.read(self.max_image_bytes)
         try:
-            image = media.check(data, f"upload.{extension}", self.max_image_bytes)
-        except media.MediaError:
+            image = publish.check(data, f"upload.{extension}", self.max_image_bytes)
+        except publish.MediaError:
             raise Refusal(HTTPStatus.BAD_REQUEST, "invalid_image") from None
         at = self._take_upload(reader, reserve=True)
         try:
-            media.store(self.media_dir, image)
+            publish.store(self.media_dir, image)
         except OSError:
             self._give_back(reader, at)
             raise
@@ -968,8 +968,8 @@ class Api:
         self.changed("answer", page.name)
         if "comment" in stored:
             self.changed("comment", page.name)
-            stored["comment"] = routing.public(
-                stored["comment"], routing.last_pulls(self.database), self.window,
+            stored["comment"] = agents.public(
+                stored["comment"], agents.last_pulls(self.database), self.window,
                 self.clock(), self.database.responder_paused())
         return stored
 
@@ -1085,7 +1085,7 @@ class Api:
     def _post_comment(self, fields: dict, actor: Mapping) -> dict:
         row = self._store_comment(fields, actor)
         self.changed("comment", row["page"])
-        return routing.public(row, routing.last_pulls(self.database), self.window, self.clock(),
+        return agents.public(row, agents.last_pulls(self.database), self.window, self.clock(),
                               self.database.responder_paused())
 
     def _store_comment(self, fields: dict, actor: Mapping) -> dict:

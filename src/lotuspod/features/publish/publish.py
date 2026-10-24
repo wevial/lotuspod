@@ -14,14 +14,14 @@ from functools import partial
 from pathlib import Path
 
 from lotuspod import core
-from lotuspod.features.agents import machine
+from lotuspod.features import agents
 from lotuspod.core import (DEFAULT_OUTPUT_DIR, DEFAULT_REMOTE_COMMAND, EXIT_CONFIG,
                            EXIT_REVISION_CONFLICT, INDEX_FILE, _KEPT_SOURCE_SUFFIX, ConfigError,
                            commit_output, config_path, extract_meta, html_title, markdown_title,
                            normalized, page_revision, publish_config, publish_lock,
                            source_revision, write_atomic)
-from lotuspod.features.blocks import refs
-from lotuspod.features.index import commands as index_commands
+from lotuspod.features import blocks
+from lotuspod.features import index
 from lotuspod.features.publish import markdown, media
 from lotuspod.features.publish.manifest import cmd_manifest
 from lotuspod.features.publish.publish_sources import (NO_REFS, REFS_MEMBER, decoded,
@@ -30,7 +30,7 @@ from lotuspod.features.publish.publish_sources import (NO_REFS, REFS_MEMBER, dec
                                                        source_archive, stored_image)
 from lotuspod.features.publish.render import (REFS_MAX, REFS_SUFFIX, check_owner, cmd_render,
                                               page_owner, page_variant)
-from lotuspod.features.widgets import widgets
+from lotuspod.features import widgets
 
 
 # A label once lower-cased: a letter or digit, then letters, digits and '-'.
@@ -119,7 +119,7 @@ def read_refs_file(path: str) -> tuple[bytes, dict[str, dict]]:
                            "nothing written") from None
     if len(data) > REFS_MAX:
         raise RuntimeError(f"refs file {path}: over {REFS_MAX} bytes; nothing written")
-    return data, refs.parse_refs(data, path)
+    return data, blocks.parse_refs(data, path)
 
 
 def kept_refs(out_dir: Path, name: str) -> tuple[dict[str, dict], str]:
@@ -131,7 +131,7 @@ def kept_refs(out_dir: Path, name: str) -> tuple[dict[str, dict], str]:
     try:
         kept = json.loads(path.read_text(encoding="utf-8"))
         as_of = kept["asOf"]
-        entries = refs.check_refs({"refs": kept["refs"]})
+        entries = blocks.check_refs({"refs": kept["refs"]})
         if not isinstance(as_of, str):
             raise TypeError("asOf is not text")
     except (OSError, UnicodeDecodeError, ValueError, KeyError, TypeError, RuntimeError) as exc:
@@ -269,7 +269,7 @@ def cmd_publish(args: argparse.Namespace) -> int:
         if args.source_archive:
             data, sent, archived_refs = read_source_archive(sys.stdin.buffer, media_cap())
             if archived_refs is not NO_REFS:
-                given_refs = refs.check_refs(archived_refs)
+                given_refs = blocks.check_refs(archived_refs)
         else:
             data = read_source(args, label)
         fmt, raw, found = prepare_publish(args, fmt, name, decoded(data, label), label,
@@ -342,7 +342,7 @@ def cmd_publish(args: argparse.Namespace) -> int:
                 no_outline=False,
                 comments=args.comments,
                 # Checked above, or kept from the page when it is a handle.
-                owner=owner if machine.is_handle(owner) else "",
+                owner=owner if agents.is_handle(owner) else "",
                 owner_checked=True,
                 variant=variant,
                 out_dir=str(out_dir),
@@ -360,7 +360,7 @@ def cmd_publish(args: argparse.Namespace) -> int:
                 (out_dir / f"{name}{suffix}").unlink(missing_ok=True)
         steps = argparse.Namespace(out_dir=str(out_dir), commit=False)
         cmd_manifest(steps)
-        index_commands.cmd_index(steps)
+        index.cmd_index(steps)
         commit_output(out_dir, f"publish {name}")
     print(f"published {name} at revision {revision}")
     return 0

@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import argparse
 
-from lotuspod.features.publish import media
+from lotuspod.features import publish
 from lotuspod.features.backup.backup import (DEFAULT_BACKUPS, DEFAULT_KEEP, LATEST, cmd_backup,
                                              cmd_restore)
 from lotuspod.store import db
@@ -59,7 +59,7 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
         "backup set",
         description="Check every checksum in SET, then copy its database to --db, "
         "clone its bundle into --out-dir with main checked out at the recorded HEAD, "
-        f"and copy its images into {media.MEDIA_DIR_NAME} beside --out-dir, adding to "
+        f"and copy its images into {publish.MEDIA_DIR_NAME} beside --out-dir, adding to "
         "it when it exists. Refuses, changing nothing, when either path exists or a "
         "file already there under an image's name holds other bytes. Never pushes.",
     )

@@ -6,15 +6,15 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Callable
 
-from lotuspod.features.agents import machine
+from lotuspod.features import agents
 from lotuspod.core import (_KEPT_SOURCE_SUFFIX, extract_meta, extract_visibility, is_page_name,
                            page_revision, source_revision)
-from lotuspod.features.comments import comments
-from lotuspod.features.decisions import decisions
-from lotuspod.features.history import archive
-from lotuspod.features.publish.render import _H2Collector, kept_block_hashes, page_owner
+from lotuspod.features import comments
+from lotuspod.features import decisions
+from lotuspod.features import history
+from lotuspod.features.publish import _H2Collector, kept_block_hashes, page_owner
 from lotuspod.features.serve import api, serve_files
-from lotuspod.features.widgets import widgets
+from lotuspod.features import widgets
 
 
 def served_page_names(out_dir: Path, allowed: frozenset[str] | None = None) -> list[str]:
@@ -24,7 +24,7 @@ def served_page_names(out_dir: Path, allowed: frozenset[str] | None = None) -> l
         allowed = serve_files.serve_allow_list(out_dir)
     return sorted(file[:-len(".html")] for file in allowed
                   if file.endswith(".html") and is_page_name(file)
-                  and not archive.is_archived(out_dir, file[:-len(".html")]))
+                  and not history.is_archived(out_dir, file[:-len(".html")]))
 
 
 def api_page(out_dir: Path, name: str,
@@ -45,7 +45,7 @@ def api_page(out_dir: Path, name: str,
             return None
         page_html = (out_dir / file).read_text(encoding="utf-8")
         revision = page_revision(out_dir, name)
-        record = archive.read_record(out_dir, name) or {}
+        record = history.read_record(out_dir, name) or {}
     except (OSError, UnicodeDecodeError, RuntimeError):
         return None
     # The allow-list may have been read before the page was published hidden.
@@ -78,7 +78,7 @@ def api_page(out_dir: Path, name: str,
     }
     return api.Page(name=name, revision=revision, sections=sections, questions=questions,
                     comment_sections=boxes, widgets=page_widgets,
-                    owner=owner if machine.is_handle(owner) else "",
+                    owner=owner if agents.is_handle(owner) else "",
                     title=extract_meta(page_html, name)["title"],
                     archived=record.get("archivedAt", ""),
                     superseded_by=record.get("supersededBy") or "")
