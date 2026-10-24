@@ -121,7 +121,7 @@ CHECKLIST_TABLE = CHECKLIST.split("### Checklist for the maintainer\n\n", 1)[1]
 class _Page(HTMLParser):
     """A page's decision forms, with their inputs, plus its tables, the
     scripts it loads (an inline script, the theme's head script, has no src
-    and is not listed) and every class its elements carry."""
+    and is not listed) and every class and id its elements carry."""
 
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
@@ -129,6 +129,7 @@ class _Page(HTMLParser):
         self.tables = 0
         self.scripts: list[str] = []
         self.classes: set[str] = set()
+        self.ids: set[str] = set()
         self._form: dict | None = None
         self._label: dict | None = None
         self._button: dict | None = None
@@ -141,6 +142,8 @@ class _Page(HTMLParser):
         attrs = {key: value or "" for key, value in attrs}
         classes = attrs.get("class", "").split()
         self.classes.update(classes)
+        if "id" in attrs:
+            self.ids.add(attrs["id"])
         if tag == "table":
             self.tables += 1
         elif tag == "script" and attrs.get("src"):
@@ -290,8 +293,11 @@ class FormTests(DecisionsTestCase):
             self.assertIn("artifact-decision-default", labels[0]["last"])
         self.assertEqual([form["context"] for form in page.forms], [[], []])
         self.assertEqual([src.split("?")[0] for src in page.scripts], [core.PAGE_SCRIPT])
-        # The review bar and its panel are the page script's to draw.
-        self.assertFalse({"artifact-review-bar", "artifact-review-panel"} & page.classes)
+        # The review bar and its panel are the page script's to draw: no
+        # element of the page as rendered is either, by class or by id.
+        drawn = {"artifact-review-bar", "artifact-review-panel"}
+        self.assertFalse(drawn & page.classes)
+        self.assertFalse(drawn & page.ids)
 
     def test_the_forms_sit_inside_their_section(self):
         page_html = self.render_markdown("plan", PLAN)

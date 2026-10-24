@@ -146,9 +146,14 @@ test('served chrome, lifecycle, expansion and isolated Open alone: height=260', 
 });
 
 test('a block sized by its own page fills the window under the top bar when expanded, and Close puts it back in the column', async ({page}) => {
-  for (const style of ['body { min-height: 100vh; box-sizing: border-box; margin: 0; }', 'html, body { height: 100%; box-sizing: border-box; margin: 0; }']) {
-    publish('widget-chrome-fill', '', style);
-    await page.goto('/widget-chrome-fill.html?standalone');
+  // A page of its own for each sizing, repeat and retry: a page published
+  // again shows its history, which would move the block after its place in
+  // the column is read.
+  const run = `${test.info().repeatEachIndex}-${test.info().retry}`;
+  for (const [sizing, style] of [['min', 'body { min-height: 100vh; box-sizing: border-box; margin: 0; }'], ['full', 'html, body { height: 100%; box-sizing: border-box; margin: 0; }']]) {
+    const name = `widget-chrome-fill-${sizing}-${run}`;
+    publish(name, '', style);
+    await page.goto(`/${name}.html?standalone`);
     const figure = page.locator('figure[data-widget="clock"]');
     const frame = figure.locator('iframe');
     const expand = figure.getByRole('button', {name: 'Expand', exact: true});

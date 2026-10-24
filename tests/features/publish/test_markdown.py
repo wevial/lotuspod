@@ -38,10 +38,13 @@ from html.parser import HTMLParser
 from pathlib import Path
 from unittest import mock
 
+# First: it puts this checkout's src/ at the front of sys.path for lotuspod.
+from tests.features.publish.test_manifest_v2 import SRC_DIR, TempDirTestCase, run_cli
+
+# isort: split
 from lotuspod import core
 from lotuspod.features.publish import media
 from lotuspod.features.publish.markdown import images, to_body, with_sources
-from tests.features.publish.test_manifest_v2 import SRC_DIR, TempDirTestCase, run_cli
 
 ROOT = Path(__file__).resolve().parents[3]
 MARKDOWN_FIXTURES = Path(__file__).parents[2] / "fixtures" / "markdown"
