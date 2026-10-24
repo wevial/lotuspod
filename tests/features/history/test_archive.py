@@ -30,7 +30,7 @@ from pathlib import Path
 
 from tests import test_activity_witness as activity_witness
 from tests.features.publish import test_publish_remote as publish_remote
-from tests.test_answers_witness import READER, assertion
+from tests.features.decisions.test_answers_witness import READER, assertion
 
 REPO = Path(__file__).resolve().parents[3]
 SRC = REPO / "src"

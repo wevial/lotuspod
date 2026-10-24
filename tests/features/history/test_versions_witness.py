@@ -3,7 +3,7 @@ and opens each one read-only, marked as old.
 
 Real git in temporary directories, with a local identity; pages published
 with this checkout's CLI and served by a real `lotuspod serve`, which the
-test reaches with Access assertions it signs itself (tests.test_answers_witness).
+test reaches with Access assertions it signs itself (tests.features.decisions.test_answers_witness).
 The git processes lotuspod.features.history.versions starts are counted in a server run in
 process, each still run through the real subprocess.
 """
@@ -22,7 +22,7 @@ from contextlib import redirect_stderr
 from pathlib import Path
 from unittest import mock
 
-from tests.test_answers_witness import Site, assertion, git
+from tests.features.decisions.test_answers_witness import Site, assertion, git
 from tests.features.publish.test_publish_witness import parse
 
 REPO = Path(__file__).resolve().parents[3]
