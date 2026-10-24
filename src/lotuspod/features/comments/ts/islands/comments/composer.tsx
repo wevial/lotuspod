@@ -62,7 +62,6 @@ export function composers(page: Page, bridge: ComposerBridge) {
   function wireField(form: HTMLFormElement): ComposerHandles {
     const field = fieldOf(form), images = page.attachments(form, field);
     bridge.attached.set(form, images);
-    // A typed :shortcode: becomes its emoji; a partial one lists matches.
     shortcodeList(form, field);
     field.addEventListener("keydown", event => {
       if (event.key !== "Enter" || !(event.metaKey || event.ctrlKey) || event.isComposing) return;

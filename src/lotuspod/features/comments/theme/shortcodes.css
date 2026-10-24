@@ -2,8 +2,7 @@
    (comments/shortcode-list.tsx), listed as the panel's section picker lists
    sections (.artifact-comments-choices in comments.css). The script fixes it
    under the field's box, or above it without room below, so neither the
-   panel's nor a popover's or sheet's scrolling clips it. Its colors are the
-   theme's own. */
+   panel's nor a popover's or sheet's scrolling clips it. */
 .artifact-shortcodes {
   background: var(--color-surface);
   border: 1px solid var(--hairline-strong);
