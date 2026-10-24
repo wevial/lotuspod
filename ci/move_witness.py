@@ -18,15 +18,21 @@ LOTUSPOD_CONFIG naming a missing file:
   counting as an added name. A name may be discovered more often here than
   at the merge base only by as many times as test files the merge base lacks
   declare it, so a move ticket may add a test module; those names are listed.
+  A test module named by `--rewritten PATH` (its file path from the repo
+  root, such as tests/core/test_theme_sources.py, or its dotted name; once
+  for each) is one the ticket rewrites: the names declared in it may be added
+  or dropped at either tree, and each one that is is listed as allowed;
+  every other module's names are compared as before.
 
 Prints each difference and exits 1, else prints the counts it compared and
 exits 0. Every move ticket runs it from the repo root:
 
-    python -m ci.move_witness
+    python -m ci.move_witness [--rewritten PATH ...]
 """
 
 from __future__ import annotations
 
+import argparse
 import collections
 import difflib
 import io
@@ -180,23 +186,44 @@ def unmarked(data: bytes) -> bytes:
     return MARKER.sub(lambda m: m.group(1) + m.group(2).rsplit(b"/", 1)[-1] + m.group(3), data)
 
 
+def module_path(module: str) -> str:
+    """The file of a test module named by its path or its dotted name, from
+    the root, as UNITTEST_NAMES names it."""
+    if module.endswith(".py") or "/" in module:
+        return Path(module).as_posix()
+    return module.replace(".", "/") + ".py"
+
+
 def multiset_differences(kind: str, before: collections.Counter, after: collections.Counter,
-                         base_files: set[str]) -> tuple[list[str], list[str]]:
+                         base_files: set[str], rewritten: frozenset[str] = frozenset()
+                         ) -> tuple[list[str], list[str]]:
     """The differences between before's and after's names, each counted
     without its file, and the names after adds from test files the merge
-    base lacks, which are allowed."""
+    base lacks, which are allowed, as are the names added or dropped in the
+    files rewritten names."""
     old: collections.Counter = collections.Counter()
     new: collections.Counter = collections.Counter()
     added: collections.Counter = collections.Counter()
     added_in: dict[str, set[str]] = collections.defaultdict(set)
-    for (_, name), count in before.items():
-        old[name] += count
+    lines, allowed = [], []
+    for path in sorted(rewritten):
+        was = collections.Counter({name: count for (at, name), count in before.items() if at == path})
+        now = collections.Counter({name: count for (at, name), count in after.items() if at == path})
+        for name in sorted(set(was) | set(now)):
+            if was[name] != now[name]:
+                change = "added" if now[name] > was[name] else "dropped"
+                allowed.append(f"{kind}: {name!r} is {change} in {path}, rewritten "
+                               f"({was[name]} time(s) at the merge base, {now[name]} here)")
+    for (path, name), count in before.items():
+        if path not in rewritten:
+            old[name] += count
     for (path, name), count in after.items():
+        if path in rewritten:
+            continue
         new[name] += count
         if path not in base_files:
             added[name] += count
             added_in[name].add(path)
-    lines, allowed = [], []
     for name in sorted(set(old) | set(new)):
         if old[name] == new[name]:
             continue
@@ -208,7 +235,14 @@ def multiset_differences(kind: str, before: collections.Counter, after: collecti
     return lines, allowed
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(prog="python -m ci.move_witness", description=__doc__,
+                                     formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--rewritten", action="append", default=[], metavar="PATH",
+                        help="a test module the ticket rewrites, by its file path "
+                             "(a dotted name is also accepted)")
+    args = parser.parse_args(argv)
+    rewritten = frozenset(map(module_path, args.rewritten))
     playwright = REPO_ROOT / "e2e" / "node_modules" / ".bin" / "playwright"
     if not playwright.exists():
         print(f"move witness: {playwright} is missing: npm --prefix e2e ci", file=sys.stderr)
@@ -218,6 +252,12 @@ def main() -> int:
         base_root = scratch / "base"
         base = extract_merge_base(base_root)
         base_files = set(git("ls-tree", "-r", "--name-only", base).splitlines())
+        unknown = sorted(path for path in rewritten
+                         if path not in base_files and not (REPO_ROOT / path).is_file())
+        if unknown:
+            print(f"move witness: --rewritten names no test module: {', '.join(unknown)}",
+                  file=sys.stderr)
+            return 2
         (base_root / "e2e" / "node_modules").symlink_to(REPO_ROOT / "e2e" / "node_modules")
         missing = scratch / "no-such-config.ini"
         trees = (Tree(f"merge base {base[:12]}", base_root, missing),
@@ -245,7 +285,8 @@ def main() -> int:
                                         "merge base", "working tree", lineterm="", n=1)
             differences.append(f"`{command} --help` reads differently:\n" + "\n".join(diff))
     for kind in ("unittest", "playwright"):
-        lines, allowed = multiset_differences(kind, before[kind], after[kind], base_files)
+        lines, allowed = multiset_differences(kind, before[kind], after[kind], base_files,
+                                              rewritten)
         differences += lines
         for line in allowed:
             print(line)

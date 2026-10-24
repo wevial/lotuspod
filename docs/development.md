@@ -22,7 +22,7 @@ A theme script can be written in TypeScript: its source is a slice's
 `src/lotuspod/features/SLICE/ts/NAME.ts`, and the build writes it beside
 itself as `NAME.js`.
 That is the file render
-already joins in the order `THEME_SOURCES` in `core/__init__.py` declares. `web/` is a
+already joins at the slot its slice's `theme_parts.json` declares. `web/` is a
 Bun project of its own, beside `e2e/`. The build strips each source's types
 on its own with Bun's transpiler, without bundling, which also drops its
 comments, and starts the file with a marker line naming the source; edit the
@@ -48,7 +48,7 @@ with its imports and Preact (pinned in `web/package.json` as a dependency,
 and resolved from `web/node_modules`) with `Bun.build` into
 `src/lotuspod/features/comments/ts/islands.js`, after its marker line, as one minified
 IIFE for the browser with no source map, JSX through Preact's automatic
-runtime. `THEME_SOURCES` declares it directly after comment-markdown.js inside
+runtime. The comments slice's `theme_parts.json` slots it directly after comment-markdown.js inside
 the shared closure: comments start before later sources find the panel and register
 their listeners, and never on a pod that goes to the index
 (`features/publish/ts/open-in-tabs.js`). Neither the index script nor the old-version script

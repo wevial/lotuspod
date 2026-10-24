@@ -1,0 +1,9 @@
+[
+  {"file": "lotuspod.css", "part": "theme/versions.css", "slot": 220},
+  {"file": "lotuspod.css", "part": "theme/archive.css", "slot": 230},
+  {"file": "lotuspod-page.js", "part": "ts/version-menu.js", "slot": 170},
+  {"file": "lotuspod-page.js", "part": "ts/versions.js", "slot": 180},
+  {"file": "lotuspod-page.js", "part": "ts/archive.js", "slot": 240},
+  {"file": "lotuspod-old-version.js", "part": "ts/version-menu.js", "slot": 20},
+  {"file": "lotuspod-old-version.js", "part": "ts/old-version.js", "slot": 30}
+]

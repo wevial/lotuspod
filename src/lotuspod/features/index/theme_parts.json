@@ -1,0 +1,7 @@
+[
+  {"file": "lotuspod.css", "part": "theme/index.css", "slot": 190},
+  {"file": "lotuspod.css", "part": "theme/pod-tabs.css", "slot": 200},
+  {"file": "lotuspod.css", "part": "theme/pod-finder.css", "slot": 210},
+  {"file": "lotuspod-index.js", "part": "ts/pod-tabs.js", "slot": 10},
+  {"file": "lotuspod-index.js", "part": "ts/pod-finder.js", "slot": 20}
+]

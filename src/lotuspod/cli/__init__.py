@@ -4,36 +4,40 @@ from __future__ import annotations
 
 
 import argparse
+import importlib
 import json
 import sys
+from pathlib import Path
+from typing import Callable
 
-from lotuspod.features.agents import commands as agents_commands
-from lotuspod.features.backup import commands as backup_commands
-from lotuspod.features.decisions import commands as decisions_commands
-from lotuspod.features.history import commands as history_commands
-from lotuspod.features.index import commands as index_commands
-from lotuspod.features.publish import commands as publish_commands
-from lotuspod.features.serve import commands as serve_commands
+# Each slice under it whose folder holds a commands module registers its
+# subcommands there: a COMMANDS tuple of (slot, register) pairs, register
+# taking the subparsers. The parser calls them in slot order, so a new
+# slice's command is a new file, not a line here; slots leave gaps for one.
+FEATURES_DIR = Path(__file__).resolve().parent.parent / "features"
+
+Register = Callable[[argparse._SubParsersAction], None]
+
+
+def registrations() -> list[tuple[int, Register]]:
+    """Every slice's (slot, register) pair, in slot order; two at one slot
+    are refused."""
+    found: dict[int, tuple[str, Register]] = {}
+    for commands in sorted(FEATURES_DIR.glob("*/commands.py")):
+        module = f"lotuspod.features.{commands.parent.name}.commands"
+        for slot, register in importlib.import_module(module).COMMANDS:
+            if slot in found:
+                raise RuntimeError(f"{module} registers a command at slot {slot}, "
+                                   f"which {found[slot][0]} holds")
+            found[slot] = (module, register)
+    return [(slot, found[slot][1]) for slot in sorted(found)]
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="lotuspod", description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
-
-    publish_commands.add_render_parsers(sub)
-    index_commands.add_parser(sub)
-    publish_commands.add_publish_parser(sub)
-
-    serve_commands.add_parser(sub)
-
-    agents_commands.add_credential_parser(sub)
-
-    decisions_commands.add_parser(sub)
-
-    agents_commands.add_audit_parsers(sub)
-    backup_commands.add_parser(sub)
-    history_commands.add_parser(sub)
-
+    for _, register in registrations():
+        register(sub)
     return parser
 
 

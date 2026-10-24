@@ -112,3 +112,9 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
         help=f"serve's database (default: {db.DEFAULT_NAME} beside the artifacts directory)",
     )
     answers.set_defaults(func=cmd_answers)
+
+
+# This slice's subcommands by slot, the order `lotuspod --help` lists them in.
+COMMANDS = (
+    (60, add_parser),
+)

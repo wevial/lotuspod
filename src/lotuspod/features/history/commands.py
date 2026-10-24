@@ -41,3 +41,9 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
             help="change the page on this machine even when the config names a host",
         )
         parser.set_defaults(func=func)
+
+
+# This slice's subcommands by slot, the order `lotuspod --help` lists them in.
+COMMANDS = (
+    (90, add_parser),
+)

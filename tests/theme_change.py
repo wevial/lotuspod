@@ -65,7 +65,7 @@ def main(argv: list[str] | None = None) -> int:
     with tempfile.TemporaryDirectory(prefix="lotuspod-theme-") as scratch:
         theme = Path(scratch) / "theme"
         shutil.copytree(core.THEME_ROOT, theme, ignore=shutil.ignore_patterns("*.py", "__pycache__"))
-        last_source = core.THEME_SOURCES["lotuspod.css"][-1]
+        last_source = core.theme_sources()["lotuspod.css"][-1]
         with (theme / last_source).open("a", encoding="utf-8") as fh:
             fh.write(args[1])
         with mock.patch.object(core, "THEME_ROOT", theme):

@@ -41,3 +41,9 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
     index = sub.add_parser("index", help="build index.html listing rendered artifacts")
     index.add_argument("--out-dir", default="", help="artifacts directory (default: artifacts/)")
     index.set_defaults(func=cmd_index)
+
+
+# This slice's subcommands by slot, the order `lotuspod --help` lists them in.
+COMMANDS = (
+    (20, add_parser),
+)

@@ -75,7 +75,7 @@ class AddressTests(ThemeHashTestCase):
 class ThemeEditTests(ThemeHashTestCase):
     def assert_edit_moves_the_address(self, filename: str) -> None:
         """Flip one byte of the served file filename's last source."""
-        source = core.THEME_SOURCES[filename][-1]
+        source = core.theme_sources()[filename][-1]
         unchanged = self.theme_copy()
         with mock.patch.object(core, "THEME_ROOT", unchanged):
             before = self.rendered("before")
