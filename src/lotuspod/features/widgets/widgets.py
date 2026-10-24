@@ -36,7 +36,7 @@ ALONE_HEADERS = (
 ALONE_QUERY = 'alone'
 
 
-def alone_page(filename: str, query: str = '') -> bytes:
+def alone_page(filename: str, query: str) -> bytes:
     """The page answering a widget file opened in a tab: one sandboxed frame
     of the same file (query: its own, without the ?) filling the window."""
     src = filename + '?' + (query + '&' if query else '') + ALONE_QUERY
