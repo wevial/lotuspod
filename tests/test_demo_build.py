@@ -426,9 +426,9 @@ class OutsideTheBuildTests(unittest.TestCase):
 
     def test_no_theme_source_is_under_demo(self):
         demo = (REPO_ROOT / "demo").resolve()
-        sources = [core.THEME_ROOT / source for files in core.THEME_SOURCES.values()
+        sources = [core.THEME_ROOT / source for files in core.theme_sources().values()
                    for source in files]
-        self.assertIn("features/comments/ts/islands.js", core.THEME_SOURCES[core.PAGE_SCRIPT])
+        self.assertIn("features/comments/ts/islands.js", core.theme_sources()[core.PAGE_SCRIPT])
         for source in sources:
             with self.subTest(source=str(source)):
                 self.assertTrue(source.is_file())

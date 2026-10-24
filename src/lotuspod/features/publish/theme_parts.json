@@ -1,0 +1,7 @@
+[
+  {"file": "lotuspod.css", "part": "theme/forms.css", "slot": 20},
+  {"file": "lotuspod.css", "part": "theme/prose.css", "slot": 100},
+  {"file": "lotuspod.css", "part": "theme/report.css", "slot": 150},
+  {"file": "lotuspod-page.js", "part": "ts/open-in-tabs.js", "slot": 10, "why": "First, and alone outside the closure (THEME_CLOSURES in lotuspod.core): it evaluates to the function the closure is handed to."},
+  {"file": "lotuspod-page.js", "part": "ts/page-open.js", "slot": 20}
+]

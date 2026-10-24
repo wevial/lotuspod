@@ -17,12 +17,9 @@ lotuspod = "lotuspod.cli:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-lotuspod = ["py.typed", "core/templates/*.html", "core/theme/*.css", "core/theme/*.json",
-            "core/theme/*.svg", "core/ts/*.js", "features/blocks/theme/*.css", "features/blocks/ts/*.js",
-            "features/comments/theme/*.css", "features/comments/ts/*.js",
-            "features/decisions/theme/*.css", "features/decisions/ts/*.js",
-            "features/history/theme/*.css", "features/history/ts/*.js",
-            "features/index/templates/*.html", "features/index/theme/*.css",
-            "features/index/ts/*.js", "features/live/theme/*.css", "features/live/ts/*.js",
-            "features/publish/theme/*.css", "features/publish/ts/*.js",
-            "features/widgets/theme/*.css", "features/widgets/ts/*.js"]
+# Recursive globs over core/ and every slice: its theme parts declaration, its
+# theme/, its templates/ and the built .js in its ts/ (never a .ts source), so
+# a new theme file or slice takes no line here.
+lotuspod = ["py.typed", "core/theme_parts.json", "core/templates/**/*.html", "core/theme/**/*",
+            "core/ts/**/*.js", "features/*/theme_parts.json", "features/*/templates/**/*.html",
+            "features/*/theme/**/*", "features/*/ts/**/*.js"]

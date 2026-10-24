@@ -441,10 +441,9 @@ class ArtifactTopbarTests(TempDirTestCase):
         previous = previous_theme(self.out_dir, "afec6b8")
 
         after = self.rendered()
-        # The older stylesheet is the only stylesheet source: each file in
-        # the older theme is served as it is.
-        with mock.patch.object(core, "THEME_ROOT", previous), \
-                mock.patch.object(core, "THEME_SOURCES", {}):
+        # The older stylesheet is the only stylesheet source: the older theme
+        # declares no parts, so each of its files is served as it is.
+        with mock.patch.object(core, "THEME_ROOT", previous):
             before = self.rendered()
 
         old_hash, new_hash = stylesheet_hash(before), stylesheet_hash(after)
@@ -1343,10 +1342,9 @@ class OutlineSideRenderTests(TempDirTestCase):
         previous = previous_theme(self.out_dir, self.PREVIOUS_COMMIT)
 
         after = self.rendered()
-        # The older stylesheet is the only stylesheet source: each file in
-        # the older theme is served as it is.
-        with mock.patch.object(core, "THEME_ROOT", previous), \
-                mock.patch.object(core, "THEME_SOURCES", {}):
+        # The older stylesheet is the only stylesheet source: the older theme
+        # declares no parts, so each of its files is served as it is.
+        with mock.patch.object(core, "THEME_ROOT", previous):
             before = self.rendered()
 
         old_hash, new_hash = stylesheet_hash(before), stylesheet_hash(after)

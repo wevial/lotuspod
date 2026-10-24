@@ -548,85 +548,16 @@ INDEX_SCRIPT = "lotuspod-index.js"
 # comment, no answer, and nothing posted.
 OLD_VERSION_SCRIPT = "lotuspod-old-version.js"
 THEME_FILES = ("lotuspod.css", "favicon.svg", PAGE_SCRIPT, INDEX_SCRIPT, OLD_VERSION_SCRIPT)
-# The served files written as one source per feature, relative to THEME_ROOT:
-# each is its sources joined in this order, byte for byte. A theme file not
-# named here is served as it is, from THEME_FILE_SOURCES. A new feature's file
-# takes one line here.
-THEME_SOURCES = {
-    "lotuspod.css": (
-        "core/theme/base.css",
-        "features/publish/theme/forms.css",
-        "features/decisions/theme/decisions.css",
-        "features/comments/theme/review-sheet.css",
-        "features/comments/theme/attachments.css",
-        "features/comments/theme/comments.css",
-        "features/comments/theme/panel-resize.css",
-        "features/comments/theme/narrow.css",
-        "features/live/theme/live-page.css",
-        "features/publish/theme/prose.css",
-        "features/blocks/theme/ref-cards.css",
-        "features/blocks/theme/calltree.css",
-        "features/blocks/theme/diagram-cards.css",
-        "features/blocks/theme/diagram-view.css",
-        "features/publish/theme/report.css",
-        "features/blocks/theme/table-expand.css",
-        "features/widgets/theme/widgets.css",
-        "features/blocks/theme/image-viewer.css",
-        "features/index/theme/index.css",
-        "features/index/theme/pod-tabs.css",
-        "features/index/theme/pod-finder.css",
-        "features/history/theme/versions.css",
-        "features/history/theme/archive.css",
-        "core/theme/theme-switch.css",
-    ),
-    PAGE_SCRIPT: (
-        "features/publish/ts/open-in-tabs.js",
-        "features/publish/ts/page-open.js",
-        "core/ts/shared.js",
-        "core/ts/link-tab.js",
-        "features/decisions/ts/decisions.js",
-        "features/comments/ts/narrow.js",
-        "features/comments/ts/attachments.js",
-        # Built from features/live/ts/live-events.ts: serve's change stream,
-        # which the sources after it listen to.
-        "features/live/ts/live-events.js",
-        "features/live/ts/live-page.js",
-        # Built from features/live/ts/page-swap.ts: it registers its swap with
-        # live.
-        "features/live/ts/page-swap.js",
-        "features/comments/ts/comment-markdown.js",
-        # The islands start the comments before later sources look for the
-        # panel and register their listeners. All bridge names are defined
-        # here.
-        "features/comments/ts/islands.js",
-        "features/comments/ts/panel-resize.js",
-        "features/blocks/ts/tables.js",
-        "features/blocks/ts/table-expand.js",
-        "features/blocks/ts/image-viewer.js",
-        "features/history/ts/version-menu.js",
-        "features/history/ts/versions.js",
-        "features/blocks/ts/diagram-cards.js",
-        "features/blocks/ts/diagram-view.js",
-        "features/blocks/ts/ref-cards.js",
-        # Built from features/blocks/ts/calltree.ts: it folds calltree blocks.
-        "features/blocks/ts/calltree.js",
-        "features/widgets/ts/widgets.js",
-        "features/history/ts/archive.js",
-    ),
-    INDEX_SCRIPT: (
-        "features/index/ts/pod-tabs.js",
-        "features/index/ts/pod-finder.js",
-        # Built from features/live/ts/index-refresh.ts: it swaps in the
-        # listing's rows as the index is served again.
-        "features/live/ts/index-refresh.js",
-        "features/live/ts/live-events.js",
-    ),
-    OLD_VERSION_SCRIPT: (
-        "core/ts/shared.js",
-        "features/history/ts/version-menu.js",
-        "features/history/ts/old-version.js",
-    ),
-}
+# The served files written as one source per feature are joined from parts,
+# each declared in THEME_PARTS at the root of core/ or of a slice
+# (features/SLICE/), from its own ts/ and theme/: a JSON list of
+# {"file": SERVED, "part": PATH, "slot": N}, PATH relative to that folder, and
+# an optional "why" saying why the part sits at its slot. Each served file is
+# its parts joined in slot order, byte for byte (theme_sources), so a new
+# feature's part is a line in its own folder's declaration; slots leave gaps
+# for one. A theme file no part names is served as it is, from
+# THEME_FILE_SOURCES.
+THEME_PARTS = "theme_parts.json"
 # The served scripts that run as one strict function, so their sources share
 # its helpers and objects (features/publish/ts/page-open.js, core/ts/shared.js) while each source
 # stays a complete script: the join puts THEME_CLOSURE_OPEN before the source
@@ -643,10 +574,33 @@ THEME_CLOSURES = {
 THEME_CLOSURE_OPEN = b'(function () {\n  "use strict";\n'
 THEME_CLOSURE_CLOSE = b"})();\n"
 # Each served theme file not joined from sources, relative to THEME_ROOT; a
-# name in neither table is read from _theme/.
+# name no part joins and not in this table is read from _theme/.
 THEME_FILE_SOURCES = {
     "favicon.svg": "core/theme/favicon.svg",
 }
+
+
+def theme_sources() -> dict[str, tuple[str, ...]]:
+    """Each joined served file's sources, relative to THEME_ROOT, in slot
+    order: the parts core's THEME_PARTS declares, then each slice's, by
+    folder name. Two parts of one served file at one slot are refused.
+    THEME_ROOT is read at call time, never at import."""
+    folders = [THEME_ROOT / "core",
+               *sorted(path for path in (THEME_ROOT / "features").glob("*") if path.is_dir())]
+    slotted: dict[str, dict[int, str]] = {}
+    for folder in folders:
+        declared = folder / THEME_PARTS
+        if not declared.is_file():
+            continue
+        prefix = folder.relative_to(THEME_ROOT).as_posix()
+        for part in json.loads(declared.read_text(encoding="utf-8")):
+            source, slots = f"{prefix}/{part['part']}", slotted.setdefault(part["file"], {})
+            if part["slot"] in slots:
+                raise ValueError(f"{declared}: {source} takes slot {part['slot']} of "
+                                 f"{part['file']}, which {slots[part['slot']]} holds")
+            slots[part["slot"]] = source
+    return {filename: tuple(slots[slot] for slot in sorted(slots))
+            for filename, slots in slotted.items()}
 
 
 def theme_files() -> list[tuple[str, bytes]]:
@@ -656,14 +610,15 @@ def theme_files() -> list[tuple[str, bytes]]:
     names them, so the ?v= address always follows what serve answers.
     THEME_ROOT is read at call time, never at import.
     """
-    return [(filename, theme_file_bytes(filename)) for filename in THEME_FILES]
+    sources = theme_sources()
+    return [(filename, theme_file_bytes(filename, sources)) for filename in THEME_FILES]
 
 
-def theme_file_bytes(filename: str) -> bytes:
-    """The bytes of one served theme file: its sources (THEME_SOURCES) joined
-    in their declared order, the closure (THEME_CLOSURES) around those it
-    wraps, or the file itself (THEME_FILE_SOURCES) when it has none."""
-    sources = THEME_SOURCES.get(filename)
+def theme_file_bytes(filename: str, declared: dict[str, tuple[str, ...]] | None = None) -> bytes:
+    """The bytes of one served theme file: its sources (theme_sources, or
+    declared) joined in slot order, the closure (THEME_CLOSURES) around those
+    it wraps, or the file itself (THEME_FILE_SOURCES) when it has none."""
+    sources = (theme_sources() if declared is None else declared).get(filename)
     if sources is None:
         return (THEME_ROOT / THEME_FILE_SOURCES.get(filename, f"_theme/{filename}")).read_bytes()
     parts = [(THEME_ROOT / source).read_bytes() for source in sources]

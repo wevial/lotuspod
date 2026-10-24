@@ -1,0 +1,15 @@
+[
+  {"file": "lotuspod.css", "part": "theme/ref-cards.css", "slot": 110},
+  {"file": "lotuspod.css", "part": "theme/calltree.css", "slot": 120},
+  {"file": "lotuspod.css", "part": "theme/diagram-cards.css", "slot": 130},
+  {"file": "lotuspod.css", "part": "theme/diagram-view.css", "slot": 140},
+  {"file": "lotuspod.css", "part": "theme/table-expand.css", "slot": 160},
+  {"file": "lotuspod.css", "part": "theme/image-viewer.css", "slot": 180},
+  {"file": "lotuspod-page.js", "part": "ts/tables.js", "slot": 140},
+  {"file": "lotuspod-page.js", "part": "ts/table-expand.js", "slot": 150},
+  {"file": "lotuspod-page.js", "part": "ts/image-viewer.js", "slot": 160},
+  {"file": "lotuspod-page.js", "part": "ts/diagram-cards.js", "slot": 190},
+  {"file": "lotuspod-page.js", "part": "ts/diagram-view.js", "slot": 200},
+  {"file": "lotuspod-page.js", "part": "ts/ref-cards.js", "slot": 210},
+  {"file": "lotuspod-page.js", "part": "ts/calltree.js", "slot": 220, "why": "Built from ts/calltree.ts: it folds calltree blocks."}
+]

@@ -197,3 +197,10 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
         f"[comments] owner_window_sec, else {routing.DEFAULT_WINDOW})",
     )
     serve.set_defaults(func=cmd_serve)
+
+
+# This slice's subcommands, each by the slot `lotuspod --help` lists it at
+# (lotuspod.cli.build_parser).
+COMMANDS = (
+    (40, add_parser),
+)

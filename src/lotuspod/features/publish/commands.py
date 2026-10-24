@@ -172,3 +172,11 @@ def add_publish_parser(sub: argparse._SubParsersAction) -> None:
     publish.add_argument('--live', action='store_true', help='publish a whole HTML document as a live widget')
     publish.add_argument('--notes', metavar='FILE', help='markdown notes below the --live document')
     publish.set_defaults(func=cmd_publish)
+
+
+# This slice's subcommands, each by the slot `lotuspod --help` lists it at
+# (lotuspod.cli.build_parser).
+COMMANDS = (
+    (10, add_render_parsers),
+    (30, add_publish_parser),
+)

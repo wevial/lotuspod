@@ -1,0 +1,8 @@
+[
+  {"file": "lotuspod.css", "part": "theme/live-page.css", "slot": 90},
+  {"file": "lotuspod-page.js", "part": "ts/live-events.js", "slot": 80, "why": "Built from ts/live-events.ts: serve's change stream, which the parts after it listen to."},
+  {"file": "lotuspod-page.js", "part": "ts/live-page.js", "slot": 90},
+  {"file": "lotuspod-page.js", "part": "ts/page-swap.js", "slot": 100, "why": "Built from ts/page-swap.ts: it registers its swap with live."},
+  {"file": "lotuspod-index.js", "part": "ts/index-refresh.js", "slot": 30, "why": "Built from ts/index-refresh.ts: it swaps in the listing's rows as the index is served again."},
+  {"file": "lotuspod-index.js", "part": "ts/live-events.js", "slot": 40}
+]

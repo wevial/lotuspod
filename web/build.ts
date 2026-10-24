@@ -5,8 +5,9 @@
 // alone), after one marker line naming the source. Beside them it bundles a
 // slice's islands entry, src/lotuspod/features/SLICE/ts/islands/main.tsx, with
 // its imports and Preact (from web/node_modules) into islands.js in that ts/,
-// after its marker line. The order the scripts are served in stays in
-// THEME_SOURCES in src/lotuspod/core/__init__.py, which joins them.
+// after its marker line. The order the scripts are served in is the slots
+// each slice's theme_parts.json declares; src/lotuspod/core/__init__.py joins
+// them.
 //
 //   bun build.ts [WEB_DIR]           build
 //   bun build.ts --check [WEB_DIR]   build, then fail on a file that does not

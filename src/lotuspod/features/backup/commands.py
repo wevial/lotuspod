@@ -69,3 +69,10 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
     restore_parser.add_argument("--out-dir", required=True, metavar="DIR",
                                 help="where the artifacts repository goes; must not exist")
     restore_parser.set_defaults(func=cmd_restore)
+
+
+# This slice's subcommands, each by the slot `lotuspod --help` lists it at
+# (lotuspod.cli.build_parser).
+COMMANDS = (
+    (80, add_parser),
+)

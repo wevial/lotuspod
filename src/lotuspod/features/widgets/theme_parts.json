@@ -1,0 +1,4 @@
+[
+  {"file": "lotuspod.css", "part": "theme/widgets.css", "slot": 170},
+  {"file": "lotuspod-page.js", "part": "ts/widgets.js", "slot": 230}
+]

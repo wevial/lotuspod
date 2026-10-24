@@ -1,0 +1,7 @@
+[
+  {"file": "lotuspod.css", "part": "theme/base.css", "slot": 10},
+  {"file": "lotuspod.css", "part": "theme/theme-switch.css", "slot": 240},
+  {"file": "lotuspod-page.js", "part": "ts/shared.js", "slot": 30},
+  {"file": "lotuspod-page.js", "part": "ts/link-tab.js", "slot": 40},
+  {"file": "lotuspod-old-version.js", "part": "ts/shared.js", "slot": 10}
+]
