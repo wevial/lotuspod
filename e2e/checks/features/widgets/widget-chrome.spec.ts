@@ -137,8 +137,10 @@ for (const [sizing, style] of [['height=260', ''], ['', 'body { min-height: 100v
       const popup = await popupPromise;
       await popup.waitForLoadState();
       expect(popup.url()).toBe(widgetURL);
-      expect(await popup.evaluate(() => self.origin)).toBe('null');
-      await expect.poll(async () => Number(await popup.locator('output').textContent())).toBeGreaterThan(1);
+      const alone = popup.frameLocator('iframe');
+      await expect(alone.locator('output')).toBeVisible();
+      expect(await alone.locator('body').evaluate(() => self.origin)).toBe('null');
+      await expect.poll(async () => Number(await alone.locator('output').textContent())).toBeGreaterThan(1);
       await popup.close();
       expect(errors.sort()).toEqual(['First intentional error', '<b>value</b>', 'Reset this error'].sort());
     } finally { releaseScript(); releaseWidget(); }
