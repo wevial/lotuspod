@@ -99,7 +99,7 @@
   appearance: none;
   background: color-mix(in srgb, var(--color-orchid) 14%, transparent);
   border: 1px solid var(--color-orchid);
-  border-radius: var(--radius-pill);
+  border-radius: var(--radius-block);
   color: var(--color-orchid);
   cursor: pointer;
   display: flex;

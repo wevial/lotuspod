@@ -149,11 +149,14 @@ function Panel({ desk }: { desk: Desk }) {
   if (!desk.ready.value) {
     return null;
   }
+  // Whether a form is still the page's: a swap may replace one while its
+  // save or its saved moment is pending, and a replaced form has no card.
+  const asked = (form: HTMLFormElement) => desk.forms.includes(form);
   // A form saved from the tab while the reader changed it again stays listed,
   // not saved, until it is saved or put back: the confirmation would hide
   // what is still unsaved.
   for (const form of kept.current) {
-    if (!desk.dirty(form)) kept.current.delete(form);
+    if (!asked(form) || !desk.dirty(form)) kept.current.delete(form);
   }
   const listed = desk.forms.filter((form) => desk.toAnswer(form) || held.has(form) || kept.current.has(form));
   function hold(form: HTMLFormElement, on: boolean): void {
@@ -164,12 +167,20 @@ function Panel({ desk }: { desk: Desk }) {
     });
   }
   function saved(form: HTMLFormElement, done: boolean): void {
+    if (!asked(form)) {
+      hold(form, false);
+      return;
+    }
     if (!done || desk.dirty(form)) {
       if (done) kept.current.add(form);
       hold(form, false);
       return;
     }
     setTimeout(() => {
+      if (!asked(form)) {
+        hold(form, false);
+        return;
+      }
       if (desk.dirty(form)) {
         kept.current.add(form);
         hold(form, false);
