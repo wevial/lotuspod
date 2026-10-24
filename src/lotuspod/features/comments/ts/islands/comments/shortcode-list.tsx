@@ -5,14 +5,13 @@ import { closed, fragment, matches, type Table } from "./shortcodes";
 // fetched once for every composer on the page, on the first colon typed in
 // any of them. A failed fetch leaves the composers as they were; the next
 // colon tries again.
-const TABLE = "lotuspod-emoji.json";
 let table: Table | null = null;
 let loading: Promise<Table | null> | null = null;
 
 function address(): string {
   const link = document.querySelector<HTMLLinkElement>('link[rel="stylesheet"][href*="?v="]');
   const theme = /[?&]v=([^&#]*)/.exec(link?.getAttribute("href") ?? "")?.[1] ?? "";
-  return new URL(TABLE + "?v=" + theme, link?.href ?? location.href).href;
+  return new URL("lotuspod-emoji.json?v=" + theme, link?.href ?? location.href).href;
 }
 
 function load(): Promise<Table | null> {
@@ -152,9 +151,7 @@ export function shortcodeList(form: HTMLFormElement, field: HTMLTextAreaElement)
   // emoji's length less the shortcode's, 0 for none.
   function convert(at: number): number {
     const done = table && closed(field.value, at, table);
-    if (!done) return 0;
-    const start = fragment(field.value, at - 1)!.start, emoji = done.text.slice(start, done.caret);
-    return replace(start, at, emoji) ? emoji.length - (at - start) : 0;
+    return done && replace(done.start, at, done.emoji) ? done.emoji.length - (at - done.start) : 0;
   }
   // The table arrived: the shortcodes the colons typed meanwhile close
   // become their emoji, the last first so the earlier carets still hold,

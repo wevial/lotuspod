@@ -34,13 +34,12 @@ export function matches(table: Table, query: string): string[] {
   return [...starting, ...containing].slice(0, LIMIT);
 }
 
-// The text with the shortcode a colon just typed before caret closes made
-// its emoji, and the caret right after the emoji; null when the colon closes
-// no shortcode in table.
-export function closed(text: string, caret: number, table: Table): { text: string; caret: number } | null {
+// The shortcode a colon just typed before caret closes: the index of its
+// opening colon and its emoji; null when the colon closes no shortcode in
+// table.
+export function closed(text: string, caret: number, table: Table): { start: number; emoji: string } | null {
   if (text[caret - 1] !== ":") return null;
   const open = fragment(text, caret - 1);
   if (!open || !Object.hasOwn(table, open.query)) return null;
-  const emoji = table[open.query]!;
-  return { text: text.slice(0, open.start) + emoji + text.slice(caret), caret: open.start + emoji.length };
+  return { start: open.start, emoji: table[open.query]! };
 }
