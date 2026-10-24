@@ -87,9 +87,9 @@ class VersionsWitness(Site):
         done = git(out, "log", "--format=%H", "--", f"{name}.html")
         return done.stdout.decode().split()
 
-    def get(self, path: str, token="valid"):
+    def get(self, path: str, token="valid", headers=None):
         """A page request: status, headers and body bytes."""
-        headers = {}
+        headers = dict(headers or {})
         if token == "valid":
             token = assertion()
         if token:

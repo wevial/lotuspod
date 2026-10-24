@@ -217,9 +217,17 @@ export function store(page: Page, bridge: StoreBridge): Store {
       (section === "page" && sections.get(page.wholePage)) || null;
   }
 
-  // The section a live block's frame is in, else the whole page.
+  // The section a live block's frame is in: its wrapper's, else that of the
+  // last h2 before it with a box on the page, else the whole page.
   function sectionOf(frame: HTMLIFrameElement) {
-    return frame.closest<HTMLElement>(".artifact-section-body")?.dataset.section ?? page.wholePage;
+    const wrapper = frame.closest<HTMLElement>(".artifact-section-body");
+    if (wrapper) return wrapper.dataset.section ?? page.wholePage;
+    let section = page.wholePage;
+    for (const heading of document.querySelectorAll<HTMLElement>("h2[id]")) {
+      if (!(heading.compareDocumentPosition(frame) & Node.DOCUMENT_POSITION_FOLLOWING)) break;
+      if (sections.has(heading.id)) section = heading.id;
+    }
+    return section;
   }
 
   // The line a thread on a section the page no longer has starts with.
