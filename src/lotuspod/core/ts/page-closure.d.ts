@@ -32,9 +32,6 @@ declare function all<E extends Element = HTMLElement>(selector: string, root?: P
 declare function json(response: Response): Promise<unknown>;
 // core/ts/link-tab.js: a link off the site opens in a new tab.
 declare function linkTab(link: Element): void;
-// js/decisions.js: what reads and saves the page's decision forms, null on a
-// page that loaded with neither a form nor a comment box.
-declare const answering: object | null;
 
 // js/page-open.js: fold a section's wrapper under its heading's button, as
 // fold says (else as the reader left it), marked "changed" while folded when

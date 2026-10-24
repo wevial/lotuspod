@@ -1,6 +1,7 @@
 import type { Attachments, Page, Swapped, Widget } from "../bridge";
 import { blockStanding } from "./anchor";
 import type { Kept, PassageDraft, Store } from "./parts";
+import { shared } from "./state";
 import { store as makeStore } from "./store";
 
 // A composer's text and images not sent, as kept over a reload or a swap:
@@ -159,8 +160,11 @@ export function drafts(page: Page, boxes: HTMLElement[]): void {
     return each.from ? each.from.pass(images) : images.restore(each.images);
   }
 
+  // The form says why a draft came to it: the drafts' mark, held in the
+  // store's state (comments/state.ts).
   function told(form: HTMLFormElement, why: string) {
     if (why) {
+      shared.write.mark(form, why);
       form.querySelector(".artifact-comment-status")!.textContent = why;
     }
   }
@@ -348,7 +352,7 @@ export function drafts(page: Page, boxes: HTMLElement[]): void {
   // Threads on a section taken away are listed with those on sections
   // the page no longer has, and a section added takes back its own. Each
   // decision form taken out or put in leaves or joins the decisions, in
-  // page order, a new one with its Ask, and a thread on a question the
+  // page order (its Ask the decisions island's), and a thread on a question the
   // page no longer asks is drawn as on a reload. The passages of the
   // parts swapped are found again in the new text, and numbered in page
   // order. A passage composer whose words went with a part (one held
@@ -387,7 +391,6 @@ export function drafts(page: Page, boxes: HTMLElement[]): void {
     decisions.push(...fresh);
     decisions.sort(inOrder);
     store.ask();
-    fresh.forEach(store.askAbout);
     if (olds.length || news.length) {
       remount(olds, news, unsent);
     } else {

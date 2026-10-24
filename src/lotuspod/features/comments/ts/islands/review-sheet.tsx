@@ -1,4 +1,4 @@
-// The review sheet over a page's decision forms (js/decisions.js), drawn
+// The review sheet over a page's decision cards (the decisions island), drawn
 // once the page's answers are read, and again once each swap's read of
 // them is (web/src/page-swap.ts sends ANSWERED after it). Each question's shown choice is its
 // picked option, else its stored answer at its version, else its default
@@ -25,7 +25,8 @@
 
 import { createPortal, Fragment, render } from "preact";
 import { useLayoutEffect, useReducer, useRef, useState } from "preact/hooks";
-import type { Answering, Page } from "./bridge";
+import type { Cards } from "../../../decisions/ts/index";
+import type { Page } from "./bridge";
 
 const MARKS = ".artifact-section-mark, .artifact-changed-tag, .artifact-review-open";
 
@@ -89,7 +90,7 @@ function picked(form: HTMLFormElement): HTMLInputElement | null {
 }
 
 // The value of a decision's shown choice; "" when it has none.
-function shown(the: Answering, question: Question): string {
+function shown(the: Cards, question: Question): string {
   const choice = picked(question.form);
   if (choice) {
     return choice.value;
@@ -98,14 +99,14 @@ function shown(the: Answering, question: Question): string {
   return answer ? String(answer.choice) : question.fallback;
 }
 
-function label(the: Answering, question: Question, value: string): string {
+function label(the: Cards, question: Question, value: string): string {
   const radio = radioOf(question, value);
   return radio ? the.optionText(radio) : value;
 }
 
 // A question whose saved answer is a dismissal is Dismissed, never pending,
 // so it is never counted nor jumped to as open.
-function standing(the: Answering, question: Question): Standing {
+function standing(the: Cards, question: Question): Standing {
   const form = question.form;
   const answer = the.saved(form);
   if (answer && answer.dismissed) {
@@ -129,7 +130,7 @@ function standing(the: Answering, question: Question): Standing {
   };
 }
 
-function opened(the: Answering, question: Question): boolean {
+function opened(the: Cards, question: Question): boolean {
   return standing(the, question).name === "Open";
 }
 
@@ -179,7 +180,7 @@ interface Group {
 
 interface SheetProps {
   page: Page;
-  the: Answering;
+  the: Cards;
   questions: Question[];
   // One group per section asking a question, in page order, under its
   // title; a question before the first h2 is under the page's title. The
@@ -450,10 +451,10 @@ function Sheet({ page, the, questions, groups, marks }: SheetProps) {
 // Each question in page order, under the nearest h2 before its form, and
 // one group per h2 asking one, each followed by one per live block its
 // questions are about. The heading stays the h2's, which the marks count.
-function questionsOf(page: Page, the: Answering,
+function questionsOf(page: Page, the: Cards,
   asks: (form: HTMLFormElement) => boolean): { questions: Question[]; groups: Group[] } {
   const headings = all<HTMLElement>("h2", document.querySelector("section.artifact-body")!);
-  const questions = page.forms.filter(asks).map((form): Question => {
+  const questions = the.forms.filter(asks).map((form): Question => {
     let heading: HTMLElement | null = null;
     for (const h2 of headings) {
       if (h2.compareDocumentPosition(form) & Node.DOCUMENT_POSITION_FOLLOWING) {
@@ -548,7 +549,7 @@ function markUp(marks: Map<HTMLElement, Marks>, questions: Question[]): void {
 // Draw the sheet over the page's forms, once their answers are read: into
 // tools, the same container each time, so Preact keeps the sheet's own
 // state. The forms in read are those an earlier draw picked defaults on.
-function draw(page: Page, the: Answering, tools: HTMLElement, marks: Map<HTMLElement, Marks>,
+function draw(page: Page, the: Cards, tools: HTMLElement, marks: Map<HTMLElement, Marks>,
   read: WeakSet<HTMLFormElement>): void {
   // A form brought in by a swap whose read failed has no answer read: it
   // stays out of the sheet, so no default is picked or saved over one,
@@ -605,16 +606,16 @@ function draw(page: Page, the: Answering, tools: HTMLElement, marks: Map<HTMLEle
 // A live block's "N decisions" (lotuspod.widgets) is such a link to the
 // first question about it, which then also takes the focus, as jump() gives
 // it, pressed again once it is the address too.
-export function reviewSheet(page: Page): void {
-  const the = page.answering;
-  if (!the || !page.forms.length) {
+export function reviewSheet(page: Page, cards: Cards | null): void {
+  if (!cards || !cards.forms.length) {
     return;
   }
+  const the = cards;
   // The question a block's link was last pressed for, until it is followed.
   let focusing: string | null = null;
   function toQuestion(first: boolean): void {
     const id = page.linkedTo("question", first);
-    const form = page.forms.find((each) => each.dataset.question === id);
+    const form = the.forms.find((each) => each.dataset.question === id);
     const focus = !first && id !== null && id === focusing;
     focusing = null;
     if (form) {
@@ -657,9 +658,9 @@ export function reviewSheet(page: Page): void {
 // The sheet's first draw, and once it is drawn, a draw again after each
 // swap's read of the answers: never before it, so no default is picked
 // over an answer not read yet.
-function sheet(page: Page, the: Answering): void {
+function sheet(page: Page, the: Cards): void {
   const bar = document.querySelector(".artifact-topbar");
-  if (!bar || !document.querySelector("section.artifact-body") || page.archived || !page.forms.length) {
+  if (!bar || !document.querySelector("section.artifact-body") || page.archived || !the.forms.length) {
     return;
   }
   const tools = bar.appendChild(document.createElement("div"));

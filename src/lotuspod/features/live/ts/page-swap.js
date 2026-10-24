@@ -6,6 +6,7 @@ function holdSwap(test) {
 function pageSwap() {
   const ADDED = "div.artifact-answered, .artifact-comments-changed";
   const DECISION = "form.artifact-decision";
+  const DECIDES = document.querySelector(DECISION + ", details.artifact-comment[data-page]") !== null;
   const DIAGRAM = "pre.mermaid";
   const HELD = "div.artifact-swap-held";
   const CHANGED_TEXT = "This section changed";
@@ -165,7 +166,7 @@ function pageSwap() {
       })
     ].filter((node) => node !== null);
     const decided = (nodes) => nodes.some((node) => node instanceof Element && (node.matches(DECISION) || node.querySelector(DECISION) !== null));
-    if (answering === null && decided(touched))
+    if (!DECIDES && decided(touched))
       return null;
     const holds = (nodes, gone) => {
       const elements = nodes.filter((node) => node instanceof Element);

@@ -1,4 +1,3 @@
 [
-  {"file": "lotuspod.css", "part": "theme/decisions.css", "slot": 30},
-  {"file": "lotuspod-page.js", "part": "ts/decisions.js", "slot": 50}
+  {"file": "lotuspod.css", "part": "theme/decisions.css", "slot": 30}
 ]
