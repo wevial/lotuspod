@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/mermaid@11.4.1/ https://cdn.jsdelivr.net/npm/@mermaid-js/layout-elk@0.2.3/ 'sha256-yoSLl6+rAJiio3R2qWc+n+JjKvJcyiXFytiQ0qXtytE=' 'sha256-2NqqFEGuvrQJJuKrjRGAYx0pwxQQey6K/CjqhQJ5d0g='; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/mermaid@11.4.1/ https://cdn.jsdelivr.net/npm/@mermaid-js/layout-elk@0.2.3/ 'sha256-Lz7FdbrIfXWyccqQY8WoZNd9UJsitwNDjW5Swiho0W0=' 'sha256-2NqqFEGuvrQJJuKrjRGAYx0pwxQQey6K/CjqhQJ5d0g='; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Plain Page · Lotuspod</title>
   <meta name="generator" content="lotuspod theme lotus">
@@ -48,6 +48,20 @@
   root.setAttribute("data-theme", resolved());
   light.addEventListener("change", function () {
     if (choice === "auto") apply();
+  });
+  // A choice made in another document of this site (another tab, or a pod
+  // framed in the index) reaches this one as a storage event; a null key is
+  // storage cleared, which is Auto. sessionStorage's events are not the choice.
+  window.addEventListener("storage", function (event) {
+    if (event.key !== KEY && event.key !== null) return;
+    try {
+      if (event.storageArea !== window.localStorage) return;
+    } catch (error) {
+      return;
+    }
+    var kept = event.newValue;
+    choice = kept === "night" || kept === "dawn" ? kept : "auto";
+    apply();
   });
 
   document.addEventListener("DOMContentLoaded", function () {
