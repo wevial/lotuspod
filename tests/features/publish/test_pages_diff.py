@@ -70,10 +70,10 @@ class PagesDiffTests(unittest.TestCase):
                         cwd=self.tmp)
         self.assertEqual(done.returncode, 0, done.stderr)
 
-    def edit(self, file: str, old: str, new: str, count: int = 1) -> None:
+    def edit(self, file: str, old: str, new: str) -> None:
         path = self.out_dir / file
         text = path.read_text(encoding="utf-8")
-        self.assertEqual(text.count(old), count, f"{old!r} in {file}")
+        self.assertEqual(text.count(old), 1, f"{old!r} in {file}")
         path.write_text(text.replace(old, new), encoding="utf-8")
 
     def report(self, *extra: str) -> subprocess.CompletedProcess:
