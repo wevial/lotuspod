@@ -8,8 +8,4 @@ from lotuspod.features import public_edge
 # The names the other slices use, by the module that defines each.
 __getattr__ = public_edge(__name__, {
     "add_stale_parser": "commands",
-    "overtaken": "stale",
-    "page_pulls": "stale",
-    "read_states": "stale",
-    "states_path": "stale",
 })
