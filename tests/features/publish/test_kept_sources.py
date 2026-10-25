@@ -313,6 +313,39 @@ class MigrateTests(MigrateTestCase):
                          ["migrate", "pages", "old-plain.body.html"])
         self.assertEqual(git(self.out_dir, "status", "--porcelain"), " M notes.txt\n")
 
+    def test_a_refused_push_keeps_whatever_else_is_staged(self):
+        notes = self.out_dir / "notes.txt"
+        notes.write_text("committed\n", encoding="utf-8")
+        self.commit("add notes")
+        notes.write_text("staged\n", encoding="utf-8")
+        git(self.out_dir, "add", "notes.txt")
+        notes.write_text("working\n", encoding="utf-8")
+        hook = self.bare / "hooks" / "pre-receive"
+        hook.write_text("#!/bin/sh\nexit 1\n", encoding="utf-8")
+        hook.chmod(0o755)
+        head = git(self.out_dir, "rev-parse", "HEAD")
+
+        rc, out, err = self.migrate()
+        self.assertEqual((rc, out), (1, ""))
+        self.assertIn("nothing kept", err)
+        self.assertFalse((self.out_dir / "old-plain.body.html").exists())
+        self.assertEqual(git(self.out_dir, "rev-parse", "HEAD"), head)
+        self.assertEqual(git(self.out_dir, "show", ":notes.txt"), "staged\n")
+        self.assertEqual(notes.read_text(encoding="utf-8"), "working\n")
+
+    def test_a_section_in_a_noscript_is_not_the_body(self):
+        plain = (FIXTURES / "old-plain.html").read_text(encoding="utf-8")
+        fallback = plain.replace('  <main class="artifact"', '  <noscript><section class="artifact-body">'
+                                 '<p>Fallback</p></section></noscript>\n  <main class="artifact"')
+        self.assertNotEqual(fallback, plain)
+        (self.out_dir / "fallback.html").write_text(fallback, encoding="utf-8")
+        self.commit("add fallback")
+
+        rc, _, err = self.migrate()
+        self.assertEqual((rc, err), (0, ""))
+        self.assertEqual((self.out_dir / "fallback.body.html").read_text(encoding="utf-8"),
+                         (self.out_dir / "old-plain.body.html").read_text(encoding="utf-8"))
+
     def test_a_section_in_a_template_is_not_the_body(self):
         plain = (FIXTURES / "old-plain.html").read_text(encoding="utf-8")
         decoy = plain.replace('  <main class="artifact"', '  <template><section class="artifact-body">'
@@ -371,16 +404,13 @@ class FrameNameTests(unittest.TestCase):
         for name in published.values():
             self.assertIn(b"<p>same</p>", files[name])
 
-    def test_two_blocks_made_different_keep_their_own_bytes(self):
+    def test_two_blocks_sharing_a_frame_made_different_are_refused(self):
         published = self.publish("same", "same")
         self.assertEqual(published["a"], published["b"])
         self.edit("same", "changed")
-        page_html, files = kept.render_kept(self.out_dir, "board")
-        rendered = self.frames(page_html)
-        self.assertEqual(rendered["a"], published["a"])
-        self.assertNotEqual(rendered["b"], rendered["a"])
-        self.assertIn(b"<p>same</p>", files[rendered["a"]])
-        self.assertIn(b"<p>changed</p>", files[rendered["b"]])
+        with self.assertRaisesRegex(RuntimeError, rf"live block b: its frame "
+                                    rf"{re.escape(published['a'])} is also block a's"):
+            kept.render_kept(self.out_dir, "board")
 
 
 if __name__ == "__main__":

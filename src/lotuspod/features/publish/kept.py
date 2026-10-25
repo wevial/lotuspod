@@ -12,6 +12,7 @@ from html.parser import HTMLParser
 from pathlib import Path
 
 from lotuspod.core import (BODY_SOURCE_SUFFIX, DEFAULT_OUTPUT_DIR, _KEPT_SOURCE_SUFFIX, _git,
+                           Templates,
                            _git_ok, _GitFailed, extract_meta, html_title, is_page_name,
                            is_repository_top, normalized, publish_lock, write_atomic)
 from lotuspod.features import agents
@@ -29,7 +30,10 @@ _OUTLINE_MARK = '<nav class="artifact-outline"'
 
 class _BodySpan(HTMLParser):
     """Locate the inner HTML of a page's section.artifact-body. A template's
-    content is inert, so no section inside one is the page's."""
+    content is inert, so no section inside one is the page's, and a
+    noscript's is raw text, as core.Templates reads it."""
+
+    CDATA_CONTENT_ELEMENTS = Templates.CDATA_CONTENT_ELEMENTS
 
     def __init__(self, page_html: str) -> None:
         super().__init__(convert_charrefs=True)
@@ -261,7 +265,10 @@ def commit_sources(out_dir: Path, written: list[Path]) -> None:
         if not _git(out_dir, "remote", "get-url", "origin").returncode:
             _git_ok(out_dir, "push", "origin", "HEAD:main")
     except _GitFailed:
-        _git(out_dir, "reset", "-q", *(["HEAD~1"] if committed else ["--", *names]))
+        # Only the sources written leave the index; anything else staged stays.
+        if committed:
+            _git(out_dir, "reset", "-q", "--soft", "HEAD~1")
+        _git(out_dir, "reset", "-q", "HEAD", "--", *names)
         for path in written:
             path.unlink(missing_ok=True)
         raise

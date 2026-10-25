@@ -379,9 +379,10 @@ def label_context(labels: list[str]) -> dict:
 def keep_frame_names(body: str, files: dict[str, bytes], name: str,
                      frame_names: dict[str, str]) -> tuple[str, dict[str, bytes]]:
     """The body and frame files with each live block's frame named as
-    frame_names gives for its id; the bytes stay today's. A block keeps
-    today's name when the name it was given already holds other bytes."""
+    frame_names gives for its id; the bytes stay today's. A frame name is
+    an anchor, so RuntimeError when two blocks given one name now differ."""
     kept_files: dict[str, bytes] = {}
+    owners: dict[str, str] = {}
     targets: dict[str, tuple[str, str]] = {}
     for ident, (hash_, _, _) in widgets.PageWidgets(body).found.items():
         today = f"{name}.w-{hash_}.html"
@@ -389,8 +390,12 @@ def keep_frame_names(body: str, files: dict[str, bytes], name: str,
             continue
         target = frame_names.get(ident) or today
         if kept_files.get(target, files[today]) != files[today]:
-            target = today
+            raise RuntimeError(
+                f"live block {ident}: its frame {target} is also block {owners[target]}'s, "
+                "whose bytes now differ, so a render would move its frame name"
+            )
         kept_files[target] = files[today]
+        owners.setdefault(target, ident)
         targets[ident] = (today, target)
 
     def rename(figure: re.Match) -> str:
