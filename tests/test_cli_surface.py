@@ -32,7 +32,7 @@ REMOVED_PATHS = (
     "tests/test_responses_pull.py",
     "src/lotuspod/_theme/lotuspod-form.js",
 )
-COMMANDS = ("render", "manifest", "index", "serve", "publish", "credential", "answers",
+COMMANDS = ("render", "manifest", "index", "serve", "publish", "pages", "credential", "answers",
             "comments", "audit", "respond", "backup", "restore", "archive", "unarchive",
             "inbox")
 REMOVED_COMMANDS = ("export", "responses")

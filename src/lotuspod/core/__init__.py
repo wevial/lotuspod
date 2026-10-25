@@ -307,7 +307,11 @@ def source_revision(data: bytes) -> str:
 def page_revision(out_dir: Path, name: str) -> str:
     """The revision NAME.html is published at; "none" when there is no page.
 
-    A page rendered before revisions were stamped takes its kept source's.
+    A page rendered before revisions were stamped takes its kept NAME.md's.
+    Publish has stamped every page it kept a NAME.body.html for, so an
+    unstamped page beside one kept it from `lotuspod pages migrate`, which
+    takes the page's own body: it has no revision until it is published
+    again, however that source is edited meanwhile.
     """
     page = out_dir / f"{name}.html"
     if not page.exists():
@@ -319,7 +323,7 @@ def page_revision(out_dir: Path, name: str) -> str:
     for suffix in _KEPT_SOURCE_SUFFIX.values():
         kept = out_dir / f"{name}{suffix}"
         if kept.is_file():
-            return source_revision(kept.read_bytes())
+            return "" if suffix == BODY_SOURCE_SUFFIX else source_revision(kept.read_bytes())
     return ""
 
 

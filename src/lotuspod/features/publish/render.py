@@ -41,6 +41,9 @@ VARIANTS = (DEFAULT_VARIANT, "report")
 # element's text verbatim, so render leaves it alone and only decides from its
 # presence whether the page needs the drawing script at all.
 _MERMAID_BLOCK = re.compile(r'<pre\b[^>]*\bclass="[^"]*\bmermaid\b')
+# A live block as widgets.render writes it, its frame and links inside.
+_LIVE_FIGURE = re.compile(r'<figure class="artifact-live" data-widget="([^"]*)">.*?</figure>',
+                          re.DOTALL)
 _CALLTREE_BLOCK = re.compile(r'<div\b[^>]*\bclass="(?:[^"]*\s)?calltree[\s"]')
 
 
@@ -373,12 +376,45 @@ def label_context(labels: list[str]) -> dict:
     }
 
 
-def cmd_render(args: argparse.Namespace) -> int:
+def keep_frame_names(body: str, files: dict[str, bytes], name: str,
+                     frame_names: dict[str, str]) -> tuple[str, dict[str, bytes]]:
+    """The body and frame files with each live block's frame named as
+    frame_names gives for its id; the bytes stay today's. A frame name is
+    an anchor, so RuntimeError when two blocks given one name now differ."""
+    kept_files: dict[str, bytes] = {}
+    owners: dict[str, str] = {}
+    targets: dict[str, tuple[str, str]] = {}
+    for ident, (hash_, _, _) in widgets.PageWidgets(body).found.items():
+        today = f"{name}.w-{hash_}.html"
+        if today not in files:
+            continue
+        target = frame_names.get(ident) or today
+        if kept_files.get(target, files[today]) != files[today]:
+            raise RuntimeError(
+                f"live block {ident}: its frame {target} is also block {owners[target]}'s, "
+                "whose bytes now differ, so a render would move its frame name"
+            )
+        kept_files[target] = files[today]
+        owners.setdefault(target, ident)
+        targets[ident] = (today, target)
+
+    def rename(figure: re.Match) -> str:
+        today, target = targets.get(html.unescape(figure.group(1)), ("", ""))
+        if not today or today == target:
+            return figure.group(0)
+        return figure.group(0).replace(html.escape(today), html.escape(target))
+
+    body = _LIVE_FIGURE.sub(rename, body)
+    kept_files.update({filename: data for filename, data in files.items()
+                       if filename not in {today for today, _ in targets.values()}})
+    return body, kept_files
+
+
+def build_page(args: argparse.Namespace) -> argparse.Namespace:
+    """The page cmd_render writes, built without writing anything: its
+    html, final body and live-block frame files (widget_files), with the
+    warnings, refs and names of refs used (named) the writing needs."""
     with_comments = getattr(args, "comments", False)
-    if with_comments and args.no_outline:
-        print("error: --comments needs the heading ids --no-outline leaves out; "
-              "nothing written", file=sys.stderr)
-        return 1
     owner = getattr(args, "owner", "")
     if owner and not getattr(args, "owner_checked", False):
         check_owner(args, Path(args.out_dir) if args.out_dir else DEFAULT_OUTPUT_DIR)
@@ -411,6 +447,8 @@ def cmd_render(args: argparse.Namespace) -> int:
             raise RuntimeError(f"image {line.src} in {label}: {why}; nothing written")
         body = markdown.to_body(text, sizes)
     body, widget_files, widget_warnings = widgets.render(body, args.name)
+    if getattr(args, "frame_names", None):
+        body, widget_files = keep_frame_names(body, widget_files, args.name, args.frame_names)
     body, has_node_tables = mark_node_tables(body)
     # Before the outline, so the forms sit inside their section.
     body, has_decisions = decisions.render_decisions(body, args.name)
@@ -485,7 +523,20 @@ def cmd_render(args: argparse.Namespace) -> int:
         "summary_block",
     )))
     context["outline_digest"] = unit_digest(context["outline_items"])
-    html = render_page(context)
+    return argparse.Namespace(html=render_page(context), body=body, out_dir=out_dir,
+                              widget_files=widget_files, widget_warnings=widget_warnings,
+                              page_refs=page_refs, named=named)
+
+
+def cmd_render(args: argparse.Namespace) -> int:
+    if getattr(args, "comments", False) and args.no_outline:
+        print("error: --comments needs the heading ids --no-outline leaves out; "
+              "nothing written", file=sys.stderr)
+        return 1
+    built = build_page(args)
+    html, body, out_dir = built.html, built.body, built.out_dir
+    widget_files, widget_warnings = built.widget_files, built.widget_warnings
+    page_refs, named = built.page_refs, built.named
 
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / f"{args.name}.html"

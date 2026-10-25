@@ -1,6 +1,7 @@
 """The publish slice's commands: `lotuspod render` (render.py), `lotuspod
-manifest` (manifest.py) and `lotuspod publish` (publish.py). `lotuspod index`
-sits between manifest and publish, so each run is registered on its own."""
+manifest` (manifest.py), `lotuspod publish` (publish.py) and `lotuspod pages`
+(kept.py). `lotuspod index` sits between manifest and publish, so each run is
+registered on its own."""
 
 from __future__ import annotations
 
@@ -8,6 +9,7 @@ import argparse
 
 from lotuspod.features import agents
 from lotuspod.core import EXIT_REVISION_CONFLICT, NO_REVISION
+from lotuspod.features.publish.kept import cmd_pages_migrate
 from lotuspod.features.publish.manifest import cmd_manifest
 from lotuspod.features.publish.publish import (LABEL_MAX, PUBLISH_FORMATS, PUBLISH_VARIANT,
                                                cmd_publish)
@@ -174,8 +176,24 @@ def add_publish_parser(sub: argparse._SubParsersAction) -> None:
     publish.set_defaults(func=cmd_publish)
 
 
+def add_pages_parser(sub: argparse._SubParsersAction) -> None:
+    """Register `lotuspod pages migrate`."""
+    pages = sub.add_parser("pages", help="work on every page of the output directory at once")
+    actions = pages.add_subparsers(dest="action", required=True)
+    migrate = actions.add_parser(
+        "migrate",
+        help="keep the body of each page that has no source as NAME.body.html, once a "
+        "render from it gives the page's text and anchors back, and commit once",
+    )
+    migrate.add_argument("--check", action="store_true",
+                         help="print what migrate would keep and refuse; write nothing")
+    migrate.add_argument("--out-dir", default="", help="output directory (default: artifacts/)")
+    migrate.set_defaults(func=cmd_pages_migrate)
+
+
 # This slice's subcommands by slot, the order `lotuspod --help` lists them in.
 COMMANDS = (
     (10, add_render_parsers),
     (30, add_publish_parser),
+    (35, add_pages_parser),
 )
