@@ -263,12 +263,14 @@ class DeclaredOrderTests(ThemeCopyTestCase):
 
     def test_the_pod_tabs_sources_are_declared_and_the_index_script_is_served(self):
         """LOTUS-101: the index script, lotuspod-index.js, is joined from
-        features/index/ts/pod-tabs.js, written and served beside the page
-        script; the tabs' styles follow features/index/theme/index.css, which
-        they draw over."""
+        the index slice's islands bundle, features/index/ts/islands.js, whose
+        tabs no hand-written source draws since LOTUS-268, written and served
+        beside the page script; the tabs' styles follow
+        features/index/theme/index.css, which they draw over."""
         styles = core.theme_sources()[STYLESHEET]
         self.assertEqual(core.INDEX_SCRIPT, "lotuspod-index.js")
-        self.assertEqual(core.theme_sources()[core.INDEX_SCRIPT][0], "features/index/ts/pod-tabs.js")
+        self.assertEqual(core.theme_sources()[core.INDEX_SCRIPT][0], "features/index/ts/islands.js")
+        self.assertFalse((core.THEME_ROOT / "features" / "index" / "ts" / "pod-tabs.js").exists())
         self.assertEqual(styles.index("features/index/theme/pod-tabs.css"), styles.index("features/index/theme/index.css") + 1)
         self.assertIn(core.INDEX_SCRIPT, core.THEME_FILES)
         self.assertIn(core.INDEX_SCRIPT, serve_files.serve_allow_list(self.out_dir))
@@ -311,11 +313,11 @@ class DeclaredOrderTests(ThemeCopyTestCase):
     def test_the_pod_finder_sources_follow_the_pod_tabs_sources(self):
         """LOTUS-102: the finder hands its choice to the tabs and opens from
         their strip, so features/index/ts/pod-finder.js is joined just after
-        features/index/ts/pod-tabs.js in the index script, and its styles just
+        the tabs' features/index/ts/islands.js in the index script, and its styles just
         after features/index/theme/pod-tabs.css."""
         styles = core.theme_sources()[STYLESHEET]
         self.assertEqual(core.theme_sources()[core.INDEX_SCRIPT][:2],
-                         ("features/index/ts/pod-tabs.js", "features/index/ts/pod-finder.js"))
+                         ("features/index/ts/islands.js", "features/index/ts/pod-finder.js"))
         self.assertEqual(styles.index("features/index/theme/pod-finder.css"), styles.index("features/index/theme/pod-tabs.css") + 1)
         problems = source_problems(core.THEME_ROOT, core.theme_sources())
         self.assertEqual(problems, [], "\n".join(problems))
@@ -330,7 +332,7 @@ class DeclaredOrderTests(ThemeCopyTestCase):
         page = core.theme_sources()[core.PAGE_SCRIPT]
         self.assertEqual(page.index("features/live/ts/live-events.js") + 1, page.index("features/live/ts/live-page.js"))
         self.assertEqual(core.theme_sources()[core.INDEX_SCRIPT],
-                         ("features/index/ts/pod-tabs.js", "features/index/ts/pod-finder.js", "features/live/ts/index-refresh.js",
+                         ("features/index/ts/islands.js", "features/index/ts/pod-finder.js", "features/live/ts/index-refresh.js",
                           "features/live/ts/live-events.js"))
         self.assertNotIn("features/live/ts/live-events.js", core.theme_sources()[core.OLD_VERSION_SCRIPT])
         problems = source_problems(core.THEME_ROOT, core.theme_sources())
@@ -373,13 +375,13 @@ class DeclaredOrderTests(ThemeCopyTestCase):
     def test_a_declared_source_not_on_disk_is_named(self):
         theme = self.theme_copy()
         comments_css = "features/comments/theme/comments.css"
-        versions_js = "features/history/ts/versions.js"
+        archive_js = "features/history/ts/archive.js"
         (theme / comments_css).unlink()
-        (theme / versions_js).unlink()
+        (theme / archive_js).unlink()
         problems = source_problems(theme, sources_at(theme))
         self.assertEqual(len(problems), 2, problems)
         self.assertTrue(problems[0].startswith(f"{comments_css}: "), problems)
-        self.assertTrue(problems[1].startswith(f"{versions_js}: "), problems)
+        self.assertTrue(problems[1].startswith(f"{archive_js}: "), problems)
 
     def test_a_new_slices_part_is_joined_at_its_slot(self):
         """A new slice folder holding one stylesheet part and its declaration,

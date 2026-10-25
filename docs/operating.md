@@ -245,6 +245,59 @@ It exits 1 only when a page failed. It writes nothing and commits nothing;
 it holds the publish lock only while it reads the pages, and makes no lock
 file where none is yet.
 
+## Which pages a merge has overtaken
+
+A page that lists a pull request as in flight keeps saying so after it
+merges, until someone publishes the page again. `lotuspod pages stale` lists
+each page linking a GitHub pull request that merged or closed after the
+page's last publish:
+
+```sh
+lotuspod pages stale --check --out-dir artifacts   # look the pull requests up, then list
+lotuspod pages stale --json --out-dir artifacts    # list from the states kept; look nothing up
+```
+
+A page's links are the `href`s in its `NAME.html` of the form
+`https://github.com/OWNER/REPO/pull/N` (a `/files`, `?...` or `#...` after
+it included, reference cards' links too), each counted once per page. It
+reads every page serve answers that the manifest lists and that is not
+archived, and compares with the manifest's `updated`.
+
+`--check` first looks up each linked pull request with
+`GET $LOTUSPOD_GITHUB_API/repos/OWNER/REPO/pulls/N` (default
+`https://api.github.com`; name a GitHub Enterprise host's API there), sending
+`Authorization: Bearer $GITHUB_TOKEN` when `GITHUB_TOKEN` is set: a private
+repository needs one, and a token raises the hourly rate limit. A pull
+request stored merged is never looked up again; any other only when it was
+checked `--every` minutes ago or more (default 15). A 404 is stored
+`unknown`. On a 403 or 429, a timeout or any other failure, the check stops,
+keeps every state it learned, prints `pages stale: stopped looking up:
+REASON; M of T pull requests not checked` on standard error, and still lists.
+Without `--check` nothing is looked up.
+
+The states are kept in `lotuspod-pulls.json` beside serve's database
+(`--db`, default `lotuspod.sqlite3` beside the artifacts directory), never in
+the output directory: `{"pulls": {"owner/repo#N": {state, at, checked}}}`,
+`state` one of `open`, `merged`, `closed` and `unknown`, `at` the merge or
+close time. It is written whole and renamed into place. A `--db` inside the
+output directory is refused, as serve refuses it. The command writes nothing
+in the output directory and commits nothing.
+
+The list is made from the stored states and each page's `updated` at the
+time it runs, so a page published again after the merge drops off at once.
+It prints `NAME  updated UPDATED  M merged, C closed since: owner/repo#N, ...`
+for each page, oldest first, or `no page is out of date`. `--json` prints
+`{"pages": [{page, title, updated, merged, closed}], "unchecked": N}`, each of
+`merged` and `closed` a list of `{pull, url, at}` and `unchecked` the linked
+pull requests with no stored state. It exits 0.
+
+To keep the states fresh, run the check on a timer on the writer host as the
+user serve runs as, for example from cron every 15 minutes:
+
+```sh
+*/15 * * * * cd /srv/lotuspod && GITHUB_TOKEN=... lotuspod pages stale --check --out-dir artifacts > /dev/null
+```
+
 ## Deploying from main
 
 The live site runs from its own checkout and follows `main` by itself. A
