@@ -369,9 +369,11 @@ def diff_page(out_dir: Path, name: str) -> dict:
         return found
     found["anchors"] = anchor_changes(published, rendered)
     words = [_anchor_words(change) for change in found["anchors"]]
-    # By section, block boundaries kept, as history reads a page's text.
-    text_changed = ([section.text for section in history.sections(page_html)]
-                    != [section.text for section in history.sections(rendered_html)])
+    # The whole body's text, block boundaries kept as history reads them;
+    # where its sections split is no change of text.
+    text_changed = len({" ".join(" ".join(section.text for section in
+                                          history.sections(html_)).split())
+                        for html_ in (page_html, rendered_html)}) > 1
     if text_changed:
         compared = history.compare(page_html, rendered_html)
         titles = [section["title"] for part in ("changed", "added", "removed")

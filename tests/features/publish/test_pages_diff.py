@@ -154,7 +154,7 @@ class PagesDiffTests(unittest.TestCase):
         self.edit("lone.body.html", "<h2>Banks</h2>", "<h3>Banks</h3>")
         lone = {page["name"]: page for page in json.loads(self.report("--json").stdout)
                 ["pages"]}["lone"]
-        self.assertEqual((lone["kind"], lone["anchors"]), ("text", []))
+        self.assertEqual((lone["kind"], lone["sections"], lone["anchors"]), ("markup", [], []))
 
     def test_a_page_whose_render_fails_is_failed_and_the_others_still_reported(self):
         self.publish("pictured", PICTURED)
