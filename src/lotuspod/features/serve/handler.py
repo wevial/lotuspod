@@ -26,8 +26,8 @@ from lotuspod.features import live
 from lotuspod.features import publish
 from lotuspod.features.publish import version_stamp
 from lotuspod.features.serve import access, api, serve_files
-from lotuspod.features.serve.pages import (api_catalog, api_page, render_version, rendered_page,
-                                           served_page_names)
+from lotuspod.features.serve.pages import (api_catalog, api_page, render_version, rendered_index,
+                                           rendered_page, served_page_names)
 from lotuspod.features.serve.serve_files import _SERVE_NEVER_FILES
 from lotuspod.features import widgets
 from lotuspod.store import db
@@ -100,7 +100,8 @@ class _AllowListHandler(SimpleHTTPRequestHandler):
     other query on a page is served as the page. A page is answered as
     rendered now from what it keeps (see _serve_rendered), never its
     published file unless that render fails; one with an archive record is
-    answered marked archived (see _serve_archived).
+    answered marked archived (see _serve_archived). The index, at / and
+    /index.html, is answered rendered from the manifest (see _serve_index).
     """
 
     # Whether the response being written is a page's, and the type of the
@@ -413,6 +414,15 @@ class _AllowListHandler(SimpleHTTPRequestHandler):
                                      f'"{rendered.inputs}-{self.render_version}"',
                                      _RENDERED_HEADERS)
 
+    def _serve_index(self):
+        """The index rendered from the manifest; None when the manifest
+        cannot be read, so it is answered from its file."""
+        rendered = rendered_index(self.root)
+        if rendered is None:
+            return None
+        return self._answer_rendered(rendered[0].encode("utf-8"),
+                                     f'"i-{rendered[1]}-{self.render_version}"', _RENDERED_HEADERS)
+
     def _serve_frame(self, stored: Path):
         """The live-block frame at stored as its page's render draws it
         today; None when no allow-listed page's render names it."""
@@ -453,6 +463,10 @@ class _AllowListHandler(SimpleHTTPRequestHandler):
                 answer = self._serve_archived(stored)
                 if answer is None:
                     answer = self._serve_rendered(stored)
+                if answer is not None:
+                    return answer
+            if stored.name == INDEX_FILE:
+                answer = self._serve_index()
                 if answer is not None:
                     return answer
         if stored.parent == publish.media_dir(self.root):

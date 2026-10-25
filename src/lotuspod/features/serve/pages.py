@@ -1,21 +1,24 @@
 """The pages serve answers: each rendered when asked for (rendered_page),
-and as its /api and the agents' socket record them: served_page_names,
+the index rendered from the manifest (rendered_index), and as its /api and the agents' socket record them: served_page_names,
 api_page and its one-read catalog, and agent_page."""
 
 from __future__ import annotations
 
+import datetime as _dt
 import hashlib
+import json
 import sys
 import threading
 from pathlib import Path
 from typing import Callable, NamedTuple
 
 from lotuspod.features import agents
-from lotuspod.core import (_KEPT_SOURCE_SUFFIX, THEME_ROOT, extract_meta, extract_visibility,
+from lotuspod.core import (_KEPT_SOURCE_SUFFIX, MANIFEST_FILE, THEME_ROOT, extract_meta, extract_visibility,
                            is_page_name, page_revision, source_revision)
 from lotuspod.features import comments
 from lotuspod.features import decisions
 from lotuspod.features import history
+from lotuspod.features import index
 from lotuspod.features.publish import (REFS_SUFFIX, _H2Collector, kept_block_hashes, kept_source,
                                        page_owner, render_kept_or_extracted)
 from lotuspod.features.serve import api, serve_files
@@ -130,6 +133,46 @@ def rendered_page(out_dir: Path, name: str) -> Rendered | None:
         with _RENDERS_LOCK:
             _RENDERS[key] = found
         return found
+
+
+# The index as last rendered for each served directory, by its key.
+_INDEXES: dict[Path, tuple[str, str]] = {}
+
+
+def rendered_index(out_dir: Path) -> tuple[str, str] | None:
+    """The index rendered now from out_dir's manifest with today's template,
+    listing only the pages serve answers, and a key over the manifest's
+    bytes, the day it was written, which is the day the index names as
+    updated, and the pages listed; None when the manifest cannot be read."""
+    path = out_dir / MANIFEST_FILE
+    try:
+        if path.is_symlink():
+            return None
+        data = path.read_bytes()
+        day = _dt.date.fromtimestamp(path.stat().st_mtime).isoformat()
+        artifacts = json.loads(data.decode("utf-8"))["artifacts"]
+    except (OSError, UnicodeDecodeError, ValueError, KeyError, TypeError):
+        return None
+    if not isinstance(artifacts, list) or not all(isinstance(m, dict) for m in artifacts):
+        return None
+    # A manifest older than a page's turn to hidden still lists it: only the
+    # pages serve answers are listed, so none shows its title or summary.
+    allowed = serve_files.serve_allow_list(out_dir)
+    artifacts = [m for m in artifacts if m.get("file") in allowed and is_page_name(str(m["file"]))]
+    listed = "\0".join(str(m["file"]) for m in artifacts)
+    key = hashlib.sha256(b"\0".join((data, day.encode("ascii"), listed.encode("utf-8"))))
+    key = key.hexdigest()[:16]
+    with _RENDERS_LOCK:
+        found = _INDEXES.get(Path(out_dir))
+    if found is not None and found[1] == key:
+        return found
+    try:
+        found = (index.render_index(artifacts, day), key)
+    except (KeyError, TypeError, AttributeError):
+        return None
+    with _RENDERS_LOCK:
+        _INDEXES[Path(out_dir)] = found
+    return found
 
 
 def served_page_names(out_dir: Path, allowed: frozenset[str] | None = None) -> list[str]:

@@ -1609,8 +1609,17 @@ its hash, sets the resolved theme as `data-theme` on `html` before the body
 parses, so the first paint is already in it; it follows a system change while
 the choice is Auto, and sends `lotuspod:theme` (`{theme}`) on the `document`
 each time the resolved theme changes, for live blocks and diagrams, which are
-drawn again in the other set. The index and an earlier version's page carry
-no switch and follow the system through the stylesheet alone.
+drawn again in the other set. One choice holds for every open page of the
+site: the head script hears the `storage` event for `lotuspod:theme` (or for
+storage cleared) and applies the new choice as its own buttons would, so a
+press in any page reaches every other open tab, and every pod framed in the
+index, with no reload; storage that refuses keeps a choice on its own page
+only. The index carries the same head script inline, with no switch of its
+own: `lotuspod serve` answers `/` and `/index.html` rendered from
+`manifest.json` with the package's index template, under an `ETag` over the
+manifest, so the tab shell takes the choice before its first paint and
+follows it as it changes. An earlier version's page carries no switch and
+follows the system through the stylesheet alone.
 
 A top-level table keeps the reading layout's width and scrolls inside itself
 when it is wider. Where the window has at least 4rem of free width beside such

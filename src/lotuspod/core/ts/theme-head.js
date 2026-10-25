@@ -38,6 +38,20 @@
   light.addEventListener("change", function () {
     if (choice === "auto") apply();
   });
+  // A choice made in another document of this site (another tab, or a pod
+  // framed in the index) reaches this one as a storage event; a null key is
+  // storage cleared, which is Auto. sessionStorage's events are not the choice.
+  window.addEventListener("storage", function (event) {
+    if (event.key !== KEY && event.key !== null) return;
+    try {
+      if (event.storageArea !== window.localStorage) return;
+    } catch (error) {
+      return;
+    }
+    var kept = event.newValue;
+    choice = kept === "night" || kept === "dawn" ? kept : "auto";
+    apply();
+  });
 
   document.addEventListener("DOMContentLoaded", function () {
     var group = document.querySelector(".artifact-theme-switch");
