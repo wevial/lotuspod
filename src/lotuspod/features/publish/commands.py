@@ -173,6 +173,7 @@ def add_publish_parser(sub: argparse._SubParsersAction) -> None:
     )
     publish.add_argument('--live', action='store_true', help='publish a whole HTML document as a live widget')
     publish.add_argument('--notes', metavar='FILE', help='markdown notes below the --live document')
+    publish.add_argument('--artifact', action='store_true', help='publish a Claude artifact\'s HTML file as --live does, its CDN scripts inlined, its font links dropped and its data-theme following the reader\'s theme')
     publish.set_defaults(func=cmd_publish)
 
 

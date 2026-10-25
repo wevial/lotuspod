@@ -15,7 +15,7 @@ from html.parser import HTMLParser
 from pathlib import Path
 from typing import Callable
 
-from lotuspod.features.publish import markdown, media
+from lotuspod.features.publish import artifact, markdown, media
 from lotuspod.core import ConfigError, config_path, config_section, normalized, without_templates
 from lotuspod.features.publish.render import REFS_MAX
 
@@ -446,18 +446,28 @@ def prepare_publish(args: argparse.Namespace, fmt: str, name: str, raw: str,
                     ) -> tuple[str, str, dict[str, media.Image]]:
     """Prepare the same self-contained source for local and SSH publishing."""
     base = source_base(args)
-    if getattr(args, 'notes', None) and not getattr(args, 'live', False):
+    artifact_given = getattr(args, 'artifact', False)
+    live = getattr(args, 'live', False) or artifact_given
+    if getattr(args, 'notes', None) and not live:
         raise RuntimeError('--notes requires --live; nothing written')
-    if getattr(args, 'live', False):
+    if live:
+        flag = '--artifact' if artifact_given else '--live'
         if fmt != 'html' or args.source == '-':
-            raise RuntimeError('--live requires an HTML file; nothing written')
+            raise RuntimeError(f'{flag} requires an HTML file; nothing written')
         filename = Path(args.source).name
         source_base_dir = Path(args.source).parent
         source = live_file(filename, source_base_dir, 3)
         document_title = ' '.join(_DocumentTitle(source).title.split()) or name
         title = ' '.join((args.title if args.title is not None else document_title).split())
-        raw = '# ' + title + '\n\n```html live file=' + shlex.quote(filename) + ' height=full title=' + shlex.quote(title) + '\n```\n'
-        raw = send_live_files(raw, source_base_dir)
+        if artifact_given:
+            # The block holds the adapted document, so the kept source and
+            # the writer host never fetch.
+            document = normalized(artifact.adapt(source)).removesuffix('\n')
+            info = shlex.join(['html', 'live', 'height=full', 'title=' + title])
+            raw = '# ' + title + '\n\n```' + info + '\n' + document + '\n```\n'
+        else:
+            raw = '# ' + title + '\n\n```html live file=' + shlex.quote(filename) + ' height=full title=' + shlex.quote(title) + '\n```\n'
+            raw = send_live_files(raw, source_base_dir)
         images = {}
         if args.notes:
             notes = Path(args.notes)

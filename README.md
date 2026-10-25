@@ -129,8 +129,8 @@ html live title="A counter"
 ```
 
 [Interactive pages](docs/publishing.md#interactive-pages) has the options,
-the pinned chart libraries, whole HTML pages with `publish --live`, and the
-limits; [the worked example](docs/examples/interactive.md) is a pod with a
+the pinned chart libraries, whole HTML pages with `publish --live`, Claude
+artifacts with `publish --artifact`, and the limits; [the worked example](docs/examples/interactive.md) is a pod with a
 live d3 chart, notes and a decision.
 
 ## Where to read next
