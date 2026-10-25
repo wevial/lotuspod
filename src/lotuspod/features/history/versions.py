@@ -201,7 +201,7 @@ class _Sections(HTMLParser):
 
     _SKIPPED = frozenset({"script", "style", "template"})
     # The elements that start a new line of text, as the page script reads
-    # the text (js/page-open.js BLOCK).
+    # the text (features/publish/ts/page-open.js BLOCK).
     _BLOCKS = frozenset({
         "address", "article", "aside", "blockquote", "br", "caption", "dd", "details", "div",
         "dl", "dt", "fieldset", "figcaption", "figure", "footer", "form", "h1", "h2", "h3",

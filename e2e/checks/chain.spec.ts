@@ -258,7 +258,7 @@ test.describe('the chain', () => {
       await expect(link).toHaveAttribute('href', `${NAME}.html`);
 
       // The page, loaded on its own at the top level, opens in the index's
-      // tabs (js/open-in-tabs.js).
+      // tabs (features/publish/ts/open-in-tabs.js).
       await link.click();
       await expect(page).toHaveURL(new RegExp(`/#tabs=${NAME}&on=${NAME}$`));
       const framed = page.frameLocator('iframe.pod-frame--active');

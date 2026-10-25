@@ -6,9 +6,11 @@ import { expect, test, type Page } from '@playwright/test';
 
 // An open page published again swaps in a changed section's diagram
 // (features/live/ts/page-swap.ts): the template's start-up module draws it on the
-// lotuspod:diagrams event, its Expand button (js/diagram-view.js) and node
-// cards (js/diagram-cards.js) are mounted on it once drawn, and a section
-// whose diagram is open in the view is held back until the reader updates it.
+// lotuspod:diagrams event, its Expand button
+// (features/blocks/ts/diagram-view.js) and node cards
+// (features/blocks/ts/diagram-cards.js) are mounted on it once drawn, and a
+// section whose diagram is open in the view is held back until the reader
+// updates it.
 // Each check publishes a page of its own with a real `lotuspod publish`, as
 // live-page.spec.ts does. The page's clock runs, so Mermaid draws as it would:
 // the page's revision check is run by a visibilitychange instead of by

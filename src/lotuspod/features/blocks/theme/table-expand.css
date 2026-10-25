@@ -1,15 +1,15 @@
 
 /* An expanded table: a top-level table the reader asked to widen lifts its
-   --measure-full cap to the room left of the comments panel (js/tables.js)
-   and grows to the right of the reading column, never past its natural
-   width. Its left edge stays where it was. */
+   --measure-full cap to the room left of the comments panel
+   (features/blocks/ts/tables.js) and grows to the right of the reading column,
+   never past its natural width. Its left edge stays where it was. */
 .artifact-body > table.artifact-table--expanded,
 .artifact-section-body > table.artifact-table--expanded {
   max-width: var(--table-room, var(--measure-full));
 }
 
 /* While a table expands or collapses, the page script keeps its top in place
-   itself (js/table-expand.js). */
+   itself (features/blocks/ts/table-expand.js). */
 .artifact-body table.artifact-table--holding {
   overflow-anchor: none;
 }

@@ -118,10 +118,10 @@
     };
     // Drawn off to the side, out of sight, so the diagram on the page stays
     // until its new svg takes its place. The new svg is then announced
-    // (lotuspod:diagram-redrawn): js/diagram-cards.js binds its boxes, and
-    // for a diagram open in the diagram view, its svg in the dialog,
-    // js/diagram-view.js puts the new svg there and claims the event. A
-    // diagram not drawn yet is drawn in the new theme as it is.
+    // (lotuspod:diagram-redrawn): features/blocks/ts/diagram-cards.js binds its
+    // boxes, and for a diagram open in the diagram view, its svg in the dialog,
+    // features/blocks/ts/diagram-view.js puts the new svg there and claims the
+    // event. A diagram not drawn yet is drawn in the new theme as it is.
     const redraw = async (pre, mine) => {
       if (mine !== generation || !pre.isConnected || drawnIn.get(pre) === current()) return;
       if (!pre.hasAttribute("data-processed")) {

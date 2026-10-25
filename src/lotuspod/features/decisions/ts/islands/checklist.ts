@@ -1,5 +1,5 @@
-// A checklist (lotuspod.decisions) asks one question about a list of
-// items: its inputs are checkboxes, each preset to its default, and its
+// A checklist (lotuspod.features.decisions.decisions) asks one question about a
+// list of items: its inputs are checkboxes, each preset to its default, and its
 // answer is the set of items checked.
 
 export function all<T extends Element = HTMLElement>(selector: string, root: ParentNode): T[] {

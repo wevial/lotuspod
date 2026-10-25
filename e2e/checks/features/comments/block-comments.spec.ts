@@ -30,12 +30,13 @@ const QUESTION = 'Reruns look high';
 // thread hermes's credential may not claim: the reader asks hermes in it.
 const ASK = '@hermes Is it the shared migration file?';
 const REPLY = 'Mostly the shared migration file.';
-// js/page-open.js's BLOCK_CHANGED and STALE_BLOCK.
+// features/publish/ts/page-open.js's BLOCK_CHANGED and STALE_BLOCK.
 const BLOCK_CHANGED = 'This block was updated since you started. Your comment stays on the version you saw.';
 const STALE_BLOCK = 'This block has changed since the page loaded. Reload the page to comment on its new version.';
-// js/page-open.js's BLOCK_GONE.
+// features/publish/ts/page-open.js's BLOCK_GONE.
 const BLOCK_GONE = 'The block you were commenting on was removed. Your comment is kept here, on the section.';
-// js/live-page.js's KEPT: what the page keeps over a reload, per page.
+// features/live/ts/live-page.js's KEPT: what the page keeps over a reload, per
+// page.
 const KEPT = 'lotuspod:reload:';
 const FISH = path.resolve(__dirname, '..', '..', '..', '..', 'tests', 'fixtures', 'media', 'fish-320x240.jpg');
 

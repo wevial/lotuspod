@@ -1,8 +1,8 @@
 
-  // The page's versions (lotuspod.versions): a page with a revision asks the
-  // versions route once. When it answers 200, even with no versions (a
-  // directory that is not the top of its own repository has none), the
-  // header's date line gains a
+  // The page's versions (lotuspod.features.history.versions): a page with a
+  // revision asks the versions route once. When it answers 200, even with no
+  // versions (a directory that is not the top of its own repository has none),
+  // the header's date line gains a
   // "Versions · N" link to #versions, and while the hash is #versions the
   // page shows its versions view in place of its header and body: a
   // breadcrumb back to the page, the heading, and the versions newest first,
@@ -11,7 +11,8 @@
   // each with a "View" link that a click anywhere on its row follows: the
   // current one's to the page (NAME.html), every other's to its read-only
   // old version (NAME.html?version=COMMIT). Beside the "Versions · N" link a
-  // "▾" button opens a menu of the versions (js/version-menu.js).
+  // "▾" button opens a menu of the versions
+  // (features/history/ts/version-menu.js).
   // The list shows SHOWN entries, and "Show older versions" shows SHOWN more
   // each time. Any other answer leaves the page as it is: no link, no view.
   //
@@ -31,7 +32,8 @@
     var SHOWN = 20;
     var NO_SOURCE = "This page has no kept source for that version, so it compares by section.";
     // What the comparison calls the text before the first h2, the whole
-    // text of a body without one (lotuspod.versions.PAGE_TEXT).
+    // text of a body without one
+    // (lotuspod.features.history.versions.PAGE_TEXT).
     var PAGE_TEXT = "The page text";
     var line = document.querySelector("header.artifact-header .artifact-meta");
     var main = document.querySelector("main.artifact");
@@ -215,10 +217,11 @@
       var count = versions.length;
       var link = element("a", "artifact-versions-link", "Versions · " + count);
       link.href = HASH;
-      // The link and the version menu's button (js/version-menu.js) take
-      // the slot the theme kept for them at the end of the line, so the
-      // header does not move when they arrive; only the badge of replies to
-      // the reader (the comments island) comes after them.
+      // The link and the version menu's button
+      // (features/history/ts/version-menu.js) take the slot the theme kept for
+      // them at the end of the line, so the header does not move when they
+      // arrive; only the badge of replies to the reader (the comments island)
+      // comes after them.
       var current = versions.find(function (version) { return version.current; });
       var menu = versionMenu(versions, page, current ? current.commit : null,
         found ? found.since.commit : null);
@@ -242,8 +245,9 @@
           item.classList.add("artifact-versions-entry--seen");
           item.appendChild(element("span", "artifact-versions-seen", "you last looked"));
         }
-        // The row's one link, stretched over the row (css/versions.css), so
-        // a click anywhere on it is a click on the link.
+        // The row's one link, stretched over the row
+        // (features/history/theme/versions.css), so a click anywhere on it is a
+        // click on the link.
         var open = element("a", "artifact-versions-view", "View");
         if (version.current) {
           item.classList.add("artifact-versions-entry--current");

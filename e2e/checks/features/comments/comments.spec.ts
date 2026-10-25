@@ -420,7 +420,7 @@ test.describe('signed in', () => {
     await expect(items.nth(3).locator('.artifact-comment-text')).toHaveText('No change needed.');
 
     // The page, loaded on its own at the top level, opens in the index's
-    // tabs (js/open-in-tabs.js).
+    // tabs (features/publish/ts/open-in-tabs.js).
     await link.click();
     await expect(page).toHaveURL(/\/#tabs=capture-comments&on=capture-comments$/);
     await expect(page.frameLocator('iframe.pod-frame--active').locator('.artifact-body details.artifact-comment')).toHaveCount(3);

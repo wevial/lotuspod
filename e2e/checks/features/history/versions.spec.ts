@@ -93,8 +93,8 @@ function view(page: Page | FrameLocator) {
 }
 
 // The current page, loaded on its own at the top level by a link to it,
-// opens in the index's tabs (js/open-in-tabs.js): the index, that page its
-// active tab, and the page in its frame.
+// opens in the index's tabs (features/publish/ts/open-in-tabs.js): the index,
+// that page its active tab, and the page in its frame.
 async function inTab(page: Page, name: string) {
   await expect(page).toHaveURL(new RegExp(`/#tabs=${name}&on=${name}$`));
   return page.frameLocator('iframe.pod-frame--active');

@@ -1,7 +1,8 @@
 
   // What the page script and the old-version script both use, joined into
-  // each one's closure (THEME_CLOSURES in cli.py), after js/page-open.js in the
-  // page script and first in the old-version script.
+  // each one's closure (THEME_CLOSURES in core/__init__.py), after
+  // features/publish/ts/page-open.js in the page script and first in the
+  // old-version script.
 
   // A stamp as the reader's locale writes a date and time; the stamp itself
   // when it is no date.

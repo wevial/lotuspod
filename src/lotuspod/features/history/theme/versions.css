@@ -1,8 +1,9 @@
 
-/* A page's versions (js/versions.js): a "Versions · N" link in the header's
-   date line, and the versions view, shown in place of the header and the
-   body while the hash is #versions. The view is a breadcrumb, the heading and
-   the versions newest first, one row each, the current one marked. */
+/* A page's versions (features/history/ts/versions.js): a "Versions · N" link in
+   the header's date line, and the versions view, shown in place of the header
+   and the body while the hash is #versions. The view is a breadcrumb, the
+   heading and the versions newest first, one row each, the current one
+   marked. */
 
 /* The link arrives after the page is drawn, so a page with a revision keeps
    its slot at the end of the date line from the start, as wide as the
@@ -42,9 +43,10 @@ html:has(meta[name="lotuspod:revision"]) .artifact-meta--versions::after {
   text-decoration-color: currentColor;
 }
 
-/* The version menu (js/version-menu.js): a "▾" button after the link, and
-   under it the Labels menu's surface (css/index.css) listing the versions,
-   which scroll past about 20rem above "See all versions". */
+/* The version menu (features/history/ts/version-menu.js): a "▾" button after
+   the link, and under it the Labels menu's surface
+   (features/index/theme/index.css) listing the versions, which scroll past
+   about 20rem above "See all versions". */
 .artifact-versions-menu-button {
   align-items: center;
   appearance: none;
@@ -314,9 +316,9 @@ html:has(meta[name="lotuspod:revision"]) .artifact-meta--versions::after {
   display: none;
 }
 
-/* An earlier version, served read-only (lotuspod.versions): a banner over
-   the header saying so, its comment boxes hidden and its decision forms
-   dimmed, each with a note on where to answer. */
+/* An earlier version, served read-only (lotuspod.features.history.versions): a
+   banner over the header saying so, its comment boxes hidden and its decision
+   forms dimmed, each with a note on where to answer. */
 .artifact-version-banner {
   align-items: center;
   background: color-mix(in srgb, var(--color-amber) 10%, var(--color-surface));
@@ -361,8 +363,9 @@ html:has(meta[name="lotuspod:revision"]) .artifact-meta--versions::after {
   text-decoration: underline;
 }
 
-/* The banner's version menu (js/old-version.js): "Choose a version ▾" drawn
-   as the banner's links are, and under it the header's menu as it is. */
+/* The banner's version menu (features/history/ts/old-version.js): "Choose a
+   version ▾" drawn as the banner's links are, and under it the header's menu as
+   it is. */
 .artifact-version-banner-menu {
   position: relative;
 }
@@ -396,10 +399,10 @@ html:has(meta[name="lotuspod:revision"]) .artifact-meta--versions::after {
   margin: 0.5rem 0 0 1rem;
 }
 
-/* What changed since the reader last looked (js/versions.js): a box under the
-   header listing the sections that changed, a tag on each one's heading, and
-   in the versions view a pane beside the list comparing that version with the
-   current one. */
+/* What changed since the reader last looked (features/history/ts/versions.js):
+   a box under the header listing the sections that changed, a tag on each one's
+   heading, and in the versions view a pane beside the list comparing that
+   version with the current one. */
 .artifact-changes {
   background: color-mix(in srgb, var(--color-sky) 8%, var(--color-surface));
   border: 1px solid color-mix(in srgb, var(--color-sky) 45%, transparent);

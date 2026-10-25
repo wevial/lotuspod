@@ -5,7 +5,8 @@
   // window's maximum: MAX_WIDTH, at most MAX_SHARE of the window, and never
   // so wide that the reading column keeps less than COLUMN_MIN up to the
   // panel. The column narrows as the
-  // panel grows into it (css/base.css, from the room js/tables.js publishes).
+  // panel grows into it (core/theme/base.css, from the room
+  // features/blocks/ts/tables.js publishes).
   // The width is kept for every page under WIDTH; a stored width the window
   // has no room for is shown clamped and kept as stored, so a wider window
   // opens it again. A double-click goes back to DEFAULT_WIDTH and forgets the
@@ -22,8 +23,8 @@
   // The most of the window's width the panel takes: 40rem in a 1920 pixel
   // window, 30rem in a 1440 pixel one.
   var MAX_SHARE = 1 / 3;
-  // The column's narrowest, and the gutter js/tables.js leaves before the
-  // panel, in rem.
+  // The column's narrowest, and the gutter features/blocks/ts/tables.js leaves
+  // before the panel, in rem.
   var COLUMN_MIN = 32;
   var COLUMN_GUTTER = 1;
   var RESIZING = "artifact-comments-panel--resizing";

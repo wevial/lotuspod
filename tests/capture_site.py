@@ -810,8 +810,8 @@ VERSIONS_MANY = 25
 # A plan page for the review sheet: four sections, three asking two
 # questions each, one with a default and one without (D3, with none, before
 # D4), and one a three-item checklist. Answered by
-# e2e/checks/review-sheet.spec.ts alone. No diagram, so the page needs no
-# network.
+# e2e/checks/features/comments/review-sheet.spec.ts alone. No diagram, so the
+# page needs no network.
 REVIEW_SHEET_BODY = """\
 <p>A sample plan for captures: who reviews a ticket, and how.</p>
 <h2>Who reviews</h2>

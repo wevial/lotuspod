@@ -24,9 +24,9 @@
 // &on=NAME, written with history.replaceState, and a load with that fragment
 // opens them again, a name the listing does not have dropped. On a load,
 // &at=FRAGMENT after &on=NAME (encoded, as a pod loaded on its own asks it,
-// js/open-in-tabs.js) opens the active tab at that fragment; it is never
-// written again. The fragment names the Pages view of the index's own
-// script, or ends &view=activity for Recent activity, and is written again
+// features/publish/ts/open-in-tabs.js) opens the active tab at that fragment;
+// it is never written again. The fragment names the Pages view of the index's
+// own script, or ends &view=activity for Recent activity, and is written again
 // each time that script shows a view ("lotuspod:view"), whose buttons would
 // otherwise drop it. Once no tab is open, the fragment is the view's own
 // again: none, or #activity.
@@ -34,24 +34,26 @@
 // Each time the listing shows again, the index's own script is told
 // ("lotuspod:listing"), so it reads its marks and counts again, as when the
 // browser brings the index back from its back-forward cache. When the
-// listing's rows are swapped in ("lotuspod:rows", js/index-refresh.js), the
-// pods are read from them again and each open tab takes its pod's title.
+// listing's rows are swapped in ("lotuspod:rows",
+// features/live/ts/index-refresh.ts), the pods are read from them again and
+// each open tab takes its pod's title.
 //
 // A tab that is not active shows a dot from the seen route: amber ("new
 // version") when its pod was published again since this reader last opened
 // it, else orchid ("new replies") when someone else has commented since. The
 // route is read on load, when a tab is activated or closed, when the window
 // is seen again, and on a tick from serve's stream that a page was published
-// or commented on or the listing rebuilt (js/live-events.js); activating a tab
-// first posts the framed page's revision, so what it shows counts as read. A
-// page with no revision (rendered, never published) has no script of its own
-// to record its opening, so each time it loads in a tab, it is posted at "",
-// its own. Any answer but 200 (signed out, or the demo) shows no dot.
+// or commented on or the listing rebuilt (features/live/ts/live-events.ts);
+// activating a tab first posts the framed page's revision, so what it shows
+// counts as read. A page with no revision (rendered, never published) has no
+// script of its own to record its opening, so each time it loads in a tab, it
+// is posted at "", its own. Any answer but 200 (signed out, or the demo) shows
+// no dot.
 //
-// The pod finder (js/pod-finder.js) opens from a "+" after the last tab, a
-// "Find a pod" button at the strip's end, and Cmd+K on a Mac or Ctrl+K
-// elsewhere, in the index or in a framed page; the key closes it again. Each
-// asks it with "lotuspod:find", and it hands back the pod chosen with
+// The pod finder (features/index/ts/pod-finder.ts) opens from a "+" after the
+// last tab, a "Find a pod" button at the strip's end, and Cmd+K on a Mac or
+// Ctrl+K elsewhere, in the index or in a framed page; the key closes it again.
+// Each asks it with "lotuspod:find", and it hands back the pod chosen with
 // "lotuspod:open", which opens it as a link would and focuses its tab.
 //
 // A tab moves along the strip: pressed (not on its ✕) and dragged more than
@@ -250,8 +252,8 @@
     }
   };
 
-  // The ticks from serve's stream (js/live-events.js) that read the route
-  // again.
+  // The ticks from serve's stream (features/live/ts/live-events.ts) that read
+  // the route again.
   const TICKS = new Set(["publish", "index", "comment", "resync"]);
 
   // At most one read of ask in flight, and one more asked after it however
@@ -755,10 +757,10 @@
     focusTab(find(name));
   });
   document.addEventListener("click", (event) => follow(event, null));
-  // The listing's rows swapped in (js/index-refresh.js): its pods read again,
-  // a pod open in a tab but no longer listed kept as it was, and each open
-  // tab titled with its pod's title. The strip, the active tab, the frames
-  // and the dots stay as they are.
+  // The listing's rows swapped in (features/live/ts/index-refresh.ts): its pods
+  // read again, a pod open in a tab but no longer listed kept as it was, and
+  // each open tab titled with its pod's title. The strip, the active tab, the
+  // frames and the dots stay as they are.
   document.addEventListener("lotuspod:rows", () => {
     const was = new Map(pods);
     readPods();

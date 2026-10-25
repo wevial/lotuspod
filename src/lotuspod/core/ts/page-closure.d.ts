@@ -4,7 +4,8 @@
 // with the source that defines it. A source's own top-level names join these
 // in the one closure, so none may repeat another source's.
 
-// js/live-page.js: what the page keeps of its revision while it is open.
+// features/live/ts/live-page.js: what the page keeps of its revision while it
+// is open.
 interface PageLive {
   // A revision the page learned it is now published at.
   seen(revision: unknown): void;
@@ -25,18 +26,18 @@ declare const live: PageLive;
 // core/ts/shared.js.
 declare function element<K extends keyof HTMLElementTagNameMap>(
   tag: K, className?: string | null, text?: string): HTMLElementTagNameMap[K];
-// js/page-open.js: the elements selector matches under root (the document
-// when none), in document order.
+// features/publish/ts/page-open.js: the elements selector matches under root
+// (the document when none), in document order.
 declare function all<E extends Element = HTMLElement>(selector: string, root?: ParentNode): E[];
-// js/page-open.js: a response's JSON, null when it is none.
+// features/publish/ts/page-open.js: a response's JSON, null when it is none.
 declare function json(response: Response): Promise<unknown>;
 // core/ts/link-tab.js: a link off the site opens in a new tab.
 declare function linkTab(link: Element): void;
 
-// js/page-open.js: fold a section's wrapper under its heading's button, as
-// fold says (else as the reader left it), marked "changed" while folded when
-// changed says a newer revision changed or added it, and forget one taken
-// away.
+// features/publish/ts/page-open.js: fold a section's wrapper under its
+// heading's button, as fold says (else as the reader left it), marked "changed"
+// while folded when changed says a newer revision changed or added it, and
+// forget one taken away.
 interface FoldSection {
   (heading: HTMLElement, wrapper: HTMLElement, id: string | number, fold?: boolean, changed?: boolean): void;
   // Mark a folded section "changed", or clear the mark.
@@ -62,7 +63,8 @@ interface SwappedDetail {
   units: SwappedUnit[];
 }
 
-// js/page-open.js: sent on the document once a swap is applied.
+// features/publish/ts/page-open.js: sent on the document once a swap is
+// applied.
 declare const SWAPPED: "lotuspod:swapped";
 
 // The diagrams (pre.mermaid) a swap brought in, for the template's start-up
@@ -71,8 +73,8 @@ interface DiagramsDetail {
   nodes: HTMLElement[];
 }
 
-// js/page-open.js: sent on the document once a swap is applied, naming the
-// diagrams it brought in, when it brought in any.
+// features/publish/ts/page-open.js: sent on the document once a swap is
+// applied, naming the diagrams it brought in, when it brought in any.
 declare const DIAGRAMS: "lotuspod:diagrams";
 
 interface DocumentEventMap {
@@ -85,7 +87,8 @@ interface DocumentEventMap {
 // the new revision took the part away.
 declare function holdSwap(test: (nodes: readonly Element[], removed: boolean) => boolean): void;
 
-// web/src/widgets.ts: accepted notifications dispatched on the widget frame.
+// features/widgets/ts/widgets.ts: accepted notifications dispatched on the
+// widget frame.
 declare var WIDGET: "lotuspod:widget";
 interface WidgetDetail {
   kind: "ready" | "error" | "escape" | "state";
@@ -105,7 +108,7 @@ interface BlockAnchor {
   state: string;
 }
 // src/lotuspod/features/comments/ts/islands/bridge.ts: open the form for a
-// new thread on the block's section, on the block. Declared by web/src/widgets.ts and set by the
-// comments island once it starts, on a page that takes new comments; else
-// undefined.
+// new thread on the block's section, on the block. Declared by
+// features/widgets/ts/widgets.ts and set by the comments island once it starts,
+// on a page that takes new comments; else undefined.
 declare var startComment: ((request: { anchor: BlockAnchor }) => void) | undefined;

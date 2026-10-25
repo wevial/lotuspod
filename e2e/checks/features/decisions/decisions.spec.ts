@@ -21,8 +21,9 @@ const AMBER = (() => {
   return `rgb(${r}, ${g}, ${b})`;
 })();
 
-// The forms lotuspod.decisions wrote for this page before decision cards A:
-// "(default)" after an option, a note always open, an "Answer" button.
+// The forms lotuspod.features.decisions.decisions wrote for this page before
+// decision cards A: "(default)" after an option, a note always open, an
+// "Answer" button.
 const PUBLISHED_BEFORE = `<div class="artifact-decisions">
 <form class="artifact-decision" data-page="capture-decisions" data-question="decision-1" data-version="87f71d1b09cb">
 <fieldset>

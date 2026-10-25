@@ -560,7 +560,8 @@ test.describe('signed in', () => {
     await page.evaluate(() => document.getSelection()!.removeAllRanges());
 
     // A click on the highlighted words follows the link: the page it names,
-    // loaded on its own, opens in the index's tabs (js/open-in-tabs.js).
+    // loaded on its own, opens in the index's tabs
+    // (features/publish/ts/open-in-tabs.js).
     await drawn.click();
     await expect(page).toHaveURL(/\/#tabs=capture-article&on=capture-article$/);
     await seen.clean();

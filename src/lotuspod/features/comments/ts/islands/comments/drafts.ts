@@ -53,9 +53,9 @@ export function pageBox(page: Page, boxes: HTMLElement[]): HTMLElement[] {
   return [box, ...boxes];
 }
 
-// The comment boxes (lotuspod.comments): one per section, or one for the
-// page. The threads, the reads that fill them, the replies to the reader
-// and the decisions' Ask are the store's (comments/store.ts); this keeps
+// The comment boxes (lotuspod.features.comments.comments): one per section, or
+// one for the page. The threads, the reads that fill them, the replies to the
+// reader and the decisions' Ask are the store's (comments/store.ts); this keeps
 // what is kept over a reload and swaps, and reaches the threads through the
 // store.
 export function drafts(page: Page, boxes: HTMLElement[]): void {
@@ -98,8 +98,8 @@ export function drafts(page: Page, boxes: HTMLElement[]): void {
     return each.field.value.trim() !== "" || each.images.held();
   }
 
-  // Kept over a reload of the page (js/live-page.js): what is open, and
-  // the text and uploaded images not sent in each composer. An image
+  // Kept over a reload of the page (features/live/ts/live-page.js): what is
+  // open, and the text and uploaded images not sent in each composer. An image
   // still uploading is unsent too, so a hidden page waits for the reader.
   live.keep({
     unsent() {
@@ -350,7 +350,7 @@ export function drafts(page: Page, boxes: HTMLElement[]): void {
   const wire = (box: HTMLElement) => { store.composer.wire(box); };
   boxes.forEach(wire);
 
-  // A swap (web/src/page-swap.ts) brought in a newer revision's parts:
+  // A swap (features/live/ts/page-swap.ts) brought in a newer revision's parts:
   // each box in a part it replaced, took away or added is mounted in place
   // of the one it replaces, taken out, or added, and the threads, chips
   // and panel are drawn from the boxes as they now are. A thread open in

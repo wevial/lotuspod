@@ -20,8 +20,8 @@
 // the other.
 //
 // This compares rows in a shape of its own rather than the finder's pods
-// (js/pod-finder.js), which leave out what a row is archived at, when it was
-// created and its labels as written.
+// (features/index/ts/pod-finder.ts), which leave out what a row is archived at,
+// when it was created and its labels as written.
 (() => {
   const main = document.querySelector<HTMLElement>("main.index");
   if (!main) return;

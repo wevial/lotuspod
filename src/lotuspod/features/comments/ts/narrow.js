@@ -9,8 +9,8 @@
   // form for a new one, or a passage's composer. Its entries are moved in
   // from the panel's groups and back, never drawn twice, and shown as the
   // panel shows them, Resolve included. The comments island's placement
-  // (web/src/islands/comments/placement.ts) makes it, and passes what it
-  // reads threads with as `the`.
+  // (features/comments/ts/islands/comments/placement.ts) makes it, and passes
+  // what it reads threads with as `the`.
   // On a page that asks questions the sheet's head is two tabs, Decisions
   // and Comments, each with its count, and Close: on Decisions it holds the
   // comments panel's Decisions tab, its nodes moved in and back as the

@@ -661,7 +661,8 @@ test('what the visitor wrote stays over reloads, tabs and a minute, until "Reset
   await expect(page.locator('details.artifact-comment > summary.artifact-comment-chip--none')).toHaveCount(4);
   await expect(side.entries).toHaveCount(0);
   // With no answer stored, each decision has its default picked, not saved
-  // (js/review-sheet.js), so it reads "Not saved" rather than "Not answered yet".
+  // (features/decisions/ts/islands/card.tsx), so it reads "Not saved" rather
+  // than "Not answered yet".
   for (const [question, fallback] of [['decision-1', 'Next weekend'], ['decision-2', 'No']]) {
     const form = decision(page, question);
     await expect(form.form).not.toHaveClass(/artifact-decision--saved/);

@@ -1,17 +1,17 @@
 
 /* Decisions for the maintainer: each question of the page's decisions table is
-   a form (lotuspod.decisions) drawn inline in the prose's own voice, with a
-   quiet rule down its left edge. Its options are a list of themed radio rows,
-   the default carrying a muted "default" after its label; the note folds
-   behind "Add a note". The rule turns lavender and "Not saved" shows while the
-   picked answer differs from the saved one, and a saved answer folds the card
-   to one line with a "change" button, its note, who and when, and the earlier
-   answers in the muted voice of the meta line. On a page that takes comments
-   an outlined Ask sits beside "Save answer" (js/comments.js). A checklist is
-   the same card, its option rows each holding a square checkbox. The answered
-   questions end the page in an "Answered" table under a section's folding
-   heading, kept to the reading column and wrapping its cells rather than
-   scrolling. */
+   a form (lotuspod.features.decisions.decisions) drawn inline in the prose's
+   own voice, with a quiet rule down its left edge. Its options are a list of
+   themed radio rows, the default carrying a muted "default" after its label;
+   the note folds behind "Add a note". The rule turns lavender and "Not saved"
+   shows while the picked answer differs from the saved one, and a saved answer
+   folds the card to one line with a "change" button, its note, who and when,
+   and the earlier answers in the muted voice of the meta line. On a page that
+   takes comments an outlined Ask sits beside "Save answer"
+   (features/decisions/ts/islands/ask.ts). A checklist is the same card, its
+   option rows each holding a square checkbox. The answered questions end the
+   page in an "Answered" table under a section's folding heading, kept to the
+   reading column and wrapping its cells rather than scrolling. */
 .artifact-decisions {
   display: grid;
   gap: 1.25rem;

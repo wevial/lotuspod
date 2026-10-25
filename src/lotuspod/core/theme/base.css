@@ -501,8 +501,9 @@ body {
    hang a cap on - capping the box catches every line either way. Structure that
    is read as a unit steps back out to --measure-full. A comments panel widened
    into the column's space narrows it: the cap also keeps the box inside the
-   room js/tables.js publishes up to the panel (--table-room, from the content
-   edge, less a gutter), so the text reflows left of the panel. */
+   room features/blocks/ts/tables.js publishes up to the panel (--table-room,
+   from the content edge, less a gutter), so the text reflows left of the
+   panel. */
 .artifact-body {
   /* How far a block may reach out of the reading column: the page container's
      content box, less this box's own side padding. */

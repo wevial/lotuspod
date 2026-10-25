@@ -41,13 +41,14 @@ export interface Cards {
   readonly drawn: ReadonlySignal<number>;
 }
 
-// The page's decision cards (lotuspod.decisions), as an island on the
-// comments store: each form the renderer wrote is taken over, drawn from
-// the store's answers to its question (comments/ts/islands/comments/state.ts)
-// and saved through it, and the Answered table that ends the body is drawn
-// from its current answers. forms may be empty, on a page whose decisions
-// are no longer asked; a page with no form names itself on its comment
-// boxes, and one with neither has no cards (null).
+// The page's decision cards (lotuspod.features.decisions.decisions), as an
+// island on the comments store: each form the renderer wrote is taken over,
+// drawn from the store's answers to its question
+// (comments/ts/islands/comments/state.ts) and saved through it, and the
+// Answered table that ends the body is drawn from its current answers. forms
+// may be empty, on a page whose decisions are no longer asked; a page with no
+// form names itself on its comment boxes, and one with neither has no cards
+// (null).
 export function decisions(page: Page): Cards | null {
   const forms = page.all("form.artifact-decision") as HTMLFormElement[];
   const named = forms[0] || document.querySelector<HTMLElement>("details.artifact-comment[data-page]");

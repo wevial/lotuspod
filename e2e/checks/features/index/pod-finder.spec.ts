@@ -322,7 +322,7 @@ test.describe('signed in', () => {
     await page.keyboard.press('ControlOrMeta+Enter');
     let other = await opened;
     // The new browser tab, a pod loaded on its own, opens it in the index's
-    // tabs there (js/open-in-tabs.js).
+    // tabs there (features/publish/ts/open-in-tabs.js).
     await expect(other).toHaveURL(new RegExp(`/#tabs=${CHECKLIST.name}&on=${CHECKLIST.name}$`));
     await other.close();
     await expect(finder(page)).toBeHidden();

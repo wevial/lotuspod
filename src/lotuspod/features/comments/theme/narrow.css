@@ -2,12 +2,12 @@
 /* Without room for the comments panel a thread opens over the text, never in
    its box (docs/design/margin-comments-mockup.html, "Narrow window: a
    popover" and "Phone"). From 700px wide it is a popover the page script
-   (js/narrow.js) sets under the chip or highlight that opened it, its tip
-   pointing up at it, inside the window and scrolling on its own. Narrower it
-   is a bottom sheet fixed to the bottom of the window, at most 60% of its
-   height, that slides up; its header steps through the page's threads and
-   says where this one stands. Both (.artifact-comments-held) hold the thread
-   as the panel's open entry does, under a title: "Section HEADING", a
+   (features/comments/ts/narrow.js) sets under the chip or highlight that opened
+   it, its tip pointing up at it, inside the window and scrolling on its own.
+   Narrower it is a bottom sheet fixed to the bottom of the window, at most 60%
+   of its height, that slides up; its header steps through the page's threads
+   and says where this one stands. Both (.artifact-comments-held) hold the
+   thread as the panel's open entry does, under a title: "Section HEADING", a
    passage's number and words, or "On TITLE" for a live block. */
 .artifact-comments-held {
   background: var(--color-surface);

@@ -127,7 +127,7 @@ comment carries `answer`, {id, choice, label} of the answer, and is pulled
 as any comment is.
 
 A pulled answer may be an owner's dismissal of a question that no longer
-matters (lotuspod.db): still of kind `answer`, its `answer` carries
+matters (lotuspod.store.db): still of kind `answer`, its `answer` carries
 `dismissed: true`, its reason in `note` and `undoneAt` once it is undone,
 and it is acknowledged by its id as any answer is.
 

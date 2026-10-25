@@ -5,8 +5,9 @@
 //
 // It replaces window.fetch. A same-origin request whose path starts with
 // /api/ is answered here, from this browser's localStorage, in the shapes
-// and status codes lotuspod.api answers; every other request goes to the
-// browser's own fetch unchanged. Nothing written here leaves the browser.
+// and status codes lotuspod.features.serve.api answers; every other request
+// goes to the browser's own fetch unchanged. Nothing written here leaves the
+// browser.
 // It replaces window.EventSource too: a same-origin /api/ stream, serve's
 // /api/events, never connects, so the page keeps its polling.
 //

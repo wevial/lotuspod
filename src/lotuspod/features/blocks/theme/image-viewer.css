@@ -1,8 +1,8 @@
 
-/* The image viewer (js/image-viewer.js): a modal dialog that fills the window
-   over a dimmed backdrop, with the image at its natural size, never wider or
-   taller than the room the window leaves beside its caption and controls. A
-   click on the dialog around them closes it. */
+/* The image viewer (features/blocks/ts/image-viewer.js): a modal dialog that
+   fills the window over a dimmed backdrop, with the image at its natural size,
+   never wider or taller than the room the window leaves beside its caption and
+   controls. A click on the dialog around them closes it. */
 .artifact-image-viewer {
   align-items: center;
   background: transparent;

@@ -1,6 +1,7 @@
 
-  // Images on a comment (lotuspod.api's /api/media). A composer is one box:
-  // the images attached above its field, then a row with its + ("Add image").
+  // Images on a comment (lotuspod.features.serve.api's /api/media). A composer
+  // is one box: the images attached above its field, then a row with its +
+  // ("Add image").
   // It takes up to MAX_IMAGES, pasted into its field, dropped on it or picked
   // with its +.
   // A file that is not a PNG, JPEG, WebP or GIF, or is over the cap the
@@ -9,10 +10,10 @@
   // an X that removes it, a link that opens it in the image viewer once it
   // is uploaded. A comment's images are drawn under its text, each a
   // link to the full size that opens in the image viewer
-  // (js/image-viewer.js), or with a modifier in a new tab, its box reserved
-  // from the stored width and height. A thumbnail only ever shows the uploaded
-  // /media/ URL, never a blob: one, so the page policy's img-src stays
-  // 'self' data:.
+  // (features/blocks/ts/image-viewer.js), or with a modifier in a new tab, its
+  // box reserved from the stored width and height. A thumbnail only ever shows
+  // the uploaded /media/ URL, never a blob: one, so the page policy's img-src
+  // stays 'self' data:.
   var MEDIA = "/api/media";
   var MAX_IMAGES = 4;
   var NO_CAP = "The site's size limit could not be checked. Attach the image again.";

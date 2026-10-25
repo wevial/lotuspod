@@ -1,11 +1,11 @@
 
-/* The handle on the open comments panel's left edge (js/panel-resize.js): a
-   strip straddling the panel's border, centred on it, so the edge follows
-   the pointer that drags it. At rest it is the border and a faint grip; on
-   hover, while dragged and when focused, a lavender line. The open panel
-   clips a little outside its box so the strip's outer half shows; folded,
-   there is no handle. No transition while it is dragged, so the panel keeps
-   up with the pointer. */
+/* The handle on the open comments panel's left edge
+   (features/comments/ts/panel-resize.js): a strip straddling the panel's
+   border, centred on it, so the edge follows the pointer that drags it. At rest
+   it is the border and a faint grip; on hover, while dragged and when focused,
+   a lavender line. The open panel clips a little outside its box so the strip's
+   outer half shows; folded, there is no handle. No transition while it is
+   dragged, so the panel keeps up with the pointer. */
 .artifact-comments-panel--open {
   overflow: clip;
   overflow-clip-margin: 0.3125rem;

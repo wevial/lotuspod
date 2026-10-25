@@ -479,8 +479,8 @@ the page's header, right after its date line: a box with `data-section=""`,
 its field named "Comment on this page", and
 first among the page's boxes. Its chip reads "No comments · Comment on this
 page" while it has no thread. Its threads are stored with `section` `""`
-(`lotuspod.comments.WHOLE_PAGE`), which no heading's id can be, and
-`sectionTitle` `""`, and carry text and images only: never a quote or a
+(`lotuspod.features.comments.comments.WHOLE_PAGE`), which no heading's id can
+be, and `sectionTitle` `""`, and carry text and images only: never a quote or a
 decision. They are routed, pulled, claimed, answered, resolved and counted
 unread as any thread, and an agent reads them as "the whole page". A page
 whose only box is `page` has no other: its box already covers the whole page.
@@ -493,9 +493,9 @@ that have changed" (in the panel, where there is one). Every author and text
 is set as text, never as markup.
 
 A bubble draws its text as a small markdown subset, a reader's comment and an
-agent's reply alike (the page script's `js/comment-markdown.js`, which builds
-every node itself and sets every text as text, so raw HTML and entities show
-as typed):
+agent's reply alike (the page script's
+`features/comments/ts/comment-markdown.js`, which builds every node itself and
+sets every text as text, so raw HTML and entities show as typed):
 
 - A blank line separates paragraphs; a single newline inside one stays a line
   break.
@@ -756,7 +756,7 @@ on load and on resize, and what is open moves to the new place, a field's
 typed text with it. Either holds the thread as the panel's open entry does,
 the same nodes moved in from the panel and back, never drawn twice, so a
 reply arriving is drawn in it in place. Both are their own theme sources,
-`js/narrow.js` and `css/narrow.css`.
+`features/comments/ts/narrow.js` and `features/comments/theme/narrow.css`.
 
 The popover is a non-modal dialog named by what it holds: "Section HEADING",
 a passage's number and opening words, or "Decision N: QUESTION". It opens under the chip or the
@@ -795,7 +795,8 @@ sheet before they scroll to the card. Pressing "Comments" goes back to the
 thread the sheet held before, else to the first open thread, else to the
 first section's form; pressing "Decisions" keeps a passage's composer for
 it. On a page that takes no comments the sheet has the Decisions tab alone.
-The tabs are drawn by `js/narrow.js`, styled by `css/sheet-tabs.css`.
+The tabs are drawn by `features/comments/ts/narrow.js`, styled by
+`features/comments/theme/sheet-tabs.css`.
 
 ### Comments on passages
 

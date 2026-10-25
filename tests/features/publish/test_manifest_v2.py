@@ -1568,7 +1568,7 @@ class ReportVariantTests(TempDirTestCase):
         self.assertIn("border-bottom: 1px solid var(--hairline)", header)
 
     def test_report_tables_scroll_inside_themselves_as_article_tables_do(self):
-        """A report table keeps the article's scroll container (css/prose.css);
+        """A report table keeps the article's scroll container (features/publish/theme/prose.css);
         display: table would grow it past its cap to its min-content width."""
         table = next(
             rule for rule in self.css.split("}")

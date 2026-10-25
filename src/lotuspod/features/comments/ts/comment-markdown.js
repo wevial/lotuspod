@@ -21,13 +21,13 @@
   // mdReferenceEnd; last, since none of the others starts at a `[` or `!`
   // where the image and link ones do not match). Italic opens on a `*`
   // before a non-space and closes on one after a non-space, so a lone `2 * 3`
-  // is text. A bare URL, as lotuspod.markdown's: `http://` or `https://` (any
-  // case, letter by letter, since a case-blind `s` would also match `ſ`) not
-  // after a letter, digit or `/`, up to the next space, `<`, `>`, `"` or
-  // backtick (mdUrl trims its end). The ones before it are matched first, so
-  // a URL in a code span, an image or a link, refused or not, is never linked
-  // again; bold and italic come after it, but open before it, so they close
-  // around it.
+  // is text. A bare URL, as lotuspod.features.publish.markdown's: `http://` or
+  // `https://` (any case, letter by letter, since a case-blind `s` would also
+  // match `ſ`) not after a letter, digit or `/`, up to the next space, `<`,
+  // `>`, `"` or backtick (mdUrl trims its end). The ones before it are matched
+  // first, so a URL in a code span, an image or a link, refused or not, is
+  // never linked again; bold and italic come after it, but open before it, so
+  // they close around it.
   var MD_INLINE = new RegExp([
     "`([^`\\n]+)`",
     "(!)\\[[^\\]\\n]*\\]\\(" + MD_TARGET + "\\)",
@@ -37,9 +37,9 @@
     "\\*(?=[^\\s*])([\\s\\S]*?[^\\s*])\\*(?!\\*)",
     "(!?\\[[^\\]\\n]*\\]\\()",
   ].join("|"), "u");
-  // A link target drawn as a link, as lotuspod.markdown's _LINK_TARGET:
-  // http(s), or a relative path or `#anchor` (no `//` start, no `:` before
-  // its first `/`, `?` or `#`).
+  // A link target drawn as a link, as lotuspod.features.publish.markdown's
+  // _LINK_TARGET: http(s), or a relative path or `#anchor` (no `//` start, no
+  // `:` before its first `/`, `?` or `#`).
   var MD_LINK_TARGET = /^(?:https?:\/\/|(?!\/\/)[^:\/?#]*(?:[\/?#]|$))/i;
   // What a bare URL never ends with, and the brackets it ends with only in
   // pairs.

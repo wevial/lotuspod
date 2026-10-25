@@ -2,9 +2,9 @@ import type { Thread } from "../bridge";
 import { anchorOf } from "./anchor";
 
 // The pin on each live block's frame (span.artifact-live-pin, which
-// web/src/widgets.ts adds once): the number of open threads on the block,
-// hidden at none. Pressing it opens the block's first open thread. Only its
-// text and hidden change here, so no render recreates the chrome.
+// features/widgets/ts/widgets.ts adds once): the number of open threads on the
+// block, hidden at none. Pressing it opens the block's first open thread. Only
+// its text and hidden change here, so no render recreates the chrome.
 export function pins(bridge: {
   shown: Map<number, Thread>;
   resolved(thread: Thread): boolean;

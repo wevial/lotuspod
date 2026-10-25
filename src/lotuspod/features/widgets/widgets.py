@@ -399,9 +399,10 @@ def render(body: str, name: str) -> tuple[str, dict[str, bytes], list[str]]:
 
 
 class AboutForms(HTMLParser):
-    """The decision forms about a live block (lotuspod.decisions), in page
-    order: each data-about id to its forms' data-question ids. A form inside
-    a template or a noscript is inert, and not one of them."""
+    """The decision forms about a live block
+    (lotuspod.features.decisions.decisions), in page order: each data-about id
+    to its forms' data-question ids. A form inside a template or a noscript is
+    inert, and not one of them."""
     CDATA_CONTENT_ELEMENTS = Templates.CDATA_CONTENT_ELEMENTS
 
     def __init__(self, text: str):
@@ -428,7 +429,8 @@ class AboutForms(HTMLParser):
 def link_decisions(body: str) -> str:
     """The body with a link in the chrome of each live block that decision
     forms are about: "N decisions", to the first of them as #question=ID.
-    Run after lotuspod.decisions, on the figures render() drew."""
+    Run after lotuspod.features.decisions.decisions, on the figures render()
+    drew."""
     for ident, questions in AboutForms(body).found.items():
         head = f'<figure class="artifact-live" data-widget="{html.escape(ident)}"><div class="artifact-live-chrome">'
         start = body.find(head)

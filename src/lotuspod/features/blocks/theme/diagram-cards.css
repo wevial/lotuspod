@@ -1,12 +1,12 @@
 
-/* A flowchart's node cards (js/diagram-cards.js). Each box the Nodes table
-   lists is a button that opens its card, and takes its row's status color
-   unless it has an authored Mermaid style (style, class or :::), which wins:
-   the script then adds no status class, so no rule here reaches it.
+/* A flowchart's node cards (features/blocks/ts/diagram-cards.js). Each box the
+   Nodes table lists is a button that opens its card, and takes its row's status
+   color unless it has an authored Mermaid style (style, class or :::), which
+   wins: the script then adds no status class, so no rule here reaches it.
    Mermaid's own rules inside the svg are scoped by the svg's id, which no
    rule here can name, so the colors that replace them are !important.
    Each rule holds as well while the svg is in its view's stage
-   (js/diagram-view.js). */
+   (features/blocks/ts/diagram-view.js). */
 :is(.artifact-body pre.mermaid, .artifact-diagram-view-stage) g.artifact-node {
   cursor: pointer;
 }
