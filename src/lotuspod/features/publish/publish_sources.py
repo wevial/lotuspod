@@ -451,9 +451,8 @@ def prepare_publish(args: argparse.Namespace, fmt: str, name: str, raw: str,
     if getattr(args, 'notes', None) and not live:
         raise RuntimeError('--notes requires --live; nothing written')
     if live:
-        flag = '--artifact' if artifact_given else '--live'
         if fmt != 'html' or args.source == '-':
-            raise RuntimeError(f'{flag} requires an HTML file; nothing written')
+            raise RuntimeError(f'{"--artifact" if artifact_given else "--live"} requires an HTML file; nothing written')
         filename = Path(args.source).name
         source_base_dir = Path(args.source).parent
         source = live_file(filename, source_base_dir, 3)
