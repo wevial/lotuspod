@@ -12,6 +12,7 @@ import json
 import re
 import sys
 from html.parser import HTMLParser
+from itertools import zip_longest
 from pathlib import Path
 
 from lotuspod.core import (BODY_SOURCE_SUFFIX, DEFAULT_OUTPUT_DIR, _KEPT_SOURCE_SUFFIX, _git,
@@ -326,14 +327,8 @@ def anchor_changes(published: str, rendered: str) -> list[dict]:
     """Each anchor the render gives other than the body published does, by
     position within its kind: {kind, page, render}, None where one has none."""
     page, render = anchors(published), anchors(rendered)
-    changes = []
-    for kind in page:
-        for at in range(max(len(page[kind]), len(render[kind]))):
-            had = page[kind][at] if at < len(page[kind]) else None
-            got = render[kind][at] if at < len(render[kind]) else None
-            if had != got:
-                changes.append({"kind": kind, "page": had, "render": got})
-    return changes
+    return [{"kind": kind, "page": had, "render": got} for kind in page
+            for had, got in zip_longest(page[kind], render[kind]) if had != got]
 
 
 def _anchor_words(change: dict) -> str:
@@ -360,20 +355,16 @@ def diff_page(out_dir: Path, name: str) -> dict:
         return {**found, "kind": "failed", "error": str(exc), "what": str(exc)}
     if published == rendered:
         return found
-    words = []
-    if body_text(published) != body_text(rendered):
+    found["anchors"] = anchor_changes(published, rendered)
+    words = [_anchor_words(change) for change in found["anchors"]]
+    text_changed = body_text(published) != body_text(rendered)
+    if text_changed:
         compared = history.compare(page_html, rendered_html)
         titles = [section["title"] for part in ("changed", "added", "removed")
                   for section in compared["sections"][part]]
         found["sections"] = list(dict.fromkeys(titles))
         words.append(history.summary(compared) if titles else "the text changed")
-        found["kind"] = "text"
-    else:
-        found["kind"] = "markup"
-    found["anchors"] = anchor_changes(published, rendered)
-    if found["anchors"]:
-        found["kind"] = "anchors"
-        words[:0] = [_anchor_words(change) for change in found["anchors"]]
+    found["kind"] = "anchors" if found["anchors"] else "text" if text_changed else "markup"
     found["what"] = "; ".join(words)
     return found
 
