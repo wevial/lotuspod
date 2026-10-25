@@ -347,7 +347,8 @@ class _DocumentTitle(HTMLParser):
             self.title += data
 
 
-def live_file(path: str, base: Path | None, line: int, limit: int = 2 * 1024 * 1024) -> str:
+def live_file(path: str, base: Path | None, line: int,
+              limit: int | None = 2 * 1024 * 1024) -> str:
     """Read one bounded, contained UTF-8 file safe to put inside a fence."""
     try:
         if base is None:
@@ -361,8 +362,8 @@ def live_file(path: str, base: Path | None, line: int, limit: int = 2 * 1024 * 1
         if not target.is_file():
             raise ValueError('not a regular file')
         with target.open('rb') as stream:
-            data = stream.read(limit + 1)
-        if len(data) > limit:
+            data = stream.read() if limit is None else stream.read(limit + 1)
+        if limit is not None and len(data) > limit:
             raise ValueError(f'source exceeds {limit // (1024 * 1024)} MB')
         try:
             source = data.decode('utf-8')
@@ -455,8 +456,9 @@ def prepare_publish(args: argparse.Namespace, fmt: str, name: str, raw: str,
             raise RuntimeError(f'{"--artifact" if artifact_given else "--live"} requires an HTML file; nothing written')
         filename = Path(args.source).name
         source_base_dir = Path(args.source).parent
+        # An artifact's limit counts its adapted document (artifact.adapt).
         source = live_file(filename, source_base_dir, 3,
-                           artifact.READ_MAX if artifact_given else 2 * 1024 * 1024)
+                           None if artifact_given else 2 * 1024 * 1024)
         document_title = ' '.join(_DocumentTitle(source).title.split()) or name
         title = ' '.join((args.title if args.title is not None else document_title).split())
         if artifact_given:

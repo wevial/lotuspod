@@ -190,11 +190,17 @@ class ArtifactPublish(unittest.TestCase):
     def test_a_document_counts_against_the_limit_once_adapted(self):
         fonts = '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>'
         padding = "x" * (artifact.DOCUMENT_MAX - 64 * len(fonts))
-        source = self.source(document(head=fonts * 128, body=padding))
-        self.assertGreater(source.stat().st_size, artifact.DOCUMENT_MAX)
+        for count, size in ((128, artifact.DOCUMENT_MAX), (17 * 1024 * 1024 // len(fonts), 16 * 1024 * 1024)):
+            with self.subTest(size=size):
+                source = self.source(document(head=fonts * count, body=padding))
+                self.assertGreater(source.stat().st_size, size)
+                done = self.publish_local(source)
+                self.assertEqual(done.returncode, 0, done.stderr)
+                self.assertNotIn("fonts.gstatic.com", self.widget())
+        source = self.source(document(body="x" * (artifact.DOCUMENT_MAX + 1)))
         done = self.publish_local(source)
-        self.assertEqual(done.returncode, 0, done.stderr)
-        self.assertNotIn("fonts.gstatic.com", self.widget())
+        self.assertNotEqual(done.returncode, 0)
+        self.assertIn("exceeds 2 MB", done.stderr)
 
     def test_stylesheets_a_browser_reads_as_remote_are_refused(self):
         for href in ("http:/example.com/board.css", " ht\ntps://example.com/board.css",
@@ -249,15 +255,27 @@ class ArtifactFetch(unittest.TestCase):
                 self.assertRaisesRegex(ValueError, "cut short"):
             artifact.fetch(JSDELIVR)
 
-    def test_a_comment_opener_in_a_script_cannot_hold_the_element_open(self):
-        text = 'var a = "<!--"; var b = "<script>"; var c = /<!--/u;'
+    def adapted(self, text: str) -> str:
         with mock.patch.object(artifact, "fetch", return_value=text.encode()), \
                 redirect_stderr(io.StringIO()):
-            adapted = artifact.adapt(document(body=f'<script src="{JSDELIVR}"></script><p>After</p>'))
-        inlined = re.search(r"<script>(var a.*?)</script><p>After</p>", adapted).group(1)
-        self.assertNotIn("<!--", inlined)
-        self.assertEqual(inlined, text.replace("<!--", "\\x3C!--"))
+            return artifact.adapt(document(body=f'<script src="{JSDELIVR}"></script><p>After</p>'))
 
+    def test_script_text_that_would_hold_the_element_open_is_refused(self):
+        for text in ('var a = "<!--"; var b = "<script>";',
+                     'var a = "<!--"; var b = "<SCRIPT\ttype=x";',
+                     'var a = "<!-- <script> --> <!--"; var b = "<script/";'):
+            with self.subTest(text=text), self.assertRaisesRegex(RuntimeError, JSDELIVR):
+                self.adapted(text)
+
+    def test_script_text_the_tokenizer_closes_is_inlined_as_fetched(self):
+        for text in ("<!--\nglobalThis.answer = 42;\n//-->",
+                     "globalThis.raw = String.raw`<!--`; var c = /<!--/u;",
+                     'var a = "<!-- <script> -->"; var b = "<script>";',
+                     'var a = "<!--><script>";', 'var a = "<script>"; var b = "<!--";'):
+            with self.subTest(text=text):
+                inlined = re.search(r"<p>Board</p><script>(.*?)</script><p>After</p>",
+                                    self.adapted(text), re.DOTALL).group(1)
+                self.assertEqual(inlined, text)
 
 if __name__ == "__main__":
     unittest.main()

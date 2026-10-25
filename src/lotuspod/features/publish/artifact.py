@@ -23,16 +23,16 @@ from lotuspod.core import normalized
 CDN_PREFIXES = ("https://cdnjs.cloudflare.com/", "https://cdn.jsdelivr.net/npm/")
 FONT_HOSTS = ("fonts.googleapis.com", "fonts.gstatic.com")
 FETCH_TIMEOUT = 30
-# What a whole document in a live block may hold, as widgets.render counts it;
-# the file read may hold more, since what counts is the adapted document.
+# What a whole document in a live block may hold, as widgets.render counts it:
+# the adapted document, not the file it was read from.
 DOCUMENT_MAX = 2 * 1024 * 1024
-READ_MAX = 16 * 1024 * 1024
 # An inlined script keeps every attribute but these.
 _DROPPED = ("src", "integrity", "crossorigin", "referrerpolicy")
 _SCRIPT_CLOSE = re.compile(r"</(script)", re.IGNORECASE)
-# "<!--" in script text lets a later "<script" keep the element open past its
-# end tag; written \x3C it reads the same in a string, a template or a regex.
-_COMMENT_OPEN = "<!--"
+# What moves HTML's script data tokenizer between its states: "<!--" opens
+# the escaped state, "<script" then the double escaped one, which no end tag
+# closes, and "-->" goes back to plain script data.
+_SCRIPT_DATA = re.compile(r"<!--|-->|<(/?)script[\t\n\f\r />]", re.IGNORECASE)
 _DIGESTS = {"sha256": hashlib.sha256, "sha384": hashlib.sha384, "sha512": hashlib.sha512}
 
 # Put first in the head: the bridge before it keeps window.lotuspod.theme and
@@ -180,8 +180,33 @@ def _inlined(element: _Element) -> str:
         raise refused("contains a line starting with three backticks")
     kept = "".join(f' {key}="{html.escape(value)}"' if value else f" {key}"
                    for key, value in element.attrs.items() if key not in _DROPPED)
-    text = _SCRIPT_CLOSE.sub(r"<\\/\1", text).replace(_COMMENT_OPEN, "\\x3C!--")
+    text = _SCRIPT_CLOSE.sub(r"<\\/\1", text)
+    if _holds_open(text):
+        raise refused('its "<!--" and "<script" would hold the element open past its '
+                      "end tag once inline")
     return f"<script{kept}>{text}</script>"
+
+
+def _holds_open(text: str) -> bool:
+    """Whether text, as an inline script's, leaves HTML's tokenizer in the
+    double escaped state, where the element's end tag does not end it."""
+    state, at = "data", 0
+    while (token := _SCRIPT_DATA.search(text, at)) is not None:
+        word = token.group(0).lower()
+        at = token.end()
+        if word == "<!--":
+            if state == "data":
+                state = "escaped"
+                at = token.start() + 2  # its dashes may begin "-->"
+        elif word == "-->":
+            if state != "data":
+                state = "data"
+        elif word.startswith("</"):
+            if state == "double":
+                state = "escaped"
+        elif state == "escaped":
+            state = "double"
+    return state == "double"
 
 
 def _url(href: str) -> str:
