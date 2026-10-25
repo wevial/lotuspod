@@ -25,6 +25,7 @@ import sys
 import tempfile
 import threading
 import unittest
+from unittest import mock
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -72,12 +73,14 @@ def parse(text: str) -> _dt.datetime:
 
 class StandIn:
     """The GitHub API's pulls route, answering from answers by path, and
-    with 403 from the request numbered fail_from on when it is set."""
+    with 403 from the request numbered fail_from on when it is set, or with
+    a body shorter than its Content-Length from truncate_from on."""
 
     def __init__(self) -> None:
         self.answers: dict[str, dict] = {}
         self.requests: list[tuple[str, dict[str, str]]] = []
         self.fail_from: int | None = None
+        self.truncate_from: int | None = None
         stand_in = self
 
         class Handler(BaseHTTPRequestHandler):
@@ -90,7 +93,9 @@ class StandIn:
                 body = json.dumps(found if code == 200 else {"message": "no"}).encode()
                 self.send_response(code)
                 self.send_header("Content-Type", "application/json")
-                self.send_header("Content-Length", str(len(body)))
+                truncating = (stand_in.truncate_from is not None
+                              and len(stand_in.requests) >= stand_in.truncate_from)
+                self.send_header("Content-Length", str(len(body) + 1000 * truncating))
                 self.end_headers()
                 self.wfile.write(body)
 
@@ -287,6 +292,49 @@ class PagesStaleTests(unittest.TestCase):
             cwd=str(self.tmp), env=self.env(), capture_output=True, text=True, timeout=TIMEOUT)
         self.assertEqual(done.returncode, 0, done.stderr)
         self.assertEqual(self.stale().stdout, "no page is out of date\n")
+
+    def test_a_truncated_answer_stops_the_lookups_and_keeps_what_was_learned(self):
+        self.stand_in.truncate_from = 2
+        done = self.stale("--check")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        errors = done.stderr.splitlines()
+        self.assertEqual(len(errors), 1, done.stderr)
+        self.assertTrue(errors[0].startswith("pages stale: stopped looking up:"), errors[0])
+        self.assertTrue(errors[0].endswith("2 of 3 pull requests not checked"), errors[0])
+        self.assertEqual(done.stdout.splitlines(), [
+            f"plan  updated {self.updated['plan']}  1 merged since: acme/pond#7"])
+        self.assertEqual(set(self.stored()), {"acme/pond#7"})
+
+    def test_a_pull_number_too_long_to_be_one_is_no_link(self):
+        self.publish("notes", NOTES + f"\n[Long](https://github.com/acme/pond/pull/{'9' * 5000})\n")
+        done = self.stale("--check", "--json")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual([page["page"] for page in json.loads(done.stdout)["pages"]], ["plan"])
+        self.assertEqual(len(self.stand_in.requests), 3)
+
+    def test_a_check_keeps_the_states_another_check_wrote_meanwhile(self):
+        sys.path.insert(0, str(SRC_DIR))
+        self.addCleanup(sys.path.remove, str(SRC_DIR))
+        from lotuspod.features.stale import stale
+        read_before = stale.read_states(self.states)
+        meanwhile = {"acme/pond#9": {"state": "merged", "at": self.merged_9,
+                                     "checked": stamp(_dt.datetime.now(_dt.timezone.utc))}}
+        stale.write_states(self.states, meanwhile)
+        with mock.patch.dict(os.environ, {"LOTUSPOD_GITHUB_API": self.stand_in.url}):
+            stale.check(["acme/pond#7"], read_before, 15, self.states)
+        self.assertEqual({key: entry["state"] for key, entry in self.stored().items()},
+                         {"acme/pond#7": "merged", "acme/pond#9": "merged"})
+
+    def test_the_slice_exports_the_link_reader_the_states_reader_and_the_verdict(self):
+        sys.path.insert(0, str(SRC_DIR))
+        self.addCleanup(sys.path.remove, str(SRC_DIR))
+        from lotuspod.features import stale
+        self.assertEqual(stale.page_pulls('<a href="https://github.com/Acme/Pond/pull/7/files">'),
+                         ["acme/pond#7"])
+        self.assertEqual(stale.read_states(stale.states_path(self.tmp / "lotuspod.sqlite3")), {})
+        self.assertEqual(stale.overtaken("2026-01-01T00:00:00Z", ["acme/pond#7"], {
+            "acme/pond#7": {"state": "merged", "at": "2026-01-02T00:00:00Z", "checked": None}}),
+            (["acme/pond#7"], []))
 
 
 if __name__ == "__main__":

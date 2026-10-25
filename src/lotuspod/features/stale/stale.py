@@ -11,6 +11,7 @@ alone, so serve can draw it while answering a page.
 from __future__ import annotations
 
 import datetime as _dt
+import http.client
 import json
 import os
 import re
@@ -31,14 +32,18 @@ TOKEN_ENV = "GITHUB_TOKEN"
 TIMEOUT = 10
 DEFAULT_EVERY = 15
 
+# A pull request number longer than this is no link, and never reaches int().
+NUMBER_DIGITS = 18
+
 OPEN, MERGED, CLOSED, UNKNOWN = "open", "merged", "closed", "unknown"
 STATES = (OPEN, MERGED, CLOSED, UNKNOWN)
 
 PULL_URL = re.compile(
-    r"https://github\.com/([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+)/pull/([0-9]+)(?:[/?#].*)?",
+    r"https://github\.com/([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+)/pull/([0-9]{1,%d})(?:[/?#].*)?"
+    % NUMBER_DIGITS,
     re.DOTALL,
 )
-PULL_KEY = re.compile(r"([a-z0-9_.-]+)/([a-z0-9_.-]+)#([0-9]+)")
+PULL_KEY = re.compile(r"([a-z0-9_.-]+)/([a-z0-9_.-]+)#([0-9]{1,%d})" % NUMBER_DIGITS)
 
 
 class _Hrefs(HTMLParser):
@@ -193,7 +198,7 @@ def look_up(api: str, key: str, token: str) -> tuple[str, str | None]:
         raise LookupStopped(f"{key}: timed out") from None
     except urllib.error.URLError as error:
         raise LookupStopped(f"{key}: {error.reason}") from None
-    except (OSError, UnicodeDecodeError, ValueError) as error:
+    except (OSError, http.client.HTTPException, UnicodeDecodeError, ValueError) as error:
         raise LookupStopped(f"{key}: {error}") from None
     if not isinstance(found, dict):
         raise LookupStopped(f"{key}: the answer is not a pull request")
@@ -245,7 +250,9 @@ def check(pulls: list[str], states: dict[str, dict], every: int, path: Path) -> 
                        "checked": _utc_stamp(_dt.datetime.now(_dt.timezone.utc))}
         learned += 1
     if learned:
-        write_states(path, states)
+        # Another check may have written the file since it was read: keep
+        # its states and lay only the ones learned here over them.
+        write_states(path, {**read_states(path), **{key: states[key] for key in todo[:learned]}})
     return states
 
 
