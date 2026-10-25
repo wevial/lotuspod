@@ -192,7 +192,9 @@ class IndexTableTests(TempDirTestCase):
         # The search and the row count name pages, not episodes.
         self.assertIn('placeholder="Search pages by title, date or summary"', index_html)
         self.assertNotIn("episodes", index_html.lower())
-        script = index_html[index_html.index("<script>"): index_html.index("</script>")]
+        # The index's own script, in its body; the head holds the theme script.
+        start = index_html.index("<script>", index_html.index("</head>"))
+        script = index_html[start: index_html.index("</script>", start)]
         # Archived rows are counted apart, behind their toggle.
         noun = re.search(r'total === 1 \? "(\w+)" : "(\w+)"', script)
         self.assertIsNotNone(noun)
@@ -207,7 +209,9 @@ class IndexTableTests(TempDirTestCase):
     def test_script_wires_sorting_and_filtering(self):
         make_mixed_fixture(self.out_dir)
         index_html = self.build_index()
-        script = index_html[index_html.index("<script>"): index_html.index("</script>")]
+        # The index's own script, in its body; the head holds the theme script.
+        start = index_html.index("<script>", index_html.index("</head>"))
+        script = index_html[start: index_html.index("</script>", start)]
         self.assertIn(".index-table", script)
         self.assertIn("sort-button", script)
         self.assertIn("aria-sort", script)

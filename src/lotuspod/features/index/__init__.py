@@ -8,4 +8,5 @@ __getattr__ = public_edge(__name__, {
     "_hidden_note": "commands",
     "cmd_index": "commands",
     "collect_artifacts": "listing",
+    "render_index": "listing",
 })

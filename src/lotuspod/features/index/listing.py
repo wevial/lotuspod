@@ -13,6 +13,8 @@ from lotuspod.features import history
 
 
 INDEX_TEMPLATE_PATH = package_path("features", "index", "templates", "index.html")
+# The head's theme script, relative to THEME_ROOT.
+THEME_HEAD_SOURCE = "core/ts/theme-head.js"
 
 
 # How git log marks each commit's line among the file names it lists: a
@@ -145,13 +147,18 @@ def index_entries_html(artifacts: list[dict]) -> str:
     )
 
 
-def render_index(artifacts: list[dict]) -> str:
-    """The index page's text for a visible set."""
+def render_index(artifacts: list[dict], generated: str = "") -> str:
+    """The index page's text for a visible set, updated on the day generated
+    (YYYY-MM-DD; today when empty)."""
     tokens = load_tokens()
     context = {
-        "generated": _dt.date.today().isoformat(),
+        "generated": generated or _dt.date.today().isoformat(),
         "entries_block": index_entries_html(artifacts),
         "theme_name": tokens["name"],
         "theme_hash": theme_hash(),
+        # The head script pages carry, so the shell follows the reader's
+        # theme from its first paint. The index has no policy meta; one added
+        # must allow this script by its hash, as page_policy() does.
+        "theme_head": (core.THEME_ROOT / THEME_HEAD_SOURCE).read_text(encoding="utf-8"),
     }
     return render_template(context, INDEX_TEMPLATE_PATH)
