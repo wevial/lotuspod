@@ -20,6 +20,7 @@ const document = `<!DOCTYPE html>
 <title>Pump board</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&amp;display=swap" rel="stylesheet">
+<noscript><script src="https://cdn.jsdelivr.net/npm/pump-board@1.0.0/dist/board.js" defer></script></noscript>
 <style>
 :root { --bg: #f6f1e7; --ink: #1d2a2c; --panel: #ffffff; --accent: #2f7d5b; }
 @media (prefers-color-scheme: dark) {
@@ -84,6 +85,11 @@ test('an artifact pod follows the reader\'s Dawn and Night and takes comments on
   await expect(body).toHaveCSS('background-color', LIGHT);
   await expect(page.locator('.artifact-live-badge').first()).toHaveText('Live');
   expect(await inner.locator('link').count()).toBe(0);
+  // A frame runs scripts, so its noscript holds text and no script runs from it.
+  await expect(inner.locator('noscript')).toHaveCount(1);
+  expect(await inner.locator('noscript').evaluate(element => element.childElementCount)).toBe(0);
+  expect(await inner.locator('noscript').evaluate(element => element.textContent)).toContain('board.js');
+  await expect(inner.locator('script[defer]')).toHaveCount(0);
   await page.getByRole('group', { name: 'Theme' }).getByRole('button', { name: 'Night', exact: true }).click();
   await expect(root).toHaveAttribute('data-theme', 'dark');
   await expect(body).toHaveCSS('background-color', DARK);

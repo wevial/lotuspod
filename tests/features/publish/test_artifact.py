@@ -305,5 +305,18 @@ class ArtifactFetch(unittest.TestCase):
                       f"<script async>{CDNJS_BYTES.decode()}</script></body>", adapted)
         self.assertEqual(adapted.count(JSDELIVR_BYTES.decode()), 1)
 
+    def test_what_a_noscript_element_holds_is_left_as_written(self):
+        held = (f'<noscript><script src="{JSDELIVR}" defer></script>'
+                '<script src="https://unpkg.com/pump"></script>'
+                '<link rel="stylesheet" href="https://example.com/a.css"></noscript>')
+        source = document(head=held, body=f'<noscript><script src="{CDNJS}" async></script>'
+                                           '</noscript><div id="board"></div>')
+        with mock.patch.object(artifact, "fetch") as fetch, redirect_stderr(io.StringIO()):
+            adapted = artifact.adapt(source)
+        fetch.assert_not_called()
+        theme = f"<head><script>{artifact.THEME_SCRIPT}</script>"
+        self.assertEqual(adapted, source.replace("<head>", theme, 1))
+
+
 if __name__ == "__main__":
     unittest.main()

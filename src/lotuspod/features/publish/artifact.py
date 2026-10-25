@@ -96,6 +96,11 @@ class _Elements(HTMLParser):
     its head's start tag ends (None when it has none before content), and
     where its last body or html end tag starts (None when it has neither)."""
 
+    # A frame runs scripts, so its parser reads a noscript element's content
+    # as text, as it does these others': nothing in one is an element.
+    CDATA_CONTENT_ELEMENTS = ("script", "style", "xmp", "iframe", "noembed", "noframes",
+                              "noscript")
+
     def __init__(self, source: str) -> None:
         super().__init__(convert_charrefs=True)
         self._source = source
