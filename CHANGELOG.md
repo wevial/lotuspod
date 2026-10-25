@@ -4,6 +4,43 @@ All notable changes to Lotuspod are recorded here, newest first, in the
 Keep a Changelog style. Each version's section, headed
 `## X.Y.Z - YYYY-MM-DD`, becomes the notes of its GitHub release.
 
+## 0.7.0 - 2026-10-25
+
+- Every page now takes its look from the current release when it is read.
+  `lotuspod serve` builds each page's shell (theme, scripts, layout) from
+  the page's kept content at request time, with an `ETag` and 304 replies,
+  so a template or theme change reaches every page without republishing.
+  `NAME.html` stays on disk as the published snapshot and is left
+  unchanged. Old versions opened with `?version=` render in today's shell
+  from that version's own content, still marked as old versions.
+- After upgrading, run `lotuspod pages migrate` once. It keeps the body of
+  each page published before kept sources existed, and keeps only those a
+  render gives back with the same text and anchors. `lotuspod pages diff`
+  lists every page today's render draws differently from its published
+  file, and what changed. It writes nothing.
+- One theme choice for the whole site. Picking Night, Dawn or Auto on any
+  page applies it to the index and to every open page at once.
+- A page's open questions get a Decisions tab in the comments panel,
+  including the phone's bottom sheet. The title bar's count opens it, and
+  every unsaved question counts as "to answer". Saved answers fold into an
+  Answered list, a decision card collapses to one line from its title, and
+  a new question has its own field in the panel. The old Respond panel is
+  gone.
+- A reader's reply that mentions no one goes to the agent that last
+  answered its thread, while that agent is listening.
+- Comment composers turn a typed `:shortcode:` into its emoji and suggest
+  emoji after `:` and two letters.
+- A live block's thread is named "On TITLE" in popovers and the phone's
+  bottom sheet. On a page with unwrapped sections, a block's comments go
+  to its heading's section. A block opened alone runs inside a frame, so
+  it cannot move its tab to another site.
+- The code is split into one package per feature, with an import-graph
+  test, public edges between slices and a file-size ratchet. A new
+  feature is new files.
+- Faster checks: the unit suite runs in two parallel shards, the e2e
+  shards run in the Playwright image, and duplicate browser checks are
+  folded into their neighbours or moved to Python tests.
+
 ## 0.6.0 - 2026-10-22
 
 - Authors can add interactive charts, sliders and walkthroughs with an
