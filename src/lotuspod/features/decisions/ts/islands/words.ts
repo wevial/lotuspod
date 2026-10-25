@@ -50,11 +50,7 @@ function squeezed(text: unknown): string {
 }
 
 // Whether answer, a question's current answer, shows as the form's answer:
-// at the form's version, or a decision's answer, not a dismissal, given to
-// the question the form asks in the same words, whose choice the form still
-// offers under the label it was given. A checklist's answer, a dismissal and
-// one stored before its words were kept hold only at their own version
-// (lotuspod.features.decisions.decisions.holds is the same rule).
+// the rule lotuspod.features.decisions.decisions.holds documents.
 export function holds(form: HTMLFormElement, answer: Answer): boolean {
   if (answer.version === form.dataset.version) {
     return true;
