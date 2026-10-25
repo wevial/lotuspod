@@ -137,10 +137,9 @@ def rendered_page(out_dir: Path, name: str) -> Rendered | None:
 
 
 # One render per page per commit for the life of the serve process (whose
-# render version is fixed), the oldest dropped past _VERSIONS_KEPT; a
-# version that cannot be rendered is kept as None, so it is said once.
+# render version is fixed); a version that cannot be rendered is kept as
+# None, so it is tried and said once.
 _VERSIONS: dict[tuple[Path, str, str], str | None] = {}
-_VERSIONS_KEPT = 256
 
 
 def rendered_version(out_dir: Path, name: str, commit: str, page_html: str,
@@ -184,8 +183,6 @@ def rendered_version(out_dir: Path, name: str, commit: str, page_html: str,
             if found is None:
                 return None
             _VERSIONS[key] = page
-            while len(_VERSIONS) > _VERSIONS_KEPT:
-                del _VERSIONS[next(iter(_VERSIONS))]
         return page
 
 

@@ -19,10 +19,12 @@ import re
 import shutil
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from lotuspod.core import OLD_VERSION_SCRIPT, theme_hash
 from lotuspod.features.history import History, old_page
 from lotuspod.features.publish import version_stamp
+from lotuspod.features.serve import pages
 from tests.features.serve.test_serve_shell import (FIXTURES, THEME_HEAD, Site, git, script_src,
                                                    shell_of)
 from tests.features.serve.test_serve_theme import SRC
@@ -157,6 +159,17 @@ class VersionShellTests(unittest.TestCase):
         self.assertTrue(other["ETag"])
         self.assertNotEqual(other["ETag"], tag)
 
+        # A 304 leaves the stored policy, whose nonce is the stored body's.
+        status, headers, _ = site.ask("GET", path, {"If-None-Match": tag})
+        self.assertEqual(status, 304)
+        self.assertIsNone(headers["Content-Security-Policy"])
+        # Published again, the version is one more behind: a new tag.
+        site.publish("fourth")
+        status, headers, page = site.ask("GET", path, {"If-None-Match": tag})
+        self.assertEqual(status, 200)
+        self.assertNotEqual(headers["ETag"], tag)
+        self.assertIn(b"3 versions behind", page)
+
     def test_a_version_whose_body_fails_the_check_is_answered_as_published(self):
         site = VersionSite(self)
         # Its body holds section wrappers and comment boxes, which publish
@@ -190,6 +203,39 @@ class VersionShellTests(unittest.TestCase):
         lines = [line for line in site.log().splitlines()
                  if line.startswith("serve:") and f"old-shell.html?version={refused}" in line]
         self.assertEqual(len(lines), 1, site.log())
+
+
+class VersionRenderCacheTests(unittest.TestCase):
+    def setUp(self):
+        self.out = Site(self).out
+        self.addCleanup(pages._VERSIONS.clear)
+
+    def test_renders_and_failures_are_kept_for_the_life_of_serve(self):
+        """Past any number of other versions, a version is neither rendered
+        nor said to fail again."""
+        calls = []
+
+        def render(out_dir, name, page_html, kept, refs):
+            calls.append(page_html)
+            if page_html == "refused":
+                raise RuntimeError("its body holds a section wrapper")
+            return page_html, {}
+
+        def files_at(commit, filenames):
+            return [None] * len(filenames)
+
+        commits = [f"{at:040x}" for at in range(600)]
+        with mock.patch.object(pages, "render_from", render), \
+                mock.patch("sys.stderr") as stderr:
+            for _ in range(2):
+                self.assertIsNone(pages.rendered_version(self.out, "pond", commits[0], "refused",
+                                                         files_at))
+                for commit in commits[1:]:
+                    self.assertEqual(pages.rendered_version(self.out, "pond", commit, commit,
+                                                            files_at), commit)
+        self.assertEqual(calls, ["refused", *commits[1:]])
+        logged = "".join(call.args[0] for call in stderr.write.call_args_list)
+        self.assertEqual(logged.count(f"pond.html?version={commits[0]}"), 1)
 
 
 if __name__ == "__main__":

@@ -320,10 +320,13 @@ class _AllowListHandler(SimpleHTTPRequestHandler):
             head = (THEME_ROOT / "core/ts/theme-head.js").read_text(encoding="utf-8")
             data = old_page(rendered, stem, version, behind, nonce, script,
                             frozenset((head,))).encode("utf-8")
-            return self._answer_rendered(data, f'"v-{commit}-{self.render_version}"', tuple(
-                (header, value + f"; script-src 'nonce-{nonce}' {script_hash(head)}"
-                 if header == "Content-Security-Policy" else value)
-                for header, value in _OLD_VERSION_HEADERS))
+            # The banner counts the newer versions, so the tag does too.
+            return self._answer_rendered(
+                data, f'"v-{commit}-{behind}-{self.render_version}"', tuple(
+                    (header, value + f"; script-src 'nonce-{nonce}' {script_hash(head)}"
+                     if header == "Content-Security-Policy" else value)
+                    for header, value in _OLD_VERSION_HEADERS),
+                unchanged=("Content-Security-Policy",))
         data = old_page(page_html, stem, version, behind, nonce, script).encode("utf-8")
         self._page_response, self._media_type = False, ""
         self.send_response(HTTPStatus.OK)
@@ -399,15 +402,18 @@ class _AllowListHandler(SimpleHTTPRequestHandler):
         tag = f'"a-{inputs}-{self.render_version}-{hashlib.sha256(data).hexdigest()[:16]}"'
         return self._answer_rendered(data, tag, _ARCHIVED_HEADERS)
 
-    def _answer_rendered(self, data: bytes, tag: str, headers: tuple):
-        """data under ETag tag, or 304 when the request already holds it."""
+    def _answer_rendered(self, data: bytes, tag: str, headers: tuple, unchanged: tuple = ()):
+        """data under ETag tag, or 304 when the request already holds it.
+        A 304 leaves out the headers named in unchanged, so the client keeps
+        those it stored with the body: a policy's nonce is that body's."""
         self._page_response, self._media_type = False, ""
         held = self.headers.get("If-None-Match") or ""
         if tag in (word.strip().removeprefix("W/") for word in held.split(",")):
             self.send_response(HTTPStatus.NOT_MODIFIED)
             self.send_header("ETag", tag)
             for header, value in headers:
-                self.send_header(header, value)
+                if header not in unchanged:
+                    self.send_header(header, value)
             self.end_headers()
             return io.BytesIO(b"")
         self.send_response(HTTPStatus.OK)
