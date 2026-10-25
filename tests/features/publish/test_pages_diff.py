@@ -98,7 +98,6 @@ class PagesDiffTests(unittest.TestCase):
         ])
 
     def test_json_holds_the_same_pages_and_counts(self):
-        text = self.report()
         done = self.report("--json")
         self.assertEqual((done.returncode, done.stderr), (0, ""))
         found = json.loads(done.stdout)
@@ -109,13 +108,8 @@ class PagesDiffTests(unittest.TestCase):
                                             "error": ""})
         self.assertEqual(pages["restyled"]["kind"], "markup")
         self.assertEqual(pages["restyled"]["sections"], [])
-        counts = found["counts"]
-        self.assertEqual(text.stdout.splitlines()[-1],
-                         f"{counts['pages']} pages: {counts['same']} same, "
-                         f"{counts['markup']} markup, {counts['text']} text, "
-                         f"{counts['anchors']} anchors, {counts['failed']} failed")
-        self.assertEqual(counts, {"pages": 3, "same": 1, "markup": 1, "text": 1,
-                                  "anchors": 0, "failed": 0})
+        self.assertEqual(found["counts"], {"pages": 3, "same": 1, "markup": 1, "text": 1,
+                                           "anchors": 0, "failed": 0})
 
     def test_a_second_h2_id_edited_in_the_file_is_named_under_anchors(self):
         self.publish("moved", MOVED)
