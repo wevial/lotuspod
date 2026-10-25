@@ -11,11 +11,10 @@ export function answeredTable(page: Page, formOf: (question: string) => HTMLForm
   change: (form: HTMLFormElement) => void) {
   let answered: HTMLElement | null = null;
 
-  // A row of the table. A question the page asks as it was answered
-  // (words.ts's holds) takes its number, question and label from its card,
-  // and has "change" unless it is dismissed; any other takes the words it
-  // was answered in, or else its id and the choice. A checklist has no
-  // number.
+  // A row of the table. A question the page asks as it was answered takes
+  // its number, question and label from its card, and has "change" unless
+  // it is dismissed; any other takes the words it was answered in, or else
+  // its id and the choice. A checklist has no number.
   function Row({ answer }: { answer: Answer }) {
     const question = String(answer.question);
     const form = formOf(question);

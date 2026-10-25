@@ -37,8 +37,7 @@ export interface Deck {
   undo(card: Card, button: HTMLButtonElement): void;
 }
 
-// The answer to the question as the page now asks it, if any (words.ts's
-// holds).
+// The answer to the question as the page now asks it, if any.
 export function saved(card: Card): Answer | null {
   const current = card.shown.current;
   return current && holds(card.form, current) ? current : null;
