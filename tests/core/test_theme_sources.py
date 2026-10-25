@@ -375,13 +375,13 @@ class DeclaredOrderTests(ThemeCopyTestCase):
     def test_a_declared_source_not_on_disk_is_named(self):
         theme = self.theme_copy()
         comments_css = "features/comments/theme/comments.css"
-        versions_js = "features/history/ts/versions.js"
+        archive_js = "features/history/ts/archive.js"
         (theme / comments_css).unlink()
-        (theme / versions_js).unlink()
+        (theme / archive_js).unlink()
         problems = source_problems(theme, sources_at(theme))
         self.assertEqual(len(problems), 2, problems)
         self.assertTrue(problems[0].startswith(f"{comments_css}: "), problems)
-        self.assertTrue(problems[1].startswith(f"{versions_js}: "), problems)
+        self.assertTrue(problems[1].startswith(f"{archive_js}: "), problems)
 
     def test_a_new_slices_part_is_joined_at_its_slot(self):
         """A new slice folder holding one stylesheet part and its declaration,
