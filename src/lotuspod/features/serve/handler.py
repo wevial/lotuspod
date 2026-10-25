@@ -3,6 +3,7 @@ server _make_server builds around it."""
 
 from __future__ import annotations
 
+import hashlib
 import io
 import json
 import queue
@@ -58,8 +59,8 @@ _OLD_VERSION_HEADERS = (
     ("Cache-Control", "private, no-store"),
 )
 _VERSION_QUERY = "version"
-# Headers on an archived page, answered from memory: never answered 304 from
-# a copy kept before it was archived or unarchived.
+# Headers on an archived page, answered from memory under an ETag over its
+# bytes: a copy kept before it was archived or unarchived is never answered 304.
 _ARCHIVED_HEADERS = (*_PAGE_HEADERS, ("Cache-Control", "no-cache"))
 # Headers on a page and a live-block frame rendered when asked for: each
 # answer is checked against its ETag, which follows the page's inputs and
@@ -360,7 +361,7 @@ class _AllowListHandler(SimpleHTTPRequestHandler):
         return io.BytesIO(data)
 
     def _serve_archived(self, stored: Path):
-        """The page at stored as archived_page() marks it, always a 200;
+        """The page at stored as archived_page() marks it, under an ETag;
         None when it has no archive record, or one that cannot be read, so
         it is answered from its file."""
         stem = stored.name[:-len(".html")]
@@ -375,14 +376,10 @@ class _AllowListHandler(SimpleHTTPRequestHandler):
             return None
         data = archived_page(
             page_html, record, successor_title(self.root, record)).encode("utf-8")
-        self._page_response, self._media_type = False, ""
-        self.send_response(HTTPStatus.OK)
-        self.send_header("Content-Type", "text/html; charset=utf-8")
-        self.send_header("Content-Length", str(len(data)))
-        for header, value in _ARCHIVED_HEADERS:
-            self.send_header(header, value)
-        self.end_headers()
-        return io.BytesIO(data)
+        # Tagged by what it answers, which follows the page's inputs, its
+        # record, its successor's title and the render version.
+        return self._answer_rendered(data, f'"a-{hashlib.sha256(data).hexdigest()[:16]}"',
+                                     _ARCHIVED_HEADERS)
 
     def _answer_rendered(self, data: bytes, tag: str, headers: tuple):
         """data under ETag tag, or 304 when the request already holds it."""

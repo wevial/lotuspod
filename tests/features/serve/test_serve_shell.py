@@ -293,6 +293,28 @@ class RenderedShellTests(unittest.TestCase):
                 self.assertEqual(site.ask("GET", path)[0], 404)
 
 
+    def test_an_archived_page_is_checked_by_its_etag(self):
+        site = Site(self, "old-shell.html", "old-shell.md")
+        site.ok("archive", "old-shell", "--local")
+        site.serve()
+
+        status, headers, _ = site.ask("GET", "/old-shell.html")
+        tag = headers["ETag"]
+        self.assertEqual(status, 200)
+        self.assertTrue(tag)
+        self.assertEqual(headers["Cache-Control"], "no-cache")
+        self.assertEqual(site.ask("HEAD", "/old-shell.html")[1]["ETag"], tag)
+        for method in ("GET", "HEAD"):
+            with self.subTest(method=method):
+                status, _, body = site.ask(method, "/old-shell.html", {"If-None-Match": tag})
+                self.assertEqual((status, body), (304, b""))
+
+        site.ok("unarchive", "old-shell")
+        status, headers, page = site.ask("GET", "/old-shell.html", {"If-None-Match": tag})
+        self.assertEqual(status, 200)
+        self.assertNotEqual(headers["ETag"], tag)
+        self.assertNotIn(b'class="artifact-archived-banner"', page)
+
     def test_a_linked_source_is_never_rendered(self):
         site = Site(self, "old-shell.html")
         private = site.tmp / "private.md"
