@@ -109,14 +109,14 @@ def _listed_verdicts(out_dir: Path, names: list[str]) -> dict[str, Verdict]:
     marks = {}
     for name in names:
         key = (Path(out_dir), name)
+        file = out_dir / f"{name}.html"
         try:
-            found = (out_dir / f"{name}.html").stat()
+            found = file.stat()
             stamp = (found.st_mtime_ns, found.st_size, *seen)
             with _RENDERS_LOCK:
                 kept = _VERDICTS.get(key)
             if kept is None or kept[0] != stamp:
-                kept = (stamp, page_verdict(out_dir, name, (out_dir / f"{name}.html").read_bytes(),
-                                            states))
+                kept = (stamp, page_verdict(out_dir, name, file.read_bytes(), states))
                 with _RENDERS_LOCK:
                     _VERDICTS[key] = kept
         except OSError:
@@ -352,8 +352,7 @@ def rendered_index(out_dir: Path) -> tuple[str, str] | None:
     parts = [data, day.encode("ascii"), listed.encode("utf-8")]
     if marks:
         parts.append(json.dumps(marks, sort_keys=True).encode("utf-8"))
-    key = hashlib.sha256(b"\0".join(parts))
-    key = key.hexdigest()[:16]
+    key = hashlib.sha256(b"\0".join(parts)).hexdigest()[:16]
     with _RENDERS_LOCK:
         found = _INDEXES.get(Path(out_dir))
     if found is not None and found[1] == key:
