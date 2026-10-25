@@ -263,6 +263,34 @@ class ServeStaleMarks(unittest.TestCase):
         _, _, index = self.ask("/index.html")
         self.assertIn("index-stale", self.index_row(index, "pond-plan"))
 
+    def test_a_page_that_reads_a_link_keeps_its_mark(self):
+        kept = self.out / "pond-plan.md"
+        self.assertTrue(kept.is_file())
+        refs = self.out / "pond-plan.refs.json"
+        self.serve()
+        for linked in (kept, refs):
+            with self.subTest(linked=linked.name):
+                outside = self.tmp / f"outside-{linked.name}"
+                outside.write_bytes(kept.read_bytes() if linked == kept else b'{"refs": {}}')
+                if linked.exists():
+                    linked.unlink()
+                linked.symlink_to(outside)
+                self.store(merged_7=True)
+                status, headers, page = self.ask("/pond-plan.html")
+                self.assertEqual(status, 200)
+                self.assertIn('<span class="artifact-stale" title="acme/pond#7">',
+                              self.header_line(page))
+                status, _, _ = self.ask("/pond-plan.html", {"If-None-Match": headers["ETag"]})
+                self.assertEqual(status, 304)
+                self.store(merged_7=False)
+                status, _, page = self.ask("/pond-plan.html",
+                                           {"If-None-Match": headers["ETag"]})
+                self.assertEqual(status, 200)
+                self.assertNotIn("artifact-stale", page)
+                linked.unlink()
+                if linked == kept:
+                    kept.write_bytes(outside.read_bytes())
+
     def test_an_archived_page_is_not_marked_as_pages_stale_lists_it_not(self):
         self.assertIn("pond-plan", self.stale_pages())
         done = self.cli("archive", "pond-plan", "--local", "--out-dir", str(self.out))

@@ -278,7 +278,13 @@ def rendered_page(out_dir: Path, name: str) -> Rendered | None:
     key = (Path(out_dir), name)
     try:
         if _linked(key[0], name):
-            return _published(key[0], name, "", "a file it is rendered from is a link")
+            published = (key[0] / f"{name}.html").read_bytes()
+            verdict = page_verdict(key[0], name, published)
+            # A marked answer is tagged by the file and the verdict it shows.
+            inputs = (hashlib.sha256(published + b"\0" + json.dumps(verdict).encode("utf-8"))
+                      .hexdigest()[:16] if verdict.merged or verdict.closed else "")
+            return _published(key[0], name, inputs, "a file it is rendered from is a link",
+                              verdict)
         inputs, verdict = page_inputs(key[0], name)
     except OSError:
         return None
