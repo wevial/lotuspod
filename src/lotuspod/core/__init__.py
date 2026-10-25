@@ -307,20 +307,69 @@ def source_revision(data: bytes) -> str:
 def page_revision(out_dir: Path, name: str) -> str:
     """The revision NAME.html is published at; "none" when there is no page.
 
-    A page rendered before revisions were stamped takes its kept source's.
+    A page rendered before revisions were stamped takes its kept source's,
+    unless that source is the page's own published body.
     """
     page = out_dir / f"{name}.html"
     if not page.exists():
         return NO_REVISION
-    tag = _REVISION_TAG_RE.search(page.read_text(encoding="utf-8"))
+    page_html = page.read_text(encoding="utf-8")
+    tag = _REVISION_TAG_RE.search(page_html)
     content = _META_CONTENT_RE.search(tag.group(0)) if tag else None
     if content:
         return content.group(1).strip()
     for suffix in _KEPT_SOURCE_SUFFIX.values():
         kept = out_dir / f"{name}{suffix}"
         if kept.is_file():
-            return source_revision(kept.read_bytes())
+            data = kept.read_bytes()
+            # A source taken from the page's own body (`lotuspod pages
+            # migrate`) was never published from: the page keeps no revision
+            # until it is published again.
+            if suffix == BODY_SOURCE_SUFFIX and data == (published_body(page_html) or "").encode("utf-8"):
+                return ""
+            return source_revision(data)
     return ""
+
+
+class _BodySpan(HTMLParser):
+    """Locate the inner HTML of a page's section.artifact-body."""
+
+    def __init__(self, page_html: str) -> None:
+        super().__init__(convert_charrefs=True)
+        self._line_starts = [0, *(match.end() for match in re.finditer("\n", page_html))]
+        self._depth = 0
+        self.start: int | None = None
+        self.end: int | None = None
+
+    def _offset(self) -> int:
+        line, column = self.getpos()
+        return self._line_starts[line - 1] + column
+
+    def handle_starttag(self, tag: str, attrs: list) -> None:
+        if tag != "section" or self.end is not None:
+            return
+        if self._depth:
+            self._depth += 1
+        elif self.start is None and "artifact-body" in (dict(attrs).get("class") or "").split():
+            self.start = self._offset() + len(self.get_starttag_text() or "")
+            self._depth = 1
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag == "section" and self._depth:
+            self._depth -= 1
+            if not self._depth:
+                self.end = self._offset()
+
+
+def published_body(page_html: str) -> str | None:
+    """The inner HTML of a page's section.artifact-body, byte for byte as
+    published; None when it has none."""
+    parser = _BodySpan(page_html)
+    parser.feed(page_html)
+    parser.close()
+    if parser.start is None or parser.end is None:
+        return None
+    return page_html[parser.start:parser.end]
 
 
 class _ScriptCollector(HTMLParser):

@@ -57,7 +57,7 @@ The pictures come from a sample page served on loopback by the test fixture;
 
 ```
 lotuspod/
-├── src/lotuspod/          # package + CLI (`lotuspod render|publish|manifest|index|serve|credential|answers|audit|comments|inbox|respond|backup|restore|archive|unarchive`)
+├── src/lotuspod/          # package + CLI (`lotuspod render|publish|pages|manifest|index|serve|credential|answers|audit|comments|inbox|respond|backup|restore|archive|unarchive`)
 │   ├── cli/               # the entry point: the root parser and each slice's commands
 │   ├── core/              # what every part shares (imports nothing else in Lotuspod)
 │   │   ├── templates/artifact.html  # artifact template ({{placeholder}} substitution)

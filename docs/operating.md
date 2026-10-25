@@ -136,6 +136,38 @@ exposure beyond that allow-list: `manifest.json`, `FINDINGS.md`, hidden
 pages, and everything else 404 through the public hostname too, and the
 ingress catch-all sends any other hostname to a bare 404.
 
+## Keeping every page's source
+
+A page published with a source keeps it beside it, `NAME.md` or
+`NAME.body.html`. A page rendered before publish kept sources has only its
+`NAME.html`, so nothing can render it again with today's template.
+`lotuspod pages migrate` keeps the body of each such page as its
+`NAME.body.html`:
+
+```sh
+lotuspod pages migrate --check --out-dir artifacts   # what it would keep; writes nothing
+lotuspod pages migrate --out-dir artifacts
+```
+
+It takes the publish lock and looks at every page, listed or hidden. A page
+that already keeps a source is counted as kept. For any other, the body is
+the inner HTML of the page's `section.artifact-body` as published, and it is
+kept only when a render from it, with the stamps the page carries (title,
+dates, summary, labels, owner, visibility, revision, treatment, outline and
+comment boxes), gives the page's text, whitespace collapsed, and its anchors
+back: h2 ids, decision question ids, live-block frame names and comment-box
+sections. A body holding a comment box, a section wrapper, a decision form or
+a live block is refused, as publish only ever wrote those from a source, and
+so is one whose render differs; the refusal names the first difference.
+
+It prints `kept N, extracted M, refused R`, then each refused page with its
+reason, and exits 1 when any page was refused. It writes only
+`NAME.body.html` files, never a page, `manifest.json` or `index.html`, and
+makes one commit, `migrate pages`, when the output directory is the top of
+its own repository. A second run extracts nothing and commits nothing. No
+page gains a version or a revision: a page whose kept `NAME.body.html` is its
+own published body reports the revision it had, until it is next published.
+
 ## Deploying from main
 
 The live site runs from its own checkout and follows `main` by itself. A

@@ -1,8 +1,9 @@
 """Publishing: a page rendered from the template (render.py, with its
 markdown, images and sections in markdown.py, media.py and sections.py), the
-manifest (manifest.py) and publish, here or over ssh (publish.py and
-publish_sources.py), with `lotuspod render`, `lotuspod manifest` and
-`lotuspod publish` in commands.py."""
+manifest (manifest.py), publish, here or over ssh (publish.py and
+publish_sources.py), and a page rendered again from what it keeps (kept.py),
+with `lotuspod render`, `lotuspod manifest`, `lotuspod publish` and
+`lotuspod pages` in commands.py."""
 
 from lotuspod.features import public_edge
 from lotuspod.features.publish.manifest import cmd_manifest
