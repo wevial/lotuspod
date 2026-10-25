@@ -61,45 +61,75 @@ class Rendered(NamedTuple):
     rendered: bool
 
 
-# One render per page per input digest, for the life of the serve process.
+# One render per page per input digest, for the life of the serve process;
+# a page renders under its own lock, so requests that miss together render
+# it once. A failed render is never kept, so a page whose render failed
+# renders again at its next request; its failure is logged once.
 _RENDERS: dict[tuple[Path, str], Rendered] = {}
+_RENDERING: dict[tuple[Path, str], threading.Lock] = {}
+_FAILED: set[tuple[Path, str, str]] = set()
 _RENDERS_LOCK = threading.Lock()
+
+
+def _linked(out_dir: Path, name: str) -> bool:
+    """Whether a file NAME's render reads is a link, which may name a file
+    outside the served directory."""
+    return any((out_dir / f"{name}{suffix}").is_symlink()
+               for suffix in (".html", REFS_SUFFIX, *_KEPT_SOURCE_SUFFIX.values()))
+
+
+def _published(out_dir: Path, name: str, inputs: str, why: str) -> Rendered | None:
+    """NAME's published file as its answer, the reason logged once per inputs."""
+    try:
+        published = (out_dir / f"{name}.html").read_bytes().decode("utf-8")
+    except (OSError, UnicodeDecodeError):
+        return None
+    with _RENDERS_LOCK:
+        logged = (out_dir, name, inputs) in _FAILED
+        _FAILED.add((out_dir, name, inputs))
+    if not logged:
+        print(f"serve: {name}.html is answered from its published file: {why}",
+              file=sys.stderr, flush=True)
+    return Rendered(published, {}, inputs, False)
 
 
 def rendered_page(out_dir: Path, name: str) -> Rendered | None:
     """NAME's page rendered now from its kept source (or the body extracted
     from its published file) with today's template; None when its published
-    file cannot be read. A render that raises gives the published file, and
-    says so once on standard error."""
+    file cannot be read. A render that raises, or a page that reads a link,
+    gives the published file, and says so once on standard error."""
     key = (Path(out_dir), name)
     try:
+        if _linked(key[0], name):
+            return _published(key[0], name, "", "a file it is rendered from is a link")
         inputs = page_inputs(key[0], name)
     except OSError:
         return None
     with _RENDERS_LOCK:
         found = _RENDERS.get(key)
+        rendering = _RENDERING.setdefault(key, threading.Lock())
     if found is not None and found.inputs == inputs:
         return found
-    try:
-        page_html, frames = render_kept_or_extracted(key[0], name)
-        found = Rendered(page_html, frames, inputs, True)
-    except Exception as exc:  # noqa: BLE001 - any failed render answers the published file
-        try:
-            published = (key[0] / f"{name}.html").read_bytes().decode("utf-8")
-        except (OSError, UnicodeDecodeError):
-            return None
-        found = Rendered(published, {}, inputs, False)
-        print(f"serve: {name}.html is answered from its published file: its render "
-              f"failed: {type(exc).__name__}: {exc}", file=sys.stderr, flush=True)
-    try:
-        # Published again while it rendered: answered, never kept.
-        if page_inputs(key[0], name) != inputs:
+    with rendering:
+        with _RENDERS_LOCK:
+            found = _RENDERS.get(key)
+        if found is not None and found.inputs == inputs:
             return found
-    except OSError:
+        try:
+            page_html, frames = render_kept_or_extracted(key[0], name)
+        except Exception as exc:  # noqa: BLE001 - any failed render answers the published file
+            return _published(key[0], name, inputs,
+                              f"its render failed: {type(exc).__name__}: {exc}")
+        found = Rendered(page_html, frames, inputs, True)
+        try:
+            # Published again while it rendered: answered, never kept.
+            if page_inputs(key[0], name) != inputs:
+                return found
+        except OSError:
+            return found
+        with _RENDERS_LOCK:
+            _RENDERS[key] = found
         return found
-    with _RENDERS_LOCK:
-        _RENDERS[key] = found
-    return found
 
 
 def served_page_names(out_dir: Path, allowed: frozenset[str] | None = None) -> list[str]:

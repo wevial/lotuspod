@@ -24,10 +24,14 @@ import re
 import shutil
 import subprocess
 import sys
+import threading
+import time
 import unittest
+from unittest import mock
 from html.parser import HTMLParser
 from pathlib import Path
 
+from lotuspod.features.serve import pages
 from tests import access_keys as keys
 from tests.features.serve.test_serve_theme import SRC, ServedSite
 
@@ -287,6 +291,57 @@ class RenderedShellTests(unittest.TestCase):
         for path in ("/secret.html", "/old-shell.md", "/manifest.json"):
             with self.subTest(path=path):
                 self.assertEqual(site.ask("GET", path)[0], 404)
+
+
+    def test_a_linked_source_is_never_rendered(self):
+        site = Site(self, "old-shell.html")
+        private = site.tmp / "private.md"
+        private.write_text("# Old shell\n\nOutside the served directory.\n", encoding="utf-8")
+        (site.out / "old-shell.md").symlink_to(private)
+        site.serve()
+
+        status, _, page = site.ask("GET", "/old-shell.html")
+        self.assertEqual(status, 200)
+        self.assertNotIn(b"Outside the served directory.", page)
+        self.assertEqual(page, (FIXTURES / "old-shell.html").read_bytes())
+        self.assertEqual(site.ask("GET", "/old-shell.md")[0], 404)
+
+
+class RenderCacheTests(unittest.TestCase):
+    def setUp(self):
+        self.out = Site(self, "old-shell.html", "old-shell.md").out
+        self.addCleanup(pages._RENDERS.clear)
+        self.addCleanup(pages._FAILED.clear)
+
+    def test_requests_that_miss_together_render_once(self):
+        calls = []
+        real = pages.render_kept_or_extracted
+
+        def slow(out_dir, name):
+            calls.append(name)
+            time.sleep(0.2)
+            return real(out_dir, name)
+
+        with mock.patch.object(pages, "render_kept_or_extracted", slow):
+            threads = [threading.Thread(target=pages.rendered_page, args=(self.out, "old-shell"))
+                       for _ in range(6)]
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join()
+        self.assertEqual(calls, ["old-shell"])
+
+    def test_a_failed_render_is_logged_once_and_tried_again(self):
+        def failing(out_dir, name):
+            raise RuntimeError("an image is missing")
+
+        with mock.patch.object(pages, "render_kept_or_extracted", failing), \
+                mock.patch("sys.stderr") as stderr:
+            for _ in range(3):
+                self.assertFalse(pages.rendered_page(self.out, "old-shell").rendered)
+        logged = "".join(call.args[0] for call in stderr.write.call_args_list)
+        self.assertEqual(logged.count("old-shell.html is answered from its published file"), 1)
+        self.assertTrue(pages.rendered_page(self.out, "old-shell").rendered)
 
 
 if __name__ == "__main__":
