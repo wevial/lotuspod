@@ -156,7 +156,6 @@ class ServeStaleMarks(unittest.TestCase):
         status, _, page_a = self.ask("/pond-plan.html")
         self.assertEqual(status, 200)
         line = self.header_line(page_a)
-        self.assertIn('<span class="artifact-stale"', line)
         mark = re.search(r'<span class="artifact-stale" title="([^"]*)">([^<]*)</span>', line)
         self.assertIsNotNone(mark, line)
         self.assertEqual(mark.groups(),
@@ -170,7 +169,6 @@ class ServeStaleMarks(unittest.TestCase):
         status, _, index = self.ask("/index.html")
         self.assertEqual(status, 200)
         row_a = self.index_row(index, "pond-plan")
-        self.assertIn('<span class="index-stale"', row_a)
         self.assertIn('<span class="index-stale" title="acme/pond#7">may be out of date</span>'
                       "</td>", row_a)
         self.assertNotIn("index-stale", self.index_row(index, "pond-status"))
