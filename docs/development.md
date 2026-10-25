@@ -71,8 +71,8 @@ IIFE for the browser with no source map, JSX through Preact's automatic
 runtime. The comments slice's `theme_parts.json` slots it directly after comment-markdown.js inside
 the shared closure: comments start before later sources find the panel and register
 their listeners, and never on a pod that goes to the index
-(`features/publish/ts/open-in-tabs.js`). Neither the index script nor the old-version script
-has it. The islands reach the legacy page only through
+(`features/publish/ts/open-in-tabs.js`). The old-version script has no islands, and the
+index script has its own bundle, not this one (below). The islands reach the legacy page only through
 `features/comments/ts/islands/bridge.ts`, the one module that names the closure's
 variables: it declares the types of `live` (`features/live/ts/live-page.js`),
 `linkedTo()`, `ARCHIVED`, the answers route, `STALE`, `FOLDED_ANSWERED`,
@@ -252,6 +252,27 @@ anchor-to-element switch. The bridge also supplies `CLOSED`,
 `PANEL`, `RESOLVED_SHOWN` and `WHOLE_PAGE`; the shell keeps storage and listbox
 state and calls page hooks to compose or refresh threads.
 
+The index script carries an islands bundle of its own: the index slice's
+`src/lotuspod/features/index/ts/islands/main.tsx`, built the same way into
+`src/lotuspod/features/index/ts/islands.js`, with its own copy of Preact and
+its signals, and slotted first in the index script by the index slice's
+`theme_parts.json`, before `pod-finder.js`, `index-refresh.js` and
+`live-events.js`. The index script is joined inside no closure, so the
+bundle's IIFE stands on its own there. It draws the pods in tabs: the strip,
+a frame per open pod, the address fragment, the seen route's dots, moves by
+drag and by key, and link following. The open pods' tabs in strip order,
+their frames in opening order, the active pod and the seen route's last
+answer are signals (`islands/state.ts`), read-only outside it and written
+only by the island's own actions, and the strip and the frames are drawn
+from them at once on each change. Each frame is created once, when its tab
+opens, and never moved or created again while its tab is open: a moved
+iframe loads its page again, so a move reorders the tabs alone. The
+pointer and touch handling of a drag (`islands/moves.ts`) sets the
+dragged tabs' transforms and classes on their nodes; where it ends is the
+state's. It trades these events with the index's other sources and its
+own script: `lotuspod:find`, `lotuspod:open`, `lotuspod:view`,
+`lotuspod:listing`, `lotuspod:rows` and serve's stream ticks.
+
 ```sh
 bun install --cwd web --frozen-lockfile
 bun run --cwd web build
@@ -270,7 +291,8 @@ sources but their public entries), and the islands, modules with imports and JSX
 whose `jsxImportSource` is `preact`, under their own config
 (`src/lotuspod/features/comments/ts/islands/tsconfig.json`, which finds
 Preact and its signals in `web/node_modules`, and checks the decisions
-island as `main.tsx` imports it).
+island as `main.tsx` imports it, and
+`src/lotuspod/features/index/ts/islands/tsconfig.json` for the index's).
 `test` runs `web/build.test.ts`, `web/shortcodes.test.ts`, the comment
 composers' emoji shortcode matcher with the table it reads, and the islands'
 tests (`web/store.test.ts`, the comments store's signals;

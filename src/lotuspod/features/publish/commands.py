@@ -1,13 +1,13 @@
 """The publish slice's commands: `lotuspod render` (render.py), `lotuspod
 manifest` (manifest.py), `lotuspod publish` (publish.py) and `lotuspod pages`
-(kept.py). `lotuspod index` sits between manifest and publish, so each run is
-registered on its own."""
+(kept.py, and `pages stale` from the stale slice). `lotuspod index` sits
+between manifest and publish, so each run is registered on its own."""
 
 from __future__ import annotations
 
 import argparse
 
-from lotuspod.features import agents
+from lotuspod.features import agents, stale
 from lotuspod.core import EXIT_REVISION_CONFLICT, NO_REVISION
 from lotuspod.features.publish.kept import cmd_pages_diff, cmd_pages_migrate
 from lotuspod.features.publish.manifest import cmd_manifest
@@ -177,7 +177,7 @@ def add_publish_parser(sub: argparse._SubParsersAction) -> None:
 
 
 def add_pages_parser(sub: argparse._SubParsersAction) -> None:
-    """Register `lotuspod pages migrate` and `lotuspod pages diff`."""
+    """Register `lotuspod pages migrate`, `lotuspod pages diff` and `lotuspod pages stale`."""
     pages = sub.add_parser("pages", help="work on every page of the output directory at once")
     actions = pages.add_subparsers(dest="action", required=True)
     migrate = actions.add_parser(
@@ -197,6 +197,7 @@ def add_pages_parser(sub: argparse._SubParsersAction) -> None:
     diff.add_argument("--json", action="store_true", help="print the report as one JSON object")
     diff.add_argument("--out-dir", default="", help="output directory (default: artifacts/)")
     diff.set_defaults(func=cmd_pages_diff)
+    stale.add_stale_parser(actions)
 
 
 # This slice's subcommands by slot, the order `lotuspod --help` lists them in.
