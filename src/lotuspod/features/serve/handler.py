@@ -19,7 +19,8 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from lotuspod.features import agents
-from lotuspod.core import INDEX_FILE, OLD_VERSION_SCRIPT, WIDGET_NAME, is_page_name, theme_hash
+from lotuspod.core import (INDEX_FILE, OLD_VERSION_SCRIPT, THEME_ROOT, WIDGET_NAME, is_page_name,
+                           script_hash, theme_hash)
 from lotuspod.features.history import (History, archived_page, old_page, read_record, set_archived,
                                         successor_title)
 from lotuspod.features import live
@@ -27,7 +28,7 @@ from lotuspod.features import publish
 from lotuspod.features.publish import version_stamp
 from lotuspod.features.serve import access, api, serve_files
 from lotuspod.features.serve.pages import (api_catalog, api_page, render_version, rendered_index,
-                                           rendered_page, served_page_names)
+                                           rendered_page, rendered_version, served_page_names)
 from lotuspod.features.serve.serve_files import _SERVE_NEVER_FILES
 from lotuspod.features import widgets
 from lotuspod.store import db
@@ -298,7 +299,10 @@ class _AllowListHandler(SimpleHTTPRequestHandler):
 
     def _serve_version(self, name: str, commit: str):
         """The page NAME.html as it was at commit, read-only; 404 unless it
-        is one of the page's listed versions."""
+        is one of the page's listed versions. It is rendered from that
+        commit's content with today's template, under an ETag over the
+        commit and the render version; one that cannot be is answered from
+        its published file then, with no ETag."""
         if self._reader() is None:
             return None
         stem = name[:-len(".html")]
@@ -309,6 +313,20 @@ class _AllowListHandler(SimpleHTTPRequestHandler):
         version, behind, page_html = found
         nonce = secrets.token_urlsafe(18)
         script = f"{OLD_VERSION_SCRIPT}?v={theme_hash()}"
+        rendered = rendered_version(self.root, stem, commit, page_html, self.history.files_at)
+        if rendered is not None:
+            # The theme head is the one script of the page's own that runs,
+            # allowed by its hash, so the reader's theme and switch hold.
+            head = (THEME_ROOT / "core/ts/theme-head.js").read_text(encoding="utf-8")
+            data = old_page(rendered, stem, version, behind, nonce, script,
+                            frozenset((head,))).encode("utf-8")
+            # The banner counts the newer versions, so the tag does too.
+            return self._answer_rendered(
+                data, f'"v-{commit}-{behind}-{self.render_version}"', tuple(
+                    (header, value + f"; script-src 'nonce-{nonce}' {script_hash(head)}"
+                     if header == "Content-Security-Policy" else value)
+                    for header, value in _OLD_VERSION_HEADERS),
+                unchanged=("Content-Security-Policy",))
         data = old_page(page_html, stem, version, behind, nonce, script).encode("utf-8")
         self._page_response, self._media_type = False, ""
         self.send_response(HTTPStatus.OK)
@@ -384,15 +402,18 @@ class _AllowListHandler(SimpleHTTPRequestHandler):
         tag = f'"a-{inputs}-{self.render_version}-{hashlib.sha256(data).hexdigest()[:16]}"'
         return self._answer_rendered(data, tag, _ARCHIVED_HEADERS)
 
-    def _answer_rendered(self, data: bytes, tag: str, headers: tuple):
-        """data under ETag tag, or 304 when the request already holds it."""
+    def _answer_rendered(self, data: bytes, tag: str, headers: tuple, unchanged: tuple = ()):
+        """data under ETag tag, or 304 when the request already holds it.
+        A 304 leaves out the headers named in unchanged, so the client keeps
+        those it stored with the body: a policy's nonce is that body's."""
         self._page_response, self._media_type = False, ""
         held = self.headers.get("If-None-Match") or ""
         if tag in (word.strip().removeprefix("W/") for word in held.split(",")):
             self.send_response(HTTPStatus.NOT_MODIFIED)
             self.send_header("ETag", tag)
             for header, value in headers:
-                self.send_header(header, value)
+                if header not in unchanged:
+                    self.send_header(header, value)
             self.end_headers()
             return io.BytesIO(b"")
         self.send_response(HTTPStatus.OK)

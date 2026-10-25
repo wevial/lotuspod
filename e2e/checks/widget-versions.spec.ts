@@ -45,6 +45,12 @@ test('an earlier page runs its own historical widget with read-only chrome', asy
   await expect(page.getByRole('link', { name: 'Open alone' })).toHaveAttribute('href', src!);
   expect(await frame.evaluate(node => node.getBoundingClientRect().height)).toBe(240);
   await expect(page.getByRole('button', { name: 'Choose a version' })).toBeVisible();
-  expect(await page.locator('script').count()).toBe(1);
+  // Of the page's own scripts only today's theme head is left; then the
+  // old-version script.
+  expect(await page.locator('script').evaluateAll(nodes => nodes.map(node => {
+    const script = node as HTMLScriptElement;
+    if (script.src) return new URL(script.src).pathname;
+    return script.text.includes('"lotuspod:theme"') ? 'theme head' : 'another inline script';
+  }))).toEqual(['theme head', '/lotuspod-old-version.js']);
   expect(errors).toEqual([]);
 });

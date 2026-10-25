@@ -94,9 +94,10 @@ def kept_source(out_dir: Path, name: str) -> tuple[str, bytes] | None:
     return None
 
 
-def _render(out_dir: Path, name: str, page_html: str, fmt: str,
-            data: bytes) -> tuple[str, dict[str, bytes]]:
-    """NAME rendered from a source of fmt, with the stamps page_html carries."""
+def _render(out_dir: Path, name: str, page_html: str, fmt: str, data: bytes,
+            refs: tuple[dict[str, dict], str] | None = None) -> tuple[str, dict[str, bytes]]:
+    """NAME rendered from a source of fmt, with the stamps page_html carries
+    and refs, (entries, asOf), or NAME.refs.json's when None."""
     text = normalized(data.decode("utf-8"))
     if fmt == "markdown":
         sizes = {}
@@ -112,7 +113,7 @@ def _render(out_dir: Path, name: str, page_html: str, fmt: str,
     meta = extract_meta(page_html, name)
     revision, visible, _ = version_stamp(page_html)
     owner = page_owner(page_html)
-    refs, refs_as_of = kept_refs(out_dir, name)
+    refs, refs_as_of = kept_refs(out_dir, name) if refs is None else refs
     built = build_page(argparse.Namespace(
         name=name,
         title=html.escape(meta["title"], quote=False),
@@ -159,12 +160,21 @@ def render_kept_or_extracted(out_dir: Path, name: str) -> tuple[str, dict[str, b
     its extracted body."""
     out_dir = Path(out_dir)
     page_html = (out_dir / f"{name}.html").read_bytes().decode("utf-8")
-    kept = kept_source(out_dir, name)
+    return render_from(out_dir, name, page_html, kept_source(out_dir, name))
+
+
+def render_from(out_dir: Path, name: str, page_html: str, kept: tuple[str, bytes] | None,
+                refs: tuple[dict[str, dict], str] | None = None
+                ) -> tuple[str, dict[str, bytes]]:
+    """render_kept_or_extracted() over the inputs given rather than the
+    files beside it: page_html, the published page; kept, (format, bytes)
+    of its kept source or None; refs, (entries, asOf) or None for
+    NAME.refs.json's. RuntimeError names why a body cannot be extracted."""
     revision = version_stamp(page_html)[0]
     if kept is not None and (not revision or source_revision(kept[1]) == revision):
-        return _render(out_dir, name, page_html, *kept)
-    body = extract(out_dir, name, page_html)
-    return _render(out_dir, name, page_html, "html", body.encode("utf-8"))
+        return _render(out_dir, name, page_html, *kept, refs=refs)
+    body = extract(out_dir, name, page_html, refs)
+    return _render(out_dir, name, page_html, "html", body.encode("utf-8"), refs=refs)
 
 
 class _Decorations(HTMLParser):
@@ -238,9 +248,11 @@ def first_difference(published: str, rendered: str) -> str:
     return ""
 
 
-def extract(out_dir: Path, name: str, page_html: str) -> str:
+def extract(out_dir: Path, name: str, page_html: str,
+            refs: tuple[dict[str, dict], str] | None = None) -> str:
     """The body to keep for NAME, a page with no source, checked by a render
-    from it; RuntimeError names why it cannot be kept."""
+    from it (with refs, as _render takes them); RuntimeError names why it
+    cannot be kept."""
     body = published_body(page_html)
     if body is None:
         raise RuntimeError("the page has no section.artifact-body")
@@ -252,7 +264,7 @@ def extract(out_dir: Path, name: str, page_html: str) -> str:
                            "only from a source")
     try:
         rendered = published_body(_render(out_dir, name, page_html, "html",
-                                          body.encode("utf-8"))[0]) or ""
+                                          body.encode("utf-8"), refs)[0]) or ""
     except (RuntimeError, ValueError, KeyError) as exc:
         raise RuntimeError(f"a render from its body fails: {exc}") from None
     difference = first_difference(body, rendered)

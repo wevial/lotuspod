@@ -66,8 +66,20 @@ once as it starts; a request whose `If-None-Match` holds that tag is answered
 page is published again. A live block's frame keeps the name the published
 page gives it, so a comment thread on the block stays on it; serve answers
 that name with the frame the render draws today, with the frame's own
-headers. An archived page is the render marked archived; an earlier version
-(`?version=COMMIT`) is answered from its commit as it was published.
+headers. An archived page is the render marked archived.
+
+An earlier version (`?version=COMMIT`) is drawn in today's shell too, from
+that version's own content, read from the artifacts repository at that
+commit: its kept source when the commit holds one beside the page, else the
+body extracted from its published file then, with the stamps (created date,
+revision, title) that file carries. It is marked old as before: the
+old-version banner with its link back to the current page, its decision
+forms disabled, and only the theme head and the old-version script running.
+Its `ETag` is over the commit and the render version, and serve keeps one
+render of each version in memory. A version whose body fails the extraction
+check (or whose render fails) is answered from its commit as it was
+published, marked old the same way, and serve prints one line naming the
+page and the commit. Nothing is written to the repository.
 
 Images a page shows are answered from `lotuspod-media/` beside the artifacts
 directory (see [Images](publishing.md#images)): a GET or HEAD of `/media/NAME`, where NAME
