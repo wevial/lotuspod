@@ -92,6 +92,16 @@ declare const STALE_BLOCK: string;
 declare function commentMarkdown(node: HTMLDivElement, text: string): HTMLDivElement;
 declare function commentImages(row: CommentRow): HTMLUListElement | null;
 declare function when(stamp: string | undefined): string;
+// core/ts/shared.js: the page as its URL names it.
+declare function pageName(): string;
+// features/history/ts/version-menu.js, joined after the bundle; a function
+// declaration, so defined as the bundle loads: the "▾" button and the menu of
+// a page's versions, with the commit shown and the one the reader last
+// looked at, and close(), which closes the menu.
+declare function versionMenu(
+  versions: readonly { commit: string; date: string; summary?: unknown; current?: unknown }[],
+  page: string, shown: string | null, seen: string | null, old?: boolean,
+): { button: HTMLButtonElement; menu: HTMLDivElement; close(focus: boolean): void };
 
 declare function json<T = CommentRow & CommentPayload>(response: Response): Promise<T | null>;
 declare function attachments(form: HTMLFormElement, field: HTMLTextAreaElement): Attachments;
@@ -122,7 +132,7 @@ export const page = Object.freeze({
   attachments, json, settleImageCap, noCap: NO_CAP, imageWords, all, changed: CHANGED,
   signedOut: SIGNED_OUT, stalePage: STALE_PAGE, staleSection: STALE_SECTION,
   noQuestion: NO_QUESTION, staleQuestion: STALE_QUESTION,
-  commentMarkdown, commentImages, when,
+  commentMarkdown, commentImages, when, pageName, versionMenu,
   holdSwap,
   passageGone: PASSAGE_GONE,
   placeGone: PLACE_GONE,

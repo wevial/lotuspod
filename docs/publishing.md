@@ -26,6 +26,12 @@ The `lotuspod` command is the installed console script. From a bare checkout —
 no install — the same CLI runs as a module: `PYTHONPATH=src python3 -m lotuspod
 render ...`.
 
+`lotuspod pages` works on every page at once: `pages migrate` keeps the body
+of each page that has no source, `pages diff` lists the pages a render from
+the kept source now gives differently, and `pages stale` lists the pages
+linking a GitHub pull request that merged or closed since they were last
+published ([Operating](operating.md#which-pages-a-merge-has-overtaken)).
+
 Pass `--hidden` to mark an artifact not visible: it carries a
 `lotuspod:visible: false` flag and is excluded from `manifest.json` and
 `index.html`. Re-render without `--hidden` to publish it.

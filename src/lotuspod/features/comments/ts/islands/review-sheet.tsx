@@ -253,7 +253,7 @@ function draw(page: Page, the: Cards, tools: HTMLElement, marks: Map<HTMLElement
 // the sheet. A question the page does not ask leaves the page where it is.
 // A link followed before the answers are drawn is no reload's fragment,
 // and one after waits for every other hashchange listener, such as the
-// versions view's (features/history/ts/versions.js), which may still hide the
+// versions view's (features/history/ts/islands/versions.ts), which may still hide the
 // text.
 // A live block's "N decisions" (lotuspod.features.widgets.widgets) is such a
 // link to the first question about it, which then also takes the focus, as

@@ -3,8 +3,8 @@
   // (web/build.ts), JSX through Preact's automatic runtime. The DOM's types
   // and none of Bun's, as for the per-file sources in ../. Preact and its
   // signals are installed in web/node_modules, so "paths" finds them there.
-  // The decisions island, which main.tsx mounts through that slice's
-  // ts/index.ts, is checked as main.tsx imports it.
+  // The decisions and history islands, which main.tsx mounts through each
+  // slice's ts/index.ts, are checked as main.tsx imports them.
   "compilerOptions": {
     "target": "ESNext",
     "module": "Preserve",
