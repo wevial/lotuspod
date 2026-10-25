@@ -141,8 +141,9 @@ _INDEXES: dict[Path, tuple[str, str]] = {}
 
 def rendered_index(out_dir: Path) -> tuple[str, str] | None:
     """The index rendered now from out_dir's manifest with today's template,
-    and a key over the manifest's bytes and the day it was written, which is
-    the day the index names as updated; None when the manifest cannot be read."""
+    listing only the pages serve answers, and a key over the manifest's
+    bytes, the day it was written, which is the day the index names as
+    updated, and the pages listed; None when the manifest cannot be read."""
     path = out_dir / MANIFEST_FILE
     try:
         if path.is_symlink():
@@ -154,7 +155,13 @@ def rendered_index(out_dir: Path) -> tuple[str, str] | None:
         return None
     if not isinstance(artifacts, list) or not all(isinstance(m, dict) for m in artifacts):
         return None
-    key = hashlib.sha256(data + b"\0" + day.encode("ascii")).hexdigest()[:16]
+    # A manifest older than a page's turn to hidden still lists it: only the
+    # pages serve answers are listed, so none shows its title or summary.
+    allowed = serve_files.serve_allow_list(out_dir)
+    artifacts = [m for m in artifacts if m.get("file") in allowed and is_page_name(str(m["file"]))]
+    listed = "\0".join(str(m["file"]) for m in artifacts)
+    key = hashlib.sha256(b"\0".join((data, day.encode("ascii"), listed.encode("utf-8"))))
+    key = key.hexdigest()[:16]
     with _RENDERS_LOCK:
         found = _INDEXES.get(Path(out_dir))
     if found is not None and found[1] == key:

@@ -13,6 +13,7 @@ Run from the repo root:
 
 from __future__ import annotations
 
+import json
 import re
 import unittest
 
@@ -39,19 +40,24 @@ class IndexShellTests(unittest.TestCase):
         site.ok("publish", str(source), "--local")
 
     def site(self) -> Site:
-        site = Site(self)
+        site = Site(self, "old-shell.html", "old-shell.md")
         for name, title in (("reeds", "Reeds"), ("frost", "Frost")):
             self.publish(site, name, title)
+        site.ok("manifest")
+        site.ok("index")
         site.serve()
         return site
 
     def test_the_index_holds_the_theme_head_and_the_manifests_rows_in_order(self):
         site = self.site()
         theme_head = (SRC / THEME_HEAD).read_text(encoding="utf-8")
-        index_file = site.out / "index.html"
-        written = rows(index_file.read_bytes())
-        self.assertEqual(sorted(written), ["frost", "reeds"])
+        listed = [entry["file"].removesuffix(".html") for entry in
+                  json.loads((site.out / "manifest.json").read_text(encoding="utf-8"))["artifacts"]]
+        written = rows((site.out / "index.html").read_bytes())
+        self.assertEqual(sorted(listed), ["frost", "old-shell", "reeds"])
+        self.assertEqual(written, listed)
         # An index written before the head script: serve answers its render.
+        index_file = site.out / "index.html"
         index_file.write_text(index_file.read_text(encoding="utf-8").replace(
             f"<script>{theme_head}</script>", ""), encoding="utf-8")
         self.assertNotIn(theme_head, index_file.read_text(encoding="utf-8"))
@@ -68,16 +74,47 @@ class IndexShellTests(unittest.TestCase):
 
     def test_the_etag_holds_until_a_publish_lists_another_page(self):
         site = self.site()
-        _, headers, _ = site.ask("GET", "/")
-        tag = headers["ETag"]
-        status, _, body = site.ask("GET", "/", {"If-None-Match": tag})
-        self.assertEqual((status, body), (304, b""))
+        tags = {}
+        for path in INDEX_PATHS:
+            with self.subTest(path=path):
+                _, first, _ = site.ask("GET", path)
+                _, second, _ = site.ask("GET", path)
+                tags[path] = first["ETag"]
+                self.assertTrue(tags[path])
+                self.assertEqual(second["ETag"], tags[path])
+                status, _, body = site.ask("GET", path, {"If-None-Match": tags[path]})
+                self.assertEqual((status, body), (304, b""))
+        self.assertEqual(tags["/"], tags["/index.html"])
 
         self.publish(site, "heron", "Heron")
 
-        status, _, page = site.ask("GET", "/", {"If-None-Match": tag})
-        self.assertEqual(status, 200)
-        self.assertIn("heron", rows(page))
+        for path in INDEX_PATHS:
+            with self.subTest(path=path):
+                status, headers, page = site.ask("GET", path, {"If-None-Match": tags[path]})
+                self.assertEqual(status, 200)
+                self.assertNotEqual(headers["ETag"], tags[path])
+                self.assertIn("heron", rows(page))
+                self.assertEqual(rows(page), rows((site.out / "index.html").read_bytes()))
+
+    def test_a_page_turned_hidden_after_the_manifest_is_not_listed(self):
+        site = self.site()
+        source = site.tmp / "secret.md"
+        source.write_text("# Secret\n\nA private note.\n", encoding="utf-8")
+        render = ("render", "--name", "secret", "--title", "Secret Title",
+                  "--summary", "Sensitive summary", "--markdown", str(source))
+        site.ok(*render)
+        site.ok("manifest")
+        self.assertIn("Sensitive summary", (site.out / "manifest.json").read_text(encoding="utf-8"))
+        site.ok(*render, "--hidden")
+
+        self.assertEqual(site.ask("GET", "/secret.html")[0], 404)
+        for path in INDEX_PATHS:
+            with self.subTest(path=path):
+                status, _, page = site.ask("GET", path)
+                self.assertEqual(status, 200)
+                self.assertNotIn(b"Secret Title", page)
+                self.assertNotIn(b"Sensitive summary", page)
+                self.assertNotIn("secret", rows(page))
 
 
 if __name__ == "__main__":
