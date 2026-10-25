@@ -13,5 +13,4 @@ __getattr__ = public_edge(__name__, {
     "page_pulls": "stale",
     "read_states": "stale",
     "states_path": "stale",
-    "verdict": "stale",
 })

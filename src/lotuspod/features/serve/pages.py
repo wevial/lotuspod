@@ -95,7 +95,8 @@ def page_verdict(out_dir: Path, name: str, page_html: bytes,
     if not states:
         return Verdict()
     text = page_html.decode("utf-8", "replace")
-    merged, closed = stale.verdict(text, extract_meta(text, name)["updated"], states)
+    merged, closed = stale.overtaken(extract_meta(text, name)["updated"], stale.page_pulls(text),
+                                     states)
     return Verdict(tuple(merged), tuple(closed))
 
 
@@ -167,7 +168,10 @@ def _marked_index(index_html: str, marks: dict[str, Verdict]) -> str:
     return _INDEX_ROW.sub(mark, index_html)
 
 
-def _inputs(out_dir: Path, name: str) -> tuple[str, Verdict]:
+def page_inputs(out_dir: Path, name: str) -> tuple[str, Verdict]:
+    """A digest of what NAME's render is made from: its published file, its
+    kept source, its kept refs and its verdict (page_verdict), and that
+    verdict. OSError when the page cannot be read."""
     digest = hashlib.sha256()
     kept = kept_source(out_dir, name)
     refs = out_dir / f"{name}{REFS_SUFFIX}"
@@ -183,13 +187,6 @@ def _inputs(out_dir: Path, name: str) -> tuple[str, Verdict]:
         digest.update(len(part).to_bytes(8, "big"))
         digest.update(part)
     return digest.hexdigest()[:16], found
-
-
-def page_inputs(out_dir: Path, name: str) -> str:
-    """A digest of what NAME's render is made from: its published file, its
-    kept source, its kept refs and its verdict (page_verdict). OSError when
-    the page cannot be read."""
-    return _inputs(out_dir, name)[0]
 
 
 class Rendered(NamedTuple):
@@ -245,7 +242,7 @@ def rendered_page(out_dir: Path, name: str) -> Rendered | None:
     try:
         if _linked(key[0], name):
             return _published(key[0], name, "", "a file it is rendered from is a link")
-        inputs, verdict = _inputs(key[0], name)
+        inputs, verdict = page_inputs(key[0], name)
     except OSError:
         return None
     with _RENDERS_LOCK:
@@ -266,7 +263,7 @@ def rendered_page(out_dir: Path, name: str) -> Rendered | None:
         found = Rendered(_marked_page(page_html, verdict), frames, inputs, True)
         try:
             # Published again while it rendered: answered, never kept.
-            if page_inputs(key[0], name) != inputs:
+            if page_inputs(key[0], name)[0] != inputs:
                 return found
         except OSError:
             return found

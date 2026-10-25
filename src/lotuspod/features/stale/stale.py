@@ -146,13 +146,6 @@ def overtaken(updated: str, pulls: list[str],
     return merged, closed
 
 
-def verdict(page_html: str, updated: str,
-            states: dict[str, dict]) -> tuple[list[str], list[str]]:
-    """One page's verdict from its html and updated stamp: the pull requests
-    it links stored merged and closed since (overtaken)."""
-    return overtaken(updated, page_pulls(page_html), states)
-
-
 def mark_text(merged: list[str], closed: list[str]) -> str:
     """The words a verdict's mark ends in, after "may be out of date · "."""
     if merged and closed:
