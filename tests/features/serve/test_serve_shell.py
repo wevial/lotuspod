@@ -24,6 +24,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import unittest
@@ -293,6 +294,12 @@ class RenderedShellTests(unittest.TestCase):
                 self.assertEqual(site.ask("GET", path)[0], 404)
 
 
+    def tmp_src(self) -> Path:
+        copy = Path(tempfile.mkdtemp()) / "src"
+        shutil.copytree(SRC, copy, ignore=shutil.ignore_patterns("__pycache__"))
+        self.addCleanup(shutil.rmtree, copy.parent, True)
+        return copy
+
     def test_an_archived_page_is_checked_by_its_etag(self):
         site = Site(self, "old-shell.html", "old-shell.md")
         site.ok("archive", "old-shell", "--local")
@@ -308,6 +315,22 @@ class RenderedShellTests(unittest.TestCase):
             with self.subTest(method=method):
                 status, _, body = site.ask(method, "/old-shell.html", {"If-None-Match": tag})
                 self.assertEqual((status, body), (304, b""))
+
+        # A kept source and a package that change while the page answers the
+        # same bytes still change its tag.
+        with (site.out / "old-shell.md").open("a", encoding="utf-8") as source:
+            source.write("\n")
+        status, headers, _ = site.ask("GET", "/old-shell.html", {"If-None-Match": tag})
+        self.assertEqual(status, 200)
+        self.assertNotEqual(headers["ETag"], tag)
+        tag = headers["ETag"]
+        copy = self.tmp_src()
+        with (copy / "lotuspod" / "features" / "serve" / "pages.py").open("a", encoding="utf-8") as code:
+            code.write("# A deploy.\n")
+        site.serve(copy)
+        status, headers, _ = site.ask("GET", "/old-shell.html", {"If-None-Match": tag})
+        self.assertEqual(status, 200)
+        self.assertNotEqual(headers["ETag"], tag)
 
         site.ok("unarchive", "old-shell")
         status, headers, page = site.ask("GET", "/old-shell.html", {"If-None-Match": tag})

@@ -376,10 +376,12 @@ class _AllowListHandler(SimpleHTTPRequestHandler):
             return None
         data = archived_page(
             page_html, record, successor_title(self.root, record)).encode("utf-8")
-        # Tagged by what it answers, which follows the page's inputs, its
-        # record, its successor's title and the render version.
-        return self._answer_rendered(data, f'"a-{hashlib.sha256(data).hexdigest()[:16]}"',
-                                     _ARCHIVED_HEADERS)
+        # Tagged by the page's inputs and the render version, as a page
+        # that is not archived is, and by what it answers, which follows its
+        # record and its successor's title.
+        inputs = rendered.inputs if rendered is not None else "unread"
+        tag = f'"a-{inputs}-{self.render_version}-{hashlib.sha256(data).hexdigest()[:16]}"'
+        return self._answer_rendered(data, tag, _ARCHIVED_HEADERS)
 
     def _answer_rendered(self, data: bytes, tag: str, headers: tuple):
         """data under ETag tag, or 304 when the request already holds it."""
