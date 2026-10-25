@@ -205,7 +205,8 @@ It prints `NAME  KIND  WHAT` for each page that is not `same`, then
 `N pages: S same, M markup, T text, A anchors, F failed`. `--json` prints one
 object, `{"pages": [{name, kind, sections, anchors, error}], "counts": {...}}`.
 It exits 1 only when a page failed. It writes nothing and commits nothing;
-it holds the publish lock only while it reads the pages.
+it holds the publish lock only while it reads the pages, and makes no lock
+file where none is yet.
 
 ## Deploying from main
 

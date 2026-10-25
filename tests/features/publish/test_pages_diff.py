@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -147,6 +148,14 @@ class PagesDiffTests(unittest.TestCase):
             {"kind": "comment-box section", "page": None, "render": "gate"},
         ])
 
+    def test_an_h2_with_no_id_is_no_anchor(self):
+        self.publish("lone", "<h1>Lone</h1><p>Intro.</p><h2>Banks</h2><p>Reeds.</p>", ".html")
+        self.assertIn("<h2>Banks</h2>", (self.out_dir / "lone.html").read_text(encoding="utf-8"))
+        self.edit("lone.body.html", "<h2>Banks</h2>", "<h3>Banks</h3>")
+        lone = {page["name"]: page for page in json.loads(self.report("--json").stdout)
+                ["pages"]}["lone"]
+        self.assertEqual((lone["kind"], lone["anchors"]), ("text", []))
+
     def test_a_page_whose_render_fails_is_failed_and_the_others_still_reported(self):
         self.publish("pictured", PICTURED)
         missing = "/media/" + "0" * 64 + ".png"
@@ -177,6 +186,16 @@ class PagesDiffTests(unittest.TestCase):
                 self.assertEqual(self.files(), before)
                 self.assertEqual(self.commits(), commits)
                 self.assertEqual(git(self.out_dir, "status", "--porcelain"), status)
+
+    def test_the_report_makes_no_lock_file_beside_a_directory_never_published_into(self):
+        copied = self.tmp / "copied"
+        shutil.copytree(self.out_dir, copied, ignore=shutil.ignore_patterns(".git"))
+        beside = sorted(path.name for path in self.tmp.iterdir())
+        done = lotuspod("pages", "diff", "--out-dir", str(copied), cwd=self.tmp)
+        self.assertEqual((done.returncode, done.stderr), (0, ""))
+        self.assertEqual(done.stdout.splitlines()[-1],
+                         "3 pages: 1 same, 1 markup, 1 text, 0 anchors, 0 failed")
+        self.assertEqual(sorted(path.name for path in self.tmp.iterdir()), beside)
 
 
 if __name__ == "__main__":

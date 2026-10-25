@@ -327,8 +327,11 @@ DIFF_KINDS = ("same", "markup", "text", "anchors", "failed")
 def anchor_changes(published: str, rendered: str) -> list[dict]:
     """Each anchor the render gives other than the body published does, the
     two lists of a kind aligned on the anchors both hold: {kind, page,
-    render}, None where one has none."""
-    page, render = anchors(published), anchors(rendered)
+    render}, None where one has none. An element with no anchor, such as
+    an h2 with no id, is no anchor to detach."""
+    page, render = ({kind: [value for value in values if value]
+                     for kind, values in anchors(body).items()}
+                    for body in (published, rendered))
     changes = []
     for kind in page:
         matcher = SequenceMatcher(None, page[kind], render[kind], autojunk=False)
@@ -383,7 +386,7 @@ def diff_page(out_dir: Path, name: str) -> dict:
 def diff(out_dir: Path, as_json: bool) -> int:
     """Report each page whose body a render now gives differently from its
     published file; write nothing. 1 when a page's render failed."""
-    with publish_lock(out_dir):
+    with publish_lock(out_dir, create=False):
         names = sorted(path.name[:-len(".html")] for path in out_dir.glob("*.html")
                        if is_page_name(path.name) and path.is_file() and not path.is_symlink())
         pages = [diff_page(out_dir, name) for name in names]
