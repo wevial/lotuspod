@@ -10,6 +10,9 @@ __getattr__ = public_edge(__name__, {
     "read_record": "archive",
     "set_archived": "archive",
     "successor_title": "archive",
+    "compare": "versions",
     "History": "versions",
     "old_page": "versions",
+    "sections": "versions",
+    "summary": "versions",
 })

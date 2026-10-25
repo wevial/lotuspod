@@ -173,6 +173,41 @@ however that source is edited, until it is next published; publish takes
 `--expect-revision` at that source's own revision, as an agent's pull names
 it.
 
+## Which pages a deploy redraws
+
+A page is drawn from its kept source with today's converter and body passes,
+so a change to either can change how an old page reads at the next deploy,
+with no publish. `lotuspod pages diff` lists the pages whose body a render
+from the kept source now gives differently from the published `NAME.html`:
+
+```sh
+lotuspod pages diff --out-dir artifacts
+lotuspod pages diff --json --out-dir artifacts
+```
+
+Run it on the writer host, against the output directory and with the
+checkout about to be deployed, before a deploy that changes the converter or
+a body pass. It looks at every page, listed or hidden, and compares only the
+`section.artifact-body`: the header and outline come from the published file.
+Each page is one of:
+
+- `same`: the same HTML;
+- `markup`: the same text, whitespace collapsed, in other HTML;
+- `text`: other text, naming the sections changed, added and removed, as a
+  version's summary does;
+- `anchors`: an h2 id, a decision question id, a live-block frame name or a
+  comment-box section moved, each named with the value the file holds and
+  the one the render gives; a moved anchor detaches comments and answers;
+- `failed`: the render raised, with its error (a page that keeps no source,
+  or a source naming an image the media directory does not hold).
+
+It prints `NAME  KIND  WHAT` for each page that is not `same`, then
+`N pages: S same, M markup, T text, A anchors, F failed`. `--json` prints one
+object, `{"pages": [{name, kind, sections, anchors, error}], "counts": {...}}`.
+It exits 1 only when a page failed. It writes nothing and commits nothing;
+it holds the publish lock only while it reads the pages, and makes no lock
+file where none is yet.
+
 ## Deploying from main
 
 The live site runs from its own checkout and follows `main` by itself. A

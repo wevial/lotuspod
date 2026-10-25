@@ -1,14 +1,19 @@
-"""kept: a page rendered again from what it keeps (render_kept), and
+"""kept: a page rendered again from what it keeps (render_kept),
 `lotuspod pages migrate`, which keeps the body of each page published only as
-HTML as its NAME.body.html once a render from it gives the page back."""
+HTML as its NAME.body.html once a render from it gives the page back, and
+`lotuspod pages diff`, which lists each page whose body a render now gives
+differently from its published file."""
 
 from __future__ import annotations
 
 import argparse
 import html
+import json
 import re
 import sys
 from html.parser import HTMLParser
+from difflib import SequenceMatcher
+from itertools import zip_longest
 from pathlib import Path
 
 from lotuspod.core import (BODY_SOURCE_SUFFIX, DEFAULT_OUTPUT_DIR, _KEPT_SOURCE_SUFFIX, _git,
@@ -18,6 +23,7 @@ from lotuspod.core import (BODY_SOURCE_SUFFIX, DEFAULT_OUTPUT_DIR, _KEPT_SOURCE_
 from lotuspod.features import agents
 from lotuspod.features import comments
 from lotuspod.features import decisions
+from lotuspod.features import history
 from lotuspod.features import widgets
 from lotuspod.features.publish import markdown, media
 from lotuspod.features.publish.publish import kept_refs
@@ -314,9 +320,106 @@ def migrate(out_dir: Path, check: bool) -> int:
     return 1 if refused else 0
 
 
-def cmd_pages_migrate(args: argparse.Namespace) -> int:
+# A page's kinds in the diff report, the order its counts are given in.
+DIFF_KINDS = ("same", "markup", "text", "anchors", "failed")
+
+
+def anchor_changes(published: str, rendered: str) -> list[dict]:
+    """Each anchor the render gives other than the body published does, the
+    two lists of a kind aligned on the anchors both hold: {kind, page,
+    render}, None where one has none. An element with no anchor, such as
+    an h2 with no id, is no anchor to detach."""
+    page, render = ({kind: [value for value in values if value]
+                     for kind, values in anchors(body).items()}
+                    for body in (published, rendered))
+    changes = []
+    for kind in page:
+        matcher = SequenceMatcher(None, page[kind], render[kind], autojunk=False)
+        for op, had_from, had_to, got_from, got_to in matcher.get_opcodes():
+            if op != "equal":
+                changes += [{"kind": kind, "page": had, "render": got} for had, got in
+                            zip_longest(page[kind][had_from:had_to],
+                                        render[kind][got_from:got_to])]
+    return changes
+
+
+def _anchor_words(change: dict) -> str:
+    had, got = change["page"], change["render"]
+    if had is None:
+        return f"{change['kind']} {got!r} only in the render"
+    if got is None:
+        return f"{change['kind']} {had!r} only in the file"
+    return f"{change['kind']} {had!r} in the file, {got!r} in the render"
+
+
+def diff_page(out_dir: Path, name: str) -> dict:
+    """How NAME's body as rendered now from its kept source differs from its
+    published file's: {name, kind, sections, anchors, error, what}."""
+    found = {"name": name, "kind": "same", "sections": [], "anchors": [], "error": "",
+             "what": ""}
+    try:
+        page_html = (out_dir / f"{name}.html").read_bytes().decode("utf-8")
+        rendered_html = render_kept(out_dir, name)[0]
+        published, rendered = published_body(page_html), published_body(rendered_html)
+        if published is None or rendered is None:
+            raise RuntimeError("no section.artifact-body")
+    except (OSError, RuntimeError, ValueError, KeyError) as exc:
+        return {**found, "kind": "failed", "error": str(exc), "what": str(exc)}
+    if published == rendered:
+        return found
+    found["anchors"] = anchor_changes(published, rendered)
+    words = [_anchor_words(change) for change in found["anchors"]]
+    # The whole body's text, block boundaries kept as history reads them;
+    # where its sections split is no change of text.
+    text_changed = len({" ".join(" ".join(section.text for section in
+                                          history.sections(html_)).split())
+                        for html_ in (page_html, rendered_html)}) > 1
+    if text_changed:
+        compared = history.compare(page_html, rendered_html)
+        titles = [section["title"] for part in ("changed", "added", "removed")
+                  for section in compared["sections"][part]]
+        found["sections"] = list(dict.fromkeys(titles))
+        words.append(history.summary(compared) if titles else "the text changed")
+    found["kind"] = "anchors" if found["anchors"] else "text" if text_changed else "markup"
+    found["what"] = "; ".join(words)
+    return found
+
+
+def diff(out_dir: Path, as_json: bool) -> int:
+    """Report each page whose body a render now gives differently from its
+    published file; write nothing. 1 when a page's render failed."""
+    with publish_lock(out_dir, create=False):
+        names = sorted(path.name[:-len(".html")] for path in out_dir.glob("*.html")
+                       if is_page_name(path.name) and path.is_file() and not path.is_symlink())
+        pages = [diff_page(out_dir, name) for name in names]
+    counts = {"pages": len(pages), **{kind: sum(page["kind"] == kind for page in pages)
+                                       for kind in DIFF_KINDS}}
+    shown = [page for page in pages if page["kind"] != "same"]
+    if as_json:
+        print(json.dumps({"pages": [{key: page[key] for key in
+                                     ("name", "kind", "sections", "anchors", "error")}
+                                    for page in shown], "counts": counts}, indent=2))
+    else:
+        for page in shown:
+            print("  ".join(filter(None, (page["name"], page["kind"], page["what"]))))
+        print(f"{counts['pages']} pages: "
+              + ", ".join(f"{counts[kind]} {kind}" for kind in DIFF_KINDS))
+    return 1 if counts["failed"] else 0
+
+
+def _out_dir(args: argparse.Namespace) -> Path | None:
     out_dir = (Path(args.out_dir) if args.out_dir else DEFAULT_OUTPUT_DIR).resolve()
     if not out_dir.is_dir():
         print(f"error: no output directory {out_dir}", file=sys.stderr)
-        return 1
-    return migrate(out_dir, args.check)
+        return None
+    return out_dir
+
+
+def cmd_pages_diff(args: argparse.Namespace) -> int:
+    out_dir = _out_dir(args)
+    return 1 if out_dir is None else diff(out_dir, args.json)
+
+
+def cmd_pages_migrate(args: argparse.Namespace) -> int:
+    out_dir = _out_dir(args)
+    return 1 if out_dir is None else migrate(out_dir, args.check)

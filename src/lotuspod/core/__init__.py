@@ -102,15 +102,20 @@ def write_atomic(path: Path, data: bytes) -> None:
 
 
 @contextmanager
-def publish_lock(out_dir: Path, *, blocking: bool = True):
+def publish_lock(out_dir: Path, *, blocking: bool = True, create: bool = True):
     """Hold the output directory's publish lock for the block.
 
     The lock file sits beside the directory, never inside it, so it is
     never a file of the site and never reaches the artifacts repository.
     With blocking=False, raise BlockingIOError if a publisher holds it.
+    With create=False, a missing lock file is not made and the block runs
+    unlocked: no publisher has held it yet, and each writes its files whole.
     """
     lock_path = out_dir.parent / f".{out_dir.name}.publish.lock"
-    with open(lock_path, "a") as fh:
+    if not create and not lock_path.is_file():
+        yield
+        return
+    with open(lock_path, "a" if create else "r") as fh:
         fcntl.flock(fh.fileno(), fcntl.LOCK_EX | (0 if blocking else fcntl.LOCK_NB))
         yield
 
