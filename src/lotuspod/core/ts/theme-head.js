@@ -48,7 +48,7 @@
     } catch (error) {
       return;
     }
-    var kept = event.key === null ? null : event.newValue;
+    var kept = event.newValue;
     choice = kept === "night" || kept === "dawn" ? kept : "auto";
     apply();
   });
