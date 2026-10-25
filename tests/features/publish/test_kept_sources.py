@@ -261,5 +261,127 @@ class MigrateTests(MigrateTestCase):
                          (self.out_dir / "old-plain.body.html").read_text(encoding="utf-8"))
 
 
+    def test_an_edit_of_the_extracted_source_keeps_the_revision_until_published(self):
+        rc, _, err = self.migrate()
+        self.assertEqual((rc, err), (0, ""))
+        source = self.out_dir / "old-plain.body.html"
+        kept_bytes = source.read_bytes()
+        pulled = core.source_revision(kept_bytes)
+        source.write_bytes(kept_bytes + b"<p>Mulched in May.</p>\n")
+        self.assertEqual(core.page_revision(self.out_dir, "old-plain"), "")
+        self.assertEqual(serve_pages.api_page(self.out_dir, "old-plain").revision, "")
+        source.write_bytes(kept_bytes)
+
+        # An agent's edit of the source it pulled, published expecting its revision.
+        edited = self.tmp / "old-plain.body.html"
+        edited.write_bytes(kept_bytes + b"<p>Mulched in May.</p>\n")
+        rc, out, err = run_cli("publish", str(edited), "--local", "--title", "Old plain",
+                               "--out-dir", str(self.out_dir), "--expect-revision", pulled)
+        self.assertEqual(rc, 0, err)
+        revision = core.source_revision(edited.read_bytes())
+        self.assertIn(f"at revision {revision}", out)
+        self.assertEqual(core.page_revision(self.out_dir, "old-plain"), revision)
+
+    def test_a_directory_behind_its_origin_is_refused(self):
+        other = self.tmp / "other"
+        git(self.tmp, "clone", "-q", str(self.bare), str(other))
+        git(other, "config", "user.name", "Lotuspod Test")
+        git(other, "config", "user.email", "test@example.com")
+        page = other / "old-plain.html"
+        page.write_text(page.read_text(encoding="utf-8").replace("spring", "autumn"),
+                        encoding="utf-8")
+        git(other, "commit", "-q", "-am", "autumn")
+        git(other, "push", "-q", "origin", "HEAD:main")
+        subjects = self.remote_subjects()
+        before = self.files()
+
+        rc, out, err = self.migrate()
+        self.assertEqual((rc, out), (1, ""))
+        self.assertIn("pull, then migrate", err)
+        self.assertEqual(self.files(), before)
+        self.assertEqual(self.remote_subjects(), subjects)
+
+    def test_the_commit_holds_only_the_sources_kept(self):
+        notes = self.out_dir / "notes.txt"
+        notes.write_text("first\n", encoding="utf-8")
+        self.commit("add notes")
+        notes.write_text("edited\n", encoding="utf-8")
+
+        rc, _, err = self.migrate()
+        self.assertEqual((rc, err), (0, ""))
+        self.assertEqual(git(self.bare, "show", "--format=%s", "--name-only", "main").split(),
+                         ["migrate", "pages", "old-plain.body.html"])
+        self.assertEqual(git(self.out_dir, "status", "--porcelain"), " M notes.txt\n")
+
+    def test_a_section_in_a_template_is_not_the_body(self):
+        plain = (FIXTURES / "old-plain.html").read_text(encoding="utf-8")
+        decoy = plain.replace('  <main class="artifact"', '  <template><section class="artifact-body">'
+                              '<p>Decoy</p></section></template>\n  <main class="artifact"')
+        self.assertNotEqual(decoy, plain)
+        (self.out_dir / "decoy.html").write_text(decoy, encoding="utf-8")
+        self.commit("add decoy")
+
+        rc, _, err = self.migrate()
+        self.assertEqual((rc, err), (0, ""))
+        self.assertEqual((self.out_dir / "decoy.body.html").read_text(encoding="utf-8"),
+                         (self.out_dir / "old-plain.body.html").read_text(encoding="utf-8"))
+        self.assertEqual(kept.render_kept(str(self.out_dir), "decoy")[0].count("Decoy"), 0)
+
+
+LIVE = "```html live id={ident} title={title}\n<p>{text}</p>\n```\n\n"
+
+
+class FrameNameTests(unittest.TestCase):
+    """render_kept() keeps each live block's published frame name, and never
+    gives two blocks one name for different bytes."""
+
+    def setUp(self) -> None:
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.out_dir = Path(tmp.name).resolve()
+        env = mock.patch.dict(os.environ,
+                              {"LOTUSPOD_CONFIG": str(self.out_dir / "no-config.ini")})
+        env.start()
+        self.addCleanup(env.stop)
+
+    def publish(self, a: str, b: str) -> dict[str, str]:
+        source = self.out_dir / "board.md"
+        source.write_text("# Board\n\n" + LIVE.format(ident="a", title="A", text=a)
+                          + LIVE.format(ident="b", title="B", text=b), encoding="utf-8")
+        rc, _, err = run_cli("publish", str(source), "--local", "--out-dir", str(self.out_dir))
+        self.assertEqual(rc, 0, err)
+        return self.frames((self.out_dir / "board.html").read_text(encoding="utf-8"))
+
+    def frames(self, page_html: str) -> dict[str, str]:
+        return {ident: re.search(rf'<iframe [^>]*src="([^"]+)"[^>]*data-widget="{ident}"',
+                                 page_html).group(1) for ident in ("a", "b")}
+
+    def edit(self, a: str, b: str) -> None:
+        (self.out_dir / "board.md").write_text(
+            "# Board\n\n" + LIVE.format(ident="a", title="A", text=a)
+            + LIVE.format(ident="b", title="B", text=b), encoding="utf-8")
+
+    def test_two_blocks_made_alike_keep_both_names(self):
+        published = self.publish("one", "two")
+        self.assertNotEqual(published["a"], published["b"])
+        self.edit("same", "same")
+        page_html, files = kept.render_kept(self.out_dir, "board")
+        self.assertEqual(self.frames(page_html), published)
+        self.assertEqual(set(files), set(published.values()))
+        for name in published.values():
+            self.assertIn(b"<p>same</p>", files[name])
+
+    def test_two_blocks_made_different_keep_their_own_bytes(self):
+        published = self.publish("same", "same")
+        self.assertEqual(published["a"], published["b"])
+        self.edit("same", "changed")
+        page_html, files = kept.render_kept(self.out_dir, "board")
+        rendered = self.frames(page_html)
+        self.assertEqual(rendered["a"], published["a"])
+        self.assertNotEqual(rendered["b"], rendered["a"])
+        self.assertIn(b"<p>same</p>", files[rendered["a"]])
+        self.assertIn(b"<p>changed</p>", files[rendered["b"]])
+
+
 if __name__ == "__main__":
     unittest.main()

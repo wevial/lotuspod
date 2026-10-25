@@ -15,8 +15,9 @@ from pathlib import Path
 
 from lotuspod import core
 from lotuspod.features import agents
-from lotuspod.core import (DEFAULT_OUTPUT_DIR, DEFAULT_REMOTE_COMMAND, EXIT_CONFIG,
-                           EXIT_REVISION_CONFLICT, INDEX_FILE, _KEPT_SOURCE_SUFFIX, ConfigError,
+from lotuspod.core import (BODY_SOURCE_SUFFIX, DEFAULT_OUTPUT_DIR, DEFAULT_REMOTE_COMMAND,
+                           EXIT_CONFIG, EXIT_REVISION_CONFLICT, INDEX_FILE, _KEPT_SOURCE_SUFFIX,
+                           ConfigError,
                            commit_output, config_path, extract_meta, html_title, markdown_title,
                            normalized, page_revision, publish_config, publish_lock,
                            source_revision, write_atomic)
@@ -298,7 +299,12 @@ def cmd_publish(args: argparse.Namespace) -> int:
     out_dir.mkdir(parents=True, exist_ok=True)
     with publish_lock(out_dir):
         current = page_revision(out_dir, name)
-        if args.expect_revision is not None and args.expect_revision != current:
+        # A page with no revision whose source migrate kept is edited from
+        # that source, which an agent's pull names by its own revision.
+        extracted = out_dir / f"{name}{BODY_SOURCE_SUFFIX}"
+        accepted = {current} | ({source_revision(extracted.read_bytes())}
+                                if current == "" and extracted.is_file() else set())
+        if args.expect_revision is not None and args.expect_revision not in accepted:
             print(
                 f"error: revision conflict: {name} is at revision {current or 'unknown'}, "
                 f"not {args.expect_revision}; nothing published",

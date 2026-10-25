@@ -163,10 +163,15 @@ so is one whose render differs; the refusal names the first difference.
 It prints `kept N, extracted M, refused R`, then each refused page with its
 reason, and exits 1 when any page was refused. It writes only
 `NAME.body.html` files, never a page, `manifest.json` or `index.html`, and
-makes one commit, `migrate pages`, when the output directory is the top of
-its own repository. A second run extracts nothing and commits nothing. No
-page gains a version or a revision: a page whose kept `NAME.body.html` is its
-own published body reports the revision it had, until it is next published.
+makes one commit, `migrate pages`, holding only those files, when the output
+directory is the top of its own repository. When its origin has commits the
+directory lacks, it refuses and writes nothing: pull, then migrate. A push
+the origin refuses leaves no commit and no source. A second run extracts
+nothing and commits nothing. No page gains a version or a revision: a page
+with no revision stamp beside a kept `NAME.body.html` reports no revision,
+however that source is edited, until it is next published; publish takes
+`--expect-revision` at that source's own revision, as an agent's pull names
+it.
 
 ## Deploying from main
 

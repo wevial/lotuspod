@@ -41,6 +41,9 @@ VARIANTS = (DEFAULT_VARIANT, "report")
 # element's text verbatim, so render leaves it alone and only decides from its
 # presence whether the page needs the drawing script at all.
 _MERMAID_BLOCK = re.compile(r'<pre\b[^>]*\bclass="[^"]*\bmermaid\b')
+# A live block as widgets.render writes it, its frame and links inside.
+_LIVE_FIGURE = re.compile(r'<figure class="artifact-live" data-widget="([^"]*)">.*?</figure>',
+                          re.DOTALL)
 _CALLTREE_BLOCK = re.compile(r'<div\b[^>]*\bclass="(?:[^"]*\s)?calltree[\s"]')
 
 
@@ -376,14 +379,30 @@ def label_context(labels: list[str]) -> dict:
 def keep_frame_names(body: str, files: dict[str, bytes], name: str,
                      frame_names: dict[str, str]) -> tuple[str, dict[str, bytes]]:
     """The body and frame files with each live block's frame named as
-    frame_names gives for its id; the bytes stay today's."""
+    frame_names gives for its id; the bytes stay today's. A block keeps
+    today's name when the name it was given already holds other bytes."""
+    kept_files: dict[str, bytes] = {}
+    targets: dict[str, tuple[str, str]] = {}
     for ident, (hash_, _, _) in widgets.PageWidgets(body).found.items():
-        today, kept = f"{name}.w-{hash_}.html", frame_names.get(ident)
-        if kept and today in files:
-            body = body.replace(html.escape(today), html.escape(kept))
-            files = {kept if filename == today else filename: data
-                     for filename, data in files.items()}
-    return body, files
+        today = f"{name}.w-{hash_}.html"
+        if today not in files:
+            continue
+        target = frame_names.get(ident) or today
+        if kept_files.get(target, files[today]) != files[today]:
+            target = today
+        kept_files[target] = files[today]
+        targets[ident] = (today, target)
+
+    def rename(figure: re.Match) -> str:
+        today, target = targets.get(html.unescape(figure.group(1)), ("", ""))
+        if not today or today == target:
+            return figure.group(0)
+        return figure.group(0).replace(html.escape(today), html.escape(target))
+
+    body = _LIVE_FIGURE.sub(rename, body)
+    kept_files.update({filename: data for filename, data in files.items()
+                       if filename not in {today for today, _ in targets.values()}})
+    return body, kept_files
 
 
 def build_page(args: argparse.Namespace) -> argparse.Namespace:

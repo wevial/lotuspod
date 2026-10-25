@@ -6,13 +6,14 @@ from __future__ import annotations
 
 import argparse
 import html
+import re
 import sys
 from html.parser import HTMLParser
 from pathlib import Path
 
-from lotuspod.core import (BODY_SOURCE_SUFFIX, DEFAULT_OUTPUT_DIR, _KEPT_SOURCE_SUFFIX,
-                           commit_output, extract_meta, html_title, is_page_name, normalized,
-                           publish_lock, published_body, write_atomic)
+from lotuspod.core import (BODY_SOURCE_SUFFIX, DEFAULT_OUTPUT_DIR, _KEPT_SOURCE_SUFFIX, _git,
+                           _git_ok, _GitFailed, extract_meta, html_title, is_page_name,
+                           is_repository_top, normalized, publish_lock, write_atomic)
 from lotuspod.features import agents
 from lotuspod.features import comments
 from lotuspod.features import decisions
@@ -24,6 +25,53 @@ from lotuspod.features.publish.render import (_H2Collector, build_page, page_own
 
 
 _OUTLINE_MARK = '<nav class="artifact-outline"'
+
+
+class _BodySpan(HTMLParser):
+    """Locate the inner HTML of a page's section.artifact-body. A template's
+    content is inert, so no section inside one is the page's."""
+
+    def __init__(self, page_html: str) -> None:
+        super().__init__(convert_charrefs=True)
+        self._line_starts = [0, *(match.end() for match in re.finditer("\n", page_html))]
+        self._templates = 0
+        self._depth = 0
+        self.start: int | None = None
+        self.end: int | None = None
+
+    def _offset(self) -> int:
+        line, column = self.getpos()
+        return self._line_starts[line - 1] + column
+
+    def handle_starttag(self, tag: str, attrs: list) -> None:
+        if tag == "template":
+            self._templates += 1
+        elif tag != "section" or self.end is not None or (self._templates and not self._depth):
+            return
+        elif self._depth:
+            self._depth += 1
+        elif "artifact-body" in (dict(attrs).get("class") or "").split():
+            self.start = self._offset() + len(self.get_starttag_text() or "")
+            self._depth = 1
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag == "template" and self._templates:
+            self._templates -= 1
+        elif tag == "section" and self._depth and self.end is None:
+            self._depth -= 1
+            if not self._depth:
+                self.end = self._offset()
+
+
+def published_body(page_html: str) -> str | None:
+    """The inner HTML of a page's section.artifact-body, byte for byte as
+    published; None when it has none."""
+    parser = _BodySpan(page_html)
+    parser.feed(page_html)
+    parser.close()
+    if parser.start is None or parser.end is None:
+        return None
+    return page_html[parser.start:parser.end]
 
 
 def kept_source(out_dir: Path, name: str) -> tuple[str, bytes] | None:
@@ -84,6 +132,7 @@ def render_kept(out_dir: Path, name: str) -> tuple[str, dict[str, bytes]]:
     """NAME's page as publish would render it now from its kept source and
     the stamps its published file carries, and its live-block frame files;
     nothing is written. RuntimeError when NAME keeps no source."""
+    out_dir = Path(out_dir)
     page_html = (out_dir / f"{name}.html").read_text(encoding="utf-8")
     kept = kept_source(out_dir, name)
     if kept is None:
@@ -185,11 +234,52 @@ def extract(out_dir: Path, name: str, page_html: str) -> str:
     return body
 
 
+def behind_origin(out_dir: Path) -> bool:
+    """Whether origin's main has commits out_dir's branch lacks, fetched now;
+    False when out_dir is not the top of a repository with an origin."""
+    if not is_repository_top(out_dir) or _git(out_dir, "remote", "get-url", "origin").returncode:
+        return False
+    _git_ok(out_dir, "fetch", "origin")
+    if _git(out_dir, "rev-parse", "--verify", "--quiet", "refs/remotes/origin/main").returncode:
+        return False
+    return bool(_git(out_dir, "merge-base", "--is-ancestor", "origin/main", "HEAD").returncode)
+
+
+def commit_sources(out_dir: Path, written: list[Path]) -> None:
+    """Commit only the sources written, and push them when origin's main is
+    still behind this branch; a push refused leaves no commit and no source.
+    The pages were checked as they stand here, so a newer page never comes
+    in under a source taken from an older one."""
+    if not is_repository_top(out_dir):
+        return
+    names = [path.name for path in written]
+    committed = False
+    try:
+        _git_ok(out_dir, "add", "--", *names)
+        _git_ok(out_dir, "commit", "-q", "-m", "migrate pages", "--", *names)
+        committed = True
+        if not _git(out_dir, "remote", "get-url", "origin").returncode:
+            _git_ok(out_dir, "push", "origin", "HEAD:main")
+    except _GitFailed:
+        _git(out_dir, "reset", "-q", *(["HEAD~1"] if committed else ["--", *names]))
+        for path in written:
+            path.unlink(missing_ok=True)
+        raise
+
+
 def migrate(out_dir: Path, check: bool) -> int:
     """Keep the body of each page with no source as its NAME.body.html,
     and commit once; with check, write nothing. 1 when a page is refused."""
     kept, extracted, refused = 0, {}, {}
     with publish_lock(out_dir):
+        try:
+            if behind_origin(out_dir):
+                print("error: origin has pages this directory lacks: pull, then migrate; "
+                      "nothing written", file=sys.stderr)
+                return 1
+        except _GitFailed as exc:
+            print(f"error: {exc}; nothing written", file=sys.stderr)
+            return 1
         pages = sorted(path for path in out_dir.glob("*.html")
                        if is_page_name(path.name) and path.is_file() and not path.is_symlink())
         for path in pages:
@@ -202,9 +292,15 @@ def migrate(out_dir: Path, check: bool) -> int:
             except (RuntimeError, UnicodeDecodeError) as exc:
                 refused[name] = str(exc)
         if extracted and not check:
+            written = []
             for name, body in extracted.items():
-                write_atomic(out_dir / f"{name}{BODY_SOURCE_SUFFIX}", body.encode("utf-8"))
-            commit_output(out_dir, "migrate pages")
+                written.append(out_dir / f"{name}{BODY_SOURCE_SUFFIX}")
+                write_atomic(written[-1], body.encode("utf-8"))
+            try:
+                commit_sources(out_dir, written)
+            except _GitFailed as exc:
+                print(f"error: {exc}; nothing kept", file=sys.stderr)
+                return 1
     print(f"kept {kept}, extracted {len(extracted)}, refused {len(refused)}")
     for name, why in refused.items():
         print(f"refused {name}: {why}")
