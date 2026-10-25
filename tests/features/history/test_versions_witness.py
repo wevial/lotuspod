@@ -183,8 +183,10 @@ class ViewTests(VersionsWitness):
         older = self.commits(self.out, PAGE)[1]
         self.start_server()
 
-        # The policy allows scripts by one nonce only, and the body holds
-        # exactly one script carrying it, the old-version script.
+        # The policy allows scripts by one nonce and today's theme head by
+        # its hash only, and the body holds exactly one script carrying the
+        # nonce, the old-version script.
+        head = (core.THEME_ROOT / "core/ts/theme-head.js").read_text(encoding="utf-8")
         nonces = []
         for _ in range(2):
             status, headers, data = self.get(f"/{PAGE}.html?version={older}")
@@ -195,7 +197,8 @@ class ViewTests(VersionsWitness):
             self.assertIn("base-uri 'none'", policy)
             directives = [part.split() for part in policy.split(";") if part.strip()]
             (script_src,) = [part[1:] for part in directives if part[0] == "script-src"]
-            self.assertEqual(len(script_src), 1, policy)
+            self.assertEqual(len(script_src), 2, policy)
+            self.assertEqual(script_src[1], core.script_hash(head), policy)
             found = re.fullmatch(r"'nonce-([A-Za-z0-9+/_=-]+)'", script_src[0])
             self.assertIsNotNone(found, policy)
             carrying = [node for node in parse(data.decode("utf-8")).find("script")
@@ -278,7 +281,7 @@ class GitProcessTests(VersionsWitness):
     """The git processes one list, its repeat and one view start, counted in
     a server run in this process."""
 
-    def test_a_list_starts_two_a_repeat_one_and_a_view_two(self):
+    def test_a_list_starts_two_a_repeat_one_a_first_view_three_and_a_repeat_view_two(self):
         self.three_publishes()
         commits = self.commits(self.out, PAGE)
 
@@ -302,6 +305,7 @@ class GitProcessTests(VersionsWitness):
         counts = []
         with mock.patch.object(subprocess, "run", spy), redirect_stderr(io.StringIO()):
             for path in (f"/api/versions?page={PAGE}", f"/api/versions?page={PAGE}",
+                         f"/{PAGE}.html?version={commits[1]}",
                          f"/{PAGE}.html?version={commits[1]}"):
                 before = len(started)
                 self.assertEqual(self.get(path, token=access_keys.assertion())[0], 200)
@@ -309,7 +313,10 @@ class GitProcessTests(VersionsWitness):
         self.assertTrue(all(argv[0] == "git" for argv in started), started)
         self.assertLessEqual(counts[0], 2, started)
         self.assertLessEqual(counts[1], 1, started)
-        self.assertLessEqual(counts[2], 2, started)
+        # A version's first view also reads its kept files to render it;
+        # the render is kept, so a repeat view does not.
+        self.assertLessEqual(counts[2], 3, started)
+        self.assertLessEqual(counts[3], 2, started)
         self.assertGreater(counts[0], 0)
 
 

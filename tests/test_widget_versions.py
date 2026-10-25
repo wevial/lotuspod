@@ -14,6 +14,14 @@ def live(text):
             + text + '";</script>\n```')
 
 
+def scripts(root):
+    # Of the page's own scripts only today's theme head is left; then the
+    # old-version script.
+    return [node.attrs.get('src', '').split('?')[0] or
+            ('theme head' if '"lotuspod:theme"' in node.text() else 'another inline script')
+            for node in root.find('script')]
+
+
 class WidgetVersionsTests(VersionsWitness):
     def test_authored_badge_script_does_not_corrupt_adjacent_content(self):
         self.repository(self.out)
@@ -32,7 +40,7 @@ class WidgetVersionsTests(VersionsWitness):
         self.assertEqual(root.find('span', 'artifact-live-badge')[0].text(), 'Old version')
         self.assertIn('<p>AFTER BADGE</p>', data.decode())
         self.assertNotIn('bad()', data.decode())
-        self.assertEqual(len(root.find('script')), 1)
+        self.assertEqual(scripts(root), ['theme head', 'lotuspod-old-version.js'])
 
     def prepare(self):
         self.repository(self.out)
@@ -58,7 +66,7 @@ class WidgetVersionsTests(VersionsWitness):
         self.assertEqual(root.find('a', 'artifact-live-open')[0].attrs['href'], expected)
         self.assertEqual(root.find('span', 'artifact-live-badge')[0].text(), 'Old version')
         self.assertEqual(root.find('iframe', 'artifact-widget')[0].attrs['height'], '240')
-        self.assertEqual(len(root.find('script')), 1)
+        self.assertEqual(scripts(root), ['theme head', 'lotuspod-old-version.js'])
         for commit, filename, original in (first, second):
             for asked in ({}, {'Sec-Fetch-Dest': 'iframe'}):
                 status, headers, data = self.get(f'/{filename}?version={commit}', headers=asked)
