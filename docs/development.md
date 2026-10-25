@@ -104,6 +104,20 @@ brings in or takes out a form, sends `ANSWERED` once each is drawn and
 saved, or still posting. What it returns (`Cards`) is what the review sheet
 reads the forms by.
 
+The page's versions are the history slice's island
+(`features/history/ts/islands/`, mounted through `features/history/ts/index.ts`
+after the comments island): on a page with a revision it asks the versions
+route and, when the reader last opened the page at another revision, the
+changes route, and holds both answers, how many versions the list shows and
+whether `#versions` is open in signals (`islands/state.ts`). From them it
+draws the header's "Versions · N" link into the slot it shares with the
+version menu, before the badge of replies to the reader; the `#versions` view
+with its list and "Show older versions"; and the "What changed since you last
+looked" box, its tags on the sections' headings and the diff pane in the view.
+The version menu stays the classic `features/history/ts/version-menu.js`,
+which the old-version script draws too; the bridge supplies it as
+`versionMenu()`, with `pageName()` (`core/ts/shared.js`).
+
 The first island is the review sheet (`features/comments/ts/islands/review-sheet.tsx`):
 the title bar's open-question count and Next open, and the "N open" marks on
 headings and outline links. Once `ANSWERED` is first
@@ -123,7 +137,7 @@ swap brings in whose read fails stays out of the sheet until a later read. The f
 truth: the sheet draws from them on each form's `input`, `change` and
 `SAVED`. Preact holds only the sheet's own state: the question Next open
 last jumped to, which a swap keeps. The bundle, Preact with it, stays at most
-47,000 bytes gzipped; it uses Preact and its hooks, with `createPortal` from
+51,000 bytes gzipped (`gzip -c`); it uses Preact and its hooks, with `createPortal` from
 `preact/compat` for independently owned DOM targets.
 
 The comments island (`features/comments/ts/islands/comments/index.ts`) mounts after the

@@ -99,7 +99,7 @@ function pageSwap(): void {
   };
 
   // The render variant main.artifact names (artifact--report, ...), leaving
-  // out the class features/history/ts/versions.js toggles while its view shows.
+  // out the class the versions view (features/history/ts/islands/) toggles.
   const variantOf = (doc: Document): string =>
     Array.from(doc.querySelector("main.artifact")?.classList ?? [])
       .filter((name) => name.startsWith("artifact--") && name !== "artifact--versions")
