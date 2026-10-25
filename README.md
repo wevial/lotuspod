@@ -75,6 +75,7 @@ lotuspod/
 │   │   ├── live/          # serve's change stream and the page's live scripts: revision checks, the swap, the index's refresh
 │   │   ├── serve/         # `serve`: its allow-list and handler, the /api routes and the Cloudflare Access check
 │   │   ├── backup/        # `backup` and `restore`
+│   │   ├── stale/         # pages a merged or closed pull request overtook (`pages stale`)
 │   │   └── agents/        # machine credentials, the agents' pull, the default responder, routing (`credential`, `audit`, `comments`, `inbox`, `respond`)
 ├── artifacts/             # rendered output (gitignored)
 └── lotuspod-media/        # markdown pages' images and the images readers attach to comments, beside artifacts/ (gitignored)
