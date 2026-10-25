@@ -19,7 +19,8 @@ from pathlib import Path
 from lotuspod.core import (BODY_SOURCE_SUFFIX, DEFAULT_OUTPUT_DIR, _KEPT_SOURCE_SUFFIX, _git,
                            Templates,
                            _git_ok, _GitFailed, extract_meta, html_title, is_page_name,
-                           is_repository_top, normalized, publish_lock, write_atomic)
+                           is_repository_top, normalized, publish_lock, source_revision,
+                           write_atomic)
 from lotuspod.features import agents
 from lotuspod.features import comments
 from lotuspod.features import decisions
@@ -152,11 +153,16 @@ def render_kept(out_dir: Path, name: str) -> tuple[str, dict[str, bytes]]:
 
 def render_kept_or_extracted(out_dir: Path, name: str) -> tuple[str, dict[str, bytes]]:
     """render_kept(), or for a page that keeps no source, the render from
-    the body `lotuspod pages migrate` would keep for it (extract)."""
+    the body `lotuspod pages migrate` would keep for it (extract). A kept
+    source other than the one the page is stamped at (publish writes the
+    page before its source) is not the page's, and the page renders from
+    its extracted body."""
     out_dir = Path(out_dir)
-    if kept_source(out_dir, name) is not None:
-        return render_kept(out_dir, name)
     page_html = (out_dir / f"{name}.html").read_bytes().decode("utf-8")
+    kept = kept_source(out_dir, name)
+    revision = version_stamp(page_html)[0]
+    if kept is not None and (not revision or source_revision(kept[1]) == revision):
+        return _render(out_dir, name, page_html, *kept)
     body = extract(out_dir, name, page_html)
     return _render(out_dir, name, page_html, "html", body.encode("utf-8"))
 
