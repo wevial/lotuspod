@@ -77,9 +77,8 @@ export function read(page: Page, name: string, state: VersionsState): void {
       }
       const payload = await page.json<{ versions?: unknown }>(response);
       if (payload && Array.isArray(payload.versions)) {
-        const list = payload.versions as Version[];
         await changes;
-        state.versions.value = list;
+        state.versions.value = payload.versions as Version[];
       }
     } catch {
       // No list: the page shows no versions.

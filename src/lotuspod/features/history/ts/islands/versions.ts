@@ -2,7 +2,7 @@ import { effect, untracked } from "@preact/signals";
 import type { Page } from "../../../comments/ts/index";
 import { box } from "./changes";
 import { slot, type Menu } from "./slot";
-import { HASH, read, versionsState, type Version, type VersionsState } from "./state";
+import { HASH, read, versionsState, type VersionsState } from "./state";
 import { view } from "./view";
 
 // The page's versions (lotuspod.features.history.versions): a page with a
@@ -37,23 +37,21 @@ export function versions(page: Page): void {
   effect(() => {
     const listed = state.versions.value;
     if (listed) {
-      untracked(() => draw(listed));
+      untracked(() => {
+        const found = state.changes.value;
+        const current = listed.find((version) => version.current);
+        const menu = page.versionMenu(listed, name, current ? current.commit : null,
+          found ? found.since.commit : null);
+        slot(line, page, state, menu);
+        window.addEventListener("hashchange", () => {
+          state.open.value = location.hash === HASH;
+        });
+        state.open.value = location.hash === HASH;
+        shows(page, main, name, title, state, menu);
+      });
     }
   });
   read(page, name, state);
-
-  function draw(listed: Version[]): void {
-    const found = state.changes.value;
-    const current = listed.find((version) => version.current);
-    const menu = page.versionMenu(listed, name, current ? current.commit : null,
-      found ? found.since.commit : null);
-    slot(line!, page, state, menu);
-    window.addEventListener("hashchange", () => {
-      state.open.value = location.hash === HASH;
-    });
-    state.open.value = location.hash === HASH;
-    shows(page, main!, name, title, state, menu);
-  }
 }
 
 // The view follows open: made the first time it shows; showing it closes
