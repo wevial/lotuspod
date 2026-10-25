@@ -3,6 +3,7 @@ server _make_server builds around it."""
 
 from __future__ import annotations
 
+import hashlib
 import io
 import json
 import queue
@@ -25,7 +26,8 @@ from lotuspod.features import live
 from lotuspod.features import publish
 from lotuspod.features.publish import version_stamp
 from lotuspod.features.serve import access, api, serve_files
-from lotuspod.features.serve.pages import api_catalog, api_page, served_page_names
+from lotuspod.features.serve.pages import (api_catalog, api_page, render_version, rendered_page,
+                                           served_page_names)
 from lotuspod.features.serve.serve_files import _SERVE_NEVER_FILES
 from lotuspod.features import widgets
 from lotuspod.store import db
@@ -57,9 +59,14 @@ _OLD_VERSION_HEADERS = (
     ("Cache-Control", "private, no-store"),
 )
 _VERSION_QUERY = "version"
-# Headers on an archived page, answered from memory: never answered 304 from
-# a copy kept before it was archived or unarchived.
+# Headers on an archived page, answered from memory under an ETag over its
+# bytes: a copy kept before it was archived or unarchived is never answered 304.
 _ARCHIVED_HEADERS = (*_PAGE_HEADERS, ("Cache-Control", "no-cache"))
+# Headers on a page and a live-block frame rendered when asked for: each
+# answer is checked against its ETag, which follows the page's inputs and
+# the render version, so a publish or a deploy reaches the reader at once.
+_RENDERED_HEADERS = (*_PAGE_HEADERS, ("Cache-Control", "no-cache"))
+_FRAME_HEADERS = (*widgets.HEADERS, widgets.VARY, ("Cache-Control", "no-cache"))
 
 
 # Headers on every /api answer.
@@ -90,8 +97,10 @@ class _AllowListHandler(SimpleHTTPRequestHandler):
 
     NAME.html?version=COMMIT answers an earlier version of an allow-listed
     page, read-only (see _serve_version), after the same Access check; any
-    other query on a page is served as the page. A page with an archive
-    record is answered marked archived (see _serve_archived).
+    other query on a page is served as the page. A page is answered as
+    rendered now from what it keeps (see _serve_rendered), never its
+    published file unless that render fails; one with an archive record is
+    answered marked archived (see _serve_archived).
     """
 
     # Whether the response being written is a page's, and the type of the
@@ -101,9 +110,10 @@ class _AllowListHandler(SimpleHTTPRequestHandler):
 
     def __init__(self, *args, root: Path, verifier: access.Verifier | None = None,
                  api: api.Api | None = None, history: History | None = None,
-                 events: live.Hub | None = None,
+                 events: live.Hub | None = None, render_version: str = "",
                  **kwargs):
         self.root = Path(root)
+        self.render_version = render_version
         self.verifier = verifier
         self.events = events
         self.api = api
@@ -351,7 +361,7 @@ class _AllowListHandler(SimpleHTTPRequestHandler):
         return io.BytesIO(data)
 
     def _serve_archived(self, stored: Path):
-        """The page at stored as archived_page() marks it, always a 200;
+        """The page at stored as archived_page() marks it, under an ETag;
         None when it has no archive record, or one that cannot be read, so
         it is answered from its file."""
         stem = stored.name[:-len(".html")]
@@ -359,19 +369,62 @@ class _AllowListHandler(SimpleHTTPRequestHandler):
             record = read_record(self.root, stem)
             if record is None:
                 return None
-            page_html = stored.read_text(encoding="utf-8")
+            rendered = rendered_page(self.root, stem)
+            page_html = (rendered.html if rendered is not None
+                         else stored.read_text(encoding="utf-8"))
         except (OSError, UnicodeDecodeError, RuntimeError):
             return None
         data = archived_page(
             page_html, record, successor_title(self.root, record)).encode("utf-8")
+        # Tagged by the page's inputs and the render version, as a page
+        # that is not archived is, and by what it answers, which follows its
+        # record and its successor's title.
+        inputs = rendered.inputs if rendered is not None else "unread"
+        tag = f'"a-{inputs}-{self.render_version}-{hashlib.sha256(data).hexdigest()[:16]}"'
+        return self._answer_rendered(data, tag, _ARCHIVED_HEADERS)
+
+    def _answer_rendered(self, data: bytes, tag: str, headers: tuple):
+        """data under ETag tag, or 304 when the request already holds it."""
         self._page_response, self._media_type = False, ""
+        held = self.headers.get("If-None-Match") or ""
+        if tag in (word.strip().removeprefix("W/") for word in held.split(",")):
+            self.send_response(HTTPStatus.NOT_MODIFIED)
+            self.send_header("ETag", tag)
+            for header, value in headers:
+                self.send_header(header, value)
+            self.end_headers()
+            return io.BytesIO(b"")
         self.send_response(HTTPStatus.OK)
         self.send_header("Content-Type", "text/html; charset=utf-8")
         self.send_header("Content-Length", str(len(data)))
-        for header, value in _ARCHIVED_HEADERS:
+        self.send_header("ETag", tag)
+        for header, value in headers:
             self.send_header(header, value)
         self.end_headers()
         return io.BytesIO(data)
+
+    def _serve_rendered(self, stored: Path):
+        """The page at stored rendered from what it keeps; None when its
+        render failed, so it is answered from its file."""
+        rendered = rendered_page(self.root, stored.name[:-len(".html")])
+        if rendered is None or not rendered.rendered:
+            return None
+        return self._answer_rendered(rendered.html.encode("utf-8"),
+                                     f'"{rendered.inputs}-{self.render_version}"',
+                                     _RENDERED_HEADERS)
+
+    def _serve_frame(self, stored: Path):
+        """The live-block frame at stored as its page's render draws it
+        today; None when no allow-listed page's render names it."""
+        owner = stored.name.rsplit(".w-", 1)[0] + ".html"
+        if not is_page_name(owner) or self.translate_path("/" + owner) != str(self.root / owner):
+            return None
+        rendered = rendered_page(self.root, owner[:-len(".html")])
+        data = rendered.frames.get(stored.name) if rendered is not None else None
+        if data is None:
+            return None
+        return self._answer_rendered(data, f'"{rendered.inputs}-{self.render_version}"',
+                                     _FRAME_HEADERS)
 
     def send_head(self):
         # Denial never reaches the file system: were a file ever to sit at
@@ -398,6 +451,8 @@ class _AllowListHandler(SimpleHTTPRequestHandler):
                 return self._serve_version(stored.name, commit)
             if stored.name.endswith(".html") and is_page_name(stored.name):
                 answer = self._serve_archived(stored)
+                if answer is None:
+                    answer = self._serve_rendered(stored)
                 if answer is not None:
                     return answer
         if stored.parent == publish.media_dir(self.root):
@@ -409,6 +464,11 @@ class _AllowListHandler(SimpleHTTPRequestHandler):
         if self._widget_response and self._opened_alone() and stored.is_file():
             self._widget_response = False
             return self._serve_alone(stored.name)
+        if self._widget_response and stored.parent == self.root:
+            answer = self._serve_frame(stored)
+            if answer is not None:
+                self._widget_response = False
+                return answer
         return super().send_head()
 
     def send_error(self, *args, **kwargs):
@@ -460,7 +520,7 @@ def _make_server(out_dir: Path, host: str, port: int,
                          changed=events.changed)
     handler = partial(
         _AllowListHandler, directory=str(out_dir), root=out_dir, verifier=verifier,
-        api=routes, history=history, events=events,
+        api=routes, history=history, events=events, render_version=render_version(),
     )
     server = ThreadingHTTPServer((host, port), handler)
     server.events = events

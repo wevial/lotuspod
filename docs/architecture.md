@@ -96,6 +96,15 @@ publish over a page that has changed, and publishes to one directory take
 turns under a lock ([Publish a page](publishing.md#publish-a-page)). serve
 reads its allow-list on every request, so a published page is live at once.
 
+The published `NAME.html` is the record, which a page's versions and its
+history read; serve answers it as written only when a render fails. It
+renders each page when it is asked for, from the kept source, the stamps the
+published file carries and the installed package's template and theme, and
+keeps one render of each page in memory until the page is published again
+([Serve](operating.md#serve)). A deploy restarts serve, so a template or
+converter change reaches every page with no publish, no version and no
+commit.
+
 ## Trust boundaries
 
 Cloudflare Access is the only reader identity: serve's `/api` routes trust the

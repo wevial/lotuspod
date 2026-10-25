@@ -1,0 +1,83 @@
+<!doctype html><html><head><meta http-equiv="Content-Security-Policy" content="default-src &#x27;none&#x27;; script-src &#x27;sha256-ZjwzhrpKsO8qkG9H/4a5g5/4ApOZjmHHmPAOMzgdaXw=&#x27;; style-src &#x27;unsafe-inline&#x27;; img-src data:; font-src data:; connect-src &#x27;none&#x27;; form-action &#x27;none&#x27;; base-uri &#x27;none&#x27;; frame-src &#x27;none&#x27;"><meta charset="utf-8"><style>:root {
+  --lotus-color-night: #16121f;
+  --lotus-color-deep-night: #0d0a15;
+  --lotus-color-surface: #1e1930;
+  --lotus-color-glow: #272043;
+  --lotus-color-lavender: #b79cf4;
+  --lotus-color-pale-lavender: #d8cbfa;
+  --lotus-color-muted-lavender: #948aad;
+  --lotus-color-white: #ffffff;
+  --lotus-color-sky: #86b8ff;
+  --lotus-color-pale-sky: #cadeff;
+  --lotus-color-rose: #f4a3c9;
+  --lotus-color-pale-rose: #f9d4e6;
+  --lotus-color-mint: #92d9b5;
+  --lotus-color-amber: #ebc57f;
+  --lotus-color-orchid: #d99be8;
+  --lotus-color-cyan: #5ee0ff;
+  --lotus-font-display: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  --lotus-font-body: "Avenir Next", -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --lotus-font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --lotus-type-measure: 66ch;
+  --lotus-type-ink: rgba(255, 255, 255, 0.87);
+  --lotus-type-body-size: 1.0625rem;
+  --lotus-type-body-leading: 1.7;
+  --lotus-type-report-body-size: 0.875rem;
+  --lotus-type-report-body-leading: 1.6;
+  --lotus-type-heading-leading: 1.25;
+  --lotus-type-h2-size: clamp(1.45rem, 4vw, 1.95rem);
+  --lotus-type-h3-size: 1.375rem;
+  --lotus-type-h4-size: 1.125rem;
+  --lotus-type-h5-size: 0.875rem;
+  --lotus-structure-hairline: rgba(216, 203, 250, 0.16);
+  --lotus-structure-hairline-strong: rgba(216, 203, 250, 0.32);
+  --lotus-structure-row-tint: rgba(216, 203, 250, 0.04);
+  --lotus-structure-code-surface: rgba(216, 203, 250, 0.09);
+  --lotus-structure-quote-tint: rgba(183, 156, 244, 0.07);
+  --lotus-structure-header-tint: #23263a;
+  --lotus-structure-header-rule: rgba(134, 184, 255, 0.4);
+  --lotus-structure-code-chip: rgba(134, 184, 255, 0.13);
+  --lotus-structure-mint-tint: rgba(146, 217, 181, 0.12);
+  --lotus-structure-amber-tint: rgba(235, 197, 127, 0.12);
+  --lotus-structure-code-edge: rgba(134, 184, 255, 0.22);
+  --lotus-structure-quote-band: rgba(134, 184, 255, 0.06);
+  --lotus-structure-quote-rule: rgba(134, 184, 255, 0.6);
+  --lotus-structure-link-line: rgba(134, 184, 255, 0.45);
+  --lotus-structure-reader-tint: #312333;
+  --lotus-structure-reader-line: rgba(244, 163, 201, 0.4);
+  --lotus-structure-reader-avatar: #3e2c3e;
+  --lotus-structure-highlight: rgba(244, 163, 201, 0.2);
+  --lotus-structure-highlight-line: rgba(244, 163, 201, 0.7);
+  --lotus-radius-chip: 4px;
+  --lotus-radius-block: 8px;
+  --lotus-radius-card: 14px;
+  --lotus-radius-pill: 999px;
+}
+body { margin: 0; font-family: var(--lotus-font-body); color: var(--lotus-type-ink); background: transparent; color-scheme: dark; }
+</style></head><body><script>(function () {
+  "use strict";
+  function post(data) { parent.postMessage(data, "*"); }
+  var last = -1;
+  new ResizeObserver(function () {
+    var height = Math.ceil(document.documentElement.getBoundingClientRect().height);
+    if (height !== last) {
+      last = height;
+      post({type: "lotuspod:resize", height: height});
+    }
+  }).observe(document.documentElement);
+  window.addEventListener("load", function () { post({type: "lotuspod:ready"}); }, {once: true});
+  function error(message) { post({type: "lotuspod:error", message: String(message).slice(0, 200)}); }
+  window.addEventListener("error", function (event) { error(event.message); });
+  window.addEventListener("unhandledrejection", function (event) { error(event.reason && event.reason.message || event.reason); });
+  // Where the reader is, in the widget's words, for the page's chrome and a
+  // comment started from the block: cut to 80 characters, never inside a
+  // surrogate pair. A new document names none until its widget does.
+  function state(label) { post({type: "lotuspod:state", label: String(label).slice(0, 80).replace(/[\uD800-\uDBFF]$/, "")}); }
+  window.lotuspod = {state: state};
+  state("");
+  window.addEventListener("keydown", function (event) {
+    if (event.key === "Escape") post({type: "lotuspod:escape"});
+  });
+})();
+</script><p>Two metres at the deep shelf.</p>
+</body></html>

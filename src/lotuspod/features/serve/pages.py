@@ -1,20 +1,135 @@
-"""The pages serve answers, as its /api and the agents' socket record them:
-served_page_names, api_page and its one-read catalog, and agent_page."""
+"""The pages serve answers: each rendered when asked for (rendered_page),
+and as its /api and the agents' socket record them: served_page_names,
+api_page and its one-read catalog, and agent_page."""
 
 from __future__ import annotations
 
+import hashlib
+import sys
+import threading
 from pathlib import Path
-from typing import Callable
+from typing import Callable, NamedTuple
 
 from lotuspod.features import agents
-from lotuspod.core import (_KEPT_SOURCE_SUFFIX, extract_meta, extract_visibility, is_page_name,
-                           page_revision, source_revision)
+from lotuspod.core import (_KEPT_SOURCE_SUFFIX, THEME_ROOT, extract_meta, extract_visibility,
+                           is_page_name, page_revision, source_revision)
 from lotuspod.features import comments
 from lotuspod.features import decisions
 from lotuspod.features import history
-from lotuspod.features.publish import _H2Collector, kept_block_hashes, page_owner
+from lotuspod.features.publish import (REFS_SUFFIX, _H2Collector, kept_block_hashes, kept_source,
+                                       page_owner, render_kept_or_extracted)
 from lotuspod.features.serve import api, serve_files
 from lotuspod.features import widgets
+
+
+def render_version() -> str:
+    """A digest of every file the package holds: its templates, the sources
+    of its served theme files and the code a render runs. A deploy restarts
+    serve, which takes it once as it starts."""
+    digest = hashlib.sha256()
+    for path in sorted(THEME_ROOT.rglob("*")):
+        if not path.is_file() or "__pycache__" in path.parts:
+            continue
+        for part in (path.relative_to(THEME_ROOT).as_posix().encode("utf-8"), path.read_bytes()):
+            digest.update(len(part).to_bytes(8, "big"))
+            digest.update(part)
+    return digest.hexdigest()[:16]
+
+
+def page_inputs(out_dir: Path, name: str) -> str:
+    """A digest of what NAME's render is made from: its published file, its
+    kept source and its kept refs. OSError when the page cannot be read."""
+    digest = hashlib.sha256()
+    kept = kept_source(out_dir, name)
+    refs = out_dir / f"{name}{REFS_SUFFIX}"
+    for part in ((out_dir / f"{name}.html").read_bytes(),
+                 (kept[0].encode("utf-8") + b"\0" + kept[1]) if kept else b"",
+                 refs.read_bytes() if refs.is_file() else b""):
+        digest.update(len(part).to_bytes(8, "big"))
+        digest.update(part)
+    return digest.hexdigest()[:16]
+
+
+class Rendered(NamedTuple):
+    """A page as serve answers it: its html, its live-block frames by the
+    names the page gives them, and the digest of the inputs it was made
+    from (page_inputs). rendered is False when the render raised and html
+    is the published file's."""
+    html: str
+    frames: dict[str, bytes]
+    inputs: str
+    rendered: bool
+
+
+# One render per page per input digest, for the life of the serve process;
+# a page renders under its own lock, so requests that miss together render
+# it once. A failed render is never kept, so a page whose render failed
+# renders again at its next request; its failure is logged once.
+_RENDERS: dict[tuple[Path, str], Rendered] = {}
+_RENDERING: dict[tuple[Path, str], threading.Lock] = {}
+_FAILED: set[tuple[Path, str, str]] = set()
+_RENDERS_LOCK = threading.Lock()
+
+
+def _linked(out_dir: Path, name: str) -> bool:
+    """Whether a file NAME's render reads is a link, which may name a file
+    outside the served directory."""
+    return any((out_dir / f"{name}{suffix}").is_symlink()
+               for suffix in (".html", REFS_SUFFIX, *_KEPT_SOURCE_SUFFIX.values()))
+
+
+def _published(out_dir: Path, name: str, inputs: str, why: str) -> Rendered | None:
+    """NAME's published file as its answer, the reason logged once per inputs."""
+    try:
+        published = (out_dir / f"{name}.html").read_bytes().decode("utf-8")
+    except (OSError, UnicodeDecodeError):
+        return None
+    with _RENDERS_LOCK:
+        logged = (out_dir, name, inputs) in _FAILED
+        _FAILED.add((out_dir, name, inputs))
+    if not logged:
+        print(f"serve: {name}.html is answered from its published file: {why}",
+              file=sys.stderr, flush=True)
+    return Rendered(published, {}, inputs, False)
+
+
+def rendered_page(out_dir: Path, name: str) -> Rendered | None:
+    """NAME's page rendered now from its kept source (or the body extracted
+    from its published file) with today's template; None when its published
+    file cannot be read. A render that raises, or a page that reads a link,
+    gives the published file, and says so once on standard error."""
+    key = (Path(out_dir), name)
+    try:
+        if _linked(key[0], name):
+            return _published(key[0], name, "", "a file it is rendered from is a link")
+        inputs = page_inputs(key[0], name)
+    except OSError:
+        return None
+    with _RENDERS_LOCK:
+        found = _RENDERS.get(key)
+        rendering = _RENDERING.setdefault(key, threading.Lock())
+    if found is not None and found.inputs == inputs:
+        return found
+    with rendering:
+        with _RENDERS_LOCK:
+            found = _RENDERS.get(key)
+        if found is not None and found.inputs == inputs:
+            return found
+        try:
+            page_html, frames = render_kept_or_extracted(key[0], name)
+        except Exception as exc:  # noqa: BLE001 - any failed render answers the published file
+            return _published(key[0], name, inputs,
+                              f"its render failed: {type(exc).__name__}: {exc}")
+        found = Rendered(page_html, frames, inputs, True)
+        try:
+            # Published again while it rendered: answered, never kept.
+            if page_inputs(key[0], name) != inputs:
+                return found
+        except OSError:
+            return found
+        with _RENDERS_LOCK:
+            _RENDERS[key] = found
+        return found
 
 
 def served_page_names(out_dir: Path, allowed: frozenset[str] | None = None) -> list[str]:
@@ -43,7 +158,11 @@ def api_page(out_dir: Path, name: str,
         # by a link, which serve_allow_list never lists.
         if (out_dir / file).is_symlink():
             return None
-        page_html = (out_dir / file).read_text(encoding="utf-8")
+        rendered = rendered_page(out_dir, name)
+        if rendered is None:
+            return None
+        # The page as the reader sees it, rendered from what it keeps.
+        page_html = rendered.html
         revision = page_revision(out_dir, name)
         record = history.read_record(out_dir, name) or {}
     except (OSError, UnicodeDecodeError, RuntimeError):
