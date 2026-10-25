@@ -50,10 +50,9 @@ stamps its published file carries (title, dates, summary, labels, owner,
 visibility, revision, treatment, outline and comment boxes) and this
 package's template, theme head, theme switch, scripts and page policy. A
 page that keeps no source yet is drawn from the body `lotuspod pages
-migrate` would keep for it (see [Keeping every page's
-source](#keeping-every-pages-source)), so a deploy may come before or after
-the migration. A page whose render fails is answered from its published
-file, and serve prints one line naming it. The published `NAME.html` is the
+migrate` would keep for it (see Keeping every page's source, below), so a
+deploy may come before or after the migration. A page whose render fails is
+answered from its published file, and serve prints one line naming it. The published `NAME.html` is the
 record: serve never writes it, and only publish, render and archive do, so a
 deploy gives no page a version or a "new version" dot. A deploy restarts
 serve, so a template or converter change reaches every page at its next
