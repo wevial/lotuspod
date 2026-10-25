@@ -63,8 +63,8 @@ class PagesDiffTests(unittest.TestCase):
         self.edit("drifted.md", "The north bed is dry.", "The north bed is flooded.")
         self.edit("restyled.html", "<p>Raked smooth.</p>", "<p><span>Raked</span> smooth.</p>")
 
-    def publish(self, name: str, text: str) -> None:
-        source = self.tmp / f"{name}.md"
+    def publish(self, name: str, text: str, suffix: str = ".md") -> None:
+        source = self.tmp / f"{name}{suffix}"
         source.write_text(text, encoding="utf-8")
         done = lotuspod("publish", str(source), "--local", "--out-dir", str(self.out_dir),
                         cwd=self.tmp)
@@ -126,6 +126,26 @@ class PagesDiffTests(unittest.TestCase):
         self.assertEqual(moved["kind"], "anchors")
         self.assertEqual(moved["anchors"], [{"kind": "h2 id", "page": "entrance",
                                              "render": "door"}])
+
+    def test_two_paragraphs_run_together_are_text_not_markup(self):
+        self.publish("joined", "<h1>Joined</h1><h2>Banks</h2><p>Reeds.</p><p>Rushes.</p>",
+                     ".html")
+        self.edit("joined.body.html", "<p>Reeds.</p><p>Rushes.</p>", "<p>Reeds.Rushes.</p>")
+        done = self.report()
+        self.assertEqual((done.returncode, done.stderr), (0, ""))
+        self.assertIn("joined  text  Banks changed", done.stdout.splitlines())
+
+    def test_a_section_inserted_names_only_its_own_anchors(self):
+        self.publish("moved", MOVED)
+        self.edit("moved.md", "## Door", "## Gate\n\nIron.\n\n## Door")
+        moved = {page["name"]: page for page in json.loads(self.report("--json").stdout)
+                 ["pages"]}["moved"]
+        self.assertEqual(moved["kind"], "anchors")
+        self.assertEqual(moved["sections"], ["Gate"])
+        self.assertEqual(moved["anchors"], [
+            {"kind": "h2 id", "page": None, "render": "gate"},
+            {"kind": "comment-box section", "page": None, "render": "gate"},
+        ])
 
     def test_a_page_whose_render_fails_is_failed_and_the_others_still_reported(self):
         self.publish("pictured", PICTURED)

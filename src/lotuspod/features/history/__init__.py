@@ -13,5 +13,6 @@ __getattr__ = public_edge(__name__, {
     "compare": "versions",
     "History": "versions",
     "old_page": "versions",
+    "sections": "versions",
     "summary": "versions",
 })

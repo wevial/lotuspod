@@ -12,6 +12,7 @@ import json
 import re
 import sys
 from html.parser import HTMLParser
+from difflib import SequenceMatcher
 from itertools import zip_longest
 from pathlib import Path
 
@@ -324,11 +325,19 @@ DIFF_KINDS = ("same", "markup", "text", "anchors", "failed")
 
 
 def anchor_changes(published: str, rendered: str) -> list[dict]:
-    """Each anchor the render gives other than the body published does, by
-    position within its kind: {kind, page, render}, None where one has none."""
+    """Each anchor the render gives other than the body published does, the
+    two lists of a kind aligned on the anchors both hold: {kind, page,
+    render}, None where one has none."""
     page, render = anchors(published), anchors(rendered)
-    return [{"kind": kind, "page": had, "render": got} for kind in page
-            for had, got in zip_longest(page[kind], render[kind]) if had != got]
+    changes = []
+    for kind in page:
+        matcher = SequenceMatcher(None, page[kind], render[kind], autojunk=False)
+        for op, had_from, had_to, got_from, got_to in matcher.get_opcodes():
+            if op != "equal":
+                changes += [{"kind": kind, "page": had, "render": got} for had, got in
+                            zip_longest(page[kind][had_from:had_to],
+                                        render[kind][got_from:got_to])]
+    return changes
 
 
 def _anchor_words(change: dict) -> str:
@@ -357,7 +366,9 @@ def diff_page(out_dir: Path, name: str) -> dict:
         return found
     found["anchors"] = anchor_changes(published, rendered)
     words = [_anchor_words(change) for change in found["anchors"]]
-    text_changed = body_text(published) != body_text(rendered)
+    # By section, block boundaries kept, as history reads a page's text.
+    text_changed = ([section.text for section in history.sections(page_html)]
+                    != [section.text for section in history.sections(rendered_html)])
     if text_changed:
         compared = history.compare(page_html, rendered_html)
         titles = [section["title"] for part in ("changed", "added", "removed")
