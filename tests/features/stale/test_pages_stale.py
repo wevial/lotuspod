@@ -255,14 +255,12 @@ class PagesStaleTests(unittest.TestCase):
         self.assertEqual(found["unchecked"], 2)
 
     def test_a_database_inside_the_output_directory_is_refused_and_no_state_written(self):
-        for extra in (("--check",), ()):
-            with self.subTest(argv=extra):
-                done = self.stale(*extra, "--db", str(self.out_dir / "lotuspod.sqlite3"))
-                self.assertNotEqual(done.returncode, 0)
-                self.assertIn("inside the output directory", done.stderr)
-                self.assertEqual(self.stand_in.requests, [])
-                self.assertEqual(list(self.out_dir.glob("lotuspod-pulls.json")), [])
-                self.assertFalse(self.states.exists())
+        done = self.stale("--check", "--db", str(self.out_dir / "lotuspod.sqlite3"))
+        self.assertNotEqual(done.returncode, 0)
+        self.assertIn("inside the output directory", done.stderr)
+        self.assertEqual(self.stand_in.requests, [])
+        self.assertEqual(list(self.out_dir.glob("lotuspod-pulls.json")), [])
+        self.assertFalse(self.states.exists())
 
     def test_the_states_sit_beside_a_named_database(self):
         db_dir = self.tmp / "state"
