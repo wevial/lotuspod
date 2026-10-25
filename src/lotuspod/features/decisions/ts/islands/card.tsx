@@ -3,7 +3,7 @@ import type { ReadonlySignal, Signal } from "@preact/signals";
 import type { Answer, Answers, Page } from "../../../comments/ts/index";
 import { isChecklist, optionText, same, ticked, boxes } from "./checklist";
 import { expand } from "./collapse";
-import { label, noteField, noteOf, radios, status } from "./words";
+import { holds, label, noteField, noteOf, radios, status } from "./words";
 
 // A decision form as the island holds it: the store's answers to its
 // question, those it was last drawn from, whether it is open to change
@@ -37,10 +37,11 @@ export interface Deck {
   undo(card: Card, button: HTMLButtonElement): void;
 }
 
-// The answer to the question as the page now asks it, if any.
+// The answer to the question as the page now asks it, if any (words.ts's
+// holds).
 export function saved(card: Card): Answer | null {
   const current = card.shown.current;
-  return current && current.version === card.form.dataset.version ? current : null;
+  return current && holds(card.form, current) ? current : null;
 }
 
 // Whether the picked option or the note differs from answer; for a

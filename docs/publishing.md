@@ -323,6 +323,21 @@ the time it ran, in UTC to the second (`2026-10-08T17:04:05Z`), in a
 Updated 2026-10-08", or "Created 2026-09-01" alone while the update falls on
 the created day; both show the UTC day. A bare `render` stamps nothing.
 
+When serve's database is there (`--db`, else `lotuspod.sqlite3` beside the
+output directory), a republish prints one line to standard error for each
+answered decision it reopens: one whose current answer showed as its answer
+on the page before (see [Decisions for the maintainer](#decisions-for-the-maintainer))
+and no longer does on the page as published, which still asks it:
+
+```text
+publish: NAME: QUESTION was answered "ASKED TEXT" (LABEL); this publish asks "NEW TEXT" there, so its card opens again
+```
+
+so the agent can keep the question's words, or give a new question its own
+number. A question the republish takes off the page prints nothing (the
+Answered table keeps it). The line changes nothing: publish writes, commits
+and exits 0 as ever.
+
 A published page takes comments on every section (see [Comments](comments.md#comments));
 `--no-comments` leaves the boxes out. `--owner HANDLE --credential FILE`
 names the agent or seat that published it, and a republish without `--owner`
@@ -1067,10 +1082,18 @@ before one whose slug alone matches. A table with any row of fewer than two opti
 exactly as written, and the page then loads no script.
 
 Each form carries `data-version`, a short hash of its question's text and its
-options' labels. Rewording a question changes its version, so answers given
-to the old wording are not attached to the new words: the answers route
-refuses a stale version (409), and the page shows an old answer as given "to
-an earlier wording" without filling the form from it.
+options' labels, so any edit to them changes its version, and the answers
+route refuses a stale version (409). The page still shows a question's
+current answer as its answer when it was given at the form's version, or
+when it is a decision's answer (not a dismissal) given to the question in the
+same words, with its chosen option still offered under the same label (text
+and labels compared trimmed, runs of white space as one space): adding an
+option, or rewording another, keeps the answer. Rewording the question, or
+the chosen option's label, does not: the page shows the old answer as given
+"to an earlier wording" without filling the form from it. A checklist's
+answer, a dismissal, and an answer stored before its words were kept show
+only at their own version. "change" and "Save answer" always post at the
+form's version.
 
 Each question is drawn as an inline card with a quiet rule down its left
 edge, its options one under another as radio rows. An unanswered card reads

@@ -44,6 +44,32 @@ export function label(form: HTMLFormElement, answer: Answer): string {
   return text ? text.textContent ?? "" : String(answer.choice);
 }
 
+// Text with its white space collapsed.
+function squeezed(text: unknown): string {
+  return String(text).replace(/\s+/g, " ").trim();
+}
+
+// Whether answer, a question's current answer, shows as the form's answer:
+// at the form's version, or a decision's answer, not a dismissal, given to
+// the question the form asks in the same words, whose choice the form still
+// offers under the label it was given. A checklist's answer, a dismissal and
+// one stored before its words were kept hold only at their own version
+// (lotuspod.features.decisions.decisions.holds is the same rule).
+export function holds(form: HTMLFormElement, answer: Answer): boolean {
+  if (answer.version === form.dataset.version) {
+    return true;
+  }
+  const asked = answer.asked || {};
+  if (isChecklist(form) || answer.dismissed || Array.isArray(answer.checked) || !asked.text ||
+    asked.label === undefined || asked.label === null) {
+    return false;
+  }
+  const found = radios(form).find((radio) => radio.value === answer.choice);
+  const text = found && found.parentNode!.querySelector(".artifact-decision-label");
+  return Boolean(text) && squeezed(asked.text) === words(form, ".artifact-decision-text") &&
+    squeezed(asked.label) === squeezed(text!.textContent ?? "");
+}
+
 // The form's note field.
 export function noteField(form: HTMLFormElement): HTMLTextAreaElement {
   return form.elements.namedItem("note") as HTMLTextAreaElement;

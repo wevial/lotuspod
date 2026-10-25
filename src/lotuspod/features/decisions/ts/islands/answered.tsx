@@ -1,7 +1,7 @@
 import { render } from "preact";
 import type { Answer, Page } from "../../../comments/ts/index";
 import { all } from "./checklist";
-import { kept, label, words } from "./words";
+import { holds, kept, label, words } from "./words";
 
 // The "Answered" table that ends the page's body: one row per answered
 // question, newest first, drawn from the store's current answers, read
@@ -11,14 +11,15 @@ export function answeredTable(page: Page, formOf: (question: string) => HTMLForm
   change: (form: HTMLFormElement) => void) {
   let answered: HTMLElement | null = null;
 
-  // A row of the table. A question the page asks at the answer's version
-  // takes its number, question and label from its card, and has "change"
-  // unless it is dismissed; any other takes the words it was answered in,
-  // or else its id and the choice. A checklist has no number.
+  // A row of the table. A question the page asks as it was answered
+  // (words.ts's holds) takes its number, question and label from its card,
+  // and has "change" unless it is dismissed; any other takes the words it
+  // was answered in, or else its id and the choice. A checklist has no
+  // number.
   function Row({ answer }: { answer: Answer }) {
     const question = String(answer.question);
     const form = formOf(question);
-    const asks = Boolean(form) && form!.dataset.version === answer.version;
+    const asks = Boolean(form) && holds(form!, answer);
     const asked = answer.asked || {};
     const id = Array.isArray(answer.checked) ? "" : question.replace(/^decision-/, "");
     const number = asks ? words(form!, ".artifact-decision-number") || id : id;
