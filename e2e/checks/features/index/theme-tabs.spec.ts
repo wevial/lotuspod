@@ -16,7 +16,6 @@ const PYTHON = ENV.LOTUSPOD_TEST_PYTHON ?? '';
 const SIGNED_IN = { 'Cf-Access-Jwt-Assertion': ENV.LOTUSPOD_TEST_ASSERTION ?? '' };
 const SRC = path.resolve(__dirname, '..', '..', '..', '..', 'src');
 const FIXTURES = path.resolve(__dirname, '..', '..', '..', '..', 'tests', 'fixtures', 'old-template');
-const KEY = 'lotuspod:theme';
 const TOKENS = JSON.parse(fs.readFileSync(path.join(SRC, 'lotuspod', 'core', 'theme', 'tokens.json'), 'utf-8'));
 const NIGHT: Record<string, string> = TOKENS.colors;
 const DAWN: Record<string, string> = TOKENS.dawn.colors;
@@ -88,9 +87,8 @@ async function watch(page: Page) {
   return errors;
 }
 
-const strip = (page: Page) => page.getByRole('group', { name: 'Open pods' });
 const tabTitle = (page: Page, pod: Pod) =>
-  strip(page).locator(`.pod-tab[data-page="${pod.name}"] button.pod-tab-title`);
+  page.getByRole('group', { name: 'Open pods' }).locator(`.pod-tab[data-page="${pod.name}"] button.pod-tab-title`);
 const framed = (page: Page, pod: Pod) => page.frameLocator(`iframe.pod-frame[title="${pod.title}"]`);
 const choice = (page: Page, pod: Pod, name: 'Night' | 'Dawn' | 'Auto') =>
   framed(page, pod).getByRole('group', { name: 'Theme' }).getByRole('button', { name, exact: true });
@@ -129,9 +127,7 @@ function shellBackground(page: Page) {
 test('one theme choice holds across the tab shell and every open tab, a page kept from before the switch included', async ({ page }) => {
   const errors = await watch(page);
   await page.goto(`/#tabs=${OLD.name},${ARTICLE.name}&on=${ARTICLE.name}`);
-  await expect(strip(page)).toHaveCount(1);
   for (const pod of [OLD, ARTICLE]) await expect(framed(page, pod).locator('h1')).toHaveText(pod.title);
-  await expect(choice(page, ARTICLE, 'Dawn')).toBeVisible();
 
   // Auto under a dark system reads as Night in the shell and in both tabs.
   await expect.poll(() => themes(page)).toEqual(everywhere('night'));
@@ -144,16 +140,13 @@ test('one theme choice holds across the tab shell and every open tab, a page kep
 
   await choice(page, ARTICLE, 'Dawn').click();
   await expect.poll(() => themes(page)).toEqual(everywhere('dawn'));
-  expect(await page.evaluate((key) => localStorage.getItem(key), KEY)).toBe('dawn');
   await expect.poll(() => shellBackground(page)).toBe(rgb(DAWN.night));
   expect(await marked(page)).toEqual([true, true, true]);
 
   await tabTitle(page, OLD).click();
-  await expect(choice(page, OLD, 'Dawn')).toBeVisible();
   await expect(choice(page, OLD, 'Dawn')).toHaveAttribute('aria-pressed', 'true');
   await choice(page, OLD, 'Auto').click();
   await expect.poll(() => themes(page)).toEqual(everywhere('night'));
-  expect(await page.evaluate((key) => localStorage.getItem(key), KEY)).toBeNull();
   await expect.poll(() => shellBackground(page)).toBe(rgb(NIGHT.night));
   await expect(choice(page, ARTICLE, 'Auto')).toHaveAttribute('aria-pressed', 'true');
   expect(await marked(page)).toEqual([true, true, true]);

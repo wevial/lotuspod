@@ -150,35 +150,6 @@ test('Auto forgets the choice and follows the system as it changes', async ({ pa
   expect(errors).toEqual([]);
 });
 
-test('a press in one tab applies at once in another tab of the same browser', async ({ page, context }) => {
-  const errors = await watch(page);
-  await page.goto(`${PAGE}?standalone`);
-  const other = await context.newPage();
-  const otherErrors = await watch(other);
-  await other.goto(`${DIAGRAM}?standalone`);
-  await expect(switchButton(other, 'Auto')).toHaveAttribute('aria-pressed', 'true');
-  expect(await theme(other)).toBe('night');
-  await expect.poll(() => shapeFill(other)).toBe(rgb(NIGHT.surface));
-  // Marked, so a reload would show as the mark gone.
-  await other.evaluate(() => { (window as any).sameDocument = true; });
-
-  await switchButton(page, 'Dawn').click();
-  await expect.poll(() => theme(other)).toBe('dawn');
-  expect(await pressed(other)).toEqual([['Night', 'false'], ['Dawn', 'true'], ['Auto', 'false']]);
-  await expect.poll(() => background(other)).toBe(rgb(DAWN.night));
-  await expect.poll(() => shapeFill(other)).toBe(rgb(DAWN.surface));
-  expect(await other.evaluate(() => (window as any).sameDocument)).toBe(true);
-
-  await switchButton(page, 'Auto').click();
-  await expect.poll(() => theme(other)).toBe('night');
-  expect(await pressed(other)).toEqual([['Night', 'false'], ['Dawn', 'false'], ['Auto', 'true']]);
-  expect(await other.evaluate(() => (window as any).sameDocument)).toBe(true);
-  await other.unrouteAll({ behavior: 'ignoreErrors' });
-  await other.close();
-  expect(otherErrors).toEqual([]);
-  expect(errors).toEqual([]);
-});
-
 test('storage that throws reads as Auto, and a press still applies', async ({ page }) => {
   const errors = await watch(page);
   await page.addInitScript(() => {

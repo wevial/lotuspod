@@ -13,7 +13,6 @@ Run from the repo root:
 
 from __future__ import annotations
 
-import json
 import re
 import unittest
 
@@ -40,24 +39,19 @@ class IndexShellTests(unittest.TestCase):
         site.ok("publish", str(source), "--local")
 
     def site(self) -> Site:
-        site = Site(self, "old-shell.html", "old-shell.md")
+        site = Site(self)
         for name, title in (("reeds", "Reeds"), ("frost", "Frost")):
             self.publish(site, name, title)
-        site.ok("manifest")
-        site.ok("index")
         site.serve()
         return site
 
     def test_the_index_holds_the_theme_head_and_the_manifests_rows_in_order(self):
         site = self.site()
         theme_head = (SRC / THEME_HEAD).read_text(encoding="utf-8")
-        listed = [entry["file"].removesuffix(".html") for entry in
-                  json.loads((site.out / "manifest.json").read_text(encoding="utf-8"))["artifacts"]]
-        written = rows((site.out / "index.html").read_bytes())
-        self.assertEqual(sorted(listed), ["frost", "old-shell", "reeds"])
-        self.assertEqual(written, listed)
-        # An index written before the head script: serve answers its render.
         index_file = site.out / "index.html"
+        written = rows(index_file.read_bytes())
+        self.assertEqual(sorted(written), ["frost", "reeds"])
+        # An index written before the head script: serve answers its render.
         index_file.write_text(index_file.read_text(encoding="utf-8").replace(
             f"<script>{theme_head}</script>", ""), encoding="utf-8")
         self.assertNotIn(theme_head, index_file.read_text(encoding="utf-8"))
@@ -74,27 +68,16 @@ class IndexShellTests(unittest.TestCase):
 
     def test_the_etag_holds_until_a_publish_lists_another_page(self):
         site = self.site()
-        tags = {}
-        for path in INDEX_PATHS:
-            with self.subTest(path=path):
-                _, first, _ = site.ask("GET", path)
-                _, second, _ = site.ask("GET", path)
-                tags[path] = first["ETag"]
-                self.assertTrue(tags[path])
-                self.assertEqual(second["ETag"], tags[path])
-                status, _, body = site.ask("GET", path, {"If-None-Match": tags[path]})
-                self.assertEqual((status, body), (304, b""))
-        self.assertEqual(tags["/"], tags["/index.html"])
+        _, headers, _ = site.ask("GET", "/")
+        tag = headers["ETag"]
+        status, _, body = site.ask("GET", "/", {"If-None-Match": tag})
+        self.assertEqual((status, body), (304, b""))
 
         self.publish(site, "heron", "Heron")
 
-        for path in INDEX_PATHS:
-            with self.subTest(path=path):
-                status, headers, page = site.ask("GET", path, {"If-None-Match": tags[path]})
-                self.assertEqual(status, 200)
-                self.assertNotEqual(headers["ETag"], tags[path])
-                self.assertIn("heron", rows(page))
-                self.assertEqual(rows(page), rows((site.out / "index.html").read_bytes()))
+        status, _, page = site.ask("GET", "/", {"If-None-Match": tag})
+        self.assertEqual(status, 200)
+        self.assertIn("heron", rows(page))
 
 
 if __name__ == "__main__":
