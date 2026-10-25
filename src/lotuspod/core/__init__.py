@@ -346,7 +346,7 @@ class _BodySpan(HTMLParser):
         return self._line_starts[line - 1] + column
 
     def handle_starttag(self, tag: str, attrs: list) -> None:
-        if tag != "section" or self.end is not None:
+        if tag != "section":
             return
         if self._depth:
             self._depth += 1
@@ -367,7 +367,7 @@ def published_body(page_html: str) -> str | None:
     parser = _BodySpan(page_html)
     parser.feed(page_html)
     parser.close()
-    if parser.start is None or parser.end is None:
+    if parser.end is None:
         return None
     return page_html[parser.start:parser.end]
 

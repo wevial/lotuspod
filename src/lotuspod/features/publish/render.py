@@ -379,7 +379,7 @@ def keep_frame_names(body: str, files: dict[str, bytes], name: str,
     frame_names gives for its id; the bytes stay today's."""
     for ident, (hash_, _, _) in widgets.PageWidgets(body).found.items():
         today, kept = f"{name}.w-{hash_}.html", frame_names.get(ident)
-        if kept and kept != today and today in files:
+        if kept and today in files:
             body = body.replace(html.escape(today), html.escape(kept))
             files = {kept if filename == today else filename: data
                      for filename, data in files.items()}

@@ -84,7 +84,6 @@ def render_kept(out_dir: Path, name: str) -> tuple[str, dict[str, bytes]]:
     """NAME's page as publish would render it now from its kept source and
     the stamps its published file carries, and its live-block frame files;
     nothing is written. RuntimeError when NAME keeps no source."""
-    out_dir = Path(out_dir)
     page_html = (out_dir / f"{name}.html").read_text(encoding="utf-8")
     kept = kept_source(out_dir, name)
     if kept is None:
@@ -108,7 +107,7 @@ class _Decorations(HTMLParser):
     def handle_starttag(self, tag: str, attrs: list) -> None:
         classes = (dict(attrs).get("class") or "").split()
         for mark_tag, mark_class, what in self.MARKS:
-            if tag == mark_tag and mark_class in classes and what not in self.found:
+            if tag == mark_tag and mark_class in classes:
                 self.found.append(what)
 
 
