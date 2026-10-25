@@ -146,6 +146,21 @@ def overtaken(updated: str, pulls: list[str],
     return merged, closed
 
 
+def verdict(page_html: str, updated: str,
+            states: dict[str, dict]) -> tuple[list[str], list[str]]:
+    """One page's verdict from its html and updated stamp: the pull requests
+    it links stored merged and closed since (overtaken)."""
+    return overtaken(updated, page_pulls(page_html), states)
+
+
+def mark_text(merged: list[str], closed: list[str]) -> str:
+    """The words a verdict's mark ends in, after "may be out of date · "."""
+    if merged and closed:
+        return f"{len(merged)} merged, {len(closed)} closed since"
+    found, kind = (merged, MERGED) if merged else (closed, CLOSED)
+    return f"{len(found)} linked PR{'' if len(found) == 1 else 's'} {kind} since"
+
+
 def listed_pages(out_dir: Path) -> list[dict]:
     """Each page serve answers that the manifest lists and that is not
     archived: {page, title, updated, pulls}."""

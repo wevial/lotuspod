@@ -371,6 +371,18 @@ conflict still exits 3. `--local` publishes on this machine regardless of the
 config, and `--out-dir` without `--local` is refused while a host is set. Keep
 the host's address in the local config only, never in this repository.
 
+When a GitHub pull request a page links has merged or closed since the
+page's last publish, by the states `lotuspod pages stale` keeps (see
+[operating.md](operating.md#which-pages-a-merge-has-overtaken)), serve ends
+the page's header line, after its Updated date and before its labels, in
+"may be out of date · 3 linked PRs merged since" (or "1 linked PR closed
+since", or "2 merged, 1 closed since"), in a `span.artifact-stale` whose
+`title` names the pull requests, `owner/repo#N` comma-separated. Publishing
+the page again takes the mark off. Only serve draws it, from the stored
+states: `render`, `publish`, the published `NAME.html`, `manifest.json`,
+`pages diff` and an earlier version (`?version=`) carry none, and an open
+page shows a change after a reload.
+
 ### Images
 
 A markdown page shows images (see [From markdown](#from-markdown)), and an
@@ -783,6 +795,11 @@ reads "Showing" and one token per checked label, "relos ✕", which unchecks it.
 The count reads "M pages, newest update first" in the arrival order, and "N of
 M pages" while filtered; when no row is left, the table gives way to "No pages
 match these filters." The table stays one flat list in its sort order.
+
+Served by `lotuspod serve`, the title cell of a page that linked pull
+requests have overtaken (see [Publish a page](#publish-a-page)) ends, after
+its tags, in a small "may be out of date" (`span.index-stale`, with the same
+`title`); the written `index.html` carries none.
 
 An archived page's row (see [Archive a page](#archive-a-page)) carries its
 archive time in `data-archived` and is written `hidden`, so the default list

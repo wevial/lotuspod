@@ -28,7 +28,8 @@ from lotuspod.features import publish
 from lotuspod.features.publish import version_stamp
 from lotuspod.features.serve import access, api, serve_files
 from lotuspod.features.serve.pages import (api_catalog, api_page, render_version, rendered_index,
-                                           rendered_page, rendered_version, served_page_names)
+                                           rendered_page, rendered_version, served_page_names,
+                                           watch_states)
 from lotuspod.features.serve.serve_files import _SERVE_NEVER_FILES
 from lotuspod.features import widgets
 from lotuspod.store import db
@@ -538,13 +539,15 @@ def _make_server(out_dir: Path, host: str, port: int,
                  events: live.Hub | None = None) -> ThreadingHTTPServer:
     """The allow-list server; /api answers 503 access_unconfigured without a
     verifier, and has no answers, comments, media, revision, seen, versions and
-    archive routes without a database. Uploads go to the media store beside out_dir,
+    archive routes, and no page or index marked out of date, without a
+    database. Uploads go to the media store beside out_dir,
     within max_image_bytes. The pages' versions are read from out_dir's repository.
     The verifier's owners may archive a page, which the route writes as
     `lotuspod archive` does."""
     history = History(out_dir, version_stamp)
     routes = None
     if db_path is not None:
+        watch_states(out_dir, db_path)
         events = events or live.Hub(out_dir)
         routes = api.Api(db.Database(db_path), partial(api_page, out_dir), window,
                          media_dir=publish.media_dir(out_dir), max_image_bytes=max_image_bytes,
