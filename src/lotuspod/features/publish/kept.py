@@ -150,6 +150,17 @@ def render_kept(out_dir: Path, name: str) -> tuple[str, dict[str, bytes]]:
     return _render(out_dir, name, page_html, *kept)
 
 
+def render_kept_or_extracted(out_dir: Path, name: str) -> tuple[str, dict[str, bytes]]:
+    """render_kept(), or for a page that keeps no source, the render from
+    the body `lotuspod pages migrate` would keep for it (extract)."""
+    out_dir = Path(out_dir)
+    if kept_source(out_dir, name) is not None:
+        return render_kept(out_dir, name)
+    page_html = (out_dir / f"{name}.html").read_bytes().decode("utf-8")
+    body = extract(out_dir, name, page_html)
+    return _render(out_dir, name, page_html, "html", body.encode("utf-8"))
+
+
 class _Decorations(HTMLParser):
     """What in a body only publish writes from a source, in body order."""
 

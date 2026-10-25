@@ -120,15 +120,14 @@ class BannerTests(ArchivedSite):
         self.assertEqual(file.read_bytes(), published)
         self.assertNotIn(b"lotuspod:archived", published)
 
-        # The file's own time asks for a 304, which a page with no record
-        # gets; the archived page is still answered whole.
+        # The file's own time asks for a 304; the archived page is still
+        # answered whole. A page with no record is checked by its ETag.
         since = {"If-Modified-Since": email.utils.formatdate(file.stat().st_mtime, usegmt=True)}
         status, _, data = self.page("/old.html", since)
         self.assertEqual(status, 200)
         self.banner(data)
-        new = self.out / "new.html"
-        status, _, _ = self.page("/new.html", {
-            "If-Modified-Since": email.utils.formatdate(new.stat().st_mtime, usegmt=True)})
+        _, headers, _ = self.page("/new.html")
+        status, _, _ = self.page("/new.html", {"If-None-Match": headers["ETag"]})
         self.assertEqual(status, 304)
 
     def test_a_successor_not_served_markup_in_its_title_and_unarchiving(self):

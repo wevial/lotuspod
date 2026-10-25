@@ -44,6 +44,32 @@ subdirectories, traversal attempts (encoded or not), and directory listings
 are denied too. The allow-list is recomputed per request,
 so re-rendering an artifact publishes or unpublishes it live — no restart.
 
+A page is rendered when it is asked for: serve answers `NAME.html` with the
+page drawn now from its kept source (`NAME.md` or `NAME.body.html`), the
+stamps its published file carries (title, dates, summary, labels, owner,
+visibility, revision, treatment, outline and comment boxes) and this
+package's template, theme head, theme switch, scripts and page policy. A
+page that keeps no source yet is drawn from the body `lotuspod pages
+migrate` would keep for it (see [Keeping every page's
+source](#keeping-every-pages-source)), so a deploy may come before or after
+the migration. A page whose render fails is answered from its published
+file, and serve prints one line naming it. The published `NAME.html` is the
+record: serve never writes it, and only publish, render and archive do, so a
+deploy gives no page a version or a "new version" dot. A deploy restarts
+serve, so a template or converter change reaches every page at its next
+request.
+
+Each rendered page carries `Cache-Control: no-cache` and an `ETag` over the
+page's inputs (its published file, kept source and kept refs) and the render
+version, a digest of every file in the installed package that serve takes
+once as it starts; a request whose `If-None-Match` holds that tag is answered
+304 with no body. serve keeps one render of each page in memory until the
+page is published again. A live block's frame keeps the name the published
+page gives it, so a comment thread on the block stays on it; serve answers
+that name with the frame the render draws today, with the frame's own
+headers. An archived page is the render marked archived; an earlier version
+(`?version=COMMIT`) is answered from its commit as it was published.
+
 Images a page shows are answered from `lotuspod-media/` beside the artifacts
 directory (see [Images](publishing.md#images)): a GET or HEAD of `/media/NAME`, where NAME
 is 64 lower-case hex digits, a dot and `png`, `jpg`, `webp` or `gif`, answers
