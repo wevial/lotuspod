@@ -305,12 +305,23 @@ class PagesStaleTests(unittest.TestCase):
             f"plan  updated {self.updated['plan']}  1 merged since: acme/pond#7"])
         self.assertEqual(set(self.stored()), {"acme/pond#7"})
 
-    def test_a_pull_number_too_long_to_be_one_is_no_link(self):
-        self.publish("notes", NOTES + f"\n[Long](https://github.com/acme/pond/pull/{'9' * 5000})\n")
-        done = self.stale("--check", "--json")
-        self.assertEqual(done.returncode, 0, done.stderr)
-        self.assertEqual([page["page"] for page in json.loads(done.stdout)["pages"]], ["plan"])
-        self.assertEqual(len(self.stand_in.requests), 3)
+    def test_a_pull_number_of_any_length_is_a_link(self):
+        for digits in ("1234567890123456789", "9" * 5000):
+            with self.subTest(digits=len(digits)):
+                self.stand_in.answers[f"/repos/acme/pond/pulls/{digits}"] = {
+                    "state": "closed", "merged_at": self.merged_7, "closed_at": self.merged_7}
+                self.publish("notes", NOTES + f"\n[Long](https://github.com/acme/pond/pull/"
+                             f"{digits})\n", shift=SHIFT)
+                self.stand_in.requests.clear()
+                done = self.stale("--check", "--json")
+                self.assertEqual(done.returncode, 0, done.stderr)
+                found = json.loads(done.stdout)
+                notes = {page["page"]: page for page in found["pages"]}["notes"]
+                self.assertEqual([entry["pull"] for entry in notes["merged"]],
+                                 [f"acme/pond#{digits}"])
+                self.assertEqual(found["unchecked"], 0)
+                self.assertIn(f"/repos/acme/pond/pulls/{digits}", self.stand_in.paths())
+                self.assertEqual(self.stored()[f"acme/pond#{digits}"]["state"], "merged")
 
     def test_a_check_keeps_the_states_another_check_wrote_meanwhile(self):
         sys.path.insert(0, str(SRC_DIR))

@@ -32,18 +32,14 @@ TOKEN_ENV = "GITHUB_TOKEN"
 TIMEOUT = 10
 DEFAULT_EVERY = 15
 
-# A pull request number longer than this is no link, and never reaches int().
-NUMBER_DIGITS = 18
-
 OPEN, MERGED, CLOSED, UNKNOWN = "open", "merged", "closed", "unknown"
 STATES = (OPEN, MERGED, CLOSED, UNKNOWN)
 
 PULL_URL = re.compile(
-    r"https://github\.com/([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+)/pull/([0-9]{1,%d})(?:[/?#].*)?"
-    % NUMBER_DIGITS,
+    r"https://github\.com/([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+)/pull/([0-9]+)(?:[/?#].*)?",
     re.DOTALL,
 )
-PULL_KEY = re.compile(r"([a-z0-9_.-]+)/([a-z0-9_.-]+)#([0-9]{1,%d})" % NUMBER_DIGITS)
+PULL_KEY = re.compile(r"([a-z0-9_.-]+)/([a-z0-9_.-]+)#([0-9]+)")
 
 
 class _Hrefs(HTMLParser):
@@ -66,13 +62,16 @@ def page_pulls(page_html: str) -> list[str]:
         match = PULL_URL.fullmatch(href.strip())
         if match:
             owner, repo, number = match.groups()
-            found.add(f"{owner.lower()}/{repo.lower()}#{int(number)}")
+            found.add(f"{owner.lower()}/{repo.lower()}#{number.lstrip('0') or '0'}")
     return sorted(found, key=pull_order)
 
 
-def pull_order(key: str) -> tuple[str, int]:
+def pull_order(key: str) -> tuple[str, int, str]:
+    """Numeric order, compared as digits: a number of any length is a link,
+    and int() refuses one of thousands of digits."""
     repo, _, number = key.partition("#")
-    return repo, int(number)
+    number = number.lstrip("0") or "0"
+    return repo, len(number), number
 
 
 def pull_url(key: str) -> str:
