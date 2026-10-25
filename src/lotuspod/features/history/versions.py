@@ -598,6 +598,15 @@ class History:
         objects = self._object_bytes([f"{commit}:{filename}"])
         return objects[0] if objects else None
 
+    def files_at(self, commit: str, filenames: list[str]) -> list[bytes | None] | None:
+        """Each named file's bytes at commit, read in one process, None for
+        one the commit does not hold; None when git failed. Nothing is
+        kept, and the repository is only read."""
+        if not COMMIT.fullmatch(commit) or any(
+                char in filename for filename in filenames for char in "/\\\n\r"):
+            return None
+        return self._object_bytes([f"{commit}:{filename}" for filename in filenames])
+
     def block_hashes(self, name: str, ident: str) -> frozenset[str]:
         """The hashes of the widget files live block ident had in NAME's
         visible versions, every one of them, not only the MAX_VERSIONS a
@@ -788,15 +797,18 @@ def _disable_forms(page_html: str, note: str) -> str:
 
 
 def old_page(page_html: str, name: str, version: Version, behind: int,
-             nonce: str, script: str) -> str:
+             nonce: str, script: str, keep: frozenset[str] = frozenset()) -> str:
     """An earlier version's HTML as serve answers it, ending in one script
     element: script, the old-version script's address, allowed by nonce, the
-    answer's own; no other script in the page carries it."""
+    answer's own; no other script in the page carries it. Each inline
+    script whose text is one of keep stays, where it is."""
     places = Places(page_html)
     # Authored badges can contain scripts or widget links. Reparse between
     # transformations so replacing a parent never overlaps an edit to its
     # contents, whose original offsets would then corrupt adjacent HTML.
-    page_html = edited(page_html, [(start, end, "") for start, end in places.scripts])
+    kept = {f"<script>{text}</script>" for text in keep}
+    page_html = edited(page_html, [(start, end, "") for start, end in places.scripts
+                                   if page_html[start:end] not in kept])
     places = Places(page_html)
     page_html = edited(page_html, [(start, end, "Old version")
                                    for start, end in places.badges])

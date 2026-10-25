@@ -20,7 +20,8 @@ from lotuspod.features import decisions
 from lotuspod.features import history
 from lotuspod.features import index
 from lotuspod.features.publish import (REFS_SUFFIX, _H2Collector, kept_block_hashes, kept_source,
-                                       page_owner, render_kept_or_extracted)
+                                       page_owner, refs_from, render_from,
+                                       render_kept_or_extracted)
 from lotuspod.features.serve import api, serve_files
 from lotuspod.features import widgets
 
@@ -133,6 +134,64 @@ def rendered_page(out_dir: Path, name: str) -> Rendered | None:
         with _RENDERS_LOCK:
             _RENDERS[key] = found
         return found
+
+
+def theme_head() -> str:
+    """The theme head script's text, as a render writes it inline."""
+    return (THEME_ROOT / "core" / "ts" / "theme-head.js").read_text(encoding="utf-8")
+
+
+# One render per page per commit for the life of the serve process (whose
+# render version is fixed), the oldest dropped past _VERSIONS_KEPT; a
+# version that cannot be rendered is kept as None, so it is said once.
+_VERSIONS: dict[tuple[Path, str, str], str | None] = {}
+_VERSIONS_KEPT = 256
+
+
+def rendered_version(out_dir: Path, name: str, commit: str, page_html: str,
+                     files_at: Callable[[str, list[str]], list[bytes | None] | None]
+                     ) -> str | None:
+    """NAME as it was at commit, page_html its published file then, rendered
+    with today's template from that commit's kept source (or the body
+    extracted from page_html) and kept refs, read by files_at
+    (History.files_at); nothing is written. None, said on standard error
+    (once, unless git failed), when it cannot be, so the version is
+    answered as published."""
+    key = (Path(out_dir), name, commit)
+    with _RENDERS_LOCK:
+        if key in _VERSIONS:
+            return _VERSIONS[key]
+        rendering = _RENDERING.setdefault(key, threading.Lock())
+    with rendering:
+        with _RENDERS_LOCK:
+            if key in _VERSIONS:
+                return _VERSIONS[key]
+        sources = [f"{name}{suffix}" for suffix in _KEPT_SOURCE_SUFFIX.values()]
+        found = files_at(commit, [*sources, f"{name}{REFS_SUFFIX}"])
+        page: str | None = None
+        if found is None:
+            why = "its files at that commit cannot be read"
+        else:
+            kept = next(((fmt, data) for fmt, data in zip(_KEPT_SOURCE_SUFFIX, found)
+                         if data is not None), None)
+            try:
+                refs = (refs_from(found[-1], f"{name}{REFS_SUFFIX} at {commit}")
+                        if found[-1] is not None else ({}, ""))
+                page = render_from(key[0], name, page_html, kept, refs)[0]
+            except Exception as exc:  # noqa: BLE001 - any failed render answers the published file
+                why = f"its render failed: {type(exc).__name__}: {exc}"
+        if page is None:
+            print(f"serve: {name}.html?version={commit} is answered from its published "
+                  f"file: {why}", file=sys.stderr, flush=True)
+        with _RENDERS_LOCK:
+            _RENDERING.pop(key, None)
+            # git failing is not the version's: it is asked again next time.
+            if found is None:
+                return None
+            _VERSIONS[key] = page
+            while len(_VERSIONS) > _VERSIONS_KEPT:
+                del _VERSIONS[next(iter(_VERSIONS))]
+        return page
 
 
 # The index as last rendered for each served directory, by its key.

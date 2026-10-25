@@ -130,13 +130,23 @@ def kept_refs(out_dir: Path, name: str) -> tuple[dict[str, dict], str]:
     if not path.is_file():
         return {}, ""
     try:
-        kept = json.loads(path.read_text(encoding="utf-8"))
+        data = path.read_bytes()
+    except OSError as exc:
+        raise RuntimeError(f"cannot read the kept refs {path}: {exc}") from None
+    return refs_from(data, str(path))
+
+
+def refs_from(data: bytes, where: str) -> tuple[dict[str, dict], str]:
+    """The entries and when they were taken from a kept refs file's bytes;
+    RuntimeError, naming where, when they cannot be read."""
+    try:
+        kept = json.loads(data.decode("utf-8"))
         as_of = kept["asOf"]
         entries = blocks.check_refs({"refs": kept["refs"]})
         if not isinstance(as_of, str):
             raise TypeError("asOf is not text")
-    except (OSError, UnicodeDecodeError, ValueError, KeyError, TypeError, RuntimeError) as exc:
-        raise RuntimeError(f"cannot read the kept refs {path}: {exc}") from None
+    except (UnicodeDecodeError, ValueError, KeyError, TypeError, RuntimeError) as exc:
+        raise RuntimeError(f"cannot read the kept refs {where}: {exc}") from None
     return entries, as_of
 
 
