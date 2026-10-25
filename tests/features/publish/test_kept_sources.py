@@ -346,6 +346,35 @@ class MigrateTests(MigrateTestCase):
         self.assertEqual((self.out_dir / "fallback.body.html").read_text(encoding="utf-8"),
                          (self.out_dir / "old-plain.body.html").read_text(encoding="utf-8"))
 
+    def test_a_section_end_in_a_template_does_not_end_the_body(self):
+        plain = (FIXTURES / "old-plain.html").read_text(encoding="utf-8")
+        example = "<template></section><p>Example</p></template>\n"
+        templated = plain.replace("<p>Planted in the spring.</p>\n",
+                                  "<p>Planted in the spring.</p>\n" + example)
+        self.assertNotEqual(templated, plain)
+        (self.out_dir / "templated.html").write_text(templated, encoding="utf-8")
+        self.commit("add templated")
+
+        rc, _, err = self.migrate()
+        self.assertEqual((rc, err), (0, ""))
+        kept_body = (self.out_dir / "templated.body.html").read_text(encoding="utf-8")
+        self.assertEqual(kept_body, (self.out_dir / "old-plain.body.html").read_text(
+            encoding="utf-8").replace("<p>Planted in the spring.</p>\n",
+                                      "<p>Planted in the spring.</p>\n" + example))
+        self.assertIn("<p>Gravel from the gate to the pond.</p>", kept_body)
+
+    def test_the_kept_body_keeps_the_pages_line_endings(self):
+        crlf = (FIXTURES / "old-plain.html").read_bytes().replace(b"\n", b"\r\n")
+        (self.out_dir / "crlf.html").write_bytes(crlf)
+        self.commit("add crlf")
+
+        rc, _, err = self.migrate()
+        self.assertEqual((rc, err), (0, ""))
+        kept_body = (self.out_dir / "crlf.body.html").read_bytes()
+        self.assertIn(b"\r\n", kept_body)
+        self.assertEqual(kept_body, re.search(rb'<section class="artifact-body">(.*?)</section>',
+                                              crlf, re.DOTALL).group(1))
+
     def test_a_section_in_a_template_is_not_the_body(self):
         plain = (FIXTURES / "old-plain.html").read_text(encoding="utf-8")
         decoy = plain.replace('  <main class="artifact"', '  <template><section class="artifact-body">'

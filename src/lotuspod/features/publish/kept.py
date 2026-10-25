@@ -30,8 +30,8 @@ _OUTLINE_MARK = '<nav class="artifact-outline"'
 
 class _BodySpan(HTMLParser):
     """Locate the inner HTML of a page's section.artifact-body. A template's
-    content is inert, so no section inside one is the page's, and a
-    noscript's is raw text, as core.Templates reads it."""
+    content is inert, so no section tag inside one opens or closes the page's
+    body, and a noscript's is raw text, as core.Templates reads it."""
 
     CDATA_CONTENT_ELEMENTS = Templates.CDATA_CONTENT_ELEMENTS
 
@@ -50,7 +50,7 @@ class _BodySpan(HTMLParser):
     def handle_starttag(self, tag: str, attrs: list) -> None:
         if tag == "template":
             self._templates += 1
-        elif tag != "section" or self.end is not None or (self._templates and not self._depth):
+        elif tag != "section" or self.end is not None or self._templates:
             return
         elif self._depth:
             self._depth += 1
@@ -61,7 +61,7 @@ class _BodySpan(HTMLParser):
     def handle_endtag(self, tag: str) -> None:
         if tag == "template" and self._templates:
             self._templates -= 1
-        elif tag == "section" and self._depth and self.end is None:
+        elif tag == "section" and self._depth and self.end is None and not self._templates:
             self._depth -= 1
             if not self._depth:
                 self.end = self._offset()
@@ -137,7 +137,7 @@ def render_kept(out_dir: Path, name: str) -> tuple[str, dict[str, bytes]]:
     the stamps its published file carries, and its live-block frame files;
     nothing is written. RuntimeError when NAME keeps no source."""
     out_dir = Path(out_dir)
-    page_html = (out_dir / f"{name}.html").read_text(encoding="utf-8")
+    page_html = (out_dir / f"{name}.html").read_bytes().decode("utf-8")
     kept = kept_source(out_dir, name)
     if kept is None:
         raise RuntimeError(f"{name} keeps no source")
@@ -295,7 +295,7 @@ def migrate(out_dir: Path, check: bool) -> int:
                 kept += 1
                 continue
             try:
-                extracted[name] = extract(out_dir, name, path.read_text(encoding="utf-8"))
+                extracted[name] = extract(out_dir, name, path.read_bytes().decode("utf-8"))
             except (RuntimeError, UnicodeDecodeError) as exc:
                 refused[name] = str(exc)
         if extracted and not check:
