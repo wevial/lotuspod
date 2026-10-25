@@ -91,13 +91,14 @@ class ServeStaleMarks(unittest.TestCase):
                               text=True, timeout=TIMEOUT)
         self.assertEqual(done.returncode, 0, done.stderr)
 
-    def store(self, merged_7: bool) -> None:
+    def store(self, merged_7: bool, more: dict | None = None) -> None:
         checked = stamp(_dt.datetime.now(_dt.timezone.utc))
         pull_7 = ({"state": "merged", "at": self.merged, "checked": checked} if merged_7
                   else {"state": "open", "at": None, "checked": checked})
         text = json.dumps({"pulls": {
             "acme/pond#7": pull_7,
             "acme/pond#8": {"state": "open", "at": None, "checked": checked},
+            **(more or {}),
         }}, indent=2) + "\n"
         before = self.states.stat() if self.states.exists() else None
         self.states.write_text(text, encoding="utf-8")
@@ -222,6 +223,70 @@ class ServeStaleMarks(unittest.TestCase):
         self.assertIn("artifact-meta", old)
         self.assertNotIn("artifact-stale", old)
         self.assertNotIn("may be out of date", (self.out / "manifest.json").read_text("utf-8"))
+
+    def stale_pages(self) -> list[str]:
+        done = self.cli("pages", "stale", "--json", "--out-dir", str(self.out),
+                        "--db", str(self.tmp / "lotuspod.sqlite3"))
+        self.assertEqual(done.returncode, 0, done.stderr)
+        return [page["page"] for page in json.loads(done.stdout)["pages"]]
+
+    def test_a_page_with_no_updated_stamp_is_marked_from_the_manifests(self):
+        source = self.tmp / "legacy.md"
+        source.write_text("# Legacy\n\nShipped in [#9](https://github.com/acme/pond/pull/9).\n",
+                          encoding="utf-8")
+        done = self.cli("render", "--name", "legacy", "--title", "Legacy", "--date", "2020-01-01",
+                        "--markdown", str(source), "--out-dir", str(self.out))
+        self.assertEqual(done.returncode, 0, done.stderr)
+        for step in ("manifest", "index"):
+            done = self.cli(step, "--out-dir", str(self.out))
+            self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertNotIn('name="lotuspod:updated"', (self.out / "legacy.html").read_text("utf-8"))
+        manifest = json.loads((self.out / "manifest.json").read_text(encoding="utf-8"))
+        updated = {meta["file"]: meta["updated"] for meta in manifest["artifacts"]}["legacy.html"]
+        self.assertTrue(updated)
+        merged = stamp(parse(updated) + _dt.timedelta(hours=1))
+        self.store(merged_7=True, more={"acme/pond#9": {"state": "merged", "at": merged,
+                                                        "checked": merged}})
+        self.assertIn("legacy", self.stale_pages())
+        self.serve()
+        _, _, page = self.ask("/legacy.html")
+        self.assertIn('<span class="artifact-stale" title="acme/pond#9">', self.header_line(page))
+        _, _, index = self.ask("/index.html")
+        self.assertIn("index-stale", self.index_row(index, "legacy"))
+
+    def test_a_page_whose_render_fails_keeps_its_mark(self):
+        self.serve()
+        (self.out / "pond-plan.refs.json").write_text("{broken", encoding="utf-8")
+        status, _, page = self.ask("/pond-plan.html")
+        self.assertEqual(status, 200)
+        self.assertIn('<span class="artifact-stale" title="acme/pond#7">', self.header_line(page))
+        _, _, index = self.ask("/index.html")
+        self.assertIn("index-stale", self.index_row(index, "pond-plan"))
+
+    def test_an_archived_page_is_not_marked_as_pages_stale_lists_it_not(self):
+        self.assertIn("pond-plan", self.stale_pages())
+        done = self.cli("archive", "pond-plan", "--local", "--out-dir", str(self.out))
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(self.stale_pages(), [])
+        self.serve()
+        status, _, page = self.ask("/pond-plan.html")
+        self.assertEqual(status, 200)
+        self.assertNotIn("artifact-stale", page)
+        _, _, index = self.ask("/index.html")
+        self.assertNotIn("index-stale", index)
+
+    def test_a_stored_time_past_the_clocks_range_is_no_time(self):
+        self.store(merged_7=True, more={"acme/pond#9": {
+            "state": "merged", "at": "0001-01-01T00:00:00+00:01", "checked": self.merged}})
+        self.serve()
+        status, _, page = self.ask("/pond-plan.html")
+        self.assertEqual(status, 200)
+        self.assertIn("artifact-stale", page)
+        status, _, page = self.ask("/pond-status.html")
+        self.assertEqual(status, 200)
+        self.assertNotIn("artifact-stale", page)
+        status, _, _ = self.ask("/index.html")
+        self.assertEqual(status, 200)
 
 
 if __name__ == "__main__":

@@ -377,8 +377,10 @@ page's last publish, by the states `lotuspod pages stale` keeps (see
 the page's header line, after its Updated date and before its labels, in
 "may be out of date · 3 linked PRs merged since" (or "1 linked PR closed
 since", or "2 merged, 1 closed since"), in a `span.artifact-stale` whose
-`title` names the pull requests, `owner/repo#N` comma-separated. Publishing
-the page again takes the mark off. Only serve draws it, from the stored
+`title` names the pull requests, `owner/repo#N` comma-separated. It compares
+with the manifest's `updated`, as `pages stale` does, and marks no archived
+page, which `pages stale` never lists. Publishing the page again takes the
+mark off. Only serve draws it, from the stored
 states: `render`, `publish`, the published `NAME.html`, `manifest.json`,
 `pages diff` and an earlier version (`?version=`) carry none, and an open
 page shows a change after a reload.

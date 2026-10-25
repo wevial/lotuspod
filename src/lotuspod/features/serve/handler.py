@@ -428,10 +428,18 @@ class _AllowListHandler(SimpleHTTPRequestHandler):
 
     def _serve_rendered(self, stored: Path):
         """The page at stored rendered from what it keeps; None when its
-        render failed, so it is answered from its file."""
+        render failed and it is current, so it is answered from its file."""
         rendered = rendered_page(self.root, stored.name[:-len(".html")])
-        if rendered is None or not rendered.rendered:
+        if rendered is None:
             return None
+        if not rendered.rendered:
+            # The published file never holds the mark: one marked out of
+            # date is answered as marked, so the warning stays.
+            if '<span class="artifact-stale"' not in rendered.html:
+                return None
+            return self._answer_rendered(rendered.html.encode("utf-8"),
+                                         f'"p-{rendered.inputs}-{self.render_version}"',
+                                         _RENDERED_HEADERS)
         return self._answer_rendered(rendered.html.encode("utf-8"),
                                      f'"{rendered.inputs}-{self.render_version}"',
                                      _RENDERED_HEADERS)

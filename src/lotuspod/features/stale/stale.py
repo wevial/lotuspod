@@ -95,7 +95,11 @@ def parse_time(stamp: object) -> _dt.datetime | None:
         return None
     if moment.tzinfo is None:
         moment = moment.replace(tzinfo=_dt.timezone.utc)
-    return moment.astimezone(_dt.timezone.utc)
+    try:
+        return moment.astimezone(_dt.timezone.utc)
+    except OverflowError:
+        # An offset that carries the time past year 1 or 9999.
+        return None
 
 
 def read_states(path: Path) -> dict[str, dict]:

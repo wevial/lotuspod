@@ -50,8 +50,11 @@ def render_version() -> str:
 _STATES_PATHS: dict[Path, Path] = {}
 _STATES: dict[Path, tuple[tuple[int, int], dict[str, dict]]] = {}
 # Each page the index lists, its verdict by its published file's and the
-# states file's modification times and sizes.
-_VERDICTS: dict[tuple[Path, str], tuple[tuple[int, ...], "Verdict"]] = {}
+# states file's modification times and sizes and its updated stamp.
+_VERDICTS: dict[tuple[Path, str], tuple[tuple, "Verdict"]] = {}
+# Each served directory's manifest's updated stamp by page name, by the
+# manifest's modification time and size.
+_UPDATED: dict[Path, tuple[tuple[int, int], dict[str, str]]] = {}
 
 
 class Verdict(NamedTuple):
@@ -86,37 +89,69 @@ def _stored_states(out_dir: Path) -> tuple[tuple[int, int], dict[str, dict]]:
     return kept
 
 
+def _manifest_updated(out_dir: Path) -> dict[str, str]:
+    """The updated stamp the manifest records for each page it lists, by
+    name: the one `pages stale` compares with, which a page published before
+    publish stamped it takes from its commit."""
+    path = out_dir / MANIFEST_FILE
+    try:
+        found = path.stat()
+    except OSError:
+        return {}
+    seen = (found.st_mtime_ns, found.st_size)
+    with _RENDERS_LOCK:
+        kept = _UPDATED.get(Path(out_dir))
+    if kept is not None and kept[0] == seen:
+        return kept[1]
+    try:
+        artifacts = json.loads(path.read_bytes().decode("utf-8"))["artifacts"]
+    except (OSError, UnicodeDecodeError, ValueError, KeyError, TypeError):
+        artifacts = []
+    updated = {meta["file"].removesuffix(".html"): str(meta.get("updated") or "")
+               for meta in (artifacts if isinstance(artifacts, list) else [])
+               if isinstance(meta, dict) and isinstance(meta.get("file"), str)}
+    with _RENDERS_LOCK:
+        _UPDATED[Path(out_dir)] = (seen, updated)
+    return updated
+
+
 def page_verdict(out_dir: Path, name: str, page_html: bytes,
-                 states: dict[str, dict] | None = None) -> Verdict:
-    """NAME's verdict from its published file's bytes and the stored states
-    (read now unless given)."""
+                 states: dict[str, dict] | None = None, updated: str | None = None) -> Verdict:
+    """NAME's verdict from its published file's bytes, the stored states
+    (read now unless given) and the manifest's updated stamp for it (read
+    now unless given); current, as `pages stale` never lists it, when the
+    page is archived or the manifest lists it not."""
     if states is None:
         states = _stored_states(out_dir)[1]
-    if not states:
+    if not states or history.is_archived(out_dir, name):
         return Verdict()
+    if updated is None:
+        updated = _manifest_updated(out_dir).get(name, "")
     text = page_html.decode("utf-8", "replace")
-    merged, closed = stale.overtaken(extract_meta(text, name)["updated"], stale.page_pulls(text),
-                                     states)
+    merged, closed = stale.overtaken(updated, stale.page_pulls(text), states)
     return Verdict(tuple(merged), tuple(closed))
 
 
-def _listed_verdicts(out_dir: Path, names: list[str]) -> dict[str, Verdict]:
-    """The verdict of each of names that is not current, each page's
-    published file read again only when it or the states file changes."""
+def _listed_verdicts(out_dir: Path, listed: dict[str, str]) -> dict[str, Verdict]:
+    """The verdict of each page of listed (its updated stamp by name) that
+    is not current, each page's published file read again only when it,
+    its stamp or the states file changes."""
     seen, states = _stored_states(out_dir)
     if not states:
         return {}
     marks = {}
-    for name in names:
+    for name, updated in listed.items():
         key = (Path(out_dir), name)
         file = out_dir / f"{name}.html"
         try:
+            if history.is_archived(out_dir, name):
+                continue
             found = file.stat()
-            stamp = (found.st_mtime_ns, found.st_size, *seen)
+            stamp = (found.st_mtime_ns, found.st_size, *seen, updated)
             with _RENDERS_LOCK:
                 kept = _VERDICTS.get(key)
             if kept is None or kept[0] != stamp:
-                kept = (stamp, page_verdict(out_dir, name, file.read_bytes(), states))
+                kept = (stamp, page_verdict(out_dir, name, file.read_bytes(), states, updated))
                 with _RENDERS_LOCK:
                     _VERDICTS[key] = kept
         except OSError:
@@ -217,8 +252,10 @@ def _linked(out_dir: Path, name: str) -> bool:
                for suffix in (".html", REFS_SUFFIX, *_KEPT_SOURCE_SUFFIX.values()))
 
 
-def _published(out_dir: Path, name: str, inputs: str, why: str) -> Rendered | None:
-    """NAME's published file as its answer, the reason logged once per inputs."""
+def _published(out_dir: Path, name: str, inputs: str, why: str,
+               verdict: Verdict = Verdict()) -> Rendered | None:
+    """NAME's published file as its answer, its header marked by verdict,
+    the reason logged once per inputs."""
     try:
         published = (out_dir / f"{name}.html").read_bytes().decode("utf-8")
     except (OSError, UnicodeDecodeError):
@@ -229,7 +266,7 @@ def _published(out_dir: Path, name: str, inputs: str, why: str) -> Rendered | No
     if not logged:
         print(f"serve: {name}.html is answered from its published file: {why}",
               file=sys.stderr, flush=True)
-    return Rendered(published, {}, inputs, False)
+    return Rendered(_marked_page(published, verdict), {}, inputs, False)
 
 
 def rendered_page(out_dir: Path, name: str) -> Rendered | None:
@@ -259,7 +296,7 @@ def rendered_page(out_dir: Path, name: str) -> Rendered | None:
             page_html, frames = render_kept_or_extracted(key[0], name)
         except Exception as exc:  # noqa: BLE001 - any failed render answers the published file
             return _published(key[0], name, inputs,
-                              f"its render failed: {type(exc).__name__}: {exc}")
+                              f"its render failed: {type(exc).__name__}: {exc}", verdict)
         found = Rendered(_marked_page(page_html, verdict), frames, inputs, True)
         try:
             # Published again while it rendered: answered, never kept.
@@ -348,7 +385,8 @@ def rendered_index(out_dir: Path) -> tuple[str, str] | None:
     allowed = serve_files.serve_allow_list(out_dir)
     artifacts = [m for m in artifacts if m.get("file") in allowed and is_page_name(str(m["file"]))]
     listed = "\0".join(str(m["file"]) for m in artifacts)
-    marks = _listed_verdicts(out_dir, [str(m["file"])[:-len(".html")] for m in artifacts])
+    marks = _listed_verdicts(out_dir, {str(m["file"])[:-len(".html")]: str(m.get("updated") or "")
+                                       for m in artifacts})
     parts = [data, day.encode("ascii"), listed.encode("utf-8")]
     if marks:
         parts.append(json.dumps(marks, sort_keys=True).encode("utf-8"))
