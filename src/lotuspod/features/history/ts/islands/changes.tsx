@@ -13,7 +13,7 @@ function listed(sections: Sections, kind: keyof Sections): Section[] {
   return Array.isArray(found) ? found : [];
 }
 
-export function plural(count: number, noun: string): string {
+function plural(count: number, noun: string): string {
   return count + " " + noun + (count === 1 ? "" : "s");
 }
 

@@ -1,8 +1,8 @@
 import { signal, type Signal } from "@preact/signals";
 import type { Page } from "../../../comments/ts/index";
 
-export const VERSIONS = "/api/versions";
-export const CHANGES = "/api/changes";
+const VERSIONS = "/api/versions";
+const CHANGES = "/api/changes";
 export const HASH = "#versions";
 // How many versions the list shows at first, and how many more each "Show
 // older versions" shows.
