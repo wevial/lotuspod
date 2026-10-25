@@ -292,5 +292,18 @@ class ArtifactFetch(unittest.TestCase):
                       f"<script async>{CDNJS_BYTES.decode()}</script></body>", adapted)
         self.assertEqual(adapted.count(reads), 1)
 
+    def test_a_deferred_script_inside_a_template_stays_in_place(self):
+        answers = {JSDELIVR: JSDELIVR_BYTES, CDNJS: CDNJS_BYTES}
+        body = (f'<template id="row"><script src="{JSDELIVR}" defer></script></template>'
+                f'<script src="{CDNJS}" async></script><div id="board"></div>')
+        with mock.patch.object(artifact, "fetch", side_effect=answers.__getitem__), \
+                redirect_stderr(io.StringIO()):
+            adapted = artifact.adapt(document(body=body))
+        self.assertIn(f'<template id="row"><script defer>{JSDELIVR_BYTES.decode()}'
+                      "</script></template>", adapted)
+        self.assertIn('<div id="board"></div>'
+                      f"<script async>{CDNJS_BYTES.decode()}</script></body>", adapted)
+        self.assertEqual(adapted.count(JSDELIVR_BYTES.decode()), 1)
+
 if __name__ == "__main__":
     unittest.main()

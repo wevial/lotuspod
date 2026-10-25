@@ -81,13 +81,14 @@ def fetch(url: str) -> bytes:
 
 @dataclass(frozen=True)
 class _Element:
-    """A script or link element: its span in the document and its attributes,
-    the first value of each."""
+    """A script or link element: its span in the document, its attributes,
+    the first value of each, and whether it sits inside a template element."""
 
     tag: str
     start: int
     end: int
     attrs: dict
+    templated: bool = False
 
 
 class _Elements(HTMLParser):
@@ -99,7 +100,8 @@ class _Elements(HTMLParser):
         super().__init__(convert_charrefs=True)
         self._source = source
         self._lines = [0, *(m.end() for m in re.finditer("\n", source))]
-        self._script: tuple[int, dict] | None = None
+        self._script: tuple[int, dict, bool] | None = None
+        self._templates = 0
         self.elements: list[_Element] = []
         self.head: int | None = None
         self.html: int | None = None
@@ -128,8 +130,10 @@ class _Elements(HTMLParser):
             self.html = end
         else:
             self._started = True
+        if tag == "template":
+            self._templates += 1
         if tag == "script" and "src" in first:
-            self._script = (start, first)
+            self._script = (start, first, self._templates > 0)
         elif tag == "link":
             self.elements.append(_Element("link", start, end, first))
 
@@ -139,11 +143,13 @@ class _Elements(HTMLParser):
             self.body_end = self._offset()
         elif tag == "html":
             self.html_end = self._offset()
+        elif tag == "template" and self._templates:
+            self._templates -= 1
         if tag == "script" and self._script is not None:
-            start, attrs = self._script
+            start, attrs, templated = self._script
             end = self._source.find(">", self._offset())
             end = len(self._source) if end < 0 else end + 1
-            self.elements.append(_Element("script", start, end, attrs))
+            self.elements.append(_Element("script", start, end, attrs, templated))
             self._script = None
 
     def handle_data(self, data: str) -> None:
@@ -239,8 +245,10 @@ def adapt(source: str) -> str:
         if element.tag == "script":
             replacement = _inlined(element)
             # An inline script runs where the parser meets it: one whose
-            # source ran after parsing goes where parsing ends.
-            if "defer" in element.attrs or "async" in element.attrs:
+            # source ran after parsing goes where parsing ends. One inside a
+            # template is inert until cloned, so it stays where it is.
+            if not element.templated and ("defer" in element.attrs
+                                          or "async" in element.attrs):
                 deferred.append(replacement)
                 replacement = ""
         else:
