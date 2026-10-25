@@ -136,11 +136,6 @@ def rendered_page(out_dir: Path, name: str) -> Rendered | None:
         return found
 
 
-def theme_head() -> str:
-    """The theme head script's text, as a render writes it inline."""
-    return (THEME_ROOT / "core" / "ts" / "theme-head.js").read_text(encoding="utf-8")
-
-
 # One render per page per commit for the life of the serve process (whose
 # render version is fixed), the oldest dropped past _VERSIONS_KEPT; a
 # version that cannot be rendered is kept as None, so it is said once.

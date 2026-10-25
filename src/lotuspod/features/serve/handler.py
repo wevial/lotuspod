@@ -19,8 +19,8 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from lotuspod.features import agents
-from lotuspod.core import (INDEX_FILE, OLD_VERSION_SCRIPT, WIDGET_NAME, is_page_name, script_hash,
-                           theme_hash)
+from lotuspod.core import (INDEX_FILE, OLD_VERSION_SCRIPT, THEME_ROOT, WIDGET_NAME, is_page_name,
+                           script_hash, theme_hash)
 from lotuspod.features.history import (History, archived_page, old_page, read_record, set_archived,
                                         successor_title)
 from lotuspod.features import live
@@ -28,8 +28,7 @@ from lotuspod.features import publish
 from lotuspod.features.publish import version_stamp
 from lotuspod.features.serve import access, api, serve_files
 from lotuspod.features.serve.pages import (api_catalog, api_page, render_version, rendered_index,
-                                           rendered_page, rendered_version, served_page_names,
-                                           theme_head)
+                                           rendered_page, rendered_version, served_page_names)
 from lotuspod.features.serve.serve_files import _SERVE_NEVER_FILES
 from lotuspod.features import widgets
 from lotuspod.store import db
@@ -318,7 +317,7 @@ class _AllowListHandler(SimpleHTTPRequestHandler):
         if rendered is not None:
             # The theme head is the one script of the page's own that runs,
             # allowed by its hash, so the reader's theme and switch hold.
-            head = theme_head()
+            head = (THEME_ROOT / "core/ts/theme-head.js").read_text(encoding="utf-8")
             data = old_page(rendered, stem, version, behind, nonce, script,
                             frozenset((head,))).encode("utf-8")
             return self._answer_rendered(data, f'"v-{commit}-{self.render_version}"', tuple(
