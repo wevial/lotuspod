@@ -244,7 +244,7 @@ def reopened(out_dir: Path, args: argparse.Namespace, name: str, previous: str,
     if not previous:
         return []
     try:
-        path = serve.serve_db_path(out_dir, getattr(args, "db", ""))
+        path = serve.serve_db_path(out_dir, args.db)
         if not path.is_file():
             return []
         questions = db.Database(path).answers(name, asked=True)
