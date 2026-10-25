@@ -9,7 +9,7 @@ import argparse
 
 from lotuspod.features import agents
 from lotuspod.core import EXIT_REVISION_CONFLICT, NO_REVISION
-from lotuspod.features.publish.kept import cmd_pages_migrate
+from lotuspod.features.publish.kept import cmd_pages_diff, cmd_pages_migrate
 from lotuspod.features.publish.manifest import cmd_manifest
 from lotuspod.features.publish.publish import (LABEL_MAX, PUBLISH_FORMATS, PUBLISH_VARIANT,
                                                cmd_publish)
@@ -177,7 +177,7 @@ def add_publish_parser(sub: argparse._SubParsersAction) -> None:
 
 
 def add_pages_parser(sub: argparse._SubParsersAction) -> None:
-    """Register `lotuspod pages migrate`."""
+    """Register `lotuspod pages migrate` and `lotuspod pages diff`."""
     pages = sub.add_parser("pages", help="work on every page of the output directory at once")
     actions = pages.add_subparsers(dest="action", required=True)
     migrate = actions.add_parser(
@@ -189,6 +189,14 @@ def add_pages_parser(sub: argparse._SubParsersAction) -> None:
                          help="print what migrate would keep and refuse; write nothing")
     migrate.add_argument("--out-dir", default="", help="output directory (default: artifacts/)")
     migrate.set_defaults(func=cmd_pages_migrate)
+    diff = actions.add_parser(
+        "diff",
+        help="list each page whose body a render from its kept source now gives "
+        "differently from its published file, and what changed; write nothing",
+    )
+    diff.add_argument("--json", action="store_true", help="print the report as one JSON object")
+    diff.add_argument("--out-dir", default="", help="output directory (default: artifacts/)")
+    diff.set_defaults(func=cmd_pages_diff)
 
 
 # This slice's subcommands by slot, the order `lotuspod --help` lists them in.
