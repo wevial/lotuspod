@@ -271,7 +271,9 @@ class ArtifactFetch(unittest.TestCase):
         for text in ("<!--\nglobalThis.answer = 42;\n//-->",
                      "globalThis.raw = String.raw`<!--`; var c = /<!--/u;",
                      'var a = "<!-- <script> -->"; var b = "<script>";',
-                     'var a = "<!--><script>";', 'var a = "<script>"; var b = "<!--";'):
+                     'var a = "<!--><script>";', 'var a = "<script>"; var b = "<!--";',
+                     'window.answer = "<!-- <script> <!-->";',
+                     'window.answer = "<!-- <!--> <script>";'):
             with self.subTest(text=text):
                 inlined = re.search(r"<p>Board</p><script>(.*?)</script><p>After</p>",
                                     self.adapted(text), re.DOTALL).group(1)

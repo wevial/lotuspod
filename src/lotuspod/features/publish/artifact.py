@@ -195,9 +195,10 @@ def _holds_open(text: str) -> bool:
         word = token.group(0).lower()
         at = token.end()
         if word == "<!--":
+            # In every state its dashes may begin "-->".
+            at = token.start() + 2
             if state == "data":
                 state = "escaped"
-                at = token.start() + 2  # its dashes may begin "-->"
         elif word == "-->":
             if state != "data":
                 state = "data"
