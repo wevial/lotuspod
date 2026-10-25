@@ -38,10 +38,11 @@ default. A checklist table with no body rows, an empty Item cell, another
 Default or any other column is left exactly as written.
 
 `holds()` says whether a question's stored answer still shows as its answer
-on the page, a version apart or not. `read_forms()` reads the forms back from a finished page, which is how the
-answers route knows what a page asks, `lotuspod answers` its labels and the
-agents' pull its context lines. Each form's section is that of the first
-comment box after it, which ends the form's own section: the comments route files a thread on the decision there.
+on the page, a version apart or not. `read_forms()` reads the forms back
+from a finished page, which is how the answers route knows what a page asks,
+`lotuspod answers` its labels and the agents' pull its context lines. Each
+form's section is that of the first comment box after it, which ends the
+form's own section: the comments route files a thread on the decision there.
 """
 
 from __future__ import annotations
