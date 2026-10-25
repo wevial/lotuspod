@@ -279,5 +279,18 @@ class ArtifactFetch(unittest.TestCase):
                                     self.adapted(text), re.DOTALL).group(1)
                 self.assertEqual(inlined, text)
 
+    def test_a_deferred_or_async_script_is_inlined_where_parsing_ends(self):
+        reads = "window.board = document.querySelector('#board').id;"
+        answers = {JSDELIVR: reads.encode(), CDNJS: CDNJS_BYTES}
+        head = (f'<script src="{JSDELIVR}" defer></script>'
+                f'<script src="{CDNJS}" async></script>')
+        with mock.patch.object(artifact, "fetch", side_effect=answers.__getitem__), \
+                redirect_stderr(io.StringIO()):
+            adapted = artifact.adapt(document(head=head, body='<div id="board"></div>'))
+        self.assertIn('<div id="board"></div>'
+                      f"<script defer>{reads}</script>"
+                      f"<script async>{CDNJS_BYTES.decode()}</script></body>", adapted)
+        self.assertEqual(adapted.count(reads), 1)
+
 if __name__ == "__main__":
     unittest.main()

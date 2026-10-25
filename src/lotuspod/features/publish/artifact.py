@@ -91,8 +91,9 @@ class _Element:
 
 
 class _Elements(HTMLParser):
-    """The document's script elements with a src, its link elements, and
-    where its head's start tag ends (None when it has none before content)."""
+    """The document's script elements with a src, its link elements, where
+    its head's start tag ends (None when it has none before content), and
+    where its last body or html end tag starts (None when it has neither)."""
 
     def __init__(self, source: str) -> None:
         super().__init__(convert_charrefs=True)
@@ -102,6 +103,8 @@ class _Elements(HTMLParser):
         self.elements: list[_Element] = []
         self.head: int | None = None
         self.html: int | None = None
+        self.body_end: int | None = None
+        self.html_end: int | None = None
         self._started = False
         self.feed(source)
         self.close()
@@ -132,6 +135,10 @@ class _Elements(HTMLParser):
 
     def handle_endtag(self, tag: str) -> None:
         self._started = True
+        if tag == "body":
+            self.body_end = self._offset()
+        elif tag == "html":
+            self.html_end = self._offset()
         if tag == "script" and self._script is not None:
             start, attrs = self._script
             end = self._source.find(">", self._offset())
@@ -226,11 +233,16 @@ def adapt(source: str) -> str:
     each stylesheet) and the theme script first in its head; RuntimeError
     naming the first script or stylesheet it cannot keep."""
     found = _Elements(source)
-    pieces: list[str] = []
-    cursor = 0
+    edits: list[tuple[int, int, str]] = []
+    deferred: list[str] = []
     for element in found.elements:
         if element.tag == "script":
             replacement = _inlined(element)
+            # An inline script runs where the parser meets it: one whose
+            # source ran after parsing goes where parsing ends.
+            if "defer" in element.attrs or "async" in element.attrs:
+                deferred.append(replacement)
+                replacement = ""
         else:
             href = element.attrs.get("href", "")
             rels = element.attrs.get("rel", "").lower().split()
@@ -245,8 +257,17 @@ def adapt(source: str) -> str:
                                    "from the network; put its CSS inline; nothing written")
             else:
                 continue
-        pieces += [source[cursor:element.start], replacement]
-        cursor = element.end
+        edits.append((element.start, element.end, replacement))
+    if deferred:
+        end = next((at for at in (found.body_end, found.html_end) if at is not None),
+                   len(source.rstrip(" \t\r\n\f")))
+        edits.append((end, end, "".join(deferred)))
+        edits.sort(key=lambda edit: edit[0])
+    pieces: list[str] = []
+    cursor = 0
+    for start, end, replacement in edits:
+        pieces += [source[cursor:start], replacement]
+        cursor = end
     pieces.append(source[cursor:])
     document = "".join(pieces)
     theme = f"<script>{THEME_SCRIPT}</script>"
