@@ -172,9 +172,16 @@ class VersionShellTests(unittest.TestCase):
 
     def test_a_version_whose_body_fails_the_check_is_answered_as_published(self):
         site = VersionSite(self)
-        # Its body holds section wrappers and comment boxes, which publish
-        # writes only from a source.
-        shutil.copyfile(FIXTURES / "old-shell.html", site.out / "old-shell.html")
+        # Its body holds section wrappers, comment boxes and a decision form,
+        # which publish writes only from a source.
+        decided = (FIXTURES.parent / "decisions" / "one_table.expected.html").read_text(
+            encoding="utf-8")
+        form = re.search(r'<form class="artifact-decision".*?</form>', decided, re.S).group(0)
+        shell = (FIXTURES / "old-shell.html").read_text(encoding="utf-8")
+        intro = "<p>Written before the theme switch.</p>\n"
+        self.assertEqual(shell.count(intro), 1)
+        (site.out / "old-shell.html").write_text(shell.replace(intro, intro + form + "\n"),
+                                                 encoding="utf-8")
         refused = site.commit("old-shell.html")
         page = site.out / "old-shell.html"
         page.write_text(page.read_text(encoding="utf-8").replace(
@@ -192,6 +199,13 @@ class VersionShellTests(unittest.TestCase):
                             f"{OLD_VERSION_SCRIPT}?v={theme_hash()}").encode("utf-8")
         self.assertEqual(answer, expected)
         self.assertIn(BANNER, answer)
+        # Its form is closed: the fieldset disabled, and the note after it.
+        self.assertIn(b'<form class="artifact-decision"', answer)
+        self.assertEqual(answer.count(b"<fieldset disabled>"), 1)
+        self.assertNotIn(b"<fieldset>\n<legend", answer)
+        self.assertIn(b'<p class="artifact-version-note">Answering is off on old versions.',
+                      answer)
+        self.assertIn(b"lotuspod-old-version.js", answer)
         self.assertNotIn(b'class="artifact-theme-switch"', answer)
         self.assertIsNone(headers["ETag"])
         self.assertEqual(headers["Content-Security-Policy"],
