@@ -63,8 +63,8 @@ note to the same question is a reply in the newest thread one opened.
 
 A thread may be anchored to a live block on its page: its first comment
 keeps `widget`, {id, hash, state}, the block's id, its widget file's hash
-and the state label the reader's widget showed. Every comment row carries
-`widget`, null on every other comment.
+and the state label the reader's widget showed; or `spot`, {id, hash, shape,
+nodes}, on a diagram or an image. Every row carries both, null on any other.
 
 Each reader's last visit to each page is kept too: one row per reader, by
 the address Access verified, and page, holding the revision they last
@@ -99,7 +99,7 @@ from typing import Callable, Iterator, Mapping, Sequence
 from lotuspod.core import URL_PREFIX
 
 DEFAULT_NAME = "lotuspod.sqlite3"
-SCHEMA_VERSION = 17
+SCHEMA_VERSION = 18
 # Seconds a connection waits for another writer before giving up.
 BUSY_TIMEOUT = 30
 # The state of a reader's comment until an agent takes it up.
@@ -287,6 +287,9 @@ _SCHEMA = {1: (
     # The live block a thread is anchored to, on its first comment only, as
     # JSON {id, hash, state}; NULL on every other comment.
     "ALTER TABLE comments ADD COLUMN widget TEXT",
+), 18: (
+    # The spot a thread is anchored to, on its first comment only, as JSON.
+    "ALTER TABLE comments ADD COLUMN spot TEXT",
 )}
 # The settings row that holds whether the responder is paused.
 _PAUSED = "responder_paused"
@@ -400,6 +403,7 @@ def _comment(row: sqlite3.Row) -> dict:
         "text": row["text"],
         "quote": None if row["quote"] is None else json.loads(row["quote"]),
         "widget": None if row["widget"] is None else json.loads(row["widget"]),
+        "spot": None if row["spot"] is None else json.loads(row["spot"]),
         "images": _images(row["images"]),
         "actor": _actor(row["actor"]),
         "createdAt": row["created_at"],
@@ -667,24 +671,23 @@ class Database:
         stored before they were kept)."""
         with self._connect() as conn:
             rows = conn.execute(
-                "SELECT * FROM answers WHERE page = ? ORDER BY id DESC", (page,)
-            ).fetchall()
+                "SELECT * FROM answers WHERE page = ? ORDER BY id DESC", (page,)).fetchall()
         return _entries(rows, asked)
 
     def add_comment(self, *, page: str, section: str, section_title: str, revision: str,
                     text: str, quote: Mapping | None, actor: Mapping, owner: str = "",
                     images: Sequence[Mapping] = (), question: str | None = None,
-                    widget: Mapping | None = None) -> dict:
+                    widget: Mapping | None = None, spot: Mapping | None = None) -> dict:
         """Store a comment opening a new thread on section of a page owned
         by owner ("" when it has none), with its images, each {name, width,
         height}; with question, the thread is on that decision, in section;
-        with widget, {id, hash, state}, it is on that live block."""
+        with widget, {id, hash, state}, on that live block; with spot, on it."""
         with self._connect() as conn, _write(conn):
             return _insert_comment(
                 conn, page=page, section=section, section_title=section_title,
                 revision=revision, parent=None, text=text,
                 quote=None if quote is None else _dump(quote), actor=actor, owner=owner,
-                images=images, question=question, widget=widget,
+                images=images, question=question, widget=widget, spot=spot,
             )
 
     def add_reply(self, *, page: str, parent: int, revision: str,
@@ -722,14 +725,12 @@ class Database:
         throughout."""
         with self._connect() as conn:
             rows = conn.execute(
-                "SELECT * FROM comments WHERE page = ? ORDER BY id", (page,)
-            ).fetchall()
+                "SELECT * FROM comments WHERE page = ? ORDER BY id", (page,)).fetchall()
             # Oldest first, so each thread's newest row is the one left.
             changes = conn.execute(
                 "SELECT resolutions.* FROM resolutions JOIN comments"
                 " ON comments.id = resolutions.thread WHERE comments.page = ?"
-                " ORDER BY resolutions.id", (page,)
-            ).fetchall()
+                " ORDER BY resolutions.id", (page,)).fetchall()
         newest = {row["thread"]: row for row in changes}
         threads: dict[int, dict] = {}
         for row in rows:
@@ -768,8 +769,7 @@ class Database:
         first."""
         with self._connect() as conn:
             rows = conn.execute(
-                "SELECT * FROM resolutions WHERE thread = ? ORDER BY id", (root,)
-            ).fetchall()
+                "SELECT * FROM resolutions WHERE thread = ? ORDER BY id", (root,)).fetchall()
         return [_resolution(row) for row in rows]
 
     def open_comments(self) -> list[dict]:
@@ -993,8 +993,7 @@ class Database:
                 rows = conn.execute("SELECT * FROM audit ORDER BY id").fetchall()
             else:
                 rows = conn.execute(
-                    "SELECT * FROM audit WHERE page = ? ORDER BY id", (page,)
-                ).fetchall()
+                    "SELECT * FROM audit WHERE page = ? ORDER BY id", (page,)).fetchall()
         return [_audit(row) for row in rows]
 
     def thread(self, root: int) -> dict:
@@ -1544,7 +1543,8 @@ def _insert_comment(conn: sqlite3.Connection, *, page: str, section: str,
                     section_title: str, revision: str, parent: int | None, text: str,
                     quote: str | None, actor: Mapping, owner: str,
                     images: Sequence[Mapping] = (), question: str | None = None,
-                    answer: Mapping | None = None, widget: Mapping | None = None) -> dict:
+                    answer: Mapping | None = None, widget: Mapping | None = None,
+                    spot: Mapping | None = None) -> dict:
     # The owner's last pull as the comment arrives, read under the write lock.
     pulled = None
     if owner:
@@ -1553,10 +1553,10 @@ def _insert_comment(conn: sqlite3.Connection, *, page: str, section: str,
     cursor = conn.execute(
         "INSERT INTO comments (page, section, section_title, revision, parent, text,"
         " quote, actor, created_at, state, arrival_owner, arrival_pull, images, question,"
-        " answer, widget) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        " answer, widget, spot) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (page, section, section_title, revision, parent, text, quote,
          _dump(actor), _now(), PENDING, owner, pulled, _stored_images(images), question,
-         None if answer is None else _dump(answer), None if widget is None else _dump(widget)),
+         *(None if value is None else _dump(value) for value in (answer, widget, spot))),
     )
     row = conn.execute("SELECT * FROM comments WHERE id = ?", (cursor.lastrowid,))
     return _comment(row.fetchone())

@@ -107,6 +107,37 @@ twice.
   of their stored names in the order they are shown; a comment with images may
   have empty `text`. Every comment row carries `images`, each `{name, url,
   width, height}`, and `[]` when it has none.
+- A new thread on a section, or on the whole page, may carry `spot` in place
+  of `quote` or `widget`: a mark on one of the page's Mermaid diagrams or
+  `/media/` images, `{id, hash, shape, nodes}`. Render gives each diagram and
+  each image an id and a hash (`data-spot` and `data-spot-hash`): a diagram's
+  id is the one its `mermaid id=NAME` fence names (see
+  [Publishing](publishing.md)), else `SECTION-diagram-N`, N counted from 1 in
+  its section (`diagram-N` before the first heading); an image's is the slug of
+  its alt text, else `SECTION-figure-N`; an id another target already has takes
+  `-2`, `-3` in page order. A diagram's hash is the first 12 hex digits of the
+  SHA-256 of its source, an image's the first 12 of its stored name. `shape` is
+  `{kind: "box", x, y, w, h}` or `{kind: "stroke", points: [[x, y], ...]}` (2 to
+  256 points), and `nodes` up to 12 `{id, label}`, the flowchart boxes the mark
+  covers. Coordinates are fractions of the box the covered nodes span when
+  `nodes` is not empty, fractions of the whole diagram when a diagram's mark
+  covers none, and an image's natural pixels; a mark on nodes is checked only
+  for finite numbers, as the server cannot lay out Mermaid. After the checks
+  above, a spot is refused, with nothing stored, in this order: 400
+  `invalid_body` for any other key, a `hash` not 12 lowercase hex digits, a
+  shape of another kind or keys, a coordinate that is not a finite number (a
+  boolean is not one), a box whose `w` or `h` is not above 0, a stroke of fewer
+  than 2 or more than 256 points, a mark on no nodes outside its drawing (beyond
+  0 to 1, or 0 to the image's width and height), more than 12 nodes, a node id
+  that is not letters, digits, `-` and `_`, or one listed twice, a label over
+  100 characters or holding a control character, nodes on an image, and a spot
+  beside a `quote` or a `widget`, on a reply or on a thread on a decision; 400
+  `unknown_spot` for an id no target has, or a target in another section than
+  the thread's; and 409 `stale_spot` for a hash the target has had in none of
+  the page's visible publishes (kept beside the page in `NAME.targets.json`,
+  which serve never answers) nor its versions in the site's git history. A hash
+  it had earlier is stored as sent. Every comment row carries `spot`: the
+  anchor as stored on a thread's first comment, `null` on every other.
 - `GET /api/comments?page=NAME` answers `{page, revision, threads, unread,
   maxImageBytes}`: the page's current revision, each thread as `{root,
   replies, resolution}`, threads and replies oldest first, the ids of this

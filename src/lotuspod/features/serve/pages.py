@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Callable, NamedTuple
 
 from lotuspod.features import agents
+from lotuspod.features import blocks
 from lotuspod.core import (_KEPT_SOURCE_SUFFIX, MANIFEST_FILE, THEME_ROOT, extract_meta, extract_visibility,
                            is_page_name, page_revision, source_revision)
 from lotuspod.features import comments
@@ -20,9 +21,9 @@ from lotuspod.features import decisions
 from lotuspod.features import history
 from lotuspod.features import index
 from lotuspod.features.publish import (REFS_SUFFIX, _H2Collector, kept_block_hashes, kept_source,
-                                       page_owner, refs_from, render_from,
+                                       kept_target_hashes, page_owner, refs_from, render_from,
                                        render_kept_or_extracted)
-from lotuspod.features.serve import api, serve_files
+from lotuspod.features.serve import api, serve_files, spots
 from lotuspod.features import widgets
 
 
@@ -291,8 +292,17 @@ def api_page(out_dir: Path, name: str,
                           earlier=frozenset(earlier.get(ident, ())))
         for ident, (hash_, title, section) in widgets.PageWidgets(page_html).found.items()
     }
+    # A diagram or an image is in its section as a block is.
+    earlier = kept_target_hashes(out_dir, name)
+    targets = {
+        ident: spots.Target(kind=found.kind, hash=found.hash, title=found.title,
+                            section=outside if only_page else found.section or outside,
+                            earlier=frozenset(earlier.get(ident, ())), source=found.source,
+                            url=found.src, width=found.width, height=found.height)
+        for ident, found in blocks.PageTargets(page_html).found.items()
+    }
     return api.Page(name=name, revision=revision, sections=sections, questions=questions,
-                    comment_sections=boxes, widgets=page_widgets,
+                    comment_sections=boxes, widgets=page_widgets, targets=targets,
                     owner=owner if agents.is_handle(owner) else "",
                     title=extract_meta(page_html, name)["title"],
                     archived=record.get("archivedAt", ""),

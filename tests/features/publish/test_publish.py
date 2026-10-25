@@ -487,10 +487,10 @@ class ImageTests(ImageTestCase):
                                          (fish, "Fish", 320, 240)):
             url = f"/media/{name}"
             self.assertIn(
-                f'<figure class="artifact-figure"><a href="{url}"><img src="{url}" '
+                f'<figure class="artifact-figure"><a href="{url}"><img data-spot='
+                f'"{alt.lower().replace(" ", "-")}" data-spot-hash="{name[:12]}" src="{url}" '
                 f'alt="{alt}" loading="lazy" width="{width}" height="{height}"></a></figure>',
-                page,
-            )
+                page)
         self.assertNotIn("chart.png", page)
         self.assertNotIn("photos/fish.jpg", page)
 

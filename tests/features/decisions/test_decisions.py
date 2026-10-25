@@ -19,6 +19,7 @@ import http.client
 import io
 import json
 import os
+import re
 import sys
 import tempfile
 import threading
@@ -663,7 +664,8 @@ class LeftAsWrittenTests(DecisionsTestCase):
         # Not listed: a listed page loads the page script to open in the
         # index's tabs.
         page_html = self.render_body("plan", body, "--hidden")
-        self.assertIn(body.split("\n", 1)[1].strip(), page_html)
+        unmarked = re.sub(r' data-spot(?:-hash)?="[^"]*"', "", page_html)
+        self.assertIn(body.split("\n", 1)[1].strip(), unmarked)
         self.assertNotIn("artifact-decision", page_html)
 
 

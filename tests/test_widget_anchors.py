@@ -489,7 +489,7 @@ class SchemaTests(unittest.TestCase):
         self.path = Path(tmp.name) / db.DEFAULT_NAME
 
     def main_database(self) -> None:
-        """A database at main's schema, one below this one's, with comments."""
+        """A database at the schema before widget anchors, with comments."""
         database = db.Database(self.path)
         root = database.add_comment(page="plan", section="risks", section_title="Risks",
                                     revision="r1", text="First.", quote=None,
@@ -498,8 +498,9 @@ class SchemaTests(unittest.TestCase):
                            sections={"risks": "Risks"}, text="Second.",
                            actor={"kind": "human", "email": "a@example.com"})
         with sqlite3.connect(self.path) as conn:
+            conn.execute("ALTER TABLE comments DROP COLUMN spot")
             conn.execute("ALTER TABLE comments DROP COLUMN widget")
-            conn.execute(f"PRAGMA user_version = {db.SCHEMA_VERSION - 1}")
+            conn.execute("PRAGMA user_version = 16")
 
     def test_main_s_database_migrates_and_its_comments_answer_widget_null(self):
         self.main_database()

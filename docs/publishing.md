@@ -99,7 +99,12 @@ palette, built from `tokens.json` (surface fills, lavender lines and borders,
 pale lavender labels in the mono font on the night background). The text inside
 the block is left exactly as written, since Mermaid reads it verbatim; before
 the script runs, or without scripting, it reads as a code block. A body with no
-diagram block ships no script and no CDN reference at all.
+diagram block ships no script and no CDN reference at all. Render gives each
+diagram, and each `/media/` image in a figure, the id and hash a comment on a
+spot of it keeps (`data-spot` and `data-spot-hash` on its start tag, nothing
+else changed; see [Comments](comments.md#answers-and-comments)), and a visible
+publish keeps each one's hashes in `NAME.targets.json` beside the page, which
+serve never answers.
 
 The same script registers Mermaid's ELK layout (`@mermaid-js/layout-elk`
 0.2.3), which it loads only when a diagram asks for it, so a diagram without
@@ -214,7 +219,11 @@ The converter (`lotuspod.features.publish.markdown.to_body`) takes a small subse
 - `` `code spans` `` and `**bold**`.
 - Fenced code: a `mermaid` fence becomes a `<pre class="mermaid">` diagram
   block, a `calltree` fence a static call tree, and any other fence a
-  `<pre><code>` block.
+  `<pre><code>` block. A `mermaid id=NAME` fence names its diagram: its `pre`
+  carries `data-spot="NAME"`, the id a comment on a spot of it keeps across
+  republishes. NAME is letters, digits, `-` and `_`, and no other fence of the
+  page may name it; else publish refuses the page, naming the fence's line,
+  and writes nothing.
 - Images: a line that is only `![ALT](SRC)`, at the top level or in a
   blockquote, becomes a figure - a lazy `img` with the image's width and
   height, inside a link to the full image - and stops a paragraph. The
