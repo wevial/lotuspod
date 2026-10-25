@@ -8,6 +8,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import html
+import http.client
 import re
 import sys
 import urllib.request
@@ -22,11 +23,16 @@ from lotuspod.core import normalized
 CDN_PREFIXES = ("https://cdnjs.cloudflare.com/", "https://cdn.jsdelivr.net/npm/")
 FONT_HOSTS = ("fonts.googleapis.com", "fonts.gstatic.com")
 FETCH_TIMEOUT = 30
-# What a whole document in a live block may hold, as widgets.render counts it.
+# What a whole document in a live block may hold, as widgets.render counts it;
+# the file read may hold more, since what counts is the adapted document.
 DOCUMENT_MAX = 2 * 1024 * 1024
+READ_MAX = 16 * 1024 * 1024
 # An inlined script keeps every attribute but these.
 _DROPPED = ("src", "integrity", "crossorigin", "referrerpolicy")
 _SCRIPT_CLOSE = re.compile(r"</(script)", re.IGNORECASE)
+# "<!--" in script text lets a later "<script" keep the element open past its
+# end tag; written \x3C it reads the same in a string, a template or a regex.
+_COMMENT_OPEN = "<!--"
 _DIGESTS = {"sha256": hashlib.sha256, "sha384": hashlib.sha384, "sha512": hashlib.sha512}
 
 # Put first in the head: the bridge before it keeps window.lotuspod.theme and
@@ -44,13 +50,33 @@ THEME_SCRIPT = (
 )
 
 
+class _CdnRedirects(urllib.request.HTTPRedirectHandler):
+    """Follow a redirect only to another URL a script may be fetched from."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        if not newurl.startswith(CDN_PREFIXES):
+            raise ValueError(f"redirected to {newurl}")
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
 def fetch(url: str) -> bytes:
-    """The bytes at an https URL; OSError or ValueError when they cannot be
-    had. Every fetch goes through here."""
-    if not url.startswith("https://"):
-        raise ValueError("not an https URL")
-    with urllib.request.urlopen(url, timeout=FETCH_TIMEOUT) as response:
-        return response.read(DOCUMENT_MAX + 1)
+    """The bytes at an https URL on one of the CDNs, whole; OSError or
+    ValueError when they cannot be had. Every fetch goes through here."""
+    if not url.startswith(CDN_PREFIXES):
+        raise ValueError("not an https URL on " + " or ".join(CDN_PREFIXES))
+    opener = urllib.request.build_opener(_CdnRedirects)
+    try:
+        with opener.open(url, timeout=FETCH_TIMEOUT) as response:
+            data = response.read(DOCUMENT_MAX + 1)
+            if len(data) > DOCUMENT_MAX:
+                raise ValueError("over 2 MB")
+            # A read with a size returns what came before the connection
+            # closed; the length still owed says it was cut short.
+            if response.length:
+                raise ValueError(f"cut short, {response.length} bytes missing")
+            return data
+    except http.client.HTTPException as exc:
+        raise ValueError(f"cut short or malformed ({exc!r})") from None
 
 
 @dataclass(frozen=True)
@@ -154,11 +180,18 @@ def _inlined(element: _Element) -> str:
         raise refused("contains a line starting with three backticks")
     kept = "".join(f' {key}="{html.escape(value)}"' if value else f" {key}"
                    for key, value in element.attrs.items() if key not in _DROPPED)
-    return f"<script{kept}>" + _SCRIPT_CLOSE.sub(r"<\\/\1", text) + "</script>"
+    text = _SCRIPT_CLOSE.sub(r"<\\/\1", text).replace(_COMMENT_OPEN, "\\x3C!--")
+    return f"<script{kept}>{text}</script>"
+
+
+def _url(href: str) -> str:
+    """href as a browser parses it: trimmed, tabs and newlines taken out, a
+    backslash read as a slash."""
+    return re.sub(r"[\t\n\r]", "", href.strip("\x00- ")).replace("\\", "/")
 
 
 def _remote(href: str) -> bool:
-    return bool(re.match(r"(?:https?:)?//", href.strip(), re.IGNORECASE))
+    return bool(re.match(r"(?:https?:|//)", _url(href), re.IGNORECASE))
 
 
 def adapt(source: str) -> str:
@@ -175,7 +208,7 @@ def adapt(source: str) -> str:
         else:
             href = element.attrs.get("href", "")
             rels = element.attrs.get("rel", "").lower().split()
-            if _remote(href) and (urlsplit(href.strip()).hostname or "") in FONT_HOSTS:
+            if _remote(href) and (urlsplit(_url(href)).hostname or "") in FONT_HOSTS:
                 if "stylesheet" in rels:
                     print(f"warning: artifact stylesheet {href} dropped: its fonts are not "
                           "loaded in a frame, the document's fallback fonts apply",

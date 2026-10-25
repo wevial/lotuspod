@@ -9,12 +9,19 @@ from __future__ import annotations
 import base64
 import hashlib
 import html
+import http.client
+import io
 import json
 import re
 import subprocess
 import sys
 import unittest
+import urllib.request
+from contextlib import redirect_stderr
 from pathlib import Path
+from unittest import mock
+
+from lotuspod.features.publish import artifact
 
 from tests.features.publish import test_publish_remote_witness as witness
 from tests.features.publish.test_publish_remote_witness import TIMEOUT, git
@@ -179,6 +186,77 @@ class ArtifactPublish(unittest.TestCase):
         self.assertIn(f"<script>{JSDELIVR_BYTES.decode()}</script>", kept)
         self.assertNotIn(JSDELIVR, kept)
         self.assertEqual(self.fetched(), [JSDELIVR])
+
+    def test_a_document_counts_against_the_limit_once_adapted(self):
+        fonts = '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>'
+        padding = "x" * (artifact.DOCUMENT_MAX - 64 * len(fonts))
+        source = self.source(document(head=fonts * 128, body=padding))
+        self.assertGreater(source.stat().st_size, artifact.DOCUMENT_MAX)
+        done = self.publish_local(source)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertNotIn("fonts.gstatic.com", self.widget())
+
+    def test_stylesheets_a_browser_reads_as_remote_are_refused(self):
+        for href in ("http:/example.com/board.css", " ht\ntps://example.com/board.css",
+                     "\\\\example.com/board.css"):
+            with self.subTest(href=href):
+                done = self.publish_local(self.source(document(
+                    head=f'<link rel="stylesheet" href="{html.escape(href)}">')))
+                self.assertNotEqual(done.returncode, 0)
+                self.assertIn("artifact stylesheet", done.stderr)
+                self.assertEqual(list(self.out.glob("board*")), [])
+
+
+class _Socket:
+    def __init__(self, data: bytes) -> None:
+        self.stream = io.BytesIO(data)
+
+    def makefile(self, mode):
+        return self.stream
+
+
+def answered(raw: bytes):
+    """An opener whose every response is the raw HTTP bytes given."""
+    response = http.client.HTTPResponse(_Socket(raw))
+    response.begin()
+    return mock.Mock(open=mock.Mock(return_value=response))
+
+
+class ArtifactFetch(unittest.TestCase):
+    def test_a_redirect_is_followed_only_to_the_cdns(self):
+        handler = artifact._CdnRedirects()
+        request = urllib.request.Request(JSDELIVR)
+        for target in ("https://unpkg.com/valve@2.1.0/dist/valve.js",
+                       "http://cdn.jsdelivr.net/npm/valve@2.1.0/dist/valve.js",
+                       "http://127.0.0.1/valve.js"):
+            with self.subTest(target=target), self.assertRaisesRegex(ValueError, target):
+                handler.redirect_request(request, None, 302, "Found", {}, target)
+        moved = "https://cdn.jsdelivr.net/npm/valve@2.1.1/dist/valve.js"
+        self.assertEqual(handler.redirect_request(request, None, 302, "Found", {}, moved)
+                         .full_url, moved)
+
+    def test_a_response_cut_short_is_refused(self):
+        body = b"window.partial = true; // cut off"
+        whole = b"HTTP/1.1 200 OK\r\nContent-Length: %d\r\n\r\n" % len(body) + body
+        with mock.patch("urllib.request.build_opener", return_value=answered(whole)):
+            self.assertEqual(artifact.fetch(JSDELIVR), body)
+        short = b"HTTP/1.1 200 OK\r\nContent-Length: 1000\r\n\r\n" + body
+        with mock.patch("urllib.request.build_opener", return_value=answered(short)), \
+                self.assertRaisesRegex(ValueError, "cut short"):
+            artifact.fetch(JSDELIVR)
+        chunked = b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n100\r\n" + body
+        with mock.patch("urllib.request.build_opener", return_value=answered(chunked)), \
+                self.assertRaisesRegex(ValueError, "cut short"):
+            artifact.fetch(JSDELIVR)
+
+    def test_a_comment_opener_in_a_script_cannot_hold_the_element_open(self):
+        text = 'var a = "<!--"; var b = "<script>"; var c = /<!--/u;'
+        with mock.patch.object(artifact, "fetch", return_value=text.encode()), \
+                redirect_stderr(io.StringIO()):
+            adapted = artifact.adapt(document(body=f'<script src="{JSDELIVR}"></script><p>After</p>'))
+        inlined = re.search(r"<script>(var a.*?)</script><p>After</p>", adapted).group(1)
+        self.assertNotIn("<!--", inlined)
+        self.assertEqual(inlined, text.replace("<!--", "\\x3C!--"))
 
 
 if __name__ == "__main__":
