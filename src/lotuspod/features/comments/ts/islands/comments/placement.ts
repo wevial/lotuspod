@@ -290,7 +290,8 @@ export function placement(page: Page, bridge: PlacementBridge): Placement {
   };
 
   // Without room for the panel, one thing at a time opens over the text,
-  // in a popover or the bottom sheet (overText in js/narrow.js).
+  // in a popover or the bottom sheet (overText in
+  // features/comments/ts/narrow.js).
   var over = page.overText({
     comments: true, tabs: sheetTabs, panel: api, groups: groups, passages: passages, mute: chips.mute,
     compose: threadList.compose, threadsOf: threadsOf, unresolvedOf: threadList.unresolvedOf, resolved: resolved,

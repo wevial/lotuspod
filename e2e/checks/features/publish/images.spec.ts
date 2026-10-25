@@ -4,7 +4,7 @@ import { expect, test, type Page } from '@playwright/test';
 // fixture images beside its source. Each media response is held back, so a
 // box the page did not reserve before the bytes arrive shows as a layout
 // shift. Chromium's naturalWidth and naturalHeight are the independent check
-// of the sizes lotuspod.media reads from each header.
+// of the sizes lotuspod.features.publish.media reads from each header.
 const PAGE = '/capture-images.html';
 const HOLD_MS = 500;
 // Signed in, as every reader behind Access is: a page posts the revision it

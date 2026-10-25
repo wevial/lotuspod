@@ -2,13 +2,14 @@ import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { expect, test, type APIRequestContext, type Locator, type Page } from '@playwright/test';
 
-// A comment's bubble draws a small markdown subset (js/comment-markdown.js):
-// paragraphs, bold, italic, code, code blocks, links and one level of lists,
-// a reader's comment and an agent's reply alike. Raw HTML, entities and
-// links to anything but http(s), an anchor or a relative path stay as typed.
+// A comment's bubble draws a small markdown subset
+// (features/comments/ts/comment-markdown.js): paragraphs, bold, italic, code,
+// code blocks, links and one level of lists, a reader's comment and an agent's
+// reply alike. Raw HTML, entities and links to anything but http(s), an anchor
+// or a relative path stay as typed.
 // A bare http(s) URL is a link too. A link to the site itself opens in the
 // same tab and any other in a new one, in a bubble and in the page body
-// alike (js/link-tab.js).
+// alike (core/ts/link-tab.js).
 // The checks render their own page into the capture fixture's site and find
 // the threads they post by id; hermes replies through real `lotuspod`
 // commands on the fixture's agent socket, an image attached with --image
@@ -303,7 +304,8 @@ test.describe('signed in', () => {
 
     // Only the same-site link is followed, so nothing is asked of the outside.
     // The page it names, loaded on its own, goes on to the index's tabs
-    // (js/open-in-tabs.js), so its request witnesses the follow.
+    // (features/publish/ts/open-in-tabs.js), so its request witnesses the
+    // follow.
     const followed = page.waitForRequest((sent) => sent.isNavigationRequest() &&
       sent.frame() === page.mainFrame() && new URL(sent.url()).pathname === `/${TARGET}.html`);
     await same.click();

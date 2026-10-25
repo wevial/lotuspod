@@ -21,7 +21,7 @@ export function unfold(target: HTMLElement): void {
 
 // Whether the window leaves ROOM right of the reading column at its
 // full measure: a panel widened into the column narrows it
-// (css/base.css), which must not change where the threads live. The
+// (core/theme/base.css), which must not change where the threads live. The
 // measure is read from a probe set in the column's font, out of sight
 // and outside the column, so it is no part of the page's text.
 function roomy(page: Page): boolean {

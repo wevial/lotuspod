@@ -1,11 +1,11 @@
-/* The index's pod finder (js/pod-finder.js): a dialog on the surface near the
-   top of the window, over a backdrop that dims the strip and the pod under
-   it. Its input runs the width of the dialog; under it, the options, each a
-   title in white with "in a tab" while it is open in one and its Updated day
-   on the right, then its summary on one line and its labels as the listing's
-   tags. "Recent" and "Other pods" head their groups in muted lavender. The
-   selected option sits on the glow with a lavender rule at its left. A line
-   of keys ends the dialog. */
+/* The index's pod finder (features/index/ts/pod-finder.ts): a dialog on the
+   surface near the top of the window, over a backdrop that dims the strip and
+   the pod under it. Its input runs the width of the dialog; under it, the
+   options, each a title in white with "in a tab" while it is open in one and
+   its Updated day on the right, then its summary on one line and its labels as
+   the listing's tags. "Recent" and "Other pods" head their groups in muted
+   lavender. The selected option sits on the glow with a lavender rule at its
+   left. A line of keys ends the dialog. */
 .pod-finder-backdrop {
   align-items: flex-start;
   background: var(--scrim);

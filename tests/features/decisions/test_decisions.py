@@ -597,7 +597,8 @@ class DefaultTests(DecisionsTestCase):
                                                  "capture-decisions")
         first = next(form for form in read(rendered).forms
                      if form["attrs"]["data-question"] == "decision-1")
-        # As e2e/checks/decisions.spec.ts recorded it before forms had defaults.
+        # As e2e/checks/features/decisions/decisions.spec.ts recorded it before
+        # forms had defaults.
         self.assertEqual(first["attrs"]["data-version"], "87f71d1b09cb")
         self.assertEqual(first["attrs"]["data-default"], "sonnet")
 

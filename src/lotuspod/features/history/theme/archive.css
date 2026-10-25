@@ -1,11 +1,11 @@
 
-/* An archived page (lotuspod.archive): a banner under the title bar saying
-   when it was archived and what superseded it, styled as an old version's
-   banner is (versions.css); its decision forms and comment controls
-   disabled; and for an owner, an Archive or Unarchive button at the right
-   of the top bar (js/archive.js), before the review sheet's bar when both
-   are drawn. The top bar takes no room in flow, so the button moves nothing
-   when it arrives. */
+/* An archived page (lotuspod.features.history.archive): a banner under the
+   title bar saying when it was archived and what superseded it, styled as an
+   old version's banner is (versions.css); its decision forms and comment
+   controls disabled; and for an owner, an Archive or Unarchive button at the
+   right of the top bar (features/history/ts/archive.js), before the review
+   sheet's bar when both are drawn. The top bar takes no room in flow, so the
+   button moves nothing when it arrives. */
 .artifact-archived-banner {
   align-items: center;
   background: color-mix(in srgb, var(--color-amber) 10%, var(--color-surface));

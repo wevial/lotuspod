@@ -1,10 +1,11 @@
 // Lotuspod page and index script: serve's change stream. Each browser tab
 // holds one EventSource on /api/events, and each "change" it carries,
 // {what, page}, is sent on the document as "lotuspod:change", whose
-// listeners run the checks they already have at once (js/live-page.js,
-// the comments island, js/pod-tabs.js and the index's own script). Their
-// schedules stay, so a stream refused, dropped or blocked leaves the page
-// as it was without it.
+// listeners run the checks they already have at once
+// (features/live/ts/live-page.js, the comments island,
+// features/index/ts/pod-tabs.js and the index's own script). Their schedules
+// stay, so a stream refused, dropped or blocked leaves the page as it was
+// without it.
 //
 // The browser opens a stream that ends again itself, after the stream's
 // retry. One it closes (an HTTP error: 503 past serve's cap, 401 once signed
@@ -18,8 +19,8 @@
 // competes with the page's own loading for the browser's connections.
 //
 // A page framed in a same-origin window whose document holds the stream (the
-// index's tabs, js/pod-tabs.js) opens none of its own: it sends each tick
-// that document gets again on its own, until its pagehide.
+// index's tabs, features/index/ts/pod-tabs.js) opens none of its own: it sends
+// each tick that document gets again on its own, until its pagehide.
 (() => {
   const EVENTS = "/api/events";
   const HELD = "data-lotuspod-events";

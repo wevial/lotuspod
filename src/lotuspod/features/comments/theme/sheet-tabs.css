@@ -1,8 +1,9 @@
-/* The bottom sheet on a page that asks questions (js/narrow.js): its head is
-   two tabs, Decisions and Comments, drawn as the comments panel's are, each
-   with its count, and Close. Under Comments, a row steps through the threads
-   and says where the one shown stands; under Decisions, the panel's
-   questions scroll on their own. A handle is centred over the tabs. */
+/* The bottom sheet on a page that asks questions
+   (features/comments/ts/narrow.js): its head is two tabs, Decisions and
+   Comments, drawn as the comments panel's are, each with its count, and Close.
+   Under Comments, a row steps through the threads and says where the one shown
+   stands; under Decisions, the panel's questions scroll on their own. A handle
+   is centred over the tabs. */
 .artifact-comments-bottom-sheet--tabs::before {
   background: var(--hairline-strong);
   border-radius: 2px;

@@ -3,13 +3,14 @@
 // a minifier never renames its free names. Reading each as the bundle loads
 // makes a missing name throw on every page at once.
 
-// What js/live-page.js keeps of the page's revision while it is open.
+// What features/live/ts/live-page.js keeps of the page's revision while it is
+// open.
 export interface Live {
   // A revision the page learned it is now published at; once it is not its
   // own, the page offers a reload.
   seen(revision: unknown): void;
   // The revision the page shows now: its own, then each one a swap brought
-  // in (web/src/page-swap.ts); "" on a page with none.
+  // in (features/live/ts/page-swap.ts); "" on a page with none.
   revision(): string;
   // What to keep over a reload: save() is kept, and unsent() says whether a
   // composer holds text not sent, so a hidden page does not reload itself.
@@ -23,7 +24,8 @@ export interface Live {
   previous(): Promise<string | null>;
 }
 
-// js/page-open.js: shell text, storage keys and the whole-page section id.
+// features/publish/ts/page-open.js: shell text, storage keys and the whole-page
+// section id.
 declare const CLOSED: string;
 declare const PANEL: string;
 declare const RESOLVED_SHOWN: string;
@@ -34,50 +36,55 @@ declare const ROOM: number;
 declare const POPOVER: string;
 declare function overText(the: NarrowBridge | QuestionsBridge): import("./comments/parts").Over;
 
-// js/live-page.js.
+// features/live/ts/live-page.js.
 declare const live: Live;
-// js/page-open.js: what the address's fragment gives name as #NAME=VALUE,
-// decoded, else null; read as the page opens (first), null on a reload.
+// features/publish/ts/page-open.js: what the address's fragment gives name as
+// #NAME=VALUE, decoded, else null; read as the page opens (first), null on a
+// reload.
 declare function linkedTo(name: string, first?: boolean): string | null;
-// js/page-open.js: an archived page takes no new comment, reply or answer.
+// features/publish/ts/page-open.js: an archived page takes no new comment,
+// reply or answer.
 declare const ARCHIVED: boolean;
-// web/src/widgets.ts: what a live block's Comment button calls, set here
-// once the comments island can start a thread on a block.
+// features/widgets/ts/widgets.ts: what a live block's Comment button calls, set
+// here once the comments island can start a thread on a block.
 declare var startComment: StartComment | undefined;
-// js/page-open.js: the page events. ANSWERED is sent on the document once
-// the page's read of answers has finished, and again once each read after a
-// swap that changed a decision form is drawn; SAVED on a decision form once
-// an answer to it is saved, DRAWN on a comment box when rows are drawn into
-// it.
+// features/publish/ts/page-open.js: the page events. ANSWERED is sent on the
+// document once the page's read of answers has finished, and again once each
+// read after a swap that changed a decision form is drawn; SAVED on a decision
+// form once an answer to it is saved, DRAWN on a comment box when rows are
+// drawn into it.
 declare const ANSWERED: string;
 declare const SAVED: string;
-// js/page-open.js: the answers route, what an answer to a question the page
-// has changed since it loaded is refused with, and the Answered table's key
-// among the folded sections.
+// features/publish/ts/page-open.js: the answers route, what an answer to a
+// question the page has changed since it loaded is refused with, and the
+// Answered table's key among the folded sections.
 declare const ANSWERS: string;
 declare const STALE: string;
 declare const FOLDED_ANSWERED: number;
-// js/page-open.js: fold a section's wrapper under its heading's button,
-// kept as id.
+// features/publish/ts/page-open.js: fold a section's wrapper under its
+// heading's button, kept as id.
 declare function foldSection(heading: HTMLElement, wrapper: HTMLElement, id: string | number): void;
-// js/page-open.js: a reader's name, else a handle; never an address.
+// features/publish/ts/page-open.js: a reader's name, else a handle; never an
+// address.
 declare function reader(row: { actor?: CommentRow["actor"] } | null): string;
 declare const DRAWN: string;
-// js/page-open.js: sent on the document once a swap is applied.
+// features/publish/ts/page-open.js: sent on the document once a swap is
+// applied.
 declare const SWAPPED: string;
-// web/src/page-swap.ts: hold back from a swap each part whose nodes test
-// says to, told whether the new revision took the part away.
+// features/live/ts/page-swap.ts: hold back from a swap each part whose nodes
+// test says to, told whether the new revision took the part away.
 declare function holdSwap(test: (nodes: readonly Element[], removed: boolean) => boolean): void;
-// js/page-open.js: what a draft whose place a new revision dropped says on
-// the form it went to: a passage's words gone, or any other place.
+// features/publish/ts/page-open.js: what a draft whose place a new revision
+// dropped says on the form it went to: a passage's words gone, or any other
+// place.
 declare const PASSAGE_GONE: string;
 declare const PLACE_GONE: string;
-// js/page-open.js: what a comment begun on a live block says on its
-// section's form when the page reloaded without the block.
+// features/publish/ts/page-open.js: what a comment begun on a live block says
+// on its section's form when the page reloaded without the block.
 declare const BLOCK_GONE: string;
-// js/page-open.js: what a section's form on a live block says when a swap
-// changed the block under it (the comment stays on the version the reader
-// saw), and when a send was refused for a block the
+// features/publish/ts/page-open.js: what a section's form on a live block says
+// when a swap changed the block under it (the comment stays on the version the
+// reader saw), and when a send was refused for a block the
 // page has changed since it loaded.
 declare const BLOCK_CHANGED: string;
 declare const STALE_BLOCK: string;
@@ -89,23 +96,24 @@ declare function when(stamp: string | undefined): string;
 declare function json<T = CommentRow & CommentPayload>(response: Response): Promise<T | null>;
 declare function attachments(form: HTMLFormElement, field: HTMLTextAreaElement): Attachments;
 declare const SIGNED_OUT: string;
-// js/page-open.js: what a decision's Ask says with no question in its note,
-// and when the page changed since it loaded.
+// features/publish/ts/page-open.js: what a decision's Ask says with no question
+// in its note, and when the page changed since it loaded.
 declare const NO_QUESTION: string;
 declare const STALE_QUESTION: string;
 declare const STALE_PAGE: string;
 declare const STALE_SECTION: string;
-// js/page-open.js: the heading of the list of threads on sections the page
-// no longer has.
+// features/publish/ts/page-open.js: the heading of the list of threads on
+// sections the page no longer has.
 declare const CHANGED: string;
-// js/attachments.js: what the comments route's read said of the image cap,
-// bytes or null with why, and why no cap was read.
+// features/comments/ts/attachments.js: what the comments route's read said of
+// the image cap, bytes or null with why, and why no cap was read.
 declare function settleImageCap(bytes: number | null, why?: string): void;
 declare const NO_CAP: string;
-// js/attachments.js: "1 image" or "N images", what a comment of images alone
-// says in a list.
+// features/comments/ts/attachments.js: "1 image" or "N images", what a comment
+// of images alone says in a list.
 declare function imageWords(row: CommentRow): string;
-// js/page-open.js: the elements selector matches in node, else the page.
+// features/publish/ts/page-open.js: the elements selector matches in node, else
+// the page.
 declare function all(selector: string, node?: HTMLElement): HTMLElement[];
 
 export const page = Object.freeze({
@@ -153,9 +161,9 @@ export type Page = typeof page;
 export interface Widget { id: string; hash: string; state: string }
 export type StartComment = (request: { anchor: { kind: "block" } & Widget }) => void;
 
-// One part of the page a swap changed (web/src/page-swap.ts): the header,
-// the outline, the intro, a section or the references block, with the nodes
-// it took out, detached, and put in.
+// One part of the page a swap changed (features/live/ts/page-swap.ts): the
+// header, the outline, the intro, a section or the references block, with the
+// nodes it took out, detached, and put in.
 export interface SwappedUnit {
   kind: "header" | "outline" | "intro" | "section" | "refs";
   id: string;

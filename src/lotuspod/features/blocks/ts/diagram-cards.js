@@ -9,11 +9,12 @@
   // arrow is dimmed. Each box takes its row's status color, unless the
   // author styled it in Mermaid. The heading and table are hidden only when
   // every row names a box the diagram draws, so nothing the author wrote
-  // disappears. While a diagram is in its view (js/diagram-view.js), the
-  // card opens inside the view's dialog and follows its box as the view
-  // moves; Esc there closes the card before the view. A diagram a swap brings
-  // in (web/src/page-swap.ts) is bound once Mermaid has drawn it, as one at
-  // load is; one it takes out is let go, and its card closed.
+  // disappears. While a diagram is in its view
+  // (features/blocks/ts/diagram-view.js), the card opens inside the view's
+  // dialog and follows its box as the view moves; Esc there closes the card
+  // before the view. A diagram a swap brings in (features/live/ts/page-swap.ts)
+  // is bound once Mermaid has drawn it, as one at load is; one it takes out is
+  // let go, and its card closed.
   //
   // What it returns mounts one diagram's pre (mount) and lets go of each
   // diagram whose pre is in the nodes a swap took out (drop); the card and
@@ -155,7 +156,8 @@
           heading.hidden = true;
         }
         table.hidden = true;
-        // The Expand button js/table-expand.js may have put after the table.
+        // The Expand button features/blocks/ts/table-expand.js may have put
+        // after the table.
         var after = table.nextElementSibling;
         if (after && after.classList.contains("artifact-table-expand")) {
           after.hidden = true;
@@ -570,8 +572,9 @@
     if (cardsMount && pre.matches(CARDS_PRE)) {
       cardsMount.drop([pre]);
       // Once the event is done: the new svg is in the pre, or in the diagram
-      // view's dialog for a diagram open there (js/diagram-view.js), where
-      // the pre's watch would never see it.
+      // view's dialog for a diagram open there
+      // (features/blocks/ts/diagram-view.js), where the pre's watch would never
+      // see it.
       queueMicrotask(function () {
         if (svg.isConnected) {
           cardsMount.bind(pre, svg);

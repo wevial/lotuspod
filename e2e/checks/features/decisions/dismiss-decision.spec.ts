@@ -290,7 +290,8 @@ test.describe('signed in', () => {
     release();
     await expect(nightly.form).toHaveClass(/\bartifact-decision--dismissed\b/);
     await expect(nightly.saved).toHaveText('Dismissed: Draft B · Undo');
-    // Saved, so a folded section's mark (js/page-open.js) never counts it.
+    // Saved, so a folded section's mark (features/publish/ts/page-open.js)
+    // never counts it.
     await expect(nightly.form).toHaveClass(/\bartifact-decision--saved\b/);
     await expect(side.count).toHaveText('All answered');
     await page.unroute(reading, holdRead);

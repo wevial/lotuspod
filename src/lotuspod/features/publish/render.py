@@ -62,7 +62,7 @@ class _LinkFinder(HTMLParser):
 def has_link(body: str) -> bool:
     """Whether body holds any link. Which site a link goes to is only known
     in the browser (`//host`, an entity in the scheme and `/\\host` all leave
-    it), so the page script (js/link-tab.js) is loaded for every link and
+    it), so the page script (core/ts/link-tab.js) is loaded for every link and
     decides its tab there."""
     finder = _LinkFinder()
     finder.feed(body)

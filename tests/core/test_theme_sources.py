@@ -160,8 +160,9 @@ class DeclaredOrderTests(ThemeCopyTestCase):
 
     def test_the_popover_and_bottom_sheet_sources_are_declared_beside_the_comments(self):
         """LOTUS-37: the narrow script runs before the comments start, so it
-        is joined before js/islands.js, which starts them (LOTUS-206); its
-        styles win at equal specificity, so they are joined after css/comments.css."""
+        is joined before features/comments/ts/islands.js, which starts them
+        (LOTUS-206); its styles win at equal specificity, so they are joined
+        after features/comments/theme/comments.css."""
         styles = core.theme_sources()[STYLESHEET]
         script = core.theme_sources()[core.PAGE_SCRIPT]
         self.assertIn("features/comments/theme/narrow.css", styles)
@@ -171,8 +172,8 @@ class DeclaredOrderTests(ThemeCopyTestCase):
 
     def test_the_live_page_sources_are_declared_before_the_comments_script(self):
         """LOTUS-41: the comments' reads hand the live page each revision
-        they carry, so its script is joined before js/islands.js, which
-        reads them (LOTUS-206)."""
+        they carry, so its script is joined before
+        features/comments/ts/islands.js, which reads them (LOTUS-206)."""
         styles = core.theme_sources()[STYLESHEET]
         script = core.theme_sources()[core.PAGE_SCRIPT]
         self.assertIn("features/live/theme/live-page.css", styles)
@@ -183,9 +184,9 @@ class DeclaredOrderTests(ThemeCopyTestCase):
 
     def test_the_tables_script_is_declared_after_the_comments_script(self):
         """LOTUS-49: a table's room is measured against the comments panel,
-        which the comments island makes, so js/tables.js is joined after
-        js/islands.js (LOTUS-206), inside the closure the join closes after
-        the last source."""
+        which the comments island makes, so features/blocks/ts/tables.js is
+        joined after features/comments/ts/islands.js (LOTUS-206), inside the
+        closure the join closes after the last source."""
         script = core.theme_sources()[core.PAGE_SCRIPT]
         self.assertIn("features/blocks/ts/tables.js", script)
         self.assertGreater(script.index("features/blocks/ts/tables.js"), script.index("features/comments/ts/islands.js"))
@@ -194,9 +195,10 @@ class DeclaredOrderTests(ThemeCopyTestCase):
 
     def test_the_panel_resize_sources_are_declared_after_the_comments(self):
         """LOTUS-51: the resize handle is added to the panel the comments
-        island makes, so js/panel-resize.js is joined after js/islands.js,
-        inside the closure; its styles override the panel's, so they are
-        joined after css/comments.css."""
+        island makes, so features/comments/ts/panel-resize.js is joined after
+        features/comments/ts/islands.js, inside the closure; its styles override
+        the panel's, so they are joined after
+        features/comments/theme/comments.css."""
         styles = core.theme_sources()[STYLESHEET]
         script = core.theme_sources()[core.PAGE_SCRIPT]
         self.assertIn("features/comments/theme/panel-resize.css", styles)
@@ -207,9 +209,10 @@ class DeclaredOrderTests(ThemeCopyTestCase):
         self.assertEqual(problems, [], "\n".join(problems))
 
     def test_the_table_expand_sources_are_declared(self):
-        """LOTUS-50: the Expand button reads the room js/tables.js publishes,
-        so js/table-expand.js is joined after it, inside the closure; its
-        styles are declared in the stylesheet's order."""
+        """LOTUS-50: the Expand button reads the room
+        features/blocks/ts/tables.js publishes, so
+        features/blocks/ts/table-expand.js is joined after it, inside the
+        closure; its styles are declared in the stylesheet's order."""
         script = core.theme_sources()[core.PAGE_SCRIPT]
         self.assertIn("features/blocks/ts/table-expand.js", script)
         self.assertGreater(script.index("features/blocks/ts/table-expand.js"), script.index("features/blocks/ts/tables.js"))
@@ -225,8 +228,8 @@ class DeclaredOrderTests(ThemeCopyTestCase):
 
     def test_the_image_viewer_sources_are_declared(self):
         """LOTUS-56: the image viewer's script is joined after
-        js/page-open.js, inside the closure, and its styles are declared in
-        the stylesheet's order."""
+        features/publish/ts/page-open.js, inside the closure, and its styles are
+        declared in the stylesheet's order."""
         script = core.theme_sources()[core.PAGE_SCRIPT]
         self.assertIn("features/blocks/ts/image-viewer.js", script)
         self.assertGreater(script.index("features/blocks/ts/image-viewer.js"), script.index("features/publish/ts/page-open.js"))
@@ -235,9 +238,10 @@ class DeclaredOrderTests(ThemeCopyTestCase):
         self.assertEqual(problems, [], "\n".join(problems))
 
     def test_the_comment_markdown_script_is_declared_before_the_comments_script(self):
-        """LOTUS-92: a bubble's text is drawn by js/comment-markdown.js, so it
-        is joined before js/islands.js, whose comments call it; the islands
-        follow it directly, in js/comments.js's old place (LOTUS-206)."""
+        """LOTUS-92: a bubble's text is drawn by
+        features/comments/ts/comment-markdown.js, so it is joined before
+        features/comments/ts/islands.js, whose comments call it; the islands
+        follow it directly, in the old comments script's place (LOTUS-206)."""
         script = core.theme_sources()[core.PAGE_SCRIPT]
         self.assertIn("features/comments/ts/comment-markdown.js", script)
         self.assertEqual(script.index("features/comments/ts/islands.js"), script.index("features/comments/ts/comment-markdown.js") + 1)
@@ -245,9 +249,10 @@ class DeclaredOrderTests(ThemeCopyTestCase):
 
     def test_the_ref_cards_sources_are_declared(self):
         """LOTUS-100: the cards' script uses when() and linkTab(), so it is
-        joined after js/page-open.js and js/link-tab.js, before
-        js/calltree.js (LOTUS-167), js/widgets.js and js/archive.js; its
-        styles just after css/prose.css."""
+        joined after features/publish/ts/page-open.js and core/ts/link-tab.js,
+        before features/blocks/ts/calltree.js (LOTUS-167),
+        features/widgets/ts/widgets.js and features/history/ts/archive.js; its
+        styles just after features/publish/theme/prose.css."""
         styles = core.theme_sources()[STYLESHEET]
         script = core.theme_sources()[core.PAGE_SCRIPT]
         self.assertEqual(script[-4:], ("features/blocks/ts/ref-cards.js", "features/blocks/ts/calltree.js", "features/widgets/ts/widgets.js", "features/history/ts/archive.js"))
@@ -258,8 +263,9 @@ class DeclaredOrderTests(ThemeCopyTestCase):
 
     def test_the_pod_tabs_sources_are_declared_and_the_index_script_is_served(self):
         """LOTUS-101: the index script, lotuspod-index.js, is joined from
-        js/pod-tabs.js, written and served beside the page script; the tabs'
-        styles follow css/index.css, which they draw over."""
+        features/index/ts/pod-tabs.js, written and served beside the page
+        script; the tabs' styles follow features/index/theme/index.css, which
+        they draw over."""
         styles = core.theme_sources()[STYLESHEET]
         self.assertEqual(core.INDEX_SCRIPT, "lotuspod-index.js")
         self.assertEqual(core.theme_sources()[core.INDEX_SCRIPT][0], "features/index/ts/pod-tabs.js")
@@ -271,9 +277,10 @@ class DeclaredOrderTests(ThemeCopyTestCase):
 
     def test_the_archive_sources_are_declared(self):
         """LOTUS-118: the header's Archive button uses element(), json() and
-        SIGNED_OUT, so js/archive.js is joined after js/page-open.js, last;
-        its styles, the archived banner's among them,
-        follow css/versions.css, whose old-version banner they match."""
+        SIGNED_OUT, so features/history/ts/archive.js is joined after
+        features/publish/ts/page-open.js, last; its styles, the archived
+        banner's among them, follow features/history/theme/versions.css, whose
+        old-version banner they match."""
         styles = core.theme_sources()[STYLESHEET]
         script = core.theme_sources()[core.PAGE_SCRIPT]
         self.assertEqual(script[-1], "features/history/ts/archive.js")
@@ -283,10 +290,11 @@ class DeclaredOrderTests(ThemeCopyTestCase):
 
     def test_the_review_sheet_is_an_island(self):
         """LOTUS-157: the review sheet is drawn by the islands bundle, after
-        js/comment-markdown.js (no js/comments.js since LOTUS-206, and the
-        decision cards whose forms it reads are an island in the same bundle
-        since LOTUS-241): no script of its own is declared, and its styles
-        stay css/review-sheet.css."""
+        features/comments/ts/comment-markdown.js (no comments script of its own
+        since LOTUS-206, and the decision cards whose forms it reads are an
+        island in the same bundle since LOTUS-241): no script of its own is
+        declared, and its styles stay
+        features/comments/theme/review-sheet.css."""
         styles = core.theme_sources()[STYLESHEET]
         script = core.theme_sources()[core.PAGE_SCRIPT]
         self.assertNotIn("features/comments/ts/review-sheet.js", script)
@@ -302,8 +310,9 @@ class DeclaredOrderTests(ThemeCopyTestCase):
 
     def test_the_pod_finder_sources_follow_the_pod_tabs_sources(self):
         """LOTUS-102: the finder hands its choice to the tabs and opens from
-        their strip, so js/pod-finder.js is joined just after js/pod-tabs.js
-        in the index script, and its styles just after css/pod-tabs.css."""
+        their strip, so features/index/ts/pod-finder.js is joined just after
+        features/index/ts/pod-tabs.js in the index script, and its styles just
+        after features/index/theme/pod-tabs.css."""
         styles = core.theme_sources()[STYLESHEET]
         self.assertEqual(core.theme_sources()[core.INDEX_SCRIPT][:2],
                          ("features/index/ts/pod-tabs.js", "features/index/ts/pod-finder.js"))
@@ -313,10 +322,11 @@ class DeclaredOrderTests(ThemeCopyTestCase):
 
     def test_the_live_events_source_joins_the_page_and_index_scripts(self):
         """LOTUS-177: serve's change stream, built from
-        features/live/ts/live-events.ts, is joined just before js/live-page.js, whose
-        check its ticks run, and last in the index script, after
-        js/pod-finder.js and js/index-refresh.js; the old-version script
-        opens no stream."""
+        features/live/ts/live-events.ts, is joined just before
+        features/live/ts/live-page.js, whose check its ticks run, and last in
+        the index script, after features/index/ts/pod-finder.js and
+        features/live/ts/index-refresh.js; the old-version script opens no
+        stream."""
         page = core.theme_sources()[core.PAGE_SCRIPT]
         self.assertEqual(page.index("features/live/ts/live-events.js") + 1, page.index("features/live/ts/live-page.js"))
         self.assertEqual(core.theme_sources()[core.INDEX_SCRIPT],

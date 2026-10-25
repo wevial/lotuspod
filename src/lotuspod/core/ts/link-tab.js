@@ -3,10 +3,10 @@
   // an `#anchor` or an absolute URL on this origin) opens in the same tab;
   // any other http(s) link in a new one, with no opener and no referrer. The
   // origin is only known here, in the browser, so a comment's links
-  // (js/comment-markdown.js) and the page body's own take their tab from
-  // this, the body's once at load: a newer revision reloads the page
-  // (js/live-page.js) rather than swapping its body. A body link that names
-  // its own target keeps it.
+  // (features/comments/ts/comment-markdown.js) and the page body's own take
+  // their tab from this, the body's once at load: a newer revision reloads the
+  // page (features/live/ts/live-page.js) rather than swapping its body. A body
+  // link that names its own target keeps it.
   function linkTab(link) {
     var url;
     try {

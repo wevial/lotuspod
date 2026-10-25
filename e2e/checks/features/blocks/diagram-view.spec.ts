@@ -6,9 +6,9 @@ import { expect, test, type Locator, type Page } from '@playwright/test';
 // paragraph, a flowchart LR of fourteen boxes in one chain (S1 --> ... -->
 // S14), paragraphs enough that the page scrolls, then an h3 "Small loop" and
 // a sequence diagram. Each drawn diagram has an Expand button that opens it
-// in a window-filling view (js/diagram-view.js). Each is loaded with
-// ?standalone, so it stays in the window rather than opening in a tab of the
-// index.
+// in a window-filling view (features/blocks/ts/diagram-view.js). Each is loaded
+// with ?standalone, so it stays in the window rather than opening in a tab of
+// the index.
 const PAGE = '/capture-diagram-view.html';
 const CARDS_PAGE = '/capture-node-cards.html';
 // The pinned Mermaid (e2e/package.json) answers jsDelivr's requests for it,

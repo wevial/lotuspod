@@ -1,15 +1,15 @@
 
   // A top-level table that scrolls inside itself, where the window has free
   // width right of it, gets an Expand button: pressed, the table lifts its
-  // --measure-full cap to the room js/tables.js publishes and grows to the
-  // right, never past its natural width, up to just short of the comments
-  // panel. Its left edge stays put, so nothing above or beside it moves; what
-  // is below follows its new height, and the table's top is kept where it was
-  // in the window. The button sits in the table's bottom margin and takes no
-  // room. The choice is kept per table for the session, and is set aside
-  // while the room is too small for it to matter. A table a swap brings in
-  // (web/src/page-swap.ts) gets its button as one at load, and takes the
-  // choice of the one it replaces at the same place in its section.
+  // --measure-full cap to the room features/blocks/ts/tables.js publishes and
+  // grows to the right, never past its natural width, up to just short of the
+  // comments panel. Its left edge stays put, so nothing above or beside it
+  // moves; what is below follows its new height, and the table's top is kept
+  // where it was in the window. The button sits in the table's bottom margin
+  // and takes no room. The choice is kept per table for the session, and is set
+  // aside while the room is too small for it to matter. A table a swap brings
+  // in (features/live/ts/page-swap.ts) gets its button as one at load, and
+  // takes the choice of the one it replaces at the same place in its section.
   function tableExpand(body) {
     // Each page's expanded tables are kept under this, its path, the table's
     // position among its section's tables and the section's id ("" for the

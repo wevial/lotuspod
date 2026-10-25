@@ -2,8 +2,9 @@
   // The diagram view: once Mermaid has drawn a diagram (pre.mermaid), an
   // Expand button in the pre's top right corner opens it in a modal dialog
   // that fills the window. The page's own svg moves into the dialog's stage,
-  // so its ids and the listeners js/diagram-cards.js set on its boxes stay as
-  // they are, and the pre keeps its height so the page behind holds still.
+  // so its ids and the listeners features/blocks/ts/diagram-cards.js set on its
+  // boxes stay as they are, and the pre keeps its height so the page behind
+  // holds still.
   // A drag, a two-finger scroll or pinch, the arrow keys or the bar's buttons
   // move and zoom it by rewriting the svg's viewBox, so text stays sharp at
   // any zoom; 100% is Mermaid's own size. Each move is announced on the svg
@@ -11,9 +12,9 @@
   // 0, or F) shows it whole again. The dialog's own Escape or its ✕ puts the
   // svg back in its pre, with every attribute the view changed restored, and
   // the focus on its Expand button. A diagram a swap brings in
-  // (web/src/page-swap.ts) gets its Expand button once Mermaid has drawn it,
-  // as one at load does, and a section whose diagram is open in the view is
-  // held back from a swap until the reader updates it.
+  // (features/live/ts/page-swap.ts) gets its Expand button once Mermaid has
+  // drawn it, as one at load does, and a section whose diagram is open in the
+  // view is held back from a swap until the reader updates it.
   //
   // What it returns mounts one diagram's pre; the view itself is made once,
   // on the first.
@@ -463,9 +464,9 @@
         add(pre);
         return;
       }
-      // As in js/diagram-cards.js: Mermaid draws on the window's load, or
-      // once a swap has brought the diagram in, and a diagram is drawn once
-      // an svg is the pre's own child.
+      // As in features/blocks/ts/diagram-cards.js: Mermaid draws on the
+      // window's load, or once a swap has brought the diagram in, and a diagram
+      // is drawn once an svg is the pre's own child.
       var watch = new MutationObserver(function () {
         if (pre.querySelector(":scope > svg")) {
           watch.disconnect();

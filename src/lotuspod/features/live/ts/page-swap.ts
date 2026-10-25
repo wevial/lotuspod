@@ -1,11 +1,12 @@
 // Lotuspod page script: once an open page learns it was published again
-// (js/live-page.js), it fetches the new revision and swaps in only the parts
-// whose digest render stamped (data-digest, data-intro-digest) changed: the
-// header's authored text, the outline's links, the intro, each changed,
-// added or removed section, and the references block (div.artifact-ref-cards)
-// written after the body. Every other node stays as it was, and with it the
-// scroll position and the folds. A section swapped in folds as the one it
-// replaces was; one added starts open unless the reader's kept folds name it.
+// (features/live/ts/live-page.js), it fetches the new revision and swaps in
+// only the parts whose digest render stamped (data-digest, data-intro-digest)
+// changed: the header's authored text, the outline's links, the intro, each
+// changed, added or removed section, and the references block
+// (div.artifact-ref-cards) written after the body. Every other node stays as it
+// was, and with it the scroll position and the folds. A section swapped in
+// folds as the one it replaces was; one added starts open unless the reader's
+// kept folds name it.
 // Once applied, "lotuspod:swapped" (SWAPPED) tells the other page scripts what
 // changed, "lotuspod:diagrams" (DIAGRAMS) has the template's start-up module
 // draw the diagrams brought in, the parts brought in are tinted for a moment,
@@ -19,9 +20,9 @@
 // (src/lotuspod/features/comments/ts/islands/comments/drafts.ts): an open
 // passage composer's words are in it, or it is a section taken away whose form
 // holds text not sent; the decisions island's: a decision form in it holds an answer
-// not saved; js/diagram-view.js's: its diagram is open full-window) stays as it
-// is, under a bar saying so with an Update button, which applies the part's
-// newest nodes as a swap would.
+// not saved; features/blocks/ts/diagram-view.js's: its diagram is open
+// full-window) stays as it is, under a bar saying so with an Update button,
+// which applies the part's newest nodes as a swap would.
 // The page still takes the new revision; a later swap replaces the kept nodes
 // when the part changed again, and takes the bar away when it is back to the
 // open page's digest.
@@ -98,7 +99,7 @@ function pageSwap(): void {
   };
 
   // The render variant main.artifact names (artifact--report, ...), leaving
-  // out the class js/versions.js toggles while its view shows.
+  // out the class features/history/ts/versions.js toggles while its view shows.
   const variantOf = (doc: Document): string =>
     Array.from(doc.querySelector("main.artifact")?.classList ?? [])
       .filter((name) => name.startsWith("artifact--") && name !== "artifact--versions")
@@ -460,8 +461,9 @@ function pageSwap(): void {
       old.querySelector(".artifact-live-note")?.remove();
       const note = fresh.querySelector(".artifact-live-note");
       if (note) frame.before(note);
-      // So are the decisions about it (lotuspod.widgets.link_decisions):
-      // their count and first question follow the page as published now.
+      // So are the decisions about it
+      // (lotuspod.features.widgets.widgets.link_decisions): their count and
+      // first question follow the page as published now.
       old.querySelector(".artifact-live-chrome > .artifact-live-decisions")?.remove();
       const decisions = fresh.querySelector(".artifact-live-chrome > .artifact-live-decisions");
       if (decisions) old.querySelector(".artifact-live-chrome > .artifact-live-open")?.after(decisions);

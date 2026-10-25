@@ -73,8 +73,8 @@
   border: 0;
 }
 
-/* Folding (web/src/calltree.ts): a caret on each parent row, a spacer of
-   its width on every other row, and the count a folded row shows. */
+/* Folding (features/blocks/ts/calltree.ts): a caret on each parent row, a
+   spacer of its width on every other row, and the count a folded row shows. */
 .calltree-row[hidden] { display: none; }
 .calltree-caret {
   padding: 0;

@@ -74,9 +74,9 @@ their listeners, and never on a pod that goes to the index
 (`features/publish/ts/open-in-tabs.js`). Neither the index script nor the old-version script
 has it. The islands reach the legacy page only through
 `features/comments/ts/islands/bridge.ts`, the one module that names the closure's
-variables: it declares the types of `live` (`js/live-page.js`), `linkedTo()`,
-`ARCHIVED`, the answers route, `STALE`, `FOLDED_ANSWERED`, `foldSection()`,
-`reader()` and the page events
+variables: it declares the types of `live` (`features/live/ts/live-page.js`),
+`linkedTo()`, `ARCHIVED`, the answers route, `STALE`, `FOLDED_ANSWERED`,
+`foldSection()`, `reader()` and the page events
 `ANSWERED`, `SAVED` and `DRAWN` (`features/publish/ts/page-open.js`), and exports one object,
 `page`, built from them as the bundle loads, so a name that does not exist
 throws on every page at once. A minifier never renames a free name, so the

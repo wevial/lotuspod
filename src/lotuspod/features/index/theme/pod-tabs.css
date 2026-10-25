@@ -1,14 +1,14 @@
-/* The index's tabs (js/pod-tabs.js): a strip on the deep night above the
-   index header, its "Lotuspod" button then a tab per open pod, scrolling
-   sideways when full. A tab is its title and a ✕; the pointer anywhere on it
-   lifts the whole tab, ✕ included, to the surface with white text. The active
-   tab sits on the glow with a 2-pixel lavender rule under it and white
-   semibold text. A tab not active may carry a dot: amber for a new version,
-   orchid for new replies, its words for a screen reader alone. A "+" follows
-   the last tab and "Find a pod", with its key, ends the strip; both open the
-   finder (css/pod-finder.css). A tab dragged along the strip rides above
-   the others on the surface, lavender-edged, while they slide aside to show
-   where it lands. The active
+/* The index's tabs (features/index/ts/pod-tabs.js): a strip on the deep night
+   above the index header, its "Lotuspod" button then a tab per open pod,
+   scrolling sideways when full. A tab is its title and a ✕; the pointer
+   anywhere on it lifts the whole tab, ✕ included, to the surface with white
+   text. The active tab sits on the glow with a 2-pixel lavender rule under it
+   and white semibold text. A tab not active may carry a dot: amber for a new
+   version, orchid for new replies, its words for a screen reader alone. A "+"
+   follows the last tab and "Find a pod", with its key, ends the strip; both
+   open the finder (features/index/theme/pod-finder.css). A tab dragged along
+   the strip rides above the others on the surface, lavender-edged, while they
+   slide aside to show where it lands. The active
    tab's frame fills the window under the strip; the others keep their place,
    loaded and hidden. */
 .pod-tabs-bar {
@@ -172,8 +172,8 @@
 
 /* A focused title rings its whole tab, ✕ included; the ✕ focused alone
    rings itself, inside the tab. A title focused after a pointer press, in a
-   browser that cannot be asked for no ring, carries --quiet (js/pod-tabs.js)
-   and rings nothing. */
+   browser that cannot be asked for no ring, carries --quiet
+   (features/index/ts/pod-tabs.js) and rings nothing. */
 .pod-tabs-home:focus-visible,
 .pod-tabs-new:focus-visible,
 .pod-tabs-find:focus-visible,

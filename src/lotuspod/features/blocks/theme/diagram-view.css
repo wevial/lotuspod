@@ -1,6 +1,6 @@
-/* A drawn diagram's Expand button (js/diagram-view.js), in its pre's top
-   right corner: transparent until the pointer is over the diagram or the
-   button has keyboard focus, and in the tab order all the while. */
+/* A drawn diagram's Expand button (features/blocks/ts/diagram-view.js), in its
+   pre's top right corner: transparent until the pointer is over the diagram or
+   the button has keyboard focus, and in the tab order all the while. */
 pre.mermaid:has(> .artifact-diagram-expand) {
   position: relative;
 }

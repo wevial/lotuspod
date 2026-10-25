@@ -9,7 +9,8 @@ const WIDE = { width: 1440, height: 900 };
 test.use({ viewport: WIDE });
 
 // An open page or index tab listens to serve's stream (/api/events,
-// js/live-events.js): a tick runs the checks the page already has at once.
+// features/live/ts/live-events.ts): a tick runs the checks the page already has
+// at once.
 // Each check publishes a page of its own on the capture fixture's site with
 // a real `lotuspod publish`, and hermes replies with real `lotuspod
 // comments` commands on the fixture's socket. The page's clock is paused, so

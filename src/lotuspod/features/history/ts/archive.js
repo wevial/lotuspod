@@ -1,10 +1,11 @@
 
-  // Archiving a page from its top bar (lotuspod.archive): the page asks the
-  // archive route once. When it answers 200 and the reader may archive (one
-  // of the [access] owners), the top bar gains a button at its right end,
-  // before the review sheet's bar when it has one (js/review-sheet.js),
-  // "Archive", or "Unarchive" on an archived page. The top bar is fixed and
-  // takes no room in flow, so nothing on the page moves when it arrives.
+  // Archiving a page from its top bar (lotuspod.features.history.archive): the
+  // page asks the archive route once. When it answers 200 and the reader may
+  // archive (one of the [access] owners), the top bar gains a button at its
+  // right end, before the review sheet's bar when it has one
+  // (features/comments/ts/islands/review-sheet.tsx), "Archive", or "Unarchive"
+  // on an archived page. The top bar is fixed and takes no room in flow, so
+  // nothing on the page moves when it arrives.
   // Pressed, it posts the other state and reloads the page on 200, which
   // serve then answers with its banner or without; any other answer leaves
   // the page as it is, a line beside the button saying why. Signed out, as a

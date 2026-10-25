@@ -10,14 +10,14 @@ import { effect, untracked } from "@preact/signals";
 import { shared, type Read } from "./state";
 import { replies as makeReplies } from "./unread";
 
-// A tick from serve's stream (js/live-events.js).
+// A tick from serve's stream (features/live/ts/live-events.ts).
 interface Tick { what?: string; page?: string }
 
-// The comment threads (lotuspod.comments) and the reads that fill them. One
-// per section, or one for the page. Threads come from the comments route;
-// each is shown in its section's group, or, when the page no longer has
-// that section, in a list at the end of the body. Each thread read or
-// posted is written to its signal in the store's state (comments/state.ts).
+// The comment threads (lotuspod.features.comments.comments) and the reads that
+// fill them. One per section, or one for the page. Threads come from the
+// comments route; each is shown in its section's group, or, when the page no
+// longer has that section, in a list at the end of the body. Each thread read
+// or posted is written to its signal in the store's state (comments/state.ts).
 // The replies to the reader and the decisions' Ask are the replies part's
 // (comments/unread.ts).
 // The drafts (comments/drafts.ts) keep drafts and swaps, and reach these
@@ -27,8 +27,8 @@ export function store(page: Page, bridge: StoreBridge): Store {
   const name = boxes[0].dataset.page || "";
   const owner = document.querySelector<HTMLMetaElement>('meta[name="lotuspod:owner"]')?.content || "";
   // The revision the page shows now, which a swap moves on
-  // (js/live-page.js); null on a page with none. While a swap's SWAPPED
-  // is handled, live.revision() is still the one before it.
+  // (features/live/ts/live-page.js); null on a page with none. While a swap's
+  // SWAPPED is handled, live.revision() is still the one before it.
   let swappedTo = "";
   function revision() {
     return swappedTo || page.live.revision() || null;
@@ -530,9 +530,9 @@ export function store(page: Page, bridge: StoreBridge): Store {
     read();
   }
 
-  // A tick from serve's stream (js/live-events.js) that this page's
-  // threads or answers changed, or that the stream missed some, reads the
-  // threads at once; one while the page is hidden is read once it is seen
+  // A tick from serve's stream (features/live/ts/live-events.ts) that this
+  // page's threads or answers changed, or that the stream missed some, reads
+  // the threads at once; one while the page is hidden is read once it is seen
   // again. Signed out, nothing is read.
   document.addEventListener("lotuspod:change", event => {
     const tick: Tick = (event as CustomEvent<Tick>).detail;

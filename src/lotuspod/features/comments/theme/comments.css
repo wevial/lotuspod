@@ -1,10 +1,10 @@
 
-/* Comments (lotuspod.comments): each section ends in a folded box whose
-   summary is a quiet pill; open, it holds the section's threads as a chat. The
-   reader's comments sit on the right in tinted bubbles behind a round avatar;
-   an agent's replies sit on the left behind a square lavender avatar, the
-   handle in the mono voice and an AGENT tag, so a reply is never mistaken for
-   a person's. A state is never part of what anyone wrote: a typing bubble
+/* Comments (lotuspod.features.comments.comments): each section ends in a folded
+   box whose summary is a quiet pill; open, it holds the section's threads as a
+   chat. The reader's comments sit on the right in tinted bubbles behind a round
+   avatar; an agent's replies sit on the left behind a square lavender avatar,
+   the handle in the mono voice and an AGENT tag, so a reply is never mistaken
+   for a person's. A state is never part of what anyone wrote: a typing bubble
    while an agent has not answered, and centred system lines for failures,
    queueing, a paused responder and page revisions. Every field is a rounded
    composer with a round send button whose text stays its accessible name. */
@@ -224,8 +224,8 @@
   white-space: pre-wrap;
 }
 
-/* A bubble's markdown (js/comment-markdown.js): its blocks spaced apart, a
-   single newline in a paragraph or an item still a line break. */
+/* A bubble's markdown (features/comments/ts/comment-markdown.js): blocks
+   spaced apart, one newline in a paragraph or an item still a line break. */
 :is(.artifact-body, .artifact-comments-panel, .artifact-comments-held) .artifact-comment-text > :is(p, pre, ul, ol) {
   margin: 0;
 }
@@ -449,9 +449,9 @@
   overflow-wrap: anywhere;
 }
 
-/* A reply to the reader not yet read (js/comments.js): a lavender edge on its
-   bubble and a "New" tag before its byline, under a line saying so above the
-   first in its thread. */
+/* An unread reply (features/comments/ts/islands/comments/thread.tsx): a
+   lavender edge on its bubble and a "New" tag before its byline, under a line
+   saying so above the first in its thread. */
 :is(.artifact-body, .artifact-comments-panel, .artifact-comments-held) .artifact-comment--unread .artifact-comment-text {
   border-color: var(--color-lavender);
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-lavender) 35%, transparent);
@@ -734,10 +734,10 @@
    button that opens it, a badge counting the open threads and a dot for each,
    mint once answered, a pulsing lavender while an agent writes, a hollow
    amber ring while it waits. Open, it is --comments-panel-width wide, 20rem
-   unless the reader has resized it (js/panel-resize.js), and scrolls its list
-   on its own, grouped under each section's heading; the open entry holds its
-   thread as the box would, and a resolved one folds to a dashed line. It lies
-   over the margin, never the column, so nothing in the column moves. */
+   unless the reader has resized it (features/comments/ts/panel-resize.js),
+   and scrolls its list on its own, grouped under each section's heading; the
+   open entry holds its thread as the box would, a resolved one folded to a
+   dashed line. It lies over the margin, so nothing in the column moves. */
 .artifact-comments-panel {
   --comments-panel-width: 20rem;
   background: var(--color-surface);

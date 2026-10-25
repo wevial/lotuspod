@@ -1,8 +1,8 @@
 
-/* A newer revision of the page (js/live-page.js): one line fixed over the top
-   of the window, above the title bar, the comments panel and the sheet. It
-   takes no room in the page, so no text moves when it shows. Its region is
-   always there for the announcement and lets every click through. */
+/* A newer revision of the page (features/live/ts/live-page.js): one line fixed
+   over the top of the window, above the title bar, the comments panel and the
+   sheet. It takes no room in the page, so no text moves when it shows. Its
+   region is always there for the announcement and lets every click through. */
 .artifact-live-page {
   left: 0;
   pointer-events: none;
@@ -64,8 +64,8 @@
   opacity: 0.7;
 }
 
-/* What a swap changed (web/src/page-swap.ts): one line in the banner's place
-   for a few seconds, taking no room either. */
+/* What a swap changed (features/live/ts/page-swap.ts): one line in the banner's
+   place for a few seconds, taking no room either. */
 .artifact-live-page-note {
   background: var(--color-surface);
   border: 1px solid color-mix(in srgb, var(--color-sky) 40%, transparent);

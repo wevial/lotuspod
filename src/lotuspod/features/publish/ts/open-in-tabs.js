@@ -4,9 +4,9 @@
 // location with the index its brand link names (index.html is its directory;
 // the demo names pages.html), that pod its one tab and the active one, at the
 // fragment the page holds then: #tabs=NAME&on=NAME&at=FRAGMENT, which the
-// index script (js/pod-tabs.js) reads. So a pod opened from a link or a
-// bookmark has the tabs and the finder too, and the bare page leaves no
-// history entry. It goes only once that index answers itself, 2xx and not
+// index script (features/index/ts/pod-tabs.js) reads. So a pod opened from a
+// link or a bookmark has the tabs and the finder too, and the bare page leaves
+// no history entry. It goes only once that index answers itself, 2xx and not
 // redirected, however long it takes, with a row for this pod in its
 // listing, as pod-tabs.js reads it: a page rendered with no index beside
 // it, one the index does not list yet, one whose index sends it back to a
@@ -15,8 +15,8 @@
 //
 // This source opens the page script's one statement: it is a function handed
 // the rest, the closure the join opens just after it and closes after the
-// last source (THEME_CLOSURES in cli.py), and runs that only when the page
-// stays, so a load that goes to the index posts nothing, not
+// last source (THEME_CLOSURES in core/__init__.py), and runs that only when the
+// page stays, so a load that goes to the index posts nothing, not
 // even its opening to the seen route; its frame posts that once it loads.
 // The rest waits for the index's answer only on a load that may go.
 (function () {

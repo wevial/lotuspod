@@ -13,19 +13,20 @@
 // thread on the decision, and once the decision has threads a chip under it
 // opens them as a section's chip does. Its review sheet counts the open
 // questions in the title bar, marks where they are, and opens the comments
-// panel's Decisions tab to answer them (web/src/islands/review-sheet.tsx). For
-// comments it reads the page's threads, draws each in its section's box as a
-// chat (the reader's comments on the right, agents' replies on the left, each
-// state as its own mark outside what anyone wrote), and posts new threads and
-// replies. While a thread waits for an agent and the page is seen, it reads
-// the threads again, less often while nothing changes, and draws what is new
-// in place. Each box's summary becomes a one-line chip that opens its
-// section's thread, and a thread can be resolved and reopened. Where the
-// window has room right of the reading column, the threads live in a side
-// panel (aside.artifact-comments-panel) folded to a rail of status dots;
-// without that room a thread opens over the text, in a popover under what
-// opened it (div.artifact-comments-popover), or on a phone in a bottom sheet
-// (div.artifact-comments-bottom-sheet) that steps through the page's threads.
+// panel's Decisions tab to answer them
+// (features/comments/ts/islands/review-sheet.tsx). For comments it reads the
+// page's threads, draws each in its section's box as a chat (the reader's
+// comments on the right, agents' replies on the left, each state as its own
+// mark outside what anyone wrote), and posts new threads and replies. While a
+// thread waits for an agent and the page is seen, it reads the threads again,
+// less often while nothing changes, and draws what is new in place. Each box's
+// summary becomes a one-line chip that opens its section's thread, and a thread
+// can be resolved and reopened. Where the window has room right of the reading
+// column, the threads live in a side panel (aside.artifact-comments-panel)
+// folded to a rail of status dots; without that room a thread opens over the
+// text, in a popover under what opened it (div.artifact-comments-popover), or
+// on a phone in a bottom sheet (div.artifact-comments-bottom-sheet) that steps
+// through the page's threads.
 // A top-level table is kept short of the panel, open or folded.
 // One that scrolls, where the window has free width beside it, can be
 // expanded into that width, up to the panel.
@@ -50,7 +51,8 @@
   var STALE_BLOCK = "This block has changed since the page loaded. Reload the page to comment on its new version.";
   var CHANGED = "Comments on sections that have changed";
   var CHANGED_GROUP = "Sections that have changed";
-  // The section of a thread on the whole page (lotuspod.comments.WHOLE_PAGE).
+  // The section of a thread on the whole page
+  // (lotuspod.features.comments.comments.WHOLE_PAGE).
   var WHOLE_PAGE = "";
   // Whether the reader left the comments panel open or folded.
   var PANEL = "lotuspod:comments-panel";
@@ -77,21 +79,23 @@
   // Sent on a decision form once an answer to it is saved.
   var SAVED = "lotuspod:saved";
   // Sent on the document once a newer revision's changed parts are swapped
-  // into the page (web/src/page-swap.ts), naming each.
+  // into the page (features/live/ts/page-swap.ts), naming each.
   var SWAPPED = "lotuspod:swapped";
   // Sent on the document after SWAPPED, naming the diagrams (pre.mermaid) the
   // swap brought in, for the template's start-up module to draw (the same
-  // string as its listener's) and js/diagram-view.js and
-  // js/diagram-cards.js to mount.
+  // string as its listener's) and features/blocks/ts/diagram-view.js and
+  // features/blocks/ts/diagram-cards.js to mount.
   var DIAGRAMS = "lotuspod:diagrams";
   // Sent on the document by the template's start-up module with a diagram's
   // svg drawn again in the reader's other theme (detail.svg), in its pre
-  // (detail.pre) when the old svg was there, for js/diagram-cards.js to bind
-  // the new boxes. When the diagram is open in its view, js/diagram-view.js
-  // puts the new svg there and cancels the event.
+  // (detail.pre) when the old svg was there, for
+  // features/blocks/ts/diagram-cards.js to bind the new boxes. When the diagram
+  // is open in its view, features/blocks/ts/diagram-view.js puts the new svg
+  // there and cancels the event.
   var REDRAWN = "lotuspod:diagram-redrawn";
-  // Sent on a diagram's svg each time its view (js/diagram-view.js) moves or
-  // zooms it, so an open node card (js/diagram-cards.js) follows its box.
+  // Sent on a diagram's svg each time its view
+  // (features/blocks/ts/diagram-view.js) moves or zooms it, so an open node
+  // card (features/blocks/ts/diagram-cards.js) follows its box.
   var MOVED = "lotuspod:diagram-moved";
   // What the page's text leaves out and no passage may hold: the comment UI,
   // decision forms and their chips, the Answered table, diagrams and their
@@ -115,8 +119,9 @@
   var CONTEXT = 32;
   // How long the selection must keep still before the pill shows, in ms.
   var STILL = 200;
-  // An archived page, as serve marks it (lotuspod.archive): its threads and
-  // answers are read, but it takes no new comment, reply or answer.
+  // An archived page, as serve marks it (lotuspod.features.history.archive):
+  // its threads and answers are read, but it takes no new comment, reply or
+  // answer.
   var ARCHIVED = Boolean(document.querySelector('meta[name="lotuspod:archived"]'));
   var CLOSED = "Comments are closed: this page is archived.";
 
@@ -135,10 +140,12 @@
 
   // What the address's fragment gives name as #NAME=VALUE, decoded: a link
   // from the index's Recent activity, #thread=ID (the comments island) or
-  // #question=ID (the review sheet, web/src/islands/review-sheet.tsx, reads
-  // it through web/src/islands/bridge.ts). Null for any other fragment, and,
+  // #question=ID (the review sheet,
+  // features/comments/ts/islands/review-sheet.tsx, reads it through
+  // features/comments/ts/islands/bridge.ts). Null for any other fragment, and,
   // read as the page opens (first), for a page reloaded, by the reader or by
-  // itself (js/live-page.js), which keeps where the reader was instead.
+  // itself (features/live/ts/live-page.js), which keeps where the reader was
+  // instead.
   function linkedTo(name, first) {
     var prefix = "#" + name + "=";
     if (location.hash.indexOf(prefix) !== 0) {
@@ -349,8 +356,8 @@
   // "changed" when a newer revision swapped it in while it was folded.
   // What it returns folds a later heading and body the same way, as the
   // Answered table does once it is drawn and a section a newer revision
-  // swapped in does (web/src/page-swap.ts), and its drop forgets one taken
-  // away.
+  // swapped in does (features/live/ts/page-swap.ts), and its drop forgets one
+  // taken away.
   function foldSections(wrappers) {
     var key = SECTIONS + location.pathname;
     var sections = [];

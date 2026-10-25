@@ -51,9 +51,9 @@ it, whatever command the responder restarted with.
 When the agent's answer ends with a line `NEEDS_OWNER: ASK`, the comment
 asks the page's owner to do something the agent cannot: the line is taken
 off, the reply ends with "I've queued this for OWNER: ASK" instead, and ASK
-goes into OWNER's inbox (lotuspod.db) with the page and the comment, in the
-same transaction as the reply, so only a reply that is stored queues it; serve
-names OWNER as the page has it then, and a page with no owner gets a reply
+goes into OWNER's inbox (lotuspod.store.db) with the page and the comment, in
+the same transaction as the reply, so only a reply that is stored queues it;
+serve names OWNER as the page has it then, and a page with no owner gets a reply
 saying there is no one to queue it for. The line's room is not counted
 against the reply's length.
 The prompt always gives the comment to answer in full, whatever of its

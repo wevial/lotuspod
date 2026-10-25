@@ -1,8 +1,8 @@
 // The decisions island (src/lotuspod/features/decisions/ts/islands/) on the
 // comments store's signals, as the islands bundle holds them (islands.ts),
 // mounted over a decision form as the renderer writes it
-// (lotuspod.decisions), in happy-dom's DOM, against stubbed answers and
-// archive routes.
+// (lotuspod.features.decisions.decisions), in happy-dom's DOM, against stubbed
+// answers and archive routes.
 
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { Window } from "happy-dom";

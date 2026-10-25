@@ -71,8 +71,9 @@
 }
 
 /* A report's table is its own scroll container, as an article's is
-   (css/prose.css): it takes the room it is given, up to --measure-full at the
-   top level, and scrolls inside itself when its columns cannot fit it. */
+   (features/publish/theme/prose.css): it takes the room it is given, up to
+   --measure-full at the top level, and scrolls inside itself when its columns
+   cannot fit it. */
 .artifact--report .artifact-body table {
   font-size: 0.8rem;
   line-height: 1.45;

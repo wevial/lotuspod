@@ -38,7 +38,7 @@ unread replies on, that serve still answers: `revision` the page's current
 one, `seen` the one recorded and `seenAt` when (both null for a page never
 opened), `replies` the count of the page's comments stored since then by
 anyone but the reader (0 for a page never opened) and `unread` the count of
-the reader's unread replies on it (lotuspod.db), 0 while the page has no
+the reader's unread replies on it (lotuspod.store.db), 0 while the page has no
 comment boxes. A page never opened is listed only while that count is not
 0. It never names the reader.
 
@@ -142,15 +142,15 @@ note to the same question is a reply in the newest thread a note opened,
 which it reopens if resolved. A note-less answer's body has no `comment`.
 
 `{page, section: "", text}` opens a thread on the whole page rather than one
-section: section "" (lotuspod.comments.WHOLE_PAGE), which no box carries, is
-stored with section_title "". It takes no quote (400 invalid_body), and only
-a page with section boxes takes it: 400 unknown_section on a page with no
-comment boxes and on one whose only box is `page`, which already covers the
-whole page. It is refused otherwise as any new thread is.
+section: section "" (lotuspod.features.comments.comments.WHOLE_PAGE), which no
+box carries, is stored with section_title "". It takes no quote (400
+invalid_body), and only a page with section boxes takes it: 400 unknown_section
+on a page with no comment boxes and on one whose only box is `page`, which
+already covers the whole page. It is refused otherwise as any new thread is.
 
 An owner (one of the [access] owners) may dismiss a question that no
 longer matters: `{page, question, version, dismissed: true, reason}`, the
-reason 0 to MAX_REASON characters, stores a dismissal (lotuspod.db), an
+reason 0 to MAX_REASON characters, stores a dismissal (lotuspod.store.db), an
 answer of its own marked `dismissed`, its choice "", its kept label
 "Dismissed" and its reason as its note, and answers 201 with it. It opens
 no thread. `{page, question, dismissed: false}` undoes the dismissal that

@@ -1,6 +1,6 @@
-"""lotuspod.media: which files are accepted as images, the width and height
-read from each one's header, the content-addressed store beside the artifacts
-directory, and serve's answers under /media/.
+"""lotuspod.features.publish.media: which files are accepted as images, the
+width and height read from each one's header, the content-addressed store beside
+the artifacts directory, and serve's answers under /media/.
 
 The images in tests/fixtures/media/ were made with a real encoder (Pillow),
 never written byte by byte here; each name states the size it was encoded at.

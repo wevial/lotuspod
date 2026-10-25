@@ -1,7 +1,7 @@
 // The review sheet over a page's decision cards (the decisions island), drawn
 // once the page's answers are read, and again once each swap's read of
-// them is (web/src/page-swap.ts sends ANSWERED after it). A form with a
-// default (the form's data-default) and no stored answer gets its default
+// them is (features/live/ts/page-swap.ts sends ANSWERED after it). A form with
+// a default (the form's data-default) and no stored answer gets its default
 // picked, so it shows "Not saved": on a swap, only a form the swap brought
 // in.
 // A question is to answer while it has no stored answer at its version (a
@@ -253,10 +253,11 @@ function draw(page: Page, the: Cards, tools: HTMLElement, marks: Map<HTMLElement
 // the sheet. A question the page does not ask leaves the page where it is.
 // A link followed before the answers are drawn is no reload's fragment,
 // and one after waits for every other hashchange listener, such as the
-// versions view's (js/versions.js), which may still hide the text.
-// A live block's "N decisions" (lotuspod.widgets) is such a link to the
-// first question about it, which then also takes the focus, as Cards.jump gives
-// it, pressed again once it is the address too.
+// versions view's (features/history/ts/versions.js), which may still hide the
+// text.
+// A live block's "N decisions" (lotuspod.features.widgets.widgets) is such a
+// link to the first question about it, which then also takes the focus, as
+// Cards.jump gives it, pressed again once it is the address too.
 export function reviewSheet(page: Page, cards: Cards | null): void {
   if (!cards || !cards.forms.length) {
     return;

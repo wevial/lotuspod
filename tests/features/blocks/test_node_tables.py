@@ -1,7 +1,7 @@
 """Test suite for the Nodes table under a flowchart
-(`src/lotuspod/node_tables.py`): render marks the diagram, its heading, its
-table and each body row with attributes, and changes nothing else in the
-body.
+(`src/lotuspod/features/blocks/node_tables.py`): render marks the diagram, its
+heading, its table and each body row with attributes, and changes nothing else
+in the body.
 
 Run from the repo root:
 

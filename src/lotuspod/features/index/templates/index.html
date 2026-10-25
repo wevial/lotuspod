@@ -641,7 +641,8 @@
 
       // Where an event happened, from its page's href: the page itself for
       // its current version, the read-only old version for an earlier one,
-      // the page with the thread open (js/comments.js) for a comment or a
+      // the page with the thread open
+      // (features/comments/ts/islands/comments/store.ts) for a comment or a
       // reply, and scrolled to the decision's form for an answer; the page
       // itself for an event missing its commit, thread or question.
       const whereOf = (href, event) => {

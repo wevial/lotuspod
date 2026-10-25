@@ -1,5 +1,6 @@
-/* Ticket keys and pull requests the page names (js/ref-cards.js). Without
-   the script a reference reads as the text around it and no card shows. */
+/* Ticket keys and pull requests the page names
+   (features/blocks/ts/ref-cards.js). Without the script a reference reads as
+   the text around it and no card shows. */
 .artifact-body button.artifact-ref {
   background: none;
   border: 0;

@@ -8,8 +8,8 @@
   // where it was written and is set from the reference's rectangle: under it,
   // left-aligned to it, or right-aligned where that would pass the window's
   // right edge, always inside the window. References and cards a swap brings
-  // in (web/src/page-swap.ts) are bound as those at load; a card that shows
-  // while it or its reference is swapped out is hidden.
+  // in (features/live/ts/page-swap.ts) are bound as those at load; a card that
+  // shows while it or its reference is swapped out is hidden.
   function refCards(body) {
     // The room kept between the card and its reference, and the window's
     // edge, in px.
@@ -38,7 +38,7 @@
       all("time[datetime]", card).forEach(function (time) {
         time.textContent = when(time.getAttribute("datetime"));
       });
-      // The card's links are off the body, so js/link-tab.js left them.
+      // The card's links are off the body, so core/ts/link-tab.js left them.
       all("a[href]:not([target])", card).forEach(linkTab);
       var close = element("button", "artifact-ref-card-close", "✕");
       close.type = "button";
