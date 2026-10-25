@@ -21,7 +21,7 @@ import urllib.request
 from html.parser import HTMLParser
 from pathlib import Path
 
-from lotuspod.core import MANIFEST_FILE, is_page_name, write_atomic
+from lotuspod.core import MANIFEST_FILE, _utc_stamp, is_page_name, write_atomic
 from lotuspod.features import history, serve
 
 STATES_FILE = "lotuspod-pulls.json"
@@ -92,10 +92,6 @@ def parse_time(stamp: object) -> _dt.datetime | None:
     if moment.tzinfo is None:
         moment = moment.replace(tzinfo=_dt.timezone.utc)
     return moment.astimezone(_dt.timezone.utc)
-
-
-def utc_stamp(moment: _dt.datetime) -> str:
-    return moment.astimezone(_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def read_states(path: Path) -> dict[str, dict]:
@@ -202,10 +198,10 @@ def look_up(api: str, key: str, token: str) -> tuple[str, str | None]:
     if not isinstance(found, dict):
         raise LookupStopped(f"{key}: the answer is not a pull request")
     if parse_time(found.get("merged_at")):
-        return MERGED, utc_stamp(parse_time(found["merged_at"]))
+        return MERGED, _utc_stamp(parse_time(found["merged_at"]))
     if found.get("state") == "closed":
         closed_at = parse_time(found.get("closed_at"))
-        return CLOSED, utc_stamp(closed_at) if closed_at else None
+        return CLOSED, _utc_stamp(closed_at) if closed_at else None
     if found.get("state") == "open":
         return OPEN, None
     raise LookupStopped(f"{key}: the answer names no state")
@@ -246,7 +242,7 @@ def check(pulls: list[str], states: dict[str, dict], every: int, path: Path) -> 
                   file=sys.stderr)
             break
         states[key] = {"state": state, "at": at,
-                       "checked": utc_stamp(_dt.datetime.now(_dt.timezone.utc))}
+                       "checked": _utc_stamp(_dt.datetime.now(_dt.timezone.utc))}
         learned += 1
     if learned:
         write_states(path, states)
