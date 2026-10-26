@@ -219,7 +219,9 @@ export interface MarkView {
   close?(): void;
 }
 export interface SpotNode { id: string; label: string }
-export interface Spot { id: string; hash: string; shape: SpotShape; nodes: SpotNode[] }
+// title is the target's as serve read it when the thread was posted; a spot
+// stored before titles were kept has none.
+export interface Spot { id: string; hash: string; shape: SpotShape; nodes: SpotNode[]; title?: string }
 // Where a spot thread's mark stands: on its target as it was, on a changed
 // target whose nodes are all drawn, or nowhere.
 export type SpotStanding = "current" | "changed" | "gone";
