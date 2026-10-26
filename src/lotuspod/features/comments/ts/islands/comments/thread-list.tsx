@@ -382,8 +382,10 @@ export function threadList(page: Page, shell: Shell, bridge: ThreadListBridge) {
       made.status.textContent = "";
       thread.resolution = payload.resolution;
       shared.write.take({ root: thread.root, resolution: payload.resolution });
-      if (resolve && current === thread) {
-        current = null;
+      if (resolve) {
+        // Resolving reads the thread up to its newest comment.
+        bridge.seen(thread);
+        if (current === thread) current = null;
       }
       if (!resolve) {
         expand(thread);

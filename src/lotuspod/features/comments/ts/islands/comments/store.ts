@@ -574,7 +574,7 @@ export function store(page: Page, bridge: StoreBridge): Store {
       panel = makePlacement(page, {
         all: page.all, boxes, shown, forms, decisions,
         rows, resolved, agent, routed, threadsOf, decisionOf, passages,
-        imageWords: page.imageWords, looked: replies.looked, refresh, failure: composer.failure, json: page.json,
+        imageWords: page.imageWords, looked: replies.looked, seen: replies.see, refresh, failure: composer.failure, json: page.json,
         page: name, sections, showUnread: replies.showUnread, changed, author, unreadIn: replies.unreadIn,
         unblock: box => composer.unblock(forms.get(box)), settled: () => settled,
         unsent: box => {

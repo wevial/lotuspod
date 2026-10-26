@@ -81,7 +81,23 @@ export function replies(page: Page, bridge: RepliesBridge) {
   // the title follow the signals.
   function showUnread() {
     shown.forEach(markUnread);
+    shown.forEach(arrived);
   }
+
+  // A thread open in view on a visible page took comments unread since it
+  // opened: they are seen as on opening it, and stay marked while it stays
+  // open. One that came while the page was hidden is seen once it shows.
+  function arrived(thread: Thread) {
+    if (!thread.lit || !tracked.value || document.visibilityState !== "visible") return;
+    const held = opening.get(thread.root.id) || new Set<number>();
+    const fresh = rows(thread).filter(entry => counted(thread, entry) && !held.has(entry.id));
+    if (!fresh.length) return;
+    fresh.forEach(entry => held.add(entry.id));
+    opening.set(thread.root.id, held);
+    markUnread(thread);
+    void seeThread(thread);
+  }
+  document.addEventListener("visibilitychange", () => shown.forEach(arrived));
 
   // A thread opened or closed, in the panel, a popover or the sheet, all of
   // which draw it (the thread-list part's draw). Opened, it posts its newest
@@ -99,6 +115,11 @@ export function replies(page: Page, bridge: RepliesBridge) {
       markUnread(thread);
     }
     void seeThread(thread);
+  }
+
+  // A thread the reader resolved is seen up to its newest comment.
+  function see(thread: Thread) {
+    if (tracked.value) void seeThread(thread);
   }
 
   // Post that the reader has seen a thread up to its newest comment; the
@@ -153,7 +174,7 @@ export function replies(page: Page, bridge: RepliesBridge) {
   }
 
   return {
-    opening, counted, unreadIn, readTo, showUnread, looked, ask,
+    opening, counted, unreadIn, readTo, showUnread, looked, see, ask,
     // A swap gave the tab the new revision's title.
     retitle() {
       tabTitle.value = document.title;
