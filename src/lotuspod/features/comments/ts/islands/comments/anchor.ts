@@ -23,7 +23,7 @@ export function anchorOf(root: CommentRow): Anchor {
   if (root.spot) {
     const spot = root.spot;
     return { kind: "spot", id: String(spot.id), hash: String(spot.hash), shape: spot.shape,
-      nodes: Array.isArray(spot.nodes) ? spot.nodes : [] };
+      nodes: Array.isArray(spot.nodes) ? spot.nodes : [], title: spot.title };
   }
   if (!root.section || root.section === page.wholePage || root.section === "page") return { kind: "page" };
   return { kind: "section", section: root.section };
@@ -109,16 +109,20 @@ function remember(id: string, title: string) {
 
 // What a spot is on, in words: the labels its nodes were stored with, never
 // the live drawing's, so a reload still names a node gone; else its target's
-// title (an image's alt text, a diagram's section heading) as the page last
-// showed it, else the title of the section its thread was posted in
-// (section, as stored), else its id.
+// title (an image's alt text, a diagram's section heading) as the page shows
+// it, else as the thread stored it when posted, else as this browser last
+// saw it, else the title of the section its thread was posted in (section,
+// as stored), else its id.
 export function spotTitle(spot: Spot, section?: string): string {
   const labels = spot.nodes.map(node => String(node.label || node.id)).filter(Boolean);
   if (labels.length) return labels.join(", ");
   const target = targetOf(spot.id);
   const title = target && targetTitle(target);
-  if (title) remember(spot.id, title);
-  return remembered().get(spot.id) || section || spot.id;
+  if (title) {
+    remember(spot.id, title);
+    return title;
+  }
+  return spot.title || remembered().get(spot.id) || section || spot.id;
 }
 
 function targetTitle(target: HTMLElement): string {

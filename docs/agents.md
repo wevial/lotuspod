@@ -121,8 +121,9 @@ responder queued for it. Items are, comments first, oldest first:
   choice, label}` of that answer; claim and reply to it as to any comment.
   A comment in a thread anchored to a spot on a diagram or an image (see
   [Answers and comments](comments.md#answers-and-comments)) also comes with
-  `spot`, the anchor `{id, hash, shape, nodes}` as the thread's first comment
-  keeps it, and `target`: its `kind` (`diagram` or `image`), `title` (a
+  `spot`, the anchor `{id, hash, shape, nodes, title}` as the thread's first
+  comment keeps it, `title` the target's when the thread was posted (no
+  `title` on one stored before titles were kept), and `target`: its `kind` (`diagram` or `image`), `title` (a
   diagram's section title, an image's alt text) and `status`, `current` while
   the target's hash is the anchor's, `changed` once it is another, and
   `removed`, with `kind` and `title` `""`, once the page has no target of that
@@ -177,8 +178,8 @@ first comment, and each quoted first comment `show` prints, gives the same two
 fences under "The reader highlighted, on revision R:". A comment with no quote
 prints none of these. A comment in a thread on a spot adds, after its state,
 `- Spot: box on Pod (diagram "Flow")`: the shape's kind, `on` and the covered
-nodes' labels when there are any, the target's kind and title (its id when the
-title is empty), then `, changed since` or `, removed since` when it has. A
+nodes' labels when there are any, the target's kind and title (when the
+title is empty, the spot's stored `title`, else its id), then `, changed since` or `, removed since` when it has. A
 comment in a thread on a decision adds, after its
 state, ``- Decision: `ID`, QUESTION`` (or ``- Decision: `ID`, which the page
 no longer asks``), a `- Context: LINE` line for each of its context lines,

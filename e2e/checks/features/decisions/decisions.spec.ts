@@ -196,7 +196,7 @@ test.describe('signed in', () => {
     await page.goto(`${PAGE}?standalone`);
     for (const question of ['decision-1', 'decision-2']) {
       const card = decision(page, question);
-      await expect(card.radios).toHaveCount(2);
+      await expect(card.radios).toHaveCount(3);
       const [top, bottom] = [await card.radios.nth(0).boundingBox(), await card.radios.nth(1).boundingBox()];
       expect(bottom!.y).toBeGreaterThan(top!.y + top!.height);
       expect(Math.abs(bottom!.x - top!.x)).toBeLessThan(1);

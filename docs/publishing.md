@@ -1088,7 +1088,9 @@ for the maintainer" (any case), before the next h2, whose header row has a
 own heading, so a question can sit in the section it is about. The pass
 works on the body's HTML, so a markdown page and an HTML one alike get it.
 `#`, `Options` and `Default` columns are optional; any other column is shown
-under its question as context.
+under its question as context. An `Options` or `Default` header may carry a
+parenthesised note after it, as `Options (a / b)` or `Default (if unsure)`,
+and is still that column (any case).
 
 A `Context` column (any case) is for what the question needs explaining, so
 the Question cell stays short:
@@ -1114,17 +1116,25 @@ a note folded behind "Add a note" and a "Save answer" button. Its question id
 is `decision-` and the slug of its `#` cell, or `decision-N` by row number
 without a `#` column. Options are the `Options` cell split on ` / `, each
 keyed by its slug; the one matching the `Default` cell carries a quiet
-"· default" mark. With a `Default` but no `Options`
-column, a row offers "Accept the default" (`accept`) and "Something else"
+"· default" mark, and no "Options" or "Default" line is drawn. Every
+decision ends in one more radio, "Something else" (`other`), unless the cell
+already offers an option valued `other` or labelled "Something else" (any
+case); it is not part of the version. Picking it on the card opens the
+card's "Add a note", the focus staying on the radio, for the reader to say
+what. With a `Default` but no `Options`
+column, or an `Options` cell that does not split into two or more options,
+a row offers "Accept the default" (`accept`) and "Something else"
 (`other`) and shows the default's text as "Default:", which is what "Accept
-the default" accepts. A form with a default names it in `data-default`: the
-default option's value, or `accept`. The page as written picks no option;
+the default" accepts; such an `Options` cell's text shows as context,
+labelled with its header. A form with a default names it in `data-default`:
+the default option's value, or `accept`. The page as written picks no option;
 once the page script has read the answers, it picks the default of each
 question that has one and no answer as the page now asks it, which shows
 "Not saved" until it is
 saved. A Default cell names the option whose label it matches, in any case,
-before one whose slug alone matches. A table with any row of fewer than two options is left
-exactly as written, and the page then loads no script.
+before one whose slug alone matches. A table with any row of fewer than two
+options and no Default is left exactly as written, and the page then loads
+no script.
 
 Each form carries `data-version`, a short hash of its question's text and its
 options' labels, so any edit to them changes its version, and the answers
@@ -1133,7 +1143,12 @@ current answer as its answer when it was given at the form's version, or
 when it is a decision's answer (not a dismissal) given to the question in the
 same words, with its chosen option still offered under the same label (text
 and labels compared trimmed, runs of white space as one space): adding an
-option, or rewording another, keeps the answer. Rewording the question, or
+option, or rewording another, keeps the answer. An answer saved through
+"Accept the default", once the row asks the same question with options of
+its own and a Default naming one of them, shows as that default option
+chosen: the card fills it and folds to "✓ Saved · LABEL · change", it counts
+as answered, and publish prints no line for it. Agents still read it as
+"Accept the default". Rewording the question, or
 the chosen option's label, does not: the page shows the old answer as given
 "to an earlier wording" without filling the form from it. A checklist's
 answer, a dismissal, and an answer stored before its words were kept show

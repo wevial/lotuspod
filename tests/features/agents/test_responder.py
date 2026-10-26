@@ -286,7 +286,8 @@ class DecisionPromptTests(ResponderCase):
         section = self.answer_section(record["prompt"], first)
         self.assertIn("The reader asks about the decision `decision-1`: \"Buy a heater?\"",
                       section)
-        self.assertIn("Its options: Gas (`gas`), Electric (`electric`), Neither (`neither`).",
+        self.assertIn("Its options: Gas (`gas`), Electric (`electric`), Neither (`neither`), "
+                      "Something else (`other`).",
                       section)
         self.assertIn("Its current answer: not answered yet.", section)
         self.assertLess(section.index('On the section headed "Decisions for the maintainer"'),
