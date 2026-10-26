@@ -85,19 +85,14 @@
     var status = bar.querySelector(".artifact-copy-link-status");
     var field = null;
     var timer = null;
-    // Each press, and each close, starts a new attempt; a clipboard write
-    // that settles after a later one acts on nothing.
+    // Each press, and each close of an open field, starts a new attempt; a
+    // clipboard write that settles after a later one acts on nothing.
     var attempt = 0;
 
-    // The server answers an earlier version only for a query of `version`
-    // alone, once; any other query shows the current page.
     function address() {
-      var query = new URLSearchParams(location.search);
-      var keys = [];
-      query.forEach(function (value, key) { keys.push(key); });
+      var version = new URLSearchParams(location.search).get("version");
       var base = location.origin + location.pathname;
-      if (keys.length !== 1 || keys[0] !== "version") return base;
-      return base + "?version=" + encodeURIComponent(query.get("version"));
+      return version ? base + "?version=" + encodeURIComponent(version) : base;
     }
 
     function copied() {
@@ -111,8 +106,8 @@
     }
 
     function close() {
-      attempt++;
       if (!field || field.hidden) return;
+      attempt++;
       field.hidden = true;
       button.focus();
     }

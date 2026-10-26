@@ -124,13 +124,11 @@ test('on an earlier version Copy link copies that version address', async ({ pag
   await expect(button).toHaveAttribute('data-copied', '');
   expect(await clipboard(page)).toBe(`${new URL(baseURL!).origin}/${name}.html?version=${older.commit}`);
 
-  // With any other query the server shows the current page, so the link is
-  // the current page's.
-  await page.goto(`/${name}.html?version=${older.commit}&utm_source=test`);
-  await expect(page.locator('.artifact-body')).toContainText('Edition: second.');
+  // Every other query part and the fragment are dropped; the version stays.
+  await page.goto(`/${name}.html?version=${older.commit}&utm_source=test#top`);
   await copyLink(page).click();
   await expect(copyLink(page)).toHaveAttribute('data-copied', '');
-  expect(await clipboard(page)).toBe(`${new URL(baseURL!).origin}/${name}.html`);
+  expect(await clipboard(page)).toBe(`${new URL(baseURL!).origin}/${name}.html?version=${older.commit}`);
   expect(errors).toEqual([]);
 });
 
@@ -196,6 +194,21 @@ test('a refusal that settles after the field was dismissed opens nothing', async
   await page.evaluate(() => new Promise((done) => setTimeout(done, 100)));
   await expect(field).toBeHidden();
   await expect(button).toBeFocused();
+  expect(errors).toEqual([]);
+});
+
+test('a click elsewhere while the write is pending leaves its refusal to open the field', async ({ page }) => {
+  const errors = await watch(page);
+  await page.addInitScript(() => {
+    navigator.clipboard.writeText = () => new Promise((_, reject) => {
+      (window as any).refuse = () => reject(new DOMException('Refused', 'NotAllowedError'));
+    });
+  });
+  await page.goto(`${PAGE}?standalone`);
+  await copyLink(page).click();
+  await page.locator('.artifact-body').click();
+  await page.evaluate(() => (window as any).refuse());
+  await expect(page.locator('input.artifact-copy-link-field')).toBeFocused();
   expect(errors).toEqual([]);
 });
 
