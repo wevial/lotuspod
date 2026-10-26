@@ -654,8 +654,8 @@ class BaseTests(ImageTestCase):
             POND_IMAGES.replace("./chart.png", f"/media/{chart}")
             .replace("photos/fish.jpg", f"/media/{fish}"),
         )
-        self.assertIn(f'<img src="/media/{fish}" alt="Fish" loading="lazy" width="320" '
-                      'height="240">', self.page("pond"))
+        self.assertIn(f'<img data-spot="fish" data-spot-hash="{fish[:12]}" src="/media/{fish}"'
+                      ' alt="Fish" loading="lazy" width="320" height="240">', self.page("pond"))
 
     def test_base_names_another_directory_than_the_source_files(self):
         elsewhere = self.tmp / "elsewhere"

@@ -436,7 +436,7 @@ class MigrationTests(unittest.TestCase):
             conn.commit()
 
             # Columns later migrations add, which the inbox's leaves alone.
-            later = {("comments", "widget")}
+            later = {("comments", "widget"), ("comments", "spot")}
 
             def snapshot() -> dict:
                 tables = conn.execute(
