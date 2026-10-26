@@ -5,11 +5,10 @@ export function radios(form: HTMLFormElement): HTMLInputElement[] {
   return all<HTMLInputElement>('input[type="radio"][name="choice"]', form);
 }
 
-// Whether a radio is the form's "Something else": valued "other", or so
-// labelled in any case.
-export function isOther(radio: HTMLInputElement): boolean {
-  const text = radio.parentNode!.querySelector(".artifact-decision-label");
-  return radio.value === "other" || (text?.textContent ?? "").trim().toLowerCase() === "something else";
+// The label beside the form's radio valued value, if it has one.
+function labelOf(form: HTMLFormElement, value: unknown): Element | null | undefined {
+  const found = radios(form).find((radio) => radio.value === value);
+  return found && found.parentNode!.querySelector(".artifact-decision-label");
 }
 
 // The words of a form's part, its whitespace collapsed.
@@ -47,21 +46,17 @@ export function label(form: HTMLFormElement, answer: Answer): string {
     return answer.version === form.dataset.version ? summary(form, answer.checked || []) : kept(answer);
   }
   const choice = chosen(form, answer);
-  const found = radios(form).find((radio) => radio.value === choice);
-  const text = found && found.parentNode!.querySelector(".artifact-decision-label");
+  const text = labelOf(form, choice);
   return text ? text.textContent ?? "" : String(choice);
 }
 
-// The option a decision form shows answer as: its default for an earlier
-// "Accept the default" it no longer offers (accepted), else the answer's
-// own choice.
+// The option a decision form shows answer as, the rule
+// lotuspod.features.decisions.decisions.shown documents: its default for an
+// earlier "Accept the default" it no longer offers, else the answer's own
+// choice.
 export function chosen(form: HTMLFormElement, answer: Answer): string | undefined {
-  return accepted(form, answer) ? form.dataset.default : answer.choice;
+  return holds(form, answer) && accepted(form, answer) ? form.dataset.default : answer.choice;
 }
-
-// The option a row offers when it has a default and no options of its own.
-const ACCEPT = "accept";
-const ACCEPTED = "Accept the default";
 
 // The characters Python's str.split() takes as white space, so the page and
 // publish's warning collapse the same ones.
@@ -80,34 +75,25 @@ export function holds(form: HTMLFormElement, answer: Answer): boolean {
   }
   const asked = answer.asked || {};
   if (isChecklist(form) || answer.dismissed || Array.isArray(answer.checked) || !asked.text ||
-    asked.label === undefined || asked.label === null) {
+    asked.label == null || squeezed(asked.text) !== squeezed(form.querySelector(".artifact-decision-text")?.textContent ?? "")) {
     return false;
   }
-  const found = radios(form).find((radio) => radio.value === answer.choice);
-  const text = found && found.parentNode!.querySelector(".artifact-decision-label");
-  if (text) {
-    return asksAs(form, answer) && squeezed(asked.label) === squeezed(text.textContent ?? "");
-  }
-  return accepted(form, answer);
+  const text = labelOf(form, answer.choice);
+  return text ? squeezed(asked.label) === squeezed(text.textContent ?? "") : accepted(form, answer);
 }
 
-// Whether answer was given to the question the form asks, in its words.
-function asksAs(form: HTMLFormElement, answer: Answer): boolean {
-  const asked = answer.asked || {};
-  return Boolean(asked.text) &&
-    squeezed(asked.text) === squeezed(form.querySelector(".artifact-decision-text")?.textContent ?? "");
-}
-
-// Whether answer, a decision's, not a dismissal, given to the question the
-// form asks in its words, is an "Accept the default" the form no longer
-// offers, while the form's default is one of its options.
+// Whether answer, a decision's, not a dismissal, is an "Accept the default"
+// the form no longer offers, while the form's default is one of its options.
 function accepted(form: HTMLFormElement, answer: Answer): boolean {
-  const asked = answer.asked || {};
-  const values = radios(form).map((radio) => radio.value);
-  const fallback = form.dataset.default;
-  return !isChecklist(form) && !answer.dismissed && answer.choice === ACCEPT &&
-    squeezed(asked.label) === ACCEPTED &&
-    asksAs(form, answer) && !values.includes(ACCEPT) && Boolean(fallback) && values.includes(fallback!);
+  return !answer.dismissed && answer.choice === "accept" &&
+    squeezed(answer.asked?.label) === "Accept the default" &&
+    !labelOf(form, "accept") && Boolean(labelOf(form, form.dataset.default));
+}
+
+// The note field's fold opened, or closed.
+export function fold(note: HTMLTextAreaElement, open: boolean): void {
+  const details = note.closest("details");
+  if (details) details.open = open;
 }
 
 // The form's note field.

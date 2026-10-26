@@ -472,8 +472,6 @@ test.describe('signed in', () => {
         [390, 844, '.artifact-comments-bottom-sheet--open', 'And clear of the pump.'],
         [1280, 800, '.artifact-comments-panel', 'The fish keep to the far end.'],
       ] as const) {
-        // Off the page, so its open thread does not mark the reply read.
-        await page.goto('about:blank');
         addTo(text, `activity-links-${thread}-${width}`);
         await expect.poll(unreadOnC).toBe(1);
         await page.setViewportSize({ width, height });

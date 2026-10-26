@@ -3,7 +3,7 @@ import type { ReadonlySignal, Signal } from "@preact/signals";
 import type { Answer, Answers, Page } from "../../../comments/ts/index";
 import { isChecklist, optionText, same, ticked, boxes } from "./checklist";
 import { expand } from "./collapse";
-import { chosen, holds, label, noteField, noteOf, radios, status } from "./words";
+import { chosen, fold, holds, label, noteField, noteOf, radios, status } from "./words";
 
 // A decision form as the island holds it: the store's answers to its
 // question, those it was last drawn from, whether it is open to change
@@ -279,10 +279,7 @@ export function openCard(deck: Deck, card: Card): void {
   if (!dirty(card)) {
     fill(card);
   }
-  const note = form.querySelector<HTMLDetailsElement>("details.artifact-decision-note");
-  if (note) {
-    note.open = Boolean(noteField(form).value);
-  }
+  fold(noteField(form), Boolean(noteField(form).value));
   card.editing = true;
   status(form, "");
   draw(deck, card);

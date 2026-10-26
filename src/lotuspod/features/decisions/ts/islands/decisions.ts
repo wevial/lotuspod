@@ -8,7 +8,7 @@ import { collapsible, expand, isCollapsed } from "./collapse";
 import { dismissals } from "./dismiss";
 import { decisionsPanel } from "./panel";
 import { headingOf, jump, place } from "./sections";
-import { isOther, noteField, status } from "./words";
+import { fold, noteField, status } from "./words";
 
 // What the review sheet (comments/ts/islands/review-sheet.tsx) reads the
 // page's decision forms by: the forms and the store's answers are the
@@ -191,12 +191,9 @@ export function decisions(page: Page): Cards | null {
     form.addEventListener("submit", submit);
     form.addEventListener("input", () => mark(card));
     form.addEventListener("change", (event) => {
-      // "Something else" opens the note to say what; the focus stays on it.
-      const target = event.target as HTMLInputElement;
-      if (target.name === "choice" && target.checked && isOther(target)) {
-        const note = form.querySelector<HTMLDetailsElement>("details.artifact-decision-note");
-        if (note) note.open = true;
-      }
+      // "Something else", valued "other" or an option so labelled, opens the
+      // note to say what; the focus stays on it.
+      if (/^(other|something-else)$/.test((event.target as HTMLInputElement).value)) fold(noteField(form), true);
       mark(card);
     });
     mark(card);
