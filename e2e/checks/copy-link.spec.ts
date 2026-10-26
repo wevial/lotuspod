@@ -57,6 +57,12 @@ function clipboard(page: Page | Frame) {
   return page.evaluate(() => navigator.clipboard.readText());
 }
 
+function refuseClipboard(page: Page) {
+  return page.addInitScript(() => {
+    navigator.clipboard.writeText = () => Promise.reject(new DOMException('Refused', 'NotAllowedError'));
+  });
+}
+
 function run(...args: string[]) {
   return execFileSync(PYTHON, ['-m', 'lotuspod', ...args], {
     encoding: 'utf-8',
@@ -135,9 +141,7 @@ test('on an earlier version Copy link copies that version address', async ({ pag
 
 test('where the clipboard refuses, a selected read-only field holds the address until Escape', async ({ page, baseURL }) => {
   const errors = await watch(page);
-  await page.addInitScript(() => {
-    navigator.clipboard.writeText = () => Promise.reject(new DOMException('Refused', 'NotAllowedError'));
-  });
+  await refuseClipboard(page);
   await page.goto(`${PAGE}?standalone#top`);
   const address = `${new URL(baseURL!).origin}${PAGE}`;
   const button = copyLink(page);
@@ -177,9 +181,7 @@ test('where the clipboard refuses, a selected read-only field holds the address 
 // A page opened from disk has the origin "null" in some browsers; its address
 // is still its file URL.
 test('a page opened from disk gives its file address', async ({ page }) => {
-  await page.addInitScript(() => {
-    navigator.clipboard.writeText = () => Promise.reject(new DOMException('Refused', 'NotAllowedError'));
-  });
+  await refuseClipboard(page);
   const file = pathToFileURL(path.join(OUT, `${SLUG}.html`)).href;
   await page.goto(`${file}?from=index#top`);
   await copyLink(page).click();
@@ -227,9 +229,7 @@ test('a click elsewhere while the write is pending leaves its refusal to open th
 
 test('Escape closes the field after focus has moved off it', async ({ page }) => {
   const errors = await watch(page);
-  await page.addInitScript(() => {
-    navigator.clipboard.writeText = () => Promise.reject(new DOMException('Refused', 'NotAllowedError'));
-  });
+  await refuseClipboard(page);
   await page.goto(`${PAGE}?standalone`);
   const button = copyLink(page);
   await button.click();
@@ -245,9 +245,7 @@ test('Escape closes the field after focus has moved off it', async ({ page }) =>
 
 test('the field stays in the window when the window narrows', async ({ page }) => {
   const errors = await watch(page);
-  await page.addInitScript(() => {
-    navigator.clipboard.writeText = () => Promise.reject(new DOMException('Refused', 'NotAllowedError'));
-  });
+  await refuseClipboard(page);
   await page.goto(`${PAGE}?standalone`);
   await copyLink(page).click();
   const field = page.locator('input.artifact-copy-link-field');

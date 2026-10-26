@@ -31,16 +31,8 @@
 .artifact-copy-link {
   align-items: center;
   align-self: center;
-  background: none;
-  border: 0;
-  border-radius: var(--radius-pill);
-  color: var(--color-muted-lavender);
-  cursor: pointer;
   display: inline-flex;
   flex: none;
-  font: inherit;
-  font-size: 0.8rem;
-  line-height: 1.4;
   margin: -0.2rem 0 -0.2rem auto;
   order: 1;
   padding: 0.15rem 0.45rem;
@@ -98,16 +90,20 @@
   width: 24rem;
 }
 
-.artifact-theme-option {
+.artifact-theme-option,
+.artifact-copy-link {
   background: none;
   border: 0;
   border-radius: var(--radius-pill);
   color: var(--color-muted-lavender);
   cursor: pointer;
   font: inherit;
-  font-family: var(--font-body);
   font-size: 0.8rem;
   line-height: 1.4;
+}
+
+.artifact-theme-option {
+  font-family: var(--font-body);
   margin: 0;
   padding: 0.15rem 0.7rem;
   position: relative;
