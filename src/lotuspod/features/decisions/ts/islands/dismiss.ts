@@ -1,7 +1,7 @@
 import type { AnswerStore } from "../../../comments/ts/index";
 import { acting, dirty, draw, fill, queue, refused, saved, type Card, type Deck } from "./card";
 import { isChecklist } from "./checklist";
-import { noteField, radios, status } from "./words";
+import { fold, noteField, radios, status } from "./words";
 
 const MAX_REASON = 200;
 
@@ -57,10 +57,7 @@ export function dismissals(deck: Deck, answers: AnswerStore, told: (card: Card, 
       for (const radio of radios(form)) radio.checked = false;
       if (note.value === sent) {
         note.value = "";
-        const fold = note.closest("details");
-        if (fold) {
-          fold.open = false;
-        }
+        fold(note, false);
       }
       card.editing = false;
       status(form, "");
@@ -118,10 +115,7 @@ export function dismissals(deck: Deck, answers: AnswerStore, told: (card: Card, 
       fill(card);
       if (draft) {
         note.value = draft;
-        const fold = note.closest("details");
-        if (fold) {
-          fold.open = true;
-        }
+        fold(note, true);
       }
       card.editing = dirty(card);
       status(form, "");

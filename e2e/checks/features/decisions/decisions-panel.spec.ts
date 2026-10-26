@@ -291,7 +291,8 @@ test('every question with no saved answer is to answer, in the title bar, the ma
   await expect(second.option('Added and removed')).toBeChecked();
   await expect(second.item.locator('label', { has: page.locator('input:checked') })
     .locator('.artifact-decision-default')).toBeVisible();
-  for (const [question, labels] of Object.entries(OPTIONS)) {
+  for (const [question, options] of Object.entries(OPTIONS)) {
+    const labels = [...options, 'Something else'];
     const own = entry(page, question);
     await expect(own.labels).toHaveText(labels);
     await expect(own.radios).toHaveCount(labels.length);
@@ -612,7 +613,7 @@ test('a saved question moves to the folded Answered list, and its row changes th
   // "change" opens the row in place, as saved.
   await four.change.click();
   await expect(four.option('Only open tickets')).toBeChecked();
-  await expect(four.radios).toHaveCount(BACKFILL.length);
+  await expect(four.radios).toHaveCount(BACKFILL.length + 1);
   await expect(four.noteSummary).toHaveText('Edit note');
   await expect(four.note).toHaveValue(NOTE_4);
   for (const button of [four.save, four.cancel, four.show]) await expect(button).toBeVisible();

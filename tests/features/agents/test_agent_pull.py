@@ -931,7 +931,7 @@ class DecisionPullTests(PullTestCase):
     """A thread on a decision is pulled with the decision as the page asks
     it now, and its current answer."""
 
-    OPTIONS = [{"value": "yes", "label": "Yes"}, {"value": "no", "label": "No"}]
+    OPTIONS = [{"value": value, "label": label} for value, label in (("yes", "Yes"), ("no", "No"), decisions.OTHER)]
 
     def items(self, owner: str = "hermes", credential: Path | None = None) -> dict:
         return {item["comment"]["id"]: item for item in self.pull(owner, credential)
@@ -997,7 +997,7 @@ class DecisionPullTests(PullTestCase):
         out = self.markdown("pull", "--owner", "hermes")
         mine, plain = out.split("section Goals")
         self.assertIn("- Decision: `decision-2`, Skate on it?\n"
-                      "- Options: Yes (`yes`), No (`no`)\n"
+                      "- Options: Yes (`yes`), No (`no`), Something else (`other`)\n"
                       "- Answer: not answered yet\n", mine)
         self.assertNotIn("- Decision:", plain)
         self.assertNotIn("- Options:", plain)
@@ -1328,7 +1328,7 @@ class ContextPullTests(PullTestCase):
         self.assertIn("- Decision: `decision-1`, Freeze the pond?\n"
                       "- Context: A floating pump rides the ice.\n"
                       "- Context: Why it matters: The pond freezes in December.\n"
-                      "- Options: Yes (`yes`), No (`no`)\n", thread)
+                      "- Options: Yes (`yes`), No (`no`), Something else (`other`)\n", thread)
         other = out[out.index(f"Comment {bare['id']} on"):out.index(f"Answer {answer['id']} on")]
         self.assertIn("- Decision: `decision-2`, Skate on it?\n- Options:", other)
         self.assertNotIn("- Context:", other)
