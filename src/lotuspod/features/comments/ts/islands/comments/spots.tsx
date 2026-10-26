@@ -35,8 +35,8 @@ export interface Spots {
   // uploaded other than its crop, and whether any image is attached or on
   // its way; null with none.
   writing(): { section: string; text: string; images: StoredImage[]; held: boolean } | null;
-  // Once the open draft's uploads on their way are answered: whether there
-  // was one to wait for.
+  // Once the open draft's crop is made and known by its name, and its
+  // uploads on their way are answered: whether there was one to wait for.
   settled(): Promise<boolean>;
 }
 
@@ -920,9 +920,16 @@ export function spots(page: Page, bridge: SpotsBridge): Spots {
         images: draft.composer.images.kept().filter(image => image.name !== draft.crop), held: draft.composer.images.held(),
       };
     },
-    settled() {
+    // The crop is told from the other images once draft.making settles,
+    // so writing() leaves it out; a crop made again meanwhile is asked of
+    // again.
+    async settled() {
       const draft = marking?.draft;
-      return draft ? draft.composer.images.settled() : Promise.resolve(false);
+      if (!draft) return false;
+      const making = draft.making;
+      await making;
+      const waited = await draft.composer.images.settled();
+      return waited || draft.making !== making;
     },
   };
 }

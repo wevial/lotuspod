@@ -899,6 +899,59 @@ test('an image still uploading in a spot draft is waited for by Reload and kept 
   expect(errors).toEqual([]);
 });
 
+test('without crypto.subtle, an image spot\'s crop still uploading over Reload is not kept as an image', async ({ page }) => {
+  test.setTimeout(120_000);
+  const name = `spot-comments-kept-crop-${test.info().repeatEachIndex}`;
+  publish(name, doc());
+  // As on a page served over plain HTTP: the crop is found among the
+  // composer's images once uploaded, not by its hash.
+  await page.addInitScript(() => {
+    Object.defineProperty(Crypto.prototype, 'subtle', { get: () => undefined, configurable: true });
+  });
+  const errors = await watch(page);
+  await load(page, name);
+  const fish = figure(page);
+  await fish.img.scrollIntoViewIfNeeded();
+  await expect.poll(() => fish.img.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth)).toBe(320);
+  let release!: () => void;
+  const released = new Promise<void>((done) => { release = done; });
+  await page.route('**/api/media', async (route) => {
+    await released;
+    await route.continue();
+  });
+  await fish.comment.click();
+  const shown = await rect(fish.img);
+  await drag(page, [shown.x + shown.width * 0.2, shown.y + shown.height * 0.25],
+    [shown.x + shown.width * 0.6, shown.y + shown.height * 0.7]);
+  const form = composer(page);
+  await form.field.fill('Not sent yet');
+  await expect(page.locator('.artifact-attach-item--loading')).toHaveCount(1);
+
+  await page.evaluate(() => {
+    Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true });
+    Object.defineProperty(document, 'hidden', { value: true, configurable: true });
+  });
+  const [head, flowPart, pictures] = doc().split(/(?=## Flow|## Pictures)/);
+  publish(name, head + pictures + '\n' + flowPart);
+  await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+  const reload = page.locator('.artifact-live-page-banner').getByRole('button', { name: 'Reload' });
+  await expect(reload).toBeVisible();
+
+  const fetched = page.waitForResponse((response) => new URL(response.url()).pathname === `/${name}.html` &&
+    response.request().resourceType() === 'fetch');
+  const loaded = page.waitForEvent('load');
+  await reload.click();
+  await fetched;
+  release();
+  await loaded;
+  await page.unroute('**/api/media');
+  await expect(page.locator('html')).toHaveAttribute('data-lotuspod-comments-read', '');
+  const picturesForm = panel(page).group('Pictures').locator('form.artifact-comment-form');
+  await expect(picturesForm.locator('textarea[name="text"]')).toHaveValue('Not sent yet');
+  await expect(picturesForm.locator('.artifact-attach-item')).toHaveCount(0);
+  expect(errors).toEqual([]);
+});
+
 test('marks on adjacent diagrams are numbered in page order, and a draft\'s composer follows a wide diagram\'s scroll', async ({ page }) => {
   test.setTimeout(120_000);
   const name = `spot-comments-adjacent-${test.info().repeatEachIndex}`;
