@@ -83,14 +83,16 @@ export function onImage(spot: Spot): boolean {
 // swap took away.
 const titles = new Map<string, string>();
 
-// What a spot is on, in words: its nodes' labels, else its target's title
-// (an image's alt text, a diagram's section heading), else its id.
-export function spotTitle(spot: Spot): string {
+// What a spot is on, in words: the labels its nodes were stored with, never
+// the live drawing's, so a reload still names a node gone; else its target's
+// title (an image's alt text, a diagram's section heading), else the title
+// of the section its thread was posted in (section, as stored), else its id.
+export function spotTitle(spot: Spot, section?: string): string {
   const labels = spot.nodes.map(node => String(node.label || node.id)).filter(Boolean);
   if (labels.length) return labels.join(", ");
   const target = targetOf(spot.id);
   if (target) titles.set(spot.id, targetTitle(target) || spot.id);
-  return titles.get(spot.id) || spot.id;
+  return titles.get(spot.id) || section || spot.id;
 }
 
 function targetTitle(target: HTMLElement): string {

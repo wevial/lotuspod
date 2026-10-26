@@ -857,12 +857,20 @@ smaller area, its own or the mark's bounding box, overlaps), at most the 12 it
 covers most, each with its id and its label as drawn, and the shape in
 fractions of the rectangle those boxes span, or of the diagram's own viewBox
 when it covers none; on an image, the shape in the image's natural pixels and
-no boxes. An image's composer attaches, as its first image, a PNG crop of the
-spot at natural size, uploaded as any attached image is. Refused with 409
+no boxes. An image's composer attaches a PNG crop of the spot at natural
+size, uploaded as any attached image is, and posts it as its first image.
+Each send reads the composer's images as they then are: with no stored PNG of
+the crop's size among them (its upload refused or failed, or the reader took
+it out), the crop is made and attached again, and should that fail too,
+nothing is posted, the text stays and the composer says "The crop of the
+marked spot was not attached. Press Comment to try again." Refused with 409
 `stale_spot` or 400 `unknown_spot`, the composer keeps its text and says "This
 diagram has changed since the page loaded. Reload the page to comment on its
 new version." ("This image has changed ..." on an image). While a draft is
-open, a swap holds back the part it is in.
+open, a swap holds back the part it is in. Its Update keeps the composer and
+its text: the draft is drawn again where its boxes now are on the diagram
+swapped in, and posts on it; with one of its boxes gone, no draft is drawn and
+the composer stays on the version it was drawn on.
 
 Each unresolved spot thread is placed again each time the page draws its
 target: on load, when a swap brings it in and when Mermaid draws it again in
@@ -872,7 +880,9 @@ on none), dashed where those boxes now put it, its first comment followed by
 "Diagram changed since this comment" ("Image changed since this comment").
 When the target or one of its boxes is gone, nothing is drawn, nothing is
 guessed, and the thread is listed under "Sections that have changed", headed
-"On" and its boxes' labels joined by ", " (else the target's title). Marks are
+"On" and its boxes' labels joined by ", " as they were stored with the
+comment, so a reload names them too (else the target's title while the page
+has shown it, else the title of the section the thread was posted in). Marks are
 drawn in the drawing's own coordinates, each with its number at its first
 corner: spot threads are numbered with the passages, in page order, and those
 drawn nowhere after them. Pointing at a mark lights it and its entry in the

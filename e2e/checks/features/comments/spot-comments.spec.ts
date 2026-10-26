@@ -30,8 +30,6 @@ const MERMAID_COPY = path.join(__dirname, '..', '..', '..', 'node_modules', 'mer
 // features/publish/ts/page-open.js's STALE_DIAGRAM.
 const STALE_DIAGRAM = 'This diagram has changed since the page loaded. Reload the page to comment on its new version.';
 const CHANGED = 'Diagram changed since this comment';
-// features/publish/ts/page-open.js's PLACE_GONE.
-const PLACE_GONE = 'Where you were writing has changed since. Your text is kept here.';
 // What an image spot's composer says when its crop was not stored.
 const CROP_FAILED = 'The crop of the marked spot was not attached. Press Comment to try again.';
 const QUESTION = 'Is this the pod?';
@@ -149,6 +147,20 @@ async function swap(page: Page, name: string, markdown: string) {
   publish(name, markdown);
   await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
   await page.evaluate(() => (window as any).swapped);
+  await expect(diagram(page).svg).toBeVisible();
+}
+
+// Publish the page again while a draft holds Flow back, and apply the
+// swap with Flow's Update once it has redrawn the diagram.
+async function update(page: Page, name: string, markdown: string) {
+  const held = page.locator('.artifact-swap-held').getByRole('button', { name: 'Update', exact: true });
+  publish(name, markdown);
+  await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+  await expect(held).toBeVisible();
+  const old = await diagram(page).pre.evaluate((pre) => { (pre as any).old = true; return true; });
+  expect(old).toBe(true);
+  await held.click();
+  await expect.poll(() => diagram(page).pre.evaluate((pre) => !(pre as any).old)).toBe(true);
   await expect(diagram(page).svg).toBeVisible();
 }
 
@@ -442,15 +454,40 @@ test('a stroke, a click on a node and the keyboard mark spots; Escape drops a dr
   await expect(form.status).toHaveText(STALE_DIAGRAM);
   await expect(form.field).toHaveValue('Kept');
 
-  // A republish holds the section back while the draft is open; its Update
-  // takes the diagram away, and the text goes to Flow's form, saying why.
-  await swap(page, name, doc('TD'));
-  await expect(form.holder).toHaveCount(1);
-  await page.locator('.artifact-swap-held').getByRole('button', { name: 'Update', exact: true }).click();
+  // A republish holds Flow back while the draft is open. Its Update swaps
+  // the diagram in: the draft is drawn round Reader's new place, its text
+  // kept, and posts on the new diagram.
+  await update(page, name, doc('TD'));
+  await expect(form.field).toHaveValue('Kept');
+  await expect(flow.draft).toHaveCount(1);
+  await expect.poll(() => holds(flow.draft, flow.node('Reader'))).toBe(true);
+  const fresh = await flow.pre.getAttribute('data-spot-hash');
+  expect(fresh).not.toBe('abcdefabcdef');
+  await form.field.fill('Kept across Update');
+  const moved = page.waitForResponse((response) => new URL(response.url()).pathname === '/api/comments' &&
+    response.request().method() === 'POST');
+  await form.send.click();
+  const across = await moved;
+  expect(across.status()).toBe(201);
+  const acrossSpot = across.request().postDataJSON().spot;
+  expect(acrossSpot.hash).toBe(fresh);
+  expect(acrossSpot.nodes).toEqual([{ id: 'Reader', label: 'Reader' }]);
   await expect(form.holder).toHaveCount(0);
-  const flowForm = panel(page).group('Flow').locator('form.artifact-comment-form');
-  await expect(flowForm.locator('textarea[name="text"]')).toHaveValue('Kept');
-  await expect(flowForm.locator('.artifact-comment-status')).toHaveText(PLACE_GONE);
+
+  // With the draft's node gone, Update keeps the composer and its text, and
+  // draws no draft.
+  await flow.comment.click();
+  await boxRound(page, flow.node('Reader'));
+  await form.field.fill('Kept without Reader');
+  await update(page, name, doc('TD', 'Agent --> Publish --> Pod'));
+  await expect(flow.node('Pod')).toHaveCount(1);
+  await expect(flow.node('Reader')).toHaveCount(0);
+  await expect(form.holder).toHaveCount(1);
+  await expect(form.field).toHaveValue('Kept without Reader');
+  await expect(flow.draft).toHaveCount(0);
+  await form.field.focus();
+  await page.keyboard.press('Escape');
+  await expect(form.holder).toHaveCount(0);
   expect(errors).toEqual([]);
 });
 
@@ -553,7 +590,8 @@ test('a box on an image is posted in its natural pixels with a crop of it, and d
   expect(retried.images[0]).toMatch(/^[0-9a-f]{64}\.png$/);
   await expect(form.holder).toHaveCount(0);
 
-  // A crop the reader takes out is attached again before the send posts.
+  // A crop the reader takes out once it has uploaded is made and attached
+  // again by the send, and posted as the first image.
   await fish.img.scrollIntoViewIfNeeded();
   await fish.comment.click();
   const now = await rect(fish.img);
@@ -562,14 +600,19 @@ test('a box on an image is posted in its natural pixels with a crop of it, and d
   await form.holder.locator('.artifact-attach-remove').click();
   await expect(form.holder.locator('.artifact-attach-item')).toHaveCount(0);
   await form.field.fill('Without it?');
-  await page.waitForTimeout(1000);
-  console.log('TRAY', await form.holder.locator('.artifact-attach-item').count());
   const recropped = posting(page);
+  const recroppedRow = page.waitForResponse((response) => new URL(response.url()).pathname === '/api/comments' &&
+    response.request().method() === 'POST');
   await form.send.click();
   const third = (await recropped).postDataJSON();
-  console.log('THIRD', JSON.stringify(third));
   expect(third.images).toHaveLength(1);
   expect(third.images[0]).toMatch(/^[0-9a-f]{64}\.png$/);
+  const thirdRow = await recroppedRow;
+  expect(thirdRow.status()).toBe(201);
+  const thirdImage = (await thirdRow.json()).images[0];
+  expect(thirdImage.name).toBe(third.images[0]);
+  expect(thirdImage.width).toBe(Math.round(third.spot.shape.w));
+  expect(thirdImage.height).toBe(Math.round(third.spot.shape.h));
   await expect(form.holder).toHaveCount(0);
   expect(errors).toEqual([]);
 });

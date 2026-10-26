@@ -257,7 +257,7 @@ export function threadList(page: Page, shell: Shell, bridge: ThreadListBridge) {
         <span class="artifact-comments-entry-block">{blockTitle(anchor)}</span>{anchor.state ? " · " + anchor.state : ""}</span>;
       // Drawn, its number stands for where it is; else it says what it was on.
       case "spot": return thread.standing === "gone"
-        ? <span class="artifact-comments-entry-words">{"On " + spotTitle(anchor)}</span>
+        ? <span class="artifact-comments-entry-words">{"On " + spotTitle(anchor, thread.root.sectionTitle)}</span>
         : <span class="artifact-comments-entry-words">{opening(thread.root.text || bridge.imageWords(thread.root))}</span>;
       default: { const missing: never = anchor; return missing; }
     }
@@ -318,7 +318,7 @@ export function threadList(page: Page, shell: Shell, bridge: ThreadListBridge) {
     const anchor = anchorOf(thread.root);
     const leadKey = (decision ? "decision " + decision.name + "\n" + decision.question + "\n" : "") +
       (anchor.kind === "block" ? "block " + blockTitle(anchor) + "\n" : "") +
-      (anchor.kind === "spot" ? "spot " + thread.standing + " " + spotTitle(anchor) + " " + thread.n + "\n" : "") + bridge.passages.key(thread);
+      (anchor.kind === "spot" ? "spot " + thread.standing + " " + spotTitle(anchor, thread.root.sectionTitle) + " " + thread.n + "\n" : "") + bridge.passages.key(thread);
     const key = [standing(thread), bridge.routed(asked(thread)), thread.replies.length].join("\n");
     item.classList.toggle("artifact-comments-entry--resolved", done);
     item.classList.toggle("artifact-comments-entry--open", opened);

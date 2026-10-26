@@ -136,7 +136,7 @@ does, and picks a default only on a form the swap brought in. A form a
 swap brings in whose read fails stays out of the sheet until a later read. The forms and their stored answers stay the
 truth: the sheet draws from them on each form's `input`, `change` and
 `SAVED`. Preact holds only the sheet's own state: the question Next open
-last jumped to, which a swap keeps. The bundle, Preact with it, is 56,039 bytes
+last jumped to, which a swap keeps. The bundle, Preact with it, is 56,270 bytes
 gzipped (`gzip -c`) and stays within its gzipped-size pin in
 `tests/test_bundle_size.py`, which pins and enforces every slice's islands
 bundle; it uses Preact and its hooks, with `createPortal` from

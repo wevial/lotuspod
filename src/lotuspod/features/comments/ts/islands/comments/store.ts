@@ -298,7 +298,7 @@ export function store(page: Page, bridge: StoreBridge): Store {
   // spot's names what it was on.
   function whereFrom(root: CommentRow) {
     const anchor = anchorOf(root);
-    return page.element("p", "artifact-comment-section", "On " + (anchor.kind === "spot" ? spotTitle(anchor)
+    return page.element("p", "artifact-comment-section", "On " + (anchor.kind === "spot" ? spotTitle(anchor, root.sectionTitle)
       : String(root.sectionTitle || root.section || "an earlier section")));
   }
 

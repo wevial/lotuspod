@@ -46,8 +46,13 @@ const EDGE = 8;
 const CROP_FAILED = "The crop of the marked spot was not attached. Press Comment to try again.";
 
 // A draft: its mark and the shape it draws, in its layer's coordinates, its
-// composer, the spot it posts, and on an image its crop, once attached.
-interface Draft { mark: SVGGElement; shape: SpotShape; composer: Composer; spot: Omit<Spot, "hash">; image: boolean; cropped: Promise<boolean> }
+// composer, the target it posts on and the spot, and on an image the crop
+// being made and the stored name of the crop it posts first, once a send has
+// found it.
+interface Draft {
+  mark: SVGGElement; shape: SpotShape; composer: Composer; target: HTMLElement; spot: Omit<Spot, "hash">; image: boolean;
+  making: Promise<void>; crop: string;
+}
 interface Press { id: number; x: number; y: number; layer: SVGGElement; points: Point[]; moved: boolean; node: SVGGElement | null; preview: SVGGElement | null }
 interface Marking { holder: HTMLElement; tool: "box" | "stroke"; draft: Draft | null; press: Press | null; tabbed: SVGGElement[] }
 
@@ -346,16 +351,43 @@ export function spots(page: Page, bridge: SpotsBridge): Spots {
     draft.composer.holder.remove();
   }
 
-  // The diagram in mark mode was drawn again (the other theme lays it out
-  // the same): a draft's mark is drawn on the new drawing, its composer kept.
+  // The target in mark mode was drawn again, in the other theme or swapped
+  // in by Update: a draft's mark is drawn where its spot now falls, and its
+  // spot is then on the new target. With a node it covers gone, nothing is
+  // drawn and the composer stays, its text kept, on the target it was on.
   function redrawn() {
     const draft = marking?.draft;
-    const layer = draft && !draft.mark.isConnected ? layerOf(marking!.holder) : null;
-    if (draft && layer) {
-      draft.mark = draw(layer, draft.shape, "artifact-spot-mark--draft", null);
+    const target = marking && targetIn(marking.holder);
+    const layer = draft && target && !draft.mark.isConnected ? layerOf(target) : null;
+    const shape = layer && located({ ...draft!.spot, hash: "" }, target!, layer);
+    if (draft && layer && shape) {
+      draft.target = target!;
+      draft.shape = shape;
+      draft.mark = draw(layer, shape, "artifact-spot-mark--draft", null);
       seat(draft);
     }
     tab();
+  }
+
+  // A swap took the target in mark mode away: mark mode moves to the target
+  // the swap brought in with its id, and a draft goes with it. With none, a
+  // draft stays as it is, and mark mode without one ends.
+  function moved() {
+    const was = marking!;
+    const now = targetOf(was.draft?.target.dataset.spot || targetIn(was.holder)?.dataset.spot || "");
+    const holder = now && holderOf(now);
+    if (!holder || !bridge.boxOf(now)) {
+      if (!was.draft) leave(false);
+      return;
+    }
+    was.press = null;
+    was.tabbed = [];
+    was.holder.classList.remove(page.marking);
+    was.holder = holder;
+    holder.classList.add(page.marking);
+    mount(now);
+    bar(holder);
+    redrawn();
   }
 
   function nodeOf(group: Element | null, drawing: SVGSVGElement): [string, SVGGElement] | null {
@@ -502,8 +534,9 @@ export function spots(page: Page, bridge: SpotsBridge): Spots {
     // reader dropped it, or started another, leaves the newer one as it is.
     const mine = () => marking?.draft === draft;
     const composer = bridge.composer.spot(box, () => ({
-      spot: { ...spot, id: target.dataset.spot || spot.id, hash: target.dataset.spotHash || "" },
+      spot: { ...spot, id: draft.target.dataset.spot || spot.id, hash: draft.target.dataset.spotHash || "" },
       stale: image ? page.staleImage : page.staleDiagram,
+      first: image ? draft.crop : "",
     }), () => {
       if (!mine()) return;
       drop();
@@ -513,19 +546,25 @@ export function spots(page: Page, bridge: SpotsBridge): Spots {
       drop();
       leave(false);
     }, async () => {
-      // An image spot is sent only with its crop stored: one refused or
-      // failed is attached again, and if that fails too, nothing is sent.
-      if (await draft.cropped) return "";
-      draft.cropped = crop();
-      return await draft.cropped ? "" : CROP_FAILED;
-    });
-    const crop = () => attach(target as HTMLImageElement, spot.shape, draft).then(() => uploaded(composer, spot.shape));
-    const draft: Draft = { mark, shape, composer, spot, image, cropped: Promise.resolve(true) };
+      // An image spot is sent only with its crop stored, read from the
+      // composer's images as they are at this send: a crop refused, failed
+      // or removed by the reader is made and attached again, and if that
+      // fails too, nothing is sent.
+      if (!image) return "";
+      await draft.making;
+      draft.crop = await uploaded(composer, spot.shape);
+      if (draft.crop) return "";
+      draft.making = attach(draft.target as HTMLImageElement, spot.shape, draft);
+      await draft.making;
+      draft.crop = await uploaded(composer, spot.shape);
+      return draft.crop ? "" : CROP_FAILED;
+    }, CROP_FAILED);
+    const draft: Draft = { mark, shape, composer, target, spot, image, making: Promise.resolve(), crop: "" };
     marking.draft = draft;
     document.body.appendChild(composer.holder);
     seat(draft);
     composer.field.focus({ preventScroll: true });
-    if (image) draft.cropped = crop();
+    if (image) draft.making = attach(target as HTMLImageElement, spot.shape, draft);
   }
 
   // The composer just under its mark, inside the window and left of the
@@ -559,15 +598,15 @@ export function spots(page: Page, bridge: SpotsBridge): Spots {
     if (blob && marking?.draft === draft) draft.composer.images.take([new File([blob], "spot.png", { type: "image/png" })]);
   }
 
-  // Once a composer's images have uploaded, or failed to, as its tray says:
-  // whether a stored PNG of the crop's size is among them.
-  async function uploaded(composer: Composer, shape: SpotShape): Promise<boolean> {
+  // Once a composer's images have uploaded, or failed to, as its tray now
+  // says: the stored name of a PNG of the crop's size among them, else "".
+  async function uploaded(composer: Composer, shape: SpotShape): Promise<string> {
     while (composer.images.busy() && composer.holder.isConnected) {
       await new Promise(done => setTimeout(done, 100));
     }
     const part = shapeBounds(shape);
     const width = Math.max(1, Math.round(part.w)), height = Math.max(1, Math.round(part.h));
-    return composer.images.kept().some(image => /\.png$/.test(image.name) && image.width === width && image.height === height);
+    return composer.images.kept().find(image => /\.png$/.test(image.name) && image.width === width && image.height === height)?.name || "";
   }
 
   // Escape drops a draft, staying in mark mode, and with none leaves it.
@@ -596,11 +635,8 @@ export function spots(page: Page, bridge: SpotsBridge): Spots {
     place,
     number,
     swapped() {
-      if (marking && !marking.holder.isConnected) {
-        drop();
-        marking = null;
-      }
       scan();
+      if (marking && !marking.holder.isConnected) moved();
     },
   };
 }

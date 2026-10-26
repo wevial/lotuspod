@@ -28,12 +28,16 @@ export function composers(page: Page, bridge: ComposerBridge) {
     const error = code ? String(code) : "status " + response.status;
     return "Not saved (" + error + "). Try again.";
   }
-  async function post(form: HTMLFormElement, body: Body, spotStale?: string): Promise<CommentRow | null> {
+  // first: the stored name of an image the comment must carry as its first,
+  // else "": sent first when attached, and with it not attached nothing is sent.
+  async function post(form: HTMLFormElement, body: Body, spotStale?: string, first = "", missing = ""): Promise<CommentRow | null> {
     const status = form.querySelector<HTMLElement>(".artifact-comment-status")!;
     const button = form.querySelector<HTMLButtonElement>('button[type="submit"]')!;
     const images = bridge.attached.get(form);
     if (images?.busy()) { status.textContent = "Wait until the images have uploaded."; return null; }
+    if (first && !images?.kept().some(image => image.name === first)) { status.textContent = missing; return null; }
     const names = images?.sending() || [];
+    if (first) names.sort((a, b) => Number(b === first) - Number(a === first));
     if (names.length) body.images = names;
     let saved = false;
     button.disabled = true;
@@ -231,8 +235,10 @@ export function composers(page: Page, bridge: ComposerBridge) {
   // calls saved first. A send waits for ready, which says why it may not go
   // ("" when it may): an image spot is never posted without its crop. While
   // it waits, Comment is disabled and a second send does nothing.
-  function spot(box: HTMLElement, made: () => { spot: Spot; stale: string }, cancel: () => void,
-    saved: (row: CommentRow) => void, ready: () => Promise<string>) {
+  // first: the stored name of the image it must post first, as found by
+  // ready, else ""; missing: what it says when that image is not attached.
+  function spot(box: HTMLElement, made: () => { spot: Spot; stale: string; first: string }, cancel: () => void,
+    saved: (row: CommentRow) => void, ready: () => Promise<string>, missing = "") {
     const holder = document.createElement("div");
     holder.className = "artifact-spot-composer";
     render(<form class="artifact-comment-form artifact-spot-form">{controls("Comment", "Comment on the marked spot", cancel)}</form>, holder);
@@ -255,7 +261,7 @@ export function composers(page: Page, bridge: ComposerBridge) {
       status.textContent = why;
       if (why) return;
       const now = made();
-      handles.saving = post(handles.form, { ...fields(box, handles.field), spot: now.spot }, now.stale);
+      handles.saving = post(handles.form, { ...fields(box, handles.field), spot: now.spot }, now.stale, now.first, missing);
       const row = await handles.saving;
       handles.saving = null;
       if (!row) return;
