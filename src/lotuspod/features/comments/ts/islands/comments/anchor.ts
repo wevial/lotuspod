@@ -1,12 +1,14 @@
 import { page } from "../bridge";
-import type { CommentRow, Widget } from "../bridge";
+import type { CommentRow, Spot, SpotStanding, Widget } from "../bridge";
+import { drawingOf, nodesOf } from "./spot-shapes";
 
 export type Anchor =
   | { kind: "page" }
   | { kind: "section"; section: string }
   | { kind: "passage"; quote: NonNullable<CommentRow["quote"]> }
   | { kind: "decision"; question: string | number }
-  | ({ kind: "block" } & Widget);
+  | ({ kind: "block" } & Widget)
+  | ({ kind: "spot" } & Spot);
 
 // The first comment is the stored address of a thread. Keep interpretation
 // here so another kind must be handled by every presentation of an anchor.
@@ -17,6 +19,11 @@ export function anchorOf(root: CommentRow): Anchor {
   }
   if (root.widget) {
     return { kind: "block", id: String(root.widget.id), hash: String(root.widget.hash), state: String(root.widget.state || "") };
+  }
+  if (root.spot) {
+    const spot = root.spot;
+    return { kind: "spot", id: String(spot.id), hash: String(spot.hash), shape: spot.shape,
+      nodes: Array.isArray(spot.nodes) ? spot.nodes : [] };
   }
   if (!root.section || root.section === page.wholePage || root.section === "page") return { kind: "page" };
   return { kind: "section", section: root.section };
@@ -44,4 +51,53 @@ export function blockStanding(block: Widget): "current" | "changed" | "gone" {
 // The block's title as the page names it, else its id.
 export function blockTitle(block: Widget): string {
   return frameOf(block.id)?.getAttribute("title") || block.id;
+}
+
+// The page's diagram (its pre) or image whose data-spot is id, else null.
+export function targetOf(id: string): HTMLElement | null {
+  return page.all("pre.mermaid[data-spot], figure.artifact-figure img[data-spot]")
+    .find(node => node.dataset.spot === id) || null;
+}
+
+// What the page shows of a spot's target: the same one, a changed one with
+// every node the mark covers drawn (or a mark on none), or none with its id
+// or one of those nodes. A diagram not drawn yet has its nodes.
+export function spotStanding(spot: Spot): SpotStanding {
+  const target = targetOf(spot.id);
+  if (!target) return "gone";
+  const svg = drawingOf(target);
+  if (svg && spot.nodes.length) {
+    const drawn = nodesOf(svg);
+    if (spot.nodes.some(node => !drawn.has(node.id))) return "gone";
+  }
+  return target.dataset.spotHash === spot.hash ? "current" : "changed";
+}
+
+// Whether a spot is on one of the page's images rather than a diagram.
+export function onImage(spot: Spot): boolean {
+  return targetOf(spot.id)?.tagName === "IMG";
+}
+
+// The titles of targets the page has shown, kept for a thread whose target a
+// swap took away.
+const titles = new Map<string, string>();
+
+// What a spot is on, in words: its nodes' labels, else its target's title
+// (an image's alt text, a diagram's section heading), else its id.
+export function spotTitle(spot: Spot): string {
+  const labels = spot.nodes.map(node => String(node.label || node.id)).filter(Boolean);
+  if (labels.length) return labels.join(", ");
+  const target = targetOf(spot.id);
+  if (target) titles.set(spot.id, targetTitle(target) || spot.id);
+  return titles.get(spot.id) || spot.id;
+}
+
+function targetTitle(target: HTMLElement): string {
+  if (target.tagName === "IMG") return target.getAttribute("alt") || "";
+  const wrapper = target.closest(".artifact-section-body");
+  const heading = wrapper?.previousElementSibling;
+  if (!heading || heading.tagName !== "H2") return "";
+  const copy = heading.cloneNode(true) as HTMLElement;
+  page.all(".artifact-section-mark, .artifact-changed-tag, .artifact-review-open", copy).forEach(mark => mark.remove());
+  return (copy.textContent || "").replace(/\s+/g, " ").trim();
 }

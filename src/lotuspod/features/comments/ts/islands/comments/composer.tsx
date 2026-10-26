@@ -1,12 +1,12 @@
 import { render } from "preact";
 import { createPortal } from "preact/compat";
-import type { CommentPayload, CommentRow, ComposerBridge, Page, Thread, Widget } from "../bridge";
+import type { CommentPayload, CommentRow, ComposerBridge, Page, Spot, Thread, Widget } from "../bridge";
 import type { ComposerHandles } from "./parts";
 import { blockStanding, frameOf, hashOf } from "./anchor";
 import { shortcodeList } from "./shortcode-list";
 
 type Quote = NonNullable<CommentRow["quote"]>;
-interface Body { page: string; text: string; parent?: number; section?: string; revision?: string; quote?: Quote; widget?: Widget; images?: string[] }
+interface Body { page: string; text: string; parent?: number; section?: string; revision?: string; quote?: Quote; widget?: Widget; spot?: Spot; images?: string[] }
 
 export function composers(page: Page, bridge: ComposerBridge) {
   const replies = new WeakMap<Thread, ComposerHandles & { toggle: HTMLButtonElement }>();
@@ -14,18 +14,21 @@ export function composers(page: Page, bridge: ComposerBridge) {
   // above its field that says so, while a block's Comment holds it open.
   // seen: the hash of the block's file the page last showed beside the form.
   const blocks = new Map<HTMLFormElement, { widget: Widget; line: HTMLParagraphElement; seen: string }>();
-  function failure(response: Response, payload: CommentPayload | null, stale = page.stalePage): string {
+  // stale: what a refusal for a changed page says; spot: what one for a
+  // changed diagram or image says.
+  function failure(response: Response, payload: CommentPayload | null, stale = page.stalePage, spot = page.staleDiagram): string {
     if (response.status === 401) return page.signedOut;
     const code = payload?.error;
     if ((response.status === 409 && code === "stale_page") || (response.status === 400 && code === "unknown_section")) return stale;
     if ((response.status === 409 && code === "stale_widget") || (response.status === 400 && code === "unknown_widget")) {
       return page.staleBlock;
     }
+    if ((response.status === 409 && code === "stale_spot") || (response.status === 400 && code === "unknown_spot")) return spot;
     if (response.status === 409 && code === "archived") return page.closed;
     const error = code ? String(code) : "status " + response.status;
     return "Not saved (" + error + "). Try again.";
   }
-  async function post(form: HTMLFormElement, body: Body): Promise<CommentRow | null> {
+  async function post(form: HTMLFormElement, body: Body, spotStale?: string): Promise<CommentRow | null> {
     const status = form.querySelector<HTMLElement>(".artifact-comment-status")!;
     const button = form.querySelector<HTMLButtonElement>('button[type="submit"]')!;
     const images = bridge.attached.get(form);
@@ -41,7 +44,7 @@ export function composers(page: Page, bridge: ComposerBridge) {
       });
       const payload: (CommentRow & CommentPayload) | null = await page.json(response);
       if (response.status !== 201 || !payload) {
-        status.textContent = failure(response, payload, body.quote ? page.stalePage : page.staleSection);
+        status.textContent = failure(response, payload, body.quote ? page.stalePage : page.staleSection, spotStale);
         return null;
       }
       status.textContent = "";
@@ -219,9 +222,39 @@ export function composers(page: Page, bridge: ComposerBridge) {
     });
     return handles;
   }
+  // The composer under a mark on a diagram or an image, in box's section:
+  // spot() gives the spot as its target now stands, and what a refusal for
+  // a changed target says. Cancel and Escape call cancel; a thread posted
+  // calls saved first.
+  function spot(box: HTMLElement, made: () => { spot: Spot; stale: string }, cancel: () => void, saved: (row: CommentRow) => void) {
+    const holder = document.createElement("div");
+    holder.className = "artifact-spot-composer";
+    render(<><form class="artifact-comment-form artifact-spot-form">{controls("Comment", "Comment on the marked spot")}</form>
+      <button type="button" class="artifact-passage-cancel" onClick={cancel}>Cancel</button></>, holder);
+    const handles = { ...wireField(holder.querySelector("form")!), holder, saving: null as Promise<CommentRow | null> | null };
+    holder.addEventListener("keydown", event => {
+      if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); cancel(); }
+    });
+    handles.form.addEventListener("submit", async event => {
+      event.preventDefault();
+      const now = made();
+      handles.saving = post(handles.form, { ...fields(box, handles.field), spot: now.spot }, now.stale);
+      const row = await handles.saving;
+      handles.saving = null;
+      if (!row) return;
+      const focused = holder.contains(document.activeElement) || document.activeElement === document.body;
+      saved(row);
+      // The new thread opens in the panel, which may be folded: the composer
+      // was over the page, not in it.
+      const thread = stored(row);
+      if (thread && focused && bridge.placement().wide) bridge.placement().open(thread);
+      else bridge.placement().started(thread, focused);
+    });
+    return handles;
+  }
   // A thread's reply composer.
   function handles(thread: Thread) {
     return replies.get(thread)!;
   }
-  return { reply, wire, passage, label, failure, block, unblock, on, swapped, fieldOf, handles, sending: bridge.sending };
+  return { reply, wire, passage, spot, label, failure, block, unblock, on, swapped, fieldOf, handles, sending: bridge.sending };
 }

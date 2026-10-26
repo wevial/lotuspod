@@ -829,6 +829,58 @@ it. On a page that takes no comments the sheet has the Decisions tab alone.
 The tabs are drawn by `features/comments/ts/narrow.js`, styled by
 `features/comments/theme/sheet-tabs.css`.
 
+### Comments on a spot
+
+A comment can be on one spot of a Mermaid diagram or of a figure's image: a
+box round a few flowchart boxes, or a stroke under something. On a page that
+takes new comments in the diagram's or figure's section (not an archived
+page, nor an old version, which runs no page script), each diagram Mermaid has
+drawn has a "Comment" button beside its Expand, in a band above the drawing
+(and the diagram is kept short of the comments panel, as a table is), and each
+figure one at its top right corner. A page published with `--no-comments` has
+none. "Comment" opens mark mode: "Box" (pressed first), "Stroke" and
+"Cancel" take its place, and the drawing shows a crosshair. A drag draws a
+box, or with "Stroke" a line through the points dragged over (thinned evenly
+to at most 256); a press that moves under 6 px on a flowchart box marks that
+box with a box 8 px larger on each side, and opens no node card. Tab goes
+through the diagram's boxes and Enter marks the one focused. The mark is
+drawn dashed, and the composer opens under it: "Comment", or Cmd+Enter
+(Ctrl+Enter elsewhere), posts; its "Cancel", or Escape, takes the draft away
+and stays in mark mode; Escape with no draft, or the bar's "Cancel", leaves
+mark mode with the focus back on "Comment". Outside mark mode a drag on a
+drawing draws nothing.
+
+The post is a new thread on the target's section with `spot` (see the
+comments route above): the target's `data-spot` and `data-spot-hash`; on a
+diagram, the boxes the mark covers (a box is covered when at least half the
+smaller area, its own or the mark's bounding box, overlaps), at most the 12 it
+covers most, each with its id and its label as drawn, and the shape in
+fractions of the rectangle those boxes span, or of the diagram's own viewBox
+when it covers none; on an image, the shape in the image's natural pixels and
+no boxes. An image's composer attaches, as its first image, a PNG crop of the
+spot at natural size, uploaded as any attached image is. Refused with 409
+`stale_spot` or 400 `unknown_spot`, the composer keeps its text and says "This
+diagram has changed since the page loaded. Reload the page to comment on its
+new version." ("This image has changed ..." on an image). While a draft is
+open, a swap holds back the part it is in.
+
+Each unresolved spot thread is placed again each time the page draws its
+target: on load, when a swap brings it in and when Mermaid draws it again in
+the other theme. On the target as it was (the same hash), its mark is drawn
+solid rose; on a changed target whose covered boxes are all drawn (or a mark
+on none), dashed where those boxes now put it, its first comment followed by
+"Diagram changed since this comment" ("Image changed since this comment").
+When the target or one of its boxes is gone, nothing is drawn, nothing is
+guessed, and the thread is listed under "Sections that have changed", headed
+"On" and its boxes' labels joined by ", " (else the target's title). Marks are
+drawn in the drawing's own coordinates, each with its number at its first
+corner: spot threads are numbered with the passages, in page order, and those
+drawn nowhere after them. Pointing at a mark lights it and its entry in the
+panel, and pointing at the entry lights the mark; clicking a mark opens its
+thread. A resolved spot thread draws no mark. A spot is marked on the page
+itself, not in the diagram view or the image viewer, and on an image with the
+pointer only.
+
 ### Comments on passages
 
 A comment can be on words of a section rather than the whole of it, as in a

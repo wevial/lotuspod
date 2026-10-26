@@ -2,7 +2,7 @@ import type { Page, Thread, PlacementBridge } from "../bridge";
 import type { Placement, Group, Taken, Mode } from "./parts";
 import { shell as makeShell } from "./shell";
 import { threadList as makeThreadList } from "./thread-list";
-import { anchorOf as threadAnchor, blockTitle, frameOf } from "./anchor";
+import { anchorOf as threadAnchor, blockTitle, frameOf, targetOf } from "./anchor";
 import { chips as makeChips } from "./chips";
 import { pins as makePins } from "./pins";
 import { barBottom, modeOf, unfold } from "./room";
@@ -65,12 +65,13 @@ export function placement(page: Page, bridge: PlacementBridge): Placement {
   }
 
   // A detached passage falls back to its section chip, as a thread on a
-  // live block the page no longer has does.
+  // live block the page no longer has does, and one on a spot not drawn.
   function anchorOf(thread: Thread): HTMLElement | null {
     const anchor = threadAnchor(thread.root);
     switch (anchor.kind) {
       case "passage": return thread.marks[0] || chips.anchor(thread);
       case "block": return (thread.box && frameOf(anchor.id)?.closest("figure")) || chips.anchor(thread);
+      case "spot": return (thread.drawing && targetOf(anchor.id)?.closest<HTMLElement>("pre, figure")) || chips.anchor(thread);
       case "decision":
       case "page":
       case "section": return chips.anchor(thread);
