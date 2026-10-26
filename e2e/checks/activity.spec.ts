@@ -401,13 +401,15 @@ test.describe('signed in', () => {
       await expect(entry).toHaveClass(/\bartifact-comments-entry--open\b/);
       await expect(entry).toBeInViewport();
 
-      // hermes replies; the listing shows it unread, and the reply's link,
-      // pressed from the keyboard, opens the thread again and reads it.
+      // hermes replies while the tab is not shown, as one that came to the
+      // thread open in view would be seen; the listing shows it unread, and
+      // the reply's link, pressed from the keyboard, opens the thread again
+      // and reads it.
+      await home.click();
       const claim = hermes('claim', String(thread));
       const reply = hermes('reply', String(thread), `--claim=${claim.claimToken}`,
         '--key', `activity-links-${thread}`, '--text', 'Half a metre down.');
       expect(reply.parent).toBe(thread);
-      await home.click();
       const replied = c.locator('li.index-activity-event', { hasText: 'hermes replied to your comment on “Heater”' });
       await expect(replied.locator('.index-activity-new')).toHaveText('new, to you');
       await expect(c.locator('.index-activity-unread')).toHaveText('1 new reply to you');
