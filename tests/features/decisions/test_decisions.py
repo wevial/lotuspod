@@ -273,7 +273,7 @@ class FormTests(DecisionsTestCase):
         self.assertEqual([form["attrs"]["class"] for form in page.forms],
                          ["artifact-decision", "artifact-decision"])
         self.assertEqual([[radio["value"] for radio in form["radios"]] for form in page.forms],
-                         [["sonnet", "opus"], ["yes", "no"]])
+                         [["sonnet", "opus", "other"], ["yes", "no", "other"]])
         for form in page.forms:
             with self.subTest(form=form["attrs"]["data-question"]):
                 self.assertRegex(form["attrs"]["data-version"], r"^[0-9a-f]{12}$")
@@ -284,13 +284,13 @@ class FormTests(DecisionsTestCase):
                 self.assertEqual(form["summaries"], ["Add a note"])
                 self.assertEqual(form["buttons"], [{"type": "submit", "text": "Save answer"}])
         self.assertEqual([label["text"] for label in page.forms[0]["labels"]],
-                         ["Sonnet default", "Opus"])
+                         ["Sonnet default", "Opus", "Something else"])
         self.assertEqual([label["text"] for label in page.forms[1]["labels"]],
-                         ["Yes default", "No"])
+                         ["Yes default", "No", "Something else"])
         # The default's label ends in its mark; the others carry none.
         for form in page.forms:
             labels = form["labels"]
-            self.assertEqual([label["marks"] for label in labels], [["default"], []])
+            self.assertEqual([label["marks"] for label in labels], [["default"], [], []])
             self.assertIn("artifact-decision-default", labels[0]["last"])
         self.assertEqual([form["context"] for form in page.forms], [[], []])
         self.assertEqual([src.split("?")[0] for src in page.scripts], [core.PAGE_SCRIPT])
@@ -414,7 +414,7 @@ class FormTests(DecisionsTestCase):
         text = PLAN.replace("| Sonnet / Opus | Sonnet |", "| Sonnet / Opus | Haiku |")
         page = read(self.render_markdown("plan", text))
         self.assertEqual([[label["marks"] for label in form["labels"]] for form in page.forms],
-                         [[[], []], [["default"], []]])
+                         [[[], [], []], [["default"], [], []]])
         self.assertEqual([form["context"] for form in page.forms], [[], []])
 
     def test_an_html_body_and_an_h3_heading_in_any_case(self):
@@ -426,7 +426,7 @@ class FormTests(DecisionsTestCase):
         page = read(self.render_body("plan", body))
         self.assertEqual(page.tables, 0)
         self.assertEqual([[radio["value"] for radio in form["radios"]] for form in page.forms],
-                         [["yes", "no", "later"]])
+                         [["yes", "no", "later", "other"]])
 
     def test_the_first_qualifying_table_is_taken(self):
         body = (
@@ -461,7 +461,8 @@ class FormTests(DecisionsTestCase):
         forms = decisions.read_forms(self.render_markdown("pond", SECTIONS))
         self.assertEqual(list(forms), ["decision-d1", "decision-d2"])
         self.assertEqual([form.text for form in forms.values()], ["Which pump?", "Which heater?"])
-        self.assertEqual(forms["decision-d2"].options, (("electric", "Electric"), ("solar", "Solar")))
+        self.assertEqual(forms["decision-d2"].options,
+                         (("electric", "Electric"), ("solar", "Solar"), decisions.OTHER))
 
     def test_a_number_repeated_across_tables_is_deduplicated(self):
         text = SECTIONS.replace("| D2 |", "| D1 |") + (
@@ -499,7 +500,7 @@ class FormTests(DecisionsTestCase):
         self.assertEqual(list(forms), ["decision-1", "decision-2"])
         first = forms["decision-1"]
         self.assertEqual(first.text, "Which model replies?")
-        self.assertEqual(first.options, (("sonnet", "Sonnet"), ("opus", "Opus")))
+        self.assertEqual(first.options, (("sonnet", "Sonnet"), ("opus", "Opus"), decisions.OTHER))
         self.assertEqual(first.version, decisions.version("Which model replies?", ["Sonnet", "Opus"]))
         self.assertEqual(first.label("opus"), "Opus")
         self.assertEqual(first.label("maybe"), "maybe")
@@ -579,11 +580,11 @@ class DefaultTests(DecisionsTestCase):
             "| Yes / No | |", "| Rust / Go | go |")
         page_html = self.render_markdown("slugs", text)
         forms = decisions.read_forms(page_html)
-        self.assertEqual(forms["decision-1"].options, (("c", "C++"), ("c-2", "C#")))
+        self.assertEqual(forms["decision-1"].options, (("c", "C++"), ("c-2", "C#"), decisions.OTHER))
         self.assertEqual(forms["decision-1"].default, "c-2")
         self.assertEqual(forms["decision-2"].default, "go")
         labels = read(page_html).forms[0]["labels"]
-        self.assertEqual([label["marks"] for label in labels], [[], ["default"]])
+        self.assertEqual([label["marks"] for label in labels], [[], ["default"], []])
 
     def test_a_checklist_names_no_default(self):
         page_html = self.render_markdown("mail", CHECKLIST)
@@ -906,12 +907,13 @@ class LongOptionValueTests(DecisionsTestCase):
         self.assertRegex(values[0], r"-[0-9a-f]{8}$")
         self.assertTrue(core.slugify(LONG_LABEL).startswith(values[0][:-9]))
         self.assertEqual(values[1], "no")
-        self.assertEqual([label["text"] for label in form["labels"]], [LONG_LABEL, "No"])
+        self.assertEqual([label["text"] for label in form["labels"]],
+                         [LONG_LABEL, "No", "Something else"])
 
     def test_long_labels_sharing_a_prefix_get_distinct_values(self):
         form = read(self.render_markdown(
             "pond", long_options(f"{LONG_LABEL} / {OTHER_LONG_LABEL}"))).forms[0]
-        values = [radio["value"] for radio in form["radios"]]
+        values = [radio["value"] for radio in form["radios"]][:-1]
         self.assertNotEqual(values[0], values[1])
         for value in values:
             self.assertLessEqual(len(value), 100)
@@ -921,12 +923,12 @@ class LongOptionValueTests(DecisionsTestCase):
         labels = ["Sonnet", "A" * 40 + " " + "b" * 39]
         form = read(self.render_markdown("pond", long_options(" / ".join(labels)))).forms[0]
         self.assertEqual([radio["value"] for radio in form["radios"]],
-                         [core.slugify(label) for label in labels])
+                         [core.slugify(label) for label in labels] + ["other"])
 
     def test_a_default_naming_a_long_option_marks_it(self):
         form = read(self.render_markdown(
             "pond", long_options(f"No / {LONG_LABEL}", default=LONG_LABEL))).forms[0]
-        self.assertEqual([label["marks"] for label in form["labels"]], [[], ["default"]])
+        self.assertEqual([label["marks"] for label in form["labels"]], [[], ["default"], []])
 
 
 class LongOptionTests(ServedTestCase):

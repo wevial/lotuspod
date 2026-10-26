@@ -326,7 +326,7 @@ class AnswersWitness(Site):
         self.forms = parser.forms
         self.scripts = parser.scripts
         self.assertEqual(len(self.forms), 2, "the decisions table did not become two forms")
-        self.assertEqual([len(form["choices"]) for form in self.forms], [2, 2])
+        self.assertEqual([len(form["choices"]) for form in self.forms], [3, 3])
 
     def answer(self, form, choice, note="", token="valid", headers=None, **override):
         payload = {"page": "model-choice", "question": form["question"],

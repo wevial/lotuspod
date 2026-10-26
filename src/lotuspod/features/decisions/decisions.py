@@ -5,19 +5,26 @@ the first table before the next h2 (or the next such heading) whose header
 row has a "Question" column becomes one radio form per row:
 `render_decisions()` replaces it in the body HTML, so markdown and HTML
 sources alike get it. A page may so ask each question in the section it is
-about. `#`, `Options` and `Default` columns are optional; any other column
-is shown under its question as context: a `Context` column (any case) first
+about. `#`, `Options` and `Default` columns are optional, the last two
+headed so alone or followed by a parenthesised note; any other column is
+shown under its question as context: a `Context` column (any case) first
 and unlabelled, then each other one as "LABEL: text".
+
+A row's options are its Options cell split on " / ", then "Something else"
+unless the cell offers it. A row whose cell gives fewer than two, or with no
+Options column, and with a Default, offers "Accept the default" and
+"Something else", the cell shown as context.
 
 Each form carries `data-question` (`decision-` and the slug of its `#` cell,
 or its row number in its table), unique across the page, and
-`data-version`, a short hash of the question's text and its options' labels:
+`data-version`, a short hash of the question's text and its options' labels
+("Something else" after a cell's own options not among them):
 rewording a question strands the answers given to the old wording instead of
 attaching them to the new words; its context is not part of it. A question
 with a default also carries `data-default`, the value of the option its
-Default cell names, or `accept` for a row with no Options column; it is not
-part of the version. A table with any row of fewer than two options is left
-exactly as written.
+Default cell names, or `accept` for a row without options of its own; it is
+not part of the version. A table with any row that makes no question is
+left exactly as written.
 
 A decisions table whose previous element in the body is a live block (a
 `figure.artifact-live`, as lotuspod.features.widgets.widgets renders one
@@ -131,10 +138,12 @@ def holds(form: Form, answer: dict) -> bool:
     """Whether answer, a question's current answer as answers(asked=True)
     gives it, shows as form's answer: at form's version, or a decision's
     answer, not a dismissal, given to the question form asks in the same
-    words, whose choice form still offers under the label it was given.
-    Text and labels are compared with their white space collapsed. A
-    checklist's answer, a dismissal and one stored before its words were
-    kept hold only at their own version."""
+    words, whose choice form still offers under the label it was given, or
+    an "Accept the default" form no longer offers, which shows as form's
+    default option when form has one (shown()). Text and labels are
+    compared with their white space collapsed. A checklist's answer, a
+    dismissal and one stored before its words were kept hold only at their
+    own version."""
     if answer.get("version") == form.version:
         return True
     asked = answer.get("asked") or {}
@@ -143,8 +152,32 @@ def holds(form: Form, answer: dict) -> bool:
         return False
     offered = dict(form.options)
     choice = answer.get("choice")
-    return (_text([asked["text"]]) == _text([form.text]) and choice in offered
-            and _text([asked["label"]]) == _text([offered[choice]]))
+    if _text([asked["text"]]) != _text([form.text]):
+        return False
+    if choice in offered:
+        return _text([asked["label"]]) == _text([offered[choice]])
+    return _accepted(form, answer)
+
+
+def _accepted(form: Form, answer: dict) -> bool:
+    """Whether answer, given to form's question in the same words, is an
+    "Accept the default" that form shows as its default option: form offers
+    no such option and its default is one it offers."""
+    asked = answer.get("asked") or {}
+    return (answer.get("choice") == ACCEPT[0] and not form.checklist
+            and _text([asked.get("label") or ""]) == ACCEPT[1]
+            and ACCEPT[0] not in dict(form.options) and form.default in dict(form.options))
+
+
+def shown(form: Form, answer: dict) -> str | None:
+    """The option form shows answer as when it holds (holds()): its
+    default for an earlier "Accept the default" it no longer offers, else
+    the answer's own choice; None when it does not hold."""
+    if not holds(form, answer):
+        return None
+    if answer.get("version") != form.version and _accepted(form, answer):
+        return form.default
+    return answer.get("choice")
 
 
 class _TableFinder(HTMLParser):
@@ -286,6 +319,14 @@ def _column(header: list[dict], name: str) -> int | None:
     return next((i for i, cell in enumerate(header) if cell["text"].casefold() == name), None)
 
 
+def _noted_column(header: list[dict], name: str) -> int | None:
+    """The column headed name, alone or followed by white space and a
+    parenthesised note, as "Options (a / b)"; in any case."""
+    pattern = re.compile(re.escape(name) + r"(?:\s+\(.*\))?", re.IGNORECASE | re.DOTALL)
+    return next((i for i, cell in enumerate(header)
+                 if pattern.fullmatch(cell["text"].strip())), None)
+
+
 def version(text: str, labels: list[str]) -> str:
     """The version of a question: a short hash of its text and option labels."""
     data = json.dumps([text, labels], ensure_ascii=False).encode("utf-8")
@@ -325,10 +366,13 @@ def _questions(rows: list[list[dict]], taken: set[str]) -> list[dict] | None:
     new id is added to it.
     """
     header, body = rows[0], rows[1:]
-    columns = {name: _column(header, name) for name in ("#", "question", "options", "default")}
+    columns = {name: _column(header, name) for name in ("#", "question")}
+    columns.update({name: _noted_column(header, name) for name in ("options", "default")})
     # The Context column first, then the others in the table's order.
-    context = sorted((i for i in range(len(header)) if i not in columns.values()),
-                     key=lambda i: header[i]["text"].casefold() != CONTEXT_COLUMN)
+    def first(i: int) -> tuple[bool, int]:
+        return header[i]["text"].casefold() != CONTEXT_COLUMN, i
+
+    context = sorted((i for i in range(len(header)) if i not in columns.values()), key=first)
     questions = []
     for number, row in enumerate(body, start=1):
         question = _cell(row, columns["question"])
@@ -340,23 +384,28 @@ def _questions(rows: list[list[dict]], taken: set[str]) -> list[dict] | None:
         question_id = core._unique_id(ID_PREFIX + key, taken)
         taken.add(question_id)
         default = _cell(row, columns["default"])
+        options = []
         if columns["options"] is not None:
             parts = _cell(row, columns["options"])["text"].split(" / ")
             labels = [label for label in (" ".join(part.split()) for part in parts) if label]
             values: set[str] = set()
-            options = []
             for label in labels:
                 value = core._unique_id(option_value(label), values)
                 values.add(value)
                 options.append((value, label))
-        elif columns["default"] is not None and default["text"]:
+        # A row whose Options cell gives fewer than two options asks as one
+        # with no Options column, the cell shown as context.
+        own = len(options) >= 2
+        lines = context
+        if not own:
+            if not default["text"]:
+                return None
             options = [ACCEPT, OTHER]
-        else:
-            options = []
-        if len(options) < 2:
-            return None
+            if columns["options"] is not None:
+                lines = sorted([*context, columns["options"]], key=first)
+        labels = [label for _, label in options]
         marked = ""
-        if columns["options"] is not None and default["text"]:
+        if own and default["text"]:
             # The option the Default cell names by its words, in any case,
             # before one whose slug only matches: labels such as "C++" and
             # "C#" share a slug.
@@ -366,6 +415,11 @@ def _questions(rows: list[list[dict]], taken: set[str]) -> list[dict] | None:
                        lambda label: option_value(label) == option_value(wanted))
             marked = next((value for match in matches for value, label in options
                            if match(label)), "")
+        # Every decision ends in "Something else", unless the cell offers
+        # it; it is not part of the version.
+        if own and not any(value == OTHER[0] or label.casefold() == OTHER[1].casefold()
+                           for value, label in options):
+            options.append(OTHER)
         questions.append({
             "id": question_id,
             "number": _cell(row, columns["#"])["html"],
@@ -373,16 +427,16 @@ def _questions(rows: list[list[dict]], taken: set[str]) -> list[dict] | None:
             "options": options,
             "marked": marked,
             # The option the row's Default cell picks: its marked option, or
-            # "Accept the default" for a row with no Options column.
-            "picked": ACCEPT[0] if columns["options"] is None else marked,
-            # The default's text, shown only when the row has no Options
-            # column: it is what "Accept the default" accepts.
-            "default": default["html"] if columns["options"] is None and default["text"] else "",
+            # "Accept the default" for a row without options of its own.
+            "picked": marked if own else ACCEPT[0],
+            # The default's text, shown only for a row without options of
+            # its own: it is what "Accept the default" accepts.
+            "default": "" if own else default["html"],
             # (label, cell HTML) per line; no label for the Context column.
             "context": [(None if header[i]["text"].casefold() == CONTEXT_COLUMN
                          else header[i]["html"], _cell(row, i)["html"])
-                        for i in context if _cell(row, i)["text"]],
-            "version": version(question["text"], [label for _, label in options]),
+                        for i in lines if _cell(row, i)["text"]],
+            "version": version(question["text"], labels),
         })
     return questions
 
@@ -498,7 +552,7 @@ def render_decisions(body: str, page: str) -> tuple[str, bool]:
     """(body with its decisions and checklist tables as forms, whether it
     has any forms).
 
-    A decisions table with a row of fewer than two options, and a checklist
+    A decisions table with a row that makes no question, and a checklist
     table that does not make a checklist, are left exactly as written, so a
     body without a table that makes forms comes back as written.
     """

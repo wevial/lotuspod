@@ -3,7 +3,7 @@ import type { ReadonlySignal, Signal } from "@preact/signals";
 import type { Answer, Answers, Page } from "../../../comments/ts/index";
 import { isChecklist, optionText, same, ticked, boxes } from "./checklist";
 import { expand } from "./collapse";
-import { holds, label, noteField, noteOf, radios, status } from "./words";
+import { chosen, holds, label, noteField, noteOf, radios, status } from "./words";
 
 // A decision form as the island holds it: the store's answers to its
 // question, those it was last drawn from, whether it is open to change
@@ -53,7 +53,7 @@ function differs(form: HTMLFormElement, answer: Answer | null): boolean {
     }
   } else {
     const picked = form.querySelector<HTMLInputElement>('input[name="choice"]:checked');
-    if (picked && (!answer || picked.value !== answer.choice)) {
+    if (picked && (!answer || picked.value !== chosen(form, answer))) {
       return true;
     }
   }
@@ -243,7 +243,7 @@ export function fill(card: Card): void {
     }
   } else {
     for (const radio of radios(card.form)) {
-      radio.checked = radio.value === answer.choice;
+      radio.checked = radio.value === chosen(card.form, answer);
     }
   }
   noteField(card.form).value = noteOf(answer);

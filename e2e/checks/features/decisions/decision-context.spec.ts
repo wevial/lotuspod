@@ -66,7 +66,7 @@ test.describe('signed in', () => {
     const seen = await watch(page);
     await page.goto(`${PAGE}?standalone`);
     const first = decision(page, 'decision-1');
-    await expect(first.radios).toHaveCount(2);
+    await expect(first.radios).toHaveCount(3);
     await expect(first.context).toHaveCount(1);
     await expect(first.context).toBeVisible();
     await expect(first.context).toHaveText(CONTEXT);
@@ -81,7 +81,7 @@ test.describe('signed in', () => {
     expect(option.y).toBeGreaterThanOrEqual(context.y + context.height - 1);
 
     const second = decision(page, 'decision-2');
-    await expect(second.radios).toHaveCount(2);
+    await expect(second.radios).toHaveCount(3);
     await expect(second.context).toHaveCount(0);
 
     // At 360 pixels wide the context wraps and the page does not scroll
