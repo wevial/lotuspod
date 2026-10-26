@@ -74,7 +74,8 @@ commit: its kept source when the commit holds one beside the page, else the
 body extracted from its published file then, with the stamps (created date,
 revision, title) that file carries. It is marked old as before: the
 old-version banner with its link back to the current page, its decision
-forms disabled, and only the theme head and the old-version script running.
+forms disabled, and only the theme head, the widget bridge on a page with a
+live block, and the old-version script running.
 Its `ETag` is over the commit and the render version, and serve keeps one
 render of each version in memory. A version whose body fails the extraction
 check (or whose render fails) is answered from its commit as it was

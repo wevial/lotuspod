@@ -15,10 +15,12 @@ def live(text):
 
 
 def scripts(root):
-    # Of the page's own scripts only today's theme head is left; then the
-    # old-version script.
+    # Of the page's own scripts only today's widget bridge, on a page with a
+    # live block, and theme head are left; then the old-version script. Both
+    # hold "lotuspod:theme", so the bridge is told apart by its installer.
     return [node.attrs.get('src', '').split('?')[0] or
-            ('theme head' if '"lotuspod:theme"' in node.text() else 'another inline script')
+            ('widget bridge' if 'installWidgetBridge' in node.text() else
+             'theme head' if '"lotuspod:theme"' in node.text() else 'another inline script')
             for node in root.find('script')]
 
 
@@ -66,7 +68,8 @@ class WidgetVersionsTests(VersionsWitness):
         self.assertEqual(root.find('a', 'artifact-live-open')[0].attrs['href'], expected)
         self.assertEqual(root.find('span', 'artifact-live-badge')[0].text(), 'Old version')
         self.assertEqual(root.find('iframe', 'artifact-widget')[0].attrs['height'], '240')
-        self.assertEqual(scripts(root), ['theme head', 'lotuspod-old-version.js'])
+        self.assertEqual(scripts(root),
+                         ['widget bridge', 'theme head', 'lotuspod-old-version.js'])
         for commit, filename, original in (first, second):
             for asked in ({}, {'Sec-Fetch-Dest': 'iframe'}):
                 status, headers, data = self.get(f'/{filename}?version={commit}', headers=asked)

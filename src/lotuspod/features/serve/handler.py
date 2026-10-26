@@ -316,15 +316,23 @@ class _AllowListHandler(SimpleHTTPRequestHandler):
         script = f"{OLD_VERSION_SCRIPT}?v={theme_hash()}"
         rendered = rendered_version(self.root, stem, commit, page_html, self.history.files_at)
         if rendered is not None:
-            # The theme head is the one script of the page's own that runs,
-            # allowed by its hash, so the reader's theme and switch hold.
+            # The theme head and, on a page with a live block, the widget
+            # bridge are the only scripts of the page's own that run, each
+            # allowed by its hash, so the reader's theme and switch hold and
+            # a block resizes, expands and pauses. Both texts are today's,
+            # never the old commit's; a hash is allowed only for a script
+            # the page holds.
             head = (THEME_ROOT / "core/ts/theme-head.js").read_text(encoding="utf-8")
+            bridge = widgets.bridge_script()
+            sources = f"'nonce-{nonce}' {script_hash(head)}"
+            if f"<script>{bridge}</script>" in rendered:
+                sources += f" {script_hash(bridge)}"
             data = old_page(rendered, stem, version, behind, nonce, script,
-                            frozenset((head,))).encode("utf-8")
+                            frozenset((head, bridge))).encode("utf-8")
             # The banner counts the newer versions, so the tag does too.
             return self._answer_rendered(
                 data, f'"v-{commit}-{behind}-{self.render_version}"', tuple(
-                    (header, value + f"; script-src 'nonce-{nonce}' {script_hash(head)}"
+                    (header, value + f"; script-src {sources}"
                      if header == "Content-Security-Policy" else value)
                     for header, value in _OLD_VERSION_HEADERS),
                 unchanged=("Content-Security-Policy",))

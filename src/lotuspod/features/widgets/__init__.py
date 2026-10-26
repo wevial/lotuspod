@@ -10,6 +10,7 @@ __getattr__ = public_edge(__name__, {
     "HEADERS": "widgets",
     "VARY": "widgets",
     "alone_page": "widgets",
+    "bridge_script": "widgets",
     "Frames": "widgets",
     "PageWidgets": "widgets",
     "block_source": "widgets",

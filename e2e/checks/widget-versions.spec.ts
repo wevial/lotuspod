@@ -37,20 +37,24 @@ test('an earlier page runs its own historical widget with read-only chrome', asy
   await expect(page.locator('.artifact-version-banner')).toContainText('2 versions behind');
   await expect(page.frameLocator('iframe.artifact-widget').locator('output'))
     .toHaveText('First forecast: a calm pond.');
-  await expect(page.locator('.artifact-live-badge')).toHaveText('Old version');
-  await expect(page.locator('.artifact-live-chrome button')).toHaveCount(0);
+  // Today's bridge replaces the served badge once the block has loaded, and
+  // draws no Comment: an earlier version loads no page script.
+  await expect(page.locator('.artifact-live-badge')).toHaveText('Live');
+  await expect(page.locator('.artifact-live-chrome button')).toHaveText(['Expand', 'Pause']);
   const frame = page.locator('iframe.artifact-widget');
   const src = await frame.getAttribute('src');
   expect(src).toMatch(new RegExp(`^${name}\\.w-[a-f0-9]{12}\\.html\\?version=${versions[2].commit}$`));
   await expect(page.getByRole('link', { name: 'Open alone' })).toHaveAttribute('href', src!);
   expect(await frame.evaluate(node => node.getBoundingClientRect().height)).toBe(240);
   await expect(page.getByRole('button', { name: 'Choose a version' })).toBeVisible();
-  // Of the page's own scripts only today's theme head is left; then the
-  // old-version script.
+  // Of the page's own scripts only today's widget bridge and theme head are
+  // left; then the old-version script. Both hold "lotuspod:theme", so the
+  // bridge is told apart by its installer.
   expect(await page.locator('script').evaluateAll(nodes => nodes.map(node => {
     const script = node as HTMLScriptElement;
     if (script.src) return new URL(script.src).pathname;
+    if (script.text.includes('installWidgetBridge')) return 'widget bridge';
     return script.text.includes('"lotuspod:theme"') ? 'theme head' : 'another inline script';
-  }))).toEqual(['theme head', '/lotuspod-old-version.js']);
+  }))).toEqual(['widget bridge', 'theme head', '/lotuspod-old-version.js']);
   expect(errors).toEqual([]);
 });

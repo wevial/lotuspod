@@ -9,6 +9,7 @@ from pathlib import Path
 import re
 import shlex
 
+from lotuspod import core
 from lotuspod.core import Templates, collect_scripts, html_title, normalized, script_hash
 from lotuspod.features import comments
 from lotuspod.features.widgets import libraries
@@ -49,6 +50,15 @@ def alone_page(filename: str, query: str = '') -> bytes:
             'iframe { display: block; width: 100%; height: 100%; border: 0; }</style></head>'
             f'<body><iframe src="{html.escape(src)}" sandbox="allow-scripts" allow="" '
             'referrerpolicy="no-referrer"></iframe></body></html>').encode('utf-8')
+
+
+def bridge_script() -> str:
+    """The text of the inline script a page with a live block runs as its
+    widget bridge; serve keeps and hashes exactly this text on an earlier
+    version, so it must be the text the template writes."""
+    return ('(function () {\n'
+            + (core.THEME_ROOT / 'features/widgets/ts/widgets.js').read_text(encoding='utf-8')
+            + '\ninstallWidgetBridge();\n})();')
 
 
 def variables(attribute: str = 'data-lotus-theme') -> str:
