@@ -628,25 +628,24 @@ export function spots(page: Page, bridge: SpotsBridge): Spots {
     const layer = markLayer();
     if (!layer || !marking || marking.draft || event.altKey || event.ctrlKey || event.metaKey) return;
     const size = natural(img);
-    const step = { x: size.w / NUDGED, y: size.h / NUDGED };
     const was = marking.keyed;
-    let box: Rect;
     if (event.key === "Enter") {
       if (was) {
         unkey();
         open(layer, { kind: "box", ...was.shape }, null);
       } else {
         const w = size.w / DROPPED, h = size.h / DROPPED;
-        box = { x: (size.w - w) / 2, y: (size.h - h) / 2, w, h };
+        const box = { x: (size.w - w) / 2, y: (size.h - h) / 2, w, h };
         marking.keyed = { shape: box, mark: draw(layer, { kind: "box", ...box }, "artifact-spot-mark--draft") };
       }
     } else {
       const arrow = ({ ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] } as Record<string, number[]>)[event.key];
       if (!arrow) return;
       if (was) {
+        const step = { x: size.w / NUDGED, y: size.h / NUDGED };
         const [dx, dy] = [arrow[0] * step.x, arrow[1] * step.y];
         const { x, y, w, h } = was.shape;
-        box = event.shiftKey
+        const box = event.shiftKey
           ? { x, y, w: Math.max(step.x, Math.min(w + dx, size.w - x)), h: Math.max(step.y, Math.min(h + dy, size.h - y)) }
           : { x: Math.max(0, Math.min(x + dx, size.w - w)), y: Math.max(0, Math.min(y + dy, size.h - h)), w, h };
         was.mark.remove();
