@@ -90,10 +90,7 @@
     var attempt = 0;
 
     function address() {
-      // Only a page served as an earlier version carries its banner; one asked
-      // for with ?version= beside other query parts is answered as current.
-      var version = document.querySelector(".artifact-version-banner")
-        ? new URLSearchParams(location.search).get("version") : null;
+      var version = new URLSearchParams(location.search).get("version");
       // From href, not origin: a page opened from disk has the origin "null".
       var base = location.href.split(/[?#]/)[0];
       return version ? base + "?version=" + encodeURIComponent(version) : base;

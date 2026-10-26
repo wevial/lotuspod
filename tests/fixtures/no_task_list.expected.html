@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/mermaid@11.4.1/ https://cdn.jsdelivr.net/npm/@mermaid-js/layout-elk@0.2.3/ 'sha256-h53ifE1c9iuZ7Oy0Dtc0Q1okuYzvS4io1wQvUhP9tyo=' 'sha256-vSVW0lrhdrlT7yNzwgrmqkyDbRpcl9vlZMrfx+C+Jq8='; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/mermaid@11.4.1/ https://cdn.jsdelivr.net/npm/@mermaid-js/layout-elk@0.2.3/ 'sha256-EFYGXDh9Oz82ioEHWDc1WpjKNsAVj1KQCvTEdIDC194=' 'sha256-vSVW0lrhdrlT7yNzwgrmqkyDbRpcl9vlZMrfx+C+Jq8='; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Plain Page · Lotuspod</title>
   <meta name="generator" content="lotuspod theme lotus">
@@ -101,10 +101,7 @@
     var attempt = 0;
 
     function address() {
-      // Only a page served as an earlier version carries its banner; one asked
-      // for with ?version= beside other query parts is answered as current.
-      var version = document.querySelector(".artifact-version-banner")
-        ? new URLSearchParams(location.search).get("version") : null;
+      var version = new URLSearchParams(location.search).get("version");
       // From href, not origin: a page opened from disk has the origin "null".
       var base = location.href.split(/[?#]/)[0];
       return version ? base + "?version=" + encodeURIComponent(version) : base;

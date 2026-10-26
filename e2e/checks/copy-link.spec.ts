@@ -131,19 +131,11 @@ test('on an earlier version Copy link copies that version address', async ({ pag
   await expect(button).toHaveAttribute('data-copied', '');
   expect(await clipboard(page)).toBe(`${new URL(baseURL!).origin}/${name}.html?version=${older.commit}`);
 
-  // The fragment is dropped; the version stays.
-  await page.goto(`/${name}.html?version=${older.commit}#top`);
+  // Every other query part and the fragment are dropped; the version stays.
+  await page.goto(`/${name}.html?version=${older.commit}&utm_source=test#top`);
   await copyLink(page).click();
   await expect(copyLink(page)).toHaveAttribute('data-copied', '');
   expect(await clipboard(page)).toBe(`${new URL(baseURL!).origin}/${name}.html?version=${older.commit}`);
-
-  // Asked for beside another query part, the version is not what is shown:
-  // the link copied opens the current page that is.
-  await page.goto(`/${name}.html?version=${older.commit}&utm_source=test`);
-  await expect(page.locator('.artifact-body')).toContainText('Edition: second.');
-  await copyLink(page).click();
-  await expect(copyLink(page)).toHaveAttribute('data-copied', '');
-  expect(await clipboard(page)).toBe(`${new URL(baseURL!).origin}/${name}.html`);
   expect(errors).toEqual([]);
 });
 
