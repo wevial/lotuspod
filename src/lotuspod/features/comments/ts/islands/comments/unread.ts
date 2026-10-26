@@ -84,11 +84,20 @@ export function replies(page: Page, bridge: RepliesBridge) {
     shown.forEach(arrived);
   }
 
-  // A thread open in view on a visible page took comments unread since it
+  // Whether the page is in view: not hidden, nor framed in an index tab
+  // that is not shown, whose frame the index hides with visibility, which
+  // checkVisibility weighs only when asked.
+  function inView() {
+    if (document.visibilityState !== "visible") return false;
+    const frame = window.frameElement;
+    return !frame || typeof frame.checkVisibility !== "function" || frame.checkVisibility({ visibilityProperty: true });
+  }
+
+  // A thread open in view on a page in view took comments unread since it
   // opened: they are seen as on opening it, and stay marked while it stays
-  // open. One that came while the page was hidden is seen once it shows.
+  // open. One that came while the page was out of view is seen once it shows.
   function arrived(thread: Thread) {
-    if (!thread.lit || !tracked.value || document.visibilityState !== "visible") return;
+    if (!thread.lit || !tracked.value || !inView()) return;
     const held = opening.get(thread.root.id) || new Set<number>();
     const fresh = rows(thread).filter(entry => counted(thread, entry) && !held.has(entry.id));
     if (!fresh.length) return;
@@ -98,6 +107,14 @@ export function replies(page: Page, bridge: RepliesBridge) {
     void seeThread(thread);
   }
   document.addEventListener("visibilitychange", () => shown.forEach(arrived));
+  // The index shows a tab by its frame's class and that of the frames' box.
+  const frame = window.frameElement;
+  if (frame) {
+    const shows = new MutationObserver(() => shown.forEach(arrived));
+    for (const node of [frame, frame.parentElement]) {
+      if (node) shows.observe(node, { attributes: true, attributeFilter: ["class", "style", "hidden"] });
+    }
+  }
 
   // A thread opened or closed, in the panel, a popover or the sheet, all of
   // which draw it (the thread-list part's draw). Opened, it posts its newest

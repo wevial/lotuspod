@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
+import { expect, test, type APIRequestContext, type FrameLocator, type Page } from '@playwright/test';
 
 // A reply in a thread the reader started stays unread for them until they
 // open the thread: marked New on the page, counted on its chip, in its header
@@ -155,17 +155,17 @@ function answer(id: number, text: string) {
 
 // The reader starts a thread on the section from the panel's form, naming
 // hermes, which waits for it; the thread's id once it is stored.
-async function startInPanel(page: Page, text: string) {
+async function startInPanel(page: Page, text: string, on: Page | FrameLocator = page) {
   hermes('pull', '--owner', OWNER);
-  await page.locator('.artifact-comments-rail').click();
-  await page.locator('aside.artifact-comments-panel').getByRole('button', { name: 'Comment on a section' }).click();
-  await page.locator('aside.artifact-comments-panel').getByRole('option').filter({ hasText: 'Next steps' }).click();
-  const field = page.getByLabel('Comment on Next steps');
+  await on.locator('.artifact-comments-rail').click();
+  await on.locator('aside.artifact-comments-panel').getByRole('button', { name: 'Comment on a section' }).click();
+  await on.locator('aside.artifact-comments-panel').getByRole('option').filter({ hasText: 'Next steps' }).click();
+  const field = on.getByLabel('Comment on Next steps');
   await expect(field).toBeFocused();
   await field.fill(`@${OWNER} ${text}`);
   const posted = page.waitForResponse((response) =>
     new URL(response.url()).pathname === COMMENTS && response.request().method() === 'POST');
-  await page.locator('aside.artifact-comments-panel').getByRole('button', { name: 'Comment', exact: true }).click();
+  await on.locator('aside.artifact-comments-panel').getByRole('button', { name: 'Comment', exact: true }).click();
   const stored = await posted;
   expect(stored.status()).toBe(201);
   return ((await stored.json()) as Row).id;
@@ -699,6 +699,50 @@ test.describe('signed in', () => {
     await expect(chip(page).locator('.artifact-comment-chip-unread')).toHaveCount(0);
     await expect(page.locator('header.artifact-header .artifact-meta .artifact-unread')).toHaveCount(0);
     await expect(page).toHaveTitle(title);
+
+    await openPage(page, true);
+    await expect(reply(page, id)).toHaveCount(1);
+    await expect(page.locator('.artifact-unread')).toHaveCount(0);
+    expect(errors).toEqual([]);
+  });
+
+  test('a reply that arrives in the open thread of an index tab not shown is posted as seen once the tab shows', async ({ page, request }) => {
+    test.setTimeout(120_000);
+    const errors = watchErrors(page);
+    await catchUp(request);
+    // Loaded at its own address, the page opens as the index's active tab.
+    await page.goto(PAGE);
+    const frame = page.locator('iframe.pod-frame--active');
+    await expect(frame).toBeVisible();
+    const title = (await frame.getAttribute('title')) ?? '';
+    const framed = page.frameLocator(`iframe.pod-frame[title="${title}"]`);
+    await expect(framed.locator('details.artifact-comment')).not.toHaveCount(0);
+    const thread = await startInPanel(page, 'Does the heater need its own breaker?', framed);
+    await expect(framed.locator(`.artifact-comments-entry[data-thread="${thread}"] .artifact-comments-entry-head`))
+      .toHaveAttribute('aria-expanded', 'true');
+    await expect(framed.locator(`.artifact-comment-thread[data-thread="${thread}"] .artifact-comment-typing`)).toBeVisible();
+    await page.waitForTimeout(300);
+
+    const posts: unknown[] = [];
+    page.on('request', (sent) => {
+      if (new URL(sent.url()).pathname === SEEN && sent.method() === 'POST' &&
+        (sent.postDataJSON() ?? {}).thread === thread) posts.push(sent.postDataJSON());
+    });
+    // The listing shown, the tab's frame is hidden; the page in it still reads.
+    await page.locator('.pod-tabs-bar').getByRole('button', { name: 'Lotuspod', exact: true }).click();
+    await expect(page.locator(`iframe.pod-frame[title="${title}"]`)).toBeHidden();
+    const id = answer(thread, 'It does: a 6 A one.');
+    await page.waitForResponse(async (response) =>
+      new URL(response.url()).pathname === COMMENTS && response.request().method() === 'GET' &&
+      ((await response.json()) as { unread?: number[] }).unread?.includes(id), { timeout: 60_000 });
+    await expect(framed.locator('header.artifact-header .artifact-meta .artifact-unread')).toHaveText('1 new reply to you');
+    await page.waitForTimeout(500);
+    expect(posts).toEqual([]);
+
+    const seen = seenPost(page, thread, id);
+    await page.getByRole('group', { name: 'Open pods' }).locator('.pod-tab[data-page="capture-comments"] button.pod-tab-title').click();
+    expect((await seen).status()).toBe(200);
+    await expect(framed.locator('.artifact-unread')).toHaveCount(0);
     expect(errors).toEqual([]);
   });
 
