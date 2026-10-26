@@ -91,8 +91,11 @@
 
     function address() {
       var version = new URLSearchParams(location.search).get("version");
-      // From href, not origin: a page opened from disk has the origin "null".
-      var base = location.href.split(/[?#]/)[0];
+      // Origin and path, so no user name or password in the address goes
+      // with it; a page opened from disk has the origin "null", so its file
+      // URL instead.
+      var base = location.origin !== "null" ? location.origin + location.pathname
+        : location.href.split(/[?#]/)[0];
       return version ? base + "?version=" + encodeURIComponent(version) : base;
     }
 
