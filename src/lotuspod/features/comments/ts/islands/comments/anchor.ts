@@ -80,19 +80,41 @@ export function onImage(spot: Spot): boolean {
 }
 
 // The titles of targets the page has shown, kept for a thread whose target a
-// swap took away.
-const titles = new Map<string, string>();
+// swap took away, and in localStorage per page for one a reload finds gone.
+const TITLES = "lotuspod-spot-titles:" + location.pathname;
+let titles: Map<string, string> | null = null;
+
+function remembered(): Map<string, string> {
+  if (titles) return titles;
+  titles = new Map();
+  try {
+    const stored: unknown = JSON.parse(localStorage.getItem(TITLES) || "{}");
+    if (stored && typeof stored === "object") {
+      Object.entries(stored).forEach(([id, title]) => { if (typeof title === "string") titles!.set(id, title); });
+    }
+  } catch { /* Unremembered. */ }
+  return titles;
+}
+
+function remember(id: string, title: string) {
+  const known = remembered();
+  if (known.get(id) === title) return;
+  known.set(id, title);
+  try { localStorage.setItem(TITLES, JSON.stringify(Object.fromEntries(known))); } catch { /* Unremembered. */ }
+}
 
 // What a spot is on, in words: the labels its nodes were stored with, never
 // the live drawing's, so a reload still names a node gone; else its target's
-// title (an image's alt text, a diagram's section heading), else the title
-// of the section its thread was posted in (section, as stored), else its id.
+// title (an image's alt text, a diagram's section heading) as the page last
+// showed it, else the title of the section its thread was posted in
+// (section, as stored), else its id.
 export function spotTitle(spot: Spot, section?: string): string {
   const labels = spot.nodes.map(node => String(node.label || node.id)).filter(Boolean);
   if (labels.length) return labels.join(", ");
   const target = targetOf(spot.id);
-  if (target) titles.set(spot.id, targetTitle(target) || spot.id);
-  return titles.get(spot.id) || section || spot.id;
+  const title = target && targetTitle(target);
+  if (title) remember(spot.id, title);
+  return remembered().get(spot.id) || section || spot.id;
 }
 
 function targetTitle(target: HTMLElement): string {

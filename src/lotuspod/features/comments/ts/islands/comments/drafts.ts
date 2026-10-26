@@ -101,10 +101,16 @@ export function drafts(page: Page, boxes: HTMLElement[]): void {
   // Kept over a reload of the page (features/live/ts/live-page.js): what is
   // open, and the text and uploaded images not sent in each composer. An image
   // still uploading is unsent too, so a hidden page waits for the reader.
+  // A spot's draft is not kept on its spot: a reload takes its text, and the
+  // images the reader attached, to its section's form, saying why.
+  function spotDraft() {
+    const spot = store.spots?.writing();
+    return spot && (spot.text.trim() || spot.held) ? spot : null;
+  }
   live.keep({
     unsent() {
       const passage = store.passages.writing();
-      return Boolean(passage && ((passage.text || "").trim() || passage.held)) || composers().some(holding) ||
+      return Boolean(passage && ((passage.text || "").trim() || passage.held)) || composers().some(holding) || Boolean(spotDraft()) ||
         awaiting.size > 0 || pending().length > 0 || Boolean(kept && kept.passage);
     },
     // What the last reload kept and the threads' first read has not yet
@@ -118,6 +124,9 @@ export function drafts(page: Page, boxes: HTMLElement[]): void {
           ...composers().filter(holding).map(each => ({
             thread: each.thread, section: each.section, index: each.index, widget: each.widget,
             text: each.field.value, images: each.images.kept(),
+          })),
+          ...[spotDraft()].filter(spot => spot !== null).map(spot => ({
+            section: spot.section, index: 0, text: spot.text, images: spot.images, why: page.placeGone,
           })),
           ...Array.from(awaiting, each => ({
             section: each.section, index: each.index, widget: each.widget, text: String(each.text || ""),

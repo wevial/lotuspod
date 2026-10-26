@@ -847,7 +847,8 @@ through the diagram's boxes and Enter marks the one focused. The mark is
 drawn dashed, and the composer opens under it: "Comment", or Cmd+Enter
 (Ctrl+Enter elsewhere), posts; its "Cancel", or Escape, takes the draft away
 and stays in mark mode; Escape with no draft, or the bar's "Cancel", leaves
-mark mode with the focus back on "Comment". Outside mark mode a drag on a
+mark mode with the focus back on "Comment". In mark mode the crosshair holds over the whole drawing, posted marks
+too. Outside mark mode a drag on a
 drawing draws nothing.
 
 The post is a new thread on the target's section with `spot` (see the
@@ -874,7 +875,10 @@ its text: the draft is drawn again where its boxes now are on the diagram
 swapped in, and posts on it; with one of its boxes gone, no draft is drawn and
 the composer stays on the version it was drawn on, as an image draft does
 when the swap brings in other pixels, its crop being of the old ones. A send
-cancelled while it waits for the crop posts nothing. A box is posted with its
+cancelled while it waits for the crop posts nothing. A draft with text or
+images holds back a hidden page's reload, as a section's form does, and a
+reload takes its text, and the images the reader attached, to its section's
+form, saying why. A box is posted with its
 edges rounded, so one reaching the image's edge stays within it.
 
 Each unresolved spot thread is placed again each time the page draws its
@@ -886,8 +890,9 @@ on none), dashed where those boxes now put it, its first comment followed by
 When the target or one of its boxes is gone, nothing is drawn, nothing is
 guessed, and the thread is listed under "Sections that have changed", headed
 "On" and its boxes' labels joined by ", " as they were stored with the
-comment, so a reload names them too (else the target's title while the page
-has shown it, else the title of the section the thread was posted in). Marks are
+comment, so a reload names them too (else the target's title as the page
+last showed it, which the browser keeps per page in localStorage, else the
+title of the section the thread was posted in). Marks are
 drawn in the drawing's own coordinates, each with its number at its first
 corner: spot threads are numbered with the passages, in page order, and those
 drawn nowhere after them. Pointing at a mark lights it and its entry in the

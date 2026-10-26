@@ -1,5 +1,5 @@
 import { render } from "preact";
-import type { Page, Spot, SpotNode, SpotShape, Thread } from "../bridge";
+import type { Page, Spot, SpotNode, SpotShape, StoredImage, Thread } from "../bridge";
 import type { Placement } from "./parts";
 import { anchorOf, targetOf } from "./anchor";
 import {
@@ -29,6 +29,10 @@ export interface Spots {
   number(thread: Thread): void;
   // A swap has changed the page's sections.
   swapped(): void;
+  // The open draft, for a reload to keep: its section, its text, its images
+  // uploaded other than its crop, and whether any image is attached or on
+  // its way; null with none.
+  writing(): { section: string; text: string; images: StoredImage[]; held: boolean } | null;
 }
 
 const SVG = "http://www.w3.org/2000/svg";
@@ -49,7 +53,7 @@ const CROP_FAILED = "The crop of the marked spot was not attached. Press Comment
 // composer, the target it posts on and the spot, and on an image the crop
 // being made and the name the site stores that crop under, once made.
 interface Draft {
-  mark: SVGGElement; shape: SpotShape; composer: Composer; target: HTMLElement; spot: Omit<Spot, "hash">; image: boolean;
+  mark: SVGGElement; shape: SpotShape; composer: Composer; box: HTMLElement; target: HTMLElement; spot: Omit<Spot, "hash">; image: boolean;
   making: Promise<void>; crop: string;
 }
 interface Press { id: number; x: number; y: number; layer: SVGGElement; points: Point[]; moved: boolean; node: SVGGElement | null; preview: SVGGElement | null }
@@ -559,7 +563,7 @@ export function spots(page: Page, bridge: SpotsBridge): Spots {
       await draft.making;
       return await uploaded(draft) ? "" : CROP_FAILED;
     }, CROP_FAILED);
-    const draft: Draft = { mark, shape, composer, target, spot, image, making: Promise.resolve(), crop: "" };
+    const draft: Draft = { mark, shape, composer, box, target, spot, image, making: Promise.resolve(), crop: "" };
     marking.draft = draft;
     document.body.appendChild(composer.holder);
     seat(draft);
@@ -658,6 +662,14 @@ export function spots(page: Page, bridge: SpotsBridge): Spots {
     swapped() {
       scan();
       if (marking && !marking.holder.isConnected) moved();
+    },
+    writing() {
+      const draft = marking?.draft;
+      if (!draft) return null;
+      return {
+        section: draft.box.dataset.section || "", text: draft.composer.field.value,
+        images: draft.composer.images.kept().filter(image => image.name !== draft.crop), held: draft.composer.images.held(),
+      };
     },
   };
 }

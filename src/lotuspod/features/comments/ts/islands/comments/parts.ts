@@ -1,6 +1,7 @@
 import type { Thread } from "../bridge";
 import type { threadList } from "./thread-list";
 import type { Asked } from "./state";
+import type { Spots } from "./spots";
 
 export interface Section {
   box: HTMLElement;
@@ -57,6 +58,8 @@ export interface Store {
   readonly composer: Pick<ReturnType<typeof import("./composer").composers>, "sending" | "wire" | "fieldOf" | "handles" | "on" | "unblock">;
   readonly panel: Placement;
   readonly passages: Passages;
+  // The spots part, null until the store starts.
+  readonly spots: Spots | null;
   // A swap moved the page on to revision to.
   swapped(to: string): void;
   // A swap gave the tab a new title.

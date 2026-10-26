@@ -33,19 +33,23 @@ const CHANGED = 'Diagram changed since this comment';
 // What an image spot's composer says when its crop was not stored.
 const CROP_FAILED = 'The crop of the marked spot was not attached. Press Comment to try again.';
 const QUESTION = 'Is this the pod?';
+// features/publish/ts/page-open.js's PLACE_GONE.
+const PLACE_GONE = 'Where you were writing has changed since. Your text is kept here.';
+// What features/live/ts/live-page.js keeps over a reload, per page.
+const KEPT = 'lotuspod:reload:';
 
 test.use({ viewport: { width: 1280, height: 800 }, extraHTTPHeaders: SIGNED_IN });
 
 // The page: Flow's flowchart laid out as layout says, its chain as given,
-// and the fish under Pictures.
-function doc(layout = 'LR', chain = 'Agent --> Publish --> Pod --> Reader') {
+// and the fish under Pictures unless fish is false.
+function doc(layout = 'LR', chain = 'Agent --> Publish --> Pod --> Reader', fish = true) {
   const ids = chain.split(' --> ');
   return ['# Spot study', '', 'Where a comment on a drawing lands.', '',
     '## Flow', '', 'How a page reaches its reader.', '',
     '```mermaid id=flow', `graph ${layout}`, `  ${chain}`, '```', '',
     '### Nodes', '', '| Node | Title | Status |', '|---|---|---|',
     ...ids.map((id) => `| ${id} | The ${id.toLowerCase()} step | merged |`), '',
-    '## Pictures', '', 'The pond as it is.', '', '![Fish](fish.jpg)', ''].join('\n');
+    '## Pictures', '', 'The pond as it is.', '', ...(fish ? ['![Fish](fish.jpg)', ''] : [])].join('\n');
 }
 
 function run(...args: string[]) {
@@ -567,6 +571,12 @@ test('a box on an image is posted in its natural pixels with a crop of it, and d
   expect(Math.abs(drawn.y - (again.y + from[1] - shown.y))).toBeLessThanOrEqual(2);
   expect(Math.abs(drawn.width - (to[0] - from[0]))).toBeLessThanOrEqual(4);
   expect(Math.abs(drawn.height - (to[1] - from[1]))).toBeLessThanOrEqual(4);
+  // In mark mode the crosshair holds over a posted mark too.
+  await expect(fish.marks.first().locator('.artifact-spot-shape')).toHaveCSS('cursor', 'pointer');
+  await fish.comment.click();
+  await expect(fish.marks.first().locator('.artifact-spot-shape')).toHaveCSS('cursor', 'crosshair');
+  await page.keyboard.press('Escape');
+  await expect(fish.comment).toBeVisible();
 
   // A crop the site refuses is never posted without: a send attaches it
   // again, and while the site still refuses it, says so and keeps the text;
@@ -668,6 +678,68 @@ test('a box on an image is posted in its natural pixels with a crop of it, and d
   await page.waitForTimeout(500);
   await page.unroute('**/api/media');
   expect(comments).toEqual([]);
+
+  // Without the fish, its threads are under the changed sections, headed
+  // with its alt text, and so after a reload. Mark mode is left and the
+  // focus taken out of Pictures, which a swap would hold back.
+  await page.keyboard.press('Escape');
+  await expect(fish.comment).toBeVisible();
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+  await swap(page, name, doc('LR', undefined, false));
+  await expect(fish.node).toHaveCount(0);
+  const strays = panel(page).strays.locator('.artifact-comments-entry');
+  const headings = () => strays.evaluateAll((entries) =>
+    entries.map((entry) => entry.querySelector('.artifact-comments-entry-words')?.textContent));
+  await expect(strays).toHaveCount(4);
+  await expect.poll(headings).toEqual(Array(4).fill('On Fish'));
+  await page.reload();
+  await expect(page.locator('html')).toHaveAttribute('data-lotuspod-comments-read', '');
+  await expect(strays).toHaveCount(4);
+  await expect.poll(headings).toEqual(Array(4).fill('On Fish'));
+  expect(errors).toEqual([]);
+});
+
+test('a spot draft holds back a hidden page\'s reload, and its text is kept over the reload', async ({ page }) => {
+  test.setTimeout(120_000);
+  const name = `spot-comments-kept-${test.info().repeatEachIndex}`;
+  publish(name, doc());
+  const errors = await watch(page);
+  await load(page, name);
+  const flow = diagram(page);
+  const form = composer(page);
+  await flow.comment.click();
+  await boxRound(page, flow.node('Pod'));
+  await form.field.fill('Not sent yet');
+
+  // Hidden, the page keeps the draft's text for its section.
+  await page.evaluate(() => {
+    Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true });
+    Object.defineProperty(document, 'hidden', { value: true, configurable: true });
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  const kept = await page.evaluate((key) => JSON.parse(sessionStorage.getItem(key) ?? 'null'), KEPT + name);
+  const texts = kept?.comments?.texts ?? [];
+  const draft = texts.find((each: { text?: string }) => each.text === 'Not sent yet');
+  expect(draft, `the kept texts ${JSON.stringify(texts)} hold the spot draft's`).toBeTruthy();
+  expect(draft.section).toBe('flow');
+
+  // A republish that moves the sections round is not swapped in: the hidden
+  // page offers a reload rather than taking it, the draft as it was.
+  const [head, flowPart, pictures] = doc().split(/(?=## Flow|## Pictures)/);
+  publish(name, head + pictures + '\n' + flowPart);
+  await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+  const reload = page.locator('.artifact-live-page-banner').getByRole('button', { name: 'Reload' });
+  await expect(reload).toBeVisible();
+  await expect(form.field).toHaveValue('Not sent yet');
+
+  // Reloaded, the text is in Flow's form, saying why.
+  const loaded = page.waitForEvent('load');
+  await reload.click();
+  await loaded;
+  await expect(page.locator('html')).toHaveAttribute('data-lotuspod-comments-read', '');
+  const flowForm = panel(page).group('Flow').locator('form.artifact-comment-form');
+  await expect(flowForm.locator('textarea[name="text"]')).toHaveValue('Not sent yet');
+  await expect(flowForm.locator('.artifact-comment-status')).toHaveText(PLACE_GONE);
   expect(errors).toEqual([]);
 });
 
