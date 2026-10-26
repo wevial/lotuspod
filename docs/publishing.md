@@ -1402,8 +1402,52 @@ lotuspod publish mock.html --live --notes notes.md
 live block, at `height=full`. The pod is titled from `--title`, the
 document's `<title>`, or the page name. `--notes FILE.md` adds markdown below
 the block, which takes comments, decisions and images as any page does; it
-requires `--live`, and the notes find their files from their own directory.
-The document follows the same rules as a block's `file=`.
+requires `--live` (or `--artifact`), and the notes find their files from
+their own directory. The document follows the same rules as a block's
+`file=`.
+
+#### Claude artifacts
+
+```sh
+lotuspod publish mockup.html --artifact --notes notes.md
+```
+
+`--artifact` publishes one HTML file shaped like a Claude artifact as
+`--live` does, with `--title` and `--notes` as there, after three changes
+made where publish runs, before anything is sent to the writer host. The
+convention it expects:
+
+- **One HTML file**, its CSS and JS inline. Its `<title>` titles the pod
+  unless `--title` is given.
+- **Scripts only from two CDNs.** Each `<script src>` whose URL starts
+  `https://cdnjs.cloudflare.com/` or `https://cdn.jsdelivr.net/npm/` is
+  fetched once and put inline where it stood, keeping its `type`; when it
+  carries `integrity`, the fetched bytes must match it. The frame's policy
+  then covers it by its hash, as any inline script, and the kept source is
+  the self-contained document, so reading the pod never reaches a CDN. Any
+  other `<script src>` (another host, plain HTTP, a relative path), a fetch
+  that fails or an integrity mismatch refuses the publish, naming the URL.
+- **Fonts dropped.** Each `<link>` to `fonts.googleapis.com` or
+  `fonts.gstatic.com` is removed, with one warning per stylesheet naming
+  its URL; the document's own fallback fonts apply. Any other stylesheet
+  `<link>` to an `http:` or `https:` URL refuses the publish, naming it.
+- **`data-theme` follows the reader.** A script put first in the head sets
+  `data-theme` on the root to `light` while the reader's theme is Dawn and
+  `dark` while it is Night, at once and on each switch. Keep the dark values
+  under `:root[data-theme="dark"]` and let the light ones win under
+  `:root[data-theme="light"]` (a `prefers-color-scheme` block guarded by
+  `:root:not([data-theme="light"])` still serves the file opened elsewhere).
+
+The document with its scripts inlined is what the 2 MB limit counts. What
+still does not run in a frame (see [What a widget cannot do](#what-a-widget-cannot-do)):
+
+- storage: `localStorage` and `sessionStorage` throw, so wrap their use in
+  `try`/`catch`;
+- inline `on*=` handlers such as `onclick="..."`: attach listeners from a
+  script instead;
+- code evaluated at run time, such as in-browser Babel compiling JSX;
+- network reads: `fetch` and the like are refused;
+- `window.claude` and the other capabilities of Claude's artifact runtime.
 
 ### The frame's chrome
 

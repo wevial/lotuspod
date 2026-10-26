@@ -1,0 +1,322 @@
+"""`lotuspod publish --artifact`: a Claude artifact's HTML file published as a
+live pod with its CDN scripts inlined, its font links dropped and its
+data-theme following the reader's theme, with real git and the publishing
+witness's SSH transport. The CLI runs in a process whose one fetch function
+answers fixed bytes, so no test reaches the network."""
+
+from __future__ import annotations
+
+import base64
+import hashlib
+import html
+import http.client
+import io
+import json
+import re
+import subprocess
+import sys
+import unittest
+import urllib.request
+from contextlib import redirect_stderr
+from pathlib import Path
+from unittest import mock
+
+from lotuspod.features.publish import artifact
+
+from tests.features.publish import test_publish_remote_witness as witness
+from tests.features.publish.test_publish_remote_witness import TIMEOUT, git
+
+CDNJS = "https://cdnjs.cloudflare.com/ajax/libs/pump/1.0.0/pump.min.js"
+JSDELIVR = "https://cdn.jsdelivr.net/npm/valve@2.1.0/dist/valve.js"
+CDNJS_BYTES = b"window.pump = {speed: 3};"
+JSDELIVR_BYTES = b"window.valve = function () { return 'open'; };"
+
+# Runs the CLI with artifact.fetch answering from the JSON file named in
+# ARTIFACT_FETCHES: a URL's text, or null for a fetch that fails.
+LAUNCHER = """\
+import json, os, sys
+from lotuspod.cli import main
+from lotuspod.features.publish import artifact
+with open(os.environ["ARTIFACT_FETCHES"], encoding="utf-8") as stream:
+    answers = json.load(stream)
+def fetch(url):
+    with open(os.environ["ARTIFACT_FETCHES"] + ".log", "a", encoding="utf-8") as log:
+        log.write(url + "\\n")
+    if answers.get(url) is None:
+        raise OSError("connection refused")
+    return answers[url].encode("utf-8")
+artifact.fetch = fetch
+sys.exit(main(sys.argv[1:]))
+"""
+
+
+def sri(data: bytes, algorithm: str = "sha384") -> str:
+    return algorithm + "-" + base64.b64encode(hashlib.new(algorithm, data).digest()).decode()
+
+
+def csp_hash(data: bytes) -> str:
+    return "'sha256-" + base64.b64encode(hashlib.sha256(data).digest()).decode() + "'"
+
+
+def document(head: str = "", body: str = "") -> str:
+    return ('<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">'
+            f'<title>Pump board</title>{head}<style>body {{ padding: 8px; }}</style></head>'
+            f'<body><p>Board</p>{body}</body></html>\n')
+
+
+SCRIPTS = (f'<script src="{CDNJS}" integrity="{sri(CDNJS_BYTES)}" crossorigin="anonymous" '
+           f'referrerpolicy="no-referrer"></script><p>between</p>'
+           f'<script src="{JSDELIVR}"></script>')
+INLINED = (f"<script>{CDNJS_BYTES.decode()}</script><p>between</p>"
+           f"<script>{JSDELIVR_BYTES.decode()}</script>")
+
+
+class ArtifactPublish(unittest.TestCase):
+    # The witness's real git and SSH fixture, without its test cases.
+    setUp_witness = witness.RemotePublishWitness.setUp
+    write_config = witness.RemotePublishWitness.write_config
+    calls = witness.RemotePublishWitness.calls
+    commits = witness.RemotePublishWitness.commits
+    remote_bytes = witness.RemotePublishWitness.remote_bytes
+
+    def setUp(self):
+        self.setUp_witness()
+        self.launcher = self.tmp / "launch.py"
+        self.launcher.write_text(LAUNCHER, encoding="utf-8")
+        self.fetches = self.tmp / "fetches.json"
+        self.answer({CDNJS: CDNJS_BYTES.decode(), JSDELIVR: JSDELIVR_BYTES.decode()})
+        self.env["ARTIFACT_FETCHES"] = str(self.fetches)
+
+    def answer(self, answers: dict) -> None:
+        self.fetches.write_text(json.dumps(answers), encoding="utf-8")
+
+    def fetched(self) -> list[str]:
+        log = Path(str(self.fetches) + ".log")
+        return log.read_text().splitlines() if log.exists() else []
+
+    def source(self, text: str) -> Path:
+        path = self.tmp / "board.html"
+        path.write_text(text, encoding="utf-8")
+        return path
+
+    def publish(self, source: Path, *extra: str) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            [sys.executable, str(self.launcher), "publish", str(source), *extra],
+            cwd=str(self.tmp), env=self.env, capture_output=True, text=True, timeout=TIMEOUT)
+
+    def publish_local(self, source: Path, *extra: str) -> subprocess.CompletedProcess:
+        return self.publish(source, "--artifact", "--local", "--out-dir", str(self.out), *extra)
+
+    def widget(self) -> str:
+        return next(self.out.glob("board.w-*.html")).read_text(encoding="utf-8")
+
+    def test_cdn_scripts_are_inlined_in_place_and_covered_by_their_hashes(self):
+        done = self.publish_local(self.source(document(body=SCRIPTS)))
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(self.fetched(), [CDNJS, JSDELIVR])
+        page = (self.out / "board.html").read_text(encoding="utf-8")
+        self.assertIn('<h1 class="artifact-title">Pump board</h1>', page)
+        widget = self.widget()
+        self.assertIn(INLINED, widget)
+        self.assertNotIn(CDNJS, widget)
+        self.assertNotIn(JSDELIVR, widget)
+        policy = html.unescape(re.search(
+            r'<meta http-equiv="Content-Security-Policy" content="([^"]*)"', widget).group(1))
+        script_src = re.search(r"script-src ([^;]*)", policy).group(1).split()
+        for data in (CDNJS_BYTES, JSDELIVR_BYTES):
+            self.assertIn(csp_hash(data), script_src)
+        self.assertFalse([source for source in script_src if "https:" in source], script_src)
+        kept = (self.out / "board.md").read_text(encoding="utf-8")
+        self.assertIn(INLINED, kept)
+        self.assertNotIn("src=", kept)
+        names = git(self.out, "show", "--pretty=", "--name-only", "HEAD").stdout.decode()
+        for name in ("board.html", "board.md"):
+            self.assertIn(name, names.split())
+        self.assertEqual(self.commits(), 1)
+
+    def test_the_theme_script_comes_first_after_the_policy_and_bridge(self):
+        done = self.publish_local(self.source(document()))
+        self.assertEqual(done.returncode, 0, done.stderr)
+        widget = self.widget()
+        bridge = widget.index("lotuspod:resize")
+        theme = widget.index('setAttribute("data-theme", "light")')
+        self.assertLess(bridge, theme)
+        self.assertLess(theme, widget.index("<title>Pump board</title>"))
+
+    def test_refusals_name_the_url_and_write_nothing(self):
+        cases = [
+            ("integrity", CDNJS, f'<script src="{CDNJS}" integrity="{sri(b"other")}"></script>'),
+            ("unpkg", "https://unpkg.com/pump@1.0.0/pump.js",
+             '<script src="https://unpkg.com/pump@1.0.0/pump.js"></script>'),
+            ("stylesheet", "https://example.com/board.css",
+             '<link rel="stylesheet" href="https://example.com/board.css">'),
+            ("fetch", JSDELIVR, f'<script src="{JSDELIVR}"></script>'),
+        ]
+        self.answer({CDNJS: CDNJS_BYTES.decode(), JSDELIVR: None})
+        for case, url, element in cases:
+            with self.subTest(case=case):
+                done = self.publish_local(self.source(document(head=element)))
+                self.assertNotEqual(done.returncode, 0)
+                self.assertIn(url, done.stderr)
+                self.assertEqual(list(self.out.glob("board*")), [])
+                self.assertEqual(git(self.out, "rev-list", "--all").stdout, b"")
+                self.assertEqual(self.commits(), 0)
+
+    def test_font_links_are_dropped_with_one_warning_per_stylesheet(self):
+        stylesheet = "https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap"
+        head = ('<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>'
+                f'<link href="{html.escape(stylesheet)}" rel="stylesheet">')
+        done = self.publish_local(self.source(document(head=head)))
+        self.assertEqual(done.returncode, 0, done.stderr)
+        widget = self.widget()
+        self.assertNotIn("fonts.googleapis.com", widget)
+        self.assertNotIn("fonts.gstatic.com", widget)
+        warnings = [line for line in done.stderr.splitlines() if line.startswith("warning:")]
+        self.assertEqual(len([line for line in warnings if "fonts." in line]), 1, done.stderr)
+        self.assertIn(stylesheet, done.stderr)
+
+    def test_over_ssh_the_writer_host_receives_the_adapted_document(self):
+        source = self.source(document(body=f'<script src="{JSDELIVR}"></script>'))
+        done = self.publish(source, "--artifact")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        calls = self.calls()
+        self.assertEqual(len(calls), 1, calls)
+        self.assertNotIn("--artifact", calls[0][-1])
+        kept = self.remote_bytes("board.md").decode("utf-8")
+        self.assertIn(f"<script>{JSDELIVR_BYTES.decode()}</script>", kept)
+        self.assertNotIn(JSDELIVR, kept)
+        self.assertEqual(self.fetched(), [JSDELIVR])
+
+    def test_a_document_counts_against_the_limit_once_adapted(self):
+        fonts = '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>'
+        padding = "x" * (artifact.DOCUMENT_MAX - 64 * len(fonts))
+        for count, size in ((128, artifact.DOCUMENT_MAX), (17 * 1024 * 1024 // len(fonts), 16 * 1024 * 1024)):
+            with self.subTest(size=size):
+                source = self.source(document(head=fonts * count, body=padding))
+                self.assertGreater(source.stat().st_size, size)
+                done = self.publish_local(source)
+                self.assertEqual(done.returncode, 0, done.stderr)
+                self.assertNotIn("fonts.gstatic.com", self.widget())
+        source = self.source(document(body="x" * (artifact.DOCUMENT_MAX + 1)))
+        done = self.publish_local(source)
+        self.assertNotEqual(done.returncode, 0)
+        self.assertIn("exceeds 2 MB", done.stderr)
+
+    def test_stylesheets_a_browser_reads_as_remote_are_refused(self):
+        for href in ("http:/example.com/board.css", " ht\ntps://example.com/board.css",
+                     "\\\\example.com/board.css"):
+            with self.subTest(href=href):
+                done = self.publish_local(self.source(document(
+                    head=f'<link rel="stylesheet" href="{html.escape(href)}">')))
+                self.assertNotEqual(done.returncode, 0)
+                self.assertIn("artifact stylesheet", done.stderr)
+                self.assertEqual(list(self.out.glob("board*")), [])
+
+
+class _Socket:
+    def __init__(self, data: bytes) -> None:
+        self.stream = io.BytesIO(data)
+
+    def makefile(self, mode):
+        return self.stream
+
+
+def answered(raw: bytes):
+    """An opener whose every response is the raw HTTP bytes given."""
+    response = http.client.HTTPResponse(_Socket(raw))
+    response.begin()
+    return mock.Mock(open=mock.Mock(return_value=response))
+
+
+class ArtifactFetch(unittest.TestCase):
+    def test_a_redirect_is_followed_only_to_the_cdns(self):
+        handler = artifact._CdnRedirects()
+        request = urllib.request.Request(JSDELIVR)
+        for target in ("https://unpkg.com/valve@2.1.0/dist/valve.js",
+                       "http://cdn.jsdelivr.net/npm/valve@2.1.0/dist/valve.js",
+                       "http://127.0.0.1/valve.js"):
+            with self.subTest(target=target), self.assertRaisesRegex(ValueError, target):
+                handler.redirect_request(request, None, 302, "Found", {}, target)
+        moved = "https://cdn.jsdelivr.net/npm/valve@2.1.1/dist/valve.js"
+        self.assertEqual(handler.redirect_request(request, None, 302, "Found", {}, moved)
+                         .full_url, moved)
+
+    def test_a_response_cut_short_is_refused(self):
+        body = b"window.partial = true; // cut off"
+        whole = b"HTTP/1.1 200 OK\r\nContent-Length: %d\r\n\r\n" % len(body) + body
+        with mock.patch("urllib.request.build_opener", return_value=answered(whole)):
+            self.assertEqual(artifact.fetch(JSDELIVR), body)
+        short = b"HTTP/1.1 200 OK\r\nContent-Length: 1000\r\n\r\n" + body
+        with mock.patch("urllib.request.build_opener", return_value=answered(short)), \
+                self.assertRaisesRegex(ValueError, "cut short"):
+            artifact.fetch(JSDELIVR)
+        chunked = b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n100\r\n" + body
+        with mock.patch("urllib.request.build_opener", return_value=answered(chunked)), \
+                self.assertRaisesRegex(ValueError, "cut short"):
+            artifact.fetch(JSDELIVR)
+
+    def adapted(self, text: str) -> str:
+        with mock.patch.object(artifact, "fetch", return_value=text.encode()), \
+                redirect_stderr(io.StringIO()):
+            return artifact.adapt(document(body=f'<script src="{JSDELIVR}"></script><p>After</p>'))
+
+    def test_script_text_that_would_hold_the_element_open_is_refused(self):
+        for text in ('var a = "<!--"; var b = "<script>";',
+                     'var a = "<!--"; var b = "<SCRIPT\ttype=x";',
+                     'var a = "<!-- <script> --> <!--"; var b = "<script/";'):
+            with self.subTest(text=text), self.assertRaisesRegex(RuntimeError, JSDELIVR):
+                self.adapted(text)
+
+    def test_script_text_the_tokenizer_closes_is_inlined_as_fetched(self):
+        for text in ("<!--\nglobalThis.answer = 42;\n//-->",
+                     "globalThis.raw = String.raw`<!--`; var c = /<!--/u;",
+                     'var a = "<!-- <script> -->"; var b = "<script>";',
+                     'var a = "<!--><script>";', 'var a = "<script>"; var b = "<!--";',
+                     'window.answer = "<!-- <script> <!-->";',
+                     'window.answer = "<!-- <!--> <script>";'):
+            with self.subTest(text=text):
+                inlined = re.search(r"<p>Board</p><script>(.*?)</script><p>After</p>",
+                                    self.adapted(text), re.DOTALL).group(1)
+                self.assertEqual(inlined, text)
+
+    def test_a_deferred_or_async_script_is_inlined_where_parsing_ends(self):
+        reads = "window.board = document.querySelector('#board').id;"
+        answers = {JSDELIVR: reads.encode(), CDNJS: CDNJS_BYTES}
+        head = (f'<script src="{JSDELIVR}" defer></script>'
+                f'<script src="{CDNJS}" async></script>')
+        with mock.patch.object(artifact, "fetch", side_effect=answers.__getitem__), \
+                redirect_stderr(io.StringIO()):
+            adapted = artifact.adapt(document(head=head, body='<div id="board"></div>'))
+        self.assertIn('<div id="board"></div>'
+                      f"<script defer>{reads}</script>"
+                      f"<script async>{CDNJS_BYTES.decode()}</script></body>", adapted)
+        self.assertEqual(adapted.count(reads), 1)
+
+    def test_a_deferred_script_inside_a_template_stays_in_place(self):
+        answers = {JSDELIVR: JSDELIVR_BYTES, CDNJS: CDNJS_BYTES}
+        body = (f'<template id="row"><script src="{JSDELIVR}" defer></script></template>'
+                f'<script src="{CDNJS}" async></script><div id="board"></div>')
+        with mock.patch.object(artifact, "fetch", side_effect=answers.__getitem__), \
+                redirect_stderr(io.StringIO()):
+            adapted = artifact.adapt(document(body=body))
+        self.assertIn(f'<template id="row"><script defer>{JSDELIVR_BYTES.decode()}'
+                      "</script></template>", adapted)
+        self.assertIn('<div id="board"></div>'
+                      f"<script async>{CDNJS_BYTES.decode()}</script></body>", adapted)
+        self.assertEqual(adapted.count(JSDELIVR_BYTES.decode()), 1)
+
+    def test_what_a_noscript_element_holds_is_left_as_written(self):
+        held = (f'<noscript><script src="{JSDELIVR}" defer></script>'
+                '<script src="https://unpkg.com/pump"></script>'
+                '<link rel="stylesheet" href="https://example.com/a.css"></noscript>')
+        source = document(head=held, body=f'<noscript><script src="{CDNJS}" async></script>'
+                                           '</noscript><div id="board"></div>')
+        with mock.patch.object(artifact, "fetch") as fetch, redirect_stderr(io.StringIO()):
+            adapted = artifact.adapt(source)
+        fetch.assert_not_called()
+        theme = f"<head><script>{artifact.THEME_SCRIPT}</script>"
+        self.assertEqual(adapted, source.replace("<head>", theme, 1))
+
+
+if __name__ == "__main__":
+    unittest.main()
