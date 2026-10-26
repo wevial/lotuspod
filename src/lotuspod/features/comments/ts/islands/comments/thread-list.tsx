@@ -386,8 +386,7 @@ export function threadList(page: Page, shell: Shell, bridge: ThreadListBridge) {
         // Resolving reads the thread up to its newest comment.
         bridge.seen(thread);
         if (current === thread) current = null;
-      }
-      if (!resolve) {
+      } else {
         expand(thread);
       }
       bridge.refresh();
