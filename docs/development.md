@@ -413,7 +413,12 @@ stored in `lotuspod-media/` beside the site. For an agent command it names the s
 in `LOTUSPOD_TEST_SOCKET`, the credentials' files in
 `LOTUSPOD_TEST_CREDENTIAL_HERMES` and `LOTUSPOD_TEST_CREDENTIAL_OTHER`, the
 site's output directory in `LOTUSPOD_TEST_OUT` and its own Python in
-`LOTUSPOD_TEST_PYTHON`. The screenshots go to the directory named by
+`LOTUSPOD_TEST_PYTHON`. It passes its environment through to the command,
+so `LOTUSPOD_TEST_FAIL_FIRST`, set to a check's title, makes
+`e2e/checks/fail-first-attempt.ts` fail that check's first attempt after it
+has run; the checklist's `signed in`, activity's `signed in`, `the chain` and
+`an archived page` call it, and `tests/test_check_retries.py` uses it to
+witness which groups CI retries. The screenshots go to the directory named by
 `CAPTURE_OUT`:
 
 ```sh
@@ -519,7 +524,13 @@ combined result. Each shard runs in Microsoft's Playwright image
 the libraries it needs, so no shard downloads a browser;
 `tests/test_e2e_image.py` fails when the image tag and the pinned version
 differ, so bump both together. Each shard runs with one worker, and `e2e/checks.config.ts` retries
-a failed check once when `CI` is set (never locally). A check that passes
+a failed check once when `CI` is set (never locally). Three groups opt out
+with `test.describe.configure({ retries: 0 })`, since their checks write to
+the served site and a retry would meet the first attempt's state and fail on
+it: `signed in` in `e2e/checks/features/decisions/checklist.spec.ts` (its
+saved answers), `the chain` in `e2e/checks/chain.spec.ts` (hermes's items)
+and, in `e2e/checks/activity.spec.ts`, the `counting what they write` group
+inside `signed in` (the versions and events it publishes). A check that passes
 only on its retry is reported as flaky: the list output prints `N flaky`
 with each such check, and the `Playwright Run Summary` notice on the run's
 summary page names them. A pull request whose changes are all docs (under

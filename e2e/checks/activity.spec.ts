@@ -212,283 +212,289 @@ test.describe('signed in', () => {
     }
   });
 
-  test('the index opens on Recent activity, grouped by page, newest first, and the filters span both views', async ({ page, request }) => {
-    test.setTimeout(180_000);
-    const errors = watchErrors(page);
-    await catchUp(request);
-    publish(A, source('Activity check A', 'A heater keeps a hole in the ice.'), '--label', LABEL);
-    publish(B, source('Activity check B', 'The heater shares the pump outlet.'));
-    // hermes listens, so the comment, naming it, waits for it.
-    hermes('pull', '--owner', OWNER);
-    const posted = await request.post(COMMENTS, {
-      headers: SIGNED_IN, data: { page: B, section: 'heater', text: '@hermes Which outlet does it share?' },
-    });
-    expect(posted.status()).toBe(201);
-    const { id: thread } = (await posted.json()) as Row;
-    // A version is dated to the second: A's must come after the comment.
-    await page.waitForTimeout(1100);
-    publish(A, source('Activity check A', 'A floating heater keeps a hole in the ice.'),
-      '--label', LABEL);
+  // These checks publish and answer on the served site, so a retry would
+  // find the first attempt's versions and events and could never pass.
+  test.describe('counting what they write', () => {
+    test.describe.configure({ retries: 0 });
 
-    try {
-      await openIndex(page);
-      const { group: switcher, pages, activity } = views(page);
-      await expect(switcher).toBeVisible();
-      // After the title.
-      expect(await switcher.evaluate((node) => node.previousElementSibling?.className)).toBe('index-title');
-      await expect(activity).toHaveAttribute('aria-pressed', 'true');
-      await expect(pages).toHaveAttribute('aria-pressed', 'false');
-      await expect(page.locator('.index-table')).toBeHidden();
-      await expect(page.locator('.index-activity')).toBeVisible();
-      await expect.poll(async () => (await shownGroups(page)).slice(0, 2)).toEqual([A, B]);
-      await expect(page.locator('.index-count')).toHaveText(/^\d+ pages? with activity in the last 7 days$/);
-
-      const a = group(page, A);
-      await expect(a.locator('.index-activity-title a')).toHaveText('Activity check A');
-      await expect(a.locator('.index-activity-title a')).toHaveAttribute('href', `${A}.html`);
-      await expect(a.locator('.index-tag')).toHaveText([LABEL]);
-      await expect(a.locator('.index-activity-count')).toHaveText('2 events');
-      const aEvents = a.locator('li.index-activity-event');
-      await expect(aEvents).toHaveCount(2);
-      await expect(aEvents.nth(0)).toContainText('hermes published a new version: Heater changed');
-      await expect(aEvents.nth(0).locator('.index-dot')).toHaveClass('index-dot index-dot--version');
-      await expect(aEvents.nth(0).locator('.index-dot')).toHaveAttribute('aria-hidden', 'true');
-      await expect(aEvents.nth(1)).toContainText('hermes published the page');
-      // Today's events show the time of day alone.
-      await expect(aEvents.nth(0).locator('time')).toHaveText(/^\d{2}:\d{2}( [AP]M)?$/);
-
-      const b = group(page, B);
-      const comment = b.locator('li.index-activity-event').first();
-      await expect(comment.locator('.index-activity-actor')).toHaveText('you');
-      await expect(comment).toContainText('you commented on “Heater”');
-      await expect(comment.locator('.index-dot')).toHaveClass('index-dot index-dot--comment');
-      await expect(b.locator('.index-activity-unread')).toHaveCount(0);
-
-      // hermes replies to the comment: B moves above A.
-      const claim = hermes('claim', String(thread));
-      // A claim token may start with '-': give it to its option in one word.
-      const reply = hermes('reply', String(thread), `--claim=${claim.claimToken}`,
-        '--key', `activity-${thread}`, '--text', 'The one by the steps.');
-      expect(reply.parent).toBe(thread);
-      await openIndex(page, true);
-      // The response can arrive before its groups have been drawn.
-      await expect.poll(async () => (await shownGroups(page)).slice(0, 2)).toEqual([B, A]);
-      await expect(b.locator('.index-activity-unread')).toHaveText('1 new reply to you');
-      await expect(b.locator('.index-activity-count')).toHaveText('3 events');
-      const replied = b.locator('li.index-activity-event').first();
-      await expect(replied).toContainText('hermes replied to your comment on “Heater” · new, to you');
-      await expect(replied.locator('.index-activity-new')).toHaveText('new, to you');
-      await expect(replied.locator('.index-dot')).toHaveClass('index-dot index-dot--reply index-dot--unread');
-
-      // Pages, then Recent activity again, each written in place.
-      const entries = await page.evaluate(() => history.length);
-      await pages.click();
-      await expect(page).not.toHaveURL(/#/);
-      await expect(pages).toHaveAttribute('aria-pressed', 'true');
-      await expect(page.locator('.index-table')).toBeVisible();
-      await expect(page.locator('.index-activity')).toBeHidden();
-      await expect(page.locator('.index-count')).toHaveText(/^\d+ pages, newest update first$/);
-      await activity.click();
-      await expect(page).toHaveURL(/\/#activity$/);
-      await expect(activity).toHaveAttribute('aria-pressed', 'true');
-      await expect(page.locator('.index-activity')).toBeVisible();
-      await expect(page.locator('.index-table')).toBeHidden();
-      expect(await page.evaluate(() => history.length)).toBe(entries);
-
-      // A label only A carries keeps only A's group, then only its row.
-      await page.getByRole('button', { name: /^Labels/ }).click();
-      await option(page, LABEL).check();
-      await page.keyboard.press('Escape');
-      await expect.poll(() => shownGroups(page)).toEqual([A]);
-      await expect(page.locator('.index-active')).toHaveText(`Showing ${LABEL} ✕`);
-      await expect(page.locator('.index-count')).toHaveText(/^1 of \d+ pages? with activity in the last 7 days$/);
-      await pages.click();
-      await expect.poll(() => shownRows(page)).toEqual([A]);
-      await expect(page.locator('.index-active')).toHaveText(`Showing ${LABEL} ✕`);
-      await activity.click();
-
-      // Unread keeps B alone, which carries no label: no group is left.
-      const unread = page.locator('button.index-toggle', { hasText: /^Unread/ });
-      await expect(unread).toHaveText('Unread · 1');
-      await unread.click();
-      await expect.poll(() => shownGroups(page)).toEqual([]);
-      await expect(page.getByText('No activity matches these filters.')).toBeVisible();
-      await expect(page.locator('.index-active')).toHaveText(`Showing ${LABEL} ✕ unread ✕`);
-
-      // The search reads a group's events too.
-      await page.getByRole('button', { name: `Remove filter ${LABEL}` }).click();
-      await expect.poll(() => shownGroups(page)).toEqual([B]);
-      // The unread reply's flag is event text too.
-      await page.getByLabel('Search').fill('new, to you');
-      await expect.poll(() => shownGroups(page)).toEqual([B]);
-      await page.getByLabel('Search').fill('by the steps');
-      await expect.poll(() => shownGroups(page)).toEqual([]);
-      await page.getByLabel('Search').fill('your comment on “heater”');
-      await expect.poll(() => shownGroups(page)).toEqual([B]);
-      expect(errors).toEqual([]);
-    } finally {
-      // The label leaves the index with this check.
-      publish(A, source('Activity check A', 'A floating heater keeps a hole in the ice.'),
-        '--no-labels');
+    test('the index opens on Recent activity, grouped by page, newest first, and the filters span both views', async ({ page, request }) => {
+      test.setTimeout(180_000);
+      const errors = watchErrors(page);
       await catchUp(request);
-    }
-  });
-
-  test('each row links to its version, its thread or its decision, and the link opens it there', async ({ page, request }) => {
-    test.setTimeout(240_000);
-    const errors = watchErrors(page);
-    await catchUp(request);
-    publish(C, linksSource('A floating heater keeps a hole in the ice.'));
-    // A version is dated to the second: the second must come after the first.
-    await page.waitForTimeout(1100);
-    publish(C, linksSource('A submerged heater keeps the pond from freezing.'));
-    const listed = await request.get(`/api/versions?page=${C}`, { headers: SIGNED_IN });
-    expect(listed.status()).toBe(200);
-    const { versions } = (await listed.json()) as { versions: { commit: string }[] };
-    expect(versions.length).toBe(2);
-    const older = versions[1].commit;
-
-    // hermes listens, so the comment, naming it, waits for it.
-    hermes('pull', '--owner', OWNER);
-    const posted = await request.post(COMMENTS, {
-      headers: SIGNED_IN, data: { page: C, section: 'heater', text: '@hermes How deep does it sit?' },
-    });
-    expect(posted.status()).toBe(201);
-    const { id: thread } = (await posted.json()) as Row;
-    const html = await (await request.get(`/${C}.html`, { headers: SIGNED_IN })).text();
-    const asked = /data-question="decision-pump" data-version="([^"]+)"[\s\S]*?name="choice" value="([^"]+)"/.exec(html);
-    expect(asked, 'the page asks decision-pump').not.toBeNull();
-    const answered = await request.post('/api/answers', {
-      headers: SIGNED_IN,
-      data: { page: C, question: 'decision-pump', version: asked![1], choice: asked![2], note: '' },
-    });
-    expect(answered.status()).toBe(201);
-
-    try {
-      await openIndex(page);
-      const c = group(page, C);
-      const row = (text: string) => c.locator('li.index-activity-event', { hasText: text })
-        .locator('a.index-activity-said');
-      const home = page.getByRole('button', { name: 'Lotuspod', exact: true });
-      const tabs = page.locator('.pod-tabs .pod-tab');
-
-      // The earlier version loads its read-only old version in the window.
-      await expect(row('published the page')).toHaveAttribute('href', `${C}.html?version=${older}`);
-      await row('published the page').click();
-      await expect(page).toHaveURL(new RegExp(`/${C}\\.html\\?version=${older}$`));
-      await expect(page.locator('main.artifact--old-version > div.artifact-version-banner')).toBeVisible();
-
-      // The current version opens the page itself in a tab.
-      await page.goBack();
-      await expect(row('published a new version')).toHaveAttribute('href', `${C}.html`);
-      await row('published a new version').click();
-      await expect(tabs).toHaveCount(1);
-      await expect.poll(() => framedAddress(page)).toMatch(new RegExp(`/${C}\\.html$`));
-
-      // So does it in C's tab left on its versions view.
-      await framed(page).locator('a.artifact-versions-link').click();
-      await expect.poll(() => framedAddress(page)).toMatch(/#versions$/);
-      await expect(framed(page).locator('section.artifact-versions')).toBeVisible();
-      await home.click();
-      await row('published a new version').click();
-      await expect(tabs).toHaveCount(1);
-      await expect.poll(() => framedAddress(page)).toMatch(new RegExp(`/${C}\\.html$`));
-      await expect(framed(page).locator('section.artifact-versions')).toBeHidden();
-      await expect(framed(page).locator('h1')).toBeVisible();
-
-      // The comment opens the page with its thread open in the panel.
-      await home.click();
-      await row('you commented on “Heater”').click();
-      await expect.poll(() => framedAddress(page)).toMatch(new RegExp(`/${C}\\.html#thread=${thread}$`));
-      const entry = framed(page).locator(`li.artifact-comments-entry[data-thread="${thread}"]`);
-      await expect(entry).toHaveClass(/\bartifact-comments-entry--open\b/);
-      await expect(entry).toBeInViewport();
-
-      // hermes replies while the tab is not shown, as one that came to the
-      // thread open in view would be seen; the listing shows it unread, and
-      // the reply's link, pressed from the keyboard, opens the thread again
-      // and reads it.
-      await home.click();
-      const claim = hermes('claim', String(thread));
-      const reply = hermes('reply', String(thread), `--claim=${claim.claimToken}`,
-        '--key', `activity-links-${thread}`, '--text', 'Half a metre down.');
-      expect(reply.parent).toBe(thread);
-      const replied = c.locator('li.index-activity-event', { hasText: 'hermes replied to your comment on “Heater”' });
-      await expect(replied.locator('.index-activity-new')).toHaveText('new, to you');
-      await expect(c.locator('.index-activity-unread')).toHaveText('1 new reply to you');
-      await replied.locator('a.index-activity-said').focus();
-      await page.keyboard.press('Enter');
-      await expect(entry).toHaveClass(/\bartifact-comments-entry--open\b/);
-      await expect(entry).toContainText('Half a metre down.');
-      await expect.poll(async () => {
-        const seen = await request.get(SEEN, { headers: SIGNED_IN });
-        const { pages } = (await seen.json()) as { pages: Record<string, { unread: number }> };
-        return pages[C]?.unread;
-      }).toBe(0);
-      await home.click();
-      await expect(c.locator('.index-activity-unread')).toHaveCount(0);
-      await expect(replied).toBeVisible();
-      await expect(replied.locator('.index-activity-new')).toHaveCount(0);
-
-      // The answer scrolls C's open tab to the decision's form.
-      await row('you answered “Which pump?”').click();
-      await expect(tabs).toHaveCount(1);
-      await expect.poll(() => framedAddress(page)).toMatch(/#question=decision-pump$/);
-      const form = framed(page).locator('form[data-question="decision-pump"]');
-      await expect(form).toBeInViewport();
-      await expect.poll(async () => {
-        const bar = await framed(page).locator('.artifact-topbar').boundingBox();
-        const box = await form.boundingBox();
-        return bar && box ? box.y >= bar.y + bar.height : false;
-      }).toBe(true);
-
-      // A phone opens the thread in the bottom sheet.
-      await page.setViewportSize({ width: 390, height: 844 });
-      await page.goto(`/${C}.html?standalone#thread=${thread}`);
-      const sheet = page.locator('.artifact-comments-bottom-sheet--open');
-      await expect(sheet.locator(`li.artifact-comments-entry[data-thread="${thread}"]`))
-        .toHaveClass(/\bartifact-comments-entry--open\b/);
-
-      // Resolved, it opens listed with the resolved threads in the panel.
-      const resolved = await request.post(COMMENTS, {
-        headers: SIGNED_IN, data: { page: C, thread, resolved: true },
+      publish(A, source('Activity check A', 'A heater keeps a hole in the ice.'), '--label', LABEL);
+      publish(B, source('Activity check B', 'The heater shares the pump outlet.'));
+      // hermes listens, so the comment, naming it, waits for it.
+      hermes('pull', '--owner', OWNER);
+      const posted = await request.post(COMMENTS, {
+        headers: SIGNED_IN, data: { page: B, section: 'heater', text: '@hermes Which outlet does it share?' },
       });
-      expect(resolved.status()).toBe(200);
-      await page.setViewportSize({ width: 1280, height: 800 });
-      // A load of its own, not a move within the page already open.
-      await page.goto('about:blank');
-      await page.goto(`/${C}.html?standalone#thread=${thread}`);
-      const listed = page.locator(`.artifact-comments-panel li.artifact-comments-entry--resolved[data-thread="${thread}"]`);
-      await expect(listed).toBeInViewport();
-      await expect(page.locator('.artifact-comments-panel')).toHaveClass(/\bartifact-comments-panel--resolved-shown\b/);
+      expect(posted.status()).toBe(201);
+      const { id: thread } = (await posted.json()) as Row;
+      // A version is dated to the second: A's must come after the comment.
+      await page.waitForTimeout(1100);
+      publish(A, source('Activity check A', 'A floating heater keeps a hole in the ice.'),
+        '--label', LABEL);
 
-      // hermes adds to the resolved thread: a link opens it to read, on a
-      // phone and in the panel, and its reply counts as read.
-      const unreadOnC = async () => {
-        const seen = await request.get(SEEN, { headers: SIGNED_IN });
-        const { pages } = (await seen.json()) as { pages: Record<string, { unread: number }> };
-        return pages[C]?.unread ?? 0;
-      };
-      const addTo = (text: string, key: string) =>
-        hermes('follow-up', String(thread), '--key', key, '--text', text);
-      for (const [width, height, held, text] of [
-        [390, 844, '.artifact-comments-bottom-sheet--open', 'And clear of the pump.'],
-        [1280, 800, '.artifact-comments-panel', 'The fish keep to the far end.'],
-      ] as const) {
-        addTo(text, `activity-links-${thread}-${width}`);
-        await expect.poll(unreadOnC).toBe(1);
-        await page.setViewportSize({ width, height });
+      try {
+        await openIndex(page);
+        const { group: switcher, pages, activity } = views(page);
+        await expect(switcher).toBeVisible();
+        // After the title.
+        expect(await switcher.evaluate((node) => node.previousElementSibling?.className)).toBe('index-title');
+        await expect(activity).toHaveAttribute('aria-pressed', 'true');
+        await expect(pages).toHaveAttribute('aria-pressed', 'false');
+        await expect(page.locator('.index-table')).toBeHidden();
+        await expect(page.locator('.index-activity')).toBeVisible();
+        await expect.poll(async () => (await shownGroups(page)).slice(0, 2)).toEqual([A, B]);
+        await expect(page.locator('.index-count')).toHaveText(/^\d+ pages? with activity in the last 7 days$/);
+
+        const a = group(page, A);
+        await expect(a.locator('.index-activity-title a')).toHaveText('Activity check A');
+        await expect(a.locator('.index-activity-title a')).toHaveAttribute('href', `${A}.html`);
+        await expect(a.locator('.index-tag')).toHaveText([LABEL]);
+        await expect(a.locator('.index-activity-count')).toHaveText('2 events');
+        const aEvents = a.locator('li.index-activity-event');
+        await expect(aEvents).toHaveCount(2);
+        await expect(aEvents.nth(0)).toContainText('hermes published a new version: Heater changed');
+        await expect(aEvents.nth(0).locator('.index-dot')).toHaveClass('index-dot index-dot--version');
+        await expect(aEvents.nth(0).locator('.index-dot')).toHaveAttribute('aria-hidden', 'true');
+        await expect(aEvents.nth(1)).toContainText('hermes published the page');
+        // Today's events show the time of day alone.
+        await expect(aEvents.nth(0).locator('time')).toHaveText(/^\d{2}:\d{2}( [AP]M)?$/);
+
+        const b = group(page, B);
+        const comment = b.locator('li.index-activity-event').first();
+        await expect(comment.locator('.index-activity-actor')).toHaveText('you');
+        await expect(comment).toContainText('you commented on “Heater”');
+        await expect(comment.locator('.index-dot')).toHaveClass('index-dot index-dot--comment');
+        await expect(b.locator('.index-activity-unread')).toHaveCount(0);
+
+        // hermes replies to the comment: B moves above A.
+        const claim = hermes('claim', String(thread));
+        // A claim token may start with '-': give it to its option in one word.
+        const reply = hermes('reply', String(thread), `--claim=${claim.claimToken}`,
+          '--key', `activity-${thread}`, '--text', 'The one by the steps.');
+        expect(reply.parent).toBe(thread);
+        await openIndex(page, true);
+        // The response can arrive before its groups have been drawn.
+        await expect.poll(async () => (await shownGroups(page)).slice(0, 2)).toEqual([B, A]);
+        await expect(b.locator('.index-activity-unread')).toHaveText('1 new reply to you');
+        await expect(b.locator('.index-activity-count')).toHaveText('3 events');
+        const replied = b.locator('li.index-activity-event').first();
+        await expect(replied).toContainText('hermes replied to your comment on “Heater” · new, to you');
+        await expect(replied.locator('.index-activity-new')).toHaveText('new, to you');
+        await expect(replied.locator('.index-dot')).toHaveClass('index-dot index-dot--reply index-dot--unread');
+
+        // Pages, then Recent activity again, each written in place.
+        const entries = await page.evaluate(() => history.length);
+        await pages.click();
+        await expect(page).not.toHaveURL(/#/);
+        await expect(pages).toHaveAttribute('aria-pressed', 'true');
+        await expect(page.locator('.index-table')).toBeVisible();
+        await expect(page.locator('.index-activity')).toBeHidden();
+        await expect(page.locator('.index-count')).toHaveText(/^\d+ pages, newest update first$/);
+        await activity.click();
+        await expect(page).toHaveURL(/\/#activity$/);
+        await expect(activity).toHaveAttribute('aria-pressed', 'true');
+        await expect(page.locator('.index-activity')).toBeVisible();
+        await expect(page.locator('.index-table')).toBeHidden();
+        expect(await page.evaluate(() => history.length)).toBe(entries);
+
+        // A label only A carries keeps only A's group, then only its row.
+        await page.getByRole('button', { name: /^Labels/ }).click();
+        await option(page, LABEL).check();
+        await page.keyboard.press('Escape');
+        await expect.poll(() => shownGroups(page)).toEqual([A]);
+        await expect(page.locator('.index-active')).toHaveText(`Showing ${LABEL} ✕`);
+        await expect(page.locator('.index-count')).toHaveText(/^1 of \d+ pages? with activity in the last 7 days$/);
+        await pages.click();
+        await expect.poll(() => shownRows(page)).toEqual([A]);
+        await expect(page.locator('.index-active')).toHaveText(`Showing ${LABEL} ✕`);
+        await activity.click();
+
+        // Unread keeps B alone, which carries no label: no group is left.
+        const unread = page.locator('button.index-toggle', { hasText: /^Unread/ });
+        await expect(unread).toHaveText('Unread · 1');
+        await unread.click();
+        await expect.poll(() => shownGroups(page)).toEqual([]);
+        await expect(page.getByText('No activity matches these filters.')).toBeVisible();
+        await expect(page.locator('.index-active')).toHaveText(`Showing ${LABEL} ✕ unread ✕`);
+
+        // The search reads a group's events too.
+        await page.getByRole('button', { name: `Remove filter ${LABEL}` }).click();
+        await expect.poll(() => shownGroups(page)).toEqual([B]);
+        // The unread reply's flag is event text too.
+        await page.getByLabel('Search').fill('new, to you');
+        await expect.poll(() => shownGroups(page)).toEqual([B]);
+        await page.getByLabel('Search').fill('by the steps');
+        await expect.poll(() => shownGroups(page)).toEqual([]);
+        await page.getByLabel('Search').fill('your comment on “heater”');
+        await expect.poll(() => shownGroups(page)).toEqual([B]);
+        expect(errors).toEqual([]);
+      } finally {
+        // The label leaves the index with this check.
+        publish(A, source('Activity check A', 'A floating heater keeps a hole in the ice.'),
+          '--no-labels');
+        await catchUp(request);
+      }
+    });
+
+    test('each row links to its version, its thread or its decision, and the link opens it there', async ({ page, request }) => {
+      test.setTimeout(240_000);
+      const errors = watchErrors(page);
+      await catchUp(request);
+      publish(C, linksSource('A floating heater keeps a hole in the ice.'));
+      // A version is dated to the second: the second must come after the first.
+      await page.waitForTimeout(1100);
+      publish(C, linksSource('A submerged heater keeps the pond from freezing.'));
+      const listed = await request.get(`/api/versions?page=${C}`, { headers: SIGNED_IN });
+      expect(listed.status()).toBe(200);
+      const { versions } = (await listed.json()) as { versions: { commit: string }[] };
+      expect(versions.length).toBe(2);
+      const older = versions[1].commit;
+
+      // hermes listens, so the comment, naming it, waits for it.
+      hermes('pull', '--owner', OWNER);
+      const posted = await request.post(COMMENTS, {
+        headers: SIGNED_IN, data: { page: C, section: 'heater', text: '@hermes How deep does it sit?' },
+      });
+      expect(posted.status()).toBe(201);
+      const { id: thread } = (await posted.json()) as Row;
+      const html = await (await request.get(`/${C}.html`, { headers: SIGNED_IN })).text();
+      const asked = /data-question="decision-pump" data-version="([^"]+)"[\s\S]*?name="choice" value="([^"]+)"/.exec(html);
+      expect(asked, 'the page asks decision-pump').not.toBeNull();
+      const answered = await request.post('/api/answers', {
+        headers: SIGNED_IN,
+        data: { page: C, question: 'decision-pump', version: asked![1], choice: asked![2], note: '' },
+      });
+      expect(answered.status()).toBe(201);
+
+      try {
+        await openIndex(page);
+        const c = group(page, C);
+        const row = (text: string) => c.locator('li.index-activity-event', { hasText: text })
+          .locator('a.index-activity-said');
+        const home = page.getByRole('button', { name: 'Lotuspod', exact: true });
+        const tabs = page.locator('.pod-tabs .pod-tab');
+
+        // The earlier version loads its read-only old version in the window.
+        await expect(row('published the page')).toHaveAttribute('href', `${C}.html?version=${older}`);
+        await row('published the page').click();
+        await expect(page).toHaveURL(new RegExp(`/${C}\\.html\\?version=${older}$`));
+        await expect(page.locator('main.artifact--old-version > div.artifact-version-banner')).toBeVisible();
+
+        // The current version opens the page itself in a tab.
+        await page.goBack();
+        await expect(row('published a new version')).toHaveAttribute('href', `${C}.html`);
+        await row('published a new version').click();
+        await expect(tabs).toHaveCount(1);
+        await expect.poll(() => framedAddress(page)).toMatch(new RegExp(`/${C}\\.html$`));
+
+        // So does it in C's tab left on its versions view.
+        await framed(page).locator('a.artifact-versions-link').click();
+        await expect.poll(() => framedAddress(page)).toMatch(/#versions$/);
+        await expect(framed(page).locator('section.artifact-versions')).toBeVisible();
+        await home.click();
+        await row('published a new version').click();
+        await expect(tabs).toHaveCount(1);
+        await expect.poll(() => framedAddress(page)).toMatch(new RegExp(`/${C}\\.html$`));
+        await expect(framed(page).locator('section.artifact-versions')).toBeHidden();
+        await expect(framed(page).locator('h1')).toBeVisible();
+
+        // The comment opens the page with its thread open in the panel.
+        await home.click();
+        await row('you commented on “Heater”').click();
+        await expect.poll(() => framedAddress(page)).toMatch(new RegExp(`/${C}\\.html#thread=${thread}$`));
+        const entry = framed(page).locator(`li.artifact-comments-entry[data-thread="${thread}"]`);
+        await expect(entry).toHaveClass(/\bartifact-comments-entry--open\b/);
+        await expect(entry).toBeInViewport();
+
+        // hermes replies while the tab is not shown, as one that came to the
+        // thread open in view would be seen; the listing shows it unread, and
+        // the reply's link, pressed from the keyboard, opens the thread again
+        // and reads it.
+        await home.click();
+        const claim = hermes('claim', String(thread));
+        const reply = hermes('reply', String(thread), `--claim=${claim.claimToken}`,
+          '--key', `activity-links-${thread}`, '--text', 'Half a metre down.');
+        expect(reply.parent).toBe(thread);
+        const replied = c.locator('li.index-activity-event', { hasText: 'hermes replied to your comment on “Heater”' });
+        await expect(replied.locator('.index-activity-new')).toHaveText('new, to you');
+        await expect(c.locator('.index-activity-unread')).toHaveText('1 new reply to you');
+        await replied.locator('a.index-activity-said').focus();
+        await page.keyboard.press('Enter');
+        await expect(entry).toHaveClass(/\bartifact-comments-entry--open\b/);
+        await expect(entry).toContainText('Half a metre down.');
+        await expect.poll(async () => {
+          const seen = await request.get(SEEN, { headers: SIGNED_IN });
+          const { pages } = (await seen.json()) as { pages: Record<string, { unread: number }> };
+          return pages[C]?.unread;
+        }).toBe(0);
+        await home.click();
+        await expect(c.locator('.index-activity-unread')).toHaveCount(0);
+        await expect(replied).toBeVisible();
+        await expect(replied.locator('.index-activity-new')).toHaveCount(0);
+
+        // The answer scrolls C's open tab to the decision's form.
+        await row('you answered “Which pump?”').click();
+        await expect(tabs).toHaveCount(1);
+        await expect.poll(() => framedAddress(page)).toMatch(/#question=decision-pump$/);
+        const form = framed(page).locator('form[data-question="decision-pump"]');
+        await expect(form).toBeInViewport();
+        await expect.poll(async () => {
+          const bar = await framed(page).locator('.artifact-topbar').boundingBox();
+          const box = await form.boundingBox();
+          return bar && box ? box.y >= bar.y + bar.height : false;
+        }).toBe(true);
+
+        // A phone opens the thread in the bottom sheet.
+        await page.setViewportSize({ width: 390, height: 844 });
+        await page.goto(`/${C}.html?standalone#thread=${thread}`);
+        const sheet = page.locator('.artifact-comments-bottom-sheet--open');
+        await expect(sheet.locator(`li.artifact-comments-entry[data-thread="${thread}"]`))
+          .toHaveClass(/\bartifact-comments-entry--open\b/);
+
+        // Resolved, it opens listed with the resolved threads in the panel.
+        const resolved = await request.post(COMMENTS, {
+          headers: SIGNED_IN, data: { page: C, thread, resolved: true },
+        });
+        expect(resolved.status()).toBe(200);
+        await page.setViewportSize({ width: 1280, height: 800 });
+        // A load of its own, not a move within the page already open.
         await page.goto('about:blank');
         await page.goto(`/${C}.html?standalone#thread=${thread}`);
-        const opened = page.locator(`${held} li.artifact-comments-entry--resolved[data-thread="${thread}"]`);
-        await expect(opened).toHaveClass(/\bartifact-comments-entry--open\b/);
-        await expect(opened.getByText(text)).toBeVisible();
-        await expect.poll(unreadOnC).toBe(0);
+        const listed = page.locator(`.artifact-comments-panel li.artifact-comments-entry--resolved[data-thread="${thread}"]`);
+        await expect(listed).toBeInViewport();
+        await expect(page.locator('.artifact-comments-panel')).toHaveClass(/\bartifact-comments-panel--resolved-shown\b/);
+
+        // hermes adds to the resolved thread: a link opens it to read, on a
+        // phone and in the panel, and its reply counts as read.
+        const unreadOnC = async () => {
+          const seen = await request.get(SEEN, { headers: SIGNED_IN });
+          const { pages } = (await seen.json()) as { pages: Record<string, { unread: number }> };
+          return pages[C]?.unread ?? 0;
+        };
+        const addTo = (text: string, key: string) =>
+          hermes('follow-up', String(thread), '--key', key, '--text', text);
+        for (const [width, height, held, text] of [
+          [390, 844, '.artifact-comments-bottom-sheet--open', 'And clear of the pump.'],
+          [1280, 800, '.artifact-comments-panel', 'The fish keep to the far end.'],
+        ] as const) {
+          addTo(text, `activity-links-${thread}-${width}`);
+          await expect.poll(unreadOnC).toBe(1);
+          await page.setViewportSize({ width, height });
+          await page.goto('about:blank');
+          await page.goto(`/${C}.html?standalone#thread=${thread}`);
+          const opened = page.locator(`${held} li.artifact-comments-entry--resolved[data-thread="${thread}"]`);
+          await expect(opened).toHaveClass(/\bartifact-comments-entry--open\b/);
+          await expect(opened.getByText(text)).toBeVisible();
+          await expect.poll(unreadOnC).toBe(0);
+        }
+        expect(errors).toEqual([]);
+      } finally {
+        await catchUp(request);
       }
-      expect(errors).toEqual([]);
-    } finally {
-      await catchUp(request);
-    }
+    });
   });
 
   test('every event line is a link, plain until pointed at or focused, its time and dot outside it', async ({ page }) => {

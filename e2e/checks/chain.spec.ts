@@ -109,6 +109,9 @@ async function stored(request: APIRequestContext) {
 }
 
 test.describe('the chain', () => {
+  // The chain answers and comments on the served page and first asserts
+  // hermes holds nothing for it, so a retry meets the first attempt's items.
+  test.describe.configure({ retries: 0 });
   test.use({ extraHTTPHeaders: SIGNED_IN });
 
   test.afterEach(({}, testInfo) => failFirstAttempt(testInfo));

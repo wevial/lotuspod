@@ -75,6 +75,9 @@ async function fits(page: Page) {
 }
 
 test.describe.serial('signed in', () => {
+  // The checks save answers to the served page and the first asserts none
+  // are saved, so a retry of the group meets the first attempt's answers.
+  test.describe.configure({ retries: 0 });
   test.use({ extraHTTPHeaders: SIGNED_IN, viewport: { width: 1280, height: 900 } });
 
   test.afterEach(({}, testInfo) => failFirstAttempt(testInfo));
