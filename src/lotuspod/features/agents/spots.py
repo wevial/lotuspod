@@ -43,7 +43,7 @@ def lines(item: Mapping) -> list[str]:
     if anchor["nodes"]:
         line += " on " + ", ".join(node["label"] for node in anchor["nodes"])
     title = (" ".join(found["title"].split())
-             or " ".join(str(anchor.get("title") or "").split()) or anchor["id"])
+             or " ".join((anchor.get("title") or "").split()) or anchor["id"])
     line += f" ({found['kind']} \"{title}\")" if found["kind"] else f" (\"{title}\")"
     if found["status"] != "current":
         line += f", {found['status']} since"

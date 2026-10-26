@@ -23,8 +23,7 @@ export function anchorOf(root: CommentRow): Anchor {
   if (root.spot) {
     const spot = root.spot;
     return { kind: "spot", id: String(spot.id), hash: String(spot.hash), shape: spot.shape,
-      nodes: Array.isArray(spot.nodes) ? spot.nodes : [],
-      ...(typeof spot.title === "string" ? { title: spot.title } : {}) };
+      nodes: Array.isArray(spot.nodes) ? spot.nodes : [], title: spot.title };
   }
   if (!root.section || root.section === page.wholePage || root.section === "page") return { kind: "page" };
   return { kind: "section", section: root.section };
