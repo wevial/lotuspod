@@ -95,13 +95,13 @@ class RepublishWarning(unittest.TestCase):
             git(self.out, "config", key, value)
         self.source = self.tmp / f"{NAME}.md"
 
-    def publish(self, text: str) -> subprocess.CompletedProcess:
+    def publish(self, text: str, *extra: str) -> subprocess.CompletedProcess:
         self.source.write_text(text, encoding="utf-8")
         env = dict(os.environ, PYTHONPATH=str(SRC),
                    LOTUSPOD_CONFIG=str(self.tmp / "no-config.toml"))
         done = subprocess.run(
             [sys.executable, "-m", "lotuspod", "publish", str(self.source), "--local",
-             "--out-dir", str(self.out)],
+             "--out-dir", str(self.out), *extra],
             cwd=str(self.tmp), env=env, capture_output=True, text=True, timeout=TIMEOUT)
         self.assertEqual(done.returncode, 0, done.stderr)
         self.assertIn(f"published {NAME} at revision", done.stdout)
@@ -182,6 +182,13 @@ class RepublishWarning(unittest.TestCase):
         done = self.publish(REWORDED)
         self.assertEqual(self.warnings(done), [])
         self.assertFalse(self.db.exists())
+
+    def test_a_db_symlink_loop_prints_nothing_and_publish_succeeds(self):
+        self.publish(FIRST)
+        loop = self.tmp / "loop.sqlite3"
+        loop.symlink_to(loop.name)
+        done = self.publish(REWORDED, "--db", str(loop))
+        self.assertEqual(self.warnings(done), [])
 
 
 class Rule(unittest.TestCase):

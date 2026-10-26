@@ -651,7 +651,7 @@ class Responder:
                 title=None if titled else core.extract_meta(previous, name)["title"],
                 summary=None, labels=None, no_labels=False, variant=None,
                 expect_revision=expect,
-                out_dir=str(self.out_dir), owner="", credential="", db="",
+                out_dir=str(self.out_dir), owner="", credential="", db=str(self.database.path),
                 comments=bool(comments.read_boxes(previous)), local=True,
                 base="", source_archive=False,
             )

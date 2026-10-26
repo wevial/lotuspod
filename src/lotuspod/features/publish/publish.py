@@ -278,7 +278,8 @@ def reopened(out_dir: Path, args: argparse.Namespace, name: str, previous: str,
         if not path.is_file():
             return []
         questions = _ReadOnly(path).answers(name, asked=True)
-    except (ValueError, sqlite3.Error, OSError):
+    except (ValueError, RuntimeError, sqlite3.Error, OSError):
+        # RuntimeError: a symlink loop in --db, which resolve() raises
         return []
     before, after = decisions.read_forms(previous), decisions.read_forms(published)
     lines = []
