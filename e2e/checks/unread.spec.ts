@@ -822,6 +822,7 @@ test.describe('signed in', () => {
     await page.unrouteAll({ behavior: 'ignoreErrors' });
     await openPage(page, true, at);
     await expect(chip(page).locator('.artifact-comment-chip-text')).toHaveText('1 resolved · 1 new');
+    await expect(page.locator('header.artifact-header .artifact-meta .artifact-unread')).toHaveText('1 new reply to you');
 
     // With an open thread beside it, the section reads that thread's line.
     hermes('pull', '--owner', OWNER);
