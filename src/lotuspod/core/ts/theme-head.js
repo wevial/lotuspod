@@ -91,7 +91,8 @@
 
     function address() {
       var version = new URLSearchParams(location.search).get("version");
-      var base = location.origin + location.pathname;
+      // From href, not origin: a page opened from disk has the origin "null".
+      var base = location.href.split(/[?#]/)[0];
       return version ? base + "?version=" + encodeURIComponent(version) : base;
     }
 

@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { expect, test, type Frame, type Page } from '@playwright/test';
 
 // The title bar's Copy link (theme-head.js): a link icon button just before
@@ -171,6 +172,18 @@ test('where the clipboard refuses, a selected read-only field holds the address 
   await expect(field).toBeHidden();
   await expect(button).toBeFocused();
   expect(errors).toEqual([]);
+});
+
+// A page opened from disk has the origin "null" in some browsers; its address
+// is still its file URL.
+test('a page opened from disk gives its file address', async ({ page }) => {
+  await page.addInitScript(() => {
+    navigator.clipboard.writeText = () => Promise.reject(new DOMException('Refused', 'NotAllowedError'));
+  });
+  const file = pathToFileURL(path.join(OUT, `${SLUG}.html`)).href;
+  await page.goto(`${file}?from=index#top`);
+  await copyLink(page).click();
+  await expect(page.locator('input.artifact-copy-link-field')).toHaveValue(file);
 });
 
 test('a refusal that settles after the field was dismissed opens nothing', async ({ page }) => {
