@@ -139,4 +139,54 @@ test.describe('signed in', () => {
     await expect(hazards.locator('.artifact-attach-item--loading')).toHaveCount(0);
     expect(errors).toEqual([]);
   });
+
+  test('an image pasted in another form while Reload waits is waited for too', async ({ page }) => {
+    const errors = watchErrors(page);
+    const name = 'live-held-reload-another';
+    const title = 'Live held reload another';
+    publish(name, source(title, 'first'));
+    await stopClock(page);
+    await open(page, name);
+    await box(page, 'risks').locator('summary').click();
+    const risks = form(page, 'Risks').locator('textarea');
+    const UNSENT = 'What cracks first, the pump or the pipe?';
+    await risks.fill(UNSENT);
+    const releaseRisks = await holdUploads(page);
+    await pasteFishOnly(risks);
+    await expect(page.locator('.artifact-attach-item--loading')).toHaveCount(1);
+
+    const { second, third } = await holdThenBanner(page, name,
+      source(title, 'first').replace(/Risks/g, 'Hazards'),
+      source(title, 'second').replace(/Risks/g, 'Hazards'));
+    await box(page, 'findings').locator('summary').click();
+    const loads = watchLoads(page);
+    const fetched = page.waitForResponse((response) => new URL(response.url()).pathname === `/${name}.html` &&
+      response.request().resourceType() === 'fetch');
+    const loaded = page.waitForEvent('load');
+    await banner(page).reload.click();
+    await fetched;
+    // Begun once Reload's fetch is answered and its first wait begun.
+    const releaseFindings = await holdUploads(page);
+    const findings = form(page, 'Findings');
+    await findings.locator('textarea').fill('Is the heater on a timer?');
+    await pasteFishOnly(findings.locator('textarea'));
+    await expect(findings.locator('.artifact-attach-item--loading')).toHaveCount(1);
+
+    releaseRisks();
+    await expect(form(page, 'Risks').locator('.artifact-attach-item img')).toHaveCount(1);
+    // Real time, the page's clock paused: long enough for a reload to begin.
+    await page.waitForTimeout(500);
+    expect(loads.count).toBe(0);
+    expect(await revisionOf(page)).toBe(second);
+
+    releaseFindings();
+    await loaded;
+    expect(await revisionOf(page)).toBe(third);
+    for (const section of ['Hazards', 'Findings']) {
+      const kept = form(page, section);
+      await expect(kept.locator('.artifact-attach-item img')).toHaveCount(1);
+      expect((await attachedIn(kept))[0]).toMatch(MEDIA_URL);
+    }
+    expect(errors).toEqual([]);
+  });
 });

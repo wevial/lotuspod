@@ -35,6 +35,9 @@ export interface Spots {
   // uploaded other than its crop, and whether any image is attached or on
   // its way; null with none.
   writing(): { section: string; text: string; images: StoredImage[]; held: boolean } | null;
+  // Once the open draft's uploads on their way are answered: whether there
+  // was one to wait for.
+  settled(): Promise<boolean>;
 }
 
 const SVG = "http://www.w3.org/2000/svg";
@@ -916,6 +919,10 @@ export function spots(page: Page, bridge: SpotsBridge): Spots {
         section: draft.box.dataset.section || "", text: draft.composer.field.value,
         images: draft.composer.images.kept().filter(image => image.name !== draft.crop), held: draft.composer.images.held(),
       };
+    },
+    settled() {
+      const draft = marking?.draft;
+      return draft ? draft.composer.images.settled() : Promise.resolve(false);
     },
   };
 }

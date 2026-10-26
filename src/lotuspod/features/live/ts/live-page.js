@@ -179,16 +179,25 @@
       if (button) {
         button.disabled = true;
       }
-      // Fetched afresh first: a publish in the second the page was served
-      // leaves its date as it was, and the reload alone could then be
-      // answered from the cache with the page this one is.
-      var fetched = fetch(location.href, { cache: "reload" }).catch(function () {
+      try {
+        // Fetched afresh first: a publish in the second the page was served
+        // leaves its date as it was, and the reload alone could then be
+        // answered from the cache with the page this one is.
+        await fetch(location.href, { cache: "reload" });
+      } catch (ignored) {
         // The reload asks again.
-      });
-      // An image still uploading in a composer is waited for, so it is
-      // kept with its text; one refused is not kept, as without a reload.
-      var uploaded = keeper ? Promise.resolve(keeper.settled()).catch(function () {}) : null;
-      await Promise.all([fetched, uploaded]);
+      }
+      // Then an image still uploading in a composer, one begun while the
+      // page was fetched too, is waited for, so it is kept with its text;
+      // one refused is not kept, as without a reload. The uploads run
+      // meanwhile, so the wait is the longer of the two, not both.
+      if (keeper) {
+        try {
+          await keeper.settled();
+        } catch (ignored) {
+          // What is uploaded is kept.
+        }
+      }
       // Kept only now, with nothing left to wait for: the reader may write
       // and scroll while the page is fetched.
       save();

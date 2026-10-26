@@ -839,6 +839,66 @@ test('a spot draft holds back a hidden page\'s reload, and its text is kept over
   expect(errors).toEqual([]);
 });
 
+test('an image still uploading in a spot draft is waited for by Reload and kept with its text', async ({ page }) => {
+  test.setTimeout(120_000);
+  const name = `spot-comments-kept-image-${test.info().repeatEachIndex}`;
+  publish(name, doc());
+  const errors = await watch(page);
+  await load(page, name);
+  const flow = diagram(page);
+  const form = composer(page);
+  await flow.comment.click();
+  await boxRound(page, flow.node('Pod'));
+  await form.field.fill('Not sent yet');
+  let release!: () => void;
+  const released = new Promise<void>((done) => { release = done; });
+  await page.route('**/api/media', async (route) => {
+    await released;
+    await route.continue();
+  });
+  const base64 = fs.readFileSync(FISH).toString('base64');
+  await form.field.evaluate((node, base64) => {
+    const data = new DataTransfer();
+    data.items.add(new File([Uint8Array.from(atob(base64), (c) => c.charCodeAt(0))], 'fish.jpg', { type: 'image/jpeg' }));
+    node.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }));
+  }, base64);
+  await expect(page.locator('.artifact-attach-item--loading')).toHaveCount(1);
+
+  // Hidden, with an image on its way, the page offers a reload of a
+  // republish that moves the sections round rather than taking it.
+  await page.evaluate(() => {
+    Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true });
+    Object.defineProperty(document, 'hidden', { value: true, configurable: true });
+  });
+  const [head, flowPart, pictures] = doc().split(/(?=## Flow|## Pictures)/);
+  publish(name, head + pictures + '\n' + flowPart);
+  await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+  const reload = page.locator('.artifact-live-page-banner').getByRole('button', { name: 'Reload' });
+  await expect(reload).toBeVisible();
+
+  // Reload waits for the upload: no load until it is answered.
+  let loads = 0;
+  page.on('load', () => { loads += 1; });
+  const fetched = page.waitForResponse((response) => new URL(response.url()).pathname === `/${name}.html` &&
+    response.request().resourceType() === 'fetch');
+  const loaded = page.waitForEvent('load');
+  await reload.click();
+  await fetched;
+  await expect(reload).toBeDisabled();
+  await page.waitForTimeout(500);
+  expect(loads).toBe(0);
+
+  release();
+  await loaded;
+  await page.unroute('**/api/media');
+  await expect(page.locator('html')).toHaveAttribute('data-lotuspod-comments-read', '');
+  const flowForm = panel(page).group('Flow').locator('form.artifact-comment-form');
+  await expect(flowForm.locator('textarea[name="text"]')).toHaveValue('Not sent yet');
+  await expect(flowForm.locator('.artifact-attach-item img')).toHaveCount(1);
+  await expect(flowForm.locator('.artifact-attach-item--loading')).toHaveCount(0);
+  expect(errors).toEqual([]);
+});
+
 test('marks on adjacent diagrams are numbered in page order, and a draft\'s composer follows a wide diagram\'s scroll', async ({ page }) => {
   test.setTimeout(120_000);
   const name = `spot-comments-adjacent-${test.info().repeatEachIndex}`;

@@ -15,7 +15,8 @@ export interface Live {
   // What to keep over a reload: save() is kept, and unsent() says whether a
   // composer holds text not sent, so a hidden page does not reload itself.
   // settled() resolves once the images on their way in the composers save()
-  // would keep are answered, so a reload keeps them.
+  // would keep are answered, those begun meanwhile too, so a reload keeps
+  // them.
   keep(keeper: { save(): unknown; unsent(): boolean; settled(): Promise<unknown> }): void;
   // What save() kept before the reload that loaded this page, taken once.
   kept(): object | null;
@@ -389,7 +390,7 @@ export interface Attachments {
   kept(): StoredImage[];
   busy(): boolean;
   held(): boolean;
-  settled(): Promise<void>;
+  settled(): Promise<boolean>;
   restore(images: unknown): string;
   sending(): string[];
   sent(saved: boolean): void;

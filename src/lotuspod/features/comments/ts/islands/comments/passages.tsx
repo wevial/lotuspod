@@ -266,7 +266,7 @@ export function passages(page: Page, bridge: PassagesBridge): Passages {
 
   // Once the open composer's uploads on their way are answered.
   api.settled = function () {
-    return open ? attached.get(open.form)!.settled() : Promise.resolve();
+    return open ? attached.get(open.form)!.settled() : Promise.resolve(false);
   };
 
   // Open a composer again on the words kept, where the page still has
