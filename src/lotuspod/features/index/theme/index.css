@@ -537,6 +537,16 @@
   padding: 0 0.4rem;
 }
 
+/* serve's mark on the row of a page linked pull requests have overtaken,
+   on its own line under the title and tags, as .artifact-stale is drawn. */
+.index-stale {
+  color: var(--color-amber);
+  display: block;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  margin-top: 0.3rem;
+}
+
 .episode-date {
   color: var(--color-muted-lavender);
   white-space: nowrap;

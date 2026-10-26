@@ -298,6 +298,13 @@ body {
   white-space: nowrap;
 }
 
+/* serve's mark on a page that linked pull requests merged or closed since
+   its last publish have overtaken, in the amber of a reference card's
+   review tone. */
+.artifact-stale {
+  color: var(--color-amber);
+}
+
 .artifact-summary {
   border-left: 1px solid var(--hairline-strong);
   color: var(--color-pale-lavender);

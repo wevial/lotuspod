@@ -32,7 +32,11 @@ published pages above carry labels (PAGE_LABELS) for the index's Labels menu;
 the rendered ones, and the calltree, refs and versions pages below, carry
 none. The calltree page, capture-calltree, holds a linked and an unlinked
 calltree fence. The refs page, capture-refs, is published with a refs file (REFS_FILE), so the
-tickets and pull requests it names open cards.
+tickets and pull requests it names open cards. The stale page, capture-stale,
+is published from markdown created STALE_CREATED, so its header names the
+Updated day, and links a GitHub pull request the states file beside the
+database (STALE_STATES) holds merged after the page's publish, so serve
+marks it "may be out of date"; no other page links one.
 
 The site is the top of its own git repository, with a local identity and no
 origin, so each render and publish commits there as on the writer host, and
@@ -83,6 +87,7 @@ from lotuspod.features.serve import handler as serve_handler, pages as serve_pag
 from lotuspod.features.publish import media, publish  # noqa: E402
 from lotuspod.features.index import listing  # noqa: E402
 from lotuspod.features.publish import render as page_render  # noqa: E402
+from lotuspod.features import stale  # noqa: E402
 from lotuspod.store import db  # noqa: E402
 from tests import access_keys  # noqa: E402
 
@@ -800,6 +805,26 @@ REFS_FILE = {"refs": {
     "HOLO-160": {"title": "Named nowhere on the page", "project": "Holophyte"},
 }}
 
+# The stale page: it links a GitHub pull request that STALE_STATES, kept
+# where `lotuspod pages stale` keeps them, holds merged an hour after the
+# page's publish, so serve marks it out of date. No diagram and no comments,
+# so the page needs no network.
+STALE_PAGE = "capture-stale"
+STALE_CREATED = "2025-12-30"
+STALE_SOURCE = """\
+# Capture stale
+
+A sample plan for captures, overtaken by a pull request merged since its publish.
+
+## Where things stand
+
+The pond's pump is replaced in [acme/pond#7](https://github.com/acme/pond/pull/7), still in review.
+"""
+STALE_STATES = {"pulls": {
+    "acme/pond#7": {"state": "merged", "at": f"{SAMPLE_DATE}T13:00:00Z",
+                    "checked": f"{SAMPLE_DATE}T13:05:00Z"},
+}}
+
 # The versions pages: one published once, and one published VERSIONS_MANY
 # times, each edition naming its number.
 VERSIONS_ONCE_PAGE = "capture-versions-once"
@@ -909,6 +934,7 @@ PAGE_LABELS = {
     PASSAGES_PAGE: ("croton", "relos"),
     DECISION_THREADS_PAGE: ("holophyte",),
     IMAGES_PAGE: ("croton",),
+    STALE_PAGE: ("croton",),
 }
 
 
@@ -953,6 +979,9 @@ def render(out_dir: Path, db_path: Path) -> None:
     refs_source.write_text(REFS_SOURCE, encoding="utf-8")
     refs_file = db_path.with_name(f"{REFS_PAGE}-refs.json")
     refs_file.write_text(json.dumps(REFS_FILE, indent=2), encoding="utf-8")
+    stale_source = db_path.with_name(f"{STALE_PAGE}.md")
+    stale_source.write_text(STALE_SOURCE, encoding="utf-8")
+    stale.states_path(db_path).write_text(json.dumps(STALE_STATES, indent=2), encoding="utf-8")
     steps = [
         (
             f"render {name}",
@@ -1004,6 +1033,14 @@ def render(out_dir: Path, db_path: Path) -> None:
         [
             "publish", str(refs_source), "--local", "--date", SAMPLE_DATE,
             "--out-dir", str(out_dir), "--no-comments", "--refs", str(refs_file),
+        ],
+    ))
+    steps.append((
+        f"publish {STALE_PAGE}",
+        [
+            "publish", str(stale_source), "--local", "--date", STALE_CREATED,
+            *label_options(STALE_PAGE),
+            "--out-dir", str(out_dir), "--no-comments",
         ],
     ))
     steps.append(("publish capture-calltree", [

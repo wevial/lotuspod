@@ -28,7 +28,8 @@ from lotuspod.features import publish
 from lotuspod.features.publish import version_stamp
 from lotuspod.features.serve import access, api, serve_files
 from lotuspod.features.serve.pages import (api_catalog, api_page, render_version, rendered_index,
-                                           rendered_page, rendered_version, served_page_names)
+                                           rendered_page, rendered_version, served_page_names,
+                                           watch_states)
 from lotuspod.features.serve.serve_files import _SERVE_NEVER_FILES
 from lotuspod.features import widgets
 from lotuspod.store import db
@@ -427,10 +428,18 @@ class _AllowListHandler(SimpleHTTPRequestHandler):
 
     def _serve_rendered(self, stored: Path):
         """The page at stored rendered from what it keeps; None when its
-        render failed, so it is answered from its file."""
+        render failed and it is current, so it is answered from its file."""
         rendered = rendered_page(self.root, stored.name[:-len(".html")])
-        if rendered is None or not rendered.rendered:
+        if rendered is None:
             return None
+        if not rendered.rendered:
+            # The published file never holds the mark: one marked out of
+            # date is answered as marked, so the warning stays.
+            if '<span class="artifact-stale"' not in rendered.html:
+                return None
+            return self._answer_rendered(rendered.html.encode("utf-8"),
+                                         f'"p-{rendered.inputs}-{self.render_version}"',
+                                         _RENDERED_HEADERS)
         return self._answer_rendered(rendered.html.encode("utf-8"),
                                      f'"{rendered.inputs}-{self.render_version}"',
                                      _RENDERED_HEADERS)
@@ -538,13 +547,15 @@ def _make_server(out_dir: Path, host: str, port: int,
                  events: live.Hub | None = None) -> ThreadingHTTPServer:
     """The allow-list server; /api answers 503 access_unconfigured without a
     verifier, and has no answers, comments, media, revision, seen, versions and
-    archive routes without a database. Uploads go to the media store beside out_dir,
+    archive routes, and no page or index marked out of date, without a
+    database. Uploads go to the media store beside out_dir,
     within max_image_bytes. The pages' versions are read from out_dir's repository.
     The verifier's owners may archive a page, which the route writes as
     `lotuspod archive` does."""
     history = History(out_dir, version_stamp)
     routes = None
     if db_path is not None:
+        watch_states(out_dir, db_path)
         events = events or live.Hub(out_dir)
         routes = api.Api(db.Database(db_path), partial(api_page, out_dir), window,
                          media_dir=publish.media_dir(out_dir), max_image_bytes=max_image_bytes,
