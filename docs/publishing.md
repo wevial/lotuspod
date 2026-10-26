@@ -742,10 +742,20 @@ from when, and how many versions behind the current one it is, with links
 comment boxes hidden, and a `Content-Security-Policy` header of
 `frame-ancestors 'none'; form-action 'none'; base-uri 'none'; script-src
 'nonce-NONCE'`, with a fresh NONCE made for each answer, keeps its forms and
-every script it carries, a Mermaid diagram's included, from running: comments
-and answers stay on the current page. The one script it runs is the one serve adds before `</body>`
-with that nonce, the site's old-version script, `lotuspod-old-version.js`; no
-script in the page itself carries the nonce, and none can guess it. It is sent
+every other script it carries, a Mermaid diagram's and the page script
+included, from running: comments and answers stay on the current page. Of
+the page's own scripts, an earlier version keeps only today's theme head and,
+when the version holds a live block, today's widget bridge, each matched
+whole against the text the package writes now (never the old commit's) and
+allowed by its sha256 hash in `script-src`. Each is kept only in the head,
+where the template writes it; a copy in the page's body is removed, and the
+bridge's hash is added only when the head holds the bridge. So the version's
+live block follows the theme switch, sizes its frame to its content and offers Expand and Pause, but
+no Comment. A version answered from its published file, because it cannot be
+rendered, keeps neither and allows the nonce alone. The one script serve adds,
+before `</body>` with that nonce, is the site's old-version script,
+`lotuspod-old-version.js`; no script in the page itself carries the nonce,
+and none can guess it. It is sent
 with `Cache-Control: private, no-store`. Any other query on a page is served
 as the page.
 
@@ -1739,8 +1749,8 @@ under the button. The index carries the same head script inline, with no switch 
 own: `lotuspod serve` answers `/` and `/index.html` rendered from
 `manifest.json` with the package's index template, under an `ETag` over the
 manifest, so the tab shell takes the choice before its first paint and
-follows it as it changes. An earlier version's page carries no switch and
-follows the system through the stylesheet alone.
+follows it as it changes. An earlier version's page carries the same switch,
+and its live blocks follow it through the widget bridge it keeps.
 
 A top-level table keeps the reading layout's width and scrolls inside itself
 when it is wider. Where the window has at least 4rem of free width beside such

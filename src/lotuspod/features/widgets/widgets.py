@@ -51,6 +51,15 @@ def alone_page(filename: str, query: str = '') -> bytes:
             'referrerpolicy="no-referrer"></iframe></body></html>').encode('utf-8')
 
 
+def bridge_script() -> str:
+    """The text of the inline script a page with a live block runs as its
+    widget bridge; serve keeps and hashes exactly this text on an earlier
+    version, so it must be the text the template writes."""
+    return ('(function () {\n'
+            + (THEME / 'widgets.js').read_text(encoding='utf-8')
+            + '\ninstallWidgetBridge();\n})();')
+
+
 def variables(attribute: str = 'data-lotus-theme') -> str:
     """The tokens as --lotus-* declarations: Night on :root, and the dawn set
     where attribute on the root names dawn, or the system is light and it

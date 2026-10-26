@@ -21,8 +21,8 @@ from pathlib import Path
 from lotuspod.features import agents
 from lotuspod.core import (INDEX_FILE, OLD_VERSION_SCRIPT, THEME_ROOT, WIDGET_NAME, is_page_name,
                            script_hash, theme_hash)
-from lotuspod.features.history import (History, archived_page, old_page, read_record, set_archived,
-                                        successor_title)
+from lotuspod.features.history import (History, archived_page, holds_script, old_page, read_record,
+                                        set_archived, successor_title)
 from lotuspod.features import live
 from lotuspod.features import publish
 from lotuspod.features.publish import version_stamp
@@ -316,15 +316,22 @@ class _AllowListHandler(SimpleHTTPRequestHandler):
         script = f"{OLD_VERSION_SCRIPT}?v={theme_hash()}"
         rendered = rendered_version(self.root, stem, commit, page_html, self.history.files_at)
         if rendered is not None:
-            # The theme head is the one script of the page's own that runs,
-            # allowed by its hash, so the reader's theme and switch hold.
+            # The theme head and, on a page with a live block, the widget
+            # bridge are the only scripts of the page's own that run, each
+            # allowed by the hash of today's text, never the old commit's.
             head = (THEME_ROOT / "core/ts/theme-head.js").read_text(encoding="utf-8")
-            data = old_page(rendered, stem, version, behind, nonce, script,
-                            frozenset((head,))).encode("utf-8")
+            bridge = widgets.bridge_script()
+            answer = old_page(rendered, stem, version, behind, nonce, script,
+                              frozenset((head, bridge)))
+            # Read from the answer itself: old_page may drop a kept script
+            # (one inside a badge it replaces), and no absent one is allowed.
+            sources = f"'nonce-{nonce}' {script_hash(head)}"
+            if holds_script(answer, bridge):
+                sources += f" {script_hash(bridge)}"
             # The banner counts the newer versions, so the tag does too.
             return self._answer_rendered(
-                data, f'"v-{commit}-{behind}-{self.render_version}"', tuple(
-                    (header, value + f"; script-src 'nonce-{nonce}' {script_hash(head)}"
+                answer.encode("utf-8"), f'"v-{commit}-{behind}-{self.render_version}"', tuple(
+                    (header, value + f"; script-src {sources}"
                      if header == "Content-Security-Policy" else value)
                     for header, value in _OLD_VERSION_HEADERS),
                 unchanged=("Content-Security-Policy",))

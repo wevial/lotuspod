@@ -509,9 +509,7 @@ def build_page(args: argparse.Namespace) -> argparse.Namespace:
                                or bool(widget_files) or has_node_tables or bool(refs_block)
                                or bool(getattr(args, "revision", "")) or has_link(body)
                                or has_mermaid_block(body) or has_calltree_block(body)),
-        "widget_bridge": ("(function () {\n"
-                          + (core.THEME_ROOT / "features/widgets/ts/widgets.js").read_text(encoding="utf-8")
-                          + "\ninstallWidgetBridge();\n})();" if widget_files else ""),
+        "widget_bridge": widgets.bridge_script() if widget_files else "",
         "theme_head": (core.THEME_ROOT / "core/ts/theme-head.js").read_text(encoding="utf-8"),
         "page_script": PAGE_SCRIPT,
         "mermaid_theme_variables": mermaid_theme_variables(tokens) if has_mermaid_block(body) else "",
