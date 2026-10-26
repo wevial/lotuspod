@@ -33,6 +33,10 @@ const DEFAULT_ONLY = markdown('| # | Question | Context | Default |',
   `| H1 | ${QUESTION} | It shows on every run | Off |`);
 const WITH_OPTIONS = markdown('| # | Question | Context | Options (a / b) | Default |',
   `| H1 | ${QUESTION} | It shows on every run | Off / On | Off |`);
+// A cell whose "Something else" is valued other than "other", beside an
+// option nearly so labelled.
+const NEAR = markdown('| # | Question | Context | Options (a / b) | Default |',
+  `| H1 | ${QUESTION} | It shows on every run | Yes / Something else? / Something else | Yes |`);
 
 function publish(name: string, text: string) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lotuspod-option-radios-'));
@@ -128,6 +132,26 @@ test.describe('signed in', () => {
     await card.save.click();
     await expect(card.saved).toHaveText('✓ Saved · Something else · change');
     await expect(card.savedNote).toHaveText(NOTE);
+    expect(errors).toEqual([]);
+  });
+
+  test('an option labelled Something else opens the note whatever its value', async ({ page }) => {
+    const name = 'option-radios-near';
+    const errors = watch(page);
+    publish(name, NEAR);
+    await load(page, name);
+    const card = decision(page);
+    await expect(card.labels).toHaveText(['Yes', 'Something else?', 'Something else']);
+    const values = await card.radios.evaluateAll((inputs) => inputs.map((input) => (input as HTMLInputElement).value));
+    expect(values[2]).not.toBe('other');
+
+    await card.radios.nth(1).check();
+    await expect(card.unsaved).toHaveText('Not saved');
+    await expect(card.noteBox).toHaveJSProperty('open', false);
+
+    await card.radios.nth(2).check();
+    await expect(card.noteBox).toHaveJSProperty('open', true);
+    await expect(card.radios.nth(2)).toBeFocused();
     expect(errors).toEqual([]);
   });
 

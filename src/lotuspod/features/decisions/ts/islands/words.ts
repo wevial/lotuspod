@@ -11,6 +11,14 @@ function labelOf(form: HTMLFormElement, value: unknown): Element | null | undefi
   return found && found.parentNode!.querySelector(".artifact-decision-label");
 }
 
+// Whether input is a choice radio, picked, that offers "Something else":
+// valued "other" or so labelled in any case.
+export function somethingElse(input: HTMLInputElement): boolean {
+  if (input.type !== "radio" || input.name !== "choice" || !input.checked) return false;
+  const text = input.parentNode?.querySelector(".artifact-decision-label")?.textContent ?? "";
+  return input.value === "other" || text.replace(/\s+/g, " ").trim().toLowerCase() === "something else";
+}
+
 // The words of a form's part, its whitespace collapsed.
 export function words(form: HTMLFormElement, selector: string): string {
   const node = form.querySelector(selector);
