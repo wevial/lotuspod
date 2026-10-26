@@ -318,10 +318,7 @@ class _AllowListHandler(SimpleHTTPRequestHandler):
         if rendered is not None:
             # The theme head and, on a page with a live block, the widget
             # bridge are the only scripts of the page's own that run, each
-            # allowed by its hash, so the reader's theme and switch hold and
-            # a block resizes, expands and pauses. Both texts are today's,
-            # never the old commit's; a hash is allowed only for a script
-            # the page holds.
+            # allowed by the hash of today's text, never the old commit's.
             head = (THEME_ROOT / "core/ts/theme-head.js").read_text(encoding="utf-8")
             bridge = widgets.bridge_script()
             sources = f"'nonce-{nonce}' {script_hash(head)}"
