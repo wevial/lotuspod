@@ -1,4 +1,5 @@
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
+import { failFirstAttempt } from '../../fail-first-attempt';
 
 // The capture fixture's checklist page: Emails asks one checklist of four
 // items, 1 "Welcome email" and 3 "Renewal reminder" on by default, as one
@@ -74,7 +75,12 @@ async function fits(page: Page) {
 }
 
 test.describe.serial('signed in', () => {
+  // The checks save answers to the served page and the first asserts none
+  // are saved, so a retry of the group meets the first attempt's answers.
+  test.describe.configure({ retries: 0 });
   test.use({ extraHTTPHeaders: SIGNED_IN, viewport: { width: 1280, height: 900 } });
+
+  test.afterEach(({}, testInfo) => failFirstAttempt(testInfo));
 
   test('an unanswered checklist is one card at its defaults, not saved only while it differs from them', async ({ page, request }) => {
     expect(ASSERTION, 'LOTUSPOD_TEST_ASSERTION names an assertion the site accepts').toBeTruthy();
