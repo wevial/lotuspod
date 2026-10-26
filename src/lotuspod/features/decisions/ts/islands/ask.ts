@@ -1,5 +1,5 @@
 import type { Asking, Page } from "../../../comments/ts/index";
-import { noteField } from "./words";
+import { fold, noteField } from "./words";
 
 // Each decision's Ask, beside "Save answer", on a page whose comments store
 // has started: the note's text posted through the store as a question
@@ -35,8 +35,7 @@ export function giveAsk(page: Page, form: HTMLFormElement, asking: Asking): void
         // not yet sent: it stays, open, and the card keeps it unsaved.
         if (field.value !== sent) return;
         field.value = "";
-        const fold = field.closest("details");
-        if (fold) fold.open = false;
+        fold(field, false);
         // The card, and the review sheet, mark themselves as the note now
         // reads.
         field.dispatchEvent(new Event("input", { bubbles: true }));
