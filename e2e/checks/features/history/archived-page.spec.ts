@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
+import { failFirstAttempt } from '../../fail-first-attempt';
 
 // An archived page opens with a banner under its title bar, keeps its
 // threads readable and takes no new comment, reply or answer; its owner gets
@@ -246,6 +247,8 @@ let thread = 0;
 let reply = '';
 
 test.describe.serial('an archived page', () => {
+  test.afterEach(({}, testInfo) => failFirstAttempt(testInfo));
+
   test.beforeAll(async ({ playwright, baseURL }) => {
     for (const [name, value] of Object.entries({ ASSERTION, SECOND, OUT, PYTHON })) {
       expect(value, `the capture fixture names ${name}`).toBeTruthy();

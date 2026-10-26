@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
+import { failFirstAttempt } from './fail-first-attempt';
 
 // The index's Recent activity view, fed by /api/activity, beside the Pages
 // view. The first check publishes two pages of its own on the capture
@@ -202,6 +203,8 @@ function paleLavender(page: Page): Promise<string> {
 
 test.describe('signed in', () => {
   test.use({ extraHTTPHeaders: SIGNED_IN });
+
+  test.afterEach(({}, testInfo) => failFirstAttempt(testInfo));
 
   test.beforeEach(() => {
     for (const [name, value] of Object.entries({ ASSERTION, SOCKET, HERMES, OUT, PYTHON })) {
