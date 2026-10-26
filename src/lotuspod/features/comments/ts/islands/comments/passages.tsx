@@ -174,12 +174,7 @@ export function passages(page: Page, bridge: PassagesBridge): Passages {
     });
     // Drawing splits text nodes, never the text: each draws from its own read.
     found.forEach(draw);
-    var spots: Thread[] = [];
-    shown.forEach(function (thread) {
-      if (spotted(thread)) {
-        spots.push(thread);
-      }
-    });
+    var spots = Array.from(shown.values()).filter(spotted);
     var marked = spots.filter(function (thread) { return Boolean(thread.drawing); });
     var at = new Map<Thread, number>();
     threads.forEach(function (thread) {
