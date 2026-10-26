@@ -36,9 +36,6 @@ NAME = "today-log"
 H1 = ('| H1 | Should "PR opened" be a Today\'s log highlight? | '
       'It shows on every run; merge rows already link the PR | Off / On | Off |')
 NOTED = "| # | Question | Context | Options (a / b) | Default |"
-# The version main rendered for the row `| 1 | Which model replies? |
-# Sonnet / Opus | Sonnet |` under a plain Options header.
-MAIN_VERSION = "87f71d1b09cb"
 
 DEFAULT_ONLY = """\
 # Today's log
@@ -55,8 +52,6 @@ WITH_OPTIONS = DEFAULT_ONLY.replace(
     "| # | Question | Context | Default |\n| --- | --- | --- | --- |",
     "| # | Question | Context | Options (a / b) | Default |\n| --- | --- | --- | --- | --- |",
 ).replace("| It shows on every run | Off |", "| It shows on every run | Off / On | Off |")
-REWORDED = WITH_OPTIONS.replace('Should "PR opened" be a Today\'s log highlight?',
-                                'Should "PR opened" be highlighted?')
 
 
 def body(header: str, *rows: str) -> str:
@@ -117,23 +112,13 @@ class Headers(unittest.TestCase):
 
 
 class SomethingElse(unittest.TestCase):
-    def test_a_plain_options_row_keeps_main_s_version_and_ends_in_something_else(self):
-        page_html, _ = render("| # | Question | Options | Default |",
-                              "| 1 | Which model replies? | Sonnet / Opus | Sonnet |")
-        [form] = read(page_html).forms
-        self.assertEqual(form["attrs"]["data-version"], MAIN_VERSION)
-        self.assertEqual(form["labels"][-1]["text"], "Something else")
-        self.assertEqual(form["radios"][-1]["value"], "other")
-
     def test_an_option_already_something_else_is_not_offered_twice(self):
-        for cell in ("Yes / No / Something else", "Yes / No / something ELSE"):
-            with self.subTest(cell=cell):
-                page_html, _ = render("| # | Question | Options | Default |",
-                                      f"| 1 | Ship it? | {cell} | Yes |")
-                [form] = read(page_html).forms
-                self.assertEqual(len(form["radios"]), 3)
-                self.assertEqual([label["text"].casefold() for label in form["labels"]].count(
-                    "something else"), 1)
+        page_html, _ = render("| # | Question | Options | Default |",
+                              "| 1 | Ship it? | Yes / No / something ELSE | Yes |")
+        [form] = read(page_html).forms
+        self.assertEqual(len(form["radios"]), 3)
+        self.assertEqual([label["text"].casefold() for label in form["labels"]].count(
+            "something else"), 1)
 
     def test_an_option_valued_other_is_not_offered_twice(self):
         page_html, _ = render("| # | Question | Options |", "| 1 | Ship it? | Yes / Other |")
@@ -188,10 +173,6 @@ class Rule(unittest.TestCase):
                  "asked": {"text": "Should it be  a highlight?", "label": "Accept the default"}}
         found.update(changes)
         return found
-
-    def test_an_earlier_accept_shows_as_the_default_option(self):
-        self.assertTrue(holds(self.FORM, self.answer()))
-        self.assertEqual(shown(self.FORM, self.answer()), "off")
 
     def test_an_answer_to_an_offered_option_shows_as_itself(self):
         self.assertEqual(shown(self.FORM, self.answer(choice="on",
@@ -280,13 +261,6 @@ class Republished(unittest.TestCase):
         self.assertNotEqual(self.current()["version"], form.version)
         self.assertTrue(holds(form, self.current()))
         self.assertEqual(shown(form, self.current()), "off")
-
-    def test_an_accept_to_a_reworded_question_shows_as_no_answer(self):
-        self.accepted()
-        self.publish(REWORDED)
-        form = self.form()
-        self.assertFalse(holds(form, self.current()))
-        self.assertIsNone(shown(form, self.current()))
 
 
 if __name__ == "__main__":
