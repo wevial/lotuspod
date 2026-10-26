@@ -472,10 +472,11 @@ test.describe('signed in', () => {
         [390, 844, '.artifact-comments-bottom-sheet--open', 'And clear of the pump.'],
         [1280, 800, '.artifact-comments-panel', 'The fish keep to the far end.'],
       ] as const) {
+        // Off the page, which would read it live with the thread open.
+        await page.goto('about:blank');
         addTo(text, `activity-links-${thread}-${width}`);
         await expect.poll(unreadOnC).toBe(1);
         await page.setViewportSize({ width, height });
-        await page.goto('about:blank');
         await page.goto(`/${C}.html?standalone#thread=${thread}`);
         const opened = page.locator(`${held} li.artifact-comments-entry--resolved[data-thread="${thread}"]`);
         await expect(opened).toHaveClass(/\bartifact-comments-entry--open\b/);
