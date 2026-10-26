@@ -15,13 +15,14 @@ Run from the repo root:
 from __future__ import annotations
 
 import re
+import shutil
 import unittest
 
 from lotuspod.core import OLD_VERSION_SCRIPT, PAGE_SCRIPT, script_hash
-from tests.features.serve.test_serve_shell import ADDED, THEME_HEAD, script_src, shell_of
+from tests.features.serve.test_serve_shell import ADDED, THEME_HEAD, git, script_src, shell_of
 from tests.features.serve.test_serve_version_bridge import DIAGRAM
 from tests.features.serve.test_serve_theme import SRC
-from tests.features.serve.test_serve_versions_shell import VersionSite
+from tests.features.serve.test_serve_versions_shell import BANNER, VersionSite
 from tests.test_widget_versions import live
 
 # A script the author wrote in the body, which never runs.
@@ -30,6 +31,41 @@ BODY_SCRIPT = '<script>document.title = "from the body";</script>'
 
 class PublishedVersionTests(unittest.TestCase):
     def test_a_version_answered_as_published_runs_todays_theme_head(self):
+        site = VersionSite(self)
+        done = site.cli("publish", str(site.source("first")), "--local", "--comments",
+                        "--out-dir", str(site.scratch))
+        self.assertEqual(done.returncode, 0, done.stderr)
+        shutil.copyfile(site.scratch / "pond.html", site.out / "pond.html")
+        first = site.commit("pond.html")
+        site.publish("second")
+        self.assertNotIn("pond.md", git(site.out, "ls-tree", "--name-only", first).split())
+        site.serve()
+
+        status, headers, page = site.ask("GET", f"/pond.html?version={first}")
+        self.assertEqual(status, 200, page)
+        lines = [line for line in site.log().splitlines()
+                 if f"pond.html?version={first}" in line
+                 and "is answered from its published file" in line]
+        self.assertEqual(len(lines), 1, site.log())
+        self.assertIsNone(headers["ETag"])
+        self.assertIn(BANNER, page)
+        self.assertIn(b'class="artifact-theme-switch"', page)
+        self.assertIn(b"artifact-copy-link", page)
+
+        theme_head = (SRC / THEME_HEAD).read_text(encoding="utf-8")
+        policy = headers["Content-Security-Policy"]
+        nonce = re.search(r"'nonce-([^']+)'", policy).group(1)
+        # In order: today's head, ending the head, then the old-version script.
+        self.assertEqual(page.count(b"<script"), 2, page)
+        head = page.index(f"<script>{theme_head}</script>\n</head>".encode("utf-8"))
+        old = page.index(f'<script nonce="{nonce}" src="{OLD_VERSION_SCRIPT}'.encode("utf-8"))
+        self.assertLess(head, old)
+        self.assertEqual(shell_of(page).scripts, [theme_head])
+        self.assertIn("frame-ancestors 'none'; form-action 'none'; base-uri 'none'", policy)
+        self.assertEqual(script_src(policy), [f"'nonce-{nonce}'", script_hash(theme_head)])
+        self.assertEqual(script_src(shell_of(page).policy), ["'self'", script_hash(theme_head)])
+
+    def test_no_script_of_the_stored_page_runs_and_its_head_is_never_allowed(self):
         """A stored head (an older package's text) is replaced by today's,
         and its hash leaves both policies; nor does Mermaid's start-up
         module, the page script, the widget bridge or a script written in
@@ -50,8 +86,15 @@ class PublishedVersionTests(unittest.TestCase):
         # Markdown escapes a script, so the body's is written in the file.
         intro = "<p>The first edition.</p>\n"
         self.assertEqual(published.count(intro), 1)
-        stored = published.replace(intro, intro + BODY_SCRIPT + "\n").replace(f"<script>{theme_head}</script>", f"<script>{other}</script>")
+        stored = published.replace(intro, intro + BODY_SCRIPT + "\n").replace(
+            f"<script>{theme_head}</script>", f"<script>{other}</script>")
         stored = stored.replace(script_hash(theme_head), script_hash(other))
+        # Its policy meta as a browser still reads it: a ">" quoted in an
+        # attribute, and script-src-elem, which overrides script-src.
+        meta = '<meta http-equiv="Content-Security-Policy" content="default-src'
+        self.assertEqual(stored.count(meta), 1)
+        stored = stored.replace(meta, '<meta data-note=">" http-equiv="Content-Security-Policy" '
+                                f'content="script-src-elem \'self\' {script_hash(other)}; default-src')
         self.assertNotIn(theme_head + "</script>", stored)
         (site.out / "pond.html").write_text(stored, encoding="utf-8")
         first = site.commit("pond.html")
@@ -62,6 +105,10 @@ class PublishedVersionTests(unittest.TestCase):
         self.assertEqual(status, 200, page)
         self.assertIn("is answered from its published file", site.log())
         policy = headers["Content-Security-Policy"]
+        for absent in (other, script_hash(other)):
+            self.assertNotIn(absent.encode("utf-8"), page)
+            self.assertNotIn(absent, policy)
+        self.assertNotIn(b"script-src-elem", page)
         nonce = re.search(r"'nonce-([^']+)'", policy).group(1)
         self.assertEqual(page.count(b"<script"), 2, page)
         self.assertIn(f"<script>{theme_head}</script>\n</head>".encode("utf-8"), page)

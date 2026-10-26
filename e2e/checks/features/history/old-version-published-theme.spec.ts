@@ -53,12 +53,17 @@ test('an earlier version answered as published follows the theme switch and copi
   const first = commitPageOnly(`first (${Date.now()})`);
   publish('second', '--out-dir', env.LOTUSPOD_TEST_OUT!, '--owner', 'hermes',
     '--credential', env.LOTUSPOD_TEST_CREDENTIAL_HERMES!);
+  const listed = await page.request.get(`/api/versions?page=${NAME}`);
+  expect(listed.status()).toBe(200);
+  const version = (await listed.json()).versions.find((entry: { commit: string }) => entry.commit === first);
+  expect(version, 'the committed revision is a listed version').toBeTruthy();
+  expect(version.current).toBe(false);
 
   await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: baseURL });
   const errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
   page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
-  const address = `/${NAME}.html?version=${first}`;
+  const address = `/${NAME}.html?version=${version.commit}`;
   const response = await page.goto(address);
   expect(response!.status()).toBe(200);
   expect(response!.headers()['etag']).toBeUndefined();

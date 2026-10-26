@@ -82,7 +82,6 @@ _SLUG_STRIP = re.compile(r"[^a-z0-9]+")
 _NO_BLOB = "0" * 40
 _MAIN_OPEN_RE = re.compile(r'<main class="([^"]*)"([^>]*)>')
 _TITLE_END_RE = re.compile(r"</title\s*>", re.IGNORECASE)
-_META_RE = re.compile(r"<meta\b[^>]*>", re.IGNORECASE)
 
 
 @dataclass(frozen=True)
@@ -827,42 +826,58 @@ def holds_script(page_html: str, text: str) -> bool:
         if end <= places.head_end)
 
 
-class _Attributes(HTMLParser):
-    """One start tag's attributes, as a browser reads them."""
+class _Policies(HTMLParser):
+    """The start and end offsets and content of each policy meta tag in
+    page_html, read as a browser reads its tags, so a ">" quoted in an
+    attribute ends none."""
 
-    def __init__(self, tag: str) -> None:
+    def __init__(self, page_html: str) -> None:
         super().__init__(convert_charrefs=True)
-        self.attrs: dict[str, str | None] = {}
-        self.feed(tag)
+        self._lines = [0] + [match.end() for match in re.finditer("\n", page_html)]
+        self.found: list[tuple[int, int, str]] = []
+        self.feed(page_html)
         self.close()
 
     def handle_starttag(self, tag, attrs):
-        self.attrs = dict(attrs)
+        values = dict(attrs)
+        if tag == "meta" and (values.get("http-equiv") or "").lower() == "content-security-policy":
+            line, column = self.getpos()
+            at = self._lines[line - 1] + column
+            self.found.append((at, at + len(self.get_starttag_text() or ""),
+                               values.get("content") or ""))
+
+    handle_startendtag = handle_starttag
+
+
+# Directives that govern a script element, each of which a browser checks
+# on its own: script-src-elem and script-src-attr override script-src.
+_SCRIPT_DIRECTIVES = ("script-src", "script-src-elem", "script-src-attr")
 
 
 def with_head(page_html: str, head: str) -> str:
     """page_html with head, a script's text, run at the end of its head as
     an inline script element, and each policy meta tag of its head allowing
-    the site's own files and that script alone: no source a stored policy
-    allowed stays. Unchanged when page_html has no head end."""
+    the site's own files and that script alone: no script source a stored
+    policy allowed stays. Unchanged when page_html has no head end."""
     places = Places(page_html)
     if places.head_end is None:
         return page_html
     sources = f"script-src 'self' {script_hash(head)}"
     edits = [(places.head_end, places.head_end, f"<script>{head}</script>\n")]
-    for match in _META_RE.finditer(page_html, 0, places.head_end):
-        attrs = _Attributes(match.group(0)).attrs
-        if (attrs.get("http-equiv") or "").lower() != "content-security-policy":
-            continue
-        directives = [part.strip() for part in (attrs.get("content") or "").split(";")
-                      if part.strip()]
-        policy = [sources if part.split()[0].lower() == "script-src" else part
-                  for part in directives]
+    for start, end, content in _Policies(page_html[:places.head_end]).found:
+        policy: list[str] = []
+        for part in (part.strip() for part in content.split(";")):
+            if not part:
+                continue
+            if part.split()[0].lower() not in _SCRIPT_DIRECTIVES:
+                policy.append(part)
+            elif sources not in policy:
+                policy.append(sources)
         if sources not in policy:
             policy.append(sources)
-        edits.append((match.start(), match.end(),
-                      '<meta http-equiv="Content-Security-Policy" content="'
-                      + html.escape("; ".join(policy), quote=True) + '">'))
+        edits.append((start, end, '<meta http-equiv="Content-Security-Policy" content="'
+                      + html.escape("; ".join(policy), quote=False).replace('"', "&quot;")
+                      + '">'))
     return edited(page_html, edits)
 
 
