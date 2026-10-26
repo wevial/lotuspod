@@ -53,10 +53,14 @@ export function blockTitle(block: Widget): string {
   return frameOf(block.id)?.getAttribute("title") || block.id;
 }
 
-// The page's diagram (its pre) or image whose data-spot is id, else null.
+// The page's diagrams (their pres) and images a spot may be on.
+export function spotTargets(): HTMLElement[] {
+  return page.all("pre.mermaid[data-spot], figure.artifact-figure img[data-spot]");
+}
+
+// The page's diagram or image whose data-spot is id, else null.
 export function targetOf(id: string): HTMLElement | null {
-  return page.all("pre.mermaid[data-spot], figure.artifact-figure img[data-spot]")
-    .find(node => node.dataset.spot === id) || null;
+  return spotTargets().find(node => node.dataset.spot === id) || null;
 }
 
 // What the page shows of a spot's target: the same one, a changed one with

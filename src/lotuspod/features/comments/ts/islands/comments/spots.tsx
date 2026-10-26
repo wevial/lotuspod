@@ -1,7 +1,7 @@
 import { render } from "preact";
 import type { Page, Spot, SpotNode, SpotShape, StoredImage, Thread } from "../bridge";
 import type { Placement } from "./parts";
-import { anchorOf, targetOf } from "./anchor";
+import { anchorOf, spotTargets, targetOf } from "./anchor";
 import {
   clamp, covered, drawingOf, grow, into, labelOf, MAX_NODES, nodesOf, outOf, pointIn, rectIn, shapeBounds,
   spanOf, thin, unitOf, type Point, type Rect,
@@ -46,6 +46,8 @@ const BADGE = 9;
 const FIGURE = 11;
 const GAP = 8;
 const EDGE = 8;
+// The tool mark mode draws with, where the focus goes back to.
+const PRESSED = ".artifact-spot-tool[aria-pressed='true']";
 // What an image spot's composer says when its crop could not be stored.
 const CROP_FAILED = "The crop of the marked spot was not attached. Press Comment to try again.";
 
@@ -75,10 +77,6 @@ export function spots(page: Page, bridge: SpotsBridge): Spots {
   const drawnAs = new WeakMap<Thread, string>();
   let marking: Marking | null = null;
   let pending = false;
-
-  function targets() {
-    return page.all("pre.mermaid[data-spot], figure.artifact-figure img[data-spot]");
-  }
 
   // The element that holds a target's chrome: a diagram's pre, an image's figure.
   function holderOf(target: HTMLElement): HTMLElement | null {
@@ -288,7 +286,7 @@ export function spots(page: Page, bridge: SpotsBridge): Spots {
   }
 
   function scan() {
-    targets().forEach(target => {
+    spotTargets().forEach(target => {
       if (target.tagName === "PRE") watch(target);
       mount(target);
     });
@@ -307,7 +305,7 @@ export function spots(page: Page, bridge: SpotsBridge): Spots {
     if (target && target.tagName !== "PRE") layerOf(target);
     tab();
     bar(holder);
-    focusIn(holder, ".artifact-spot-tool[aria-pressed='true']");
+    focusIn(holder, PRESSED);
   }
 
   // In mark mode Tab goes through the diagram's nodes, and Enter marks one.
@@ -549,7 +547,7 @@ export function spots(page: Page, bridge: SpotsBridge): Spots {
     }), () => {
       if (!mine()) return;
       drop();
-      focusIn(holder, ".artifact-spot-tool[aria-pressed='true']");
+      focusIn(holder, PRESSED);
     }, () => {
       if (!mine()) return;
       drop();
@@ -643,7 +641,7 @@ export function spots(page: Page, bridge: SpotsBridge): Spots {
     event.preventDefault();
     if (marking.draft) {
       drop();
-      focusIn(marking.holder, ".artifact-spot-tool[aria-pressed='true']");
+      focusIn(marking.holder, PRESSED);
     } else {
       leave(true);
     }
