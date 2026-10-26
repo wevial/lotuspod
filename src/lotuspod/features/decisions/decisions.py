@@ -163,7 +163,10 @@ def _accepted(form: Form, answer: dict) -> bool:
     """Whether answer, given to form's question in the same words, is an
     "Accept the default" that form shows as its default option: form offers
     no such option and its default is one it offers."""
-    return (answer.get("choice") == ACCEPT[0] and _text([answer["asked"]["label"]]) == ACCEPT[1]
+    asked = answer.get("asked") or {}
+    return (answer.get("choice") == ACCEPT[0] and not form.checklist
+            and not answer.get("dismissed")
+            and _text([asked.get("label") or ""]) == ACCEPT[1]
             and ACCEPT[0] not in dict(form.options) and form.default in dict(form.options))
 
 

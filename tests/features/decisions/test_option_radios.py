@@ -19,6 +19,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from dataclasses import replace
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "src"))
@@ -202,6 +203,16 @@ class Rule(unittest.TestCase):
         answer = {"question": "decision-1", "version": "v1", "choice": "accept",
                   "asked": {"text": "Ship it?", "label": "Accept the default"}}
         self.assertEqual(shown(form, answer), "accept-the-default")
+
+    def test_an_answer_stored_without_its_words_shows_as_its_own_choice(self):
+        form = Form(question="decision-1", text="Ship it?", version="v1",
+                    options=(decisions.ACCEPT, decisions.OTHER), default="accept")
+        for asked in (None, {"text": None, "label": None}):
+            with self.subTest(asked=asked):
+                answer = {"question": "decision-1", "version": "v1", "choice": "accept",
+                          "asked": asked}
+                self.assertEqual(shown(form, answer), "accept")
+                self.assertEqual(shown(replace(self.FORM, version="v1"), answer), "accept")
 
     def test_an_answer_to_an_offered_option_shows_as_itself(self):
         self.assertEqual(shown(self.FORM, self.answer(choice="on",
