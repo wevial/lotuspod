@@ -365,7 +365,7 @@ export interface Attachments {
 export interface ComposerBridge {
   page: string;
   revision(): string | null;
-  attached: Map<HTMLFormElement, Attachments>;
+  attached: WeakMap<HTMLFormElement, Attachments>;
   forms: Map<HTMLElement, HTMLFormElement>;
   sending: Map<HTMLFormElement, Promise<CommentRow | null>>;
   boxWith(form: HTMLFormElement): HTMLElement | null;
@@ -410,7 +410,7 @@ export interface PassagesBridge {
   shown: Map<number, Thread>;
   resolved(thread: Thread): boolean;
   revision(): string | null;
-  attached: Map<HTMLFormElement, Attachments>;
+  attached: WeakMap<HTMLFormElement, Attachments>;
   composer: Pick<ReturnType<typeof import('./comments/composer').composers>, 'passage'>;
   placement(): import('./comments/parts').Placement;
   // A drawn spot thread's mark shows its number.

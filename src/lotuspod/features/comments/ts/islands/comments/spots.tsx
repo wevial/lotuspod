@@ -74,7 +74,8 @@ interface Marking { holder: HTMLElement; tool: "box" | "stroke"; draft: Draft | 
 // as it was and dashed on a changed one; one whose target or nodes are gone
 // draws nothing.
 export function spots(page: Page, bridge: SpotsBridge): Spots {
-  const tools = new Map<HTMLElement, HTMLDivElement>();
+  // Weak, as a swap takes a target's holder away for good.
+  const tools = new WeakMap<HTMLElement, HTMLDivElement>();
   const watched = new WeakSet<HTMLElement>();
   const drawnAs = new WeakMap<Thread, string>();
   let marking: Marking | null = null;

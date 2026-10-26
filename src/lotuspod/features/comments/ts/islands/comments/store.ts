@@ -41,8 +41,9 @@ export function store(page: Page, bridge: StoreBridge): Store {
   const shown = new Map<number, Thread>();
   // Each box's form for a new thread, wherever it is shown.
   const forms = new Map<HTMLElement, HTMLFormElement>();
-  // Each composer's attachments, by its form.
-  const attached = new Map<HTMLFormElement, import("../bridge").Attachments>();
+  // Each composer's attachments, by its form; a form gone from the page
+  // takes its images with it.
+  const attached = new WeakMap<HTMLFormElement, import("../bridge").Attachments>();
   const questions = new Map<string, HTMLFormElement>();
 
   // The checks for replies: while a thread waits, or the reader has a

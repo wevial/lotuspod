@@ -54,7 +54,7 @@ export interface Store {
   readonly sections: Map<string, HTMLElement>;
   readonly shown: Map<number, Thread>;
   readonly forms: Map<HTMLElement, HTMLFormElement>;
-  readonly attached: Map<HTMLFormElement, import("../bridge").Attachments>;
+  readonly attached: WeakMap<HTMLFormElement, import("../bridge").Attachments>;
   readonly composer: Pick<ReturnType<typeof import("./composer").composers>, "sending" | "wire" | "fieldOf" | "handles" | "on" | "unblock">;
   readonly panel: Placement;
   readonly passages: Passages;
