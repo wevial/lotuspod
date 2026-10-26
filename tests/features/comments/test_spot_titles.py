@@ -26,17 +26,11 @@ WITHOUT_IMAGE = pond().replace("![Pond at dawn](pond.png)\n\n", "")
 
 
 class TitleTests(SpotCase):
-    def post_spot(self, spot: dict) -> dict:
-        status, row = self.post({"section": "flow", "text": "@hermes This is off.",
-                                 "spot": spot})
-        self.assertEqual(status, 201, row)
-        return row
-
     def test_each_spot_is_stored_and_served_with_its_target_s_title(self):
         image = self.spot("pond-at-dawn", shape=STROKE)
         diagram = self.spot("flow-diagram-2", hash=digest(SECOND))
         self.assertEqual(diagram["nodes"], [])
-        image_row, diagram_row = self.post_spot(image), self.post_spot(diagram)
+        image_row, diagram_row = self.anchored(image), self.anchored(diagram)
         self.assertEqual(image_row["spot"], {**image, "title": "Pond at dawn"})
         self.assertEqual(diagram_row["spot"], {**diagram, "title": "Flow"})
 
@@ -52,7 +46,7 @@ class TitleTests(SpotCase):
         self.assertEqual(self.stored(), before)
 
     def test_the_pull_names_a_removed_image_by_its_stored_title(self):
-        titled = self.post_spot(self.spot("pond-at-dawn", shape=STROKE))
+        titled = self.anchored(self.spot("pond-at-dawn", shape=STROKE))
         old_spot = self.spot("pond-at-dawn")
         old = db.Database(self.db_path).add_comment(
             page="pond", section="flow", section_title="Flow", revision=titled["revision"],
