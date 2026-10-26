@@ -106,7 +106,7 @@ function accepted(form: HTMLFormElement, answer: Answer): boolean {
   const values = radios(form).map((radio) => radio.value);
   const fallback = form.dataset.default;
   return !isChecklist(form) && !answer.dismissed && answer.choice === ACCEPT &&
-    asked.label !== undefined && asked.label !== null && squeezed(asked.label) === ACCEPTED &&
+    squeezed(asked.label) === ACCEPTED &&
     asksAs(form, answer) && !values.includes(ACCEPT) && Boolean(fallback) && values.includes(fallback!);
 }
 
