@@ -143,8 +143,8 @@ export function spots(page: Page, bridge: SpotsBridge): Spots {
     return over.querySelector<SVGGElement>(":scope > g.artifact-spot-layer");
   }
 
-  // A mark: its shape, and its badge at its first corner when numbered.
-  function draw(layer: SVGGElement, shape: SpotShape, className: string, number: string | null): SVGGElement {
+  // A mark: its shape, and with badge its badge at its first corner, for number() to fill.
+  function draw(layer: SVGGElement, shape: SpotShape, className: string, badge = false): SVGGElement {
     const unit = unitOf(layer);
     const mark = svg("g", "artifact-spot-mark" + (className ? " " + className : ""));
     let first: Point;
@@ -167,8 +167,8 @@ export function spots(page: Page, bridge: SpotsBridge): Spots {
       mark.append(hit, line);
       first = shape.points[0];
     }
-    if (number !== null) {
-      const badge = svg("g", "artifact-spot-badge");
+    if (badge) {
+      const group = svg("g", "artifact-spot-badge");
       const circle = svg("circle", "");
       circle.setAttribute("cx", String(first[0]));
       circle.setAttribute("cy", String(first[1]));
@@ -177,9 +177,8 @@ export function spots(page: Page, bridge: SpotsBridge): Spots {
       text.setAttribute("x", String(first[0]));
       text.setAttribute("y", String(first[1]));
       text.style.fontSize = FIGURE * unit + "px";
-      text.textContent = number;
-      badge.append(circle, text);
-      mark.appendChild(badge);
+      group.append(circle, text);
+      mark.appendChild(group);
     }
     layer.appendChild(mark);
     return mark;
@@ -219,7 +218,7 @@ export function spots(page: Page, bridge: SpotsBridge): Spots {
       const key = [thread.standing, unitOf(layer).toFixed(4), JSON.stringify(shape)].join("\n");
       if (thread.drawing && thread.drawing.parentNode === layer && drawnAs.get(thread) === key) return;
       erase(thread);
-      const mark = draw(layer, shape, thread.standing === "changed" ? "artifact-spot-mark--changed" : "", "");
+      const mark = draw(layer, shape, thread.standing === "changed" ? "artifact-spot-mark--changed" : "", true);
       mark.dataset.thread = String(thread.root.id);
       thread.drawing = mark;
       drawnAs.set(thread, key);
@@ -372,7 +371,7 @@ export function spots(page: Page, bridge: SpotsBridge): Spots {
       // takes the thread.
       draft.box = bridge.boxOf(target!) || draft.box;
       draft.shape = shape;
-      draft.mark = draw(layer, shape, "artifact-spot-mark--draft", null);
+      draft.mark = draw(layer, shape, "artifact-spot-mark--draft");
       seat(draft);
     }
     tab();
@@ -437,7 +436,7 @@ export function spots(page: Page, bridge: SpotsBridge): Spots {
       if (marking!.tool === "stroke") press.points.push(at);
       else press.points = [press.points[0], at];
       press.preview?.remove();
-      press.preview = draw(press.layer, drawn(press), "artifact-spot-mark--draft", null);
+      press.preview = draw(press.layer, drawn(press), "artifact-spot-mark--draft");
     });
     holder.addEventListener("pointerup", event => finish(holder, event, true));
     holder.addEventListener("pointercancel", event => finish(holder, event, false));
@@ -538,7 +537,7 @@ export function spots(page: Page, bridge: SpotsBridge): Spots {
       spot = { id: target.dataset.spot!, shape: into(shape, { x: 0, y: 0, w: 1, h: 1 }, 2), nodes: [] };
     }
     const image = !drawing;
-    const mark = draw(layer, shape, "artifact-spot-mark--draft", null);
+    const mark = draw(layer, shape, "artifact-spot-mark--draft");
     // Each callback acts on its own draft only: a save that ends after the
     // reader dropped it, or started another, leaves the newer one as it is.
     const mine = () => marking?.draft === draft;

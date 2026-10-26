@@ -6,7 +6,7 @@ export type Point = [number, number];
 
 // The points a stroke keeps and the nodes a mark names, as the comments route
 // takes them (lotuspod.features.serve.spots).
-export const MAX_POINTS = 256;
+const MAX_POINTS = 256;
 export const MAX_NODES = 12;
 // Mermaid 11.4.1's box ids, as features/blocks/ts/diagram-cards.js reads them:
 // flowchart-ID-N, which the ELK layout prefixes with the svg's own id and a
@@ -82,7 +82,7 @@ export function unitOf(layer: SVGGraphicsElement): number {
   return scale > 0 ? 1 / scale : 1;
 }
 
-export function bounds(points: Point[]): Rect {
+function bounds(points: Point[]): Rect {
   const xs = points.map(point => point[0]);
   const ys = points.map(point => point[1]);
   const x = Math.min(...xs), y = Math.min(...ys);
@@ -115,10 +115,10 @@ export function covered(mark: Rect, boxes: Map<string, Rect>): string[] {
     .map(each => each.id);
 }
 
-// At most most points, thinned evenly, the first and last kept.
-export function thin(points: Point[], most = MAX_POINTS): Point[] {
-  if (points.length <= most) return points;
-  return Array.from({ length: most }, (_, at) => points[Math.round(at * (points.length - 1) / (most - 1))]);
+// At most MAX_POINTS points, thinned evenly, the first and last kept.
+export function thin(points: Point[]): Point[] {
+  if (points.length <= MAX_POINTS) return points;
+  return Array.from({ length: MAX_POINTS }, (_, at) => points[Math.round(at * (points.length - 1) / (MAX_POINTS - 1))]);
 }
 
 // A shape's bounding box.
