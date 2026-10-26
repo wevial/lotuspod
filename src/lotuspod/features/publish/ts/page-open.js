@@ -105,6 +105,16 @@
   // comments island's mark mode): a press there draws a mark, so a click on a
   // box opens no node card (features/blocks/ts/diagram-cards.js).
   var MARKING = "artifact-spot-marking";
+  // Sent on a diagram's pre or a figure by the comments island's mark mode
+  // where comments use the bottom sheet, for features/blocks/ts/diagram-view.js
+  // or features/blocks/ts/image-viewer.js to open it in mark mode: the one
+  // that opens cancels the event and fills in its detail (the comments
+  // island's MarkView).
+  var MARK_VIEW = "lotuspod:mark-view";
+  // On a diagram's pre while its svg is in the diagram view; on that svg
+  // meanwhile, its own viewBox, which the view rewrites.
+  var VIEWED = "artifact-diagram-viewed";
+  var NATURAL_BOX = "data-artifact-natural-box";
   // What the page's text leaves out and no passage may hold: the comment UI,
   // decision forms and their chips, the Answered table, diagrams and their
   // node cards, and the list of changed sections.

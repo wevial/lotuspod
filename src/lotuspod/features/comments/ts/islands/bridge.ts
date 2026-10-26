@@ -99,6 +99,15 @@ declare const STALE_IMAGE: string;
 declare const DIAGRAMS: string;
 declare const REDRAWN: string;
 declare const MARKING: string;
+// features/publish/ts/page-open.js: sent on a target's holder to open it in
+// the diagram view or the image viewer in mark mode (detail: MarkView); sent
+// on a diagram's svg as its view moves or zooms it; the class on a diagram's
+// pre while its svg is in the view, and the attribute on that svg holding its
+// own viewBox meanwhile.
+declare const MARK_VIEW: string;
+declare const MOVED: string;
+declare const VIEWED: string;
+declare const NATURAL_BOX: string;
 
 declare function commentMarkdown(node: HTMLDivElement, text: string): HTMLDivElement;
 declare function commentImages(row: CommentRow): HTMLUListElement | null;
@@ -153,6 +162,8 @@ export const page = Object.freeze({
   staleDiagram: STALE_DIAGRAM,
   staleImage: STALE_IMAGE,
   marking: MARKING,
+  viewed: VIEWED,
+  naturalBox: NATURAL_BOX,
   room: ROOM,
   popover: POPOVER,
   overText,
@@ -175,7 +186,8 @@ export const page = Object.freeze({
   startComment(start: StartComment): void {
     if (!ARCHIVED) startComment = start;
   },
-  events: Object.freeze({ answered: ANSWERED, saved: SAVED, drawn: DRAWN, swapped: SWAPPED, diagrams: DIAGRAMS, redrawn: REDRAWN }),
+  events: Object.freeze({ answered: ANSWERED, saved: SAVED, drawn: DRAWN, swapped: SWAPPED, diagrams: DIAGRAMS, redrawn: REDRAWN,
+    markView: MARK_VIEW, moved: MOVED }),
 });
 
 export type Page = typeof page;
@@ -190,6 +202,22 @@ export interface Widget { id: string; hash: string; state: string }
 export type SpotShape =
   | { kind: "box"; x: number; y: number; w: number; h: number }
   | { kind: "stroke"; points: [number, number][] };
+// MARK_VIEW's detail. The comments island gives escape, called on Escape in
+// the view while it marks, and closed, called once the view has closed; the
+// view that opens gives the rest: where presses land (its stage, or the
+// frame round its image), its image if it is the image viewer, where the
+// composer goes, dock to put the mark-mode bar in it, done to end mark mode
+// with the view left open, and close.
+export interface MarkView {
+  escape(): void;
+  closed(): void;
+  surface?: HTMLElement;
+  image?: HTMLImageElement;
+  room?: HTMLElement;
+  dock?(bar: HTMLElement): void;
+  done?(): void;
+  close?(): void;
+}
 export interface SpotNode { id: string; label: string }
 export interface Spot { id: string; hash: string; shape: SpotShape; nodes: SpotNode[] }
 // Where a spot thread's mark stands: on its target as it was, on a changed

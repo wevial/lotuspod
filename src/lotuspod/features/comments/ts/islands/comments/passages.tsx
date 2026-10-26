@@ -2,7 +2,7 @@ import { render } from "preact";
 import { createPortal } from "preact/compat";
 import type { Page, PassagesBridge, Thread, TextModel, PassageQuote } from "../bridge";
 import type { Passages } from "./parts";
-import { anchorOf } from "./anchor";
+import { anchorOf, targetOf } from "./anchor";
 
 type OpenPassage = ReturnType<ReturnType<typeof import('./composer').composers>['passage']> & {
   box: HTMLElement;
@@ -191,9 +191,12 @@ export function passages(page: Page, bridge: PassagesBridge): Passages {
         on.set(thread, thread.marks[0]);
       }
     });
+    // By its target on the page, as a view or viewer may hold the mark.
     marked.forEach(function (thread) {
       model = model || textModel(article);
-      var target = thread.drawing!.closest("pre, figure") || thread.drawing!;
+      var spot = anchorOf(thread.root);
+      var onPage = spot.kind === "spot" ? targetOf(spot.id) : null;
+      var target = onPage?.closest("pre, figure") || onPage || thread.drawing!;
       at.set(thread, offsetOf(model, target, 0));
       on.set(thread, target);
     });

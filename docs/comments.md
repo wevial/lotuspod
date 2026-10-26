@@ -897,9 +897,34 @@ drawn in the drawing's own coordinates, each with its number at its first
 corner: spot threads are numbered with the passages, in page order, and those
 drawn nowhere after them. Pointing at a mark lights it and its entry in the
 panel, and pointing at the entry lights the mark; clicking a mark opens its
-thread. A resolved spot thread draws no mark. A spot is marked on the page
-itself, not in the diagram view or the image viewer, and on an image with the
-pointer only.
+thread. A resolved spot thread draws no mark.
+
+Where comments use the bottom sheet (a phone), "Comment" opens the diagram
+view or the image viewer with mark mode on and "Box" pressed, its bar in a
+band under the view's bar or above the image, instead of marking on the page,
+where a finger would hold the page still and the drawing is small to aim at.
+In the diagram view the diagram's own svg, marks included, is what the view
+moves and zooms; in the image viewer the marks are drawn in an svg over its
+image in natural pixels. One finger draws (or a tap marks a box), two fingers
+pan and pinch the diagram view as at any time and draw nothing, and the
+composer opens in the view under the mark, following it as the view moves.
+Posting closes the view and opens the new thread in the bottom sheet. Escape
+in the view, the composer's "Cancel" or the bar's "Cancel" leaves mark mode,
+a draft with it, with the view open, and Escape again closes it, as at any
+time, the focus back on the diagram's Expand or the figure's "Comment". While
+the view is in mark mode a swap holds back the part the target is in, a
+diagram drawn again in the other theme keeps its draft, and the image viewer
+opens no attached image over the one being marked. Outside mark mode a swipe over a diagram or a
+figure on the page scrolls the page: only a target in mark mode takes the
+touch to itself.
+
+The keyboard marks an image too. In mark mode Tab reaches the image's mark
+surface after the bar; there Enter drops a box a quarter of the image's width
+and height at its centre, drawn dashed, the arrow keys move it by a twentieth
+of the image's width or height, and Shift with an arrow grows or shrinks its
+width or height by as much (never past the image, nor under a twentieth).
+Enter then opens the composer under it, and Cmd+Enter (Ctrl+Enter elsewhere)
+posts, as for a node. Escape takes the box away and stays in mark mode.
 
 ### Comments on passages
 

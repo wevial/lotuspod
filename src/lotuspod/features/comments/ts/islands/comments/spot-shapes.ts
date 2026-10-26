@@ -1,4 +1,4 @@
-import type { SpotShape } from "../bridge";
+import { page, type SpotShape } from "../bridge";
 
 // A rectangle and a point in one drawing's coordinates.
 export interface Rect { x: number; y: number; w: number; h: number }
@@ -16,9 +16,12 @@ const NODE_ID = /^[A-Za-z0-9_-]+$/;
 const LABEL = 100;
 
 // A target's drawing: a diagram's svg once Mermaid has drawn it in its pre,
-// else null (an image, or a diagram not drawn yet).
+// or in the diagram view's stage while it is there, else null (an image, or a
+// diagram not drawn yet).
 export function drawingOf(target: HTMLElement): SVGSVGElement | null {
-  return target.tagName === "PRE" ? target.querySelector<SVGSVGElement>(":scope > svg") : null;
+  if (target.tagName !== "PRE") return null;
+  return target.querySelector<SVGSVGElement>(":scope > svg") || (target.classList.contains(page.viewed)
+    ? document.querySelector<SVGSVGElement>("dialog.artifact-diagram-view .artifact-diagram-view-stage > svg") : null);
 }
 
 // A drawn flowchart's boxes, by node id, in the order drawn.
