@@ -244,7 +244,7 @@ _NATURAL: dict[str, tuple[int, int]] = {}
 def natural_size(out_dir: Path, found: blocks.Target) -> dict[str, int]:
     """A target's width and height: an image's natural size, read from the
     media store once per stored name, else the size its tag gives."""
-    name = found.src.rsplit("/", 1)[-1]
+    name = found.stored
     if name and name not in _NATURAL:
         image = load_stored(media_dir(out_dir), name)
         if image is not None:

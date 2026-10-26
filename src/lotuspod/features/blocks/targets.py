@@ -2,8 +2,9 @@
 and its stored images, each with an id and a hash.
 
 A diagram is a `pre.mermaid`; an image is an `img` inside a
-`figure.artifact-figure` whose `src` is a stored name under /media/. Neither
-counts inside another diagram, a `template` or a `noscript`. Each one's
+`figure.artifact-figure` whose `src` is a stored name under /media/, with
+any query or fragment. Neither counts inside another diagram, a `template`
+or a `noscript`. Each one's
 section is the id of the last h2 before it that starts one (an h2 in a
 diagram, a form or a template starts none), "" before the first.
 
@@ -46,7 +47,9 @@ HASH_ATTRIBUTE = "data-spot-hash"
 FIGURE_CLASS = "artifact-figure"
 # What a `mermaid id=` fence may name, checked at publish.
 SPOT_ID = re.compile(r"[A-Za-z0-9_-]+")
-_STORED = re.compile(re.escape(URL_PREFIX) + r"([0-9a-f]{64})\.[a-z]+")
+# A stored image's URL, as serve answers it: its stored name, then any query
+# or fragment, which serve does not read.
+_STORED = re.compile(re.escape(URL_PREFIX) + r"(([0-9a-f]{64})\.[a-z]+)(?:[?#].*)?", re.DOTALL)
 _SLUG_STRIP = re.compile(r"[^a-z0-9]+")
 
 
@@ -65,6 +68,8 @@ class Target:
     src: str = ""
     width: int = 0
     height: int = 0
+    # An image's stored name, as its src names it; "" for a diagram.
+    stored: str = ""
 
 
 def _size(value: str | None) -> int:
@@ -195,8 +200,9 @@ def _targets(text: str) -> list[tuple[str, Target, dict]]:
                             candidate["sectionTitle"], section, source=source)
         else:
             src = attrs["src"]
-            target = Target(IMAGE, _STORED.fullmatch(src).group(1)[:12], attrs.get("alt") or "",
-                            section, src=src, width=_size(attrs.get("width")),
+            stored = _STORED.fullmatch(src)
+            target = Target(IMAGE, stored.group(2)[:12], attrs.get("alt") or "",
+                            section, src=src, stored=stored.group(1), width=_size(attrs.get("width")),
                             height=_size(attrs.get("height")))
         found.append((ident, target, candidate))
     return found

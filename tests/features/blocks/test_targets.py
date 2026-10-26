@@ -175,6 +175,16 @@ class IdTests(unittest.TestCase):
         self.assertEqual(marked, body.replace("000000000000", found.hash))
         self.assertEqual(targets.mark_targets(marked), marked)
 
+    def test_an_image_url_with_a_query_is_its_stored_image(self):
+        name = f"{'d' * 64}.png"
+        body = (f'<figure class="artifact-figure"><img src="/media/{name}?v=1#top" alt="Pond"'
+                ' width="8" height="6"></figure>')
+        marked = targets.mark_targets(body)
+        self.assertIn(f'data-spot="pond" data-spot-hash="{"d" * 12}"', marked)
+        image = targets.PageTargets(marked).found["pond"]
+        self.assertEqual((image.src, image.stored, image.hash),
+                         (f"/media/{name}?v=1#top", name, "d" * 12))
+
     def test_what_is_no_target(self):
         body = ('<pre class="mermaid" data-spot="">graph TD</pre>'
                 '<template><pre class="mermaid">graph TD</pre></template>'
