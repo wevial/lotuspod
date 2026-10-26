@@ -383,7 +383,7 @@ export function spots(page: Page, bridge: SpotsBridge): Spots {
   }
 
   // Open the target in the diagram view or the image viewer in mark mode,
-  // with the bar docked there; on the page as before when neither opens it.
+  // with the bar docked there; on the page when neither opens it.
   function viewed(now: Marking) {
     const view: MarkView = {
       escape: () => {
