@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { expect, test, type APIRequestContext, type FrameLocator, type Page } from '@playwright/test';
+import { failFirstAttempt } from './fail-first-attempt';
 
 // At this width a box never opens: its chip opens the section's threads in
 // a popover over the text. panel.spec.ts checks the side panel a wider
@@ -108,7 +109,12 @@ async function stored(request: APIRequestContext) {
 }
 
 test.describe('the chain', () => {
+  // The chain answers and comments on the served page and first asserts
+  // hermes holds nothing for it, so a retry meets the first attempt's items.
+  test.describe.configure({ retries: 0 });
   test.use({ extraHTTPHeaders: SIGNED_IN });
+
+  test.afterEach(({}, testInfo) => failFirstAttempt(testInfo));
 
   test('a signed-in answer and comment reach the owner alone, and its reply and revision reach the reader', async ({ page, browser, request }) => {
     test.setTimeout(180_000);
