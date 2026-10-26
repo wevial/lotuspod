@@ -899,7 +899,7 @@ test('an image still uploading in a spot draft is waited for by Reload and kept 
   expect(errors).toEqual([]);
 });
 
-test('without crypto.subtle, an image spot\'s crop still uploading over Reload is not kept as an image', async ({ page }) => {
+test('without crypto.subtle, an image spot\'s crop still uploading over Reload is not kept as an image, and a paused clock does not stall it', async ({ page }) => {
   test.setTimeout(120_000);
   const name = `spot-comments-kept-crop-${test.info().repeatEachIndex}`;
   publish(name, doc());
@@ -908,6 +908,7 @@ test('without crypto.subtle, an image spot\'s crop still uploading over Reload i
   await page.addInitScript(() => {
     Object.defineProperty(Crypto.prototype, 'subtle', { get: () => undefined, configurable: true });
   });
+  await page.clock.install();
   const errors = await watch(page);
   await load(page, name);
   const fish = figure(page);
@@ -937,18 +938,48 @@ test('without crypto.subtle, an image spot\'s crop still uploading over Reload i
   const reload = page.locator('.artifact-live-page-banner').getByRole('button', { name: 'Reload' });
   await expect(reload).toBeVisible();
 
+  // Reload's wait is on promises alone: with the page's clock paused, it
+  // still ends once the uploads are answered.
+  await page.clock.pauseAt(Date.now() + 60_000);
+  let loads = 0;
+  page.on('load', () => { loads += 1; });
   const fetched = page.waitForResponse((response) => new URL(response.url()).pathname === `/${name}.html` &&
     response.request().resourceType() === 'fetch');
   const loaded = page.waitForEvent('load');
   await reload.click();
   await fetched;
+  // An image pasted in Flow's form while Reload waits for the crop, its
+  // upload held apart from the crop's.
+  let releaseFlow!: () => void;
+  const flowReleased = new Promise<void>((done) => { releaseFlow = done; });
+  await page.route('**/api/media', async (route) => {
+    await flowReleased;
+    await route.continue();
+  });
+  const flowField = page.getByRole('textbox', { name: 'Comment on Flow', includeHidden: true });
+  const base64 = fs.readFileSync(FISH).toString('base64');
+  await flowField.evaluate((node, base64) => {
+    const data = new DataTransfer();
+    data.items.add(new File([Uint8Array.from(atob(base64), (c) => c.charCodeAt(0))], 'fish.jpg', { type: 'image/jpeg' }));
+    node.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }));
+  }, base64);
+  await expect(page.locator('.artifact-attach-item--loading')).toHaveCount(2);
   release();
+  await expect(page.locator('.artifact-attach-item--loading')).toHaveCount(1);
+  // Real time: long enough for a reload to begin.
+  await page.waitForTimeout(500);
+  expect(loads).toBe(0);
+
+  releaseFlow();
   await loaded;
   await page.unroute('**/api/media');
+  await page.clock.resume();
   await expect(page.locator('html')).toHaveAttribute('data-lotuspod-comments-read', '');
   const picturesForm = panel(page).group('Pictures').locator('form.artifact-comment-form');
   await expect(picturesForm.locator('textarea[name="text"]')).toHaveValue('Not sent yet');
   await expect(picturesForm.locator('.artifact-attach-item')).toHaveCount(0);
+  const flowForm = panel(page).group('Flow').locator('form.artifact-comment-form');
+  await expect(flowForm.locator('.artifact-attach-item img')).toHaveCount(1);
   expect(errors).toEqual([]);
 });
 

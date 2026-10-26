@@ -849,15 +849,21 @@ export function spots(page: Page, bridge: SpotsBridge): Spots {
       !before.has(image.name))?.name || "";
   }
 
+  // Each crop's making settled() has waited out.
+  const made = new WeakSet<Promise<void>>();
+
   async function stored(blob: Blob): Promise<string> {
     if (!crypto.subtle) return "";
     const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", await blob.arrayBuffer()));
     return Array.from(digest, byte => byte.toString(16).padStart(2, "0")).join("") + ".png";
   }
 
+  // Uploads on their way are waited for on their promises, so a paused
+  // clock (as Reload's wait may meet) does not hold them; only files still
+  // waiting for the size limit are looked for again on a timer.
   async function settled(composer: Composer) {
     while (composer.images.busy() && composer.holder.isConnected) {
-      await new Promise(done => setTimeout(done, 100));
+      if (!await composer.images.settled()) await new Promise(done => setTimeout(done, 100));
     }
   }
 
@@ -921,15 +927,18 @@ export function spots(page: Page, bridge: SpotsBridge): Spots {
       };
     },
     // The crop is told from the other images once draft.making settles,
-    // so writing() leaves it out; a crop made again meanwhile is asked of
-    // again.
+    // so writing() leaves it out. A crop not yet waited for counts as a
+    // wait, so the keeper asks every composer again after it; so does one
+    // made again meanwhile.
     async settled() {
       const draft = marking?.draft;
       if (!draft) return false;
       const making = draft.making;
+      const fresh = !made.has(making);
       await making;
+      made.add(making);
       const waited = await draft.composer.images.settled();
-      return waited || draft.making !== making;
+      return waited || fresh || draft.making !== making;
     },
   };
 }
