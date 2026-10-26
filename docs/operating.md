@@ -291,6 +291,14 @@ for each page, oldest first, or `no page is out of date`. `--json` prints
 `merged` and `closed` a list of `{pull, url, at}` and `unchecked` the linked
 pull requests with no stored state. It exits 0.
 
+serve draws the same verdict where a reader looks: "may be out of date" on
+the page's header line and on its index row (see
+[publishing.md](publishing.md#publish-a-page)). It reads only the stored
+states, again whenever the file's modification time or size changes, and
+never looks a pull request up, so the marks are as fresh as the last
+`--check`; a check that changes a page's verdict changes its `ETag`, and the
+next request renders it again.
+
 To keep the states fresh, run the check on a timer on the writer host as the
 user serve runs as, for example from cron every 15 minutes:
 

@@ -1,12 +1,15 @@
 """The pages serve answers: each rendered when asked for (rendered_page),
-the index rendered from the manifest (rendered_index), and as its /api and the agents' socket record them: served_page_names,
+the index rendered from the manifest (rendered_index), each marked when the
+pull requests it links have overtaken it (watch_states), and as its /api and the agents' socket record them: served_page_names,
 api_page and its one-read catalog, and agent_page."""
 
 from __future__ import annotations
 
 import datetime as _dt
 import hashlib
+import html
 import json
+import re
 import sys
 import threading
 from pathlib import Path
@@ -20,6 +23,7 @@ from lotuspod.features import comments
 from lotuspod.features import decisions
 from lotuspod.features import history
 from lotuspod.features import index
+from lotuspod.features import stale
 from lotuspod.features.publish import (REFS_SUFFIX, _H2Collector, kept_block_hashes, kept_source,
                                        kept_target_hashes, load_stored, media_dir, page_owner,
                                        refs_from, render_from, render_kept_or_extracted)
@@ -41,18 +45,184 @@ def render_version() -> str:
     return digest.hexdigest()[:16]
 
 
-def page_inputs(out_dir: Path, name: str) -> str:
+# The stored pull request states each served directory's marks are drawn
+# from, by the path of its states file, read again only when the file's
+# modification time or size changes. Nothing here reaches the network.
+_STATES_PATHS: dict[Path, Path] = {}
+_STATES: dict[Path, tuple[tuple[int, int], dict[str, dict]]] = {}
+# Each page the index lists, its verdict by its published file's and the
+# states file's modification times and sizes and its updated stamp.
+_VERDICTS: dict[tuple[Path, str], tuple[tuple, "Verdict"]] = {}
+# Each served directory's manifest's updated stamp by page name, by the
+# manifest's modification time and size.
+_UPDATED: dict[Path, tuple[tuple[int, int], dict[str, str]]] = {}
+
+
+class Verdict(NamedTuple):
+    """The pull requests a page links stored merged and closed since its
+    last publish; both empty when the page is current."""
+    merged: tuple[str, ...] = ()
+    closed: tuple[str, ...] = ()
+
+
+def watch_states(out_dir: Path, db_path: Path) -> None:
+    """Draw out_dir's marks from the states file beside serve's database."""
+    _STATES_PATHS[Path(out_dir)] = stale.states_path(Path(db_path))
+
+
+def _stored_states(out_dir: Path) -> tuple[tuple[int, int], dict[str, dict]]:
+    """The stored states and the states file's modification time and size."""
+    path = _STATES_PATHS.get(Path(out_dir))
+    if path is None:
+        return (0, 0), {}
+    try:
+        found = path.stat()
+    except OSError:
+        return (0, 0), {}
+    seen = (found.st_mtime_ns, found.st_size)
+    with _RENDERS_LOCK:
+        kept = _STATES.get(path)
+    if kept is not None and kept[0] == seen:
+        return kept
+    kept = (seen, stale.read_states(path))
+    with _RENDERS_LOCK:
+        _STATES[path] = kept
+    return kept
+
+
+def _manifest_updated(out_dir: Path) -> dict[str, str]:
+    """The updated stamp the manifest records for each page it lists, by
+    name: the one `pages stale` compares with, which a page published before
+    publish stamped it takes from its commit."""
+    path = out_dir / MANIFEST_FILE
+    try:
+        found = path.stat()
+    except OSError:
+        return {}
+    seen = (found.st_mtime_ns, found.st_size)
+    with _RENDERS_LOCK:
+        kept = _UPDATED.get(Path(out_dir))
+    if kept is not None and kept[0] == seen:
+        return kept[1]
+    try:
+        artifacts = json.loads(path.read_bytes().decode("utf-8"))["artifacts"]
+    except (OSError, UnicodeDecodeError, ValueError, KeyError, TypeError):
+        artifacts = []
+    updated = {meta["file"].removesuffix(".html"): str(meta.get("updated") or "")
+               for meta in (artifacts if isinstance(artifacts, list) else [])
+               if isinstance(meta, dict) and isinstance(meta.get("file"), str)}
+    with _RENDERS_LOCK:
+        _UPDATED[Path(out_dir)] = (seen, updated)
+    return updated
+
+
+def page_verdict(out_dir: Path, name: str, page_html: bytes,
+                 states: dict[str, dict] | None = None, updated: str | None = None) -> Verdict:
+    """NAME's verdict from its published file's bytes, the stored states
+    (read now unless given) and the manifest's updated stamp for it (read
+    now unless given); current, as `pages stale` never lists it, when the
+    page is archived or the manifest lists it not."""
+    if states is None:
+        states = _stored_states(out_dir)[1]
+    if not states or history.is_archived(out_dir, name):
+        return Verdict()
+    if updated is None:
+        updated = _manifest_updated(out_dir).get(name, "")
+    text = page_html.decode("utf-8", "replace")
+    merged, closed = stale.overtaken(updated, stale.page_pulls(text), states)
+    return Verdict(tuple(merged), tuple(closed))
+
+
+def _listed_verdicts(out_dir: Path, listed: dict[str, str]) -> dict[str, Verdict]:
+    """The verdict of each page of listed (its updated stamp by name) that
+    is not current, each page's published file read again only when it,
+    its stamp or the states file changes."""
+    seen, states = _stored_states(out_dir)
+    if not states:
+        return {}
+    marks = {}
+    for name, updated in listed.items():
+        key = (Path(out_dir), name)
+        file = out_dir / f"{name}.html"
+        try:
+            if history.is_archived(out_dir, name):
+                continue
+            found = file.stat()
+            stamp = (found.st_mtime_ns, found.st_size, *seen, updated)
+            with _RENDERS_LOCK:
+                kept = _VERDICTS.get(key)
+            if kept is None or kept[0] != stamp:
+                kept = (stamp, page_verdict(out_dir, name, file.read_bytes(), states, updated))
+                with _RENDERS_LOCK:
+                    _VERDICTS[key] = kept
+        except OSError:
+            continue
+        if kept[1].merged or kept[1].closed:
+            marks[name] = kept[1]
+    return marks
+
+
+def _mark_title(found: Verdict) -> str:
+    return html.escape(", ".join((*found.merged, *found.closed)))
+
+
+def _marked_page(page_html: str, found: Verdict) -> str:
+    """page_html with its header's date line holding the verdict's mark,
+    after its dates and before its labels; page_html as given when current."""
+    if not (found.merged or found.closed):
+        return page_html
+    header = page_html.find('<header class="artifact-header"')
+    start = page_html.find('<p class="artifact-meta">', header) if header >= 0 else -1
+    end = page_html.find("</p>", start) if start >= 0 else -1
+    if end < 0:
+        return page_html
+    labels = page_html.find(' <span class="artifact-label">', start, end)
+    at = labels if labels >= 0 else end
+    mark = (f' · <span class="artifact-stale" title="{_mark_title(found)}">may be out of date · '
+            f'{html.escape(stale.mark_text(list(found.merged), list(found.closed)))}</span>')
+    return page_html[:at] + mark + page_html[at:]
+
+
+# A row of the index's listing up to the end of its title cell.
+_INDEX_ROW = re.compile(r'(<tr data-page="([^"]*)"[^>]*>\s*<td class="episode-title">.*?)(</td>)',
+                        re.DOTALL)
+
+
+def _marked_index(index_html: str, marks: dict[str, Verdict]) -> str:
+    """index_html with the title cell of each page marks names ending in
+    its mark, after its tags."""
+    if not marks:
+        return index_html
+
+    def mark(row: re.Match) -> str:
+        found = marks.get(html.unescape(row.group(2)))
+        if found is None:
+            return row.group(0)
+        return (f'{row.group(1)}<span class="index-stale" title="{_mark_title(found)}">'
+                f'may be out of date</span>{row.group(3)}')
+
+    return _INDEX_ROW.sub(mark, index_html)
+
+
+def page_inputs(out_dir: Path, name: str) -> tuple[str, Verdict]:
     """A digest of what NAME's render is made from: its published file, its
-    kept source and its kept refs. OSError when the page cannot be read."""
+    kept source, its kept refs and its verdict (page_verdict), and that
+    verdict. OSError when the page cannot be read."""
     digest = hashlib.sha256()
     kept = kept_source(out_dir, name)
     refs = out_dir / f"{name}{REFS_SUFFIX}"
-    for part in ((out_dir / f"{name}.html").read_bytes(),
-                 (kept[0].encode("utf-8") + b"\0" + kept[1]) if kept else b"",
-                 refs.read_bytes() if refs.is_file() else b""):
+    published = (out_dir / f"{name}.html").read_bytes()
+    found = page_verdict(out_dir, name, published)
+    parts = [published,
+             (kept[0].encode("utf-8") + b"\0" + kept[1]) if kept else b"",
+             refs.read_bytes() if refs.is_file() else b""]
+    # A current page adds no part, so its digest and ETag stay as they were.
+    if found.merged or found.closed:
+        parts.append(json.dumps(found).encode("utf-8"))
+    for part in parts:
         digest.update(len(part).to_bytes(8, "big"))
         digest.update(part)
-    return digest.hexdigest()[:16]
+    return digest.hexdigest()[:16], found
 
 
 class Rendered(NamedTuple):
@@ -83,8 +253,10 @@ def _linked(out_dir: Path, name: str) -> bool:
                for suffix in (".html", REFS_SUFFIX, *_KEPT_SOURCE_SUFFIX.values()))
 
 
-def _published(out_dir: Path, name: str, inputs: str, why: str) -> Rendered | None:
-    """NAME's published file as its answer, the reason logged once per inputs."""
+def _published(out_dir: Path, name: str, inputs: str, why: str,
+               verdict: Verdict = Verdict()) -> Rendered | None:
+    """NAME's published file as its answer, its header marked by verdict,
+    the reason logged once per inputs."""
     try:
         published = (out_dir / f"{name}.html").read_bytes().decode("utf-8")
     except (OSError, UnicodeDecodeError):
@@ -95,19 +267,26 @@ def _published(out_dir: Path, name: str, inputs: str, why: str) -> Rendered | No
     if not logged:
         print(f"serve: {name}.html is answered from its published file: {why}",
               file=sys.stderr, flush=True)
-    return Rendered(published, {}, inputs, False)
+    return Rendered(_marked_page(published, verdict), {}, inputs, False)
 
 
 def rendered_page(out_dir: Path, name: str) -> Rendered | None:
     """NAME's page rendered now from its kept source (or the body extracted
-    from its published file) with today's template; None when its published
+    from its published file) with today's template, its header marked when
+    its verdict (page_verdict) is not current; None when its published
     file cannot be read. A render that raises, or a page that reads a link,
     gives the published file, and says so once on standard error."""
     key = (Path(out_dir), name)
     try:
         if _linked(key[0], name):
-            return _published(key[0], name, "", "a file it is rendered from is a link")
-        inputs = page_inputs(key[0], name)
+            published = (key[0] / f"{name}.html").read_bytes()
+            verdict = page_verdict(key[0], name, published)
+            # A marked answer is tagged by the file and the verdict it shows.
+            inputs = (hashlib.sha256(published + b"\0" + json.dumps(verdict).encode("utf-8"))
+                      .hexdigest()[:16] if verdict.merged or verdict.closed else "")
+            return _published(key[0], name, inputs, "a file it is rendered from is a link",
+                              verdict)
+        inputs, verdict = page_inputs(key[0], name)
     except OSError:
         return None
     with _RENDERS_LOCK:
@@ -124,11 +303,11 @@ def rendered_page(out_dir: Path, name: str) -> Rendered | None:
             page_html, frames = render_kept_or_extracted(key[0], name)
         except Exception as exc:  # noqa: BLE001 - any failed render answers the published file
             return _published(key[0], name, inputs,
-                              f"its render failed: {type(exc).__name__}: {exc}")
-        found = Rendered(page_html, frames, inputs, True)
+                              f"its render failed: {type(exc).__name__}: {exc}", verdict)
+        found = Rendered(_marked_page(page_html, verdict), frames, inputs, True)
         try:
             # Published again while it rendered: answered, never kept.
-            if page_inputs(key[0], name) != inputs:
+            if page_inputs(key[0], name)[0] != inputs:
                 return found
         except OSError:
             return found
@@ -195,7 +374,8 @@ def rendered_index(out_dir: Path) -> tuple[str, str] | None:
     """The index rendered now from out_dir's manifest with today's template,
     listing only the pages serve answers, and a key over the manifest's
     bytes, the day it was written, which is the day the index names as
-    updated, and the pages listed; None when the manifest cannot be read."""
+    updated, the pages listed and the verdicts of those not current, each
+    marking its row; None when the manifest cannot be read."""
     path = out_dir / MANIFEST_FILE
     try:
         if path.is_symlink():
@@ -212,14 +392,18 @@ def rendered_index(out_dir: Path) -> tuple[str, str] | None:
     allowed = serve_files.serve_allow_list(out_dir)
     artifacts = [m for m in artifacts if m.get("file") in allowed and is_page_name(str(m["file"]))]
     listed = "\0".join(str(m["file"]) for m in artifacts)
-    key = hashlib.sha256(b"\0".join((data, day.encode("ascii"), listed.encode("utf-8"))))
-    key = key.hexdigest()[:16]
+    marks = _listed_verdicts(out_dir, {str(m["file"])[:-len(".html")]: str(m.get("updated") or "")
+                                       for m in artifacts})
+    parts = [data, day.encode("ascii"), listed.encode("utf-8")]
+    if marks:
+        parts.append(json.dumps(marks, sort_keys=True).encode("utf-8"))
+    key = hashlib.sha256(b"\0".join(parts)).hexdigest()[:16]
     with _RENDERS_LOCK:
         found = _INDEXES.get(Path(out_dir))
     if found is not None and found[1] == key:
         return found
     try:
-        found = (index.render_index(artifacts, day), key)
+        found = (_marked_index(index.render_index(artifacts, day), marks), key)
     except (KeyError, TypeError, AttributeError):
         return None
     with _RENDERS_LOCK:
