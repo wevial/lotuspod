@@ -566,8 +566,6 @@ export function spots(page: Page, bridge: SpotsBridge): Spots {
       const at = layer && pointIn(layer, event.clientX, event.clientY);
       if (!layer || !at) return;
       event.preventDefault();
-      drop();
-      unkey();
       const drawing = drawingOf(target);
       now.press = {
         id: event.pointerId, x: event.clientX, y: event.clientY, layer, points: [at], moved: false, preview: null,
@@ -681,6 +679,10 @@ export function spots(page: Page, bridge: SpotsBridge): Spots {
     press.preview?.remove();
     if (surface.hasPointerCapture(event.pointerId)) surface.releasePointerCapture(event.pointerId);
     if (!ended) return;
+    // Only a press that ends replaces the draft: a pinch's first finger keeps
+    // it and its text.
+    drop();
+    unkey();
     const target = targetIn(now.holder)!;
     const drawing = drawingOf(target);
     if (!press.moved) {

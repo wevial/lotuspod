@@ -313,6 +313,18 @@ test.describe('on a phone', () => {
     const under = await rect(form.holder);
     expect(under.y).toBeGreaterThanOrEqual(mark.y + mark.height);
 
+    // A pinch with the composer open zooms the view and keeps the mark, the
+    // composer and its text.
+    await form.field.fill('Is this the pod?');
+    const typed = await zoom(page);
+    const high = { x: centre.x, y: stage.y + stage.height * 0.2 };
+    await fingers.gesture([{ x: high.x - 30, y: high.y }, { x: high.x + 30, y: high.y }],
+      [{ x: high.x - 70, y: high.y }, { x: high.x + 70, y: high.y }]);
+    expect(await zoom(page)).toBeGreaterThan(typed);
+    await expect(shown.draft).toHaveCount(1);
+    await expect(form.field).toHaveValue('Is this the pod?');
+    expect(posts).toEqual([]);
+
     // Posted: the spot names Pod, the view closes and the thread opens in the sheet.
     const body = await post(page, 'Is this the pod?');
     expect(body.spot.id).toBe('flow');
