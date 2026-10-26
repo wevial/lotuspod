@@ -139,14 +139,10 @@
         return;
       }
       var text = address();
-      var clipboard = navigator.clipboard;
-      if (!clipboard || typeof clipboard.writeText !== "function") {
-        open(text);
-        return;
-      }
       var writing;
       try {
-        writing = clipboard.writeText(text);
+        // No clipboard (an insecure context) throws here too.
+        writing = navigator.clipboard.writeText(text);
       } catch (error) {
         open(text);
         return;

@@ -20,7 +20,8 @@
 }
 
 /* Beside the archive or review bar, which take the free room first. */
-.artifact-topbar:has(.artifact-archive-bar, .artifact-review-bar) .artifact-theme-switch {
+.artifact-topbar:has(.artifact-archive-bar, .artifact-review-bar) .artifact-theme-switch,
+.artifact-topbar:has(.artifact-archive-bar, .artifact-review-bar) .artifact-copy-link {
   margin-left: 0.25rem;
 }
 
@@ -51,20 +52,6 @@
 
 .artifact-topbar:has(.artifact-copy-link:not([hidden])) .artifact-theme-switch {
   margin-left: 0;
-}
-
-.artifact-topbar:has(.artifact-archive-bar, .artifact-review-bar) .artifact-copy-link {
-  margin-left: 0.25rem;
-}
-
-.artifact-copy-link:hover,
-.artifact-copy-link[data-copied] {
-  color: var(--color-white);
-}
-
-.artifact-copy-link:focus-visible {
-  outline: 2px solid var(--color-lavender);
-  outline-offset: 2px;
 }
 
 /* One line's height, so the button's height is an option's. */
@@ -111,11 +98,6 @@
   width: 24rem;
 }
 
-.artifact-copy-link-field:focus-visible {
-  outline: 2px solid var(--color-lavender);
-  outline-offset: 2px;
-}
-
 .artifact-theme-option {
   background: none;
   border: 0;
@@ -131,7 +113,9 @@
   position: relative;
 }
 
-.artifact-theme-option:hover {
+.artifact-theme-option:hover,
+.artifact-copy-link:hover,
+.artifact-copy-link[data-copied] {
   color: var(--color-white);
 }
 
@@ -140,7 +124,9 @@
   color: var(--color-night);
 }
 
-.artifact-theme-option:focus-visible {
+.artifact-theme-option:focus-visible,
+.artifact-copy-link:focus-visible,
+.artifact-copy-link-field:focus-visible {
   outline: 2px solid var(--color-lavender);
   outline-offset: 2px;
 }
