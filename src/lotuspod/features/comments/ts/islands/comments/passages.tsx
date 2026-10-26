@@ -24,7 +24,7 @@ function pageOrder(a: Node, b: Node) {
 }
 // Highlights stay imperative: the author's text is never a Preact render root.
 export function passages(page: Page, bridge: PassagesBridge): Passages {
-  const { article, boxes, shown, resolved, revision, attached, composer, placement, numbered } = bridge;
+  const { article, boxes, shown, resolved, revision, attached, composer, placement, numbered, placeOf } = bridge;
   const { element, textModel, offsetOf, pieces, locate, wrap, unwrap } = page;
   const { apart: APART, maxExact: MAX_EXACT, context: CONTEXT, still: STILL, coarse: COARSE, archived: ARCHIVED } = page;
   var api = {} as Passages;
@@ -252,15 +252,21 @@ export function passages(page: Page, bridge: PassagesBridge): Passages {
   };
 
   // The open composer's words, its section (and where its box is among
-  // the page's), what is written in it and the images attached, to open
+  // the page's, for a box a swap holds back where it was then, as Update
+  // keeps it), what is written in it and the images attached, to open
   // again after a reload (api.reopen); null when none is open. held
   // says whether it has images attached or on their way.
   api.writing = function () {
     return open ? {
-      quote: open.quote, section: open.box.dataset.section, index: boxes.indexOf(open.box),
+      quote: open.quote, section: open.box.dataset.section, index: placeOf(open.box),
       text: open.field.value, images: attached.get(open.form)!.kept(),
       held: attached.get(open.form)!.held(),
     } : null;
+  };
+
+  // Once the open composer's uploads on their way are answered.
+  api.settled = function () {
+    return open ? attached.get(open.form)!.settled() : Promise.resolve();
   };
 
   // Open a composer again on the words kept, where the page still has

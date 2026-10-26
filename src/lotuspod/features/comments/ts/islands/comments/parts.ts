@@ -196,6 +196,7 @@ export interface Passages {
   place(): void;
   cancel(mine: Passage): void;
   writing(): PassageDraft | null;
+  settled(): Promise<void>;
   reopen(kept: PassageDraft): boolean;
   moved(): void;
   writes(nodes: HTMLElement[]): boolean;

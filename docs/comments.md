@@ -344,7 +344,12 @@ of this page is available" with a Reload button. Reload brings the new
 revision back at the same place in its text, with the comments thread that was
 open open again and any comment or reply not yet sent back in its composer,
 its text and its uploaded images (kept per page in sessionStorage; where the
-browser keeps nothing, the page still reloads, at its top). A reload of the
+browser keeps nothing, the page still reloads, at its top). Reload waits for
+an image still uploading in a composer, its button greyed out, and keeps it
+with its text once uploaded (one the site refuses is not kept, as without a
+reload). A draft from a section held back as removed goes where Update would
+put it: to the section in the place the removed one had when the swap took
+it away. A reload of the
 page by the browser in the same tab (its reload button, or a mobile browser
 reloading a tab it put away) brings them back the same way: the page keeps
 them as it is left, and while its tab is hidden, and lets them go once the
