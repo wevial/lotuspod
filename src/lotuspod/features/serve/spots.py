@@ -30,8 +30,8 @@ another section than the thread's; and 409 stale_spot for a hash the target
 has had in none of the page's visible publishes (Target.earlier, kept
 beside the page) nor of its versions (History.target_hashes()). A hash it
 had in an earlier one is stored as sent. Every comment a route answers
-carries `spot`: the anchor as stored, its `title` with it, on a thread's
-first comment, null on every other comment.
+carries `spot`: the anchor as stored on a thread's first comment, null on
+every other comment.
 """
 
 from __future__ import annotations

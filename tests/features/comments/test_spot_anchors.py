@@ -49,7 +49,6 @@ def box(**changes) -> dict:
 
 
 def titled(spot: dict) -> dict:
-    """spot as sent, with the title serve stores it with."""
     return {**spot, "title": TITLES[spot["id"]]}
 
 
