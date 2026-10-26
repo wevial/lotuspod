@@ -328,10 +328,9 @@ class _AllowListHandler(SimpleHTTPRequestHandler):
             sources = f"'nonce-{nonce}' {script_hash(head)}"
             if holds_script(answer, bridge):
                 sources += f" {script_hash(bridge)}"
-            data = answer.encode("utf-8")
             # The banner counts the newer versions, so the tag does too.
             return self._answer_rendered(
-                data, f'"v-{commit}-{behind}-{self.render_version}"', tuple(
+                answer.encode("utf-8"), f'"v-{commit}-{behind}-{self.render_version}"', tuple(
                     (header, value + f"; script-src {sources}"
                      if header == "Content-Security-Policy" else value)
                     for header, value in _OLD_VERSION_HEADERS),
