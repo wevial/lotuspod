@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/mermaid@11.4.1/ https://cdn.jsdelivr.net/npm/@mermaid-js/layout-elk@0.2.3/ 'sha256-Lz7FdbrIfXWyccqQY8WoZNd9UJsitwNDjW5Swiho0W0=' 'sha256-vSVW0lrhdrlT7yNzwgrmqkyDbRpcl9vlZMrfx+C+Jq8='; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/mermaid@11.4.1/ https://cdn.jsdelivr.net/npm/@mermaid-js/layout-elk@0.2.3/ 'sha256-k0hscGJQ99N3J38y80lvvXcWf4DP+ViQftrNFdg36NY=' 'sha256-vSVW0lrhdrlT7yNzwgrmqkyDbRpcl9vlZMrfx+C+Jq8='; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Plain Page · Lotuspod</title>
   <meta name="generator" content="lotuspod theme lotus">
@@ -82,7 +82,108 @@
     });
     apply();
     group.hidden = false;
+    wireCopyLink();
   });
+
+  // The title bar's Copy link: the page's own address, or the version's on
+  // an earlier version, with no other query and no fragment. Where the
+  // clipboard refuses, a read-only field under the button holds the address,
+  // selected, to copy by hand.
+  function wireCopyLink() {
+    var button = document.querySelector(".artifact-topbar > button.artifact-copy-link");
+    if (!button) return;
+    var bar = button.parentNode;
+    var status = bar.querySelector(".artifact-copy-link-status");
+    var field = null;
+    var timer = null;
+    // Each press, and each close of an open field, starts a new attempt; a
+    // clipboard write that settles after a later one acts on nothing.
+    var attempt = 0;
+
+    function address() {
+      var version = new URLSearchParams(location.search).get("version");
+      // Origin and path, so no user name or password in the address goes
+      // with it; a page opened from disk has the origin "null", so its file
+      // URL instead.
+      var base = location.origin !== "null" ? location.origin + location.pathname
+        : location.href.split(/[?#]/)[0];
+      return version ? base + "?version=" + encodeURIComponent(version) : base;
+    }
+
+    function copied() {
+      clearTimeout(timer);
+      button.setAttribute("data-copied", "");
+      status.textContent = "Link copied";
+      timer = setTimeout(function () {
+        button.removeAttribute("data-copied");
+        status.textContent = "";
+      }, 1500);
+    }
+
+    function close() {
+      if (!field || field.hidden) return;
+      attempt++;
+      field.hidden = true;
+      button.focus();
+    }
+
+    // Under the button, its right edge on the button's, and inside the bar's
+    // gutters, at whatever width the window has now.
+    function place() {
+      if (!field || field.hidden) return;
+      var gutter = parseFloat(getComputedStyle(bar).paddingLeft);
+      var right = bar.getBoundingClientRect().right - button.getBoundingClientRect().right;
+      field.style.right = Math.max(0, Math.min(right, bar.clientWidth - gutter - field.offsetWidth)) + "px";
+    }
+
+    function open(text) {
+      if (!field) {
+        field = document.createElement("input");
+        field.readOnly = true;
+        field.className = "artifact-copy-link-field";
+        field.setAttribute("aria-label", "Page link");
+        bar.appendChild(field);
+      }
+      field.value = text;
+      field.hidden = false;
+      place();
+      field.focus();
+      field.select();
+    }
+
+    button.addEventListener("click", function () {
+      if (field && !field.hidden) {
+        close();
+        return;
+      }
+      var text = address();
+      var mine = ++attempt;
+      var writing;
+      try {
+        // No clipboard (an insecure context) throws here too.
+        writing = navigator.clipboard.writeText(text);
+      } catch (error) {
+        open(text);
+        return;
+      }
+      Promise.resolve(writing).then(function () {
+        if (mine === attempt) copied();
+      }, function () {
+        if (mine === attempt) open(text);
+      });
+    });
+    window.addEventListener("resize", place);
+    document.addEventListener("click", function (event) {
+      if (event.target !== field && !button.contains(event.target)) close();
+    });
+    // Escape closes the field wherever focus has moved since it opened.
+    document.addEventListener("keydown", function (event) {
+      if (event.key !== "Escape" || !field || field.hidden) return;
+      event.preventDefault();
+      close();
+    });
+    button.hidden = false;
+  }
 })();
 </script>
 </head>
@@ -91,6 +192,8 @@
     <div class="artifact-topbar">
       <a class="artifact-topbar-brand" href="index.html">Lotuspod</a><span class="artifact-topbar-sep">:</span>
       <a class="artifact-topbar-title" href="#top">Plain Page</a>
+      <button type="button" class="artifact-copy-link" aria-label="Copy link" hidden><svg class="artifact-copy-link-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M6.5 9.5l3-3M7 4.5l1.2-1.2a2.6 2.6 0 0 1 3.7 3.7L10.7 8.2M9 11.5l-1.2 1.2a2.6 2.6 0 0 1-3.7-3.7L5.3 7.8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg><svg class="artifact-copy-link-tick" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M3.5 8.5l3 3 6-7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      <span class="artifact-copy-link-status" role="status"></span>
       <div class="artifact-theme-switch" role="group" aria-label="Theme" hidden>
         <button type="button" class="artifact-theme-option" data-theme-choice="night" aria-label="Night" aria-pressed="false">N<span class="artifact-theme-more">ight</span></button>
         <button type="button" class="artifact-theme-option" data-theme-choice="dawn" aria-label="Dawn" aria-pressed="false">D<span class="artifact-theme-more">awn</span></button>
