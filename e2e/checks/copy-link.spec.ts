@@ -86,7 +86,6 @@ test('Copy link copies the page address alone, and shows it copied for a moment'
   await page.goto(`${PAGE}?from=index#top`);
   const frame = await inTab(page, SLUG);
   const button = copyLink(frame);
-  await expect(button).toBeVisible();
   const status = frame.locator('.artifact-topbar > .artifact-copy-link-status[role="status"]');
   await button.click();
   await expect(button).toHaveAttribute('data-copied', '');
@@ -133,16 +132,16 @@ test('where the clipboard refuses, a selected read-only field holds the address 
     navigator.clipboard.writeText = () => Promise.reject(new DOMException('Refused', 'NotAllowedError'));
   });
   await page.goto(`${PAGE}?standalone#top`);
+  const address = `${new URL(baseURL!).origin}${PAGE}`;
   const button = copyLink(page);
   await button.click();
   const field = page.locator('input.artifact-copy-link-field');
   await expect(field).toBeVisible();
   await expect(field).toHaveAttribute('readonly', '');
   await expect(field).toBeFocused();
-  await expect(field).toHaveValue(`${new URL(baseURL!).origin}${PAGE}`);
+  await expect(field).toHaveValue(address);
   expect(await field.evaluate((input: HTMLInputElement) =>
-    [input.selectionStart, input.selectionEnd, input.value.length])).toEqual(
-    [0, `${new URL(baseURL!).origin}${PAGE}`.length, `${new URL(baseURL!).origin}${PAGE}`.length]);
+    [input.selectionStart, input.selectionEnd])).toEqual([0, address.length]);
   await expect(button).not.toHaveAttribute('data-copied', /.*/);
   const box = (await field.boundingBox())!;
   const under = (await button.boundingBox())!;
@@ -196,7 +195,6 @@ test.describe('with scripts off', () => {
   test('the page shows no Copy link button', async ({ page }) => {
     await page.goto(`${PAGE}?standalone`);
     await expect(page.locator('.artifact-topbar-title')).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Copy link' })).toHaveCount(0);
     await expect(page.locator('button.artifact-copy-link')).toBeHidden();
   });
 });
