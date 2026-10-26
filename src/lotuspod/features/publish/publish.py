@@ -8,8 +8,11 @@ import html
 import json
 import re
 import shlex
+import sqlite3
 import subprocess
 import sys
+from collections.abc import Iterator
+from contextlib import contextmanager
 from functools import partial
 from pathlib import Path
 
@@ -22,7 +25,9 @@ from lotuspod.core import (BODY_SOURCE_SUFFIX, DEFAULT_OUTPUT_DIR, DEFAULT_REMOT
                            normalized, page_revision, publish_config, publish_lock,
                            source_revision, write_atomic)
 from lotuspod.features import blocks
+from lotuspod.features import decisions
 from lotuspod.features import index
+from lotuspod.features import serve
 from lotuspod.features.publish import markdown, media
 from lotuspod.features.publish.manifest import cmd_manifest
 from lotuspod.features.publish.publish_sources import (NO_REFS, REFS_MEMBER, decoded,
@@ -32,6 +37,7 @@ from lotuspod.features.publish.publish_sources import (NO_REFS, REFS_MEMBER, dec
 from lotuspod.features.publish.render import (REFS_MAX, REFS_SUFFIX, check_owner, cmd_render,
                                               page_owner, page_variant)
 from lotuspod.features import widgets
+from lotuspod.store import db
 
 
 # A label once lower-cased: a letter or digit, then letters, digits and '-'.
@@ -231,6 +237,67 @@ def publish_over_ssh(args: argparse.Namespace, config: dict[str, str]) -> int:
     return done.returncode
 
 
+class _ReadOnly(db.Database):
+    """serve's database, only read: opened read-only, so never migrated nor
+    moved to WAL; sqlite3.DatabaseError when its schema is not this
+    lotuspod's."""
+
+    @contextmanager
+    def _connect(self) -> Iterator[sqlite3.Connection]:
+        conn = sqlite3.connect(f"{self.path.resolve().as_uri()}?mode=ro", uri=True,
+                               timeout=db.BUSY_TIMEOUT)
+        try:
+            conn.row_factory = sqlite3.Row
+            version = conn.execute("PRAGMA user_version").fetchone()[0]
+            if version != db.SCHEMA_VERSION:
+                raise sqlite3.DatabaseError(
+                    f"database schema {version} is not this lotuspod's {db.SCHEMA_VERSION}")
+            yield conn
+        finally:
+            conn.close()
+
+
+def _answered(form: decisions.Form, answer: dict) -> str:
+    """An answer stored without its words, in form's labels: a checklist's
+    items checked, a decision's option."""
+    if "checked" in answer:
+        return ", ".join(form.label(item) for item in answer["checked"]) or "nothing checked"
+    return form.label(answer.get("choice", ""))
+
+
+def reopened(out_dir: Path, args: argparse.Namespace, name: str, previous: str,
+             published: str) -> list[str]:
+    """A line for each question whose stored answer showed as its answer on
+    the page before (decisions.holds) and no longer does on the page as
+    published, which still asks it; none without serve's database, with one
+    of another schema, or without a page before."""
+    if not previous:
+        return []
+    try:
+        path = serve.serve_db_path(out_dir, args.db)
+        if not path.is_file():
+            return []
+        questions = _ReadOnly(path).answers(name, asked=True)
+    except (ValueError, RuntimeError, sqlite3.Error, OSError):
+        # RuntimeError: a symlink loop in --db, which resolve() raises
+        return []
+    before, after = decisions.read_forms(previous), decisions.read_forms(published)
+    lines = []
+    for question, old in before.items():
+        entry, new = questions.get(question), after.get(question)
+        if entry is None or new is None:
+            continue
+        answer = entry["current"]
+        if not decisions.holds(old, answer) or decisions.holds(new, answer):
+            continue
+        asked = answer.get("asked") or {}
+        text = asked.get("text") or old.text
+        label = asked.get("label") or _answered(old, answer)
+        lines.append(f'publish: {name}: {question} was answered "{text}" ({label}); '
+                     f'this publish asks "{new.text}" there, so its card opens again')
+    return lines
+
+
 def cmd_publish(args: argparse.Namespace) -> int:
     """Render a page from its source, keep the source, rebuild the manifest
     and the index, and commit and push once.
@@ -378,5 +445,8 @@ def cmd_publish(args: argparse.Namespace) -> int:
         cmd_manifest(steps)
         index.cmd_index(steps)
         commit_output(out_dir, f"publish {name}")
+        published = page.read_text(encoding="utf-8")
+    for line in reopened(out_dir, args, name, previous, published):
+        print(line, file=sys.stderr)
     print(f"published {name} at revision {revision}")
     return 0

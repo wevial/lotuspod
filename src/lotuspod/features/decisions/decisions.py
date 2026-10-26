@@ -37,10 +37,12 @@ table. Its version hashes the legend's text and each item's id, label and
 default. A checklist table with no body rows, an empty Item cell, another
 Default or any other column is left exactly as written.
 
-`read_forms()` reads the forms back from a finished page, which is how the
-answers route knows what a page asks, `lotuspod answers` its labels and the
-agents' pull its context lines. Each form's section is that of the first
-comment box after it, which ends the form's own section: the comments route files a thread on the decision there.
+`holds()` says whether a question's stored answer still shows as its answer
+on the page, a version apart or not. `read_forms()` reads the forms back
+from a finished page, which is how the answers route knows what a page asks,
+`lotuspod answers` its labels and the agents' pull its context lines. Each
+form's section is that of the first comment box after it, which ends the
+form's own section: the comments route files a thread on the decision there.
 """
 
 from __future__ import annotations
@@ -123,6 +125,26 @@ class Form:
 
 def _text(parts: list[str]) -> str:
     return " ".join("".join(parts).split())
+
+
+def holds(form: Form, answer: dict) -> bool:
+    """Whether answer, a question's current answer as answers(asked=True)
+    gives it, shows as form's answer: at form's version, or a decision's
+    answer, not a dismissal, given to the question form asks in the same
+    words, whose choice form still offers under the label it was given.
+    Text and labels are compared with their white space collapsed. A
+    checklist's answer, a dismissal and one stored before its words were
+    kept hold only at their own version."""
+    if answer.get("version") == form.version:
+        return True
+    asked = answer.get("asked") or {}
+    if (form.checklist or answer.get("dismissed") or "checked" in answer
+            or not asked.get("text") or asked.get("label") is None):
+        return False
+    offered = dict(form.options)
+    choice = answer.get("choice")
+    return (_text([asked["text"]]) == _text([form.text]) and choice in offered
+            and _text([asked["label"]]) == _text([offered[choice]]))
 
 
 class _TableFinder(HTMLParser):

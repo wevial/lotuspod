@@ -5,6 +5,7 @@ from lotuspod.features import public_edge
 
 # The names the other slices use, by the module that defines each.
 __getattr__ = public_edge(__name__, {
+    "holds": "decisions",
     "read_forms": "decisions",
     "render_decisions": "decisions",
 })
