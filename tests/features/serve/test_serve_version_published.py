@@ -19,10 +19,16 @@ import shutil
 import unittest
 from html.parser import HTMLParser
 
-from lotuspod.core import OLD_VERSION_SCRIPT, script_hash
-from tests.features.serve.test_serve_shell import THEME_HEAD, git, script_src, shell_of
+from lotuspod.core import OLD_VERSION_SCRIPT, PAGE_SCRIPT, script_hash
+from tests.features.serve.test_serve_shell import (ADDED, THEME_HEAD, git, script_src,
+                                                   shell_of)
+from tests.features.serve.test_serve_version_bridge import DIAGRAM
 from tests.features.serve.test_serve_theme import SRC
 from tests.features.serve.test_serve_versions_shell import BANNER, VersionSite
+from tests.test_widget_versions import live
+
+# A script the author wrote in the body, which never runs.
+BODY_SCRIPT = '<script>document.title = "from the body";</script>'
 
 
 class _Scripts(HTMLParser):
@@ -103,6 +109,57 @@ class PublishedVersionTests(unittest.TestCase):
         self.assertEqual(scripts[1]["nonce"], nonce)
 
         self.assertIn("frame-ancestors 'none'; form-action 'none'; base-uri 'none'", policy)
+        self.assertEqual(script_src(policy), [f"'nonce-{nonce}'", script_hash(theme_head)])
+        self.assertEqual(script_src(shell_of(page).policy), ["'self'", script_hash(theme_head)])
+
+    def test_no_script_of_the_stored_page_runs_and_its_head_is_never_allowed(self):
+        """A stored head (an older package's text) is replaced by today's,
+        and neither its text nor its hash reaches the answer; nor does
+        Mermaid's start-up module, the page script, the widget bridge or a
+        script written in the body."""
+        site = PublishedVersionSite(self)
+        source = site.source("first")
+        source.write_text(source.read_text(encoding="utf-8") + "\n" + DIAGRAM + "\n\n"
+                          + live("First forecast") + "\n", encoding="utf-8")
+        done = site.cli("publish", str(source), "--local", "--comments",
+                        "--out-dir", str(site.scratch))
+        self.assertEqual(done.returncode, 0, done.stderr)
+        theme_head = (SRC / THEME_HEAD).read_text(encoding="utf-8")
+        other = theme_head + ADDED
+        published = (site.scratch / "pond.html").read_text(encoding="utf-8")
+        for held in (f"<script>{theme_head}</script>", script_hash(theme_head),
+                     'type="module"', PAGE_SCRIPT, "installWidgetBridge"):
+            self.assertIn(held, published)
+        # Markdown escapes a script, so the body's is written in the file.
+        intro = "<p>The first edition.</p>\n"
+        self.assertEqual(published.count(intro), 1)
+        stored = published.replace(intro, intro + BODY_SCRIPT + "\n").replace(f"<script>{theme_head}</script>", f"<script>{other}</script>")
+        stored = stored.replace(script_hash(theme_head), script_hash(other))
+        self.assertNotIn(theme_head + "</script>", stored)
+        (site.out / "pond.html").write_text(stored, encoding="utf-8")
+        first = site.commit("pond.html")
+        site.publish("second")
+        site.serve()
+
+        status, headers, page = site.ask("GET", f"/pond.html?version={first}")
+        self.assertEqual(status, 200, page)
+        self.assertIn("is answered from its published file", site.log())
+        policy = headers["Content-Security-Policy"]
+        for absent in (other, script_hash(other)):
+            self.assertNotIn(absent.encode("utf-8"), page)
+            self.assertNotIn(absent, policy)
+        scripts = scripts_of(page)
+        self.assertNotIn(b'type="module"', page)
+        self.assertFalse([script for script in scripts if PAGE_SCRIPT in (script["src"] or "")
+                          or "installWidgetBridge" in script["text"]])
+        self.assertNotIn(BODY_SCRIPT.encode("utf-8"), page)
+        self.assertEqual([script["text"] for script in scripts if script["src"] is None],
+                         [theme_head])
+        self.assertEqual(len(scripts), 2, scripts)
+        self.assertTrue(scripts[0]["head"], scripts)
+        nonce = re.search(r"'nonce-([^']+)'", policy).group(1)
+        self.assertTrue(scripts[1]["src"].startswith(OLD_VERSION_SCRIPT), scripts)
+        self.assertEqual(scripts[1]["nonce"], nonce)
         self.assertEqual(script_src(policy), [f"'nonce-{nonce}'", script_hash(theme_head)])
         self.assertEqual(script_src(shell_of(page).policy), ["'self'", script_hash(theme_head)])
 

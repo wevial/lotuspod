@@ -60,7 +60,7 @@ from typing import Callable
 
 from lotuspod.features import widgets
 from lotuspod.features.blocks import PageTargets
-from lotuspod.core import WIDGET_NAME, git_environment
+from lotuspod.core import WIDGET_NAME, git_environment, script_hash
 
 # The versions of one page a list holds, newest first.
 MAX_VERSIONS = 200
@@ -82,6 +82,7 @@ _SLUG_STRIP = re.compile(r"[^a-z0-9]+")
 _NO_BLOB = "0" * 40
 _MAIN_OPEN_RE = re.compile(r'<main class="([^"]*)"([^>]*)>')
 _TITLE_END_RE = re.compile(r"</title\s*>", re.IGNORECASE)
+_META_RE = re.compile(r"<meta\b[^>]*>", re.IGNORECASE)
 
 
 @dataclass(frozen=True)
@@ -824,6 +825,45 @@ def holds_script(page_html: str, text: str) -> bool:
     return places.head_end is not None and any(
         page_html[start:end] == element for start, end in places.scripts
         if end <= places.head_end)
+
+
+class _Attributes(HTMLParser):
+    """One start tag's attributes, as a browser reads them."""
+
+    def __init__(self, tag: str) -> None:
+        super().__init__(convert_charrefs=True)
+        self.attrs: dict[str, str | None] = {}
+        self.feed(tag)
+        self.close()
+
+    def handle_starttag(self, tag, attrs):
+        self.attrs = dict(attrs)
+
+
+def with_head(page_html: str, head: str) -> str:
+    """page_html with head, a script's text, run at the end of its head as
+    an inline script element, and each policy meta tag of its head allowing
+    the site's own files and that script alone: no source a stored policy
+    allowed stays. Unchanged when page_html has no head end."""
+    places = Places(page_html)
+    if places.head_end is None:
+        return page_html
+    sources = f"script-src 'self' {script_hash(head)}"
+    edits = [(places.head_end, places.head_end, f"<script>{head}</script>\n")]
+    for match in _META_RE.finditer(page_html, 0, places.head_end):
+        attrs = _Attributes(match.group(0)).attrs
+        if (attrs.get("http-equiv") or "").lower() != "content-security-policy":
+            continue
+        directives = [part.strip() for part in (attrs.get("content") or "").split(";")
+                      if part.strip()]
+        policy = [sources if part.split()[0].lower() == "script-src" else part
+                  for part in directives]
+        if sources not in policy:
+            policy.append(sources)
+        edits.append((match.start(), match.end(),
+                      '<meta http-equiv="Content-Security-Policy" content="'
+                      + html.escape("; ".join(policy), quote=True) + '">'))
+    return edited(page_html, edits)
 
 
 def old_page(page_html: str, name: str, version: Version, behind: int,

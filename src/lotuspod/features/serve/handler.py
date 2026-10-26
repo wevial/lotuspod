@@ -22,7 +22,7 @@ from lotuspod.features import agents
 from lotuspod.core import (INDEX_FILE, OLD_VERSION_SCRIPT, THEME_ROOT, WIDGET_NAME, is_page_name,
                            script_hash, theme_hash)
 from lotuspod.features.history import (History, archived_page, holds_script, old_page, read_record,
-                                        set_archived, successor_title)
+                                        set_archived, successor_title, with_head)
 from lotuspod.features import live
 from lotuspod.features import publish
 from lotuspod.features.publish import version_stamp
@@ -51,10 +51,13 @@ _PAGE_HEADERS = (
 # policy adds to the page's own meta policy, so no form runs, no page frames
 # it, and it is never kept. _serve_version adds the policy's script source:
 # a nonce made for each answer, which allows the one script old_page() adds,
-# the old-version script. None of the page's own scripts carries it, so none
-# of them runs; and no base element in the page may move that script's
-# address to another site, as a page published before its own meta policy
-# (page_policy) could.
+# the old-version script, and the hash of today's theme head, which runs in
+# either answer: kept in a page drawn in today's shell, put in a page
+# answered as published. A drawn page's widget bridge is allowed by its hash
+# too. No other script of the page carries the nonce or one of those texts,
+# so none runs; and no base element in the page may move the old-version
+# script's address to another site, as a page published before its own meta
+# policy (page_policy) could.
 _OLD_VERSION_HEADERS = (
     ("Content-Security-Policy", "frame-ancestors 'none'; form-action 'none'; base-uri 'none'"),
     ("X-Content-Type-Options", "nosniff"),
@@ -314,12 +317,13 @@ class _AllowListHandler(SimpleHTTPRequestHandler):
         version, behind, page_html = found
         nonce = secrets.token_urlsafe(18)
         script = f"{OLD_VERSION_SCRIPT}?v={theme_hash()}"
+        # The theme head runs on both answers, allowed by the hash of
+        # today's text, never the old commit's.
+        head = (THEME_ROOT / "core/ts/theme-head.js").read_text(encoding="utf-8")
         rendered = rendered_version(self.root, stem, commit, page_html, self.history.files_at)
         if rendered is not None:
-            # The theme head and, on a page with a live block, the widget
-            # bridge are the only scripts of the page's own that run, each
-            # allowed by the hash of today's text, never the old commit's.
-            head = (THEME_ROOT / "core/ts/theme-head.js").read_text(encoding="utf-8")
+            # On a page with a live block the widget bridge runs too, the
+            # only other script of the page's own.
             bridge = widgets.bridge_script()
             answer = old_page(rendered, stem, version, behind, nonce, script,
                               frozenset((head, bridge)))
@@ -335,14 +339,20 @@ class _AllowListHandler(SimpleHTTPRequestHandler):
                      if header == "Content-Security-Policy" else value)
                     for header, value in _OLD_VERSION_HEADERS),
                 unchanged=("Content-Security-Policy",))
-        data = old_page(page_html, stem, version, behind, nonce, script).encode("utf-8")
+        # The stored page's own policy meta must allow the head as well, and
+        # allows nothing else inline.
+        answer = with_head(old_page(page_html, stem, version, behind, nonce, script), head)
+        sources = f"'nonce-{nonce}'"
+        if holds_script(answer, head):
+            sources += f" {script_hash(head)}"
+        data = answer.encode("utf-8")
         self._page_response, self._media_type = False, ""
         self.send_response(HTTPStatus.OK)
         self.send_header("Content-Type", "text/html; charset=utf-8")
         self.send_header("Content-Length", str(len(data)))
         for header, value in _OLD_VERSION_HEADERS:
             if header == "Content-Security-Policy":
-                value += f"; script-src 'nonce-{nonce}'"
+                value += f"; script-src {sources}"
             self.send_header(header, value)
         self.end_headers()
         return io.BytesIO(data)
