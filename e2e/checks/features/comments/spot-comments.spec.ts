@@ -30,6 +30,8 @@ const MERMAID_COPY = path.join(__dirname, '..', '..', '..', 'node_modules', 'mer
 // features/publish/ts/page-open.js's STALE_DIAGRAM.
 const STALE_DIAGRAM = 'This diagram has changed since the page loaded. Reload the page to comment on its new version.';
 const CHANGED = 'Diagram changed since this comment';
+// features/publish/ts/page-open.js's PLACE_GONE.
+const PLACE_GONE = 'Where you were writing has changed since. Your text is kept here.';
 // What an image spot's composer says when its crop was not stored.
 const CROP_FAILED = 'The crop of the marked spot was not attached. Press Comment to try again.';
 const QUESTION = 'Is this the pod?';
@@ -439,6 +441,16 @@ test('a stroke, a click on a node and the keyboard mark spots; Escape drops a dr
   expect((await answer.json()).error).toBe('stale_spot');
   await expect(form.status).toHaveText(STALE_DIAGRAM);
   await expect(form.field).toHaveValue('Kept');
+
+  // A republish holds the section back while the draft is open; its Update
+  // takes the diagram away, and the text goes to Flow's form, saying why.
+  await swap(page, name, doc('TD'));
+  await expect(form.holder).toHaveCount(1);
+  await page.locator('.artifact-swap-held').getByRole('button', { name: 'Update', exact: true }).click();
+  await expect(form.holder).toHaveCount(0);
+  const flowForm = panel(page).group('Flow').locator('form.artifact-comment-form');
+  await expect(flowForm.locator('textarea[name="text"]')).toHaveValue('Kept');
+  await expect(flowForm.locator('.artifact-comment-status')).toHaveText(PLACE_GONE);
   expect(errors).toEqual([]);
 });
 
@@ -539,6 +551,25 @@ test('a box on an image is posted in its natural pixels with a crop of it, and d
   const retried = (await resent).postDataJSON();
   expect(retried.images).toHaveLength(1);
   expect(retried.images[0]).toMatch(/^[0-9a-f]{64}\.png$/);
+  await expect(form.holder).toHaveCount(0);
+
+  // A crop the reader takes out is attached again before the send posts.
+  await fish.img.scrollIntoViewIfNeeded();
+  await fish.comment.click();
+  const now = await rect(fish.img);
+  await drag(page, [now.x + now.width * 0.2, now.y + now.height * 0.25], [now.x + now.width * 0.6, now.y + now.height * 0.7]);
+  await expect(form.holder.locator('a.artifact-attach-link')).toHaveCount(1);
+  await form.holder.locator('.artifact-attach-remove').click();
+  await expect(form.holder.locator('.artifact-attach-item')).toHaveCount(0);
+  await form.field.fill('Without it?');
+  await page.waitForTimeout(1000);
+  console.log('TRAY', await form.holder.locator('.artifact-attach-item').count());
+  const recropped = posting(page);
+  await form.send.click();
+  const third = (await recropped).postDataJSON();
+  console.log('THIRD', JSON.stringify(third));
+  expect(third.images).toHaveLength(1);
+  expect(third.images[0]).toMatch(/^[0-9a-f]{64}\.png$/);
   await expect(form.holder).toHaveCount(0);
   expect(errors).toEqual([]);
 });
