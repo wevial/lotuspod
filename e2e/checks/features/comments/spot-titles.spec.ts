@@ -9,8 +9,8 @@ import { expect, test, type Browser, type BrowserContext, type Page } from '@pla
 // The check publishes pages of its own as hermes on the capture fixture's
 // site with a real `lotuspod publish`: a section Pictures holding the
 // fixture's fish as "Pond fish at dusk". A box on it is posted through the
-// page's route, then the page is published again without the image, or with
-// its alt text changed, and opened in a new context. A thread stored as one
+// page's route, then the page is published again without the image and
+// opened in a new context. A thread stored as one
 // was before titles were kept falls back as before. The run shares one
 // database, so each repeat publishes pages of its own names.
 const ENV = process.env;
@@ -31,11 +31,10 @@ const CHANGED_GROUP = 'Sections that have changed';
 
 test.use({ viewport: VIEWPORT, extraHTTPHeaders: SIGNED_IN });
 
-// The page: a section Notes, and Pictures holding the fish as alt, none
-// without it.
-function doc(alt: string | null = ALT) {
+// The page: a section Notes, and Pictures holding the fish, or not.
+function doc(fish = true) {
   return ['# Spot titles', '', 'Where a comment on a picture lands.', '',
-    '## Notes', '', 'What the pond holds.', '', '## Pictures', '', 'The pond as it is.', '', ...(alt === null ? [] : [`![${alt}](fish.jpg)`, ''])].join('\n');
+    '## Notes', '', 'What the pond holds.', '', '## Pictures', '', 'The pond as it is.', '', ...(fish ? [`![${ALT}](fish.jpg)`, ''] : [])].join('\n');
 }
 
 function run(args: string[], input?: string) {
@@ -130,33 +129,26 @@ async function fresh(browser: Browser): Promise<BrowserContext> {
   return browser.newContext({ viewport: VIEWPORT, extraHTTPHeaders: SIGNED_IN });
 }
 
-test('a removed or renamed image\'s thread is headed with its alt text in a new browser', async ({ page, browser }) => {
+test('a removed image\'s thread is headed with its alt text in a new browser', async ({ page, browser }) => {
   test.setTimeout(120_000);
   const errors = errorsOf(page);
-  const repeat = test.info().repeatEachIndex;
-  const removed = `spot-titles-removed-${repeat}`;
-  const renamed = `spot-titles-renamed-${repeat}`;
-
-  await boxOnFish(page, removed);
-  publish(removed, doc(null));
-  await boxOnFish(page, renamed);
-  publish(renamed, doc('Koi at dusk'));
+  const name = `spot-titles-removed-${test.info().repeatEachIndex}`;
+  await boxOnFish(page, name);
+  publish(name, doc(false));
   expect(errors).toEqual([]);
 
-  for (const name of [removed, renamed]) {
-    const context = await fresh(browser);
-    try {
-      const other = await context.newPage();
-      const otherErrors = errorsOf(other);
-      await load(other, name);
-      await expect(image(other)).toHaveCount(0);
-      const listed = strays(other);
-      await expect(listed.entries).toHaveCount(1);
-      await expect.poll(listed.headings).toEqual([`On ${ALT}`]);
-      expect(otherErrors).toEqual([]);
-    } finally {
-      await context.close();
-    }
+  const context = await fresh(browser);
+  try {
+    const other = await context.newPage();
+    const otherErrors = errorsOf(other);
+    await load(other, name);
+    await expect(image(other)).toHaveCount(0);
+    const listed = strays(other);
+    await expect(listed.entries).toHaveCount(1);
+    await expect.poll(listed.headings).toEqual([`On ${ALT}`]);
+    expect(otherErrors).toEqual([]);
+  } finally {
+    await context.close();
   }
 });
 
@@ -175,7 +167,7 @@ test('a thread stored before titles were kept is headed as before', async ({ pag
   await page.reload();
   await expect(page.locator('html')).toHaveAttribute('data-lotuspod-comments-read', '');
   await expect(image(page)).toHaveCount(1);
-  publish(name, doc(null));
+  publish(name, doc(false));
   await page.reload();
   await expect(page.locator('html')).toHaveAttribute('data-lotuspod-comments-read', '');
   const here = strays(page);

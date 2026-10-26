@@ -120,6 +120,8 @@ class RouteTests(SpotCase):
         cases = [
             ("an extra key", {**text, "spot": {**self.spot(), "colour": "red"}},
              400, "invalid_body"),
+            ("a title", {**text, "spot": {**self.spot(), "title": "Elsewhere"}},
+             400, "invalid_body"),
             ("a box with w 0", {**text, "spot": self.spot(shape=box(w=0))},
              400, "invalid_body"),
             ("a box outside a diagram, on no nodes",
