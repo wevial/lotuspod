@@ -136,8 +136,13 @@ twice.
   the thread's; and 409 `stale_spot` for a hash the target has had in none of
   the page's visible publishes (kept beside the page in `NAME.targets.json`,
   which serve never answers) nor its versions in the site's git history. A hash
-  it had earlier is stored as sent. Every comment row carries `spot`: the
-  anchor as stored on a thread's first comment, `null` on every other.
+  it had earlier is stored as sent. The spot is stored with `title` added:
+  the target's title as the page had it when the thread was posted (an
+  image's alt text, a diagram's section heading, `""` before the first
+  heading), so the thread can name its target once it is gone; a `title` in
+  the body is refused 400 `invalid_body` like any other key. Every comment row
+  carries `spot`: the anchor as stored on a thread's first comment (no `title`
+  on one stored before titles were kept), `null` on every other.
 - `GET /api/comments?page=NAME` answers `{page, revision, threads, unread,
   maxImageBytes}`: the page's current revision, each thread as `{root,
   replies, resolution}`, threads and replies oldest first, the ids of this
@@ -896,8 +901,10 @@ When the target or one of its boxes is gone, nothing is drawn, nothing is
 guessed, and the thread is listed under "Sections that have changed", headed
 "On" and its boxes' labels joined by ", " as they were stored with the
 comment, so a reload names them too (else the target's title as the page
-last showed it, which the browser keeps per page in localStorage, else the
-title of the section the thread was posted in). Marks are
+shows it, else the title stored with the spot when the thread was posted,
+so every browser names a removed or renamed image by its alt text, else
+the title as the page last showed it, which the browser keeps per page in
+localStorage, else the title of the section the thread was posted in). Marks are
 drawn in the drawing's own coordinates, each with its number at its first
 corner: spot threads are numbered with the passages, in page order, and those
 drawn nowhere after them. Pointing at a mark lights it and its entry in the
