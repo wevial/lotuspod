@@ -86,12 +86,7 @@ async function answered(request: APIRequestContext, text: string, name = NAME) {
   });
   expect(posted.status()).toBe(201);
   const { id } = (await posted.json()) as Row;
-  const claim = hermes('claim', String(id));
-  // A claim token may start with '-': give it to its option in one word.
-  const reply = hermes('reply', String(id), `--claim=${claim.claimToken}`,
-    '--key', `unread-${id}`, '--text', 'A submerged heater, clear of the pump outlet.');
-  expect(reply.parent).toBe(id);
-  return { thread: id, reply: reply.id as number };
+  return { thread: id, reply: answer(id, 'A submerged heater, clear of the pump outlet.') };
 }
 
 // Resolve a thread as the reader, through the comments route.
@@ -102,11 +97,13 @@ async function resolve(request: APIRequestContext, thread: number) {
   expect(resolved.status()).toBe(200);
 }
 
-// The page's post of a thread as seen, once answered.
-function seenPost(page: Page, thread: number) {
-  return page.waitForResponse((response) =>
-    new URL(response.url()).pathname === SEEN && response.request().method() === 'POST' &&
-    (response.request().postDataJSON() ?? {}).thread === thread);
+// The page's post of a thread as seen, up to comment if given, once answered.
+function seenPost(page: Page, thread: number, comment?: number) {
+  return page.waitForResponse((response) => {
+    if (new URL(response.url()).pathname !== SEEN || response.request().method() !== 'POST') return false;
+    const body = response.request().postDataJSON() ?? {};
+    return body.thread === thread && (comment === undefined || body.comment === comment);
+  });
 }
 
 // The page's read of the threads that finds a thread resolved.
@@ -115,15 +112,6 @@ function readResolved(page: Page, thread: number) {
     new URL(response.url()).pathname === COMMENTS && response.request().method() === 'GET' &&
     ((await response.json()) as { threads: (Thread & { resolution: { resolved: boolean } | null })[] })
       .threads.some((each) => each.root.id === thread && each.resolution?.resolved), { timeout: 60_000 });
-}
-
-// The page's post of a thread as seen up to a comment, once answered.
-function seenTo(page: Page, thread: number, comment: number) {
-  return page.waitForResponse((response) => {
-    if (new URL(response.url()).pathname !== SEEN || response.request().method() !== 'POST') return false;
-    const body = response.request().postDataJSON() ?? {};
-    return body.thread === thread && body.comment === comment;
-  });
 }
 
 // The tab hidden or shown, as a browser says so.
@@ -159,6 +147,7 @@ function publish() {
 // hermes answers the reader's comment ID; the reply's id.
 function answer(id: number, text: string) {
   const claim = hermes('claim', String(id));
+  // A claim token may start with '-': give it to its option in one word.
   const reply = hermes('reply', String(id), `--claim=${claim.claimToken}`, '--key', `unread-${id}`, '--text', text);
   expect(reply.parent).toBe(id);
   return reply.id as number;
@@ -702,7 +691,7 @@ test.describe('signed in', () => {
     await expect(item.locator('.artifact-comments-entry-head')).toHaveAttribute('aria-expanded', 'true');
 
     const id = answer(thread, 'One built in, set to four degrees.');
-    const seen = await seenTo(page, thread, id);
+    const seen = await seenPost(page, thread, id);
     expect(seen.status()).toBe(200);
     expect(seen.request().postDataJSON()).toEqual({ page: NAME, thread, comment: id });
     const theirs = reply(page, id);
@@ -750,7 +739,7 @@ test.describe('signed in', () => {
     await page.waitForTimeout(500);
     expect(posts).toEqual([]);
 
-    const seen = seenTo(page, thread, id);
+    const seen = seenPost(page, thread, id);
     await setVisibility(page, 'visible');
     expect((await seen).status()).toBe(200);
     await expect(item.locator('.artifact-comments-entry-head')).toHaveAttribute('aria-expanded', 'true');
@@ -786,7 +775,7 @@ test.describe('signed in', () => {
 
     const resolved = page.waitForResponse((response) =>
       new URL(response.url()).pathname === COMMENTS && response.request().method() === 'POST');
-    const seen = seenTo(page, thread, id);
+    const seen = seenPost(page, thread, id);
     await item.getByRole('button', { name: 'Resolve' }).click();
     expect((await resolved).status()).toBe(200);
     const posted = await seen;
