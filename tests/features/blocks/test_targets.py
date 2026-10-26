@@ -175,6 +175,16 @@ class IdTests(unittest.TestCase):
         self.assertEqual(marked, body.replace("000000000000", found.hash))
         self.assertEqual(targets.mark_targets(marked), marked)
 
+    def test_a_diagram_s_source_keeps_its_tags_with_entities_decoded(self):
+        bold = '<pre class="mermaid">graph TD\n  A["<b>Pond</b> &amp; reed"]</pre>'
+        italic = bold.replace("<b>Pond</b>", "<i>Pond</i>")
+        found = targets.PageTargets(bold).found["diagram-1"]
+        self.assertEqual(found.source, 'graph TD\n  A["<b>Pond</b> & reed"]')
+        self.assertEqual(found.hash, digest(found.source))
+        self.assertNotEqual(targets.PageTargets(italic).found["diagram-1"].hash, found.hash)
+        marked = targets.mark_targets(bold)
+        self.assertEqual(targets.PageTargets(marked).found["diagram-1"], found)
+
     def test_an_image_url_with_a_query_is_its_stored_image(self):
         name = f"{'d' * 64}.png"
         body = (f'<figure class="artifact-figure"><img src="/media/{name}?v=1#top" alt="Pond"'

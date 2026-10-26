@@ -17,8 +17,8 @@ its element no target; any other is its id, as a counted id may hold any
 character its heading's id does (SPOT_ID binds only what a fence names). A slug or counted id another target
 has takes -2, -3 in page order.
 
-Hashes: a diagram's is the first 12 hex digits of the SHA-256 of its text,
-entities decoded, as Mermaid reads it; an image's the first 12 of its stored
+Hashes: a diagram's is the first 12 hex digits of the SHA-256 of its inner
+HTML, tags kept and entities decoded, as Mermaid reads it; an image's the first 12 of its stored
 name, which is its SHA-256. A diagram's title is its section's heading
 text, "" before the first; an image's its alt text.
 
@@ -33,6 +33,7 @@ targets from its HTML by the same rules, with or without those attributes.
 from __future__ import annotations
 
 import hashlib
+import html
 import re
 from dataclasses import dataclass
 from html.parser import HTMLParser
@@ -61,7 +62,7 @@ class Target:
     hash: str
     title: str
     section: str
-    # A diagram's text as Mermaid reads it; "" for an image.
+    # A diagram's inner HTML as Mermaid reads it; "" for an image.
     source: str = ""
     # An image's /media/ URL and the size its tag gives (render writes its
     # natural size; serve reads that from the media store); "" and 0 for a diagram.
@@ -84,6 +85,7 @@ class _TargetFinder(HTMLParser):
 
     def __init__(self, text: str) -> None:
         super().__init__(convert_charrefs=True)
+        self._text = text
         self._line_starts = [0]
         for index, char in enumerate(text):
             if char == "\n":
@@ -117,7 +119,8 @@ class _TargetFinder(HTMLParser):
         elif tag == "pre" and (self._mermaid or "mermaid" in classes):
             self._mermaid += 1
             if self._mermaid == 1:
-                self._pre = {**self._candidate(DIAGRAM, attrs), "text": []}
+                self._pre = self._candidate(DIAGRAM, attrs)
+                self._pre["inner"] = self._pre["start"] + len(self._pre["tag"])
         elif self._mermaid:
             return
         elif tag == "form":
@@ -134,9 +137,7 @@ class _TargetFinder(HTMLParser):
     def handle_data(self, data: str) -> None:
         if self._templates:
             return
-        if self._pre is not None and self._mermaid == 1:
-            self._pre["text"].append(data)
-        elif self._heading is not None and not self._mermaid:
+        if self._heading is not None and not self._mermaid:
             self._heading["text"].append(data)
 
     def handle_endtag(self, tag: str) -> None:
@@ -147,7 +148,9 @@ class _TargetFinder(HTMLParser):
         elif tag == "pre" and self._mermaid:
             self._mermaid -= 1
             if not self._mermaid and self._pre is not None:
-                self._pre["text"] = "".join(self._pre["text"])
+                # Mermaid reads the pre's inner HTML, entities decoded, so
+                # tags in it (an HTML label's <b>) are part of its source.
+                self._pre["text"] = html.unescape(self._text[self._pre["inner"]:self._offset()])
                 self.found.append(self._pre)
                 self._pre = None
         elif self._mermaid:
