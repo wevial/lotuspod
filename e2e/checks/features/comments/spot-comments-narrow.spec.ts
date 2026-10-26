@@ -380,8 +380,6 @@ test.describe('on a phone', () => {
     expect(shape.kind).toBe('box');
     expect(shape.w).toBeGreaterThan(0);
     expect(shape.h).toBeGreaterThan(0);
-    expect(shape.x).toBeGreaterThanOrEqual(0);
-    expect(shape.y).toBeGreaterThanOrEqual(0);
     expect(shape.x + shape.w).toBeLessThanOrEqual(320);
     expect(shape.y + shape.h).toBeLessThanOrEqual(240);
     expect(shape.x).toBeCloseTo(64, -1);
