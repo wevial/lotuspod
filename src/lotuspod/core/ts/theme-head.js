@@ -71,5 +71,94 @@
     });
     apply();
     group.hidden = false;
+    wireCopyLink();
   });
+
+  // The title bar's Copy link: the page's own address, or the version's on
+  // an earlier version, with no other query and no fragment. Where the
+  // clipboard refuses, a read-only field under the button holds the address,
+  // selected, to copy by hand.
+  function wireCopyLink() {
+    var button = document.querySelector(".artifact-topbar > button.artifact-copy-link");
+    if (!button) return;
+    var bar = button.parentNode;
+    var status = bar.querySelector(".artifact-copy-link-status");
+    var field = null;
+    var timer = null;
+
+    function address() {
+      var version = new URLSearchParams(location.search).get("version");
+      var base = location.origin + location.pathname;
+      return version ? base + "?version=" + encodeURIComponent(version) : base;
+    }
+
+    function copied() {
+      clearTimeout(timer);
+      button.setAttribute("data-copied", "");
+      if (status) status.textContent = "Link copied";
+      timer = setTimeout(function () {
+        button.removeAttribute("data-copied");
+        if (status) status.textContent = "";
+      }, 1500);
+    }
+
+    function close() {
+      if (!field || field.hidden) return;
+      field.hidden = true;
+      button.focus();
+    }
+
+    function open(text) {
+      if (!field) {
+        field = document.createElement("input");
+        field.type = "text";
+        field.readOnly = true;
+        field.className = "artifact-copy-link-field";
+        field.setAttribute("aria-label", "Page link");
+        field.addEventListener("keydown", function (event) {
+          if (event.key === "Escape") {
+            event.preventDefault();
+            close();
+          }
+        });
+        bar.appendChild(field);
+      }
+      field.value = text;
+      field.hidden = false;
+      // Under the button, its right edge on the button's, and inside the
+      // bar's gutters.
+      var gutter = parseFloat(getComputedStyle(bar).paddingLeft) || 0;
+      var right = bar.getBoundingClientRect().right - button.getBoundingClientRect().right;
+      field.style.right = Math.max(0, Math.min(right, bar.clientWidth - gutter - field.offsetWidth)) + "px";
+      field.focus();
+      field.select();
+    }
+
+    button.addEventListener("click", function () {
+      if (field && !field.hidden) {
+        close();
+        return;
+      }
+      var text = address();
+      var clipboard = navigator.clipboard;
+      if (!clipboard || typeof clipboard.writeText !== "function") {
+        open(text);
+        return;
+      }
+      var writing;
+      try {
+        writing = clipboard.writeText(text);
+      } catch (error) {
+        open(text);
+        return;
+      }
+      Promise.resolve(writing).then(copied, function () {
+        open(text);
+      });
+    });
+    document.addEventListener("click", function (event) {
+      if (field && !field.hidden && event.target !== field && !button.contains(event.target)) close();
+    });
+    button.hidden = false;
+  }
 })();

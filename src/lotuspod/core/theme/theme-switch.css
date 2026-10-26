@@ -24,6 +24,102 @@
   margin-left: 0.25rem;
 }
 
+/* Copy link, just before the switch: an icon button the size and colours of
+   one of the switch's options. The head script reveals it, and with it the
+   switch no longer takes the free room: the button does. */
+.artifact-copy-link {
+  align-items: center;
+  align-self: center;
+  background: none;
+  border: 0;
+  border-radius: var(--radius-pill);
+  color: var(--color-muted-lavender);
+  cursor: pointer;
+  display: inline-flex;
+  flex: none;
+  font: inherit;
+  font-size: 0.8rem;
+  line-height: 1.4;
+  margin: -0.2rem 0 -0.2rem auto;
+  order: 1;
+  padding: 0.15rem 0.45rem;
+}
+
+.artifact-copy-link[hidden] {
+  display: none;
+}
+
+.artifact-topbar:has(.artifact-copy-link:not([hidden])) .artifact-theme-switch {
+  margin-left: 0;
+}
+
+.artifact-topbar:has(.artifact-archive-bar, .artifact-review-bar) .artifact-copy-link {
+  margin-left: 0.25rem;
+}
+
+.artifact-copy-link:hover,
+.artifact-copy-link[data-copied] {
+  color: var(--color-white);
+}
+
+.artifact-copy-link:focus-visible {
+  outline: 2px solid var(--color-lavender);
+  outline-offset: 2px;
+}
+
+/* One line's height, so the button's height is an option's. */
+.artifact-copy-link svg {
+  display: block;
+  height: 1.4em;
+  width: 1.4em;
+}
+
+.artifact-copy-link .artifact-copy-link-tick,
+.artifact-copy-link[data-copied] .artifact-copy-link-icon {
+  display: none;
+}
+
+.artifact-copy-link[data-copied] .artifact-copy-link-tick {
+  display: block;
+}
+
+.artifact-copy-link-status {
+  clip-path: inset(50%);
+  height: 1px;
+  overflow: hidden;
+  position: absolute;
+  white-space: nowrap;
+  width: 1px;
+}
+
+/* Where the clipboard refused: the address under the button, to copy by
+   hand, never wider than the window less the page's gutter. */
+.artifact-copy-link-field {
+  background: var(--color-surface);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-block);
+  box-shadow: 0 10px 30px var(--shadow);
+  box-sizing: border-box;
+  color: var(--color-white);
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  margin-top: 0.35rem;
+  max-width: calc(100vw - 3rem);
+  padding: 0.4rem 0.6rem;
+  position: absolute;
+  top: 100%;
+  width: 24rem;
+}
+
+.artifact-copy-link-field[hidden] {
+  display: none;
+}
+
+.artifact-copy-link-field:focus-visible {
+  outline: 2px solid var(--color-lavender);
+  outline-offset: 2px;
+}
+
 .artifact-theme-option {
   background: none;
   border: 0;
@@ -54,8 +150,12 @@
 }
 
 @media (max-width: 40rem) {
-  .artifact-theme-option {
+  .artifact-theme-option,
+  .artifact-copy-link {
     font-size: 0.75rem;
+  }
+
+  .artifact-theme-option {
     padding-inline: 0.5rem;
   }
 
@@ -162,10 +262,10 @@
   }
 }
 
-/* Beside the archive button alone, the words fit down to 352 px; narrower,
-   the buttons show their initials as beside the review sheet's controls,
-   and narrower than 320 px the switch takes a second line. */
-@media (max-width: 22rem) {
+/* Beside the archive button alone and Copy link, the words fit down to
+   392 px; narrower, the buttons show their initials as beside the review
+   sheet's controls, and narrower than 320 px the switch takes a second line. */
+@media (max-width: 24.5rem) {
   .artifact-topbar:has(.artifact-archive-bar):not(:has(.artifact-review-bar)) .artifact-theme-more {
     clip-path: inset(50%);
     height: 1px;

@@ -1692,7 +1692,11 @@ site: the head script hears the `storage` event for `lotuspod:theme` (or for
 storage cleared) and applies the new choice as its own buttons would, so a
 press in any page reaches every other open tab, and every pod framed in the
 index, with no reload; storage that refuses keeps a choice on its own page
-only. The index carries the same head script inline, with no switch of its
+only. The head script also runs the title bar's Copy link, just before the
+switch: it copies the page's address, or the version's on an earlier
+version (`NAME.html?version=COMMIT`), with no other query or fragment, and
+where the clipboard refuses shows the address selected in a read-only field
+under the button. The index carries the same head script inline, with no switch of its
 own: `lotuspod serve` answers `/` and `/index.html` rendered from
 `manifest.json` with the package's index template, under an `ETag` over the
 manifest, so the tab shell takes the choice before its first paint and
