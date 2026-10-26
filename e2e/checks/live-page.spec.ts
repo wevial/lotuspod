@@ -1,8 +1,12 @@
-import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { expect, test, type APIRequestContext, type Locator, type Page } from '@playwright/test';
+import {
+  ASSERTION, CHECK, HERMES, MEDIA_URL, OUT, OWNER, POND, PYTHON, RISKY, SIGNED_IN, SOCKET, attachedIn, banner, box,
+  fallBack, holdUploads, open, pasteFishOnly, pond, publish, refuse, revisionOf, run, sectioned, selectPassage,
+  source, stopClock, watchErrors, watchLoads,
+} from './live-page-helpers';
 
 // Wide enough for the side panel: a thread opens in it.
 const WIDE = { width: 1440, height: 900 };
@@ -20,73 +24,12 @@ test.afterEach(async ({ page }) => {
 // opens it, publishes it again to a new revision and drives the page's
 // clock: the page asks for its revision every 60 seconds, and learns it from
 // each read of its threads too.
-const ENV = process.env;
-const ASSERTION = ENV.LOTUSPOD_TEST_ASSERTION ?? '';
-const SIGNED_IN = { 'Cf-Access-Jwt-Assertion': ASSERTION };
-const SOCKET = ENV.LOTUSPOD_TEST_SOCKET ?? '';
-const HERMES = ENV.LOTUSPOD_TEST_CREDENTIAL_HERMES ?? '';
-const OUT = ENV.LOTUSPOD_TEST_OUT ?? '';
-const PYTHON = ENV.LOTUSPOD_TEST_PYTHON ?? '';
-// This checkout's package, whatever lotuspod is installed.
-const SRC = path.resolve(__dirname, '..', '..', 'src');
-const OWNER = 'hermes';
 const NEWER = 'A newer version of this page is available';
-const CHECK = 60_000;
-const EVENTS = '/api/events';
-const START = Date.parse('2026-10-02T12:00:00Z');
-const FISH = path.resolve(__dirname, '..', '..', 'tests', 'fixtures', 'media', 'fish-320x240.jpg');
-const MEDIA_URL = /^\/media\/[0-9a-f]{64}\.jpg$/;
-
-function run(...args: string[]) {
-  return execFileSync(PYTHON, ['-m', 'lotuspod', ...args], {
-    encoding: 'utf-8',
-    env: { ...ENV, PYTHONPATH: SRC },
-    stdio: ['ignore', 'pipe', 'pipe'],
-    timeout: 60_000,
-  });
-}
 
 // hermes pulls, so it is listening and a new comment naming it waits for it.
 function listen() {
   JSON.parse(run('comments', 'pull', '--owner', OWNER, '--json', '--socket', SOCKET,
     '--credential', HERMES));
-}
-
-// A page's markdown: three sections of `paragraphs` paragraphs each, the
-// edition named at the top.
-function source(title: string, edition: string, paragraphs = 2) {
-  const lines = [`# ${title}`, '', `Edition: ${edition}.`, ''];
-  for (const section of ['Findings', 'Risks', 'Next steps']) {
-    lines.push(`## ${section}`, '');
-    for (let n = 1; n <= paragraphs; n += 1) {
-      lines.push(`${section}, paragraph ${n}: the pond freezes in January, the pump stops ` +
-        'with it, and the heater keeps a hole in the ice open for the fish until the thaw.', '');
-    }
-  }
-  return lines.join('\n');
-}
-
-// A page's markdown with the sections named, in order, each with its
-// paragraphs: what a check that swaps changes one part of at a time.
-function sectioned(title: string, sections: [string, string[]][], intro = 'The pond, in winter.') {
-  const lines = [`# ${title}`, '', intro, ''];
-  for (const [heading, paragraphs] of sections) {
-    lines.push(`## ${heading}`, '');
-    for (const paragraph of paragraphs) lines.push(paragraph, '');
-  }
-  return lines.join('\n');
-}
-
-const POND: [string, string[]][] = [
-  ['Findings', ['The pond freezes in January.', 'The pump stops with it.']],
-  ['Risks', ['The pump may crack in the ice.', 'The fish need air under it.']],
-  ['Next steps', ['Order a heater before the frost.', 'Lift the pump out in December.']],
-];
-
-// POND with one section's paragraphs, or its heading, changed.
-function pond(change: Record<string, { heading?: string; paragraphs?: string[] }> = {}) {
-  return POND.map(([heading, paragraphs]): [string, string[]] =>
-    [change[heading]?.heading ?? heading, change[heading]?.paragraphs ?? paragraphs]);
 }
 
 // Open a page that takes no comments, its clock stopped, once its script has
@@ -124,23 +67,6 @@ function headings(page: Page) {
       ?? node.textContent!.trim()));
 }
 
-// hermes publishes markdown as the page name, with any extra options; the
-// revision it is now at.
-function publish(name: string, markdown: string, ...extra: string[]): string {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lotuspod-live-page-'));
-  try {
-    const file = path.join(dir, `${name}.md`);
-    fs.writeFileSync(file, markdown, 'utf-8');
-    const said = run('publish', file, '--local', '--out-dir', OUT, '--owner', OWNER,
-      '--credential', HERMES, ...extra);
-    const revision = /at revision ([0-9a-f]{12})/.exec(said)?.[1] ?? '';
-    expect(revision, said).not.toBe('');
-    return revision;
-  } finally {
-    fs.rmSync(dir, { recursive: true, force: true });
-  }
-}
-
 // A markdown table wider than an article's column, so it scrolls in it at 1440
 // by 900, its first cell naming what.
 function ledger(what: string) {
@@ -173,84 +99,11 @@ async function comment(request: APIRequestContext, name: string, section: string
   return (await response.json()) as { id: number; state: string };
 }
 
-// Errors the page throws or logs, but for serve's stream refused (refuse).
-function watchErrors(page: Page) {
-  const errors: string[] = [];
-  page.on('pageerror', (error) => errors.push(error.message));
-  page.on('console', (message) => {
-    if (message.type() === 'error' && !REFUSED(message)) errors.push(message.text());
-  });
-  return errors;
-}
-
-// Chromium's console error for the stream answered 503.
-function REFUSED(message: { text(): string; location(): { url: string } }) {
-  return new URL(message.location().url || 'about:blank', 'http://x').pathname === EVENTS &&
-    message.text().includes('503');
-}
-
-// The page's clock, paused at START: it moves only when moved. Serve's
-// stream (/api/events) is refused, so a republish or a reply reaches the
-// page only through the checks the clock drives, which these checks time.
-async function stopClock(page: Page) {
-  await refuse(page);
-  await page.clock.install({ time: START });
-  await page.clock.pauseAt(START + 1000);
-}
-
-async function refuse(page: Page) {
-  await page.route((url) => url.pathname === EVENTS, (route) =>
-    route.fulfill({ status: 503, contentType: 'application/json', body: '{"error": "too_many_streams"}' }));
-}
-
-// Open the page and let its first read of the threads come back.
-async function open(page: Page, name: string) {
-  const read = page.waitForResponse((response) =>
-    new URL(response.url()).pathname === '/api/comments' && response.request().method() === 'GET');
-  await page.goto(`/${name}.html?standalone`);
-  await read;
-}
-
-function revisionOf(page: Page) {
-  return page.locator('meta[name="lotuspod:revision"]').getAttribute('content');
-}
-
 // Where the page's text starts in the window: the same, to the pixel the
 // scroll position snaps to, after a reload that brings the reader back to the
 // same place in it, even with the box saying what changed drawn above it.
 function textTop(page: Page) {
   return page.evaluate(() => document.querySelector('.artifact-main')!.getBoundingClientRect().top);
-}
-
-function banner(page: Page) {
-  const node = page.locator('.artifact-live-page-banner');
-  return { node, reload: node.getByRole('button', { name: 'Reload' }) };
-}
-
-// Have each swap of the page fall back to the banner or a reload, as it did
-// before a page with comments swapped: the swap's fetch of the page answers
-// it with another theme. Any other request goes on to a route set before, or
-// to the site.
-async function fallBack(page: Page, name: string) {
-  await page.route((url) => url.pathname === `/${name}.html`, async (route) => {
-    if (route.request().resourceType() !== 'fetch') {
-      await route.fallback();
-      return;
-    }
-    const response = await route.fetch();
-    const text = (await response.text()).replace(/lotuspod\.css\?v=[0-9a-f]+/, 'lotuspod.css?v=000000000000');
-    await route.fulfill({ response, body: text });
-  });
-}
-
-// The number of loads and navigations of the page from now on.
-function watchLoads(page: Page) {
-  const moved = { count: 0 };
-  page.on('load', () => { moved.count += 1; });
-  page.on('framenavigated', (frame) => {
-    if (frame === page.mainFrame()) moved.count += 1;
-  });
-  return moved;
 }
 
 async function setVisibility(page: Page, state: 'hidden' | 'visible') {
@@ -267,34 +120,6 @@ async function pasteFish(page: Page, field: Locator) {
   const uploaded = page.waitForResponse((response) => new URL(response.url()).pathname === '/api/media');
   await pasteFishOnly(field);
   expect((await uploaded).status()).toBe(201);
-}
-
-// Paste the fish JPEG into a field, its upload left to answer when it may.
-async function pasteFishOnly(field: Locator) {
-  const base64 = fs.readFileSync(FISH).toString('base64');
-  await field.evaluate((node, base64) => {
-    const data = new DataTransfer();
-    const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
-    data.items.add(new File([bytes], 'fish.jpg', { type: 'image/jpeg' }));
-    node.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }));
-  }, base64);
-}
-
-// Hold the page's uploads (/api/media) until the returned release is called.
-async function holdUploads(page: Page) {
-  let release!: () => void;
-  const released = new Promise<void>((resolve) => { release = resolve; });
-  await page.route((url) => url.pathname === '/api/media', async (route) => {
-    await released;
-    await route.continue();
-  });
-  return release;
-}
-
-// The thumbnails attached in a form: their /media/ paths, once drawn.
-async function attachedIn(form: Locator) {
-  return form.locator('.artifact-attach-item img').evaluateAll((images) =>
-    images.map((img) => new URL((img as HTMLImageElement).src).pathname));
 }
 
 // Where every element of the page's main column is, in the window.
@@ -1075,23 +900,6 @@ test.describe('signed in', () => {
     expect(errors).toEqual([]);
   });
 
-  // Select `length` characters of the paragraph holding `words`, from its
-  // first or from `from`, and open the passage composer on them.
-  async function selectPassage(page: Page, words: string, length: number, from = 0) {
-    await page.locator('.artifact-body p', { hasText: words }).evaluate((paragraph, [length, from]) => {
-      const range = document.createRange();
-      range.setStart(paragraph.firstChild!, from);
-      range.setEnd(paragraph.firstChild!, from + length);
-      const selection = document.getSelection()!;
-      selection.removeAllRanges();
-      selection.addRange(range);
-    }, [length, from]);
-    await page.keyboard.press('Control+Alt+m');
-    const field = page.getByRole('textbox', { name: 'Comment on the selected words' });
-    await expect(field).toBeFocused();
-    return field;
-  }
-
   test('Reload opens a passage composer again on its words, its text unsent', async ({ page }) => {
     const errors = watchErrors(page);
     const name = 'live-page-passage';
@@ -1518,8 +1326,6 @@ test.describe('signed in', () => {
     return { first, root, moved };
   }
 
-  const RISKY = 'The pump will crack unless it is lifted out first.';
-  const box = (page: Page, id: string) => page.locator(`details.artifact-comment[data-section="${id}"]`);
   const group = (page: Page, title: string) => page.locator('.artifact-comments-panel .artifact-comments-group')
     .filter({ has: page.locator('.artifact-comments-group-title', { hasText: new RegExp(`^${title}$`) }) });
 
