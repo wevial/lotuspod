@@ -21,8 +21,8 @@ from pathlib import Path
 from lotuspod.features import agents
 from lotuspod.core import (INDEX_FILE, OLD_VERSION_SCRIPT, THEME_ROOT, WIDGET_NAME, is_page_name,
                            script_hash, theme_hash)
-from lotuspod.features.history import (History, archived_page, old_page, read_record, set_archived,
-                                        successor_title)
+from lotuspod.features.history import (History, archived_page, holds_script, old_page, read_record,
+                                        set_archived, successor_title)
 from lotuspod.features import live
 from lotuspod.features import publish
 from lotuspod.features.publish import version_stamp
@@ -322,7 +322,7 @@ class _AllowListHandler(SimpleHTTPRequestHandler):
             head = (THEME_ROOT / "core/ts/theme-head.js").read_text(encoding="utf-8")
             bridge = widgets.bridge_script()
             sources = f"'nonce-{nonce}' {script_hash(head)}"
-            if f"<script>{bridge}</script>" in rendered:
+            if holds_script(rendered, bridge):
                 sources += f" {script_hash(bridge)}"
             data = old_page(rendered, stem, version, behind, nonce, script,
                             frozenset((head, bridge))).encode("utf-8")

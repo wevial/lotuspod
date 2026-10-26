@@ -12,6 +12,7 @@ __getattr__ = public_edge(__name__, {
     "successor_title": "archive",
     "compare": "versions",
     "History": "versions",
+    "holds_script": "versions",
     "old_page": "versions",
     "sections": "versions",
     "summary": "versions",

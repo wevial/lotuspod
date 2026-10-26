@@ -814,6 +814,13 @@ def _disable_forms(page_html: str, note: str) -> str:
                               for edit in ((start, start, " disabled"), (end, end, "\n" + note))])
 
 
+def holds_script(page_html: str, text: str) -> bool:
+    """Whether page_html holds an inline script element whose text is text,
+    as old_page reads one: text in a comment or in another script is none."""
+    element = f"<script>{text}</script>"
+    return any(page_html[start:end] == element for start, end in Places(page_html).scripts)
+
+
 def old_page(page_html: str, name: str, version: Version, behind: int,
              nonce: str, script: str, keep: frozenset[str] = frozenset()) -> str:
     """An earlier version's HTML as serve answers it, ending in one script
