@@ -65,8 +65,6 @@ const NUDGED = 20;
 interface Draft {
   mark: SVGGElement; shape: SpotShape; composer: Composer; box: HTMLElement; target: HTMLElement; spot: Omit<Spot, "hash">; image: boolean;
   making: Promise<void>; crop: string;
-  // The view the composer is in, else null: it is over the page.
-  room: HTMLElement | null;
 }
 interface Press { id: number; x: number; y: number; layer: SVGGElement; points: Point[]; moved: boolean; node: SVGGElement | null; preview: SVGGElement | null }
 // Mark mode: on the page, presses land on the holder; in the diagram view or
@@ -769,10 +767,9 @@ export function spots(page: Page, bridge: SpotsBridge): Spots {
       await draft.making;
       return await uploaded(draft) ? "" : CROP_FAILED;
     }, CROP_FAILED);
-    const room = marking.view?.room || null;
-    const draft: Draft = { mark, shape, composer, box, target, spot, image, making: Promise.resolve(), crop: "", room };
+    const draft: Draft = { mark, shape, composer, box, target, spot, image, making: Promise.resolve(), crop: "" };
     marking.draft = draft;
-    (room || document.body).appendChild(composer.holder);
+    (marking.view?.room || document.body).appendChild(composer.holder);
     seat(draft);
     composer.field.focus({ preventScroll: true });
     if (image) draft.making = attach(target as HTMLImageElement, spot.shape, draft);
@@ -783,8 +780,8 @@ export function spots(page: Page, bridge: SpotsBridge): Spots {
   function seat(draft: Draft) {
     const mark = draft.mark.getBoundingClientRect();
     const holder = draft.composer.holder;
-    if (draft.room) {
-      const room = draft.room.getBoundingClientRect();
+    const room = marking?.view?.room?.getBoundingClientRect();
+    if (room) {
       const most = (size: number, own: number) => Math.max(EDGE, size - own - EDGE);
       holder.style.left = Math.round(Math.max(EDGE, Math.min(mark.left - room.left, most(room.width, holder.offsetWidth)))) + "px";
       holder.style.top = Math.round(Math.max(EDGE, Math.min(mark.bottom + GAP - room.top, most(room.height, holder.offsetHeight)))) + "px";

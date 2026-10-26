@@ -192,11 +192,7 @@
           parts.close.focus({ preventScroll: true });
         }
       };
-      detail.close = function () {
-        if (dialog.open) {
-          dialog.close();
-        }
-      };
+      detail.close = function () { dialog.close(); };
       event.preventDefault();
     });
   }

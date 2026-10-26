@@ -463,11 +463,7 @@
           parts.stage.focus({ preventScroll: true });
         }
       };
-      detail.close = function () {
-        if (shown) {
-          dialog.close();
-        }
-      };
+      detail.close = function () { dialog.close(); };
       event.preventDefault();
     });
 
