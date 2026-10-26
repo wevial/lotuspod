@@ -127,12 +127,6 @@
         field.readOnly = true;
         field.className = "artifact-copy-link-field";
         field.setAttribute("aria-label", "Page link");
-        field.addEventListener("keydown", function (event) {
-          if (event.key === "Escape") {
-            event.preventDefault();
-            close();
-          }
-        });
         bar.appendChild(field);
       }
       field.value = text;
@@ -166,6 +160,12 @@
     window.addEventListener("resize", place);
     document.addEventListener("click", function (event) {
       if (event.target !== field && !button.contains(event.target)) close();
+    });
+    // Escape closes the field wherever focus has moved since it opened.
+    document.addEventListener("keydown", function (event) {
+      if (event.key !== "Escape" || !field || field.hidden) return;
+      event.preventDefault();
+      close();
     });
     button.hidden = false;
   }

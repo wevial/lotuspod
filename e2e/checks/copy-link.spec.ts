@@ -212,6 +212,24 @@ test('a click elsewhere while the write is pending leaves its refusal to open th
   expect(errors).toEqual([]);
 });
 
+test('Escape closes the field after focus has moved off it', async ({ page }) => {
+  const errors = await watch(page);
+  await page.addInitScript(() => {
+    navigator.clipboard.writeText = () => Promise.reject(new DOMException('Refused', 'NotAllowedError'));
+  });
+  await page.goto(`${PAGE}?standalone`);
+  const button = copyLink(page);
+  await button.click();
+  const field = page.locator('input.artifact-copy-link-field');
+  await expect(field).toBeFocused();
+  await page.keyboard.press('Shift+Tab');
+  await expect(field).not.toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(field).toBeHidden();
+  await expect(button).toBeFocused();
+  expect(errors).toEqual([]);
+});
+
 test('the field stays in the window when the window narrows', async ({ page }) => {
   const errors = await watch(page);
   await page.addInitScript(() => {
