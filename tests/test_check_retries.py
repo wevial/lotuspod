@@ -40,6 +40,10 @@ ACTIVITY_INDEX = (
     "the index opens on Recent activity, grouped by page, newest first, "
     "and the filters span both views"
 )
+ACTIVITY_LINKS = (
+    "each row links to its version, its thread or its decision, "
+    "and the link opens it there"
+)
 ACTIVITY_KEPT = (
     "Recent activity, once pressed, is kept in the address, and Pages clears it"
 )
@@ -47,10 +51,13 @@ CHAIN = (
     "a signed-in answer and comment reach the owner alone, "
     "and its reply and revision reach the reader"
 )
+ARCHIVED_DRAFT = (
+    "a reply draft kept over a reload stays folded away, its toggle disabled"
+)
 
 
 def specs(suite: dict) -> list[dict]:
-    """Every spec under a suite of the report."""
+    """Every spec under a suite of the report, in file order."""
     found = list(suite.get("specs", []))
     for child in suite.get("suites", []):
         found.extend(specs(child))
@@ -106,25 +113,12 @@ class CheckRetriesTests(unittest.TestCase):
         ]
         self.assertEqual(retried, [], "no check of the run is retried")
 
-    def test_checklist_is_not_retried(self):
-        _, _, found = self.run_checks("checklist.spec", CHECKLIST_SAVES)
-        self.assert_not_retried(found, CHECKLIST_SAVES)
-
-    def test_activity_index_is_not_retried(self):
-        _, _, found = self.run_checks("activity.spec", ACTIVITY_INDEX, grep=ACTIVITY_INDEX)
-        self.assert_not_retried(found, ACTIVITY_INDEX)
-
-    def test_chain_is_not_retried(self):
-        _, _, found = self.run_checks("chain.spec", CHAIN)
-        self.assert_not_retried(found, CHAIN)
-
-    def test_activity_kept_view_keeps_its_retry(self):
-        done, data, found = self.run_checks("activity.spec", ACTIVITY_KEPT, grep=ACTIVITY_KEPT)
-        spec_results = results(self.named(found, ACTIVITY_KEPT))
+    def assert_retried_to_pass(self, done, data: dict, found: list[dict], title: str):
+        spec_results = results(self.named(found, title))
         outcomes = [(r["retry"], r["status"]) for r in spec_results]
         self.assertEqual(
             outcomes, [(0, "failed"), (1, "passed")],
-            f"{ACTIVITY_KEPT!r} failed once, then passed on its retry",
+            f"{title!r} failed once, then passed on its retry",
         )
         messages = " ".join(
             error.get("message", "") for error in spec_results[0].get("errors", [])
@@ -133,6 +127,41 @@ class CheckRetriesTests(unittest.TestCase):
         self.assertEqual(data["stats"]["flaky"], 1)
         self.assertEqual(data["stats"]["unexpected"], 0)
         self.assertEqual(done.returncode, 0, f"{done.stdout}\n{done.stderr}")
+
+    def test_checklist_is_not_retried(self):
+        _, _, found = self.run_checks("checklist.spec", CHECKLIST_SAVES)
+        self.assert_not_retried(found, CHECKLIST_SAVES)
+        index = found.index(self.named(found, CHECKLIST_SAVES))
+        self.assertGreater(index, 0)
+        self.assertEqual(
+            [r["status"] for r in results(found[0])], ["passed"],
+            "the checklist's first check passed once",
+        )
+        for spec in found[index + 1:]:
+            self.assertEqual(
+                [r["status"] for r in results(spec)], ["skipped"],
+                f"{spec['title']!r} is skipped once",
+            )
+
+    def test_activity_index_is_not_retried(self):
+        _, _, found = self.run_checks("activity.spec", ACTIVITY_INDEX, grep=ACTIVITY_INDEX)
+        self.assert_not_retried(found, ACTIVITY_INDEX)
+
+    def test_activity_links_is_not_retried(self):
+        _, _, found = self.run_checks("activity.spec", ACTIVITY_LINKS, grep=ACTIVITY_LINKS)
+        self.assert_not_retried(found, ACTIVITY_LINKS)
+
+    def test_chain_is_not_retried(self):
+        _, _, found = self.run_checks("chain.spec", CHAIN)
+        self.assert_not_retried(found, CHAIN)
+
+    def test_archived_page_keeps_its_retry(self):
+        done, data, found = self.run_checks("archived-page.spec", ARCHIVED_DRAFT)
+        self.assert_retried_to_pass(done, data, found, ARCHIVED_DRAFT)
+
+    def test_activity_kept_view_keeps_its_retry(self):
+        done, data, found = self.run_checks("activity.spec", ACTIVITY_KEPT, grep=ACTIVITY_KEPT)
+        self.assert_retried_to_pass(done, data, found, ACTIVITY_KEPT)
 
 
 if __name__ == "__main__":
