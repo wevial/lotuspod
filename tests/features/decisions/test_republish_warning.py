@@ -127,6 +127,13 @@ class RepublishWarning(unittest.TestCase):
     def warnings(self, done: subprocess.CompletedProcess) -> list[str]:
         return [line for line in done.stderr.splitlines() if line.startswith("publish: ")]
 
+    def pragma(self, statement: str):
+        conn = sqlite3.connect(self.db)
+        try:
+            return conn.execute(statement).fetchone()
+        finally:
+            conn.close()
+
     def test_a_reworded_question_is_named_and_one_taken_off_is_not(self):
         self.answered()
         done = self.publish(REWORDED)
@@ -159,26 +166,16 @@ class RepublishWarning(unittest.TestCase):
 
     def test_the_database_is_only_read(self):
         self.answered()
-        conn = sqlite3.connect(self.db)
-        conn.execute("PRAGMA journal_mode = DELETE")
-        conn.close()
+        self.pragma("PRAGMA journal_mode = DELETE")
         self.publish(WIDENED)
-        conn = sqlite3.connect(self.db)
-        mode = conn.execute("PRAGMA journal_mode").fetchone()[0]
-        conn.close()
-        self.assertEqual(mode, "delete")
+        self.assertEqual(self.pragma("PRAGMA journal_mode")[0], "delete")
 
     def test_a_database_of_another_schema_is_left_as_it_is_and_prints_nothing(self):
         self.answered()
-        conn = sqlite3.connect(self.db)
-        conn.execute(f"PRAGMA user_version = {db.SCHEMA_VERSION - 1}")
-        conn.close()
+        self.pragma(f"PRAGMA user_version = {db.SCHEMA_VERSION - 1}")
         done = self.publish(REWORDED)
         self.assertEqual(self.warnings(done), [])
-        conn = sqlite3.connect(self.db)
-        version = conn.execute("PRAGMA user_version").fetchone()[0]
-        conn.close()
-        self.assertEqual(version, db.SCHEMA_VERSION - 1)
+        self.assertEqual(self.pragma("PRAGMA user_version")[0], db.SCHEMA_VERSION - 1)
 
     def test_an_empty_database_file_stays_empty(self):
         self.publish(FIRST)
