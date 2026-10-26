@@ -56,7 +56,7 @@ export function label(form: HTMLFormElement, answer: Answer): string {
 // "Accept the default" it no longer offers (accepted), else the answer's
 // own choice.
 export function chosen(form: HTMLFormElement, answer: Answer): string | undefined {
-  return answer.version !== form.dataset.version && accepted(form, answer) ? form.dataset.default : answer.choice;
+  return accepted(form, answer) ? form.dataset.default : answer.choice;
 }
 
 // The option a row offers when it has a default and no options of its own.

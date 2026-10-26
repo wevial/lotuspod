@@ -173,7 +173,7 @@ def shown(form: Form, answer: dict) -> str | None:
     the answer's own choice; None when it does not hold."""
     if not holds(form, answer):
         return None
-    if answer.get("version") != form.version and _accepted(form, answer):
+    if _accepted(form, answer):
         return form.default
     return answer.get("choice")
 
