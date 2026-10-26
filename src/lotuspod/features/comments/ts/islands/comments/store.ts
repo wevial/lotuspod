@@ -1,9 +1,10 @@
 import type { CommentRow, Decision, Page, StartComment, StoreBridge, Thread, Widget } from "../bridge";
-import { anchorOf, blockTitle, frameOf } from "./anchor";
+import { anchorOf, blockTitle, frameOf, spotStanding, spotTitle, targetOf } from "./anchor";
 import type { Passages, Placement, Store } from "./parts";
 import { composers } from "./composer";
 import { passages as makePassages } from "./passages";
 import { placement as makePlacement } from "./placement";
+import { spots as makeSpots, type Spots } from "./spots";
 import { threadRows } from "./thread";
 import { readThreads, SIGNED_OUT } from "./route";
 import { effect, untracked } from "@preact/signals";
@@ -40,8 +41,9 @@ export function store(page: Page, bridge: StoreBridge): Store {
   const shown = new Map<number, Thread>();
   // Each box's form for a new thread, wherever it is shown.
   const forms = new Map<HTMLElement, HTMLFormElement>();
-  // Each composer's attachments, by its form.
-  const attached = new Map<HTMLFormElement, import("../bridge").Attachments>();
+  // Each composer's attachments, by its form; a form gone from the page
+  // takes its images with it.
+  const attached = new WeakMap<HTMLFormElement, import("../bridge").Attachments>();
   const questions = new Map<string, HTMLFormElement>();
 
   // The checks for replies: while a thread waits, or the reader has a
@@ -82,6 +84,7 @@ export function store(page: Page, bridge: StoreBridge): Store {
 
   let panel: Placement | null = null;
   let passages: Passages | null = null;
+  let spots: Spots | null = null;
 
   const replies = makeReplies(page, {
     page: name, shown, revision, refresh, add, posted, owe,
@@ -253,7 +256,8 @@ export function store(page: Page, bridge: StoreBridge): Store {
   }
 
   // The box a thread's first comment is on, or null when the page no
-  // longer has its section, or the live block it is on. A thread on the
+  // longer has its section, the live block it is on, or the diagram, the
+  // image or a node its spot is on. A thread on the
   // whole page of a page that has kept only its "page" box (republished
   // with fewer sections) is that box's, and a thread on that "page" box is
   // the whole page's once the page has sections.
@@ -264,6 +268,10 @@ export function store(page: Page, bridge: StoreBridge): Store {
       const frame = frameOf(anchor.id);
       return frame ? boxOn(sectionOf(frame)) : null;
     }
+    if (anchor.kind === "spot") {
+      const target = targetOf(anchor.id);
+      return target && spotStanding(anchor) !== "gone" ? boxOn(sectionOf(target)) : null;
+    }
     return boxOn(root.section);
   }
 
@@ -273,9 +281,10 @@ export function store(page: Page, bridge: StoreBridge): Store {
       (section === "page" && sections.get(page.wholePage)) || null;
   }
 
-  // The section a live block's frame is in: its wrapper's, else that of the
-  // last h2 before it with a box on the page, else the whole page.
-  function sectionOf(frame: HTMLIFrameElement) {
+  // The section a live block's frame, a diagram or an image is in: its
+  // wrapper's, else that of the last h2 before it with a box on the page,
+  // else the whole page.
+  function sectionOf(frame: Element) {
     const wrapper = frame.closest<HTMLElement>(".artifact-section-body");
     if (wrapper) return wrapper.dataset.section ?? page.wholePage;
     let section = page.wholePage;
@@ -286,10 +295,12 @@ export function store(page: Page, bridge: StoreBridge): Store {
     return section;
   }
 
-  // The line a thread on a section the page no longer has starts with.
+  // The line a thread on a section the page no longer has starts with; a
+  // spot's names what it was on.
   function whereFrom(root: CommentRow) {
-    return page.element("p", "artifact-comment-section",
-      "On " + String(root.sectionTitle || root.section || "an earlier section"));
+    const anchor = anchorOf(root);
+    return page.element("p", "artifact-comment-section", "On " + (anchor.kind === "spot" ? spotTitle(anchor, root.sectionTitle)
+      : String(root.sectionTitle || root.section || "an earlier section")));
   }
 
   function resolved(thread: Thread) {
@@ -301,12 +312,23 @@ export function store(page: Page, bridge: StoreBridge): Store {
     panel!.put(thread);
   }
 
-  // A swap may take away the live block a thread is on, or bring it back:
+  // A swap may take away the live block a thread is on, or bring it back,
+  // and so may a swap or a drawing the diagram, image or node a spot is on:
   // the thread goes to the list of those on what the page no longer has,
-  // or back to its section's box.
+  // or back to its section's box. A spot thread whose standing changed has
+  // its rows drawn again.
   function rehome() {
     shown.forEach(thread => {
-      if (anchorOf(thread.root).kind !== "block") return;
+      const anchor = anchorOf(thread.root);
+      if (anchor.kind === "spot") {
+        const standing = spotStanding(anchor);
+        if (thread.standing !== standing) {
+          thread.standing = standing;
+          sync(thread);
+        }
+      } else if (anchor.kind !== "block") {
+        return;
+      }
       const box = boxFor(thread.root);
       if (box === thread.box) return;
       thread.box = box;
@@ -345,6 +367,8 @@ export function store(page: Page, bridge: StoreBridge): Store {
   // panel, the chips, what a popover or the sheet holds and the replies
   // to the reader.
   function refresh() {
+    rehome();
+    spots!.place();
     passages!.update();
     panel!.refresh();
     replies.showUnread();
@@ -559,6 +583,7 @@ export function store(page: Page, bridge: StoreBridge): Store {
     sections, shown, forms, attached, composer,
     get panel() { return panel!; },
     get passages() { return passages!; },
+    get spots() { return spots; },
     swapped(to) { swappedTo = to; },
     retitle: replies.retitle,
     enlist, ask, boxFor, whereFrom, put, refresh, holdOn, blockBox,
@@ -567,9 +592,14 @@ export function store(page: Page, bridge: StoreBridge): Store {
     // window allows, and the first read.
     start() {
       shared.write.asking({ ask: replies.ask, owe, about: question => panel!.about(question) });
+      spots = makeSpots(page, {
+        shown, resolved, composer, refresh, placement: () => panel!,
+        boxOf: target => boxOn(sectionOf(target)),
+        shine: thread => passages?.shine(thread),
+      });
       passages = makePassages(page, {
         article, boxes, shown, resolved, revision, attached, composer,
-        placement: () => panel!,
+        placement: () => panel!, numbered: thread => spots!.number(thread),
       });
       panel = makePlacement(page, {
         all: page.all, boxes, shown, forms, decisions,
@@ -588,7 +618,7 @@ export function store(page: Page, bridge: StoreBridge): Store {
       // blocks' chrome among them.
       document.addEventListener(page.events.swapped, () => queueMicrotask(() => {
         composer.swapped(frame => boxOn(sectionOf(frame)));
-        rehome();
+        spots!.swapped();
         refresh();
       }));
       window.setTimeout(() => {

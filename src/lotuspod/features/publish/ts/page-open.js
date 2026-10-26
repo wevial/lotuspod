@@ -49,6 +49,10 @@
   var BLOCK_GONE = "The block you were commenting on was removed. Your comment is kept here, on the section.";
   var BLOCK_CHANGED = "This block was updated since you started. Your comment stays on the version you saw.";
   var STALE_BLOCK = "This block has changed since the page loaded. Reload the page to comment on its new version.";
+  // What a composer on a spot says when a send was refused for a diagram or an
+  // image the page has changed since it loaded.
+  var STALE_DIAGRAM = "This diagram has changed since the page loaded. Reload the page to comment on its new version.";
+  var STALE_IMAGE = "This image has changed since the page loaded. Reload the page to comment on its new version.";
   var CHANGED = "Comments on sections that have changed";
   var CHANGED_GROUP = "Sections that have changed";
   // The section of a thread on the whole page
@@ -97,6 +101,10 @@
   // (features/blocks/ts/diagram-view.js) moves or zooms it, so an open node
   // card (features/blocks/ts/diagram-cards.js) follows its box.
   var MOVED = "lotuspod:diagram-moved";
+  // On a diagram's pre or a figure while the reader marks a spot on it (the
+  // comments island's mark mode): a press there draws a mark, so a click on a
+  // box opens no node card (features/blocks/ts/diagram-cards.js).
+  var MARKING = "artifact-spot-marking";
   // What the page's text leaves out and no passage may hold: the comment UI,
   // decision forms and their chips, the Answered table, diagrams and their
   // node cards, and the list of changed sections.
@@ -106,9 +114,11 @@
     ".artifact-node-card";
   // What the page's text leaves out as never read: the marks and numbers the
   // page script draws, a calltree's folded counts and Fold all, the bar over
-  // a part a swap held back, and what is not shown at all.
+  // a part a swap held back, a diagram's or figure's Comment and mark-mode
+  // bar, and what is not shown at all.
   var UNSEEN = "script, style, template, noscript, .artifact-section-mark, .artifact-passage-number, " +
     ".artifact-table-expand, .artifact-changed-tag, .artifact-review-open, .artifact-swap-held, " +
+    ".artifact-spot-tools, " +
     ".calltree-folded, .calltree-fold-all";
   var BLOCK = new RegExp("^(ADDRESS|ARTICLE|ASIDE|BLOCKQUOTE|BR|CAPTION|DD|DETAILS|DIV|DL|DT|" +
     "FIELDSET|FIGCAPTION|FIGURE|FOOTER|FORM|H[1-6]|HEADER|HR|LI|MAIN|NAV|OL|P|PRE|SECTION|" +

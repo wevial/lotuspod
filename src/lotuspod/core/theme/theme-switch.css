@@ -249,9 +249,12 @@
 
 /* Beside the archive button alone and Copy link, the words fit down to
    392 px; narrower, the buttons show their initials as beside the review
-   sheet's controls, and narrower than 320 px the switch takes a second line. */
+   sheet's controls, and narrower than 320 px the switch takes a second line.
+   Copy link shows with the switch, and the archive button only once its
+   route answers: the initials follow Copy link too, so the switch does not
+   shrink, and move what is beside it, when the archive button arrives. */
 @media (max-width: 24.5rem) {
-  .artifact-topbar:has(.artifact-archive-bar):not(:has(.artifact-review-bar)) .artifact-theme-more {
+  .artifact-topbar:has(.artifact-archive-bar, .artifact-copy-link:not([hidden])):not(:has(.artifact-review-bar)) .artifact-theme-more {
     clip-path: inset(50%);
     height: 1px;
     overflow: hidden;
@@ -260,13 +263,13 @@
     width: 1px;
   }
 
-  .artifact-topbar:has(.artifact-archive-bar):not(:has(.artifact-review-bar)) .artifact-theme-switch {
+  .artifact-topbar:has(.artifact-archive-bar, .artifact-copy-link:not([hidden])):not(:has(.artifact-review-bar)) .artifact-theme-switch {
     gap: 0;
     margin-left: 0;
     padding: 0.1rem;
   }
 
-  .artifact-topbar:has(.artifact-archive-bar):not(:has(.artifact-review-bar)) .artifact-theme-option {
+  .artifact-topbar:has(.artifact-archive-bar, .artifact-copy-link:not([hidden])):not(:has(.artifact-review-bar)) .artifact-theme-option {
     min-width: 1.4rem;
     padding-inline: 0.3rem;
   }

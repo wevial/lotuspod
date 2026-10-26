@@ -16,9 +16,15 @@ function passageQuote(thread: Thread) {
   return anchor.kind === "passage" ? anchor.quote : null;
 }
 function quoteOf(thread: Thread): PassageQuote { return passageQuote(thread)!; }
+function spotted(thread: Thread) { return anchorOf(thread.root).kind === "spot"; }
+// Negative when a comes before b in the page, positive after, 0 for one node.
+function pageOrder(a: Node, b: Node) {
+  if (a === b) return 0;
+  return a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1;
+}
 // Highlights stay imperative: the author's text is never a Preact render root.
 export function passages(page: Page, bridge: PassagesBridge): Passages {
-  const { article, boxes, shown, resolved, revision, attached, composer, placement } = bridge;
+  const { article, boxes, shown, resolved, revision, attached, composer, placement, numbered } = bridge;
   const { element, textModel, offsetOf, pieces, locate, wrap, unwrap } = page;
   const { apart: APART, maxExact: MAX_EXACT, context: CONTEXT, still: STILL, coarse: COARSE, archived: ARCHIVED } = page;
   var api = {} as Passages;
@@ -69,6 +75,13 @@ export function passages(page: Page, bridge: PassagesBridge): Passages {
     });
     if (thread.number) {
       thread.number.classList.toggle("artifact-passage-number--lit", on);
+    }
+    // A spot's mark and its entry light together.
+    if (thread.drawing) {
+      thread.drawing.classList.toggle("artifact-spot-mark--lit", on);
+    }
+    if (spotted(thread) && thread.entry) {
+      thread.entry.item.classList.toggle("artifact-comments-entry--lit", on && Boolean(thread.drawing));
     }
   };
 
@@ -140,8 +153,9 @@ export function passages(page: Page, bridge: PassagesBridge): Passages {
   }
 
   // Find each open passage thread not looked for yet, draw it or take a
-  // resolved one away, and number them: those drawn in page order, then
-  // those not found.
+  // resolved one away, and number them with the spot threads: those drawn
+  // in page order (a spot where its target is), then those not found and
+  // those whose target or nodes are gone.
   api.update = function () {
     var threads: Thread[] = [];
     shown.forEach(function (thread) {
@@ -165,21 +179,43 @@ export function passages(page: Page, bridge: PassagesBridge): Passages {
     });
     // Drawing splits text nodes, never the text: each draws from its own read.
     found.forEach(draw);
-    var drawn = threads.filter(function (thread) {
-      return thread.marks.length > 0;
-    }).sort(function (a, b) {
-      return a.spot!.start - b.spot!.start || a.root.id - b.root.id;
+    var spots = Array.from(shown.values()).filter(spotted);
+    var marked = spots.filter(function (thread) { return Boolean(thread.drawing); });
+    var at = new Map<Thread, number>();
+    // What each is drawn on: targets with no text between them share an
+    // offset, and are then in page order.
+    var on = new Map<Thread, Node>();
+    threads.forEach(function (thread) {
+      if (thread.marks.length > 0) {
+        at.set(thread, thread.spot!.start);
+        on.set(thread, thread.marks[0]);
+      }
     });
-    var lost = threads.filter(api.detached).sort(function (a, b) {
+    marked.forEach(function (thread) {
+      model = model || textModel(article);
+      var target = thread.drawing!.closest("pre, figure") || thread.drawing!;
+      at.set(thread, offsetOf(model, target, 0));
+      on.set(thread, target);
+    });
+    var drawn = [...at.keys()].sort(function (a, b) {
+      return at.get(a)! - at.get(b)! || pageOrder(on.get(a)!, on.get(b)!) || a.root.id - b.root.id;
+    });
+    var lost = threads.filter(api.detached).concat(spots.filter(function (thread) {
+      return !resolved(thread) && thread.standing === "gone";
+    })).sort(function (a, b) {
       return sectionAt(a) - sectionAt(b) || a.root.id - b.root.id;
     });
-    threads.forEach(function (thread) {
+    threads.concat(spots).forEach(function (thread) {
       thread.n = 0;
     });
     drawn.concat(lost).forEach(function (thread, index) {
       thread.n = index + 1;
     });
+    marked.forEach(numbered);
     drawn.forEach(function (thread) {
+      if (!thread.number) {
+        return;
+      }
       if (thread.number!.textContent !== String(thread.n)) {
         thread.number!.textContent = String(thread.n);
         thread.number!.setAttribute("aria-label", "Open comment " + thread.n);
@@ -490,7 +526,7 @@ export function passages(page: Page, bridge: PassagesBridge): Passages {
 
   function threadAt(node: EventTarget | null) {
     var drawn = node instanceof Element &&
-      node.closest<HTMLElement>("mark.artifact-passage[data-thread], .artifact-passage-number");
+      node.closest<HTMLElement | SVGElement>("mark.artifact-passage[data-thread], .artifact-passage-number, g.artifact-spot-mark[data-thread]");
     return drawn ? shown.get(Number(drawn.dataset.thread)) || null : null;
   }
   article.addEventListener("mouseover", function (event) {
@@ -506,17 +542,18 @@ export function passages(page: Page, bridge: PassagesBridge): Passages {
   article.addEventListener("click", function (event) {
     var thread = threadAt(event.target);
     var selection = document.getSelection();
-    if (!thread) {
+    // While the reader marks a spot, a press on a mark draws another.
+    if (!thread || (event.target as Element).closest("." + page.marking)) {
       return;
     }
-    if (!(event.target as Element).closest(".artifact-passage-number") &&
+    if (!(event.target as Element).closest(".artifact-passage-number, g.artifact-spot-mark") &&
         ((selection && !selection.isCollapsed) || (event.target as Element).closest("a"))) {
       return;
     }
     if (placement().wide) {
       placement().open(thread);
     } else {
-      placement().show({ thread: thread }, (event.target as Element).closest("mark, .artifact-passage-number"));
+      placement().show({ thread: thread }, (event.target as Element).closest<HTMLElement>("mark, .artifact-passage-number, pre, figure"));
     }
   });
   return api;

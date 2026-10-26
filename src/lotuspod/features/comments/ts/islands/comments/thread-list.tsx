@@ -2,7 +2,7 @@ import { Component, createRef, render } from "preact";
 import type { Page, Thread, ThreadListBridge } from "../bridge";
 import { shared } from "./state";
 import type { Shell, Group, Entry } from "./parts";
-import { anchorOf, blockTitle, frameOf } from "./anchor";
+import { anchorOf, blockTitle, frameOf, spotTitle } from "./anchor";
 
 // Each movable container is its own root. Thread bodies and forms are
 // inserted by the page, never represented as children in the virtual tree.
@@ -232,7 +232,7 @@ export function threadList(page: Page, shell: Shell, bridge: ThreadListBridge) {
   function mark(thread: Thread): string {
     const anchor = anchorOf(thread.root);
     switch (anchor.kind) {
-      case "passage": return thread.n ? String(thread.n) : "";
+      case "passage": case "spot": return thread.n ? String(thread.n) : "";
       case "decision": return bridge.decisionOf(thread) ? "?" : "§";
       case "page": case "section": return "§";
       case "block": return "▣";
@@ -255,6 +255,10 @@ export function threadList(page: Page, shell: Shell, bridge: ThreadListBridge) {
       case "page": case "section": return <span class="artifact-comments-entry-words">{opening(thread.root.text || bridge.imageWords(thread.root))}</span>;
       case "block": return <span class="artifact-comments-entry-words">{"On "}
         <span class="artifact-comments-entry-block">{blockTitle(anchor)}</span>{anchor.state ? " · " + anchor.state : ""}</span>;
+      // Drawn, its number stands for where it is; else it says what it was on.
+      case "spot": return thread.standing === "gone"
+        ? <span class="artifact-comments-entry-words">{"On " + spotTitle(anchor, thread.root.sectionTitle)}</span>
+        : <span class="artifact-comments-entry-words">{opening(thread.root.text || bridge.imageWords(thread.root))}</span>;
       default: { const missing: never = anchor; return missing; }
     }
   }
@@ -313,12 +317,15 @@ export function threadList(page: Page, shell: Shell, bridge: ThreadListBridge) {
     const decision = bridge.decisionOf(thread);
     const anchor = anchorOf(thread.root);
     const leadKey = (decision ? "decision " + decision.name + "\n" + decision.question + "\n" : "") +
-      (anchor.kind === "block" ? "block " + blockTitle(anchor) + "\n" : "") + bridge.passages.key(thread);
+      (anchor.kind === "block" ? "block " + blockTitle(anchor) + "\n" : "") +
+      (anchor.kind === "spot" ? "spot " + thread.standing + " " + spotTitle(anchor, thread.root.sectionTitle) + " " + thread.n + "\n" : "") + bridge.passages.key(thread);
     const key = [standing(thread), bridge.routed(asked(thread)), thread.replies.length].join("\n");
     item.classList.toggle("artifact-comments-entry--resolved", done);
     item.classList.toggle("artifact-comments-entry--open", opened);
     item.classList.toggle("artifact-comments-entry--passage", anchor.kind === "passage");
     item.classList.toggle("artifact-comments-entry--block", anchor.kind === "block");
+    item.classList.toggle("artifact-comments-entry--spot", anchor.kind === "spot");
+    item.classList.toggle("artifact-comments-entry--spot-gone", anchor.kind === "spot" && thread.standing === "gone");
     item.classList.toggle("artifact-comments-entry--detached", bridge.passages.detached(thread));
     item.classList.toggle("artifact-comments-entry--decision", Boolean(decision));
     const head = createRef<HTMLButtonElement>(), body = createRef<HTMLDivElement>();
@@ -424,15 +431,16 @@ export function threadList(page: Page, shell: Shell, bridge: ThreadListBridge) {
     return found.concat(rest.sort(function (a, b) { return a.root.id - b.root.id; }));
   }
 
-  // Where a thread is listed in its group: its passages by number, with
-  // its live blocks' threads among them where each block sits, then its
-  // resolved passages and the threads on blocks the page no longer has,
+  // Where a thread is listed in its group: its passages and spots by
+  // number, with its live blocks' threads among them where each block sits,
+  // then its resolved passages and spots and the threads on blocks the page
+  // no longer has,
   // then its decisions' threads in the decisions' order, then its §
   // threads, each oldest first.
   function rank(thread: Thread): [number, number, number] {
     const anchor = anchorOf(thread.root);
     switch (anchor.kind) {
-      case "passage": return thread.n ? [0, thread.n, 0] : [1, thread.root.id, 0];
+      case "passage": case "spot": return thread.n ? [0, thread.n, 0] : [1, thread.root.id, 0];
       case "block": {
         // Between the passages around it, in the order of the page's blocks.
         const frames = page.all("iframe.artifact-widget");

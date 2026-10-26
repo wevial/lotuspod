@@ -1,0 +1,285 @@
+/* Comments on a spot (features/comments/ts/islands/comments/spots.tsx): a
+   diagram's or a figure's Comment and its mark-mode bar, the marks drawn on
+   the drawing, the composer under a draft mark, and a spot thread's entry. */
+
+/* The bar sits in the drawing's top right corner: on a diagram left of its
+   Expand, following the pre's scroll as Expand does, in a band of its own
+   above the drawing, so it covers no box and a box can be drawn round a node
+   in the top row. */
+pre.mermaid:has(> .artifact-spot-tools) {
+  position: relative;
+}
+
+.artifact-body pre.mermaid[data-processed]:has(> .artifact-spot-tools) {
+  padding-top: 2.5rem;
+}
+
+/* Kept short of the comments panel, as a table is (--table-room), so its bar
+   is never under the panel. */
+:is(.artifact-body, .artifact-section-body) > pre.mermaid:has(> .artifact-spot-tools) {
+  max-width: min(var(--measure-full), var(--table-room, var(--measure-full)));
+}
+
+/* Positioned whenever it holds the bar or the marks' overlay: an archived
+   page has no bar, and still draws its marks over the image. */
+.artifact-body .artifact-figure:is(:has(> .artifact-spot-tools), :has(> .artifact-spot-overlay)) {
+  max-width: 100%;
+  position: relative;
+  width: fit-content;
+}
+
+.artifact-spot-tools {
+  position: absolute;
+  right: calc(0.5rem + 28px + 0.375rem);
+  top: 0.5rem;
+  transform: translateX(var(--artifact-diagram-scroll, 0px));
+  z-index: 1;
+}
+
+.artifact-figure > .artifact-spot-tools {
+  right: 0.5rem;
+  transform: none;
+}
+
+.artifact-spot-bar {
+  display: flex;
+  gap: 0.375rem;
+}
+
+.artifact-spot-tools button {
+  appearance: none;
+  background: var(--color-surface);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-chip);
+  color: var(--color-pale-lavender);
+  cursor: pointer;
+  font-family: var(--font-body);
+  font-size: 0.8rem;
+  line-height: 1.2;
+  margin: 0;
+  padding: 0.3rem 0.65rem;
+}
+
+.artifact-spot-tools button:hover {
+  border-color: var(--color-lavender);
+  color: var(--color-white);
+}
+
+.artifact-spot-tools button[aria-pressed="true"] {
+  background: var(--color-lavender);
+  border-color: var(--color-lavender);
+  color: var(--color-night);
+}
+
+.artifact-spot-tools button:focus-visible {
+  outline: 2px solid var(--color-lavender);
+  outline-offset: 2px;
+}
+
+/* A badge at a mark's first corner may stand past the drawing's edge. */
+pre.mermaid > svg:has(> .artifact-spot-layer) {
+  overflow: visible;
+}
+
+/* Mark mode: a crosshair over the drawing, whose presses draw instead of
+   scrolling the page. */
+pre.mermaid.artifact-spot-marking > svg,
+pre.mermaid.artifact-spot-marking > svg g.node,
+.artifact-spot-marking > .artifact-spot-overlay,
+.artifact-spot-marking .artifact-spot-mark {
+  cursor: crosshair;
+  touch-action: none;
+}
+
+.artifact-spot-marking > .artifact-spot-overlay {
+  pointer-events: auto;
+}
+
+/* An image's marks are drawn in an svg laid over it in its natural pixels;
+   only the marks take the pointer. */
+.artifact-spot-overlay {
+  overflow: visible;
+  pointer-events: none;
+  position: absolute;
+}
+
+.artifact-spot-mark {
+  cursor: pointer;
+}
+
+.artifact-spot-shape {
+  fill: color-mix(in srgb, var(--color-rose) 16%, transparent);
+  pointer-events: visibleStroke;
+  stroke: var(--color-rose);
+  stroke-width: 2.5px;
+  vector-effect: non-scaling-stroke;
+}
+
+path.artifact-spot-shape {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 3px;
+}
+
+.artifact-spot-hit {
+  fill: none;
+  pointer-events: stroke;
+  stroke: transparent;
+  stroke-width: 14px;
+  vector-effect: non-scaling-stroke;
+}
+
+.artifact-spot-mark--changed .artifact-spot-shape,
+.artifact-spot-mark--draft .artifact-spot-shape {
+  stroke-dasharray: 7 5;
+}
+
+.artifact-spot-mark--draft {
+  pointer-events: none;
+}
+
+.artifact-spot-mark--lit .artifact-spot-shape {
+  fill: color-mix(in srgb, var(--color-rose) 30%, transparent);
+  stroke-width: 3.5px;
+}
+
+path.artifact-spot-shape:is(.artifact-spot-mark--lit *) {
+  fill: none;
+  stroke-width: 4.5px;
+}
+
+/* A mark's number, at its first corner. */
+.artifact-spot-badge {
+  pointer-events: all;
+}
+
+.artifact-spot-badge circle {
+  fill: var(--color-rose);
+  stroke: var(--color-night);
+  stroke-width: 1.5px;
+  vector-effect: non-scaling-stroke;
+}
+
+.artifact-spot-badge text {
+  dominant-baseline: central;
+  fill: var(--color-night);
+  font-family: var(--font-body);
+  font-weight: 700;
+  text-anchor: middle;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* The composer under a draft mark, over the page. */
+.artifact-spot-composer {
+  background: var(--color-surface);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-card);
+  box-shadow: 0 10px 30px var(--shadow);
+  box-sizing: border-box;
+  padding: 0.6rem 0.7rem 0.45rem;
+  position: absolute;
+  width: min(22rem, calc(100vw - 16px));
+  z-index: 30;
+}
+
+.artifact-spot-composer .artifact-comment-form {
+  margin: 0;
+}
+
+.artifact-spot-composer .artifact-comment-form textarea:focus-visible {
+  outline: none;
+}
+
+/* Its field spans the composer, with Cancel and Comment side by side under
+   it, then the status line. */
+.artifact-spot-composer .artifact-comment-form {
+  grid-template-columns: minmax(0, 1fr) auto auto;
+}
+
+.artifact-spot-composer .artifact-comment-form > :is(.artifact-composer-box, textarea),
+.artifact-spot-composer .artifact-comment-form::before {
+  grid-column: 1 / -1;
+  grid-row: 1;
+}
+
+.artifact-spot-composer .artifact-comment-actions > button {
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-chip);
+  font-family: var(--font-body);
+  font-size: 0.85rem;
+  grid-row: 2;
+  height: auto;
+  line-height: 1.2;
+  margin: 0.55rem 0 0 0.4rem;
+  overflow: visible;
+  padding: 0.35rem 0.8rem;
+  width: auto;
+}
+
+.artifact-spot-composer .artifact-comment-actions > button::before,
+.artifact-spot-composer .artifact-comment-actions > button::after {
+  content: none;
+}
+
+.artifact-spot-composer .artifact-comment-actions > .artifact-spot-cancel {
+  background: transparent;
+  color: var(--color-pale-lavender);
+  grid-column: 2;
+}
+
+.artifact-spot-composer .artifact-comment-actions > button[type="submit"] {
+  background: var(--color-lavender);
+  border-color: var(--color-lavender);
+  color: var(--color-night);
+  grid-column: 3;
+}
+
+.artifact-spot-composer .artifact-comment-actions > button:hover {
+  border-color: var(--color-pale-lavender);
+}
+
+.artifact-spot-composer .artifact-comment-actions > button:focus-visible {
+  outline: 2px solid var(--color-lavender);
+  outline-offset: 2px;
+}
+
+.artifact-spot-composer .artifact-comment-status {
+  color: var(--color-muted-lavender);
+  font-size: 0.85rem;
+  grid-column: 1 / -1;
+  grid-row: 3;
+  margin: 0;
+}
+
+.artifact-spot-composer .artifact-comment-status:not(:empty) {
+  margin-top: 0.4rem;
+}
+
+/* A spot thread's number is the rose of its mark, a ring once nothing is
+   drawn for it; its entry lights with its mark, and its row says when the
+   drawing changed under it. */
+.artifact-comments-entry--spot .artifact-comments-entry-mark {
+  background: var(--color-rose);
+  border-color: var(--color-rose);
+  color: var(--color-night);
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  font-weight: 600;
+}
+
+.artifact-comments-entry--spot-gone .artifact-comments-entry-mark,
+.artifact-comments-entry--spot .artifact-comments-entry-resolved .artifact-comments-entry-mark {
+  background: none;
+  border-color: var(--hairline-strong);
+  color: var(--color-muted-lavender);
+}
+
+.artifact-comments-entry--lit {
+  box-shadow: inset 2px 0 0 var(--color-rose);
+}
+
+.artifact-comment-event--spot > span {
+  font-style: italic;
+}

@@ -88,6 +88,17 @@ declare const BLOCK_GONE: string;
 // page has changed since it loaded.
 declare const BLOCK_CHANGED: string;
 declare const STALE_BLOCK: string;
+// features/publish/ts/page-open.js: what a composer on a spot says when a send
+// was refused for a diagram or an image the page has changed since it loaded.
+declare const STALE_DIAGRAM: string;
+declare const STALE_IMAGE: string;
+// features/publish/ts/page-open.js: sent once a swap's diagrams are in the
+// page (detail.nodes) and once Mermaid draws a diagram again in the other
+// theme (detail.pre, detail.svg); the class on a diagram's pre or a figure
+// while the reader marks a spot on it.
+declare const DIAGRAMS: string;
+declare const REDRAWN: string;
+declare const MARKING: string;
 
 declare function commentMarkdown(node: HTMLDivElement, text: string): HTMLDivElement;
 declare function commentImages(row: CommentRow): HTMLUListElement | null;
@@ -139,6 +150,9 @@ export const page = Object.freeze({
   blockGone: BLOCK_GONE,
   blockChanged: BLOCK_CHANGED,
   staleBlock: STALE_BLOCK,
+  staleDiagram: STALE_DIAGRAM,
+  staleImage: STALE_IMAGE,
+  marking: MARKING,
   room: ROOM,
   popover: POPOVER,
   overText,
@@ -161,7 +175,7 @@ export const page = Object.freeze({
   startComment(start: StartComment): void {
     if (!ARCHIVED) startComment = start;
   },
-  events: Object.freeze({ answered: ANSWERED, saved: SAVED, drawn: DRAWN, swapped: SWAPPED }),
+  events: Object.freeze({ answered: ANSWERED, saved: SAVED, drawn: DRAWN, swapped: SWAPPED, diagrams: DIAGRAMS, redrawn: REDRAWN }),
 });
 
 export type Page = typeof page;
@@ -169,6 +183,18 @@ export type Page = typeof page;
 // A live block's address as a thread's first comment stores it (widget):
 // its id, its widget file's hash and the state its widget showed.
 export interface Widget { id: string; hash: string; state: string }
+// A spot on a diagram or an image as a thread's first comment stores it
+// (spot): the target's id and hash, the mark's shape and the flowchart boxes
+// it covers. A shape is in fractions of the box its nodes span, of the
+// diagram's viewBox when it covers none, or in an image's natural pixels.
+export type SpotShape =
+  | { kind: "box"; x: number; y: number; w: number; h: number }
+  | { kind: "stroke"; points: [number, number][] };
+export interface SpotNode { id: string; label: string }
+export interface Spot { id: string; hash: string; shape: SpotShape; nodes: SpotNode[] }
+// Where a spot thread's mark stands: on its target as it was, on a changed
+// target whose nodes are all drawn, or nowhere.
+export type SpotStanding = "current" | "changed" | "gone";
 export type StartComment = (request: { anchor: { kind: "block" } & Widget }) => void;
 
 // One part of the page a swap changed (features/live/ts/page-swap.ts): the
@@ -200,6 +226,7 @@ export interface CommentRow {
   quote?: { exact?: string; prefix?: string; suffix?: string } | null;
   question?: string | number | null;
   widget?: Widget | null;
+  spot?: Spot | null;
   sectionTitle?: string;
   text?: string;
   state?: string;
@@ -223,6 +250,9 @@ export interface Thread {
   marks: HTMLElement[];
   lit: boolean;
   entry: import("./comments/parts").Entry | null;
+  // A spot thread's standing as last placed, and its mark while drawn.
+  standing?: SpotStanding;
+  drawing?: SVGGElement | null;
 }
 export interface Decision { form: HTMLFormElement; name: string; question: string }
 export interface CommentPayload { resolution?: Resolution; error?: unknown }
@@ -337,7 +367,7 @@ export interface Attachments {
 export interface ComposerBridge {
   page: string;
   revision(): string | null;
-  attached: Map<HTMLFormElement, Attachments>;
+  attached: WeakMap<HTMLFormElement, Attachments>;
   forms: Map<HTMLElement, HTMLFormElement>;
   sending: Map<HTMLFormElement, Promise<CommentRow | null>>;
   boxWith(form: HTMLFormElement): HTMLElement | null;
@@ -382,9 +412,11 @@ export interface PassagesBridge {
   shown: Map<number, Thread>;
   resolved(thread: Thread): boolean;
   revision(): string | null;
-  attached: Map<HTMLFormElement, Attachments>;
+  attached: WeakMap<HTMLFormElement, Attachments>;
   composer: Pick<ReturnType<typeof import('./comments/composer').composers>, 'passage'>;
   placement(): import('./comments/parts').Placement;
+  // A drawn spot thread's mark shows its number.
+  numbered(thread: Thread): void;
 }
 
 // shared.js: the imperative DOM helper, also used by page-owned UI.
