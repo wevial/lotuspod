@@ -148,11 +148,11 @@ export function spots(page: Page, bridge: SpotsBridge): Spots {
       return layer;
     }
     const figure = holderOf(target);
-    return figure && overlayOf(figure, target as HTMLImageElement, natural(target as HTMLImageElement)).layer;
+    return figure && overlayOf(figure, target as HTMLImageElement, natural(target as HTMLImageElement));
   }
 
-  // The svg over img in parent, in size's units, made when missing, and its layer.
-  function overlayOf(parent: HTMLElement, img: HTMLImageElement, size: Rect) {
+  // The layer of the svg over img in parent, in size's units, made when missing.
+  function overlayOf(parent: HTMLElement, img: HTMLImageElement, size: Rect): SVGGElement {
     let over = parent.querySelector<SVGSVGElement>(":scope > svg.artifact-spot-overlay");
     if (!over) {
       over = svg("svg", "artifact-spot-overlay");
@@ -167,7 +167,7 @@ export function spots(page: Page, bridge: SpotsBridge): Spots {
     over.style.top = inner.top - outer.top + "px";
     over.style.width = inner.width + "px";
     over.style.height = inner.height + "px";
-    return { over, layer: over.querySelector<SVGGElement>(":scope > g.artifact-spot-layer")! };
+    return over.querySelector<SVGGElement>(":scope > g.artifact-spot-layer")!;
   }
 
   // Where mark mode draws: on an image in the viewer, the overlay over the
@@ -176,7 +176,7 @@ export function spots(page: Page, bridge: SpotsBridge): Spots {
     const target = marking && targetIn(marking.holder);
     if (!target) return null;
     const view = marking!.view;
-    if (view?.image && target.tagName !== "PRE") return overlayOf(view.surface!, view.image, natural(target as HTMLImageElement)).layer;
+    if (view?.image && target.tagName !== "PRE") return overlayOf(view.surface!, view.image, natural(target as HTMLImageElement));
     return layerOf(target);
   }
 
