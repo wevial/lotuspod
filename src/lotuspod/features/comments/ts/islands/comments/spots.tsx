@@ -592,7 +592,16 @@ export function spots(page: Page, bridge: SpotsBridge): Spots {
 
   // An image spot's composer takes a PNG crop of the spot at natural size as
   // its first image.
+  // A crop that cannot be made is not attached, which a send then says.
   async function attach(img: HTMLImageElement, shape: SpotShape, draft: Draft) {
+    try {
+      await crop(img, shape, draft);
+    } catch {
+      // Left for the send to make again.
+    }
+  }
+
+  async function crop(img: HTMLImageElement, shape: SpotShape, draft: Draft) {
     const part = shapeBounds(shape);
     const width = Math.max(1, Math.round(part.w));
     const height = Math.max(1, Math.round(part.h));

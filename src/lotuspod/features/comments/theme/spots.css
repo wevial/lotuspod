@@ -20,7 +20,9 @@ pre.mermaid:has(> .artifact-spot-tools) {
   max-width: min(var(--measure-full), var(--table-room, var(--measure-full)));
 }
 
-.artifact-body .artifact-figure:has(> .artifact-spot-tools) {
+/* Positioned whenever it holds the bar or the marks' overlay: an archived
+   page has no bar, and still draws its marks over the image. */
+.artifact-body .artifact-figure:is(:has(> .artifact-spot-tools), :has(> .artifact-spot-overlay)) {
   max-width: 100%;
   position: relative;
   width: fit-content;

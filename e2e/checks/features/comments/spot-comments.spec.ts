@@ -673,6 +673,29 @@ test('a box on an image is posted in its natural pixels with a crop of it, and d
   expect(retried.images[0]).toMatch(/^[0-9a-f]{64}\.png$/);
   await expect(form.holder).toHaveCount(0);
 
+  // A crop the canvas cannot make leaves the send able to go again: it says
+  // so, keeps the text, and posts once a crop is made.
+  await page.evaluate(() => {
+    (window as any).toBlob = HTMLCanvasElement.prototype.toBlob;
+    HTMLCanvasElement.prototype.toBlob = function () { throw new Error('no canvas'); };
+  });
+  await fish.img.scrollIntoViewIfNeeded();
+  await fish.comment.click();
+  const broken = await rect(fish.img);
+  await drag(page, [broken.x + broken.width * 0.3, broken.y + broken.height * 0.3], [broken.x + broken.width * 0.5, broken.y + broken.height * 0.5]);
+  comments.length = 0;
+  await form.field.fill('No canvas');
+  await form.send.click();
+  await expect(form.status).toHaveText(CROP_FAILED);
+  await expect(form.send).toBeEnabled();
+  await expect(form.field).toHaveValue('No canvas');
+  expect(comments).toEqual([]);
+  await page.evaluate(() => { HTMLCanvasElement.prototype.toBlob = (window as any).toBlob; });
+  const mended = posting(page);
+  await form.send.click();
+  expect((await mended).postDataJSON().images).toHaveLength(1);
+  await expect(form.holder).toHaveCount(0);
+
   // A crop the reader takes out once it has uploaded is made and attached
   // again by the send, and posted as the first image: another PNG of the
   // same size, attached in its place, is not taken for it.
@@ -763,12 +786,12 @@ test('a box on an image is posted in its natural pixels with a crop of it, and d
   const strays = panel(page).strays.locator('.artifact-comments-entry');
   const headings = () => strays.evaluateAll((entries) =>
     entries.map((entry) => entry.querySelector('.artifact-comments-entry-words')?.textContent));
-  await expect(strays).toHaveCount(4);
-  await expect.poll(headings).toEqual(Array(4).fill('On Fish'));
+  await expect(strays).toHaveCount(5);
+  await expect.poll(headings).toEqual(Array(5).fill('On Fish'));
   await page.reload();
   await expect(page.locator('html')).toHaveAttribute('data-lotuspod-comments-read', '');
-  await expect(strays).toHaveCount(4);
-  await expect.poll(headings).toEqual(Array(4).fill('On Fish'));
+  await expect(strays).toHaveCount(5);
+  await expect.poll(headings).toEqual(Array(5).fill('On Fish'));
   expect(errors).toEqual([]);
 });
 
@@ -859,6 +882,38 @@ test('marks on adjacent diagrams are numbered in page order, and a draft\'s comp
   const before = await gap();
   await wide.evaluate((el) => { el.scrollLeft = 100; });
   await expect.poll(async () => Math.abs((await gap()) - before)).toBeLessThan(2);
+  expect(errors).toEqual([]);
+});
+
+test('an archived page draws its image marks over the image', async ({ page }) => {
+  test.setTimeout(120_000);
+  const name = `spot-comments-archived-${test.info().repeatEachIndex}`;
+  publish(name, doc());
+  const errors = await watch(page);
+  await load(page, name);
+  const fish = figure(page);
+  await fish.img.scrollIntoViewIfNeeded();
+  await expect.poll(() => fish.img.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth)).toBe(320);
+  await fish.comment.click();
+  const shown = await rect(fish.img);
+  await drag(page, [shown.x + shown.width * 0.2, shown.y + shown.height * 0.25], [shown.x + shown.width * 0.6, shown.y + shown.height * 0.7]);
+  await post(page, 'The fin');
+  expect(run('archive', name, '--local', '--out-dir', OUT)).toContain(`archived ${name}`);
+  try {
+    await load(page, name);
+    await expect(page.locator('meta[name="lotuspod:archived"]')).toHaveCount(1);
+    await expect(fish.comment).toHaveCount(0);
+    await expect(fish.marks).toHaveCount(1);
+    await fish.img.scrollIntoViewIfNeeded();
+    const img = await rect(fish.img);
+    const mark = await rect(fish.marks.first().locator('.artifact-spot-shape'));
+    expect(mark.x).toBeGreaterThanOrEqual(img.x);
+    expect(mark.y).toBeGreaterThanOrEqual(img.y);
+    expect(mark.x + mark.width).toBeLessThanOrEqual(img.x + img.width);
+    expect(mark.y + mark.height).toBeLessThanOrEqual(img.y + img.height);
+  } finally {
+    run('unarchive', name, '--local', '--out-dir', OUT);
+  }
   expect(errors).toEqual([]);
 });
 
