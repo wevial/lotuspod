@@ -176,12 +176,29 @@ class IdTests(unittest.TestCase):
         self.assertEqual(targets.mark_targets(marked), marked)
 
     def test_what_is_no_target(self):
-        body = ('<pre class="mermaid" data-spot="bad.id">graph TD</pre>'
+        body = ('<pre class="mermaid" data-spot="">graph TD</pre>'
                 '<template><pre class="mermaid">graph TD</pre></template>'
                 '<figure class="artifact-figure"><img src="/media/nope.png" alt="x"></figure>'
                 f'<p><img src="/media/{"c" * 64}.png" alt="loose"></p>')
         self.assertEqual(targets.PageTargets(body).found, {})
         self.assertEqual(targets.mark_targets(body), body)
+
+
+class HeadingIdTests(unittest.TestCase):
+    def test_a_counted_id_keeps_its_heading_s_id_as_written(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        work = Path(tmp.name)
+        source = work / "flow.html"
+        source.write_text('<h1>Pond</h1>\n<h2 id="flow.v2">Flow</h2>\n'
+                          '<pre class="mermaid">graph TD\n  A</pre>\n<h2>Later</h2>\n<p>x</p>\n',
+                          encoding="utf-8")
+        rc, _out, err = run_cli("publish", str(source), "--out-dir", str(work / "site"), "--local")
+        self.assertEqual(rc, 0, err)
+        page = (work / "site" / "flow.html").read_text(encoding="utf-8")
+        self.assertIn('data-spot="flow.v2-diagram-1"', page)
+        [(ident, target)] = targets.PageTargets(page).found.items()
+        self.assertEqual((ident, target.section), ("flow.v2-diagram-1", "flow.v2"))
 
 
 class FenceIdTests(unittest.TestCase):

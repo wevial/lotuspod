@@ -11,8 +11,9 @@ Ids: a diagram's is the `data-spot` its `pre` carries (a `mermaid id=NAME`
 fence writes it), else SECTION-diagram-N, N counted from 1 among the
 diagrams of its section (`diagram-N` before the first heading). An image's
 is the slug of its alt text, else SECTION-figure-N (`figure-N` before the
-first heading). A `data-spot` that is not SPOT_ID, or that an earlier one
-took, makes its element no target. A slug or counted id another target
+first heading). An empty `data-spot`, or one an earlier one took, makes
+its element no target; any other is its id, as a counted id may hold any
+character its heading's id does (SPOT_ID binds only what a fence names). A slug or counted id another target
 has takes -2, -3 in page order.
 
 Hashes: a diagram's is the first 12 hex digits of the SHA-256 of its text,
@@ -43,7 +44,7 @@ IMAGE = "image"
 SPOT_ATTRIBUTE = "data-spot"
 HASH_ATTRIBUTE = "data-spot-hash"
 FIGURE_CLASS = "artifact-figure"
-# An explicit id: a fence's, checked at publish, or one written in HTML.
+# What a `mermaid id=` fence may name, checked at publish.
 SPOT_ID = re.compile(r"[A-Za-z0-9_-]+")
 _STORED = re.compile(re.escape(URL_PREFIX) + r"([0-9a-f]{64})\.[a-z]+")
 _SLUG_STRIP = re.compile(r"[^a-z0-9]+")
@@ -168,7 +169,7 @@ def _targets(text: str) -> list[tuple[str, Target, dict]]:
         ident = candidate["attrs"].get(SPOT_ATTRIBUTE)
         if ident is None:
             continue
-        if SPOT_ID.fullmatch(ident) and ident not in taken:
+        if ident and ident not in taken:
             explicit[candidate["start"]] = ident
             taken.add(ident)
         else:
