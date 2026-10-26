@@ -321,11 +321,14 @@ class _AllowListHandler(SimpleHTTPRequestHandler):
             # allowed by the hash of today's text, never the old commit's.
             head = (THEME_ROOT / "core/ts/theme-head.js").read_text(encoding="utf-8")
             bridge = widgets.bridge_script()
+            answer = old_page(rendered, stem, version, behind, nonce, script,
+                              frozenset((head, bridge)))
+            # Read from the answer itself: old_page may drop a kept script
+            # (one inside a badge it replaces), and no absent one is allowed.
             sources = f"'nonce-{nonce}' {script_hash(head)}"
-            if holds_script(rendered, bridge):
+            if holds_script(answer, bridge):
                 sources += f" {script_hash(bridge)}"
-            data = old_page(rendered, stem, version, behind, nonce, script,
-                            frozenset((head, bridge))).encode("utf-8")
+            data = answer.encode("utf-8")
             # The banner counts the newer versions, so the tag does too.
             return self._answer_rendered(
                 data, f'"v-{commit}-{behind}-{self.render_version}"', tuple(
