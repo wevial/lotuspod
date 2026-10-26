@@ -44,9 +44,13 @@ export function label(form: HTMLFormElement, answer: Answer): string {
   return text ? text.textContent ?? "" : String(answer.choice);
 }
 
+// The characters Python's str.split() takes as white space, so the page and
+// publish's warning collapse the same ones.
+const SPACE = /[\t\n\v\f\r\x1c-\x20\x85\xa0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]+/g;
+
 // Text with its white space collapsed.
 function squeezed(text: unknown): string {
-  return String(text).replace(/\s+/g, " ").trim();
+  return String(text).replace(SPACE, " ").replace(/^ | $/g, "");
 }
 
 // Whether answer, a question's current answer, shows as the form's answer:
@@ -62,7 +66,7 @@ export function holds(form: HTMLFormElement, answer: Answer): boolean {
   }
   const found = radios(form).find((radio) => radio.value === answer.choice);
   const text = found && found.parentNode!.querySelector(".artifact-decision-label");
-  return Boolean(text) && squeezed(asked.text) === words(form, ".artifact-decision-text") &&
+  return Boolean(text) && squeezed(asked.text) === squeezed(form.querySelector(".artifact-decision-text")?.textContent ?? "") &&
     squeezed(asked.label) === squeezed(text!.textContent ?? "");
 }
 

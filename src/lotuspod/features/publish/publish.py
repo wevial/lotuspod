@@ -235,6 +235,14 @@ def publish_over_ssh(args: argparse.Namespace, config: dict[str, str]) -> int:
     return done.returncode
 
 
+def _answered(form: decisions.Form, answer: dict) -> str:
+    """An answer stored without its words, in form's labels: a checklist's
+    items checked, a decision's option."""
+    if "checked" in answer:
+        return ", ".join(form.label(item) for item in answer["checked"]) or "nothing checked"
+    return form.label(answer.get("choice", ""))
+
+
 def reopened(out_dir: Path, args: argparse.Namespace, name: str, previous: str,
              published: str) -> list[str]:
     """A line for each question whose stored answer showed as its answer on
@@ -261,7 +269,7 @@ def reopened(out_dir: Path, args: argparse.Namespace, name: str, previous: str,
             continue
         asked = answer.get("asked") or {}
         text = asked.get("text") or old.text
-        label = asked.get("label") or old.label(answer.get("choice", ""))
+        label = asked.get("label") or _answered(old, answer)
         lines.append(f'publish: {name}: {question} was answered "{text}" ({label}); '
                      f'this publish asks "{new.text}" there, so its card opens again')
     return lines

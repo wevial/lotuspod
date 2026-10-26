@@ -143,9 +143,26 @@ test.describe('signed in', () => {
     expect(errors).toEqual([]);
   });
 
+  // White space is what Python's str.split() collapses, so the card agrees
+  // with publish's warning: U+0085 is white space there, U+FEFF is not.
+  test('a question asked again with other white space between its words keeps the answer shown', async ({ page }) => {
+    const name = 'republished-answers-spaced';
+    const errors = watch(page);
+    await answered(page, name);
+    publish(name, markdown('| 1 | Which\u0085heater? | Solar / Electric / Gas | Solar |'));
+
+    await page.reload();
+    const card = decision(page);
+    await expect(card.valued('gas')).toHaveCount(1);
+    await expect(card.saved).toHaveText('✓ Saved · Electric · change');
+    await expect(card.earlier).toHaveCount(0);
+    expect(errors).toEqual([]);
+  });
+
   for (const [what, row1] of [
     ['reworded', '| 1 | Which heater for the shed? | Solar / Electric | Solar |'],
     ['with its answer renamed', '| 1 | Which heater? | Solar / Electric coil | Solar |'],
+    ['joined by a zero-width no-break space', '| 1 | Which\uFEFFheater? | Solar / Electric | Solar |'],
   ]) {
     test(`a question ${what} opens again as answered to an earlier wording`, async ({ page }) => {
       const name = `republished-answers-${what.split(' ').pop()}`;

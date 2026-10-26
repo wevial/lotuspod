@@ -52,6 +52,18 @@ Which heater the shed gets.
 | 1 | Which heater for the shed? | Solar / Electric | Solar |
 | 3 | Paint the door? | Green / Blue | |
 """
+CHECKLIST = """\
+# Heater plan
+
+Which heater the shed gets.
+
+## Checklist for the maintainer
+
+| # | Item | Default |
+| --- | --- | --- |
+| a | Vent the roof | on |
+| b | Seal the door | off |
+"""
 WIDENED = FIRST.replace("| Solar / Electric |", "| Solar / Electric / Gas |")
 WARNED = (f'publish: {NAME}: decision-1 was answered "Which heater?" (Electric); '
           'this publish asks "Which heater for the shed?" there, so its card opens again')
@@ -130,6 +142,19 @@ class RepublishWarning(unittest.TestCase):
         self.assertNotEqual(current["version"], forms["decision-1"].version)
         self.assertTrue(holds(forms["decision-1"], current))
 
+    def test_a_checklist_answer_without_its_words_is_named_by_its_items(self):
+        self.publish(CHECKLIST)
+        form = self.forms()["checklist-1"]
+        db.Database(self.db).add_answer(
+            page=NAME, question=form.question, version=form.version, choice="",
+            note="", revision="r1", actor={"kind": "reader", "email": "m@example.com"},
+            checked=["a", "b"])
+        done = self.publish(CHECKLIST.replace("Seal the door", "Seal the shed door"))
+        self.assertEqual(self.warnings(done), [
+            f'publish: {NAME}: checklist-1 was answered "{form.text}" '
+            f'(Vent the roof, Seal the door); this publish asks "{form.text}" there, '
+            'so its card opens again'])
+
     def test_no_database_prints_nothing(self):
         self.publish(FIRST)
         done = self.publish(REWORDED)
@@ -150,6 +175,14 @@ class Rule(unittest.TestCase):
     def test_the_same_words_and_label_hold_across_versions(self):
         self.assertTrue(holds(self.FORM, self.answer()))
         self.assertTrue(holds(self.FORM, self.answer(version="v2", asked=None)))
+
+    def test_white_space_is_what_python_and_the_page_both_collapse(self):
+        for text, same in (("Which\x85heater?", True), ("Which\x1fheater?", True),
+                           ("Which\u3000heater?", True), ("Which\ufeffheater?", False)):
+            with self.subTest(text=text):
+                form = Form(question="decision-1", text=text, version="v2",
+                            options=self.FORM.options)
+                self.assertEqual(holds(form, self.answer()), same)
 
     def test_other_words_a_dismissal_a_checklist_or_no_words_do_not(self):
         for changes in ({"asked": {"text": "Which heater for the shed?", "label": "Electric"}},
