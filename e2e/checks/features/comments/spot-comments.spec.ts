@@ -363,6 +363,54 @@ test('a stroke, a click on a node and the keyboard mark spots; Escape drops a dr
   await expect(flow.comment).toBeFocused();
   expect(posts).toEqual([]);
 
+  // A draft keeps its mark and its text while Mermaid draws the diagram again
+  // in the other theme.
+  const themes = page.getByRole('group', { name: 'Theme' });
+  const redrawn = async (theme: 'Dawn' | 'Night') => {
+    await flow.svg.evaluate((svg) => { (svg as any).old = true; });
+    await themes.getByRole('button', { name: theme, exact: true }).click();
+    await expect.poll(() => flow.svg.evaluate((svg) => !(svg as any).old)).toBe(true);
+  };
+  await flow.comment.click();
+  await boxRound(page, flow.node('Reader'));
+  await form.field.fill('Still here');
+  await redrawn('Dawn');
+  await expect(flow.draft).toHaveCount(1);
+  await expect(form.field).toHaveValue('Still here');
+  await redrawn('Night');
+  await expect(flow.draft).toHaveCount(1);
+  await expect(form.field).toHaveValue('Still here');
+  await form.field.focus();
+  await page.keyboard.press('Escape');
+  await expect(form.holder).toHaveCount(0);
+
+  // A save that ends after its draft was dropped leaves a newer draft as it is.
+  let release!: () => void;
+  const held = new Promise<void>((done) => { release = done; });
+  await page.route('**/api/comments', async (route) => {
+    if (route.request().method() === 'POST') await held;
+    await route.continue();
+  });
+  await boxRound(page, flow.node('Agent'));
+  await form.field.fill('Saved late');
+  const late = page.waitForResponse((response) => new URL(response.url()).pathname === '/api/comments' &&
+    response.request().method() === 'POST');
+  await form.send.click();
+  await form.cancel.click();
+  await expect(form.holder).toHaveCount(0);
+  await boxRound(page, flow.node('Reader'));
+  await form.field.fill('Newer');
+  release();
+  expect((await late).status()).toBe(201);
+  await page.unroute('**/api/comments');
+  await expect(flow.marks).toHaveCount(4);
+  await expect(flow.draft).toHaveCount(1);
+  await expect(form.field).toHaveValue('Newer');
+  await expect(flow.box).toBeVisible();
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Escape');
+  await expect(flow.comment).toBeFocused();
+
   // A hash the diagram never had is refused, and the text kept.
   await flow.comment.click();
   await boxRound(page, flow.node('Reader'));
@@ -390,13 +438,15 @@ test('a box on an image is posted in its natural pixels with a crop of it, and d
   await expect.poll(() => fish.img.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth)).toBe(320);
   await expect(fish.comment).toBeVisible();
   await fish.comment.click();
+  // Mark mode shows its crosshair over the image before any press.
+  await expect.poll(() => fish.node.locator('svg.artifact-spot-overlay')
+    .evaluate((over) => getComputedStyle(over).cursor)).toBe('crosshair');
   const shown = await rect(fish.img);
   const from: [number, number] = [shown.x + shown.width * 0.2, shown.y + shown.height * 0.25];
   const to: [number, number] = [shown.x + shown.width * 0.6, shown.y + shown.height * 0.7];
   await drag(page, from, to);
   const form = composer(page);
-  // The crop is the composer's first image, once uploaded.
-  await expect(form.holder.locator('a.artifact-attach-link').first()).toBeVisible();
+  // Posted at once, the comment waits for its crop to upload: its first image.
   const { body, row } = await post(page, 'This fin');
   const shape = body.spot.shape;
   expect(body.spot.nodes).toEqual([]);

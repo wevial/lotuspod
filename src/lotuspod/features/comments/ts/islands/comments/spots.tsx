@@ -43,7 +43,9 @@ const FIGURE = 11;
 const GAP = 8;
 const EDGE = 8;
 
-interface Draft { mark: SVGGElement; composer: Composer; spot: Omit<Spot, "hash">; image: boolean }
+// A draft: its mark and the shape it draws, in its layer's coordinates, its
+// composer, the spot it posts, and on an image its crop, once attached.
+interface Draft { mark: SVGGElement; shape: SpotShape; composer: Composer; spot: Omit<Spot, "hash">; image: boolean; cropped: Promise<void> }
 interface Press { id: number; x: number; y: number; layer: SVGGElement; points: Point[]; moved: boolean; node: SVGGElement | null; preview: SVGGElement | null }
 interface Marking { holder: HTMLElement; tool: "box" | "stroke"; draft: Draft | null; press: Press | null; tabbed: SVGGElement[] }
 
@@ -291,6 +293,9 @@ export function spots(page: Page, bridge: SpotsBridge): Spots {
     if (marking) leave(false);
     marking = { holder, tool: "box", draft: null, press: null, tabbed: [] };
     holder.classList.add(page.marking);
+    // An image's overlay takes the crosshair from the start.
+    const target = targetIn(holder);
+    if (target && target.tagName !== "PRE") layerOf(target);
     tab();
     bar(holder);
     focusIn(holder, ".artifact-spot-tool[aria-pressed='true']");
@@ -334,9 +339,15 @@ export function spots(page: Page, bridge: SpotsBridge): Spots {
     draft.composer.holder.remove();
   }
 
-  // The diagram in mark mode was drawn again: a draft on the old drawing goes.
+  // The diagram in mark mode was drawn again (the other theme lays it out
+  // the same): a draft's mark is drawn on the new drawing, its composer kept.
   function redrawn() {
-    if (marking?.draft && !marking.draft.mark.isConnected) drop();
+    const draft = marking?.draft;
+    const layer = draft && !draft.mark.isConnected ? layerOf(marking!.holder) : null;
+    if (draft && layer) {
+      draft.mark = draw(layer, draft.shape, "artifact-spot-mark--draft", null);
+      seat(draft);
+    }
     tab();
   }
 
@@ -480,22 +491,27 @@ export function spots(page: Page, bridge: SpotsBridge): Spots {
     }
     const image = !drawing;
     const mark = draw(layer, shape, "artifact-spot-mark--draft", null);
+    // Each callback acts on its own draft only: a save that ends after the
+    // reader dropped it, or started another, leaves the newer one as it is.
+    const mine = () => marking?.draft === draft;
     const composer = bridge.composer.spot(box, () => ({
       spot: { ...spot, id: target.dataset.spot || spot.id, hash: target.dataset.spotHash || "" },
       stale: image ? page.staleImage : page.staleDiagram,
     }), () => {
+      if (!mine()) return;
       drop();
       focusIn(holder, ".artifact-spot-tool[aria-pressed='true']");
     }, () => {
+      if (!mine()) return;
       drop();
       leave(false);
-    });
-    const draft: Draft = { mark, composer, spot, image };
+    }, () => draft.cropped);
+    const draft: Draft = { mark, shape, composer, spot, image, cropped: Promise.resolve() };
     marking.draft = draft;
     document.body.appendChild(composer.holder);
     seat(draft);
     composer.field.focus({ preventScroll: true });
-    if (image) attach(target as HTMLImageElement, spot.shape, draft);
+    if (image) draft.cropped = attach(target as HTMLImageElement, spot.shape, draft).then(() => uploaded(composer));
   }
 
   // The composer just under its mark, inside the window and left of the
@@ -527,6 +543,13 @@ export function spots(page: Page, bridge: SpotsBridge): Spots {
     canvas.getContext("2d")?.drawImage(img, part.x, part.y, Math.max(part.w, 1), Math.max(part.h, 1), 0, 0, width, height);
     const blob = await new Promise<Blob | null>(done => canvas.toBlob(done, "image/png"));
     if (blob && marking?.draft === draft) draft.composer.images.take([new File([blob], "spot.png", { type: "image/png" })]);
+  }
+
+  // Once a composer's images have uploaded, or failed to, as its tray says.
+  async function uploaded(composer: Composer) {
+    while (composer.images.busy() && composer.holder.isConnected) {
+      await new Promise(done => setTimeout(done, 100));
+    }
   }
 
   // Escape drops a draft, staying in mark mode, and with none leaves it.

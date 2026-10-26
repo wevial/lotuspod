@@ -189,6 +189,71 @@ path.artifact-spot-shape:is(.artifact-spot-mark--lit *) {
   outline: none;
 }
 
+/* Its field spans the composer, with Cancel and Comment side by side under
+   it, then the status line. */
+.artifact-spot-composer .artifact-comment-form {
+  grid-template-columns: minmax(0, 1fr) auto auto;
+}
+
+.artifact-spot-composer .artifact-comment-form > :is(.artifact-composer-box, textarea),
+.artifact-spot-composer .artifact-comment-form::before {
+  grid-column: 1 / -1;
+  grid-row: 1;
+}
+
+.artifact-spot-composer .artifact-comment-actions > button {
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-chip);
+  font-family: var(--font-body);
+  font-size: 0.85rem;
+  grid-row: 2;
+  height: auto;
+  line-height: 1.2;
+  margin: 0.55rem 0 0 0.4rem;
+  overflow: visible;
+  padding: 0.35rem 0.8rem;
+  width: auto;
+}
+
+.artifact-spot-composer .artifact-comment-actions > button::before,
+.artifact-spot-composer .artifact-comment-actions > button::after {
+  content: none;
+}
+
+.artifact-spot-composer .artifact-comment-actions > .artifact-spot-cancel {
+  background: transparent;
+  color: var(--color-pale-lavender);
+  grid-column: 2;
+}
+
+.artifact-spot-composer .artifact-comment-actions > button[type="submit"] {
+  background: var(--color-lavender);
+  border-color: var(--color-lavender);
+  color: var(--color-night);
+  grid-column: 3;
+}
+
+.artifact-spot-composer .artifact-comment-actions > button:hover {
+  border-color: var(--color-pale-lavender);
+}
+
+.artifact-spot-composer .artifact-comment-actions > button:focus-visible {
+  outline: 2px solid var(--color-lavender);
+  outline-offset: 2px;
+}
+
+.artifact-spot-composer .artifact-comment-status {
+  color: var(--color-muted-lavender);
+  font-size: 0.85rem;
+  grid-column: 1 / -1;
+  grid-row: 3;
+  margin: 0;
+}
+
+.artifact-spot-composer .artifact-comment-status:not(:empty) {
+  margin-top: 0.4rem;
+}
+
 /* A spot thread's number is the rose of its mark, a ring once nothing is
    drawn for it; its entry lights with its mark, and its row says when the
    drawing changed under it. */

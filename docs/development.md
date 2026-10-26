@@ -136,7 +136,7 @@ does, and picks a default only on a form the swap brought in. A form a
 swap brings in whose read fails stays out of the sheet until a later read. The forms and their stored answers stay the
 truth: the sheet draws from them on each form's `input`, `change` and
 `SAVED`. Preact holds only the sheet's own state: the question Next open
-last jumped to, which a swap keeps. The bundle, Preact with it, is 55,587 bytes
+last jumped to, which a swap keeps. The bundle, Preact with it, is 55,780 bytes
 gzipped (`gzip -c`); it uses Preact and its hooks, with `createPortal` from
 `preact/compat` for independently owned DOM targets.
 

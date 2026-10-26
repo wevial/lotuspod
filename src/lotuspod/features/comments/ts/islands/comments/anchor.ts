@@ -64,7 +64,8 @@ export function targetOf(id: string): HTMLElement | null {
 // or one of those nodes. A diagram not drawn yet has its nodes.
 export function spotStanding(spot: Spot): SpotStanding {
   const target = targetOf(spot.id);
-  if (!target) return "gone";
+  // Nodes are a diagram's: a target of that id that is now an image has none.
+  if (!target || (spot.nodes.length && target.tagName !== "PRE")) return "gone";
   const svg = drawingOf(target);
   if (svg && spot.nodes.length) {
     const drawn = nodesOf(svg);

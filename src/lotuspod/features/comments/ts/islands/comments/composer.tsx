@@ -74,9 +74,12 @@ export function composers(page: Page, bridge: ComposerBridge) {
     });
     return { form, field, images, unfold(open) { form.hidden = !open; } };
   }
-  function controls(send: string, label?: string) {
+  // A spot's composer has its Cancel beside its send button.
+  function controls(send: string, label?: string, cancel?: () => void) {
     return <><textarea name="text" rows={2} maxLength={4000} required aria-label={label} />
-      <div class="artifact-comment-actions"><button type="submit">{send}</button>
+      <div class="artifact-comment-actions">
+        {cancel && <button type="button" class="artifact-spot-cancel" onClick={cancel}>Cancel</button>}
+        <button type="submit">{send}</button>
         <p class="artifact-comment-status" role="status" /></div></>;
   }
   function label(thread: Thread, entry: CommentRow) {
@@ -225,18 +228,20 @@ export function composers(page: Page, bridge: ComposerBridge) {
   // The composer under a mark on a diagram or an image, in box's section:
   // spot() gives the spot as its target now stands, and what a refusal for
   // a changed target says. Cancel and Escape call cancel; a thread posted
-  // calls saved first.
-  function spot(box: HTMLElement, made: () => { spot: Spot; stale: string }, cancel: () => void, saved: (row: CommentRow) => void) {
+  // calls saved first. A send waits for ready: an image spot's crop is
+  // attached first, so it is never posted without it.
+  function spot(box: HTMLElement, made: () => { spot: Spot; stale: string }, cancel: () => void,
+    saved: (row: CommentRow) => void, ready: () => Promise<void>) {
     const holder = document.createElement("div");
     holder.className = "artifact-spot-composer";
-    render(<><form class="artifact-comment-form artifact-spot-form">{controls("Comment", "Comment on the marked spot")}</form>
-      <button type="button" class="artifact-passage-cancel" onClick={cancel}>Cancel</button></>, holder);
+    render(<form class="artifact-comment-form artifact-spot-form">{controls("Comment", "Comment on the marked spot", cancel)}</form>, holder);
     const handles = { ...wireField(holder.querySelector("form")!), holder, saving: null as Promise<CommentRow | null> | null };
     holder.addEventListener("keydown", event => {
       if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); cancel(); }
     });
     handles.form.addEventListener("submit", async event => {
       event.preventDefault();
+      await ready();
       const now = made();
       handles.saving = post(handles.form, { ...fields(box, handles.field), spot: now.spot }, now.stale);
       const row = await handles.saving;
