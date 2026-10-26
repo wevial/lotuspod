@@ -599,7 +599,7 @@ export function store(page: Page, bridge: StoreBridge): Store {
       });
       passages = makePassages(page, {
         article, boxes, shown, resolved, revision, attached, composer,
-        placement: () => panel!, numbered: thread => spots!.number(thread),
+        placement: () => panel!, numbered: thread => spots!.number(thread), placeOf: bridge.placeOf,
       });
       panel = makePlacement(page, {
         all: page.all, boxes, shown, forms, decisions,

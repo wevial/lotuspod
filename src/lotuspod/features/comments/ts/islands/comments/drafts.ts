@@ -63,7 +63,7 @@ export function drafts(page: Page, boxes: HTMLElement[]): void {
   // The page's decision forms, in page order.
   const decisions = page.all("form.artifact-decision[data-question]") as HTMLFormElement[];
 
-  const store: Store = makeStore(page, { boxes, decisions, restore, boxWith });
+  const store: Store = makeStore(page, { boxes, decisions, restore, boxWith, placeOf });
   const { sections, shown, forms, attached, refresh } = store;
   const { fieldOf, handles, on, unblock } = store.composer;
 
@@ -134,6 +134,21 @@ export function drafts(page: Page, boxes: HTMLElement[]): void {
           })),
         ],
       };
+    },
+    // Once every image on its way in a composer save() keeps is answered,
+    // asking each composer again after any wait: one may have begun an
+    // upload meanwhile.
+    async settled() {
+      let waited = true;
+      while (waited) {
+        const each = await Promise.all([
+          ...composers().map(composer => composer.images.settled()),
+          store.passages.settled(),
+          store.spots ? store.spots.settled() : false,
+          ...Array.from(awaiting, held => held.from ? held.from.settled() : false),
+        ]);
+        waited = each.some(Boolean);
+      }
     },
   });
 
