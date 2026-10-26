@@ -8,7 +8,7 @@ import { expect, test, type Locator, type Page, type Request } from '@playwright
 // an image. The check publishes pages of its own as hermes on the capture
 // fixture's site with a real `lotuspod publish`: a section Flow drawing the
 // flowchart `flow` (Agent, Publish, Pod, Reader), and a section Pictures with
-// the fixture's fish. At 390 by 844 with touch, a target's Comment opens the
+// the fixture's fish, and the fish again as Weeds under Pond. At 390 by 844 with touch, a target's Comment opens the
 // diagram view or the image viewer in mark mode, one finger draws and two
 // pinch; the posted thread opens in the bottom sheet. The run shares one
 // database, so each repeat publishes pages of its own names.
@@ -36,14 +36,16 @@ test.afterEach(async ({ page }) => {
   await page.unrouteAll({ behavior: 'ignoreErrors' });
 });
 
-// Flow's flowchart and the fish under Pictures, with text enough round them
+// Flow's flowchart, the fish under Pictures and again under Pond, with text enough round them
 // that the page scrolls at either size.
 const DOC = ['# Spot study', '', 'Where a comment on a drawing lands.', '',
   '## Flow', '', 'How a page reaches its reader.', '',
   '```mermaid id=flow', 'graph LR', '  Agent --> Publish --> Pod --> Reader', '```', '',
   ...Array.from({ length: 6 }, (_, n) => `Paragraph ${n + 1} on how a page is published, served and read by its readers.\n`),
   '## Pictures', '', 'The pond as it is.', '', '![Fish](fish.jpg)', '',
-  ...Array.from({ length: 6 }, (_, n) => `Note ${n + 1} on the pond, its fish and the weeds along its edge.\n`)].join('\n');
+  ...Array.from({ length: 6 }, (_, n) => `Note ${n + 1} on the pond, its fish and the weeds along its edge.\n`),
+  '## Pond', '', 'The weeds at its edge.', '', '![Weeds](fish.jpg)', '',
+  ...Array.from({ length: 4 }, (_, n) => `Line ${n + 1} on the weeds and how they grow.\n`)].join('\n');
 
 function run(...args: string[]) {
   return execFileSync(PYTHON, ['-m', 'lotuspod', ...args], {
@@ -101,8 +103,8 @@ function diagram(page: Page) {
   };
 }
 
-function figure(page: Page) {
-  const node = page.locator('figure.artifact-figure').filter({ has: page.locator('img[alt="Fish"]') });
+function figure(page: Page, alt = 'Fish') {
+  const node = page.locator('figure.artifact-figure').filter({ has: page.locator(`img[alt="${alt}"]`) });
   return {
     node, img: node.locator('img'),
     comment: node.getByRole('button', { name: 'Comment', exact: true }),
@@ -401,10 +403,27 @@ test.describe('on a phone', () => {
     await expect(sheet(page).node).toBeVisible();
     await expect(sheet(page).entry('This fin')).toBeVisible();
 
+    // A mark on the weeds, later in the page, is numbered after the fish's.
+    const weeds = figure(page, 'Weeds');
+    const badge = (node: Locator) => node.locator('g.artifact-spot-mark[data-thread] .artifact-spot-badge text');
+    await sheet(page).node.getByRole('button', { name: 'Close' }).first().tap();
+    await expect(sheet(page).node).toBeHidden();
+    await weeds.img.evaluate((img) => img.scrollIntoView({ block: 'center' }));
+    await expect.poll(() => weeds.img.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth)).toBe(320);
+    await weeds.comment.tap();
+    await expect(shown.box).toBeVisible();
+    const pond = await rect(shown.image);
+    await fingers.gesture([{ x: pond.x + pond.width * 0.5, y: pond.y + pond.height * 0.5 }],
+      [{ x: pond.x + pond.width * 0.8, y: pond.y + pond.height * 0.8 }]);
+    await post(page, 'These weeds');
+    await expect(shown.dialog).toBeHidden();
+    await expect(badge(fish.node)).toHaveText('1');
+    await expect(badge(weeds.node)).toHaveText('2');
+
     // The posted mark is drawn over the viewer's image in mark mode, numbered
-    // as on the page. With a box drawn, Escape leaves mark mode with the
-    // viewer open, the mark going back to the page, and a second closes it,
-    // the focus back on the fish's Comment.
+    // as on the page, and the weeds' keeps its number. With a box drawn,
+    // Escape leaves mark mode with the viewer open, the mark going back to
+    // the page, and a second closes it, the focus back on the fish's Comment.
     await sheet(page).node.getByRole('button', { name: 'Close' }).first().tap();
     await fish.img.evaluate((img) => img.scrollIntoView({ block: 'center' }));
     await fish.comment.tap();
@@ -412,6 +431,7 @@ test.describe('on a phone', () => {
     await expect(shown.posted).toHaveCount(1);
     await expect(shown.posted.locator('.artifact-spot-badge text')).toHaveText('1');
     await expect(fish.node.locator('g.artifact-spot-mark[data-thread]')).toHaveCount(0);
+    await expect(badge(weeds.node)).toHaveText('2');
     const again = await rect(shown.image);
     await fingers.gesture([{ x: again.x + again.width * 0.3, y: again.y + again.height * 0.3 }],
       [{ x: again.x + again.width * 0.5, y: again.y + again.height * 0.5 }]);
@@ -423,6 +443,8 @@ test.describe('on a phone', () => {
     await expect(shown.dialog).toBeVisible();
     await expect(shown.posted).toHaveCount(0);
     await expect(fish.node.locator('g.artifact-spot-mark[data-thread]')).toHaveCount(1);
+    await expect(badge(fish.node)).toHaveText('1');
+    await expect(badge(weeds.node)).toHaveText('2');
     await expect(fish.comment).toHaveCount(1);
     await page.keyboard.press('Escape');
     await expect(shown.dialog).toBeHidden();
