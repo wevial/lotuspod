@@ -747,9 +747,10 @@ included, from running: comments and answers stay on the current page. Of
 the page's own scripts, an earlier version keeps only today's theme head and,
 when the version holds a live block, today's widget bridge, each matched
 whole against the text the package writes now (never the old commit's) and
-allowed by its sha256 hash in `script-src`; a bridge's hash is added only
-when the version's head holds the bridge. So the version's live block follows the
-theme switch, sizes its frame to its content and offers Expand and Pause, but
+allowed by its sha256 hash in `script-src`. Each is kept only in the head,
+where the template writes it; a copy in the page's body is removed, and the
+bridge's hash is added only when the head holds the bridge. So the version's
+live block follows the theme switch, sizes its frame to its content and offers Expand and Pause, but
 no Comment. A version answered from its published file, because it cannot be
 rendered, keeps neither and allows the nonce alone. The one script serve adds,
 before `</body>` with that nonce, is the site's old-version script,

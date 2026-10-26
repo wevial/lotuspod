@@ -831,14 +831,16 @@ def old_page(page_html: str, name: str, version: Version, behind: int,
     """An earlier version's HTML as serve answers it, ending in one script
     element: script, the old-version script's address, allowed by nonce, the
     answer's own; no other script in the page carries it. Each inline
-    script whose text is one of keep stays, where it is."""
+    script of the head whose text is one of keep stays, where it is; one in
+    the body is authored HTML, never the template's, and goes."""
     places = Places(page_html)
     # Authored badges can contain scripts or widget links. Reparse between
     # transformations so replacing a parent never overlaps an edit to its
     # contents, whose original offsets would then corrupt adjacent HTML.
     kept = {f"<script>{text}</script>" for text in keep}
+    head_end = places.head_end or 0
     page_html = edited(page_html, [(start, end, "") for start, end in places.scripts
-                                   if page_html[start:end] not in kept])
+                                   if page_html[start:end] not in kept or end > head_end])
     places = Places(page_html)
     page_html = edited(page_html, [(start, end, "Old version")
                                    for start, end in places.badges])
