@@ -95,7 +95,11 @@ def parse_time(stamp: object) -> _dt.datetime | None:
         return None
     if moment.tzinfo is None:
         moment = moment.replace(tzinfo=_dt.timezone.utc)
-    return moment.astimezone(_dt.timezone.utc)
+    try:
+        return moment.astimezone(_dt.timezone.utc)
+    except OverflowError:
+        # An offset that carries the time past year 1 or 9999.
+        return None
 
 
 def read_states(path: Path) -> dict[str, dict]:
@@ -144,6 +148,14 @@ def overtaken(updated: str, pulls: list[str],
             elif entry["state"] == CLOSED:
                 closed.append(key)
     return merged, closed
+
+
+def mark_text(merged: list[str], closed: list[str]) -> str:
+    """The words a verdict's mark ends in, after "may be out of date · "."""
+    if merged and closed:
+        return f"{len(merged)} merged, {len(closed)} closed since"
+    found, kind = (merged, MERGED) if merged else (closed, CLOSED)
+    return f"{len(found)} linked PR{'' if len(found) == 1 else 's'} {kind} since"
 
 
 def listed_pages(out_dir: Path) -> list[dict]:

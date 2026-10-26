@@ -35,6 +35,7 @@ __getattr__ = public_edge(__name__, {
     "REFS_SUFFIX": "render",
     "_H2Collector": "render",
     "kept_block_hashes": "render",
+    "kept_target_hashes": "render",
     "page_owner": "render",
     "version_stamp": "render",
 })

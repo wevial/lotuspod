@@ -1130,7 +1130,7 @@ class MermaidTests(TempDirTestCase):
         self.assertIn("startOnLoad: true", script)
 
     def test_the_diagram_source_is_byte_identical_to_the_input(self):
-        page = self.rendered(self.BODY)
+        page = re.sub(r' data-spot(?:-hash)?="[^"]*"', "", self.rendered(self.BODY))
         self.assertIn(self.DIAGRAM, page)
         self.assertIn(self.BODY, page)
 
@@ -1146,7 +1146,7 @@ class MermaidTests(TempDirTestCase):
         out, outline = render.outline_body(body)
         self.assertIn(diagram, out)
         self.assertEqual([entry["text"] for entry in outline], ["One", "Two"])
-        self.assertIn(diagram, self.rendered(body))
+        self.assertIn(diagram, re.sub(r' data-spot(?:-hash)?="[^"]*"', "", self.rendered(body)))
 
     def test_a_page_without_a_diagram_block_never_mentions_mermaid(self):
         page = self.rendered("<p>Plain prose.</p><h2>A</h2><p>x</p><h2>B</h2><p>y</p>")

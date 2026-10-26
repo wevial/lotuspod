@@ -99,7 +99,12 @@ palette, built from `tokens.json` (surface fills, lavender lines and borders,
 pale lavender labels in the mono font on the night background). The text inside
 the block is left exactly as written, since Mermaid reads it verbatim; before
 the script runs, or without scripting, it reads as a code block. A body with no
-diagram block ships no script and no CDN reference at all.
+diagram block ships no script and no CDN reference at all. Render gives each
+diagram, and each `/media/` image in a figure, the id and hash a comment on a
+spot of it keeps (`data-spot` and `data-spot-hash` on its start tag, nothing
+else changed; see [Comments](comments.md#answers-and-comments)), and a visible
+publish keeps each one's hashes in `NAME.targets.json` beside the page, which
+serve never answers.
 
 The same script registers Mermaid's ELK layout (`@mermaid-js/layout-elk`
 0.2.3), which it loads only when a diagram asks for it, so a diagram without
@@ -214,7 +219,11 @@ The converter (`lotuspod.features.publish.markdown.to_body`) takes a small subse
 - `` `code spans` `` and `**bold**`.
 - Fenced code: a `mermaid` fence becomes a `<pre class="mermaid">` diagram
   block, a `calltree` fence a static call tree, and any other fence a
-  `<pre><code>` block.
+  `<pre><code>` block. A `mermaid id=NAME` fence names its diagram: its `pre`
+  carries `data-spot="NAME"`, the id a comment on a spot of it keeps across
+  republishes. NAME is letters, digits, `-` and `_`, and no other fence of the
+  page may name it; else publish refuses the page, naming the fence's line,
+  and writes nothing.
 - Images: a line that is only `![ALT](SRC)`, at the top level or in a
   blockquote, becomes a figure - a lazy `img` with the image's width and
   height, inside a link to the full image - and stops a paragraph. The
@@ -385,6 +394,20 @@ output passes through and its exit status is `publish`'s, so a revision
 conflict still exits 3. `--local` publishes on this machine regardless of the
 config, and `--out-dir` without `--local` is refused while a host is set. Keep
 the host's address in the local config only, never in this repository.
+
+When a GitHub pull request a page links has merged or closed since the
+page's last publish, by the states `lotuspod pages stale` keeps (see
+[operating.md](operating.md#which-pages-a-merge-has-overtaken)), serve ends
+the page's header line, after its Updated date and before its labels, in
+"may be out of date · 3 linked PRs merged since" (or "1 linked PR closed
+since", or "2 merged, 1 closed since"), in a `span.artifact-stale` whose
+`title` names the pull requests, `owner/repo#N` comma-separated. It compares
+with the manifest's `updated`, as `pages stale` does, and marks no archived
+page, which `pages stale` never lists. Publishing the page again takes the
+mark off. Only serve draws it, from the stored
+states: `render`, `publish`, the published `NAME.html`, `manifest.json`,
+`pages diff` and an earlier version (`?version=`) carry none, and an open
+page shows a change after a reload.
 
 ### Images
 
@@ -798,6 +821,11 @@ reads "Showing" and one token per checked label, "relos ✕", which unchecks it.
 The count reads "M pages, newest update first" in the arrival order, and "N of
 M pages" while filtered; when no row is left, the table gives way to "No pages
 match these filters." The table stays one flat list in its sort order.
+
+Served by `lotuspod serve`, the title cell of a page that linked pull
+requests have overtaken (see [Publish a page](#publish-a-page)) ends, after
+its tags, in a small "may be out of date" (`span.index-stale`, with the same
+`title`); the written `index.html` carries none.
 
 An archived page's row (see [Archive a page](#archive-a-page)) carries its
 archive time in `data-archived` and is written `hidden`, so the default list
@@ -1406,8 +1434,52 @@ lotuspod publish mock.html --live --notes notes.md
 live block, at `height=full`. The pod is titled from `--title`, the
 document's `<title>`, or the page name. `--notes FILE.md` adds markdown below
 the block, which takes comments, decisions and images as any page does; it
-requires `--live`, and the notes find their files from their own directory.
-The document follows the same rules as a block's `file=`.
+requires `--live` (or `--artifact`), and the notes find their files from
+their own directory. The document follows the same rules as a block's
+`file=`.
+
+#### Claude artifacts
+
+```sh
+lotuspod publish mockup.html --artifact --notes notes.md
+```
+
+`--artifact` publishes one HTML file shaped like a Claude artifact as
+`--live` does, with `--title` and `--notes` as there, after three changes
+made where publish runs, before anything is sent to the writer host. The
+convention it expects:
+
+- **One HTML file**, its CSS and JS inline. Its `<title>` titles the pod
+  unless `--title` is given.
+- **Scripts only from two CDNs.** Each `<script src>` whose URL starts
+  `https://cdnjs.cloudflare.com/` or `https://cdn.jsdelivr.net/npm/` is
+  fetched once and put inline where it stood, keeping its `type`; when it
+  carries `integrity`, the fetched bytes must match it. The frame's policy
+  then covers it by its hash, as any inline script, and the kept source is
+  the self-contained document, so reading the pod never reaches a CDN. Any
+  other `<script src>` (another host, plain HTTP, a relative path), a fetch
+  that fails or an integrity mismatch refuses the publish, naming the URL.
+- **Fonts dropped.** Each `<link>` to `fonts.googleapis.com` or
+  `fonts.gstatic.com` is removed, with one warning per stylesheet naming
+  its URL; the document's own fallback fonts apply. Any other stylesheet
+  `<link>` to an `http:` or `https:` URL refuses the publish, naming it.
+- **`data-theme` follows the reader.** A script put first in the head sets
+  `data-theme` on the root to `light` while the reader's theme is Dawn and
+  `dark` while it is Night, at once and on each switch. Keep the dark values
+  under `:root[data-theme="dark"]` and let the light ones win under
+  `:root[data-theme="light"]` (a `prefers-color-scheme` block guarded by
+  `:root:not([data-theme="light"])` still serves the file opened elsewhere).
+
+The document with its scripts inlined is what the 2 MB limit counts. What
+still does not run in a frame (see [What a widget cannot do](#what-a-widget-cannot-do)):
+
+- storage: `localStorage` and `sessionStorage` throw, so wrap their use in
+  `try`/`catch`;
+- inline `on*=` handlers such as `onclick="..."`: attach listeners from a
+  script instead;
+- code evaluated at run time, such as in-browser Babel compiling JSX;
+- network reads: `fetch` and the like are refused;
+- `window.claude` and the other capabilities of Claude's artifact runtime.
 
 ### The frame's chrome
 

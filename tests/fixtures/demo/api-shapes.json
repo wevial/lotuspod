@@ -46,6 +46,7 @@
         "revision": "string",
         "section": "string",
         "sectionTitle": "string",
+        "spot": "null",
         "state": "string",
         "text": "string",
         "widget": "null"
@@ -68,6 +69,7 @@
         "revision": "string",
         "section": "string",
         "sectionTitle": "string",
+        "spot": "null",
         "state": "string",
         "text": "string",
         "widget": "null"
@@ -98,6 +100,7 @@
               "revision": "string",
               "section": "string",
               "sectionTitle": "string",
+              "spot": "null",
               "state": "string",
               "text": "string",
               "widget": "null"
@@ -132,6 +135,7 @@
                 "revision": "string",
                 "section": "string",
                 "sectionTitle": "string",
+                "spot": "null",
                 "state": "string",
                 "text": "string",
                 "widget": "null"
@@ -150,6 +154,7 @@
               "revision": "string",
               "section": "string",
               "sectionTitle": "string",
+              "spot": "null",
               "state": "string",
               "text": "string",
               "widget": "null"
@@ -176,6 +181,7 @@
         "revision": "string",
         "section": "string",
         "sectionTitle": "string",
+        "spot": "null",
         "state": "string",
         "text": "string",
         "widget": "null"
@@ -219,6 +225,7 @@
         "revision": "string",
         "section": "string",
         "sectionTitle": "string",
+        "spot": "null",
         "state": "string",
         "text": "string",
         "widget": "null"
@@ -256,6 +263,7 @@
                 "revision": "string",
                 "section": "string",
                 "sectionTitle": "string",
+                "spot": "null",
                 "state": "string",
                 "text": "string",
                 "widget": "null"
@@ -279,6 +287,7 @@
               "revision": "string",
               "section": "string",
               "sectionTitle": "string",
+              "spot": "null",
               "state": "string",
               "text": "string",
               "widget": "null"
@@ -410,6 +419,7 @@
         "revision": "string",
         "section": "string",
         "sectionTitle": "string",
+        "spot": "null",
         "state": "string",
         "text": "string",
         "widget": {"hash": "string", "id": "string", "state": "string"}
@@ -440,6 +450,7 @@
                 "revision": "string",
                 "section": "string",
                 "sectionTitle": "string",
+                "spot": "null",
                 "state": "string",
                 "text": "string",
                 "widget": "null"
@@ -463,6 +474,7 @@
               "revision": "string",
               "section": "string",
               "sectionTitle": "string",
+              "spot": "null",
               "state": "string",
               "text": "string",
               "widget": {"oneOf": ["null", {"hash": "string", "id": "string", "state": "string"}]}

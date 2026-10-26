@@ -1554,7 +1554,7 @@ class SchemaTests(PullTestCase):
                              store.db.SCHEMA_VERSION)
         finally:
             conn.close()
-        self.assertEqual(store.db.SCHEMA_VERSION, 17)
+        self.assertEqual(store.db.SCHEMA_VERSION, 18)
 
 
 class ReplySchemaTests(SchemaTests):

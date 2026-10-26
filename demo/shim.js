@@ -30,6 +30,8 @@
 // hash other than the block's file's now, as the demo has no earlier
 // publishes. The thread's first comment keeps the widget as sent; every
 // reply, demo-agent's included, and every other comment keeps widget null.
+// A new thread's `spot` is kept as sent on its first comment, unchecked, and
+// every other comment keeps spot null, as serve answers them.
 //
 // Everything is kept under keys starting KEY, the page script's own
 // "lotuspod:" keys left alone, and kept until the banner's "Reset demo"
@@ -178,6 +180,7 @@
       text: fields.text,
       quote: fields.quote || null,
       widget: fields.widget || null,
+      spot: fields.spot || null,
       images: [],
       actor: fields.actor,
       createdAt: now(),
@@ -442,6 +445,7 @@
       var block = own(fields, "widget") ? anchor(fields.widget, section, quoted) : null;
       made = readerRow(page, {
         section: section, parent: null, text: words, quote: quoted, widget: block,
+        spot: own(fields, "spot") ? fields.spot : null,
       });
     }
     stored.rows.push(made);

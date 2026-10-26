@@ -6,9 +6,9 @@ The markup is witnessed by parsing it, never by matching strings. A page
 without a task list is held byte for byte to tests/fixtures/
 no_task_list.expected.html, captured from the renderer as it stood before
 forms existed and re-captured with the page policy tag, then with the
-theme switch, its head script and the two themes' diagram variables. The
-fixture holds THEME_HASH where the page names the theme's hash, so a theme
-edit never re-captures it.
+theme switch, its head script and the two themes' diagram variables, then
+with its diagram's spot marks. The fixture holds THEME_HASH where the page
+names the theme's hash, so a theme edit never re-captures it.
 
 Run from the repo root:
 

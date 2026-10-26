@@ -58,7 +58,7 @@ import urllib.parse
 from pathlib import Path
 
 from lotuspod import core
-from lotuspod.features.agents import machine
+from lotuspod.features.agents import machine, spots
 from lotuspod.features import serve
 from lotuspod.features import comments
 from lotuspod.features import publish
@@ -408,6 +408,7 @@ def pull_text(payload: dict) -> str:
                 f"- From: {_by(comment)} at {comment['createdAt']}, "
                 f"against revision {comment['revision'] or 'unknown'}",
                 f"- State: {_standing(comment)}",
+                *spots.lines(item),
             ]
             decision = item.get("decision")
             if decision:
