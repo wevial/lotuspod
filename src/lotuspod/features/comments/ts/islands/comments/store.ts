@@ -582,7 +582,6 @@ export function store(page: Page, bridge: StoreBridge): Store {
     sections, shown, forms, attached, composer,
     get panel() { return panel!; },
     get passages() { return passages!; },
-    // Null until the store starts.
     get spots() { return spots; },
     swapped(to) { swappedTo = to; },
     retitle: replies.retitle,
