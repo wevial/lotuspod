@@ -2,7 +2,7 @@ import { useState } from "preact/hooks";
 import type { ReadonlySignal } from "@preact/signals";
 import type { Answer } from "../../../comments/ts/index";
 import { all, boxes, isChecklist, optionText } from "./checklist";
-import { noteField, radios, words } from "./words";
+import { fold, noteField, radios, words } from "./words";
 
 // What the Decisions tab reads the page's decision cards by: the forms and
 // their inputs are the one state, the cards' own, so the tab never holds a
@@ -97,8 +97,7 @@ export function Note({ desk, form, summary, touched }: {
       <summary>{summary}</summary>
       <textarea rows={2} maxLength={4000} aria-label="Note" value={note.value} onInput={(event) => {
         note.value = event.currentTarget.value;
-        const box = note.closest("details");
-        if (box) box.open = true;
+        fold(note, true);
         moved(note, "input");
         touched?.();
       }} />
