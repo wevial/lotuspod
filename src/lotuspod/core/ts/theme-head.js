@@ -85,11 +85,19 @@
     var status = bar.querySelector(".artifact-copy-link-status");
     var field = null;
     var timer = null;
+    // Each press, and each close, starts a new attempt; a clipboard write
+    // that settles after a later one acts on nothing.
+    var attempt = 0;
 
+    // The server answers an earlier version only for a query of `version`
+    // alone, once; any other query shows the current page.
     function address() {
-      var version = new URLSearchParams(location.search).get("version");
+      var query = new URLSearchParams(location.search);
+      var keys = [];
+      query.forEach(function (value, key) { keys.push(key); });
       var base = location.origin + location.pathname;
-      return version ? base + "?version=" + encodeURIComponent(version) : base;
+      if (keys.length !== 1 || keys[0] !== "version") return base;
+      return base + "?version=" + encodeURIComponent(query.get("version"));
     }
 
     function copied() {
@@ -103,9 +111,19 @@
     }
 
     function close() {
+      attempt++;
       if (!field || field.hidden) return;
       field.hidden = true;
       button.focus();
+    }
+
+    // Under the button, its right edge on the button's, and inside the bar's
+    // gutters, at whatever width the window has now.
+    function place() {
+      if (!field || field.hidden) return;
+      var gutter = parseFloat(getComputedStyle(bar).paddingLeft);
+      var right = bar.getBoundingClientRect().right - button.getBoundingClientRect().right;
+      field.style.right = Math.max(0, Math.min(right, bar.clientWidth - gutter - field.offsetWidth)) + "px";
     }
 
     function open(text) {
@@ -124,11 +142,7 @@
       }
       field.value = text;
       field.hidden = false;
-      // Under the button, its right edge on the button's, and inside the
-      // bar's gutters.
-      var gutter = parseFloat(getComputedStyle(bar).paddingLeft);
-      var right = bar.getBoundingClientRect().right - button.getBoundingClientRect().right;
-      field.style.right = Math.max(0, Math.min(right, bar.clientWidth - gutter - field.offsetWidth)) + "px";
+      place();
       field.focus();
       field.select();
     }
@@ -139,6 +153,7 @@
         return;
       }
       var text = address();
+      var mine = ++attempt;
       var writing;
       try {
         // No clipboard (an insecure context) throws here too.
@@ -147,10 +162,13 @@
         open(text);
         return;
       }
-      Promise.resolve(writing).then(copied, function () {
-        open(text);
+      Promise.resolve(writing).then(function () {
+        if (mine === attempt) copied();
+      }, function () {
+        if (mine === attempt) open(text);
       });
     });
+    window.addEventListener("resize", place);
     document.addEventListener("click", function (event) {
       if (event.target !== field && !button.contains(event.target)) close();
     });

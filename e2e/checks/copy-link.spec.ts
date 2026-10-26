@@ -123,6 +123,14 @@ test('on an earlier version Copy link copies that version address', async ({ pag
   await button.click();
   await expect(button).toHaveAttribute('data-copied', '');
   expect(await clipboard(page)).toBe(`${new URL(baseURL!).origin}/${name}.html?version=${older.commit}`);
+
+  // With any other query the server shows the current page, so the link is
+  // the current page's.
+  await page.goto(`/${name}.html?version=${older.commit}&utm_source=test`);
+  await expect(page.locator('.artifact-body')).toContainText('Edition: second.');
+  await copyLink(page).click();
+  await expect(copyLink(page)).toHaveAttribute('data-copied', '');
+  expect(await clipboard(page)).toBe(`${new URL(baseURL!).origin}/${name}.html`);
   expect(errors).toEqual([]);
 });
 
@@ -164,6 +172,46 @@ test('where the clipboard refuses, a selected read-only field holds the address 
   await page.locator('.artifact-body').click();
   await expect(field).toBeHidden();
   await expect(button).toBeFocused();
+  expect(errors).toEqual([]);
+});
+
+test('a refusal that settles after the field was dismissed opens nothing', async ({ page }) => {
+  const errors = await watch(page);
+  await page.addInitScript(() => {
+    const pending: Array<() => void> = [];
+    (window as any).refuse = (index: number) => pending[index]();
+    navigator.clipboard.writeText = () => new Promise((_, reject) =>
+      pending.push(() => reject(new DOMException('Refused', 'NotAllowedError'))));
+  });
+  await page.goto(`${PAGE}?standalone`);
+  const button = copyLink(page);
+  const field = page.locator('input.artifact-copy-link-field');
+  await button.click();
+  await button.click();
+  await page.evaluate(() => (window as any).refuse(1));
+  await expect(field).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(field).toBeHidden();
+  await page.evaluate(() => (window as any).refuse(0));
+  await page.evaluate(() => new Promise((done) => setTimeout(done, 100)));
+  await expect(field).toBeHidden();
+  await expect(button).toBeFocused();
+  expect(errors).toEqual([]);
+});
+
+test('the field stays in the window when the window narrows', async ({ page }) => {
+  const errors = await watch(page);
+  await page.addInitScript(() => {
+    navigator.clipboard.writeText = () => Promise.reject(new DOMException('Refused', 'NotAllowedError'));
+  });
+  await page.goto(`${PAGE}?standalone`);
+  await copyLink(page).click();
+  const field = page.locator('input.artifact-copy-link-field');
+  await expect(field).toBeVisible();
+  await page.setViewportSize({ width: 390, height: 780 });
+  await expect.poll(async () => (await field.boundingBox())!.x).toBeGreaterThanOrEqual(0);
+  const box = (await field.boundingBox())!;
+  expect(box.x + box.width).toBeLessThanOrEqual(390);
   expect(errors).toEqual([]);
 });
 
