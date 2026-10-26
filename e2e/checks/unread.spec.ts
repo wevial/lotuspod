@@ -95,9 +95,9 @@ async function answered(request: APIRequestContext, text: string, name = NAME) {
 }
 
 // Resolve a thread as the reader, through the comments route.
-async function resolve(request: APIRequestContext, thread: number, name = NAME) {
+async function resolve(request: APIRequestContext, thread: number) {
   const resolved = await request.post(COMMENTS, {
-    headers: SIGNED_IN, data: { page: name, thread, resolved: true },
+    headers: SIGNED_IN, data: { page: NAME, thread, resolved: true },
   });
   expect(resolved.status()).toBe(200);
 }
