@@ -291,8 +291,14 @@
       var x = event.clientX;
       var y = event.clientY;
       if (!dragged) {
-        // In mark mode one pointer draws.
-        if (marking || Math.hypot(x - press.x, y - press.y) <= NUDGE) {
+        // In mark mode one pointer draws, the view only keeping up with
+        // where it is for a second finger's pinch.
+        if (marking) {
+          at.x = x;
+          at.y = y;
+          return;
+        }
+        if (Math.hypot(x - press.x, y - press.y) <= NUDGE) {
           return;
         }
         startDrag();
@@ -425,7 +431,10 @@
       was.pre.scrollLeft = was.scrolled;
       was.pre.classList.remove(VIEWED);
       document.documentElement.classList.remove(OPEN);
-      if (was.expand.isConnected) {
+      // Not when what closed the view has put the focus elsewhere: the bottom
+      // sheet, once a comment marked in it is posted.
+      var lost = document.activeElement === document.body || dialog.contains(document.activeElement);
+      if (was.expand.isConnected && lost) {
         was.expand.focus({ preventScroll: true });
       }
       if (marked) {

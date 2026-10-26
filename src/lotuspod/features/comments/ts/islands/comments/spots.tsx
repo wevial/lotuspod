@@ -448,10 +448,13 @@ export function spots(page: Page, bridge: SpotsBridge): Spots {
   }
 
   // Escape drops a draft or a box the keyboard is placing, staying in mark
-  // mode, and with neither leaves it.
+  // mode, and with neither leaves it; in a view it leaves mark mode at once,
+  // so a second Escape closes the view.
   function escape() {
     if (!marking) return;
-    if (marking.draft) {
+    if (marking.view) {
+      leave(true);
+    } else if (marking.draft) {
       drop();
       focusIn(marking.holder, PRESSED);
     } else if (marking.keyed) {
@@ -742,6 +745,8 @@ export function spots(page: Page, bridge: SpotsBridge): Spots {
       box: draft.box,
     }), () => {
       if (!mine()) return;
+      // In a view, Cancel leaves mark mode, as Escape does.
+      if (marking!.view) return leave(false);
       drop();
       // A swap may have put mark mode on another holder since.
       focusIn(marking!.holder, PRESSED);
@@ -872,10 +877,21 @@ export function spots(page: Page, bridge: SpotsBridge): Spots {
     if (draft && event.target instanceof Element && event.target.contains(draft.mark)) seat(draft);
   }, { capture: true, passive: true });
   document.addEventListener(page.events.diagrams, scan);
-  document.addEventListener(page.events.redrawn, schedule);
+  document.addEventListener(page.events.redrawn, event => {
+    schedule();
+    // The diagram view puts a diagram drawn again in its place once this has
+    // run: the draft and the nodes Tab reaches follow it there.
+    if (marking?.view && (event as CustomEvent<{ pre?: Element }>).detail?.pre === marking.holder) {
+      queueMicrotask(() => {
+        if (marking?.view) redrawn();
+      });
+    }
+  });
   // A part holding the target a draft is on stays as it is until the reader
   // updates it, so a swap never takes the draft away.
-  page.holdSwap(nodes => Boolean(marking?.draft) && nodes.some(node => node.contains(marking!.holder)));
+  // So does one whose target is open in a view in mark mode, which shows the
+  // target as it was.
+  page.holdSwap(nodes => Boolean(marking?.draft || marking?.view) && nodes.some(node => node.contains(marking!.holder)));
 
   scan();
   return {

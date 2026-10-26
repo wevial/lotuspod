@@ -909,9 +909,12 @@ image in natural pixels. One finger draws (or a tap marks a box), two fingers
 pan and pinch the diagram view as at any time and draw nothing, and the
 composer opens in the view under the mark, following it as the view moves.
 Posting closes the view and opens the new thread in the bottom sheet. Escape
-in the view drops a draft and stays in mark mode; Escape with no draft, or
-the bar's "Cancel", leaves mark mode with the view open, and Escape again
-closes it, as at any time. Outside mark mode a swipe over a diagram or a
+in the view, the composer's "Cancel" or the bar's "Cancel" leaves mark mode,
+a draft with it, with the view open, and Escape again closes it, as at any
+time, the focus back on the diagram's Expand or the figure's "Comment". While
+the view is in mark mode a swap holds back the part the target is in, a
+diagram drawn again in the other theme keeps its draft, and the image viewer
+opens no attached image over the one being marked. Outside mark mode a swipe over a diagram or a
 figure on the page scrolls the page: only a target in mark mode takes the
 touch to itself.
 

@@ -221,6 +221,7 @@ async function touches(page: Page) {
     });
   }
   return {
+    send,
     // Move the fingers from where they go down to where they lift.
     async gesture(from: { x: number; y: number }[], to: { x: number; y: number }[], steps = 8) {
       await send('touchStart', from);
@@ -281,8 +282,25 @@ test.describe('on a phone', () => {
     await expect(composer(page).holder).toHaveCount(0);
     expect(posts).toEqual([]);
 
+    // A second finger joining one that has begun to draw pinches from where
+    // both now are: the view zooms in, and what the first drew goes.
+    const drawing = await zoom(page);
+    const one = (x: number) => [{ x, y: centre.y }];
+    await fingers.send('touchStart', one(centre.x - 120));
+    for (let at = 1; at <= 10; at += 1) await fingers.send('touchMove', one(centre.x - 120 + 10 * at));
+    const both = (left: number, right: number) => [{ x: left, y: centre.y }, { x: right, y: centre.y }];
+    await fingers.send('touchStart', both(centre.x - 20, centre.x + 80));
+    for (let at = 1; at <= 4; at += 1) await fingers.send('touchMove', both(centre.x - 20 - 3 * at, centre.x + 80 + 3 * at));
+    await fingers.send('touchEnd', []);
+    await page.waitForTimeout(400);
+    expect(await zoom(page)).toBeGreaterThan(drawing);
+    await expect(shown.draft).toHaveCount(0);
+    await expect(composer(page).holder).toHaveCount(0);
+    expect(posts).toEqual([]);
+
     // One finger draws a box round Pod: the page holds still, and the
     // composer opens in the view under the mark.
+    await shown.dialog.getByRole('button', { name: 'Fit', exact: true }).tap();
     const pod = await rect(shown.node('Pod'));
     const held = await scrolled(page);
     await fingers.gesture([{ x: pod.x - 10, y: pod.y - 10 }], [{ x: pod.x + pod.width + 10, y: pod.y + pod.height + 10 }]);
@@ -372,17 +390,25 @@ test.describe('on a phone', () => {
     await expect(sheet(page).node).toBeVisible();
     await expect(sheet(page).entry('This fin')).toBeVisible();
 
-    // Escape leaves mark mode with the viewer open, and a second closes it.
+    // With a box drawn, Escape leaves mark mode with the viewer open, and a
+    // second closes it, the focus back on the fish's Comment.
     await sheet(page).node.getByRole('button', { name: 'Close' }).first().tap();
     await fish.img.evaluate((img) => img.scrollIntoView({ block: 'center' }));
     await fish.comment.tap();
     await expect(shown.box).toBeVisible();
+    const again = await rect(shown.image);
+    await fingers.gesture([{ x: again.x + again.width * 0.3, y: again.y + again.height * 0.3 }],
+      [{ x: again.x + again.width * 0.5, y: again.y + again.height * 0.5 }]);
+    await expect(composer(page).field).toBeFocused();
     await page.keyboard.press('Escape');
     await expect(shown.box).toHaveCount(0);
+    await expect(composer(page).holder).toHaveCount(0);
+    await expect(shown.draft).toHaveCount(0);
     await expect(shown.dialog).toBeVisible();
     await expect(fish.comment).toHaveCount(1);
     await page.keyboard.press('Escape');
     await expect(shown.dialog).toBeHidden();
+    await expect(fish.comment).toBeFocused();
     expect(errors).toEqual([]);
   });
 });

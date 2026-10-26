@@ -25,8 +25,10 @@
     var group = [];
     var at = 0;
     var opener = null;
-    // MARK_VIEW's detail while the viewer is in mark mode, else null.
+    // MARK_VIEW's detail while the viewer is in mark mode, else null; and
+    // the figure mark mode opened it from, whose Comment takes the focus back.
     var marking = null;
+    var origin = null;
 
     function make() {
       dialog = element("dialog", "artifact-image-viewer");
@@ -78,7 +80,9 @@
       });
       dialog.addEventListener("close", function () {
         var marked = marking;
+        var from = origin;
         marking = null;
+        origin = null;
         parts.image.removeAttribute("src");
         if (opener && opener.isConnected) {
           opener.focus({ preventScroll: true });
@@ -86,6 +90,12 @@
         opener = null;
         if (marked) {
           marked.closed();
+        }
+        // Not when what closed it has put the focus elsewhere: the bottom
+        // sheet, once a comment marked in it is posted.
+        var comment = from && from.querySelector(".artifact-spot-comment");
+        if (comment && (document.activeElement === document.body || dialog.contains(document.activeElement))) {
+          comment.focus({ preventScroll: true });
         }
       });
     }
@@ -137,6 +147,11 @@
         return;
       }
       event.preventDefault();
+      // In mark mode the viewer keeps the image being marked: a composer's
+      // attached image opens nothing over it.
+      if (marking) {
+        return;
+      }
       if (!dialog) {
         make();
       }
@@ -162,6 +177,7 @@
       }
       group = [link];
       opener = null;
+      origin = figure;
       show(0);
       dialog.showModal();
       var detail = event.detail;
