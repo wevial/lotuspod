@@ -21,8 +21,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from lotuspod.core import OLD_VERSION_SCRIPT, theme_hash
-from lotuspod.features.history import History, old_page
+from lotuspod.core import OLD_VERSION_SCRIPT, script_hash, theme_hash
+from lotuspod.features.history import History, old_page, with_head
 from lotuspod.features.publish import version_stamp
 from lotuspod.features.serve import pages
 from tests.features.serve.test_serve_shell import (FIXTURES, THEME_HEAD, Site, git, script_src,
@@ -195,9 +195,16 @@ class VersionShellTests(unittest.TestCase):
         nonce = re.search(r"'nonce-([^']+)'", headers["Content-Security-Policy"]).group(1)
         version, behind, published = History(site.out, version_stamp).version("old-shell",
                                                                                refused)
-        expected = old_page(published, "old-shell", version, behind, nonce,
-                            f"{OLD_VERSION_SCRIPT}?v={theme_hash()}").encode("utf-8")
-        self.assertEqual(answer, expected)
+        theme_head = (SRC / THEME_HEAD).read_text(encoding="utf-8")
+        expected = with_head(old_page(published, "old-shell", version, behind, nonce,
+                                      f"{OLD_VERSION_SCRIPT}?v={theme_hash()}"), theme_head)
+        self.assertEqual(answer, expected.encode("utf-8"))
+        # Today's theme head runs, at the head's end, beside the old-version
+        # script; both policies allow it by its hash and nothing else inline.
+        self.assertNotIn(theme_head, published)
+        self.assertIn(f"<script>{theme_head}</script>\n</head>".encode("utf-8"), answer)
+        self.assertEqual(shell_of(answer).scripts, [theme_head])
+        self.assertEqual(script_src(shell_of(answer).policy), ["'self'", script_hash(theme_head)])
         self.assertIn(BANNER, answer)
         # Its form is closed: the fieldset disabled, and the note after it.
         self.assertIn(b'<form class="artifact-decision"', answer)
@@ -210,7 +217,7 @@ class VersionShellTests(unittest.TestCase):
         self.assertIsNone(headers["ETag"])
         self.assertEqual(headers["Content-Security-Policy"],
                          "frame-ancestors 'none'; form-action 'none'; base-uri 'none'; "
-                         f"script-src 'nonce-{nonce}'")
+                         f"script-src 'nonce-{nonce}' {script_hash(theme_head)}")
         self.assertEqual(headers["Cache-Control"], "private, no-store")
 
         site.ask("GET", f"/old-shell.html?version={refused}")

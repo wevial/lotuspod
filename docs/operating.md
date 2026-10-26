@@ -79,8 +79,12 @@ live block, and the old-version script running.
 Its `ETag` is over the commit and the render version, and serve keeps one
 render of each version in memory. A version whose body fails the extraction
 check (or whose render fails) is answered from its commit as it was
-published, marked old the same way, and serve prints one line naming the
-page and the commit. Nothing is written to the repository.
+published, marked old the same way, with no `ETag`, and serve prints one line
+naming the page and the commit. None of that file's scripts runs: serve puts
+today's theme head at the end of its head, allowed by its hash in the
+header's policy and in the file's own policy meta tag, so its theme switch
+and Copy link, when the file carries them, work as on a rendered version.
+Nothing is written to the repository.
 
 Images a page shows are answered from `lotuspod-media/` beside the artifacts
 directory (see [Images](publishing.md#images)): a GET or HEAD of `/media/NAME`, where NAME

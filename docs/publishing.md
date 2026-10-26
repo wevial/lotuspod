@@ -752,7 +752,11 @@ where the template writes it; a copy in the page's body is removed, and the
 bridge's hash is added only when the head holds the bridge. So the version's
 live block follows the theme switch, sizes its frame to its content and offers Expand and Pause, but
 no Comment. A version answered from its published file, because it cannot be
-rendered, keeps neither and allows the nonce alone. The one script serve adds,
+rendered, keeps none of its own scripts, its stored theme head included:
+serve puts today's theme head at the end of its head instead, never the
+widget bridge, and allows it by its hash both in `script-src` beside the
+nonce and in the file's own policy meta tag, whose `script-src` becomes
+`'self'` and that hash alone. The one script serve adds,
 before `</body>` with that nonce, is the site's old-version script,
 `lotuspod-old-version.js`; no script in the page itself carries the nonce,
 and none can guess it. It is sent
@@ -1750,7 +1754,10 @@ own: `lotuspod serve` answers `/` and `/index.html` rendered from
 `manifest.json` with the package's index template, under an `ETag` over the
 manifest, so the tab shell takes the choice before its first paint and
 follows it as it changes. An earlier version's page carries the same switch,
-and its live blocks follow it through the widget bridge it keeps.
+and its live blocks follow it through the widget bridge it keeps. One answered
+from its published file runs today's head too, so it takes the reader's theme
+from the first paint and its switch and Copy link work when the file carries
+them; one published before the switch existed gets none.
 
 A top-level table keeps the reading layout's width and scrolls inside itself
 when it is wider. Where the window has at least 4rem of free width beside such

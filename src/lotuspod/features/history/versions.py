@@ -60,7 +60,7 @@ from typing import Callable
 
 from lotuspod.features import widgets
 from lotuspod.features.blocks import PageTargets
-from lotuspod.core import WIDGET_NAME, git_environment
+from lotuspod.core import WIDGET_NAME, git_environment, script_hash
 
 # The versions of one page a list holds, newest first.
 MAX_VERSIONS = 200
@@ -824,6 +824,61 @@ def holds_script(page_html: str, text: str) -> bool:
     return places.head_end is not None and any(
         page_html[start:end] == element for start, end in places.scripts
         if end <= places.head_end)
+
+
+class _Policies(HTMLParser):
+    """The start and end offsets and content of each policy meta tag in
+    page_html, read as a browser reads its tags, so a ">" quoted in an
+    attribute ends none."""
+
+    def __init__(self, page_html: str) -> None:
+        super().__init__(convert_charrefs=True)
+        self._lines = [0] + [match.end() for match in re.finditer("\n", page_html)]
+        self.found: list[tuple[int, int, str]] = []
+        self.feed(page_html)
+        self.close()
+
+    def handle_starttag(self, tag, attrs):
+        values = dict(attrs)
+        if tag == "meta" and (values.get("http-equiv") or "").lower() == "content-security-policy":
+            line, column = self.getpos()
+            at = self._lines[line - 1] + column
+            self.found.append((at, at + len(self.get_starttag_text() or ""),
+                               values.get("content") or ""))
+
+    handle_startendtag = handle_starttag
+
+
+# Directives that govern a script element, each of which a browser checks
+# on its own: script-src-elem and script-src-attr override script-src.
+_SCRIPT_DIRECTIVES = ("script-src", "script-src-elem", "script-src-attr")
+
+
+def with_head(page_html: str, head: str) -> str:
+    """page_html with head, a script's text, run at the end of its head as
+    an inline script element, and each policy meta tag of its head allowing
+    the site's own files and that script alone: no script source a stored
+    policy allowed stays. Unchanged when page_html has no head end."""
+    places = Places(page_html)
+    if places.head_end is None:
+        return page_html
+    sources = f"script-src 'self' {script_hash(head)}"
+    edits = [(places.head_end, places.head_end, f"<script>{head}</script>\n")]
+    for start, end, content in _Policies(page_html[:places.head_end]).found:
+        policy: list[str] = []
+        for part in (part.strip() for part in content.split(";")):
+            if not part:
+                continue
+            if part.split()[0].lower() not in _SCRIPT_DIRECTIVES:
+                policy.append(part)
+            elif sources not in policy:
+                policy.append(sources)
+        if sources not in policy:
+            policy.append(sources)
+        edits.append((start, end, '<meta http-equiv="Content-Security-Policy" content="'
+                      + html.escape("; ".join(policy), quote=False).replace('"', "&quot;")
+                      + '">'))
+    return edited(page_html, edits)
 
 
 def old_page(page_html: str, name: str, version: Version, behind: int,
