@@ -30,6 +30,8 @@ const MERMAID_COPY = path.join(__dirname, '..', '..', '..', 'node_modules', 'mer
 // features/publish/ts/page-open.js's STALE_DIAGRAM.
 const STALE_DIAGRAM = 'This diagram has changed since the page loaded. Reload the page to comment on its new version.';
 const CHANGED = 'Diagram changed since this comment';
+// What an image spot's composer says when its crop was not stored.
+const CROP_FAILED = 'The crop of the marked spot was not attached. Press Comment to try again.';
 const QUESTION = 'Is this the pod?';
 
 test.use({ viewport: { width: 1280, height: 800 }, extraHTTPHeaders: SIGNED_IN });
@@ -411,6 +413,19 @@ test('a stroke, a click on a node and the keyboard mark spots; Escape drops a dr
   await page.keyboard.press('Escape');
   await expect(flow.comment).toBeFocused();
 
+  // Escape in the middle of a drag leaves mark mode with no draft drawn.
+  await flow.comment.click();
+  const agent = await rect(flow.node('Agent'));
+  await page.mouse.move(agent.x - 6, agent.y - 6);
+  await page.mouse.down();
+  await page.mouse.move(agent.x + agent.width, agent.y + agent.height, { steps: 6 });
+  await expect(flow.draft).toHaveCount(1);
+  await page.keyboard.press('Escape');
+  await page.mouse.up();
+  await expect(flow.comment).toBeVisible();
+  await expect(flow.draft).toHaveCount(0);
+  await expect(form.holder).toHaveCount(0);
+
   // A hash the diagram never had is refused, and the text kept.
   await flow.comment.click();
   await boxRound(page, flow.node('Reader'));
@@ -446,8 +461,35 @@ test('a box on an image is posted in its natural pixels with a crop of it, and d
   const to: [number, number] = [shown.x + shown.width * 0.6, shown.y + shown.height * 0.7];
   await drag(page, from, to);
   const form = composer(page);
-  // Posted at once, the comment waits for its crop to upload: its first image.
-  const { body, row } = await post(page, 'This fin');
+  // Sent twice at once while the crop uploads, the comment waits for it and
+  // is posted once, the crop its first image.
+  let release!: () => void;
+  const held = new Promise<void>((done) => { release = done; });
+  await page.route('**/api/media', async (route) => {
+    await held;
+    await route.continue();
+  });
+  const comments: string[] = [];
+  page.on('request', (request) => {
+    if (new URL(request.url()).pathname === '/api/comments' && request.method() === 'POST') comments.push(request.url());
+  });
+  await expect(form.field).toBeFocused();
+  await form.field.fill('This fin');
+  const sent = posting(page);
+  const answered = page.waitForResponse((response) => new URL(response.url()).pathname === '/api/comments' &&
+    response.request().method() === 'POST');
+  await page.keyboard.press('ControlOrMeta+Enter');
+  await page.keyboard.press('ControlOrMeta+Enter');
+  await expect(form.send).toBeDisabled();
+  release();
+  const body = (await sent).postDataJSON();
+  const response = await answered;
+  expect(response.status()).toBe(201);
+  const row = await response.json();
+  await page.unroute('**/api/media');
+  await expect(form.holder).toHaveCount(0);
+  await page.waitForTimeout(500);
+  expect(comments).toHaveLength(1);
   const shape = body.spot.shape;
   expect(body.spot.nodes).toEqual([]);
   expect(shape.kind).toBe('box');
@@ -476,6 +518,28 @@ test('a box on an image is posted in its natural pixels with a crop of it, and d
   expect(Math.abs(drawn.y - (again.y + from[1] - shown.y))).toBeLessThanOrEqual(2);
   expect(Math.abs(drawn.width - (to[0] - from[0]))).toBeLessThanOrEqual(4);
   expect(Math.abs(drawn.height - (to[1] - from[1]))).toBeLessThanOrEqual(4);
+
+  // A crop the site refuses is never posted without: a send attaches it
+  // again, and while the site still refuses it, says so and keeps the text;
+  // a send once it is stored posts it.
+  await page.route('**/api/media', (route) => route.fulfill({ status: 500, contentType: 'application/json', body: '{"error":"broken"}' }));
+  const refused = page.waitForResponse((response) => new URL(response.url()).pathname === '/api/media');
+  await fish.comment.click();
+  await drag(page, from, to);
+  await refused;
+  comments.length = 0;
+  await form.field.fill('Again');
+  await form.send.click();
+  await expect(form.status).toHaveText(CROP_FAILED);
+  await expect(form.field).toHaveValue('Again');
+  expect(comments).toEqual([]);
+  await page.unroute('**/api/media');
+  const resent = posting(page);
+  await form.send.click();
+  const retried = (await resent).postDataJSON();
+  expect(retried.images).toHaveLength(1);
+  expect(retried.images[0]).toMatch(/^[0-9a-f]{64}\.png$/);
+  await expect(form.holder).toHaveCount(0);
   expect(errors).toEqual([]);
 });
 

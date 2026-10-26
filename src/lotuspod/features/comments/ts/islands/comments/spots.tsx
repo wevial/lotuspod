@@ -42,10 +42,12 @@ const BADGE = 9;
 const FIGURE = 11;
 const GAP = 8;
 const EDGE = 8;
+// What an image spot's composer says when its crop could not be stored.
+const CROP_FAILED = "The crop of the marked spot was not attached. Press Comment to try again.";
 
 // A draft: its mark and the shape it draws, in its layer's coordinates, its
 // composer, the spot it posts, and on an image its crop, once attached.
-interface Draft { mark: SVGGElement; shape: SpotShape; composer: Composer; spot: Omit<Spot, "hash">; image: boolean; cropped: Promise<void> }
+interface Draft { mark: SVGGElement; shape: SpotShape; composer: Composer; spot: Omit<Spot, "hash">; image: boolean; cropped: Promise<boolean> }
 interface Press { id: number; x: number; y: number; layer: SVGGElement; points: Point[]; moved: boolean; node: SVGGElement | null; preview: SVGGElement | null }
 interface Marking { holder: HTMLElement; tool: "box" | "stroke"; draft: Draft | null; press: Press | null; tabbed: SVGGElement[] }
 
@@ -316,6 +318,11 @@ export function spots(page: Page, bridge: SpotsBridge): Spots {
   function leave(focus: boolean) {
     const was = marking;
     if (!was) return;
+    // A drag still held ends here, its preview with it.
+    const press = was.press;
+    was.press = null;
+    press?.preview?.remove();
+    if (press && was.holder.hasPointerCapture(press.id)) was.holder.releasePointerCapture(press.id);
     drop();
     was.tabbed.forEach(group => group.removeAttribute("tabindex"));
     was.holder.classList.remove(page.marking);
@@ -505,13 +512,20 @@ export function spots(page: Page, bridge: SpotsBridge): Spots {
       if (!mine()) return;
       drop();
       leave(false);
-    }, () => draft.cropped);
-    const draft: Draft = { mark, shape, composer, spot, image, cropped: Promise.resolve() };
+    }, async () => {
+      // An image spot is sent only with its crop stored: one refused or
+      // failed is attached again, and if that fails too, nothing is sent.
+      if (await draft.cropped) return "";
+      draft.cropped = crop();
+      return await draft.cropped ? "" : CROP_FAILED;
+    });
+    const crop = () => attach(target as HTMLImageElement, spot.shape, draft).then(() => uploaded(composer, spot.shape));
+    const draft: Draft = { mark, shape, composer, spot, image, cropped: Promise.resolve(true) };
     marking.draft = draft;
     document.body.appendChild(composer.holder);
     seat(draft);
     composer.field.focus({ preventScroll: true });
-    if (image) draft.cropped = attach(target as HTMLImageElement, spot.shape, draft).then(() => uploaded(composer));
+    if (image) draft.cropped = crop();
   }
 
   // The composer just under its mark, inside the window and left of the
@@ -545,11 +559,15 @@ export function spots(page: Page, bridge: SpotsBridge): Spots {
     if (blob && marking?.draft === draft) draft.composer.images.take([new File([blob], "spot.png", { type: "image/png" })]);
   }
 
-  // Once a composer's images have uploaded, or failed to, as its tray says.
-  async function uploaded(composer: Composer) {
+  // Once a composer's images have uploaded, or failed to, as its tray says:
+  // whether a stored PNG of the crop's size is among them.
+  async function uploaded(composer: Composer, shape: SpotShape): Promise<boolean> {
     while (composer.images.busy() && composer.holder.isConnected) {
       await new Promise(done => setTimeout(done, 100));
     }
+    const part = shapeBounds(shape);
+    const width = Math.max(1, Math.round(part.w)), height = Math.max(1, Math.round(part.h));
+    return composer.images.kept().some(image => /\.png$/.test(image.name) && image.width === width && image.height === height);
   }
 
   // Escape drops a draft, staying in mark mode, and with none leaves it.

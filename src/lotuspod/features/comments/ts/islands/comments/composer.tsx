@@ -228,10 +228,11 @@ export function composers(page: Page, bridge: ComposerBridge) {
   // The composer under a mark on a diagram or an image, in box's section:
   // spot() gives the spot as its target now stands, and what a refusal for
   // a changed target says. Cancel and Escape call cancel; a thread posted
-  // calls saved first. A send waits for ready: an image spot's crop is
-  // attached first, so it is never posted without it.
+  // calls saved first. A send waits for ready, which says why it may not go
+  // ("" when it may): an image spot is never posted without its crop. While
+  // it waits, Comment is disabled and a second send does nothing.
   function spot(box: HTMLElement, made: () => { spot: Spot; stale: string }, cancel: () => void,
-    saved: (row: CommentRow) => void, ready: () => Promise<void>) {
+    saved: (row: CommentRow) => void, ready: () => Promise<string>) {
     const holder = document.createElement("div");
     holder.className = "artifact-spot-composer";
     render(<form class="artifact-comment-form artifact-spot-form">{controls("Comment", "Comment on the marked spot", cancel)}</form>, holder);
@@ -239,9 +240,20 @@ export function composers(page: Page, bridge: ComposerBridge) {
     holder.addEventListener("keydown", event => {
       if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); cancel(); }
     });
+    let waiting = false;
     handles.form.addEventListener("submit", async event => {
       event.preventDefault();
-      await ready();
+      if (waiting || handles.saving) return;
+      const button = handles.form.querySelector<HTMLButtonElement>('button[type="submit"]')!;
+      const status = handles.form.querySelector<HTMLElement>(".artifact-comment-status")!;
+      waiting = true;
+      button.disabled = true;
+      status.textContent = "Saving...";
+      const why = await ready();
+      waiting = false;
+      button.disabled = false;
+      status.textContent = why;
+      if (why) return;
       const now = made();
       handles.saving = post(handles.form, { ...fields(box, handles.field), spot: now.spot }, now.stale);
       const row = await handles.saving;
