@@ -494,8 +494,8 @@ test('a stroke, a click on a node and the keyboard mark spots; Escape drops a dr
   await expect(form.holder).toHaveCount(0);
 
   // The diagram moved under Pictures, the sections in the same order: Flow's
-  // Update brings the draft to it, and its thread is Pictures'.
-  await flow.comment.click();
+  // Update brings the draft to it, and its thread is Pictures'. Escape left
+  // mark mode on.
   await boxRound(page, flow.node('Pod'));
   await form.field.fill('Moved with it');
   const [head, flowPart, pictures] = doc('TD', 'Agent --> Publish --> Pod').split(/(?=## Flow|## Pictures)/);
