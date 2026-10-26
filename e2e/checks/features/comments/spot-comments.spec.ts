@@ -300,6 +300,19 @@ test('a box round a node is posted, drawn round it after a reload and in Dawn, a
   const stray = side.strays.locator('.artifact-comments-entry');
   await expect(stray).toHaveCount(1);
   await expect(stray.locator('.artifact-comments-entry-words').first()).toHaveText('On Pod');
+  // Its number is a muted ring, not the rose of a mark.
+  const ring = await stray.locator('.artifact-comments-entry-mark').first().evaluate((mark) => {
+    const probe = document.createElement('span');
+    probe.style.color = 'var(--color-rose)';
+    document.body.appendChild(probe);
+    const rose = getComputedStyle(probe).color;
+    probe.remove();
+    const seen = getComputedStyle(mark);
+    return { rose, border: seen.borderTopColor, color: seen.color, fill: seen.backgroundColor };
+  });
+  expect(ring.border).not.toBe(ring.rose);
+  expect(ring.color).not.toBe(ring.rose);
+  expect(ring.fill).toBe('rgba(0, 0, 0, 0)');
   await expect(side.group('Flow').locator('.artifact-comments-entry')).toHaveCount(0);
   await page.reload();
   await expect(flow.svg).toBeVisible();
@@ -489,9 +502,10 @@ test('a stroke, a click on a node and the keyboard mark spots; Escape drops a dr
   await expect(form.holder).toHaveCount(1);
   await expect(form.field).toHaveValue('Kept without Reader');
   await expect(flow.draft).toHaveCount(0);
-  await form.field.focus();
-  await page.keyboard.press('Escape');
+  await form.cancel.click();
   await expect(form.holder).toHaveCount(0);
+  // Mark mode is on the diagram Update drew, and its Box has the focus.
+  await expect(flow.box).toBeFocused();
 
   // The diagram moved under Pictures, the sections in the same order: Flow's
   // Update brings the draft to it, and its thread is Pictures'. Escape left
@@ -765,6 +779,52 @@ test('a spot draft holds back a hidden page\'s reload, and its text is kept over
   const flowForm = panel(page).group('Flow').locator('form.artifact-comment-form');
   await expect(flowForm.locator('textarea[name="text"]')).toHaveValue('Not sent yet');
   await expect(flowForm.locator('.artifact-comment-status')).toHaveText(PLACE_GONE);
+  expect(errors).toEqual([]);
+});
+
+test('marks on adjacent diagrams are numbered in page order, and a draft\'s composer follows a wide diagram\'s scroll', async ({ page }) => {
+  test.setTimeout(120_000);
+  const name = `spot-comments-adjacent-${test.info().repeatEachIndex}`;
+  const chain = Array.from({ length: 16 }, (_, i) => `Step${i + 1}`).join(' --> ');
+  publish(name, ['# Spot pair', '', 'Two drawings, one after the other.', '', '## Flow', '', 'Both of them.', '',
+    '```mermaid id=upper', 'graph LR', '  Agent --> Pod', '```', '',
+    // Drawn at its own width, it scrolls sideways in its pre.
+    '```mermaid id=wide', '%%{init: {"flowchart": {"useMaxWidth": false}}}%%', 'graph LR', `  ${chain}`, '```', ''].join('\n'));
+  const errors = await watch(page);
+  await page.goto(`/${name}.html?standalone`);
+  const pre = (id: string) => page.locator(`pre.mermaid[data-spot="${id}"]`);
+  const node = (id: string, label: string) => pre(id).locator(`g.node[id^="flowchart-${label}-"]`);
+  await expect(pre('upper').locator(':scope > svg')).toBeVisible();
+  await expect(pre('wide').locator(':scope > svg')).toBeVisible();
+  await expect(page.locator('html')).toHaveAttribute('data-lotuspod-comments-read', '');
+  const form = composer(page);
+
+  // The lower diagram's thread is posted first.
+  for (const [id, label] of [['wide', 'Step1'], ['upper', 'Pod']]) {
+    await pre(id).getByRole('button', { name: 'Comment', exact: true }).click();
+    await node(id, label).click();
+    await form.field.fill(`On ${label}`);
+    const sent = posting(page);
+    await form.send.click();
+    await sent;
+    await expect(form.holder).toHaveCount(0);
+  }
+  await page.reload();
+  const badge = (id: string) => pre(id).locator('g.artifact-spot-mark:not(.artifact-spot-mark--draft) .artifact-spot-badge text');
+  await expect(badge('upper')).toHaveText('1');
+  await expect(badge('wide')).toHaveText('2');
+
+  // The wide diagram scrolls inside its pre; the composer stays under its mark.
+  const wide = pre('wide');
+  expect(await wide.evaluate((el) => el.scrollWidth > el.clientWidth + 100)).toBe(true);
+  await wide.getByRole('button', { name: 'Comment', exact: true }).click();
+  await node('wide', 'Step2').click();
+  await expect(form.holder).toHaveCount(1);
+  const draft = wide.locator('g.artifact-spot-mark--draft .artifact-spot-shape');
+  const gap = async () => (await rect(form.holder)).x - (await rect(draft)).x;
+  const before = await gap();
+  await wide.evaluate((el) => { el.scrollLeft = 100; });
+  await expect.poll(async () => Math.abs((await gap()) - before)).toBeLessThan(2);
   expect(errors).toEqual([]);
 });
 

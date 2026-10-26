@@ -17,6 +17,11 @@ function passageQuote(thread: Thread) {
 }
 function quoteOf(thread: Thread): PassageQuote { return passageQuote(thread)!; }
 function spotted(thread: Thread) { return anchorOf(thread.root).kind === "spot"; }
+// Negative when a comes before b in the page, positive after, 0 for one node.
+function pageOrder(a: Node, b: Node) {
+  if (a === b) return 0;
+  return a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1;
+}
 // Highlights stay imperative: the author's text is never a Preact render root.
 export function passages(page: Page, bridge: PassagesBridge): Passages {
   const { article, boxes, shown, resolved, revision, attached, composer, placement, numbered } = bridge;
@@ -177,17 +182,23 @@ export function passages(page: Page, bridge: PassagesBridge): Passages {
     var spots = Array.from(shown.values()).filter(spotted);
     var marked = spots.filter(function (thread) { return Boolean(thread.drawing); });
     var at = new Map<Thread, number>();
+    // What each is drawn on: targets with no text between them share an
+    // offset, and are then in page order.
+    var on = new Map<Thread, Node>();
     threads.forEach(function (thread) {
       if (thread.marks.length > 0) {
         at.set(thread, thread.spot!.start);
+        on.set(thread, thread.marks[0]);
       }
     });
     marked.forEach(function (thread) {
       model = model || textModel(article);
-      at.set(thread, offsetOf(model, thread.drawing!.closest("pre, figure") || thread.drawing!, 0));
+      var target = thread.drawing!.closest("pre, figure") || thread.drawing!;
+      at.set(thread, offsetOf(model, target, 0));
+      on.set(thread, target);
     });
     var drawn = [...at.keys()].sort(function (a, b) {
-      return at.get(a)! - at.get(b)! || a.root.id - b.root.id;
+      return at.get(a)! - at.get(b)! || pageOrder(on.get(a)!, on.get(b)!) || a.root.id - b.root.id;
     });
     var lost = threads.filter(api.detached).concat(spots.filter(function (thread) {
       return !resolved(thread) && thread.standing === "gone";

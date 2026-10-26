@@ -547,7 +547,8 @@ export function spots(page: Page, bridge: SpotsBridge): Spots {
     }), () => {
       if (!mine()) return;
       drop();
-      focusIn(holder, PRESSED);
+      // A swap may have put mark mode on another holder since.
+      focusIn(marking!.holder, PRESSED);
     }, () => {
       if (!mine()) return;
       drop();
@@ -650,6 +651,11 @@ export function spots(page: Page, bridge: SpotsBridge): Spots {
     if (marking?.draft) seat(marking.draft);
     schedule();
   });
+  // A wide diagram scrolls inside its pre: the composer follows its mark.
+  document.addEventListener("scroll", event => {
+    const draft = marking?.draft;
+    if (draft && event.target instanceof Element && event.target.contains(draft.mark)) seat(draft);
+  }, { capture: true, passive: true });
   document.addEventListener(page.events.diagrams, scan);
   document.addEventListener(page.events.redrawn, schedule);
   // A part holding the target a draft is on stays as it is until the reader

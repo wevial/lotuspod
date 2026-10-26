@@ -270,7 +270,8 @@ path.artifact-spot-shape:is(.artifact-spot-mark--lit *) {
 .artifact-comments-entry--spot-gone .artifact-comments-entry-mark,
 .artifact-comments-entry--spot .artifact-comments-entry-resolved .artifact-comments-entry-mark {
   background: none;
-  color: var(--color-pale-rose);
+  border-color: var(--hairline-strong);
+  color: var(--color-muted-lavender);
 }
 
 .artifact-comments-entry--lit {
