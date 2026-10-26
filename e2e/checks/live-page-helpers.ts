@@ -8,7 +8,7 @@ import { expect, type Locator, type Page } from '@playwright/test';
 // share: publishing a page on the capture fixture's site, opening it with its
 // clock stopped, and reading what the live page shows.
 
-export const ENV = process.env;
+const ENV = process.env;
 export const ASSERTION = ENV.LOTUSPOD_TEST_ASSERTION ?? '';
 export const SIGNED_IN = { 'Cf-Access-Jwt-Assertion': ASSERTION };
 export const SOCKET = ENV.LOTUSPOD_TEST_SOCKET ?? '';
@@ -16,12 +16,12 @@ export const HERMES = ENV.LOTUSPOD_TEST_CREDENTIAL_HERMES ?? '';
 export const OUT = ENV.LOTUSPOD_TEST_OUT ?? '';
 export const PYTHON = ENV.LOTUSPOD_TEST_PYTHON ?? '';
 // This checkout's package, whatever lotuspod is installed.
-export const SRC = path.resolve(__dirname, '..', '..', 'src');
+const SRC = path.resolve(__dirname, '..', '..', 'src');
 export const OWNER = 'hermes';
 export const CHECK = 60_000;
-export const EVENTS = '/api/events';
-export const START = Date.parse('2026-10-02T12:00:00Z');
-export const FISH = path.resolve(__dirname, '..', '..', 'tests', 'fixtures', 'media', 'fish-320x240.jpg');
+const EVENTS = '/api/events';
+const START = Date.parse('2026-10-02T12:00:00Z');
+const FISH = path.resolve(__dirname, '..', '..', 'tests', 'fixtures', 'media', 'fish-320x240.jpg');
 export const MEDIA_URL = /^\/media\/[0-9a-f]{64}\.jpg$/;
 
 export function run(...args: string[]) {
@@ -98,7 +98,7 @@ export function watchErrors(page: Page) {
 }
 
 // Chromium's console error for the stream answered 503.
-export function REFUSED(message: { text(): string; location(): { url: string } }) {
+function REFUSED(message: { text(): string; location(): { url: string } }) {
   return new URL(message.location().url || 'about:blank', 'http://x').pathname === EVENTS &&
     message.text().includes('503');
 }
