@@ -73,11 +73,15 @@ class VersionBridgeTests(VersionsWitness):
         self.assertEqual(script_src(headers["Content-Security-Policy"]),
                          [nonce, script_hash(theme_head)])
 
-    def test_bridge_text_in_a_comment_allows_no_hash(self):
+    def assert_no_bridge_allowed(self, markup, *, scripts_read=True):
+        """A plain first revision whose authored HTML holds markup, the
+        bridge element written in it, answered without the bridge's hash
+        and, where scripts_read, with no bridge among its script elements;
+        the second revision adds a live block."""
         self.repository(self.out)
         source = self.tmp / f"{PAGE}.html"
         source.write_text("<h1>Pond plan</h1><p>A plain first revision.</p>\n"
-                          f"<!-- <script>{widgets.bridge_script()}</script> -->\n",
+                          + markup.format(f"<script>{widgets.bridge_script()}</script>") + "\n",
                           encoding="utf-8")
         done = self.cli("publish", str(source), "--local", "--out-dir", str(self.out))
         self.assertEqual(done.returncode, 0, done.stderr)
@@ -90,33 +94,22 @@ class VersionBridgeTests(VersionsWitness):
 
         status, headers, data = self.get(f"/{PAGE}.html?version={first}")
         self.assertEqual(status, 200, data)
-        self.assertIn("installWidgetBridge()", data.decode("utf-8"))
         scripts = parse(data.decode("utf-8")).find("script")
-        self.assertEqual([node.text() or node.attrs.get("src", "").split("?")[0]
-                          for node in scripts], [theme_head, OLD_VERSION_SCRIPT])
+        if scripts_read:
+            self.assertEqual([node.text() or node.attrs.get("src", "").split("?")[0]
+                              for node in scripts], [theme_head, OLD_VERSION_SCRIPT])
         self.assertEqual(script_src(headers["Content-Security-Policy"]),
                          [f"'nonce-{scripts[-1].attrs.get('nonce')}'", script_hash(theme_head)])
+        return data.decode("utf-8")
+
+    def test_bridge_text_in_a_comment_allows_no_hash(self):
+        answer = self.assert_no_bridge_allowed("<!-- {} -->")
+        self.assertIn("installWidgetBridge()", answer)
 
     def test_bridge_text_in_a_badge_allows_no_hash(self):
-        self.repository(self.out)
-        source = self.tmp / f"{PAGE}.html"
-        source.write_text("<h1>Pond plan</h1><p>A plain first revision.</p>\n"
-                          '<span class="artifact-live-badge">'
-                          f"<script>{widgets.bridge_script()}</script></span>\n",
-                          encoding="utf-8")
-        done = self.cli("publish", str(source), "--local", "--out-dir", str(self.out))
-        self.assertEqual(done.returncode, 0, done.stderr)
-        self.publish(PAGE, live("Added forecast"), DATES[1])
-        first = self.commits(self.out, PAGE)[-1]
-        inline = inline_scripts((self.out / f"{PAGE}.html").read_text(encoding="utf-8"))
-        (theme_head,) = [text for text in inline if "installWidgetBridge()" not in text
-                         and '"lotuspod:theme"' in text]
-        self.start_server()
+        self.assert_no_bridge_allowed('<span class="artifact-live-badge">{}</span>')
 
-        status, headers, data = self.get(f"/{PAGE}.html?version={first}")
-        self.assertEqual(status, 200, data)
-        scripts = parse(data.decode("utf-8")).find("script")
-        self.assertEqual([node.text() or node.attrs.get("src", "").split("?")[0]
-                          for node in scripts], [theme_head, OLD_VERSION_SCRIPT])
-        self.assertEqual(script_src(headers["Content-Security-Policy"]),
-                         [f"'nonce-{scripts[-1].attrs.get('nonce')}'", script_hash(theme_head)])
+    def test_bridge_in_a_noscript_allows_no_hash(self):
+        # With scripting on, a browser reads a noscript's content as text, so
+        # the bridge there never runs; this parser still reads it as a script.
+        self.assert_no_bridge_allowed("<noscript>{}</noscript>", scripts_read=False)

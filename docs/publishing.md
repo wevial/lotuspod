@@ -748,7 +748,7 @@ the page's own scripts, an earlier version keeps only today's theme head and,
 when the version holds a live block, today's widget bridge, each matched
 whole against the text the package writes now (never the old commit's) and
 allowed by its sha256 hash in `script-src`; a bridge's hash is added only
-when the version holds the bridge. So the version's live block follows the
+when the version's head holds the bridge. So the version's live block follows the
 theme switch, sizes its frame to its content and offers Expand and Pause, but
 no Comment. A version answered from its published file, because it cannot be
 rendered, keeps neither and allows the nonce alone. The one script serve adds,

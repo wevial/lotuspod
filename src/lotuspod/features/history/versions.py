@@ -815,10 +815,15 @@ def _disable_forms(page_html: str, note: str) -> str:
 
 
 def holds_script(page_html: str, text: str) -> bool:
-    """Whether page_html holds an inline script element whose text is text,
-    as old_page reads one: text in a comment or in another script is none."""
+    """Whether page_html's head holds an inline script element whose text is
+    text, as old_page reads one: text in a comment or in another script is
+    none, and so is one in the body, where a noscript or template around it
+    would keep it from running."""
     element = f"<script>{text}</script>"
-    return any(page_html[start:end] == element for start, end in Places(page_html).scripts)
+    places = Places(page_html)
+    return places.head_end is not None and any(
+        page_html[start:end] == element for start, end in places.scripts
+        if end <= places.head_end)
 
 
 def old_page(page_html: str, name: str, version: Version, behind: int,
