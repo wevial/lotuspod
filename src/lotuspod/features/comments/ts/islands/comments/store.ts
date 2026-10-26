@@ -594,6 +594,7 @@ export function store(page: Page, bridge: StoreBridge): Store {
       spots = makeSpots(page, {
         shown, resolved, composer, refresh, placement: () => panel!,
         boxOf: target => boxOn(sectionOf(target)),
+        shine: thread => passages?.shine(thread),
       });
       passages = makePassages(page, {
         article, boxes, shown, resolved, revision, attached, composer,

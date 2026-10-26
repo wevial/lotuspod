@@ -20,6 +20,8 @@ export interface SpotsBridge {
   // The box of the section a target is in, which takes its new threads;
   // null when the page has none for it.
   boxOf(target: HTMLElement): HTMLElement | null;
+  // Light a thread's mark as its row is lit (the passages' shine).
+  shine(thread: Thread): void;
 }
 
 export interface Spots {
@@ -221,6 +223,8 @@ export function spots(page: Page, bridge: SpotsBridge): Spots {
       thread.drawing = mark;
       drawnAs.set(thread, key);
       number(thread);
+      // A mark drawn anew, as in the other theme, is lit as the old one was.
+      bridge.shine(thread);
     });
   }
 

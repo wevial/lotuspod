@@ -278,6 +278,26 @@ test('a box round a node is posted, drawn round it after a reload and in Dawn, a
   await page.getByRole('group', { name: 'Theme' }).getByRole('button', { name: 'Night', exact: true }).click();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'night');
 
+  // On Auto, a mark lit by its hovered row stays lit when the system's
+  // scheme turns light and Mermaid draws the diagram again. The pointer stays
+  // on the row: the theme buttons are pressed from the page.
+  const theme = (label: string) => page.getByRole('group', { name: 'Theme' })
+    .getByRole('button', { name: label, exact: true }).evaluate((button) => (button as HTMLButtonElement).click());
+  await theme('Auto');
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'night');
+  await entry.hover();
+  await expect(flow.marks.first()).toHaveClass(/artifact-spot-mark--lit/);
+  await flow.svg.evaluate((svg) => { (svg as any).old = true; });
+  await page.emulateMedia({ colorScheme: 'light' });
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dawn');
+  await expect.poll(() => flow.svg.evaluate((svg) => !(svg as any).old)).toBe(true);
+  await expect(flow.marks).toHaveCount(1);
+  await expect(flow.marks.first()).toHaveClass(/artifact-spot-mark--lit/);
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await theme('Night');
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'night');
+  await page.mouse.move(0, 0);
+
   // Laid out top to bottom: Pod is elsewhere, and the mark dashed round it.
   await swap(page, name, doc('TD'));
   await expect(flow.marks).toHaveCount(1);
