@@ -137,7 +137,9 @@ swap brings in whose read fails stays out of the sheet until a later read. The f
 truth: the sheet draws from them on each form's `input`, `change` and
 `SAVED`. Preact holds only the sheet's own state: the question Next open
 last jumped to, which a swap keeps. The bundle, Preact with it, is 56,039 bytes
-gzipped (`gzip -c`); it uses Preact and its hooks, with `createPortal` from
+gzipped (`gzip -c`) and stays within its gzipped-size pin in
+`tests/test_bundle_size.py`, which pins and enforces every slice's islands
+bundle; it uses Preact and its hooks, with `createPortal` from
 `preact/compat` for independently owned DOM targets.
 
 The comments island (`features/comments/ts/islands/comments/index.ts`) mounts after the
