@@ -270,8 +270,7 @@ def reopened(out_dir: Path, args: argparse.Namespace, name: str, previous: str,
     """A line for each question whose stored answer showed as its answer on
     the page before (decisions.holds) and no longer does on the page as
     published, which still asks it; none without serve's database, with one
-    of another schema, or without a page before. The database is only read:
-    never migrated, its journal mode never changed."""
+    of another schema, or without a page before."""
     if not previous:
         return []
     try:
