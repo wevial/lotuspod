@@ -229,15 +229,15 @@ export function composers(page: Page, bridge: ComposerBridge) {
     });
     return handles;
   }
-  // The composer under a mark on a diagram or an image, in box's section:
-  // spot() gives the spot as its target now stands, and what a refusal for
-  // a changed target says. Cancel and Escape call cancel; a thread posted
+  // The composer under a mark on a diagram or an image: made() gives the
+  // spot as its target now stands, the box of the section that takes it,
+  // and what a refusal for a changed target says. Cancel and Escape call cancel; a thread posted
   // calls saved first. A send waits for ready, which says why it may not go
   // ("" when it may): an image spot is never posted without its crop. While
   // it waits, Comment is disabled and a second send does nothing.
   // first: the stored name of the image it must post first, as found by
   // ready, else ""; missing: what it says when that image is not attached.
-  function spot(box: HTMLElement, made: () => { spot: Spot; stale: string; first: string }, cancel: () => void,
+  function spot(made: () => { spot: Spot; stale: string; first: string; box: HTMLElement }, cancel: () => void,
     saved: (row: CommentRow) => void, ready: () => Promise<string>, missing = "") {
     const holder = document.createElement("div");
     holder.className = "artifact-spot-composer";
@@ -263,7 +263,7 @@ export function composers(page: Page, bridge: ComposerBridge) {
       status.textContent = why;
       if (why) return;
       const now = made();
-      handles.saving = post(handles.form, { ...fields(box, handles.field), spot: now.spot }, now.stale, now.first, missing);
+      handles.saving = post(handles.form, { ...fields(now.box, handles.field), spot: now.spot }, now.stale, now.first, missing);
       const row = await handles.saving;
       handles.saving = null;
       if (!row) return;

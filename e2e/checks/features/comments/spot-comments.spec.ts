@@ -492,6 +492,31 @@ test('a stroke, a click on a node and the keyboard mark spots; Escape drops a dr
   await form.field.focus();
   await page.keyboard.press('Escape');
   await expect(form.holder).toHaveCount(0);
+
+  // The diagram moved under Pictures, the sections in the same order: Flow's
+  // Update brings the draft to it, and its thread is Pictures'.
+  await flow.comment.click();
+  await boxRound(page, flow.node('Pod'));
+  await form.field.fill('Moved with it');
+  const [head, flowPart, pictures] = doc('TD', 'Agent --> Publish --> Pod').split(/(?=## Flow|## Pictures)/);
+  const diagramSource = /```mermaid id=flow[\s\S]*?```\n/.exec(flowPart)![0];
+  publish(name, head + flowPart.replace(diagramSource, '') + pictures + '\n' + diagramSource);
+  await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+  const flowUpdate = page.locator('.artifact-swap-held').getByRole('button', { name: 'Update', exact: true });
+  await expect(flowUpdate).toBeVisible();
+  await flowUpdate.click();
+  await expect(flow.pre).toHaveCount(1);
+  await expect(page.locator('h2#flow + .artifact-section-body pre.mermaid')).toHaveCount(0);
+  await expect(page.locator('h2#pictures + .artifact-section-body pre.mermaid[data-spot="flow"] > svg')).toBeVisible();
+  await expect(form.field).toHaveValue('Moved with it');
+  await expect(flow.draft).toHaveCount(1);
+  const movedAnswer = page.waitForResponse((response) => new URL(response.url()).pathname === '/api/comments' &&
+    response.request().method() === 'POST');
+  await form.send.click();
+  const movedTo = await movedAnswer;
+  expect(movedTo.status()).toBe(201);
+  expect(movedTo.request().postDataJSON().section).toBe('pictures');
+  await expect(form.holder).toHaveCount(0);
   expect(errors).toEqual([]);
 });
 

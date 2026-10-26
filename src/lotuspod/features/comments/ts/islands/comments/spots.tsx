@@ -368,6 +368,9 @@ export function spots(page: Page, bridge: SpotsBridge): Spots {
     const shape = layer && !other && located({ ...draft!.spot, hash: "" }, target!, layer);
     if (draft && layer && shape) {
       draft.target = target!;
+      // A swap may have moved the target to another section, which then
+      // takes the thread.
+      draft.box = bridge.boxOf(target!) || draft.box;
       draft.shape = shape;
       draft.mark = draw(layer, shape, "artifact-spot-mark--draft", null);
       seat(draft);
@@ -539,10 +542,11 @@ export function spots(page: Page, bridge: SpotsBridge): Spots {
     // Each callback acts on its own draft only: a save that ends after the
     // reader dropped it, or started another, leaves the newer one as it is.
     const mine = () => marking?.draft === draft;
-    const composer = bridge.composer.spot(box, () => ({
+    const composer = bridge.composer.spot(() => ({
       spot: { ...spot, id: draft.target.dataset.spot || spot.id, hash: draft.target.dataset.spotHash || "" },
       stale: image ? page.staleImage : page.staleDiagram,
       first: image ? draft.crop : "",
+      box: draft.box,
     }), () => {
       if (!mine()) return;
       drop();
