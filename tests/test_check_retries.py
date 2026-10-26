@@ -24,22 +24,13 @@ import json
 import os
 import re
 import subprocess
-import sys
 import tempfile
 import unittest
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
-PLAYWRIGHT = REPO_ROOT / "e2e" / "node_modules" / "@playwright" / "test"
-TIMEOUT = 600
-MESSAGE = "failed on its first attempt by LOTUSPOD_TEST_FAIL_FIRST"
+from tests.test_browser_checks import COMMAND, PLAYWRIGHT, REPO_ROOT, TIMEOUT
 
-COMMAND = (
-    sys.executable, "-m", "tests.capture_site",
-    "npm", "--prefix", "e2e", "exec", "--no", "--",
-    "playwright", "test", "--config", "e2e/checks.config.ts",
-    "--reporter=json",
-)
+MESSAGE = "failed on its first attempt by LOTUSPOD_TEST_FAIL_FIRST"
 
 CHECKLIST_SAVES = (
     "saving folds the card to the items changed from their defaults, "
@@ -93,7 +84,7 @@ class CheckRetriesTests(unittest.TestCase):
                 "LOTUSPOD_TEST_FAIL_FIRST": fail_first,
                 "PLAYWRIGHT_JSON_OUTPUT_NAME": str(report),
             })
-            command = [*COMMAND, spec]
+            command = [*COMMAND, "--reporter=json", spec]
             if grep is not None:
                 command += ["--grep", re.escape(grep)]
             done = subprocess.run(
