@@ -9,7 +9,6 @@ from pathlib import Path
 import re
 import shlex
 
-from lotuspod import core
 from lotuspod.core import Templates, collect_scripts, html_title, normalized, script_hash
 from lotuspod.features import comments
 from lotuspod.features.widgets import libraries
@@ -57,7 +56,7 @@ def bridge_script() -> str:
     widget bridge; serve keeps and hashes exactly this text on an earlier
     version, so it must be the text the template writes."""
     return ('(function () {\n'
-            + (core.THEME_ROOT / 'features/widgets/ts/widgets.js').read_text(encoding='utf-8')
+            + (THEME / 'widgets.js').read_text(encoding='utf-8')
             + '\ninstallWidgetBridge();\n})();')
 
 
