@@ -136,6 +136,7 @@ function viewer(page: Page) {
     image: dialog.locator('img.artifact-image-viewer-image'),
     box: dialog.getByRole('button', { name: 'Box', exact: true }),
     draft: dialog.locator('g.artifact-spot-mark--draft'),
+    posted: dialog.locator('g.artifact-spot-mark[data-thread]'),
   };
 }
 
@@ -400,12 +401,17 @@ test.describe('on a phone', () => {
     await expect(sheet(page).node).toBeVisible();
     await expect(sheet(page).entry('This fin')).toBeVisible();
 
-    // With a box drawn, Escape leaves mark mode with the viewer open, and a
-    // second closes it, the focus back on the fish's Comment.
+    // The posted mark is drawn over the viewer's image in mark mode, numbered
+    // as on the page. With a box drawn, Escape leaves mark mode with the
+    // viewer open, the mark going back to the page, and a second closes it,
+    // the focus back on the fish's Comment.
     await sheet(page).node.getByRole('button', { name: 'Close' }).first().tap();
     await fish.img.evaluate((img) => img.scrollIntoView({ block: 'center' }));
     await fish.comment.tap();
     await expect(shown.box).toBeVisible();
+    await expect(shown.posted).toHaveCount(1);
+    await expect(shown.posted.locator('.artifact-spot-badge text')).toHaveText('1');
+    await expect(fish.node.locator('g.artifact-spot-mark[data-thread]')).toHaveCount(0);
     const again = await rect(shown.image);
     await fingers.gesture([{ x: again.x + again.width * 0.3, y: again.y + again.height * 0.3 }],
       [{ x: again.x + again.width * 0.5, y: again.y + again.height * 0.5 }]);
@@ -415,6 +421,8 @@ test.describe('on a phone', () => {
     await expect(composer(page).holder).toHaveCount(0);
     await expect(shown.draft).toHaveCount(0);
     await expect(shown.dialog).toBeVisible();
+    await expect(shown.posted).toHaveCount(0);
+    await expect(fish.node.locator('g.artifact-spot-mark[data-thread]')).toHaveCount(1);
     await expect(fish.comment).toHaveCount(1);
     await page.keyboard.press('Escape');
     await expect(shown.dialog).toBeHidden();

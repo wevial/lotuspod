@@ -178,6 +178,12 @@ export function spots(page: Page, bridge: SpotsBridge): Spots {
     return layerOf(target);
   }
 
+  // The layer a target's posted marks are drawn in: the viewer's overlay
+  // while the image is open there in mark mode, as the modal hides the page's.
+  function shownIn(target: HTMLElement): SVGGElement | null {
+    return marking?.view?.image && targetIn(marking.holder) === target ? markLayer() : layerOf(target);
+  }
+
   // An image's overlay is its mark surface in mark mode, which Tab reaches
   // after the bar; out of it, it is hidden from assistive technology.
   function surfaceOn(over: SVGSVGElement, on: boolean) {
@@ -260,7 +266,7 @@ export function spots(page: Page, bridge: SpotsBridge): Spots {
       const anchor = anchorOf(thread.root);
       if (anchor.kind !== "spot") return;
       const target = !bridge.resolved(thread) && thread.standing && thread.standing !== "gone" ? targetOf(anchor.id) : null;
-      const layer = target && layerOf(target);
+      const layer = target && shownIn(target);
       const shape = layer && located(anchor, target, layer);
       if (!layer || !shape) {
         erase(thread);
@@ -374,6 +380,7 @@ export function spots(page: Page, bridge: SpotsBridge): Spots {
       now.view?.image?.addEventListener("load", () => {
         if (marking === now) markLayer();
       }, { once: true });
+      if (now.view) schedule();
     }
     tab();
     bar(holder);
@@ -441,6 +448,8 @@ export function spots(page: Page, bridge: SpotsBridge): Spots {
     }
     marking = null;
     bar(was.holder);
+    // The image's posted marks go back to the page with its overlay.
+    if (was.view && over) schedule();
     if (was.view) was.view.done!();
     else if (focus) focusIn(was.holder, ".artifact-spot-comment");
   }
