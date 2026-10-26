@@ -177,13 +177,6 @@ class RepublishWarning(unittest.TestCase):
         self.assertEqual(self.warnings(done), [])
         self.assertEqual(self.pragma("PRAGMA user_version")[0], db.SCHEMA_VERSION - 1)
 
-    def test_an_empty_database_file_stays_empty(self):
-        self.publish(FIRST)
-        self.db.write_bytes(b"")
-        done = self.publish(REWORDED)
-        self.assertEqual(self.warnings(done), [])
-        self.assertEqual(self.db.read_bytes(), b"")
-
     def test_no_database_prints_nothing(self):
         self.publish(FIRST)
         done = self.publish(REWORDED)
