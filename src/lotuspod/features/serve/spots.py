@@ -11,7 +11,12 @@ with no control character. The coordinates are fractions of the box the
 covered nodes span when `nodes` is not empty; fractions of the whole
 drawing when a diagram's mark covers none; an image's natural pixels. The
 server cannot lay out Mermaid, so a mark on nodes is checked only for
-finite numbers, and its nodes and labels are stored as sent.
+finite numbers, and its nodes and labels are stored as sent. The spot is
+stored as {id, hash, shape, nodes, title}, `title` the target's Target.title
+as the page had it when the thread was posted (an image's alt text, a
+diagram's section heading text, "" before the first heading), so the
+thread can name its target once it is gone; a spot stored before titles
+were kept has none.
 
 After the route's checks before the widget's, a spot is refused, with
 nothing stored, in this order: 400 invalid_body for any other key, a hash
@@ -25,8 +30,8 @@ another section than the thread's; and 409 stale_spot for a hash the target
 has had in none of the page's visible publishes (Target.earlier, kept
 beside the page) nor of its versions (History.target_hashes()). A hash it
 had in an earlier one is stored as sent. Every comment a route answers
-carries `spot`: the anchor as stored on a thread's first comment, null on
-every other comment.
+carries `spot`: the anchor as stored, its `title` with it, on a thread's
+first comment, null on every other comment.
 """
 
 from __future__ import annotations
@@ -158,4 +163,4 @@ def check(value: object, page: api.Page, section: str, quote: dict | None,
     if (target.hash != hash_ and hash_ not in target.earlier
             and (history is None or hash_ not in history.target_hashes(page.name, ident))):
         raise api.Refusal(HTTPStatus.CONFLICT, "stale_spot")
-    return {"id": ident, "hash": hash_, "shape": shape, "nodes": nodes}
+    return {"id": ident, "hash": hash_, "shape": shape, "nodes": nodes, "title": target.title}

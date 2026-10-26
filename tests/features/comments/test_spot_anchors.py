@@ -1,5 +1,6 @@
 """A comment thread anchored to a spot on a diagram or an image: the comments
-route checks and stores `spot`, {id, hash, shape, nodes}, threads answer it,
+route checks `spot`, {id, hash, shape, nodes}, and stores it with its
+target's title, threads answer it,
 an earlier hash of the target is taken from the kept hashes or the site's
 git history, and an agent's pull carries the spot with the target it is on.
 
@@ -37,11 +38,19 @@ from tests.features.blocks.test_targets import FLOW, IMAGE, digest, pond  # noqa
 MAIN_SCHEMA = 17
 EDITED = FLOW.replace("Lake-->Sea", "Lake-->Ocean")
 POD = [{"id": "Pod", "label": "Pod"}]
+# pond's targets' titles, as serve stores them with a spot.
+TITLES = {"flow": "Flow", "flow-diagram-2": "Flow", "pond-at-dawn": "Pond at dawn",
+          "diagram-1": "", "later-diagram-1": "Later"}
 WIDTH, HEIGHT = 1600, 600
 
 
 def box(**changes) -> dict:
     return {"kind": "box", "x": 0.1, "y": 0.2, "w": 0.5, "h": 0.25, **changes}
+
+
+def titled(spot: dict) -> dict:
+    """spot as sent, with the title serve stores it with."""
+    return {**spot, "title": TITLES[spot["id"]]}
 
 
 def git(cwd: Path, *argv: str) -> None:
@@ -86,7 +95,7 @@ class SpotCase(PullTestCase):
         status, row = self.post({"section": "flow", "text": "@hermes This box is off.",
                                  "spot": spot})
         self.assertEqual(status, 201, row)
-        self.assertEqual(row["spot"], spot)
+        self.assertEqual(row["spot"], titled(spot))
         return row
 
     def item(self, comment_id: int) -> dict:
@@ -169,7 +178,7 @@ class RouteTests(SpotCase):
         whole = self.spot("diagram-1", hash=digest("graph TD\n  Start-->Pond"),
                           shape=box(x=0, y=0, w=1, h=1))
         status, row = self.post({"section": "", "text": "Whole.", "spot": whole})
-        self.assertEqual((status, row.get("spot")), (201, whole), row)
+        self.assertEqual((status, row.get("spot")), (201, titled(whole)), row)
 
     def test_a_spot_thread_carries_its_spot_and_every_other_comment_null(self):
         spot = self.spot()
@@ -182,7 +191,7 @@ class RouteTests(SpotCase):
         self.assertIsNone(plain["spot"])
 
         threads = {thread["root"]["id"]: thread for thread in self.threads("pond")}
-        self.assertEqual(threads[root["id"]]["root"]["spot"], spot)
+        self.assertEqual(threads[root["id"]]["root"]["spot"], titled(spot))
         self.assertEqual([row["spot"] for row in threads[root["id"]]["replies"]], [None])
         self.assertIsNone(threads[plain["id"]]["root"]["spot"])
 
@@ -210,7 +219,7 @@ class RouteTests(SpotCase):
                 "shape": box(x=100, y=10, w=20, h=20)}
         status, row = self.reader("POST", "/api/comments", {
             "page": "pics", "section": "page", "text": "Here.", "spot": spot})
-        self.assertEqual((status, row.get("spot")), (201, spot), row)
+        self.assertEqual((status, row.get("spot")), (201, {**spot, "title": "Shown small"}), row)
 
 
 class SchemaTests(unittest.TestCase):
@@ -300,7 +309,7 @@ class PullTests(SpotCase):
         spot = self.spot()
         row = self.anchored()
         item = self.item(row["id"])
-        self.assertEqual(item["spot"], spot)
+        self.assertEqual(item["spot"], titled(spot))
         self.assertEqual(item["target"], {"kind": "diagram", "title": "Flow", "status": "current",
                                           "source": FLOW, "nodes": POD})
         self.assertIn('- Spot: box on Pod (diagram "Flow")\n', self.text_pull())
@@ -314,7 +323,7 @@ class PullTests(SpotCase):
         self.publish_pond(pond(flow_fence=False))
         item = self.item(row["id"])
         self.assertEqual(item["target"], {"kind": "", "title": "", "status": "removed"})
-        self.assertIn('- Spot: box on Pod ("flow"), removed since\n', self.text_pull())
+        self.assertIn('- Spot: box on Pod ("Flow"), removed since\n', self.text_pull())
 
     def test_the_pull_carries_an_image_spot_s_url_and_size(self):
         stroke = {"kind": "stroke", "points": [[10, 10], [200, 120]]}
