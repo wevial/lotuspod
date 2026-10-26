@@ -136,9 +136,10 @@ does, and picks a default only on a form the swap brought in. A form a
 swap brings in whose read fails stays out of the sheet until a later read. The forms and their stored answers stay the
 truth: the sheet draws from them on each form's `input`, `change` and
 `SAVED`. Preact holds only the sheet's own state: the question Next open
-last jumped to, which a swap keeps. The bundle, Preact with it, stays within
-its gzipped-size pin in `tests/test_bundle_size.py`, which pins and enforces
-every slice's islands bundle; it uses Preact and its hooks, with `createPortal` from
+last jumped to, which a swap keeps. The bundle, Preact with it, is 57,157 bytes
+gzipped (`gzip -c`) and stays within its gzipped-size pin in
+`tests/test_bundle_size.py`, which pins and enforces every slice's islands
+bundle; it uses Preact and its hooks, with `createPortal` from
 `preact/compat` for independently owned DOM targets.
 
 The comments island (`features/comments/ts/islands/comments/index.ts`) mounts after the
@@ -245,9 +246,31 @@ The bridge supplies the text-model helpers and passage constants; highlights wra
 and unwrap author text imperatively, while the pill alone renders through a portal
 into the body. The composer part draws the movable passage composer. The drafts
 part calls the part's writing, reopen, swept, moved and writes handles for drafts
-and swaps; moved still runs before swaps replace the boxes.
-`comments/anchor.ts` interprets each first comment as a page, section, passage or
-decision anchor. Mark, words and rank each exhaustively handle that union, so a
+and swaps; moved still runs before swaps replace the boxes. It numbers spot
+threads with the passages, in page order, and lights a spot's mark and entry.
+The spots part (`comments/spots.tsx`) mounts each diagram's and figure's Comment
+and its mark-mode bar as independent roots in the target, draws draft and
+posted marks imperatively in a layer of the drawing's own coordinates (inside
+the diagram's svg, or an svg laid over the image), and places each spot thread
+again on every refresh, which a MutationObserver on each diagram's pre asks for
+whenever Mermaid draws it (load, a swap, the other theme). Its geometry, the
+flowchart boxes by id, coverage, thinning and fractions, is in
+`comments/spot-shapes.ts`. The composer part draws the spot composer over the
+page on the same send path; the store keeps a spot thread's standing on the
+thread and moves it to the changed sections when its target or a node is gone.
+The bridge supplies `STALE_DIAGRAM`, `STALE_IMAGE`, `MARKING` (the class
+`features/blocks/ts/diagram-cards.js` reads to open no node card in mark mode),
+`DIAGRAMS` and `REDRAWN`. Where comments use the bottom sheet, the spots part
+sends `MARK_VIEW` on the target's holder: `features/blocks/ts/diagram-view.js`
+or `features/blocks/ts/image-viewer.js` opens it, cancels the event and fills
+in its detail (`MarkView` in the bridge) with the surface presses land on,
+where the bar docks and the composer goes, and how to end mark mode or close;
+the spots part calls back on Escape and once the view closes. While a
+diagram is in the view its pre has `VIEWED`, so `drawingOf` finds its svg in
+the stage, and the svg keeps its own viewBox in `NATURAL_BOX`; the composer
+follows its mark on `MOVED`.
+`comments/anchor.ts` interprets each first comment as a page, section, passage,
+decision, block or spot anchor. Mark, words and rank each exhaustively handle that union, so a
 future kind must be handled in all three places and in placement's exhaustive
 anchor-to-element switch. The bridge also supplies `CLOSED`,
 `PANEL`, `RESOLVED_SHOWN` and `WHOLE_PAGE`; the shell keeps storage and listbox

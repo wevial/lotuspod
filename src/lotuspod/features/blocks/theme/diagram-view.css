@@ -164,3 +164,23 @@ html.artifact-diagram-view-open {
   outline: 2px solid var(--color-lavender);
   outline-offset: -2px;
 }
+
+/* Mark mode (the comments island's, where comments use the bottom sheet): its
+   bar in a band under the view's, and a crosshair over the stage, where one
+   pointer draws. */
+.artifact-diagram-view > .artifact-spot-tools {
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--hairline-strong);
+  display: flex;
+  flex: none;
+  justify-content: flex-end;
+  padding: 0.5rem 1rem;
+  position: static;
+  transform: none;
+}
+
+.artifact-diagram-view-stage.artifact-spot-marking,
+.artifact-diagram-view-stage.artifact-spot-marking > svg,
+.artifact-diagram-view-stage.artifact-spot-marking g.node {
+  cursor: crosshair;
+}

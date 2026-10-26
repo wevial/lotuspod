@@ -1,12 +1,12 @@
 import { render } from "preact";
 import { createPortal } from "preact/compat";
-import type { CommentPayload, CommentRow, ComposerBridge, Page, Thread, Widget } from "../bridge";
+import type { CommentPayload, CommentRow, ComposerBridge, Page, Spot, Thread, Widget } from "../bridge";
 import type { ComposerHandles } from "./parts";
 import { blockStanding, frameOf, hashOf } from "./anchor";
 import { shortcodeList } from "./shortcode-list";
 
 type Quote = NonNullable<CommentRow["quote"]>;
-interface Body { page: string; text: string; parent?: number; section?: string; revision?: string; quote?: Quote; widget?: Widget; images?: string[] }
+interface Body { page: string; text: string; parent?: number; section?: string; revision?: string; quote?: Quote; widget?: Widget; spot?: Spot; images?: string[] }
 
 export function composers(page: Page, bridge: ComposerBridge) {
   const replies = new WeakMap<Thread, ComposerHandles & { toggle: HTMLButtonElement }>();
@@ -14,23 +14,30 @@ export function composers(page: Page, bridge: ComposerBridge) {
   // above its field that says so, while a block's Comment holds it open.
   // seen: the hash of the block's file the page last showed beside the form.
   const blocks = new Map<HTMLFormElement, { widget: Widget; line: HTMLParagraphElement; seen: string }>();
-  function failure(response: Response, payload: CommentPayload | null, stale = page.stalePage): string {
+  // stale: what a refusal for a changed page says; spot: what one for a
+  // changed diagram or image says.
+  function failure(response: Response, payload: CommentPayload | null, stale = page.stalePage, spot = page.staleDiagram): string {
     if (response.status === 401) return page.signedOut;
     const code = payload?.error;
     if ((response.status === 409 && code === "stale_page") || (response.status === 400 && code === "unknown_section")) return stale;
     if ((response.status === 409 && code === "stale_widget") || (response.status === 400 && code === "unknown_widget")) {
       return page.staleBlock;
     }
+    if ((response.status === 409 && code === "stale_spot") || (response.status === 400 && code === "unknown_spot")) return spot;
     if (response.status === 409 && code === "archived") return page.closed;
     const error = code ? String(code) : "status " + response.status;
     return "Not saved (" + error + "). Try again.";
   }
-  async function post(form: HTMLFormElement, body: Body): Promise<CommentRow | null> {
+  // first: the stored name of an image the comment must carry as its first,
+  // else "": sent first when attached, and with it not attached nothing is sent.
+  async function post(form: HTMLFormElement, body: Body, spotStale?: string, first = "", missing = ""): Promise<CommentRow | null> {
     const status = form.querySelector<HTMLElement>(".artifact-comment-status")!;
     const button = form.querySelector<HTMLButtonElement>('button[type="submit"]')!;
     const images = bridge.attached.get(form);
     if (images?.busy()) { status.textContent = "Wait until the images have uploaded."; return null; }
+    if (first && !images?.kept().some(image => image.name === first)) { status.textContent = missing; return null; }
     const names = images?.sending() || [];
+    if (first) names.sort((a, b) => Number(b === first) - Number(a === first));
     if (names.length) body.images = names;
     let saved = false;
     button.disabled = true;
@@ -41,7 +48,7 @@ export function composers(page: Page, bridge: ComposerBridge) {
       });
       const payload: (CommentRow & CommentPayload) | null = await page.json(response);
       if (response.status !== 201 || !payload) {
-        status.textContent = failure(response, payload, body.quote ? page.stalePage : page.staleSection);
+        status.textContent = failure(response, payload, body.quote ? page.stalePage : page.staleSection, spotStale);
         return null;
       }
       status.textContent = "";
@@ -71,9 +78,12 @@ export function composers(page: Page, bridge: ComposerBridge) {
     });
     return { form, field, images, unfold(open) { form.hidden = !open; } };
   }
-  function controls(send: string, label?: string) {
+  // A spot's composer has its Cancel beside its send button.
+  function controls(send: string, label?: string, cancel?: () => void) {
     return <><textarea name="text" rows={2} maxLength={4000} required aria-label={label} />
-      <div class="artifact-comment-actions"><button type="submit">{send}</button>
+      <div class="artifact-comment-actions">
+        {cancel && <button type="button" class="artifact-spot-cancel" onClick={cancel}>Cancel</button>}
+        <button type="submit">{send}</button>
         <p class="artifact-comment-status" role="status" /></div></>;
   }
   function label(thread: Thread, entry: CommentRow) {
@@ -219,9 +229,62 @@ export function composers(page: Page, bridge: ComposerBridge) {
     });
     return handles;
   }
+  // The composer under a mark on a diagram or an image: made() gives the
+  // spot as its target now stands, the box of the section that takes it,
+  // and what a refusal for a changed target says. Cancel and Escape call cancel; a thread posted
+  // calls saved first. A send waits for ready, which says why it may not go
+  // ("" when it may): an image spot is never posted without its crop. While
+  // it waits, Comment is disabled and a second send does nothing.
+  // first: the stored name of the image it must post first, as found by
+  // ready, else ""; missing: what it says when that image is not attached.
+  function spot(made: () => { spot: Spot; stale: string; first: string; box: HTMLElement }, cancel: () => void,
+    saved: (row: CommentRow) => void, ready: () => Promise<string>, missing = "") {
+    const holder = document.createElement("div");
+    holder.className = "artifact-spot-composer";
+    render(<form class="artifact-comment-form artifact-spot-form">{controls("Comment", "Comment on the marked spot", cancel)}</form>, holder);
+    const handles = { ...wireField(holder.querySelector("form")!), holder, saving: null as Promise<CommentRow | null> | null };
+    holder.addEventListener("keydown", event => {
+      if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); cancel(); }
+    });
+    let waiting = false;
+    handles.form.addEventListener("submit", async event => {
+      event.preventDefault();
+      if (waiting || handles.saving) return;
+      const button = handles.form.querySelector<HTMLButtonElement>('button[type="submit"]')!;
+      const status = handles.form.querySelector<HTMLElement>(".artifact-comment-status")!;
+      waiting = true;
+      button.disabled = true;
+      status.textContent = "Saving...";
+      let why: string;
+      try {
+        why = await ready();
+      } catch {
+        why = missing || "Not saved. Try again.";
+      }
+      waiting = false;
+      // Cancelled while it waited: nothing is sent.
+      if (!holder.isConnected) return;
+      button.disabled = false;
+      status.textContent = why;
+      if (why) return;
+      const now = made();
+      handles.saving = post(handles.form, { ...fields(now.box, handles.field), spot: now.spot }, now.stale, now.first, missing);
+      const row = await handles.saving;
+      handles.saving = null;
+      if (!row) return;
+      const focused = holder.contains(document.activeElement) || document.activeElement === document.body;
+      saved(row);
+      // The new thread opens in the panel, which may be folded: the composer
+      // was over the page, not in it.
+      const thread = stored(row);
+      if (thread && focused && bridge.placement().wide) bridge.placement().open(thread);
+      else bridge.placement().started(thread, focused);
+    });
+    return handles;
+  }
   // A thread's reply composer.
   function handles(thread: Thread) {
     return replies.get(thread)!;
   }
-  return { reply, wire, passage, label, failure, block, unblock, on, swapped, fieldOf, handles, sending: bridge.sending };
+  return { reply, wire, passage, spot, label, failure, block, unblock, on, swapped, fieldOf, handles, sending: bridge.sending };
 }

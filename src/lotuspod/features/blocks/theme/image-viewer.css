@@ -37,6 +37,12 @@
   min-height: 0;
 }
 
+/* The image's frame, which mark mode's overlay covers. */
+.artifact-image-viewer-frame {
+  min-height: 0;
+  position: relative;
+}
+
 .artifact-image-viewer-image {
   border-radius: var(--radius-block);
   display: block;
@@ -97,4 +103,18 @@
 /* A page figure's image opens in the viewer. */
 .artifact-body .artifact-figure a {
   cursor: zoom-in;
+}
+
+/* Mark mode (the comments island's, where comments use the bottom sheet): its
+   bar above the image, and a crosshair over the image, whose presses draw
+   instead of scrolling. */
+.artifact-image-viewer > .artifact-spot-tools {
+  position: static;
+  transform: none;
+}
+
+.artifact-image-viewer-frame.artifact-spot-marking,
+.artifact-image-viewer-frame.artifact-spot-marking > img {
+  cursor: crosshair;
+  touch-action: none;
 }

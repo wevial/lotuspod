@@ -1,6 +1,6 @@
 import { render, type ComponentChildren, type VNode } from "preact";
 import type { CommentRow, Page, Thread, ThreadBridge } from "../bridge";
-import { anchorOf, blockStanding } from "./anchor";
+import { anchorOf, blockStanding, onImage, spotStanding } from "./anchor";
 
 export function threadRows(page: Page, bridge: ThreadBridge) {
   const states = new WeakMap<Thread, State>();
@@ -73,10 +73,14 @@ export function threadRows(page: Page, bridge: ThreadBridge) {
     </>, true);
     return null;
   }
-  // Whether the live block a thread is on is still on the page, changed.
+  // What a thread's first comment is followed by when the live block, the
+  // diagram or the image it is on is still on the page, changed; "" for
+  // anything else.
   function changed(thread: Thread) {
     const anchor = anchorOf(thread.root);
-    return anchor.kind === "block" && blockStanding(anchor) === "changed";
+    if (anchor.kind === "block") return blockStanding(anchor) === "changed" ? "Widget changed since this comment" : "";
+    if (anchor.kind !== "spot" || spotStanding(anchor) !== "changed") return "";
+    return (onImage(anchor) ? "Image" : "Diagram") + " changed since this comment";
   }
   // The list is an independent root: placement may move its thread container.
   // Keys insert new rows without re-inserting earlier live-region children.
@@ -97,8 +101,10 @@ export function threadRows(page: Page, bridge: ThreadBridge) {
       item.key = "row " + id;
       children.push(item);
       if (drawn.mark) children.push(drawn.mark);
-      if (id === thread.root.id && changed(thread)) {
-        children.push(<li key="widget changed" class="artifact-comment-event artifact-comment-event--widget"><span>Widget changed since this comment</span></li>);
+      const said = id === thread.root.id ? changed(thread) : "";
+      if (said) {
+        children.push(<li key={"changed " + said} class={"artifact-comment-event artifact-comment-event--" +
+          (anchorOf(thread.root).kind === "spot" ? "spot" : "widget")}><span>{said}</span></li>);
       }
     }
     if (value.typing) children.push(value.typing);

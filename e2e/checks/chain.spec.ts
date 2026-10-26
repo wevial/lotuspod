@@ -179,7 +179,16 @@ test.describe('the chain', () => {
     });
 
     let revision = '';
-    await test.step('4. hermes pulls both with the source and revision, claims, revises the page and replies', () => {
+    await test.step('4. hermes pulls both with the source and revision, claims, revises the page and replies', async () => {
+      // The reader has left the page, so the reply does not arrive in its open
+      // thread, which would count it seen. What the page keeps as it is left
+      // goes, so it does not come back to where the reader was.
+      await page.evaluate(() => window.addEventListener('pagehide', () => {
+        for (const key of Object.keys(sessionStorage).filter((key) => key.startsWith('lotuspod:reload:'))) {
+          sessionStorage.removeItem(key);
+        }
+      }));
+      await page.goto('about:blank');
       const pulled = pull(HERMES, OWNER);
       expect(pulled.status, pulled.stderr).toBe(0);
       const items = pulled.json.items.filter((item: any) => item.page.name === NAME);
@@ -229,14 +238,8 @@ test.describe('the chain', () => {
       expect(reply.json.parent).toBe(commentId);
     });
 
-    await test.step('5. after a reload the reader sees the reply, its revision link, the edit and the answer', async () => {
-      // A fresh load: what the page keeps as it is left goes, so it does not come back to where the reader was.
-      await page.evaluate(() => window.addEventListener('pagehide', () => {
-        for (const key of Object.keys(sessionStorage).filter((key) => key.startsWith('lotuspod:reload:'))) {
-          sessionStorage.removeItem(key);
-        }
-      }));
-      await page.reload();
+    await test.step('5. back on the page the reader sees the reply, its revision link, the edit and the answer', async () => {
+      await page.goto(`${PAGE}?standalone`);
       const heater = box(page, 'heater');
       // The reply is the reader's to read: counted until its thread opens.
       await expect(heater.summary).toHaveText('1 reply · ✓ hermes answered · 1 new');

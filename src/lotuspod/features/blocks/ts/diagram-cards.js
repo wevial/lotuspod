@@ -412,8 +412,9 @@
     }
 
     function open(box) {
-      // A box of a diagram a swap took out is let go.
-      if (diagrams.indexOf(box.diagram) < 0) {
+      // A box of a diagram a swap took out is let go, and one of a diagram
+      // the reader is marking a spot on (MARKING) opens no card.
+      if (diagrams.indexOf(box.diagram) < 0 || box.diagram.pre.classList.contains(MARKING)) {
         return;
       }
       if (!card) {

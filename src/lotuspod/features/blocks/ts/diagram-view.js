@@ -15,6 +15,10 @@
   // (features/live/ts/page-swap.ts) gets its Expand button once Mermaid has
   // drawn it, as one at load does, and a section whose diagram is open in the
   // view is held back from a swap until the reader updates it.
+  // The comments island opens a diagram here in mark mode (MARK_VIEW) where
+  // comments use the bottom sheet: its bar sits under the view's, one pointer
+  // draws instead of moving the diagram while two still pinch, and Escape
+  // goes to it until it leaves mark mode.
   //
   // What it returns mounts one diagram's pre; the view itself is made once,
   // on the first.
@@ -51,6 +55,8 @@
     // The zoom and the fingers' distance at the pinch's last input frame,
     // and that frame's time.
     var pinch = null;
+    // MARK_VIEW's detail while the view is in mark mode, else null.
+    var marking = null;
 
     function button(className, text, label) {
       var made = element("button", className, text);
@@ -137,7 +143,7 @@
 
     // Tab and Shift+Tab go round the dialog's controls, never out of it.
     function keepFocus(event) {
-      var stops = all("a[href], button, [tabindex='0']", dialog).filter(function (node) {
+      var stops = all("a[href], button, textarea, [tabindex='0']", dialog).filter(function (node) {
         return !node.disabled && node.getClientRects().length;
       });
       if (!stops.length) {
@@ -158,13 +164,18 @@
       var key = event.key;
       if (key === "Escape") {
         event.stopPropagation();
+        if (marking) {
+          event.preventDefault();
+          marking.escape();
+        }
         return;
       }
       if (key === "Tab") {
         keepFocus(event);
         return;
       }
-      if (event.ctrlKey || event.metaKey || event.altKey) {
+      // A composer's field keeps its keys.
+      if (event.ctrlKey || event.metaKey || event.altKey || event.target.closest("textarea")) {
         return;
       }
       var moves = { ArrowLeft: [-MOVE, 0], ArrowRight: [MOVE, 0], ArrowUp: [0, -MOVE], ArrowDown: [0, MOVE] };
@@ -280,6 +291,13 @@
       var x = event.clientX;
       var y = event.clientY;
       if (!dragged) {
+        // In mark mode one pointer draws, the view only keeping up with
+        // where it is for a second finger's pinch.
+        if (marking) {
+          at.x = x;
+          at.y = y;
+          return;
+        }
         if (Math.hypot(x - press.x, y - press.y) <= NUDGE) {
           return;
         }
@@ -296,7 +314,7 @@
       at.x = x;
       at.y = y;
       if (!other) {
-        if (x !== fromX || y !== fromY) {
+        if (!marking && (x !== fromX || y !== fromY)) {
           pan(x - fromX, y - fromY);
         }
         return;
@@ -373,10 +391,13 @@
         : { x: 0, y: 0, width: drawn.width || 1, height: drawn.height || 1 };
       shown = {
         pre: pre, svg: svg, expand: expand, next: svg.nextSibling, box: box, scrolled: pre.scrollLeft,
-        saved: [[svg, "viewBox"], [svg, "width"], [svg, "height"], [svg, "style"], [pre, "style"]].map(function (at) {
+        saved: [[svg, "viewBox"], [svg, "width"], [svg, "height"], [svg, "style"], [svg, NATURAL_BOX],
+          [pre, "style"]].map(function (at) {
           return [at[0], at[1], at[0].getAttribute(at[1])];
         }),
       };
+      svg.setAttribute(NATURAL_BOX, [box.x, box.y, box.width, box.height].join(" "));
+      pre.classList.add(VIEWED);
       pre.style.boxSizing = "border-box";
       pre.style.height = pre.getBoundingClientRect().height + "px";
       parts.title.textContent = heading(pre);
@@ -392,7 +413,9 @@
 
     function restore() {
       var was = shown;
+      var marked = marking;
       shown = null;
+      marking = null;
       pointers.clear();
       dragged = false;
       pinch = null;
@@ -406,11 +429,43 @@
         }
       });
       was.pre.scrollLeft = was.scrolled;
+      was.pre.classList.remove(VIEWED);
       document.documentElement.classList.remove(OPEN);
-      if (was.expand.isConnected) {
+      // Not when what closed the view has put the focus elsewhere: the bottom
+      // sheet, once a comment marked in it is posted.
+      var lost = document.activeElement === document.body || dialog.contains(document.activeElement);
+      if (was.expand.isConnected && lost) {
         was.expand.focus({ preventScroll: true });
       }
+      if (marked) {
+        marked.closed();
+      }
     }
+
+    // The comments island's mark mode, on a drawn diagram while the view is
+    // closed.
+    document.addEventListener(MARK_VIEW, function (event) {
+      var pre = event.target;
+      var svg = pre.matches("pre.mermaid") && pre.querySelector(":scope > svg");
+      var expand = svg && pre.querySelector(":scope > .artifact-diagram-expand");
+      if (!expand || shown) {
+        return;
+      }
+      open(pre, svg, expand);
+      var detail = event.detail;
+      marking = detail;
+      detail.surface = parts.stage;
+      detail.room = dialog;
+      detail.dock = function (bar) { dialog.insertBefore(bar, parts.stage); };
+      detail.done = function () {
+        if (marking === detail) {
+          marking = null;
+          parts.stage.focus({ preventScroll: true });
+        }
+      };
+      detail.close = function () { dialog.close(); };
+      event.preventDefault();
+    });
 
     function add(pre) {
       pre.addEventListener("scroll", function () {
@@ -440,6 +495,10 @@
       shown.saved = shown.saved.map(function (at) {
         return at[0] === old ? [fresh, at[1], fresh.getAttribute(at[1])] : at;
       });
+      var natural = fresh.viewBox && fresh.viewBox.baseVal;
+      if (natural && natural.width && natural.height) {
+        fresh.setAttribute(NATURAL_BOX, [natural.x, natural.y, natural.width, natural.height].join(" "));
+      }
       ["viewBox", "width", "height", "style"].forEach(function (name) {
         var value = old.getAttribute(name);
         if (value === null) {

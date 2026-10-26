@@ -1,6 +1,8 @@
 import { execFileSync } from 'node:child_process';
+import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
-import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
+import { expect, test, type APIRequestContext, type FrameLocator, type Page } from '@playwright/test';
 
 // A reply in a thread the reader started stays unread for them until they
 // open the thread: marked New on the page, counted on its chip, in its header
@@ -24,9 +26,12 @@ const SEEN = '/api/seen';
 const ENV = process.env;
 const ASSERTION = ENV.LOTUSPOD_TEST_ASSERTION ?? '';
 const SIGNED_IN = { 'Cf-Access-Jwt-Assertion': ASSERTION };
+// A second reader, who wrote nothing in the threads the first starts.
+const SECOND = { 'Cf-Access-Jwt-Assertion': ENV.LOTUSPOD_TEST_ASSERTION_SECOND ?? '' };
 const SOCKET = ENV.LOTUSPOD_TEST_SOCKET ?? '';
 const HERMES = ENV.LOTUSPOD_TEST_CREDENTIAL_HERMES ?? '';
 const PYTHON = ENV.LOTUSPOD_TEST_PYTHON ?? '';
+const OUT = ENV.LOTUSPOD_TEST_OUT ?? '';
 // This checkout's package, whatever lotuspod is installed.
 const SRC = path.resolve(__dirname, '..', '..', 'src');
 const OWNER = 'hermes';
@@ -74,21 +79,16 @@ async function catchUp(request: APIRequestContext) {
 
 // The reader opens a thread on the comments page and hermes answers it: the
 // thread's id and the reply's.
-async function answered(request: APIRequestContext, text: string) {
+async function answered(request: APIRequestContext, text: string, name = NAME) {
   await catchUp(request);
   // hermes listens, and the comment names it, so it waits for it.
   hermes('pull', '--owner', OWNER);
   const posted = await request.post(COMMENTS, {
-    headers: SIGNED_IN, data: { page: NAME, section: SECTION, text: `@${OWNER} ${text}` },
+    headers: SIGNED_IN, data: { page: name, section: SECTION, text: `@${OWNER} ${text}` },
   });
   expect(posted.status()).toBe(201);
   const { id } = (await posted.json()) as Row;
-  const claim = hermes('claim', String(id));
-  // A claim token may start with '-': give it to its option in one word.
-  const reply = hermes('reply', String(id), `--claim=${claim.claimToken}`,
-    '--key', `unread-${id}`, '--text', 'A submerged heater, clear of the pump outlet.');
-  expect(reply.parent).toBe(id);
-  return { thread: id, reply: reply.id as number };
+  return { thread: id, reply: answer(id, 'A submerged heater, clear of the pump outlet.') };
 }
 
 // Resolve a thread as the reader, through the comments route.
@@ -99,11 +99,13 @@ async function resolve(request: APIRequestContext, thread: number) {
   expect(resolved.status()).toBe(200);
 }
 
-// The page's post of a thread as seen, once answered.
-function seenPost(page: Page, thread: number) {
-  return page.waitForResponse((response) =>
-    new URL(response.url()).pathname === SEEN && response.request().method() === 'POST' &&
-    (response.request().postDataJSON() ?? {}).thread === thread);
+// The page's post of a thread as seen, up to comment if given, once answered.
+function seenPost(page: Page, thread: number, comment?: number) {
+  return page.waitForResponse((response) => {
+    if (new URL(response.url()).pathname !== SEEN || response.request().method() !== 'POST') return false;
+    const body = response.request().postDataJSON() ?? {};
+    return body.thread === thread && (comment === undefined || body.comment === comment);
+  });
 }
 
 // The page's read of the threads that finds a thread resolved.
@@ -112,6 +114,63 @@ function readResolved(page: Page, thread: number) {
     new URL(response.url()).pathname === COMMENTS && response.request().method() === 'GET' &&
     ((await response.json()) as { threads: (Thread & { resolution: { resolved: boolean } | null })[] })
       .threads.some((each) => each.root.id === thread && each.resolution?.resolved), { timeout: 60_000 });
+}
+
+// The tab hidden or shown, as a browser says so.
+async function setVisibility(page: Page, state: 'hidden' | 'visible') {
+  await page.evaluate((state) => {
+    Object.defineProperty(document, 'visibilityState', { value: state, configurable: true });
+    Object.defineProperty(document, 'hidden', { value: state === 'hidden', configurable: true });
+    document.dispatchEvent(new Event('visibilitychange'));
+  }, state);
+}
+
+// Publish a page of hermes's whose Next steps section holds no thread yet
+// (a page with one section has a box for the whole page only),
+// under a name no earlier run has used; its name.
+function publish() {
+  const name = `unread-resolved-${Date.now()}`;
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lotuspod-unread-'));
+  try {
+    const file = path.join(dir, `${name}.md`);
+    fs.writeFileSync(file, ['# Pond heater', '', 'Keeping the pond open over winter.', '',
+      '## Findings', '', 'The pond freezes in January.', '', '## Next steps', '', 'Fit the heater.', ''].join('\n'), 'utf-8');
+    const said = execFileSync(PYTHON, ['-m', 'lotuspod', 'publish', file, '--local', '--out-dir', OUT,
+      '--owner', OWNER, '--credential', HERMES, '--comments'], {
+      encoding: 'utf-8', env: { ...ENV, PYTHONPATH: SRC }, stdio: ['ignore', 'pipe', 'pipe'], timeout: 60_000,
+    });
+    expect(said).toContain(`published ${name} at revision`);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+  return name;
+}
+
+// hermes answers the reader's comment ID; the reply's id.
+function answer(id: number, text: string) {
+  const claim = hermes('claim', String(id));
+  // A claim token may start with '-': give it to its option in one word.
+  const reply = hermes('reply', String(id), `--claim=${claim.claimToken}`, '--key', `unread-${id}`, '--text', text);
+  expect(reply.parent).toBe(id);
+  return reply.id as number;
+}
+
+// The reader starts a thread on the section from the panel's form, naming
+// hermes, which waits for it; the thread's id once it is stored.
+async function startInPanel(page: Page, text: string, on: Page | FrameLocator = page) {
+  hermes('pull', '--owner', OWNER);
+  await on.locator('.artifact-comments-rail').click();
+  await on.locator('aside.artifact-comments-panel').getByRole('button', { name: 'Comment on a section' }).click();
+  await on.locator('aside.artifact-comments-panel').getByRole('option').filter({ hasText: 'Next steps' }).click();
+  const field = on.getByLabel('Comment on Next steps');
+  await expect(field).toBeFocused();
+  await field.fill(`@${OWNER} ${text}`);
+  const posted = page.waitForResponse((response) =>
+    new URL(response.url()).pathname === COMMENTS && response.request().method() === 'POST');
+  await on.locator('aside.artifact-comments-panel').getByRole('button', { name: 'Comment', exact: true }).click();
+  const stored = await posted;
+  expect(stored.status()).toBe(201);
+  return ((await stored.json()) as Row).id;
 }
 
 function watchErrors(page: Page) {
@@ -128,9 +187,9 @@ function threadsRead(page: Page) {
 // Open the comments page on its own (?standalone, so it does not open in the
 // index's tabs), or load it again, and let its first read of the threads come
 // back.
-async function openPage(page: Page, again = false) {
+async function openPage(page: Page, again = false, at = PAGE) {
   const read = threadsRead(page);
-  await (again ? page.reload() : page.goto(`${PAGE}?standalone`));
+  await (again ? page.reload() : page.goto(`${at}?standalone`));
   await read;
 }
 
@@ -621,6 +680,196 @@ test.describe('signed in', () => {
     const name = (await row(page, NAME).locator('a').first().textContent())?.trim() ?? '';
     await page.getByLabel('Search').fill(name);
     await expect.poll(() => shownPages(page)).toEqual([NAME]);
+    expect(errors).toEqual([]);
+  });
+  test('a reply that arrives in the open thread is posted as seen, and counts nowhere', async ({ page, request }) => {
+    test.setTimeout(120_000);
+    const errors = watchErrors(page);
+    await catchUp(request);
+    await openPage(page);
+    const title = await page.evaluate(() => document.title.replace(/^\(\d+\) /, ''));
+    const thread = await startInPanel(page, 'Does the heater need a thermostat?');
+    const item = page.locator(`.artifact-comments-panel .artifact-comments-entry[data-thread="${thread}"]`);
+    await expect(item.locator('.artifact-comments-entry-head')).toHaveAttribute('aria-expanded', 'true');
+
+    const id = answer(thread, 'One built in, set to four degrees.');
+    const seen = await seenPost(page, thread, id);
+    expect(seen.status()).toBe(200);
+    const theirs = reply(page, id);
+    await expect(theirs).toBeVisible();
+    await expect(theirs.locator('.artifact-comment-new')).toHaveText('New');
+    await expect(chip(page).locator('.artifact-comment-chip-unread')).toHaveCount(0);
+    await expect(page.locator('header.artifact-header .artifact-meta .artifact-unread')).toHaveCount(0);
+    await expect(page).toHaveTitle(title);
+
+    await openPage(page, true);
+    await expect(reply(page, id)).toHaveCount(1);
+    await expect(page.locator('.artifact-unread')).toHaveCount(0);
+    expect(errors).toEqual([]);
+  });
+
+  test('a reply that arrives in a thread open in view is posted as seen for a reader it never counted for', async ({ browser, request }) => {
+    test.setTimeout(120_000);
+    expect(SECOND['Cf-Access-Jwt-Assertion'], 'the capture fixture names a second reader').toBeTruthy();
+    await catchUp(request);
+    hermes('pull', '--owner', OWNER);
+    const posted = await request.post(COMMENTS, {
+      headers: SIGNED_IN, data: { page: NAME, section: SECTION, text: `@${OWNER} Is the heater rated for outdoors?` },
+    });
+    expect(posted.status()).toBe(201);
+    const { id: thread } = (await posted.json()) as Row;
+
+    const context = await browser.newContext({ extraHTTPHeaders: SECOND, viewport: WIDE });
+    try {
+      const page = await context.newPage();
+      const errors = watchErrors(page);
+      await openPage(page);
+      const opened = seenPost(page, thread, thread);
+      await chip(page).click();
+      expect((await opened).status()).toBe(200);
+      const item = page.locator(`.artifact-comments-panel .artifact-comments-entry[data-thread="${thread}"]`);
+      await expect(item.locator('.artifact-comments-entry-head')).toHaveAttribute('aria-expanded', 'true');
+
+      // Not this reader's thread: the reply never counts for them, and is
+      // seen all the same as it is drawn in the open thread.
+      const id = answer(thread, 'It is: IP68.');
+      const arrived = await seenPost(page, thread, id);
+      expect(arrived.status()).toBe(200);
+      await expect(reply(page, id)).toBeVisible();
+      await expect(reply(page, id)).not.toHaveClass(/\bartifact-comment--unread\b/);
+      await expect(page.locator('.artifact-unread')).toHaveCount(0);
+      expect(errors).toEqual([]);
+    } finally {
+      await context.close();
+    }
+  });
+
+  test('a reply that arrives in the open thread of an index tab not shown is posted as seen once the tab shows', async ({ page, request }) => {
+    test.setTimeout(120_000);
+    const errors = watchErrors(page);
+    await catchUp(request);
+    // Loaded at its own address, the page opens as the index's active tab.
+    await page.goto(PAGE);
+    const frame = page.locator('iframe.pod-frame--active');
+    await expect(frame).toBeVisible();
+    const title = (await frame.getAttribute('title')) ?? '';
+    const framed = page.frameLocator(`iframe.pod-frame[title="${title}"]`);
+    await expect(framed.locator('details.artifact-comment')).not.toHaveCount(0);
+    const thread = await startInPanel(page, 'Does the heater need its own breaker?', framed);
+    await expect(framed.locator(`.artifact-comments-entry[data-thread="${thread}"] .artifact-comments-entry-head`))
+      .toHaveAttribute('aria-expanded', 'true');
+    await expect(framed.locator(`.artifact-comment-thread[data-thread="${thread}"] .artifact-comment-typing`)).toBeVisible();
+    await page.waitForTimeout(300);
+
+    const posts: unknown[] = [];
+    page.on('request', (sent) => {
+      if (new URL(sent.url()).pathname === SEEN && sent.method() === 'POST' &&
+        (sent.postDataJSON() ?? {}).thread === thread) posts.push(sent.postDataJSON());
+    });
+    // The listing shown, the tab's frame is hidden; the page in it still reads.
+    await page.locator('.pod-tabs-bar').getByRole('button', { name: 'Lotuspod', exact: true }).click();
+    await expect(page.locator(`iframe.pod-frame[title="${title}"]`)).toBeHidden();
+    const id = answer(thread, 'It does: a 6 A one.');
+    await page.waitForResponse(async (response) =>
+      new URL(response.url()).pathname === COMMENTS && response.request().method() === 'GET' &&
+      ((await response.json()) as { unread?: number[] }).unread?.includes(id), { timeout: 60_000 });
+    await expect(framed.locator('header.artifact-header .artifact-meta .artifact-unread')).toHaveText('1 new reply to you');
+    await page.waitForTimeout(500);
+    expect(posts).toEqual([]);
+
+    const seen = seenPost(page, thread, id);
+    await page.getByRole('group', { name: 'Open pods' }).locator('.pod-tab[data-page="capture-comments"] button.pod-tab-title').click();
+    expect((await seen).status()).toBe(200);
+    await expect(framed.locator('.artifact-unread')).toHaveCount(0);
+    expect(errors).toEqual([]);
+  });
+
+  test('a reply that arrives in the open thread while the page is hidden is posted as seen once it shows', async ({ page, request }) => {
+    test.setTimeout(120_000);
+    const errors = watchErrors(page);
+    await catchUp(request);
+    await openPage(page);
+    const thread = await startInPanel(page, 'Should the heater go in before the first frost?');
+    const item = page.locator(`.artifact-comments-panel .artifact-comments-entry[data-thread="${thread}"]`);
+    await expect(item.locator('.artifact-comments-entry-head')).toHaveAttribute('aria-expanded', 'true');
+    // The post of the thread as it opened is in before the page hides.
+    await expect(page.locator(`.artifact-comment-thread[data-thread="${thread}"] .artifact-comment-typing`)).toBeVisible();
+    await page.waitForTimeout(300);
+
+    const posts: unknown[] = [];
+    page.on('request', (sent) => {
+      if (new URL(sent.url()).pathname === SEEN && sent.method() === 'POST' &&
+        (sent.postDataJSON() ?? {}).thread === thread) posts.push(sent.postDataJSON());
+    });
+    await setVisibility(page, 'hidden');
+    const id = answer(thread, 'Yes, a week before.');
+    // A hidden page reads no threads on its own: a link to a thread it does
+    // not have reads them and opens nothing.
+    const read = page.waitForResponse(async (response) =>
+      new URL(response.url()).pathname === COMMENTS && response.request().method() === 'GET' &&
+      ((await response.json()) as { unread?: number[] }).unread?.includes(id));
+    await page.evaluate(() => { location.hash = '#thread=999999999'; });
+    await read;
+    await expect(reply(page, id)).toBeAttached();
+    await expect(page.locator('header.artifact-header .artifact-meta .artifact-unread')).toHaveText('1 new reply to you');
+    await page.waitForTimeout(500);
+    expect(posts).toEqual([]);
+
+    const seen = seenPost(page, thread, id);
+    await setVisibility(page, 'visible');
+    expect((await seen).status()).toBe(200);
+    await expect(page.locator('.artifact-unread')).toHaveCount(0);
+    expect(errors).toEqual([]);
+  });
+
+  test('Resolve posts the thread as seen, and the section\'s chip says it is resolved until a follow-up comes', async ({ page, request }) => {
+    test.setTimeout(120_000);
+    const errors = watchErrors(page);
+    const name = publish();
+    const at = `/${name}.html`;
+    const { thread, reply: id } = await answered(request, 'Does the heater want a float switch?', name);
+    // The page's first post of the thread as seen is refused: the reply
+    // still counts.
+    let refused = false;
+    await page.route((url) => url.pathname === SEEN, (route) => {
+      const body = route.request().postDataJSON() ?? {};
+      if (!refused && route.request().method() === 'POST' && body.thread === thread) {
+        refused = true;
+        return route.fulfill({ status: 500, contentType: 'application/json', body: '{"error":"refused"}' });
+      }
+      return route.continue();
+    });
+
+    await openPage(page, false, at);
+    const refusal = seenPost(page, thread);
+    await chip(page).click();
+    expect((await refusal).status()).toBe(500);
+    const item = page.locator(`.artifact-comments-panel .artifact-comments-entry[data-thread="${thread}"]`);
+    await expect(reply(page, id)).toBeVisible();
+    await expect(page.locator('header.artifact-header .artifact-meta .artifact-unread')).toHaveText('1 new reply to you');
+
+    const seen = seenPost(page, thread, id);
+    await item.getByRole('button', { name: 'Resolve' }).click();
+    const posted = await seen;
+    expect(posted.status()).toBe(200);
+    await expect(page.locator('header.artifact-header .artifact-meta .artifact-unread')).toHaveCount(0);
+    await expect(chip(page).locator('.artifact-comment-chip-text')).toHaveText('1 resolved');
+
+    // A follow-up to the resolved thread counts.
+    hermes('follow-up', String(thread), '--key', `unread-follow-up-${thread}`, '--text', 'It came with one fitted.');
+    await page.unrouteAll({ behavior: 'ignoreErrors' });
+    await openPage(page, true, at);
+    await expect(chip(page).locator('.artifact-comment-chip-text')).toHaveText('1 resolved · 1 new');
+    await expect(page.locator('header.artifact-header .artifact-meta .artifact-unread')).toHaveText('1 new reply to you');
+
+    // With an open thread beside it, the section reads that thread's line.
+    hermes('pull', '--owner', OWNER);
+    const open = await request.post(COMMENTS, {
+      headers: SIGNED_IN, data: { page: name, section: SECTION, text: `@${OWNER} Where does the cable run?` },
+    });
+    expect(open.status()).toBe(201);
+    await openPage(page, true, at);
+    await expect(chip(page).locator('.artifact-comment-chip-text')).toHaveText('1 comment · waiting · 1 new');
     expect(errors).toEqual([]);
   });
 });

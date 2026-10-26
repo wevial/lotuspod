@@ -88,6 +88,26 @@ declare const BLOCK_GONE: string;
 // page has changed since it loaded.
 declare const BLOCK_CHANGED: string;
 declare const STALE_BLOCK: string;
+// features/publish/ts/page-open.js: what a composer on a spot says when a send
+// was refused for a diagram or an image the page has changed since it loaded.
+declare const STALE_DIAGRAM: string;
+declare const STALE_IMAGE: string;
+// features/publish/ts/page-open.js: sent once a swap's diagrams are in the
+// page (detail.nodes) and once Mermaid draws a diagram again in the other
+// theme (detail.pre, detail.svg); the class on a diagram's pre or a figure
+// while the reader marks a spot on it.
+declare const DIAGRAMS: string;
+declare const REDRAWN: string;
+declare const MARKING: string;
+// features/publish/ts/page-open.js: sent on a target's holder to open it in
+// the diagram view or the image viewer in mark mode (detail: MarkView); sent
+// on a diagram's svg as its view moves or zooms it; the class on a diagram's
+// pre while its svg is in the view, and the attribute on that svg holding its
+// own viewBox meanwhile.
+declare const MARK_VIEW: string;
+declare const MOVED: string;
+declare const VIEWED: string;
+declare const NATURAL_BOX: string;
 
 declare function commentMarkdown(node: HTMLDivElement, text: string): HTMLDivElement;
 declare function commentImages(row: CommentRow): HTMLUListElement | null;
@@ -139,6 +159,11 @@ export const page = Object.freeze({
   blockGone: BLOCK_GONE,
   blockChanged: BLOCK_CHANGED,
   staleBlock: STALE_BLOCK,
+  staleDiagram: STALE_DIAGRAM,
+  staleImage: STALE_IMAGE,
+  marking: MARKING,
+  viewed: VIEWED,
+  naturalBox: NATURAL_BOX,
   room: ROOM,
   popover: POPOVER,
   overText,
@@ -161,7 +186,8 @@ export const page = Object.freeze({
   startComment(start: StartComment): void {
     if (!ARCHIVED) startComment = start;
   },
-  events: Object.freeze({ answered: ANSWERED, saved: SAVED, drawn: DRAWN, swapped: SWAPPED }),
+  events: Object.freeze({ answered: ANSWERED, saved: SAVED, drawn: DRAWN, swapped: SWAPPED, diagrams: DIAGRAMS, redrawn: REDRAWN,
+    markView: MARK_VIEW, moved: MOVED }),
 });
 
 export type Page = typeof page;
@@ -169,6 +195,34 @@ export type Page = typeof page;
 // A live block's address as a thread's first comment stores it (widget):
 // its id, its widget file's hash and the state its widget showed.
 export interface Widget { id: string; hash: string; state: string }
+// A spot on a diagram or an image as a thread's first comment stores it
+// (spot): the target's id and hash, the mark's shape and the flowchart boxes
+// it covers. A shape is in fractions of the box its nodes span, of the
+// diagram's viewBox when it covers none, or in an image's natural pixels.
+export type SpotShape =
+  | { kind: "box"; x: number; y: number; w: number; h: number }
+  | { kind: "stroke"; points: [number, number][] };
+// MARK_VIEW's detail. The comments island gives escape, called on Escape in
+// the view while it marks, and closed, called once the view has closed; the
+// view that opens gives the rest: where presses land (its stage, or the
+// frame round its image), its image if it is the image viewer, where the
+// composer goes, dock to put the mark-mode bar in it, done to end mark mode
+// with the view left open, and close.
+export interface MarkView {
+  escape(): void;
+  closed(): void;
+  surface?: HTMLElement;
+  image?: HTMLImageElement;
+  room?: HTMLElement;
+  dock?(bar: HTMLElement): void;
+  done?(): void;
+  close?(): void;
+}
+export interface SpotNode { id: string; label: string }
+export interface Spot { id: string; hash: string; shape: SpotShape; nodes: SpotNode[] }
+// Where a spot thread's mark stands: on its target as it was, on a changed
+// target whose nodes are all drawn, or nowhere.
+export type SpotStanding = "current" | "changed" | "gone";
 export type StartComment = (request: { anchor: { kind: "block" } & Widget }) => void;
 
 // One part of the page a swap changed (features/live/ts/page-swap.ts): the
@@ -200,6 +254,7 @@ export interface CommentRow {
   quote?: { exact?: string; prefix?: string; suffix?: string } | null;
   question?: string | number | null;
   widget?: Widget | null;
+  spot?: Spot | null;
   sectionTitle?: string;
   text?: string;
   state?: string;
@@ -223,6 +278,9 @@ export interface Thread {
   marks: HTMLElement[];
   lit: boolean;
   entry: import("./comments/parts").Entry | null;
+  // A spot thread's standing as last placed, and its mark while drawn.
+  standing?: SpotStanding;
+  drawing?: SVGGElement | null;
 }
 export interface Decision { form: HTMLFormElement; name: string; question: string }
 export interface CommentPayload { resolution?: Resolution; error?: unknown }
@@ -242,6 +300,8 @@ export interface ThreadListBridge {
   passages: Pick<import("./comments/parts").Passages, "said" | "key" | "point" | "detached" | "shine">;
   imageWords(row: CommentRow): string;
   looked(thread: Thread, viewed: boolean): void;
+  // Post that the reader has seen a thread up to its newest comment.
+  seen(thread: Thread): void;
   refresh(): void;
   // The box's form for a new thread is no longer on a live block.
   unblock(box: HTMLElement): void;
@@ -335,7 +395,7 @@ export interface Attachments {
 export interface ComposerBridge {
   page: string;
   revision(): string | null;
-  attached: Map<HTMLFormElement, Attachments>;
+  attached: WeakMap<HTMLFormElement, Attachments>;
   forms: Map<HTMLElement, HTMLFormElement>;
   sending: Map<HTMLFormElement, Promise<CommentRow | null>>;
   boxWith(form: HTMLFormElement): HTMLElement | null;
@@ -380,9 +440,11 @@ export interface PassagesBridge {
   shown: Map<number, Thread>;
   resolved(thread: Thread): boolean;
   revision(): string | null;
-  attached: Map<HTMLFormElement, Attachments>;
+  attached: WeakMap<HTMLFormElement, Attachments>;
   composer: Pick<ReturnType<typeof import('./comments/composer').composers>, 'passage'>;
   placement(): import('./comments/parts').Placement;
+  // A drawn spot thread's mark shows its number.
+  numbered(thread: Thread): void;
 }
 
 // shared.js: the imperative DOM helper, also used by page-owned UI.

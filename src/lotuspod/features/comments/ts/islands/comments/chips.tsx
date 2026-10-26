@@ -75,8 +75,8 @@ export function chips(page: Page, bridge: ChipsBridge) {
     render(drawn.content, node);
   }
 
-  // A passage or a live block's thread counts on its section; placement
-  // may use its mark or its block instead.
+  // A passage's, a live block's or a spot's thread counts on its section;
+  // placement may use its mark, its block or its target instead.
   function anchor(thread: Thread): HTMLElement | null {
     const target = anchorOf(thread.root);
     switch (target.kind) {
@@ -86,6 +86,7 @@ export function chips(page: Page, bridge: ChipsBridge) {
       }
       case "passage":
       case "block":
+      case "spot":
       case "section":
       case "page": return thread.box?.querySelector("summary") || null;
       default: { const missing: never = target; return missing; }
@@ -99,6 +100,7 @@ export function chips(page: Page, bridge: ChipsBridge) {
         case "decision": return bridge.decisionOf(thread)?.form === form;
         case "passage":
         case "block":
+        case "spot":
         case "section":
         case "page": return false;
         default: { const missing: never = target; return missing; }
@@ -160,9 +162,11 @@ export function chips(page: Page, bridge: ChipsBridge) {
       if (!bridge.settled()) return;
       bridge.boxes.forEach(box => {
         const threads = bridge.threadsOf(box);
+        const unresolved = threads.filter(thread => !resolved(thread));
         paint(box.querySelector("summary")!, "artifact-comment-summary",
-          line(threads.filter(thread => !resolved(thread)), unreadIn(threads),
-            box.dataset.section === page.wholePage ? "Comment on this page" : "Comment"));
+          line(unresolved, unreadIn(threads),
+            box.dataset.section === page.wholePage ? "Comment on this page" : "Comment",
+            unresolved.length ? 0 : threads.length));
       });
       bridge.decisions.forEach(decisionChip);
     },
