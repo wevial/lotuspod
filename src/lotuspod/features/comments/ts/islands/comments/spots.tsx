@@ -511,10 +511,11 @@ export function spots(page: Page, bridge: SpotsBridge): Spots {
       const rect = rectIn(layer, group);
       if (rect) rects.set(id, rect);
     });
-    // A stroke's box is a line wide at least, so a flat stroke still covers.
+    // A stroke's box is a line wide at least, so a flat stroke still covers;
+    // a box covers by its own edges.
     const unit = unitOf(layer);
     const size = shapeBounds(shape);
-    const mark = { x: size.x - (size.w < unit ? unit : 0), y: size.y - (size.h < unit ? unit : 0),
+    const mark = shape.kind === "box" ? size : { x: size.x - (size.w < unit ? unit : 0), y: size.y - (size.h < unit ? unit : 0),
       w: Math.max(size.w, 2 * unit), h: Math.max(size.h, 2 * unit) };
     let ids = covered(mark, rects);
     const first = marked && [...groups].find(([, group]) => group === marked)?.[0];

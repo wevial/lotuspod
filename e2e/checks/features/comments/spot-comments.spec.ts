@@ -364,6 +364,20 @@ test('a stroke, a click on a node and the keyboard mark spots; Escape drops a dr
   expect(stroked.shape.points.length).toBeGreaterThanOrEqual(2);
   expect(stroked.shape.points.length).toBeLessThanOrEqual(256);
 
+  // A thin box over Pod's left edge covers less than half of itself, so it
+  // names no node, as the stroke's widening would have it do.
+  // Chromium's client box of an svg group is its geometry, the stroke left
+  // out; it is read once Comment has brought the diagram into view.
+  await flow.comment.click();
+  const edge = await flow.node('Pod').evaluate((group) => {
+    const box = group.getBoundingClientRect();
+    return { x: box.left, y: box.top + box.height / 2 };
+  });
+  await drag(page, [edge.x - 0.9, edge.y - 20], [edge.x + 0.6, edge.y + 20]);
+  const thin = (await post(page, 'Just beside Pod')).body.spot;
+  expect(thin.shape.kind).toBe('box');
+  expect(thin.nodes).toEqual([]);
+
   // A click on Agent marks Agent, and opens no node card.
   await flow.comment.click();
   await flow.node('Agent').click();
@@ -456,7 +470,7 @@ test('a stroke, a click on a node and the keyboard mark spots; Escape drops a dr
   release();
   expect((await late).status()).toBe(201);
   await page.unroute('**/api/comments');
-  await expect(flow.marks).toHaveCount(4);
+  await expect(flow.marks).toHaveCount(5);
   await expect(flow.draft).toHaveCount(1);
   await expect(form.field).toHaveValue('Newer');
   await expect(flow.box).toBeVisible();
