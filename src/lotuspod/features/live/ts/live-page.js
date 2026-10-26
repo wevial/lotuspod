@@ -93,8 +93,9 @@
       return previous;
     };
 
-    // What the comments page keeps: save() is what to keep, and unsent()
-    // says whether a composer holds text not sent.
+    // What the comments page keeps: save() is what to keep, unsent()
+    // says whether a composer holds text not sent, and settled() waits for
+    // the images still uploading in them.
     var keeper = null;
     var noticed = false;
     var asking = false;
@@ -185,6 +186,17 @@
         await fetch(location.href, { cache: "reload" });
       } catch (ignored) {
         // The reload asks again.
+      }
+      // Then an image still uploading in a composer, one begun while the
+      // page was fetched too, is waited for, so it is kept with its text;
+      // one refused is not kept, as without a reload. The uploads run
+      // meanwhile, so the wait is the longer of the two, not both.
+      if (keeper) {
+        try {
+          await keeper.settled();
+        } catch (ignored) {
+          // What is uploaded is kept.
+        }
       }
       // Kept only now, with nothing left to wait for: the reader may write
       // and scroll while the page is fetched.

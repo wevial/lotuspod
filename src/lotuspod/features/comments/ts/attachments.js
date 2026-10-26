@@ -140,8 +140,9 @@
   // field goes into the composer's box, its images above it and its + below;
   // the send button and the status line stay after the box. kept() are those
   // uploaded with their sizes, in order (to keep over a reload), busy()
-  // whether any is still uploading, held() whether any is attached or on
-  // its way, and restore() attaches images kept before a reload again.
+  // whether any is still uploading, settled() a promise that resolves once
+  // every upload on its way (and any begun meanwhile) is answered, uploaded
+  // or refused, to whether there was one to wait for, held() whether any is attached or on its way, and restore() attaches images kept before a reload again.
   // sending() gives the stored names of those uploaded and holds the
   // composer while the comment naming them saves: nothing is attached or
   // removed until sent() takes them off once it is saved, or gives them
@@ -380,6 +381,18 @@
       },
       held: function () {
         return queued.length > 0 || items.length > 0;
+      },
+      // Each upload's item leaves the tray or is shown once fill() has its
+      // answer; asked again after each wait for those begun meanwhile.
+      settled: async function () {
+        var waited = false;
+        var waiting = items.filter(function (item) { return !item.name; });
+        while (waiting.length) {
+          waited = true;
+          await Promise.all(waiting.map(function (item) { return item.done; }));
+          waiting = items.filter(function (item) { return !item.name; });
+        }
+        return waited;
       },
       // Attach again the stored images kept, after any attached already and
       // never twice; why those past MAX_IMAGES were not, else "".

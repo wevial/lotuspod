@@ -386,6 +386,15 @@ class ContentTests(unittest.TestCase):
                       " the reply is routed to `responder`", reply)
         self.assertIn("A thread's first comment never routes this way.", reply)
 
+    def test_the_reload_paragraph_keeps_an_uploading_image_and_a_held_section_draft(self):
+        text = " ".join(section(read("docs/comments.md"), "Answers and comments").split())
+        start = text.index("of this page is available\" with a Reload button.")
+        reload = text[start:text.index("A reload of the page by the browser", start)]
+        self.assertIn("Reload waits for an image still uploading in a composer", reload)
+        self.assertIn("keeps it with its text once uploaded", reload)
+        self.assertIn("A draft from a section held back as removed goes where Update would put it",
+                      reload)
+
 
 if __name__ == "__main__":
     unittest.main()
