@@ -1,5 +1,5 @@
 import { render } from "preact";
-import type { Page, Spot, SpotNode, SpotShape, StoredImage, Thread } from "../bridge";
+import type { MarkView, Page, Spot, SpotNode, SpotShape, StoredImage, Thread } from "../bridge";
 import type { Placement } from "./parts";
 import { anchorOf, spotTargets, targetOf } from "./anchor";
 import {
@@ -52,6 +52,12 @@ const EDGE = 8;
 const PRESSED = ".artifact-spot-tool[aria-pressed='true']";
 // What an image spot's composer says when its crop could not be stored.
 const CROP_FAILED = "The crop of the marked spot was not attached. Press Comment to try again.";
+// An image's mark surface, as mark mode names it.
+const KEYS = "Image: Enter drops a box, the arrow keys move it, Shift and an arrow resize it, Enter again comments";
+// A box Enter drops on an image is this part of its width and height, and an
+// arrow key moves or resizes it by this part.
+const DROPPED = 4;
+const NUDGED = 20;
 
 // A draft: its mark and the shape it draws, in its layer's coordinates, its
 // composer, the target it posts on and the spot, and on an image the crop
@@ -59,9 +65,19 @@ const CROP_FAILED = "The crop of the marked spot was not attached. Press Comment
 interface Draft {
   mark: SVGGElement; shape: SpotShape; composer: Composer; box: HTMLElement; target: HTMLElement; spot: Omit<Spot, "hash">; image: boolean;
   making: Promise<void>; crop: string;
+  // The view the composer is in, else null: it is over the page.
+  room: HTMLElement | null;
 }
 interface Press { id: number; x: number; y: number; layer: SVGGElement; points: Point[]; moved: boolean; node: SVGGElement | null; preview: SVGGElement | null }
-interface Marking { holder: HTMLElement; tool: "box" | "stroke"; draft: Draft | null; press: Press | null; tabbed: SVGGElement[] }
+// Mark mode: on the page, presses land on the holder; in the diagram view or
+// the image viewer (view), on its surface, with the bar docked there and a
+// placeholder (home) where the bar was. Down: the pointers down on the
+// surface. Keyed: the box the keyboard is placing on an image.
+interface Marking {
+  holder: HTMLElement; tool: "box" | "stroke"; draft: Draft | null; press: Press | null; tabbed: SVGGElement[];
+  surface: HTMLElement; view: MarkView | null; home: Comment | null; down: Set<number>;
+  keyed: { mark: SVGGElement; shape: Rect } | null;
+}
 
 // Comments on a spot of a Mermaid diagram (pre.mermaid[data-spot]) or a
 // figure's image (img[data-spot]). Each target in a section that takes new
@@ -73,10 +89,14 @@ interface Marking { holder: HTMLElement; tool: "box" | "stroke"; draft: Draft | 
 // (inside the diagram's svg, or an svg over the image), solid on the target
 // as it was and dashed on a changed one; one whose target or nodes are gone
 // draws nothing.
+// Where comments use the bottom sheet, Comment opens the diagram view or the
+// image viewer in mark mode instead, the bar and the composer in it: one
+// pointer draws, two pinch the diagram view, and a post closes it.
 export function spots(page: Page, bridge: SpotsBridge): Spots {
   // Weak, as a swap takes a target's holder away for good.
   const tools = new WeakMap<HTMLElement, HTMLDivElement>();
   const watched = new WeakSet<HTMLElement>();
+  const listened = new WeakSet<HTMLElement>();
   const drawnAs = new WeakMap<Thread, string>();
   let marking: Marking | null = null;
   let pending = false;
@@ -102,8 +122,11 @@ export function spots(page: Page, bridge: SpotsBridge): Spots {
       h: img.naturalHeight || Number(img.getAttribute("height")) || 1 };
   }
 
-  // The rectangle a diagram's mark on no node is a fraction of: its own viewBox.
+  // The rectangle a diagram's mark on no node is a fraction of: its own
+  // viewBox, kept aside while the diagram view rewrites it.
   function frameOf(drawing: SVGSVGElement): Rect {
+    const [x, y, w, h] = (drawing.getAttribute(page.naturalBox) || "").split(" ").map(Number);
+    if (w > 0 && h > 0) return { x, y, w, h };
     const box = drawing.viewBox.baseVal;
     if (box && box.width && box.height) return { x: box.x, y: box.y, w: box.width, h: box.height };
     const shown = drawing.getBoundingClientRect();
@@ -125,23 +148,52 @@ export function spots(page: Page, bridge: SpotsBridge): Spots {
       return layer;
     }
     const figure = holderOf(target);
-    if (!figure) return null;
-    let over = figure.querySelector<SVGSVGElement>(":scope > svg.artifact-spot-overlay");
+    return figure && overlayOf(figure, target as HTMLImageElement, natural(target as HTMLImageElement)).layer;
+  }
+
+  // The svg over img in parent, in size's units, made when missing, and its layer.
+  function overlayOf(parent: HTMLElement, img: HTMLImageElement, size: Rect) {
+    let over = parent.querySelector<SVGSVGElement>(":scope > svg.artifact-spot-overlay");
     if (!over) {
       over = svg("svg", "artifact-spot-overlay");
       over.setAttribute("aria-hidden", "true");
       over.setAttribute("preserveAspectRatio", "none");
       over.appendChild(svg("g", "artifact-spot-layer"));
-      figure.appendChild(over);
+      parent.appendChild(over);
     }
-    const size = natural(target as HTMLImageElement);
     over.setAttribute("viewBox", `0 0 ${size.w} ${size.h}`);
-    const outer = figure.getBoundingClientRect(), inner = target.getBoundingClientRect();
+    const outer = parent.getBoundingClientRect(), inner = img.getBoundingClientRect();
     over.style.left = inner.left - outer.left + "px";
     over.style.top = inner.top - outer.top + "px";
     over.style.width = inner.width + "px";
     over.style.height = inner.height + "px";
-    return over.querySelector<SVGGElement>(":scope > g.artifact-spot-layer");
+    return { over, layer: over.querySelector<SVGGElement>(":scope > g.artifact-spot-layer")! };
+  }
+
+  // Where mark mode draws: on an image in the viewer, the overlay over the
+  // viewer's image, in the page image's natural pixels; else the target's layer.
+  function markLayer(): SVGGElement | null {
+    const target = marking && targetIn(marking.holder);
+    if (!target) return null;
+    const view = marking!.view;
+    if (view?.image && target.tagName !== "PRE") return overlayOf(view.surface!, view.image, natural(target as HTMLImageElement)).layer;
+    return layerOf(target);
+  }
+
+  // An image's overlay is its mark surface in mark mode, which Tab reaches
+  // after the bar; out of it, it is hidden from assistive technology.
+  function surfaceOn(over: SVGSVGElement, on: boolean) {
+    if (on) {
+      over.setAttribute("tabindex", "0");
+      over.setAttribute("role", "group");
+      over.setAttribute("aria-label", KEYS);
+      over.removeAttribute("aria-hidden");
+    } else {
+      over.removeAttribute("tabindex");
+      over.removeAttribute("role");
+      over.removeAttribute("aria-label");
+      over.setAttribute("aria-hidden", "true");
+    }
   }
 
   // A mark: its shape, and with badge its badge at its first corner, for number() to fill.
@@ -266,15 +318,15 @@ export function spots(page: Page, bridge: SpotsBridge): Spots {
     const drawing = drawingOf(target);
     if (target.tagName === "PRE" && !drawing) return;
     let root = tools.get(holder);
-    if (root && root.parentNode === holder) return;
+    // In a view, the bar is docked there.
+    if ((root && root.parentNode === holder) || (marking?.holder === holder && marking.view)) return;
     if (!root) {
       root = document.createElement("div");
       root.className = "artifact-spot-tools";
       tools.set(holder, root);
-      listen(holder);
     }
     // Before the drawing, so Tab reaches the bar before a diagram's nodes.
-    holder.insertBefore(root, drawing || null);
+    holder.insertBefore(root, drawing?.parentNode === holder ? drawing : null);
     bar(holder);
   }
 
@@ -303,14 +355,54 @@ export function spots(page: Page, bridge: SpotsBridge): Spots {
 
   function enter(holder: HTMLElement) {
     if (marking) leave(false);
-    marking = { holder, tool: "box", draft: null, press: null, tabbed: [] };
+    const now: Marking = marking = {
+      holder, tool: "box", draft: null, press: null, tabbed: [], surface: holder, view: null, home: null, down: new Set(), keyed: null,
+    };
     holder.classList.add(page.marking);
-    // An image's overlay takes the crosshair from the start.
+    if (bridge.placement().mode === "sheet") viewed(now);
+    now.surface.classList.add(page.marking);
+    listen(now.surface);
+    // An image's overlay takes the crosshair from the start, and is its mark
+    // surface after the bar.
     const target = targetIn(holder);
-    if (target && target.tagName !== "PRE") layerOf(target);
+    if (target && target.tagName !== "PRE") {
+      const layer = markLayer();
+      const over = layer?.ownerSVGElement;
+      if (over) {
+        now.surface.appendChild(over);
+        surfaceOn(over, true);
+      }
+      // The viewer's image may still be loading.
+      now.view?.image?.addEventListener("load", () => {
+        if (marking === now) markLayer();
+      }, { once: true });
+    }
     tab();
     bar(holder);
     focusIn(holder, PRESSED);
+  }
+
+  // Open the target in the diagram view or the image viewer in mark mode,
+  // with the bar docked there; on the page as before when neither opens it.
+  function viewed(now: Marking) {
+    const view: MarkView = {
+      escape: () => {
+        if (marking === now) escape();
+      },
+      closed: () => {
+        if (marking === now) leave(false);
+      },
+    };
+    const root = tools.get(now.holder);
+    if (now.holder.dispatchEvent(new CustomEvent(page.events.markView, { bubbles: true, cancelable: true, detail: view })) ||
+        !view.surface || !root) {
+      return;
+    }
+    now.view = view;
+    now.surface = view.surface;
+    now.home = document.createComment("");
+    root.replaceWith(now.home);
+    view.dock!(root);
   }
 
   // In mark mode Tab goes through the diagram's nodes, and Enter marks one.
@@ -325,6 +417,8 @@ export function spots(page: Page, bridge: SpotsBridge): Spots {
     });
   }
 
+  // Mark mode ends; in a view, the view stays open, the bar going back to
+  // the page.
   function leave(focus: boolean) {
     const was = marking;
     if (!was) return;
@@ -332,19 +426,50 @@ export function spots(page: Page, bridge: SpotsBridge): Spots {
     const press = was.press;
     was.press = null;
     press?.preview?.remove();
-    if (press && was.holder.hasPointerCapture(press.id)) was.holder.releasePointerCapture(press.id);
+    if (press && was.surface.hasPointerCapture(press.id)) was.surface.releasePointerCapture(press.id);
     drop();
+    unkey();
     was.tabbed.forEach(group => group.removeAttribute("tabindex"));
     was.holder.classList.remove(page.marking);
+    was.surface.classList.remove(page.marking);
+    const over = was.surface.querySelector<SVGSVGElement>(":scope > svg.artifact-spot-overlay");
+    if (was.view) {
+      over?.remove();
+      const root = tools.get(was.holder);
+      if (root && was.home?.parentNode) was.home.replaceWith(root);
+      else was.home?.remove();
+    } else if (over) {
+      surfaceOn(over, false);
+    }
     marking = null;
     bar(was.holder);
-    if (focus) focusIn(was.holder, ".artifact-spot-comment");
+    if (was.view) was.view.done!();
+    else if (focus) focusIn(was.holder, ".artifact-spot-comment");
+  }
+
+  // Escape drops a draft or a box the keyboard is placing, staying in mark
+  // mode, and with neither leaves it.
+  function escape() {
+    if (!marking) return;
+    if (marking.draft) {
+      drop();
+      focusIn(marking.holder, PRESSED);
+    } else if (marking.keyed) {
+      unkey();
+    } else {
+      leave(true);
+    }
   }
 
   function choose(tool: "box" | "stroke") {
     if (!marking) return;
     marking.tool = tool;
     bar(marking.holder);
+  }
+
+  function unkey() {
+    marking?.keyed?.mark.remove();
+    if (marking) marking.keyed = null;
   }
 
   // The draft and its composer go, posting nothing.
@@ -393,9 +518,14 @@ export function spots(page: Page, bridge: SpotsBridge): Spots {
     }
     was.press = null;
     was.tabbed = [];
+    was.down.clear();
     was.holder.classList.remove(page.marking);
     was.holder = holder;
     holder.classList.add(page.marking);
+    if (!was.view) {
+      was.surface = holder;
+      listen(holder);
+    }
     mount(now);
     bar(holder);
     redrawn();
@@ -410,27 +540,41 @@ export function spots(page: Page, bridge: SpotsBridge): Spots {
     return null;
   }
 
-  function listen(holder: HTMLElement) {
-    holder.addEventListener("pointerdown", event => {
-      const target = targetIn(holder);
-      if (marking?.holder !== holder || !target || (event.pointerType === "mouse" && event.button !== 0) ||
-          tools.get(holder)?.contains(event.target as Node)) {
+  // Presses and keys on a surface in mark mode: a holder on the page, or a
+  // view's stage or image frame.
+  function listen(surface: HTMLElement) {
+    if (listened.has(surface)) return;
+    listened.add(surface);
+    const mine = () => marking?.surface === surface ? marking : null;
+    surface.addEventListener("pointerdown", event => {
+      const now = mine();
+      const target = now && targetIn(now.holder);
+      if (!now || !target || (event.pointerType === "mouse" && event.button !== 0) ||
+          tools.get(now.holder)?.contains(event.target as Node)) {
         return;
       }
-      const layer = layerOf(target);
+      now.down.add(event.pointerId);
+      surface.setPointerCapture(event.pointerId);
+      // A second pointer pinches the view: what the first drew goes.
+      if (now.down.size > 1) {
+        now.press?.preview?.remove();
+        now.press = null;
+        return;
+      }
+      const layer = markLayer();
       const at = layer && pointIn(layer, event.clientX, event.clientY);
       if (!layer || !at) return;
       event.preventDefault();
       drop();
+      unkey();
       const drawing = drawingOf(target);
-      marking.press = {
+      now.press = {
         id: event.pointerId, x: event.clientX, y: event.clientY, layer, points: [at], moved: false, preview: null,
         node: drawing ? nodeOf(event.target as Element, drawing)?.[1] || null : null,
       };
-      holder.setPointerCapture(event.pointerId);
     });
-    holder.addEventListener("pointermove", event => {
-      const press = marking?.holder === holder ? marking.press : null;
+    surface.addEventListener("pointermove", event => {
+      const press = mine()?.press;
       if (!press || press.id !== event.pointerId) return;
       if (!press.moved && Math.hypot(event.clientX - press.x, event.clientY - press.y) < NUDGE) return;
       press.moved = true;
@@ -441,31 +585,76 @@ export function spots(page: Page, bridge: SpotsBridge): Spots {
       press.preview?.remove();
       press.preview = draw(press.layer, drawn(press), "artifact-spot-mark--draft");
     });
-    holder.addEventListener("pointerup", event => finish(holder, event, true));
-    holder.addEventListener("pointercancel", event => finish(holder, event, false));
-    holder.addEventListener("lostpointercapture", event => finish(holder, event, false));
+    surface.addEventListener("pointerup", event => finish(surface, event, true));
+    surface.addEventListener("pointercancel", event => finish(surface, event, false));
+    surface.addEventListener("lostpointercapture", event => finish(surface, event, false));
     // A press in mark mode ends in no click on a node, a link or the image
     // viewer, and drags no image.
-    holder.addEventListener("click", event => {
-      if (marking?.holder === holder && !tools.get(holder)?.contains(event.target as Node)) {
+    surface.addEventListener("click", event => {
+      const now = mine();
+      if (now && !tools.get(now.holder)?.contains(event.target as Node)) {
         event.preventDefault();
         event.stopPropagation();
       }
     }, true);
-    holder.addEventListener("dragstart", event => {
-      if (marking?.holder === holder) event.preventDefault();
+    surface.addEventListener("dragstart", event => {
+      if (mine()) event.preventDefault();
     });
-    holder.addEventListener("keydown", event => {
-      const drawing = drawingOf(holder);
-      if (marking?.holder !== holder || event.key !== "Enter" || !drawing) return;
+    surface.addEventListener("keydown", event => {
+      const now = mine();
+      const target = now && targetIn(now.holder);
+      if (!target) return;
+      if (target.tagName !== "PRE") {
+        if ((event.target as Element).matches("svg.artifact-spot-overlay")) keyed(event, target as HTMLImageElement);
+        return;
+      }
+      const drawing = drawingOf(target);
+      if (event.key !== "Enter" || !drawing) return;
       const found = nodeOf(event.target as Element, drawing);
-      const layer = found && layerOf(holder);
+      const layer = found && layerOf(target);
       if (!found || !layer) return;
       event.preventDefault();
       event.stopPropagation();
       drop();
       around(found[1], layer, drawing);
     }, true);
+  }
+
+  // The keyboard on an image's mark surface: Enter drops a box a DROPPED part
+  // of the image at its centre, the arrows move it by a NUDGED part, with
+  // Shift grow or shrink it by as much, never past the image, and Enter then
+  // opens the composer under it.
+  function keyed(event: KeyboardEvent, img: HTMLImageElement) {
+    const layer = markLayer();
+    if (!layer || !marking || marking.draft || event.altKey || event.ctrlKey || event.metaKey) return;
+    const size = natural(img);
+    const step = { x: size.w / NUDGED, y: size.h / NUDGED };
+    const was = marking.keyed;
+    let box: Rect;
+    if (event.key === "Enter") {
+      if (was) {
+        unkey();
+        open(layer, { kind: "box", ...was.shape }, null);
+      } else {
+        const w = size.w / DROPPED, h = size.h / DROPPED;
+        box = { x: (size.w - w) / 2, y: (size.h - h) / 2, w, h };
+        marking.keyed = { shape: box, mark: draw(layer, { kind: "box", ...box }, "artifact-spot-mark--draft") };
+      }
+    } else {
+      const arrow = ({ ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] } as Record<string, number[]>)[event.key];
+      if (!arrow) return;
+      if (was) {
+        const [dx, dy] = [arrow[0] * step.x, arrow[1] * step.y];
+        const { x, y, w, h } = was.shape;
+        box = event.shiftKey
+          ? { x, y, w: Math.max(step.x, Math.min(w + dx, size.w - x)), h: Math.max(step.y, Math.min(h + dy, size.h - y)) }
+          : { x: Math.max(0, Math.min(x + dx, size.w - w)), y: Math.max(0, Math.min(y + dy, size.h - h)), w, h };
+        was.mark.remove();
+        marking.keyed = { shape: box, mark: draw(layer, { kind: "box", ...box }, "artifact-spot-mark--draft") };
+      }
+    }
+    event.preventDefault();
+    event.stopPropagation();
   }
 
   // The shape a press has drawn so far, in its layer's coordinates.
@@ -483,14 +672,16 @@ export function spots(page: Page, bridge: SpotsBridge): Spots {
     open(layer, box, group);
   }
 
-  function finish(holder: HTMLElement, event: PointerEvent, ended: boolean) {
-    const press = marking?.holder === holder ? marking.press : null;
-    if (!press || press.id !== event.pointerId) return;
-    marking!.press = null;
+  function finish(surface: HTMLElement, event: PointerEvent, ended: boolean) {
+    const now = marking?.surface === surface ? marking : null;
+    now?.down.delete(event.pointerId);
+    const press = now?.press;
+    if (!now || !press || press.id !== event.pointerId) return;
+    now.press = null;
     press.preview?.remove();
-    if (holder.hasPointerCapture(event.pointerId)) holder.releasePointerCapture(event.pointerId);
+    if (surface.hasPointerCapture(event.pointerId)) surface.releasePointerCapture(event.pointerId);
     if (!ended) return;
-    const target = targetIn(holder)!;
+    const target = targetIn(now.holder)!;
     const drawing = drawingOf(target);
     if (!press.moved) {
       if (press.node && drawing) around(press.node, press.layer, drawing);
@@ -557,8 +748,11 @@ export function spots(page: Page, bridge: SpotsBridge): Spots {
       focusIn(marking!.holder, PRESSED);
     }, () => {
       if (!mine()) return;
+      // Posted from a view, the view closes, and the thread opens in the sheet.
+      const view = marking!.view;
       drop();
       leave(false);
+      view?.close!();
     }, async () => {
       // An image spot is sent only with its crop stored, read from the
       // composer's images as they are at this send: a crop refused, failed
@@ -571,19 +765,27 @@ export function spots(page: Page, bridge: SpotsBridge): Spots {
       await draft.making;
       return await uploaded(draft) ? "" : CROP_FAILED;
     }, CROP_FAILED);
-    const draft: Draft = { mark, shape, composer, box, target, spot, image, making: Promise.resolve(), crop: "" };
+    const room = marking.view?.room || null;
+    const draft: Draft = { mark, shape, composer, box, target, spot, image, making: Promise.resolve(), crop: "", room };
     marking.draft = draft;
-    document.body.appendChild(composer.holder);
+    (room || document.body).appendChild(composer.holder);
     seat(draft);
     composer.field.focus({ preventScroll: true });
     if (image) draft.making = attach(target as HTMLImageElement, spot.shape, draft);
   }
 
   // The composer just under its mark, inside the window and left of the
-  // comments panel.
+  // comments panel; in a view, inside the view.
   function seat(draft: Draft) {
     const mark = draft.mark.getBoundingClientRect();
     const holder = draft.composer.holder;
+    if (draft.room) {
+      const room = draft.room.getBoundingClientRect();
+      const most = (size: number, own: number) => Math.max(EDGE, size - own - EDGE);
+      holder.style.left = Math.round(Math.max(EDGE, Math.min(mark.left - room.left, most(room.width, holder.offsetWidth)))) + "px";
+      holder.style.top = Math.round(Math.max(EDGE, Math.min(mark.bottom + GAP - room.top, most(room.height, holder.offsetHeight)))) + "px";
+      return;
+    }
     const panel = document.querySelector<HTMLElement>("aside.artifact-comments-panel:not([hidden])");
     const right = Math.min(document.documentElement.clientWidth, panel ? panel.getBoundingClientRect().left : Infinity);
     const left = Math.max(EDGE, Math.min(mark.left, right - holder.offsetWidth - EDGE));
@@ -651,20 +853,19 @@ export function spots(page: Page, bridge: SpotsBridge): Spots {
     return Boolean(draft.crop) && draft.composer.images.kept().some(image => image.name === draft.crop);
   }
 
-  // Escape drops a draft, staying in mark mode, and with none leaves it.
   document.addEventListener("keydown", event => {
     if (event.key !== "Escape" || !marking || event.defaultPrevented) return;
     event.preventDefault();
-    if (marking.draft) {
-      drop();
-      focusIn(marking.holder, PRESSED);
-    } else {
-      leave(true);
-    }
+    escape();
   });
   window.addEventListener("resize", () => {
     if (marking?.draft) seat(marking.draft);
+    if (marking?.view?.image) markLayer();
     schedule();
+  });
+  // The diagram view moved or zoomed: the composer follows its mark.
+  document.addEventListener(page.events.moved, () => {
+    if (marking?.draft) seat(marking.draft);
   });
   // A wide diagram scrolls inside its pre: the composer follows its mark.
   document.addEventListener("scroll", event => {

@@ -260,7 +260,15 @@ page on the same send path; the store keeps a spot thread's standing on the
 thread and moves it to the changed sections when its target or a node is gone.
 The bridge supplies `STALE_DIAGRAM`, `STALE_IMAGE`, `MARKING` (the class
 `features/blocks/ts/diagram-cards.js` reads to open no node card in mark mode),
-`DIAGRAMS` and `REDRAWN`.
+`DIAGRAMS` and `REDRAWN`. Where comments use the bottom sheet, the spots part
+sends `MARK_VIEW` on the target's holder: `features/blocks/ts/diagram-view.js`
+or `features/blocks/ts/image-viewer.js` opens it, cancels the event and fills
+in its detail (`MarkView` in the bridge) with the surface presses land on,
+where the bar docks and the composer goes, and how to end mark mode or close;
+the spots part calls back on Escape and once the view closes. While a
+diagram is in the view its pre has `VIEWED`, so `drawingOf` finds its svg in
+the stage, and the svg keeps its own viewBox in `NATURAL_BOX`; the composer
+follows its mark on `MOVED`.
 `comments/anchor.ts` interprets each first comment as a page, section, passage,
 decision, block or spot anchor. Mark, words and rank each exhaustively handle that union, so a
 future kind must be handled in all three places and in placement's exhaustive

@@ -11,6 +11,10 @@
   // A click with a modifier, or the dialog's "Open original" link, opens the
   // image's /media/ URL itself in a new page. The viewer only ever shows a URL
   // the page links to already, so the page policy's img-src stays as it is.
+  // The comments island opens a page figure's image here in mark mode
+  // (MARK_VIEW) where comments use the bottom sheet: its bar sits over the
+  // image, presses on the image draw, Escape goes to it until it leaves mark
+  // mode, and a click beside the image closes nothing meanwhile.
   function imageViewer() {
     var OPENERS = ".artifact-body .artifact-figure a[href], a.artifact-comment-image[href], " +
       "ul.artifact-attach-tray a.artifact-attach-link[href]";
@@ -21,14 +25,19 @@
     var group = [];
     var at = 0;
     var opener = null;
+    // MARK_VIEW's detail while the viewer is in mark mode, else null.
+    var marking = null;
 
     function make() {
       dialog = element("dialog", "artifact-image-viewer");
       var figure = element("figure", "artifact-image-viewer-figure");
+      // The frame holds the image alone, so mark mode's overlay covers it.
+      var frame = element("div", "artifact-image-viewer-frame");
       var image = element("img", "artifact-image-viewer-image");
       var caption = element("figcaption", "artifact-image-viewer-caption");
       caption.id = "artifact-image-viewer-caption";
-      figure.append(image, caption);
+      frame.appendChild(image);
+      figure.append(frame, caption);
       var bar = element("div", "artifact-image-viewer-bar");
       var back = element("button", "artifact-image-viewer-step", "Previous");
       var forth = element("button", "artifact-image-viewer-step", "Next");
@@ -41,7 +50,8 @@
       bar.append(back, forth, original, close);
       dialog.append(figure, bar);
       document.body.appendChild(dialog);
-      parts = { image: image, caption: caption, back: back, forth: forth, original: original };
+      parts = { figure: figure, frame: frame, image: image, caption: caption, back: back, forth: forth, original: original,
+        close: close };
 
       back.addEventListener("click", function () { show(at - 1); });
       forth.addEventListener("click", function () { show(at + 1); });
@@ -49,7 +59,7 @@
       // A click beside the image and its controls lands on the dialog
       // itself, which fills the window over its backdrop.
       dialog.addEventListener("click", function (event) {
-        if (event.target === dialog) {
+        if (event.target === dialog && !marking) {
           dialog.close();
         }
       });
@@ -58,22 +68,31 @@
       dialog.addEventListener("keydown", function (event) {
         if (event.key === "Escape") {
           event.stopPropagation();
+          if (marking) {
+            event.preventDefault();
+            marking.escape();
+          }
         } else if (event.key === "Tab") {
           keepFocus(event);
         }
       });
       dialog.addEventListener("close", function () {
+        var marked = marking;
+        marking = null;
         parts.image.removeAttribute("src");
         if (opener && opener.isConnected) {
           opener.focus({ preventScroll: true });
         }
         opener = null;
+        if (marked) {
+          marked.closed();
+        }
       });
     }
 
     // Tab and Shift+Tab go round the dialog's controls, never out of it.
     function keepFocus(event) {
-      var stops = all("button, a[href]", dialog).filter(function (node) {
+      var stops = all("button, a[href], textarea, [tabindex='0']", dialog).filter(function (node) {
         return !node.hidden && !node.disabled;
       });
       if (!stops.length) {
@@ -128,6 +147,41 @@
       if (!dialog.open) {
         dialog.showModal();
       }
+    });
+
+    // The comments island's mark mode, on a page figure's image while the
+    // viewer is closed.
+    document.addEventListener(MARK_VIEW, function (event) {
+      var figure = event.target;
+      var link = figure.matches(".artifact-body .artifact-figure") && figure.querySelector("a[href]");
+      if (!link || (dialog && dialog.open)) {
+        return;
+      }
+      if (!dialog) {
+        make();
+      }
+      group = [link];
+      opener = null;
+      show(0);
+      dialog.showModal();
+      var detail = event.detail;
+      marking = detail;
+      detail.surface = parts.frame;
+      detail.image = parts.image;
+      detail.room = dialog;
+      detail.dock = function (bar) { dialog.insertBefore(bar, parts.figure); };
+      detail.done = function () {
+        if (marking === detail) {
+          marking = null;
+          parts.close.focus({ preventScroll: true });
+        }
+      };
+      detail.close = function () {
+        if (dialog.open) {
+          dialog.close();
+        }
+      };
+      event.preventDefault();
     });
   }
 

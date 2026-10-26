@@ -36,7 +36,7 @@ BUNDLES = "src/lotuspod/features/*/ts/islands.js"
 # How far a pin may sit above its bundle before it must come down.
 OVER = 1000
 PINNED = {
-    "src/lotuspod/features/comments/ts/islands.js": 58000,
+    "src/lotuspod/features/comments/ts/islands.js": 59000,
     "src/lotuspod/features/index/ts/islands.js": 16000,
 }
 

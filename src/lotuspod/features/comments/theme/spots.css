@@ -95,6 +95,13 @@ pre.mermaid.artifact-spot-marking > svg g.node,
   pointer-events: auto;
 }
 
+/* In mark mode an image's overlay is its mark surface, which the keyboard
+   reaches. */
+.artifact-spot-overlay:focus-visible {
+  outline: 2px solid var(--color-lavender);
+  outline-offset: 2px;
+}
+
 /* An image's marks are drawn in an svg laid over it in its natural pixels;
    only the marks take the pointer. */
 .artifact-spot-overlay {
