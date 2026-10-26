@@ -416,9 +416,9 @@ site's output directory in `LOTUSPOD_TEST_OUT` and its own Python in
 `LOTUSPOD_TEST_PYTHON`. It passes its environment through to the command,
 so `LOTUSPOD_TEST_FAIL_FIRST`, set to a check's title, makes
 `e2e/checks/fail-first-attempt.ts` fail that check's first attempt after it
-has run; the checklist's `signed in`, activity's `signed in`, `the chain` and
-`an archived page` call it, and `tests/test_check_retries.py` uses it to
-witness which groups CI retries. The screenshots go to the directory named by
+has run; the checklist's `signed in`, activity's `signed in` and `the chain`
+call it, and `tests/test_check_retries.py` uses it to witness which groups CI
+retries. The screenshots go to the directory named by
 `CAPTURE_OUT`:
 
 ```sh
