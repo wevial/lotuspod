@@ -591,22 +591,41 @@ test('a box on an image is posted in its natural pixels with a crop of it, and d
   await expect(form.holder).toHaveCount(0);
 
   // A crop the reader takes out once it has uploaded is made and attached
-  // again by the send, and posted as the first image.
+  // again by the send, and posted as the first image: another PNG of the
+  // same size, attached in its place, is not taken for it.
   await fish.img.scrollIntoViewIfNeeded();
   await fish.comment.click();
   const now = await rect(fish.img);
   await drag(page, [now.x + now.width * 0.2, now.y + now.height * 0.25], [now.x + now.width * 0.6, now.y + now.height * 0.7]);
-  await expect(form.holder.locator('a.artifact-attach-link')).toHaveCount(1);
+  const cropLink = form.holder.locator('a.artifact-attach-link');
+  await expect(cropLink).toHaveCount(1);
+  const cropName = path.basename(new URL((await cropLink.getAttribute('href'))!, page.url()).pathname);
+  const cropSize = await cropLink.locator('img').evaluate(async (img: HTMLImageElement) => {
+    await img.decode();
+    return [img.naturalWidth, img.naturalHeight];
+  });
   await form.holder.locator('.artifact-attach-remove').click();
   await expect(form.holder.locator('.artifact-attach-item')).toHaveCount(0);
+  const other = Buffer.from(await page.evaluate(([w, h]) => {
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    const context = canvas.getContext('2d')!;
+    context.fillStyle = '#3a7';
+    context.fillRect(0, 0, w, h);
+    return canvas.toDataURL('image/png').split(',')[1];
+  }, cropSize), 'base64');
+  await form.holder.locator('input[type="file"]').setInputFiles({ name: 'other.png', mimeType: 'image/png', buffer: other });
+  await expect(form.holder.locator('a.artifact-attach-link')).toHaveCount(1);
+  const otherName = path.basename(new URL((await form.holder.locator('a.artifact-attach-link').getAttribute('href'))!, page.url()).pathname);
+  expect(otherName).not.toBe(cropName);
   await form.field.fill('Without it?');
   const recropped = posting(page);
   const recroppedRow = page.waitForResponse((response) => new URL(response.url()).pathname === '/api/comments' &&
     response.request().method() === 'POST');
   await form.send.click();
   const third = (await recropped).postDataJSON();
-  expect(third.images).toHaveLength(1);
-  expect(third.images[0]).toMatch(/^[0-9a-f]{64}\.png$/);
+  expect(third.images).toEqual([cropName, otherName]);
   const thirdRow = await recroppedRow;
   expect(thirdRow.status()).toBe(201);
   const thirdImage = (await thirdRow.json()).images[0];
@@ -614,6 +633,41 @@ test('a box on an image is posted in its natural pixels with a crop of it, and d
   expect(thirdImage.width).toBe(Math.round(third.spot.shape.w));
   expect(thirdImage.height).toBe(Math.round(third.spot.shape.h));
   await expect(form.holder).toHaveCount(0);
+
+  // A box dragged past the image's far corner stays within it once rounded.
+  await fish.comment.click();
+  const edge = await rect(fish.img);
+  await drag(page, [edge.x + edge.width * 0.333, edge.y + edge.height * 0.4], [edge.x + edge.width + 20, edge.y + edge.height + 20]);
+  await expect(form.holder.locator('a.artifact-attach-link')).toHaveCount(1);
+  const { body: edged, row: edgedRow } = await post(page, 'To the corner');
+  const corner = edged.spot.shape;
+  expect(corner.x).toBeGreaterThanOrEqual(0);
+  expect(corner.y).toBeGreaterThanOrEqual(0);
+  expect(corner.x + corner.w).toBeLessThanOrEqual(320);
+  expect(corner.y + corner.h).toBeLessThanOrEqual(240);
+  expect(corner.x + corner.w).toBeGreaterThan(319.9);
+  expect(edgedRow.images[0].width).toBe(Math.round(corner.w));
+  expect(edgedRow.images[0].height).toBe(Math.round(corner.h));
+
+  // Cancelled while its crop uploads, a send posts nothing.
+  let letGo!: () => void;
+  const slow = new Promise<void>((done) => { letGo = done; });
+  await page.route('**/api/media', async (route) => {
+    await slow;
+    await route.continue();
+  });
+  await fish.comment.click();
+  await drag(page, from, to);
+  comments.length = 0;
+  await form.field.fill('Never mind');
+  await form.send.click();
+  await expect(form.send).toBeDisabled();
+  await form.cancel.click();
+  await expect(form.holder).toHaveCount(0);
+  letGo();
+  await page.waitForTimeout(500);
+  await page.unroute('**/api/media');
+  expect(comments).toEqual([]);
   expect(errors).toEqual([]);
 });
 

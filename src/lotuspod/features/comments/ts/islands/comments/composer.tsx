@@ -257,6 +257,8 @@ export function composers(page: Page, bridge: ComposerBridge) {
       status.textContent = "Saving...";
       const why = await ready();
       waiting = false;
+      // Cancelled while it waited: nothing is sent.
+      if (!holder.isConnected) return;
       button.disabled = false;
       status.textContent = why;
       if (why) return;

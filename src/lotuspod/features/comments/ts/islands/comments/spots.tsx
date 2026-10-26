@@ -47,8 +47,7 @@ const CROP_FAILED = "The crop of the marked spot was not attached. Press Comment
 
 // A draft: its mark and the shape it draws, in its layer's coordinates, its
 // composer, the target it posts on and the spot, and on an image the crop
-// being made and the stored name of the crop it posts first, once a send has
-// found it.
+// being made and the name the site stores that crop under, once made.
 interface Draft {
   mark: SVGGElement; shape: SpotShape; composer: Composer; target: HTMLElement; spot: Omit<Spot, "hash">; image: boolean;
   making: Promise<void>; crop: string;
@@ -359,7 +358,10 @@ export function spots(page: Page, bridge: SpotsBridge): Spots {
     const draft = marking?.draft;
     const target = marking && targetIn(marking.holder);
     const layer = draft && target && !draft.mark.isConnected ? layerOf(target) : null;
-    const shape = layer && located({ ...draft!.spot, hash: "" }, target!, layer);
+    // A crop shows the image it was made from: a draft stays on that image
+    // when the swap brings in other pixels.
+    const other = draft?.image && target !== draft.target && target!.dataset.spotHash !== draft.target.dataset.spotHash;
+    const shape = layer && !other && located({ ...draft!.spot, hash: "" }, target!, layer);
     if (draft && layer && shape) {
       draft.target = target!;
       draft.shape = shape;
@@ -552,12 +554,10 @@ export function spots(page: Page, bridge: SpotsBridge): Spots {
       // fails too, nothing is sent.
       if (!image) return "";
       await draft.making;
-      draft.crop = await uploaded(composer, spot.shape);
-      if (draft.crop) return "";
+      if (await uploaded(draft)) return "";
       draft.making = attach(draft.target as HTMLImageElement, spot.shape, draft);
       await draft.making;
-      draft.crop = await uploaded(composer, spot.shape);
-      return draft.crop ? "" : CROP_FAILED;
+      return await uploaded(draft) ? "" : CROP_FAILED;
     }, CROP_FAILED);
     const draft: Draft = { mark, shape, composer, target, spot, image, making: Promise.resolve(), crop: "" };
     marking.draft = draft;
@@ -595,18 +595,39 @@ export function spots(page: Page, bridge: SpotsBridge): Spots {
     canvas.height = height;
     canvas.getContext("2d")?.drawImage(img, part.x, part.y, Math.max(part.w, 1), Math.max(part.h, 1), 0, 0, width, height);
     const blob = await new Promise<Blob | null>(done => canvas.toBlob(done, "image/png"));
-    if (blob && marking?.draft === draft) draft.composer.images.take([new File([blob], "spot.png", { type: "image/png" })]);
+    if (!blob || marking?.draft !== draft) return;
+    const images = draft.composer.images;
+    const before = new Set(images.kept().map(image => image.name));
+    images.take([new File([blob], "spot.png", { type: "image/png" })]);
+    // The site stores an image under the SHA-256 of its bytes; where the page
+    // cannot hash (no secure context), the crop is the PNG this upload added.
+    const name = await stored(blob);
+    if (name) {
+      draft.crop = name;
+      return;
+    }
+    await settled(draft.composer);
+    draft.crop = images.kept().find(image => /\.png$/.test(image.name) && image.width === width && image.height === height &&
+      !before.has(image.name))?.name || "";
   }
 
-  // Once a composer's images have uploaded, or failed to, as its tray now
-  // says: the stored name of a PNG of the crop's size among them, else "".
-  async function uploaded(composer: Composer, shape: SpotShape): Promise<string> {
+  async function stored(blob: Blob): Promise<string> {
+    if (!crypto.subtle) return "";
+    const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", await blob.arrayBuffer()));
+    return Array.from(digest, byte => byte.toString(16).padStart(2, "0")).join("") + ".png";
+  }
+
+  async function settled(composer: Composer) {
     while (composer.images.busy() && composer.holder.isConnected) {
       await new Promise(done => setTimeout(done, 100));
     }
-    const part = shapeBounds(shape);
-    const width = Math.max(1, Math.round(part.w)), height = Math.max(1, Math.round(part.h));
-    return composer.images.kept().find(image => /\.png$/.test(image.name) && image.width === width && image.height === height)?.name || "";
+  }
+
+  // Once a draft's images have uploaded, or failed to: whether its crop, by
+  // the name it is stored under, is among them.
+  async function uploaded(draft: Draft): Promise<boolean> {
+    await settled(draft.composer);
+    return Boolean(draft.crop) && draft.composer.images.kept().some(image => image.name === draft.crop);
   }
 
   // Escape drops a draft, staying in mark mode, and with none leaves it.

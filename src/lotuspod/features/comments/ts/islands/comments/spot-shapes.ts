@@ -136,13 +136,21 @@ export function clamp(shape: SpotShape, frame: Rect): SpotShape {
 }
 
 // A shape in frame's coordinates as fractions of it (into), or back (out of);
-// rounded to digits after the point.
+// rounded to digits after the point. A box's edges are rounded, not its
+// origin and size apart, so a box within the frame stays within it: its far
+// edge, origin plus size, never passes the rounded one.
 export function into(shape: SpotShape, frame: Rect, digits = 4): SpotShape {
   const round = (value: number) => Number(value.toFixed(digits));
   const x = (value: number) => round((value - frame.x) / frame.w);
   const y = (value: number) => round((value - frame.y) / frame.h);
   if (shape.kind === "stroke") return { kind: "stroke", points: shape.points.map(([px, py]) => [x(px), y(py)]) };
-  return { kind: "box", x: x(shape.x), y: y(shape.y), w: round(shape.w / frame.w), h: round(shape.h / frame.h) };
+  const span = (from: number, to: number) => {
+    let size = round(to - from);
+    while (size > 0 && from + size > to) size = round(size - 10 ** -digits);
+    return size;
+  };
+  const left = x(shape.x), top = y(shape.y);
+  return { kind: "box", x: left, y: top, w: span(left, x(shape.x + shape.w)), h: span(top, y(shape.y + shape.h)) };
 }
 
 export function outOf(shape: SpotShape, frame: Rect): SpotShape {

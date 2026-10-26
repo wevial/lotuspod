@@ -859,9 +859,11 @@ fractions of the rectangle those boxes span, or of the diagram's own viewBox
 when it covers none; on an image, the shape in the image's natural pixels and
 no boxes. An image's composer attaches a PNG crop of the spot at natural
 size, uploaded as any attached image is, and posts it as its first image.
-Each send reads the composer's images as they then are: with no stored PNG of
-the crop's size among them (its upload refused or failed, or the reader took
-it out), the crop is made and attached again, and should that fail too,
+Each send reads the composer's images as they then are: with the crop not
+among them, known by the name the site stores it under, the SHA-256 of its
+bytes (its upload refused or failed, or the reader took it out; another PNG
+of the same size does not stand for it), the crop is made and attached again,
+and should that fail too,
 nothing is posted, the text stays and the composer says "The crop of the
 marked spot was not attached. Press Comment to try again." Refused with 409
 `stale_spot` or 400 `unknown_spot`, the composer keeps its text and says "This
@@ -870,7 +872,10 @@ new version." ("This image has changed ..." on an image). While a draft is
 open, a swap holds back the part it is in. Its Update keeps the composer and
 its text: the draft is drawn again where its boxes now are on the diagram
 swapped in, and posts on it; with one of its boxes gone, no draft is drawn and
-the composer stays on the version it was drawn on.
+the composer stays on the version it was drawn on, as an image draft does
+when the swap brings in other pixels, its crop being of the old ones. A send
+cancelled while it waits for the crop posts nothing. A box is posted with its
+edges rounded, so one reaching the image's edge stays within it.
 
 Each unresolved spot thread is placed again each time the page draws its
 target: on load, when a swap brings it in and when Mermaid draws it again in
