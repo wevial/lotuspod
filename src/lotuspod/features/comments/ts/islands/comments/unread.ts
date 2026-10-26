@@ -33,6 +33,8 @@ export function replies(page: Page, bridge: RepliesBridge) {
   const { shown, rows, markUnread } = bridge;
   const { unread, tracked, seenTo } = shared;
   const opening = new Map<number, Set<number>>();
+  // Each open thread's newest comment as it was last seen open in view.
+  const viewedTo = new Map<number, number>();
   const tabTitle = signal(document.title);
   const dateLine = document.querySelector("header.artifact-header .artifact-meta");
   let newBadge: HTMLSpanElement | null = null;
@@ -93,17 +95,26 @@ export function replies(page: Page, bridge: RepliesBridge) {
     return !frame || typeof frame.checkVisibility !== "function" || frame.checkVisibility({ visibilityProperty: true });
   }
 
-  // A thread open in view on a page in view took comments unread since it
-  // opened: they are seen as on opening it, and stay marked while it stays
-  // open. One that came while the page was out of view is seen once it shows.
+  function newestOf(thread: Thread) {
+    return rows(thread).reduce((n, entry) => Math.max(n, entry.id), 0);
+  }
+
+  // A thread open in view on a page in view took a comment newer than its
+  // newest seen there: it is seen as on opening the thread, and what came
+  // unread stays marked while the thread stays open. One that came while
+  // the page was out of view is seen once it shows.
   function arrived(thread: Thread) {
     if (!thread.lit || !tracked.value || !inView()) return;
+    const newest = newestOf(thread);
+    if (newest <= (viewedTo.get(thread.root.id) || 0)) return;
+    viewedTo.set(thread.root.id, newest);
     const held = opening.get(thread.root.id) || new Set<number>();
     const fresh = rows(thread).filter(entry => counted(thread, entry) && !held.has(entry.id));
-    if (!fresh.length) return;
-    fresh.forEach(entry => held.add(entry.id));
-    opening.set(thread.root.id, held);
-    markUnread(thread);
+    if (fresh.length) {
+      fresh.forEach(entry => held.add(entry.id));
+      opening.set(thread.root.id, held);
+      markUnread(thread);
+    }
     void seeThread(thread);
   }
   document.addEventListener("visibilitychange", () => shown.forEach(arrived));
@@ -122,10 +133,12 @@ export function replies(page: Page, bridge: RepliesBridge) {
   // stays open; closed, it marks only what is still unread.
   function looked(thread: Thread, open: boolean) {
     if (!open) {
+      viewedTo.delete(thread.root.id);
       if (opening.delete(thread.root.id)) markUnread(thread);
       return;
     }
     if (!tracked.value) return;
+    viewedTo.set(thread.root.id, newestOf(thread));
     const fresh = rows(thread).filter(entry => counted(thread, entry));
     if (fresh.length) {
       opening.set(thread.root.id, new Set(fresh.map(entry => entry.id)));
@@ -142,7 +155,7 @@ export function replies(page: Page, bridge: RepliesBridge) {
   // Post that the reader has seen a thread up to its newest comment; the
   // counts drop once it is stored. A failure leaves them as they were.
   async function seeThread(thread: Thread) {
-    const newest = rows(thread).reduce((n, entry) => Math.max(n, entry.id), 0);
+    const newest = newestOf(thread);
     try {
       const response = await fetch(SEEN, {
         method: "POST",

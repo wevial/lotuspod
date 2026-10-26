@@ -26,6 +26,8 @@ const SEEN = '/api/seen';
 const ENV = process.env;
 const ASSERTION = ENV.LOTUSPOD_TEST_ASSERTION ?? '';
 const SIGNED_IN = { 'Cf-Access-Jwt-Assertion': ASSERTION };
+// A second reader, who wrote nothing in the threads the first starts.
+const SECOND = { 'Cf-Access-Jwt-Assertion': ENV.LOTUSPOD_TEST_ASSERTION_SECOND ?? '' };
 const SOCKET = ENV.LOTUSPOD_TEST_SOCKET ?? '';
 const HERMES = ENV.LOTUSPOD_TEST_CREDENTIAL_HERMES ?? '';
 const PYTHON = ENV.LOTUSPOD_TEST_PYTHON ?? '';
@@ -704,6 +706,42 @@ test.describe('signed in', () => {
     await expect(reply(page, id)).toHaveCount(1);
     await expect(page.locator('.artifact-unread')).toHaveCount(0);
     expect(errors).toEqual([]);
+  });
+
+  test('a reply that arrives in a thread open in view is posted as seen for a reader it never counted for', async ({ browser, request }) => {
+    test.setTimeout(120_000);
+    expect(SECOND['Cf-Access-Jwt-Assertion'], 'the capture fixture names a second reader').toBeTruthy();
+    await catchUp(request);
+    hermes('pull', '--owner', OWNER);
+    const posted = await request.post(COMMENTS, {
+      headers: SIGNED_IN, data: { page: NAME, section: SECTION, text: `@${OWNER} Is the heater rated for outdoors?` },
+    });
+    expect(posted.status()).toBe(201);
+    const { id: thread } = (await posted.json()) as Row;
+
+    const context = await browser.newContext({ extraHTTPHeaders: SECOND, viewport: WIDE });
+    try {
+      const page = await context.newPage();
+      const errors = watchErrors(page);
+      await openPage(page);
+      const opened = seenPost(page, thread, thread);
+      await chip(page).click();
+      expect((await opened).status()).toBe(200);
+      const item = page.locator(`.artifact-comments-panel .artifact-comments-entry[data-thread="${thread}"]`);
+      await expect(item.locator('.artifact-comments-entry-head')).toHaveAttribute('aria-expanded', 'true');
+
+      // Not this reader's thread: the reply never counts for them, and is
+      // seen all the same as it is drawn in the open thread.
+      const id = answer(thread, 'It is: IP68.');
+      const arrived = await seenPost(page, thread, id);
+      expect(arrived.status()).toBe(200);
+      await expect(reply(page, id)).toBeVisible();
+      await expect(reply(page, id)).not.toHaveClass(/\bartifact-comment--unread\b/);
+      await expect(page.locator('.artifact-unread')).toHaveCount(0);
+      expect(errors).toEqual([]);
+    } finally {
+      await context.close();
+    }
   });
 
   test('a reply that arrives in the open thread of an index tab not shown is posted as seen once the tab shows', async ({ page, request }) => {
