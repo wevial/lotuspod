@@ -231,6 +231,13 @@
     flex: 1;
   }
 
+  /* Copy link stays on the first line, level with the controls there,
+     clear of the switch's line. */
+  .artifact-topbar:has(.artifact-archive-bar, .artifact-review-bar) .artifact-copy-link {
+    align-self: flex-start;
+    margin-block: 0.15rem 0;
+  }
+
   .artifact-topbar:has(.artifact-review-bar) .artifact-theme-more {
     clip-path: none;
     height: auto;

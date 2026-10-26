@@ -131,11 +131,19 @@ test('on an earlier version Copy link copies that version address', async ({ pag
   await expect(button).toHaveAttribute('data-copied', '');
   expect(await clipboard(page)).toBe(`${new URL(baseURL!).origin}/${name}.html?version=${older.commit}`);
 
-  // Every other query part and the fragment are dropped; the version stays.
-  await page.goto(`/${name}.html?version=${older.commit}&utm_source=test#top`);
+  // The fragment is dropped; the version stays.
+  await page.goto(`/${name}.html?version=${older.commit}#top`);
   await copyLink(page).click();
   await expect(copyLink(page)).toHaveAttribute('data-copied', '');
   expect(await clipboard(page)).toBe(`${new URL(baseURL!).origin}/${name}.html?version=${older.commit}`);
+
+  // Asked for beside another query part, the version is not what is shown:
+  // the link copied opens the current page that is.
+  await page.goto(`/${name}.html?version=${older.commit}&utm_source=test`);
+  await expect(page.locator('.artifact-body')).toContainText('Edition: second.');
+  await copyLink(page).click();
+  await expect(copyLink(page)).toHaveAttribute('data-copied', '');
+  expect(await clipboard(page)).toBe(`${new URL(baseURL!).origin}/${name}.html`);
   expect(errors).toEqual([]);
 });
 
@@ -278,6 +286,25 @@ test('on a phone beside the review sheet the button and every theme button stay 
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(360);
   expect(errors).toEqual([]);
 });
+
+// Below 320 px the switch takes a second line; Copy link keeps to the first.
+for (const pageName of [DECISIONS, PAGE]) {
+  test(`below 320 px Copy link stays clear of the switch's line on ${pageName}`, async ({ page }) => {
+    const errors: string[] = [];
+    page.on('pageerror', (error) => errors.push(error.message));
+    await page.setViewportSize({ width: 319, height: 780 });
+    await page.goto(`${pageName}?standalone`);
+    const button = copyLink(page);
+    await expect(button).toBeVisible();
+    const box = (await button.boundingBox())!;
+    const line = (await page.getByRole('group', { name: 'Theme' }).boundingBox())!;
+    expect(box.y + box.height).toBeLessThanOrEqual(line.y);
+    expect(await button.evaluate((element, [x, y]) =>
+      element.contains(document.elementFromPoint(x, y)), [box.x + box.width / 2, box.y + box.height - 1]))
+      .toBe(true);
+    expect(errors).toEqual([]);
+  });
+}
 
 test.describe('with scripts off', () => {
   test.use({ javaScriptEnabled: false });
