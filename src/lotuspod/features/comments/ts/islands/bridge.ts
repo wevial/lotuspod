@@ -242,6 +242,8 @@ export interface ThreadListBridge {
   passages: Pick<import("./comments/parts").Passages, "said" | "key" | "point" | "detached" | "shine">;
   imageWords(row: CommentRow): string;
   looked(thread: Thread, viewed: boolean): void;
+  // Post that the reader has seen a thread up to its newest comment.
+  seen(thread: Thread): void;
   refresh(): void;
   // The box's form for a new thread is no longer on a live block.
   unblock(box: HTMLElement): void;

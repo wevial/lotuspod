@@ -431,8 +431,8 @@ test.describe('signed in', () => {
     await expect(mine.agents).toHaveCount(1, { timeout: 15_000 });
     await expect(mine.agents.locator('.artifact-comment-text')).toHaveText(REPLY);
     await expect(mine.head).toHaveAttribute('aria-expanded', 'true');
-    // The reply is the reader's to read: counted until the thread next opens.
-    await expect(first.chip).toHaveText(`1 reply · ✓ ${OWNER} answered · 1 new`);
+    // It lands in the thread open in view: seen, so it counts nowhere.
+    await expect(first.chip).toHaveText(`1 reply · ✓ ${OWNER} answered`);
     await expect(first.hint).toHaveText('Not answered yet');
 
     // The reader replies from the thread's composer: it waits for hermes again.

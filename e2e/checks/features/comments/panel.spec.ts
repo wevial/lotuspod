@@ -444,7 +444,8 @@ test.describe('signed in', () => {
     const steps = box(page, 'next-steps');
     await expect(findings.chip).toHaveText('1 reply · ✓ hermes answered');
     await expect(risks.chip).toHaveText('hermes is writing…');
-    await expect(steps.chip).toHaveText('No comments · Comment');
+    // Its one thread is resolved.
+    await expect(steps.chip).toHaveText('1 resolved');
     // The faces before the words are hidden from assistive technology.
     await expect(findings.chip).toHaveAccessibleName('1 reply · hermes answered');
     await expect(findings.chip.locator('.artifact-comment-chip-faces')).toHaveAttribute('aria-hidden', 'true');
@@ -562,8 +563,8 @@ test.describe('signed in', () => {
     const bubble = (await theirs.locator('.artifact-comment-text').boundingBox())!;
     expect(left.x).toBeLessThan(right.x);
     expect(bubble.x).toBeGreaterThan(left.x);
-    // The reply is the reader's to read: counted until the thread next opens.
-    await expect(findings.chip).toHaveText(`1 reply · ✓ ${OWNER} answered · 1 new`);
+    // It lands in the thread open in view: seen, so it counts nowhere.
+    await expect(findings.chip).toHaveText(`1 reply · ✓ ${OWNER} answered`);
     await side.fold.click();
     expect(await dotKinds(side.dots)).toEqual(['answered']);
     expect(await spot(paragraph)).toEqual(before);
@@ -599,7 +600,7 @@ test.describe('signed in', () => {
     await expect(side.showResolved).toBeFocused();
     await expect(side.count).toHaveText('1 open · 1 resolved');
     await expect(side.badge).toHaveText('1');
-    await expect(box(page, 'findings').chip).toHaveText('No comments · Comment');
+    await expect(box(page, 'findings').chip).toHaveText('1 resolved');
     const stored = await readThread(request, asked.id);
     expect(stored.resolution.resolved).toBe(true);
     expect(stored.resolution.actor).toEqual({ kind: 'human', name: READER });

@@ -160,9 +160,11 @@ export function chips(page: Page, bridge: ChipsBridge) {
       if (!bridge.settled()) return;
       bridge.boxes.forEach(box => {
         const threads = bridge.threadsOf(box);
+        const unresolved = threads.filter(thread => !resolved(thread));
         paint(box.querySelector("summary")!, "artifact-comment-summary",
-          line(threads.filter(thread => !resolved(thread)), unreadIn(threads),
-            box.dataset.section === page.wholePage ? "Comment on this page" : "Comment"));
+          line(unresolved, unreadIn(threads),
+            box.dataset.section === page.wholePage ? "Comment on this page" : "Comment",
+            unresolved.length ? 0 : threads.length));
       });
       bridge.decisions.forEach(decisionChip);
     },
