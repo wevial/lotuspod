@@ -114,17 +114,16 @@ title on the page now, its lines as written in the page's kept source
 (NAME.md or NAME.body.html; "" when none is kept), and `status`, `current`
 while the block's widget file hash is the anchor's, `changed` once it is
 another, and `removed`, its title and source "", once the page has no block
-of that id. An item for any other thread has neither.
+of that id. An item for any other thread has neither (on a spot: spots.py).
 
 A pulled answer's `question` also carries `context`: the page's context for
 the question while it asks it at the answer's version, and "" when
 `reworded` is true. The context is not kept with the answer.
 
-A pulled answer whose note the reader's page stored as a comment in a
-thread on its decision also carries `noteComment`, that comment's id (the
-earlier answer's, for a note kept unchanged with another option); the
-comment carries `answer`, {id, choice, label} of the answer, and is pulled
-as any comment is.
+A pulled answer whose note the reader's page stored as a comment in a thread on
+its decision also carries `noteComment`, that comment's id (the earlier
+answer's, for a note kept unchanged with another option); the comment carries
+`answer`, {id, choice, label} of the answer, and is pulled as any comment is.
 
 A pulled answer may be an owner's dismissal of a question that no longer
 matters (lotuspod.store.db): still of kind `answer`, its `answer` carries
@@ -161,25 +160,24 @@ state, so nothing is claimed, settled or routed again, and a resolved thread
 stays resolved unless reopen is true. Its key names it for good, as a
 reply's does, and its revision is checked as a reply's is.
 
-POST /v1/answers/record stores an answer the page's owner gave somewhere
-else, such as a chat or another page: an agent's answer, as that owner,
-keeping where in `source` (1 to MAX_SOURCE characters). Its version,
-question text and option label are the page's as it asks the decision now,
-and its revision is the page's. It counts as answered wherever answers do,
-supersedes the question's newest answer, and the owner has it acknowledged
-already. The same option recorded again from the same source, at the same
-version, is not stored again: it answers {answer, created: false} with the
-answer stored first, and {answer, created: true} otherwise, the answer
-carrying `asked` as the pull's do. It is refused, with nothing stored, in
-this order: 400 invalid_body when page is missing or not a string, 404
-unknown_page, 403 handle_not_allowed or operation_not_allowed, 400
-invalid_body for any other missing or extra key or length, 400
-unknown_question, 400 not_a_decision for a checklist, and
-400 invalid_choice for an option the form does not offer. A reader's later
-answer replaces it, as it replaces any.
+POST /v1/answers/record stores an answer the page's owner gave somewhere else,
+such as a chat or another page: an agent's answer, as that owner, keeping where
+in `source` (1 to MAX_SOURCE characters). Its version, question text and option
+label are the page's as it asks the decision now, and its revision is the
+page's. It counts as answered wherever answers do, supersedes the question's
+newest answer, and the owner has it acknowledged already. The same option
+recorded again from the same source, at the same version, is not stored again:
+it answers {answer, created: false} with the answer stored first, and {answer,
+created: true} otherwise, the answer carrying `asked` as the pull's do. It is
+refused, with nothing stored, in this order: 400 invalid_body when page is
+missing or not a string, 404 unknown_page, 403 handle_not_allowed or
+operation_not_allowed, 400 invalid_body for any other missing or extra key or
+length, 400 unknown_question, 400 not_a_decision for a checklist, and 400
+invalid_choice for an option the form does not offer. A reader's later answer
+replaces it, as it replaces any.
 
-No socket route writes a reader's answer, comment or resolution as the
-reader, whatever the credential.
+No socket route writes a reader's answer, comment or resolution as the reader,
+whatever the credential.
 """
 
 from __future__ import annotations
@@ -205,7 +203,7 @@ from pathlib import Path
 from typing import Callable, Mapping
 
 from lotuspod import store
-from lotuspod.features.agents import routing
+from lotuspod.features.agents import routing, spots
 from lotuspod.features import serve
 from lotuspod.features import publish
 from lotuspod.features import widgets
@@ -591,6 +589,8 @@ class Routes:
             if found["root"].get("widget"):
                 item["widget"] = found["root"]["widget"]
                 item["block"] = block(page, item_page(page), found["root"]["widget"])
+            if found["root"].get("spot"):
+                item.update(spot=found["root"]["spot"], target=spots.target(page, found["root"]["spot"]))
             items.append(item)
         items += self._answers(owner, page_of, item_page)
         return {"owner": owner, "pulledAt": pulled_at, "items": items}

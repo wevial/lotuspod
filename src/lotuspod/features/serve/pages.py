@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Callable, NamedTuple
 
 from lotuspod.features import agents
+from lotuspod.features import blocks
 from lotuspod.core import (_KEPT_SOURCE_SUFFIX, MANIFEST_FILE, THEME_ROOT, extract_meta, extract_visibility,
                            is_page_name, page_revision, source_revision)
 from lotuspod.features import comments
@@ -24,9 +25,9 @@ from lotuspod.features import history
 from lotuspod.features import index
 from lotuspod.features import stale
 from lotuspod.features.publish import (REFS_SUFFIX, _H2Collector, kept_block_hashes, kept_source,
-                                       page_owner, refs_from, render_from,
-                                       render_kept_or_extracted)
-from lotuspod.features.serve import api, serve_files
+                                       kept_target_hashes, load_stored, media_dir, page_owner,
+                                       refs_from, render_from, render_kept_or_extracted)
+from lotuspod.features.serve import api, serve_files, spots
 from lotuspod.features import widgets
 
 
@@ -420,6 +421,23 @@ def served_page_names(out_dir: Path, allowed: frozenset[str] | None = None) -> l
                   and not history.is_archived(out_dir, file[:-len(".html")]))
 
 
+# Each stored image's natural size, by its stored name, which names its bytes.
+_NATURAL: dict[str, tuple[int, int]] = {}
+
+
+def natural_size(out_dir: Path, found: blocks.Target) -> dict[str, int]:
+    """A target's width and height: an image's natural size, read from the
+    media store once per stored name, else the size its tag gives."""
+    name = found.stored
+    if name and name not in _NATURAL:
+        image = load_stored(media_dir(out_dir), name)
+        if image is not None:
+            with _RENDERS_LOCK:
+                _NATURAL[name] = (image.width, image.height)
+    width, height = _NATURAL.get(name, (found.width, found.height))
+    return {"width": width, "height": height}
+
+
 def api_page(out_dir: Path, name: str,
              allowed: frozenset[str] | None = None) -> api.Page | None:
     """The page serve answers as NAME.html, as /api records it; None when
@@ -475,8 +493,17 @@ def api_page(out_dir: Path, name: str,
                           earlier=frozenset(earlier.get(ident, ())))
         for ident, (hash_, title, section) in widgets.PageWidgets(page_html).found.items()
     }
+    # A diagram or an image is in its section as a block is.
+    earlier = kept_target_hashes(out_dir, name)
+    targets = {
+        ident: spots.Target(kind=found.kind, hash=found.hash, title=found.title,
+                            section=outside if only_page else found.section or outside,
+                            earlier=frozenset(earlier.get(ident, ())), source=found.source,
+                            url=found.src, **natural_size(out_dir, found))
+        for ident, found in blocks.PageTargets(page_html).found.items()
+    }
     return api.Page(name=name, revision=revision, sections=sections, questions=questions,
-                    comment_sections=boxes, widgets=page_widgets,
+                    comment_sections=boxes, widgets=page_widgets, targets=targets,
                     owner=owner if agents.is_handle(owner) else "",
                     title=extract_meta(page_html, name)["title"],
                     archived=record.get("archivedAt", ""),

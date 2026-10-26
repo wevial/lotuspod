@@ -16,7 +16,7 @@ version()'s two, then one cat-file process for its bytes, which are never kept.
 block_hashes() is the widget file hashes one live block had in every visible
 version, for the comments route: a list's two git processes, then one
 cat-file process for the blobs whose blocks are not known yet, kept by blob
-id.
+id; target_hashes() is the same for a diagram's or an image's hashes.
 A version is listed only when its own page was visible, at most MAX_VERSIONS of them, and a directory that is not the
 top of its own repository has none. The whole history of the page is read,
 so the version before the oldest one listed is known too.
@@ -59,6 +59,7 @@ from pathlib import Path
 from typing import Callable
 
 from lotuspod.features import widgets
+from lotuspod.features.blocks import PageTargets
 from lotuspod.core import WIDGET_NAME, git_environment
 
 # The versions of one page a list holds, newest first.
@@ -358,6 +359,8 @@ class History:
         self._summaries: dict[tuple[str, str], str] = {}
         # Blob ids to the live blocks' ids in them, each to its file's hash.
         self._blocks: dict[str, dict[str, str]] = {}
+        # Blob ids to the diagrams' and images' ids in them, each to its hash.
+        self._targets: dict[str, dict[str, str]] = {}
         self._lock = threading.Lock()
 
     def _git(self, *argv: str, data: bytes | None = None) -> bytes | None:
@@ -612,22 +615,37 @@ class History:
         visible versions, every one of them, not only the MAX_VERSIONS a
         list holds, from the blobs whose blocks are not known yet, read in
         one process; none outside a repository, or when git failed."""
+        return self._hashes(name, ident, self._blocks, lambda text: {
+            key: hash_ for key, (hash_, _, _) in widgets.PageWidgets(text).found.items()})
+
+    def target_hashes(self, name: str, ident: str) -> frozenset[str]:
+        """The hashes diagram or image ident (lotuspod.features.blocks.targets)
+        had in NAME's visible versions, read as block_hashes() reads a
+        block's."""
+        return self._hashes(name, ident, self._targets, lambda text: {
+            key: target.hash for key, target in PageTargets(text).found.items()})
+
+    def _hashes(self, name: str, ident: str, known: dict[str, dict[str, str]],
+                read: Callable[[str], dict[str, str]]) -> frozenset[str]:
+        """The hashes ident had in NAME's visible versions, each version's
+        ids to their hashes read from its HTML by read and kept in known by
+        blob id."""
         commits = self._commits(name)
         self._read([blob for _, _, _, blob in commits])
         with self._lock:
             wanted = [blob for _, _, _, blob in commits
                       if blob in self._stamps and self._stamps[blob][1]]
-            missing = [blob for blob in dict.fromkeys(wanted) if blob not in self._blocks]
+            missing = [blob for blob in dict.fromkeys(wanted) if blob not in known]
         texts = self._objects(missing) if missing else None
         for blob, text in zip(missing, texts or []):
             if text is None:
                 continue
-            found = {key: hash_ for key, (hash_, _, _) in widgets.PageWidgets(text).found.items()}
+            found = read(text)
             with self._lock:
-                self._blocks[blob] = found
+                known[blob] = found
         with self._lock:
-            return frozenset(self._blocks[blob][ident] for blob in wanted
-                             if ident in self._blocks.get(blob, {}))
+            return frozenset(known[blob][ident] for blob in wanted
+                             if ident in known.get(blob, {}))
 
     def _objects(self, names: list[str]) -> list[str | None] | None:
         """Each named object's text, None for one git does not have; None

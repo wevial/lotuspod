@@ -29,8 +29,8 @@ def serve_allow_list(out_dir: Path) -> frozenset[str]:
     over HTTP even though it lives in the served directory. Sources
     (NAME.body.html, like NAME.md), dotfiles and symbolic links are never
     pages, so they are never listed, and neither is a page's kept refs
-    (NAME.refs.json) or block hashes (NAME.blocks.json), which are no
-    pages either.
+    (NAME.refs.json), block hashes (NAME.blocks.json) or diagram and image
+    hashes (NAME.targets.json), which are no pages either.
     """
     allowed = {INDEX_FILE, *_SERVE_SUPPORT_FILES}
     try:

@@ -20,6 +20,11 @@ its figures taken out. `images()` names the image lines from the same walk
 `to_body()` draws them in, so publish reads and rewrites exactly the lines
 the page shows as images.
 
+A `mermaid id=NAME` fence is a diagram block whose `data-spot` names it, the
+id a comment's spot on it keeps (lotuspod.features.blocks.targets). NAME is
+letters, digits, `-` and `_`, and no other fence of the page names it: else
+the fence is refused, naming its line, and nothing is written.
+
 A `calltree` fence draws a static call tree with a summary, legend and
 file:line chips, optionally linked to GitHub.
 
@@ -50,7 +55,7 @@ import re
 from dataclasses import dataclass
 from typing import Callable, Mapping
 
-from lotuspod.features.blocks import render
+from lotuspod.features.blocks import SPOT_ID, render
 from lotuspod.features import widgets
 
 CUT = "\n## Concrete commands"
@@ -170,7 +175,7 @@ def _walk(text: str, figure: Callable[[Image], str]) -> list[str]:
             # JavaScript template literal in an inlined live document.
             lines = lines[:i]
             break
-    return _convert(lines, list(range(len(lines))), figure, [0])
+    return _convert(lines, list(range(len(lines))), figure, [0], set())
 
 
 def _link(m: re.Match) -> str:
@@ -278,12 +283,25 @@ def _render_list(block: list[str]) -> str:
     return emit(root["children"])
 
 
-def _convert(lines: list[str], numbers: list[int],
-             figure: Callable[[Image], str], live_count: list[int]) -> list[str]:
+def _spot_id(ident: str, line: int, taken: set[str]) -> str:
+    """A `mermaid id=` fence's id, escaped for its attribute; RuntimeError,
+    naming the fence's line, for one not of SPOT_ID or named before."""
+    if not SPOT_ID.fullmatch(ident):
+        raise RuntimeError(f"diagram {ident} at line {line}: an id is letters, digits, - and _; "
+                           "nothing written")
+    if ident in taken:
+        raise RuntimeError(f"diagram {ident} at line {line}: another diagram has that id; "
+                           "nothing written")
+    taken.add(ident)
+    return ident
+
+
+def _convert(lines: list[str], numbers: list[int], figure: Callable[[Image], str],
+             live_count: list[int], spot_ids: set[str]) -> list[str]:
     """Body HTML blocks for markdown `lines`, whose indices in the source are
     `numbers`; a blockquote's inner lines go through the same conversion, so
     code blocks, lists, tables and images work inside. `figure` draws an
-    image line."""
+    image line; spot_ids holds the diagram ids fences named so far."""
     out: list[str] = []
     i = 0
     while i < len(lines):
@@ -297,7 +315,7 @@ def _convert(lines: list[str], numbers: list[int],
                 inner.append(re.sub(r"^ {0,3}> ?", "", lines[i]))
                 inner_numbers.append(numbers[i])
                 i += 1
-            blocks = _convert(inner, inner_numbers, figure, live_count)
+            blocks = _convert(inner, inner_numbers, figure, live_count, spot_ids)
             out.append("<blockquote>" + "\n".join(blocks) + "</blockquote>")
             continue
         image = _IMAGE.fullmatch(line)
@@ -324,7 +342,10 @@ def _convert(lines: list[str], numbers: list[int],
                 out.append(render(code, words[1:]))
                 continue
             text = html.escape("\n".join(code), quote=False)
-            if lang == "mermaid":
+            if words[:1] == ["mermaid"] and len(words) == 2 and words[1].startswith("id="):
+                ident = _spot_id(words[1][3:], fence_line, spot_ids)
+                out.append(f'<pre class="mermaid" data-spot="{ident}">{text}</pre>')
+            elif lang == "mermaid":
                 out.append(f'<pre class="mermaid">{text}</pre>')
             else:
                 out.append(f"<pre><code>{text}</code></pre>")

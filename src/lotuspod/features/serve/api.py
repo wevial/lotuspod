@@ -8,7 +8,7 @@ the reader as actor. Ten routes:
                           {page, question, version, dismissed: true, reason}
                           or {page, question, dismissed: false}
     GET  /api/answers?page=NAME
-    POST /api/comments    {page, section, text[, quote | widget][, revision][, images]},
+    POST /api/comments    {page, section, text[, quote | widget | spot][, revision][, images]},
                           {page, section: "", text[, revision][, images]},
                           {page, question, text[, revision][, images]},
                           {page, parent, text[, images]} or {page, thread, resolved}
@@ -28,27 +28,25 @@ threads, and /api/revision answers it alone, {revision}: an open page
 compares it with the revision it was rendered at to notice a republish.
 
 POST /api/seen records that the reader opened `page` at `revision`, the
-revision it was rendered at ("" for a page with no revision, and only for
-one), keyed by their verified address, and answers
-200 {page, revision, previous}: `previous` is the revision recorded for them
-before, null the first time. GET /api/seen, which takes no query (400
-invalid_query for any), answers {pages: {NAME: {revision, seen, seenAt,
-replies, unread}}}, one entry for each page the reader has opened, or has
-unread replies on, that serve still answers: `revision` the page's current
-one, `seen` the one recorded and `seenAt` when (both null for a page never
-opened), `replies` the count of the page's comments stored since then by
-anyone but the reader (0 for a page never opened) and `unread` the count of
-the reader's unread replies on it (lotuspod.store.db), 0 while the page has no
-comment boxes. A page never opened is listed only while that count is not
-0. It never names the reader.
+revision it was rendered at ("" for a page with no revision, and only for one),
+keyed by their verified address, and answers 200 {page, revision, previous}:
+`previous` is the revision recorded for them before, null the first time. GET
+/api/seen, which takes no query (400 invalid_query for any), answers {pages:
+{NAME: {revision, seen, seenAt, replies, unread}}}, one entry for each page the
+reader has opened, or has unread replies on, that serve still answers:
+`revision` the page's current one, `seen` the one recorded and `seenAt` when
+(both null for a page never opened), `replies` the count of the page's comments
+stored since then by anyone but the reader (0 for a page never opened) and
+`unread` the count of the reader's unread replies on it (lotuspod.store.db), 0
+while the page has no comment boxes. A page never opened is listed only while
+that count is not 0. It never names the reader.
 
 `{page, thread, comment}` records that the reader has seen the thread whose
 first comment is `thread` up to `comment`, and answers 200 {thread, comment}
-with the mark as stored, which never goes down nor passes the thread's
-newest comment: 404 unknown_thread when
-`thread` is no first comment on `page`. A read of the comments also answers
-`unread`, the ids of the reader's unread comments among its threads, oldest
-first, none while the page has no comment boxes.
+with the mark as stored, which never goes down nor passes the thread's newest
+comment: 404 unknown_thread when `thread` is no first comment on `page`. A read
+of the comments also answers `unread`, the ids of the reader's unread comments
+among its threads, oldest first, none while the page has no comment boxes.
 
 /api/versions answers {page, versions: [{commit, date, revision, current,
 summary}]}: each commit of the artifacts repository that changed the page
@@ -123,7 +121,7 @@ block's id, the 12 lowercase hex digits of its widget file's hash, and up
 to MAX_STATE characters of plain text the widget showed, "" for none. After
 the checks above it is refused, with nothing stored, in this order: 400
 invalid_body for any other keys, a hash or state not of that shape, a state
-holding a control character, or a widget beside a quote (a widget beside a
+holding a control character, or a widget beside a quote or a spot (one beside a
 question, or on a reply, is a body not of its shape); 400 unknown_widget
 for an id the page has no block for, or a block in another section than the
 thread's; and 409 stale_widget for a hash the block has had in none of the
@@ -131,7 +129,7 @@ page's visible publishes (Widget.earlier, kept beside the page) nor of its
 versions (History.block_hashes()): a hash it had in an earlier one is
 stored as sent, so the thread says the block changed since it, as it does
 for a thread stored before the block changed. Every comment a route answers carries `widget`: the anchor
-as stored on a thread's first comment, null on every other comment.
+as stored on a thread's first comment, null on every other comment. So does `spot` (spots.py).
 
 An answer's note also opens a thread on its decision when the page has a
 comment box after the decision's form: the note, not empty once trimmed and
@@ -196,9 +194,9 @@ in the last UPLOAD_WINDOW seconds.
 a row is stored only when it changes the resolution. A reader's reply to a
 resolved thread reopens it.
 
-A reader's actor leaves a route as {kind: human, name}: the name is the part
-of their address before its last @, and the address itself never reaches a
-page. The agents' socket (lotuspod.features.agents.machine) still sees the address.
+A reader's actor leaves a route as {kind: human, name}: the name is the part of
+their address before its last @, and the address itself never reaches a page.
+The agents' socket (lotuspod.features.agents.machine) still sees the address.
 """
 
 from __future__ import annotations
@@ -224,6 +222,7 @@ from lotuspod.features import agents
 from lotuspod.features import comments
 from lotuspod.features import publish
 from lotuspod.features.history import History
+from lotuspod.features.serve import spots
 
 ANSWERS = "/api/answers"
 COMMENTS = "/api/comments"
@@ -372,6 +371,8 @@ class Page:
     superseded_by: str = ""
     # Its live blocks' ids to the blocks.
     widgets: Mapping[str, Widget] = field(default_factory=dict)
+    # Its diagrams' and images' ids to them (spots.py).
+    targets: Mapping[str, spots.Target] = field(default_factory=dict)
 
 
 class Refusal(Exception):
@@ -491,9 +492,8 @@ def _quote(value: object) -> dict | None:
 
 
 def _widget(value: object) -> dict:
-    """value as a live block's anchor, {id, hash, state}; Refusal for
-    anything else. The state is shown as text, so it holds no control
-    character."""
+    """value as a live block's anchor, {id, hash, state}; Refusal for anything
+    else. The state is shown as text, so it holds no control character."""
     if not isinstance(value, dict):
         raise _invalid()
     _keys(value, {"id", "hash", "state"})
@@ -1107,7 +1107,7 @@ class Api:
         if "question" in fields and "section" not in fields:
             return self._store_decision_thread(fields, names, least, actor)
         _keys(fields, {"page", "section", "text"},
-              frozenset({"quote", "revision", "images", "widget"}))
+              frozenset({"quote", "revision", "images", "widget", "spot"}))
         # A heading's id may be any length, and must match one of the page's
         # boxes exactly: the body's own limit is the only one it needs.
         # comments.WHOLE_PAGE, "", is the whole page, and matches no box.
@@ -1129,10 +1129,9 @@ class Api:
         if read is not None and read != page.revision:
             raise Refusal(HTTPStatus.CONFLICT, "stale_page")
         images = self._images(names)
-        widget = None
-        if "widget" in fields:
-            widget = _widget(fields["widget"])
-            if quote is not None:
+        widget = _widget(fields["widget"]) if "widget" in fields else None
+        if widget is not None:
+            if quote is not None or "spot" in fields:
                 raise _invalid()
             block = page.widgets.get(widget["id"])
             if block is None or block.section != section:
@@ -1141,10 +1140,11 @@ class Api:
                     and (self.history is None
                          or widget["hash"] not in self.history.block_hashes(page.name, widget["id"]))):
                 raise Refusal(HTTPStatus.CONFLICT, "stale_widget")
+        spot = spots.check(fields["spot"], page, section, quote, self.history) if "spot" in fields else None
         return self.database.add_comment(
             page=page.name, section=section, section_title=page.sections.get(section, ""),
             revision=page.revision, text=text, quote=quote, actor=actor, owner=page.owner,
-            images=images, widget=widget,
+            images=images, widget=widget, spot=spot,
         )
 
     def _store_decision_thread(self, fields: dict, names: list[str] | None, least: int,

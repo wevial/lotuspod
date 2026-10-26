@@ -19,7 +19,7 @@ from lotuspod.features import agents
 from lotuspod.features import serve
 from lotuspod.features import comments
 from lotuspod.features import decisions
-from lotuspod.features.blocks import mark_node_tables, mark_refs
+from lotuspod.features.blocks import PageTargets, mark_node_tables, mark_refs, mark_targets
 from lotuspod.features.publish import markdown, media, sections
 from lotuspod.features import widgets
 from lotuspod.core import (DEFAULT_OUTPUT_DIR, _META_CONTENT_RE, PAGE_SCRIPT, _REVISION_TAG_RE,
@@ -460,6 +460,8 @@ def build_page(args: argparse.Namespace) -> argparse.Namespace:
     body, refs_block, named = mark_refs(body, page_refs or {},
                                              getattr(args, "refs_as_of", ""))
     body, outline = (body, []) if args.no_outline else outline_body(body)
+    # After the outline, so a counted id is named after its heading's id.
+    body = mark_targets(body)
     # After the outline, so each box names its heading's id.
     whole_page_box = ""
     if with_comments:
@@ -548,11 +550,11 @@ def cmd_render(args: argparse.Namespace) -> int:
     # The outgoing page's hashes first, so a page published before they were
     # kept keeps the ones it had.
     try:
-        keep_block_hashes(out_dir, args.name, out_path.read_text(encoding="utf-8"))
+        keep_hashes(out_dir, args.name, out_path.read_text(encoding="utf-8"))
     except (OSError, UnicodeDecodeError):
         pass
     write_atomic(out_path, html.encode("utf-8"))
-    keep_block_hashes(out_dir, args.name, html)
+    keep_hashes(out_dir, args.name, html)
     widget_name = re.compile(re.escape(args.name) + r"\.w-[0-9a-f]{12}\.html\Z")
     for stale in out_dir.iterdir():
         if widget_name.fullmatch(stale.name) and stale.name not in widget_files:
@@ -593,36 +595,58 @@ REFS_MAX = 1 << 20
 # kept beside it, never served: the comments route takes a thread on any of
 # them, with or without the site's git history.
 BLOCKS_SUFFIX = ".blocks.json"
+# Each diagram's and image's hash (lotuspod.features.blocks.targets) over the
+# page's visible publishes, kept and never served as the blocks' are: the
+# comments route takes a spot on any of them.
+TARGETS_SUFFIX = ".targets.json"
+
+
+def _kept_hashes(path: Path, key: str) -> dict[str, list[str]]:
+    """Each id to the hashes the file at path keeps for it under key,
+    oldest first; {} when there is no file or it cannot be read."""
+    try:
+        kept = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, ValueError):
+        return {}
+    found = kept.get(key) if isinstance(kept, dict) else None
+    if not isinstance(found, dict):
+        return {}
+    return {ident: [hash_ for hash_ in hashes if isinstance(hash_, str)]
+            for ident, hashes in found.items() if isinstance(hashes, list)}
 
 
 def kept_block_hashes(out_dir: Path, name: str) -> dict[str, list[str]]:
-    """Each live block id to the hashes NAME.blocks.json keeps for it,
-    oldest first; {} when there is no file or it cannot be read."""
-    try:
-        kept = json.loads((out_dir / f"{name}{BLOCKS_SUFFIX}").read_text(encoding="utf-8"))
-    except (OSError, UnicodeDecodeError, ValueError):
-        return {}
-    blocks = kept.get("blocks") if isinstance(kept, dict) else None
-    if not isinstance(blocks, dict):
-        return {}
-    return {ident: [hash_ for hash_ in hashes if isinstance(hash_, str)]
-            for ident, hashes in blocks.items() if isinstance(hashes, list)}
+    """Each live block id to the hashes NAME.blocks.json keeps for it."""
+    return _kept_hashes(out_dir / f"{name}{BLOCKS_SUFFIX}", "blocks")
 
 
-def keep_block_hashes(out_dir: Path, name: str, page_html: str) -> None:
-    """Add the live blocks' hashes of NAME's page_html, when it is
-    visible, to NAME.blocks.json; a page that never had a block keeps no
-    file."""
-    found = widgets.PageWidgets(page_html).found
-    if not found or not extract_visibility(page_html):
+def kept_target_hashes(out_dir: Path, name: str) -> dict[str, list[str]]:
+    """Each target id to the hashes NAME.targets.json keeps for it."""
+    return _kept_hashes(out_dir / f"{name}{TARGETS_SUFFIX}", "targets")
+
+
+def _keep(path: Path, key: str, kept: dict[str, list[str]], found: dict[str, str]) -> None:
+    """Add each id's hash in found to kept, written to path under key; no
+    file is written while there is nothing to keep."""
+    if not found:
         return
-    blocks = kept_block_hashes(out_dir, name)
-    for ident, (hash_, _, _) in found.items():
-        hashes = blocks.setdefault(ident, [])
+    for ident, hash_ in found.items():
+        hashes = kept.setdefault(ident, [])
         if hash_ not in hashes:
             hashes.append(hash_)
-    write_atomic(out_dir / f"{name}{BLOCKS_SUFFIX}",
-                 (json.dumps({"blocks": blocks}, indent=2) + "\n").encode("utf-8"))
+    write_atomic(path, (json.dumps({key: kept}, indent=2) + "\n").encode("utf-8"))
+
+
+def keep_hashes(out_dir: Path, name: str, page_html: str) -> None:
+    """Add the hashes of the live blocks and the targets of NAME's
+    page_html, when it is visible, to NAME.blocks.json and
+    NAME.targets.json; a page that never had one keeps no such file."""
+    if not extract_visibility(page_html):
+        return
+    _keep(out_dir / f"{name}{BLOCKS_SUFFIX}", "blocks", kept_block_hashes(out_dir, name),
+          {ident: hash_ for ident, (hash_, _, _) in widgets.PageWidgets(page_html).found.items()})
+    _keep(out_dir / f"{name}{TARGETS_SUFFIX}", "targets", kept_target_hashes(out_dir, name),
+          {ident: target.hash for ident, target in PageTargets(page_html).found.items()})
 
 
 _MAIN_CLASS_RE = re.compile(r'<main class="([^"]*)"')

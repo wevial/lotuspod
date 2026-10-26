@@ -487,10 +487,10 @@ class ImageTests(ImageTestCase):
                                          (fish, "Fish", 320, 240)):
             url = f"/media/{name}"
             self.assertIn(
-                f'<figure class="artifact-figure"><a href="{url}"><img src="{url}" '
+                f'<figure class="artifact-figure"><a href="{url}"><img data-spot='
+                f'"{alt.lower().replace(" ", "-")}" data-spot-hash="{name[:12]}" src="{url}" '
                 f'alt="{alt}" loading="lazy" width="{width}" height="{height}"></a></figure>',
-                page,
-            )
+                page)
         self.assertNotIn("chart.png", page)
         self.assertNotIn("photos/fish.jpg", page)
 
@@ -654,8 +654,8 @@ class BaseTests(ImageTestCase):
             POND_IMAGES.replace("./chart.png", f"/media/{chart}")
             .replace("photos/fish.jpg", f"/media/{fish}"),
         )
-        self.assertIn(f'<img src="/media/{fish}" alt="Fish" loading="lazy" width="320" '
-                      'height="240">', self.page("pond"))
+        self.assertIn(f'<img data-spot="fish" data-spot-hash="{fish[:12]}" src="/media/{fish}"'
+                      ' alt="Fish" loading="lazy" width="320" height="240">', self.page("pond"))
 
     def test_base_names_another_directory_than_the_source_files(self):
         elsewhere = self.tmp / "elsewhere"
