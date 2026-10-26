@@ -10,6 +10,8 @@ import { expect, test, type Frame, type Page } from '@playwright/test';
 // read-only field under the button holds the address, selected.
 const PAGE = '/capture-palette.html';
 const SLUG = 'capture-palette';
+// The decisions page's title bar also holds the review sheet's controls.
+const DECISIONS = '/capture-decisions.html';
 const ENV = process.env;
 const ASSERTION = ENV.LOTUSPOD_TEST_ASSERTION ?? '';
 const SIGNED_IN = { 'Cf-Access-Jwt-Assertion': ASSERTION };
@@ -166,10 +168,12 @@ test('where the clipboard refuses, a selected read-only field holds the address 
   expect(errors).toEqual([]);
 });
 
-test('on a phone the button and every theme button stay in the window', async ({ page }) => {
-  const errors = await watch(page);
+test('on a phone beside the review sheet the button and every theme button stay in the window', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.message));
   await page.setViewportSize({ width: 360, height: 780 });
-  await page.goto(`${PAGE}?standalone`);
+  await page.goto(`${DECISIONS}?standalone`);
+  await expect(page.locator('.artifact-review-bar')).toBeVisible();
   const bar = (await page.locator('.artifact-topbar').boundingBox())!;
   const group = page.getByRole('group', { name: 'Theme' });
   const buttons = [copyLink(page), ...['Night', 'Dawn', 'Auto'].map((name) =>
