@@ -71,8 +71,15 @@ class Target:
 
 
 def _number(value: object) -> int | float:
-    if isinstance(value, bool) or not isinstance(value, (int, float)) or (
-            isinstance(value, float) and not math.isfinite(value)):
+    """value as a finite number; Refusal for anything else, an integer too
+    large to compare with a float among them."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise api._invalid()
+    try:
+        finite = math.isfinite(value)
+    except OverflowError:
+        finite = False
+    if not finite:
         raise api._invalid()
     return value
 

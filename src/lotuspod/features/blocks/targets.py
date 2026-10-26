@@ -22,7 +22,8 @@ text, "" before the first; an image's its alt text.
 
 `mark_targets()` runs on the body once its h2s have ids: it splices
 `data-spot` (when the element has none) and `data-spot-hash` (when it has
-none) into each target's start tag at the parser's offsets, so the rest of
+none, or one other than its hash, which it takes out) into each target's
+start tag at the parser's offsets, so the rest of
 the body stays byte for byte as written. `PageTargets` reads a page's
 targets from its HTML by the same rules, with or without those attributes.
 """
@@ -35,7 +36,7 @@ from dataclasses import dataclass
 from html.parser import HTMLParser
 
 from lotuspod.core import URL_PREFIX, Templates, _unique_id
-from lotuspod.features.blocks.node_tables import _with_attributes
+from lotuspod.features.blocks.node_tables import _ATTRIBUTE, _TAG_NAME, _with_attributes
 
 DIAGRAM = "diagram"
 IMAGE = "image"
@@ -58,7 +59,8 @@ class Target:
     section: str
     # A diagram's text as Mermaid reads it; "" for an image.
     source: str = ""
-    # An image's /media/ URL and natural size; "" and 0 for a diagram.
+    # An image's /media/ URL and the size its tag gives (render writes its
+    # natural size; serve reads that from the media store); "" and 0 for a diagram.
     src: str = ""
     width: int = 0
     height: int = 0
@@ -199,18 +201,36 @@ def _targets(text: str) -> list[tuple[str, Target, dict]]:
     return found
 
 
+def _without_attribute(tag: str, name: str) -> str:
+    """A start tag's source with every attribute called name taken out."""
+    at = _TAG_NAME.match(tag).end()
+    while (match := _ATTRIBUTE.match(tag, at)) is not None and match.end() > at:
+        if match.group(1).lower() == name:
+            tag = tag[:at] + tag[match.end():]
+        else:
+            at = match.end()
+    return tag
+
+
 def mark_targets(body: str) -> str:
     """The body with each target's id and hash on its start tag."""
     pieces: list[str] = []
     cursor = 0
     for ident, target, candidate in _targets(body):
-        added = {name: value for name, value in ((SPOT_ATTRIBUTE, ident),
-                                                 (HASH_ATTRIBUTE, target.hash))
-                 if name not in candidate["attrs"]}
+        start, tag = candidate["start"], candidate["tag"]
+        attrs = candidate["attrs"]
+        # A hash carried over from an earlier render of other source is
+        # replaced, so the page never names a hash its target no longer has.
+        stale = attrs.get(HASH_ATTRIBUTE, target.hash) != target.hash
+        added = {}
+        if SPOT_ATTRIBUTE not in attrs:
+            added[SPOT_ATTRIBUTE] = ident
+        if HASH_ATTRIBUTE not in attrs or stale:
+            added[HASH_ATTRIBUTE] = target.hash
         if not added:
             continue
-        start, tag = candidate["start"], candidate["tag"]
-        pieces += [body[cursor:start], _with_attributes(tag, added)]
+        marked = _without_attribute(tag, HASH_ATTRIBUTE) if stale else tag
+        pieces += [body[cursor:start], _with_attributes(marked, added)]
         cursor = start + len(tag)
     pieces.append(body[cursor:])
     return "".join(pieces)

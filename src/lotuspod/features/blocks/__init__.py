@@ -15,5 +15,6 @@ __getattr__ = public_edge(__name__, {
     "parse_refs": "refs",
     "SPOT_ID": "targets",
     "PageTargets": "targets",
+    "Target": "targets",
     "mark_targets": "targets",
 })

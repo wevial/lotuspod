@@ -135,6 +135,9 @@ class RouteTests(SpotCase):
              400, "invalid_body"),
             ("a boolean coordinate", {**text, "spot": self.spot(shape=box(x=True))},
              400, "invalid_body"),
+            ("a coordinate too large for a float",
+             {**text, "spot": self.spot("flow-diagram-2", shape=box(x=10 ** 400, w=0.1))},
+             400, "invalid_body"),
             ("a hash not of 12 hex digits", {**text, "spot": self.spot(hash="F" * 12)},
              400, "invalid_body"),
             ("on a reply", {"parent": root["id"], "text": "Off.", "spot": self.spot()},
@@ -193,6 +196,21 @@ class RouteTests(SpotCase):
                           "pond-at-dawn": ("image", "Pond at dawn", "flow"),
                           "later-diagram-1": ("diagram", "Later", "later")})
         self.assertEqual(serve_pages.api_page(self.out_dir, "plan").targets, {})
+
+    def test_an_image_shown_at_another_size_is_checked_against_its_natural_size(self):
+        source = self.work / "pics.html"
+        source.write_text('<h1>Pics</h1>\n<figure class="artifact-figure"><img src="pond.png" '
+                          'alt="Shown small" width="40" height="30"></figure>\n', encoding="utf-8")
+        rc, _out, err = run_cli("publish", str(source), "--out-dir", str(self.out_dir),
+                                "--local", "--comments")
+        self.assertEqual(rc, 0, err)
+        image = serve_pages.api_page(self.out_dir, "pics").targets["shown-small"]
+        self.assertEqual((image.width, image.height), (WIDTH, HEIGHT))
+        spot = {"id": "shown-small", "hash": self.image_hash(), "nodes": [],
+                "shape": box(x=100, y=10, w=20, h=20)}
+        status, row = self.reader("POST", "/api/comments", {
+            "page": "pics", "section": "page", "text": "Here.", "spot": spot})
+        self.assertEqual((status, row.get("spot")), (201, spot), row)
 
 
 class SchemaTests(unittest.TestCase):

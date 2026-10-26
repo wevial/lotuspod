@@ -167,6 +167,14 @@ class IdTests(unittest.TestCase):
         self.assertIn('data-spot="a-figure-1"', marked)
         self.assertEqual(targets.mark_targets(marked), marked)
 
+    def test_a_hash_the_source_no_longer_has_is_replaced(self):
+        body = '<pre data-spot-hash="000000000000" class="mermaid" data-spot="flow">graph TD\n  A-->C</pre>'
+        marked = targets.mark_targets(body)
+        found = targets.PageTargets(marked).found["flow"]
+        self.assertEqual(found.hash, digest("graph TD\n  A-->C"))
+        self.assertEqual(marked, body.replace("000000000000", found.hash))
+        self.assertEqual(targets.mark_targets(marked), marked)
+
     def test_what_is_no_target(self):
         body = ('<pre class="mermaid" data-spot="bad.id">graph TD</pre>'
                 '<template><pre class="mermaid">graph TD</pre></template>'
