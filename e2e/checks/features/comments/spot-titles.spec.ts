@@ -31,10 +31,11 @@ const CHANGED_GROUP = 'Sections that have changed';
 
 test.use({ viewport: VIEWPORT, extraHTTPHeaders: SIGNED_IN });
 
-// The page: a section Notes, and Pictures holding the fish, or not.
-function doc(fish = true) {
+// The page: a section Notes, and Pictures holding the fish as alt, none
+// without it.
+function doc(alt: string | null = ALT) {
   return ['# Spot titles', '', 'Where a comment on a picture lands.', '',
-    '## Notes', '', 'What the pond holds.', '', '## Pictures', '', 'The pond as it is.', '', ...(fish ? [`![${ALT}](fish.jpg)`, ''] : [])].join('\n');
+    '## Notes', '', 'What the pond holds.', '', '## Pictures', '', 'The pond as it is.', '', ...(alt === null ? [] : [`![${alt}](fish.jpg)`, ''])].join('\n');
 }
 
 function run(args: string[], input?: string) {
@@ -129,26 +130,32 @@ async function fresh(browser: Browser): Promise<BrowserContext> {
   return browser.newContext({ viewport: VIEWPORT, extraHTTPHeaders: SIGNED_IN });
 }
 
-test('a removed image\'s thread is headed with its alt text in a new browser', async ({ page, browser }) => {
+test('a removed or renamed image\'s thread is headed with its alt text in a new browser', async ({ page, browser }) => {
   test.setTimeout(120_000);
   const errors = errorsOf(page);
-  const name = `spot-titles-removed-${test.info().repeatEachIndex}`;
-  await boxOnFish(page, name);
-  publish(name, doc(false));
+  const repeat = test.info().repeatEachIndex;
+  const removed = `spot-titles-removed-${repeat}`;
+  const renamed = `spot-titles-renamed-${repeat}`;
+  await boxOnFish(page, removed);
+  publish(removed, doc(null));
+  await boxOnFish(page, renamed);
+  publish(renamed, doc('Koi at dusk'));
   expect(errors).toEqual([]);
 
-  const context = await fresh(browser);
-  try {
-    const other = await context.newPage();
-    const otherErrors = errorsOf(other);
-    await load(other, name);
-    await expect(image(other)).toHaveCount(0);
-    const listed = strays(other);
-    await expect(listed.entries).toHaveCount(1);
-    await expect.poll(listed.headings).toEqual([`On ${ALT}`]);
-    expect(otherErrors).toEqual([]);
-  } finally {
-    await context.close();
+  for (const name of [removed, renamed]) {
+    const context = await fresh(browser);
+    try {
+      const other = await context.newPage();
+      const otherErrors = errorsOf(other);
+      await load(other, name);
+      await expect(image(other)).toHaveCount(0);
+      const listed = strays(other);
+      await expect(listed.entries).toHaveCount(1);
+      await expect.poll(listed.headings).toEqual([`On ${ALT}`]);
+      expect(otherErrors).toEqual([]);
+    } finally {
+      await context.close();
+    }
   }
 });
 
@@ -167,7 +174,7 @@ test('a thread stored before titles were kept is headed as before', async ({ pag
   await page.reload();
   await expect(page.locator('html')).toHaveAttribute('data-lotuspod-comments-read', '');
   await expect(image(page)).toHaveCount(1);
-  publish(name, doc(false));
+  publish(name, doc(null));
   await page.reload();
   await expect(page.locator('html')).toHaveAttribute('data-lotuspod-comments-read', '');
   const here = strays(page);
