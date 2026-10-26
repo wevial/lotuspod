@@ -78,12 +78,12 @@ class CheckRetriesTests(unittest.TestCase):
         first attempt; returns the exit code, the report and its specs."""
         with tempfile.TemporaryDirectory() as tmp:
             report = Path(tmp) / "report.json"
-            env = dict(os.environ)
-            env.update({
+            env = {
+                **os.environ,
                 "CI": "1",
                 "LOTUSPOD_TEST_FAIL_FIRST": fail_first,
                 "PLAYWRIGHT_JSON_OUTPUT_NAME": str(report),
-            })
+            }
             command = [*COMMAND, "--reporter=json", spec]
             if grep is not None:
                 command += ["--grep", re.escape(grep)]
