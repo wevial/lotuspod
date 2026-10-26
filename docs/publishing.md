@@ -351,7 +351,8 @@ publish: NAME: QUESTION was answered "ASKED TEXT" (LABEL); this publish asks "NE
 so the agent can keep the question's words, or give a new question its own
 number. A question the republish takes off the page prints nothing (the
 Answered table keeps it). The line changes nothing: publish writes, commits
-and exits 0 as ever.
+and exits 0 as ever. Publish only reads the database for it, and prints
+nothing when the database's schema is not this lotuspod's.
 
 A published page takes comments on every section (see [Comments](comments.md#comments));
 `--no-comments` leaves the boxes out. `--owner HANDLE --credential FILE`

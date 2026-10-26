@@ -3,8 +3,9 @@ decision. With serve's database beside the output directory, a republish
 prints one line to standard error for each question whose stored answer
 showed as its answer before (decisions.holds) and no longer does on the page
 as published, which still asks it; a question taken off, an option added, an
-unchanged republish and a site with no database print none. Publish still
-writes, commits and exits 0.
+unchanged republish and a site with no database, or one of another schema,
+print none. The database is only read. Publish still writes, commits and
+exits 0.
 
 Real publishes with `--local`, real git with a local bare repository as the
 artifacts remote, and the real database. The CLI runs as a subprocess of
@@ -14,6 +15,7 @@ this checkout's src/.
 from __future__ import annotations
 
 import os
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -154,6 +156,36 @@ class RepublishWarning(unittest.TestCase):
             f'publish: {NAME}: checklist-1 was answered "{form.text}" '
             f'(Vent the roof, Seal the door); this publish asks "{form.text}" there, '
             'so its card opens again'])
+
+    def test_the_database_is_only_read(self):
+        self.answered()
+        conn = sqlite3.connect(self.db)
+        conn.execute("PRAGMA journal_mode = DELETE")
+        conn.close()
+        self.publish(WIDENED)
+        conn = sqlite3.connect(self.db)
+        mode = conn.execute("PRAGMA journal_mode").fetchone()[0]
+        conn.close()
+        self.assertEqual(mode, "delete")
+
+    def test_a_database_of_another_schema_is_left_as_it_is_and_prints_nothing(self):
+        self.answered()
+        conn = sqlite3.connect(self.db)
+        conn.execute(f"PRAGMA user_version = {db.SCHEMA_VERSION - 1}")
+        conn.close()
+        done = self.publish(REWORDED)
+        self.assertEqual(self.warnings(done), [])
+        conn = sqlite3.connect(self.db)
+        version = conn.execute("PRAGMA user_version").fetchone()[0]
+        conn.close()
+        self.assertEqual(version, db.SCHEMA_VERSION - 1)
+
+    def test_an_empty_database_file_stays_empty(self):
+        self.publish(FIRST)
+        self.db.write_bytes(b"")
+        done = self.publish(REWORDED)
+        self.assertEqual(self.warnings(done), [])
+        self.assertEqual(self.db.read_bytes(), b"")
 
     def test_no_database_prints_nothing(self):
         self.publish(FIRST)

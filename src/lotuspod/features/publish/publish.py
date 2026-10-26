@@ -11,6 +11,8 @@ import shlex
 import sqlite3
 import subprocess
 import sys
+from collections.abc import Iterator
+from contextlib import contextmanager
 from functools import partial
 from pathlib import Path
 
@@ -235,6 +237,26 @@ def publish_over_ssh(args: argparse.Namespace, config: dict[str, str]) -> int:
     return done.returncode
 
 
+class _ReadOnly(db.Database):
+    """serve's database, only read: opened read-only, so never migrated nor
+    moved to WAL; sqlite3.DatabaseError when its schema is not this
+    lotuspod's."""
+
+    @contextmanager
+    def _connect(self) -> Iterator[sqlite3.Connection]:
+        conn = sqlite3.connect(f"{self.path.resolve().as_uri()}?mode=ro", uri=True,
+                               timeout=db.BUSY_TIMEOUT)
+        try:
+            conn.row_factory = sqlite3.Row
+            version = conn.execute("PRAGMA user_version").fetchone()[0]
+            if version != db.SCHEMA_VERSION:
+                raise sqlite3.DatabaseError(
+                    f"database schema {version} is not this lotuspod's {db.SCHEMA_VERSION}")
+            yield conn
+        finally:
+            conn.close()
+
+
 def _answered(form: decisions.Form, answer: dict) -> str:
     """An answer stored without its words, in form's labels: a checklist's
     items checked, a decision's option."""
@@ -247,15 +269,16 @@ def reopened(out_dir: Path, args: argparse.Namespace, name: str, previous: str,
              published: str) -> list[str]:
     """A line for each question whose stored answer showed as its answer on
     the page before (decisions.holds) and no longer does on the page as
-    published, which still asks it; none without serve's database or a page
-    before."""
+    published, which still asks it; none without serve's database, with one
+    of another schema, or without a page before. The database is only read:
+    never migrated, its journal mode never changed."""
     if not previous:
         return []
     try:
         path = serve.serve_db_path(out_dir, args.db)
         if not path.is_file():
             return []
-        questions = db.Database(path).answers(name, asked=True)
+        questions = _ReadOnly(path).answers(name, asked=True)
     except (ValueError, sqlite3.Error, OSError):
         return []
     before, after = decisions.read_forms(previous), decisions.read_forms(published)
