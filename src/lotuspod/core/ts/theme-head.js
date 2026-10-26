@@ -95,10 +95,10 @@
     function copied() {
       clearTimeout(timer);
       button.setAttribute("data-copied", "");
-      if (status) status.textContent = "Link copied";
+      status.textContent = "Link copied";
       timer = setTimeout(function () {
         button.removeAttribute("data-copied");
-        if (status) status.textContent = "";
+        status.textContent = "";
       }, 1500);
     }
 
@@ -111,7 +111,6 @@
     function open(text) {
       if (!field) {
         field = document.createElement("input");
-        field.type = "text";
         field.readOnly = true;
         field.className = "artifact-copy-link-field";
         field.setAttribute("aria-label", "Page link");
@@ -127,7 +126,7 @@
       field.hidden = false;
       // Under the button, its right edge on the button's, and inside the
       // bar's gutters.
-      var gutter = parseFloat(getComputedStyle(bar).paddingLeft) || 0;
+      var gutter = parseFloat(getComputedStyle(bar).paddingLeft);
       var right = bar.getBoundingClientRect().right - button.getBoundingClientRect().right;
       field.style.right = Math.max(0, Math.min(right, bar.clientWidth - gutter - field.offsetWidth)) + "px";
       field.focus();
@@ -157,7 +156,7 @@
       });
     });
     document.addEventListener("click", function (event) {
-      if (field && !field.hidden && event.target !== field && !button.contains(event.target)) close();
+      if (event.target !== field && !button.contains(event.target)) close();
     });
     button.hidden = false;
   }

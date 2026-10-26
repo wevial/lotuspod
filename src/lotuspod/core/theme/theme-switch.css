@@ -111,10 +111,6 @@
   width: 24rem;
 }
 
-.artifact-copy-link-field[hidden] {
-  display: none;
-}
-
 .artifact-copy-link-field:focus-visible {
   outline: 2px solid var(--color-lavender);
   outline-offset: 2px;
