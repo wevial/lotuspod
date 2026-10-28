@@ -435,6 +435,7 @@ test.describe('signed in', () => {
     const link = page.locator('.artifact-header .artifact-meta a.artifact-versions-link');
     await expect(link).toHaveText('Versions · 2');
     await expect(page.locator('button.artifact-versions-menu-button')).toHaveCount(0);
+    await expect(page.locator('.artifact-versions-menu')).toHaveCount(0);
     // The link is the slot's last element, before any unread badge.
     expect(await link.evaluate((node) => {
       const line = node.closest('.artifact-header .artifact-meta');
