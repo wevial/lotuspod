@@ -353,9 +353,8 @@ def compare(old_html: str, new_html: str, old_source: str | None = None,
         new_parts = section_sources(new_html, new_source)
         if old_parts is not None and new_parts is not None:
             for section, entry in zip(changed, found["sections"]["changed"]):
-                if section.key in old_parts and section.key in new_parts:
-                    entry["lines"], entry["truncated"] = source_diff(
-                        old_parts[section.key], new_parts[section.key])
+                entry["lines"], entry["truncated"] = source_diff(
+                    old_parts[section.key], new_parts[section.key])
     return found
 
 
