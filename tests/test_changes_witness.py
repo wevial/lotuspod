@@ -102,8 +102,10 @@ class SourceTests(ChangesWitness):
         self.assertEqual(answer["since"]["revision"], first)
         self.assertEqual(answer["since"]["commit"], commits[1])
         self.assertRegex(answer["since"]["date"], r"^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$")
-        self.assertEqual(answer["sections"], {"changed": [{"id": "beta", "title": "Beta"}],
-                                              "added": [], "removed": []})
+        self.assertEqual([{"id": entry["id"], "title": entry["title"]}
+                          for entry in answer["sections"]["changed"]],
+                         [{"id": "beta", "title": "Beta"}])
+        self.assertEqual((answer["sections"]["added"], answer["sections"]["removed"]), ([], []))
         self.assertIn({"op": "-", "text": "old line"}, answer["lines"])
         self.assertIn({"op": "+", "text": "new line"}, answer["lines"])
         self.assertEqual(answer["lines"][0]["op"], "@")
@@ -123,7 +125,9 @@ class SourceTests(ChangesWitness):
         self.assertEqual(status, 200, answer)
         self.assertEqual(len(answer["lines"]), 400)
         self.assertIs(answer["truncated"], True)
-        self.assertEqual(answer["sections"]["changed"], [{"id": "", "title": "The page text"}])
+        self.assertEqual([(entry["id"], entry["title"], entry["truncated"])
+                          for entry in answer["sections"]["changed"]],
+                         [("", "The page text", True)])
 
 
 class SectionTests(ChangesWitness):

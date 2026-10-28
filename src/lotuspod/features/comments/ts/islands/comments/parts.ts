@@ -23,6 +23,8 @@ export interface ShellHooks {
 }
 export interface Shell {
   readonly list: HTMLDivElement;
+  // What scrolls the start controls and the threads in the panel.
+  readonly scroller: HTMLDivElement;
   // Whether the threads are in view: the panel open on its Comments tab.
   isOpen(): boolean;
   // Whether the panel is open on its Decisions tab.

@@ -5,6 +5,7 @@
   {"file": "lotuspod.css", "part": "theme/spots.css", "slot": 62},
   {"file": "lotuspod.css", "part": "theme/shortcodes.css", "slot": 65},
   {"file": "lotuspod.css", "part": "theme/panel-tabs.css", "slot": 67},
+  {"file": "lotuspod.css", "part": "theme/panel-scroll.css", "slot": 68},
   {"file": "lotuspod.css", "part": "theme/panel-resize.css", "slot": 70},
   {"file": "lotuspod.css", "part": "theme/narrow.css", "slot": 80},
   {"file": "lotuspod.css", "part": "theme/sheet-tabs.css", "slot": 85},

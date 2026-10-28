@@ -43,7 +43,7 @@ PINNED = {
     "e2e/checks/live-page.spec.ts": 2359,
     "src/lotuspod/features/agents/machine.py": 1146,
     "src/lotuspod/features/agents/responder.py": 1033,
-    "src/lotuspod/features/comments/theme/comments.css": 1773,
+    "src/lotuspod/features/comments/theme/comments.css": 1766,
     "src/lotuspod/features/serve/api.py": 1170,
     "src/lotuspod/store/db.py": 1562,
     "tests/features/agents/test_agent_pull.py": 1692,

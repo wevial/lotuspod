@@ -39,7 +39,8 @@ the one script that runs on it, which draws the banner's version menu.
 
 compare() is what changed between two versions: the sections of each body,
 split at its h2 elements by id and compared by their text with whitespace
-collapsed, and a line diff of their markdown sources when both have one.
+collapsed, and a line diff of their markdown sources when both have one,
+with each changed section's own part of that diff (section_sources.py).
 History.changes() reads both versions and their sources for it, in at most
 three git processes.
 """
@@ -329,13 +330,18 @@ def compare(old_html: str, new_html: str, old_source: str | None = None,
     {changed, added, removed}}, the first two as {id, title} in the new
     page's order and removed ones as {title} in the old page's (id "" for
     a heading the page gives none, and for the text before the first), and, when
-    both sources are given, {lines, truncated} from source_diff()."""
+    both sources are given, {lines, truncated} from source_diff(). Then a
+    changed entry also carries its own {lines, truncated}, over its section's
+    part of each source, when both versions split (section_sources())."""
+    from lotuspod.features.history.section_sources import section_sources
+
     before = {section.key: section for section in sections(old_html)}
     after = sections(new_html)
     keys = {section.key for section in after}
+    changed = [section for section in after
+               if section.key in before and before[section.key].text != section.text]
     found: dict = {"sections": {
-        "changed": [{"id": section.id, "title": section.title} for section in after
-                    if section.key in before and before[section.key].text != section.text],
+        "changed": [{"id": section.id, "title": section.title} for section in changed],
         "added": [{"id": section.id, "title": section.title} for section in after
                   if section.key not in before],
         "removed": [{"title": section.title} for key, section in before.items()
@@ -343,6 +349,12 @@ def compare(old_html: str, new_html: str, old_source: str | None = None,
     }}
     if old_source is not None and new_source is not None:
         found["lines"], found["truncated"] = source_diff(old_source, new_source)
+        old_parts = section_sources(old_html, old_source)
+        new_parts = section_sources(new_html, new_source)
+        if old_parts is not None and new_parts is not None:
+            for section, entry in zip(changed, found["sections"]["changed"]):
+                entry["lines"], entry["truncated"] = source_diff(
+                    old_parts[section.key], new_parts[section.key])
     return found
 
 
