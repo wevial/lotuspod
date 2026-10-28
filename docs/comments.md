@@ -802,10 +802,28 @@ and every other way to a thread open it on Comments; the panel opens on
 Decisions when nothing chose a tab. Only the Comments tab shows the threads,
 so a thread counts as seen only while it does.
 
+A page that lists its versions (one with a revision, the reader signed in,
+see [Versions](publishing.md#versions)) gains a History tab once the
+versions route answers: the head is tabs whenever the page asks questions
+or lists versions, Decisions (when it asks), Comments (when it takes
+comments) and History, in that order, and a page with no questions moves
+"N open · M resolved" into its Comments tab as a page that asks does. Left
+and Right Arrow cycle through the tabs present, and Home and End go to the
+first and the last. The History tab's panel (`#artifact-comments-history`)
+scrolls on its own, beside the threads; the history island draws what it
+holds. While sections changed since the reader last looked and are not
+marked seen, the History tab carries a sky dot (named ", N sections
+changed" for screen readers), and the folded rail holds a sky dot over the
+sideways word "changed" after "N to answer", named "Changed since you last
+looked: open History", which opens the panel on History with the focus on
+its tab. Nothing else opens History: a load keeps the panel open or folded
+as remembered, on the tab it would show without it.
+
 A page with decision or checklist forms and no comment boxes (published
 without comments) still gets the panel, for its questions: its head is the
-Decisions tab alone, with no Comments tab, no way to start a thread, and a
-rail with only the orchid "N to answer". It shows once the page's answers
+Decisions tab alone (and History, when it lists versions), with no Comments
+tab, no way to start a thread, and a rail with only the orchid "N to answer"
+(and the History mark). It shows once the page's answers
 are read; an archived page, or one whose answers could not be read, gets
 none, and nor does a page with neither forms nor comment boxes.
 

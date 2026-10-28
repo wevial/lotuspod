@@ -27,6 +27,17 @@ export const decisionsTab = {
   opens: signal<Opens | null>(null),
 };
 
+// Where the comments panel's History tab meets the history island. The
+// island says whether the page lists its versions (shown, once the versions
+// route answers with a list), and how many sections "Since you last looked"
+// lists while they are not marked seen (unseen, 0 otherwise); the shell gives
+// it the tab's panel to draw into (node), once the shell is drawn.
+export const historyTab = {
+  shown: signal(false),
+  unseen: signal(0),
+  node: signal<HTMLElement | null>(null),
+};
+
 // What the bottom sheet's tabs read: whether it has a Decisions tab, once
 // the answers are read on a page that asks questions; how many are to
 // answer; and the node whose children it moves in to show them.
