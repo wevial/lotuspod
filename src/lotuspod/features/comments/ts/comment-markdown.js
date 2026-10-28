@@ -16,6 +16,12 @@
   // A pipe table's separator cell, as lotuspod.features.publish.markdown's
   // _SEPARATOR_CELL, with an alignment `:` allowed (and ignored) at either end.
   var MD_SEPARATOR_CELL = /^:?-+:?$/;
+  // The most cells a table may draw, short rows padded: a comment's 4000
+  // characters type at most about this many, so only a table whose padding
+  // would multiply its cells (a wide header over many one-cell rows) is
+  // refused, and its lines stay text.
+  var MD_TABLE_CELLS = 2000;
+  var MD_PIPE = /^\|/;
   // A link's target: no space, and any parentheses in pairs, so that
   // `javascript:alert(1)` is read whole and refused whole.
   var MD_TARGET = "([^\\s()]*(?:\\([^\\s()]*\\)[^\\s()]*)*)";
@@ -203,20 +209,24 @@
         continue;
       }
       // A run of lines starting `|` is a table when its second line is a
-      // separator row; any later separator row is skipped.
-      if (/^\|/.test(line) && at + 1 < lines.length && /^\|/.test(lines[at + 1]) &&
-          mdSeparator(lines[at + 1])) {
-        closeParagraph();
-        closeList();
+      // separator row; any later separator row is skipped. A run is judged
+      // once, from its first line: one that is not a table stays text whole.
+      if (MD_PIPE.test(line) && !(at && MD_PIPE.test(lines[at - 1])) &&
+          at + 1 < lines.length && MD_PIPE.test(lines[at + 1]) && mdSeparator(lines[at + 1])) {
         var rows = [mdCells(line)];
-        for (at += 2; at < lines.length && /^\|/.test(lines[at]); at++) {
-          if (!mdSeparator(lines[at])) {
-            rows.push(mdCells(lines[at]));
+        var end = at + 2;
+        for (; end < lines.length && MD_PIPE.test(lines[end]); end++) {
+          if (!mdSeparator(lines[end])) {
+            rows.push(mdCells(lines[end]));
           }
         }
-        at -= 1;
-        parent.appendChild(mdTable(rows));
-        continue;
+        if (rows.length * rows[0].length <= MD_TABLE_CELLS) {
+          closeParagraph();
+          closeList();
+          parent.appendChild(mdTable(rows));
+          at = end - 1;
+          continue;
+        }
       }
       if (MD_BLANK.test(line)) {
         closeParagraph();

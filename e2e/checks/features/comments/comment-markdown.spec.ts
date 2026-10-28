@@ -524,12 +524,20 @@ test.describe('signed in', () => {
     const seen = await watch(page);
     const unseparated = '| a | b |\n| c | d |';
     const single = '| just one pipe line |';
+    // A run judged not a table stays text whole, a separator row further down included.
+    const later = '| first | row |\n| second | row |\n| --- | --- |\n| body | row |';
+    const prose = '| prose\n| Header |\n|---|\n| value |';
+    // A wide header over many one-cell rows would pad out to over a million cells.
+    const padded = `|a${'|'.repeat(1990)}a|\n|-\n${Array(665).fill('|x').join('\n')}`;
     const typed = await post(request, 'pond', unseparated);
     const lone = await post(request, 'pond', single);
+    const run = await post(request, 'pond', later);
+    const lead = await post(request, 'pond', prose);
+    const wide = await post(request, 'pond', padded);
     const raw = await post(request, 'pond', '| html | entity |\n| --- | :---: |\n| <b>x</b> | &amp; |\n| short |');
     await page.goto(`${PAGE}?standalone`);
     await open(page, 'pond');
-    for (const [root, text] of [[typed, unseparated], [lone, single]] as const) {
+    for (const [root, text] of [[typed, unseparated], [lone, single], [run, later], [lead, prose], [wide, padded]] as const) {
       await expect(bubble(page, root)).toBeVisible();
       await expect(bubble(page, root).locator('table')).toHaveCount(0);
       expect(await exact(bubble(page, root))).toBe(text);

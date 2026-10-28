@@ -565,7 +565,8 @@ sets every text as text, so raw HTML and entities show as typed):
   a page: the first row is its header, every other separator row is skipped,
   and each cell is drawn as inline markup. A row short of the header's cells
   gets empty ones; extra cells are dropped. A wide table scrolls inside its
-  bubble. Without the separator row the lines are paragraph text.
+  bubble. Without the separator row the whole run of `|` lines is paragraph
+  text, as is a table whose short rows would pad out past 2000 cells.
 - Anything else (headings, quotes, images, HTML) is literal text.
 
 A passage's opening words in a list stay plain text.
