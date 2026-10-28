@@ -110,8 +110,8 @@ after the comments island): on a page with a revision it asks the versions
 route and, when the reader last opened the page at another revision, the
 changes route, and holds both answers, how many versions the list shows and
 whether `#versions` is open in signals (`islands/state.ts`). From them it
-draws the header's "Versions · N" link into the slot it shares with the
-version menu, before the badge of replies to the reader; the `#versions` view
+draws the header's "Versions · N" link into the slot kept for it, before
+the badge of replies to the reader; the `#versions` view
 with its list and "Show older versions"; and the diff pane in the view.
 It also draws the comments panel's History tab
 (`islands/history-tab.tsx`), through the comments slice's `historyTab`
@@ -127,9 +127,10 @@ each changed or new section's `h2` `artifact-history-changed`
 on `main.artifact` while `selected` is true, so `history-tab.css` draws the
 headings' rules only then. Mark as seen sets the island's `marked` signal,
 for the load only, and takes the headings' class away.
-The version menu stays the classic `features/history/ts/version-menu.js`,
-which the old-version script draws too; the bridge supplies it as
-`versionMenu()`, with `pageName()` (`core/ts/shared.js`).
+The version menu is the classic `features/history/ts/version-menu.js`, which
+only the old-version script joins and draws, in an old version's banner; the
+current page's header has no menu, and the bridge supplies `pageName()`
+(`core/ts/shared.js`).
 
 The first island is the review sheet (`features/comments/ts/islands/review-sheet.tsx`):
 the title bar's open-question count and Next open, and the "N open" marks on

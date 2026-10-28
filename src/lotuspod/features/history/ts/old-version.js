@@ -21,7 +21,7 @@
       if (!payload || !Array.isArray(payload.versions)) {
         return;
       }
-      var menu = versionMenu(payload.versions, page, shown, null, true);
+      var menu = versionMenu(payload.versions, page, shown, true);
       // The words name the button; the arrow only shows it opens a menu.
       var arrow = element("span", "artifact-version-banner-arrow", "▾");
       arrow.setAttribute("aria-hidden", "true");
