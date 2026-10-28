@@ -106,7 +106,8 @@ export function threadList(page: Page, shell: Shell, bridge: ThreadListBridge) {
     if (!changes.length) {
       return;
     }
-    var top = list.getBoundingClientRect().top;
+    var scroller = shell.scroller;
+    var top = scroller.getBoundingClientRect().top;
     var anchor = bridge.all(":scope > .artifact-comments-group:not([hidden])", list).filter(function (node) {
       return node.getBoundingClientRect().bottom > top;
     })[0];
@@ -115,7 +116,7 @@ export function threadList(page: Page, shell: Shell, bridge: ThreadListBridge) {
       made.node.hidden = !made.node.hidden;
     });
     if (anchor) {
-      list.scrollTop += anchor.getBoundingClientRect().top - before;
+      scroller.scrollTop += anchor.getBoundingClientRect().top - before;
     }
   }
 
@@ -163,12 +164,13 @@ export function threadList(page: Page, shell: Shell, bridge: ThreadListBridge) {
     shell.focus(made.box!);
   }
 
-  // Scroll the panel's list, never the page, until node is in view.
+  // Scroll the panel, never the page, until node is in view.
   function reveal(node: HTMLElement) {
-    var outer = list.getBoundingClientRect();
+    var scroller = shell.scroller;
+    var outer = scroller.getBoundingClientRect();
     var inner = node.getBoundingClientRect();
     if (inner.top < outer.top || inner.bottom > outer.bottom) {
-      list.scrollTop += inner.top - outer.top - 8;
+      scroller.scrollTop += inner.top - outer.top - 8;
     }
   }
 
@@ -332,24 +334,25 @@ export function threadList(page: Page, shell: Shell, bridge: ThreadListBridge) {
     const resolve = createRef<HTMLButtonElement>(), reopen = createRef<HTMLButtonElement>(), status = createRef<HTMLParagraphElement>();
     const id = "artifact-comments-entry-" + thread.root.id;
     render(<>
-      <button ref={head} type="button" class="artifact-comments-entry-head" hidden={done} aria-controls={id} aria-expanded={opened}
-        onClick={() => { if (current === thread) expand(null); else { expand(thread); bridge.bring(thread); } }}>
-        <Lead key={leadKey} thread={thread} /><span class="artifact-comments-entry-state"><SaidCount key={key} thread={thread} /></span>
-      </button>
-      <div class="artifact-comments-entry-resolved" hidden={!done}>
-        <button type="button" class="artifact-comments-entry-read" aria-controls={id} aria-expanded={opened} onClick={() => {
-          const was = current === thread && toRead === thread;
-          toRead = was ? null : thread;
-          expand(was ? null : thread);
-          if (!was) bridge.bring(thread);
-        }}><Lead key={leadKey} thread={thread} /></button>
-        <span class="artifact-comments-entry-done"><Tick />{" resolved · "}
-          <button ref={reopen} type="button" class="artifact-comments-reopen" onClick={() => settle(thread, false)}>Reopen</button></span>
-      </div>
-      <div ref={body} class="artifact-comments-entry-body" id={id} hidden={!opened}>
-        <div class="artifact-comments-entry-tools"><span class="artifact-comments-entry-note"><SaidCount key={key} thread={thread} /></span>
+      <div class="artifact-comments-entry-top">
+        <button ref={head} type="button" class="artifact-comments-entry-head" hidden={done} aria-controls={id} aria-expanded={opened}
+          onClick={() => { if (current === thread) expand(null); else { expand(thread); bridge.bring(thread); } }}>
+          <Lead key={leadKey} thread={thread} /><span class="artifact-comments-entry-state"><SaidCount key={key} thread={thread} /></span>
+        </button>
+        <div class="artifact-comments-entry-resolved" hidden={!done}>
+          <button type="button" class="artifact-comments-entry-read" aria-controls={id} aria-expanded={opened} onClick={() => {
+            const was = current === thread && toRead === thread;
+            toRead = was ? null : thread;
+            expand(was ? null : thread);
+            if (!was) bridge.bring(thread);
+          }}><Lead key={leadKey} thread={thread} /></button>
+          <span class="artifact-comments-entry-done"><Tick />{" resolved · "}
+            <button ref={reopen} type="button" class="artifact-comments-reopen" onClick={() => settle(thread, false)}>Reopen</button></span>
+        </div>
+        <div class="artifact-comments-entry-tools" hidden={!opened}><span class="artifact-comments-entry-note"><SaidCount key={key} thread={thread} /></span>
           <button ref={resolve} type="button" class="artifact-comments-resolve" hidden={done} onClick={() => settle(thread, true)}>Resolve</button></div>
       </div>
+      <div ref={body} class="artifact-comments-entry-body" id={id} hidden={!opened} />
       <p ref={status} class="artifact-comments-entry-status" role="status" />
     </>, item);
     thread.entry = { item, head: head.current!, body: body.current!, resolve: resolve.current!, reopen: reopen.current!, status: status.current! };

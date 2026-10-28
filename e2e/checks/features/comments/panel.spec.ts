@@ -348,6 +348,48 @@ async function outlined(target: Locator) {
   expect(style.width).toBeGreaterThanOrEqual(2);
 }
 
+// A long thread in Findings, fourteen replies of about three lines each,
+// then a short one there and one in Risks.
+function longReview(resolution = OPEN) {
+  const [long] = onFive({ findings: 'Findings' }, resolution);
+  long.root.text = 'Does the pump keep the pond clear through the winter?';
+  long.replies = Array.from({ length: 14 }, (_, index) => ({
+    ...reply(long.root, `Reply ${index + 1}: the pump keeps the water moving under the ice, so the ` +
+      'fish get air and the filter does not clog, as long as the heater keeps a hole open beside it.'),
+    id: 900_000 + next++,
+  }));
+  const threads = [long, ...onFive({ findings: 'Findings' }), ...onFive({ risks: 'Risks' })];
+  return { long: long.root, threads };
+}
+
+// The panel's one scroll area, and a scroll by what it takes to bring a
+// node's top to the area's top.
+function scrolling(page: Page) {
+  const scroller = page.locator('aside.artifact-comments-panel div.artifact-comments-threads');
+  return {
+    scroller,
+    async by(pixels: number) {
+      await scroller.evaluate((node, by) => { node.scrollTop += by; }, pixels);
+    },
+    async bringToTop(target: Locator) {
+      const area = (await scroller.boundingBox())!;
+      const at = (await target.boundingBox())!;
+      await scroller.evaluate((node, by) => { node.scrollTop += by; }, at.y - area.y);
+    },
+  };
+}
+
+// Resolve sits on the words' line, right of them.
+async function besideWords(control: Locator, words: Locator) {
+  await expect(control).toBeVisible();
+  const at = (await control.boundingBox())!;
+  const said = (await words.boundingBox())!;
+  const middle = at.y + at.height / 2;
+  expect(middle).toBeGreaterThanOrEqual(said.y);
+  expect(middle).toBeLessThanOrEqual(said.y + said.height);
+  expect(at.x).toBeGreaterThanOrEqual(said.x + said.width);
+}
+
 test.describe('signed in', () => {
   test.use({ extraHTTPHeaders: SIGNED_IN });
 
@@ -1047,6 +1089,92 @@ test.describe('signed in', () => {
     await expect(mine.readers.last().locator('.artifact-comment-text')).toHaveText('The one by the outlet.');
     await expect(answer).toBeHidden();
     await expect(toggle).toBeFocused();
+    await seen.clean();
+  });
+
+  test("an open thread's head stays at the top of the scrolled panel with Resolve on its first line, and the start controls scroll away", async ({ page }) => {
+    const seen = await watch(page);
+    const { long, threads } = longReview();
+    await serveReview(page, threads);
+    const side = await loadFive(page);
+    const area = scrolling(page);
+    const header = side.aside.locator('header.artifact-comments-head');
+    await expect.poll(() => running(side.aside)).toBe(0);
+    const placed = (await header.boundingBox())!;
+    const thread = entry(page, long);
+    const top = thread.item.locator('.artifact-comments-entry-top');
+    const words = thread.head.locator('.artifact-comments-entry-words');
+    await thread.head.click();
+    await expect(thread.head).toHaveAttribute('aria-expanded', 'true');
+    await expect(thread.agents).toHaveCount(14);
+    await expect(thread.head).toBeFocused();
+    await page.keyboard.press('Tab');
+    await expect(thread.resolve).toBeFocused();
+    await outlined(thread.resolve);
+    await page.keyboard.press('Shift+Tab');
+    await expect(thread.head).toBeFocused();
+
+    await area.bringToTop(thread.agents.nth(6));
+    const scroller = (await area.scroller.boundingBox())!;
+    const pick = (await picker(page).button.boundingBox())!;
+    expect(pick.y + pick.height).toBeLessThanOrEqual(scroller.y);
+    expect(await header.boundingBox()).toEqual(placed);
+    const findings = (await side.group('Findings').locator('.artifact-comments-group-title').boundingBox())!;
+    expect(findings.y + findings.height).toBeLessThanOrEqual(scroller.y);
+    const stuck = (await top.boundingBox())!;
+    expect(Math.abs(stuck.y - scroller.y)).toBeLessThanOrEqual(1);
+    expect(await words.evaluate((node) => {
+      const rect = node.getBoundingClientRect();
+      const hit = document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2);
+      return Boolean(hit && node.closest('.artifact-comments-entry-head')!.contains(hit));
+    })).toBe(true);
+    const colours = await top.evaluate((node) => [
+      getComputedStyle(node).backgroundColor, getComputedStyle(node.closest('li')!).backgroundColor]);
+    expect(colours[0]).toMatch(/^rgb\(\d+, \d+, \d+\)$/);
+    expect(colours[0]).toBe(colours[1]);
+    const resolve = (await thread.resolve.boundingBox())!;
+    expect(resolve.y).toBeGreaterThanOrEqual(stuck.y);
+    expect(resolve.y + resolve.height).toBeLessThanOrEqual(stuck.y + stuck.height);
+    await besideWords(thread.resolve, words);
+
+    // Scrolled on to the list's end and back mid-thread, Resolve resolves it.
+    await area.by(10_000);
+    await area.bringToTop(thread.agents.nth(6));
+    await expect(thread.resolve).toBeVisible();
+    const posted = page.waitForRequest((request) =>
+      request.method() === 'POST' && new URL(request.url()).pathname === '/api/comments');
+    await thread.resolve.click();
+    expect((await posted).postDataJSON()).toEqual({ page: FIVE_SLUG, thread: long.id, resolved: true });
+    await expect(thread.item).toBeHidden();
+    await expect(side.showResolved).toHaveText('Show resolved (1)');
+    await expect(side.showResolved).toBeFocused();
+    await seen.clean();
+  });
+
+  test('a resolved thread opened to read keeps its dashed line at the top of the scrolled panel, and Reopen puts Resolve on its first line', async ({ page }) => {
+    const seen = await watch(page);
+    const { long, threads } = longReview(RESOLVED);
+    await serveReview(page, threads);
+    const side = await loadFive(page);
+    const area = scrolling(page);
+    await side.showResolved.click();
+    const thread = entry(page, long);
+    await thread.resolved.locator('.artifact-comments-entry-read').click();
+    await expect(thread.agents).toHaveCount(14);
+    await expect(thread.agents.first()).toBeVisible();
+
+    await area.bringToTop(thread.agents.nth(6));
+    const scroller = (await area.scroller.boundingBox())!;
+    const line = (await thread.resolved.boundingBox())!;
+    expect(Math.abs(line.y - scroller.y)).toBeLessThanOrEqual(1);
+    await expect(thread.done).toHaveText('✓ resolved · Reopen');
+    await expect(thread.reopen).toBeVisible();
+    const said = (await thread.resolved.locator('.artifact-comments-entry-words').boundingBox())!;
+    expect((await thread.reopen.boundingBox())!.x).toBeGreaterThanOrEqual(said.x + said.width);
+
+    await thread.reopen.click();
+    await expect(thread.head).toHaveAttribute('aria-expanded', 'true');
+    await besideWords(thread.resolve, thread.head.locator('.artifact-comments-entry-words'));
     await seen.clean();
   });
 });
