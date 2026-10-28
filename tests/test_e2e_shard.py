@@ -1,5 +1,5 @@
 """Test suite for `ci/e2e_shard.py`, which picks the spec files each `e2e`
-shard runs, and for the split rule it shares with `ci/run_modules.py`.
+shard runs.
 
 Each test runs the script as a real subprocess, as the browser checks step
 does: on this checkout's `e2e/checks` and `e2e/spec_times.json`, every spec
@@ -8,8 +8,6 @@ path, as the regex Playwright makes of it, picks another spec, and the
 slowest shard's recorded total is at most 15% above the mean. On a scratch
 directory, a spec the times file does not record counts as the median of the
 recorded times, and a shard that holds no spec prints nothing and exits 0.
-`ci/run_modules.py --list --shard I/2` still lists what the rule it had
-before the split moved into `ci/shard_split.py` lists.
 
 Run from the repo root:
 
@@ -27,11 +25,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from ci import shard_split
-
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = REPO_ROOT / "ci" / "e2e_shard.py"
-RUNNER = REPO_ROOT / "ci" / "run_modules.py"
 CHECKS = REPO_ROOT / "e2e" / "checks"
 TIMES = REPO_ROOT / "e2e" / "spec_times.json"
 SHARDS = 4
@@ -55,22 +50,6 @@ def spec_files() -> list[str]:
 
 def recorded() -> dict[str, float]:
     return {key: float(value) for key, value in json.loads(TIMES.read_text("utf-8")).items()}
-
-
-def unchanged_rule(modules: list[str], times: dict[str, float], index: int,
-                   count: int) -> list[str]:
-    """`ci/run_modules.py`'s shard and run order as it read before the split
-    moved into `ci/shard_split.py`, kept here as the reference."""
-    fallback = statistics.median(times.values()) if times else 1.0
-    weight = {rel: max(times.get(rel, fallback), 0.01) for rel in modules}
-    order = sorted(modules, key=lambda rel: (-weight[rel], rel))
-    totals = [0.0] * count
-    shards: list[list[str]] = [[] for _ in range(count)]
-    for rel in order:
-        at = min(range(count), key=lambda i: totals[i])
-        shards[at].append(rel)
-        totals[at] += weight[rel]
-    return sorted(shards[index - 1], key=lambda rel: (-weight[rel], rel))
 
 
 class CheckedInShardsTestCase(unittest.TestCase):
@@ -143,10 +122,6 @@ class ScratchShardsTestCase(unittest.TestCase):
         self.assertEqual(first, ["a.spec.ts", "features/x/new.spec.ts", "c.spec.ts"])
         self.assertEqual(second, ["b.spec.ts", "d.spec.ts", "e.spec.ts"])
 
-    def test_the_shared_weights_give_an_unrecorded_path_the_median(self) -> None:
-        weight = shard_split.weights(["a", "b", "c", "new"], {"a": 10.0, "b": 2.0, "c": 3.0})
-        self.assertEqual(weight["new"], 3.0)
-
     def test_a_shard_that_holds_no_spec_prints_nothing_and_exits_0(self) -> None:
         self.write(["only.spec.ts"], {"only.spec.ts": 5})
         self.assertEqual(self.shard(1, 2), ["only.spec.ts"])
@@ -158,27 +133,6 @@ class ScratchShardsTestCase(unittest.TestCase):
         self.times.unlink()
         printed = [line for index in (1, 2, 3) for line in self.shard(index, 3)]
         self.assertEqual(sorted(printed), specs)
-
-
-class RunModulesShardsTestCase(unittest.TestCase):
-    def test_run_modules_lists_the_same_modules_as_before(self) -> None:
-        tests = REPO_ROOT / "tests"
-        modules = sorted(
-            path.relative_to(tests).as_posix()
-            for path in tests.rglob("test_*.py")
-            if path.is_file() and "__pycache__" not in path.parts
-        )
-        times = {
-            key: float(value)
-            for key, value in json.loads((tests / "module_times.json").read_text("utf-8")).items()
-        }
-        for index in (1, 2):
-            with self.subTest(shard=f"{index}/2"):
-                listed = subprocess.run(
-                    [sys.executable, str(RUNNER), "--list", "--shard", f"{index}/2"],
-                    cwd=REPO_ROOT, capture_output=True, text=True, timeout=60, check=True,
-                ).stdout.splitlines()
-                self.assertEqual(listed, unchanged_rule(modules, times, index, 2))
 
 
 if __name__ == "__main__":

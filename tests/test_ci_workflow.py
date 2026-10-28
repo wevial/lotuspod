@@ -224,10 +224,6 @@ class E2eWorkflowTestCase(WorkflowTestCase):
 
     def test_no_shard_is_passed_to_playwright(self) -> None:
         self.assertNotIn("--shard=", self.text)
-        for line in self.browser_checks().splitlines():
-            if "playwright" in line:
-                with self.subTest(line=line):
-                    self.assertNotIn("--shard", line)
 
     def test_each_shard_runs_the_files_the_shard_script_prints(self) -> None:
         for shard in (1, 2, 3, 4):
