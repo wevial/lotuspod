@@ -561,7 +561,10 @@ test.describe('signed in', () => {
     const root = await post(request, 'frogs', `${wide}\n| - | - | - |\n${wide}`);
     await page.goto(`${PAGE}?standalone`);
     // On a phone the chip opens its section's newest thread in the bottom sheet.
-    await box(page, 'frogs').summary.click();
+    // Tapped before the threads arrive, it opens the section's empty form instead.
+    const { summary } = box(page, 'frogs');
+    await expect(summary).toHaveText(/ · /);
+    await summary.click();
     const sheet = page.locator('.artifact-comments-bottom-sheet');
     const said = sheet.locator(`.artifact-comment-thread[data-thread="${root.id}"] .artifact-comment-item--reader .artifact-comment-text`);
     await expect(said.locator('table')).toBeVisible();
