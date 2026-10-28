@@ -168,7 +168,7 @@ export function shell(page: Page, hooks: ShellHooks, comments = true): Shell {
   function draw(): void {
     const asks = decisionsTab.asks.peek();
     const listed = historyTab.shown.peek();
-    const unseen = listed ? historyTab.unseen.peek() : 0;
+    const unseen = historyTab.unseen.peek();
     const tabbed = asks || listed;
     const names = present().map((tab, at) => at ? tab : tab[0].toUpperCase() + tab.slice(1));
     const shown = showing();

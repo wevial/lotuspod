@@ -96,11 +96,8 @@ function Tab({ page, name, state }: { page: Page; name: string; state: VersionsS
 export function historyTabPanel(page: Page, main: HTMLElement, name: string, state: VersionsState): void {
   effect(() => {
     const shown = state.versions.value !== null;
-    const unseen = rowsOf(state).length;
-    untracked(() => {
-      historyTab.shown.value = shown;
-      historyTab.unseen.value = shown ? unseen : 0;
-    });
+    historyTab.shown.value = shown;
+    historyTab.unseen.value = shown ? rowsOf(state).length : 0;
   });
   effect(() => {
     const node = historyTab.node.value;
