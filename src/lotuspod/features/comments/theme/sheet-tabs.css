@@ -38,9 +38,14 @@
 
 .artifact-comments-bottom-sheet--tabs .artifact-comments-close {
   align-self: center;
+  color: var(--color-pale-lavender);
   font-size: 0.85rem;
   padding: 0 0.5rem;
   width: auto;
+}
+
+.artifact-comments-bottom-sheet--tabs .artifact-comments-close:hover {
+  color: var(--color-white);
 }
 
 .artifact-comments-bottom-sheet--tabs .artifact-comments-close > [aria-hidden="true"] {
