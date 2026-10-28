@@ -254,3 +254,36 @@ test('a section\'s link in the sheet closes it before the page goes to the secti
     await context.close();
   }
 });
+
+test('on the narrowest phones every tab is whole, clear of Close, and a press away', async ({ browser }) => {
+  test.setTimeout(90_000);
+  const { context, page } = await fresh(browser);
+  try {
+    const errors = watchErrors(page);
+    await republish(page, own('history-narrow-small'));
+    const sheet = bottom(page);
+    await page.locator('button.artifact-review-count').click();
+    await expect(sheet.tab('Decisions')).toHaveAttribute('aria-selected', 'true');
+    for (const width of [360, 320]) {
+      await page.setViewportSize({ width, height: PHONE.height });
+      // The tabs, the dot among them, that fall outside the strip or under Close.
+      const outside = () => sheet.node.evaluate((node) => {
+        const strip = node.querySelector('.artifact-comments-bottom-sheet-tabs')!.getBoundingClientRect();
+        const close = node.querySelector('.artifact-comments-close')!.getBoundingClientRect();
+        const end = Math.min(strip.right, close.left);
+        return Array.from(node.querySelectorAll('[role="tab"], .artifact-comments-tab-dot')).filter((item) => {
+          const box = item.getBoundingClientRect();
+          return box.left < strip.left || box.right > end;
+        }).map((item) => item.id || item.className);
+      });
+      await expect.poll(outside, { message: `at ${width} pixels` }).toEqual([]);
+      for (const name of ['History', 'Comments', 'Decisions'] as const) {
+        await sheet.tab(name).click();
+        await expect(sheet.tab(name)).toHaveAttribute('aria-selected', 'true');
+      }
+    }
+    expect(errors).toEqual([]);
+  } finally {
+    await context.close();
+  }
+});
