@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
+import { useLayoutEffect, useRef, useState } from "preact/hooks";
 import type { CommentRow, Page, Reaction } from "../bridge";
 
 // The quick set the Add reaction menu offers. Each must equal its value in
@@ -39,15 +39,28 @@ export function Reactions({ row, page, name, store }: ReactionsProps) {
 
   // A click anywhere outside the menu and Add reaction closes the menu and
   // puts focus back on Add reaction, a chip's or a field's click as well.
-  useEffect(() => {
+  // Escape closes it wherever focus is, even tabbed out of the row, and
+  // goes no further, so the panel or the sheet holding it stays open. Both
+  // listen from the render that opens the menu, not a frame after it.
+  useLayoutEffect(() => {
     if (!open) return;
     function outside(event: MouseEvent) {
       const target = event.target as Node;
       if (menu.current?.contains(target) || add.current?.contains(target)) return;
       close();
     }
+    function escape(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      event.stopPropagation();
+      close();
+    }
     document.addEventListener("click", outside, true);
-    return () => document.removeEventListener("click", outside, true);
+    window.addEventListener("keydown", escape, true);
+    return () => {
+      document.removeEventListener("click", outside, true);
+      window.removeEventListener("keydown", escape, true);
+    };
   }, [open]);
 
   // A row's posts are sent one after another, so each answer is newer than
@@ -85,14 +98,7 @@ export function Reactions({ row, page, name, store }: ReactionsProps) {
     post("add", emoji, !held?.mine);
   }
 
-  function keydown(event: KeyboardEvent) {
-    if (event.key !== "Escape" || !open) return;
-    event.preventDefault();
-    event.stopPropagation();
-    close();
-  }
-
-  return <div class={"artifact-reactions" + (open ? " artifact-reactions--open" : "")} onKeyDown={keydown}>
+  return <div class={"artifact-reactions" + (open ? " artifact-reactions--open" : "")}>
     {reactions.map(each => {
       const names = (each.by || []).join(", ");
       const busy = saving.has(each.emoji);

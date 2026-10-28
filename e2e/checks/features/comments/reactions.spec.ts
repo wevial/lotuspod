@@ -252,6 +252,19 @@ test.describe('signed in', () => {
     await expect(add).toHaveAttribute('aria-expanded', 'false');
     await expect(row(page, PANEL, reply)).toBeVisible();
 
+    // Tabbed out of the menu with it still open, Escape closes the menu
+    // and not the panel.
+    await add.click();
+    await expect(menu).toBeVisible();
+    for (let i = 0; i < QUICK.length; i++) await page.keyboard.press('Tab');
+    expect(await menu.evaluate((each) => each.contains(document.activeElement))).toBe(false);
+    await expect(menu).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(menu).toHaveCount(0);
+    await expect(add).toBeFocused();
+    await expect(page.locator(PANEL)).toBeVisible();
+    await expect(row(page, PANEL, reply)).toBeVisible();
+
     // A click outside the menu closes it and puts focus back on Add
     // reaction: on the page, in a field, on a chip.
     await add.click();
