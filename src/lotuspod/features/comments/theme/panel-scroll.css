@@ -12,10 +12,6 @@
   scrollbar-width: thin;
 }
 
-.artifact-comments-panel .artifact-comments-groups {
-  flex: none;
-}
-
 .artifact-comments-panel .artifact-comments-entry-top {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
