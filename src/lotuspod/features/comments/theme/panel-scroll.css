@@ -1,0 +1,63 @@
+/* The comments panel scrolls its Comments tab as one area under the fixed
+   head: the start controls, then the threads. An open thread's head row,
+   Resolve at the end of its first line, stays at the top while any of its
+   thread is in view; it sticks inside its own entry, so the thread's end
+   pushes it off. Nothing between the entry and the scroll area may set an
+   overflow, or the row no longer sticks. */
+.artifact-comments-panel .artifact-comments-threads {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scroll-padding-top: 3.5rem;
+  scrollbar-color: var(--hairline-strong) transparent;
+  scrollbar-width: thin;
+}
+
+.artifact-comments-panel .artifact-comments-entry-top {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.artifact-comments-panel .artifact-comments-entry-head {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.artifact-comments-panel .artifact-comments-entry-resolved {
+  grid-column: 1 / -1;
+}
+
+/* Beside the head, Resolve lines up with its words, drawn as Reopen is. */
+.artifact-comments-panel .artifact-comments-entry-tools {
+  align-self: start;
+  grid-column: 2;
+  grid-row: 1;
+  margin: 0;
+  padding: 0.45rem 0.6rem 0 0;
+}
+
+.artifact-comments-panel .artifact-comments-entry-tools[hidden],
+.artifact-comments-panel .artifact-comments-entry--resolved .artifact-comments-entry-tools {
+  display: none;
+}
+
+.artifact-comments-panel .artifact-comments-resolve {
+  font-size: 0.9em;
+}
+
+/* The open card's own colour, so nothing scrolling under it shows through. */
+.artifact-comments-panel .artifact-comments-entry--open > .artifact-comments-entry-top {
+  background: inherit;
+  border-bottom: 1px solid var(--hairline);
+  border-radius: var(--radius-block) var(--radius-block) 0 0;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.artifact-comments-panel .artifact-comments-entry--open .artifact-comments-entry-resolved {
+  margin-bottom: 0;
+}
+
+.artifact-comments-panel .artifact-comments-entry--open > .artifact-comments-entry-body {
+  padding-top: 0.6rem;
+}

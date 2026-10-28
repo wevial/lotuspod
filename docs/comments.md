@@ -647,7 +647,12 @@ comment's opening words, its status ("✓ Answered", "HANDLE is writing",
 is open at a time and holds the whole thread as a box would, with a "Resolve"
 control; opening one scrolls the page to its section's chip, opening the
 section first if it is folded. A group draws no control of its own for a
-new thread: the panel starts one from above its groups. "Comment on this
+new thread: the panel starts one from above its groups. Under the panel's
+head, which stays put, the ways to start a thread and the groups scroll as
+one area, so the start controls scroll away with the threads. An open
+entry's head, with "Resolve" at the end of its first line, stays at the top
+of that area while any of its thread is in view and leaves with the
+thread's end (`features/comments/theme/panel-scroll.css`). "Comment on this
 page", on a page with a box for the whole page, unfolds that box's own form
 in the "This page" group; "Comment on a section" lists "This page" first on
 such a page, then each section in page order, and unfolds the chosen box's
@@ -791,7 +796,11 @@ the chip or in the bottom sheet.
 
 "Resolve" resolves a thread as the reader (`{page, thread, resolved: true}`,
 above): its entry folds to a dashed line, its opening words and "✓ resolved ·
-Reopen", and its dot leaves the rail. "Reopen" reopens it and shows its
+Reopen", and its dot leaves the rail. In the panel "Resolve" sits at the right
+end of an open entry's first line, and "Reopen" at the right end of a
+resolved entry's line, which stays at the top as the head does while the
+resolved thread is open to read; in a popover or the sheet "Resolve" sits
+just above the thread. "Reopen" reopens it and shows its
 messages again. Under `prefers-reduced-motion: reduce` the pulsing dot keeps
 still and the panel opens without sliding.
 
