@@ -735,7 +735,9 @@ test.describe('signed in, published again', () => {
     await republish(page, name, [['Findings', []], [DECISIONS, []]], true);
     await expect(page.locator('button.artifact-review-count')).toBeHidden();
     await expect(bottom).toBeVisible();
-    await expect(bottom.getByRole('tablist')).toBeHidden();
+    // Published more than once, the sheet keeps its History tab beside Comments.
+    await expect(bottom.getByRole('tablist').getByRole('tab')).toHaveText([/^Comments/, /^History/]);
+    await expect(bottom.getByRole('tab', { name: /^Comments/ })).toHaveAttribute('aria-selected', 'true');
     await expect(bottom.locator('.artifact-comment-thread', { hasText: 'Is the ice thick yet?' })).toBeVisible();
     expect(seen.errors).toEqual([]);
   });
