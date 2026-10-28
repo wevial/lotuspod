@@ -564,8 +564,7 @@ sets every text as text, so raw HTML and entities show as typed):
   cell dashes, with an optional `:` at either end, ignored) is a table, as on
   a page: the first row is its header, every other separator row is skipped,
   and each cell is drawn as inline markup. A row short of the header's cells
-  ends in empty cells spanning the columns it lacks (one per 1000, a span's
-  cap); extra cells are dropped. A wide table scrolls inside its
+  gets empty ones; extra cells are dropped. A wide table scrolls inside its
   bubble. Without the separator row the whole run of `|` lines is paragraph
   text.
 - Anything else (headings, quotes, images, HTML) is literal text.

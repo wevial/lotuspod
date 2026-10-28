@@ -147,11 +147,8 @@
     });
   }
 
-  // A table of rows, the first its header: every row spans the header's
-  // columns, extra cells dropped. A short row ends in empty cells spanning
-  // the columns it lacks, as few as a span's 1000-column cap allows, so the
-  // nodes made grow with the text typed, never with a wide header times many
-  // short rows.
+  // A table of rows, the first its header: every row has the header's
+  // count of cells, short ones padded with empty cells, extra ones dropped.
   function mdTable(rows) {
     var table = element("table");
     var width = rows[0].length;
@@ -160,15 +157,10 @@
         table.appendChild(element(index ? "tbody" : "thead"));
       }
       var row = element("tr");
-      for (var column = 0; column < Math.min(cells.length, width); column++) {
+      for (var column = 0; column < width; column++) {
         var cell = element(index ? "td" : "th");
-        markdownInline(cell, cells[column]);
+        markdownInline(cell, cells[column] || "");
         row.appendChild(cell);
-      }
-      for (var lacking = width - cells.length; lacking > 0; lacking -= 1000) {
-        var pad = element("td");
-        pad.colSpan = Math.min(lacking, 1000);
-        row.appendChild(pad);
       }
       table.lastChild.appendChild(row);
     });
