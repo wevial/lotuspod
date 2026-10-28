@@ -515,8 +515,8 @@ The `e2e` workflow (`.github/workflows/e2e.yml`) runs the full checks on every
 pull request to main and every push to main, with `--reporter=github,list`
 so each failed check is annotated with its spec, line and title, and with
 `--forbid-only`, so a committed `test.only` fails the run instead of skipping
-the rest of the suite. It splits the checks across four shards with
-Playwright's `--shard=N/4`, one `e2e-shard (N/4)` job each, and each shard
+the rest of the suite. It splits the spec files across four shards, one
+`e2e-shard (N/4)` job each, and each shard
 serves its own copy of the sample site; one job named `e2e` reports their
 combined result. Each shard runs in Microsoft's Playwright image
 (`mcr.microsoft.com/playwright:v<version>-noble`) at the exact
@@ -539,6 +539,21 @@ summary page names them. A pull request whose changes are all docs (under
 main always runs them. When a check fails, each failing shard uploads its
 traces as the `e2e-test-results-N` artifact, kept 7 days; open one with
 `npx playwright show-trace`.
+
+`ci/e2e_shard.py --shard N/4` (standard library only) prints the spec files
+shard N runs, which the `browser checks` step passes to `playwright test` in
+place of `--shard`, so the shards finish close together rather than each
+holding the same number of files. It splits them as `ci/run_modules.py`
+splits modules (the rule lives in `ci/shard_split.py`): by the seconds
+`e2e/spec_times.json` records for each spec's path under `e2e/checks`,
+longest first, each to the shard with the smallest total so far; a spec it
+does not record counts as the median, and a shard with no spec passes
+without running Playwright. Nothing records the times automatically: to
+refresh them, sum the per-test seconds the list reporter prints in each
+shard's `browser checks` log of a green run on main per spec file, or run
+the checks locally with `--reporter=json` and sum `duration` per file.
+`tests/test_e2e_shard.py` fails when the slowest shard's recorded total is
+more than 15% above the mean.
 
 ## Demo
 

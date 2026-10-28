@@ -1,12 +1,18 @@
-"""Test suite for the `unit` GitHub Actions workflow: the pull request check
-runs the leak guard on the diff in one job, the unit suite in two shards in
-another, and a gate job named `unit` passes only when both pass.
+"""Test suite for the `unit` and `e2e` GitHub Actions workflows.
 
-Reads `.github/workflows/unit.yml` as text, since the package has no YAML
-parser, and pins the triggers, the three jobs and the gate's name, the
-full-history checkout, the Python version, the leak guard step and the ranges
-it scans, the install step, the shard matrix and the runner command, and the
-gate's needs and results.
+The `unit` pull request check runs the leak guard on the diff in one job, the
+unit suite in two shards in another, and a gate job named `unit` passes only
+when both pass. Reads `.github/workflows/unit.yml` as text, since the package
+has no YAML parser, and pins the triggers, the three jobs and the gate's name,
+the full-history checkout, the Python version, the leak guard step and the
+ranges it scans, the install step, the shard matrix and the runner command,
+and the gate's needs and results.
+
+Reads `.github/workflows/e2e.yml` the same way and pins its browser checks
+step: it runs the spec files `ci/e2e_shard.py` prints for its matrix shard,
+skips Playwright on a shard that holds none, and passes no `--shard` to
+Playwright. The step's script runs under bash with `python` stubbed to record
+the command it would serve the site around.
 
 Run from the repo root:
 
@@ -15,18 +21,26 @@ Run from the repo root:
 
 from __future__ import annotations
 
+import os
 import re
+import subprocess
+import sys
+import tempfile
 import unittest
 from pathlib import Path
 
-WORKFLOW = Path(__file__).resolve().parent.parent / ".github" / "workflows" / "unit.yml"
+REPO_ROOT = Path(__file__).resolve().parent.parent
+WORKFLOW = REPO_ROOT / ".github" / "workflows" / "unit.yml"
+E2E_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "e2e.yml"
 RUNNER = "python ci/run_modules.py --jobs 4 --shard ${{ matrix.shard }}/2 --max-module-sec 150"
 
 
-class UnitWorkflowTestCase(unittest.TestCase):
+class WorkflowTestCase(unittest.TestCase):
+    workflow = WORKFLOW
+
     def setUp(self) -> None:
-        self.assertTrue(WORKFLOW.is_file(), f"{WORKFLOW} does not exist")
-        self.text = WORKFLOW.read_text(encoding="utf-8")
+        self.assertTrue(self.workflow.is_file(), f"{self.workflow} does not exist")
+        self.text = self.workflow.read_text(encoding="utf-8")
 
     def block(self, key: str, indent: str = "", text: str | None = None) -> str:
         """The lines nested under `key:` at the given indent."""
@@ -49,6 +63,9 @@ class UnitWorkflowTestCase(unittest.TestCase):
     def runs(self, job: str) -> list[str]:
         return re.findall(r"(?m)^\s+- run: (.+)$", "".join(self.steps(job)))
 
+
+
+class UnitWorkflowTestCase(WorkflowTestCase):
     def guard_step(self) -> str:
         guards = [step for step in self.steps("leak-guard") if "ci/leak_guard.py" in step]
         self.assertEqual(len(guards), 1, guards)
@@ -153,6 +170,77 @@ class UnitWorkflowTestCase(unittest.TestCase):
     def test_has_no_node_or_browser_step(self) -> None:
         for word in ("setup-node", "npm", "npx", "playwright"):
             self.assertNotIn(word, self.text.lower())
+
+
+# Stands in for `python` in the browser checks step: runs the shard script for
+# real and records the arguments of any other command, one per line.
+PYTHON_STUB = """#!/bin/sh
+if [ "$1" = "ci/e2e_shard.py" ]; then
+  exec "$REAL_PYTHON" "$@"
+fi
+printf '%s\\n' "$@" > "$RECORD"
+"""
+PLAYWRIGHT = ("python -m tests.capture_site npm --prefix e2e exec --no -- playwright test"
+              " --config e2e/checks.config.ts --reporter=github,list"
+              " --trace=retain-on-failure --forbid-only $files")
+
+
+class E2eWorkflowTestCase(WorkflowTestCase):
+    workflow = E2E_WORKFLOW
+
+    def browser_checks(self) -> str:
+        steps = [step for step in self.steps("e2e-shard") if "name: browser checks" in step]
+        self.assertEqual(len(steps), 1, steps)
+        return steps[0]
+
+    def run_step(self, shard: int) -> list[str] | None:
+        """The arguments the step passes to `python`, besides the shard script,
+        for matrix shard N; None when it runs nothing else."""
+        script = self.browser_checks().split("run: |\n", 1)[1]
+        script = script.replace("${{ matrix.shard }}", str(shard))
+        with tempfile.TemporaryDirectory() as scratch:
+            stub = Path(scratch) / "python"
+            stub.write_text(PYTHON_STUB, encoding="utf-8")
+            stub.chmod(0o755)
+            record = Path(scratch) / "record"
+            env = dict(os.environ, PATH=f"{scratch}{os.pathsep}{os.environ['PATH']}",
+                       REAL_PYTHON=sys.executable, RECORD=str(record))
+            done = subprocess.run(["bash", "-e", "-c", script], cwd=REPO_ROOT, env=env,
+                                  capture_output=True, text=True, timeout=60)
+            self.assertEqual(done.returncode, 0, done.stderr)
+            return record.read_text(encoding="utf-8").splitlines() if record.exists() else None
+
+    def test_the_shards_are_still_four(self) -> None:
+        strategy = self.block("strategy", indent="    ", text=self.job("e2e-shard"))
+        self.assertRegex(strategy, r"(?m)^        shard: \[1, 2, 3, 4\]$")
+
+    def test_the_browser_checks_step_takes_its_files_from_the_shard_script(self) -> None:
+        script = self.browser_checks().split("run: |\n", 1)[1]
+        lines = [line.strip() for line in script.splitlines() if line.strip()]
+        self.assertEqual(lines[0], "files=$(python ci/e2e_shard.py --shard ${{ matrix.shard }}/4)")
+        self.assertEqual(lines[1], 'if [ -z "$files" ]; then')
+        self.assertIn("exit 0", lines[2:4])
+        self.assertEqual(lines[-1], PLAYWRIGHT)
+
+    def test_no_shard_is_passed_to_playwright(self) -> None:
+        self.assertNotIn("--shard=", self.text)
+        for line in self.browser_checks().splitlines():
+            if "playwright" in line:
+                with self.subTest(line=line):
+                    self.assertNotIn("--shard", line)
+
+    def test_each_shard_runs_the_files_the_shard_script_prints(self) -> None:
+        for shard in (1, 2, 3, 4):
+            with self.subTest(shard=shard):
+                printed = subprocess.run(
+                    [sys.executable, "ci/e2e_shard.py", "--shard", f"{shard}/4"],
+                    cwd=REPO_ROOT, capture_output=True, text=True, check=True,
+                ).stdout.split()
+                self.assertTrue(printed)
+                args = self.run_step(shard)
+                self.assertIsNotNone(args)
+                self.assertEqual(args[:2], ["-m", "tests.capture_site"])
+                self.assertEqual(args[args.index("--forbid-only") + 1:], printed)
 
 
 if __name__ == "__main__":
