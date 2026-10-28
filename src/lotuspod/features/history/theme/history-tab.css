@@ -116,14 +116,17 @@
   color: var(--color-muted-lavender);
 }
 
-a.artifact-history-section {
+a.artifact-history-section,
+.artifact-history-all {
   color: var(--color-sky);
   text-decoration-color: var(--link-line);
   text-underline-offset: 0.18em;
 }
 
 a.artifact-history-section:hover,
-a.artifact-history-section:focus-visible {
+a.artifact-history-section:focus-visible,
+.artifact-history-all:hover,
+.artifact-history-all:focus-visible {
   color: var(--color-pale-sky);
   text-decoration-color: currentColor;
 }
@@ -233,18 +236,9 @@ a.artifact-history-section:focus-visible {
 }
 
 .artifact-history-all {
-  color: var(--color-sky);
   display: inline-block;
   font-size: 0.875rem;
   margin-top: 0.65rem;
-  text-decoration-color: var(--link-line);
-  text-underline-offset: 0.18em;
-}
-
-.artifact-history-all:hover,
-.artifact-history-all:focus-visible {
-  color: var(--color-pale-sky);
-  text-decoration-color: currentColor;
 }
 
 .artifact-comments-tab-dot {

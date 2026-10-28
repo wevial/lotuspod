@@ -2,7 +2,7 @@ import { render } from "preact";
 import { useState } from "preact/hooks";
 import { effect, untracked } from "@preact/signals";
 import { historyTab, type Page } from "../../../comments/ts/index";
-import { KINDS, linkSections, listed, plural } from "./changes";
+import { KINDS, LastOpened, linkSections, listed } from "./changes";
 import { Line } from "./pane";
 import { HASH, type Section, type VersionsState } from "./state";
 import { Entry } from "./view";
@@ -69,11 +69,7 @@ function Tab({ page, name, state }: { page: Page; name: string; state: VersionsS
       </div>
       {found && !marked ? (
         <>
-          <p class="artifact-history-when">
-            {"You last opened this on "}
-            <time datetime={found.since.date}>{page.when(found.since.date)}</time>
-            {" · " + plural(Number(found.behind) || 0, "version") + " ago"}
-          </p>
+          <p class="artifact-history-when"><LastOpened page={page} found={found} /></p>
           {rows.length
             ? <ul class="artifact-history-list">{rows.map((row) => <Row key={row.kind + row.section.title} {...row} />)}</ul>
             : <p class="artifact-history-none">No section's text changed.</p>}

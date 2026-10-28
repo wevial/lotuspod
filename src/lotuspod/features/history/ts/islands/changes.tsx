@@ -13,7 +13,7 @@ export function listed(sections: Sections, kind: keyof Sections): Section[] {
   return Array.isArray(found) ? found : [];
 }
 
-export function plural(count: number, noun: string): string {
+function plural(count: number, noun: string): string {
   return count + " " + noun + (count === 1 ? "" : "s");
 }
 
@@ -82,15 +82,22 @@ function sectionHeading(main: HTMLElement, section: Section): HTMLElement | null
   return found;
 }
 
+// "You last opened this on DATE · K versions ago", in the box and the History tab.
+export function LastOpened({ page, found }: { page: Page; found: Changes }) {
+  return (
+    <>
+      {"You last opened this on "}
+      <time datetime={found.since.date}>{page.when(found.since.date)}</time>
+      {" · " + plural(Number(found.behind) || 0, "version") + " ago"}
+    </>
+  );
+}
+
 function Box({ page, found, dismiss }: { page: Page; found: Changes; dismiss(): void }) {
   return (
     <>
       <h2 class="artifact-changes-heading" id="artifact-changes-heading">What changed since you last looked</h2>
-      <p class="artifact-changes-when">
-        {"You last opened this on "}
-        <time datetime={found.since.date}>{page.when(found.since.date)}</time>
-        {" · " + plural(Number(found.behind) || 0, "version") + " ago"}
-      </p>
+      <p class="artifact-changes-when"><LastOpened page={page} found={found} /></p>
       <SectionList sections={found.sections} />
       <p class="artifact-changes-actions">
         <a class="artifact-changes-diff" href={HASH}>See the full diff</a>
