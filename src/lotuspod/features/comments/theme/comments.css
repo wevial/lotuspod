@@ -1225,6 +1225,7 @@
 }
 
 .artifact-comments-reopen,
+.artifact-comments-panel .artifact-comments-resolve,
 .artifact-comments-new {
   appearance: none;
   background: none;
@@ -1240,6 +1241,7 @@
 }
 
 .artifact-comments-reopen:hover,
+.artifact-comments-panel .artifact-comments-resolve:hover,
 .artifact-comments-new:hover {
   color: var(--color-pale-lavender);
   text-decoration-color: currentColor;

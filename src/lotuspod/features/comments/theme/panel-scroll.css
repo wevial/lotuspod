@@ -41,20 +41,7 @@
 }
 
 .artifact-comments-panel .artifact-comments-resolve {
-  border: 0;
-  border-radius: var(--radius-chip);
-  color: var(--color-lavender);
   font-size: 0.9em;
-  line-height: inherit;
-  padding: 0;
-  text-decoration: underline;
-  text-decoration-color: color-mix(in srgb, var(--color-lavender) 45%, transparent);
-  text-underline-offset: 0.18em;
-}
-
-.artifact-comments-panel .artifact-comments-resolve:hover {
-  color: var(--color-pale-lavender);
-  text-decoration-color: currentColor;
 }
 
 /* The open card's own colour, so nothing scrolling under it shows through. */

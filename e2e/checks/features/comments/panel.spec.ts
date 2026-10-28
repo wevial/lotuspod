@@ -370,15 +370,14 @@ function longReview(resolution = OPEN) {
 // node's top to the area's top.
 function scrolling(page: Page) {
   const scroller = page.locator('aside.artifact-comments-panel div.artifact-comments-threads');
+  const by = (pixels: number) => scroller.evaluate((node, by) => { node.scrollTop += by; }, pixels);
   return {
     scroller,
-    async by(pixels: number) {
-      await scroller.evaluate((node, by) => { node.scrollTop += by; }, pixels);
-    },
+    by,
     async bringToTop(target: Locator) {
       const area = (await scroller.boundingBox())!;
       const at = (await target.boundingBox())!;
-      await scroller.evaluate((node, by) => { node.scrollTop += by; }, at.y - area.y);
+      await by(at.y - area.y);
     },
   };
 }
