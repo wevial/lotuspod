@@ -42,7 +42,13 @@ export function questions(page: Page): void {
           reading ? { ...taken, view: { history: true } } : taken);
       }
       decisionsTab.opens.value = opensIn("decisions", mode === "panel", shell.decide, over.decisions);
-      historyTab.opens.value = opensIn("history", mode === "panel", shell.history, over.history);
+    }
+    // History opens here only while the panel or the sheet can show it:
+    // without questions counted (none left, an archived page, answers not
+    // read) the title bar's pill and "Versions · N" go to the versions view.
+    const opens = sheetTabs.asks() ? opensIn("history", mode === "panel", shell.history, over.history) : null;
+    if (opens?.id !== historyTab.opens.peek()?.id) {
+      historyTab.opens.value = opens;
     }
     // Questions no longer asked, or no longer counted, close the sheet.
     if (!sheetTabs.asks()) {

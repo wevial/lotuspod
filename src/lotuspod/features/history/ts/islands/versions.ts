@@ -58,7 +58,7 @@ export function versions(page: Page): void {
     }
   });
   historyTabPanel(page, main, name, state);
-  changedPill(page);
+  changedPill(page, state);
   read(page, name, state);
 }
 

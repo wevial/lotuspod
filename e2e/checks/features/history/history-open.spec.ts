@@ -227,3 +227,47 @@ test('on a page with no comments panel "1 changed" and "Versions · 2" open the 
     await context.close();
   }
 });
+
+test('"1 changed" pressed in the versions view leaves it for the panel\'s History', async ({ browser }) => {
+  test.setTimeout(90_000);
+  const { context, page } = await fresh(browser, WIDE);
+  try {
+    const errors = watchErrors(page);
+    await republish(page, own('history-open-view'));
+    await page.locator('#artifact-comments-history .artifact-history-all').evaluate((link: HTMLElement) => link.click());
+    await expect(page.locator('section.artifact-versions')).toBeVisible();
+
+    await page.locator('.artifact-topbar button.artifact-history-pill').click();
+    await expect(page.locator('section.artifact-versions')).toBeHidden();
+    expect(new URL(page.url()).hash).toBe('');
+    const aside = page.locator('aside.artifact-comments-panel');
+    await expect(aside.getByRole('tab', { name: /^History/ })).toHaveAttribute('aria-selected', 'true');
+    await expect(aside.locator('#artifact-comments-history')).toBeVisible();
+    expect(errors).toEqual([]);
+  } finally {
+    await context.close();
+  }
+});
+
+test('a question-only page whose answers could not be read sends "Versions · 2" to the versions view', async ({ browser }) => {
+  test.setTimeout(90_000);
+  const { context, page } = await fresh(browser, WIDE);
+  try {
+    const name = own('history-open-unread');
+    publish(name, source('History open check', 'The pump stops in January.'), false);
+    await open(page, name);
+    await page.waitForTimeout(1100);
+    publish(name, source('History open check', 'The pump runs all winter.'), false);
+    await page.route('**/api/answers?*', (route) => route.fulfill({ status: 500, body: '' }));
+    const errors = watchErrors(page);
+    await open(page, name);
+    await expect(page.locator('aside.artifact-comments-panel')).toBeHidden();
+
+    await page.locator('header.artifact-header .artifact-versions-link').click();
+    await expect(page).toHaveURL(/#versions$/);
+    await expect(page.locator('aside.artifact-versions-diff')).toBeVisible();
+    expect(errors).toEqual([]);
+  } finally {
+    await context.close();
+  }
+});
