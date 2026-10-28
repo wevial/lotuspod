@@ -5,10 +5,10 @@ import { HASH, type Changes, type Section, type Sections } from "./state";
 // What the comparison calls the text before the first h2, the whole text of
 // a body without one (lotuspod.features.history.versions.PAGE_TEXT).
 const PAGE_TEXT = "The page text";
-const KINDS = [["changed", "Changed"], ["added", "New"], ["removed", "Removed"]] as const;
+export const KINDS = [["changed", "Changed"], ["added", "New"], ["removed", "Removed"]] as const;
 const TAGS = [["changed", "changed"], ["added", "new"]] as const;
 
-function listed(sections: Sections, kind: keyof Sections): Section[] {
+export function listed(sections: Sections, kind: keyof Sections): Section[] {
   const found = sections[kind];
   return Array.isArray(found) ? found : [];
 }
@@ -82,15 +82,22 @@ function sectionHeading(main: HTMLElement, section: Section): HTMLElement | null
   return found;
 }
 
+// "You last opened this on DATE · K versions ago", in the box and the History tab.
+export function LastOpened({ page, found }: { page: Page; found: Changes }) {
+  return (
+    <>
+      {"You last opened this on "}
+      <time datetime={found.since.date}>{page.when(found.since.date)}</time>
+      {" · " + plural(Number(found.behind) || 0, "version") + " ago"}
+    </>
+  );
+}
+
 function Box({ page, found, dismiss }: { page: Page; found: Changes; dismiss(): void }) {
   return (
     <>
       <h2 class="artifact-changes-heading" id="artifact-changes-heading">What changed since you last looked</h2>
-      <p class="artifact-changes-when">
-        {"You last opened this on "}
-        <time datetime={found.since.date}>{page.when(found.since.date)}</time>
-        {" · " + plural(Number(found.behind) || 0, "version") + " ago"}
-      </p>
+      <p class="artifact-changes-when"><LastOpened page={page} found={found} /></p>
       <SectionList sections={found.sections} />
       <p class="artifact-changes-actions">
         <a class="artifact-changes-diff" href={HASH}>See the full diff</a>
@@ -100,23 +107,30 @@ function Box({ page, found, dismiss }: { page: Page; found: Changes; dismiss(): 
   );
 }
 
+// The headings of the changed and added sections, each with its tag, found
+// and given ids before anything links to them, so the box's links, the
+// pane's and the History tab's name them. Run again, it finds the same ones.
+export function linkSections(main: HTMLElement, found: Changes): [HTMLElement, string][] {
+  const tagged: [HTMLElement, string][] = [];
+  for (const [kind, tag] of TAGS) {
+    for (const section of listed(found.sections, kind)) {
+      const target = sectionHeading(main, section);
+      if (target) {
+        tagged.push([target, tag]);
+      }
+    }
+  }
+  return tagged;
+}
+
 // The box under the header, and the "changed" or "new" tags on the
-// sections' headings. The headings are found, and given ids, before the box
-// is drawn, so its links and the pane's name them.
+// sections' headings.
 export function box(page: Page, main: HTMLElement, found: Changes): void {
   const header = main.querySelector("header.artifact-header");
   if (!header) {
     return;
   }
-  const tagged: [HTMLElement, string][] = [];
-  for (const [kind, tag] of TAGS) {
-    for (const section of listed(found.sections, kind)) {
-      const target = sectionHeading(main, section);
-      if (target && !target.querySelector(".artifact-changed-tag")) {
-        tagged.push([target, tag]);
-      }
-    }
-  }
+  const tagged = linkSections(main, found).filter(([target]) => !target.querySelector(".artifact-changed-tag"));
   const node = page.element("section", "artifact-changes");
   node.setAttribute("aria-labelledby", "artifact-changes-heading");
   render(<Box page={page} found={found} dismiss={() => node.remove()} />, node);

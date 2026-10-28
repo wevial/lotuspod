@@ -11,12 +11,15 @@
   padding-top: 0.35rem;
 }
 
-/* Both tabs fit beside the fold at the panel's narrowest, 16rem; a wider
-   count clips them there rather than lay them over the fold. */
+/* The tabs sit beside the fold, never over it: where they do not all fit on
+   one line, as three do not at the panel's narrowest, 16rem, the last wraps
+   to a line of its own, every tab whole and in reach. Only a tab wider than
+   the strip on its own is clipped. */
 .artifact-comments-tabs {
   display: flex;
   flex: 0 1 auto;
-  gap: 0.8rem;
+  flex-wrap: wrap;
+  gap: 0 0.65rem;
   min-width: 0;
   overflow-x: clip;
 }

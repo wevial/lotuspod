@@ -800,6 +800,25 @@ box until the next load; the next load is seen at the page's own revision,
 so the box and the tags are gone. A first visit, a reader signed out, or any
 failure shows no box and no pane.
 
+On a wide window the comments panel also has a History tab (see [The comments
+panel](comments.md#the-comments-panel)), once the versions route answers with a
+list. It is headed "Since you last looked", with "Mark as seen" beside it
+while anything is unseen, and says "You last opened this on DATE · K versions
+ago" as the box does, then one row per section changed, new or removed: its
+kind, "Changed", "New" or "Removed", and its name, a link to its section
+unless removed. A changed section whose own markdown source changed (both
+versions kept `NAME.md`) has "Show the diff", which shows that section's
+lines under its row, then "More changes not shown." when they were cut, and
+reads "Hide the diff" while they show; an HTML page, or a version without a
+kept source, has none. With nothing changed since the last visit the tab
+reads "Nothing new since you last looked.", and with changes but no section
+listed, "No section's text changed.". Under it, "Versions · N" lists the
+newest 10 versions as the versions view does, marked "current" and "you last
+looked", and "See all versions" opens `#versions`. "Mark as seen" gives way
+to "Nothing new since you last looked." and moves "you last looked" to the
+current version for this load only; nothing is posted, as the visit was
+recorded when the page loaded. History never opens by itself.
+
 ## Index
 
 Build `artifacts/index.html`, a browsable index linking every rendered page:

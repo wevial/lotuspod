@@ -4,7 +4,7 @@ import type { Changes, DiffLine } from "./state";
 
 const NO_SOURCE = "This page has no kept source for that version, so it compares by section.";
 
-function Line({ line }: { line: DiffLine }) {
+export function Line({ line }: { line: DiffLine }) {
   const op = String(line.op);
   const Tag = op === "+" ? "ins" : op === "-" ? "del" : "div";
   const kind = op === "+" ? "added" : op === "-" ? "removed" : op === "@" ? "hunk" : "same";
