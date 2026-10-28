@@ -127,6 +127,12 @@ export function shell(page: Page, hooks: ShellHooks, comments = true): Shell {
     const question = decisions.current?.querySelector<HTMLElement>(".artifact-decisions-entry .artifact-decisions-question");
     (question ?? tabs.decisions.current)?.focus({ preventScroll: true });
   }
+  // The title bar's "N changed" and the header's "Versions · N": the panel
+  // opens on History, the focus on the tab.
+  function openHistory(): void {
+    setOpen(true, true, "history");
+    tabs.history.current?.focus({ preventScroll: true });
+  }
   function tabKey(event: KeyboardEvent): void {
     const order = present();
     const last = order.length - 1;
@@ -208,10 +214,7 @@ export function shell(page: Page, hooks: ShellHooks, comments = true): Shell {
           </button>}
           {unseen > 0 && <button type="button" class="artifact-comments-rail-history"
             aria-label="Changed since you last looked: open History" aria-controls="artifact-comments-history"
-            onClick={event => {
-              event.stopPropagation(); setOpen(true, true, "history");
-              tabs.history.current?.focus({ preventScroll: true });
-            }}>
+            onClick={event => { event.stopPropagation(); openHistory(); }}>
             <span class="artifact-comments-rail-history-dot" aria-hidden="true" />
             <span class="artifact-comments-rail-history-label" aria-hidden="true">changed</span>
           </button>}
@@ -309,7 +312,7 @@ export function shell(page: Page, hooks: ShellHooks, comments = true): Shell {
   }, true);
   return {
     list: list.current!, scroller: scroller.current!, isOpen: seen, deciding, reading, resolvedShown: () => resolvedShown,
-    setOpen, decide, setResolvedShown, unpick, focus,
+    setOpen, decide, history: openHistory, setResolvedShown, unpick, focus,
     hidden(hide) { hidden = hide; draw(); },
     sections(next) { sections = next; active = -1; draw(); },
     refresh(next) { tally = next; draw(); },

@@ -69,6 +69,14 @@ function publish(name: string, markdown: string, suffix = '.md') {
   }
 }
 
+// The full versions view, from the header's "Versions · N": on a page with
+// a comments panel it opens the History tab, whose "See all versions" opens
+// the view.
+async function openView(page: Page, link: Locator) {
+  await link.click();
+  await page.locator('#artifact-comments-history .artifact-history-all').click();
+}
+
 function watchErrors(page: Page) {
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
@@ -118,7 +126,7 @@ test.describe('signed in', () => {
     await page.goto(`/${name}.html?standalone`);
     const link = page.locator('.artifact-header .artifact-meta a.artifact-versions-link');
     await expect(link).toHaveText('Versions · 2');
-    await link.click();
+    await openView(page, link);
     await expect(page).toHaveURL(new RegExp(`/${name}\\.html\\?standalone#versions$`));
     const versions = view(page);
     await expect(versions.heading).toBeVisible();
@@ -393,7 +401,7 @@ test.describe('signed in', () => {
     await page.goto('/capture-versions-once.html?standalone');
     const link = page.locator('.artifact-versions-link');
     await expect(link).toHaveText('Versions · 1');
-    await link.click();
+    await openView(page, link);
     const versions = view(page);
     await expect(versions.node).toContainText('This is the only version.');
     await expect(versions.entries).toHaveCount(1);
@@ -407,7 +415,7 @@ test.describe('signed in', () => {
     }));
     await page.goto('/capture-versions-once.html?standalone');
     await expect(link).toHaveText('Versions · 0');
-    await link.click();
+    await openView(page, link);
     await expect(versions.heading).toBeVisible();
     await expect(versions.node).toContainText('This page has no versions yet.');
     await expect(versions.entries).toHaveCount(0);
@@ -653,7 +661,7 @@ test.describe('signed in, what changed', () => {
     await open(page, name);
     await expect(page.locator(BOX)).toHaveCount(0);
     await expect(page.locator('.artifact-changed-tag')).toHaveCount(0);
-    await page.locator('.artifact-versions-link').click();
+    await openView(page, page.locator('.artifact-versions-link'));
     await expect(view(page).heading).toBeVisible();
     await expect(page.locator('aside.artifact-versions-diff')).toHaveCount(0);
     await expect(page.locator('.artifact-versions-seen')).toHaveCount(0);

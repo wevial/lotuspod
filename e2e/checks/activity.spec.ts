@@ -390,8 +390,11 @@ test.describe('signed in', () => {
         await expect(tabs).toHaveCount(1);
         await expect.poll(() => framedAddress(page)).toMatch(new RegExp(`/${C}\\.html$`));
 
-        // So does it in C's tab left on its versions view.
-        await framed(page).locator('a.artifact-versions-link').click();
+        // So does it in C's tab left on its versions view. With a comments
+        // panel the header's link opens History, so the address leads there.
+        await page.locator('iframe.pod-frame--active').evaluate((frame) => {
+          (frame as HTMLIFrameElement).contentWindow!.location.hash = 'versions';
+        });
         await expect.poll(() => framedAddress(page)).toMatch(/#versions$/);
         await expect(framed(page).locator('section.artifact-versions')).toBeVisible();
         await home.click();
