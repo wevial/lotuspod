@@ -40,15 +40,23 @@ export const historyTab = {
 
 // What the bottom sheet's tabs read: whether it has a Decisions tab, once
 // the answers are read on a page that asks questions; how many are to
-// answer; and the node whose children it moves in to show them.
+// answer; and the node whose children it moves in to show them. Likewise
+// for its History tab: whether it has one, how many sections changed
+// unseen, and the node whose children it moves in.
 export interface SheetTabs {
   asks(): boolean;
   count(): number | null;
   node(): HTMLElement | null;
+  history(): boolean;
+  unseen(): number;
+  historyNode(): HTMLElement | null;
 }
 
 export const sheetTabs: SheetTabs = {
   asks: () => decisionsTab.asks.peek() && decisionsTab.count.peek() !== null,
   count: () => decisionsTab.count.peek(),
   node: () => decisionsTab.node.peek(),
+  history: () => historyTab.shown.peek(),
+  unseen: () => historyTab.unseen.peek(),
+  historyNode: () => historyTab.node.peek(),
 };

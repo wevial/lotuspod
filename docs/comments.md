@@ -909,8 +909,9 @@ sheet scrolls on its own, rises above an on-screen keyboard, and opening it
 scrolls the page, never its layout, so the highlight or chip sits above it.
 Escape or "Close" closes it and gives the focus back to what opened it.
 
-On a page that asks questions the sheet's header is two tabs, "Decisions"
-and "Comments", each with its count as the panel's tabs show them, and
+On a page that asks questions, or lists its versions, the sheet's header is
+its tabs, "Decisions", "Comments" and "History", each there as the panel has
+it and with its count or dot as the panel's tabs show them, and
 "Close"; the arrows and the thread's status sit in a row under them, on the
 Comments tab. The title bar's "N to answer" opens the sheet on Decisions,
 at any width without room for the panel, with the focus on the first
@@ -922,8 +923,16 @@ there as in the panel; a question's text and its "Show on page" close the
 sheet before they scroll to the card. Pressing "Comments" goes back to the
 thread the sheet held before, else to the first open thread, else to the
 first section's form; pressing "Decisions" keeps a passage's composer for
-it. On a page that takes no comments the sheet has the Decisions tab alone.
-The tabs are drawn by `features/comments/ts/narrow.js`, styled by
+it. The History tab holds the panel's History tab the same way: what changed
+since the reader last looked, each section's diff, the versions and "Mark as
+seen" work there as in the panel, the tab carries the panel's dot while
+sections changed unseen, and a link in it (a section's name, "View", "See all
+versions") closes the sheet before the browser follows it. Nothing opens the
+sheet on History by itself. The arrow keys cycle the tabs there, Home and End
+going to the first and last. A sheet on Decisions or History opens the panel
+on the same tab when the window widens to room for it, and a panel on either
+opens the sheet on it when the window narrows. On a page that takes no
+comments the sheet has no Comments tab. The tabs are drawn by `features/comments/ts/narrow.js`, styled by
 `features/comments/theme/sheet-tabs.css`.
 
 ### Comments on a spot
