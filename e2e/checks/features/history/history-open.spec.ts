@@ -152,6 +152,33 @@ test('on a phone "1 changed" opens the bottom sheet on History, and Close gives 
     const sheet = page.locator('.artifact-comments-bottom-sheet');
     const tab = sheet.getByRole('tab', { name: /^History/ });
     await expect(pill).toHaveText('1 changed');
+    await expect(page.locator('button.artifact-review-count')).toHaveText('1 to answer');
+    // The words show, rendered, and the bar's controls neither overlap nor
+    // leave the window, down to the narrowest phones.
+    for (const width of [360, 320, PHONE.width]) {
+      await page.setViewportSize({ width, height: PHONE.height });
+      expect(await pill.evaluate((node) => (node as HTMLElement).innerText.replace(/\s+/g, ' ').trim()),
+        `at ${width} pixels`).toBe('1 changed');
+      const clashes = await page.locator('.artifact-topbar').evaluate((bar) => {
+        const boxes = Array.from(bar.querySelectorAll<HTMLElement>(
+          '.artifact-history-pill, .artifact-archive, .artifact-review-next, .artifact-review-count, ' +
+          '.artifact-copy-link, .artifact-theme-switch'))
+          .filter((node) => node.offsetWidth > 0)
+          .map((node) => ({ name: node.className, box: node.getBoundingClientRect() }));
+        const found: string[] = [];
+        boxes.forEach((one, at) => {
+          if (one.box.left < 0 || one.box.right > window.innerWidth) found.push(`${one.name} leaves the window`);
+          boxes.slice(at + 1).forEach((other) => {
+            if (one.box.left < other.box.right && other.box.left < one.box.right &&
+              one.box.top < other.box.bottom && other.box.top < one.box.bottom) {
+              found.push(`${one.name} overlaps ${other.name}`);
+            }
+          });
+        });
+        return found;
+      });
+      expect(clashes, `at ${width} pixels`).toEqual([]);
+    }
 
     await pill.click();
     await expect(sheet).toBeVisible();

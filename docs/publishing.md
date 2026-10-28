@@ -826,7 +826,9 @@ when the page asks questions. Pressing it opens the comments panel on
 History with the focus on its tab, or the bottom sheet on History where the
 window has no room for the panel, Close giving the focus back to the pill.
 "Mark as seen" hides it, and so does the next load, the visit being
-recorded. On a page with a comments panel the header's "Versions · N" opens
+recorded. On a phone, beside the review sheet's controls, the title bar grows
+a second line for Copy link and the theme switch, so the pill keeps its
+words. On a page with a comments panel the header's "Versions · N" opens
 History too, without changing the address, its "Versions · N" scrolled into
 view; a middle or modified click still follows the link. A page with no
 comments panel (no comment boxes and no questions) has no History tab: there

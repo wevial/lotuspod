@@ -351,40 +351,35 @@ a.artifact-history-section:focus-visible,
   margin-left: 0.25rem;
 }
 
-/* A phone's bar has no room for the word beside the review sheet's
-   controls: the pill shows its dot and count, its aria-label keeping the
-   whole name, and the title and its separator leave the bar. */
+/* A phone's bar has no room for the pill beside the review sheet's
+   controls and the switch: the bar grows a second line, as it does under
+   320 px (theme-switch.css), and Copy link and the switch move onto it, so
+   the pill keeps its words. The page, the panels and the frames reserve the
+   bar's height by --topbar-height, so all follow. */
 @media (max-width: 40rem) {
   .artifact-history-pill {
     font-size: 0.75rem;
     padding-inline: 0.5rem;
   }
 
-  .artifact-topbar:has(.artifact-review-bar) .artifact-history-pill {
-    padding-inline: 0.45rem;
+  :root:has(.artifact-topbar .artifact-history-pill):has(.artifact-topbar .artifact-review-bar) {
+    --topbar-height: 4.75rem;
   }
 
-  .artifact-topbar:has(.artifact-review-bar) .artifact-history-pill-word {
-    display: none;
+  .artifact-topbar:has(.artifact-history-pill):has(.artifact-review-bar) .artifact-theme-switch,
+  .artifact-topbar:has(.artifact-history-pill):has(.artifact-review-bar) .artifact-copy-link {
+    align-self: auto;
+    bottom: 0.45rem;
+    margin: 0;
+    position: absolute;
   }
 
-  .artifact-topbar:has(.artifact-history-pill):has(.artifact-review-bar) .artifact-topbar-sep,
-  .artifact-topbar:has(.artifact-history-pill):has(.artifact-review-bar) .artifact-topbar-title {
-    display: none;
-  }
-}
-
-/* Narrower still, the dot alone. */
-@media (max-width: 22rem) {
-  .artifact-topbar:has(.artifact-review-bar) .artifact-history-pill {
-    padding-inline: 0.4rem;
+  .artifact-topbar:has(.artifact-history-pill):has(.artifact-review-bar) .artifact-theme-switch {
+    left: auto;
+    right: 0.75rem;
   }
 
-  .artifact-topbar:has(.artifact-review-bar) .artifact-history-pill-count {
-    display: none;
-  }
-
-  .artifact-topbar:has(.artifact-review-bar) .artifact-history-pill-dot {
-    margin-right: 0;
+  .artifact-topbar:has(.artifact-history-pill):has(.artifact-review-bar) .artifact-copy-link {
+    left: 0.75rem;
   }
 }
