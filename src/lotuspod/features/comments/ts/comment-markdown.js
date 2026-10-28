@@ -16,11 +16,6 @@
   // A pipe table's separator cell, as lotuspod.features.publish.markdown's
   // _SEPARATOR_CELL, with an alignment `:` allowed (and ignored) at either end.
   var MD_SEPARATOR_CELL = /^:?-+:?$/;
-  // The most cells a table may draw, short rows padded: a comment's 4000
-  // characters type at most about this many, so only a table whose padding
-  // would multiply its cells (a wide header over many one-cell rows) is
-  // refused, and its lines stay text.
-  var MD_TABLE_CELLS = 2000;
   var MD_PIPE = /^\|/;
   // A link's target: no space, and any parentheses in pairs, so that
   // `javascript:alert(1)` is read whole and refused whole.
@@ -152,19 +147,28 @@
     });
   }
 
-  // A table of rows, the first its header: every row has the header's
-  // count of cells, short ones padded with empty cells.
+  // A table of rows, the first its header: every row spans the header's
+  // columns, extra cells dropped. A short row ends in empty cells spanning
+  // the columns it lacks, as few as a span's 1000-column cap allows, so the
+  // nodes made grow with the text typed, never with a wide header times many
+  // short rows.
   function mdTable(rows) {
     var table = element("table");
+    var width = rows[0].length;
     rows.forEach(function (cells, index) {
       if (index < 2) {
         table.appendChild(element(index ? "tbody" : "thead"));
       }
       var row = element("tr");
-      for (var column = 0; column < rows[0].length; column++) {
+      for (var column = 0; column < Math.min(cells.length, width); column++) {
         var cell = element(index ? "td" : "th");
-        markdownInline(cell, cells[column] || "");
+        markdownInline(cell, cells[column]);
         row.appendChild(cell);
+      }
+      for (var lacking = width - cells.length; lacking > 0; lacking -= 1000) {
+        var pad = element("td");
+        pad.colSpan = Math.min(lacking, 1000);
+        row.appendChild(pad);
       }
       table.lastChild.appendChild(row);
     });
@@ -220,13 +224,11 @@
             rows.push(mdCells(lines[end]));
           }
         }
-        if (rows.length * rows[0].length <= MD_TABLE_CELLS) {
-          closeParagraph();
-          closeList();
-          parent.appendChild(mdTable(rows));
-          at = end - 1;
-          continue;
-        }
+        closeParagraph();
+        closeList();
+        parent.appendChild(mdTable(rows));
+        at = end - 1;
+        continue;
       }
       if (MD_BLANK.test(line)) {
         closeParagraph();

@@ -527,7 +527,8 @@ test.describe('signed in', () => {
     // A run judged not a table stays text whole, a separator row further down included.
     const later = '| first | row |\n| second | row |\n| --- | --- |\n| body | row |';
     const prose = '| prose\n| Header |\n|---|\n| value |';
-    // A wide header over many one-cell rows would pad out to over a million cells.
+    // A wide header over many one-cell rows: each row is padded with one cell
+    // cell per 1000 columns it lacks (a span's cap), not a cell per column.
     const padded = `|a${'|'.repeat(1990)}a|\n|-\n${Array(665).fill('|x').join('\n')}`;
     const typed = await post(request, 'pond', unseparated);
     const lone = await post(request, 'pond', single);
@@ -537,7 +538,7 @@ test.describe('signed in', () => {
     const raw = await post(request, 'pond', '| html | entity |\n| --- | :---: |\n| <b>x</b> | &amp; |\n| short |');
     await page.goto(`${PAGE}?standalone`);
     await open(page, 'pond');
-    for (const [root, text] of [[typed, unseparated], [lone, single], [run, later], [lead, prose], [wide, padded]] as const) {
+    for (const [root, text] of [[typed, unseparated], [lone, single], [run, later], [lead, prose]] as const) {
       await expect(bubble(page, root)).toBeVisible();
       await expect(bubble(page, root).locator('table')).toHaveCount(0);
       expect(await exact(bubble(page, root))).toBe(text);
@@ -549,6 +550,17 @@ test.describe('signed in', () => {
     expect(await cells.evaluateAll((tds) => tds.map((td) => td.childElementCount))).toEqual([0, 0]);
     // A short row is padded to the header's width.
     await expect(bubble(page, raw).locator('tbody > tr').nth(1).locator('td')).toHaveText(['short', '']);
+    const drawn = await bubble(page, wide).locator('table').evaluate((table) => ({
+      header: table.querySelectorAll('thead th').length,
+      rows: table.querySelectorAll('tbody > tr').length,
+      cells: table.querySelectorAll('td').length,
+      spans: Array.from(table.querySelectorAll('tbody > tr'), (tr) =>
+        Array.from(tr.querySelectorAll('td'), (td) => td.colSpan).join(',')),
+    }));
+    expect(drawn.header).toBe(1991);
+    expect(drawn.rows).toBe(665);
+    expect(drawn.cells).toBe(665 * 3);
+    expect(new Set(drawn.spans)).toEqual(new Set(['1,1000,990']));
     await seen.clean();
   });
 
