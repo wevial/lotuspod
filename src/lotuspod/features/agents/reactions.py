@@ -39,13 +39,15 @@ from lotuspod.features import serve
 from lotuspod.features.agents import agents, machine
 
 _ID = re.compile(r"[1-9][0-9]{0,18}")
+_MAX_ID = (1 << 63) - 1
 
 
 def post(sockets: machine.Routes, credential: Mapping, comment_id: int,
          headers: Message, body: serve.Body | None) -> dict:
     """Add or remove credential's reaction on comment_id as the body says."""
     machine._allow_op(credential, "reply")
-    found = sockets.database.comment(comment_id)
+    # The route's pattern takes ids past SQLite's largest integer, which no comment has.
+    found = None if comment_id > _MAX_ID else sockets.database.comment(comment_id)
     if found is None:
         raise serve.Refusal(HTTPStatus.NOT_FOUND, "unknown_comment")
     _page, handle = sockets._thread_handle(credential, found["parent"] or found["id"])

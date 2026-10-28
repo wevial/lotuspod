@@ -112,7 +112,15 @@
   // A section's title: its heading's text.
   function sectionTitle(section) {
     var heading = document.getElementById(section);
-    return heading ? heading.textContent.trim() : "";
+    if (!heading) {
+      return "";
+    }
+    // The heading as published: without the open count the page script
+    // draws into it.
+    var copy = heading.cloneNode(true);
+    Array.prototype.forEach.call(copy.querySelectorAll(".artifact-review-open"),
+      function (count) { count.remove(); });
+    return copy.textContent.trim();
   }
 
   function decisionForm(question) {

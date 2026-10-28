@@ -41,7 +41,9 @@ def remove(database: db.Database, comment: int, emoji: str, reactor: str) -> Non
 
 
 def _name(reactor: str) -> str:
-    if reactor.startswith(AGENT):
+    # An address always holds @ and a handle never does, so a reader whose
+    # address starts with agent: is still a reader.
+    if "@" not in reactor and reactor.startswith(AGENT):
         return reactor[len(AGENT):]
     return reactor.rsplit("@", 1)[0]
 

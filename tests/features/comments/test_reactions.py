@@ -98,6 +98,15 @@ class ReaderReactionTests(ReactionsTestCase):
                                                 "by": ["maintainer", "heron"]})
         self.assertNotIn("example.com", json.dumps(self.read(A)["threads"]))
 
+    def test_a_reader_whose_address_starts_with_agent_is_named_as_a_reader(self):
+        reader = "agent:hermes@example.com"
+        self.stop()
+        self.start(allowed_emails=f"{A} {B} {reader}")
+        shown = [{"emoji": EYES, "count": 1, "mine": True, "by": ["agent:hermes"]}]
+        self.assertEqual(self.reacted(reader, EYES), shown)
+        self.assertEqual(self.reactions(reader), shown)
+        self.assertEqual(self.reactions(A), [{**shown[0], "mine": False}])
+
     def test_adding_twice_stores_one_and_removing_is_a_no_op_when_absent(self):
         self.reacted(A, THUMBS)
         self.reacted(B, THUMBS)
@@ -212,6 +221,8 @@ class AgentReactionTests(ReactionsTestCase):
         for token, target, error in ((stranger, reply, "not_routed"),
                                      (puller, reply, "operation_not_allowed"),
                                      (self.token, "999999", "unknown_comment"),
+                                     # Past SQLite's largest integer.
+                                     (self.token, "9223372036854775808", "unknown_comment"),
                                      (self.token, "nope", "invalid_body")):
             with self.subTest(error=error):
                 self.assertEqual(self.agent(token, "react", target, EYES), (1, {"error": error}))
