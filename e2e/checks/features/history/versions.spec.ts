@@ -577,6 +577,7 @@ test.describe('signed in, what changed', () => {
   test.use({ extraHTTPHeaders: SIGNED_IN, viewport: { width: 1280, height: 800 } });
 
   const HISTORY = '#artifact-comments-history';
+  const PILL = '.artifact-topbar button.artifact-history-pill';
 
   // Opens the page and waits until its versions link and its History tab are
   // drawn: by then the page has heard the versions route and what changed.
@@ -645,7 +646,7 @@ test.describe('signed in, what changed', () => {
     const name = 'changes-check';
     await republish(page, name, 'Changes check');
     await noBox(page);
-    const pill = page.locator('.artifact-topbar button.artifact-history-pill');
+    const pill = page.locator(PILL);
     await expect(pill).toHaveText('1 changed');
 
     // The header's menu marks the version the reader last looked at.
@@ -714,7 +715,7 @@ test.describe('signed in, what changed', () => {
     await expect(page.locator('.artifact-comments-panel')).not.toHaveClass(/artifact-comments-panel--open/);
     await unruled(pump);
 
-    await page.locator('.artifact-topbar button.artifact-history-pill').click();
+    await page.locator(PILL).click();
     await expect(page.locator(HISTORY)).toBeVisible();
     await expect(pump).toHaveClass(/\bartifact-history-changed\b/);
     await ruled(pump);
@@ -740,7 +741,7 @@ test.describe('signed in, what changed', () => {
     const pump = page.locator('.artifact-body h2#pump');
     await unruled(pump);
 
-    await page.locator('.artifact-topbar button.artifact-history-pill').click();
+    await page.locator(PILL).click();
     const sheet = page.locator('.artifact-comments-bottom-sheet');
     await expect(sheet.locator('#artifact-comments-bottom-sheet-history .artifact-history')).toBeVisible();
     await ruled(pump);
@@ -783,7 +784,7 @@ test.describe('signed in, what changed', () => {
     await page.waitForTimeout(1100);
     publish(name, embedded('The pump runs all winter.'), '.html');
     await open(page, name);
-    await expect.soft(page.locator('.artifact-topbar button.artifact-history-pill')).toHaveText('1 changed');
+    await expect.soft(page.locator(PILL)).toHaveText('1 changed');
     expect.soft(asked.filter((each) => each.path === '/api/changes'))
       .toContainEqual({ path: '/api/changes', page: name });
     expect.soft(asked.filter((each) => each.page !== name)).toEqual([]);
@@ -817,7 +818,7 @@ test.describe('signed in, what changed', () => {
     publish(name, ['# Changes one heading', '', 'The plan for the pond this winter.', '', '## Pump', '', 'The pump runs all winter.', ''].join('\n'));
     await open(page, name);
     await noBox(page);
-    await page.locator('.artifact-topbar button.artifact-history-pill').click();
+    await page.locator(PILL).click();
     const history = page.locator(HISTORY);
     await expect(history.getByRole('link', { name: 'Pump' })).toHaveAttribute('href', '#pump');
     await expect(history.locator('.artifact-history-item--removed')).toHaveText(/Pond/);
@@ -837,7 +838,7 @@ test.describe('signed in, what changed', () => {
     publish(name, ['# Changes no heading', '', 'The pump runs all winter.', ''].join('\n'));
     await open(page, name);
     await noBox(page);
-    await page.locator('.artifact-topbar button.artifact-history-pill').click();
+    await page.locator(PILL).click();
     const link = page.locator(HISTORY).getByRole('link', { name: 'The page text' });
     await expect(link).toHaveAttribute('href', '#page-text');
     await expect(page.locator('section.artifact-body#page-text')).toHaveCount(1);
