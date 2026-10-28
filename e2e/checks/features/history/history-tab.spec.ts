@@ -270,6 +270,28 @@ test('on a page that asks a question the tabs are Decisions, Comments and Histor
     await page.keyboard.press('End');
     await expect(side.tab('History')).toHaveAttribute('aria-selected', 'true');
     await expect(side.history).toBeVisible();
+
+    // At the panel's narrowest, 16rem, every tab is whole inside the strip,
+    // clear of the fold, and a press on each selects it.
+    await side.aside.evaluate((aside) => (aside as HTMLElement).style.setProperty('--comments-panel-width', '16rem'));
+    // The panel eases to its new width, so the tabs are read once it is there.
+    const outside = () => side.aside.evaluate((aside) => {
+      const strip = aside.querySelector('.artifact-comments-tabs')!.getBoundingClientRect();
+      const fold = aside.querySelector('.artifact-comments-fold')!.getBoundingClientRect();
+      const panel = aside.querySelector('.artifact-comments-sheet')!.getBoundingClientRect();
+      const end = Math.min(strip.right, fold.left);
+      return Math.round(panel.width) === 16 * parseFloat(getComputedStyle(document.documentElement).fontSize)
+        ? Array.from(aside.querySelectorAll('[role="tab"]')).filter((tab) => {
+          const box = tab.getBoundingClientRect();
+          return box.left < strip.left || box.right > end;
+        }).map((tab) => tab.id) : ['still easing'];
+    });
+    await expect.poll(outside).toEqual([]);
+    for (const name of ['Decisions', 'Comments', 'History'] as const) {
+      await side.tab(name).click();
+      await expect(side.tab(name)).toHaveAttribute('aria-selected', 'true');
+    }
+    await expect(side.history).toBeVisible();
     expect(errors).toEqual([]);
   } finally {
     await context.close();
