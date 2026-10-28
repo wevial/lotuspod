@@ -13,6 +13,8 @@
     lotuspod comments follow-up ID --key KEY (--text TEXT | --text-file PATH)
         [--revision R] [--image PATH]...    POST /v1/media for each image, then
                                             POST /v1/threads/ID/follow-up
+    lotuspod comments react ID EMOJI [--remove]
+                                            POST /v1/comments/ID/reactions
     lotuspod comments release ID --claim TOKEN
                                             POST /v1/comments/ID/release
     lotuspod comments fail ID --claim TOKEN --reason TEXT
@@ -58,7 +60,7 @@ import urllib.parse
 from pathlib import Path
 
 from lotuspod import core
-from lotuspod.features.agents import machine, spots
+from lotuspod.features.agents import machine, reactions, spots
 from lotuspod.features import serve
 from lotuspod.features import comments
 from lotuspod.features import publish
@@ -856,6 +858,22 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
     follow.add_argument("--json", action="store_true", help="print the socket's JSON")
     add_agent_options(follow)
     follow.set_defaults(func=cmd_follow_up)
+
+    react = actions.add_parser(
+        "react",
+        help="add or remove an emoji reaction on a comment, which wakes no one",
+        description="React to comment ID with EMOJI, as a follow-up to its thread acts: as "
+        "the page's owner when the credential holds it, else as the handle the thread's "
+        "first comment is routed to. A reaction is no reply: it routes nothing, makes "
+        "nothing unread and changes no comment's state. Needs a credential with reply.",
+    )
+    react.add_argument("id", metavar="ID", help="the comment's id")
+    react.add_argument("emoji", metavar="EMOJI",
+                       help="an emoji, or a :shortcode: the composers know (:eyes:)")
+    react.add_argument("--remove", action="store_true", help="remove the reaction instead")
+    react.add_argument("--json", action="store_true", help="print the socket's JSON")
+    add_agent_options(react)
+    react.set_defaults(func=reactions.cmd_react)
 
     release = actions.add_parser(
         "release", help="end a claim unanswered, so the comment is routed again",

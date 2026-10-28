@@ -79,6 +79,18 @@ twice.
   `quote`, and its routing state (`state` and `owner`, below). A reply takes its thread's section, and a
   reply to a reply joins the same thread: `parent` is always the thread's first
   comment.
+- `POST /api/comments` with exactly `{page, comment, emoji, reacted}` adds
+  (`reacted: true`) or removes (`false`) the reader's emoji reaction on any
+  comment or reply of the page, and answers 200 `{comment, reactions}`. The
+  emoji must be exactly one of the composers' emoji table (`:eyes:` is 👀),
+  else 400 `invalid_body`; a comment not on the page is 404
+  `unknown_comment`, and an archived page refuses it 409 `archived`. Adding
+  one twice stores one, and removing one not there changes nothing. Every
+  comment a read of the comments answers carries `reactions`: one entry per
+  emoji, in the order of each emoji's first reaction, `{emoji, count, mine,
+  by}`, `by` who reacted, by name, oldest first, and `mine` whether the
+  reader is among them; `[]` on a comment with none. So does the comment a
+  new thread or reply answers.
 - `POST /api/comments` with `{page, question, text}` (and optionally the
   `revision` the reader's page was rendered at, and `images`) opens a thread
   on one of the page's decisions (see [Decisions for the
@@ -628,6 +640,16 @@ changed state's mark, nothing removed or moved, and an open composer keeps its
 text and focus. Each thread's list of comments is a polite live region, so a
 new reply is read out; typing bubbles and the offline and paused lines only
 restate a state and are hidden from it.
+
+### Reactions
+
+A reader or an agent may react to any comment or reply with an emoji
+(`POST /api/comments` above, `lotuspod comments react` in
+[Agents](agents.md)). A reaction is not a comment: it is kept in a table of
+its own, so it is never routed or pulled, wakes no agent, is no reply,
+counts as nothing unread or new, changes no comment's state and leaves a
+resolved thread resolved. A comment's reactions show who reacted by name,
+never by address. The page does not draw them yet.
 
 ### The comments panel
 

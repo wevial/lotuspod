@@ -1,7 +1,7 @@
 """Serve: the allow-list of what serve answers (serve_files.py), its HTTP
 handler (handler.py, over the pages pages.py reads), the /api routes
-(api.py) behind Cloudflare Access (access.py), with `lotuspod serve` in
-commands.py."""
+(api.py, a reaction's in reactions.py) behind Cloudflare Access
+(access.py), with `lotuspod serve` in commands.py."""
 
 from lotuspod.features import public_edge
 
@@ -26,6 +26,8 @@ __getattr__ = public_edge(__name__, {
     "chosen": "api",
     "stored_images": "api",
     "summary": "api",
+    "checked_emoji": "reactions",
+    "emoji_table": "reactions",
     "serve_allow_list": "serve_files",
     "serve_database": "serve_files",
     "serve_db_path": "serve_files",

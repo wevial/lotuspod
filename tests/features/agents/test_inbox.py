@@ -435,12 +435,13 @@ class MigrationTests(unittest.TestCase):
             conn.execute("PRAGMA user_version = 15")
             conn.commit()
 
-            # Columns later migrations add, which the inbox's leaves alone.
+            # Columns and tables later migrations add, which the inbox's leaves alone.
             later = {("comments", "widget"), ("comments", "spot")}
 
             def snapshot() -> dict:
                 tables = conn.execute(
                     "SELECT name, type FROM sqlite_master WHERE name NOT LIKE '%inbox%'"
+                    " AND name NOT LIKE '%reactions%'"
                     " ORDER BY name").fetchall()
                 shot = {}
                 for name, kind in tables:

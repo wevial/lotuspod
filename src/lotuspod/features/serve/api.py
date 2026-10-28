@@ -11,7 +11,8 @@ the reader as actor. Ten routes:
     POST /api/comments    {page, section, text[, quote | widget | spot][, revision][, images]},
                           {page, section: "", text[, revision][, images]},
                           {page, question, text[, revision][, images]},
-                          {page, parent, text[, images]} or {page, thread, resolved}
+                          {page, parent, text[, images]}, {page, thread, resolved} or
+                          {page, comment, emoji, reacted} (reactions.py)
     GET  /api/comments?page=NAME
     POST /api/media       one image's bytes
     GET  /api/revision?page=NAME
@@ -222,7 +223,7 @@ from lotuspod.features import agents
 from lotuspod.features import comments
 from lotuspod.features import publish
 from lotuspod.features.history import History
-from lotuspod.features.serve import spots
+from lotuspod.features.serve import reactions, spots
 
 ANSWERS = "/api/answers"
 COMMENTS = "/api/comments"
@@ -256,8 +257,7 @@ UPLOAD_LIMIT = 20
 UPLOAD_WINDOW = 600
 # The extension an upload's file name takes from its declared type, so
 # media.check refuses bytes of another type.
-UPLOAD_TYPES = {"image/png": "png", "image/jpeg": "jpg", "image/webp": "webp",
-                "image/gif": "gif"}
+UPLOAD_TYPES = {"image/png": "png", "image/jpeg": "jpg", "image/webp": "webp", "image/gif": "gif"}
 # Seconds a request body may take to arrive.
 BODY_TIMEOUT = 10
 # A refused body up to this size is still read, and dropped: closing a
@@ -624,10 +624,8 @@ class Api:
     names()."""
 
     def __init__(self, database: store.db.Database, pages: Callable[[str], Page | None],
-                 window: float = agents.DEFAULT_WINDOW,
-                 clock: Callable[[], float] = time.time,
-                 media_dir: Path | None = None,
-                 max_image_bytes: int = publish.DEFAULT_MAX_BYTES,
+                 window: float = agents.DEFAULT_WINDOW, clock: Callable[[], float] = time.time,
+                 media_dir: Path | None = None, max_image_bytes: int = publish.DEFAULT_MAX_BYTES,
                  history: History | None = None,
                  names: Callable[[], Sequence[str]] = tuple,
                  archive: Callable[[str, bool, str | None], tuple] | None = None,
@@ -679,6 +677,8 @@ class Api:
                     return HTTPStatus.OK, self._post_archive(fields, actor), ()
                 if path == SEEN:
                     return HTTPStatus.OK, self._post_seen(fields, actor), ()
+                if reactions.is_reaction(fields):
+                    return HTTPStatus.OK, reactions.post(self, fields, actor), ()
                 if "thread" in fields:
                     return HTTPStatus.OK, self._post_resolution(fields, actor), ()
                 return HTTPStatus.CREATED, self._post_comment(fields, actor), ()
@@ -700,7 +700,8 @@ class Api:
             elif path == VERSIONS:
                 payload = {"page": page.name, "versions": self._versions(page.name)}
             else:
-                threads = agents.threads(self.database, page.name, self.window, self.clock())
+                threads = agents.threads(self.database, page.name, self.window, self.clock(),
+                                         {reactions.reactor(actor)})
                 payload = {"page": page.name, "revision": page.revision,
                            "threads": threads, "unread": self._unread(page, threads, actor),
                            "maxImageBytes": self.max_image_bytes}
@@ -894,8 +895,7 @@ class Api:
         except OSError:
             self._give_back(reader, at)
             raise
-        return {"name": image.name, "url": image.url, "width": image.width,
-                "height": image.height}
+        return {"name": image.name, "url": image.url, "width": image.width, "height": image.height}
 
     def _take_upload(self, reader: str, reserve: bool) -> float:
         """Refusal too_many_uploads when reader has had UPLOAD_LIMIT uploads
@@ -969,7 +969,7 @@ class Api:
         if "comment" in stored:
             self.changed("comment", page.name)
             stored["comment"] = agents.shown(self.database, stored["comment"], self.window,
-                                             self.clock())
+                                             self.clock(), {reactions.reactor(actor)})
         return stored
 
     def _post_dismissal(self, fields: dict, actor: Mapping) -> dict:
@@ -1084,7 +1084,7 @@ class Api:
     def _post_comment(self, fields: dict, actor: Mapping) -> dict:
         row = self._store_comment(fields, actor)
         self.changed("comment", row["page"])
-        return agents.shown(self.database, row, self.window, self.clock())
+        return agents.shown(self.database, row, self.window, self.clock(), {reactions.reactor(actor)})
 
     def _store_comment(self, fields: dict, actor: Mapping) -> dict:
         names = _image_names(fields["images"]) if "images" in fields else None

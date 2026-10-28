@@ -41,9 +41,9 @@ import datetime
 import re
 import string
 import unicodedata
-from typing import Callable, Mapping
+from typing import Callable, Collection, Mapping
 
-from lotuspod.store import db
+from lotuspod.store import db, reactions
 
 RESPONDER = "responder"
 # Seconds: how long a pull keeps a handle listening.
@@ -227,13 +227,26 @@ def thread(found: Mapping, pulls: Mapping[str, float], window: float, now: float
     }
 
 
-def threads(database: db.Database, page: str, window: float, now: float) -> list[dict]:
-    """The page's threads as the threads routes answer them."""
+def threads(database: db.Database, page: str, window: float, now: float,
+            mine: Collection[str] = ()) -> list[dict]:
+    """The page's threads as the threads routes answer them, each comment
+    carrying its `reactions` (lotuspod.store.reactions), mine the asker's
+    reactors."""
     pulls, paused = last_pulls(database), database.responder_paused()
-    return [thread(found, pulls, window, now, paused) for found in database.threads(page)]
+    found = [thread(each, pulls, window, now, paused) for each in database.threads(page)]
+    reacted = reactions.on_page(database, page, mine)
+    for each in found:
+        for row in (each["root"], *each["replies"]):
+            row["reactions"] = reacted.get(row["id"], [])
+    return found
 
 
-def shown(database: db.Database, comment: Mapping, window: float, now: float) -> dict:
-    """The comment as public() shows it, as the database stands now."""
-    return public(comment, last_pulls(database), window, now,
-                  database.responder_paused(), thread_of(database, comment))
+def shown(database: db.Database, comment: Mapping, window: float, now: float,
+          mine: Collection[str] | None = None) -> dict:
+    """The comment as public() shows it, as the database stands now; with
+    mine, the asker's reactors, carrying its `reactions` as threads() does."""
+    row = public(comment, last_pulls(database), window, now,
+                 database.responder_paused(), thread_of(database, comment))
+    if mine is not None:
+        row["reactions"] = reactions.on_comment(database, row["id"], mine)
+    return row
