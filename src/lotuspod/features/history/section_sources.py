@@ -14,7 +14,6 @@ from __future__ import annotations
 
 from lotuspod.features.history.versions import sections
 
-# The converter's cut: from this heading on, the source is not on the page.
 _CUT = "## Concrete commands"
 
 
