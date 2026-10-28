@@ -352,6 +352,21 @@ parses when passed as `--claim=TOKEN`.
   needs `reply` and the page's owner or the handle that answered the thread
   (else 403 `not_routed`), lands once per KEY as a reply does, changes no
   comment's state, and reopens a resolved thread only with `reopen: true`.
+- `react ID EMOJI [--remove]` (`POST /v1/comments/ID/reactions` with
+  `{emoji, reacted}`) adds, or with `--remove` removes, the agent's emoji
+  reaction on comment ID, a thread's first comment or any reply: a quiet
+  acknowledgement (👀) that takes no claim. It acts as a follow-up to the
+  comment's thread does (needs `reply` and the page's owner or the handle the
+  thread's first comment is routed to, else 403 `not_routed`), is stored as
+  `agent:HANDLE`, and answers `{comment, reactions}`, `mine` true on an
+  emoji one of the credential's handles reacted with. EMOJI is an emoji or a
+  `:shortcode:` the composers know (`:eyes:` sends 👀); anything else is
+  sent as typed, and an emoji not in their table is 400 `invalid_body`, as
+  is an ID that is not a comment id; 404 `unknown_comment` for an id no
+  comment has. Without `--json` it prints one line per emoji, `👀 1:
+  hermes`. It writes no audit row and changes no comment's state, and a
+  reaction is never pulled. `comments show` gives every comment its
+  `reactions`, as the reader's read does.
 
 The key is the retry mechanism. Choose one key per intended reply before
 acting (the handle, the comment and a counter will do), keep it with the

@@ -84,6 +84,10 @@ token and an expiry as a comment is, though a current claim is never
 renewed, not even by the credential holding it, so two sessions never both
 act on it; a lapsed claim leaves it open again. Done closes it for good.
 One item per comment, however often it is queued.
+
+A reader or an agent may react to any comment with an emoji: one row per
+comment, emoji and reactor (a reader's address, or agent:HANDLE), in a table
+of its own, so a reaction routes nothing, is no reply and is never unread.
 """
 
 from __future__ import annotations
@@ -99,7 +103,7 @@ from typing import Callable, Iterator, Mapping, Sequence
 from lotuspod.core import URL_PREFIX
 
 DEFAULT_NAME = "lotuspod.sqlite3"
-SCHEMA_VERSION = 18
+SCHEMA_VERSION = 19
 # Seconds a connection waits for another writer before giving up.
 BUSY_TIMEOUT = 30
 # The state of a reader's comment until an agent takes it up.
@@ -290,6 +294,11 @@ _SCHEMA = {1: (
 ), 18: (
     # The spot a thread is anchored to, on its first comment only, as JSON.
     "ALTER TABLE comments ADD COLUMN spot TEXT",
+), 19: (
+    # One row per reactor's emoji on a comment (lotuspod.store.reactions).
+    "CREATE TABLE reactions (comment INTEGER NOT NULL REFERENCES comments(id), emoji TEXT"
+    " NOT NULL, reactor TEXT NOT NULL, actor TEXT NOT NULL, created_at TEXT NOT NULL,"
+    " PRIMARY KEY (comment, emoji, reactor))",
 )}
 # The settings row that holds whether the responder is paused.
 _PAUSED = "responder_paused"
@@ -437,17 +446,8 @@ def _images(text: str | None) -> list[dict]:
 
 
 def _audit(row: sqlite3.Row) -> dict:
-    return {
-        "id": row["id"],
-        "at": row["at"],
-        "action": row["action"],
-        "comment": row["comment"],
-        "page": row["page"],
-        "credential": row["credential"],
-        "handle": row["handle"],
-        "key": row["key"],
-        "revision": row["revision"],
-    }
+    return {key: row[key] for key in ("id", "at", "action", "comment", "page", "credential",
+                                      "handle", "key", "revision")}
 
 
 def _inbox_item(row: sqlite3.Row) -> dict:
