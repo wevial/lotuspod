@@ -349,7 +349,8 @@ async function outlined(target: Locator) {
 }
 
 // A long thread in Findings, fourteen replies of about three lines each,
-// then a short one there and one in Risks.
+// then a short one there and one in Risks, and five short ones in each of
+// Heater, Costs and Next steps so the list runs on below the long thread.
 function longReview(resolution = OPEN) {
   const [long] = onFive({ findings: 'Findings' }, resolution);
   long.root.text = 'Does the pump keep the pond clear through the winter?';
@@ -358,8 +359,11 @@ function longReview(resolution = OPEN) {
       'fish get air and the filter does not clog, as long as the heater keeps a hole open beside it.'),
     id: 900_000 + next++,
   }));
-  const threads = [long, ...onFive({ findings: 'Findings' }), ...onFive({ risks: 'Risks' })];
-  return { long: long.root, threads };
+  const later = Array.from({ length: 5 }, () =>
+    onFive({ heater: 'Heater', costs: 'Costs', 'next-steps': 'Next steps' })).flat();
+  const [after] = onFive({ findings: 'Findings' });
+  const threads = [long, after, ...onFive({ risks: 'Risks' }), ...later];
+  return { long: long.root, after: after.root, threads };
 }
 
 // The panel's one scroll area, and a scroll by what it takes to bring a
@@ -1094,7 +1098,7 @@ test.describe('signed in', () => {
 
   test("an open thread's head stays at the top of the scrolled panel with Resolve on its first line, and the start controls scroll away", async ({ page }) => {
     const seen = await watch(page);
-    const { long, threads } = longReview();
+    const { long, after, threads } = longReview();
     await serveReview(page, threads);
     const side = await loadFive(page);
     const area = scrolling(page);
@@ -1136,6 +1140,20 @@ test.describe('signed in', () => {
     expect(resolve.y).toBeGreaterThanOrEqual(stuck.y);
     expect(resolve.y + resolve.height).toBeLessThanOrEqual(stuck.y + stuck.height);
     await besideWords(thread.resolve, words);
+
+    // The thread's end pushes its head row off, and the next head scrolls as a row.
+    const rest = (await thread.item.boundingBox())!;
+    expect(rest.y + rest.height - scroller.y).toBeGreaterThan(40);
+    await area.by(rest.y + rest.height - scroller.y - 40);
+    const ended = (await thread.item.boundingBox())!;
+    expect(Math.abs(ended.y + ended.height - scroller.y - 40)).toBeLessThanOrEqual(1);
+    const pushed = (await top.boundingBox())!;
+    expect(Math.abs(pushed.y + pushed.height - (ended.y + ended.height))).toBeLessThanOrEqual(1);
+    expect(pushed.y).toBeLessThan(scroller.y);
+    const following = entry(page, after);
+    const nextTop = following.item.locator('.artifact-comments-entry-top');
+    expect(await nextTop.evaluate((node) => getComputedStyle(node).position)).not.toBe('sticky');
+    expect((await nextTop.boundingBox())!.y).toBeGreaterThan(scroller.y + 1);
 
     // Scrolled on to the list's end and back mid-thread, Resolve resolves it.
     await area.by(10_000);
