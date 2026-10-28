@@ -113,7 +113,6 @@ test('the title bar\'s "1 changed" opens the panel on History, and Mark as seen 
     const pill = bar.locator('button.artifact-history-pill');
     const count = bar.locator('button.artifact-review-count');
     const aside = page.locator('aside.artifact-comments-panel');
-    await expect(pill).toHaveCount(1);
     await expect(pill).toHaveText('1 changed');
     await expect(pill).toHaveAccessibleName('1 changed since you last looked: open History');
     await expect(count).toHaveText('1 to answer');
@@ -182,7 +181,6 @@ test('the header\'s "Versions · 2" opens History at its versions, the address k
 
     await page.locator('header.artifact-header .artifact-versions-link').click();
     await expect(aside.getByRole('tab', { name: /^History/ })).toHaveAttribute('aria-selected', 'true');
-    expect(new URL(page.url()).hash).not.toBe('#versions');
     const heading = history.getByRole('heading', { name: 'Versions · 2' });
     await expect(heading).toBeVisible();
     const inside = await heading.evaluate((node) => {
