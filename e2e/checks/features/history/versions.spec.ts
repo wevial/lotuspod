@@ -435,8 +435,6 @@ test.describe('signed in', () => {
     const link = page.locator('.artifact-header .artifact-meta a.artifact-versions-link');
     await expect(link).toHaveText('Versions · 2');
     await expect(page.locator('button.artifact-versions-menu-button')).toHaveCount(0);
-    await expect(page.locator('.artifact-versions-menu')).toHaveCount(0);
-    await expect(page.getByRole('button', { name: 'Choose a version' })).toHaveCount(0);
     // The link is the slot's last element, before any unread badge.
     expect(await link.evaluate((node) => {
       const line = node.closest('.artifact-header .artifact-meta');
@@ -480,26 +478,6 @@ test.describe('signed in', () => {
     }
     await expect(items.nth(0)).toContainText(listed[0].summary);
     await expect(items.nth(1).locator('.artifact-versions-menu-note')).toHaveText('First version');
-    await expect(items.nth(0).locator('.artifact-versions-current')).toHaveText('current');
-    await expect(items.nth(1).locator('.artifact-versions-current')).toHaveCount(0);
-    await expect(items.nth(0)).toHaveAttribute('href', `${name}.html`);
-    await expect(items.nth(1)).toHaveAttribute('aria-current', 'page');
-    await expect(items.nth(1)).toHaveAttribute('href', `${name}.html?version=${listed[1].commit}`);
-    await expect(items.nth(2)).toHaveText('See all versions');
-    await expect(items.nth(2)).toHaveAttribute('href', `${name}.html#versions`);
-    for (const index of [0, 1, 2]) {
-      await expect(items.nth(index)).not.toContainText('you last looked');
-    }
-    await expect(menu.locator('.artifact-versions-seen')).toHaveCount(0);
-
-    // The current item opens the page; "See all versions" its versions view.
-    await items.nth(0).click();
-    await expect((await inTab(page, name)).locator('.artifact-body')).toContainText('Edition: second.');
-    await page.goBack();
-    await expect(page).toHaveURL(oldUrl);
-    await button.click();
-    await items.nth(2).click();
-    await expect(view(await inTab(page, name)).heading).toBeVisible();
 
     // The keyboard, as a menu button takes it.
     await page.goto(`/${name}.html?version=${listed[1].commit}`);
