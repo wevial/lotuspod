@@ -37,6 +37,8 @@ credential that exists and is not revoked:
     POST /v1/comments/ID/release        {claimToken}: route it again (needs claim)
     POST /v1/comments/ID/fail           {claimToken, reason}: leave it failed
                                         (needs claim)
+    POST /v1/comments/ID/reactions      {emoji, reacted}: add or remove the
+                                        agent's reaction (reactions.py)
     POST /v1/threads/ID/resolve         resolve the thread whose first comment
     POST /v1/threads/ID/reopen          is ID, or reopen it (needs reply, and
                                         the page's owner or the handle its
@@ -203,7 +205,7 @@ from pathlib import Path
 from typing import Callable, Mapping
 
 from lotuspod import store
-from lotuspod.features.agents import routing, spots
+from lotuspod.features.agents import reactions, routing, spots
 from lotuspod.features import serve
 from lotuspod.features import publish
 from lotuspod.features import widgets
@@ -227,8 +229,8 @@ ROUTES = (WHOAMI, CHECK, PULL, THREADS, INBOX)
 METHODS = ("GET", "HEAD")
 # POST /v1/answers/ID/ack
 _ACK = re.compile(r"/v1/answers/([1-9][0-9]{0,18})/ack")
-# POST /v1/comments/ID/claim, /reply, /release and /fail
-_COMMENT = re.compile(r"/v1/comments/([1-9][0-9]{0,18})/(claim|reply|release|fail)")
+# POST /v1/comments/ID/claim, /reply, /release, /fail and /reactions
+_COMMENT = re.compile(r"/v1/comments/([1-9][0-9]{0,18})/(claim|reply|release|fail|reactions)")
 # POST /v1/threads/ID/resolve, /reopen and /follow-up
 _THREAD = re.compile(r"/v1/threads/([1-9][0-9]{0,18})/(resolve|reopen|follow-up)")
 # POST /v1/inbox/ID/claim and /done
@@ -261,16 +263,11 @@ def queued(answer: str, owner: str, ask: str) -> str:
 CLAIM_BYTES = 32
 # The HTTP status of each refusal a claim, reply, release, failure or resolution meets.
 _REFUSED = {
-    "unknown_comment": HTTPStatus.NOT_FOUND,
-    "unknown_thread": HTTPStatus.NOT_FOUND,
-    "unknown_item": HTTPStatus.NOT_FOUND,
-    "unknown_page": HTTPStatus.NOT_FOUND,
-    "not_routed": HTTPStatus.FORBIDDEN,
-    "settled": HTTPStatus.CONFLICT,
-    "claimed": HTTPStatus.CONFLICT,
-    "not_claimed": HTTPStatus.CONFLICT,
-    "revision_mismatch": HTTPStatus.CONFLICT,
-    "key_reused": HTTPStatus.CONFLICT,
+    "unknown_comment": HTTPStatus.NOT_FOUND, "unknown_thread": HTTPStatus.NOT_FOUND,
+    "unknown_item": HTTPStatus.NOT_FOUND, "unknown_page": HTTPStatus.NOT_FOUND,
+    "not_routed": HTTPStatus.FORBIDDEN, "settled": HTTPStatus.CONFLICT,
+    "claimed": HTTPStatus.CONFLICT, "not_claimed": HTTPStatus.CONFLICT,
+    "revision_mismatch": HTTPStatus.CONFLICT, "key_reused": HTTPStatus.CONFLICT,
 }
 # Seconds a socket connection may sit idle.
 REQUEST_TIMEOUT = 30
@@ -508,6 +505,9 @@ class Routes:
                 return HTTPStatus.OK, self._media(credential, headers, body), ()
             if path == RECORD:
                 return HTTPStatus.OK, self._record(credential, headers, body), ()
+            if acting is not None and acting.group(2) == "reactions":
+                return HTTPStatus.OK, reactions.post(self, credential, int(acting.group(1)),
+                                                     headers, body), ()
             if acting is not None:
                 return HTTPStatus.OK, self._act(credential, int(acting.group(1)),
                                                 acting.group(2), headers, body), ()
@@ -717,7 +717,8 @@ class Routes:
         page = self._page(name)
         if page is None:
             raise serve.Refusal(HTTPStatus.NOT_FOUND, "unknown_page")
-        threads = routing.threads(self.database, page.name, self.window, self.clock())
+        threads = routing.threads(self.database, page.name, self.window, self.clock(),
+                                  reactions.mine(credential))
         for thread in threads:
             thread["root"] = self._located(thread["root"])
             thread["replies"] = [self._located(row) for row in thread["replies"]]
@@ -749,8 +750,7 @@ class Routes:
         except publish.MediaError:
             raise serve.Refusal(HTTPStatus.BAD_REQUEST, "invalid_image") from None
         publish.store(self.media_dir, image)
-        return {"name": image.name, "url": image.url, "width": image.width,
-                "height": image.height}
+        return {"name": image.name, "url": image.url, "width": image.width, "height": image.height}
 
     def _images(self, fields: dict) -> Callable[[], list[dict]]:
         """What looks up the stored images a message's fields name, as a
@@ -821,13 +821,13 @@ class Routes:
             row = self.database.release(comment_id, credential=name, token_hash=token,
                                         clock=self.clock)
             self.changed("comment", row["page"])
-            return self._shown(row)
+            return self._shown(row, reactions.mine(credential))
         if action == "fail":
             reason = serve._text(fields["reason"], 1, MAX_REASON)
             row = self.database.fail(comment_id, credential=name, token_hash=token,
                                      clock=self.clock, reason=reason)
             self.changed("comment", row["page"])
-            return self._shown(row)
+            return self._shown(row, reactions.mine(credential))
         key = serve._text(fields["idempotencyKey"], 1, MAX_KEY)
         ask = fields.get("ask")
         if ask is not None:
@@ -847,7 +847,7 @@ class Routes:
                                   page_of=self._current, images_of=images, ask=ask,
                                   notice=notice)
         self.changed("comment", row["page"])
-        return self._shown(row)
+        return self._shown(row, reactions.mine(credential))
 
     def _thread_handle(self, credential: Mapping, root: int) -> tuple[serve.Page, str]:
         """The page of the thread whose first comment is root, and the handle
@@ -896,7 +896,7 @@ class Routes:
                                       key=key, text=text, revision=revision, reopen=reopen,
                                       page_of=self._current, images_of=images)
         self.changed("comment", row["page"])
-        return self._shown(row)
+        return self._shown(row, reactions.mine(credential))
 
     def _current(self, name: str) -> dict | None:
         """The page's revision, as a pull gives it, its sections and its
@@ -929,9 +929,9 @@ class Routes:
         return {"comment": row["id"], "handle": row["claim"]["handle"],
                 "claimToken": token, "expiresAt": row["claim"]["expiresAt"]}
 
-    def _shown(self, row: dict) -> dict:
-        """A comment as the threads routes show it."""
-        return routing.shown(self.database, row, self.window, self.clock())
+    def _shown(self, row: dict, mine: set[str] | None = None) -> dict:
+        """A comment as the threads routes show it, with its reactions given mine."""
+        return routing.shown(self.database, row, self.window, self.clock(), mine)
 
 
 def _json_body(headers: Message, body: serve.Body | None) -> dict:

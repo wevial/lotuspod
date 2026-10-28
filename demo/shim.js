@@ -260,12 +260,20 @@
     }
   }
 
+  // A row as a threads read or a comment's POST shows it: with its
+  // reactions, of which the demo takes none.
+  function withReactions(entry) {
+    var copy = shown(entry);
+    copy.reactions = [];
+    return copy;
+  }
+
   // The page's threads as lotuspod.features.agents.routing.threads answers them.
   function threads(page, stored) {
     return stored.rows.filter(function (entry) { return entry.parent === null; }).map(function (root) {
       return {
-        root: shown(root),
-        replies: stored.rows.filter(function (entry) { return entry.parent === root.id; }).map(shown),
+        root: withReactions(root),
+        replies: stored.rows.filter(function (entry) { return entry.parent === root.id; }).map(withReactions),
         resolution: resolution(stored, root.id),
       };
     });
@@ -450,7 +458,7 @@
     }
     stored.rows.push(made);
     save(THREADS + page, stored);
-    return [201, shown(made)];
+    return [201, withReactions(made)];
   }
 
   // The page's answered questions, each {current, earlier}: the newest
