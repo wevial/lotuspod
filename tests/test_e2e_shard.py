@@ -27,6 +27,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = REPO_ROOT / "ci" / "e2e_shard.py"
+RUNNER = REPO_ROOT / "ci" / "run_modules.py"
 CHECKS = REPO_ROOT / "e2e" / "checks"
 TIMES = REPO_ROOT / "e2e" / "spec_times.json"
 SHARDS = 4
@@ -50,6 +51,22 @@ def spec_files() -> list[str]:
 
 def recorded() -> dict[str, float]:
     return {key: float(value) for key, value in json.loads(TIMES.read_text("utf-8")).items()}
+
+
+def unchanged_rule(modules: list[str], times: dict[str, float], index: int,
+                   count: int) -> list[str]:
+    """`ci/run_modules.py`'s shard and run order as it read before the split
+    moved into `ci/shard_split.py`, kept here as the reference."""
+    fallback = statistics.median(times.values()) if times else 1.0
+    weight = {rel: max(times.get(rel, fallback), 0.01) for rel in modules}
+    order = sorted(modules, key=lambda rel: (-weight[rel], rel))
+    totals = [0.0] * count
+    shards: list[list[str]] = [[] for _ in range(count)]
+    for rel in order:
+        at = min(range(count), key=lambda i: totals[i])
+        shards[at].append(rel)
+        totals[at] += weight[rel]
+    return sorted(shards[index - 1], key=lambda rel: (-weight[rel], rel))
 
 
 class CheckedInShardsTestCase(unittest.TestCase):
@@ -89,6 +106,12 @@ class CheckedInShardsTestCase(unittest.TestCase):
             with self.subTest(line=line):
                 hits = [spec for spec in specs if re.search(line, spec, re.IGNORECASE)]
                 self.assertEqual(hits, [str(REPO_ROOT / line)])
+
+    def test_no_printed_path_holds_whitespace(self) -> None:
+        # The browser checks step splits the printed list on whitespace.
+        for line in (line for lines in self.shards for line in lines):
+            with self.subTest(line=line):
+                self.assertNotRegex(line, r"\s")
 
 
 class ScratchShardsTestCase(unittest.TestCase):
@@ -133,6 +156,30 @@ class ScratchShardsTestCase(unittest.TestCase):
         self.times.unlink()
         printed = [line for index in (1, 2, 3) for line in self.shard(index, 3)]
         self.assertEqual(sorted(printed), specs)
+
+
+class RunModulesShardsTestCase(unittest.TestCase):
+    def test_run_modules_lists_the_same_modules_as_before(self) -> None:
+        tests = REPO_ROOT / "tests"
+        modules = sorted(
+            path.relative_to(tests).as_posix()
+            for path in tests.rglob("test_*.py")
+            if path.is_file() and "__pycache__" not in path.parts
+        )
+        times = {
+            key: float(value)
+            for key, value in json.loads((tests / "module_times.json").read_text("utf-8")).items()
+        }
+        for command in ([str(RUNNER)], ["-m", "ci.run_modules"]):
+            for index in (1, 2):
+                with self.subTest(command=command, shard=f"{index}/2"):
+                    done = subprocess.run(
+                        [sys.executable, *command, "--list", "--shard", f"{index}/2"],
+                        cwd=REPO_ROOT, capture_output=True, text=True, timeout=60,
+                    )
+                    self.assertEqual(done.returncode, 0, done.stderr)
+                    self.assertEqual(done.stdout.splitlines(),
+                                     unchanged_rule(modules, times, index, 2))
 
 
 if __name__ == "__main__":

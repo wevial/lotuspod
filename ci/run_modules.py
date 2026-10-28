@@ -39,7 +39,11 @@ import time
 from pathlib import Path
 from typing import IO
 
-from shard_split import parse_shard, run_order, shard, weights
+# A script's own directory is on sys.path; `python -m ci.NAME` imports it as a package.
+if __package__:
+    from .shard_split import parse_shard, run_order, shard, weights
+else:
+    from shard_split import parse_shard, run_order, shard, weights
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 TESTS = REPO_ROOT / "tests"

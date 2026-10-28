@@ -20,7 +20,11 @@ import json
 import sys
 from pathlib import Path
 
-from shard_split import parse_shard, run_order, shard, weights
+# A script's own directory is on sys.path; `python -m ci.NAME` imports it as a package.
+if __package__:
+    from .shard_split import parse_shard, run_order, shard, weights
+else:
+    from shard_split import parse_shard, run_order, shard, weights
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 CHECKS = REPO_ROOT / "e2e" / "checks"
