@@ -88,10 +88,10 @@ revision}, behind, changed, sections, lines, truncated}: `behind` the listed
 versions newer than it, and `changed` false, with nothing compared, when REV
 is the current revision. `sections` is {changed: [{id, title}], added: [{id,
 title}], removed: [{title}]}; `lines` and `truncated` are there only when
-both versions kept NAME.md, a unified diff of the two as [{op, text}]. It
-answers 404 unknown_revision when no listed version carries REV, as for
-every page outside a repository, and is refused otherwise as the versions
-route is.
+both versions kept NAME.md, a unified diff of the two as [{op, text}], and a
+changed section carries its own when both sources split into the sections.
+It answers 404 unknown_revision when no listed version carries REV, as for
+every page outside a repository, and is refused otherwise as the versions route is.
 
 A POST is refused before anything is stored: 403 cross_origin when a browser
 sent it from another site, 415 when it is not JSON, 411 without a length,

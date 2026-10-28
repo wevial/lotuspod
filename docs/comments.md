@@ -207,7 +207,12 @@ twice.
   `NAME.md` it also answers `lines`, a unified diff of the two sources with
   three lines of context, each `{op, text}` with `op` one of `+`, `-`, a
   space or `@` (a hunk's header), at most 400, and `truncated`, true when
-  the diff was cut (see [Versions](publishing.md#versions)). It is 404
+  the diff was cut (see [Versions](publishing.md#versions)). Then each
+  `changed` entry also carries its own `lines` and `truncated`, the diff of
+  that section's part of each source alone, when both sources split into
+  the page's sections at their `## ` lines outside a code fence; a version
+  whose `h2`s and headings differ in number, as one with `> ## Aside` in a
+  blockquote, gives no entry its own. It is 404
   `unknown_revision` when no listed version carries REV, which includes
   every page outside a repository, 400 `invalid_query` without exactly one
   `page` and one `since` of 1 to 100 characters, and only read (any other
