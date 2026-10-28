@@ -2,16 +2,20 @@ import { createPortal, createRef, render } from "preact";
 import { effect, untracked } from "@preact/signals";
 import type { Page } from "../bridge";
 import type { Section, Shell, ShellHooks, Tab, Tally } from "./parts";
-import { decisionsTab } from "./tabs";
+import { decisionsTab, historyTab } from "./tabs";
 
 // A detached root owns only its portal. The groups list stays empty in the
 // virtual tree: thread-list roots and the resize handle are never Preact children,
-// nor is the Decisions tab's root, which the decisions island draws.
-// On a page that asks questions the head is two tabs, Decisions and Comments:
-// the panel shows Decisions until something chooses a tab, and the threads
-// are in view only while the Comments tab shows them. On a page that takes
-// no comments (comments false) the head is the Decisions tab alone, with no
-// way to start a thread, and the rail holds only "N to answer".
+// nor are the Decisions and History tabs' roots, which the decisions and
+// history islands draw.
+// On a page that asks questions, or lists its versions, the head is tabs:
+// Decisions while it asks, Comments while it takes comments and History
+// while it lists versions, in that order. The panel shows Decisions, else
+// Comments, until something chooses a tab, and the threads are in view only
+// while the Comments tab shows them. On a page that takes no comments
+// (comments false) there is no Comments tab, no way to start a thread, and
+// the rail holds only "N to answer" and the History mark. History opens only
+// when the reader chooses it.
 export function shell(page: Page, hooks: ShellHooks, comments = true): Shell {
   const root = document.createElement("div");
   const panel = createRef<HTMLElement>();
@@ -25,7 +29,11 @@ export function shell(page: Page, hooks: ShellHooks, comments = true): Shell {
   const choices = createRef<HTMLUListElement>();
   const start = createRef<HTMLDivElement>();
   const decisions = createRef<HTMLDivElement>();
-  const tabs = { decisions: createRef<HTMLButtonElement>(), comments: createRef<HTMLButtonElement>() };
+  const history = createRef<HTMLDivElement>();
+  const tabs = {
+    decisions: createRef<HTMLButtonElement>(), comments: createRef<HTMLButtonElement>(),
+    history: createRef<HTMLButtonElement>(),
+  };
   const toAnswer = createRef<HTMLButtonElement>();
   let open = false;
   let chosen: Tab | null = null;
@@ -38,8 +46,13 @@ export function shell(page: Page, hooks: ShellHooks, comments = true): Shell {
   let tally: Tally = { open: [], resolved: 0, none: true };
   let picking = false;
   let active = -1;
-  const tabbed = () => decisionsTab.asks.peek();
-  const showing = (): Tab => !comments ? "decisions" : tabbed() ? chosen ?? "decisions" : "comments";
+  // The tabs the head holds, in order.
+  const present = (): Tab[] => (["decisions", "comments", "history"] as const).filter(tab =>
+    tab === "decisions" ? decisionsTab.asks.peek() : tab === "comments" ? comments : historyTab.shown.peek());
+  const showing = (): Tab => {
+    const order = present();
+    return chosen && order.includes(chosen) ? chosen : order[0] ?? "decisions";
+  };
   // Whether the threads are in view: the panel open on its Comments tab.
   const seen = () => open && showing() === "comments";
   // Whether the questions are: the panel open on its Decisions tab.
@@ -113,11 +126,13 @@ export function shell(page: Page, hooks: ShellHooks, comments = true): Shell {
     (question ?? tabs.decisions.current)?.focus({ preventScroll: true });
   }
   function tabKey(event: KeyboardEvent): void {
-    if (!comments) return;
-    const order: Tab[] = ["decisions", "comments"];
+    const order = present();
+    const last = order.length - 1;
+    if (last < 1) return;
     const at = order.indexOf(showing());
-    const to = event.key === "ArrowRight" || event.key === "ArrowLeft" ? order[(at + 1) % 2]
-      : event.key === "Home" ? order[0] : event.key === "End" ? order[1] : null;
+    const to = event.key === "ArrowRight" ? order[at === last ? 0 : at + 1]
+      : event.key === "ArrowLeft" ? order[at === 0 ? last : at - 1]
+      : event.key === "Home" ? order[0] : event.key === "End" ? order[last] : null;
     if (!to) return;
     event.preventDefault();
     select(to, true);
@@ -151,7 +166,11 @@ export function shell(page: Page, hooks: ShellHooks, comments = true): Shell {
   }
   // Synchronous renders let callers inspect layout and move groups immediately.
   function draw(): void {
-    const asks = tabbed();
+    const asks = decisionsTab.asks.peek();
+    const listed = historyTab.shown.peek();
+    const unseen = listed ? historyTab.unseen.peek() : 0;
+    const tabbed = asks || listed;
+    const names = present().map((tab, at) => at ? tab : tab[0].toUpperCase() + tab.slice(1));
     const shown = showing();
     const count = decisionsTab.count.peek();
     const counts = (
@@ -185,23 +204,33 @@ export function shell(page: Page, hooks: ShellHooks, comments = true): Shell {
             <span class="artifact-comments-to-answer-count" aria-hidden="true">{count ? String(count) : "✓"}</span>
             <span class="artifact-comments-to-answer-label" aria-hidden="true">{count ? "to answer" : "answered"}</span>
           </button>}
+          {unseen > 0 && <button type="button" class="artifact-comments-rail-history"
+            aria-label="Changed since you last looked: open History" aria-controls="artifact-comments-history"
+            onClick={event => {
+              event.stopPropagation(); setOpen(true, true, "history");
+              tabs.history.current?.focus({ preventScroll: true });
+            }}>
+            <span class="artifact-comments-rail-history-dot" aria-hidden="true" />
+            <span class="artifact-comments-rail-history-label" aria-hidden="true">changed</span>
+          </button>}
           {comments && <ol class="artifact-comments-dots" aria-hidden="true">
             {tally.open.map(thread => <li key={thread.id} class={`artifact-comments-dot artifact-comments-dot--${thread.standing}`} />)}
           </ol>}
           <span class="artifact-comments-rail-label" aria-hidden="true">{comments ? "Comments" : "Decisions"}</span>
         </div>
         <div class="artifact-comments-sheet" id="artifact-comments-sheet" hidden={!open}>
-          <header class={"artifact-comments-head" + (asks ? " artifact-comments-head--tabs" : "")}>
-            {asks ? <div class="artifact-comments-tabs" role="tablist"
-              aria-label={comments ? "Decisions and comments" : "Decisions"} onKeyDown={tabKey}>
-              <button ref={tabs.decisions} type="button" role="tab" class="artifact-comments-tab"
+          <header class={"artifact-comments-head" + (tabbed ? " artifact-comments-head--tabs" : "")}>
+            {tabbed ? <div class="artifact-comments-tabs" role="tablist"
+              aria-label={names.length > 1 ? names.slice(0, -1).join(", ") + " and " + names[names.length - 1] : names[0]}
+              onKeyDown={tabKey}>
+              {asks && <button ref={tabs.decisions} type="button" role="tab" class="artifact-comments-tab"
                 id="artifact-comments-tab-decisions" aria-controls="artifact-comments-decisions"
                 aria-selected={shown === "decisions"} tabIndex={shown === "decisions" ? 0 : -1}
                 onClick={() => select("decisions", false)}>
                 Decisions
                 <span class={"artifact-comments-tab-badge" + (count === 0 ? " artifact-comments-tab-badge--done" : "")}
                   hidden={count === null}>{count ? String(count) : "✓"}</span>
-              </button>
+              </button>}
               {comments && <button ref={tabs.comments} type="button" role="tab" class="artifact-comments-tab"
                 id="artifact-comments-tab-comments" aria-controls="artifact-comments-sheet-comments"
                 aria-selected={shown === "comments"} tabIndex={shown === "comments" ? 0 : -1}
@@ -209,8 +238,16 @@ export function shell(page: Page, hooks: ShellHooks, comments = true): Shell {
                 Comments
                 <span class="artifact-comments-tab-badge">{tally.open.length}</span>
               </button>}
+              {listed && <button ref={tabs.history} type="button" role="tab" class="artifact-comments-tab"
+                id="artifact-comments-tab-history" aria-controls="artifact-comments-history"
+                aria-selected={shown === "history"} tabIndex={shown === "history" ? 0 : -1}
+                onClick={() => select("history", false)}>
+                <span>History{unseen > 0 && <span class="artifact-comments-tab-unseen">
+                  {`, ${unseen} ${unseen === 1 ? "section" : "sections"} changed`}</span>}</span>
+                {unseen > 0 && <span class="artifact-comments-tab-dot" aria-hidden="true" />}
+              </button>}
             </div> : <h2 class="artifact-comments-title">Comments</h2>}
-            {!asks && counts}
+            {!tabbed && counts}
             <button ref={fold} type="button" class="artifact-comments-fold"
               aria-label={comments ? "Fold comments" : "Fold decisions"}
               onClick={() => { setOpen(false, true); focus("opener"); }}><span aria-hidden="true">»</span></button>
@@ -220,9 +257,9 @@ export function shell(page: Page, hooks: ShellHooks, comments = true): Shell {
           {/* The Comments tab's panel holds the ways to start a thread and the
               threads themselves, and scrolls them together. */}
           <div ref={scroller} class="artifact-comments-threads" id="artifact-comments-sheet-comments" hidden={shown !== "comments"}
-            role={asks ? "tabpanel" : undefined} aria-labelledby={asks ? "artifact-comments-tab-comments" : undefined}>
+            role={tabbed ? "tabpanel" : undefined} aria-labelledby={tabbed ? "artifact-comments-tab-comments" : undefined}>
             {comments && <div ref={start} class="artifact-comments-start">
-              {asks && counts}
+              {tabbed && counts}
               {page.archived && <p class="artifact-comments-closed">{page.closed}</p>}
               <p class="artifact-comments-none" hidden={!tally.none}>No comments yet</p>
               {whole() && <button ref={onPage} type="button" class="artifact-comments-on-page" disabled={page.archived}
@@ -242,6 +279,9 @@ export function shell(page: Page, hooks: ShellHooks, comments = true): Shell {
             </div>}
             <div ref={list} class="artifact-comments-groups" />
           </div>
+          {/* The History tab's panel scrolls on its own, beside the threads. */}
+          <div ref={history} class="artifact-comments-history" id="artifact-comments-history" role="tabpanel"
+            aria-labelledby="artifact-comments-tab-history" hidden={shown !== "history"} />
         </div>
       </aside>, document.body), root);
     // Other scripts own modifiers such as --resizing. Update only ours.
@@ -250,11 +290,15 @@ export function shell(page: Page, hooks: ShellHooks, comments = true): Shell {
   }
   draw();
   decisionsTab.node.value = decisions.current;
-  // Whether the page asks questions, and how many are to answer, draw the
-  // head and the rail again.
+  historyTab.node.value = history.current;
+  // Whether the page asks questions, how many are to answer, whether it
+  // lists its versions and how many sections changed unseen, draw the head
+  // and the rail again.
   effect(() => {
     decisionsTab.asks.value;
     decisionsTab.count.value;
+    historyTab.shown.value;
+    historyTab.unseen.value;
     untracked(draw);
   });
   document.addEventListener("click", event => {

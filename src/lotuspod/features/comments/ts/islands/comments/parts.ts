@@ -14,8 +14,9 @@ export interface Tally {
   resolved: number;
   none: boolean;
 }
-// The comments panel's tabs, on a page that asks questions.
-export type Tab = "decisions" | "comments";
+// The comments panel's tabs, on a page that asks questions or lists its
+// versions.
+export type Tab = "decisions" | "comments" | "history";
 export interface ShellHooks {
   opened(): void;
   resolvedChanged(): void;

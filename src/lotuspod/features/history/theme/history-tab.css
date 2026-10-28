@@ -1,0 +1,306 @@
+/* The comments panel's History tab (features/history/ts/islands/history-tab.tsx):
+   "Since you last looked" with Mark as seen, a row per changed, new or
+   removed section, its kind a pill (sky, mint or rose), a changed one's diff
+   under its row, then the newest versions as the versions view draws them,
+   tighter, and "See all versions". While anything changed unseen, the tab
+   carries a sky dot, and the folded rail a sky dot over "changed". */
+.artifact-comments-history {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-color: var(--hairline-strong) transparent;
+  scrollbar-width: thin;
+}
+
+.artifact-comments-history[hidden] {
+  display: none;
+}
+
+.artifact-history {
+  color: var(--body-ink);
+  font-size: 0.92rem;
+  line-height: 1.5;
+  padding: 0.85rem 0.75rem 1.5rem;
+}
+
+.artifact-history-head {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 0.75rem;
+  justify-content: space-between;
+}
+
+.artifact-history-heading {
+  color: var(--color-white);
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.artifact-history-mark {
+  appearance: none;
+  background: none;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-pill);
+  color: var(--color-pale-lavender);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 0.15rem 0.85rem;
+}
+
+.artifact-history-mark:hover,
+.artifact-history-mark:focus-visible {
+  border-color: var(--color-lavender);
+  color: var(--color-white);
+}
+
+.artifact-history-when {
+  color: var(--color-muted-lavender);
+  font-size: 0.85rem;
+  margin: 0.2rem 0 0.75rem;
+}
+
+.artifact-history-none {
+  color: var(--color-muted-lavender);
+  margin: 0.35rem 0 0;
+}
+
+.artifact-history-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.artifact-history-item {
+  padding: 0.2rem 0;
+}
+
+.artifact-history-row {
+  align-items: baseline;
+  display: flex;
+  gap: 0.6rem;
+  min-width: 0;
+}
+
+.artifact-history-kind {
+  border: 1px solid currentColor;
+  border-radius: var(--radius-pill);
+  color: var(--color-sky);
+  flex: none;
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+  min-width: 4.6rem;
+  padding: 0 0.5rem;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.artifact-history-item--added .artifact-history-kind {
+  color: var(--color-mint);
+}
+
+.artifact-history-item--removed .artifact-history-kind {
+  color: var(--color-rose);
+}
+
+.artifact-history-section {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.artifact-history-item--removed .artifact-history-section {
+  color: var(--color-muted-lavender);
+}
+
+a.artifact-history-section {
+  color: var(--color-sky);
+  text-decoration-color: var(--link-line);
+  text-underline-offset: 0.18em;
+}
+
+a.artifact-history-section:hover,
+a.artifact-history-section:focus-visible {
+  color: var(--color-pale-sky);
+  text-decoration-color: currentColor;
+}
+
+/* "Show the diff ▸", "Hide the diff ▾" at the row's end. */
+.artifact-history-toggle {
+  appearance: none;
+  background: none;
+  border: 0;
+  border-radius: var(--radius-chip);
+  color: var(--color-muted-lavender);
+  cursor: pointer;
+  flex: none;
+  font: inherit;
+  font-size: 0.85rem;
+  margin-left: auto;
+  padding: 0 0.15rem;
+  white-space: nowrap;
+}
+
+.artifact-history-toggle::after {
+  content: " ▸";
+}
+
+.artifact-history-toggle[aria-expanded="true"] {
+  color: var(--color-pale-lavender);
+}
+
+.artifact-history-toggle[aria-expanded="true"]::after {
+  content: " ▾";
+}
+
+.artifact-history-toggle:hover,
+.artifact-history-toggle:focus-visible {
+  color: var(--color-white);
+}
+
+.artifact-history-diff {
+  font-size: 0.75rem;
+  margin: 0.4rem 0 0.35rem;
+}
+
+.artifact-history-diff .artifact-diff-line {
+  padding: 0 0.5rem;
+}
+
+.artifact-history-diff .artifact-diff-op {
+  width: 1rem;
+}
+
+.artifact-history-more {
+  color: var(--color-muted-lavender);
+  font-size: 0.8rem;
+  margin: 0 0 0.35rem;
+}
+
+.artifact-history-versions-heading {
+  border-top: 1px solid var(--hairline);
+  color: var(--color-muted-lavender);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  margin: 1.1rem 0 0.6rem;
+  padding-top: 1rem;
+  text-transform: uppercase;
+}
+
+/* The versions view's rows, fitted to the panel: the date, the pills and
+   View on one line, wrapping where they do not fit, the note under them on
+   one line of its own. */
+.artifact-history-versions .artifact-versions-entry {
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.15rem 0.4rem;
+  padding: 0.55rem 0.75rem;
+}
+
+.artifact-history-versions .artifact-versions-when {
+  display: contents;
+}
+
+.artifact-history-versions .artifact-versions-date {
+  font-size: 0.9rem;
+  white-space: nowrap;
+}
+
+.artifact-history-versions .artifact-versions-note {
+  flex: 1 0 100%;
+  font-size: 0.8rem;
+  margin: 0;
+  order: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.artifact-history-versions .artifact-versions-current,
+.artifact-history-versions .artifact-versions-seen {
+  font-size: 0.72rem;
+  margin: 0;
+}
+
+.artifact-history-versions .artifact-versions-view {
+  font-size: 0.85rem;
+  margin-left: auto;
+}
+
+.artifact-history-all {
+  color: var(--color-sky);
+  display: inline-block;
+  font-size: 0.875rem;
+  margin-top: 0.65rem;
+  text-decoration-color: var(--link-line);
+  text-underline-offset: 0.18em;
+}
+
+.artifact-history-all:hover,
+.artifact-history-all:focus-visible {
+  color: var(--color-pale-sky);
+  text-decoration-color: currentColor;
+}
+
+.artifact-comments-tab-dot {
+  background: var(--color-sky);
+  border-radius: 50%;
+  flex: none;
+  height: 0.45rem;
+  width: 0.45rem;
+}
+
+.artifact-comments-tab-unseen {
+  clip-path: inset(50%);
+  height: 1px;
+  overflow: hidden;
+  position: absolute;
+  white-space: nowrap;
+  width: 1px;
+}
+
+.artifact-comments-rail-history {
+  align-items: center;
+  appearance: none;
+  background: color-mix(in srgb, var(--color-sky) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-sky) 70%, transparent);
+  border-radius: var(--radius-block);
+  color: var(--color-sky);
+  cursor: pointer;
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  font: inherit;
+  gap: 0.4rem;
+  padding: 0.5rem 0 0.6rem;
+  width: 2rem;
+}
+
+.artifact-comments-rail-history:hover {
+  background: color-mix(in srgb, var(--color-sky) 22%, transparent);
+}
+
+.artifact-comments-rail-history:focus-visible {
+  outline: 2px solid var(--color-lavender);
+  outline-offset: 2px;
+}
+
+.artifact-comments-rail-history-dot {
+  background: var(--color-sky);
+  border-radius: 50%;
+  height: 0.5rem;
+  width: 0.5rem;
+}
+
+.artifact-comments-rail-history-label {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  writing-mode: vertical-rl;
+}

@@ -9,7 +9,7 @@ import { SHOWN, type Version, type VersionsState } from "./state";
 // over the row (features/history/theme/versions.css), so a click anywhere on
 // it is a click on the link: the current one's to the page, every other's to
 // its read-only old version.
-function Entry({ page, name, version, seen }: { page: Page; name: string; version: Version; seen: boolean }) {
+export function Entry({ page, name, version, seen }: { page: Page; name: string; version: Version; seen: boolean }) {
   const stamp = page.when(version.date);
   const file = encodeURIComponent(name) + ".html";
   return (
