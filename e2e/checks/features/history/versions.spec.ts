@@ -55,14 +55,14 @@ function changesSource(title: string, pump: string) {
 }
 
 // hermes publishes markdown, or HTML with suffix .html, as the page name,
-// with comments.
-function publish(name: string, markdown: string, suffix = '.md') {
+// with comments, in the given variant, else the page's current one.
+function publish(name: string, markdown: string, suffix = '.md', variant?: 'article' | 'report') {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lotuspod-versions-'));
   try {
     const file = path.join(dir, `${name}${suffix}`);
     fs.writeFileSync(file, markdown, 'utf-8');
     const said = run('publish', file, '--local', '--out-dir', OUT, '--owner', OWNER,
-      '--credential', HERMES, '--comments');
+      '--credential', HERMES, '--comments', ...(variant ? ['--variant', variant] : []));
     expect(said).toContain(`published ${name} at revision`);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
@@ -592,15 +592,15 @@ test.describe('signed in, what changed', () => {
 
   // Publishes the page, opens it with nothing to say yet, publishes it again
   // with the pump's line changed and opens it once more.
-  async function republish(page: Page, name: string, title: string) {
-    publish(name, changesSource(title, 'The pump stops in January.'));
+  async function republish(page: Page, name: string, title: string, variant?: 'article' | 'report') {
+    publish(name, changesSource(title, 'The pump stops in January.'), '.md', variant);
     await open(page, name);
     await expect(page.locator('.artifact-history-pill')).toHaveCount(0);
 
     // serve dates a page to the second: a publish in the second the page was
     // served would leave the browser's cached copy current.
     await page.waitForTimeout(1100);
-    publish(name, changesSource(title, 'The pump runs all winter.'));
+    publish(name, changesSource(title, 'The pump runs all winter.'), '.md', variant);
     await open(page, name);
   }
 
@@ -618,11 +618,19 @@ test.describe('signed in, what changed', () => {
     });
   }
 
+  // The rule is drawn, and inside the window, left of the heading's words.
   async function ruled(heading: Locator) {
     const found = await rule(heading);
     expect(found.content).not.toBe('none');
     expect(found.width).toBe('3px');
     expect(found.background).toBe(found.sky);
+    const [start, end, words] = await heading.evaluate((node) => {
+      const box = node.getBoundingClientRect();
+      const left = box.left + parseFloat(getComputedStyle(node, '::before').left);
+      return [left, left + 3, box.left];
+    });
+    expect(start).toBeGreaterThanOrEqual(0);
+    expect(end).toBeLessThanOrEqual(words);
   }
 
   async function unruled(heading: Locator) {
@@ -744,6 +752,20 @@ test.describe('signed in, what changed', () => {
     await sheet.getByRole('button', { name: 'Close', exact: true }).click();
     await expect(sheet).toBeHidden();
     await unruled(pump);
+    expect(errors).toEqual([]);
+  });
+
+  test("on a phone, an article's changed heading keeps its rule inside the window", async ({ page }) => {
+    const errors = watchErrors(page);
+    await page.setViewportSize({ width: 390, height: 844 });
+    const name = 'changes-rules-article';
+    await republish(page, name, 'Changes rules article', 'article');
+    const pump = page.locator('.artifact-body h2#pump');
+    await page.locator('.artifact-topbar button.artifact-history-pill').click();
+    await expect(page.locator('#artifact-comments-bottom-sheet-history .artifact-history')).toBeVisible();
+    await ruled(pump);
+    await page.setViewportSize({ width: 320, height: 844 });
+    await ruled(pump);
     expect(errors).toEqual([]);
   });
 

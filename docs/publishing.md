@@ -790,7 +790,9 @@ The page draws no box for it and no tag on its headings: the header runs
 straight into the body, and the title bar's "N changed" pill (below) is the
 only hint until History is opened. While History shows, in the comments
 panel or the bottom sheet, each changed or new section's heading carries a
-thin sky rule in the gutter beside it, as tall as its text, moving no words;
+thin sky rule beside it, as tall as its text, moving no words: in the
+gutter where the outline sits beside the text, and on a narrow page, whose
+gutter the section's caret fills, between the caret and the words;
 the text before the first heading has no heading and no rule. The rules go
 when History is closed or another tab is chosen, and for good once "Mark as
 seen" is pressed. History's "See all versions" opens the versions view, where
