@@ -4,9 +4,9 @@ import type { CommentRow, Page, Reaction } from "../bridge";
 // The quick set the Add reaction menu offers. Each must equal its value in
 // the composers' emoji table (theme/lotuspod-emoji.json) exactly, as serve
 // refuses any other string: ❤️ carries its variation selector.
-export const QUICK = ["👍", "❤️", "🎉", "😄", "👀", "✅"] as const;
+const QUICK = ["👍", "❤️", "🎉", "😄", "👀", "✅"] as const;
 
-export interface ReactionsProps {
+interface ReactionsProps {
   row: CommentRow;
   page: Page;
   // The page's name as its comments are stored under.
@@ -94,7 +94,7 @@ export function Reactions({ row, page, name, store }: ReactionsProps) {
       return <button key={each.emoji} type="button" class="artifact-reaction" aria-pressed={each.mine ? "true" : "false"}
         title={names} aria-label={each.emoji + " " + each.count + ": " + names} disabled={archived}
         aria-disabled={busy ? "true" : undefined}
-        onClick={() => { if (!archived) void post(each.emoji, each.emoji, !each.mine); }}>
+        onClick={() => void post(each.emoji, each.emoji, !each.mine)}>
         {each.emoji + " " + each.count}
       </button>;
     })}
@@ -103,7 +103,7 @@ export function Reactions({ row, page, name, store }: ReactionsProps) {
       onClick={() => { if (!saving.has("add")) setOpen(!open); }}>
       <span aria-hidden="true">☺+</span>
     </button>}
-    {!archived && open && <div key="menu" ref={menu} class="artifact-reaction-menu" role="group" aria-label="Quick reactions">
+    {open && <div key="menu" ref={menu} class="artifact-reaction-menu" role="group" aria-label="Quick reactions">
       {QUICK.map(emoji => <button key={emoji} type="button" class="artifact-reaction-quick" aria-label={emoji}
         onClick={() => choose(emoji)}>{emoji}</button>)}
     </div>}
