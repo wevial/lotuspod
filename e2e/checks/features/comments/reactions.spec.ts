@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
-import { expect, test, type APIRequestContext, type Locator, type Page } from '@playwright/test';
+import { expect, test, type APIRequestContext, type Locator, type Page, type Request } from '@playwright/test';
 
 // Emoji reactions on a thread's comments: each comment shows its reactions
 // as chips under its text, a chip adds or removes the reader's own, and Add
@@ -94,20 +94,20 @@ function watch(page: Page) {
   return errors;
 }
 
+function reactionPost(request: Request) {
+  return new URL(request.url()).pathname === COMMENTS && request.method() === 'POST' &&
+    'emoji' in (request.postDataJSON() ?? {});
+}
+
 // The bodies of the page's reaction posts.
 function reactionPosts(page: Page) {
   const bodies: Record<string, unknown>[] = [];
-  page.on('request', (r) => {
-    if (new URL(r.url()).pathname !== COMMENTS || r.method() !== 'POST') return;
-    const body = r.postDataJSON() ?? {};
-    if ('emoji' in body) bodies.push(body);
-  });
+  page.on('request', (r) => { if (reactionPost(r)) bodies.push(r.postDataJSON()); });
   return bodies;
 }
 
 function reactionAnswered(page: Page) {
-  return page.waitForResponse((r) => new URL(r.url()).pathname === COMMENTS && r.request().method() === 'POST' &&
-    'emoji' in (r.request().postDataJSON() ?? {}));
+  return page.waitForResponse((r) => reactionPost(r.request()));
 }
 
 // Load the page on its own and let its first read of the threads end.
@@ -136,9 +136,9 @@ const SHEET = '.artifact-comments-bottom-sheet';
 
 test.describe('signed in', () => {
   test.use({ extraHTTPHeaders: SIGNED_IN });
+  test.describe.configure({ timeout: 120_000 });
 
   test('Add reaction posts 👍, chips follow other reactions live, and a chip toggles the reader\'s own', async ({ page, request }) => {
-    test.setTimeout(120_000);
     const errors = watch(page);
     const { name, reply, thread } = await rendered(request, `check-reactions-panel-${test.info().repeatEachIndex}`);
     const posts = reactionPosts(page);
@@ -223,7 +223,6 @@ test.describe('signed in', () => {
   });
 
   test('Add reaction shows on hover alone, and Escape or a click outside closes its menu, focus back on Add reaction', async ({ page, request }) => {
-    test.setTimeout(120_000);
     const errors = watch(page);
     const { name, reply, thread } = await rendered(request, `check-reactions-escape-${test.info().repeatEachIndex}`);
     const posts = reactionPosts(page);
@@ -290,7 +289,6 @@ test.describe('signed in', () => {
   });
 
   test('a row\'s reactions are posted one after another, so an older answer never replaces a newer one', async ({ page, request }) => {
-    test.setTimeout(120_000);
     const errors = watch(page);
     const { name, reply } = await rendered(request, `check-reactions-order-${test.info().repeatEachIndex}`);
     await react(request, SECOND, name, reply, '👍');
@@ -299,8 +297,7 @@ test.describe('signed in', () => {
     const held = new Promise<void>((resolve) => { release = resolve; });
     let first = true;
     await page.route((url) => url.pathname === COMMENTS, async (route) => {
-      const body = route.request().postDataJSON() ?? {};
-      if (route.request().method() === 'POST' && 'emoji' in body && first) {
+      if (reactionPost(route.request()) && first) {
         first = false;
         const answer = await route.fetch();
         await held;
@@ -318,8 +315,7 @@ test.describe('signed in', () => {
     await eyes.click();
     await page.waitForTimeout(300);
     expect(posts).toHaveLength(1);
-    const second = page.waitForResponse((r) => new URL(r.url()).pathname === COMMENTS &&
-      r.request().method() === 'POST' && r.request().postDataJSON()?.emoji === '👀');
+    const second = page.waitForResponse((r) => reactionPost(r.request()) && r.request().postDataJSON().emoji === '👀');
     release();
     expect((await second).status()).toBe(200);
     expect(posts.map((body) => body.emoji)).toEqual(['👍', '👀']);
@@ -332,7 +328,6 @@ test.describe('signed in', () => {
   });
 
   test('at the panel\'s narrowest the quick emoji stay inside it', async ({ page, request }) => {
-    test.setTimeout(120_000);
     const errors = watch(page);
     const { name, reply, thread } = await rendered(request, `check-reactions-narrow-${test.info().repeatEachIndex}`);
     await page.addInitScript(() => localStorage.setItem('lotuspod:comments-width', '16'));
@@ -362,13 +357,11 @@ test.describe('signed in', () => {
   });
 
   test('a refused reaction leaves the chips as they were', async ({ page, request }) => {
-    test.setTimeout(120_000);
     const errors = watch(page);
     const { name, reply } = await rendered(request, `check-reactions-refused-${test.info().repeatEachIndex}`);
     await react(request, SECOND, name, reply, '👍');
     await page.route((url) => url.pathname === COMMENTS, (route) => {
-      const body = route.request().postDataJSON() ?? {};
-      if (route.request().method() === 'POST' && 'emoji' in body) {
+      if (reactionPost(route.request())) {
         return route.fulfill({ status: 503, contentType: 'application/json', body: '{"error": "storage_unavailable"}' });
       }
       return route.continue();
@@ -390,7 +383,6 @@ test.describe('signed in', () => {
   });
 
   test('an archived page draws its chips disabled and no Add reaction', async ({ page, request }) => {
-    test.setTimeout(120_000);
     const errors = watch(page);
     const { name, reply } = await rendered(request, `check-reactions-archived-${test.info().repeatEachIndex}`);
     await react(request, SECOND, name, reply, '👍');
@@ -420,7 +412,6 @@ test.describe('signed in', () => {
     test.use({ viewport: PHONE, hasTouch: true, isMobile: true });
 
     test('the bottom sheet shows the chips and Add reaction without a hover', async ({ page, request }) => {
-      test.setTimeout(120_000);
       const errors = watch(page);
       const { name, reply } = await rendered(request, `check-reactions-phone-${test.info().repeatEachIndex}`);
       await react(request, SECOND, name, reply, '👍');
