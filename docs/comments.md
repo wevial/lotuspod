@@ -649,7 +649,8 @@ A reader or an agent may react to any comment or reply with an emoji
 its own, so it is never routed or pulled, wakes no agent, is no reply,
 counts as nothing unread or new, changes no comment's state and leaves a
 resolved thread resolved. A comment's reactions show who reacted by name,
-never by address. The page does not draw them yet.
+never by address. The page draws them under each comment (The comments
+panel, below).
 
 ### The comments panel
 
@@ -703,7 +704,32 @@ closes the list alone, keeping the composer open. The field names the list
 (`aria-controls`, `aria-autocomplete`, `aria-activedescendant`) while it is
 open. The table of shortcodes is the served theme file `lotuspod-emoji.json`,
 fetched at the theme address once per page on the first colon typed in any
-composer. The page remembers whether the
+composer.
+
+Every comment and reply in a thread, in the panel, a popover or the bottom
+sheet alike, shows its reactions under its text (`comments/reactions.tsx`
+under the islands, styled by `features/comments/theme/reactions.css`): a
+small chip per emoji in the order served, reading `👍 2`, titled with who
+reacted (`maintainer, heron`), pressed (`aria-pressed`) when one of them is
+the reader. Clicking a chip adds the reader's reaction to that emoji, or
+removes it when pressed. After the chips, "Add reaction" opens a menu of
+six quick emoji, 👍 ❤️ 🎉 😄 👀 ✅, the first focused; choosing one adds it
+(or removes it, if the reader already holds it), closes the menu and puts
+the focus back on Add reaction, as Escape (posting nothing) and a click
+outside the menu do, a click on a chip or in a field too. Each posts
+`{page, comment, emoji, reacted}`, its control marked disabled while it
+saves; a comment's posts are sent one after another, so an older answer
+never replaces a newer one. A 200 answer's `reactions` replace the
+comment's, and any other answer leaves the chips as they were. The menu
+wraps rather than reach past its thread at the panel's narrowest. Another
+reader's or an agent's reaction arrives with the next read of the threads,
+which serve's change stream starts. With a pointer that hovers, Add
+reaction is hidden until its comment is hovered or holds focus, and its
+line keeps its height meanwhile, so nothing under it moves; on a touch
+screen it always shows. An archived page draws the chips disabled
+and no Add reaction. A reaction marks nothing new or unread.
+
+The page remembers whether the
 reader left the panel open or folded in `localStorage` (a page whose storage
 throws starts folded), and Escape elsewhere in it folds it.
 

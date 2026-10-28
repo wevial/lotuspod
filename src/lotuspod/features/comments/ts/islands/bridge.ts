@@ -263,7 +263,13 @@ export interface CommentRow {
   sectionTitle?: string;
   text?: string;
   state?: string;
+  // Its reactions as served, by emoji in the order of each one's first; a
+  // row served without them draws no chips.
+  reactions?: Reaction[];
 }
+// One emoji's reactions on a comment: how many, whether the reader's own is
+// among them, and who reacted, by name, oldest first.
+export interface Reaction { emoji: string; count: number; mine: boolean; by: string[] }
 export interface Resolution { resolved: boolean }
 // What SAVED tells of an answer saved: the comment its note opened or
 // added to a thread with, if any.
@@ -385,6 +391,8 @@ export interface ThreadBridge {
   counted(thread: Thread, row: CommentRow): boolean;
   opening: Map<number, Set<number>>;
   label(thread: Thread, row: CommentRow): void;
+  // Merge a row a reaction post changed into its thread, which draws it.
+  react(thread: Thread, row: CommentRow): void;
 }
 
 export interface StoredImage { name: string; width: number; height: number }

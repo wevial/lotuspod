@@ -1,6 +1,7 @@
 import { render, type ComponentChildren, type VNode } from "preact";
 import type { CommentRow, Page, Thread, ThreadBridge } from "../bridge";
 import { anchorOf, blockStanding, onImage, spotStanding } from "./anchor";
+import { Reactions } from "./reactions";
 
 export function threadRows(page: Page, bridge: ThreadBridge) {
   const states = new WeakMap<Thread, State>();
@@ -34,7 +35,14 @@ export function threadRows(page: Page, bridge: ThreadBridge) {
     return <><span class="artifact-comment-handle">{handle}</span>{" "}<span class="artifact-comment-agent">AGENT</span>
       {model && <>{" "}<span class="artifact-comment-model">{String(model)}</span></>}</>;
   }
-  function comment(drawn: Drawn, unread: boolean) {
+  // A reaction's answer lands on the row as the thread holds it then.
+  function react(thread: Thread, id: number, reactions: CommentRow["reactions"]) {
+    const current = rows(thread).find(each => each.id === id);
+    if (current) bridge.react(thread, { ...current, reactions });
+  }
+  // drawn.entry is the row as first drawn; current is the row as the last
+  // read gave it, which carries its reactions now.
+  function comment(thread: Thread, drawn: Drawn, current: CommentRow, unread: boolean) {
     const entry = drawn.entry, handle = agent(entry), name = handle || author(entry);
     return row("artifact-comment-item artifact-comment-item--" + (handle ? "agent" : "reader") +
       (unread ? " artifact-comment--unread" : ""), handle ? "artifact-comment-avatar--agent" : "",
@@ -45,6 +53,7 @@ export function threadRows(page: Page, bridge: ThreadBridge) {
         </p>
         {entry.answer && typeof entry.answer === "object" && <p class="artifact-comment-answered">Answered: {String(entry.answer.label || entry.answer.choice || "")}</p>}
         <div class="artifact-comment-text" id={"artifact-comment-text-" + entry.id} ref={drawn.attach} />
+        <Reactions row={current} page={page} name={bridge.page} store={reactions => react(thread, entry.id, reactions)} />
       </>);
   }
   function notice(state: string, kind: string, title: string, lines: string[], quiet = false) {
@@ -87,8 +96,8 @@ export function threadRows(page: Page, bridge: ThreadBridge) {
   function paint(thread: Thread, value: State) {
     const children: VNode[] = [];
     let divided = false;
-    for (const { id } of rows(thread)) {
-      const drawn = value.drawn.get(id);
+    for (const current of rows(thread)) {
+      const id = current.id, drawn = value.drawn.get(id);
       if (!drawn) continue;
       const unread = value.unread.has(id);
       if (unread && !divided) {
@@ -97,7 +106,7 @@ export function threadRows(page: Page, bridge: ThreadBridge) {
         children.push(<li key={"divider " + id} class="artifact-comment-divider" aria-hidden="true"><span>New since you last looked</span></li>);
         divided = true;
       }
-      const item = comment(drawn, unread);
+      const item = comment(thread, drawn, current, unread);
       item.key = "row " + id;
       children.push(item);
       if (drawn.mark) children.push(drawn.mark);

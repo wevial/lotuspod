@@ -95,6 +95,7 @@ export function store(page: Page, bridge: StoreBridge): Store {
   const threadPart = threadRows(page, {
     owner, page: name, checking: () => checking,
     counted: replies.counted, opening: replies.opening, label: (thread, row) => composer.label(thread, row),
+    react: (thread, row) => { merge(thread, [row]); },
   });
   const { agent, author, routed, rows, sync, markUnread } = threadPart;
 
