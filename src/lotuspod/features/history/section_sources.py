@@ -12,9 +12,14 @@ such as one from "> ## Aside" in a blockquote, does not split.
 
 from __future__ import annotations
 
+import re
+
 from lotuspod.features.history.versions import sections
 
 _CUT = "## Concrete commands"
+# The converter reads the source with universal newlines; the kept one holds
+# its own line endings.
+_LINE_END = re.compile(r"\r\n|\r|\n")
 
 
 def section_sources(page_html: str, source: str) -> dict[str, str] | None:
@@ -22,7 +27,7 @@ def section_sources(page_html: str, source: str) -> dict[str, str] | None:
     source's headings and the page's h2s do not pair one to one."""
     parts: list[list[str]] = [[]]
     fenced = False
-    for i, line in enumerate(source.split("\n")):
+    for i, line in enumerate(_LINE_END.split(source)):
         if line.startswith("```"):
             fenced = not fenced
         elif not fenced and i and line.startswith(_CUT):

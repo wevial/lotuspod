@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import unittest
 
-from tests.test_changes_witness import ChangesWitness
+from tests.test_changes_witness import ChangesWitness, body
 from lotuspod.features.history import versions
 
 PAGE = "pond-plan"
@@ -38,6 +38,7 @@ And the fish sleep.
 
 
 FENCED = "The pond freezes in January.\n\n```\n## not a heading\n```"
+CARRIAGE = "alpha before\r```\n## Fake\n{fake}\n```\rafter code"
 QUOTED = "The pond freezes in January.\n\n> ## Aside\n> The ice is thin."
 
 
@@ -104,6 +105,33 @@ class SectionDiffTests(ChangesWitness):
         for entry in changed:
             self.assertNotIn("lines", entry)
             self.assertNotIn("truncated", entry)
+        self.assertIn({"op": "-", "text": "old line"}, answer["lines"])
+        self.assertIn({"op": "+", "text": "new line"}, answer["lines"])
+
+    def test_a_page_with_no_kept_source_gives_no_section_lines(self):
+        self.repository(self.out)
+        self.render(PAGE, body(("Alpha", "The pond freezes."), ("Beta", "old line")), "rev-one")
+        self.render(PAGE, body(("Alpha", "The pond freezes."), ("Beta", "new line")), "rev-two")
+        answer = self.ask("rev-one")
+
+        changed = answer["sections"]["changed"]
+        self.assertEqual([entry["title"] for entry in changed], ["Beta"])
+        self.assertNotIn("lines", changed[0])
+        self.assertNotIn("truncated", changed[0])
+        self.assertNotIn("lines", answer)
+
+    def test_a_bare_carriage_return_ends_a_line_as_the_converter_reads_it(self):
+        self.repository(self.out)
+        first = self.publish_markdown(PAGE, page(CARRIAGE.format(fake="fake old"), "old line"))
+        self.publish_markdown(PAGE, page(CARRIAGE.format(fake="fake new"), "new line"))
+        answer = self.ask(first)
+
+        alpha, beta = answer["sections"]["changed"]
+        self.assertEqual((alpha["title"], beta["title"]), ("Alpha", "Beta"))
+        self.assertIn({"op": "+", "text": "fake new"}, alpha["lines"])
+        self.assertNotIn("new line", texts(alpha["lines"]))
+        self.assertIn({"op": "+", "text": "new line"}, beta["lines"])
+        self.assertNotIn("fake new", texts(beta["lines"]))
 
     def test_a_section_diff_past_the_cap_is_cut(self):
         self.repository(self.out)
