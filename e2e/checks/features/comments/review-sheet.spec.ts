@@ -711,7 +711,8 @@ test.describe('signed in, published again', () => {
     await republish(page, name, [['Findings', []], [DECISIONS, []]]);
     await expect(the.form('decision-1')).toHaveCount(0);
     await expect(the.count).toBeHidden();
-    await expect(the.tabs).toHaveCount(0);
+    // Published more than once, the page keeps its History tab beside Comments.
+    await expect(the.tabs).toHaveText([/^Comments/, /^History/]);
     await expect(the.decisions).toBeHidden();
     await expect(the.heading(DECISIONS).locator('.artifact-review-open')).toHaveCount(0);
     expect(seen.errors).toEqual([]);
