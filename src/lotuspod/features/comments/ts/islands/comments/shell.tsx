@@ -289,6 +289,7 @@ export function shell(page: Page, hooks: ShellHooks, comments = true): Shell {
             aria-labelledby="artifact-comments-tab-history" hidden={shown !== "history"} />
         </div>
       </aside>, document.body), root);
+    historyTab.inPanel.value = !hidden && reading();
     // Other scripts own modifiers such as --resizing. Update only ours.
     panel.current!.classList.toggle("artifact-comments-panel--open", open);
     panel.current!.classList.toggle("artifact-comments-panel--resolved-shown", resolvedShown);

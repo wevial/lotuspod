@@ -383,3 +383,31 @@ a.artifact-history-section:focus-visible,
     left: 0.75rem;
   }
 }
+
+/* While History is shown, in the panel or the bottom sheet, each changed or
+   new section's heading carries a thin sky rule as tall as its text. Hung,
+   it moves no words. A folding section's caret reaches from about -1em to
+   -0.32em: where the outline takes the gutter (base.css, 58rem) the rule
+   hangs left of it, and in the narrow page's 1.75rem gutter, which the
+   caret all but fills, between the caret and the words, so it stays on
+   screen. */
+.artifact-history-shown .artifact-body h2.artifact-history-changed {
+  position: relative;
+}
+
+.artifact-history-shown .artifact-body h2.artifact-history-changed::before {
+  background: var(--color-sky);
+  border-radius: 3px;
+  bottom: 0.15em;
+  content: "";
+  left: calc(-0.16em - 1.5px);
+  position: absolute;
+  top: 0.15em;
+  width: 3px;
+}
+
+@container (min-width: 58rem) {
+  .artifact-history-shown .artifact-body h2.artifact-history-changed::before {
+    left: -1.35em;
+  }
+}

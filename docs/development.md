@@ -112,15 +112,21 @@ changes route, and holds both answers, how many versions the list shows and
 whether `#versions` is open in signals (`islands/state.ts`). From them it
 draws the header's "Versions · N" link into the slot it shares with the
 version menu, before the badge of replies to the reader; the `#versions` view
-with its list and "Show older versions"; and the "What changed since you last
-looked" box, its tags on the sections' headings and the diff pane in the view.
+with its list and "Show older versions"; and the diff pane in the view.
 It also draws the comments panel's History tab
 (`islands/history-tab.tsx`), through the comments slice's `historyTab`
 (`features/comments/ts/index.ts`), as the decisions island draws the
 Decisions tab: it sets `shown` once the versions list is read and `unseen` to
 the sections changed while they are not marked seen, and renders into the
-tab panel the shell gives as `node`. Mark as seen sets the island's `marked`
-signal, for the load only.
+tab panel the shell gives as `node`. `selected` is true while History is in
+view: the shell sets `inPanel` as it draws the panel open on History, and
+the bottom sheet (`narrow.js`, a classic script that reads no signal) says
+whether it holds History through `sheetTabs.selected()`. The island gives
+each changed or new section's `h2` `artifact-history-changed`
+(`linkSections()` in `islands/changes.tsx`) and keeps `artifact-history-shown`
+on `main.artifact` while `selected` is true, so `history-tab.css` draws the
+headings' rules only then. Mark as seen sets the island's `marked` signal,
+for the load only, and takes the headings' class away.
 The version menu stays the classic `features/history/ts/version-menu.js`,
 which the old-version script draws too; the bridge supplies it as
 `versionMenu()`, with `pageName()` (`core/ts/shared.js`).

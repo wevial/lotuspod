@@ -2,7 +2,7 @@ import { render } from "preact";
 import { useState } from "preact/hooks";
 import { effect, untracked } from "@preact/signals";
 import { historyTab, type Page } from "../../../comments/ts/index";
-import { KINDS, LastOpened, linkSections, listed } from "./changes";
+import { CHANGED, KINDS, LastOpened, linkSections, listed } from "./changes";
 import { Line } from "./pane";
 import { HASH, type Section, type VersionsState } from "./state";
 import { Entry } from "./view";
@@ -87,7 +87,9 @@ function Tab({ page, name, state }: { page: Page; name: string; state: VersionsS
 
 // The comments panel's History tab: shown once the versions route answers
 // with a list, counting the sections changed unseen, and drawn into the
-// node the panel gives it once both are there.
+// node the panel gives it once both are there. While the panel or the
+// bottom sheet shows it, the changed sections' headings draw their rules,
+// which Mark as seen takes away.
 export function historyTabPanel(page: Page, main: HTMLElement, name: string, state: VersionsState): void {
   effect(() => {
     const shown = state.versions.value !== null;
@@ -101,10 +103,18 @@ export function historyTabPanel(page: Page, main: HTMLElement, name: string, sta
     }
     untracked(() => {
       const found = state.changes.value;
-      if (found) {
+      if (found && !state.marked.value) {
         linkSections(main, found);
       }
       render(<Tab page={page} name={name} state={state} />, node);
     });
+  });
+  effect(() => {
+    main.classList.toggle("artifact-history-shown", historyTab.selected.value);
+  });
+  effect(() => {
+    if (state.marked.value) {
+      main.querySelectorAll("." + CHANGED).forEach((heading) => heading.classList.remove(CHANGED));
+    }
   });
 }

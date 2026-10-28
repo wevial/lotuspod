@@ -1599,9 +1599,9 @@ class ReportVariantTests(TempDirTestCase):
 
     def test_report_wide_layout_narrows_the_rail_the_base_puts_on_the_left(self):
         """KO-234 moved the rail left for every page; the report only sizes it."""
-        wide = self.css.split("@container (min-width: 58rem) {")
-        self.assertEqual(len(wide), 3, "expected the article and report wide blocks")
-        report_wide = wide[2].split("\n}\n")[0]
+        blocks = self.css.split("@container (min-width: 58rem) {")
+        wide = [block.split("\n}\n")[0] for block in blocks]
+        (report_wide,) = [b for b in wide[1:] if ".artifact--report" in b]
         rules = {
             selector.strip(): body
             for selector, body in re.findall(

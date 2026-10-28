@@ -55,14 +55,14 @@ function changesSource(title: string, pump: string) {
 }
 
 // hermes publishes markdown, or HTML with suffix .html, as the page name,
-// with comments.
-function publish(name: string, markdown: string, suffix = '.md') {
+// with comments, in the given variant, else the page's current one.
+function publish(name: string, markdown: string, suffix = '.md', variant?: 'article' | 'report') {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lotuspod-versions-'));
   try {
     const file = path.join(dir, `${name}${suffix}`);
     fs.writeFileSync(file, markdown, 'utf-8');
     const said = run('publish', file, '--local', '--out-dir', OUT, '--owner', OWNER,
-      '--credential', HERMES, '--comments');
+      '--credential', HERMES, '--comments', ...(variant ? ['--variant', variant] : []));
     expect(said).toContain(`published ${name} at revision`);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
@@ -574,50 +574,84 @@ test.describe('signed in', () => {
 });
 
 test.describe('signed in, what changed', () => {
-  test.use({ extraHTTPHeaders: SIGNED_IN });
+  test.use({ extraHTTPHeaders: SIGNED_IN, viewport: { width: 1280, height: 800 } });
 
-  const BOX = 'section.artifact-changes';
+  const HISTORY = '#artifact-comments-history';
+  const PILL = '.artifact-topbar button.artifact-history-pill';
 
-  // Opens the page and waits until its versions link is drawn: by then the
-  // page has heard what changed, so a box it would show is there.
+  // Opens the page and waits until its versions link and its History tab are
+  // drawn: by then the page has heard the versions route and what changed.
   async function open(page: Page, name: string) {
     const seen = page.waitForResponse((response) =>
       new URL(response.url()).pathname === '/api/seen' && response.request().method() === 'POST');
     await page.goto(`/${name}.html?standalone`);
     expect((await seen).status()).toBe(200);
     await expect(page.locator('.artifact-versions-link')).toBeVisible();
+    await expect(page.locator('#artifact-comments-tab-history')).toBeAttached();
   }
 
   // Publishes the page, opens it with nothing to say yet, publishes it again
   // with the pump's line changed and opens it once more.
-  async function republish(page: Page, name: string, title: string) {
-    publish(name, changesSource(title, 'The pump stops in January.'));
+  async function republish(page: Page, name: string, title: string, variant?: 'article' | 'report') {
+    publish(name, changesSource(title, 'The pump stops in January.'), '.md', variant);
     await open(page, name);
-    await expect(page.locator(BOX)).toHaveCount(0);
-    await expect(page.locator('.artifact-changed-tag')).toHaveCount(0);
+    await expect(page.locator('.artifact-history-pill')).toHaveCount(0);
 
     // serve dates a page to the second: a publish in the second the page was
     // served would leave the browser's cached copy current.
     await page.waitForTimeout(1100);
-    publish(name, changesSource(title, 'The pump runs all winter.'));
+    publish(name, changesSource(title, 'The pump runs all winter.'), '.md', variant);
     await open(page, name);
   }
 
-  test('a page republished since the reader opened it says what changed', async ({ page }) => {
+  // What a heading's ::before draws: its content, width and background, and
+  // the theme's sky as a probe resolves it, so the check holds in either
+  // theme.
+  function rule(heading: Locator) {
+    return heading.evaluate((node) => {
+      const probe = document.body.appendChild(document.createElement('div'));
+      probe.style.background = 'var(--color-sky)';
+      const sky = getComputedStyle(probe).backgroundColor;
+      probe.remove();
+      const drawn = getComputedStyle(node, '::before');
+      return { content: drawn.content, width: drawn.width, background: drawn.backgroundColor, sky };
+    });
+  }
+
+  // The rule is drawn, and inside the window, left of the heading's words.
+  async function ruled(heading: Locator) {
+    const found = await rule(heading);
+    expect(found.content).not.toBe('none');
+    expect(found.width).toBe('3px');
+    expect(found.background).toBe(found.sky);
+    const [start, end, words] = await heading.evaluate((node) => {
+      const box = node.getBoundingClientRect();
+      const left = box.left + parseFloat(getComputedStyle(node, '::before').left);
+      return [left, left + 3, box.left];
+    });
+    expect(start).toBeGreaterThanOrEqual(0);
+    expect(end).toBeLessThanOrEqual(words);
+  }
+
+  async function unruled(heading: Locator) {
+    expect((await rule(heading)).content).toBe('none');
+  }
+
+  test('a page republished since the reader opened it says what changed in History', async ({ page }) => {
     const errors = watchErrors(page);
     const name = 'changes-check';
     await republish(page, name, 'Changes check');
-    const box = page.locator(BOX);
-    await expect(box.getByRole('heading', { name: 'What changed since you last looked' })).toBeVisible();
-    await expect(box).toContainText('You last opened this on');
-    await expect(box).toContainText('1 version ago');
-    await expect(box.getByRole('link', { name: 'Pump' })).toHaveAttribute('href', '#pump');
-    await expect(box.getByRole('link', { name: 'Pond' })).toHaveCount(0);
-    await expect(page.locator('h2#pump .artifact-changed-tag')).toHaveText('changed');
-    await expect(page.locator('.artifact-changed-tag')).toHaveCount(1);
-    // The box sits between the header and the body.
-    expect(await box.evaluate((node) =>
-      node.previousElementSibling?.matches('header.artifact-header'))).toBe(true);
+    // The page draws no box under the header and no tag on a heading: the
+    // header runs straight into the body.
+    await expect(page.locator('section.artifact-changes')).toHaveCount(0);
+    await expect(page.locator('.artifact-changed-tag')).toHaveCount(0);
+    expect(await page.locator('header.artifact-header').evaluate((header) => {
+      const next = header.nextElementSibling;
+      return Boolean(next && (next.matches('section.artifact-body') ||
+        next.querySelector(':scope > section.artifact-body')));
+    })).toBe(true);
+    const pill = page.locator(PILL);
+    await expect(pill).toHaveText('1 changed');
 
     // The header's menu marks the version the reader last looked at.
     const button = page.getByRole('button', { name: 'Choose a version' });
@@ -635,18 +669,25 @@ test.describe('signed in, what changed', () => {
     await page.setViewportSize({ width: 320, height: 844 });
     await page.evaluate(() => { document.documentElement.style.fontSize = '32px'; });
     await button.click();
-    const [pill, list] = await Promise.all([items.nth(1).locator('.artifact-versions-seen'),
+    const [seenPill, list] = await Promise.all([items.nth(1).locator('.artifact-versions-seen'),
       page.locator('.artifact-versions-menu-list')].map((node) => node.boundingBox()));
-    expect(pill!.x + pill!.width).toBeLessThanOrEqual(list!.x + list!.width);
+    expect(seenPill!.x + seenPill!.width).toBeLessThanOrEqual(list!.x + list!.width);
     await page.keyboard.press('Escape');
     await page.evaluate(() => { document.documentElement.style.fontSize = ''; });
     await page.setViewportSize(size);
 
-    await box.getByRole('link', { name: 'See the full diff' }).click();
+    await pill.click();
+    const history = page.locator(HISTORY);
+    await expect(history).toBeVisible();
+    await expect(history).toContainText('You last opened this on');
+    await expect(history).toContainText('1 version ago');
+    await expect(history.getByRole('link', { name: 'Pump' })).toHaveAttribute('href', '#pump');
+    await expect(history.getByRole('link', { name: 'Pond' })).toHaveCount(0);
+
+    await history.getByRole('link', { name: 'See all versions' }).click();
     await expect(page).toHaveURL(new RegExp(`/${name}\\.html\\?standalone#versions$`));
     const versions = view(page);
     await expect(versions.heading).toBeVisible();
-    await expect(box).toBeHidden();
     const pane = versions.node.locator('aside.artifact-versions-diff');
     await expect(pane).toBeVisible();
     await expect(pane.getByRole('heading')).toContainText('→ current');
@@ -659,12 +700,72 @@ test.describe('signed in, what changed', () => {
 
     // The next load was seen at the page's own revision: nothing to say.
     await open(page, name);
-    await expect(page.locator(BOX)).toHaveCount(0);
-    await expect(page.locator('.artifact-changed-tag')).toHaveCount(0);
+    await expect(page.locator('.artifact-history-pill')).toHaveCount(0);
+    await expect(page.locator('.artifact-history-changed')).toHaveCount(0);
     await openView(page, page.locator('.artifact-versions-link'));
     await expect(view(page).heading).toBeVisible();
     await expect(page.locator('aside.artifact-versions-diff')).toHaveCount(0);
     await expect(page.locator('.artifact-versions-seen')).toHaveCount(0);
+    expect(errors).toEqual([]);
+  });
+
+  test("a changed section's heading carries a rule only while History is open", async ({ page }) => {
+    const errors = watchErrors(page);
+    const name = 'changes-rules';
+    await republish(page, name, 'Changes rules');
+    const pump = page.locator('.artifact-body h2#pump');
+    const pond = page.locator('.artifact-body h2#pond');
+    await expect(page.locator('.artifact-comments-panel')).not.toHaveClass(/artifact-comments-panel--open/);
+    await unruled(pump);
+
+    await page.locator(PILL).click();
+    await expect(page.locator(HISTORY)).toBeVisible();
+    await expect(pump).toHaveClass(/\bartifact-history-changed\b/);
+    await ruled(pump);
+    await unruled(pond);
+
+    await page.locator('#artifact-comments-tab-comments').click();
+    await expect(page.locator(HISTORY)).toBeHidden();
+    await unruled(pump);
+
+    await page.locator('#artifact-comments-tab-history').click();
+    await ruled(pump);
+    await page.locator(HISTORY).getByRole('button', { name: 'Mark as seen' }).click();
+    await expect(pump).not.toHaveClass(/\bartifact-history-changed\b/);
+    await unruled(pump);
+    expect(errors).toEqual([]);
+  });
+
+  test("on a phone, the heading's rule shows while the bottom sheet holds History", async ({ page }) => {
+    const errors = watchErrors(page);
+    await page.setViewportSize({ width: 390, height: 844 });
+    const name = 'changes-rules-phone';
+    await republish(page, name, 'Changes rules phone');
+    const pump = page.locator('.artifact-body h2#pump');
+    await unruled(pump);
+
+    await page.locator(PILL).click();
+    const sheet = page.locator('.artifact-comments-bottom-sheet');
+    await expect(sheet.locator('#artifact-comments-bottom-sheet-history .artifact-history')).toBeVisible();
+    await ruled(pump);
+
+    await sheet.getByRole('button', { name: 'Close', exact: true }).click();
+    await expect(sheet).toBeHidden();
+    await unruled(pump);
+    expect(errors).toEqual([]);
+  });
+
+  test("on a phone, an article's changed heading keeps its rule inside the window", async ({ page }) => {
+    const errors = watchErrors(page);
+    await page.setViewportSize({ width: 390, height: 844 });
+    const name = 'changes-rules-article';
+    await republish(page, name, 'Changes rules article', 'article');
+    const pump = page.locator('.artifact-body h2#pump');
+    await page.locator('.artifact-topbar button.artifact-history-pill').click();
+    await expect(page.locator('#artifact-comments-bottom-sheet-history .artifact-history')).toBeVisible();
+    await ruled(pump);
+    await page.setViewportSize({ width: 320, height: 844 });
+    await ruled(pump);
     expect(errors).toEqual([]);
   });
 
@@ -700,8 +801,7 @@ test.describe('signed in, what changed', () => {
     await page.waitForTimeout(1100);
     publish(name, embedded('The pump runs all winter.'), '.html');
     await open(page, name);
-    await expect.soft(page.locator(BOX).getByRole('heading', { name: 'What changed since you last looked' }))
-      .toBeVisible();
+    await expect.soft(page.locator(PILL)).toHaveText('1 changed');
     expect.soft(asked.filter((each) => each.path === '/api/changes'))
       .toContainEqual({ path: '/api/changes', page: name });
     expect.soft(asked.filter((each) => each.page !== name)).toEqual([]);
@@ -725,47 +825,42 @@ test.describe('signed in, what changed', () => {
     expect(errors).toEqual([]);
   });
 
-  test('a page left with one heading links and tags it', async ({ page }) => {
+  test('a page left with one heading links and rules it from History', async ({ page }) => {
     const errors = watchErrors(page);
     const name = 'changes-one-heading';
     publish(name, changesSource('Changes one heading', 'The pump stops in January.'));
     await open(page, name);
-    await expect(page.locator(BOX)).toHaveCount(0);
     await page.waitForTimeout(1100);
     // The outline gives no id to a page's only h2.
     publish(name, ['# Changes one heading', '', 'The plan for the pond this winter.', '', '## Pump', '', 'The pump runs all winter.', ''].join('\n'));
     await open(page, name);
-    const box = page.locator(BOX);
-    await expect(box.getByRole('link', { name: 'Pump' })).toHaveAttribute('href', '#pump');
-    await expect(box.locator('.artifact-changes-item--removed')).toHaveText(/Pond/);
-    await expect(box.locator('.artifact-changes-item--added')).toHaveCount(0);
-    await expect(page.locator('.artifact-body h2#pump .artifact-changed-tag')).toHaveText('changed');
-    await box.getByRole('link', { name: 'Pump' }).click();
+    await page.locator(PILL).click();
+    const history = page.locator(HISTORY);
+    await expect(history.getByRole('link', { name: 'Pump' })).toHaveAttribute('href', '#pump');
+    await expect(history.locator('.artifact-history-item--removed')).toHaveText(/Pond/);
+    await expect(history.locator('.artifact-history-item--added')).toHaveCount(0);
+    await expect(page.locator('.artifact-body h2#pump')).toHaveClass(/\bartifact-history-changed\b/);
+    await history.getByRole('link', { name: 'Pump' }).click();
     await expect(page).toHaveURL(new RegExp(`/${name}\\.html\\?standalone#pump$`));
     expect(errors).toEqual([]);
   });
 
-  test('a page with no headings links its text', async ({ page }) => {
+  test('a page with no headings links its text from History', async ({ page }) => {
     const errors = watchErrors(page);
     const name = 'changes-no-heading';
     publish(name, ['# Changes no heading', '', 'The pump stops in January.', ''].join('\n'));
     await open(page, name);
-    await expect(page.locator(BOX)).toHaveCount(0);
     await page.waitForTimeout(1100);
     publish(name, ['# Changes no heading', '', 'The pump runs all winter.', ''].join('\n'));
     await open(page, name);
-    const link = page.locator(BOX).getByRole('link', { name: 'The page text' });
+    await page.locator(PILL).click();
+    const link = page.locator(HISTORY).getByRole('link', { name: 'The page text' });
     await expect(link).toHaveAttribute('href', '#page-text');
     await expect(page.locator('section.artifact-body#page-text')).toHaveCount(1);
+    // The text before any heading has no heading to carry a rule.
+    await expect(page.locator('.artifact-history-changed')).toHaveCount(0);
     await link.click();
     await expect(page).toHaveURL(new RegExp(`/${name}\\.html\\?standalone#page-text$`));
-
-    // Dismiss removes the box, and the body stays.
-    const box = page.locator(BOX);
-    await expect(box).toBeVisible();
-    await box.getByRole('button', { name: 'Dismiss' }).click();
-    await expect(page.locator(BOX)).toHaveCount(0);
-    await expect(page.locator('.artifact-body')).toBeVisible();
     expect(errors).toEqual([]);
   });
 });

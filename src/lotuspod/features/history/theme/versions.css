@@ -399,40 +399,9 @@ html:has(meta[name="lotuspod:revision"]) .artifact-meta--versions::after {
   margin: 0.5rem 0 0 1rem;
 }
 
-/* What changed since the reader last looked (features/history/ts/versions.js):
-   a box under the header listing the sections that changed, a tag on each one's
-   heading, and in the versions view a pane beside the list comparing that
-   version with the current one. */
-.artifact-changes {
-  background: color-mix(in srgb, var(--color-sky) 8%, var(--color-surface));
-  border: 1px solid color-mix(in srgb, var(--color-sky) 45%, transparent);
-  border-radius: var(--radius-card);
-  color: var(--body-ink);
-  font-size: 0.95rem;
-  line-height: 1.5;
-  margin: 1.25rem 0 0;
-  max-width: var(--measure-prose);
-  padding: 1rem 1.25rem;
-}
-
-.artifact--versions .artifact-changes {
-  display: none;
-}
-
-.artifact-changes-heading {
-  color: var(--color-white);
-  font-family: var(--font-display);
-  font-size: 1.15rem;
-  font-weight: 600;
-  margin: 0;
-}
-
-.artifact-changes-when {
-  color: var(--color-muted-lavender);
-  font-size: 0.875rem;
-  margin: 0.2rem 0 0.75rem;
-}
-
+/* What changed since the reader last looked (features/history/ts/islands/pane.tsx):
+   in the versions view, a pane beside the list comparing that version with
+   the current one, by section when that version kept no source. */
 .artifact-changes-list {
   list-style: none;
   margin: 0;
@@ -471,65 +440,16 @@ html:has(meta[name="lotuspod:revision"]) .artifact-meta--versions::after {
   color: var(--color-muted-lavender);
 }
 
-a.artifact-changes-section,
-.artifact-changes-diff {
+a.artifact-changes-section {
   color: var(--color-sky);
   text-decoration-color: var(--link-line);
   text-underline-offset: 0.18em;
 }
 
 a.artifact-changes-section:hover,
-a.artifact-changes-section:focus-visible,
-.artifact-changes-diff:hover,
-.artifact-changes-diff:focus-visible {
+a.artifact-changes-section:focus-visible {
   color: var(--color-pale-sky);
   text-decoration-color: currentColor;
-}
-
-.artifact-changes-actions {
-  align-items: center;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 1rem;
-  margin: 0.85rem 0 0;
-}
-
-.artifact-changes-diff {
-  font-weight: 600;
-}
-
-.artifact-changes-dismiss {
-  appearance: none;
-  background: none;
-  border: 1px solid var(--hairline-strong);
-  border-radius: var(--radius-pill);
-  color: var(--color-pale-lavender);
-  cursor: pointer;
-  font: inherit;
-  font-size: 0.85rem;
-  padding: 0.15rem 0.85rem;
-}
-
-.artifact-changes-dismiss:hover,
-.artifact-changes-dismiss:focus-visible {
-  border-color: var(--color-lavender);
-  color: var(--color-white);
-}
-
-.artifact-changed-tag {
-  border: 1px solid color-mix(in srgb, var(--color-sky) 60%, transparent);
-  border-radius: var(--radius-pill);
-  color: var(--color-sky);
-  display: inline-block;
-  font-family: var(--font-body);
-  font-size: 0.75rem;
-  font-weight: 500;
-  letter-spacing: 0.04em;
-  line-height: 1.5;
-  margin-left: 0.6rem;
-  padding: 0 0.55rem;
-  text-transform: uppercase;
-  vertical-align: middle;
 }
 
 /* The versions view with a pane: the list on the left, the pane beside it,

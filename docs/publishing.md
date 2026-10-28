@@ -786,25 +786,30 @@ blocks, words wrapped in `<strong>` or a decision form's version hash, does
 not count; text before the first heading, or a body with none, is one
 section, "The page text", whose link goes to the start of the body. A renamed heading reads as one section removed and one added.
 
-The page then opens with a "What changed since you last looked" box under
-its header: "You last opened this on DATE · K versions ago", DATE being when
-that version was published, then one line per section changed, new or
-removed, each changed or new one a link to its section, whose heading carries
-a "changed" or "new" tag. "See the full diff" opens the versions view, where
-a pane beside the list, headed "DATE → current", shows a line diff of the
-markdown source when both versions kept `NAME.md`, at most 400 lines and then
-"More changes not shown.". A page with no kept source for that version, as
-one published before sources were kept, or from HTML, compares by section
-instead. The list marks that version "you last looked". "Dismiss" removes the
-box until the next load; the next load is seen at the page's own revision,
-so the box and the tags are gone. A first visit, a reader signed out, or any
-failure shows no box and no pane.
+The page draws no box for it and no tag on its headings: the header runs
+straight into the body, and the title bar's "N changed" pill (below) is the
+only hint until History is opened. While History shows, in the comments
+panel or the bottom sheet, each changed or new section's heading carries a
+thin sky rule beside it, as tall as its text, moving no words: in the
+gutter where the outline sits beside the text, and on a narrow page, whose
+gutter the section's caret fills, between the caret and the words;
+the text before the first heading has no heading and no rule. The rules go
+when History is closed or another tab is chosen, and for good once "Mark as
+seen" is pressed. History's "See all versions" opens the versions view, where
+a pane beside the list, headed "DATE → current", DATE being when that
+version was published, shows a line diff of the markdown source when both
+versions kept `NAME.md`, at most 400 lines and then "More changes not
+shown.". A page with no kept source for that version, as one published
+before sources were kept, or from HTML, compares by section instead. The
+list marks that version "you last looked". The next load is seen at the
+page's own revision, so the pill and the rules are gone. A first visit, a
+reader signed out, or any failure shows no pill, no rules and no pane.
 
 On a wide window the comments panel also has a History tab (see [The comments
 panel](comments.md#the-comments-panel)), once the versions route answers with a
 list. It is headed "Since you last looked", with "Mark as seen" beside it
 while anything is unseen, and says "You last opened this on DATE · K versions
-ago" as the box does, then one row per section changed, new or removed: its
+ago", then one row per section changed, new or removed: its
 kind, "Changed", "New" or "Removed", and its name, a link to its section
 unless removed. A changed section whose own markdown source changed (both
 versions kept `NAME.md`) has "Show the diff", which shows that section's
