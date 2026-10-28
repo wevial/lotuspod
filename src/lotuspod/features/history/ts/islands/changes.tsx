@@ -97,16 +97,10 @@ export function LastOpened({ page, found }: { page: Page; found: Changes }) {
 // The headings of the changed and added sections, each given CHANGED,
 // found and given ids before anything links to them, so the pane's links
 // and the History tab's name them. Run again, it finds the same ones.
-export function linkSections(main: HTMLElement, found: Changes): HTMLElement[] {
-  const marked: HTMLElement[] = [];
+export function linkSections(main: HTMLElement, found: Changes): void {
   for (const kind of ["changed", "added"] as const) {
     for (const section of listed(found.sections, kind)) {
-      const target = sectionHeading(main, section);
-      if (target) {
-        target.classList.add(CHANGED);
-        marked.push(target);
-      }
+      sectionHeading(main, section)?.classList.add(CHANGED);
     }
   }
-  return marked;
 }
