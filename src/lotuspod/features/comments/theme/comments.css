@@ -984,13 +984,7 @@
 }
 
 .artifact-comments-groups {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  overscroll-behavior: contain;
   padding: 0.5rem 0.75rem 1.5rem;
-  scrollbar-color: var(--hairline-strong) transparent;
-  scrollbar-width: thin;
 }
 
 /* The ways to start a thread, under the heading: a button for the whole
@@ -1048,7 +1042,7 @@
   position: absolute;
   right: 0.75rem;
   top: calc(100% - 0.25rem);
-  z-index: 1;
+  z-index: 2;
 }
 
 .artifact-comments-choices:focus-visible {
@@ -1249,6 +1243,7 @@
 }
 
 .artifact-comments-reopen,
+.artifact-comments-panel .artifact-comments-resolve,
 .artifact-comments-new {
   appearance: none;
   background: none;
@@ -1264,6 +1259,7 @@
 }
 
 .artifact-comments-reopen:hover,
+.artifact-comments-panel .artifact-comments-resolve:hover,
 .artifact-comments-new:hover {
   color: var(--color-pale-lavender);
   text-decoration-color: currentColor;

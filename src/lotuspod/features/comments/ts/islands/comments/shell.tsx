@@ -16,6 +16,7 @@ export function shell(page: Page, hooks: ShellHooks, comments = true): Shell {
   const root = document.createElement("div");
   const panel = createRef<HTMLElement>();
   const list = createRef<HTMLDivElement>();
+  const scroller = createRef<HTMLDivElement>();
   const fold = createRef<HTMLButtonElement>();
   const opener = createRef<HTMLButtonElement>();
   const resolved = createRef<HTMLButtonElement>();
@@ -50,7 +51,17 @@ export function shell(page: Page, hooks: ShellHooks, comments = true): Shell {
       : control === "resolved" ? resolved.current : control === "decisions" ? tabs.decisions.current
       : control === whole()?.box ? onPage.current : pick.current;
     node?.focus({ preventScroll: true });
+    if (node) show(node);
   };
+  // The start controls scroll with the threads: bring one the focus returns
+  // to back into the panel's view, never scrolling the page.
+  function show(node: HTMLElement): void {
+    const area = scroller.current;
+    if (!area?.contains(node)) return;
+    const outer = area.getBoundingClientRect();
+    const inner = node.getBoundingClientRect();
+    if (inner.top < outer.top || inner.bottom > outer.bottom) area.scrollTop += inner.top - outer.top - 8;
+  }
   function light(index: number): void {
     active = index;
     draw();
@@ -66,7 +77,10 @@ export function shell(page: Page, hooks: ShellHooks, comments = true): Shell {
     if (!picking) return;
     picking = false;
     light(-1);
-    if (focused) pick.current?.focus({ preventScroll: true });
+    if (focused && pick.current) {
+      pick.current.focus({ preventScroll: true });
+      show(pick.current);
+    }
   }
   function choose(section: Section): void {
     unpick(false);
@@ -204,8 +218,8 @@ export function shell(page: Page, hooks: ShellHooks, comments = true): Shell {
           <div ref={decisions} class="artifact-comments-decisions" id="artifact-comments-decisions" role="tabpanel"
             aria-labelledby="artifact-comments-tab-decisions" hidden={shown !== "decisions"} />
           {/* The Comments tab's panel holds the ways to start a thread and the
-              threads themselves. */}
-          <div class="artifact-comments-threads" id="artifact-comments-sheet-comments" hidden={shown !== "comments"}
+              threads themselves, and scrolls them together. */}
+          <div ref={scroller} class="artifact-comments-threads" id="artifact-comments-sheet-comments" hidden={shown !== "comments"}
             role={asks ? "tabpanel" : undefined} aria-labelledby={asks ? "artifact-comments-tab-comments" : undefined}>
             {comments && <div ref={start} class="artifact-comments-start">
               {asks && counts}
@@ -248,7 +262,7 @@ export function shell(page: Page, hooks: ShellHooks, comments = true): Shell {
     unpick(document.activeElement === document.body || !!start.current?.contains(document.activeElement));
   }, true);
   return {
-    list: list.current!, isOpen: seen, deciding, resolvedShown: () => resolvedShown,
+    list: list.current!, scroller: scroller.current!, isOpen: seen, deciding, resolvedShown: () => resolvedShown,
     setOpen, decide, setResolvedShown, unpick, focus,
     hidden(hide) { hidden = hide; draw(); },
     sections(next) { sections = next; active = -1; draw(); },
