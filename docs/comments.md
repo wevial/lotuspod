@@ -716,13 +716,17 @@ removes it when pressed. After the chips, "Add reaction" opens a menu of
 six quick emoji, 👍 ❤️ 🎉 😄 👀 ✅, the first focused; choosing one adds it
 (or removes it, if the reader already holds it), closes the menu and puts
 the focus back on Add reaction, as Escape (posting nothing) and a click
-outside the menu do. Each posts `{page, comment, emoji, reacted}`, its
-control marked disabled while it saves; a 200 answer's `reactions` replace
-the comment's, and any other answer leaves the chips as they were. Another
+outside the menu do, a click on a chip or in a field too. Each posts
+`{page, comment, emoji, reacted}`, its control marked disabled while it
+saves; a comment's posts are sent one after another, so an older answer
+never replaces a newer one. A 200 answer's `reactions` replace the
+comment's, and any other answer leaves the chips as they were. The menu
+wraps rather than reach past its thread at the panel's narrowest. Another
 reader's or an agent's reaction arrives with the next read of the threads,
 which serve's change stream starts. With a pointer that hovers, Add
-reaction takes no room until its comment is hovered or holds focus; on a
-touch screen it always shows. An archived page draws the chips disabled
+reaction is hidden until its comment is hovered or holds focus, and its
+line keeps its height meanwhile, so nothing under it moves; on a touch
+screen it always shows. An archived page draws the chips disabled
 and no Add reaction. A reaction marks nothing new or unread.
 
 The page remembers whether the

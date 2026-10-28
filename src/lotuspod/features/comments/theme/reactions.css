@@ -1,15 +1,19 @@
 /* A comment's reactions under its text (comments/reactions.tsx): a small
    rounded chip per emoji with its count, the reader's own pressed in the
    lavender accent, and Add reaction, which opens the quick set in a small
-   menu under it. Under a pointer that hovers, Add reaction takes no room
+   menu under it. Under a pointer that hovers, Add reaction is hidden
    until its comment row is hovered or holds focus; it stays focusable all
-   the while. On a touch screen it always shows. */
+   the while, and its line keeps its height. On a touch screen it always
+   shows. */
 .artifact-reactions {
   align-items: center;
   display: flex;
   flex-wrap: wrap;
   gap: 0.3rem;
   margin: 0.3rem 0.3rem 0;
+  /* As tall as a chip, so Add reaction showing or hiding never moves the
+     rows under it. */
+  min-height: 1.5rem;
   position: relative;
 }
 
@@ -71,17 +75,28 @@
   outline-offset: 1px;
 }
 
+/* The menu wraps rather than reach past its thread's list at the panel's
+   narrowest: it stands in by at most an avatar and its gap from either
+   edge of the list. */
+.artifact-comment-list:has(.artifact-reactions) {
+  container-type: inline-size;
+}
+
 .artifact-reaction-menu {
   background: var(--color-surface);
   border: 1px solid var(--hairline-strong);
   border-radius: var(--radius-block);
   box-shadow: 0 8px 22px var(--shadow);
+  box-sizing: border-box;
   display: flex;
+  flex-wrap: wrap;
   gap: 0.2rem;
   left: 0;
+  max-width: calc(100cqi - 2.75rem);
   padding: 0.25rem;
   position: absolute;
   top: calc(100% + 0.25rem);
+  width: max-content;
   z-index: 4;
 }
 
@@ -105,10 +120,5 @@
     overflow: hidden;
     padding: 0;
     width: 0;
-  }
-
-  /* A row with no reactions keeps no room for a hidden Add reaction. */
-  .artifact-comment-row:not(:hover, :focus-within) .artifact-reactions--none:not(.artifact-reactions--open) {
-    margin-top: 0;
   }
 }

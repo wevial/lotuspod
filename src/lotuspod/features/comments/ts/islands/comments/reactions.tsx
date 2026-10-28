@@ -24,7 +24,6 @@ export function Reactions({ row, page, name, store }: ReactionsProps) {
   const reactions = Array.isArray(row.reactions) ? row.reactions : [];
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState<ReadonlySet<string>>(new Set());
-  const box = useRef<HTMLDivElement>(null);
   const add = useRef<HTMLButtonElement>(null);
   const menu = useRef<HTMLDivElement>(null);
   const archived = page.archived;
@@ -38,23 +37,30 @@ export function Reactions({ row, page, name, store }: ReactionsProps) {
     if (open) menu.current?.querySelector("button")?.focus();
   }, [open]);
 
-  // A click anywhere else closes the menu; focus goes back to Add reaction
-  // unless the click gave it to something else.
+  // A click anywhere outside the menu and Add reaction closes the menu and
+  // puts focus back on Add reaction, a chip's or a field's click as well.
   useEffect(() => {
     if (!open) return;
     function outside(event: MouseEvent) {
-      if (box.current?.contains(event.target as Node)) return;
-      setOpen(false);
-      const now = document.activeElement;
-      if (!now || now === document.body || box.current?.contains(now)) add.current?.focus();
+      const target = event.target as Node;
+      if (menu.current?.contains(target) || add.current?.contains(target)) return;
+      close();
     }
     document.addEventListener("click", outside, true);
     return () => document.removeEventListener("click", outside, true);
   }, [open]);
 
-  async function post(key: string, emoji: string, reacted: boolean) {
+  // A row's posts are sent one after another, so each answer is newer than
+  // the one before it and an older answer never replaces a newer one.
+  const queue = useRef<Promise<void>>(Promise.resolve());
+
+  function post(key: string, emoji: string, reacted: boolean) {
     if (saving.has(key)) return;
     setSaving(held => new Set(held).add(key));
+    queue.current = queue.current.then(() => send(key, emoji, reacted));
+  }
+
+  async function send(key: string, emoji: string, reacted: boolean) {
     try {
       const response = await fetch(page.commentsURL, {
         method: "POST", headers: { "Content-Type": "application/json" },
@@ -76,7 +82,7 @@ export function Reactions({ row, page, name, store }: ReactionsProps) {
   function choose(emoji: string) {
     close();
     const held = reactions.find(each => each.emoji === emoji);
-    void post("add", emoji, !held?.mine);
+    post("add", emoji, !held?.mine);
   }
 
   function keydown(event: KeyboardEvent) {
@@ -86,15 +92,14 @@ export function Reactions({ row, page, name, store }: ReactionsProps) {
     close();
   }
 
-  return <div ref={box} class={"artifact-reactions" + (reactions.length ? "" : " artifact-reactions--none") +
-    (open ? " artifact-reactions--open" : "")} onKeyDown={keydown}>
+  return <div class={"artifact-reactions" + (open ? " artifact-reactions--open" : "")} onKeyDown={keydown}>
     {reactions.map(each => {
       const names = (each.by || []).join(", ");
       const busy = saving.has(each.emoji);
       return <button key={each.emoji} type="button" class="artifact-reaction" aria-pressed={each.mine ? "true" : "false"}
         title={names} aria-label={each.emoji + " " + each.count + ": " + names} disabled={archived}
         aria-disabled={busy ? "true" : undefined}
-        onClick={() => void post(each.emoji, each.emoji, !each.mine)}>
+        onClick={() => post(each.emoji, each.emoji, !each.mine)}>
         {each.emoji + " " + each.count}
       </button>;
     })}

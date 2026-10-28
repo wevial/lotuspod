@@ -222,7 +222,7 @@ test.describe('signed in', () => {
     expect(errors).toEqual([]);
   });
 
-  test('Add reaction shows on hover alone, and Escape closes its menu with nothing posted', async ({ page, request }) => {
+  test('Add reaction shows on hover alone, and Escape or a click outside closes its menu, focus back on Add reaction', async ({ page, request }) => {
     test.setTimeout(120_000);
     const errors = watch(page);
     const { name, reply, thread } = await rendered(request, `check-reactions-escape-${test.info().repeatEachIndex}`);
@@ -235,8 +235,11 @@ test.describe('signed in', () => {
     await page.mouse.move(5, 5);
     const firstAdd = first.getByRole('button', { name: 'Add reaction' });
     await expect(firstAdd).toBeHidden();
+    const before = (await first.boundingBox())!.height;
     await first.locator('.artifact-comment-text').hover();
     await expect(firstAdd).toBeVisible();
+    // Showing it moves nothing under it.
+    expect((await first.boundingBox())!.height).toBe(before);
 
     const hermesRow = row(page, PANEL, reply);
     await hermesRow.hover();
@@ -250,13 +253,111 @@ test.describe('signed in', () => {
     await expect(add).toHaveAttribute('aria-expanded', 'false');
     await expect(row(page, PANEL, reply)).toBeVisible();
 
-    // A click outside closes it too.
+    // A click outside the menu closes it and puts focus back on Add
+    // reaction: on the page, in a field, on a chip.
     await add.click();
     await expect(menu).toBeVisible();
-    await page.locator('.artifact-body h2').first().click();
+    await page.locator('.artifact-body p').first().click();
     await expect(menu).toHaveCount(0);
+    await expect(add).toBeFocused();
+
+    await page.locator(PANEL).getByRole('button', { name: 'Reply', exact: true }).click();
+    const field = page.locator(`${PANEL} form.artifact-comment-reply textarea[name="text"]`);
+    await expect(field).toBeFocused();
+    await hermesRow.hover();
+    await add.click();
+    await expect(menu).toBeVisible();
+    await field.click();
+    await expect(menu).toHaveCount(0);
+    await expect(add).toBeFocused();
     await page.waitForTimeout(300);
     expect(posts).toEqual([]);
+
+    await react(request, SECOND, name, reply, '👍');
+    const thumbs = chip(hermesRow, '👍');
+    await expect(thumbs).toHaveText('👍 1');
+    await hermesRow.hover();
+    await add.click();
+    await expect(menu).toBeVisible();
+    const saved = reactionAnswered(page);
+    await thumbs.click();
+    expect((await saved).status()).toBe(200);
+    await expect(menu).toHaveCount(0);
+    await expect(add).toBeFocused();
+    expect(posts).toEqual([{ page: name, comment: reply, emoji: '👍', reacted: true }]);
+    await expect(thumbs).toHaveText('👍 2');
+    expect(errors).toEqual([]);
+  });
+
+  test('a row\'s reactions are posted one after another, so an older answer never replaces a newer one', async ({ page, request }) => {
+    test.setTimeout(120_000);
+    const errors = watch(page);
+    const { name, reply } = await rendered(request, `check-reactions-order-${test.info().repeatEachIndex}`);
+    await react(request, SECOND, name, reply, '👍');
+    await react(request, SECOND, name, reply, '👀');
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => { release = resolve; });
+    let first = true;
+    await page.route((url) => url.pathname === COMMENTS, async (route) => {
+      const body = route.request().postDataJSON() ?? {};
+      if (route.request().method() === 'POST' && 'emoji' in body && first) {
+        first = false;
+        const answer = await route.fetch();
+        await held;
+        return route.fulfill({ response: answer });
+      }
+      return route.continue();
+    });
+    const posts = reactionPosts(page);
+    await open(page, name);
+    await openThread(page, PANEL);
+    const hermesRow = row(page, PANEL, reply);
+    const thumbs = chip(hermesRow, '👍'), eyes = chip(hermesRow, '👀');
+    await expect(hermesRow.locator('button.artifact-reaction')).toHaveText(['👍 1', '👀 1']);
+    await thumbs.click();
+    await eyes.click();
+    await page.waitForTimeout(300);
+    expect(posts).toHaveLength(1);
+    const second = page.waitForResponse((r) => new URL(r.url()).pathname === COMMENTS &&
+      r.request().method() === 'POST' && r.request().postDataJSON()?.emoji === '👀');
+    release();
+    expect((await second).status()).toBe(200);
+    expect(posts.map((body) => body.emoji)).toEqual(['👍', '👀']);
+    await expect(hermesRow.locator('button.artifact-reaction')).toHaveText(['👍 2', '👀 2']);
+    await expect(eyes).toHaveAttribute('aria-pressed', 'true');
+    await page.waitForTimeout(500);
+    await expect(eyes).toHaveText('👀 2');
+    await expect(eyes).toHaveAttribute('aria-pressed', 'true');
+    expect(errors).toEqual([]);
+  });
+
+  test('at the panel\'s narrowest the quick emoji stay inside it', async ({ page, request }) => {
+    test.setTimeout(120_000);
+    const errors = watch(page);
+    const { name, reply, thread } = await rendered(request, `check-reactions-narrow-${test.info().repeatEachIndex}`);
+    await page.addInitScript(() => localStorage.setItem('lotuspod:comments-width', '16'));
+    await open(page, name);
+    await openThread(page, PANEL);
+    const aside = page.locator(PANEL);
+    await expect.poll(async () => Math.round((await aside.boundingBox())!.width)).toBeLessThanOrEqual(257);
+    for (const id of [reply, thread]) {
+      const at = row(page, PANEL, id);
+      await at.hover();
+      await at.getByRole('button', { name: 'Add reaction' }).click();
+      const quick = at.locator('div.artifact-reaction-menu').getByRole('button');
+      await expect(quick).toHaveCount(6);
+      const edge = (await aside.boundingBox())!;
+      for (let index = 0; index < 6; index += 1) {
+        const shown = (await quick.nth(index).boundingBox())!;
+        expect(shown.x).toBeGreaterThanOrEqual(edge.x);
+        expect(shown.x + shown.width).toBeLessThanOrEqual(edge.x + edge.width);
+      }
+      const wide = await aside.evaluate((node) => [node, ...node.querySelectorAll('*')]
+        .filter((each) => ['auto', 'scroll'].includes(getComputedStyle(each).overflowX) && each.scrollWidth > each.clientWidth + 1)
+        .map((each) => each.className));
+      expect(wide).toEqual([]);
+      await page.keyboard.press('Escape');
+    }
     expect(errors).toEqual([]);
   });
 
