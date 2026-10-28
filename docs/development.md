@@ -211,7 +211,11 @@ the store owns thread containers and the drafts part owns drafts. The thread par
 (`comments/thread.tsx`) owns each list’s rows, notices, typing bubble and unread
 marks. Its typed bridge reads unread state and checking, and supplies the shared
 markdown, image and time helpers. Stable keyed comments keep their first row
-snapshot; ref callbacks attach markdown and images once. Status keys replace
+snapshot; ref callbacks attach markdown and images once. Under each comment's
+text the reactions part (`comments/reactions.tsx`) draws its chips and Add
+reaction from the row as the thread holds it now, which every read replaces,
+and hands a post's answered reactions back through the bridge's `react`,
+which merges them into the store. Status keys replace
 only changed marks, and synchronous renders preserve live-region row identity.
 The placement part owns panel, popover and sheet selection, resize focus preservation, and the
 reload and swap hooks. Its bridge reads the live boxes and thread stores and hands
