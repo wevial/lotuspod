@@ -36,6 +36,7 @@
     // section's view, by thread.
     var leads = new Map();
     var NAMES = { popover: "artifact-comments-popover", sheet: "artifact-comments-bottom-sheet" };
+    var TABS = ["decisions", "comments", "history"];
 
     function holder(kind) {
       var node = element("div", "artifact-comments-held " + NAMES[kind]);
@@ -84,16 +85,13 @@
         made.bar.hidden = true;
         made.comments = element("div", "artifact-comments-bottom-sheet-comments");
         made.comments.id = "artifact-comments-bottom-sheet-comments";
-        made.decisions = element("div", "artifact-comments-bottom-sheet-decisions");
-        made.decisions.id = "artifact-comments-bottom-sheet-decisions";
-        made.decisions.setAttribute("role", "tabpanel");
-        made.decisions.setAttribute("aria-labelledby", made.tab.decisions.button.id);
-        made.decisions.hidden = true;
-        made.history = element("div", "artifact-comments-bottom-sheet-history");
-        made.history.id = "artifact-comments-bottom-sheet-history";
-        made.history.setAttribute("role", "tabpanel");
-        made.history.setAttribute("aria-labelledby", made.tab.history.button.id);
-        made.history.hidden = true;
+        ["decisions", "history"].forEach(function (name) {
+          made[name] = element("div", "artifact-comments-bottom-sheet-" + name);
+          made[name].id = "artifact-comments-bottom-sheet-" + name;
+          made[name].setAttribute("role", "tabpanel");
+          made[name].setAttribute("aria-labelledby", made.tab[name].button.id);
+          made[name].hidden = true;
+        });
         top.append(made.tabs, nav, made.state, close);
         body.append(title, entries, extra);
         made.comments.append(made.bar, body);
@@ -177,7 +175,7 @@
     }
 
     function present() {
-      return ["decisions", "comments", "history"].filter(has);
+      return TABS.filter(has);
     }
 
     // The node in the comments panel whose children a lent tab shows.
@@ -225,7 +223,7 @@
       var names = order.map(function (name, at) { return at ? name : name[0].toUpperCase() + name.slice(1); });
       sheet.tabs.setAttribute("aria-label", names.length > 1 ?
         names.slice(0, -1).join(", ") + " and " + names[names.length - 1] : names[0] || "Decisions");
-      ["decisions", "comments", "history"].forEach(function (name) {
+      TABS.forEach(function (name) {
         var button = sheet.tab[name].button;
         button.hidden = order.indexOf(name) < 0;
         button.setAttribute("aria-selected", name === shown ? "true" : "false");
