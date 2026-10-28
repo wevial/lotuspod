@@ -1,12 +1,29 @@
 import { render } from "preact";
-import type { Page } from "../../../comments/ts/index";
+import { historyTab, type Page } from "../../../comments/ts/index";
 import { HASH, type VersionsState } from "./state";
 
 // The menu the classic version-menu.js draws.
 export type Menu = ReturnType<Page["versionMenu"]>;
 
+// Where the page has a comments panel, a plain click opens its History tab,
+// the address kept, with the tab's own "Versions · N" scrolled to the top of
+// the tab, which scrolls on its own; any other click, or a page with no
+// panel, follows the link to the versions view.
 function Link({ state }: { state: VersionsState }) {
-  return <>{"· "}<a class="artifact-versions-link" href={HASH}>{"Versions · " + (state.versions.value ?? []).length}</a></>;
+  function click(event: MouseEvent): void {
+    const opens = historyTab.opens.peek();
+    if (!opens || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+      return;
+    }
+    event.preventDefault();
+    opens.open(event.currentTarget as HTMLElement);
+    const area = document.getElementById(opens.id);
+    const heading = area?.querySelector(".artifact-history-versions-heading");
+    if (heading && area) {
+      area.scrollTop += heading.getBoundingClientRect().top - area.getBoundingClientRect().top;
+    }
+  }
+  return <>{"· "}<a class="artifact-versions-link" href={HASH} onClick={click}>{"Versions · " + (state.versions.value ?? []).length}</a></>;
 }
 
 // The "Versions · N" link and the version menu's button take the slot the

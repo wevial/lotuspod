@@ -17,10 +17,11 @@
   // tab, and on History its History tab, their nodes moved in and back as
   // the threads' are, and on Comments it steps through the threads as above,
   // its arrows and the thread's state under the tabs. The title bar's count
-  // opens it on Decisions (over.decisions), from any width without room for
-  // the panel. On a page that takes no comments (the.comments false) it
-  // holds no threads, no Comments tab, and `the` is no more than the
-  // other tabs need.
+  // opens it on Decisions (over.decisions), and its "N changed" and the
+  // header's "Versions · N" on History (over.history), from any width
+  // without room for the panel. On a page that takes no comments
+  // (the.comments false) it holds no threads, no Comments tab, and `the` is
+  // no more than the other tabs need.
   function overText(the) {
     var panel = the.panel;
     var groups = the.groups;
@@ -764,6 +765,15 @@
       }
       var question = sheet.decisions.querySelector(".artifact-decisions-entry .artifact-decisions-question");
       (question || sheet.tab.decisions.button).focus({ preventScroll: true });
+    };
+
+    // The title bar's "N changed" and the header's "Versions · N": the sheet
+    // on History, the focus on the tab.
+    over.history = function (opener) {
+      if (!(held.view && held.view.history)) {
+        lendTo("history", opener);
+      }
+      sheet.tab.history.button.focus({ preventScroll: true });
     };
 
     // Decisions or History takes the place of what the sheet holds. What

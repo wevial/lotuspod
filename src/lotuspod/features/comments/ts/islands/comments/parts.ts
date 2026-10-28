@@ -37,6 +37,8 @@ export interface Shell {
   setOpen(show: boolean, remember: boolean, tab?: Tab): void;
   // Open the panel on Decisions, the focus on the first question to answer.
   decide(): void;
+  // Open the panel on History, remembered open, the focus on its tab.
+  history(): void;
   setResolvedShown(show: boolean, remember: boolean): void;
   hidden(hide: boolean): void;
   sections(sections: Section[]): void;
@@ -145,6 +147,8 @@ export interface Over {
   // Open the bottom sheet on its Decisions tab, opener taking the focus
   // back when it closes.
   decisions(opener: HTMLElement): void;
+  // Open the bottom sheet on its History tab, likewise.
+  history(opener: HTMLElement): void;
   peek(): Taken;
   take(): Taken;
   mode(mode: Mode): void;

@@ -298,3 +298,93 @@ a.artifact-history-section:focus-visible,
   text-transform: uppercase;
   writing-mode: vertical-rl;
 }
+
+/* The title bar's "N changed" (features/history/ts/islands/changed-pill.tsx),
+   styled as the review sheet's "N to answer": the faint fill, a sky dot and
+   pale sky words. It never shrinks: the title gives way first. It takes the
+   free room before the review bar, or before the theme switch without one. */
+.artifact-history-pill-slot {
+  display: contents;
+}
+
+.artifact-history-pill {
+  background: var(--code-surface);
+  border: 0;
+  border-radius: var(--radius-pill);
+  color: var(--color-pale-sky);
+  cursor: pointer;
+  flex: none;
+  font: inherit;
+  font-family: var(--font-body);
+  font-size: 0.8rem;
+  line-height: 1.4;
+  margin: 0 0 0 auto;
+  padding: 0.2rem 0.7rem;
+}
+
+.artifact-history-pill:hover,
+.artifact-history-pill:focus-visible {
+  color: var(--color-white);
+}
+
+.artifact-history-pill:focus-visible {
+  outline: 2px solid var(--color-lavender);
+  outline-offset: 2px;
+}
+
+.artifact-history-pill-dot {
+  background: var(--color-sky);
+  border-radius: 50%;
+  display: inline-block;
+  height: 0.5rem;
+  margin-right: 0.4rem;
+  vertical-align: 0.05em;
+  width: 0.5rem;
+}
+
+.artifact-history-pill-slot:has(.artifact-history-pill) + .artifact-review-bar {
+  margin-left: 0;
+}
+
+.artifact-topbar:has(.artifact-history-pill) .artifact-theme-switch,
+.artifact-topbar:has(.artifact-history-pill) .artifact-copy-link {
+  margin-left: 0.25rem;
+}
+
+/* A phone's bar has no room for the word beside the review sheet's
+   controls: the pill shows its dot and count, its aria-label keeping the
+   whole name, and the title and its separator leave the bar. */
+@media (max-width: 40rem) {
+  .artifact-history-pill {
+    font-size: 0.75rem;
+    padding-inline: 0.5rem;
+  }
+
+  .artifact-topbar:has(.artifact-review-bar) .artifact-history-pill {
+    padding-inline: 0.45rem;
+  }
+
+  .artifact-topbar:has(.artifact-review-bar) .artifact-history-pill-word {
+    display: none;
+  }
+
+  .artifact-topbar:has(.artifact-history-pill):has(.artifact-review-bar) .artifact-topbar-sep,
+  .artifact-topbar:has(.artifact-history-pill):has(.artifact-review-bar) .artifact-topbar-title {
+    display: none;
+  }
+}
+
+/* Narrower still, the dot alone. */
+@media (max-width: 22rem) {
+  .artifact-topbar:has(.artifact-review-bar) .artifact-history-pill {
+    padding-inline: 0.4rem;
+  }
+
+  .artifact-topbar:has(.artifact-review-bar) .artifact-history-pill-count {
+    display: none;
+  }
+
+  .artifact-topbar:has(.artifact-review-bar) .artifact-history-pill-dot {
+    margin-right: 0;
+  }
+}

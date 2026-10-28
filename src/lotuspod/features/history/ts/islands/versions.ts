@@ -1,6 +1,7 @@
 import { effect, untracked } from "@preact/signals";
 import type { Page } from "../../../comments/ts/index";
 import { box } from "./changes";
+import { changedPill } from "./changed-pill";
 import { historyTabPanel } from "./history-tab";
 import { slot, type Menu } from "./slot";
 import { HASH, read, versionsState, type VersionsState } from "./state";
@@ -20,7 +21,9 @@ import { view } from "./view";
 // added sections' headings are tagged, and the view shows a pane comparing
 // that version with the current one and marks its entry "you last looked".
 // The comments panel's History tab says the same, beside the newest
-// versions, once the versions route answers with a list.
+// versions, once the versions route answers with a list, and the title bar's
+// "N changed" opens it while any changed section is unseen. On a page with no
+// comments panel the pill and "Versions · N" open the versions view.
 export function versions(page: Page): void {
   const line = document.querySelector<HTMLElement>("header.artifact-header .artifact-meta");
   const main = document.querySelector<HTMLElement>("main.artifact");
@@ -55,6 +58,7 @@ export function versions(page: Page): void {
     }
   });
   historyTabPanel(page, main, name, state);
+  changedPill(page);
   read(page, name, state);
 }
 

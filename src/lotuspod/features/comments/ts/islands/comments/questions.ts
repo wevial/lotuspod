@@ -41,7 +41,8 @@ export function questions(page: Page): void {
         over.restore(deciding ? { ...taken, view: { decisions: true } } :
           reading ? { ...taken, view: { history: true } } : taken);
       }
-      decisionsTab.opens.value = opensIn(mode === "panel", shell.decide, over.decisions);
+      decisionsTab.opens.value = opensIn("decisions", mode === "panel", shell.decide, over.decisions);
+      historyTab.opens.value = opensIn("history", mode === "panel", shell.history, over.history);
     }
     // Questions no longer asked, or no longer counted, close the sheet.
     if (!sheetTabs.asks()) {

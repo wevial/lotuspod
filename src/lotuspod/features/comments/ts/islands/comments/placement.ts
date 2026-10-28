@@ -389,7 +389,8 @@ export function placement(page: Page, bridge: PlacementBridge): Placement {
     api.wide = mode === "panel";
     shell.hidden(!api.wide);
     over.mode(mode);
-    decisionsTab.opens.value = opensIn(api.wide, shell.decide, over.decisions);
+    decisionsTab.opens.value = opensIn("decisions", api.wide, shell.decide, over.decisions);
+    historyTab.opens.value = opensIn("history", api.wide, shell.history, over.history);
     var old = document.querySelector<HTMLElement>(".artifact-comments-changed");
     if (old) {
       old.hidden = api.wide;

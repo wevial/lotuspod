@@ -790,8 +790,11 @@ marked seen, the History tab carries a sky dot (named ", N sections
 changed" for screen readers), and the folded rail holds a sky dot over the
 sideways word "changed" after "N to answer", named "Changed since you last
 looked: open History", which opens the panel on History with the focus on
-its tab. Nothing else opens History: a load keeps the panel open or folded
-as remembered, on the tab it would show without it.
+its tab. The title bar's "N changed" pill and the header's "Versions · N"
+open it the same way, remembered open (see
+[Versions](publishing.md#versions)). Nothing else opens History: a load
+keeps the panel open or folded as remembered, on the tab it would show
+without it.
 
 A page with decision or checklist forms and no comment boxes (published
 without comments) still gets the panel, for its questions: its head is the
@@ -901,8 +904,11 @@ it. The History tab holds the panel's History tab the same way: what changed
 since the reader last looked, each section's diff, the versions and "Mark as
 seen" work there as in the panel, the tab carries the panel's dot while
 sections changed unseen, and a link in it (a section's name, "View", "See all
-versions") closes the sheet before the browser follows it. Nothing opens the
-sheet on History by itself. The arrow keys cycle the tabs there, Home and End
+versions") closes the sheet before the browser follows it. The title bar's
+"N changed" pill and the header's "Versions · N" open the sheet on History,
+at any width without room for the panel, with the focus on its tab, and
+Close gives the focus back to what opened it. Nothing opens the sheet on
+History by itself. The arrow keys cycle the tabs there, Home and End
 going to the first and last. A sheet on Decisions or History opens the panel
 on the same tab when the window widens to room for it, and a panel on either
 opens the sheet on it when the window narrows. On a page that takes no

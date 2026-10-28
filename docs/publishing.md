@@ -819,6 +819,19 @@ to "Nothing new since you last looked." and moves "you last looked" to the
 current version for this load only; nothing is posted, as the visit was
 recorded when the page loaded. History never opens by itself.
 
+While sections are listed under "Since you last looked" and not marked seen,
+the title bar holds a sky "N changed" pill, N counting them, named "N changed
+since you last looked: open History", before "Next open" and "N to answer"
+when the page asks questions. Pressing it opens the comments panel on
+History with the focus on its tab, or the bottom sheet on History where the
+window has no room for the panel, Close giving the focus back to the pill.
+"Mark as seen" hides it, and so does the next load, the visit being
+recorded. On a page with a comments panel the header's "Versions · N" opens
+History too, without changing the address, its "Versions · N" scrolled into
+view; a middle or modified click still follows the link. A page with no
+comments panel (no comment boxes and no questions) has no History tab: there
+the pill and "Versions · N" open `#versions`.
+
 ## Index
 
 Build `artifacts/index.html`, a browsable index linking every rendered page:
