@@ -575,6 +575,7 @@
       held.anchor = anchor || opener || null;
       held.titleKey = null;
       held.stateKey = null;
+      the.tabs.selected(Boolean(view.history));
       if (view.box) {
         var group = groups.get(view.box);
         made.extra.append(group.toggle, group.holder);
@@ -613,6 +614,7 @@
       held.members = [];
       held.opener = null;
       held.anchor = null;
+      the.tabs.selected(false);
       members.forEach(function (thread) {
         lead(thread, false);
         panel.put(thread);

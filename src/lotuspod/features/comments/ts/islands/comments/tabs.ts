@@ -1,4 +1,4 @@
-import { signal } from "@preact/signals";
+import { computed, signal } from "@preact/signals";
 
 // What a control in the title bar opens: the element named by id, which
 // open shows, opener taking the focus back when the bottom sheet closes.
@@ -34,19 +34,26 @@ export const decisionsTab = {
 // it the tab's panel to draw into (node), once the shell is drawn; and the
 // shell, or the bottom sheet without room for it, says how the title bar's
 // "N changed" and the header's "Versions · N" open the tab (opens), null on a
-// page with no comments panel.
+// page with no comments panel. History is in view (selected) while the panel
+// shows it, as the shell says (inPanel), or the bottom sheet holds it, as
+// the sheet says through sheetTabs.
+const inSheet = signal(false);
+const inPanel = signal(false);
 export const historyTab = {
   shown: signal(false),
   unseen: signal(0),
   node: signal<HTMLElement | null>(null),
   opens: signal<Opens | null>(null),
+  inPanel,
+  selected: computed(() => inPanel.value || inSheet.value),
 };
 
 // What the bottom sheet's tabs read: whether it has a Decisions tab, once
 // the answers are read on a page that asks questions; how many are to
 // answer; and the node whose children it moves in to show them. Likewise
 // for its History tab: whether it has one, how many sections changed
-// unseen, and the node whose children it moves in.
+// unseen, and the node whose children it moves in; and it says whether
+// it holds History.
 export interface SheetTabs {
   asks(): boolean;
   count(): number | null;
@@ -54,6 +61,7 @@ export interface SheetTabs {
   history(): boolean;
   unseen(): number;
   historyNode(): HTMLElement | null;
+  selected(holds: boolean): void;
 }
 
 export const sheetTabs: SheetTabs = {
@@ -63,4 +71,5 @@ export const sheetTabs: SheetTabs = {
   history: () => historyTab.shown.peek(),
   unseen: () => historyTab.unseen.peek(),
   historyNode: () => historyTab.node.peek(),
+  selected: (holds) => { inSheet.value = holds; },
 };

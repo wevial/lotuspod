@@ -383,3 +383,22 @@ a.artifact-history-section:focus-visible,
     left: 0.75rem;
   }
 }
+
+/* While History is shown, in the panel or the bottom sheet, each changed or
+   new section's heading carries a thin sky rule hung in the gutter, left of
+   a folding section's caret and as tall as the heading's text. Hung, it
+   moves no words. */
+.artifact-history-shown .artifact-body h2.artifact-history-changed {
+  position: relative;
+}
+
+.artifact-history-shown .artifact-body h2.artifact-history-changed::before {
+  background: var(--color-sky);
+  border-radius: 3px;
+  bottom: 0.15em;
+  content: "";
+  left: -1.35em;
+  position: absolute;
+  top: 0.15em;
+  width: 3px;
+}
