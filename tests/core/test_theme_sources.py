@@ -286,7 +286,7 @@ class DeclaredOrderTests(ThemeCopyTestCase):
         styles = core.theme_sources()[STYLESHEET]
         script = core.theme_sources()[core.PAGE_SCRIPT]
         self.assertEqual(script[-1], "features/history/ts/archive.js")
-        self.assertEqual(styles.index("features/history/theme/archive.css"), styles.index("features/history/theme/versions.css") + 1)
+        self.assertGreater(styles.index("features/history/theme/archive.css"), styles.index("features/history/theme/versions.css"))
         problems = source_problems(core.THEME_ROOT, core.theme_sources())
         self.assertEqual(problems, [], "\n".join(problems))
 

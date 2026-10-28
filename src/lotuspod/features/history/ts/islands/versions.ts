@@ -1,6 +1,7 @@
 import { effect, untracked } from "@preact/signals";
 import type { Page } from "../../../comments/ts/index";
 import { box } from "./changes";
+import { historyTabPanel } from "./history-tab";
 import { slot, type Menu } from "./slot";
 import { HASH, read, versionsState, type VersionsState } from "./state";
 import { view } from "./view";
@@ -18,6 +19,8 @@ import { view } from "./view";
 // changed: false or fails, a box under the header says so, the changed or
 // added sections' headings are tagged, and the view shows a pane comparing
 // that version with the current one and marks its entry "you last looked".
+// The comments panel's History tab says the same, beside the newest
+// versions, once the versions route answers with a list.
 export function versions(page: Page): void {
   const line = document.querySelector<HTMLElement>("header.artifact-header .artifact-meta");
   const main = document.querySelector<HTMLElement>("main.artifact");
@@ -51,6 +54,7 @@ export function versions(page: Page): void {
       });
     }
   });
+  historyTabPanel(page, main, name, state);
   read(page, name, state);
 }
 

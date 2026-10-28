@@ -237,6 +237,7 @@ class SchemaTests(unittest.TestCase):
         database.add_reply(page="pond", parent=root["id"], revision="r1",
                            sections={"flow": "Flow"}, text="Second.", actor=actor)
         with sqlite3.connect(self.path) as conn:
+            conn.execute("DROP TABLE reactions")
             conn.execute("ALTER TABLE comments DROP COLUMN spot")
             conn.execute(f"PRAGMA user_version = {MAIN_SCHEMA}")
 
@@ -244,7 +245,8 @@ class SchemaTests(unittest.TestCase):
         self.assertIsNone(thread["root"]["spot"])
         self.assertEqual([row["spot"] for row in thread["replies"]], [None])
         with sqlite3.connect(self.path) as conn:
-            self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], MAIN_SCHEMA + 1)
+            self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0],
+                             db.SCHEMA_VERSION)
             self.assertEqual(conn.execute(
                 "SELECT COUNT(*) FROM comments WHERE spot IS NULL").fetchone()[0], 2)
 

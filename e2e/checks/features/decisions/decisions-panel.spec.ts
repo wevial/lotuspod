@@ -270,7 +270,8 @@ test('every question with no saved answer is to answer, in the title bar, the ma
 
   const side = panel(page);
   await expect(side.tabs).toBeVisible();
-  await expect(side.tabs.getByRole('tab')).toHaveCount(2);
+  // A published page lists its versions: History is the third tab.
+  await expect(side.tabs.getByRole('tab')).toHaveText([/^Decisions/, /^Comments/, /^History/]);
   await expect(side.badge('Decisions')).toHaveText('3');
   await expect(side.badge('Comments')).toHaveText('2');
   await expect(side.title).toHaveCount(0);
@@ -467,7 +468,7 @@ test('the title bar\'s count and the folded rail\'s orchid count open Decisions,
   expect(errors).toEqual([]);
 });
 
-test('a page with comments and no decision forms keeps its panel\'s Comments heading and no tabs', async ({ page }) => {
+test('a page with comments and no decision forms has no Decisions tab, its tabs Comments and History', async ({ page }) => {
   test.setTimeout(60_000);
   test.skip(test.info().repeatEachIndex > 0, 'publishes a page the first repeat published');
   const name = 'decisions-panel-plain';
@@ -476,8 +477,12 @@ test('a page with comments and no decision forms keeps its panel\'s Comments hea
   await page.addInitScript(([key]) => localStorage.setItem(key, 'open'), [PANEL]);
   await page.goto(`/${name}.html?standalone`);
   const side = panel(page);
-  await expect(side.title).toHaveText('Comments');
-  await expect(side.aside.getByRole('tablist')).toHaveCount(0);
+  // Once the page has heard its versions, the head is Comments and History.
+  await expect(page.locator('.artifact-versions-link')).toBeVisible();
+  await expect(side.tabs.getByRole('tab')).toHaveText([/^Comments/, /^History/]);
+  await expect(side.tab('Comments')).toHaveAttribute('aria-selected', 'true');
+  await expect(side.aside.locator('#artifact-comments-tab-decisions')).toHaveCount(0);
+  await expect(side.title).toHaveCount(0);
   await expect(side.toAnswer).toHaveCount(0);
   expect(errors).toEqual([]);
 });

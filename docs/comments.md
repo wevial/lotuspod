@@ -79,6 +79,18 @@ twice.
   `quote`, and its routing state (`state` and `owner`, below). A reply takes its thread's section, and a
   reply to a reply joins the same thread: `parent` is always the thread's first
   comment.
+- `POST /api/comments` with exactly `{page, comment, emoji, reacted}` adds
+  (`reacted: true`) or removes (`false`) the reader's emoji reaction on any
+  comment or reply of the page, and answers 200 `{comment, reactions}`. The
+  emoji must be exactly one of the composers' emoji table (`:eyes:` is 👀),
+  else 400 `invalid_body`; a comment not on the page is 404
+  `unknown_comment`, and an archived page refuses it 409 `archived`. Adding
+  one twice stores one, and removing one not there changes nothing. Every
+  comment a read of the comments answers carries `reactions`: one entry per
+  emoji, in the order of each emoji's first reaction, `{emoji, count, mine,
+  by}`, `by` who reacted, by name, oldest first, and `mine` whether the
+  reader is among them; `[]` on a comment with none. So does the comment a
+  new thread or reply answers.
 - `POST /api/comments` with `{page, question, text}` (and optionally the
   `revision` the reader's page was rendered at, and `images`) opens a thread
   on one of the page's decisions (see [Decisions for the
@@ -629,6 +641,16 @@ text and focus. Each thread's list of comments is a polite live region, so a
 new reply is read out; typing bubbles and the offline and paused lines only
 restate a state and are hidden from it.
 
+### Reactions
+
+A reader or an agent may react to any comment or reply with an emoji
+(`POST /api/comments` above, `lotuspod comments react` in
+[Agents](agents.md)). A reaction is not a comment: it is kept in a table of
+its own, so it is never routed or pulled, wakes no agent, is no reply,
+counts as nothing unread or new, changes no comment's state and leaves a
+resolved thread resolved. A comment's reactions show who reacted by name,
+never by address. The page does not draw them yet.
+
 ### The comments panel
 
 Wherever the window leaves at least 21rem between the reading column's right
@@ -754,10 +776,28 @@ and every other way to a thread open it on Comments; the panel opens on
 Decisions when nothing chose a tab. Only the Comments tab shows the threads,
 so a thread counts as seen only while it does.
 
+A page that lists its versions (one with a revision, the reader signed in,
+see [Versions](publishing.md#versions)) gains a History tab once the
+versions route answers: the head is tabs whenever the page asks questions
+or lists versions, Decisions (when it asks), Comments (when it takes
+comments) and History, in that order, and a page with no questions moves
+"N open · M resolved" into its Comments tab as a page that asks does. Left
+and Right Arrow cycle through the tabs present, and Home and End go to the
+first and the last. The History tab's panel (`#artifact-comments-history`)
+scrolls on its own, beside the threads; the history island draws what it
+holds. While sections changed since the reader last looked and are not
+marked seen, the History tab carries a sky dot (named ", N sections
+changed" for screen readers), and the folded rail holds a sky dot over the
+sideways word "changed" after "N to answer", named "Changed since you last
+looked: open History", which opens the panel on History with the focus on
+its tab. Nothing else opens History: a load keeps the panel open or folded
+as remembered, on the tab it would show without it.
+
 A page with decision or checklist forms and no comment boxes (published
 without comments) still gets the panel, for its questions: its head is the
-Decisions tab alone, with no Comments tab, no way to start a thread, and a
-rail with only the orchid "N to answer". It shows once the page's answers
+Decisions tab alone (and History, when it lists versions), with no Comments
+tab, no way to start a thread, and a rail with only the orchid "N to answer"
+(and the History mark). It shows once the page's answers
 are read; an archived page, or one whose answers could not be read, gets
 none, and nor does a page with neither forms nor comment boxes.
 

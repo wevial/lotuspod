@@ -462,7 +462,7 @@ class CommentTests(ApiTestCase):
              "revision": self.revision, "parent": None, "text": "What if it does?",
              "quote": quote, "widget": None, "spot": None, "images": [], "actor": SHOWN,
              # The page has no owner and the responder has never pulled.
-             "state": "unavailable", "owner": "responder"},
+             "state": "unavailable", "owner": "responder", "reactions": []},
         )
         self.assertRegex(root["createdAt"], CREATED_AT)
         for row in (reply, deeper):
@@ -525,7 +525,7 @@ class CommentTests(ApiTestCase):
             page="plan", section="nowhere", section_title="Nowhere", revision="0" * 12,
             text="A section not on the page.", quote=None, actor=ACTOR,
         )
-        elsewhere = api.shown(routing.public(elsewhere, {}, routing.DEFAULT_WINDOW, 0))
+        elsewhere = {**api.shown(routing.public(elsewhere, {}, routing.DEFAULT_WINDOW, 0)), "reactions": []}
         _, reply = self.comment(parent=elsewhere["id"], text="Still here.")
         self.assertEqual(goals["sectionTitle"], "Goals")
         self.assertEqual(reply["section"], "nowhere")
@@ -560,7 +560,7 @@ class CommentTests(ApiTestCase):
             {key: root[key] for key in root if key not in ("id", "createdAt")},
             {"page": "owned", "section": "", "sectionTitle": "", "revision": revision,
              "parent": None, "text": "Is this plan current?", "quote": None, "widget": None, "spot": None, "images": [],
-             "actor": SHOWN, "state": "unavailable", "owner": "responder"},
+             "actor": SHOWN, "state": "unavailable", "owner": "responder", "reactions": []},
         )
         self.assertNotIn("question", root)
         status, reply = self.comment(page="owned", parent=root["id"], text="And the risks?")
@@ -615,7 +615,7 @@ class DecisionThreadTests(ApiTestCase):
                     {"page": page, "section": section, "sectionTitle": title,
                      "parent": None, "text": "I need more context.", "quote": None,
                      "widget": None, "spot": None, "images": [], "actor": SHOWN, "question": "decision-1",
-                     "state": "unavailable", "owner": "responder"},
+                     "state": "unavailable", "owner": "responder", "reactions": []},
                 )
                 self.assertEqual(root["revision"], self.page_revision(page))
                 _, got = self.ask("GET", f"/api/comments?page={page}")
@@ -688,7 +688,7 @@ class NoteThreadTests(ApiTestCase):
              "parent": None, "text": "  Not before March.\n", "quote": None, "widget": None, "spot": None, "images": [],
              "actor": SHOWN, "question": "decision-1",
              "answer": {"id": answer["id"], "choice": "no", "label": "No"},
-             "state": "unavailable", "owner": "responder"})
+             "state": "unavailable", "owner": "responder", "reactions": []})
         self.assertEqual(answer["note"], "  Not before March.\n")
         self.assertEqual(self.threads(),
                          [{"root": comment, "replies": [], "resolution": store.db.UNRESOLVED}])

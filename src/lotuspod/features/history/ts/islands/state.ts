@@ -16,11 +16,13 @@ export interface Version {
   current?: boolean;
 }
 
-// A section the changes route names; a heading found by its words is given
-// an id here, which the box and the pane then link to.
-export interface Section { id?: string; title?: string }
-export interface Sections { changed?: Section[]; added?: Section[]; removed?: Section[] }
 export interface DiffLine { op: string; text: string }
+// A section the changes route names; a heading found by its words is given
+// an id here, which the box, the pane and the History tab then link to. A
+// changed one carries its own line diff of the source when both versions
+// kept one.
+export interface Section { id?: string; title?: string; lines?: DiffLine[]; truncated?: boolean }
+export interface Sections { changed?: Section[]; added?: Section[]; removed?: Section[] }
 
 // The changes route's answer when anything changed since the revision the
 // reader last opened the page at.
@@ -45,10 +47,14 @@ export interface VersionsState {
   shown: Signal<number>;
   // Whether #versions is the address, so the view shows.
   open: Signal<boolean>;
+  // Whether the reader marked what changed as seen, for this load only.
+  marked: Signal<boolean>;
 }
 
 export function versionsState(): VersionsState {
-  return { versions: signal(null), changes: signal(null), shown: signal(SHOWN), open: signal(false) };
+  return {
+    versions: signal(null), changes: signal(null), shown: signal(SHOWN), open: signal(false), marked: signal(false),
+  };
 }
 
 // Ask the changes route what changed since the reader last looked, then the
