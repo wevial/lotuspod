@@ -292,7 +292,11 @@ test.describe('signed in', () => {
       await expect.poll(() => page.evaluate(() => (window as any).__weekRefresh))
         .toMatchObject({ indexed: name, rows });
     };
+    // The stream opens on the window's load, after the rows show; a publish
+    // before the server holds it is never sent on it.
+    const stream = page.waitForResponse((response) => new URL(response.url()).pathname === '/api/events');
     await openIndex(page, '/#activity');
+    expect((await stream).status()).toBe(200);
     const group = page.locator(`section.index-activity-page[data-page="${ARTICLE.name}"]`);
     await expect(group).toBeVisible();
     for (let n = 1; n <= 3; n += 1) {
