@@ -13,12 +13,12 @@
   // click outside closes it.
   //
   // It reads nothing and posts nothing: its inputs are the versions, the
-  // page's name, the commit shown and whether the one shown is an old
-  // version, so a script of its own can join it as it is. On an old version
-  // the one shown carries a "viewing" pill and "See all versions" links to
-  // the page's NAME.html#versions. It returns the button and the menu, to be
-  // put side by side in a positioned box, and close(), which closes the menu.
-  function versionMenu(versions, page, shown, old) {
+  // page's name and the commit shown, so a script of its own can join it as
+  // it is. The one shown carries a "viewing" pill and "See all versions"
+  // links to the page's NAME.html#versions. It returns the button and the
+  // menu, to be put side by side in a positioned box, and close(), which
+  // closes the menu.
+  function versionMenu(versions, page, shown) {
     var button = element("button", "artifact-versions-menu-button", "▾");
     button.type = "button";
     button.id = "artifact-versions-menu-button";
@@ -56,14 +56,14 @@
       if (version.current) {
         top.appendChild(element("span", "artifact-versions-current", "current"));
       }
-      if (old && version.commit === shown) {
+      if (version.commit === shown) {
         top.appendChild(element("span", "artifact-versions-viewing", "viewing"));
       }
       link.append(top, element("span", "artifact-versions-menu-note",
         String(version.summary || "") || "First version"));
       list.appendChild(link);
     });
-    var seeAll = item((old ? file : "") + "#versions", "artifact-versions-menu-all");
+    var seeAll = item(file + "#versions", "artifact-versions-menu-all");
     seeAll.textContent = "See all versions";
     menu.append(list, seeAll);
 
