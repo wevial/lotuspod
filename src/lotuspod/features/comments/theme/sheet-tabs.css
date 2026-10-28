@@ -1,9 +1,11 @@
-/* The bottom sheet on a page that asks questions
-   (features/comments/ts/narrow.js): its head is two tabs, Decisions and
-   Comments, drawn as the comments panel's are, each with its count, and Close.
-   Under Comments, a row steps through the threads and says where the one shown
-   stands; under Decisions, the panel's questions scroll on their own. A handle
-   is centred over the tabs. */
+/* The bottom sheet on a page that asks questions or lists its versions
+   (features/comments/ts/narrow.js): its head is its tabs, Decisions, Comments
+   and History, drawn as the comments panel's are, each with its count or dot,
+   and Close. Under Comments, a row steps through the threads and says where
+   the one shown stands; under Decisions, the panel's questions, and under
+   History, what changed and the versions, scroll on their own. A handle is
+   centred over the tabs. On the narrowest phones the head draws tighter, so
+   all three tabs and History's dot stay whole beside Close. */
 .artifact-comments-bottom-sheet--tabs::before {
   background: var(--hairline-strong);
   border-radius: 2px;
@@ -36,9 +38,14 @@
 
 .artifact-comments-bottom-sheet--tabs .artifact-comments-close {
   align-self: center;
+  color: var(--color-pale-lavender);
   font-size: 0.85rem;
   padding: 0 0.5rem;
   width: auto;
+}
+
+.artifact-comments-bottom-sheet--tabs .artifact-comments-close:hover {
+  color: var(--color-white);
 }
 
 .artifact-comments-bottom-sheet--tabs .artifact-comments-close > [aria-hidden="true"] {
@@ -75,11 +82,32 @@
   padding: 0.6rem 0.9rem 0;
 }
 
-.artifact-comments-bottom-sheet-decisions {
+.artifact-comments-bottom-sheet-decisions,
+.artifact-comments-bottom-sheet-history {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-color: var(--hairline-strong) transparent;
   scrollbar-width: thin;
+}
+
+@media (max-width: 379px) {
+  .artifact-comments-bottom-sheet--tabs .artifact-comments-held-head {
+    padding-left: 0.6rem;
+    padding-right: 0.6rem;
+  }
+
+  .artifact-comments-bottom-sheet-tabs {
+    gap: 0.6rem;
+  }
+
+  .artifact-comments-bottom-sheet-tabs .artifact-comments-tab {
+    font-size: 0.8rem;
+  }
+
+  .artifact-comments-bottom-sheet--tabs .artifact-comments-close {
+    font-size: 0.8rem;
+    padding: 0 0.3rem;
+  }
 }

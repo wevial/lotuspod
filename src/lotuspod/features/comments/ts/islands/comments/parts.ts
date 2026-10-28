@@ -30,6 +30,8 @@ export interface Shell {
   isOpen(): boolean;
   // Whether the panel is open on its Decisions tab.
   deciding(): boolean;
+  // Whether the panel is open on its History tab.
+  reading(): boolean;
   resolvedShown(): boolean;
   // Open or fold the panel; opened, it shows tab, Comments unless named.
   setOpen(show: boolean, remember: boolean, tab?: Tab): void;
@@ -107,12 +109,14 @@ export interface Passage {
   marks: HTMLElement[];
 }
 // The narrow renderer reads exactly one of these destinations at a time;
-// the questions, the bottom sheet's Decisions tab, only in the sheet.
+// the questions, the bottom sheet's Decisions tab, and what changed, its
+// History tab, only in the sheet.
 export type View =
-  | { thread: Thread; box?: never; passage?: never; decisions?: never }
-  | { box: HTMLElement; thread?: never; passage?: never; decisions?: never }
-  | { passage: Passage; thread?: never; box?: never; decisions?: never }
-  | { decisions: true; thread?: never; box?: never; passage?: never };
+  | { thread: Thread; box?: never; passage?: never; decisions?: never; history?: never }
+  | { box: HTMLElement; thread?: never; passage?: never; decisions?: never; history?: never }
+  | { passage: Passage; thread?: never; box?: never; decisions?: never; history?: never }
+  | { decisions: true; thread?: never; box?: never; passage?: never; history?: never }
+  | { history: true; thread?: never; box?: never; passage?: never; decisions?: never };
 export interface Taken {
   view: View | null;
   opener: HTMLElement | null;

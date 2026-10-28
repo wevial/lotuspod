@@ -3,7 +3,7 @@ import type { Page } from "../bridge";
 import type { Mode } from "./parts";
 import { barBottom, modeOf, unfold } from "./room";
 import { shell as makeShell } from "./shell";
-import { decisionsTab, opensIn, sheetTabs } from "./tabs";
+import { decisionsTab, historyTab, opensIn, sheetTabs } from "./tabs";
 
 // The comments panel on a page that asks questions and takes no comments:
 // its Decisions tab alone, and no store, as the page serves no threads to
@@ -29,14 +29,17 @@ export function questions(page: Page): void {
     let focused: Element | null = null;
     if (mode !== api.mode) {
       focused = document.activeElement;
-      const deciding = api.mode === "panel" && shell.deciding() && sheetTabs.asks();
+      const wide = api.mode === "panel";
+      const deciding = wide && shell.deciding() && sheetTabs.asks();
+      const reading = wide && shell.reading() && sheetTabs.history();
       const taken = over.take();
       api.mode = mode;
       over.mode(mode);
       if (mode === "panel" && taken.view) {
-        shell.setOpen(true, false, "decisions");
+        shell.setOpen(true, false, taken.view.history ? "history" : "decisions");
       } else if (mode !== "panel") {
-        over.restore(deciding ? { ...taken, view: { decisions: true } } : taken);
+        over.restore(deciding ? { ...taken, view: { decisions: true } } :
+          reading ? { ...taken, view: { history: true } } : taken);
       }
       decisionsTab.opens.value = opensIn(mode === "panel", shell.decide, over.decisions);
     }
@@ -56,6 +59,8 @@ export function questions(page: Page): void {
   effect(() => {
     decisionsTab.asks.value;
     decisionsTab.count.value;
+    historyTab.shown.value;
+    historyTab.unseen.value;
     untracked(arrange);
   });
 }

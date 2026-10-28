@@ -57,6 +57,8 @@ export function shell(page: Page, hooks: ShellHooks, comments = true): Shell {
   const seen = () => open && showing() === "comments";
   // Whether the questions are: the panel open on its Decisions tab.
   const deciding = () => open && showing() === "decisions";
+  // Whether what changed is: the panel open on its History tab.
+  const reading = () => open && showing() === "history";
   const whole = () => sections.find(s => s.section === page.wholePage)
     || sections.find(s => s.section === "page");
   const focus = (control: "fold" | "opener" | "resolved" | "decisions" | HTMLElement) => {
@@ -306,7 +308,7 @@ export function shell(page: Page, hooks: ShellHooks, comments = true): Shell {
     unpick(document.activeElement === document.body || !!start.current?.contains(document.activeElement));
   }, true);
   return {
-    list: list.current!, scroller: scroller.current!, isOpen: seen, deciding, resolvedShown: () => resolvedShown,
+    list: list.current!, scroller: scroller.current!, isOpen: seen, deciding, reading, resolvedShown: () => resolvedShown,
     setOpen, decide, setResolvedShown, unpick, focus,
     hidden(hide) { hidden = hide; draw(); },
     sections(next) { sections = next; active = -1; draw(); },
