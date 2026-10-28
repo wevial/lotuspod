@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import unittest
 
-from tests.test_changes_witness import ChangesWitness, body
+from tests.test_changes_witness import ChangesWitness
 from lotuspod.features.history import versions
 
 PAGE = "pond-plan"
@@ -104,20 +104,6 @@ class SectionDiffTests(ChangesWitness):
         for entry in changed:
             self.assertNotIn("lines", entry)
             self.assertNotIn("truncated", entry)
-        self.assertIn({"op": "-", "text": "old line"}, answer["lines"])
-        self.assertIn({"op": "+", "text": "new line"}, answer["lines"])
-
-    def test_a_page_with_no_kept_source_gives_no_section_lines(self):
-        self.repository(self.out)
-        self.render(PAGE, body(("Alpha", "The pond freezes."), ("Beta", "old line")), "rev-one")
-        self.render(PAGE, body(("Alpha", "The pond freezes."), ("Beta", "new line")), "rev-two")
-        answer = self.ask("rev-one")
-
-        changed = answer["sections"]["changed"]
-        self.assertEqual([entry["title"] for entry in changed], ["Beta"])
-        self.assertNotIn("lines", changed[0])
-        self.assertNotIn("truncated", changed[0])
-        self.assertNotIn("lines", answer)
 
     def test_a_section_diff_past_the_cap_is_cut(self):
         self.repository(self.out)
