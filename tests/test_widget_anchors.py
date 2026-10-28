@@ -498,6 +498,7 @@ class SchemaTests(unittest.TestCase):
                            sections={"risks": "Risks"}, text="Second.",
                            actor={"kind": "human", "email": "a@example.com"})
         with sqlite3.connect(self.path) as conn:
+            conn.execute("DROP TABLE reactions")
             conn.execute("ALTER TABLE comments DROP COLUMN spot")
             conn.execute("ALTER TABLE comments DROP COLUMN widget")
             conn.execute("PRAGMA user_version = 16")
