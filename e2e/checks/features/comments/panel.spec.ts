@@ -1168,6 +1168,33 @@ test.describe('signed in', () => {
     await seen.clean();
   });
 
+  test('Escape in a form far down the scrolled panel brings the section picker back into view, and its list opens there', async ({ page }) => {
+    const seen = await watch(page);
+    const { threads } = longReview();
+    await serveReview(page, threads);
+    const side = await loadFive(page);
+    const area = scrolling(page);
+    const pick = picker(page);
+    await pick.button.click();
+    await pick.options.filter({ hasText: 'Next steps' }).click();
+    const field = side.group('Next steps').getByLabel('Comment on Next steps');
+    await expect(field).toBeFocused();
+    expect(await area.scroller.evaluate((node) => node.scrollTop)).toBeGreaterThan(0);
+    await field.press('Escape');
+    await expect(pick.button).toBeFocused();
+    const within = async (target: Locator) => {
+      const outer = (await area.scroller.boundingBox())!;
+      const inner = (await target.boundingBox())!;
+      expect(inner.y).toBeGreaterThanOrEqual(outer.y);
+      expect(inner.y + inner.height).toBeLessThanOrEqual(outer.y + outer.height);
+    };
+    await within(pick.button);
+    await page.keyboard.press('Enter');
+    await expect(pick.list).toBeVisible();
+    await within(pick.list);
+    await seen.clean();
+  });
+
   test('a resolved thread opened to read keeps its dashed line at the top of the scrolled panel, and Reopen puts Resolve on its first line', async ({ page }) => {
     const seen = await watch(page);
     const { long, threads } = longReview(RESOLVED);

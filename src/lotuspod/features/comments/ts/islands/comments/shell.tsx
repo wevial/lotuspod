@@ -51,7 +51,17 @@ export function shell(page: Page, hooks: ShellHooks, comments = true): Shell {
       : control === "resolved" ? resolved.current : control === "decisions" ? tabs.decisions.current
       : control === whole()?.box ? onPage.current : pick.current;
     node?.focus({ preventScroll: true });
+    if (node) show(node);
   };
+  // The start controls scroll with the threads: bring one the focus returns
+  // to back into the panel's view, never scrolling the page.
+  function show(node: HTMLElement): void {
+    const area = scroller.current;
+    if (!area?.contains(node)) return;
+    const outer = area.getBoundingClientRect();
+    const inner = node.getBoundingClientRect();
+    if (inner.top < outer.top || inner.bottom > outer.bottom) area.scrollTop += inner.top - outer.top - 8;
+  }
   function light(index: number): void {
     active = index;
     draw();
@@ -67,7 +77,10 @@ export function shell(page: Page, hooks: ShellHooks, comments = true): Shell {
     if (!picking) return;
     picking = false;
     light(-1);
-    if (focused) pick.current?.focus({ preventScroll: true });
+    if (focused && pick.current) {
+      pick.current.focus({ preventScroll: true });
+      show(pick.current);
+    }
   }
   function choose(section: Section): void {
     unpick(false);
