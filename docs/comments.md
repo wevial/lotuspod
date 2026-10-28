@@ -560,7 +560,13 @@ sets every text as text, so raw HTML and entities show as typed):
 - A link to the page's own site (a relative path, an `#anchor` or an
   absolute URL on the same origin) opens in the same tab; any other opens in
   a new tab with `rel="noopener noreferrer"`.
-- Anything else (headings, quotes, tables, images, HTML) is literal text.
+- A run of lines starting `|` whose second line is a separator row (each
+  cell dashes, with an optional `:` at either end, ignored) is a table, as on
+  a page: the first row is its header, every other separator row is skipped,
+  and each cell is drawn as inline markup. A row short of the header's cells
+  gets empty ones; extra cells are dropped. A wide table scrolls inside its
+  bubble. Without the separator row the lines are paragraph text.
+- Anything else (headings, quotes, images, HTML) is literal text.
 
 A passage's opening words in a list stay plain text.
 

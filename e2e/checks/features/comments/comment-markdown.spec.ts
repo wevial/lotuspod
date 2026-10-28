@@ -4,8 +4,8 @@ import { expect, test, type APIRequestContext, type Locator, type Page } from '@
 
 // A comment's bubble draws a small markdown subset
 // (features/comments/ts/comment-markdown.js): paragraphs, bold, italic, code,
-// code blocks, links and one level of lists, a reader's comment and an agent's
-// reply alike. Raw HTML, entities and links to anything but http(s), an anchor
+// code blocks, links, one level of lists and pipe tables, a reader's comment
+// and an agent's reply alike. Raw HTML, entities and links to anything but http(s), an anchor
 // or a relative path stay as typed.
 // A bare http(s) URL is a link too. A link to the site itself opens in the
 // same tab and any other in a new one, in a bubble and in the page body
@@ -47,6 +47,18 @@ and <a href="#top">the top</a>.</p>
 <h2>Frogs</h2>
 <p>The frogs sleep under the ice.</p>
 `;
+
+// A paragraph, a pipe table of three columns and three body rows, and another
+// paragraph.
+const TABLE = [
+  'The sign-in options compared:',
+  '| Option | How | Cost |',
+  '|---|:---|---:|',
+  '| CLI | `lotuspod login` | free |',
+  '| Web | [the docs](https://example.com/docs) | free |',
+  '| Token | an API key | none |',
+  'Pick the CLI.',
+].join('\n');
 
 const RICH = [
   'The pump needs **bold** care, *italic* patience and `pump --stop` first.',
@@ -477,6 +489,82 @@ test.describe('signed in', () => {
     // A thumbnail loads lazily: this thread may sit below the dialog's fold.
     await thumbs.scrollIntoViewIfNeeded();
     expect(await natural(thumbs)).toEqual([320, 240]);
+    await seen.clean();
+  });
+
+  test("hermes's reply with a pipe table between two paragraphs draws a table with a header row", async ({ page, request }) => {
+    test.setTimeout(120_000);
+    const seen = await watch(page);
+    hermes('pull', '--owner', OWNER);
+    const root = await post(request, 'frogs', '@hermes How do I sign in?');
+    const claim = hermes('claim', String(root.id));
+    expect(claim.handle).toBe(OWNER);
+    hermes('reply', String(root.id), `--claim=${claim.claimToken}`, '--key', `table-${root.id}`, '--text', TABLE);
+    await page.goto(`${PAGE}?standalone`);
+    await open(page, 'frogs');
+    const text = page.locator(`.artifact-comment-thread[data-thread="${root.id}"] .artifact-comment-item--agent .artifact-comment-text`);
+    await expect(text).toHaveCount(1, { timeout: 15_000 });
+    expect(await text.evaluate((node) => Array.from(node.children, (child) => child.tagName)))
+      .toEqual(['P', 'TABLE', 'P']);
+    await expect(text.locator(':scope > p')).toHaveText(['The sign-in options compared:', 'Pick the CLI.']);
+    const table = text.locator('table');
+    await expect(table.locator('thead > tr > th')).toHaveText(['Option', 'How', 'Cost']);
+    await expect(table.locator('tbody > tr')).toHaveCount(3);
+    await expect(table.locator('tbody > tr').nth(0).locator('td')).toHaveText(['CLI', 'lotuspod login', 'free']);
+    await expect(table.locator('tbody > tr').nth(0).locator('td').nth(1).locator('code')).toHaveText('lotuspod login');
+    const link = table.locator('tbody > tr').nth(1).locator('td').nth(1).locator('a');
+    await expect(link).toHaveText('the docs');
+    await expect(link).toHaveAttribute('href', 'https://example.com/docs');
+    await expect(table.locator('tbody > tr').nth(2).locator('td')).toHaveText(['Token', 'an API key', 'none']);
+    await expect(table.locator('th').first()).toHaveCSS('border-top-style', 'solid');
+    await seen.clean();
+  });
+
+  test('lines starting with a pipe draw a table only over a separator row, and a cell keeps raw HTML and entities as typed', async ({ page, request }) => {
+    const seen = await watch(page);
+    const unseparated = '| a | b |\n| c | d |';
+    const single = '| just one pipe line |';
+    const typed = await post(request, 'pond', unseparated);
+    const lone = await post(request, 'pond', single);
+    const raw = await post(request, 'pond', '| html | entity |\n| --- | :---: |\n| <b>x</b> | &amp; |\n| short |');
+    await page.goto(`${PAGE}?standalone`);
+    await open(page, 'pond');
+    for (const [root, text] of [[typed, unseparated], [lone, single]] as const) {
+      await expect(bubble(page, root)).toBeVisible();
+      await expect(bubble(page, root).locator('table')).toHaveCount(0);
+      expect(await exact(bubble(page, root))).toBe(text);
+    }
+    const cells = bubble(page, raw).locator('tbody > tr').first().locator('td');
+    await expect(cells).toHaveCount(2);
+    expect(await exact(cells.nth(0))).toBe('<b>x</b>');
+    expect(await exact(cells.nth(1))).toBe('&amp;');
+    expect(await cells.evaluateAll((tds) => tds.map((td) => td.childElementCount))).toEqual([0, 0]);
+    // A short row is padded to the header's width.
+    await expect(bubble(page, raw).locator('tbody > tr').nth(1).locator('td')).toHaveText(['short', '']);
+    await seen.clean();
+  });
+
+  test('a table wider than its bubble scrolls inside it on a phone', async ({ page, request }) => {
+    const seen = await watch(page);
+    await page.setViewportSize({ width: 390, height: 800 });
+    const wide = `| ${'pondwater'.repeat(4)} | ${'frogspawn'.repeat(4)} | ${'heaterpump'.repeat(4)} |`;
+    const root = await post(request, 'frogs', `${wide}\n| - | - | - |\n${wide}`);
+    await page.goto(`${PAGE}?standalone`);
+    // On a phone the chip opens its section's newest thread in the bottom sheet.
+    await box(page, 'frogs').summary.click();
+    const sheet = page.locator('.artifact-comments-bottom-sheet');
+    const said = sheet.locator(`.artifact-comment-thread[data-thread="${root.id}"] .artifact-comment-item--reader .artifact-comment-text`);
+    await expect(said.locator('table')).toBeVisible();
+    const held = (await sheet.boundingBox())!;
+    const drawn = (await said.boundingBox())!;
+    expect(drawn.x).toBeGreaterThanOrEqual(held.x);
+    expect(drawn.x + drawn.width).toBeLessThanOrEqual(held.x + held.width);
+    const table = await said.locator('table').evaluate((node) => ({ scroll: node.scrollWidth, client: node.clientWidth }));
+    expect(table.scroll).toBeGreaterThan(table.client);
+    const widths = await page.evaluate(() => ({
+      scroll: document.documentElement.scrollWidth, viewport: document.documentElement.clientWidth,
+    }));
+    expect(widths.scroll).toBeLessThanOrEqual(widths.viewport);
     await seen.clean();
   });
 });

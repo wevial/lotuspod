@@ -1,10 +1,11 @@
 
   // A comment's text as a small markdown subset (commentMarkdown below):
   // paragraphs, **bold**, *italic*, `code`, fenced code blocks, links, bare
-  // http(s) URLs and one level of bullet and numbered lists. Every node is
-  // made with createElement and every text set with textContent, so raw HTML and
-  // entities in a comment are text by construction. Anything outside the
-  // subset (headings, quotes, tables, images, `_`) stays as typed.
+  // http(s) URLs, one level of bullet and numbered lists and pipe tables.
+  // Every node is made with createElement and every text set with
+  // textContent, so raw HTML and entities in a comment are text by
+  // construction. Anything outside the subset (headings, quotes, images, `_`)
+  // stays as typed.
   // A fence is a line of three backticks (a word after them is allowed);
   // a line of four or more is text.
   var MD_FENCE = /^\s*```[^`]*$/;
@@ -12,6 +13,9 @@
   var MD_BULLET = /^\s*[-*] (.*)$/;
   var MD_NUMBER = /^\s*(\d+)\. (.*)$/;
   var MD_BLANK = /^\s*$/;
+  // A pipe table's separator cell, as lotuspod.features.publish.markdown's
+  // _SEPARATOR_CELL, with an alignment `:` allowed (and ignored) at either end.
+  var MD_SEPARATOR_CELL = /^:?-+:?$/;
   // A link's target: no space, and any parentheses in pairs, so that
   // `javascript:alert(1)` is read whole and refused whole.
   var MD_TARGET = "([^\\s()]*(?:\\([^\\s()]*\\)[^\\s()]*)*)";
@@ -128,6 +132,39 @@
     }
   }
 
+  // A pipe table row's cells, split as lotuspod.features.publish.markdown's
+  // to_body does: outer pipes trimmed, then split on `|`.
+  function mdCells(line) {
+    return line.trim().replace(/^\|+|\|+$/g, "").split("|").map(function (cell) {
+      return cell.trim();
+    });
+  }
+
+  function mdSeparator(line) {
+    return mdCells(line).every(function (cell) {
+      return MD_SEPARATOR_CELL.test(cell);
+    });
+  }
+
+  // A table of rows, the first its header: every row has the header's
+  // count of cells, short ones padded with empty cells.
+  function mdTable(rows) {
+    var table = element("table");
+    rows.forEach(function (cells, index) {
+      if (index < 2) {
+        table.appendChild(element(index ? "tbody" : "thead"));
+      }
+      var row = element("tr");
+      for (var column = 0; column < rows[0].length; column++) {
+        var cell = element(index ? "td" : "th");
+        markdownInline(cell, cells[column] || "");
+        row.appendChild(cell);
+      }
+      table.lastChild.appendChild(row);
+    });
+    return table;
+  }
+
   // text's blocks, appended to parent: a blank line ends a paragraph, and a
   // single newline in one stays a line break.
   function commentMarkdown(parent, text) {
@@ -163,6 +200,22 @@
         var pre = element("pre");
         pre.appendChild(element("code", "", code.join("\n")));
         parent.appendChild(pre);
+        continue;
+      }
+      // A run of lines starting `|` is a table when its second line is a
+      // separator row; any later separator row is skipped.
+      if (/^\|/.test(line) && at + 1 < lines.length && /^\|/.test(lines[at + 1]) &&
+          mdSeparator(lines[at + 1])) {
+        closeParagraph();
+        closeList();
+        var rows = [mdCells(line)];
+        for (at += 2; at < lines.length && /^\|/.test(lines[at]); at++) {
+          if (!mdSeparator(lines[at])) {
+            rows.push(mdCells(lines[at]));
+          }
+        }
+        at -= 1;
+        parent.appendChild(mdTable(rows));
         continue;
       }
       if (MD_BLANK.test(line)) {
