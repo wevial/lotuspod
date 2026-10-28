@@ -55,8 +55,7 @@ function Tab({ page, name, state }: { page: Page; name: string; state: VersionsS
   const found = state.changes.value;
   const marked = state.marked.value;
   const rows = rowsOf(state);
-  const current = versions.find((version) => version.current);
-  const seen = marked ? current?.commit : found?.since.commit;
+  const seen = marked ? versions.find((version) => version.current)?.commit : found?.since.commit;
   function mark(): void {
     document.getElementById("artifact-comments-tab-history")?.focus({ preventScroll: true });
     state.marked.value = true;
