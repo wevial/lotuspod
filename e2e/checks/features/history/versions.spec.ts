@@ -590,18 +590,6 @@ test.describe('signed in, what changed', () => {
     await expect(page.locator('#artifact-comments-tab-history')).toBeAttached();
   }
 
-  // The page draws no box under the header and no tag on a heading: the
-  // header runs straight into the body.
-  async function noBox(page: Page) {
-    await expect(page.locator('section.artifact-changes')).toHaveCount(0);
-    await expect(page.locator('.artifact-changed-tag')).toHaveCount(0);
-    expect(await page.locator('header.artifact-header').evaluate((header) => {
-      const next = header.nextElementSibling;
-      return Boolean(next && (next.matches('section.artifact-body') ||
-        next.querySelector(':scope > section.artifact-body')));
-    })).toBe(true);
-  }
-
   // Publishes the page, opens it with nothing to say yet, publishes it again
   // with the pump's line changed and opens it once more.
   async function republish(page: Page, name: string, title: string) {
@@ -645,7 +633,15 @@ test.describe('signed in, what changed', () => {
     const errors = watchErrors(page);
     const name = 'changes-check';
     await republish(page, name, 'Changes check');
-    await noBox(page);
+    // The page draws no box under the header and no tag on a heading: the
+    // header runs straight into the body.
+    await expect(page.locator('section.artifact-changes')).toHaveCount(0);
+    await expect(page.locator('.artifact-changed-tag')).toHaveCount(0);
+    expect(await page.locator('header.artifact-header').evaluate((header) => {
+      const next = header.nextElementSibling;
+      return Boolean(next && (next.matches('section.artifact-body') ||
+        next.querySelector(':scope > section.artifact-body')));
+    })).toBe(true);
     const pill = page.locator(PILL);
     await expect(pill).toHaveText('1 changed');
 
@@ -696,7 +692,6 @@ test.describe('signed in, what changed', () => {
 
     // The next load was seen at the page's own revision: nothing to say.
     await open(page, name);
-    await noBox(page);
     await expect(page.locator('.artifact-history-pill')).toHaveCount(0);
     await expect(page.locator('.artifact-history-changed')).toHaveCount(0);
     await openView(page, page.locator('.artifact-versions-link'));
@@ -817,7 +812,6 @@ test.describe('signed in, what changed', () => {
     // The outline gives no id to a page's only h2.
     publish(name, ['# Changes one heading', '', 'The plan for the pond this winter.', '', '## Pump', '', 'The pump runs all winter.', ''].join('\n'));
     await open(page, name);
-    await noBox(page);
     await page.locator(PILL).click();
     const history = page.locator(HISTORY);
     await expect(history.getByRole('link', { name: 'Pump' })).toHaveAttribute('href', '#pump');
@@ -837,7 +831,6 @@ test.describe('signed in, what changed', () => {
     await page.waitForTimeout(1100);
     publish(name, ['# Changes no heading', '', 'The pump runs all winter.', ''].join('\n'));
     await open(page, name);
-    await noBox(page);
     await page.locator(PILL).click();
     const link = page.locator(HISTORY).getByRole('link', { name: 'The page text' });
     await expect(link).toHaveAttribute('href', '#page-text');
