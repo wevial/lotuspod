@@ -7,19 +7,14 @@
 
 /* The link arrives after the page is drawn, so a page with a revision keeps
    its slot at the end of the date line from the start, as wide as the
-   widest link ("· Versions · 200") and the version menu's button. The link
-   and the button fill the slot without moving the header, even where the
-   line wraps. */
+   widest link ("· Versions · 200"). The link fills the slot without moving
+   the header, even where the line wraps. */
 html:has(meta[name="lotuspod:revision"]) .artifact-meta::after,
 .artifact-versions-slot {
   display: inline-block;
   margin-left: 0.3em;
   min-width: 9.25em;
   white-space: nowrap;
-}
-
-.artifact-versions-slot {
-  position: relative;
 }
 
 html:has(meta[name="lotuspod:revision"]) .artifact-meta::after {
@@ -43,8 +38,8 @@ html:has(meta[name="lotuspod:revision"]) .artifact-meta--versions::after {
   text-decoration-color: currentColor;
 }
 
-/* The version menu (features/history/ts/version-menu.js): a "▾" button after
-   the link, and under it the Labels menu's surface
+/* The version menu (features/history/ts/version-menu.js), drawn in an old
+   version's banner: a button, and under it the Labels menu's surface
    (features/index/theme/index.css) listing the versions, which scroll past
    about 20rem above "See all versions". */
 .artifact-versions-menu-button {
@@ -141,7 +136,6 @@ html:has(meta[name="lotuspod:revision"]) .artifact-meta--versions::after {
 }
 
 .artifact-versions-menu-top .artifact-versions-current,
-.artifact-versions-menu-top .artifact-versions-seen,
 .artifact-versions-menu-top .artifact-versions-viewing {
   font-size: 0.75rem;
   margin: 0;
@@ -364,8 +358,7 @@ html:has(meta[name="lotuspod:revision"]) .artifact-meta--versions::after {
 }
 
 /* The banner's version menu (features/history/ts/old-version.js): "Choose a
-   version ▾" drawn as the banner's links are, and under it the header's menu as
-   it is. */
+   version ▾" drawn as the banner's links are, and under it the menu. */
 .artifact-version-banner-menu {
   position: relative;
 }

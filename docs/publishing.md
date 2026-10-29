@@ -725,13 +725,6 @@ has no versions yet." The page asks
 pages](comments.md#answers-and-comments)) once as it loads; when it answers
 anything but 200, as on the demo, there is no link and no view.
 
-Beside the link a ▾ button, "Choose a version", opens a menu of the versions
-without leaving the page: newest first, each with its date and time, its
-summary on one line, and "current" or "you last looked" where those apply,
-then "See all versions" to `#versions`. Choosing one opens it in the same
-tab. The arrow keys, Home and End move through the menu, and Escape, Tab or
-a click outside closes it.
-
 "View" opens `NAME.html?version=COMMIT`, that version read-only, for a
 reader whose Access assertion verifies as on `/api`. It answers 404 unless
 the page is served now and COMMIT, its 40 hex characters, is one of the
@@ -763,10 +756,13 @@ and none can guess it. It is sent
 with `Cache-Control: private, no-store`. Any other query on a page is served
 as the page.
 
-That script gives the banner the header's version menu: a "Choose a version
-▾" button before "All versions" whose menu lists the versions as the
-header's does, the one shown marked "viewing", the current one opening the
-page and "See all versions" opening `NAME.html#versions`. It asks
+That script gives the banner a version menu, which the current page's header
+does not have: a "Choose a version ▾" button before "All versions" whose
+menu lists the versions newest first, each with its date and time, its
+summary on one line, and "current" or "viewing" where those apply, then
+"See all versions". The current one opens the page, any other that version,
+and "See all versions" opens `NAME.html#versions`. The arrow keys, Home and
+End move through the menu, and Escape, Tab or a click outside closes it. It asks
 `GET /api/versions?page=NAME` once as the version loads and posts nothing, so
 an old version records no visit and marks no "you last looked"; when the
 route answers anything but 200 with a list, or the request fails, the banner

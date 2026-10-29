@@ -240,8 +240,8 @@ test.describe('signed in', () => {
     await expect(all.locator('.artifact-body')).toBeVisible();
     await expect(view(all).node).toBeHidden();
 
-    // The old version's banner carries the header's version menu, drawn by
-    // the one script it runs, which asks the versions route once and posts
+    // The old version's banner carries the version menu, drawn by the one
+    // script it runs, which asks the versions route once and posts
     // nothing; the page script never runs there.
     const requests: string[] = [];
     const onRequest = (request: Request) => {
@@ -424,7 +424,30 @@ test.describe('signed in', () => {
     expect(errors).toEqual([]);
   });
 
-  test("the header's menu picks a version without leaving the page", async ({ page }) => {
+  test("the current page's header ends in its versions link, with no version menu", async ({ page }) => {
+    const errors = watchErrors(page);
+    await page.setViewportSize({ width: 1280, height: 800 });
+    const name = 'versions-header-check';
+    publish(name, source('Versions header check', 'first'));
+    publish(name, source('Versions header check', 'second'));
+
+    await page.goto(`/${name}.html?standalone`);
+    const link = page.locator('.artifact-header .artifact-meta a.artifact-versions-link');
+    await expect(link).toHaveText('Versions · 2');
+    await expect(page.locator('button.artifact-versions-menu-button')).toHaveCount(0);
+    await expect(page.locator('.artifact-versions-menu')).toHaveCount(0);
+    // The link is the slot's last element, before any unread badge.
+    expect(await link.evaluate((node) => {
+      const line = node.closest('.artifact-header .artifact-meta');
+      const slot = node.parentElement!;
+      return Boolean(line && slot.matches('.artifact-versions-slot') && slot.lastElementChild === node &&
+        Array.from(line.querySelectorAll('.artifact-unread')).every((badge) =>
+          slot.compareDocumentPosition(badge) & Node.DOCUMENT_POSITION_FOLLOWING));
+    })).toBe(true);
+    expect(errors).toEqual([]);
+  });
+
+  test("an old version's banner menu picks a version", async ({ page }) => {
     const errors = watchErrors(page);
     const name = 'versions-menu-check';
     publish(name, source('Versions menu check', 'first'));
@@ -436,22 +459,13 @@ test.describe('signed in', () => {
     const oldUrl = new RegExp(`/${name}\\.html\\?version=${listed[1].commit}$`);
     const banner = page.locator('main.artifact--old-version > div.artifact-version-banner');
 
-    await page.goto(`/${name}.html?standalone`);
-    const button = page.getByRole('button', { name: 'Choose a version' });
+    await page.goto(`/${name}.html?version=${listed[1].commit}`);
+    const button = banner.getByRole('button', { name: 'Choose a version' });
     const menu = page.getByRole('menu');
     const items = menu.getByRole('menuitem');
-    await expect(button).toHaveText('▾');
+    await expect(button).toHaveText('Choose a version ▾');
     await expect(button).toHaveAttribute('aria-expanded', 'false');
     await expect(menu).toBeHidden();
-    // The button follows the link in its slot, before any unread badge.
-    expect(await button.evaluate((node) => {
-      const line = node.closest('.artifact-header .artifact-meta');
-      const link = node.previousElementSibling;
-      return Boolean(line && node.parentElement!.matches('.artifact-versions-slot') &&
-        link?.matches('a.artifact-versions-link') &&
-        Array.from(line.querySelectorAll('.artifact-unread')).every((badge) =>
-          node.compareDocumentPosition(badge) & Node.DOCUMENT_POSITION_FOLLOWING));
-    })).toBe(true);
     const hit = await button.boundingBox();
     expect(hit!.width).toBeGreaterThanOrEqual(24);
     expect(hit!.height).toBeGreaterThanOrEqual(24);
@@ -465,30 +479,9 @@ test.describe('signed in', () => {
     }
     await expect(items.nth(0)).toContainText(listed[0].summary);
     await expect(items.nth(1).locator('.artifact-versions-menu-note')).toHaveText('First version');
-    await expect(items.nth(0).locator('.artifact-versions-current')).toHaveText('current');
-    await expect(items.nth(1).locator('.artifact-versions-current')).toHaveCount(0);
-    await expect(items.nth(0)).toHaveAttribute('aria-current', 'page');
-    await expect(items.nth(0)).toHaveAttribute('href', `${name}.html`);
-    await expect(items.nth(2)).toHaveText('See all versions');
-    await expect(items.nth(2)).toHaveAttribute('href', /#versions$/);
-
-    // The older item opens the old version; the first, the page itself.
-    await items.nth(1).click();
-    await expect(page).toHaveURL(oldUrl);
-    await expect(banner).toBeVisible();
-    await page.goBack();
-    await button.click();
-    await items.nth(0).click();
-    await expect((await inTab(page, name)).locator('.artifact-body')).toContainText('Edition: second.');
-    await page.goto(`/${name}.html?standalone`);
-    await button.click();
-    await items.nth(2).click();
-    await expect(page).toHaveURL(new RegExp(`/${name}\\.html\\?standalone#versions$`));
-    await expect(view(page).heading).toBeVisible();
-    await expect(menu).toBeHidden();
 
     // The keyboard, as a menu button takes it.
-    await page.goto(`/${name}.html?standalone`);
+    await page.goto(`/${name}.html?version=${listed[1].commit}`);
     await button.focus();
     await page.keyboard.press('ArrowDown');
     await expect(menu).toBeVisible();
@@ -510,13 +503,12 @@ test.describe('signed in', () => {
     await page.keyboard.press('Enter');
     await expect(menu).toBeVisible();
     await expect(items.nth(0)).toBeFocused();
-    await page.keyboard.press('ArrowDown');
     await page.keyboard.press('Enter');
-    await expect(page).toHaveURL(oldUrl);
-    await expect(banner).toBeVisible();
+    await expect((await inTab(page, name)).locator('.artifact-body')).toContainText('Edition: second.');
 
     // A click outside closes it, and so does Tab.
     await page.goBack();
+    await expect(page).toHaveURL(oldUrl);
     await button.click();
     await expect(menu).toBeVisible();
     await page.locator('.artifact-title').click();
@@ -532,9 +524,12 @@ test.describe('signed in', () => {
 
   test('the menu of 25 versions scrolls them above "See all versions", and fits a phone', async ({ page }) => {
     const errors = watchErrors(page);
+    const answered = await page.request.get('/api/versions?page=capture-versions-many');
+    expect(answered.status()).toBe(200);
+    const older = (await answered.json()).versions[1];
     await page.setViewportSize({ width: 1280, height: 800 });
-    await page.goto('/capture-versions-many.html?standalone');
-    const button = page.getByRole('button', { name: 'Choose a version' });
+    await page.goto(`/capture-versions-many.html?version=${older.commit}`);
+    const button = page.locator('.artifact-version-banner').getByRole('button', { name: 'Choose a version' });
     const menu = page.getByRole('menu');
     await button.click();
     await expect(menu).toBeVisible();
@@ -553,6 +548,8 @@ test.describe('signed in', () => {
     const box = await menu.boundingBox();
     expect(box!.x).toBeGreaterThanOrEqual(0);
     expect(box!.x + box!.width).toBeLessThanOrEqual(390);
+    expect(box!.y).toBeGreaterThanOrEqual(0);
+    expect(box!.y + box!.height).toBeLessThanOrEqual(844);
     expect(errors).toEqual([]);
   });
 
@@ -652,29 +649,6 @@ test.describe('signed in, what changed', () => {
     })).toBe(true);
     const pill = page.locator(PILL);
     await expect(pill).toHaveText('1 changed');
-
-    // The header's menu marks the version the reader last looked at.
-    const button = page.getByRole('button', { name: 'Choose a version' });
-    await button.click();
-    const items = page.getByRole('menu').getByRole('menuitem');
-    await expect(items).toHaveCount(3);
-    await expect(items.nth(1).locator('.artifact-versions-seen')).toHaveText('you last looked');
-    await expect(items.nth(0)).not.toContainText('you last looked');
-    await page.keyboard.press('Escape');
-    await expect(page.getByRole('menu')).toBeHidden();
-
-    // On a narrow window with large text the pill wraps under the date,
-    // inside the menu.
-    const size = page.viewportSize()!;
-    await page.setViewportSize({ width: 320, height: 844 });
-    await page.evaluate(() => { document.documentElement.style.fontSize = '32px'; });
-    await button.click();
-    const [seenPill, list] = await Promise.all([items.nth(1).locator('.artifact-versions-seen'),
-      page.locator('.artifact-versions-menu-list')].map((node) => node.boundingBox()));
-    expect(seenPill!.x + seenPill!.width).toBeLessThanOrEqual(list!.x + list!.width);
-    await page.keyboard.press('Escape');
-    await page.evaluate(() => { document.documentElement.style.fontSize = ''; });
-    await page.setViewportSize(size);
 
     await pill.click();
     const history = page.locator(HISTORY);

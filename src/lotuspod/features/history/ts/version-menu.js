@@ -1,26 +1,24 @@
 
-  // A page's version menu (features/history/ts/versions.js draws it on the
-  // current page): a "▾" button that opens a menu of the page's versions,
-  // newest first, each with its date and time, its summary on one line ("First
-  // version" when it has none), and "current" or "you last looked" where those
-  // apply, then a last item "See all versions" linking to #versions. An older
-  // version's item links to NAME.html?version=COMMIT, the current one's to
-  // NAME.html; the one shown carries aria-current="page". It follows the
-  // menu-button pattern: Enter, Space or ArrowDown on the button opens it on
-  // the newest version, ArrowUp on "See all versions"; in it the arrows, Home
-  // and End move between the items, Escape closes it and returns focus to the
-  // button, and Tab or a click outside closes it.
+  // A page's version menu, which the old-version script draws in an old
+  // version's banner (features/history/ts/old-version.js): a button that
+  // opens a menu of the page's versions, newest first, each with its date and
+  // time, its summary on one line ("First version" when it has none), and
+  // "current" or "viewing" where those apply, then a last item "See all
+  // versions" linking to #versions. An older version's item links to
+  // NAME.html?version=COMMIT, the current one's to NAME.html; the one shown
+  // carries aria-current="page". It follows the menu-button pattern: Enter,
+  // Space or ArrowDown on the button opens it on the newest version, ArrowUp
+  // on "See all versions"; in it the arrows, Home and End move between the
+  // items, Escape closes it and returns focus to the button, and Tab or a
+  // click outside closes it.
   //
   // It reads nothing and posts nothing: its inputs are the versions, the
-  // page's name, the commit shown, the commit the reader last looked at
-  // (null when none) and whether the one shown is an old version (old, as
-  // the old-version script draws it in the banner,
-  // features/history/ts/old-version.js), so a script of its own can join it as
-  // it is. On an old version the one shown carries a "viewing" pill and "See
-  // all versions" links to the page's NAME.html#versions. It returns the button
-  // and the menu, to be put side by side in a positioned box, and close(),
-  // which closes the menu.
-  function versionMenu(versions, page, shown, seen, old) {
+  // page's name and the commit shown, so a script of its own can join it as
+  // it is. The one shown carries a "viewing" pill and "See all versions"
+  // links to the page's NAME.html#versions. It returns the button and the
+  // menu, to be put side by side in a positioned box, and close(), which
+  // closes the menu.
+  function versionMenu(versions, page, shown) {
     var button = element("button", "artifact-versions-menu-button", "▾");
     button.type = "button";
     button.id = "artifact-versions-menu-button";
@@ -58,17 +56,14 @@
       if (version.current) {
         top.appendChild(element("span", "artifact-versions-current", "current"));
       }
-      if (seen && version.commit === seen) {
-        top.appendChild(element("span", "artifact-versions-seen", "you last looked"));
-      }
-      if (old && version.commit === shown) {
+      if (version.commit === shown) {
         top.appendChild(element("span", "artifact-versions-viewing", "viewing"));
       }
       link.append(top, element("span", "artifact-versions-menu-note",
         String(version.summary || "") || "First version"));
       list.appendChild(link);
     });
-    var seeAll = item((old ? file : "") + "#versions", "artifact-versions-menu-all");
+    var seeAll = item(file + "#versions", "artifact-versions-menu-all");
     seeAll.textContent = "See all versions";
     menu.append(list, seeAll);
 
