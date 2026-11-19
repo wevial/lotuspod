@@ -558,8 +558,7 @@ test.describe('signed in', () => {
     // frames, and well inside the head's failsafe; the index document the
     // pod then loads held until past it.
     await page.route((url) => url.pathname === '/', async (route) => {
-      const fetched = route.request().resourceType() === 'fetch';
-      await new Promise((resolve) => setTimeout(resolve, fetched ? 700 : 4000));
+      await new Promise((resolve) => setTimeout(resolve, route.request().resourceType() === 'fetch' ? 700 : 4000));
       await route.continue();
     });
     await page.goto(`/${ARTICLE.name}.html`);
