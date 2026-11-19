@@ -542,22 +542,27 @@ test.describe('signed in', () => {
   test('a pod loaded directly paints none of its article before it moves into its tab', async ({ page }) => {
     const errors = await watch(page);
     await sampleFrames(page);
-    // A paragraph the pod's own markup sets visible, as an author may.
+    // A paragraph the pod's own markup sets visible, and a fade-in of its
+    // body, as an author may write.
     await page.route(`**/${ARTICLE.name}.html`, async (route) => {
       const answer = await route.fetch();
       const body = (await answer.text()).replace('</h1>',
-        '</h1><p id="pod-tabs-authored" style="visibility: visible">Ready for review</p>');
+        '</h1><p id="pod-tabs-authored" style="visibility: visible">Ready for review</p>'
+        + '<style>@keyframes pod-tabs-fade { from { opacity: 0; visibility: hidden }'
+        + ' to { opacity: 1; visibility: visible } } body { animation: pod-tabs-fade 0.2s forwards }</style>');
       await route.fulfill({ response: answer, body });
     });
     // The index's answer held long enough for the bare page to paint many
-    // frames, and well inside the head's failsafe.
+    // frames, and well inside the head's failsafe; the index document the
+    // pod then loads held until past it.
     await page.route((url) => url.pathname === '/', async (route) => {
-      if (route.request().resourceType() === 'fetch') await new Promise((resolve) => setTimeout(resolve, 700));
+      const fetched = route.request().resourceType() === 'fetch';
+      await new Promise((resolve) => setTimeout(resolve, fetched ? 700 : 4000));
       await route.continue();
     });
     await page.goto(`/${ARTICLE.name}.html`);
 
-    await expect(strip(page)).toHaveCount(1);
+    await expect(strip(page)).toHaveCount(1, { timeout: 15000 });
     await expectActive(page, ARTICLE);
     await expect(framed(page, ARTICLE).locator('h1')).toBeVisible();
     await expect.poll(async () => (await samples(page)).some((each) => each.framed)).toBe(true);
@@ -570,6 +575,28 @@ test.describe('signed in', () => {
     const shown = index.findIndex((each) => each.framed);
     expect(index.slice(0, shown).filter((each) => each.listing)).toEqual([]);
     await expect(page.locator('html')).not.toHaveClass(/pod-tabs-(leaving|opening)/);
+    await page.unrouteAll({ behavior: 'ignoreErrors' });
+    expect(errors).toEqual([]);
+  });
+
+  test('a pod that stays after its index answers focuses its autofocused control', async ({ page }) => {
+    const errors = await watch(page);
+    await page.route(`**/${ARTICLE.name}.html`, async (route) => {
+      const answer = await route.fetch();
+      const body = (await answer.text()).replace('</h1>', '</h1><input id="pod-tabs-autofocus" autofocus>');
+      await route.fulfill({ response: answer, body });
+    });
+    // An index that does not list the pod, answered while it is still hidden.
+    await page.route((url) => url.pathname === '/', async (route) => {
+      if (route.request().resourceType() !== 'fetch') return route.continue();
+      await new Promise((resolve) => setTimeout(resolve, 700));
+      await route.fulfill({ status: 200, contentType: 'text/html', body: '<!doctype html><title>Pages</title>' });
+    });
+    await page.goto(`/${ARTICLE.name}.html`);
+
+    await expect(page.locator('#pod-tabs-autofocus')).toBeFocused();
+    expect(await page.locator('main.artifact h1').isVisible()).toBe(true);
+    expect(new URL(page.url()).pathname).toBe(`/${ARTICLE.name}.html`);
     await page.unrouteAll({ behavior: 'ignoreErrors' });
     expect(errors).toEqual([]);
   });

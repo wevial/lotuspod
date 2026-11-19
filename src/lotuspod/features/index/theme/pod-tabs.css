@@ -236,16 +236,20 @@
   visibility: visible;
 }
 
-/* While a pod loaded on its own may still leave for its index's tab, and
-   while the index opened at a tab has not yet shown it (core/ts/theme-head.js
-   sets each class), what each would show for a moment is hidden. Its layout
+/* While a pod loaded on its own may still leave for its index's tab, once
+   it is leaving (pod-tabs-going, set by features/publish/ts/open-in-tabs.js),
+   and while the index opened at a tab has not yet shown it (core/ts/theme-head.js
+   sets the others), what each would show for a moment is hidden. Its layout
    and scripts run as ever. A pod's own markup may set its visibility back,
-   but no element is more opaque than its body. */
+   but no element is more opaque than its body; !important holds both against
+   the pod's own animations of its body. */
 .pod-tabs-leaving body,
+.pod-tabs-going body,
 .pod-tabs-opening main.index {
-  visibility: hidden;
+  visibility: hidden !important;
 }
 
-.pod-tabs-leaving body {
-  opacity: 0;
+.pod-tabs-leaving body,
+.pod-tabs-going body {
+  opacity: 0 !important;
 }
