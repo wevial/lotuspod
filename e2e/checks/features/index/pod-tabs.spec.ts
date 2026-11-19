@@ -228,6 +228,14 @@ async function samples(page: Page): Promise<Sample[]> {
   return JSON.parse(await page.evaluate((key) => sessionStorage.getItem(key) ?? '[]', SAMPLES));
 }
 
+// The article served with markup of its own just after its heading.
+async function authored(page: Page, markup: string) {
+  await page.route(`**/${ARTICLE.name}.html`, async (route) => {
+    const answer = await route.fetch();
+    await route.fulfill({ response: answer, body: (await answer.text()).replace('</h1>', `</h1>${markup}`) });
+  });
+}
+
 test.describe('signed in', () => {
   test.use({ extraHTTPHeaders: SIGNED_IN });
 
@@ -541,16 +549,11 @@ test.describe('signed in', () => {
     // body that reduced motion replaces with its end state, as an author may
     // write.
     await page.emulateMedia({ reducedMotion: 'reduce' });
-    await page.route(`**/${ARTICLE.name}.html`, async (route) => {
-      const answer = await route.fetch();
-      const body = (await answer.text()).replace('</h1>',
-        '</h1><p id="pod-tabs-authored" style="visibility: visible">Ready for review</p>'
-        + '<style>@keyframes pod-tabs-fade { from { opacity: 0; visibility: hidden }'
-        + ' to { opacity: 1; visibility: visible } } body { animation: pod-tabs-fade 0.2s forwards }'
-        + ' @media (prefers-reduced-motion: reduce) { :root body { animation: none;'
-        + ' opacity: 1 !important; visibility: visible !important } }</style>');
-      await route.fulfill({ response: answer, body });
-    });
+    await authored(page, '<p id="pod-tabs-authored" style="visibility: visible">Ready for review</p>'
+      + '<style>@keyframes pod-tabs-fade { from { opacity: 0; visibility: hidden }'
+      + ' to { opacity: 1; visibility: visible } } body { animation: pod-tabs-fade 0.2s forwards }'
+      + ' @media (prefers-reduced-motion: reduce) { :root body { animation: none;'
+      + ' opacity: 1 !important; visibility: visible !important } }</style>');
     // The index's answer held long enough for the bare page to paint many
     // frames, and well inside the head's failsafe; the index document the
     // pod then loads held until past it.
@@ -579,18 +582,11 @@ test.describe('signed in', () => {
   });
 
   // The pod with an autofocused control in a closed dialog, then one on the page.
-  const autofocused = async (page: Page) => {
-    await page.route(`**/${ARTICLE.name}.html`, async (route) => {
-      const answer = await route.fetch();
-      const body = (await answer.text()).replace('</h1>',
-        '</h1><dialog><input autofocus></dialog><input id="pod-tabs-autofocus" autofocus>');
-      await route.fulfill({ response: answer, body });
-    });
-  };
+  const AUTOFOCUSED = '<dialog><input autofocus></dialog><input id="pod-tabs-autofocus" autofocus>';
 
   test('a pod that stays after its index answers focuses its autofocused control', async ({ page }) => {
     const errors = await watch(page);
-    await autofocused(page);
+    await authored(page, AUTOFOCUSED);
     // An index that does not list the pod, answered while it is still hidden.
     await page.route((url) => url.pathname === '/', async (route) => {
       if (route.request().resourceType() !== 'fetch') return route.continue();
@@ -607,7 +603,7 @@ test.describe('signed in', () => {
   });
 
   test('a pod whose index never answers is shown by the failsafe, its autofocused control focused', async ({ page }) => {
-    await autofocused(page);
+    await authored(page, AUTOFOCUSED);
     await page.route((url) => url.pathname === '/', async (route) => {
       if (route.request().resourceType() !== 'fetch') return route.continue();
       await new Promise(() => {});
