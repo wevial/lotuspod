@@ -218,7 +218,7 @@ async function sampleFrames(page: Page) {
       } catch {
         return;
       }
-      if (++count < 600) requestAnimationFrame(sample);
+      if (++count < 1500) requestAnimationFrame(sample);
     };
     requestAnimationFrame(sample);
   }, SAMPLES);
@@ -606,8 +606,71 @@ test.describe('signed in', () => {
     await page.goto(`/${ARTICLE.name}.html#pod-tabs-jump`);
     await expect(page.locator('#pod-tabs-jump')).toBeFocused();
     expect(new URL(page.url()).hash).toBe('#pod-tabs-jump');
+
+    // A focusable form whose control named "focus" shadows its own method.
+    await page.unroute(`**/${ARTICLE.name}.html`);
+    await authored(page, '<form id="pod-tabs-form" tabindex="-1"><input name="focus"></form>');
+    await page.goto('about:blank');
+    await page.goto(`/${ARTICLE.name}.html#pod-tabs-form`);
+    await expect(page.locator('#pod-tabs-form')).toBeFocused();
+
+    // An autofocused control in a declarative shadow root.
+    await page.unroute(`**/${ARTICLE.name}.html`);
+    await authored(page, '<div id="pod-tabs-host"><template shadowrootmode="open">'
+      + '<input id="pod-tabs-shadowed" autofocus></template></div>');
+    await page.goto('about:blank');
+    await page.goto(`/${ARTICLE.name}.html`);
+    await expect(page.locator('#pod-tabs-shadowed')).toBeFocused();
     await page.unrouteAll({ behavior: 'ignoreErrors' });
     expect(errors).toEqual([]);
+  });
+
+  test('a pod whose index document is slow to load stays hidden until it moves, its stylesheet missing or not', async ({ page }) => {
+    const errors = await watch(page);
+    await sampleFrames(page);
+    // The index's answer prompt; the index document the pod then loads held
+    // long past both the head's failsafe and the fallback the leaving page
+    // keeps for a browser that cannot tell a stopped load.
+    await page.route((url) => url.pathname === '/', async (route) => {
+      if (route.request().resourceType() !== 'fetch') await new Promise((resolve) => setTimeout(resolve, 10000));
+      await route.continue();
+    });
+    await page.goto(`/${ARTICLE.name}.html`);
+
+    await expect(strip(page)).toHaveCount(1, { timeout: 20000 });
+    await expectActive(page, ARTICLE);
+    await expect.poll(async () => (await samples(page)).some((each) => each.framed)).toBe(true);
+    let bare = (await samples(page)).filter((each) => each.path === `/${ARTICLE.name}.html`);
+    expect(bare.length).toBeGreaterThan(300);
+    expect(bare.filter((each) => each.article)).toEqual([]);
+    await page.unrouteAll({ behavior: 'ignoreErrors' });
+
+    // The theme's stylesheet failing: the pod's answer and the index script
+    // each held well inside the failsafe.
+    await page.route('**/lotuspod.css*', (route) => route.fulfill({ status: 404, body: '' }));
+    await page.route((url) => url.pathname === '/', async (route) => {
+      if (route.request().resourceType() === 'fetch') await new Promise((resolve) => setTimeout(resolve, 700));
+      await route.continue();
+    });
+    await page.route('**/lotuspod-index.js*', async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 700));
+      await route.continue();
+    });
+    await page.goto('about:blank');
+    await page.evaluate((key) => sessionStorage.removeItem(key), SAMPLES).catch(() => {});
+    await page.goto(`/${ARTICLE.name}.html`);
+    await expect(page).toHaveURL(new RegExp(`/#tabs=${ARTICLE.name}&on=${ARTICLE.name}$`), { timeout: 15000 });
+    await expect.poll(async () => (await samples(page)).some((each) => each.framed)).toBe(true);
+    const seen = await samples(page);
+    bare = seen.filter((each) => each.path === `/${ARTICLE.name}.html`);
+    expect(bare.length).toBeGreaterThan(0);
+    expect(bare.filter((each) => each.article)).toEqual([]);
+    const index = seen.filter((each) => each.path === '/');
+    const shown = index.findIndex((each) => each.framed);
+    expect(shown).toBeGreaterThan(0);
+    expect(index.slice(0, shown).filter((each) => each.listing)).toEqual([]);
+    await page.unrouteAll({ behavior: 'ignoreErrors' });
+    expect(errors.filter((each) => !/404|Failed to load resource/.test(each))).toEqual([]);
   });
 
   test('a pod whose body has no box of its own paints none of its markup while its index answers', async ({ page }) => {
@@ -709,7 +772,8 @@ test.describe('signed in', () => {
 
     await expect.poll(() => page.evaluate(() => sessionStorage.getItem('pod-tabs-stopped-hidden')),
       { timeout: 10000 }).toBe('true');
-    await expect(page.locator('main.artifact h1')).toBeVisible({ timeout: 15000 });
+    // Shown once the load stops, not on a fallback timer.
+    await expect(page.locator('main.artifact h1')).toBeVisible({ timeout: 2000 });
     expect(new URL(page.url()).pathname).toBe(`/${ARTICLE.name}.html`);
     await page.unrouteAll({ behavior: 'ignoreErrors' });
   });
