@@ -257,12 +257,28 @@ body {
   color: var(--color-pale-lavender);
 }
 
+/* The header is the title, one line of what is known about the page, and
+   the summary: the date line, the box for comments on the whole page and
+   the owner wrap as one line of items. */
 .artifact-header {
+  align-items: baseline;
   background: var(--color-surface);
   border: 1px solid var(--hairline);
   border-radius: var(--radius-card);
   box-shadow: 0 10px 30px var(--shadow);
-  padding: 2.25rem 2rem 1.75rem;
+  display: flex;
+  flex-wrap: wrap;
+  padding: 0.85rem 1.75rem 0.8rem;
+}
+
+.artifact-header > * {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.artifact-header > :is(.artifact-kicker, .artifact-title, .artifact-summary),
+.artifact-header > .artifact-comment[open] {
+  flex-basis: 100%;
 }
 
 .artifact-kicker {
@@ -271,7 +287,7 @@ body {
   font-size: 0.8rem;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  margin: 0 0 0.75rem;
+  margin: 0 0 0.4rem;
 }
 
 .artifact-title {
@@ -279,13 +295,90 @@ body {
   font-family: var(--font-display);
   font-size: clamp(1.75rem, 4vw, 2.5rem);
   line-height: 1.15;
-  margin: 0 0 0.5rem;
+  margin: 0 0 0.2rem;
 }
 
-.artifact-meta {
+.artifact-meta,
+.artifact-owner {
   color: var(--color-muted-lavender);
   font-size: 0.9rem;
+  line-height: 1.5;
   margin: 0;
+}
+
+/* The comments link ends the line, after the owner: the page script
+   redraws it as its threads change, and nothing after it moves when it
+   does. The room kept for the Versions link, which arrives later, fits
+   "· Versions · 99" rather than the widest link, so the line runs on
+   without a gap. */
+.artifact-header > .artifact-owner {
+  order: 1;
+}
+
+.artifact-header > .artifact-comment {
+  order: 2;
+}
+
+.artifact-header > .artifact-summary {
+  order: 3;
+}
+
+html:has(meta[name="lotuspod:revision"]) header.artifact-header .artifact-meta::after,
+header.artifact-header .artifact-versions-slot {
+  min-width: 6.4em;
+}
+
+.artifact-header > .artifact-owner::before,
+.artifact-header > .artifact-comment > .artifact-comment-summary::before {
+  color: var(--color-muted-lavender);
+  content: "\b7";
+  margin: 0 0.35em;
+}
+
+/* The box for comments on the whole page reads as links in the line: its
+   count in the line's voice, what it offers in the links' blue. */
+header.artifact-header > .artifact-comment {
+  font-size: 0.9rem;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.artifact-header > .artifact-comment:not([open]) {
+  background: none;
+  border: 0;
+  padding: 0;
+}
+
+.artifact-header > .artifact-comment > .artifact-comment-summary {
+  background: none;
+  border: 0;
+  border-radius: var(--radius-chip);
+  color: var(--color-muted-lavender);
+  display: inline-flex;
+  font-size: inherit;
+  gap: 0;
+  line-height: inherit;
+  max-width: 100%;
+  padding: 0;
+  vertical-align: baseline;
+}
+
+.artifact-header > .artifact-comment .artifact-comment-chip-faces {
+  display: none;
+}
+
+.artifact-header > .artifact-comment .artifact-comment-chip-act,
+.artifact-header > .artifact-comment > .artifact-comment-summary:not(.artifact-comment-chip) {
+  color: var(--color-sky);
+  text-decoration: underline;
+  text-decoration-color: var(--link-line);
+  text-underline-offset: 0.18em;
+}
+
+.artifact-header > .artifact-comment > .artifact-comment-summary:hover .artifact-comment-chip-act,
+.artifact-header > .artifact-comment > .artifact-comment-summary:not(.artifact-comment-chip):hover {
+  color: var(--color-pale-sky);
+  text-decoration-color: currentColor;
 }
 
 /* The page's labels end its date line as small tags, as the index shows them. */
@@ -306,16 +399,9 @@ body {
 }
 
 .artifact-summary {
-  border-left: 1px solid var(--hairline-strong);
-  color: var(--color-pale-lavender);
-  font-size: 1.05rem;
-  margin: 1.25rem 0 0;
-  padding-left: 1rem;
-}
-
-.artifact-owner {
   color: var(--color-muted-lavender);
-  font-size: 0.9rem;
+  font-size: 0.95rem;
+  line-height: 1.45;
   margin: 0.25rem 0 0;
 }
 
@@ -326,6 +412,8 @@ body {
 .artifact-main {
   --outline-rail: 15rem;
   --outline-gap: 2.5rem;
+  --outline-handle: 2.25rem;
+  --outline-handle-gap: 1.25rem;
 }
 
 /* Narrow: a disclosure above the prose, collapsed. A phone screen belongs to
@@ -389,6 +477,11 @@ body {
   color: var(--color-lavender);
 }
 
+/* The outline's pin (the page script) serves the wide layout alone. */
+.artifact-outline-pin {
+  display: none;
+}
+
 /* The control the page script adds to the outline to fold or open every
    section at once, in the summary's quiet voice. Above the prose it sits at
    the right end of the summary's line, out of the flow, so adding it moves
@@ -413,66 +506,84 @@ body {
   color: var(--color-lavender);
 }
 
-/* Wide: the reading column is capped well inside the container, so the
-   outline moves into the gutter it leaves and rides along as a sticky rail on
-   the left, ahead of the prose in reading order - the prose keeps its measure
-   untouched. Measured against the page container rather than the viewport,
-   the same box --measure-full is figured from. */
+/* Wide: the outline lives in the gutter left of the body, ahead of the
+   prose in reading order. Unpinned it is a handle, an outline icon named by
+   the summary's text, sticky below the title bar in a column of its own; the
+   body takes the room a rail would have, so tables, diagrams and code get
+   it. Pointer hover or keyboard focus within the handle (the page script's
+   artifact-outline--open, held while focus moves inside, since the focus
+   leaving the summary would hide the link it is moving to) opens the list
+   over the gutter and the body, without moving the body: the column is the
+   handle's width whatever the outline shows. Pinned (the page script's pin,
+   data-outline="pinned" on the root) it is a sticky rail beside a reading
+   column. Measured against the page container rather than the viewport, the
+   same box --measure-full is figured from. */
 @container (min-width: 58rem) {
   .artifact-main:has(.artifact-outline) {
     align-items: start;
-    column-gap: var(--outline-gap);
+    column-gap: var(--outline-handle-gap);
     display: grid;
-    grid-template-columns: var(--outline-rail) minmax(0, 1fr);
+    grid-template-columns: var(--outline-handle) minmax(0, 1fr);
   }
 
+  /* The column a rail would take is the body's: a block stepping out of the
+     reading column stops at the container's edge, less the handle. */
   .artifact-main:has(.artifact-outline) > .artifact-body {
-    /* The rail now stands in part of the container, so a block stepping out
-       of the reading column stops at the column edge, not under the rail. */
+    --measure-wide: calc(var(--measure-prose) + var(--outline-rail) + var(--outline-gap));
     --measure-full: calc(
-      100cqi - 0.5rem - var(--outline-rail) - var(--outline-gap)
+      100cqi - 0.5rem - var(--outline-handle) - var(--outline-handle-gap)
     );
     grid-area: 1 / 2;
+    max-width: min(var(--measure-wide), var(--table-room, var(--measure-wide)) + 0.5rem);
   }
 
-  /* Sticky within the row it shares with the body, and scrollable itself if a
-     long outline outgrows the screen - a rail that runs off the bottom would
-     be navigation you cannot reach. */
+  /* The handle sits above the body and below the title bar (z-index 3), its
+     border drawn clear while closed so opening moves nothing under the
+     pointer. */
   .artifact-outline {
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: var(--radius-block);
     grid-area: 1 / 1;
+    position: sticky;
+    top: calc(var(--topbar-height) + 1.5rem);
+    width: var(--outline-handle);
+    z-index: 2;
+  }
+
+  /* Open, the panel is the rail drawn over the margin: the page's own ground
+     and the rail's hairline, scrollable itself if a long outline outgrows
+     the screen. */
+  :root:not([data-outline="pinned"]) .artifact-outline:is(:hover, .artifact-outline--open, :has(:focus-visible)) {
+    background: var(--color-night);
+    border-color: var(--hairline);
     max-height: calc(100vh - var(--topbar-height) - 3rem);
     overflow-y: auto;
-    position: sticky;
+    padding-bottom: 0.6rem;
     scrollbar-color: var(--hairline-strong) transparent;
     scrollbar-width: thin;
-    top: calc(var(--topbar-height) + 1.5rem);
+    width: calc(var(--outline-rail) + var(--outline-handle));
   }
 
-  /* In the gutter the card would read as a second surface competing with the
-     header, so the rail is drawn as a hairline margin note instead. */
+  :root:not([data-outline="pinned"]) .artifact-outline:not(:hover, .artifact-outline--open, :has(:focus-visible)) :is(
+    .artifact-outline-list, .artifact-sections-all, .artifact-outline-pin
+  ) {
+    display: none;
+  }
+
   .artifact-outline-disclosure {
     background: none;
     border: 0;
-    border-left: 1px solid var(--hairline);
     border-radius: 0;
-    padding: 0 0 0 1.15rem;
+    padding: 0;
   }
 
-  /* The gutter is empty space the prose never wanted, so out here the list
-     costs the reader nothing and stays open - the markup ships collapsed for
-     the phone, and this is the one rule that undoes it. Where
-     ::details-content is not understood the rail simply arrives folded, one
-     click from the same list. */
+  /* The list stays open out here whenever it shows - the markup ships
+     collapsed for the phone, and this is the one rule that undoes it. Where
+     ::details-content is not understood the list arrives folded, one click
+     on the summary from the same list. */
   .artifact-outline-disclosure::details-content {
     content-visibility: visible;
-  }
-
-  /* Held open by CSS, the summary can no longer close anything, so it drops
-     the affordances that would promise it can and reads as the rail's
-     heading. */
-  .artifact-outline-summary {
-    cursor: default;
-    list-style: none;
   }
 
   .artifact-outline-summary::marker,
@@ -481,23 +592,145 @@ body {
     display: none;
   }
 
-  /* Hover lift too: it reads as "this does something" on a heading that no
-     longer does. Focus keeps its lift - the summary is still reachable by
-     keyboard, and a focus ring that goes nowhere visible is worse. */
-  .artifact-outline-summary:hover {
-    color: var(--color-muted-lavender);
+  /* The handle: the summary's text stays its accessible name, set out of
+     its box, and three rules of decreasing length draw the outline. */
+  .artifact-outline-summary {
+    border-radius: var(--radius-block);
+    height: calc(var(--outline-handle) - 2px);
+    list-style: none;
+    overflow: hidden;
+    padding: 0;
+    position: relative;
+    text-indent: var(--outline-handle);
+    white-space: nowrap;
+    width: calc(var(--outline-handle) - 2px);
+  }
+
+  .artifact-outline-summary::before {
+    background:
+      linear-gradient(currentColor, currentColor) 0 0 / 100% 2px no-repeat,
+      linear-gradient(currentColor, currentColor) 0 50% / 75% 2px no-repeat,
+      linear-gradient(currentColor, currentColor) 0 100% / 50% 2px no-repeat;
+    content: "";
+    inset: 0.7rem 0.6rem;
+    position: absolute;
+  }
+
+  :root:not([data-outline="pinned"]) .artifact-outline:is(:hover, .artifact-outline--open, :has(:focus-visible)) .artifact-outline-summary {
+    color: var(--color-lavender);
+  }
+
+  .artifact-outline-summary:focus-visible {
+    outline: 2px solid var(--color-lavender);
+    outline-offset: -2px;
   }
 
   .artifact-outline-list {
     border-top: 0;
+    padding: 0.1rem 2.25rem 0 0.85rem;
+  }
+
+  .artifact-sections-all {
+    margin: 0.5rem 0 0 0.85rem;
+    padding: 0.2rem 0;
+    position: static;
+  }
+
+  /* The pin, at the top right of the open panel or the rail, in the
+     summary's quiet voice; pressed, in lavender. */
+  .artifact-outline-pin {
+    align-items: center;
+    background: none;
+    border: 0;
+    border-radius: var(--radius-chip);
+    color: var(--color-muted-lavender);
+    cursor: pointer;
+    display: inline-flex;
+    height: 1.75rem;
+    justify-content: center;
+    padding: 0;
+    position: absolute;
+    right: 0.25rem;
+    top: 0.3rem;
+    width: 1.75rem;
+  }
+
+  .artifact-outline-pin svg {
+    height: 0.95rem;
+    width: 0.95rem;
+  }
+
+  .artifact-outline-pin:hover,
+  .artifact-outline-pin[aria-pressed="true"] {
+    color: var(--color-lavender);
+  }
+
+  .artifact-outline-pin:focus-visible {
+    outline: 2px solid var(--color-lavender);
+    outline-offset: 0;
+  }
+
+  /* Pinned: a rail beside a reading column. The rail stands in part of the
+     container, so a block stepping out of the reading column stops at the
+     column edge, not under the rail. */
+  :root[data-outline="pinned"] .artifact-main:has(.artifact-outline) {
+    column-gap: var(--outline-gap);
+    grid-template-columns: var(--outline-rail) minmax(0, 1fr);
+  }
+
+  :root[data-outline="pinned"] .artifact-main:has(.artifact-outline) > .artifact-body {
+    --measure-full: calc(
+      100cqi - 0.5rem - var(--outline-rail) - var(--outline-gap)
+    );
+    max-width: min(var(--measure-prose), var(--table-room, var(--measure-prose)) + 0.5rem);
+  }
+
+  /* In the gutter a card would read as a second surface competing with the
+     header, so the rail is drawn as a hairline margin note. */
+  :root[data-outline="pinned"] .artifact-outline {
+    background: none;
+    border: 0;
+    border-radius: 0;
+    max-height: calc(100vh - var(--topbar-height) - 3rem);
+    overflow-y: auto;
+    scrollbar-color: var(--hairline-strong) transparent;
+    scrollbar-width: thin;
+    width: auto;
+  }
+
+  :root[data-outline="pinned"] .artifact-outline-disclosure {
+    border-left: 1px solid var(--hairline);
+    padding: 0 2.25rem 0 1.15rem;
+  }
+
+  /* Held open by CSS, the summary can no longer close anything, so it
+     reads as the rail's heading. Focus keeps its lift - the summary is
+     still reachable by keyboard. */
+  :root[data-outline="pinned"] .artifact-outline-summary {
+    color: var(--color-muted-lavender);
+    cursor: default;
+    height: auto;
+    overflow: visible;
+    padding: 0.7rem 0;
+    text-indent: 0;
+    width: auto;
+  }
+
+  :root[data-outline="pinned"] .artifact-outline-summary::before {
+    content: none;
+  }
+
+  :root[data-outline="pinned"] .artifact-outline-summary:focus-visible {
+    color: var(--color-lavender);
+    outline: 0;
+  }
+
+  :root[data-outline="pinned"] .artifact-outline-list {
     padding: 0.35rem 0 0;
   }
 
-  /* In the rail, under the list: the prose beside it does not move. */
-  .artifact-sections-all {
+  :root[data-outline="pinned"] .artifact-sections-all {
     margin: 0.75rem 0 0 1.15rem;
-    padding: 0.2rem 0;
-    position: static;
   }
 }
 

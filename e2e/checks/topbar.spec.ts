@@ -1,7 +1,7 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 
 // The title bar from the top of the page: the capture fixture's palette
-// page, which has five sections, comments and room to scroll 500 pixels at
+// page, which has five sections, comments and room to scroll 400 pixels at
 // 1440 by 900, and the same page on a 360-pixel phone.
 // The bar is visible at scroll 0, the page reserves its height so nothing in
 // the page starts under it, and the open comments panel meets the bar's
@@ -12,7 +12,7 @@ const SLUG = 'capture-palette';
 const SIGNED_IN = { 'Cf-Access-Jwt-Assertion': process.env.LOTUSPOD_TEST_ASSERTION ?? '' };
 const WIDE = { width: 1440, height: 900 };
 const PHONE = { width: 360, height: 780 };
-const SCROLL = 500;
+const SCROLL = 400;
 
 test.use({ extraHTTPHeaders: SIGNED_IN });
 

@@ -12,6 +12,22 @@ import {
 const WIDE = { width: 1440, height: 900 };
 test.use({ viewport: WIDE });
 
+// These checks were written against the outline pinned as a column beside
+// the body (core/theme/base.css), the layout they measure.
+function pinOutline(page: Page) {
+  return page.addInitScript(() => {
+    try {
+      localStorage.setItem('lotuspod:outline', 'pinned');
+    } catch {
+      // A frame that may keep nothing keeps the handle.
+    }
+  });
+}
+
+test.beforeEach(async ({ page }) => {
+  await pinOutline(page);
+});
+
 // The page reads /api/comments, /api/answers and itself in the background; a
 // read still in a route handler's route.fetch when a check ends would
 // otherwise fail that check with "Test ended".

@@ -632,3 +632,81 @@
   }
 
   var foldSection = foldSections(all("div.artifact-section-body"));
+
+  // The outline's pin: on a wide page the outline is a handle that opens
+  // over the margin, and pinned it is a column beside the body
+  // (core/theme/base.css), as data-outline="pinned" on the root. The choice
+  // is kept in this browser under OUTLINE; storage that refuses or throws
+  // reads as not pinned.
+  var OUTLINE = "lotuspod:outline";
+
+  function pinOutline() {
+    var outline = document.querySelector("nav.artifact-outline");
+    if (!outline) {
+      return;
+    }
+    var root = document.documentElement;
+    var pinned = false;
+    try {
+      pinned = localStorage.getItem(OUTLINE) === "pinned";
+    } catch (ignored) {
+      pinned = false;
+    }
+    var pin = element("button", "artifact-outline-pin");
+    pin.type = "button";
+    pin.setAttribute("aria-label", "Pin outline");
+    var NS = "http://www.w3.org/2000/svg";
+    var icon = document.createElementNS(NS, "svg");
+    icon.setAttribute("viewBox", "0 0 16 16");
+    icon.setAttribute("aria-hidden", "true");
+    icon.setAttribute("focusable", "false");
+    var path = document.createElementNS(NS, "path");
+    path.setAttribute("d", "M6 2h4M7 2.5v4L4.5 9.5h7L9 6.5v-4M8 9.5V14");
+    path.setAttribute("fill", "none");
+    path.setAttribute("stroke", "currentColor");
+    path.setAttribute("stroke-width", "1.5");
+    path.setAttribute("stroke-linecap", "round");
+    path.setAttribute("stroke-linejoin", "round");
+    icon.appendChild(path);
+    pin.appendChild(icon);
+    outline.insertBefore(pin, outline.firstChild);
+
+    function show() {
+      if (pinned) {
+        root.setAttribute("data-outline", "pinned");
+      } else {
+        root.removeAttribute("data-outline");
+      }
+      pin.setAttribute("aria-pressed", String(pinned));
+    }
+
+    // Keyboard focus opens the outline until focus leaves it: CSS alone
+    // would hide the list as focus left the summary for one of its links.
+    outline.addEventListener("focusin", function (event) {
+      if (event.target.matches(":focus-visible")) {
+        outline.classList.add("artifact-outline--open");
+      }
+    });
+    outline.addEventListener("focusout", function (event) {
+      if (!outline.contains(event.relatedTarget)) {
+        outline.classList.remove("artifact-outline--open");
+      }
+    });
+
+    pin.addEventListener("click", function () {
+      pinned = !pinned;
+      show();
+      try {
+        if (pinned) {
+          localStorage.setItem(OUTLINE, "pinned");
+        } else {
+          localStorage.removeItem(OUTLINE);
+        }
+      } catch (ignored) {
+        // Storage refused: the outline still pins, only unremembered.
+      }
+    });
+    show();
+  }
+
+  pinOutline();

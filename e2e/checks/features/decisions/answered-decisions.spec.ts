@@ -335,6 +335,8 @@ test.describe('signed in', () => {
     const toggle = page.getByRole('heading', { level: 2, name: /^Answered/ }).getByRole('button');
     const rows = page.locator('.artifact-answered tbody tr');
     await expect(control).toHaveText('Collapse all');
+    // On a wide page the control is in the outline the handle opens.
+    await page.locator('nav.artifact-outline .artifact-outline-summary').hover();
     await control.click();
     await expect(control).toHaveText('Expand all');
     release();
