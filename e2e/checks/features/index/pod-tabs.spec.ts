@@ -194,8 +194,9 @@ async function openTabs(page: Page, pods: Pod[], on: Pod) {
 
 // What the top-level document showed at each animation frame from its
 // first, kept in sessionStorage so a pod's move to its index keeps the pod's
-// own frames: the document's path, whether a pod's article heading, the
-// listing's table, and the active tab's framed pod heading were visible.
+// own frames: the document's path, whether a pod's article heading or a
+// paragraph its markup sets visible itself, the listing's table, and the
+// active tab's framed pod heading were visible.
 type Sample = { path: string; article: boolean; listing: boolean; framed: boolean };
 const SAMPLES = 'pod-tabs-samples';
 
@@ -203,7 +204,7 @@ async function sampleFrames(page: Page) {
   await page.addInitScript((key) => {
     if (window.top !== window) return;
     const seen = (node: Element | null | undefined) =>
-      Boolean(node && node.checkVisibility({ visibilityProperty: true }));
+      Boolean(node && node.checkVisibility({ visibilityProperty: true, opacityProperty: true }));
     let count = 0;
     const sample = () => {
       const active = document.querySelector<HTMLIFrameElement>('iframe.pod-frame--active');
@@ -215,7 +216,8 @@ async function sampleFrames(page: Page) {
       }
       try {
         const kept = JSON.parse(sessionStorage.getItem(key) ?? '[]');
-        kept.push({ path: location.pathname, article: seen(document.querySelector('main.artifact h1')),
+        kept.push({ path: location.pathname,
+          article: seen(document.querySelector('main.artifact h1')) || seen(document.getElementById('pod-tabs-authored')),
           listing: seen(document.querySelector('.index-table')), framed });
         sessionStorage.setItem(key, JSON.stringify(kept));
       } catch {
@@ -540,6 +542,19 @@ test.describe('signed in', () => {
   test('a pod loaded directly paints none of its article before it moves into its tab', async ({ page }) => {
     const errors = await watch(page);
     await sampleFrames(page);
+    // A paragraph the pod's own markup sets visible, as an author may.
+    await page.route(`**/${ARTICLE.name}.html`, async (route) => {
+      const answer = await route.fetch();
+      const body = (await answer.text()).replace('</h1>',
+        '</h1><p id="pod-tabs-authored" style="visibility: visible">Ready for review</p>');
+      await route.fulfill({ response: answer, body });
+    });
+    // The index's answer held long enough for the bare page to paint many
+    // frames, and well inside the head's failsafe.
+    await page.route((url) => url.pathname === '/', async (route) => {
+      if (route.request().resourceType() === 'fetch') await new Promise((resolve) => setTimeout(resolve, 700));
+      await route.continue();
+    });
     await page.goto(`/${ARTICLE.name}.html`);
 
     await expect(strip(page)).toHaveCount(1);
@@ -548,18 +563,26 @@ test.describe('signed in', () => {
     await expect.poll(async () => (await samples(page)).some((each) => each.framed)).toBe(true);
     const seen = await samples(page);
     const bare = seen.filter((each) => each.path === `/${ARTICLE.name}.html`);
+    expect(bare.length).toBeGreaterThan(0);
     expect(bare.filter((each) => each.article)).toEqual([]);
     // Nor the index's listing before the pod's frame shows it.
     const index = seen.filter((each) => each.path === '/');
     const shown = index.findIndex((each) => each.framed);
     expect(index.slice(0, shown).filter((each) => each.listing)).toEqual([]);
     await expect(page.locator('html')).not.toHaveClass(/pod-tabs-(leaving|opening)/);
+    await page.unrouteAll({ behavior: 'ignoreErrors' });
     expect(errors).toEqual([]);
   });
 
   test('the index opened at a pod\'s tab paints none of its listing before the frame shows the pod; with no tab named, its listing', async ({ page }) => {
     const errors = await watch(page);
     await sampleFrames(page);
+    // The index script held long enough for the listing to paint many frames,
+    // and well inside the head's failsafe.
+    await page.route('**/lotuspod-index.js*', async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 700));
+      await route.continue();
+    });
     await page.goto(`/#tabs=${ARTICLE.name}&on=${ARTICLE.name}`);
 
     await expectActive(page, ARTICLE);
@@ -568,8 +591,10 @@ test.describe('signed in', () => {
     const seen = await samples(page);
     const shown = seen.findIndex((each) => each.framed);
     expect(shown).toBeGreaterThan(-1);
+    expect(shown).toBeGreaterThan(0);
     expect(seen.slice(0, shown).filter((each) => each.listing)).toEqual([]);
     await expect(page.locator('html')).not.toHaveClass(/pod-tabs-opening/);
+    await page.unrouteAll({ behavior: 'ignoreErrors' });
 
     // The listing shows when the address names no tab, or none it lists.
     for (const address of ['/', '/#pages', '/#tabs=pod-tabs-nowhere&on=pod-tabs-nowhere']) {
@@ -594,6 +619,7 @@ test.describe('signed in', () => {
     await expect.poll(() => page.evaluate(() => document.readyState)).toBe('complete');
     await page.waitForTimeout(500);
     expect(new URL(page.url()).pathname).toBe(`/${ARTICLE.name}.html`);
+    expect(new URL(page.url()).search).toBe('?standalone');
     expect(new URL(page.url()).hash).toBe('#second-section');
     await expect(page.locator('.pod-tabs-bar')).toHaveCount(0);
     expect(errors).toEqual([]);
