@@ -17,6 +17,39 @@
   }
   var buttons = [];
 
+  // Before the body paints, a page about to leave for its index's tab, or
+  // the index opened at a tab, is marked so the theme's CSS hides what the
+  // reader would see only for a moment: a listed pod loaded on its own at the
+  // top level over http(s), with no version or standalone query (the
+  // synchronous half of features/publish/ts/open-in-tabs.js, which removes
+  // LEAVING whenever the page stays), and an index whose fragment names
+  // tabs= and on= (its listing, which its script removes OPENING from once
+  // the active tab shows or none can). Either is removed after FAILSAFE
+  // milliseconds whatever happens, so a script that fails leaves no blank page.
+  var LEAVING = "pod-tabs-leaving";
+  var OPENING = "pod-tabs-opening";
+  var FAILSAFE = 4000;
+  var marked = null;
+  try {
+    var visible = document.querySelector('meta[name="lotuspod:visible"]');
+    if (visible) {
+      var asked = new URLSearchParams(location.search);
+      if (window.top === window && (location.protocol === "http:" || location.protocol === "https:") &&
+          !asked.has("version") && !asked.has("standalone") &&
+          visible.content.trim().toLowerCase() === "true") marked = LEAVING;
+    } else if (/^#tabs=[^&]*&on=/.test(location.hash)) {
+      marked = OPENING;
+    }
+  } catch (error) {
+    marked = null;
+  }
+  if (marked) {
+    root.classList.add(marked);
+    setTimeout(function () {
+      root.classList.remove(marked);
+    }, FAILSAFE);
+  }
+
   function resolved() {
     if (choice !== "auto") return choice;
     return light.matches ? "dawn" : "night";

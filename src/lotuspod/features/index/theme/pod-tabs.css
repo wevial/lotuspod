@@ -235,3 +235,12 @@
 .pod-tabs-frames--active .pod-frame--active {
   visibility: visible;
 }
+
+/* While a pod loaded on its own may still leave for its index's tab, and
+   while the index opened at a tab has not yet shown it (core/ts/theme-head.js
+   sets each class), what each would show for a moment is hidden. Its layout
+   and scripts run as ever. */
+.pod-tabs-leaving body,
+.pod-tabs-opening main.index {
+  visibility: hidden;
+}

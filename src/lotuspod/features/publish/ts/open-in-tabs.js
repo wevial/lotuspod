@@ -69,7 +69,14 @@
       });
   }
 
-  return function (page) {
+  return function (run) {
+    // The page staying: shown again (the head's theme script hid it while it
+    // might go, core/ts/theme-head.js), then the rest run.
+    function page() {
+      document.documentElement.classList.remove("pod-tabs-leaving");
+      run();
+    }
+
     return function () {
       var there = candidate();
       if (there === null) {

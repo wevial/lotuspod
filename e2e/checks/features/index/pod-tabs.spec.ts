@@ -192,6 +192,45 @@ async function openTabs(page: Page, pods: Pod[], on: Pod) {
   for (const pod of pods) await expect(framed(page, pod).locator('h1')).toHaveText(pod.title);
 }
 
+// What the top-level document showed at each animation frame from its
+// first, kept in sessionStorage so a pod's move to its index keeps the pod's
+// own frames: the document's path, whether a pod's article heading, the
+// listing's table, and the active tab's framed pod heading were visible.
+type Sample = { path: string; article: boolean; listing: boolean; framed: boolean };
+const SAMPLES = 'pod-tabs-samples';
+
+async function sampleFrames(page: Page) {
+  await page.addInitScript((key) => {
+    if (window.top !== window) return;
+    const seen = (node: Element | null | undefined) =>
+      Boolean(node && node.checkVisibility({ visibilityProperty: true }));
+    let count = 0;
+    const sample = () => {
+      const active = document.querySelector<HTMLIFrameElement>('iframe.pod-frame--active');
+      let framed = false;
+      try {
+        framed = seen(active) && seen(active?.contentDocument?.querySelector('main.artifact h1'));
+      } catch {
+        framed = false;
+      }
+      try {
+        const kept = JSON.parse(sessionStorage.getItem(key) ?? '[]');
+        kept.push({ path: location.pathname, article: seen(document.querySelector('main.artifact h1')),
+          listing: seen(document.querySelector('.index-table')), framed });
+        sessionStorage.setItem(key, JSON.stringify(kept));
+      } catch {
+        return;
+      }
+      if (++count < 600) requestAnimationFrame(sample);
+    };
+    requestAnimationFrame(sample);
+  }, SAMPLES);
+}
+
+async function samples(page: Page): Promise<Sample[]> {
+  return JSON.parse(await page.evaluate((key) => sessionStorage.getItem(key) ?? '[]', SAMPLES));
+}
+
 test.describe('signed in', () => {
   test.use({ extraHTTPHeaders: SIGNED_IN });
 
@@ -498,10 +537,59 @@ test.describe('signed in', () => {
     expect(errors).toEqual([]);
   });
 
+  test('a pod loaded directly paints none of its article before it moves into its tab', async ({ page }) => {
+    const errors = await watch(page);
+    await sampleFrames(page);
+    await page.goto(`/${ARTICLE.name}.html`);
+
+    await expect(strip(page)).toHaveCount(1);
+    await expectActive(page, ARTICLE);
+    await expect(framed(page, ARTICLE).locator('h1')).toBeVisible();
+    await expect.poll(async () => (await samples(page)).some((each) => each.framed)).toBe(true);
+    const seen = await samples(page);
+    const bare = seen.filter((each) => each.path === `/${ARTICLE.name}.html`);
+    expect(bare.filter((each) => each.article)).toEqual([]);
+    // Nor the index's listing before the pod's frame shows it.
+    const index = seen.filter((each) => each.path === '/');
+    const shown = index.findIndex((each) => each.framed);
+    expect(index.slice(0, shown).filter((each) => each.listing)).toEqual([]);
+    await expect(page.locator('html')).not.toHaveClass(/pod-tabs-(leaving|opening)/);
+    expect(errors).toEqual([]);
+  });
+
+  test('the index opened at a pod\'s tab paints none of its listing before the frame shows the pod; with no tab named, its listing', async ({ page }) => {
+    const errors = await watch(page);
+    await sampleFrames(page);
+    await page.goto(`/#tabs=${ARTICLE.name}&on=${ARTICLE.name}`);
+
+    await expectActive(page, ARTICLE);
+    await expect(framed(page, ARTICLE).locator('h1')).toBeVisible();
+    await expect.poll(async () => (await samples(page)).some((each) => each.framed)).toBe(true);
+    const seen = await samples(page);
+    const shown = seen.findIndex((each) => each.framed);
+    expect(shown).toBeGreaterThan(-1);
+    expect(seen.slice(0, shown).filter((each) => each.listing)).toEqual([]);
+    await expect(page.locator('html')).not.toHaveClass(/pod-tabs-opening/);
+
+    // The listing shows when the address names no tab, or none it lists.
+    for (const address of ['/', '/#pages', '/#tabs=pod-tabs-nowhere&on=pod-tabs-nowhere']) {
+      await page.goto('about:blank');
+      await page.goto(address);
+      await expect(strip(page)).toHaveCount(1);
+      // Shown once the index script has run, not on the head's failsafe.
+      expect(await page.locator('.index-table').isVisible()).toBe(true);
+      await expectListing(page);
+      await expect(page.locator('html')).not.toHaveClass(/pod-tabs-opening/);
+    }
+    expect(errors).toEqual([]);
+  });
+
   test('a pod loaded with ?standalone, or an old version of it, stays on its own at the top level', async ({ page }) => {
     const errors = await watch(page);
     await page.goto(`/${ARTICLE.name}.html?standalone#second-section`);
     await expect(page.locator('main.artifact h1')).toHaveText(ARTICLE.title);
+    // Shown at once, not on the head's failsafe.
+    expect(await page.locator('main.artifact h1').isVisible()).toBe(true);
     // Its deferred page script has run by now, and has not left.
     await expect.poll(() => page.evaluate(() => document.readyState)).toBe('complete');
     await page.waitForTimeout(500);
@@ -595,6 +683,8 @@ test.describe('signed in', () => {
       '--out-dir', OUT);
     await page.goto(`/${fresh.name}.html#a-section`);
     await stayed(new RegExp(`/${fresh.name}\\.html#a-section$`));
+    // Shown as soon as its page script stays, not on the head's failsafe.
+    expect(await page.locator('main.artifact h1').isVisible()).toBe(true);
     await page.waitForTimeout(500);
     await expect(page).toHaveURL(new RegExp(`/${fresh.name}\\.html#a-section$`));
 

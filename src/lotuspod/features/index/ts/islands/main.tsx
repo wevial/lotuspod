@@ -101,6 +101,9 @@ function start(main: HTMLElement): void {
   });
 
   // The tabs the address names, in its order, the listing's pods alone.
+  // The head's theme script hid the listing under that address
+  // (core/ts/theme-head.js): it shows again once the active tab's frame has
+  // replaced it, or once none of the named tabs is there to activate.
   const named = loadedAt();
   if (named) {
     for (const name of named.names) {
@@ -108,12 +111,19 @@ function start(main: HTMLElement): void {
     }
     if (named.on !== null && isOpen(named.on)) {
       activate(named.on);
+      opening();
       return;
     }
     write();
   }
+  opening();
   askSeen();
+}
+
+function opening(): void {
+  document.documentElement.classList.remove("pod-tabs-opening");
 }
 
 const main = document.querySelector<HTMLElement>("main.index");
 if (main) start(main);
+else opening();
