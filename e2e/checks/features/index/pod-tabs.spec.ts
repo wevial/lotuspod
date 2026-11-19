@@ -208,12 +208,7 @@ async function sampleFrames(page: Page) {
     let count = 0;
     const sample = () => {
       const active = document.querySelector<HTMLIFrameElement>('iframe.pod-frame--active');
-      let framed = false;
-      try {
-        framed = seen(active) && seen(active?.contentDocument?.querySelector('main.artifact h1'));
-      } catch {
-        framed = false;
-      }
+      const framed = seen(active) && seen(active?.contentDocument?.querySelector('main.artifact h1'));
       try {
         const kept = JSON.parse(sessionStorage.getItem(key) ?? '[]');
         kept.push({ path: location.pathname,
