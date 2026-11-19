@@ -107,11 +107,15 @@
           // Kept hidden while the index document loads, past the head's
           // failsafe, which removes pod-tabs-leaving alone; shown again only
           // if this document is still here GONE milliseconds on, as after
-          // the reader stops the load.
-          document.documentElement.classList.add("pod-tabs-going");
-          setTimeout(function () {
-            document.documentElement.classList.remove("pod-tabs-going");
-          }, GONE);
+          // the reader stops the load. A page the failsafe has shown already
+          // stays shown until the index replaces it.
+          var root = document.documentElement;
+          if (root.classList.contains("pod-tabs-leaving")) {
+            root.classList.add("pod-tabs-going");
+            setTimeout(function () {
+              root.classList.remove("pod-tabs-going");
+            }, GONE);
+          }
           location.replace(there.index + fragment);
         }, function () {
           page();

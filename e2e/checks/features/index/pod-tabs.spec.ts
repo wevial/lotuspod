@@ -597,6 +597,76 @@ test.describe('signed in', () => {
     await expect(page.locator('#pod-tabs-autofocus')).toBeFocused();
     expect(await page.locator('main.artifact h1').isVisible()).toBe(true);
     expect(new URL(page.url()).pathname).toBe(`/${ARTICLE.name}.html`);
+
+    // Opened at a fragment whose target takes focus: the target has it, as
+    // a fragment navigation gives it, and the autofocused control does not.
+    await page.unroute(`**/${ARTICLE.name}.html`);
+    await authored(page, `${AUTOFOCUSED}<button id="pod-tabs-jump">Jump</button>`);
+    await page.goto('about:blank');
+    await page.goto(`/${ARTICLE.name}.html#pod-tabs-jump`);
+    await expect(page.locator('#pod-tabs-jump')).toBeFocused();
+    expect(new URL(page.url()).hash).toBe('#pod-tabs-jump');
+    await page.unrouteAll({ behavior: 'ignoreErrors' });
+    expect(errors).toEqual([]);
+  });
+
+  test('a pod whose body has no box of its own paints none of its markup while its index answers', async ({ page }) => {
+    const errors = await watch(page);
+    await authored(page, '<p id="pod-tabs-authored" style="visibility: visible">Ready for review</p>'
+      + '<style>body { display: contents }</style>');
+    let release = () => {};
+    const held = new Promise<void>((resolve) => { release = resolve; });
+    await page.route((url) => url.pathname === '/', async (route) => {
+      if (route.request().resourceType() === 'fetch') await held;
+      await route.continue();
+    });
+    await page.goto(`/${ARTICLE.name}.html`);
+
+    // The paragraph's box, as painted: one colour throughout, no text.
+    const box = await page.locator('#pod-tabs-authored').boundingBox();
+    expect(box).not.toBeNull();
+    const shot = (await page.screenshot({ clip: box! })).toString('base64');
+    const colours = await page.evaluate(async (data) => {
+      const image = new Image();
+      image.src = `data:image/png;base64,${data}`;
+      await image.decode();
+      const canvas = document.createElement('canvas');
+      canvas.width = image.width;
+      canvas.height = image.height;
+      const context = canvas.getContext('2d') as CanvasRenderingContext2D;
+      context.drawImage(image, 0, 0);
+      const pixels = context.getImageData(0, 0, image.width, image.height).data;
+      const seen = new Set<string>();
+      for (let at = 0; at < pixels.length; at += 4) seen.add(pixels.slice(at, at + 4).join(','));
+      return seen.size;
+    }, shot);
+    expect(colours).toBe(1);
+    expect(new URL(page.url()).pathname).toBe(`/${ARTICLE.name}.html`);
+    release();
+
+    await expect(strip(page)).toHaveCount(1, { timeout: 15000 });
+    await expectActive(page, ARTICLE);
+    await page.unrouteAll({ behavior: 'ignoreErrors' });
+    expect(errors).toEqual([]);
+  });
+
+  test('a pod the failsafe has shown stays shown until its index, answering late, replaces it', async ({ page }) => {
+    const errors = await watch(page);
+    await sampleFrames(page);
+    // The index's answer held past the head's failsafe, and the index
+    // document after it a second more.
+    await page.route((url) => url.pathname === '/', async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, route.request().resourceType() === 'fetch' ? 5000 : 1000));
+      await route.continue();
+    });
+    await page.goto(`/${ARTICLE.name}.html`);
+
+    await expect(strip(page)).toHaveCount(1, { timeout: 15000 });
+    await expectActive(page, ARTICLE);
+    const bare = (await samples(page)).filter((each) => each.path === `/${ARTICLE.name}.html`);
+    const shown = bare.findIndex((each) => each.article);
+    expect(shown).toBeGreaterThan(0);
+    expect(bare.slice(shown).filter((each) => !each.article)).toEqual([]);
     await page.unrouteAll({ behavior: 'ignoreErrors' });
     expect(errors).toEqual([]);
   });
