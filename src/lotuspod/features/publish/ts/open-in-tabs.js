@@ -107,10 +107,9 @@
           // Kept hidden while the index document loads, however long, past
           // the head's failsafe, which removes pod-tabs-leaving alone; shown
           // again once the load is stopped or fails, which the navigation
-          // API tells, or, where it cannot (a browser without it, an answer
-          // with no document), if this document is still here GONE
-          // milliseconds on. A page the failsafe has shown already stays
-          // shown until the index replaces it.
+          // API tells, or, in a browser without it, if this document is
+          // still here GONE milliseconds on. A page the failsafe has shown
+          // already stays shown until the index replaces it.
           var root = document.documentElement;
           if (root.classList.contains("pod-tabs-leaving")) {
             var stayed = function () {
@@ -119,8 +118,9 @@
             root.classList.add("pod-tabs-going");
             if (window.navigation) {
               window.navigation.addEventListener("navigateerror", stayed, { once: true });
+            } else {
+              setTimeout(stayed, GONE);
             }
-            setTimeout(stayed, GONE);
           }
           location.replace(there.index + fragment);
         }, function () {

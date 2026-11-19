@@ -205,20 +205,25 @@ async function sampleFrames(page: Page) {
     if (window.top !== window) return;
     const seen = (node: Element | null | undefined) =>
       Boolean(node && node.checkVisibility({ visibilityProperty: true, opacityProperty: true }));
+    // Kept in memory, written every few frames and as the document goes.
+    let kept: unknown[];
+    try {
+      kept = JSON.parse(sessionStorage.getItem(key) ?? '[]');
+    } catch {
+      return;
+    }
+    const keep = () => sessionStorage.setItem(key, JSON.stringify(kept));
+    addEventListener('pagehide', keep);
     let count = 0;
     const sample = () => {
       const active = document.querySelector<HTMLIFrameElement>('iframe.pod-frame--active');
       const framed = seen(active) && seen(active?.contentDocument?.querySelector('main.artifact h1'));
-      try {
-        const kept = JSON.parse(sessionStorage.getItem(key) ?? '[]');
-        kept.push({ path: location.pathname,
-          article: seen(document.querySelector('main.artifact h1')) || seen(document.getElementById('pod-tabs-authored')),
-          listing: seen(document.querySelector('.index-table')), framed });
-        sessionStorage.setItem(key, JSON.stringify(kept));
-      } catch {
-        return;
-      }
-      if (++count < 1500) requestAnimationFrame(sample);
+      kept.push({ path: location.pathname,
+        article: seen(document.querySelector('main.artifact h1')) || seen(document.getElementById('pod-tabs-authored')),
+        listing: seen(document.querySelector('.index-table')), framed });
+      if (++count % 20 === 0 || framed) keep();
+      if (count < 3000) requestAnimationFrame(sample);
+      else keep();
     };
     requestAnimationFrame(sample);
   }, SAMPLES);
@@ -621,32 +626,71 @@ test.describe('signed in', () => {
     await page.goto('about:blank');
     await page.goto(`/${ARTICLE.name}.html`);
     await expect(page.locator('#pod-tabs-shadowed')).toBeFocused();
+
+    // A slotted autofocused control parsed before its host's shadow root,
+    // which holds one too, and a form whose controls shadow the methods a
+    // script would walk it with: the slotted control, the first parsed.
+    await page.unroute(`**/${ARTICLE.name}.html`);
+    await authored(page, '<form><input name="hasAttribute"><input name="getRootNode"></form>'
+      + '<div><input id="pod-tabs-slotted" autofocus><template shadowrootmode="open"><slot></slot>'
+      + '<input id="pod-tabs-later" autofocus></template></div>');
+    await page.goto('about:blank');
+    await page.goto(`/${ARTICLE.name}.html`);
+    await expect(page.locator('#pod-tabs-slotted')).toBeFocused();
+
+    // An autofocused control in a closed shadow root: its host holds focus.
+    await page.unroute(`**/${ARTICLE.name}.html`);
+    await authored(page, '<div id="pod-tabs-closed"><template shadowrootmode="closed">'
+      + '<input autofocus></template></div>');
+    await page.goto('about:blank');
+    await page.goto(`/${ARTICLE.name}.html`);
+    await expect.poll(() => page.evaluate(() => document.activeElement?.id)).toBe('pod-tabs-closed');
+
+    // A focusable MathML target.
+    await page.unroute(`**/${ARTICLE.name}.html`);
+    await authored(page, '<math><mi id="pod-tabs-formula" tabindex="0">x</mi></math>');
+    await page.goto('about:blank');
+    await page.goto(`/${ARTICLE.name}.html#pod-tabs-formula`);
+    await expect.poll(() => page.evaluate(() => document.activeElement?.id)).toBe('pod-tabs-formula');
+
+    // A text fragment below the fold: scrolled to, as the browser does.
+    await page.unroute(`**/${ARTICLE.name}.html`);
+    await authored(page, '<div style="height: 3000px"></div><p id="pod-tabs-quoted">The quoted heron passage.</p>');
+    await page.goto('about:blank');
+    await page.goto(`/${ARTICLE.name}.html#:~:text=quoted%20heron%20passage`);
+    await expect(page.locator('main.artifact h1')).toBeVisible();
+    await expect(page.locator('#pod-tabs-quoted')).toBeInViewport();
     await page.unrouteAll({ behavior: 'ignoreErrors' });
     expect(errors).toEqual([]);
   });
 
-  test('a pod whose index document is slow to load stays hidden until it moves, its stylesheet missing or not', async ({ page }) => {
+  test('a pod whose index document is slow to load stays hidden until it moves', async ({ page }) => {
+    test.setTimeout(90_000);
     const errors = await watch(page);
     await sampleFrames(page);
     // The index's answer prompt; the index document the pod then loads held
-    // long past both the head's failsafe and the fallback the leaving page
-    // keeps for a browser that cannot tell a stopped load.
+    // long past the head's failsafe and the fallback a browser without the
+    // navigation API keeps.
     await page.route((url) => url.pathname === '/', async (route) => {
-      if (route.request().resourceType() !== 'fetch') await new Promise((resolve) => setTimeout(resolve, 10000));
+      if (route.request().resourceType() !== 'fetch') await new Promise((resolve) => setTimeout(resolve, 35000));
       await route.continue();
     });
     await page.goto(`/${ARTICLE.name}.html`);
 
-    await expect(strip(page)).toHaveCount(1, { timeout: 20000 });
+    await expect(strip(page)).toHaveCount(1, { timeout: 50000 });
     await expectActive(page, ARTICLE);
     await expect.poll(async () => (await samples(page)).some((each) => each.framed)).toBe(true);
-    let bare = (await samples(page)).filter((each) => each.path === `/${ARTICLE.name}.html`);
-    expect(bare.length).toBeGreaterThan(300);
+    const bare = (await samples(page)).filter((each) => each.path === `/${ARTICLE.name}.html`);
+    expect(bare.length).toBeGreaterThan(1000);
     expect(bare.filter((each) => each.article)).toEqual([]);
     await page.unrouteAll({ behavior: 'ignoreErrors' });
+    expect(errors).toEqual([]);
+  });
 
-    // The theme's stylesheet failing: the pod's answer and the index script
-    // each held well inside the failsafe.
+  test('without the theme\'s stylesheet, a moving pod and the index opened at its tab paint neither article nor listing', async ({ page }) => {
+    const errors = await watch(page);
+    await sampleFrames(page);
+    // The pod's answer and the index script each held well inside the failsafe.
     await page.route('**/lotuspod.css*', (route) => route.fulfill({ status: 404, body: '' }));
     await page.route((url) => url.pathname === '/', async (route) => {
       if (route.request().resourceType() === 'fetch') await new Promise((resolve) => setTimeout(resolve, 700));
@@ -656,13 +700,11 @@ test.describe('signed in', () => {
       await new Promise((resolve) => setTimeout(resolve, 700));
       await route.continue();
     });
-    await page.goto('about:blank');
-    await page.evaluate((key) => sessionStorage.removeItem(key), SAMPLES).catch(() => {});
     await page.goto(`/${ARTICLE.name}.html`);
     await expect(page).toHaveURL(new RegExp(`/#tabs=${ARTICLE.name}&on=${ARTICLE.name}$`), { timeout: 15000 });
     await expect.poll(async () => (await samples(page)).some((each) => each.framed)).toBe(true);
     const seen = await samples(page);
-    bare = seen.filter((each) => each.path === `/${ARTICLE.name}.html`);
+    const bare = seen.filter((each) => each.path === `/${ARTICLE.name}.html`);
     expect(bare.length).toBeGreaterThan(0);
     expect(bare.filter((each) => each.article)).toEqual([]);
     const index = seen.filter((each) => each.path === '/');

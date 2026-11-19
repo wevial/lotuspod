@@ -20,25 +20,26 @@
   // Before the body paints, the root is marked so HIDDEN hides what the
   // reader would see only for a moment: a pod that may leave for its index's
   // tab (the synchronous half of features/publish/ts/open-in-tabs.js, which
-  // removes LEAVING whenever the page stays, and sets GOING while it leaves),
-  // or the listing of an index opened at a tab (its script removes OPENING
-  // once the active tab shows or none can). FAILSAFE removes LEAVING or
+  // removes LEAVING whenever the page stays and sets pod-tabs-going while it
+  // leaves), or the listing of an index opened at a tab (its script removes
+  // OPENING once the active tab shows or none can). FAILSAFE removes LEAVING or
   // OPENING whatever happens, so a script that fails leaves no blank page.
   //
   // HIDDEN is written here, not in the theme's stylesheet, so it holds when
-  // that stylesheet fails to load. Layout and scripts run as ever. A pod's
-  // own markup may set its visibility back, but no element is more opaque
-  // than the root, which always has a box, as a body with display: contents
-  // does not. Its layer, declared first in the head, makes its !important
-  // hold against the pod's own animations and its own !important rules,
-  // unlayered or in a layer of their own.
+  // that stylesheet fails to load. Layout and scripts run as ever. A pod is
+  // hidden by its root's opacity alone: no element is more opaque than the
+  // root, which always has a box, as a body with display: contents does
+  // not, and the browser's autofocus, fragment focus and text-fragment
+  // scroll, which skip an element whose visibility is hidden, still find
+  // the pod's own, should it stay. Its layer, declared first in the head,
+  // makes its !important hold against the pod's own animations and its own
+  // !important rules, unlayered or in a layer of their own.
   var LEAVING = "pod-tabs-leaving";
   var OPENING = "pod-tabs-opening";
-  var GOING = "pod-tabs-going";
   var FAILSAFE = 4000;
   var HIDDEN = "@layer pod-tabs-hidden {" +
-    ".pod-tabs-leaving body, .pod-tabs-going body, .pod-tabs-opening main.index { visibility: hidden !important; }" +
-    ".pod-tabs-leaving, .pod-tabs-going { opacity: 0 !important; } }";
+    ".pod-tabs-leaving, .pod-tabs-going { opacity: 0 !important; }" +
+    ".pod-tabs-opening main.index { visibility: hidden !important; } }";
   var marked = null;
   try {
     var visible = document.querySelector('meta[name="lotuspod:visible"]');
@@ -61,49 +62,6 @@
     setTimeout(function () {
       root.classList.remove(marked);
     }, FAILSAFE);
-  }
-  // The browser skips autofocus on a hidden element, so once a pod hidden
-  // here is shown again, whoever removes the class (open-in-tabs.js may also
-  // add GOING while it leaves, then remove it if it never does), its first
-  // autofocused control that can take focus takes it, as it would have, in
-  // tree order through open shadow roots, unless focus has moved; a
-  // fragment's target takes it instead, where it can, as on a fragment
-  // navigation, the scroll left where it is. Focus is called from the
-  // prototype, as a form's control named "focus" shadows its own. A frame is
-  // never hidden, so its autofocus is the browser's alone.
-  function focusOn(node, options) {
-    var own = typeof SVGElement !== "undefined" && node instanceof SVGElement ? SVGElement : HTMLElement;
-    try {
-      own.prototype.focus.call(node, options);
-    } catch (error) {
-      return false;
-    }
-    return node.getRootNode().activeElement === node;
-  }
-  function autofocused(scope, found) {
-    var nodes = scope.querySelectorAll("*");
-    for (var i = 0; i < nodes.length; i++) {
-      if (nodes[i].hasAttribute("autofocus")) found.push(nodes[i]);
-      if (nodes[i].shadowRoot) autofocused(nodes[i].shadowRoot, found);
-    }
-    return found;
-  }
-  if (marked === LEAVING) {
-    new MutationObserver(function (records, observer) {
-      if (root.classList.contains(LEAVING) || root.classList.contains(GOING)) return;
-      observer.disconnect();
-      var active = document.activeElement;
-      if (active && active !== document.body) return;
-      var target = document.querySelector(":target");
-      if (target) {
-        focusOn(target, {preventScroll: true});
-        return;
-      }
-      var asked = autofocused(document, []);
-      for (var i = 0; i < asked.length; i++) {
-        if (focusOn(asked[i])) return;
-      }
-    }).observe(root, {attributes: true, attributeFilter: ["class"]});
   }
 
   function resolved() {
