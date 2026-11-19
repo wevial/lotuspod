@@ -17,15 +17,13 @@
   }
   var buttons = [];
 
-  // Before the body paints, a page about to leave for its index's tab, or
-  // the index opened at a tab, is marked so the theme's CSS hides what the
-  // reader would see only for a moment: a listed pod loaded on its own at the
-  // top level over http(s), with no version or standalone query (the
-  // synchronous half of features/publish/ts/open-in-tabs.js, which removes
-  // LEAVING whenever the page stays), and an index whose fragment names
-  // tabs= and on= (its listing, which its script removes OPENING from once
-  // the active tab shows or none can). Either is removed after FAILSAFE
-  // milliseconds whatever happens, so a script that fails leaves no blank page.
+  // Before the body paints, the root is marked so the theme's CSS hides what
+  // the reader would see only for a moment: a pod that may leave for its
+  // index's tab (the synchronous half of features/publish/ts/open-in-tabs.js,
+  // which removes LEAVING whenever the page stays), or the listing of an index
+  // opened at a tab (its script removes OPENING once the active tab shows or
+  // none can). FAILSAFE removes either whatever happens, so a script that
+  // fails leaves no blank page.
   var LEAVING = "pod-tabs-leaving";
   var OPENING = "pod-tabs-opening";
   var FAILSAFE = 4000;
