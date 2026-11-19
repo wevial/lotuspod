@@ -60,6 +60,8 @@
     return { index: index.pathname.replace(/\/index\.html$/, "/"), name: match[1] };
   }
 
+  var GONE = 8000;
+
   // Whether the index's listing has a row for the pod, with its link.
   function lists(html, name) {
     var listing = new DOMParser().parseFromString(html, "text/html");
@@ -72,16 +74,8 @@
   return function (run) {
     // The page staying: shown again (the head's theme script hid it while it
     // might go, core/ts/theme-head.js), then the rest run.
-    // The browser skips autofocus on a hidden element, so the first
-    // autofocused control is focused here, as it would have been, unless the
-    // reader has focused something or the fragment names a target.
     function page() {
       document.documentElement.classList.remove("pod-tabs-leaving");
-      var auto = document.querySelector("[autofocus]");
-      if (auto && (document.activeElement === null || document.activeElement === document.body) &&
-          !document.querySelector(":target")) {
-        auto.focus();
-      }
       run();
     }
 
@@ -111,8 +105,13 @@
             fragment += "&at=" + encodeURIComponent(location.hash.slice(1));
           }
           // Kept hidden while the index document loads, past the head's
-          // failsafe, which removes pod-tabs-leaving alone.
+          // failsafe, which removes pod-tabs-leaving alone; shown again only
+          // if this document is still here GONE milliseconds on, as after
+          // the reader stops the load.
           document.documentElement.classList.add("pod-tabs-going");
+          setTimeout(function () {
+            document.documentElement.classList.remove("pod-tabs-going");
+          }, GONE);
           location.replace(there.index + fragment);
         }, function () {
           page();

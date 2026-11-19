@@ -543,13 +543,17 @@ test.describe('signed in', () => {
     const errors = await watch(page);
     await sampleFrames(page);
     // A paragraph the pod's own markup sets visible, and a fade-in of its
-    // body, as an author may write.
+    // body that reduced motion replaces with its end state, as an author may
+    // write.
+    await page.emulateMedia({ reducedMotion: 'reduce' });
     await page.route(`**/${ARTICLE.name}.html`, async (route) => {
       const answer = await route.fetch();
       const body = (await answer.text()).replace('</h1>',
         '</h1><p id="pod-tabs-authored" style="visibility: visible">Ready for review</p>'
         + '<style>@keyframes pod-tabs-fade { from { opacity: 0; visibility: hidden }'
-        + ' to { opacity: 1; visibility: visible } } body { animation: pod-tabs-fade 0.2s forwards }</style>');
+        + ' to { opacity: 1; visibility: visible } } body { animation: pod-tabs-fade 0.2s forwards }'
+        + ' @media (prefers-reduced-motion: reduce) { :root body { animation: none;'
+        + ' opacity: 1 !important; visibility: visible !important } }</style>');
       await route.fulfill({ response: answer, body });
     });
     // The index's answer held long enough for the bare page to paint many
@@ -579,13 +583,19 @@ test.describe('signed in', () => {
     expect(errors).toEqual([]);
   });
 
-  test('a pod that stays after its index answers focuses its autofocused control', async ({ page }) => {
-    const errors = await watch(page);
+  // The pod with an autofocused control in a closed dialog, then one on the page.
+  const autofocused = async (page: Page) => {
     await page.route(`**/${ARTICLE.name}.html`, async (route) => {
       const answer = await route.fetch();
-      const body = (await answer.text()).replace('</h1>', '</h1><input id="pod-tabs-autofocus" autofocus>');
+      const body = (await answer.text()).replace('</h1>',
+        '</h1><dialog><input autofocus></dialog><input id="pod-tabs-autofocus" autofocus>');
       await route.fulfill({ response: answer, body });
     });
+  };
+
+  test('a pod that stays after its index answers focuses its autofocused control', async ({ page }) => {
+    const errors = await watch(page);
+    await autofocused(page);
     // An index that does not list the pod, answered while it is still hidden.
     await page.route((url) => url.pathname === '/', async (route) => {
       if (route.request().resourceType() !== 'fetch') return route.continue();
@@ -599,6 +609,49 @@ test.describe('signed in', () => {
     expect(new URL(page.url()).pathname).toBe(`/${ARTICLE.name}.html`);
     await page.unrouteAll({ behavior: 'ignoreErrors' });
     expect(errors).toEqual([]);
+  });
+
+  test('a pod whose index never answers is shown by the failsafe, its autofocused control focused', async ({ page }) => {
+    await autofocused(page);
+    await page.route((url) => url.pathname === '/', async (route) => {
+      if (route.request().resourceType() !== 'fetch') return route.continue();
+      await new Promise(() => {});
+    });
+    await page.goto(`/${ARTICLE.name}.html`);
+
+    await expect(page.locator('main.artifact h1')).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('#pod-tabs-autofocus')).toBeFocused();
+    expect(new URL(page.url()).pathname).toBe(`/${ARTICLE.name}.html`);
+    await page.unrouteAll({ behavior: 'ignoreErrors' });
+  });
+
+  test('a pod whose move to its index is stopped is shown again', async ({ page }) => {
+    // The index document never answers, and the reader stops its load half
+    // a second after it starts, the pod still hidden then.
+    await page.addInitScript(() => {
+      if (window.top !== window) return;
+      const going = setInterval(() => {
+        if (!document.documentElement?.classList.contains('pod-tabs-going')) return;
+        clearInterval(going);
+        setTimeout(() => {
+          const heading = document.querySelector('main.artifact h1');
+          sessionStorage.setItem('pod-tabs-stopped-hidden', String(!heading?.checkVisibility(
+            { visibilityProperty: true, opacityProperty: true })));
+          window.stop();
+        }, 500);
+      }, 10);
+    });
+    await page.route((url) => url.pathname === '/', async (route) => {
+      if (route.request().resourceType() === 'fetch') return route.continue();
+      await new Promise(() => {});
+    });
+    await page.goto(`/${ARTICLE.name}.html`);
+
+    await expect.poll(() => page.evaluate(() => sessionStorage.getItem('pod-tabs-stopped-hidden')),
+      { timeout: 10000 }).toBe('true');
+    await expect(page.locator('main.artifact h1')).toBeVisible({ timeout: 15000 });
+    expect(new URL(page.url()).pathname).toBe(`/${ARTICLE.name}.html`);
+    await page.unrouteAll({ behavior: 'ignoreErrors' });
   });
 
   test('the index opened at a pod\'s tab paints none of its listing before the frame shows the pod; with no tab named, its listing', async ({ page }) => {

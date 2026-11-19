@@ -49,6 +49,25 @@
       root.classList.remove(marked);
     }, FAILSAFE);
   }
+  // The browser skips autofocus on a hidden element, so once a pod hidden
+  // here is shown again, whoever removes the class (open-in-tabs.js may also
+  // add pod-tabs-going while it leaves, then remove it if it never does), its
+  // first autofocused control that can take focus takes it, as it would have,
+  // unless focus has moved or the fragment names a target. A frame is never
+  // hidden, so its autofocus is the browser's alone.
+  if (marked === LEAVING) {
+    new MutationObserver(function (records, observer) {
+      if (root.classList.contains(LEAVING) || root.classList.contains("pod-tabs-going")) return;
+      observer.disconnect();
+      var active = document.activeElement;
+      if ((active && active !== document.body) || document.querySelector(":target")) return;
+      var asked = document.querySelectorAll("[autofocus]");
+      for (var i = 0; i < asked.length; i++) {
+        asked[i].focus();
+        if (document.activeElement === asked[i]) return;
+      }
+    }).observe(root, {attributes: true, attributeFilter: ["class"]});
+  }
 
   function resolved() {
     if (choice !== "auto") return choice;

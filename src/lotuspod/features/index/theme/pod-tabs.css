@@ -241,15 +241,18 @@
    and while the index opened at a tab has not yet shown it (core/ts/theme-head.js
    sets the others), what each would show for a moment is hidden. Its layout
    and scripts run as ever. A pod's own markup may set its visibility back,
-   but no element is more opaque than its body; !important holds both against
-   the pod's own animations of its body. */
-.pod-tabs-leaving body,
-.pod-tabs-going body,
-.pod-tabs-opening main.index {
-  visibility: hidden !important;
-}
+   but no element is more opaque than its body. The layer's !important holds
+   both against the pod's own animations and its own !important rules, which
+   are unlayered or in a layer named after this stylesheet's. */
+@layer pod-tabs-hidden {
+  .pod-tabs-leaving body,
+  .pod-tabs-going body,
+  .pod-tabs-opening main.index {
+    visibility: hidden !important;
+  }
 
-.pod-tabs-leaving body,
-.pod-tabs-going body {
-  opacity: 0 !important;
+  .pod-tabs-leaving body,
+  .pod-tabs-going body {
+    opacity: 0 !important;
+  }
 }
