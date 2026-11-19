@@ -660,7 +660,6 @@ test.describe('signed in', () => {
     await expect.poll(async () => (await samples(page)).some((each) => each.framed)).toBe(true);
     const seen = await samples(page);
     const shown = seen.findIndex((each) => each.framed);
-    expect(shown).toBeGreaterThan(-1);
     expect(shown).toBeGreaterThan(0);
     expect(seen.slice(0, shown).filter((each) => each.listing)).toEqual([]);
     await expect(page.locator('html')).not.toHaveClass(/pod-tabs-opening/);
